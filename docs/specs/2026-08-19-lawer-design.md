@@ -76,6 +76,7 @@ lawer/
   app/                    # Next.js 单体
     src/app/              # 页面 + api 路由（薄）
     src/lib/db/           # client.ts + migrate.ts + 表封装（唯一 SQL 层）
+    src/lib/auth/         # OTP/邮箱验证/JWT/实名认证编排
     src/lib/billing/      # 公道值（抄功德：index/pricing/estimate/fulfillment/redeem/features/channel）
     src/lib/llm/          # providers/{anthropic,openai,deepseek,dashscope}.ts + router.ts + rates
     src/lib/agent/        # 律师 agent：编排、问诊状态机、行动卡、文书起草、金额计算器
