@@ -441,34 +441,48 @@ export function runMigrations(db: Database.Database): void {
   `);
 
   // 模型用量流水（成本侧真相，与 gongdao_ledger 消耗行按 ref_id 对账）。
-  // 按 model_rates 的三档分桶计量：prompt / completion / cached 各自费率不同，混算会系统性偏差。
+  // 按 model_rates 的四档分桶计量：prompt / completion / cache_read / cache_write 各自费率不同，
+  // 混算会系统性偏差——缓存读只要输入价的 0.1×，缓存写反而要 1.25×，两者并成一列必错。
   // cost_li 为精确成本，单位 0.001 公道值（厘），避免整数取整层层吃掉小额消耗。
   db.exec(`
     CREATE TABLE IF NOT EXISTS token_usage (
-      id                INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id           INTEGER NOT NULL REFERENCES users(id),
-      feature           TEXT NOT NULL,
-      model             TEXT NOT NULL,
-      prompt_tokens     INTEGER NOT NULL DEFAULT 0,
-      completion_tokens INTEGER NOT NULL DEFAULT 0,
-      cached_tokens     INTEGER NOT NULL DEFAULT 0,
-      embed_tokens      INTEGER NOT NULL DEFAULT 0,
-      cost_li           INTEGER NOT NULL DEFAULT 0,          -- 0.001 公道值（厘）
-      ref_id            TEXT,
-      created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id            INTEGER NOT NULL REFERENCES users(id),
+      feature            TEXT NOT NULL,
+      -- 双串语义，两个都要留，别合并：
+      -- model     = priced 计费键，与 model_rates.model 对齐，锁 dated 版本名/变体串
+      --             （如 qwen-vl-ocr-2025-11-20、qwen-plus:think）——决定这行扣多少钱。
+      -- api_model = 厂商响应回显的实际模型串。调用侧只能用别名发请求（厂商 API 不收 dated 串：
+      --             DeepSeek 返 400、Qwen 返 403），故「按什么价记账」与「实际跑了哪个快照」
+      --             是两件事。厂商把别名重指向新快照时，api_model 会变而 model 不变，
+      --             对账脚本据此告警计费口径漂移。可空：历史行与无回显的调用留 NULL。
+      model              TEXT NOT NULL,
+      api_model          TEXT,
+      prompt_tokens      INTEGER NOT NULL DEFAULT 0,
+      completion_tokens  INTEGER NOT NULL DEFAULT 0,
+      cache_read_tokens  INTEGER NOT NULL DEFAULT 0,          -- 命中缓存的输入 token（与 prompt_tokens 不相交）
+      cache_write_tokens INTEGER NOT NULL DEFAULT 0,          -- 写入缓存的 token（比标准输入更贵）
+      embed_tokens       INTEGER NOT NULL DEFAULT 0,
+      cost_li            INTEGER NOT NULL DEFAULT 0,          -- 0.001 公道值（厘）
+      ref_id             TEXT,
+      created_at         TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_token_usage_user ON token_usage (user_id, created_at);
   `);
 
   // 模型费率表：只追加不修改，改价 = 写一条更晚 effective_at 的新行，取最新生效那条计价。
   // 保留历史行才能对旧账单按当时费率复算（改价不得回溯篡改已发生的消费）。
+  // 档位变体编码进 model 字符串（如 qwen-plus:think / gpt-5.6-terra:long / deepseek-...:offpeak），
+  // 不另设条件列——变体→API 参数的映射归 lib/llm 路由层，账本只认这个字符串、不解释它。
+  // meta_json 记本行的定价出处（源 URL、官方原价、币种、汇率、核定日），改价争议时可原地追溯。
   db.exec(`
     CREATE TABLE IF NOT EXISTS model_rates (
       id                INTEGER PRIMARY KEY AUTOINCREMENT,
       model             TEXT NOT NULL,
-      token_kind        TEXT NOT NULL CHECK (token_kind IN ('in','out','cache')),
+      token_kind        TEXT NOT NULL CHECK (token_kind IN ('in','out','cache_read','cache_write')),
       gongdao_per_token REAL NOT NULL,
       effective_at      TEXT NOT NULL DEFAULT (datetime('now')),
+      meta_json         TEXT,
       created_at        TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE UNIQUE INDEX IF NOT EXISTS uq_model_rates
