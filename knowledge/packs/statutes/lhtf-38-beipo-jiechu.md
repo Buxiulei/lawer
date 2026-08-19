@@ -5,12 +5,12 @@ title: 劳动合同法第38条：被迫解除（劳动者单方解除仍拿N）
 keywords: [被迫解除, 第38条, 拖欠工资, 未足额支付, 未缴社保, 强迫劳动, 经济补偿, 辞职]
 applies_to: [逼迫离职, 欠薪, 社保断缴, 调岗降薪, 协商解除]
 law_refs: [劳动合同法§38, 劳动合同法§46, 法释〔2025〕12号§19]
-related: [calc-jingji-buchang-n, sop-tiaogang-yingdui]
+related: [calc-jingji-buchang-n, sop-tiaogang-yingdui, statute-jgf-2024-534-jieda-1]
 region: 北京
 sources:
-  - https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_0abfdd261c03417b949df19d869add8d.html
+  - https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=
   - https://www.court.gov.cn/zixun/xiangqing/472691.html
-  - https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020240530575736715599.pdf
+  - https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_0abfdd261c03417b949df19d869add8d.html
 confidence: 原文核实
 updated: 2026-08-19
 ---
@@ -39,8 +39,9 @@ updated: 2026-08-19
 
 ## 北京口径
 
-- **理由事后不能改**（京高法发〔2024〕534 号《解答（一）》第 73 条）：以第 38 条**之外**的理由（"个人原因""家庭原因"等）提出解除后，仲裁/诉讼阶段再主张被迫解除要求 N 或 2N 的，**不予支持**；唯一例外是能证明欺诈、胁迫、重大误解（证明标准为"排除合理怀疑"，极难）。
-- **"未及时"的时限**：北京口径为约定发薪日后**最迟不超过 7 天**（《解答（一）》第 54 条）。
+- **理由事后不能改**（京高法发〔2024〕534 号《解答（一）》第 73 条，原文见 [[statute-jgf-2024-534-jieda-1]]）：以第 38 条**之外**的理由（"个人原因""家庭原因"等）提出解除后，仲裁/诉讼阶段再主张被迫解除要求 N 或 2N 的，**不予支持**；唯一例外是能证明欺诈、胁迫、重大误解（证明标准为"排除合理怀疑"，极难）。
+- **"未及时"的时限**：约定支付日期后**最迟不应超过七天**（《解答（一）》第 54 条，原文见 [[statute-jgf-2024-534-jieda-1]]）。
+- **社保情形北京收窄**：前一年内"未建社保账户或险种不全"才支持被迫解除拿 N；仅"基数低/年限不足"走补缴、不支持 N（《解答（一）》第 71 条）；劳动者自己要求不缴的仍支持（第 72 条）。
 - 实战结论：**要么不辞职（等公司违法解除拿 2N），要么书面援引第 38 条被迫解除（拿 N）；写"个人原因"辞职 = N 与 2N 全部清零。**
 
 ## 常见误区

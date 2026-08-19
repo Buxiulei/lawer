@@ -1,4 +1,4 @@
-# knowledge packs 编译规范 v0.9（WS4 起草，待 manager 确认）
+# knowledge packs 编译规范 v1.0（manager 2026-08-19 批准）
 
 > 供 `lib/knowledge/`（pack 加载与检索）与律师 agent 消费。原料在服务器本地
 > `research/raw/`（不入仓库）；本目录全部为**原创编译产物**，可入库。
@@ -67,6 +67,16 @@ updated: 2026-08-19
 3. 法条**逐字**引用原文块，不改写、不省略号截断关键句；转述放「适用要点」。
 4. `confidence` 取整包最低档：正文只要有一处待核实即标 `待核实`。
 5. 每 pack 控制在 200 行内；超长拆分并用 `related` 互链。
+   **例外**：单点事实源汇编卡（见 #6）可放宽行数。
+6. **单点事实源**（manager 修订 2026-08-19）：被 ≥2 个 pack 引用的文号/数据，
+   建一张专卡收录（逐字条目+原文直链），其他 pack 一律经 `related` 引用该卡、
+   confidence 跟随该卡，不各自转述——防止核实状态发散。
+   现有：`statute-jgf-2024-534-jieda-1`（京高法发〔2024〕534号）。
+7. **硬数字一律走 data 卡**：社平/封顶/最低工资/基数上下限等数值不裸写进
+   calc/sop 卡，建 `data/` 卡（值/适用期间/发布机关/文号/更新触发条件）后按 id 引用。
+8. **法条原文 source 首选 flk.npc.gov.cn**（国家法律法规数据库）；转载链接
+   （samr/gov.cn 部门转载等）可列为备份源，不作首源。地方文件首选
+   beijing.gov.cn / rsj.beijing.gov.cn 原始页。
 
 ## 5. applies_to 受控词表（首批，可增补需报 manager）
 

@@ -5,7 +5,7 @@ title: 被调岗（异地/降职/换岗）当天与后续应对
 keywords: [调岗, 异地调动, 降职, 换岗, 工作地点, 异议函, 旷工, 不服从安排]
 applies_to: [调岗降薪, 逼迫离职, 证据固定]
 law_refs: [劳动合同法§35, 劳动合同法§40, 京高法发〔2024〕534号§59-61]
-related: [statute-lhtf-38-beipo-jiechu, calc-jingji-buchang-n]
+related: [statute-lhtf-38-beipo-jiechu, calc-jingji-buchang-n, statute-jgf-2024-534-jieda-1]
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241231_3977650.html

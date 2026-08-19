@@ -1,35 +1,154 @@
 [
   {
-    "id": "statute-lhtf-38-beipo-jiechu",
-    "type": "法条卡",
-    "title": "劳动合同法第38条：被迫解除（劳动者单方解除仍拿N）",
-    "keywords": ["被迫解除", "第38条", "拖欠工资", "未足额支付", "未缴社保", "强迫劳动", "经济补偿", "辞职"],
-    "applies_to": ["逼迫离职", "欠薪", "社保断缴", "调岗降薪", "协商解除"],
-    "region": "北京",
-    "confidence": "原文核实",
-    "updated": "2026-08-19",
-    "path": "packs/statutes/lhtf-38-beipo-jiechu.md"
-  },
-  {
     "id": "calc-jingji-buchang-n",
     "type": "计算规则",
     "title": "经济补偿金 N 的计算（北京口径：分段、三倍封顶、12年上限）",
-    "keywords": ["经济补偿", "N", "补偿金", "月工资", "三倍封顶", "12年上限", "分段计算", "47条"],
-    "applies_to": ["裁员", "协商解除", "逼迫离职", "欠薪", "社保断缴"],
+    "keywords": [
+      "经济补偿",
+      "N",
+      "补偿金",
+      "月工资",
+      "三倍封顶",
+      "12年上限",
+      "分段计算",
+      "47条"
+    ],
+    "applies_to": [
+      "裁员",
+      "协商解除",
+      "逼迫离职",
+      "欠薪",
+      "社保断缴"
+    ],
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/calc/jingji-buchang-n.md"
   },
   {
+    "id": "data-beijing-shepin-fengding",
+    "type": "数据卡",
+    "title": "北京经济补偿三倍封顶基数与个税免征上限（含两套社平口径区分）",
+    "keywords": [
+      "社平工资",
+      "三倍封顶",
+      "47103",
+      "法人单位从业人员",
+      "全口径",
+      "社保基数",
+      "个税免征"
+    ],
+    "applies_to": [
+      "裁员",
+      "协商解除",
+      "逼迫离职"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/data/beijing-shepin-fengding.md"
+  },
+  {
+    "id": "data-beijing-zuidi-gongzi",
+    "type": "数据卡",
+    "title": "北京市最低工资标准（现行 2,540 元/月）",
+    "keywords": [
+      "最低工资",
+      "北京",
+      "2540",
+      "小时最低工资",
+      "非全日制"
+    ],
+    "applies_to": [
+      "欠薪",
+      "待岗停工",
+      "调岗降薪"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/data/beijing-zuidi-gongzi.md"
+  },
+  {
     "id": "sop-tiaogang-yingdui",
     "type": "流程SOP",
     "title": "被调岗（异地/降职/换岗）当天与后续应对",
-    "keywords": ["调岗", "异地调动", "降职", "换岗", "工作地点", "异议函", "旷工", "不服从安排"],
-    "applies_to": ["调岗降薪", "逼迫离职", "证据固定"],
+    "keywords": [
+      "调岗",
+      "异地调动",
+      "降职",
+      "换岗",
+      "工作地点",
+      "异议函",
+      "旷工",
+      "不服从安排"
+    ],
+    "applies_to": [
+      "调岗降薪",
+      "逼迫离职",
+      "证据固定"
+    ],
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/tiaogang-yingdui.md"
+  },
+  {
+    "id": "statute-jgf-2024-534-jieda-1",
+    "type": "法条卡",
+    "title": "京高法发〔2024〕534号《劳动争议解答（一）》常用条目汇编（单点事实源）",
+    "keywords": [
+      "北京口径",
+      "解答一",
+      "534号",
+      "调岗",
+      "工作地点",
+      "经济补偿基数",
+      "社保",
+      "被迫解除",
+      "继续履行",
+      "客观情况重大变化",
+      "违反劳动纪律"
+    ],
+    "applies_to": [
+      "调岗降薪",
+      "逼迫离职",
+      "社保断缴",
+      "欠薪",
+      "裁员",
+      "违纪解除",
+      "协商解除",
+      "开庭质证"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/statutes/jgf-2024-534-jieda-1.md"
+  },
+  {
+    "id": "statute-lhtf-38-beipo-jiechu",
+    "type": "法条卡",
+    "title": "劳动合同法第38条：被迫解除（劳动者单方解除仍拿N）",
+    "keywords": [
+      "被迫解除",
+      "第38条",
+      "拖欠工资",
+      "未足额支付",
+      "未缴社保",
+      "强迫劳动",
+      "经济补偿",
+      "辞职"
+    ],
+    "applies_to": [
+      "逼迫离职",
+      "欠薪",
+      "社保断缴",
+      "调岗降薪",
+      "协商解除"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/statutes/lhtf-38-beipo-jiechu.md"
   }
 ]
