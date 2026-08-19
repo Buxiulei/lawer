@@ -1,0 +1,78 @@
+# lawer 部署编排：caddy（唯一对外）+ web（Next.js）+ sidecar（Python）
+# 用法见 deploy/README.md。在本目录执行：docker compose up -d --build
+#
+# 端口暴露策略：只有 caddy 映射宿主 80/443。web 与 sidecar 都不映射宿主端口，
+# 仅经 compose 内网（服务名 DNS）互访 —— sidecar 从宿主/公网均不可直达。
+# 注意：sidecar 需要出网（GlobalSign TSA、阿里云百炼），故不能用 internal: true 网络。
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # ACME 证书与密钥（丢了会重新签发，有速率限制，务必备份）
+      - caddy_config:/config
+    environment:
+      # 域名与 ACME 联系邮箱（在 deploy/.env 里给值）
+      - LAWER_DOMAIN=${LAWER_DOMAIN}
+      - LAWER_ACME_EMAIL=${LAWER_ACME_EMAIL}
+    depends_on:
+      - web
+    networks:
+      - lawer
+
+  web:
+    build:
+      context: ../app
+      dockerfile: Dockerfile   # 由 app 骨架侧提供
+    restart: unless-stopped
+    env_file:
+      # 首次部署前须自行准备（见 README「首次部署」）。至少要有 LAWER_DATA_KEY ——
+      # 手机号/身份证/实名等字段的 AES-256-GCM 主密钥，缺失则 auth 与实名功能直接抛错。
+      # 开发机上的凭据在 app/.env.local，部署时需汇总进 app/.env（.env.local 不进镜像）。
+      - ../app/.env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_PATH=/data/lawer.db
+      - FILES_DIR=/data/files          # 证据文件库（SHA256 去重、落盘加密）
+      - SIDECAR_URL=http://sidecar:8100
+    volumes:
+      - lawer_data:/data
+      - ./secrets:/secrets:ro          # 支付/短信等凭证，只读挂载
+    # 只保证启动顺序，不用 condition: service_healthy —— sidecar 不健康时 web 仍应起来，
+    # 站点其余部分照常可用，证据/OCR 相关功能降级报错即可，不该整站起不来。
+    depends_on:
+      - sidecar
+    networks:
+      - lawer
+
+  sidecar:
+    build:
+      context: ../sidecar
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../sidecar/.env        # 首次部署前须由 sidecar/.env.example 复制并填值
+    environment:
+      - SIDECAR_HOST=0.0.0.0
+      - SIDECAR_PORT=8100
+      - SIGNING_CERT_PATH=/secrets/sign/lawer.pfx
+    volumes:
+      - ./secrets:/secrets:ro  # PAdES 签名证书（PKCS#12），只读
+    networks:
+      - lawer
+    # 无 ports： 仅 compose 内网可达
+
+volumes:
+  lawer_data:     # lawer.db（WAL）+ /data/files
+  caddy_data:     # ACME 证书
+  caddy_config:
+
+networks:
+  lawer:

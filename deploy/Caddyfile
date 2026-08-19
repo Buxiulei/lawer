@@ -1,0 +1,42 @@
+# lawer 反向代理配置（Caddy 2）
+# 域名与邮箱由 compose 以环境变量注入（deploy/.env）：LAWER_DOMAIN / LAWER_ACME_EMAIL
+# 自动 HTTPS（Let's Encrypt）。容器内以服务名访问 web，不用 localhost。
+
+{
+	email {$LAWER_ACME_EMAIL}
+}
+
+{$LAWER_DOMAIN} {
+	# 全站反代到 Next.js（含 /verify/:no 公开验证页、/api/v1/*、/api/mcp）
+	reverse_proxy web:3000 {
+		header_up Host {host}
+		header_up X-Real-IP {client_ip}
+		header_up X-Forwarded-For {client_ip}
+		header_up X-Forwarded-Proto {scheme}
+		# LLM 回复走 SSE 流式：禁用响应缓冲，否则整段回复会被攒到最后一次性吐出
+		flush_interval -1
+	}
+
+	# 证据文件与录音上传：放宽请求体上限（默认 Caddy 不限，此处显式声明意图）
+	request_body {
+		max_size 100MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	encode zstd gzip
+
+	log {
+		output file /data/logs/lawer.access.log {
+			roll_size 100mb
+			roll_keep 10
+			roll_keep_for 720h
+		}
+		format json
+	}
+}
