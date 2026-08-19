@@ -7,3 +7,17 @@ export { signToken, verifyToken, verifyAuthHeader, TOKEN_TTL_SECONDS } from './j
 export type { TokenPayload } from './jwt';
 export { normalizePhone, maskPhone } from './phone';
 export { extractClientIp } from './ip-quota';
+// api key（agent 直连凭据）与 Bearer 双态身份解析
+export {
+  generateApiKey,
+  hashApiKey,
+  verifyApiKey,
+  parseScopes,
+  normalizeRequestedScopes,
+  ALL_SCOPES,
+  DEFAULT_SCOPES,
+} from './api-key';
+export type { Scope } from './api-key';
+export { resolveIdentity, extractBearer, hasScope } from './identity';
+export type { Identity } from './identity';
+export { requireIdentity, requireWebSession, domainFailure, parseId } from './guard';
