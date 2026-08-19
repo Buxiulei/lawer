@@ -1,9 +1,23 @@
 /**
- * 对话工作台的演示回复脚本：用户发新消息时按顺序取一条，客户端逐 chunk 模拟 SSE。
- * 接后端后本文件整体废弃，改由 /api 的真实 SSE 提供。
+ * 对话工作台的演示剧本：用户发新消息时按顺序取一条，MockTransport 照九帧契约吐出来。
+ * 接后端后本文件整体废弃，改由 /api/v1/cases/[id]/chat 的真实 SSE 提供。
+ *
+ * lawRefs 不在九帧契约里（WS2 定稿没有法条帧），mock 期间按 message_id 查表补上，
+ * 见 mockLawRefs()。
  */
 
+import type {
+  DraftFrame,
+  NoticeCode,
+  RecordTool,
+} from '@/app/(app)/case/[id]/_stream/frames';
 import type { ActionItem, LawRef } from './types';
+
+export interface ScriptRecord {
+  tool: RecordTool;
+  id: string;
+  summary: string;
+}
 
 export interface ReplyScript {
   id: string;
@@ -12,14 +26,37 @@ export interface ReplyScript {
   /** 本轮产出的行动卡，回复完成后加入档案待办 */
   actions: ActionItem[];
   lawRefs: LawRef[];
-  /** 等待首个 chunk 时的确定性文案 */
-  waiting: string;
+  /** meta.model；等待卡的中文名由它决定 */
+  model: string;
+  /** meta.degraded：主力模型不可用时本轮走备用 */
+  degraded?: boolean;
+  taskClass?: string;
+  intakeStage?: string | null;
+  /** meta 到首个 delta 之间的思考时长；不填按 DEFAULT_THINK_MS */
+  thinkMs?: number;
+  records?: ScriptRecord[];
+  notices?: { code: NoticeCode; message: string }[];
+  drafts?: Omit<DraftFrame, 'type'>[];
+  /** 演示错误剧本：正文吐到这个比例时改吐 error 帧 */
+  failAt?: { ratio: number; code: string; message: string; retryAfter?: number };
 }
+
+/** mock 首字延迟，与真链路的「受理后即达 meta」节奏对齐 */
+export const DEFAULT_THINK_MS = 800;
 
 export const workbenchReplies: ReplyScript[] = [
   {
     id: 'rs_1',
-    waiting: '正在按朝阳区仲裁委的立案要求核对材料…',
+    model: 'claude-sonnet-5',
+    taskClass: 'critical',
+    intakeStage: 'done',
+    records: [
+      {
+        tool: 'timeline_add',
+        id: 'tl_r1',
+        summary: '7 月 15 日收到解除通知（立案材料清单已按此生成）',
+      },
+    ],
     content: `立案本身不难，材料齐了当场就能收。朝阳区劳动人事争议仲裁委员会在朝阳区人力资源和社会保障局的仲裁接待窗口收件，也可以走北京市网上仲裁服务平台先提交，通过初审再去现场核验原件。
 
 按你现在的档案，要带的东西是这四类：
@@ -77,7 +114,15 @@ export const workbenchReplies: ReplyScript[] = [
   },
   {
     id: 'rs_2',
-    waiting: '正在核对北京口径的计算标准…',
+    model: 'claude-sonnet-5',
+    taskClass: 'critical',
+    records: [
+      {
+        tool: 'claims_upsert',
+        id: 'cl_r2',
+        summary: '四项诉求合计 468678.23 元（口径未变）',
+      },
+    ],
     content: `先把结论说在前面：对方在电话里说什么都不算数，只认书面。你可以听、可以录音，但不要在电话里答应任何数字。
 
 如果 HR 再打来，按这三句话应对：
@@ -117,7 +162,20 @@ export const workbenchReplies: ReplyScript[] = [
   },
   {
     id: 'rs_3',
-    waiting: '正在比对你档案里的时间线和证据…',
+    model: 'deepseek-v4-pro',
+    taskClass: 'standard',
+    records: [
+      {
+        tool: 'timeline_add',
+        id: 'tl_r3',
+        summary: '新增一条公司沟通记录，已排入时间线',
+      },
+      {
+        tool: 'emotion_log',
+        id: 'em_r3',
+        summary: '本轮状态：着急但条理清楚',
+      },
+    ],
     content: `收到。我把这条并进档案了，下面是它对现有主张的影响。
 
 **对时间线**：这是一个新的公司动作节点，和 7 月 15 日的解除通知形成前后呼应，写进申请书的事实部分能让"客观情况重大变化"这个说法更站不住。
@@ -144,3 +202,202 @@ export const workbenchReplies: ReplyScript[] = [
     ],
   },
 ];
+
+/**
+ * 演示剧本：只能用 ?mock=<id> 点名触发，不进默认轮转。
+ * 用途是把等待态、降级、草稿确认、提示、错误这几条线跑给人看。
+ */
+export const scenarioReplies: ReplyScript[] = [
+  {
+    // 推理模型长考：首字前 4 分钟，用来验等待卡与 60 秒后的安抚文案
+    id: 'rs_long',
+    model: 'claude-opus-5',
+    taskClass: 'critical',
+    thinkMs: 240_000,
+    content: `算完了。你这份协议里有两处会吃亏，我按影响从大到小说。
+
+**第一处是解除原因写成"协商一致"**。签下去等于承认双方谈妥了走人，2N 的主张基础当场没了，差额 175000 元拿不回来。这一条不能换任何东西。
+
+**第二处是"双方再无其他争议"这句话**。它把欠薪、年假、加班费、社保补缴一并结清了，而这四项你档案里初算合计 468678.23 元，协议给的是 225000 元。
+
+如果公司催得紧，你可以先回一句"金额和表述我需要核对，三个工作日内答复"，这句话不构成任何承诺。`,
+    lawRefs: [],
+    records: [
+      {
+        tool: 'claims_upsert',
+        id: 'cl_long',
+        summary: '协议金额与初算差额 243678.23 元已记入诉求对比',
+      },
+    ],
+    actions: [
+      {
+        id: 'ai_long_1',
+        caseId: 'demo',
+        title: '先回一句"需要核对，三个工作日内答复"',
+        detail:
+          '书面回一句就够，不解释理由、不给数字。这句话不构成承诺，也不会被解读为拒绝谈判，同时把签字压力挪后三天。',
+        dueAt: '2026-08-20T23:59:00+08:00',
+        priority: 1,
+        status: '待办',
+        sourceMessageId: null,
+        createdAt: '2026-08-19T10:00:00+08:00',
+      },
+    ],
+  },
+  {
+    // 主力模型不可用，本轮走备用
+    id: 'rs_degraded',
+    model: 'qwen3.7-max',
+    degraded: true,
+    taskClass: 'standard',
+    thinkMs: 1200,
+    content: `可以录，但录的时候有三件事要注意。
+
+一是你本人在场的对话可以录，不需要对方同意；二是不要用剪辑过的版本，原始文件保留在手机里别删；三是录之前把手机电量和存储留够，谈话中途断掉的录音在质证时容易被质疑完整性。
+
+约谈当天，先问一句"今天这次谈话的结论会不会出书面文件"，把对方的回答录进去——后面公司改口时这句最好用。`,
+    lawRefs: [],
+    records: [
+      {
+        tool: 'timeline_add',
+        id: 'tl_deg',
+        summary: '约谈准备：录音要点已排入时间线',
+      },
+    ],
+    actions: [
+      {
+        id: 'ai_deg_1',
+        caseId: 'demo',
+        title: '约谈前把手机录音测试一遍',
+        detail:
+          '提前录 30 秒回放，确认收音清楚、存储够用。原始文件不要剪辑、不要转存后删除原件，仲裁时可能要求当庭打开原始载体核对。',
+        dueAt: '2026-08-22T23:59:00+08:00',
+        priority: 2,
+        status: '待办',
+        sourceMessageId: null,
+        createdAt: '2026-08-19T10:00:00+08:00',
+      },
+    ],
+  },
+  {
+    // 产出草稿：走确认流，UI 不给"直接发出"
+    id: 'rs_draft',
+    model: 'claude-sonnet-5',
+    taskClass: 'critical',
+    thinkMs: 1500,
+    content: `按你刚才补充的两条，异议函我改到了第 2 版，改动集中在三处：
+
+1. 把"部门合并"明确写成内部组织架构调整，不构成订立合同时所依据的客观情况重大变化。
+2. 补了一句公司从未提出变更岗位、地点或薪酬的书面方案，把程序问题坐实。
+3. 末尾加了"确认收到不代表认可内容"，防止签收被当成认可。
+
+先看一遍全文，尤其是日期和工号这两处。`,
+    lawRefs: [],
+    records: [
+      {
+        tool: 'deadline_set',
+        id: 'dl_draft',
+        summary: '异议函答复期限：收到之日起 5 个工作日',
+      },
+    ],
+    drafts: [
+      {
+        id: 'dr_1',
+        kind: '异议函',
+        title: '《解除劳动合同通知书》异议函',
+        version: 2,
+        requires_confirmation: true,
+      },
+    ],
+    actions: [],
+  },
+  {
+    // 六种 notice 里挑三种同时出现
+    id: 'rs_notice',
+    model: 'deepseek-v4-flash',
+    taskClass: 'standard',
+    thinkMs: 1000,
+    content: `年终奖这一块，你们公司规章里写的是"发放日在职方可领取"。这类条款在实践中不是一律有效，要看奖金的性质：如果它对应的是你已经完成的年度工作，走到庭上被认定为劳动报酬的一部分、支持按比例支付的情形不少见。
+
+你手上需要的是两样东西：写着这条规定的员工手册页，以及你往年实际拿到年终奖的银行流水。两样都有，这一项才好主张。`,
+    lawRefs: [],
+    notices: [
+      {
+        code: 'KNOWLEDGE_MISS',
+        message: '年终奖发放日在职条款：知识库无逐字依据',
+      },
+      { code: 'ACTION_CARD_CAPPED', message: '本轮行动卡超过 3 条，已截取' },
+      { code: 'REFERRAL_ALREADY_USED', message: '本案已提示过一次' },
+    ],
+    records: [
+      {
+        tool: 'claims_upsert',
+        id: 'cl_notice',
+        summary: '新增待补证诉求：年终奖（金额待定）',
+      },
+    ],
+    actions: [
+      {
+        id: 'ai_notice_1',
+        caseId: 'demo',
+        title: '翻出员工手册里写年终奖的那一页',
+        detail:
+          '拍照或截屏，要能看到页码和条款编号。手册是公司单方制定的，庭上会核对版本，最好连同签收记录一起找出来。',
+        dueAt: '2026-08-25T23:59:00+08:00',
+        priority: 2,
+        status: '待办',
+        sourceMessageId: null,
+        createdAt: '2026-08-19T10:00:00+08:00',
+      },
+    ],
+  },
+  {
+    // 六个 notice code 一次全出，只为人工核对文案，真实一轮不会这么多
+    id: 'rs_notice_all',
+    model: 'deepseek-v4-flash',
+    taskClass: 'bulk',
+    thinkMs: 800,
+    content: `这一轮的提示比较多，正文先给结论：竞业限制条款要看公司有没有按月付补偿，没付满三个月你可以书面提出解除。
+
+下面几条是这一轮处理过程中的说明。`,
+    lawRefs: [],
+    notices: [
+      { code: 'KNOWLEDGE_MISS', message: '竞业补偿标准：无逐字依据' },
+      { code: 'KNOWLEDGE_UNAVAILABLE', message: '知识库连接失败' },
+      { code: 'ACTION_CARD_CAPPED', message: '行动卡超过 3 条' },
+      { code: 'ACTION_CARD_MISSING', message: '本轮无新增行动卡' },
+      { code: 'REFERRAL_ALREADY_USED', message: '本案已提示过一次' },
+      { code: 'TOOL_INPUT_REJECTED', message: 'claims_upsert 入参校验未通过' },
+    ],
+    actions: [],
+  },
+  {
+    // 半途断流：验流内错误卡 + 倒计时重试
+    id: 'rs_error',
+    model: 'claude-sonnet-5',
+    taskClass: 'standard',
+    thinkMs: 900,
+    failAt: {
+      ratio: 0.35,
+      code: 'UPSTREAM_TIMEOUT',
+      message: '这一轮中途断了，刚才那段没说完。',
+      retryAfter: 10,
+    },
+    content: `社保这一项跟赔偿金是两条线，分开走。公司从 7 月起停缴，这段属于欠缴，补缴由社保经办机构追缴，不在仲裁委的受理范围里。
+
+具体做法是先在北京市社会保险网上服务平台打一份个人权益记录，把断缴月份圈出来，然后向参保区的社保经办机构反映。`,
+    lawRefs: [],
+    actions: [],
+  },
+];
+
+const ALL_SCRIPTS = [...workbenchReplies, ...scenarioReplies];
+
+export function findScript(id: string): ReplyScript | undefined {
+  return ALL_SCRIPTS.find((s) => s.id === id);
+}
+
+/** mock 的 message_id 形如 m_<scriptId>_<时间戳>，法条卡按剧本 id 回填。 */
+export function mockLawRefs(messageId: string): LawRef[] {
+  return ALL_SCRIPTS.find((s) => messageId.startsWith(`m_${s.id}_`))?.lawRefs ?? [];
+}

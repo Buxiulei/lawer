@@ -2,46 +2,60 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ActionItem, Message } from '@/app/_mock/types';
+import type { ActionItem } from '@/app/_mock/types';
 import {
   demoActions,
   demoCase,
   demoDeadlines,
   demoMessages,
 } from '@/app/_mock/demo';
-import { workbenchReplies, type ReplyScript } from '@/app/_mock/workbench';
+import { mockLawRefs } from '@/app/_mock/workbench';
 import { formatDate } from '@/app/_ui/format';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Sheet } from '@/components/ui/Sheet';
 import { DeadlineChip } from '@/components/case/DeadlineChip';
+import { toActionItem, type DraftFrame } from '../_stream/frames';
+import { readToken } from '../_stream/httpTransport';
+import { useChatStream, type SettledTurn } from '../_stream/useChatStream';
 import { CasePanel } from './CasePanel';
 import { Composer } from './Composer';
 import {
   AssistantMessage,
   DateDivider,
   UserMessage,
-  WaitingLine,
+  type StreamedMessage,
 } from './Messages';
-import { useMockStream } from './useMockStream';
+import {
+  AcceptedLine,
+  DemoDataBanner,
+  DraftConfirmDialog,
+  StreamErrorCard,
+  WaitingCard,
+} from './StreamParts';
 
 /** 跟随滚动的容差：底部在视口这个范围内才继续跟着流式输出走 */
 const FOLLOW_SLACK_PX = 220;
 
 export function Workbench({ caseId }: { caseId: string }) {
-  // mock 阶段只有 demo 案件有历史；其他 id 一律走空案件态。
+  // demo 案件有历史、走演示数据；其他 id 只有登录后才有对话可谈。
   const seeded = caseId === demoCase.id;
+  const [signedIn, setSignedIn] = useState(false);
 
-  const [messages, setMessages] = useState<Message[]>(seeded ? demoMessages : []);
+  const [messages, setMessages] = useState<StreamedMessage[]>(
+    seeded ? demoMessages : [],
+  );
   const [actions, setActions] = useState<ActionItem[]>(seeded ? demoActions : []);
-  const [replyIndex, setReplyIndex] = useState(0);
-  /** 正在流式输出的那条脚本，等待文案要跟它走 */
-  const [active, setActive] = useState<ReplyScript | null>(null);
+  const [confirmedDrafts, setConfirmedDrafts] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [askingDraft, setAskingDraft] = useState<DraftFrame | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
-  const { phase, text, start, stop } = useMockStream();
 
   const bottom = useRef<HTMLDivElement>(null);
   const follow = useRef(false);
+
+  useEffect(() => setSignedIn(Boolean(readToken())), []);
 
   // 滚到文档末尾而不是锚点：末尾处输入区回到静态位置，最后一行不会被它压住
   const scrollToBottom = useCallback((smooth = true) => {
@@ -51,21 +65,64 @@ export function Workbench({ caseId }: { caseId: string }) {
     });
   }, []);
 
+  /** 内容自己长高时（等待卡追加安抚文案）跟一下，前提是用户没往回翻 */
+  const keepAtBottom = useCallback(() => {
+    if (follow.current) scrollToBottom();
+  }, [scrollToBottom]);
+
+  /** 等待久了的去处：滚到最近一组行动卡 */
+  const jumpToActions = useCallback(() => {
+    const groups = document.querySelectorAll('[data-action-group]');
+    const last = groups[groups.length - 1];
+    if (!last) return;
+    follow.current = false;
+    last.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, []);
+
+  const settle = useCallback(
+    (turn: SettledTurn) => {
+      const items = turn.actions.map((frame) => toActionItem(frame, caseId));
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: turn.messageId || `m_local_${Date.now()}`,
+          threadId: turn.meta?.thread_id ?? 'th_1',
+          role: 'assistant',
+          content: turn.text,
+          model: turn.meta?.model,
+          createdAt: new Date().toISOString(),
+          actionItemIds: items.map((a) => a.id),
+          // 法条卡不在九帧契约里，mock 期间按 message_id 回填
+          lawRefs: mockLawRefs(turn.messageId),
+          records: turn.records,
+          notices: turn.notices,
+          drafts: turn.drafts,
+          degraded: turn.meta?.degraded,
+        },
+      ]);
+      if (items.length) setActions((prev) => [...prev, ...items]);
+      // 回复落定后行动卡才出现，再滚一次让「现在做什么」进视野
+      if (follow.current) setTimeout(() => scrollToBottom(), 80);
+      follow.current = false;
+    },
+    [caseId, scrollToBottom],
+  );
+
+  const stream = useChatStream({ caseId, onSettled: settle });
+
   // 流式中只在用户还停在底部时跟随；一旦用户往回翻，这一轮就不再拽他
   useEffect(() => {
-    if (!follow.current || !text) return;
+    if (!follow.current || !stream.text) return;
     const rect = bottom.current?.getBoundingClientRect();
     if (rect && rect.top - window.innerHeight > FOLLOW_SLACK_PX) {
       follow.current = false;
       return;
     }
     scrollToBottom(false);
-  }, [text, scrollToBottom]);
+  }, [stream.text, scrollToBottom]);
 
   const send = useCallback(
     (content: string) => {
-      const script = workbenchReplies[replyIndex % workbenchReplies.length];
-      const now = new Date().toISOString();
       setMessages((prev) => [
         ...prev,
         {
@@ -73,38 +130,20 @@ export function Workbench({ caseId }: { caseId: string }) {
           threadId: 'th_1',
           role: 'user',
           content,
-          createdAt: now,
+          createdAt: new Date().toISOString(),
         },
       ]);
-      setReplyIndex((i) => i + 1);
-      setActive(script);
       follow.current = true;
       requestAnimationFrame(() => scrollToBottom());
-
-      start(script.content, (partial) => {
-        setActive(null);
-        // 回复落定后行动卡才出现，再滚一次让「现在做什么」进视野
-        if (follow.current) setTimeout(() => scrollToBottom(), 80);
-        follow.current = false;
-        if (!partial.trim()) return;
-        const complete = partial.length >= script.content.length;
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `m_reply_${script.id}_${Date.now()}`,
-            threadId: 'th_1',
-            role: 'assistant',
-            content: partial,
-            createdAt: new Date().toISOString(),
-            actionItemIds: complete ? script.actions.map((a) => a.id) : [],
-            lawRefs: complete ? script.lawRefs : [],
-          },
-        ]);
-        if (complete) setActions((prev) => [...prev, ...script.actions]);
-      });
+      stream.send(content);
     },
-    [replyIndex, start, scrollToBottom],
+    [scrollToBottom, stream],
   );
+
+  const retry = useCallback(() => {
+    follow.current = true;
+    stream.retry();
+  }, [stream]);
 
   const toggleAction = useCallback((id: string, done: boolean) => {
     setActions((prev) =>
@@ -112,12 +151,17 @@ export function Workbench({ caseId }: { caseId: string }) {
     );
   }, []);
 
+  const confirmDraft = useCallback((id: string) => {
+    setConfirmedDrafts((prev) => new Set(prev).add(id));
+    setAskingDraft(null);
+  }, []);
+
   const actionsById = useMemo(
     () => new Map(actions.map((a) => [a.id, a])),
     [actions],
   );
 
-  if (!seeded) {
+  if (!seeded && !signedIn) {
     return (
       <div className="pt-8">
         <EmptyState
@@ -136,68 +180,107 @@ export function Workbench({ caseId }: { caseId: string }) {
     );
   }
 
+  /** 流里正在长出来的那条回复 */
+  const live: StreamedMessage = {
+    id: 'streaming',
+    threadId: stream.meta?.thread_id ?? 'th_1',
+    role: 'assistant',
+    content: stream.text,
+    createdAt: new Date().toISOString(),
+    records: stream.records,
+    notices: stream.notices,
+    drafts: stream.drafts,
+    degraded: stream.meta?.degraded,
+  };
+
   return (
-    // AppShell 的 main 限宽 860px；工作台在 PC 需要双栏，这里向两侧扩展。
-    <div className="lg:relative lg:left-1/2 lg:w-[min(1180px,calc(100vw-160px))] lg:-translate-x-1/2">
-      <MobileBar onOpenPanel={() => setPanelOpen(true)} />
+    <>
+      {/* AppShell 的 main 限宽 860px；工作台在 PC 需要双栏，这里向两侧扩展。 */}
+      <div className="lg:relative lg:left-1/2 lg:w-[min(1180px,calc(100vw-160px))] lg:-translate-x-1/2">
+        {seeded && <MobileBar onOpenPanel={() => setPanelOpen(true)} />}
 
-      <div className="lg:flex lg:items-start lg:gap-6">
-        <div className="min-w-0 lg:flex-1">
-          <div className="flex flex-col">
-            {messages.map((m, i) => {
-              const prev = messages[i - 1];
-              const newDay =
-                !prev || formatDate(prev.createdAt) !== formatDate(m.createdAt);
-              return (
-                <div key={m.id}>
-                  {newDay && <DateDivider iso={m.createdAt} />}
-                  {m.role === 'user' ? (
-                    <UserMessage message={m} />
-                  ) : (
-                    <AssistantMessage
-                      message={m}
-                      actions={(m.actionItemIds ?? [])
-                        .map((id) => actionsById.get(id))
-                        .filter((a): a is ActionItem => Boolean(a))}
-                      onToggleAction={toggleAction}
-                    />
-                  )}
-                </div>
-              );
-            })}
+        <div className="lg:flex lg:items-start lg:gap-6">
+          <div className="min-w-0 lg:flex-1">
+            {stream.demoFallback && <DemoDataBanner />}
 
-            {phase === 'waiting' && active && <WaitingLine label={active.waiting} />}
-            {phase === 'streaming' && (
-              <AssistantMessage
-                streaming
-                message={{
-                  id: 'streaming',
-                  threadId: 'th_1',
-                  role: 'assistant',
-                  content: text,
-                  createdAt: new Date().toISOString(),
-                }}
-                actions={[]}
-                onToggleAction={toggleAction}
-              />
-            )}
+            <div className="flex flex-col">
+              {messages.map((m, i) => {
+                const prev = messages[i - 1];
+                const newDay =
+                  !prev || formatDate(prev.createdAt) !== formatDate(m.createdAt);
+                return (
+                  <div key={m.id}>
+                    {newDay && <DateDivider iso={m.createdAt} />}
+                    {m.role === 'user' ? (
+                      <UserMessage message={m} />
+                    ) : (
+                      <AssistantMessage
+                        message={m}
+                        caseId={caseId}
+                        confirmedDrafts={confirmedDrafts}
+                        onRequestConfirmDraft={setAskingDraft}
+                        actions={(m.actionItemIds ?? [])
+                          .map((id) => actionsById.get(id))
+                          .filter((a): a is ActionItem => Boolean(a))}
+                        onToggleAction={toggleAction}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+
+              {stream.phase === 'connecting' && <AcceptedLine />}
+
+              {stream.phase === 'waiting' && stream.waitBaseAt !== null && (
+                <WaitingCard
+                  baseAt={stream.waitBaseAt}
+                  model={stream.meta?.model ?? null}
+                  onJumpToActions={actions.length > 0 ? jumpToActions : undefined}
+                  onLongWait={keepAtBottom}
+                />
+              )}
+
+              {(stream.phase === 'streaming' ||
+                (stream.phase === 'error' && stream.text)) && (
+                <AssistantMessage
+                  streaming={stream.phase === 'streaming'}
+                  message={live}
+                  caseId={caseId}
+                  confirmedDrafts={confirmedDrafts}
+                  onRequestConfirmDraft={setAskingDraft}
+                  actions={[]}
+                  onToggleAction={toggleAction}
+                />
+              )}
+
+              {stream.error && <StreamErrorCard error={stream.error} onRetry={retry} />}
+            </div>
+
+            <Composer streaming={stream.busy} onSend={send} onStop={stream.stop} />
+            {/* 锚点放在输入区之后：滚到底时最新一段正好落在输入区上方 */}
+            <div ref={bottom} className="h-px" />
           </div>
 
-          <Composer streaming={phase !== 'idle'} onSend={send} onStop={stop} />
-          {/* 锚点放在输入区之后：滚到底时最新一段正好落在输入区上方 */}
-          <div ref={bottom} className="h-px" />
+          {seeded && (
+            <aside className="hidden lg:sticky lg:top-[68px] lg:block lg:max-h-[calc(100dvh-88px)] lg:w-[360px] lg:shrink-0 lg:overflow-y-auto lg:pb-4">
+              <h2 className="mb-2 px-1 text-[15px] font-semibold text-ink">案件档案</h2>
+              <CasePanel caseId={caseId} actions={actions} />
+            </aside>
+          )}
         </div>
 
-        <aside className="hidden lg:sticky lg:top-[68px] lg:block lg:max-h-[calc(100dvh-88px)] lg:w-[360px] lg:shrink-0 lg:overflow-y-auto lg:pb-4">
-          <h2 className="mb-2 px-1 text-[15px] font-semibold text-ink">案件档案</h2>
+        <Sheet open={panelOpen} onClose={() => setPanelOpen(false)} title="案件档案">
           <CasePanel caseId={caseId} actions={actions} />
-        </aside>
+        </Sheet>
       </div>
 
-      <Sheet open={panelOpen} onClose={() => setPanelOpen(false)} title="案件档案">
-        <CasePanel caseId={caseId} actions={actions} />
-      </Sheet>
-    </div>
+      {/* 变换容器会成为 fixed 的参照系，确认弹窗必须挂在它外面 */}
+      <DraftConfirmDialog
+        draft={askingDraft}
+        onCancel={() => setAskingDraft(null)}
+        onConfirm={confirmDraft}
+      />
+    </>
   );
 }
 

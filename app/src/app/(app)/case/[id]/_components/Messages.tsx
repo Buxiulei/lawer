@@ -4,7 +4,21 @@ import type { ActionItem, Message } from '@/app/_mock/types';
 import { formatDate } from '@/app/_ui/format';
 import { ActionCard } from '@/components/case/ActionCard';
 import { LawRefCard } from '@/components/case/LawRefCard';
+import type { DraftFrame, NoticeFrame, RecordFrame } from '../_stream/frames';
 import { MaskedText, RichText } from './RichText';
+import { DegradedBadge, DraftCard, NoticeLine, RecordChip } from './StreamParts';
+
+/**
+ * 一条 AI 消息在流里落定后的形状：正文之外还带这一轮的结构化产出。
+ * 九帧契约里没有法条帧，lawRefs 目前只有 mock 会填。
+ */
+export interface StreamedMessage extends Message {
+  records?: RecordFrame[];
+  drafts?: DraftFrame[];
+  notices?: NoticeFrame[];
+  /** meta.degraded：本轮由备用模型完成 */
+  degraded?: boolean;
+}
 
 /** 日期分隔：跨天时插一条细线，案件对话往往横跨几周。 */
 export function DateDivider({ iso }: { iso: string }) {
@@ -35,24 +49,55 @@ export function AssistantMessage({
   message,
   actions,
   onToggleAction,
+  caseId,
+  confirmedDrafts,
+  onRequestConfirmDraft,
   streaming = false,
 }: {
-  message: Message;
+  message: StreamedMessage;
   actions: ActionItem[];
   onToggleAction: (id: string, done: boolean) => void;
+  caseId: string;
+  confirmedDrafts: ReadonlySet<string>;
+  onRequestConfirmDraft: (frame: DraftFrame) => void;
   streaming?: boolean;
 }) {
   // 流式中末尾可能停在半个 ** 上，先剪掉避免星号一闪
   const body = streaming ? message.content.replace(/\*{1,2}$/, '') : message.content;
   const laws = message.lawRefs ?? [];
+  const records = message.records ?? [];
+  const notices = message.notices ?? [];
+  const drafts = message.drafts ?? [];
 
   return (
     <article className="py-2">
+      {message.degraded && (
+        <div className="mb-1.5">
+          <DegradedBadge />
+        </div>
+      )}
+
       <RichText text={body} />
       {streaming && <StreamCaret />}
 
+      {records.length > 0 && (
+        <div className="prose-measure mt-3 flex flex-wrap gap-1.5">
+          {records.map((record) => (
+            <RecordChip key={record.id} frame={record} />
+          ))}
+        </div>
+      )}
+
+      {notices.length > 0 && (
+        <div className="mt-3 flex flex-col gap-2">
+          {notices.map((notice, i) => (
+            <NoticeLine key={`${notice.code}-${i}`} frame={notice} />
+          ))}
+        </div>
+      )}
+
       {actions.length > 0 && (
-        <section className="mt-4 animate-[fade-in_200ms_ease-out]">
+        <section data-action-group className="mt-4 animate-[fade-in_200ms_ease-out]">
           <h3 className="mb-2 flex items-baseline gap-2">
             <span className="text-[15px] font-semibold text-ink">现在做什么</span>
             <span className="num text-[13px] text-ink-2">
@@ -64,6 +109,20 @@ export function AssistantMessage({
               <ActionCard key={item.id} item={item} onToggle={onToggleAction} />
             ))}
           </div>
+        </section>
+      )}
+
+      {drafts.length > 0 && (
+        <section className="mt-4 flex flex-col gap-2">
+          {drafts.map((draft) => (
+            <DraftCard
+              key={draft.id}
+              frame={draft}
+              caseId={caseId}
+              confirmed={confirmedDrafts.has(draft.id)}
+              onRequestConfirm={onRequestConfirmDraft}
+            />
+          ))}
         </section>
       )}
 
@@ -89,22 +148,5 @@ function StreamCaret() {
       className="ml-0.5 inline-block h-[1.1em] w-[2px] translate-y-[3px] bg-primary"
       style={{ animation: 'skeleton-pulse 1.1s ease-in-out infinite' }}
     />
-  );
-}
-
-/** 等待首个 chunk：确定性文案，不写「AI 思考中」 */
-export function WaitingLine({ label }: { label: string }) {
-  return (
-    <p
-      aria-live="polite"
-      className="flex items-center gap-2 py-3 text-[15px] text-ink-2"
-    >
-      <span
-        aria-hidden
-        className="size-2 rounded-full bg-primary"
-        style={{ animation: 'skeleton-pulse 1.2s ease-in-out infinite' }}
-      />
-      {label}
-    </p>
   );
 }
