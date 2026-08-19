@@ -14,6 +14,7 @@
 
 ## 检查点快照（2026-08-19 额度临界）
 - 已合并 PR：#1 scaffold+crypto / #2 29表 / #3 auth+notify / #5 sidecar+deploy / #6 llm路由 / #7 52知识卡 / #8 billing账本+费率种子。main 全绿。
+- PR #9（MCP/API）打回待改：tsc 一处（verify route 引用未实现 getVerification），4 项裁决已批复（建案归 agent 首诊/lib mcp 入§6/case_get 带时间线/方言 2025-06-18）。calc_json 类型已批准（含 inputSources 可选槽）。
 - 在途（各分支持久化，不怕掉线）：WS2 三线=lib/agent（C04验收+PII脱敏+反向还原）、MCP骨架、evidence链，另带 otp/sms 的 nowSql 收尾；WS1 calc 纯函数首批（类型先送审）；WS4 A09+A04 约70卡+loader；WS3 三分支（骨架已好，intake-evidence 完成待复核，workbench/docs-drafts 在途）→合并集成→最后一波页面→PR。
 - 等用户：Anthropic key、服务器选址、退款A案终审、知乎cookie（可选）、援助律师问诊单（公司名→触发调研员公司调查）。
 - 上线前 OPS：两通人工电话核验、LAWER_DATA_KEY 异地备份登记（值已在 .secrets-backup/）。
