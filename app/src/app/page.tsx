@@ -1,5 +1,7 @@
 // app/src/app/page.tsx
-// 占位首页，等前端窗口（WS3）替换。
+// 根路径直接进当前案件的工作台。多案件列表页出现前，先固定到 demo。
+import { redirect } from 'next/navigation';
+
 export default function HomePage() {
-  return <main>裁员应对专员</main>;
+  redirect('/case/demo');
 }

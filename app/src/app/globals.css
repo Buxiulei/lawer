@@ -1,0 +1,194 @@
+@import 'tailwindcss';
+
+/* 深浅色由 html 上的 .dark / .light class 控制；两者都没有时跟随系统。 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Light（默认）──────────────────────────────────────────── */
+:root {
+  --bg: #f7f6f3;
+  --surface: #ffffff;
+  --surface-2: #f0eee9;
+  --ink: #26272b;
+  --ink-2: #6b6c70;
+  --line: #e4e2dc;
+  --primary: #146d63;
+  --primary-ink: #0f544c;
+  --primary-wash: #e3efed;
+  --amber: #b45309;
+  --amber-wash: #fbf0e3;
+  --danger: #c0453c;
+  --danger-wash: #f9e9e7;
+  --success: #2f7d4f;
+  --success-wash: #e7f2eb;
+
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.06);
+  color-scheme: light;
+}
+
+/* ── Dark ──────────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --bg: #151719;
+    --surface: #1e2124;
+    --surface-2: #26292d;
+    --ink: #e8e6e1;
+    --ink-2: #9b9c9e;
+    --line: #33363a;
+    --primary: #3fa396;
+    --primary-ink: #6bc0b4;
+    --primary-wash: #1c3230;
+    --amber: #e0913c;
+    --amber-wash: #33270f;
+    --danger: #e06a5f;
+    --danger-wash: #3a201d;
+    --success: #5caf7e;
+    --success-wash: #1c2f24;
+
+    --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.4);
+    color-scheme: dark;
+  }
+}
+
+.dark {
+  --bg: #151719;
+  --surface: #1e2124;
+  --surface-2: #26292d;
+  --ink: #e8e6e1;
+  --ink-2: #9b9c9e;
+  --line: #33363a;
+  --primary: #3fa396;
+  --primary-ink: #6bc0b4;
+  --primary-wash: #1c3230;
+  --amber: #e0913c;
+  --amber-wash: #33270f;
+  --danger: #e06a5f;
+  --danger-wash: #3a201d;
+  --success: #5caf7e;
+  --success-wash: #1c2f24;
+
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
+
+/* ── Tailwind theme 映射 ────────────────────────────────────── */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-line: var(--line);
+  --color-primary: var(--primary);
+  --color-primary-ink: var(--primary-ink);
+  --color-primary-wash: var(--primary-wash);
+  --color-amber: var(--amber);
+  --color-amber-wash: var(--amber-wash);
+  --color-danger: var(--danger);
+  --color-danger-wash: var(--danger-wash);
+  --color-success: var(--success);
+  --color-success-wash: var(--success-wash);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'PingFang SC',
+    'HarmonyOS Sans SC', 'MiSans', 'Noto Sans SC', 'Microsoft YaHei',
+    'Segoe UI', Roboto, sans-serif;
+
+  --radius-card: 12px;
+  --radius-btn: 10px;
+}
+
+/* ── 基础排版 ───────────────────────────────────────────────── */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.7;
+  }
+
+  /* 金额 / 日期 / 倒计时统一等宽数字 */
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: var(--primary-wash);
+    color: var(--primary-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  /* 正文段落最大宽度 38em（DESIGN.md 中文排版） */
+  .prose-measure {
+    max-width: 38em;
+  }
+
+  /* 低调模式：打码 */
+  .discreet-blur {
+    filter: blur(6px);
+    transition: filter 150ms ease-out;
+  }
+
+  /* 极轻阴影，层级主要靠底色差与分隔线 */
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+}
+
+/* 动效：全站过渡 150–250ms ease-out，不做弹跳/视差 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes sheet-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
