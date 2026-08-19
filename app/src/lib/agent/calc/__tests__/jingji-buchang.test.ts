@@ -303,6 +303,12 @@ describe('calcNPlus1：+1 按上一个月工资，不是 12 个月平均', () =>
     expect(r.amountFen).toBe(9_000_000 + 9_000_000);
   });
 
+  test('信息性 flag：N+1 恒带「代通知金不适用三倍封顶」，N 与 2N 不带', () => {
+    expect(calcNPlus1(input).flags).toContain(CALC_FLAG.daitongzhijinNoCap);
+    expect(calcN(input).flags).not.toContain(CALC_FLAG.daitongzhijinNoCap);
+    expect(calc2N(input).flags).not.toContain(CALC_FLAG.daitongzhijinNoCap);
+  });
+
   test('basis 含第四十条与实施条例第二十条', () => {
     const r = calcNPlus1(input);
     expect(r.basis).toContainEqual(

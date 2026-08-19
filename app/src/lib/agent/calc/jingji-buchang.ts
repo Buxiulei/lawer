@@ -374,7 +374,7 @@ export function calcNPlus1(input: NPlus1Input): CalcResult<NPlus1Inputs> {
       ` = ${yuan(amountFen)} 元`,
     inputs: Object.freeze({ ...core.inputs, lastMonthWageFen: input.lastMonthWageFen }),
     steps,
-    flags: core.flags,
+    flags: [...core.flags, CALC_FLAG.daitongzhijinNoCap],
     basis: [
       ...N_BASIS,
       { law: LHTF, article: '第四十条', packId: 'calc-daitongzhijin-n1' },

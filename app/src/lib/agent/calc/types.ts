@@ -37,6 +37,12 @@ export const CALC_FLAG = {
   halfMonth: '不满六个月按半月',
   /** 工龄余数满 6 个月不满 1 年，该段按 1 年计。 */
   roundUpYear: '满六个月不满一年按一年',
+  /**
+   * 信息性（恒随 N+1 给出）：「+1」按实施条例第二十条以上月工资全额计，不套三倍封顶——
+   * 封顶法源（第四十七条第二款）只约束经济补偿，北京对代通知金无裁审明文（534 号全文零命中）。
+   * 当庭或谈判被质疑时，agent 凭此 flag 直接给出口径出处。
+   */
+  daitongzhijinNoCap: '代通知金不适用三倍封顶（北京无明文口径）',
 } as const;
 export type CalcFlag = (typeof CALC_FLAG)[keyof typeof CALC_FLAG];
 
