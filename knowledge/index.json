@@ -150,6 +150,32 @@
     "path": "packs/calc/jingji-buchang-n.md"
   },
   {
+    "id": "calc-jingye-buchang-weiyuejin",
+    "type": "计算规则",
+    "title": "竞业限制补偿够不够 + 违约金离不离谱（30%/50% 下限、5 倍参考线、2 年上限）",
+    "keywords": [
+      "竞业限制补偿",
+      "30%",
+      "50%",
+      "违约金",
+      "5倍",
+      "竞业期限2年",
+      "最低工资兜底",
+      "补偿总额",
+      "停付解除义务",
+      "提前解除3个月"
+    ],
+    "applies_to": [
+      "竞业限制",
+      "协商解除",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/calc/jingye-buchang-weiyuejin.md"
+  },
+  {
     "id": "calc-nianjia-300",
     "type": "计算规则",
     "title": "未休年休假工资报酬 300% 的计算（实际主张 200% 差额、21.75 折算）",
@@ -604,6 +630,35 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/guandian-tiaogang-kuanggong-16940.md"
+  },
+  {
+    "id": "case-guanlian-hundong-zeyi-zgf25-2",
+    "type": "判例卡",
+    "title": "关联企业混同用工，劳动者可择一确认劳动关系（最高法 2025 典型案例·案例二）",
+    "keywords": [
+      "关联企业",
+      "混同用工",
+      "择一确认",
+      "劳动关系",
+      "一人公司",
+      "经营范围重合",
+      "工作场所名牌",
+      "微信QQ冠名",
+      "法定代表人个人账户发工资",
+      "有理由相信",
+      "王某",
+      "数字公司"
+    ],
+    "applies_to": [
+      "裁员",
+      "逼迫离职",
+      "证据固定",
+      "仲裁申请"
+    ],
+    "region": "全国",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/guanlian-hundong-zeyi-zgf25-2.md"
   },
   {
     "id": "case-guyi-buqian-hetong-bjzc24-2",
@@ -1766,6 +1821,31 @@
     "path": "packs/cases/rsu-guquan-jili-bushouli-23429.md"
   },
   {
+    "id": "case-shebao-yueding-wuxiao-buchang-zgf25-6",
+    "type": "判例卡",
+    "title": "约定不缴社保、以\"补助\"代缴的条款无效，据此解除可拿经济补偿（最高法 2025 典型案例·案例六）",
+    "keywords": [
+      "不缴社保约定无效",
+      "社保补助",
+      "格式条款",
+      "自愿放弃社保",
+      "被迫解除",
+      "经济补偿",
+      "法定义务不因约定免除",
+      "朱某",
+      "保安公司"
+    ],
+    "applies_to": [
+      "社保断缴",
+      "逼迫离职",
+      "仲裁申请"
+    ],
+    "region": "全国",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/shebao-yueding-wuxiao-buchang-zgf25-6.md"
+  },
+  {
     "id": "case-shengyu-jintie-buji-jishu-jing0105-2357",
     "type": "判例卡",
     "title": "施耐德案：哺乳期后以架构调整解除违法，生育津贴不计入赔偿金基数（（2022）京0105民初2357号）",
@@ -2600,6 +2680,32 @@
     "path": "packs/cases/zhidao-239-zhubo-laodongguanxi.md"
   },
   {
+    "id": "case-zhuanbao-gongshang-daiyu-zgf25-1",
+    "type": "判例卡",
+    "title": "工程转包给个人，工人认定工伤后由承包人支付工伤保险待遇（最高法 2025 典型案例·案例一）",
+    "keywords": [
+      "转包",
+      "分包",
+      "工伤保险待遇",
+      "用工主体责任",
+      "不以劳动关系为前提",
+      "承包人",
+      "八级伤残",
+      "停工留薪期",
+      "张某",
+      "建筑公司"
+    ],
+    "applies_to": [
+      "证据固定",
+      "仲裁申请",
+      "执行"
+    ],
+    "region": "全国",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/zhuanbao-gongshang-daiyu-zgf25-1.md"
+  },
+  {
     "id": "case-zhuanjiao-baoguo-zhiye-daode-12028",
     "type": "判例卡",
     "title": "制度合法 + 已告知 + 员工签字承诺，转交包裹并转达利益诉求被解除合法（反面案）",
@@ -2717,9 +2823,36 @@
       "离职证明"
     ],
     "region": "北京",
-    "confidence": "待核实",
+    "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/data/beijing-shiye-baoxianjin.md"
+  },
+  {
+    "id": "data-beijing-zhongcai-anliang",
+    "type": "数据卡",
+    "title": "北京劳动人事争议案件量与仲裁结案率（2024 年度：14.1 万件 / 98.6%）",
+    "keywords": [
+      "案件量",
+      "14.1万件",
+      "结案率",
+      "98.6%",
+      "劳动保障监察",
+      "6521件",
+      "12333",
+      "城镇调查失业率",
+      "新增就业",
+      "你不是一个人"
+    ],
+    "applies_to": [
+      "情绪支持",
+      "仲裁申请",
+      "裁员",
+      "欠薪"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/data/beijing-zhongcai-anliang.md"
   },
   {
     "id": "data-beijing-zuidi-gongzi",
@@ -2741,6 +2874,94 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/data/beijing-zuidi-gongzi.md"
+  },
+  {
+    "id": "emotion-bengkui-jiedian-jijiu",
+    "type": "情绪指南",
+    "title": "仲裁全程易崩溃节点与情绪急救（约谈当场/通知当天/等待期/对方反诉/等裁决）",
+    "keywords": [
+      "崩溃节点",
+      "情绪急救",
+      "呼吸法",
+      "60秒呼吸",
+      "4-7-8",
+      "着地练习",
+      "反刍思维",
+      "失眠",
+      "等待期",
+      "反诉",
+      "时效焦虑",
+      "危机干预"
+    ],
+    "applies_to": [
+      "情绪支持",
+      "裁员",
+      "仲裁申请",
+      "开庭质证",
+      "裁决与终局",
+      "一审二审"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/emotion/bengkui-jiedian-jijiu.md"
+  },
+  {
+    "id": "emotion-caiyuan-xinli-jieduan",
+    "type": "情绪指南",
+    "title": "被裁后的心理阶段：识别信号 × 陪伴话术 × 每阶段只做一件事",
+    "keywords": [
+      "被裁情绪",
+      "心理阶段",
+      "否认",
+      "愤怒",
+      "讨价还价",
+      "抑郁",
+      "接受",
+      "假性放松期",
+      "陪伴话术",
+      "冲动拦截",
+      "灾难化思维"
+    ],
+    "applies_to": [
+      "情绪支持",
+      "裁员",
+      "协商解除",
+      "逼迫离职"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/emotion/caiyuan-xinli-jieduan.md"
+  },
+  {
+    "id": "emotion-kaiting-xinli-jianshe",
+    "type": "情绪指南",
+    "title": "开庭前心理建设与预演：紧张是正常的，你只需要讲事实",
+    "keywords": [
+      "开庭紧张",
+      "开庭前夜",
+      "心理建设",
+      "预演",
+      "模拟开庭",
+      "提前到场",
+      "书面陈述",
+      "问什么答什么",
+      "对方翻供",
+      "说不清楚",
+      "失眠"
+    ],
+    "applies_to": [
+      "情绪支持",
+      "开庭质证",
+      "仲裁申请",
+      "调解",
+      "裁员"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/emotion/kaiting-xinli-jianshe.md"
   },
   {
     "id": "script-goutong-huashu-ku",
@@ -2801,6 +3022,73 @@
     "path": "packs/scripts/hongxian-qingdan.md"
   },
   {
+    "id": "script-hr-huashu-chaijie",
+    "type": "话术卡",
+    "title": "HR 谈话 8 句常用话术逐句拆解（原话→意图→风险→可照读回应）",
+    "keywords": [
+      "HR话术",
+      "逐句拆解",
+      "公司决定",
+      "不签就旷工",
+      "最多给N",
+      "今天不签明天没了",
+      "走仲裁也就这么多",
+      "离职证明",
+      "背调有影响",
+      "我们是朋友",
+      "情感操控"
+    ],
+    "applies_to": [
+      "协商解除",
+      "逼迫离职",
+      "裁员",
+      "违纪解除",
+      "背调威胁",
+      "离职证明",
+      "情绪支持"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/scripts/hr-huashu-chaijie.md"
+  },
+  {
+    "id": "script-hr-taolu-fangyu",
+    "type": "话术卡",
+    "title": "HR\"合规辞退/逼走员工\"套路识别与防御（识别信号→时间线特征→对应 SOP）",
+    "keywords": [
+      "HR套路",
+      "逼员工主动离职",
+      "合规辞退",
+      "明修栈道",
+      "引君入瓮",
+      "冷落边缘",
+      "陷阱任务",
+      "目标冒顶",
+      "短板扩大",
+      "感情劝退",
+      "替代逐客",
+      "PIP剧本",
+      "辞退面谈剧本"
+    ],
+    "applies_to": [
+      "逼迫离职",
+      "PIP",
+      "末位淘汰",
+      "调岗降薪",
+      "待岗停工",
+      "违纪解除",
+      "协商解除",
+      "裁员",
+      "证据固定",
+      "情绪支持"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/scripts/hr-taolu-fangyu.md"
+  },
+  {
     "id": "script-kaiting-huashu",
     "type": "话术卡",
     "title": "开庭话术卡：陈述、举证、质证四段式、答仲裁员问、辩论（全部可照读）",
@@ -2822,9 +3110,39 @@
       "调解"
     ],
     "region": "北京",
-    "confidence": "待核实",
+    "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/scripts/kaiting-huashu.md"
+  },
+  {
+    "id": "script-tanpan-xinli-gongju",
+    "type": "话术卡",
+    "title": "谈判心理工具箱：锚定 / 期限压力 / 信息不对称 / BATNA（公司怎么用，你怎么反用）",
+    "keywords": [
+      "谈判心理",
+      "BATNA",
+      "锚定效应",
+      "人为截止日期",
+      "损失厌恶",
+      "信息不对称",
+      "钓鱼式提问",
+      "降温战术",
+      "疲劳战",
+      "突然袭击",
+      "谈判筹码"
+    ],
+    "applies_to": [
+      "协商解除",
+      "逼迫离职",
+      "裁员",
+      "调解",
+      "情绪支持",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/scripts/tanpan-xinli-gongju.md"
   },
   {
     "id": "script-zhizheng-yaodian",
@@ -3014,6 +3332,182 @@
     "path": "packs/sop/fangjia-dengtongzhi.md"
   },
   {
+    "id": "sop-fuwuqi-baomi-xieyi",
+    "type": "流程SOP",
+    "title": "被裁时公司索要培训违约金 / 拿保密协议施压怎么办",
+    "keywords": [
+      "培训服务期",
+      "专项培训费用",
+      "服务期违约金",
+      "落户服务期",
+      "特殊待遇",
+      "保密协议",
+      "保密费",
+      "违约金无效",
+      "赔偿损失",
+      "第25条"
+    ],
+    "applies_to": [
+      "裁员",
+      "协商解除",
+      "逼迫离职",
+      "违纪解除",
+      "证据固定",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/fuwuqi-baomi-xieyi.md"
+  },
+  {
+    "id": "sop-gaoguan-hehuoren-rending",
+    "type": "流程SOP",
+    "title": "高管 / \"合伙人\" / 股东身份被裁：还算不算劳动者，能主张什么",
+    "keywords": [
+      "高管",
+      "总经理",
+      "财务负责人",
+      "合伙人",
+      "事业合伙人",
+      "城市合伙人",
+      "股东",
+      "身份认定",
+      "从属性",
+      "忠实义务",
+      "不可替代性",
+      "恢复劳动关系",
+      "破产工资"
+    ],
+    "applies_to": [
+      "裁员",
+      "违纪解除",
+      "协商解除",
+      "双倍工资",
+      "仲裁申请",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/gaoguan-hehuoren-rending.md"
+  },
+  {
+    "id": "sop-gongmin-daili-peiting",
+    "type": "流程SOP",
+    "title": "谁能陪劳动者上庭：公民代理资格、手续与旁听陪同的边界",
+    "keywords": [
+      "公民代理",
+      "近亲属代理",
+      "工会推荐",
+      "社会团体推荐",
+      "单位职工代理",
+      "基层法律服务工作者",
+      "旁听",
+      "陪同",
+      "民诉法61条",
+      "民诉解释87条",
+      "有偿公民代理",
+      "不予立案"
+    ],
+    "applies_to": [
+      "仲裁申请",
+      "开庭质证",
+      "裁员",
+      "情绪支持"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/gongmin-daili-peiting.md"
+  },
+  {
+    "id": "sop-gongshang-jiechu-xianzhi",
+    "type": "流程SOP",
+    "title": "工伤职工被裁：解除限制、停工留薪期与两笔补助金",
+    "keywords": [
+      "工伤",
+      "职业病",
+      "停工留薪期",
+      "伤残等级",
+      "一次性工伤医疗补助金",
+      "一次性伤残就业补助金",
+      "第42条第2项",
+      "离岗前职业健康检查",
+      "劳动能力鉴定"
+    ],
+    "applies_to": [
+      "裁员",
+      "逼迫离职",
+      "违纪解除",
+      "协商解除",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/gongshang-jiechu-xianzhi.md"
+  },
+  {
+    "id": "sop-gongsi-zhuxiao-pochan",
+    "type": "流程SOP",
+    "title": "公司注销 / 清算 / 破产：告谁、职工债权怎么走、股东怎么追",
+    "keywords": [
+      "公司注销",
+      "简易注销",
+      "清算组",
+      "破产",
+      "职工债权",
+      "无需申报",
+      "优先受偿",
+      "股东责任",
+      "出资人",
+      "吊销营业执照",
+      "提前解散",
+      "财产保全"
+    ],
+    "applies_to": [
+      "裁员",
+      "协商解除",
+      "欠薪",
+      "仲裁申请",
+      "执行",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/gongsi-zhuxiao-pochan.md"
+  },
+  {
+    "id": "sop-gongzheng-baoquan",
+    "type": "流程SOP",
+    "title": "北京证据保全公证：流程、费用与\"值不值得做\"的判断",
+    "keywords": [
+      "公证",
+      "证据保全公证",
+      "保全证据",
+      "公证费",
+      "市场调节价",
+      "公证处",
+      "微信公证",
+      "录音公证",
+      "邮件公证",
+      "精诚公证处"
+    ],
+    "applies_to": [
+      "证据固定",
+      "开庭质证",
+      "逼迫离职",
+      "欠薪",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/gongzheng-baoquan.md"
+  },
+  {
     "id": "sop-gongzi-shebao-geshui-beijing",
     "type": "流程SOP",
     "title": "工资流水/社保记录/个税明细的北京获取路径",
@@ -3140,6 +3634,64 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/jiaojie-fanyao.md"
+  },
+  {
+    "id": "sop-jingjixing-caiyuan-chengxu",
+    "type": "流程SOP",
+    "title": "经济性裁员（第41条）的法定程序与北京实践：逐条查它的程序违法点",
+    "keywords": [
+      "经济性裁员",
+      "第41条",
+      "20人以上",
+      "10%",
+      "提前30日",
+      "工会",
+      "听取意见",
+      "向劳动行政部门报告",
+      "优先留用",
+      "优先招用",
+      "六个月",
+      "程序违法"
+    ],
+    "applies_to": [
+      "裁员",
+      "逼迫离职",
+      "协商解除",
+      "证据固定",
+      "仲裁申请",
+      "开庭质证"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/jingjixing-caiyuan-chengxu.md"
+  },
+  {
+    "id": "sop-jixu-lvxing-vs-2n",
+    "type": "流程SOP",
+    "title": "违法解除后的二选一决策：主张继续履行（含期间工资）还是 2N 赔偿金",
+    "keywords": [
+      "继续履行",
+      "2N",
+      "赔偿金",
+      "违法解除",
+      "期间工资",
+      "第18条",
+      "恢复劳动关系",
+      "二选一",
+      "金额放大器"
+    ],
+    "applies_to": [
+      "裁员",
+      "逼迫离职",
+      "违纪解除",
+      "仲裁申请",
+      "裁决与终局"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/jixu-lvxing-vs-2n.md"
   },
   {
     "id": "sop-juzheng-xuzhi-sop",
@@ -3325,6 +3877,36 @@
     "path": "packs/sop/kpi-bukeneng-renwu.md"
   },
   {
+    "id": "sop-laowu-paiqian-waibao",
+    "type": "流程SOP",
+    "title": "劳务派遣 / 外包用工被裁：告谁、被\"退回\"怎么办",
+    "keywords": [
+      "劳务派遣",
+      "外包",
+      "假外包真派遣",
+      "退回",
+      "用工单位",
+      "派遣单位",
+      "连带赔偿",
+      "同工同酬",
+      "三性",
+      "10%比例",
+      "挂靠",
+      "转包"
+    ],
+    "applies_to": [
+      "裁员",
+      "待岗停工",
+      "逼迫离职",
+      "证据固定",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/laowu-paiqian-waibao.md"
+  },
+  {
     "id": "sop-lengbaoli-guli",
     "type": "流程SOP",
     "title": "遭遇孤立/冷暴力/公开羞辱/职场霸凌的应对与取证",
@@ -3402,6 +3984,39 @@
     "path": "packs/sop/mowei-taotai.md"
   },
   {
+    "id": "sop-nianzhongjiang-guquan-ticheng",
+    "type": "流程SOP",
+    "title": "离职后主张年终奖 / 股权期权 / 销售提成",
+    "keywords": [
+      "年终奖",
+      "发放时点在职",
+      "期权",
+      "RSU",
+      "限制性股票",
+      "股权激励",
+      "回购",
+      "销售提成",
+      "回款结算",
+      "离职不发",
+      "举证责任",
+      "经济补偿基数",
+      "分摊"
+    ],
+    "applies_to": [
+      "年终奖",
+      "裁员",
+      "协商解除",
+      "欠薪",
+      "证据固定",
+      "仲裁申请",
+      "开庭质证"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/nianzhongjiang-guquan-ticheng.md"
+  },
+  {
     "id": "sop-pip-yingdui",
     "type": "流程SOP",
     "title": "收到 PIP（绩效改进计划）当天与改进期应对",
@@ -3450,6 +4065,35 @@
     "path": "packs/sop/quxiao-jixiao-jiangjin.md"
   },
   {
+    "id": "sop-sanqi-nvzhigong",
+    "type": "流程SOP",
+    "title": "三期女职工（孕期／产期／哺乳期）被裁被调岗应对",
+    "keywords": [
+      "三期",
+      "孕期",
+      "产期",
+      "哺乳期",
+      "怀孕被辞退",
+      "产假158天",
+      "生育津贴",
+      "第42条",
+      "继续履行",
+      "女职工劳动保护特别规定"
+    ],
+    "applies_to": [
+      "孕产哺乳",
+      "裁员",
+      "逼迫离职",
+      "调岗降薪",
+      "协商解除",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/sanqi-nvzhigong.md"
+  },
+  {
     "id": "sop-shebao-tingjiao-jiangji",
     "type": "流程SOP",
     "title": "停缴社保/公积金或降低缴费基数的应对（北京第71条口径）",
@@ -3473,6 +4117,88 @@
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/shebao-tingjiao-jiangji.md"
+  },
+  {
+    "id": "sop-shijianchuo-cunzheng",
+    "type": "流程SOP",
+    "title": "可信时间戳与区块链存证：自助固证的替代路径（含法院认可情况）",
+    "keywords": [
+      "可信时间戳",
+      "tsa.cn",
+      "权利卫士",
+      "区块链存证",
+      "天平链",
+      "第三方存证",
+      "哈希值",
+      "中立第三方平台",
+      "上链前真实性",
+      "电子取证"
+    ],
+    "applies_to": [
+      "证据固定",
+      "逼迫离职",
+      "开庭质证",
+      "调岗降薪",
+      "欠薪"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/shijianchuo-cunzheng.md"
+  },
+  {
+    "id": "sop-shiwunian-laoyuangong",
+    "type": "流程SOP",
+    "title": "老员工保护：连续工作满15年且距法定退休年龄不足5年",
+    "keywords": [
+      "满十五年",
+      "距退休不足五年",
+      "第42条第5项",
+      "老员工",
+      "延迟退休",
+      "弹性退休",
+      "工龄合并",
+      "到期续延",
+      "超龄劳动者"
+    ],
+    "applies_to": [
+      "裁员",
+      "逼迫离职",
+      "调岗降薪",
+      "协商解除",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/shiwunian-laoyuangong.md"
+  },
+  {
+    "id": "sop-shiyongqi-quanli",
+    "type": "流程SOP",
+    "title": "试用期被裁：期限上限、工资下限与\"不符合录用条件\"的举证",
+    "keywords": [
+      "试用期",
+      "不符合录用条件",
+      "试用期上限",
+      "试用期工资80%",
+      "只能约定一次",
+      "第十九条",
+      "第二十一条",
+      "第八十三条",
+      "说明理由"
+    ],
+    "applies_to": [
+      "裁员",
+      "违纪解除",
+      "逼迫离职",
+      "证据固定",
+      "协商解除"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/shiyongqi-quanli.md"
   },
   {
     "id": "sop-shumian-songda-liucun",
@@ -3609,6 +4335,36 @@
     "path": "packs/sop/tuoqian-kekou-gongzi.md"
   },
   {
+    "id": "sop-waiqi-cheli-yingdui",
+    "type": "流程SOP",
+    "title": "外企撤离中国（关中国区 / 撤代表处 / 外方撤资）被裁的应对",
+    "keywords": [
+      "外企撤离",
+      "关中国区",
+      "常驻代表机构",
+      "代表处",
+      "合资公司撤资",
+      "遣散包",
+      "N加X",
+      "跨境主体",
+      "名义雇主",
+      "群体调解",
+      "客观情况重大变化"
+    ],
+    "applies_to": [
+      "裁员",
+      "协商解除",
+      "调解",
+      "逼迫离职",
+      "证据固定",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/waiqi-cheli-yingdui.md"
+  },
+  {
     "id": "sop-weiji-jiechu-yingdui",
     "type": "流程SOP",
     "title": "以\"严重违纪\"为名解除（旷工、朋友圈、兼职、拒绝调岗）的当天应对",
@@ -3661,6 +4417,33 @@
     "path": "packs/sop/weixie-beidiao-lizhengming.md"
   },
   {
+    "id": "sop-wuguding-qixian-hetong",
+    "type": "流程SOP",
+    "title": "无固定期限劳动合同：什么时候你有权要、单位不给怎么办",
+    "keywords": [
+      "无固定期限",
+      "连续订立二次固定期限",
+      "连续工作满十年",
+      "视为已订立",
+      "第十四条",
+      "第八十二条",
+      "违法终止",
+      "反规避",
+      "续延"
+    ],
+    "applies_to": [
+      "裁员",
+      "逼迫离职",
+      "协商解除",
+      "双倍工资",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/wuguding-qixian-hetong.md"
+  },
+  {
     "id": "sop-yaoqiu-qianzi-wenjian",
     "type": "流程SOP",
     "title": "被要求签字的各类文件（离职申请/协商解除协议/空白件/竞业/放弃仲裁）",
@@ -3686,6 +4469,33 @@
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/yaoqiu-qianzi-wenjian.md"
+  },
+  {
+    "id": "sop-yiliaoqi-baohu",
+    "type": "流程SOP",
+    "title": "医疗期内被裁与医疗期满解除应对",
+    "keywords": [
+      "医疗期",
+      "病假",
+      "非因工负伤",
+      "三个月到二十四个月",
+      "累计病休",
+      "第42条第3项",
+      "第40条第1项",
+      "医疗补助费",
+      "劳动能力鉴定"
+    ],
+    "applies_to": [
+      "裁员",
+      "逼迫离职",
+      "违纪解除",
+      "调岗降薪",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/yiliaoqi-baohu.md"
   },
   {
     "id": "sop-yishen-ersheng-sop",
@@ -3716,6 +4526,37 @@
     "path": "packs/sop/yishen-ersheng-sop.md"
   },
   {
+    "id": "sop-zhengju-mulu-xiezuo",
+    "type": "流程SOP",
+    "title": "证明目的怎么写、原件怎么带、公司的材料怎么调取",
+    "keywords": [
+      "证明目的",
+      "证明对象",
+      "证据目录",
+      "写法",
+      "事实句",
+      "要件事实",
+      "原件规则",
+      "原始载体",
+      "开庭携带",
+      "调取证据申请书",
+      "举证责任倒置",
+      "后台原始数据"
+    ],
+    "applies_to": [
+      "证据固定",
+      "开庭质证",
+      "仲裁申请",
+      "裁员",
+      "加班费",
+      "欠薪"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/zhengju-mulu-xiezuo.md"
+  },
+  {
     "id": "sop-zhengren-yu-zhengju-qingdan",
     "type": "流程SOP",
     "title": "证人出庭作证与《证据清单》组卷骨架",
@@ -3737,7 +4578,7 @@
       "逼迫离职"
     ],
     "region": "北京",
-    "confidence": "待核实",
+    "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/zhengren-yu-zhengju-qingdan.md"
   },
@@ -3881,6 +4722,34 @@
     "path": "packs/statutes/beijing-gongzi-zhifu-guiding.md"
   },
   {
+    "id": "statute-dianzi-qianming-fa",
+    "type": "法条卡",
+    "title": "电子存证效力三法逐字：电子签名法＋互联网法院规定§11＋在线诉讼规则§12—19（单点事实源）",
+    "keywords": [
+      "电子签名法",
+      "数据电文",
+      "可靠电子签名",
+      "电子认证服务",
+      "境外认证",
+      "互联网法院规定",
+      "在线诉讼规则",
+      "区块链存证",
+      "可信时间戳",
+      "哈希值校验",
+      "上链前真实性",
+      "区块链信息服务备案"
+    ],
+    "applies_to": [
+      "证据固定",
+      "开庭质证",
+      "一审二审"
+    ],
+    "region": "全国",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/statutes/dianzi-qianming-fa.md"
+  },
+  {
     "id": "statute-fashi-2025-12-jieshi-2",
     "type": "法条卡",
     "title": "劳动争议司法解释（二）常用条文汇编（法释〔2025〕12号，单点事实源）",
@@ -3968,6 +4837,67 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/lhtf-38-beipo-jiechu.md"
+  },
+  {
+    "id": "statute-minsu-zhengju-guiding",
+    "type": "法条卡",
+    "title": "《民诉证据规定》（法释〔2019〕19号）证据规则逐字汇编（单点事实源）",
+    "keywords": [
+      "民诉证据规定",
+      "民事诉讼法",
+      "证据种类",
+      "诉前证据保全",
+      "法释2019第19号",
+      "电子数据",
+      "原始载体",
+      "证据目录",
+      "证人出庭",
+      "保证书",
+      "书面证言",
+      "不能单独认定",
+      "拒不提交",
+      "非法证据排除",
+      "高度可能性"
+    ],
+    "applies_to": [
+      "证据固定",
+      "开庭质证",
+      "仲裁申请",
+      "一审二审"
+    ],
+    "region": "全国",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/statutes/minsu-zhengju-guiding.md"
+  },
+  {
+    "id": "statute-rsty-2025-40-jingye-zhiyin",
+    "type": "法条卡",
+    "title": "人社厅发〔2025〕40号《企业实施竞业限制合规指引》全文（单点事实源·行政指引）",
+    "keywords": [
+      "竞业限制",
+      "合规指引",
+      "人社厅发2025年40号",
+      "30%",
+      "50%",
+      "违约金5倍",
+      "期限2年",
+      "地域全国全世界",
+      "行业通用知识技能",
+      "停付补偿解除义务",
+      "提前解除3个月",
+      "行政指引"
+    ],
+    "applies_to": [
+      "竞业限制",
+      "协商解除",
+      "离职证明",
+      "仲裁申请"
+    ],
+    "region": "全国",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/statutes/rsty-2025-40-jingye-zhiyin.md"
   },
   {
     "id": "template-beipo-jiechu-tongzhishu",

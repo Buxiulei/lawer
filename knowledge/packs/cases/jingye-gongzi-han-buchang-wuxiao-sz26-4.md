@@ -5,7 +5,7 @@ title: "工资里已包含竞业补偿"的约定不符合法律规定，应另�
 keywords: [竞业限制, 补偿金, 工资包含补偿, 约定无效, 30%标准, 保密费, 培训费, 工资构成拆分]
 applies_to: [竞业限制, 欠薪, 协商解除]
 law_refs: [劳动合同法§23, 劳动合同法§26, 法释〔2020〕26号§36]
-related: [case-jingye-lanyong-jujue-buchang-sz26-1, case-jingye-baogao-zuixiao-biyao-bjzc25-8, template-xieshang-jiechu-shencha-qingdan, statute-fashi-2025-12-jieshi-2]
+related: [case-jingye-lanyong-jujue-buchang-sz26-1, case-jingye-baogao-zuixiao-biyao-bjzc25-8, template-xieshang-jiechu-shencha-qingdan, statute-fashi-2025-12-jieshi-2, statute-rsty-2025-40-jingye-zhiyin, calc-jingye-buchang-weiyuejin]
 region: 北京
 sources:
   - https://www.sohu.com/a/1014564022_121123853

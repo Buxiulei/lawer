@@ -5,7 +5,7 @@ title: 劳动者履行了竞业义务，公司再以"你不属于法定竞业人
 keywords: [竞业限制, 补偿金, 拒付, 客户服务专员, 人员范围, 条款不生效, 诚信原则]
 applies_to: [竞业限制, 协商解除, 仲裁申请]
 law_refs: [劳动合同法§23, 劳动合同法§24, 法释〔2025〕12号§13]
-related: [statute-fashi-2025-12-jieshi-2, case-jingye-fanhua-jianshen-jiaolian-bjzc24-9, case-jingye-gongzi-han-buchang-wuxiao-sz26-4, template-xieshang-jiechu-shencha-qingdan]
+related: [statute-fashi-2025-12-jieshi-2, case-jingye-fanhua-jianshen-jiaolian-bjzc24-9, case-jingye-gongzi-han-buchang-wuxiao-sz26-4, template-xieshang-jiechu-shencha-qingdan, statute-rsty-2025-40-jingye-zhiyin, calc-jingye-buchang-weiyuejin]
 region: 北京
 sources:
   - https://www.sohu.com/a/1014564022_121123853

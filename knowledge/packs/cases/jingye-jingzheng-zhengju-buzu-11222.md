@@ -5,7 +5,7 @@ title: 证据不足以证明形成竞争关系 → 驳回公司诉请（京01民
 keywords: [竞业限制, 竞争关系, 举证不足, 经营范围, 实际经营内容, 受众, 地域范围, 驳回公司]
 applies_to: [竞业限制, 开庭质证, 仲裁申请]
 law_refs: [劳动合同法§23, 劳动合同法§24]
-related: [case-jingye-jingzheng-guanxi-shizhi-sz26-2, case-jingye-yewu-chonghe-weiyue-12630, case-jingye-fanwei-shiying-zgf25-4]
+related: [case-jingye-jingzheng-guanxi-shizhi-sz26-2, case-jingye-yewu-chonghe-weiyue-12630, case-jingye-fanwei-shiying-zgf25-4, statute-rsty-2025-40-jingye-zhiyin]
 region: 北京
 sources:
   - https://zh.wikisource.org/zh-hans/北京市第一中级人民法院（2023）京01民终11222号民事判决书

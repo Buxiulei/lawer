@@ -5,7 +5,7 @@ title: 不得滥用竞业限制：普通健身教练不属于法定竞业人员�
 keywords: [竞业限制, 人员范围, 普通员工, 健身教练, 违约金驳回, 商业秘密未举证, 泛化使用]
 applies_to: [竞业限制, 仲裁申请]
 law_refs: [劳动合同法§24, 法释〔2025〕12号§13]
-related: [case-jingye-lanyong-jujue-buchang-sz26-1, case-jingye-fanwei-shiying-zgf25-4, statute-fashi-2025-12-jieshi-2, case-jingye-baogao-zuixiao-biyao-bjzc25-8]
+related: [case-jingye-lanyong-jujue-buchang-sz26-1, case-jingye-fanwei-shiying-zgf25-4, statute-fashi-2025-12-jieshi-2, case-jingye-baogao-zuixiao-biyao-bjzc25-8, statute-rsty-2025-40-jingye-zhiyin]
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html

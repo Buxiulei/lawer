@@ -5,7 +5,7 @@ title: "天价违约金"的调整规则：以实际损失为基础综合衡量�
 keywords: [竞业限制, 违约金过高, 违约金调整, 实际损失, 时间戳证书, 陈述前后矛盾, 高薪技术岗]
 applies_to: [竞业限制, 开庭质证, 仲裁申请]
 law_refs: [劳动合同法§23, 民法典合同编通则解释§65]
-related: [case-jingye-peiou-daichi-sz26-3, case-jingye-feifa-quzheng-sz26-6, case-zaizhi-jingye-weiyue-zgf25-5, case-zhengju-caixin-guize-huibian]
+related: [case-jingye-peiou-daichi-sz26-3, case-jingye-feifa-quzheng-sz26-6, case-zaizhi-jingye-weiyue-zgf25-5, case-zhengju-caixin-guize-huibian, statute-rsty-2025-40-jingye-zhiyin, calc-jingye-buchang-weiyuejin]
 region: 北京
 sources:
   - https://www.sohu.com/a/1014564022_121123853
