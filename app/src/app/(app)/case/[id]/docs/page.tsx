@@ -1,13 +1,15 @@
 import type { Metadata } from 'next';
-import { PagePlaceholder } from '@/components/shell/PagePlaceholder';
+import { mockDocs } from '@/app/_mock/docs-drafts';
+import { DocsListView } from './_components/DocsListView';
 
 export const metadata: Metadata = { title: '文件解读' };
 
-export default function DocsPage() {
-  return (
-    <PagePlaceholder
-      pageName="文件解读"
-      description="公司文件 OCR、风险条款标红与签/不签意见的解读页正在开发中。"
-    />
-  );
+export default async function DocsPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  // 接后端前取 mock；后续换成按 caseId 查 company_docs。
+  return <DocsListView caseId={id} docs={mockDocs} />;
 }
