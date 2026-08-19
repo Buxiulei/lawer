@@ -251,6 +251,2377 @@
     "path": "packs/calc/weiqian-hetong-shuangbei.md"
   },
   {
+    "id": "case-ai-tidai-gangwei-2025-zhongcai",
+    "type": "判例卡",
+    "title": "AI替代岗位不属于客观情况重大变化（2025年北京市仲裁十大典型案例·案例六，官方案例未公开案号）",
+    "keywords": [
+      "AI替代",
+      "技术替代",
+      "数据采集员",
+      "客观情况重大变化",
+      "撤销部门",
+      "经营决策",
+      "岗位调剂",
+      "刘某"
+    ],
+    "applies_to": [
+      "裁员",
+      "调岗降薪",
+      "逼迫离职",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/ai-tidai-gangwei-2025-zhongcai.md"
+  },
+  {
+    "id": "case-biyezheng-hou-shixi-xieyi-bjzc25-2",
+    "type": "判例卡",
+    "title": "大学生取得毕业证后仍按\"实习协议\"用工 → 应认定劳动关系（2025 北京仲裁十大典型案例·案例二）",
+    "keywords": [
+      "实习协议",
+      "应届毕业生",
+      "毕业证",
+      "劳动者主体资格",
+      "劳动关系确认",
+      "三性从属性",
+      "违法解除"
+    ],
+    "applies_to": [
+      "裁员",
+      "逼迫离职",
+      "证据固定",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/biyezheng-hou-shixi-xieyi-bjzc25-2.md"
+  },
+  {
+    "id": "case-buqian-tongzhi-shuangbei-8452",
+    "type": "判例卡",
+    "title": "二倍工资差额 63,000 元 + 违法解除赔偿金；含北京\"应得工资\"基数完整算式（朝阳一审 京0105民初8452号）",
+    "keywords": [
+      "二倍工资差额",
+      "应得工资",
+      "赔偿金基数",
+      "年终奖分摊",
+      "加班费计入基数",
+      "个人社保部分",
+      "解除证明",
+      "倒查旷工"
+    ],
+    "applies_to": [
+      "双倍工资",
+      "裁员",
+      "加班费",
+      "年终奖",
+      "离职证明",
+      "年假"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/buqian-tongzhi-shuangbei-8452.md"
+  },
+  {
+    "id": "case-caiyuan-daitongzhijin-jing03-14407",
+    "type": "判例卡",
+    "title": "违法解除拿2N后不再另付代通知金（（2023）京03民终14407号，赔偿金66,588.75元）",
+    "keywords": [
+      "代通知金",
+      "2N不含加一",
+      "经济性裁员未举证",
+      "第48条",
+      "关联公司连带",
+      "工龄连续计算",
+      "边某"
+    ],
+    "applies_to": [
+      "裁员",
+      "协商解除",
+      "仲裁申请",
+      "一审二审"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/caiyuan-daitongzhijin-jing03-14407.md"
+  },
+  {
+    "id": "case-caiyuan-kuisun-buzhengju-jing03-18835",
+    "type": "判例卡",
+    "title": "口头主张\"业务规模缩水、持续亏损\"却不举证=违法解除（（2023）京03民终18835号）",
+    "keywords": [
+      "经济性裁员",
+      "第41条",
+      "经营困难",
+      "持续亏损",
+      "事实条件",
+      "法定程序",
+      "举证责任",
+      "赵某"
+    ],
+    "applies_to": [
+      "裁员",
+      "证据固定",
+      "一审二审"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/caiyuan-kuisun-buzhengju-jing03-18835.md"
+  },
+  {
+    "id": "case-dache-fei-guofa-xiangdang-17970",
+    "type": "判例卡",
+    "title": "因954.03元打车费直接开除 → 违反\"过罚相当\"，构成违法解除",
+    "keywords": [
+      "过罚相当",
+      "比例原则",
+      "制度合理性审查",
+      "主观故意",
+      "小额报销",
+      "违法解除赔偿金",
+      "隔离期工资"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "逼迫离职"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/dache-fei-guofa-xiangdang-17970.md"
+  },
+  {
+    "id": "case-daidaka-budingshi-gongshi-2026",
+    "type": "判例卡",
+    "title": "同事代打卡15次 + 制度明确 + 已征求工会意见 → 解除合法；不定时工作制不豁免考勤管理（反面案）",
+    "keywords": [
+      "代打卡",
+      "不定时工作制",
+      "考勤管理",
+      "征求工会意见",
+      "第39条",
+      "合法解除",
+      "反面案例"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/daidaka-budingshi-gongshi-2026.md"
+  },
+  {
+    "id": "case-daocha-kaoqin-kuanggong-2002",
+    "type": "判例卡",
+    "title": "协商解除谈崩后\"倒查考勤\"，把迟到早退累加成旷工 = 违法解除（裁员谈判失败者必读）",
+    "keywords": [
+      "倒查考勤",
+      "迟到早退累计",
+      "旷工解除",
+      "协商解除谈崩",
+      "虚报加班",
+      "加班审批",
+      "违法解除赔偿金"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "协商解除",
+      "逼迫离职",
+      "加班费",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/daocha-kaoqin-kuanggong-2002.md"
+  },
+  {
+    "id": "case-di-er-zhiye-zhidu-hefa-13839",
+    "type": "判例卡",
+    "title": "员工手册经民主程序且已公示，从事\"第二职业\"被解除合法（劳动者败诉的反面案）",
+    "keywords": [
+      "第二职业",
+      "兼职",
+      "员工手册",
+      "民主程序",
+      "公示",
+      "合法解除",
+      "反面案例",
+      "朋友圈截图",
+      "录屏"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/di-er-zhiye-zhidu-hefa-13839.md"
+  },
+  {
+    "id": "case-erci-daoqi-zhongzhi-weifa-4718",
+    "type": "判例卡",
+    "title": "二次固定期限合同到期直接终止 = 违法终止；旧考勤问题不能事后翻出来当理由（京03民终4718号）",
+    "keywords": [
+      "两次固定期限",
+      "无固定期限",
+      "到期终止",
+      "违法终止",
+      "告知单",
+      "事后找理由",
+      "钉钉记录",
+      "关联性"
+    ],
+    "applies_to": [
+      "裁员",
+      "违纪解除",
+      "双倍工资",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/erci-daoqi-zhongzhi-weifa-4718.md"
+  },
+  {
+    "id": "case-fuli-nianjia-anyue-sz25-4",
+    "type": "判例卡",
+    "title": "福利年休假属企业自主承诺，可按公司规定处理；补偿只算法定年假（三中院 2025 典型案例·案例四）",
+    "keywords": [
+      "福利年假",
+      "法定年假",
+      "员工手册",
+      "自主经营权",
+      "不予补偿",
+      "先休法定年假",
+      "反面案例"
+    ],
+    "applies_to": [
+      "年假",
+      "裁员"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/fuli-nianjia-anyue-sz25-4.md"
+  },
+  {
+    "id": "case-gaoguan-yinman-liyi-chongtu-2024",
+    "type": "判例卡",
+    "title": "高管在合规声明问卷中隐瞒利益冲突被解除，仲裁与法院均支持公司（2024北京仲裁十大典型案例·案例八）",
+    "keywords": [
+      "高管",
+      "利益冲突披露",
+      "合规声明问卷",
+      "忠实勤勉义务",
+      "持股50%",
+      "合法解除",
+      "反面案例"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "竞业限制"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/gaoguan-yinman-liyi-chongtu-2024.md"
+  },
+  {
+    "id": "case-gongshang-fuzhen-guodu-diaocha-2024",
+    "type": "判例卡",
+    "title": "七次要求到指定医院复诊、配合两次后自行就医 → 不构成严重违纪，支持违法解除赔偿金（2024北京仲裁十大典型案例·案例五）",
+    "keywords": [
+      "工伤",
+      "病假真实性调查",
+      "指定医院复诊",
+      "自主选择就医",
+      "过度调查",
+      "不配合调查",
+      "违法解除赔偿金"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "逼迫离职"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/gongshang-fuzhen-guodu-diaocha-2024.md"
+  },
+  {
+    "id": "case-gongzi-yiyiqi-wuxiao-bjzc24-3",
+    "type": "判例卡",
+    "title": "\"工资异议期\"条款无效：收薪 3 日内不提异议视为认可的约定不作数（2024 北京仲裁十大典型案例·案例三）",
+    "keywords": [
+      "工资异议期",
+      "无效条款",
+      "免除法定责任",
+      "排除劳动者权利",
+      "沉默不构成认可",
+      "工资举证责任",
+      "追索时效"
+    ],
+    "applies_to": [
+      "欠薪",
+      "加班费",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/gongzi-yiyiqi-wuxiao-bjzc24-3.md"
+  },
+  {
+    "id": "case-guandian-tiaogang-kuanggong-16940",
+    "type": "判例卡",
+    "title": "关店后不给具体新门店、直接按\"旷工\"辞退 = 违法解除（个税明细证明季度绩效2万）",
+    "keywords": [
+      "关店",
+      "调岗无具体岗位",
+      "旷工解除",
+      "违法解除",
+      "个税收入纳税明细",
+      "季度绩效",
+      "举证责任"
+    ],
+    "applies_to": [
+      "调岗降薪",
+      "违纪解除",
+      "逼迫离职",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/guandian-tiaogang-kuanggong-16940.md"
+  },
+  {
+    "id": "case-guyi-buqian-hetong-bjzc24-2",
+    "type": "判例卡",
+    "title": "故意拖延不签合同索要二倍工资不获支持（2024 北京仲裁十大典型案例·案例二）",
+    "keywords": [
+      "二倍工资",
+      "故意不签合同",
+      "诚实信用",
+      "劳动碰瓷",
+      "副总经理",
+      "驳回",
+      "反面案例"
+    ],
+    "applies_to": [
+      "双倍工资",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/guyi-buqian-hetong-bjzc24-2.md"
+  },
+  {
+    "id": "case-guyi-buqian-hetong-zgf25-3",
+    "type": "判例卡",
+    "title": "劳动者故意不订立书面劳动合同，用人单位不负支付二倍工资的责任（最高法 2025-08-01 发布典型案例·案例三）",
+    "keywords": [
+      "二倍工资",
+      "故意不订立",
+      "续订合同",
+      "最高法典型案例",
+      "冉某",
+      "诚实信用",
+      "反面案例"
+    ],
+    "applies_to": [
+      "双倍工资",
+      "仲裁申请"
+    ],
+    "region": "全国",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/guyi-buqian-hetong-zgf25-3.md"
+  },
+  {
+    "id": "case-hegui-wenze-neibu-xitong-19249",
+    "type": "判例卡",
+    "title": "合规问责制度\"公示在公司内部系统\"即视为高管知晓 → 解除合法 + 扣减50%年度绩效（反面案）",
+    "keywords": [
+      "合规问责",
+      "内部系统公示",
+      "高管知晓",
+      "监管措施",
+      "警示函",
+      "绩效扣减50%",
+      "合法解除",
+      "反面案例"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "年终奖"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/hegui-wenze-neibu-xitong-19249.md"
+  },
+  {
+    "id": "case-huanqian-gongling-lianxu-bjzc25-1",
+    "type": "判例卡",
+    "title": "换签劳动合同后工作年限仍应连续计算（2025 北京仲裁十大典型案例·案例一）",
+    "keywords": [
+      "换签",
+      "控股子公司",
+      "终止协议",
+      "工作年限连续计算",
+      "业务裁撤",
+      "经济补偿",
+      "关联公司调配"
+    ],
+    "applies_to": [
+      "裁员",
+      "协商解除",
+      "逼迫离职"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/huanqian-gongling-lianxu-bjzc25-1.md"
+  },
+  {
+    "id": "case-huanqian-jiangxin-gongling-11711",
+    "type": "判例卡",
+    "title": "换签主体 + 降薪 + 工龄不连续，员工拒签续约被解除 = 违法解除（京03民终11711号）",
+    "keywords": [
+      "换签主体",
+      "关联公司",
+      "降薪",
+      "工龄连续计算",
+      "拒签续约",
+      "违法解除",
+      "无固定期限",
+      "部门迁址"
+    ],
+    "applies_to": [
+      "裁员",
+      "调岗降薪",
+      "逼迫离职",
+      "双倍工资"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/huanqian-jiangxin-gongling-11711.md"
+  },
+  {
+    "id": "case-huanqian-zhuti-wugu-cy24-4",
+    "type": "判例卡",
+    "title": "关联企业间交替变换签约主体，两次固定期限次数仍连续计算 → 终止属违法（朝阳法院 2024 涉多元用工典型案例·案例四）",
+    "keywords": [
+      "换签主体",
+      "分公司",
+      "关联企业",
+      "无固定期限",
+      "两次固定期限",
+      "违法终止",
+      "工作年限连续"
+    ],
+    "applies_to": [
+      "裁员",
+      "双倍工资",
+      "逼迫离职"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/huanqian-zhuti-wugu-cy24-4.md"
+  },
+  {
+    "id": "case-hundong-yonggong-liandai-jing01-197",
+    "type": "判例卡",
+    "title": "解除通知同时写\"客观情况+经营困难\"却两头不举证，并认定混同用工连带责任（（2023）京01民终197号）",
+    "keywords": [
+      "混同用工",
+      "连带责任",
+      "客观情况重大变化",
+      "生产经营严重困难",
+      "主体变更协议",
+      "工龄连续计算",
+      "世纪互联",
+      "光载无限"
+    ],
+    "applies_to": [
+      "裁员",
+      "逼迫离职",
+      "证据固定",
+      "一审二审",
+      "执行"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/hundong-yonggong-liandai-jing01-197.md"
+  },
+  {
+    "id": "case-hunton-buchengli-lvsuo-3024",
+    "type": "判例卡",
+    "title": "主张混同用工失败的反面案例：仅凭\"关联公司/经营范围重合\"不够（京03民终3024号）",
+    "keywords": [
+      "混同用工",
+      "反面案例",
+      "举证不足",
+      "经营范围",
+      "名片",
+      "律师事务所解散",
+      "继续履行被驳"
+    ],
+    "applies_to": [
+      "裁员",
+      "证据固定",
+      "开庭质证"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/hunton-buchengli-lvsuo-3024.md"
+  },
+  {
+    "id": "case-hunton-liandai-cy24-1",
+    "type": "判例卡",
+    "title": "企业用工有混同，三家公司连带担责（朝阳法院 2024 涉多元用工典型案例·案例一）",
+    "keywords": [
+      "混同用工",
+      "连带责任",
+      "报销发票抬头",
+      "工作证明",
+      "短视频账号主体",
+      "从属性",
+      "朝阳法院"
+    ],
+    "applies_to": [
+      "裁员",
+      "逼迫离职",
+      "证据固定",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/hunton-liandai-cy24-1.md"
+  },
+  {
+    "id": "case-hunton-wugu-shuangbei-43551",
+    "type": "判例卡",
+    "title": "混同用工 + 未签无固定期限合同 → 二倍工资差额 29.25 万 + 第 38 条解除 N（朝阳一审 京0105民初43551号）",
+    "keywords": [
+      "混同用工",
+      "无固定期限",
+      "二倍工资差额",
+      "两次固定期限",
+      "被迫解除",
+      "居家办公",
+      "未足额支付"
+    ],
+    "applies_to": [
+      "双倍工资",
+      "欠薪",
+      "逼迫离职",
+      "裁员"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/hunton-wugu-shuangbei-43551.md"
+  },
+  {
+    "id": "case-hunton-yiren-gongsi-liandai-13483",
+    "type": "判例卡",
+    "title": "三被告缺席，认定混同用工 + 一人公司股东连带 → 2N 149,496.32 元（朝阳一审 京0105民初13483号）",
+    "keywords": [
+      "混同用工",
+      "一人公司",
+      "股东连带",
+      "法人人格否认",
+      "缺席判决",
+      "违法解除",
+      "举证不能",
+      "社保不受理"
+    ],
+    "applies_to": [
+      "裁员",
+      "逼迫离职",
+      "执行",
+      "社保断缴",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/hunton-yiren-gongsi-liandai-13483.md"
+  },
+  {
+    "id": "case-hunton-zhuxiao-gudong-16816",
+    "type": "判例卡",
+    "title": "混同用工 + 用人单位已注销 → 股东承担责任、工龄连续计算（京03民终16816号）",
+    "keywords": [
+      "混同用工",
+      "公司注销",
+      "股东责任",
+      "工龄连续计算",
+      "关联公司",
+      "发放工资"
+    ],
+    "applies_to": [
+      "裁员",
+      "协商解除",
+      "执行",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/hunton-zhuxiao-gudong-16816.md"
+  },
+  {
+    "id": "case-jiangxin-30-geshui-zhengju-7478",
+    "type": "判例卡",
+    "title": "未协商降薪30% → 补足工资差额（个税明细+同公司其他案件劳动者陈述成关键证据）",
+    "keywords": [
+      "降薪",
+      "工资标准举证",
+      "个税收入纳税明细",
+      "工资流水",
+      "其他案件陈述",
+      "群体裁员取证"
+    ],
+    "applies_to": [
+      "调岗降薪",
+      "欠薪",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jiangxin-30-geshui-zhengju-7478.md"
+  },
+  {
+    "id": "case-jiechu-buzhengju-jing0105-6093",
+    "type": "判例卡",
+    "title": "解除依据与程序均不举证直接认定违法解除；未约定竞业期限则无需履行也无补偿（（2023）京0105民初6093号）",
+    "keywords": [
+      "举证不能",
+      "违法解除",
+      "解除程序",
+      "赔偿金算式",
+      "竞业限制期限未约定",
+      "无需履行竞业",
+      "樊某"
+    ],
+    "applies_to": [
+      "裁员",
+      "违纪解除",
+      "竞业限制",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jiechu-buzhengju-jing0105-6093.md"
+  },
+  {
+    "id": "case-jinghu-fuwuqi-sunshi-107",
+    "type": "判例卡",
+    "title": "北京户口服务期违约：不能按约定收违约金，但可酌定赔\"损失\"15 万（京03民终107号）",
+    "keywords": [
+      "北京户口",
+      "落户指标",
+      "服务期",
+      "违约金",
+      "损失赔偿",
+      "诚实信用",
+      "复印件聊天记录",
+      "重复起诉"
+    ],
+    "applies_to": [
+      "协商解除",
+      "证据固定",
+      "仲裁申请",
+      "开庭质证"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jinghu-fuwuqi-sunshi-107.md"
+  },
+  {
+    "id": "case-jingye-baogao-zuixiao-biyao-bjzc25-8",
+    "type": "判例卡",
+    "title": "竞业限制报告义务应遵循\"最小必要\"原则，过度报告侵犯隐私（2025 北京仲裁十大典型案例·案例八）",
+    "keywords": [
+      "竞业限制",
+      "报告义务",
+      "最小必要",
+      "工牌自拍",
+      "定位信息",
+      "隐私权",
+      "违约金适用范围"
+    ],
+    "applies_to": [
+      "竞业限制",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jingye-baogao-zuixiao-biyao-bjzc25-8.md"
+  },
+  {
+    "id": "case-jingye-fanhua-jianshen-jiaolian-bjzc24-9",
+    "type": "判例卡",
+    "title": "不得滥用竞业限制：普通健身教练不属于法定竞业人员，30 万违约金被驳（2024 北京仲裁十大典型案例·案例九）",
+    "keywords": [
+      "竞业限制",
+      "人员范围",
+      "普通员工",
+      "健身教练",
+      "违约金驳回",
+      "商业秘密未举证",
+      "泛化使用"
+    ],
+    "applies_to": [
+      "竞业限制",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jingye-fanhua-jianshen-jiaolian-bjzc24-9.md"
+  },
+  {
+    "id": "case-jingye-fanwei-shiying-zgf25-4",
+    "type": "判例卡",
+    "title": "竞业限制义务范围应与劳动者知悉的商业秘密相适应（最高法 2025 典型案例·案例四）",
+    "keywords": [
+      "竞业限制",
+      "范围相适应",
+      "商业秘密",
+      "产品无竞争关系",
+      "郑某",
+      "医药",
+      "驳回原公司"
+    ],
+    "applies_to": [
+      "竞业限制",
+      "仲裁申请"
+    ],
+    "region": "全国",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jingye-fanwei-shiying-zgf25-4.md"
+  },
+  {
+    "id": "case-jingye-feifa-quzheng-sz26-6",
+    "type": "判例卡",
+    "title": "用人单位以不正当手段获取的非法证据不得作为定案依据（三中院 2026 竞业典型案例·案例六）",
+    "keywords": [
+      "非法证据",
+      "取证手段",
+      "操作他人电脑",
+      "跟踪拍摄",
+      "隐私权",
+      "个人信息",
+      "公共场所拍摄",
+      "竞业限制"
+    ],
+    "applies_to": [
+      "竞业限制",
+      "证据固定",
+      "开庭质证"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jingye-feifa-quzheng-sz26-6.md"
+  },
+  {
+    "id": "case-jingye-gongzi-han-buchang-wuxiao-sz26-4",
+    "type": "判例卡",
+    "title": "\"工资里已包含竞业补偿\"的约定不符合法律规定，应另按月平均工资 30% 支付（三中院 2026 竞业典型案例·案例四）",
+    "keywords": [
+      "竞业限制",
+      "补偿金",
+      "工资包含补偿",
+      "约定无效",
+      "30%标准",
+      "保密费",
+      "培训费",
+      "工资构成拆分"
+    ],
+    "applies_to": [
+      "竞业限制",
+      "欠薪",
+      "协商解除"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jingye-gongzi-han-buchang-wuxiao-sz26-4.md"
+  },
+  {
+    "id": "case-jingye-jingzheng-guanxi-shizhi-sz26-2",
+    "type": "判例卡",
+    "title": "竞争关系不能只看营业执照经营范围，应作同业 + 竞争双层实质审查（三中院 2026 竞业典型案例·案例二）",
+    "keywords": [
+      "竞业限制",
+      "竞争关系认定",
+      "经营范围",
+      "实质审查",
+      "相关市场",
+      "服务对象",
+      "违约金不予支持"
+    ],
+    "applies_to": [
+      "竞业限制",
+      "仲裁申请",
+      "开庭质证"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jingye-jingzheng-guanxi-shizhi-sz26-2.md"
+  },
+  {
+    "id": "case-jingye-jingzheng-zhengju-buzu-11222",
+    "type": "判例卡",
+    "title": "证据不足以证明形成竞争关系 → 驳回公司诉请（京01民终11222号，海淀）",
+    "keywords": [
+      "竞业限制",
+      "竞争关系",
+      "举证不足",
+      "经营范围",
+      "实际经营内容",
+      "受众",
+      "地域范围",
+      "驳回公司"
+    ],
+    "applies_to": [
+      "竞业限制",
+      "开庭质证",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jingye-jingzheng-zhengju-buzu-11222.md"
+  },
+  {
+    "id": "case-jingye-lanyong-jujue-buchang-sz26-1",
+    "type": "判例卡",
+    "title": "劳动者履行了竞业义务，公司再以\"你不属于法定竞业人员\"拒付补偿的，不予支持（三中院 2026 竞业典型案例·案例一）",
+    "keywords": [
+      "竞业限制",
+      "补偿金",
+      "拒付",
+      "客户服务专员",
+      "人员范围",
+      "条款不生效",
+      "诚信原则"
+    ],
+    "applies_to": [
+      "竞业限制",
+      "协商解除",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jingye-lanyong-jujue-buchang-sz26-1.md"
+  },
+  {
+    "id": "case-jingye-peiou-daichi-sz26-3",
+    "type": "判例卡",
+    "title": "通过配偶等近亲属参与经营竞争业务规避竞业义务的，需返还补偿并付违约金（三中院 2026 竞业典型案例·案例三）",
+    "keywords": [
+      "竞业限制",
+      "配偶代持",
+      "近亲属",
+      "规避义务",
+      "返还补偿金",
+      "违约金",
+      "实际控制人",
+      "报销名义转账"
+    ],
+    "applies_to": [
+      "竞业限制",
+      "违纪解除"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jingye-peiou-daichi-sz26-3.md"
+  },
+  {
+    "id": "case-jingye-weiyuejin-tiaozheng-sz26-5",
+    "type": "判例卡",
+    "title": "\"天价违约金\"的调整规则：以实际损失为基础综合衡量（三中院 2026 竞业典型案例·案例五）",
+    "keywords": [
+      "竞业限制",
+      "违约金过高",
+      "违约金调整",
+      "实际损失",
+      "时间戳证书",
+      "陈述前后矛盾",
+      "高薪技术岗"
+    ],
+    "applies_to": [
+      "竞业限制",
+      "开庭质证",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jingye-weiyuejin-tiaozheng-sz26-5.md"
+  },
+  {
+    "id": "case-jingye-yewu-chonghe-weiyue-12630",
+    "type": "判例卡",
+    "title": "业务重合 + 岗位均为部门主要负责人 → 构成违反竞业限制（京03民终12630号，劳动者败诉对照案）",
+    "keywords": [
+      "竞业限制",
+      "业务重合",
+      "编辑岗位",
+      "部门负责人",
+      "违约金",
+      "鉴定申请不予准许",
+      "协议被替换"
+    ],
+    "applies_to": [
+      "竞业限制",
+      "开庭质证"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jingye-yewu-chonghe-weiyue-12630.md"
+  },
+  {
+    "id": "case-jixiao-gaijin-chengxu-jing03-16660",
+    "type": "判例卡",
+    "title": "绩效考核责任书约定的改进程序未执行=违法解除，即便已通知工会（（2023）京03民终16660号）",
+    "keywords": [
+      "绩效考核责任书",
+      "绩效改进方案",
+      "无业绩",
+      "不能胜任",
+      "通知工会不救济实体",
+      "提成工资",
+      "越某"
+    ],
+    "applies_to": [
+      "PIP",
+      "末位淘汰",
+      "违纪解除",
+      "裁员",
+      "欠薪",
+      "证据固定",
+      "一审二审"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jixiao-gaijin-chengxu-jing03-16660.md"
+  },
+  {
+    "id": "case-jujie-xinhuo-jing03-5083",
+    "type": "判例卡",
+    "title": "工作量已饱和拒接新活被开除属违法解除，赔偿金12万（（2025）京03民终5083号，入库编号2025-07-2-490-002）",
+    "keywords": [
+      "工作量饱和",
+      "拒接工作",
+      "变相强迫加班",
+      "劳动定额",
+      "过罚相当",
+      "比例原则",
+      "高某红",
+      "人民法院案例库"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "逼迫离职",
+      "加班费",
+      "证据固定",
+      "一审二审"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/jujie-xinhuo-jing03-5083.md"
+  },
+  {
+    "id": "case-keguan-yiqing-yewuliang-jing03-15429",
+    "type": "判例卡",
+    "title": "疫情致业务量骤减不等于客观情况重大变化（（2023）京03民终15429号、15421号，同日同合议庭两案）",
+    "keywords": [
+      "客观情况重大变化",
+      "疫情",
+      "业务量骤减",
+      "第40条第3项",
+      "举证不能",
+      "未休年假举证",
+      "绩效奖金举证"
+    ],
+    "applies_to": [
+      "裁员",
+      "逼迫离职",
+      "年假",
+      "年终奖",
+      "证据固定",
+      "一审二审"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/keguan-yiqing-yewuliang-jing03-15429.md"
+  },
+  {
+    "id": "case-keguan-zhanlue-tiaozheng-jing03-20183",
+    "type": "判例卡",
+    "title": "经营战略与组织架构调整不是客观情况；协商须\"充分、诚信、有效\"（（2023）京03民终20183号）",
+    "keywords": [
+      "客观情况重大变化",
+      "组织架构调整",
+      "经营战略",
+      "第40条第3项",
+      "两方面举证",
+      "充分诚信有效协商",
+      "未休年假"
+    ],
+    "applies_to": [
+      "裁员",
+      "调岗降薪",
+      "逼迫离职",
+      "年假",
+      "证据固定",
+      "一审二审"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/keguan-zhanlue-tiaozheng-jing03-20183.md"
+  },
+  {
+    "id": "case-lirun-20-jixiao-weiyuejin-11114",
+    "type": "判例卡",
+    "title": "聘用合同约定\"按利润总额 20% 作为奖励绩效\"，公司无证据证明变更获劳动者认可 → 支持差额 + 日万分之三违约金（京03民终11114号）",
+    "keywords": [
+      "绩效奖金",
+      "利润提成",
+      "聘用合同约定",
+      "单方变更",
+      "违约金",
+      "日万分之三",
+      "年终奖"
+    ],
+    "applies_to": [
+      "年终奖",
+      "欠薪",
+      "调岗降薪"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/lirun-20-jixiao-weiyuejin-11114.md"
+  },
+  {
+    "id": "case-lizhi-zhengming-jianli-riqi-72152",
+    "type": "判例卡",
+    "title": "以离职证明记载的建立日期为准，未举证签约即判二倍工资差额 4 万元（朝阳一审 京0105民初72152号）",
+    "keywords": [
+      "未签劳动合同",
+      "二倍工资差额",
+      "离职证明",
+      "劳动关系建立日期",
+      "从属性",
+      "聊天记录",
+      "底薪加提成"
+    ],
+    "applies_to": [
+      "双倍工资",
+      "离职证明",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/lizhi-zhengming-jianli-riqi-72152.md"
+  },
+  {
+    "id": "case-lizhi-zhengming-pingjia-neirong-bjzc23-9",
+    "type": "判例卡",
+    "title": "离职证明不得载明法定事项以外的评价性内容（2023 北京仲裁典型案例·案例九）",
+    "keywords": [
+      "离职证明",
+      "解除劳动合同证明",
+      "评价性内容",
+      "后合同义务",
+      "服务期协议",
+      "重新出具",
+      "背调"
+    ],
+    "applies_to": [
+      "离职证明",
+      "背调威胁",
+      "调解"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/lizhi-zhengming-pingjia-neirong-bjzc23-9.md"
+  },
+  {
+    "id": "case-luyin-lihai-guanxi-bucaina-14444",
+    "type": "判例卡",
+    "title": "电话录音无法直接证明待证事实、且录音对象存在利害关系 → 不予采纳（京03民终14444号）",
+    "keywords": [
+      "电话录音",
+      "证据不采纳",
+      "利害关系",
+      "证人证言",
+      "未出庭作证",
+      "劳动关系认定",
+      "间接证据"
+    ],
+    "applies_to": [
+      "证据固定",
+      "开庭质证",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/luyin-lihai-guanxi-bucaina-14444.md"
+  },
+  {
+    "id": "case-mowei-taotai-shangwei-guize-2016",
+    "type": "判例卡",
+    "title": "末位淘汰单方解除属违法解除的上位规则（第八次全国法院民商事审判工作会议纪要，条号待核实）",
+    "keywords": [
+      "末位淘汰",
+      "竞争上岗",
+      "第八次全国法院民商事审判工作会议纪要",
+      "会议纪要第47条",
+      "继续履行",
+      "违法解除",
+      "替代打法"
+    ],
+    "applies_to": [
+      "末位淘汰",
+      "PIP",
+      "逼迫离职",
+      "仲裁申请"
+    ],
+    "region": "全国",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/mowei-taotai-shangwei-guize-2016.md"
+  },
+  {
+    "id": "case-nianjia-guoqi-zuofei-wuxiao-sz25-2",
+    "type": "判例卡",
+    "title": "用人单位无权以规章制度设定年休假有效期，\"过期作废\"条款无效（三中院 2025 典型案例·案例二）",
+    "keywords": [
+      "年休假",
+      "过期作废",
+      "无效条款",
+      "考勤管理办法",
+      "自然年度",
+      "不得顺延",
+      "未休年假工资"
+    ],
+    "applies_to": [
+      "年假",
+      "违纪解除"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/nianjia-guoqi-zuofei-wuxiao-sz25-2.md"
+  },
+  {
+    "id": "case-nianjia-yuerjia-gongzi-sz25-8",
+    "type": "判例卡",
+    "title": "年休假、育儿假期间须足额支付工资；已获准的假不能反过来算旷工（三中院 2025 典型案例·案例八）",
+    "keywords": [
+      "育儿假",
+      "年休假",
+      "哺乳假",
+      "丧假",
+      "带薪假期",
+      "旷工解除",
+      "产假返岗",
+      "人事回复"
+    ],
+    "applies_to": [
+      "孕产哺乳",
+      "年假",
+      "违纪解除",
+      "欠薪"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/nianjia-yuerjia-gongzi-sz25-8.md"
+  },
+  {
+    "id": "case-nianzhongjiang-beijing-koujing",
+    "type": "判例卡",
+    "title": "年终奖 / 绩效奖金离职后能否主张：北京判例口径汇编（8 案对照）",
+    "keywords": [
+      "年终奖",
+      "绩效奖金",
+      "离职后主张",
+      "经营自主权",
+      "个税明细",
+      "举证责任",
+      "违纪不予发放",
+      "分摊入基数"
+    ],
+    "applies_to": [
+      "年终奖",
+      "裁员",
+      "违纪解除",
+      "证据固定",
+      "开庭质证"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/nianzhongjiang-beijing-koujing.md"
+  },
+  {
+    "id": "case-nianzhongjiang-jishu-2n-jing0105-33722",
+    "type": "判例卡",
+    "title": "年终奖分摊入月平均工资基数，2N判776,028.51元（（2022）京0105民初33722号）",
+    "keywords": [
+      "年终奖分摊",
+      "应得工资",
+      "赔偿金基数",
+      "33740.37",
+      "776028.51",
+      "邮件通知解除",
+      "举证不足",
+      "钟奇燕"
+    ],
+    "applies_to": [
+      "裁员",
+      "年终奖",
+      "逼迫离职",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/nianzhongjiang-jishu-2n-jing0105-33722.md"
+  },
+  {
+    "id": "case-nongmingong-zongbao-qingchang-cy24-5",
+    "type": "判例卡",
+    "title": "分包单位拖欠农民工工资，施工总承包单位先行清偿（朝阳法院 2024 涉多元用工典型案例·案例五）",
+    "keywords": [
+      "农民工工资",
+      "总承包单位",
+      "先行清偿",
+      "分包单位",
+      "建筑工程",
+      "架子工",
+      "保障农民工工资支付条例"
+    ],
+    "applies_to": [
+      "欠薪",
+      "仲裁申请",
+      "执行"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/nongmingong-zongbao-qingchang-cy24-5.md"
+  },
+  {
+    "id": "case-paiqian-gongjijin-guocuo-cy24-6",
+    "type": "判例卡",
+    "title": "派遣协议未约定住房公积金责任，按过错由双方共担（朝阳法院 2024 涉多元用工典型案例·案例六）",
+    "keywords": [
+      "劳务派遣",
+      "住房公积金",
+      "派遣协议",
+      "内部追偿",
+      "过错分担",
+      "用工单位",
+      "派遣单位"
+    ],
+    "applies_to": [
+      "社保断缴",
+      "调解"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/paiqian-gongjijin-guocuo-cy24-6.md"
+  },
+  {
+    "id": "case-peichanjia-shijia-koufa-sz25-7",
+    "type": "判例卡",
+    "title": "陪产假不得按事假扣工资（三中院 2025 典型案例·案例七）",
+    "keywords": [
+      "陪产假",
+      "事假",
+      "扣工资",
+      "男职工",
+      "三期",
+      "假期工资",
+      "返还扣发工资"
+    ],
+    "applies_to": [
+      "孕产哺乳",
+      "欠薪",
+      "年假"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/peichanjia-shijia-koufa-sz25-7.md"
+  },
+  {
+    "id": "case-peiou-jingye-jing03-683",
+    "type": "判例卡",
+    "title": "通过配偶投资经营竞争企业构成违反竞业限制（（2024）京03民终683号，入库编号2024-07-2-490-006）",
+    "keywords": [
+      "竞业限制",
+      "配偶持股",
+      "高级管理人员",
+      "违约金酌减",
+      "返还竞业补偿",
+      "张某雷",
+      "人民法院案例库"
+    ],
+    "applies_to": [
+      "竞业限制",
+      "一审二审",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/peiou-jingye-jing03-683.md"
+  },
+  {
+    "id": "case-pingtai-yonggong-qunti-tiaojie-cy24-7",
+    "type": "判例卡",
+    "title": "11 名网约车司机群体诉讼全部调解，挽回损失 26 万余元（朝阳法院 2024 涉多元用工典型案例·案例七）",
+    "keywords": [
+      "平台用工",
+      "网约车",
+      "群体性争议",
+      "集体行动",
+      "调解",
+      "关闭接单账号",
+      "排班调度群",
+      "司法建议"
+    ],
+    "applies_to": [
+      "裁员",
+      "调解",
+      "逼迫离职",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/pingtai-yonggong-qunti-tiaojie-cy24-7.md"
+  },
+  {
+    "id": "case-qianfu-yongjin-38-jiechu-16097",
+    "type": "判例卡",
+    "title": "欠付销售佣金 → 支持劳动者依第38条解除并获经济补偿（微信记录+单位举证责任）",
+    "keywords": [
+      "销售佣金",
+      "提成",
+      "欠薪",
+      "第38条",
+      "被迫解除",
+      "微信记录",
+      "用人单位举证责任",
+      "工资差额"
+    ],
+    "applies_to": [
+      "欠薪",
+      "逼迫离职",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/qianfu-yongjin-38-jiechu-16097.md"
+  },
+  {
+    "id": "case-qingjia-benshang-jing03-9422",
+    "type": "判例卡",
+    "title": "请假奔丧被按旷工辞退属违法解除（（2025）京03民终9422号，入库编号2026-07-2-533-005）",
+    "keywords": [
+      "请假奔丧",
+      "旷工解除",
+      "严重违反规章制度",
+      "制度适用合理性",
+      "替代性措施",
+      "乔某伟",
+      "人民法院案例库"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "逼迫离职",
+      "证据固定",
+      "一审二审"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/qingjia-benshang-jing03-9422.md"
+  },
+  {
+    "id": "case-qingjia-shouxu-maodun-kuanggong-2025",
+    "type": "判例卡",
+    "title": "未履行请假手续且请假理由前后矛盾 → 旷工解除合法（劳动者败诉对照案，三中院2025典型案例·案例九）",
+    "keywords": [
+      "请假手续",
+      "诊断证明矛盾",
+      "旷工解除",
+      "劳动纪律约定有效",
+      "生产经营影响",
+      "合法解除",
+      "反面案例"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/qingjia-shouxu-maodun-kuanggong-2025.md"
+  },
+  {
+    "id": "case-qunti-zhengyi-duoyuan-tiaochu-bjzc25-9",
+    "type": "判例卡",
+    "title": "群体性争议 / 涉外企业纾困：北京走多元调处、专项调解（2025 北京仲裁十大典型案例·案例九）",
+    "keywords": [
+      "群体性争议",
+      "集体仲裁",
+      "多元调处",
+      "专项调解小组",
+      "外资企业",
+      "绩效考核办法修改",
+      "撤资施压"
+    ],
+    "applies_to": [
+      "裁员",
+      "调解",
+      "协商解除",
+      "情绪支持"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/qunti-zhengyi-duoyuan-tiaochu-bjzc25-9.md"
+  },
+  {
+    "id": "case-rsu-guquan-jili-bushouli-23429",
+    "type": "判例卡",
+    "title": "股权激励 / RSU 争议不属于劳动争议受理范围（朝阳法院 京0105民初23429号）",
+    "keywords": [
+      "RSU",
+      "限制性股票单元",
+      "股权激励",
+      "期权",
+      "不予受理",
+      "受理范围",
+      "普通民事诉讼",
+      "解除后不兑现"
+    ],
+    "applies_to": [
+      "协商解除",
+      "裁员",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/rsu-guquan-jili-bushouli-23429.md"
+  },
+  {
+    "id": "case-shengyu-jintie-buji-jishu-jing0105-2357",
+    "type": "判例卡",
+    "title": "施耐德案：哺乳期后以架构调整解除违法，生育津贴不计入赔偿金基数（（2022）京0105民初2357号）",
+    "keywords": [
+      "生育津贴不计入基数",
+      "客观情况重大变化",
+      "架构调整",
+      "哺乳期",
+      "派遣转直签",
+      "工龄连续计算",
+      "施耐德",
+      "袁培"
+    ],
+    "applies_to": [
+      "裁员",
+      "孕产哺乳",
+      "调岗降薪",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/shengyu-jintie-buji-jishu-jing0105-2357.md"
+  },
+  {
+    "id": "case-shengyu-jintie-tuoqian-bjzc25-4",
+    "type": "判例卡",
+    "title": "未及时支付生育津贴构成拖欠劳动报酬 → 支持第 38 条被迫解除（2025 北京仲裁十大典型案例·案例四）",
+    "keywords": [
+      "生育津贴",
+      "产假工资",
+      "拖欠劳动报酬",
+      "被迫解除",
+      "第38条",
+      "经济补偿",
+      "三期"
+    ],
+    "applies_to": [
+      "孕产哺乳",
+      "欠薪",
+      "逼迫离职",
+      "协商解除"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/shengyu-jintie-tuoqian-bjzc25-4.md"
+  },
+  {
+    "id": "case-shengyu-shenqing-tiaokuan-bjzc23-7",
+    "type": "判例卡",
+    "title": "\"怀孕需先申请、入职满一年才可申请生育\"的制度条款无效（2023 北京仲裁典型案例·案例七）",
+    "keywords": [
+      "生育权",
+      "规章制度无效",
+      "怀孕申请",
+      "扣绩效奖金",
+      "女职工",
+      "妇女权益保障法"
+    ],
+    "applies_to": [
+      "孕产哺乳",
+      "违纪解除",
+      "调解"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/shengyu-shenqing-tiaokuan-bjzc23-7.md"
+  },
+  {
+    "id": "case-shiye-danwei-daigang-jiepin-bjzc25-10",
+    "type": "判例卡",
+    "title": "待岗状态下的评价缺乏履职前提，\"试用期不胜任\"解聘未举证 → 支付经济补偿（2025 北京仲裁十大典型案例·案例十）",
+    "keywords": [
+      "事业单位",
+      "聘用合同",
+      "待岗",
+      "停发绩效",
+      "试用期不胜任",
+      "机构改革",
+      "编制撤销",
+      "安置方案"
+    ],
+    "applies_to": [
+      "待岗停工",
+      "PIP",
+      "裁员",
+      "逼迫离职"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/shiye-danwei-daigang-jiepin-bjzc25-10.md"
+  },
+  {
+    "id": "case-shiye-danwei-peixun-weiyuejin-bjzc24-10",
+    "type": "判例卡",
+    "title": "专业技术培训服务期违约金按递减支付后不予返还（2024 北京仲裁十大典型案例·案例十）",
+    "keywords": [
+      "服务期",
+      "培训违约金",
+      "专业技术培训",
+      "普通岗位培训",
+      "递减支付",
+      "事业单位",
+      "住院医师规范化培训"
+    ],
+    "applies_to": [
+      "协商解除",
+      "逼迫离职"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/shiye-danwei-peixun-weiyuejin-bjzc24-10.md"
+  },
+  {
+    "id": "case-shiyongqi-jiechu-minzhu-chengxu-101",
+    "type": "判例卡",
+    "title": "制度未经民主程序 + 缺失考核记录 → 试用期\"不符合录用条件\"解除违法",
+    "keywords": [
+      "试用期",
+      "不符合录用条件",
+      "绩效考评表",
+      "民主程序",
+      "规章制度效力",
+      "违法解除赔偿金"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "PIP",
+      "逼迫离职",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/shiyongqi-jiechu-minzhu-chengxu-101.md"
+  },
+  {
+    "id": "case-shiyongqi-xiangshou-nianjia-sz25-3",
+    "type": "判例卡",
+    "title": "入职前已连续工作满 12 个月的，新单位试用期同样享受当年度年休假（三中院 2025 典型案例·案例三）",
+    "keywords": [
+      "年休假",
+      "试用期",
+      "累计工作时间",
+      "连续工作满12个月",
+      "新入职",
+      "当年度年假"
+    ],
+    "applies_to": [
+      "年假"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/shiyongqi-xiangshou-nianjia-sz25-3.md"
+  },
+  {
+    "id": "case-sizi-tigang-rengge-congshuxing-2025",
+    "type": "判例卡",
+    "title": "值班员私自安排同事顶替并自付报酬 → 违反人格从属性，解除合法（2025北京仲裁十大典型案例·案例五）",
+    "keywords": [
+      "替岗",
+      "顶班",
+      "人格从属性",
+      "亲自履行",
+      "值班室",
+      "劳动纪律",
+      "合法解除",
+      "反面案例"
+    ],
+    "applies_to": [
+      "违纪解除"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/sizi-tigang-rengge-congshuxing-2025.md"
+  },
+  {
+    "id": "case-tanpan-poulie-shiwei-xieshang-15407",
+    "type": "判例卡",
+    "title": "谈判破裂后双方各自停止履行，被认定为\"协商一致解除\"只拿 N（京03民终15407号）",
+    "keywords": [
+      "谈判破裂",
+      "停止出勤",
+      "协商一致解除",
+      "视为解除",
+      "N与2N",
+      "微信记录",
+      "录像"
+    ],
+    "applies_to": [
+      "协商解除",
+      "裁员",
+      "逼迫离职",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/tanpan-poulie-shiwei-xieshang-15407.md"
+  },
+  {
+    "id": "case-tiaogang-jiangxin-19866",
+    "type": "判例卡",
+    "title": "月薪2万擅自调到1.2万岗位 → 补工资差额 + 支持第38条被迫解除（补偿基数按\"应得工资\"）",
+    "keywords": [
+      "调岗降薪",
+      "未协商一致",
+      "用工自主权",
+      "调岗合理性举证",
+      "应得工资",
+      "经济补偿基数",
+      "十三薪"
+    ],
+    "applies_to": [
+      "调岗降薪",
+      "逼迫离职",
+      "欠薪"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/tiaogang-jiangxin-19866.md"
+  },
+  {
+    "id": "case-tiqian-jiesan-buchang-qisuan-20285",
+    "type": "判例卡",
+    "title": "\"决定提前解散\"终止劳动合同：补偿年限自 2008-01-01 起算；已破产的只能申报债权（京03民终20285/20284号）",
+    "keywords": [
+      "提前解散",
+      "公司清算",
+      "终止劳动合同",
+      "经济补偿起算",
+      "2008年1月1日",
+      "破产申报债权",
+      "个别清偿",
+      "外企撤离"
+    ],
+    "applies_to": [
+      "裁员",
+      "协商解除",
+      "执行"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/tiqian-jiesan-buchang-qisuan-20285.md"
+  },
+  {
+    "id": "case-toujianli-mianshi-fei-xieshang-jing01-11801",
+    "type": "判例卡",
+    "title": "让员工\"投简历面试\"的岗位不算协商变更；三倍封顶基数41,628元判2N差额31万（（2023）京01民终11801号）",
+    "keywords": [
+      "客观情况重大变化",
+      "岗位取消",
+      "投简历面试",
+      "协商变更",
+      "三倍封顶",
+      "41628元",
+      "2N差额",
+      "第47条"
+    ],
+    "applies_to": [
+      "裁员",
+      "调岗降薪",
+      "逼迫离职",
+      "一审二审"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/toujianli-mianshi-fei-xieshang-jing01-11801.md"
+  },
+  {
+    "id": "case-waibao-qixin-juzheng-cy24-3",
+    "type": "判例卡",
+    "title": "\"外包合同\"不是防火墙：层层转包欠薪，企业举证不能担后果（朝阳法院 2024 涉多元用工典型案例·案例三）",
+    "keywords": [
+      "外包",
+      "层层转包",
+      "外卖骑手",
+      "专送",
+      "欠薪",
+      "举证责任倒置",
+      "送单记录",
+      "新就业形态"
+    ],
+    "applies_to": [
+      "欠薪",
+      "证据固定",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/waibao-qixin-juzheng-cy24-3.md"
+  },
+  {
+    "id": "case-weifa-tuihui-paiqian-cy24-2",
+    "type": "判例卡",
+    "title": "违法退回派遣工，用工单位与派遣单位连带担责（朝阳法院 2024 涉多元用工典型案例·案例二）",
+    "keywords": [
+      "劳务派遣",
+      "违法退回",
+      "用工单位",
+      "派遣单位",
+      "连带责任",
+      "经营困难",
+      "违法解除",
+      "重新安排工作"
+    ],
+    "applies_to": [
+      "裁员",
+      "待岗停工",
+      "逼迫离职"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/weifa-tuihui-paiqian-cy24-2.md"
+  },
+  {
+    "id": "case-weiji-zhengju-buzu-jixiao-87802",
+    "type": "判例卡",
+    "title": "\"严重违纪\"证据不足 → 违法解除 + 补发被扣绩效与年终奖 + 加班费（朝阳法院一审）",
+    "keywords": [
+      "违纪证据不足",
+      "扣发绩效",
+      "扣发年终奖",
+      "加班费",
+      "高度可能",
+      "甲方审核考勤",
+      "违法解除赔偿金"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "年终奖",
+      "加班费",
+      "证据固定",
+      "离职证明"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/weiji-zhengju-buzu-jixiao-87802.md"
+  },
+  {
+    "id": "case-weixin-jilu-jiechu-jueding-99",
+    "type": "判例卡",
+    "title": "微信记录相互印证可证明公司已作出解除决定；offer 薪资高于手写合同的按 offer 认定（京03民终99号）",
+    "keywords": [
+      "微信聊天记录",
+      "相互印证",
+      "解除决定",
+      "无权代表抗辩",
+      "录用通知书",
+      "手写工资标准",
+      "个税抵扣",
+      "二审新主张"
+    ],
+    "applies_to": [
+      "证据固定",
+      "裁员",
+      "逼迫离职",
+      "欠薪",
+      "开庭质证"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/weixin-jilu-jiechu-jueding-99.md"
+  },
+  {
+    "id": "case-weixin-youxing-jiaban-sz25-1",
+    "type": "判例卡",
+    "title": "微信记录 + 邮件截图初步证明隐形加班，酌情核定加班费；加班制度不宜过分严苛（三中院 2025 典型案例·案例一）",
+    "keywords": [
+      "隐形加班",
+      "微信记录",
+      "邮件截图",
+      "加班费",
+      "酌情核定",
+      "加班审批制度",
+      "休息日",
+      "法定节假日"
+    ],
+    "applies_to": [
+      "加班费",
+      "证据固定",
+      "开庭质证"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/weixin-youxing-jiaban-sz25-1.md"
+  },
+  {
+    "id": "case-xianjing-tiaokuan-bjzc25-3",
+    "type": "判例卡",
+    "title": "以\"公司账户解封\"为补偿支付前提的\"陷阱条款\"显失公平而无效（2025 北京仲裁十大典型案例·案例三）",
+    "keywords": [
+      "陷阱条款",
+      "支付前提",
+      "附条件付款",
+      "账户解封",
+      "显失公平",
+      "经济补偿",
+      "协商解除"
+    ],
+    "applies_to": [
+      "协商解除",
+      "欠薪",
+      "裁员",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/xianjing-tiaokuan-bjzc25-3.md"
+  },
+  {
+    "id": "case-xianshi-gongping-chexiao-49641",
+    "type": "判例卡",
+    "title": "以\"显失公平\"要求撤销解除协议，举证不能被驳回（朝阳法院 京0105民初49641号）",
+    "keywords": [
+      "显失公平",
+      "撤销协议",
+      "解除协议",
+      "举证责任",
+      "危困状态",
+      "缺乏判断能力",
+      "利益明显失衡"
+    ],
+    "applies_to": [
+      "协商解除",
+      "仲裁申请",
+      "开庭质证"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/xianshi-gongping-chexiao-49641.md"
+  },
+  {
+    "id": "case-xianzhao-liuchan-bingjia-kuanggong-2025",
+    "type": "判例卡",
+    "title": "先兆流产提交病假条却被按旷工辞退 = 违法解除（三中院2025典型案例·案例六）",
+    "keywords": [
+      "先兆流产",
+      "病假条",
+      "不批病假",
+      "视为旷工",
+      "制度合理性审查",
+      "违法解除赔偿金",
+      "三期"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "孕产哺乳",
+      "逼迫离职"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/xianzhao-liuchan-bingjia-kuanggong-2025.md"
+  },
+  {
+    "id": "case-xiaoji-daigong-minzhuchengxu-jing03-94",
+    "type": "判例卡",
+    "title": "指\"消极怠工\"却无具体标准+制度未经民主程序=违法解除；年假不因离职清零（（2024）京03民终94号）",
+    "keywords": [
+      "消极怠工",
+      "无具体标准",
+      "规章制度民主程序",
+      "传播负面信息",
+      "年假不清零",
+      "郭某"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "PIP",
+      "末位淘汰",
+      "年假",
+      "证据固定",
+      "一审二审"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/xiaoji-daigong-minzhuchengxu-jing03-94.md"
+  },
+  {
+    "id": "case-xiaoshou-shouce-baifang-jilu-9548",
+    "type": "判例卡",
+    "title": "签收销售部管理手册 + 无拜访记录且不作解释 → 解除合法（劳动者败诉的对照案）",
+    "keywords": [
+      "销售部管理手册",
+      "附件效力",
+      "签字签收",
+      "行为打卡",
+      "拜访记录",
+      "举证不能",
+      "合法解除",
+      "反面案例"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/xiaoshou-shouce-baifang-jilu-9548.md"
+  },
+  {
+    "id": "case-xieyi-yilanzi-fangqi-16272",
+    "type": "判例卡",
+    "title": "解除协议已签，公司晚付款也不影响协议效力；一揽子放弃条款有效（京03民终16272号）",
+    "keywords": [
+      "协商解除",
+      "解除协议",
+      "一揽子放弃",
+      "概括免责",
+      "附条件合同",
+      "支付条款",
+      "违约责任",
+      "反悔"
+    ],
+    "applies_to": [
+      "协商解除",
+      "裁员",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/xieyi-yilanzi-fangqi-16272.md"
+  },
+  {
+    "id": "case-xiujia-qingqiu-youdao-lizhi-2025",
+    "type": "判例卡",
+    "title": "拒绝正当休假请求后诱导\"你就办离职吧\" → 认定协商一致解除，须付N（三中院2025典型案例·案例五）",
+    "keywords": [
+      "休息休假权",
+      "诱导离职",
+      "自动离职",
+      "协商一致解除",
+      "经济补偿",
+      "微信聊天记录",
+      "办理交接"
+    ],
+    "applies_to": [
+      "逼迫离职",
+      "协商解除",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/xiujia-qingqiu-youdao-lizhi-2025.md"
+  },
+  {
+    "id": "case-xujia-tijian-daijian-2023",
+    "type": "判例卡",
+    "title": "找岳父代做体检 + 事后投诉扩大影响造成公司声誉受损 → 解除合法（2023北京仲裁典型案例·案例八）",
+    "keywords": [
+      "代检",
+      "虚假体检",
+      "诚实信用原则",
+      "网络曝光",
+      "声誉受损",
+      "扩大影响",
+      "合法解除",
+      "反面案例"
+    ],
+    "applies_to": [
+      "违纪解除"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/xujia-tijian-daijian-2023.md"
+  },
+  {
+    "id": "case-yanchi-tuixiu-weifa-zhongzhi-bjzc25-7",
+    "type": "判例卡",
+    "title": "延迟退休未协商即单方通知办理退休 = 违法终止（2025 北京仲裁十大典型案例·案例七）",
+    "keywords": [
+      "延迟退休",
+      "法定退休年龄",
+      "单方终止",
+      "违法终止",
+      "赔偿金",
+      "强制提前退休",
+      "大龄员工"
+    ],
+    "applies_to": [
+      "裁员",
+      "逼迫离职",
+      "协商解除"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/yanchi-tuixiu-weifa-zhongzhi-bjzc25-7.md"
+  },
+  {
+    "id": "case-yinxing-jiaban-jing03-9602",
+    "type": "判例卡",
+    "title": "隐形加班第一案：下班后微信办公被认定加班，酌定加班费3万元（（2022）京03民终9602号）",
+    "keywords": [
+      "隐形加班",
+      "微信加班",
+      "社交媒体办公",
+      "值班表",
+      "不定时工作制未审批",
+      "加班费酌定",
+      "李某艳",
+      "人民法院案例库"
+    ],
+    "applies_to": [
+      "加班费",
+      "证据固定",
+      "一审二审"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/yinxing-jiaban-jing03-9602.md"
+  },
+  {
+    "id": "case-yiqing-zhaoren-jiechu-jing0105-67387",
+    "type": "判例卡",
+    "title": "以\"疫情+发展不佳+没帮公司找到人\"解除属违法；降薪与居家办公均由公司举证（（2023）京0105民初67387号）",
+    "keywords": [
+      "违法解除",
+      "疫情降薪",
+      "调薪未同意",
+      "居家办公",
+      "公众号运营",
+      "举证不利后果",
+      "外包合同",
+      "郭某"
+    ],
+    "applies_to": [
+      "裁员",
+      "逼迫离职",
+      "调岗降薪",
+      "欠薪",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/yiqing-zhaoren-jiechu-jing0105-67387.md"
+  },
+  {
+    "id": "case-yunqi-tiaogang-baoding-2024",
+    "type": "判例卡",
+    "title": "把怀孕女职工从北京调到河北保定 = 调岗不合法不合理，支持继续履行（2024北京仲裁十大典型案例·案例四）",
+    "keywords": [
+      "三期女职工",
+      "孕期调岗",
+      "异地调岗",
+      "保定",
+      "继续履行",
+      "不服从公司安排",
+      "调岗合理性",
+      "邓某"
+    ],
+    "applies_to": [
+      "调岗降薪",
+      "孕产哺乳",
+      "逼迫离职",
+      "违纪解除"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/yunqi-tiaogang-baoding-2024.md"
+  },
+  {
+    "id": "case-yunqi-tiqian-jiesan-hunton-sz2512",
+    "type": "判例卡",
+    "title": "混同用工下签约主体\"决定提前解散\"解除孕期女职工 = 违法解除（三中院 2025-12-31）",
+    "keywords": [
+      "混同用工",
+      "提前解散",
+      "孕期",
+      "关联公司",
+      "违法解除",
+      "共同赔偿",
+      "外企撤离",
+      "劳动关系转移"
+    ],
+    "applies_to": [
+      "孕产哺乳",
+      "裁员",
+      "逼迫离职",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "二手转述",
+    "updated": "2026-08-19",
+    "path": "packs/cases/yunqi-tiqian-jiesan-hunton-sz2512.md"
+  },
+  {
+    "id": "case-zaizhi-jingshang-chigu-18348",
+    "type": "判例卡",
+    "title": "在职持股/任职竞争公司，依《员工手册》解除合法且奖金不予支付（反面案）",
+    "keywords": [
+      "在职经商",
+      "持股",
+      "法定代表人",
+      "经营范围重合",
+      "挂名抗辩",
+      "员工手册奖金条款",
+      "合法解除",
+      "反面案例"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "年终奖",
+      "竞业限制"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/zaizhi-jingshang-chigu-18348.md"
+  },
+  {
+    "id": "case-zaizhi-jingye-weiyue-zgf25-5",
+    "type": "判例卡",
+    "title": "在职期间违反竞业限制承担违约责任：协议生效后获利 122,400 元构成违约（最高法 2025 典型案例·案例五）",
+    "keywords": [
+      "在职竞业限制",
+      "销售经理",
+      "私售获利",
+      "违约责任",
+      "黄某",
+      "纺织公司",
+      "金额拆分",
+      "协议签订时点"
+    ],
+    "applies_to": [
+      "竞业限制",
+      "违纪解除"
+    ],
+    "region": "全国",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/zaizhi-jingye-weiyue-zgf25-5.md"
+  },
+  {
+    "id": "case-zhengju-caixin-guize-huibian",
+    "type": "判例卡",
+    "title": "微信、录音、考勤、个税明细：北京判例采信规则汇编（16 条对照）",
+    "keywords": [
+      "证据采信",
+      "微信记录",
+      "录音",
+      "个税明细",
+      "考勤记录",
+      "原始载体",
+      "举证不利后果",
+      "复印件",
+      "时间戳"
+    ],
+    "applies_to": [
+      "证据固定",
+      "开庭质证",
+      "仲裁申请",
+      "加班费",
+      "年终奖"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/zhengju-caixin-guize-huibian.md"
+  },
+  {
+    "id": "case-zhichang-baling-38tiao-bjzc24-7",
+    "type": "判例卡",
+    "title": "职场霸凌构成\"未提供劳动条件\"，支持第 38 条被迫解除（2024 北京仲裁十大典型案例·案例七）",
+    "keywords": [
+      "职场霸凌",
+      "未提供劳动条件",
+      "被迫解除",
+      "第38条",
+      "抄心经",
+      "收走电脑",
+      "公开通报",
+      "打击报复"
+    ],
+    "applies_to": [
+      "逼迫离职",
+      "协商解除",
+      "情绪支持",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/zhichang-baling-38tiao-bjzc24-7.md"
+  },
+  {
+    "id": "case-zhidao-239-zhubo-laodongguanxi",
+    "type": "判例卡",
+    "title": "指导性案例239号：主播签独家经纪合同不构成劳动关系（（2023）京03民终7051号）",
+    "keywords": [
+      "指导性案例239号",
+      "网络主播",
+      "独家经纪合同",
+      "新就业形态",
+      "支配性劳动管理",
+      "劳动关系认定",
+      "王某"
+    ],
+    "applies_to": [
+      "双倍工资",
+      "仲裁申请",
+      "一审二审"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/zhidao-239-zhubo-laodongguanxi.md"
+  },
+  {
+    "id": "case-zhuanjiao-baoguo-zhiye-daode-12028",
+    "type": "判例卡",
+    "title": "制度合法 + 已告知 + 员工签字承诺，转交包裹并转达利益诉求被解除合法（反面案）",
+    "keywords": [
+      "职业道德",
+      "廉洁承诺",
+      "签字确认",
+      "员工手册",
+      "告知义务",
+      "合法解除",
+      "反面案例"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/cases/zhuanjiao-baoguo-zhiye-daode-12028.md"
+  },
+  {
     "id": "data-beijing-qiuzhu-ziyuan",
     "type": "数据卡",
     "title": "北京免费求助资源卡（心理热线/朝阳法援/工会/劳动监察）",
@@ -430,6 +2801,118 @@
     "path": "packs/scripts/hongxian-qingdan.md"
   },
   {
+    "id": "script-kaiting-huashu",
+    "type": "话术卡",
+    "title": "开庭话术卡：陈述、举证、质证四段式、答仲裁员问、辩论（全部可照读）",
+    "keywords": [
+      "开庭话术",
+      "陈述模板",
+      "举证话术",
+      "质证三性",
+      "证明目的",
+      "仲裁员提问",
+      "辩论意见",
+      "最后陈述",
+      "照读"
+    ],
+    "applies_to": [
+      "开庭质证",
+      "仲裁申请",
+      "裁员",
+      "调解"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/scripts/kaiting-huashu.md"
+  },
+  {
+    "id": "script-zhizheng-yaodian",
+    "type": "话术卡",
+    "title": "质证要点卡：对公司六类常见证据怎么打（裁员场景核心，逐类给照读话术）",
+    "keywords": [
+      "质证",
+      "考勤记录",
+      "规章制度",
+      "员工手册",
+      "绩效考核",
+      "PIP",
+      "解除通知书",
+      "协商解除协议",
+      "工会意见",
+      "微信邮件OA",
+      "民主程序",
+      "公示告知"
+    ],
+    "applies_to": [
+      "开庭质证",
+      "违纪解除",
+      "裁员",
+      "协商解除",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/scripts/zhizheng-yaodian.md"
+  },
+  {
+    "id": "sop-caijue-yicaizhongju",
+    "type": "流程SOP",
+    "title": "收到仲裁裁决书：送达、生效、一裁终局判断与 15 日起诉期限",
+    "keywords": [
+      "仲裁裁决书",
+      "送达回证",
+      "签收日期",
+      "一裁终局",
+      "30480",
+      "15日起诉",
+      "撤销裁决",
+      "生效证明",
+      "补正决定书"
+    ],
+    "applies_to": [
+      "裁决与终局",
+      "一审二审",
+      "执行",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/caijue-yicaizhongju.md"
+  },
+  {
+    "id": "sop-chaoyang-lian-sop",
+    "type": "流程SOP",
+    "title": "朝阳区仲裁立案 SOP：材料清单 + 现场三步走 + 网上/邮寄立案",
+    "keywords": [
+      "朝阳仲裁",
+      "立案",
+      "将台路5号院",
+      "87983310",
+      "申请仲裁提示",
+      "材料清单",
+      "一式四份",
+      "网上立案",
+      "fuwu.rsj.beijing.gov.cn",
+      "存根回执",
+      "不予受理通知书",
+      "一裁终局"
+    ],
+    "applies_to": [
+      "仲裁申请",
+      "裁员",
+      "欠薪",
+      "证据固定",
+      "裁决与终局"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/chaoyang-lian-sop.md"
+  },
+  {
     "id": "sop-daigang-tinggong",
     "type": "流程SOP",
     "title": "被待岗/停工/\"放长假\"当天与后续应对（含生活费标准与真假停工的分辨）",
@@ -583,6 +3066,34 @@
     "path": "packs/sop/jiakong-shouquan-quanxian.md"
   },
   {
+    "id": "sop-jiancha-vs-zhongcai",
+    "type": "流程SOP",
+    "title": "仲裁前分流：劳动监察 / 工会法援 / 政府法援 怎么选（北京朝阳）",
+    "keywords": [
+      "劳动监察",
+      "投诉举报",
+      "12333",
+      "12351",
+      "工会法律援助",
+      "法律援助",
+      "监察还是仲裁",
+      "加付赔偿金",
+      "行政前置",
+      "时效中断"
+    ],
+    "applies_to": [
+      "欠薪",
+      "社保断缴",
+      "裁员",
+      "仲裁申请",
+      "情绪支持"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/jiancha-vs-zhongcai.md"
+  },
+  {
     "id": "sop-jiangxin-yingdui",
     "type": "流程SOP",
     "title": "被降薪（单独降薪/随调岗降薪/调整薪酬结构）当天与后续应对",
@@ -629,6 +3140,66 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/jiaojie-fanyao.md"
+  },
+  {
+    "id": "sop-juzheng-xuzhi-sop",
+    "type": "流程SOP",
+    "title": "朝阳区《举证须知》逐字＋举证操作要点（原件、份数、编号、期限）",
+    "keywords": [
+      "举证须知",
+      "举证责任",
+      "举证期限",
+      "证据交换",
+      "补充证据",
+      "原件核对",
+      "一式两份",
+      "A4",
+      "逐一分类编号",
+      "视听资料两份拷贝",
+      "证人五日前",
+      "电子数据原件",
+      "单位举证"
+    ],
+    "applies_to": [
+      "证据固定",
+      "开庭质证",
+      "仲裁申请",
+      "裁员",
+      "违纪解除",
+      "欠薪"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/juzheng-xuzhi-sop.md"
+  },
+  {
+    "id": "sop-kaiting-liucheng-sop",
+    "type": "流程SOP",
+    "title": "开庭逐环节：从签到到笔录签字（每一步你该做什么/说什么）",
+    "keywords": [
+      "开庭流程",
+      "庭审环节",
+      "核对身份",
+      "举证质证",
+      "庭审调查",
+      "辩论",
+      "最后陈述",
+      "庭审笔录",
+      "补正",
+      "仲裁庭纪律",
+      "不许录音"
+    ],
+    "applies_to": [
+      "开庭质证",
+      "仲裁申请",
+      "调解",
+      "裁员"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/kaiting-liucheng-sop.md"
   },
   {
     "id": "sop-kaoqin-diaonan",
@@ -956,6 +3527,62 @@
     "path": "packs/sop/tiaogang-yingdui.md"
   },
   {
+    "id": "sop-tiaojie-sop",
+    "type": "流程SOP",
+    "title": "调解：三种调解的效力差别、调解条款六件事、离职原因与放弃条款的坑",
+    "keywords": [
+      "调解",
+      "仲裁调解书",
+      "和解协议",
+      "案前调解",
+      "支付令",
+      "强制执行",
+      "离职原因",
+      "失业金",
+      "放弃其他请求",
+      "税前税后",
+      "调解定价"
+    ],
+    "applies_to": [
+      "调解",
+      "协商解除",
+      "裁员",
+      "离职证明",
+      "仲裁申请"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/tiaojie-sop.md"
+  },
+  {
+    "id": "sop-tingqian-zhunbei-sop",
+    "type": "流程SOP",
+    "title": "庭前准备：受理之后到开庭之前（要素表、变更请求期限、九条风险提示）",
+    "keywords": [
+      "庭前准备",
+      "案件审理要素表",
+      "举证期限",
+      "变更仲裁请求",
+      "反申请",
+      "管辖异议",
+      "回避",
+      "开庭通知",
+      "当事人须知",
+      "朝阳仲裁"
+    ],
+    "applies_to": [
+      "仲裁申请",
+      "开庭质证",
+      "证据固定",
+      "裁员"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/tingqian-zhunbei-sop.md"
+  },
+  {
     "id": "sop-tuoqian-kekou-gongzi",
     "type": "流程SOP",
     "title": "拖欠/克扣/延迟发薪的应对（北京7天红线）",
@@ -1061,6 +3688,34 @@
     "path": "packs/sop/yaoqiu-qianzi-wenjian.md"
   },
   {
+    "id": "sop-yishen-ersheng-sop",
+    "type": "流程SOP",
+    "title": "一审与二审：朝阳法院起诉/应诉、10 元诉讼费、网上立案、上诉至三中院",
+    "keywords": [
+      "起诉",
+      "应诉",
+      "朝阳法院",
+      "三中院",
+      "上诉",
+      "10元诉讼费",
+      "网上立案",
+      "人民法院在线服务",
+      "12368",
+      "司法救助",
+      "缓交免交"
+    ],
+    "applies_to": [
+      "一审二审",
+      "裁决与终局",
+      "仲裁申请",
+      "开庭质证"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/yishen-ersheng-sop.md"
+  },
+  {
     "id": "sop-zhengren-yu-zhengju-qingdan",
     "type": "流程SOP",
     "title": "证人出庭作证与《证据清单》组卷骨架",
@@ -1085,6 +3740,93 @@
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/zhengren-yu-zhengju-qingdan.md"
+  },
+  {
+    "id": "sop-zhixing-sop",
+    "type": "流程SOP",
+    "title": "强制执行：2 年申请期限、材料清单、执行措施与\"执行不能\"的应对",
+    "keywords": [
+      "强制执行",
+      "申请执行",
+      "两年期限",
+      "终本",
+      "恢复执行",
+      "限高",
+      "失信被执行人",
+      "追加股东",
+      "破产债权",
+      "财产保全",
+      "先予执行",
+      "撤销裁决"
+    ],
+    "applies_to": [
+      "执行",
+      "裁决与终局",
+      "一审二审",
+      "欠薪"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/zhixing-sop.md"
+  },
+  {
+    "id": "sop-zhongcai-guanxia-shixiao",
+    "type": "流程SOP",
+    "title": "仲裁管辖怎么选 + 一年时效怎么算不踩坑（北京）",
+    "keywords": [
+      "管辖",
+      "劳动合同履行地",
+      "用人单位所在地",
+      "京人社仲发〔2022〕5号",
+      "仲裁时效",
+      "一年",
+      "时效中断",
+      "时效抗辩",
+      "二倍工资时效",
+      "加班费时效"
+    ],
+    "applies_to": [
+      "仲裁申请",
+      "欠薪",
+      "裁员",
+      "双倍工资",
+      "加班费",
+      "年假"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/zhongcai-guanxia-shixiao.md"
+  },
+  {
+    "id": "sop-zhongcai-qijian-zijiu",
+    "type": "流程SOP",
+    "title": "仲裁/诉讼期间的自救：社保断缴、失业金申领、现金流",
+    "keywords": [
+      "社保断缴",
+      "灵活就业",
+      "社保转移",
+      "连续缴纳",
+      "失业保险金申领",
+      "北京人社App",
+      "司法救助",
+      "先予执行",
+      "支付令",
+      "临时救助"
+    ],
+    "applies_to": [
+      "执行",
+      "裁决与终局",
+      "一审二审",
+      "社保断缴",
+      "裁员",
+      "离职证明"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/sop/zhongcai-qijian-zijiu.md"
   },
   {
     "id": "sop-zhuan-guanlian-gongsi",
@@ -1277,6 +4019,142 @@
     "path": "packs/templates/jujue-tiaogang-huifuhan.md"
   },
   {
+    "id": "template-minshi-qisuzhuang",
+    "type": "文书模板",
+    "title": "《民事起诉状》《民事答辩状》范本（不服仲裁裁决起诉 / 公司起诉你应诉）",
+    "keywords": [
+      "民事起诉状",
+      "民事答辩状",
+      "起诉状范本",
+      "答辩状范本",
+      "不服裁决",
+      "朝阳法院",
+      "诉讼请求",
+      "举证责任",
+      "事后追加解除理由"
+    ],
+    "applies_to": [
+      "一审二审",
+      "裁决与终局",
+      "开庭质证",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/templates/minshi-qisuzhuang.md"
+  },
+  {
+    "id": "template-minshi-shangsuzhuang",
+    "type": "文书模板",
+    "title": "《民事上诉状》范本（不服朝阳法院一审判决，上诉至北京市第三中级人民法院）",
+    "keywords": [
+      "民事上诉状",
+      "上诉状范本",
+      "上诉请求",
+      "上诉理由",
+      "三中院",
+      "15日上诉期",
+      "通过原审法院递交",
+      "二审不开庭"
+    ],
+    "applies_to": [
+      "一审二审",
+      "裁决与终局"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/templates/minshi-shangsuzhuang.md"
+  },
+  {
+    "id": "template-qingqiu-shixiang-ku",
+    "type": "文书模板",
+    "title": "仲裁请求事项规范表述库＋事实理由写作骨架（裁员场景，可直接抄写）",
+    "keywords": [
+      "请求事项",
+      "仲裁请求",
+      "规范表述",
+      "句式",
+      "2N",
+      "继续履行",
+      "二倍工资差额",
+      "年休假差额",
+      "代通知金",
+      "事实和理由",
+      "计算方法",
+      "不予受理"
+    ],
+    "applies_to": [
+      "仲裁申请",
+      "裁员",
+      "欠薪",
+      "加班费",
+      "年假",
+      "双倍工资",
+      "逼迫离职",
+      "协商解除",
+      "社保断缴",
+      "竞业限制"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/templates/qingqiu-shixiang-ku.md"
+  },
+  {
+    "id": "template-shouquan-weituoshu",
+    "type": "文书模板",
+    "title": "《授权委托书》与委托代理人条件（朝阳仲裁官方样式 + 公民代理材料清单）",
+    "keywords": [
+      "授权委托书",
+      "委托代理人",
+      "公民代理",
+      "近亲属代理",
+      "一般代理",
+      "特别授权",
+      "民诉法61条",
+      "不予立案",
+      "按撤回仲裁申请处理"
+    ],
+    "applies_to": [
+      "仲裁申请",
+      "开庭质证",
+      "裁员",
+      "欠薪"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/templates/shouquan-weituoshu.md"
+  },
+  {
+    "id": "template-songda-dizhi-querenshu",
+    "type": "文书模板",
+    "title": "《当事人送达地址确认书》（朝阳仲裁官方表 + 填写说明）",
+    "keywords": [
+      "送达地址确认书",
+      "送达地址",
+      "电子送达",
+      "短信送达",
+      "公告送达",
+      "视为送达",
+      "非京号码",
+      "立案材料",
+      "朝阳仲裁"
+    ],
+    "applies_to": [
+      "仲裁申请",
+      "裁员",
+      "欠薪",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/templates/songda-dizhi-querenshu.md"
+  },
+  {
     "id": "template-xieshang-jiechu-shencha-qingdan",
     "type": "文书模板",
     "title": "《协商解除协议》逐条审查清单（签字前逐项打勾，20 条）",
@@ -1326,5 +4204,64 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/templates/yiyihan-tongyong.md"
+  },
+  {
+    "id": "template-zhengju-cailiao-qingdan",
+    "type": "文书模板",
+    "title": "朝阳区《证据材料清单》官方表＋裁员场景证据编排（按请求组织）",
+    "keywords": [
+      "证据材料清单",
+      "证据清单",
+      "官方表格",
+      "证据种类",
+      "是否有原件",
+      "证明对象",
+      "页数",
+      "编号规则",
+      "裁员证据",
+      "组卷"
+    ],
+    "applies_to": [
+      "证据固定",
+      "仲裁申请",
+      "开庭质证",
+      "裁员",
+      "欠薪",
+      "加班费",
+      "年假"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/templates/zhengju-cailiao-qingdan.md"
+  },
+  {
+    "id": "template-zhongcai-shenqingshu",
+    "type": "文书模板",
+    "title": "《仲裁申请书》官方模板（朝阳区表格式，字段逐字＋法定要素对照）",
+    "keywords": [
+      "仲裁申请书",
+      "申请书模板",
+      "朝阳区仲裁委",
+      "表头字段",
+      "法定要素",
+      "办案规则29条",
+      "调解仲裁法28条",
+      "一次性告知补正",
+      "两被申请人",
+      "一式四份"
+    ],
+    "applies_to": [
+      "仲裁申请",
+      "裁员",
+      "欠薪",
+      "逼迫离职",
+      "协商解除",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "原文核实",
+    "updated": "2026-08-19",
+    "path": "packs/templates/zhongcai-shenqingshu.md"
   }
 ]
