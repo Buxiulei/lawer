@@ -449,7 +449,15 @@ export function runMigrations(db: Database.Database): void {
       id                 INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id            INTEGER NOT NULL REFERENCES users(id),
       feature            TEXT NOT NULL,
+      -- 双串语义，两个都要留，别合并：
+      -- model     = priced 计费键，与 model_rates.model 对齐，锁 dated 版本名/变体串
+      --             （如 qwen-vl-ocr-2025-11-20、qwen-plus:think）——决定这行扣多少钱。
+      -- api_model = 厂商响应回显的实际模型串。调用侧只能用别名发请求（厂商 API 不收 dated 串：
+      --             DeepSeek 返 400、Qwen 返 403），故「按什么价记账」与「实际跑了哪个快照」
+      --             是两件事。厂商把别名重指向新快照时，api_model 会变而 model 不变，
+      --             对账脚本据此告警计费口径漂移。可空：历史行与无回显的调用留 NULL。
       model              TEXT NOT NULL,
+      api_model          TEXT,
       prompt_tokens      INTEGER NOT NULL DEFAULT 0,
       completion_tokens  INTEGER NOT NULL DEFAULT 0,
       cache_read_tokens  INTEGER NOT NULL DEFAULT 0,          -- 命中缓存的输入 token（与 prompt_tokens 不相交）

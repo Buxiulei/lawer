@@ -218,6 +218,7 @@ describe('recordTokenUsage 记账', () => {
       'unconfigured-model',
       { promptTokens: 10000, completionTokens: 3000, cacheReadTokens: 20000, cacheWriteTokens: 4000, embedTokens: 900 },
       'intake-1',
+      null,
       db,
     );
     const row = db.prepare('SELECT * FROM token_usage WHERE ref_id=?').get('intake-1') as {

@@ -142,12 +142,12 @@ describe('四档分桶计价与 cost_li 精度', () => {
     setModelRate(db, 'claude-x', 'cache_read', 0.0001, at(-2 * DAY));
     setModelRate(db, 'claude-x', 'cache_write', 0.00125, at(-2 * DAY));
     const usage = { promptTokens: 1000, completionTokens: 500, cacheReadTokens: 2000, cacheWriteTokens: 800 };
-    recordTokenUsage(uid, 'intake', 'claude-x', usage, 'r-1', db);
+    recordTokenUsage(uid, 'intake', 'claude-x', usage, 'r-1', null, db);
     // 1 + 2 + 0.2 + 1 = 4.2 公道值 → 4200 厘
     expect(db.prepare("SELECT cost_li FROM token_usage WHERE ref_id='r-1'").get()).toEqual({ cost_li: 4200 });
 
     setModelRate(db, 'claude-x', 'in', 0.002, at(-1 * DAY)); // 输入档涨价
-    recordTokenUsage(uid, 'intake', 'claude-x', usage, 'r-2', db);
+    recordTokenUsage(uid, 'intake', 'claude-x', usage, 'r-2', null, db);
     // 2 + 2 + 0.2 + 1 = 5.2 → 5200 厘；旧流水不被回溯改写
     expect(db.prepare("SELECT cost_li FROM token_usage WHERE ref_id='r-2'").get()).toEqual({ cost_li: 5200 });
     expect(db.prepare("SELECT cost_li FROM token_usage WHERE ref_id='r-1'").get()).toEqual({ cost_li: 4200 });
@@ -158,7 +158,7 @@ describe('四档分桶计价与 cost_li 精度', () => {
     recordTokenUsage(
       uid, 'intake', 'deepseek-x',
       { promptTokens: 11, completionTokens: 22, cacheReadTokens: 33, cacheWriteTokens: 44, embedTokens: 55 },
-      'cols', db,
+      'cols', null, db,
     );
     const row = db.prepare(
       'SELECT prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens, embed_tokens FROM token_usage WHERE ref_id=?',
@@ -166,6 +166,28 @@ describe('四档分桶计价与 cost_li 精度', () => {
     expect(row).toEqual({
       prompt_tokens: 11, completion_tokens: 22, cache_read_tokens: 33, cache_write_tokens: 44, embed_tokens: 55,
     });
+  });
+
+  test('api_model 落列读回：计费键与厂商回显串各记各的', () => {
+    const { db, uid } = makeDb();
+    // 计费按 dated 产品名，实际调用发的是别名、厂商回显的是快照串
+    recordTokenUsage(uid, 'ocr', 'qwen-vl-ocr-2025-11-20', { promptTokens: 100 }, 'a-1', 'qwen-vl-ocr', db);
+    const row = db.prepare("SELECT model, api_model FROM token_usage WHERE ref_id='a-1'").get();
+    expect(row).toEqual({ model: 'qwen-vl-ocr-2025-11-20', api_model: 'qwen-vl-ocr' });
+  });
+
+  test('api_model 省略时留 NULL（无回显的调用与历史行）', () => {
+    const { db, uid } = makeDb();
+    recordTokenUsage(uid, 'ocr', 'qwen-vl-ocr-2025-11-20', { promptTokens: 100 }, 'a-2', null, db);
+    expect(db.prepare("SELECT api_model FROM token_usage WHERE ref_id='a-2'").get()).toEqual({ api_model: null });
+  });
+
+  test('api_model 不参与计价：计费只认 model 这一列', () => {
+    const { db, uid } = makeDb();
+    setModelRate(db, 'priced-key', 'in', 0.001);
+    setModelRate(db, 'echoed-alias', 'in', 999); // 回显串就算配了天价费率也不该被用上
+    recordTokenUsage(uid, 'intake', 'priced-key', { promptTokens: 1000 }, 'a-3', 'echoed-alias', db);
+    expect(db.prepare("SELECT cost_li FROM token_usage WHERE ref_id='a-3'").get()).toEqual({ cost_li: 1000 });
   });
 
   test('DEFAULT_RATES 锚点：DeepSeek-V4-Flash-0731 CNY 高峰价换算（C01 §三，待 M3 核定）', () => {
@@ -282,7 +304,7 @@ describe('seedModelRates · C01 费率种子', () => {
     recordTokenUsage(
       uid, 'draft', 'claude-sonnet-5',
       { promptTokens: 10_000, completionTokens: 2_000, cacheReadTokens: 50_000, cacheWriteTokens: 8_000 },
-      'sonnet-1', db,
+      'sonnet-1', null, db,
     );
     // 10000×0.00432 + 2000×0.0216 + 50000×0.000432 + 8000×0.0054
     // = 43.2 + 43.2 + 21.6 + 43.2 = 151.2 公道值 → 151200 厘

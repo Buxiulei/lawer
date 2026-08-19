@@ -144,6 +144,10 @@ export function adminAdjustGongdao(
  * 记录一次模型调用的 token 用量（分析/审计流水，非账本事实源——账本以 gongdao_ledger 为准）。
  * 费率按 model 从 model_rates 取当时生效那档（缺行走 DEFAULT_RATES），cost_li 单位 0.001 公道值。
  * plain insert，不设幂等约束：一次任务可分多段记多行，与 ledger 消耗行按 ref_id 对账。
+ *
+ * model 与 apiModel 是两个串（见 token_usage 表注释）：model 是计费键（决定扣多少），
+ * apiModel 是厂商响应回显的实际模型串（决定「真跑了哪个快照」）。调用侧拿到回显就传，
+ * 拿不到留空——对账脚本靠它发现厂商把别名重指向新快照造成的计费口径漂移。
  */
 export function recordTokenUsage(
   userId: number,
@@ -151,18 +155,20 @@ export function recordTokenUsage(
   model: string,
   tokens: UsageTokens,
   refId: string | null = null,
+  apiModel: string | null = null,
   db: Database.Database = getDb(),
 ): void {
   const rates = getRatesForModel(db, model);
   db.prepare(
     `INSERT INTO token_usage
-       (user_id, feature, model, prompt_tokens, completion_tokens,
+       (user_id, feature, model, api_model, prompt_tokens, completion_tokens,
         cache_read_tokens, cache_write_tokens, embed_tokens, cost_li, ref_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     userId,
     feature,
     model,
+    apiModel,
     tokens.promptTokens ?? 0,
     tokens.completionTokens ?? 0,
     tokens.cacheReadTokens ?? 0,

@@ -175,7 +175,7 @@ describe('账本不变量：消费结算 = 实际 usage 汇总 ceil（无双扣�
       usage.cacheReadTokens += s.cacheReadTokens ?? 0;
       usage.cacheWriteTokens += s.cacheWriteTokens ?? 0;
       usage.embedTokens += s.embedTokens ?? 0;
-      recordTokenUsage(uid, 'intake', 'DeepSeek-V4-Flash-0731', s, ref, db);
+      recordTokenUsage(uid, 'intake', 'DeepSeek-V4-Flash-0731', s, ref, null, db);
     }
 
     const cost = costOfUsage(usage, DEFAULT_RATES);
