@@ -146,12 +146,16 @@ describe('唯一约束（用实际写入冲突验证）', () => {
     }).not.toThrow();
   });
 
-  it('model_rates.token_kind：CHECK 约束只放行 in/out/cache', () => {
+  it('model_rates.token_kind：CHECK 约束只放行 in/out/cache_read/cache_write', () => {
     const ins = db.prepare(
       'INSERT INTO model_rates (model, token_kind, gongdao_per_token) VALUES (?,?,?)',
     );
-    ins.run('claude-opus-5', 'in', 0.003);
+    for (const kind of ['in', 'out', 'cache_read', 'cache_write']) {
+      expect(() => ins.run('claude-opus-5', kind, 0.003), `${kind} 应被放行`).not.toThrow();
+    }
     expect(() => ins.run('claude-opus-5', 'embed', 0.001)).toThrow(/CHECK/);
+    // 旧的合并档 cache 已作废（缓存读 0.1× 与缓存写 1.25× 不可同价）
+    expect(() => ins.run('claude-opus-5', 'cache', 0.001)).toThrow(/CHECK/);
   });
 });
 

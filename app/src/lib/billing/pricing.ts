@@ -12,6 +12,13 @@
 /** 成本锚（spec §9）：1 元 token 成本 = 300 公道值。草案值，待 M3 核定。 */
 export const GONGDAO_PER_YUAN_TOKEN_COST = 300;
 
+/**
+ * 美元换人民币汇率——Anthropic / OpenAI 官方只有美元价（C01 §汇率口径），换算由计费层自定。
+ * 汇率草案待 M3 核定。种子行的 meta_json 会记下入库时用的汇率与核定日，日后改汇率
+ * 只影响新写入的费率行，历史账单仍按当时汇率复算。
+ */
+export const USD_CNY_RATE = 7.20;
+
 // ───────────────────────────── 零售：散充 ─────────────────────────────
 /** 散充换算：1 元 = 100 公道值。草案值，待 M3 核定。 */
 export const RECHARGE_GONGDAO_PER_YUAN = 100;
@@ -68,33 +75,41 @@ export type GongdaoLedgerType = (typeof GONGDAO_LEDGER_TYPE)[keyof typeof GONGDA
 // 本文件只提供「给定费率如何算钱」与「查不到费率时的兜底」。
 
 /**
- * 一次调用的 token 用量（各项可缺省为 0）。
- * promptTokens 与 cachedTokens 是不相交的两桶：命中缓存的输入 token 只计 cachedTokens。
+ * 一次调用的 token 用量（各项可缺省为 0）。四个桶互不相交，调用方必须先按厂商口径拆好再传：
+ * 多数厂商的 prompt_tokens 是「含缓存」的总输入，直接透传会把缓存读按全价重算一遍。
  */
 export interface UsageTokens {
+  /** 未命中缓存的输入 token（已扣除 cacheReadTokens）。 */
   promptTokens?: number;
   completionTokens?: number;
-  cachedTokens?: number;
+  /** 命中缓存的输入 token，按 cacheRead 档（Anthropic/OpenAI 均为输入价 0.1×）。 */
+  cacheReadTokens?: number;
+  /** 写入缓存的 token，按 cacheWrite 档（比标准输入贵，Anthropic/OpenAI 5m 档 1.25×）。 */
+  cacheWriteTokens?: number;
   embedTokens?: number;
 }
 
-/** 某模型的三档费率，单位 公道值/token。 */
+/** 某模型的四档费率，单位 公道值/token。 */
 export interface TokenRates {
   in: number;
   out: number;
-  cache: number;
+  cacheRead: number;
+  cacheWrite: number;
 }
 
 /**
  * model_rates 无该模型（该档）行时的兜底费率。兜底草案待 M3 核定。
- * 按 DeepSeek V3 官牌价换算（元/百万 tokens ÷ 1e6 × GONGDAO_PER_YUAN_TOKEN_COST）：
- *   输入 2 元 → 0.0006、输出 8 元 → 0.0024、缓存命中 0.5 元 → 0.00015。
+ * 取 C01 里最便宜的在售自有模型 DeepSeek-V4-Flash-0731 的 CNY 高峰价（元/百万 tokens
+ * ÷ 1e6 × GONGDAO_PER_YUAN_TOKEN_COST）：输入未命中 3.0 元、输出 9.0 元、缓存命中 0.10 元。
+ * DeepSeek 官方无缓存写费，故 cacheWrite 兜底取 in 价（宁可按未命中算，不白记 0）。
  * embed 无独立档，按 in 档计。
+ * 口径：兜底只是「没配费率也要记账」的下限，不是定价——真实计价一律走 model_rates 种子行。
  */
 export const DEFAULT_RATES: TokenRates = {
-  in: (2 / 1_000_000) * GONGDAO_PER_YUAN_TOKEN_COST,
-  out: (8 / 1_000_000) * GONGDAO_PER_YUAN_TOKEN_COST,
-  cache: (0.5 / 1_000_000) * GONGDAO_PER_YUAN_TOKEN_COST,
+  in: (3.0 / 1_000_000) * GONGDAO_PER_YUAN_TOKEN_COST,
+  out: (9.0 / 1_000_000) * GONGDAO_PER_YUAN_TOKEN_COST,
+  cacheRead: (0.1 / 1_000_000) * GONGDAO_PER_YUAN_TOKEN_COST,
+  cacheWrite: (3.0 / 1_000_000) * GONGDAO_PER_YUAN_TOKEN_COST,
 };
 
 /** 本次用量的精确公道值成本（未取整，可含小数）。 */
@@ -102,7 +117,8 @@ export function exactGongdaoOfUsage(u: UsageTokens, rates: TokenRates): number {
   return (
     (u.promptTokens ?? 0) * rates.in +
     (u.completionTokens ?? 0) * rates.out +
-    (u.cachedTokens ?? 0) * rates.cache +
+    (u.cacheReadTokens ?? 0) * rates.cacheRead +
+    (u.cacheWriteTokens ?? 0) * rates.cacheWrite +
     (u.embedTokens ?? 0) * rates.in
   );
 }

@@ -156,15 +156,17 @@ export function recordTokenUsage(
   const rates = getRatesForModel(db, model);
   db.prepare(
     `INSERT INTO token_usage
-       (user_id, feature, model, prompt_tokens, completion_tokens, cached_tokens, embed_tokens, cost_li, ref_id)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
+       (user_id, feature, model, prompt_tokens, completion_tokens,
+        cache_read_tokens, cache_write_tokens, embed_tokens, cost_li, ref_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     userId,
     feature,
     model,
     tokens.promptTokens ?? 0,
     tokens.completionTokens ?? 0,
-    tokens.cachedTokens ?? 0,
+    tokens.cacheReadTokens ?? 0,
+    tokens.cacheWriteTokens ?? 0,
     tokens.embedTokens ?? 0,
     costLiOfUsage(tokens, rates),
     refId,

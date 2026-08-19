@@ -215,23 +215,25 @@ describe('recordTokenUsage 记账', () => {
     recordTokenUsage(
       uid,
       'intake',
-      'deepseek-v3',
-      { promptTokens: 10000, completionTokens: 3000, cachedTokens: 20000, embedTokens: 900 },
+      'unconfigured-model',
+      { promptTokens: 10000, completionTokens: 3000, cacheReadTokens: 20000, cacheWriteTokens: 4000, embedTokens: 900 },
       'intake-1',
       db,
     );
     const row = db.prepare('SELECT * FROM token_usage WHERE ref_id=?').get('intake-1') as {
-      prompt_tokens: number; completion_tokens: number; cached_tokens: number; embed_tokens: number;
-      cost_li: number; feature: string; model: string;
+      prompt_tokens: number; completion_tokens: number; cache_read_tokens: number;
+      cache_write_tokens: number; embed_tokens: number; cost_li: number; feature: string; model: string;
     };
     expect(row.prompt_tokens).toBe(10000);
     expect(row.completion_tokens).toBe(3000);
-    expect(row.cached_tokens).toBe(20000);
+    expect(row.cache_read_tokens).toBe(20000);
+    expect(row.cache_write_tokens).toBe(4000);
     expect(row.embed_tokens).toBe(900);
-    // 手算：10000×0.0006 + 3000×0.0024 + 20000×0.00015 + 900×0.0006 = 6 + 7.2 + 3 + 0.54 = 16.74
-    expect(row.cost_li).toBe(16740);
+    // 兜底费率手算：10000×0.0009 + 3000×0.0027 + 20000×0.00003 + 4000×0.0009 + 900×0.0009
+    //             = 9 + 8.1 + 0.6 + 3.6 + 0.81 = 22.11
+    expect(row.cost_li).toBe(22110);
     expect(row.feature).toBe('intake');
-    expect(row.model).toBe('deepseek-v3');
+    expect(row.model).toBe('unconfigured-model');
   });
 });
 

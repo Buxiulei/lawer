@@ -163,17 +163,19 @@ describe('账本不变量：消费结算 = 实际 usage 汇总 ceil（无双扣�
 
     const ref = 'intake-J1';
     const segments = [
-      { promptTokens: 1200, completionTokens: 0 },                       // 问句理解
-      { embedTokens: 900 },                                              // 知识检索向量
-      { promptTokens: 8800, completionTokens: 3000, cachedTokens: 5000 }, // 主 LLM（含缓存命中）
+      { promptTokens: 1200, completionTokens: 0 },                        // 问句理解
+      { embedTokens: 900 },                                               // 知识检索向量
+      { promptTokens: 8800, completionTokens: 3000,                       // 主 LLM
+        cacheReadTokens: 5000, cacheWriteTokens: 2000 },                  // （首轮写缓存 + 续轮命中）
     ];
-    const usage = { promptTokens: 0, completionTokens: 0, cachedTokens: 0, embedTokens: 0 };
+    const usage = { promptTokens: 0, completionTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, embedTokens: 0 };
     for (const s of segments) {
       usage.promptTokens += s.promptTokens ?? 0;
       usage.completionTokens += s.completionTokens ?? 0;
-      usage.cachedTokens += s.cachedTokens ?? 0;
+      usage.cacheReadTokens += s.cacheReadTokens ?? 0;
+      usage.cacheWriteTokens += s.cacheWriteTokens ?? 0;
       usage.embedTokens += s.embedTokens ?? 0;
-      recordTokenUsage(uid, 'intake', 'deepseek-v3', s, ref, db);
+      recordTokenUsage(uid, 'intake', 'DeepSeek-V4-Flash-0731', s, ref, db);
     }
 
     const cost = costOfUsage(usage, DEFAULT_RATES);
