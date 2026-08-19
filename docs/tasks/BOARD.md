@@ -13,6 +13,8 @@
 | - | 援助律师 | 用户本人案件陪跑（不写代码） | - | 已委任，待用户问诊 | - | 需求转发manager |
 
 ## 已完成
+- 2026-08-19 PR #7 合并：52 张知识卡（SOP27/计算10/数据5/法条4/模板4/话术2），534号单点事实源卡逐字对照官方PDF；C03 资源定案落卡
+- 2026-08-19 调研员：C04 评测场景集（15剧本+8全局断言，定为 lib/agent 验收基准）结项，转 C05 法务文书三件草稿
 - 2026-08-19 PR #5 合并：sidecar（TSA/PAdES/OCR/ASR，GlobalSign 真通路）+ deploy 三件套（仅 Caddy 暴露端口），22 pytest 绿
 - 2026-08-19 manager：律师 agent 行为准则 v1.0 供稿（docs/agent/lawyer-agent-charter.md）；MCP五工具归属裁决（calc→WS1、knowledge→WS4、agent/evidence→WS2）
 - 2026-08-19 PR #3 合并：auth（OTP双验证/JWT/限流四规则）+notify（短信/邮件+中性文案层），69测试绿；ADR-002 时间戳约定
