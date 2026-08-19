@@ -1,0 +1,27 @@
+{
+  "name": "裁员应对专员",
+  "short_name": "陪跑",
+  "description": "劳动仲裁全程陪跑：问诊建档、行动建议、证据固化、文件解读、文书起草。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F6F3",
+  "theme_color": "#F7F6F3",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
