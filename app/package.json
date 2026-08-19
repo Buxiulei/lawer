@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "reconcile": "tsx ../scripts/reconcile.ts"
   },
   "dependencies": {
     "argon2": "^0.44.0",
@@ -24,6 +25,7 @@
     "@types/nodemailer": "^8.0.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "tsx": "^4.23.12",
     "typescript": "^5",
     "vitest": "^4.1.8"
   }
