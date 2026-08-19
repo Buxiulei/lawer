@@ -27,17 +27,20 @@ export function redeemReasonText(reason: Exclude<RedeemResult, { ok: true }>['re
  */
 export function redeemCode(db: Database.Database, userId: number, rawCode: string): RedeemResult {
   const code = rawCode.trim().toUpperCase();
+  // 过期判定在 SQL 侧算（ADR-002）：canonical 串是 UTC，而 JS 的 new Date('YYYY-MM-DD HH:MM:SS')
+  // 按本机时区解析，在 UTC+8 上会把有效期整整搬走 8 小时。datetime() 顺带归一存量的 ISO 串。
   const row = db.prepare(
-    'SELECT id, gongdao_value, redeemed_by, enabled, expires_at FROM redemption_codes WHERE code=?',
+    `SELECT id, gongdao_value, redeemed_by, enabled,
+            (expires_at IS NOT NULL AND datetime(expires_at) < datetime('now')) AS expired
+       FROM redemption_codes WHERE code=?`,
   ).get(code) as
-    | { id: number; gongdao_value: number; redeemed_by: number | null; enabled: number; expires_at: string | null }
+    | { id: number; gongdao_value: number; redeemed_by: number | null; enabled: number; expired: number }
     | undefined;
 
   if (!row) return { ok: false, reason: 'not_found' };
   if (!row.enabled) return { ok: false, reason: 'disabled' };
   if (row.redeemed_by != null) return { ok: false, reason: 'used' };
-  if (row.expires_at && new Date(row.expires_at).getTime() < Date.now())
-    return { ok: false, reason: 'expired' };
+  if (row.expired) return { ok: false, reason: 'expired' };
 
   const faceValue = row.gongdao_value;
 

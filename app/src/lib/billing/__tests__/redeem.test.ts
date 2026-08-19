@@ -5,6 +5,7 @@ import Database from 'better-sqlite3';
 import { runMigrations } from '../../db/migrate';
 import { redeemCode, redeemReasonText } from '../redeem';
 import { getGongdao } from '../index';
+import { toSql } from '../../db/time';
 
 function makeDb() {
   const db = new Database(':memory:');
@@ -65,6 +66,18 @@ describe('兑换码核销', () => {
     const exp = redeemCode(db, uid, 'LAW-EXP');
     expect([gone, off, exp].map((r) => (r.ok ? 'ok' : r.reason))).toEqual(['not_found', 'disabled', 'expired']);
     expect(getGongdao(uid, db)).toBe(0);
+  });
+
+  test('有效期按 UTC 判（ADR-002）：canonical 串写的未来到期码仍可兑换', () => {
+    const { db, uid } = makeDb();
+    const hours = (n: number) => toSql(new Date(Date.now() + n * 3600_000));
+    makeCode(db, 'LAW-FUTURE', 100, { expires_at: hours(4) });  // 4 小时后到期
+    makeCode(db, 'LAW-PAST', 100, { expires_at: hours(-4) });   // 4 小时前已过期
+    // 旧写法把 canonical 串当本机时区解析，在 UTC+8 上会把这张有效码误判成已过期
+    expect(redeemCode(db, uid, 'LAW-FUTURE').ok).toBe(true);
+    const past = redeemCode(db, uid, 'LAW-PAST');
+    expect(past.ok).toBe(false);
+    if (!past.ok) expect(past.reason).toBe('expired');
   });
 
   test('拒绝原因有中文文案', () => {
