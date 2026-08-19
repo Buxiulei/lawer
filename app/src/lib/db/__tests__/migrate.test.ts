@@ -172,8 +172,13 @@ describe('删除行为', () => {
     db.prepare(
       "INSERT INTO timeline_events (case_id, happened_at, kind, title) VALUES (?,?,?,?)",
     ).run(caseId, '2026-08-01', '公司动作', '口头通知裁员');
-    db.prepare('INSERT INTO evidence (case_id, user_id, file_id, name) VALUES (?,?,?,?)')
-      .run(caseId, uid, fileId, '录音');
+    const evId = Number(
+      db.prepare('INSERT INTO evidence (case_id, user_id, file_id, name) VALUES (?,?,?,?)')
+        .run(caseId, uid, fileId, '录音').lastInsertRowid,
+    );
+    // 该证据已出证：删案不得被存证外键挡下，存证行留存、断链置 NULL
+    db.prepare('INSERT INTO attestations (evidence_id, order_no, sha256) VALUES (?,?,?)')
+      .run(evId, 'att-cascade', 'sha-c');
     db.prepare("INSERT INTO claims (case_id, kind, amount_fen) VALUES (?,?,?)")
       .run(caseId, '2N', 12345600);
     db.prepare("INSERT INTO deadlines (case_id, kind, due_at) VALUES (?,?,?)")
@@ -182,12 +187,17 @@ describe('删除行为', () => {
       db.prepare("INSERT INTO threads (case_id, mode) VALUES (?,?)")
         .run(caseId, '问诊').lastInsertRowid,
     );
-    db.prepare("INSERT INTO messages (thread_id, role, content) VALUES (?,?,?)")
-      .run(threadId, 'user', '公司让我签自愿离职');
+    const msgId = Number(
+      db.prepare("INSERT INTO messages (thread_id, role, content) VALUES (?,?,?)")
+        .run(threadId, 'user', '公司让我签自愿离职').lastInsertRowid,
+    );
+    // 待办回指消息：删案时 messages 与 action_items 两路级联顺序不保证，SET NULL 免级联顺序陷阱
+    db.prepare('INSERT INTO action_items (case_id, title, source_message_id) VALUES (?,?,?)')
+      .run(caseId, '不要签字，先要书面通知', msgId);
 
     db.prepare('DELETE FROM cases WHERE id = ?').run(caseId);
 
-    for (const t of ['timeline_events', 'evidence', 'claims', 'deadlines', 'threads']) {
+    for (const t of ['timeline_events', 'evidence', 'claims', 'deadlines', 'threads', 'action_items']) {
       const n = db.prepare(`SELECT COUNT(*) c FROM ${t}`).get() as { c: number };
       expect(n.c, `${t} 未被级联删除`).toBe(0);
     }
@@ -195,6 +205,30 @@ describe('删除行为', () => {
     expect((db.prepare('SELECT COUNT(*) c FROM messages').get() as { c: number }).c).toBe(0);
     // files 不属于案件子表，删案不动它
     expect((db.prepare('SELECT COUNT(*) c FROM files').get() as { c: number }).c).toBe(1);
+    // 存证留存且断链置 NULL（自含记录，/verify 校验不受影响）
+    const att = db.prepare('SELECT evidence_id, sha256 FROM attestations WHERE order_no=?')
+      .get('att-cascade') as { evidence_id: number | null; sha256: string };
+    expect(att.evidence_id).toBeNull();
+    expect(att.sha256).toBe('sha-c');
+  });
+
+  it('deadlines.resolved_at 与 users.notify_verbose：新列默认值语义', () => {
+    const uid = mkUser(db);
+    const caseId = mkCase(db, uid);
+    db.prepare("INSERT INTO deadlines (case_id, kind, due_at) VALUES (?,?,?)")
+      .run(caseId, '起诉15日', '2026-09-01');
+    // 默认生效中（resolved_at NULL）；置时间戳即退出提醒
+    expect(
+      (db.prepare('SELECT COUNT(*) c FROM deadlines WHERE resolved_at IS NULL').get() as { c: number }).c,
+    ).toBe(1);
+    db.prepare("UPDATE deadlines SET resolved_at = datetime('now')").run();
+    expect(
+      (db.prepare('SELECT COUNT(*) c FROM deadlines WHERE resolved_at IS NULL').get() as { c: number }).c,
+    ).toBe(0);
+    // 通知详细模式默认关闭（中性文案防泄露）
+    expect(
+      (db.prepare('SELECT notify_verbose v FROM users WHERE id=?').get(uid) as { v: number }).v,
+    ).toBe(0);
   });
 
   it('users 无级联：删还有案件的用户被外键挡下', () => {

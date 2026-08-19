@@ -23,6 +23,7 @@ export function runMigrations(db: Database.Database): void {
       real_name_enc      TEXT,
       id_card_enc        TEXT,
       auth_status        TEXT NOT NULL DEFAULT '未认证',   -- 未认证 | 待审 | 已实名
+      notify_verbose     INTEGER NOT NULL DEFAULT 0,       -- 通知详细模式：0=中性文案（防他人代收泄露案情），1=用户明确开启后带案件细节
       created_at         TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE UNIQUE INDEX IF NOT EXISTS uq_users_phone_hash
@@ -184,11 +185,12 @@ export function runMigrations(db: Database.Database): void {
   // 存证订单：只追加不修改（钱和证据零妥协）。order_no 唯一 = 幂等键，重复下单不重复扣费。
   // tsa_* 为可信时间戳应答的原样留存（tst_b64 是唯一可对外校验的凭据，务必原文保存不加工）；
   // user_realname_snapshot_enc 冻结出证时点的实名信息密文——用户日后改名不改已出的证书。
-  // 无 CASCADE：证据可以删，已出的证不能随之消失。
+  // evidence_id ON DELETE SET NULL：证据可删、证不消失，且不挡删案（cases→evidence 级联时本表断链留存）。
+  // 存证记录自含（sha256 + order_no + 实名快照 + TSA 应答），断链后 /verify/:no 校验不受影响。
   db.exec(`
     CREATE TABLE IF NOT EXISTS attestations (
       id                          INTEGER PRIMARY KEY AUTOINCREMENT,
-      evidence_id                 INTEGER NOT NULL REFERENCES evidence(id),
+      evidence_id                 INTEGER REFERENCES evidence(id) ON DELETE SET NULL,
       order_no                    TEXT NOT NULL UNIQUE,
       user_realname_snapshot_enc  TEXT,
       sha256                      TEXT NOT NULL,
@@ -238,6 +240,8 @@ export function runMigrations(db: Database.Database): void {
 
   // 待办事项：陪跑给出的下一步动作清单。source_message_id 回指产生该待办的那条对话消息，
   // 便于用户追问「这条为什么要做」。表按 (case_id, status) 取未完成项，是首页热路径。
+  // source_message_id ON DELETE SET NULL：删案时 threads→messages 与 action_items 两路级联
+  // 顺序不保证，messages 先删不得让尚存的 action_items 触发 FK 报错（级联顺序陷阱）。
   db.exec(`
     CREATE TABLE IF NOT EXISTS action_items (
       id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -247,7 +251,7 @@ export function runMigrations(db: Database.Database): void {
       due_at            TEXT,
       priority          INTEGER NOT NULL DEFAULT 0,
       status            TEXT NOT NULL DEFAULT '待办',        -- 待办 | 完成 | 放弃
-      source_message_id INTEGER REFERENCES messages(id),
+      source_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
       created_at        TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_action_items_case ON action_items (case_id, status);
@@ -256,7 +260,8 @@ export function runMigrations(db: Database.Database): void {
   // 法定期限：错过即权利灭失，本表是整个产品最不能出错的地方。
   // derived_from 记推算依据（如「解除日 2026-08-01 + 1 年」），用户可自查系统算得对不对；
   // notified_stages_json 记已发过哪几档提醒（30/7/3/1 天…），防重复轰炸也防漏提醒。
-  // idx_deadlines_due 覆盖全表按到期时间扫描——提醒 cron 的热路径，不能只有 (case_id, due_at)。
+  // resolved_at = 退出态：期限被履行/作废（如 15 日内已起诉）即置时间戳停止提醒，NULL=生效中。
+  // idx_deadlines_due 只盖生效中的期限——提醒 cron 的热路径按到期时间全表扫，已处理行不进索引。
   db.exec(`
     CREATE TABLE IF NOT EXISTS deadlines (
       id                   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -265,10 +270,11 @@ export function runMigrations(db: Database.Database): void {
       due_at               TEXT NOT NULL,
       derived_from         TEXT,
       notified_stages_json TEXT,
+      resolved_at          TEXT,                            -- NULL=生效中；非空=已履行/作废，停止提醒
       created_at           TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_deadlines_case ON deadlines (case_id, due_at);
-    CREATE INDEX IF NOT EXISTS idx_deadlines_due ON deadlines (due_at);
+    CREATE INDEX IF NOT EXISTS idx_deadlines_due ON deadlines (due_at) WHERE resolved_at IS NULL;
   `);
 
   // 对话会话：一案多线程，mode 决定人格与工具集（问诊 / 陪跑 / 文书 / 录音分析）。
