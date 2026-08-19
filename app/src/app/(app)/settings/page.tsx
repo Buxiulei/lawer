@@ -1,13 +1,22 @@
 import type { Metadata } from 'next';
-import { PagePlaceholder } from '@/components/shell/PagePlaceholder';
+import { ApiKeysCard } from './_components/ApiKeysCard';
+import { McpCard } from './_components/McpCard';
+import { PreferencesCard } from './_components/PreferencesCard';
 
 export const metadata: Metadata = { title: '设置' };
 
 export default function SettingsPage() {
   return (
-    <PagePlaceholder
-      pageName="设置"
-      description="通知渠道、低调模式默认值、数据导出与账号注销正在开发中。"
-    />
+    <div className="pt-1 pb-4">
+      <header className="py-3">
+        <h1 className="text-[20px] font-semibold text-ink">设置</h1>
+      </header>
+
+      <div className="flex flex-col gap-4">
+        <ApiKeysCard />
+        <McpCard />
+        <PreferencesCard />
+      </div>
+    </div>
   );
 }
