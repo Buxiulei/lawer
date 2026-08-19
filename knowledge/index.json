@@ -4871,6 +4871,33 @@
     "path": "packs/statutes/minsu-zhengju-guiding.md"
   },
   {
+    "id": "statute-qijian-jisuan-tongze",
+    "type": "法条卡",
+    "title": "期间计算通则：起算不含当日、届满遇法定休假日顺延（民诉法§85+办案规则§19）",
+    "keywords": [
+      "期间计算",
+      "期限",
+      "顺延",
+      "法定休假日",
+      "次日起算",
+      "届满",
+      "在途时间",
+      "交邮",
+      "15日",
+      "民诉法85条"
+    ],
+    "applies_to": [
+      "仲裁申请",
+      "裁决与终局",
+      "一审二审",
+      "执行"
+    ],
+    "region": "全国",
+    "confidence": "待核实",
+    "updated": "2026-08-19",
+    "path": "packs/statutes/qijian-jisuan-tongze.md"
+  },
+  {
     "id": "statute-rsty-2025-40-jingye-zhiyin",
     "type": "法条卡",
     "title": "人社厅发〔2025〕40号《企业实施竞业限制合规指引》全文（单点事实源·行政指引）",
