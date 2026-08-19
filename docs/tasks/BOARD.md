@@ -12,6 +12,12 @@
 | WS5 | 调研员 | WS5-2 结项（C01定价/C02公司调查SOP）→ C03 求助资源核实 | 本地research/ | 进行中 | 今天内 | - |
 | - | 援助律师 | 用户本人案件陪跑（不写代码） | - | 已委任，待用户问诊 | - | 需求转发manager |
 
+## 检查点快照（2026-08-19 额度临界）
+- 已合并 PR：#1 scaffold+crypto / #2 29表 / #3 auth+notify / #5 sidecar+deploy / #6 llm路由 / #7 52知识卡 / #8 billing账本+费率种子。main 全绿。
+- 在途（各分支持久化，不怕掉线）：WS2 三线=lib/agent（C04验收+PII脱敏+反向还原）、MCP骨架、evidence链，另带 otp/sms 的 nowSql 收尾；WS1 calc 纯函数首批（类型先送审）；WS4 A09+A04 约70卡+loader；WS3 三分支（骨架已好，intake-evidence 完成待复核，workbench/docs-drafts 在途）→合并集成→最后一波页面→PR。
+- 等用户：Anthropic key、服务器选址、退款A案终审、知乎cookie（可选）、援助律师问诊单（公司名→触发调研员公司调查）。
+- 上线前 OPS：两通人工电话核验、LAWER_DATA_KEY 异地备份登记（值已在 .secrets-backup/）。
+
 ## 已完成
 - 2026-08-19 PR #7 合并：52 张知识卡（SOP27/计算10/数据5/法条4/模板4/话术2），534号单点事实源卡逐字对照官方PDF；C03 资源定案落卡
 - 2026-08-19 调研员：C04 评测场景集（15剧本+8全局断言，定为 lib/agent 验收基准）结项，转 C05 法务文书三件草稿
