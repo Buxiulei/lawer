@@ -12,7 +12,16 @@
 | WS5 | 调研员 | WS5-2 结项（C01定价/C02公司调查SOP）→ C03 求助资源核实 | 本地research/ | 进行中 | 今天内 | - |
 | - | 援助律师 | 用户本人案件陪跑（不写代码） | - | 已委任，待用户问诊 | - | 需求转发manager |
 
+## 检查点快照（2026-08-19 额度临界）
+- 已合并 PR：#1 scaffold+crypto / #2 29表 / #3 auth+notify / #5 sidecar+deploy / #6 llm路由 / #7 52知识卡 / #8 billing账本+费率种子。main 全绿。
+- PR #9 已合并（清理后复验 315测试+tsc 干净）：api_keys 鉴权+手写 MCP+7 工具+REST。calc_json 类型已批准。WS3 五大页面已合入 ws/frontend（build 零报错），最后一波页面在途今天内提 PR。
+- 在途（各分支持久化，不怕掉线）：WS2 三线=lib/agent（C04验收+PII脱敏+反向还原）、MCP骨架、evidence链，另带 otp/sms 的 nowSql 收尾；WS1 calc 纯函数首批（类型先送审）；WS4 A09+A04 约70卡+loader；WS3 三分支（骨架已好，intake-evidence 完成待复核，workbench/docs-drafts 在途）→合并集成→最后一波页面→PR。
+- 等用户：Anthropic key、服务器选址、退款A案终审、知乎cookie（可选）、援助律师问诊单（公司名→触发调研员公司调查）。
+- 上线前 OPS：两通人工电话核验、LAWER_DATA_KEY 异地备份登记（值已在 .secrets-backup/）。
+
 ## 已完成
+- 2026-08-19 PR #11 合并：calc 首批 N/N+1/2N（404测试）；PR #12 合并：前端全量页面+设计系统（低调模式/verify红线/PWA），404测试+tsc+build 全绿
+- 2026-08-19 PR #10 合并：evidence 链（上传/去重/加密/TSA固化/存证订单/验证）+ fromSql 时区修复（canonical 无时区标记裸解析漂移8h的真坑）+ otp 切 toSql，349 测试绿
 - 2026-08-19 PR #7 合并：52 张知识卡（SOP27/计算10/数据5/法条4/模板4/话术2），534号单点事实源卡逐字对照官方PDF；C03 资源定案落卡
 - 2026-08-19 调研员：C04 评测场景集（15剧本+8全局断言，定为 lib/agent 验收基准）结项，转 C05 法务文书三件草稿
 - 2026-08-19 PR #5 合并：sidecar（TSA/PAdES/OCR/ASR，GlobalSign 真通路）+ deploy 三件套（仅 Caddy 暴露端口），22 pytest 绿

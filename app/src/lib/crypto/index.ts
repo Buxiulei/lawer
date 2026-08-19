@@ -9,6 +9,8 @@ const KEY_BYTES = 32;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 const PREFIX = 'v1';
+/** 整文件密文的 v1 magic 头（4 字节 ASCII），与字段密文的 "v1:" 前缀同代但格式不同 */
+const FILE_MAGIC = Buffer.from('LWR1', 'ascii');
 /** HKDF info：查找摘要密钥与加密主钥必须分离，密文泄漏不得反推查找列 */
 const LOOKUP_INFO = 'lawer-lookup-v1';
 
@@ -71,6 +73,40 @@ export function decryptField(token: string): string {
     return Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf-8');
   } catch {
     throw new Error('密文认证失败：内容被篡改或密钥不匹配');
+  }
+}
+
+/**
+ * 整文件加密。产出二进制 `magic("LWR1") || iv(12B) || ciphertext || tag(16B)`。
+ *
+ * 与 encryptField 分开是因为落盘的是证据原件（图片/录音/PDF，可达数十 MB）：
+ * base64 会让体积涨三分之一且必须整串驻留内存，故这里走裸二进制、不做 base64。
+ * magic 头让「这是不是本系统的密文文件」在读第一个字节时就能判定。
+ */
+export function encryptBuffer(plaintext: Buffer): Buffer {
+  const iv = crypto.randomBytes(IV_BYTES);
+  const cipher = crypto.createCipheriv(ALGO, getMasterKey(), iv);
+  const enc = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  return Buffer.concat([FILE_MAGIC, iv, enc, cipher.getAuthTag()]);
+}
+
+/** 解密 encryptBuffer 的产物。magic/长度/认证标签任一不符即抛错，绝不返回可疑明文。 */
+export function decryptBuffer(blob: Buffer): Buffer {
+  if (blob.length < FILE_MAGIC.length + IV_BYTES + TAG_BYTES) {
+    throw new Error('密文文件长度不足：缺少 magic、iv 或认证标签');
+  }
+  if (!blob.subarray(0, FILE_MAGIC.length).equals(FILE_MAGIC)) {
+    throw new Error(`密文文件格式无法识别：期望 "${FILE_MAGIC.toString('ascii')}" magic 头`);
+  }
+  const iv = blob.subarray(FILE_MAGIC.length, FILE_MAGIC.length + IV_BYTES);
+  const enc = blob.subarray(FILE_MAGIC.length + IV_BYTES, blob.length - TAG_BYTES);
+  const tag = blob.subarray(blob.length - TAG_BYTES);
+  const decipher = crypto.createDecipheriv(ALGO, getMasterKey(), iv);
+  decipher.setAuthTag(tag);
+  try {
+    return Buffer.concat([decipher.update(enc), decipher.final()]);
+  } catch {
+    throw new Error('密文文件认证失败：内容被篡改或密钥不匹配');
   }
 }
 
