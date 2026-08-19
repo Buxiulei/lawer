@@ -1,0 +1,84 @@
+// app/src/lib/crypto/index.ts
+// 字段级加密（spec §10）：手机号/身份证/实名/认证原始报文等敏感列以 AES-256-GCM 落库，
+// 数据库里对应 `*_enc` 列存本文件产出的自包含密文串；`*_hash` 查找列存 hashLookup 的确定性摘要。
+// 主密钥只来自 env LAWER_DATA_KEY，绝不入库、绝不静默降级（缺失即启动报错）。
+import crypto from 'node:crypto';
+
+const ALGO = 'aes-256-gcm';
+const KEY_BYTES = 32;
+const IV_BYTES = 12;
+const TAG_BYTES = 16;
+const PREFIX = 'v1';
+/** HKDF info：查找摘要密钥与加密主钥必须分离，密文泄漏不得反推查找列 */
+const LOOKUP_INFO = 'lawer-lookup-v1';
+
+let masterKey: Buffer | null = null;
+let lookupKey: Buffer | null = null;
+
+/** 解析 env 主密钥：hex(64 字符) 或 base64，必须解出 32 字节 */
+function getMasterKey(): Buffer {
+  if (masterKey) return masterKey;
+  const raw = process.env.LAWER_DATA_KEY;
+  if (!raw) {
+    throw new Error('缺少 env LAWER_DATA_KEY：字段级加密主密钥未配置，参见 app/.env.example');
+  }
+  const key = /^[0-9a-fA-F]{64}$/.test(raw)
+    ? Buffer.from(raw, 'hex')
+    : Buffer.from(raw, 'base64');
+  if (key.length !== KEY_BYTES) {
+    throw new Error(`env LAWER_DATA_KEY 长度错误：解出 ${key.length} 字节，要求 ${KEY_BYTES} 字节（hex 或 base64）`);
+  }
+  masterKey = key;
+  return key;
+}
+
+function getLookupKey(): Buffer {
+  if (lookupKey) return lookupKey;
+  const derived = crypto.hkdfSync('sha256', getMasterKey(), Buffer.alloc(0), LOOKUP_INFO, KEY_BYTES);
+  lookupKey = Buffer.from(derived);
+  return lookupKey;
+}
+
+/**
+ * 加密单个字段。输出自包含格式 `v1:base64(iv(12B) || ciphertext || tag(16B))`，
+ * 可直接整串存进 `*_enc` 列，解密不需要额外元数据。
+ */
+export function encryptField(plaintext: string): string {
+  const iv = crypto.randomBytes(IV_BYTES);
+  const cipher = crypto.createCipheriv(ALGO, getMasterKey(), iv);
+  const enc = Buffer.concat([cipher.update(plaintext, 'utf-8'), cipher.final()]);
+  const payload = Buffer.concat([iv, enc, cipher.getAuthTag()]);
+  return `${PREFIX}:${payload.toString('base64')}`;
+}
+
+/** 解密 encryptField 的产物。前缀/长度/认证标签任一不符即抛错，绝不返回可疑明文。 */
+export function decryptField(token: string): string {
+  const sep = token.indexOf(':');
+  const version = sep < 0 ? '' : token.slice(0, sep);
+  if (version !== PREFIX) {
+    throw new Error(`密文格式无法识别：期望 "${PREFIX}:" 前缀`);
+  }
+  const payload = Buffer.from(token.slice(sep + 1), 'base64');
+  if (payload.length < IV_BYTES + TAG_BYTES) {
+    throw new Error('密文长度不足：缺少 iv 或认证标签');
+  }
+  const iv = payload.subarray(0, IV_BYTES);
+  const enc = payload.subarray(IV_BYTES, payload.length - TAG_BYTES);
+  const tag = payload.subarray(payload.length - TAG_BYTES);
+  const decipher = crypto.createDecipheriv(ALGO, getMasterKey(), iv);
+  decipher.setAuthTag(tag);
+  try {
+    return Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf-8');
+  } catch {
+    throw new Error('密文认证失败：内容被篡改或密钥不匹配');
+  }
+}
+
+/**
+ * 确定性查找摘要（hex），供 phone_hash 等 UNIQUE 列按明文反查。
+ * AES-GCM 每次 iv 随机、密文不可用于等值查询，故查找列另走 HMAC。
+ * 调用方负责先做业务归一化（如手机号去空格），本函数不改写入参。
+ */
+export function hashLookup(value: string): string {
+  return crypto.createHmac('sha256', getLookupKey()).update(value, 'utf-8').digest('hex');
+}

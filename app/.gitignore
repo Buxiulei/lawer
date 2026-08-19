@@ -1,0 +1,24 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# env files
+.env*
+!.env.example
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# 运行时数据（SQLite 库 + 加密文件库），绝不入库
+/data/
+
+# misc
+.DS_Store
+npm-debug.log*
