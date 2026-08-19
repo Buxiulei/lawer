@@ -1,7 +1,20 @@
 # 待核实清单（WS5 调研员对接）
 
 > 格式：pack id · 待核实点 · 建议核实途径。核实后更新对应 pack 并将其 confidence 升级。
-> 清扫纪录：2026-08-19 全库清扫，解除 18 处（依据三张单点事实源卡），余下为真实外部待核实项。
+> 清扫纪录：2026-08-19 两轮全库清扫共解除 31 处（依据三张单点事实源卡），余下为真实外部待核实项。
+> 卡内均有精确【待核实】标记，可 `grep -rn 待核实 knowledge/packs/` 定位原文。
+
+## E. A09/A04 批次新增（2026-08-19 第二轮清扫后余项，分组摘要）
+
+| 组 | 摘要 | 涉及 pack | 建议途径 |
+|---|---|---|---|
+| E1 电话/窗口/现场路径 | 朝阳法院与三中院电话及接待时间（二手）、朝阳仲裁发号与网上立案补交原件细节、邮寄申请可否、终局金额分项还是合计、监察窗口直线号、撤销期内能否径行执行 | sop-yishen-ersheng-sop、sop-chaoyang-lian-sop、sop-jiancha-vs-zhongcai、sop-zhixing-sop | 12368 / 010-87983310 / 12351 电话确认（可并入 OPS 人工核验清单） |
+| E2 法条未回官方原始页 | 民诉法、诉讼费用交纳办法（国务院令481号）、企业破产法§113、仲裁办案规则（人社部令33号）§20/50/53/54、北京失业保险金申领办法、执行变更追加规定条款号、民诉证据规定若干规则条号 | 上述 sop/templates 各卡 + scripts-kaiting-huashu | flk.npc.gov.cn / gov.cn / mohrss.gov.cn；可在 A01/A02 法条批次顺手建卡解决 |
+| E3 北京无明文口径 | 二审是否仍收10元、调解书能否写违约金、到期终止补偿的个税免征适用、监察范围是否涵盖2N、年假报酬时效起算、工会程序瑕疵补正 | sop-tiaojie-sop、sop-jiancha-vs-zhongcai、sop-zhongcai-guanxia-shixiao、scripts-zhizheng-yaodian 等 | 裁判文书检索 / 法院交费通知 / 北京税务 12366 |
+| E4 经办条件 | 非京籍灵活就业参保、医保断缴恢复时点、失业登记经办口径与失业补助金政策、临时救助条件 | sop-zhongcai-qijian-zijiu | rsj/医保局/民政局办事指南、12333 |
+| E5 案例线索 | 放弃仲裁诉权条款2024案例出处、个税免征当年数额、八民会纪要"第47条"条号、年终奖在职口径、HR谈话录音采纳判例 | template-xieshang-jiechu-shencha-qingdan、case-mowei-taotai-shangwei-guize-2016、case-nianzhongjiang-beijing-koujing、case-zhengju-caixin-guize-huibian | 最高法官方发布稿 / 三中院白皮书 / 判例检索 |
+
+编卡纪律追加（第二轮清扫教训）：①"某条未收录进源卡"的注记**不要写死在 pack 正文**——源卡扩充后即成陈旧信息，统一在源卡侧维护收录清单；②"逐月/按月起算"表述已全库绝迹，新卡禁用（正确表述：自主张权利之日起向前一年按日倒算，534§41）。law_refs 为可选字段（规范 §2），纯数值/资源 data 卡豁免。
 
 ## A. 年度数值 / 官方发布类
 
