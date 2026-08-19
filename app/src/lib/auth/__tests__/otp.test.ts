@@ -1,6 +1,7 @@
 // app/src/lib/auth/__tests__/otp.test.ts
 // 限流是这个模块唯一挡住「短信被刷爆 / 验证码被爆破」的东西，四条规则各一例，一条都不能松。
 // 全程 mock 短信与邮件发送：真发既费钱又会打扰真实号码。
+import { toSql } from '@/lib/db/time';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import crypto from 'node:crypto';
 
@@ -221,7 +222,7 @@ describe('手机验证通过后的建号与双验证', () => {
     expect(verified.ok).toBe(true);
 
     const row = db.prepare('SELECT email, email_verified_at FROM users WHERE id = ?').get(uid);
-    expect(row).toEqual({ email: 'user@example.com', email_verified_at: at(30).toISOString() });
+    expect(row).toEqual({ email: 'user@example.com', email_verified_at: toSql(at(30)) });
 
     // 再登录一次，不该再要求补邮箱
     await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(90)).deps);

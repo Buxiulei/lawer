@@ -72,7 +72,11 @@ function trimmedOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
-/** 校验 ISO8601 时间串，返回归一化后的 UTC ISO 串；不合法返回 null */
+/**
+ * 校验 API 传进来的 ISO8601 时间串（ADR-002：边界转换在这一层做）。
+ * 这里只负责"是不是个合法时间"，落库格式的归一交给 SQL 的 datetime()，
+ * 免得应用层再自己拼一套格式跟 canonical 打架。
+ */
 function normalizeIsoTime(value: unknown): string | null {
   if (typeof value !== 'string' || !value.trim()) return null;
   const ms = Date.parse(value);
@@ -188,7 +192,6 @@ export function addTimelineEvent(
     kind: unknown;
     title: unknown;
     detail?: unknown;
-    now?: Date;
   },
 ): Result<{ event: store.TimelineEventRow }> {
   const found = assertOwned(db, input.caseId, input.userId);
@@ -210,7 +213,6 @@ export function addTimelineEvent(
     kind: input.kind,
     title,
     detail: trimmedOrNull(input.detail),
-    createdAt: (input.now ?? new Date()).toISOString(),
   });
   const event = store.listTimelineEvents(db, input.caseId, TIMELINE_MAX_LIMIT).find((e) => e.id === id)!;
   return { ok: true, event };

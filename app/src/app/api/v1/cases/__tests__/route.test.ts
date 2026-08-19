@@ -143,7 +143,7 @@ describe('写接口', () => {
       ctx(caseA),
     );
     expect(added.status).toBe(201);
-    expect((await added.json()).event.happened_at).toBe('2026-08-15T01:30:00.000Z');
+    expect((await added.json()).event.happened_at).toBe('2026-08-15 01:30:00');
 
     const done = await patchAction(request('PATCH', token), {
       params: Promise.resolve({ id: String(caseA), actionId: String(actionA) }),

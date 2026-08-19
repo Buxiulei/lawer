@@ -38,7 +38,7 @@ export function extractBearer(headers: Headers): string | null {
 /**
  * 解析请求身份。任何一种凭据验不过都返回 null——调用方一律回 401，
  * 不区分"没带"和"带错了"，免得把"这把 key 存在但停用了"这类信息漏给攻击者。
- * @param now 注入用于测试；同时写进 last_used_at
+ * @param now 注入用于测试，只用于判 JWT 是否过期；last_used_at 由 SQLite 自己取时间（ADR-002）
  */
 export function resolveIdentity(
   db: Database,
@@ -56,7 +56,7 @@ export function resolveIdentity(
   const row = store.findEnabledApiKeyByHash(db, hashApiKey(token));
   if (!row || !verifyApiKey(token, row.key_hash)) return null;
 
-  store.touchApiKeyLastUsed(db, row.id, now.toISOString());
+  store.touchApiKeyLastUsed(db, row.id);
   return {
     uid: row.user_id,
     via: 'api_key',

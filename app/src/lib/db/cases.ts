@@ -95,30 +95,29 @@ export function updateCaseFields(
 
 // ========== timeline_events ==========
 
-/** 只追加，修正靠补一条新事件（spec §7）——本文件不提供 update/delete。 */
+/**
+ * 只追加，修正靠补一条新事件（spec §7）——本文件不提供 update/delete。
+ *
+ * 时间列按 ADR-002 走 canonical 格式：created_at 交给列 DEFAULT；
+ * happened_at 是 API 传进来的 ISO8601，用 SQLite 的 datetime() 就地归一成空格格式，
+ * 这样它和库里其它时间列可以直接做字符串比较与排序（idx 也还走得上）。
+ */
 export function insertTimelineEvent(
   db: Database,
   params: {
     caseId: number;
+    /** ISO8601，落库前由 datetime() 归一 */
     happenedAt: string;
     kind: string;
     title: string;
     detail: string | null;
-    createdAt: string;
   },
 ): number {
   const info = db
     .prepare(
-      'INSERT INTO timeline_events (case_id, happened_at, kind, title, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO timeline_events (case_id, happened_at, kind, title, detail) VALUES (?, datetime(?), ?, ?, ?)',
     )
-    .run(
-      params.caseId,
-      params.happenedAt,
-      params.kind,
-      params.title,
-      params.detail,
-      params.createdAt,
-    );
+    .run(params.caseId, params.happenedAt, params.kind, params.title, params.detail);
   return Number(info.lastInsertRowid);
 }
 

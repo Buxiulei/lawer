@@ -137,8 +137,8 @@ describe('正常流程', () => {
       detail: '会议室只有 HR 和我，无第三人',
     });
     expect(added).toMatchObject({ ok: true });
-    // 时间统一归一到 UTC ISO
-    expect(added.ok && added.event.happened_at).toBe('2026-08-15T01:30:00.000Z');
+    // 时间归一到 ADR-002 canonical（UTC 空格格式秒精度）
+    expect(added.ok && added.event.happened_at).toBe('2026-08-15 01:30:00');
 
     expect(
       cases.setActionStatus(db, { caseId: caseA, userId: userA, actionId: actionA }),

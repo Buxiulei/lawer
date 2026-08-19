@@ -14,6 +14,7 @@ import { encryptField, hashLookup } from '@/lib/crypto';
 import { emailVerifyCode, isValidEmail, sendMail, sendOtp } from '@/lib/notify';
 import type { MailCopy } from '@/lib/notify';
 import * as store from '@/lib/db/otp';
+import { fromSql, toSql } from '@/lib/db/time';
 import { checkAndRecordIp } from './ip-quota';
 import { signToken } from './jwt';
 import { normalizePhone } from './phone';
@@ -80,11 +81,11 @@ function checkSendQuota(
   if (!checkAndRecordIp(ip, now)) {
     return fail(429, 'RATE_LIMITED', '请求过于频繁，请稍后再试', RESEND_COOLDOWN_SECONDS);
   }
-  const cooldownFrom = new Date(now.getTime() - RESEND_COOLDOWN_SECONDS * 1000).toISOString();
+  const cooldownFrom = toSql(new Date(now.getTime() - RESEND_COOLDOWN_SECONDS * 1000));
   if (countSince(cooldownFrom) > 0) {
     return fail(429, 'RATE_LIMITED', '发送过于频繁，60 秒后再试', RESEND_COOLDOWN_SECONDS);
   }
-  const dayFrom = new Date(now.getTime() - DAILY_WINDOW_MS).toISOString();
+  const dayFrom = toSql(new Date(now.getTime() - DAILY_WINDOW_MS));
   if (countSince(dayFrom) >= DAILY_MAX_SENDS) {
     return fail(429, 'RATE_LIMITED', '今日发送次数已达上限，请明天再试');
   }
@@ -95,7 +96,7 @@ function checkSendQuota(
 function checkCodeState(row: store.OtpRow | undefined, now: Date): AuthFailure | null {
   if (!row) return fail(400, 'OTP_NOT_FOUND', '请先获取验证码');
   if (row.used) return fail(400, 'OTP_EXPIRED', '验证码已使用，请重新获取');
-  if (new Date(row.expires_at).getTime() <= now.getTime()) {
+  if (fromSql(row.expires_at).getTime() <= now.getTime()) {
     return fail(400, 'OTP_EXPIRED', '验证码已过期，请重新获取');
   }
   if (row.attempts >= MAX_VERIFY_ATTEMPTS) {
@@ -134,8 +135,8 @@ export async function sendPhoneCode(
   store.insertSmsCode(db, {
     phoneHash,
     code,
-    expiresAt: new Date(now.getTime() + minutes * 60 * 1000).toISOString(),
-    createdAt: now.toISOString(),
+    expiresAt: toSql(new Date(now.getTime() + minutes * 60 * 1000)),
+    createdAt: toSql(now),
   });
 
   try {
@@ -184,7 +185,7 @@ export function verifyPhoneCode(
     const id = store.insertUser(db, {
       phoneEnc: encryptField(phone),
       phoneHash,
-      verifiedAt: now.toISOString(),
+      verifiedAt: toSql(now),
     });
     user = store.findUserById(db, id)!;
   }
@@ -225,8 +226,8 @@ export async function sendEmailCode(
   store.insertEmailCode(db, {
     email,
     code,
-    expiresAt: new Date(now.getTime() + minutes * 60 * 1000).toISOString(),
-    createdAt: now.toISOString(),
+    expiresAt: toSql(new Date(now.getTime() + minutes * 60 * 1000)),
+    createdAt: toSql(now),
   });
 
   // 详细文案只在用户自己开了 notify_verbose 时才用（默认 0 = 中性），见 lib/notify/copy.ts
@@ -270,7 +271,7 @@ export function verifyEmailCode(
   }
 
   store.markEmailCodeUsed(db, row!.id);
-  store.setUserEmailVerified(db, input.userId, email, now.toISOString());
+  store.setUserEmailVerified(db, input.userId, email, toSql(now));
 
   return { ok: true, token: signToken(input.userId, now) };
 }
