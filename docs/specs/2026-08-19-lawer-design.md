@@ -26,7 +26,7 @@
 | D7 | 通知复用 NBDpsy：阿里云短信+企业邮/DirectMail+服务号模板消息 |
 | D8 | 电签/固化复用 NBDpsy：CFCA 证书 PAdES + GlobalSign AATL RFC3161 + 阿里云实人认证 |
 | D9 | 无人工兜底，全 AI；重度情绪（焦虑抑郁表现）可引流 NBDpsy 心理咨询，禁止趁人之危观感 |
-| D10 | 公司调查只查公开信息 |
+| D10 | 公司调查只查公开信息。**形态修订(2026-08-19)**：政务源（gsxt/zxgk/信用中国）有 WAF+服务器IP拒绝，无人值守代查不可行——agent 生成查询清单→用户手机自查→回传截图由 agent 解读；agent 可直接代查：人民法院案例库、破产重整信息网；商业库首选爱企查（免登录）。依据 research/raw/C02 实测 |
 | D11 | 凭据（模型 key、阿里云、微信）从 NBDpsy 项目获取，绝不入仓库 |
 | D12 | 律师 agent 不做刻意人设/口癖，实用为主 |
 
@@ -124,7 +124,7 @@ lawer/
 **公道值（抄问爻，改名）**
 - `gongdao`(user_id PK, balance) / `gongdao_ledger`(delta, type, ref_id, feature, meta_json; UNIQUE(type,ref_id) WHERE ref_id NOT NULL)
 - `memberships` / `skus` / `orders` / `redemption_codes` / `token_usage`(+model 列) — 结构照抄
-- `model_rates`(model, token_kind[in|out|cache], gongdao_per_token, effective_at)  — 新增
+- `model_rates`(model, token_kind[in|out|cache_read|cache_write], gongdao_per_token, effective_at)  — 新增；档位变体编码进 model 串（如 qwen-plus:think），变体→API参数映射归 lib/llm
 - `notify_log`(scene, biz_key 幂等, channel, status) — 照抄 NBDpsy 语义
 
 ## 8. 模块规格与验收（摘要）
