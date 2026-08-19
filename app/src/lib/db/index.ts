@@ -4,3 +4,9 @@
 
 // 时间戳助手（ADR-002）：应用层写时间列一律经这两个函数，禁止 toISOString() 直落。
 export { fromSql, nowSql, toSql } from './time';
+
+// 各表封装按域分组，以命名空间导出——跨表撞名的函数很多（setStatus / listByCase / create），
+// 平铺导出必然打架，调用方也看不出这个 setStatus 改的是哪张表的状态。
+export * as notifyLog from './notify-log';
+export * as realname from './realname';
+export * as shareLinks from './share-links';

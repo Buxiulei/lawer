@@ -1,10 +1,18 @@
 // app/src/lib/db/migrate.ts
 //
-// lawer 数据层第一阶段：全量表结构。新库无存量，故一律 CREATE TABLE / INDEX IF NOT EXISTS，
-// 不含任何一次性迁移/补差/回填/ALTER 块——本文件反复执行必须幂等且无副作用。
+// lawer 数据层第一阶段：全量表结构。一律 CREATE TABLE / INDEX IF NOT EXISTS，
+// 建表段之后是「存量迁移区」（见文件末尾）：已上线的库补列走 addColumnIfMissing，
+// 不回填、不改数据——本文件反复执行必须幂等且无副作用。
 // 通用约定：id 一律 INTEGER PRIMARY KEY AUTOINCREMENT；created_at TEXT DEFAULT (datetime('now'))；
 // 布尔用 INTEGER 0/1；金额单位「分」（*_fen）；外键全部显式 REFERENCES（client 恒开 foreign_keys=ON）。
 import type Database from 'better-sqlite3';
+
+/** SQLite ALTER TABLE ADD COLUMN 不支持 IF NOT EXISTS；用 PRAGMA table_info 判断后跳过。 */
+function addColumnIfMissing(db: Database.Database, table: string, col: string, ddl: string): void {
+  type ColRow = { name: string };
+  const exists = (db.prepare(`PRAGMA table_info(${table})`).all() as ColRow[]).some((r) => r.name === col);
+  if (!exists) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${ddl}`);
+}
 
 export function runMigrations(db: Database.Database): void {
   // ───────────────── 用户与实名 ─────────────────
@@ -511,4 +519,15 @@ export function runMigrations(db: Database.Database): void {
       ON notify_log (scene, biz_key, channel)
       WHERE status = 'sent';
   `);
+
+  // ───────────────── 存量迁移区 ─────────────────
+  // 上面的建表段只对新库生效（IF NOT EXISTS 不改已存在的表），已上线的库补列一律走这里。
+  // 只加列、不回填、不改语义：老行的新列取 NULL / DDL 默认值，读侧必须容得下这个缺省。
+
+  // threads.intake_stage：问诊状态机进度落痕。值集当前 A|B|C|D|done（D 档=特殊保护已问过），
+  // 由 lib/agent 就近维护并提供写入口——本列**不加 DB 级 CHECK**：状态机是推导式（不存游标，
+  // 本列只是补充落痕），SQLite 改 CHECK 要重建表，为其锁枚举得不偿失（manager 2026-08-19 裁决）。
+  // NULL = 非问诊线程，或问诊线程尚未进入状态机。
+  // WS2 此前借 timeline_events.kind='系统动作' 落痕记录进度，本列落地后切换到本列。
+  addColumnIfMissing(db, 'threads', 'intake_stage', 'TEXT');
 }

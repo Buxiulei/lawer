@@ -241,3 +241,52 @@ describe('删除行为', () => {
     expect(() => db.prepare('DELETE FROM users WHERE id = ?').run(uid)).toThrow(/FOREIGN KEY/);
   });
 });
+
+describe('存量迁移区', () => {
+  it('threads.intake_stage：列存在，默认 NULL 且可写读', () => {
+    const db = newDb();
+    const caseId = mkCase(db, mkUser(db));
+    const threadId = Number(
+      db.prepare("INSERT INTO threads (case_id, mode) VALUES (?, '问诊')").run(caseId)
+        .lastInsertRowid,
+    );
+    // 未进状态机 → NULL
+    expect(
+      (db.prepare('SELECT intake_stage s FROM threads WHERE id=?').get(threadId) as { s: string | null }).s,
+    ).toBeNull();
+    db.prepare('UPDATE threads SET intake_stage = ? WHERE id = ?').run('D', threadId);
+    expect(
+      (db.prepare('SELECT intake_stage s FROM threads WHERE id=?').get(threadId) as { s: string | null }).s,
+    ).toBe('D');
+    // 无 DB 级 CHECK：值集外的串也存得进去（二期扩值免表迁移，值集由 lib/agent 把关）
+    expect(() =>
+      db.prepare('UPDATE threads SET intake_stage = ? WHERE id = ?').run('E-二期新增档', threadId),
+    ).not.toThrow();
+  });
+
+  it('老库补列幂等：跑两遍只补一次，原有行数据不丢', () => {
+    // 模拟一个 intake_stage 落地之前的老库：建全量表后把该列摘掉，再灌一条存量线程
+    const db = newDb();
+    db.exec('ALTER TABLE threads DROP COLUMN intake_stage');
+    const caseId = mkCase(db, mkUser(db));
+    db.prepare("INSERT INTO threads (case_id, mode) VALUES (?, '陪跑')").run(caseId);
+
+    const stageCols = () =>
+      (db.prepare('PRAGMA table_info(threads)').all() as { name: string }[]).filter(
+        (c) => c.name === 'intake_stage',
+      ).length;
+    expect(stageCols()).toBe(0);
+
+    runMigrations(db);
+    expect(stageCols()).toBe(1);
+    runMigrations(db);
+    expect(stageCols()).toBe(1);
+
+    // 存量行还在，老列原样，新列为 NULL
+    const row = db.prepare('SELECT mode, intake_stage FROM threads').all() as {
+      mode: string;
+      intake_stage: string | null;
+    }[];
+    expect(row).toEqual([{ mode: '陪跑', intake_stage: null }]);
+  });
+});
