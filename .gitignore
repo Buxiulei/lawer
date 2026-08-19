@@ -1,0 +1,14 @@
+node_modules/
+.next/
+__pycache__/
+.venv/
+*.db
+*.db-*
+.env
+.env.*
+!.env.example
+secrets/
+/data/
+research/
+*.log
+.DS_Store

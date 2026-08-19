@@ -1,0 +1,174 @@
+# lawer「裁员应对专员」整站设计 spec v1.0
+
+> 状态：已批准（2026-08-19，产品负责人口头批准设计稿 v1）
+> 架构师/总控：manager 会话 · 本文件是全项目唯一事实源，改动需 manager 审批并记入 CHANGELOG
+
+## 1. 背景与目标
+
+为北京（默认朝阳区）请不起律师、自己跑劳动仲裁/一审/二审的劳动者，提供 AI 律师全程陪跑：
+**细致问诊 → 公司公开信息调查 → 专属案件档案（长期记忆）→ 随时给出快速准确的行动建议（第一优先）**，
+覆盖：书面回复/异议函、HR 约谈录音分析（后续实时耳语/直接介入）、证据固化（时间戳+电签）、
+公司文件 OCR 解读与签/不签意见、仲裁与开庭材料准备+流程预演+心理建设、全程情绪安抚。
+
+非目标（明确不做）：不自称律师/律所、不承诺胜诉率、不做诉讼代理（用户自己或公民代理出庭）、
+不反复劝用户"去找律师"（目标用户请不起律师，这是红线）。
+
+## 2. 已拍板决策（产品负责人 2026-08-19）
+
+| # | 决策 |
+|---|---|
+| D1 | 实名制：手机号+邮箱双验证才能用；上传材料绑定实名+存证订单记录；数据加密存储；原件上传 |
+| D2 | 收费只赚 token 钱；点数名「公道值」；计费逻辑照抄问爻「功德」账本 |
+| D3 | 三档套餐：入门=全 DeepSeek；中配=关键环节 Claude；高配=主力 Claude；支持 Claude/GPT/Qwen/DeepSeek |
+| D4 | MCP+API 开放：用户自己的 agent 直连档案库；下发用户 skill；无 MCP 用户网页全功能；移动端+PC |
+| D5 | 语音：事后录音分析（M5 一期）→ 实时耳语+直接介入（二期，需明确开启并告知对方） |
+| D6 | MVP 主线=解除/裁员/逼迫离职（含 N/N+1/2N、欠薪、年假、加班费、双倍工资、社保、竞业、年终奖）；朝阳深耕，分区差异化；阶段全覆盖（仲裁前博弈→执行→被告应诉） |
+| D7 | 通知复用 NBDpsy：阿里云短信+企业邮/DirectMail+服务号模板消息 |
+| D8 | 电签/固化复用 NBDpsy：CFCA 证书 PAdES + GlobalSign AATL RFC3161 + 阿里云实人认证 |
+| D9 | 无人工兜底，全 AI；重度情绪（焦虑抑郁表现）可引流 NBDpsy 心理咨询，禁止趁人之危观感 |
+| D10 | 公司调查只查公开信息 |
+| D11 | 凭据（模型 key、阿里云、微信）从 NBDpsy 项目获取，绝不入仓库 |
+| D12 | 律师 agent 不做刻意人设/口癖，实用为主 |
+
+## 3. 架构原则（架构师门禁）
+
+1. **单体优先**：一个 Next.js 应用 + 一个 Python sidecar + Caddy，不搞微服务。新增服务需 ADR。
+2. **模块边界神圣**：`lib/` 下每个目录一个职责，跨模块只经导出的函数接口；禁止路由里写业务逻辑（路由=参数校验+调 lib+返回）。
+3. **抄优于写**：问爻/NBDpsy 已验证的代码整块移植（账本、支付、OTP、电签脚本、key 网关），改名不改逻辑；移植时删掉原项目业务残留。
+4. **钱和证据零妥协**：公道值账本与存证记录只追加不修改；幂等键强制；对账脚本随迁移交付。
+5. **性能**：SQLite WAL+预编译语句；LLM 响应一律 SSE 流式；文件按 SHA256 去重存储；列表全部分页；知识检索用本地索引（不引向量库，除非 ADR）。
+6. **版本迭代**：semver + `docs/CHANGELOG.md`（keep-a-changelog 格式）+ git tag；架构决策写 `docs/adr/NNN-标题.md`。
+7. **门禁**：所有分支经 PR 进 main，manager 审核合并；测试随功能走（账本/计算器/期限引擎必须有单测）；禁止 dead code 与"顺手重构"。
+
+## 4. 技术选型（方案 A，已批准）
+
+- **app/**：Next.js 16 + React 19 + TypeScript + better-sqlite3（WAL）。骨架、账本、支付、管理端从 `/home/roots/六爻/app` 移植。
+- **sidecar/**：Python 3.11 + FastAPI。电签/时间戳脚本从 `/home/roots/NBDpsy/后端服务/管理后端/scripts/` 移植（`rfc3161_timestamp.py`、`pades_sign.py`、`gen_evidence_pdf.py`、`verify_*.py`、trust_anchors），加 OCR/ASR 编排（DashScope Qwen-VL/Paraformer）。仅内网监听，供 app 调用。
+- **MCP**：跑在 app 内（`/api/mcp` streamable HTTP route handler），鉴权复用 api_keys 表。
+- **前端**：app 内页面（不分仓）。移动优先响应式 + PWA。
+- 部署：Docker Compose（web+sidecar+caddy）；服务器国内/海外可移植，建议国内腾讯云+备案。
+
+## 5. 系统架构
+
+```
+ 用户(手机/PC浏览器)      用户自己的 Claude(挂 skill)
+        │ HTTPS                    │ MCP(HTTP)+API key
+        ▼                          ▼
+ ┌─────────────────────  Caddy  ─────────────────────┐
+ │                    Next.js app                     │
+ │  web 页面(对话工作台/档案/证据/管理端)              │
+ │  /api/v1/*(REST)  /api/mcp(MCP)  /verify/:no(公开) │
+ │  lib/: agent │ llm路由 │ billing │ knowledge │      │
+ │        cases │ evidence │ notify │ payment │ crypto │
+ └──────┬───────────────┬───────────────┬────────────┘
+        │ SQLite(WAL)   │ 文件库(SHA256去重,加密)      
+        ▼               ▼               ▼ 内网HTTP
+   lawer.db        /data/files    Python sidecar
+                                  (TSA时间戳/PAdES/OCR/ASR/PDF)
+ 外部：Anthropic/OpenAI/DeepSeek/DashScope · 阿里云(短信/实人认证) ·
+       微信(支付/服务号) · 支付宝 · GlobalSign TSA
+```
+
+## 6. 仓库结构
+
+```
+lawer/
+  app/                    # Next.js 单体
+    src/app/              # 页面 + api 路由（薄）
+    src/lib/db/           # client.ts + migrate.ts + 表封装（唯一 SQL 层）
+    src/lib/billing/      # 公道值（抄功德：index/pricing/estimate/fulfillment/redeem/features/channel）
+    src/lib/llm/          # providers/{anthropic,openai,deepseek,dashscope}.ts + router.ts + rates
+    src/lib/agent/        # 律师 agent：编排、问诊状态机、行动卡、文书起草、金额计算器
+    src/lib/knowledge/    # pack 加载与检索
+    src/lib/cases/        # 案件档案领域逻辑
+    src/lib/evidence/     # 上传/去重/固化编排（调 sidecar）
+    src/lib/notify/       # sms/email/wechat-pubacc 薄客户端
+    src/lib/payment/      # alipay/wechat（抄问爻）
+    src/lib/crypto/       # 字段级加密(AES-GCM, env 主密钥)
+    src/lib/deadline/     # 期限引擎
+  sidecar/                # FastAPI：/tsa /pades /ocr /asr /pdf
+  knowledge/              # packs（编译产物，原创+引用，可入库）
+  skill/                  # 下发给用户 Claude 的 skill 模板
+  deploy/                 # docker-compose.yml Caddyfile backup.sh
+  docs/{specs,tasks,adr,CHANGELOG.md}
+  scripts/                # 对账、导入导出、运维
+```
+
+注：调研原始材料在服务器本地 `/home/roots/裁员应对员/research/`（约150万字，含网络抓取内容），**不入仓库**。
+
+## 7. 数据模型（数据表管理窗口细化，本节为约束）
+
+**用户与实名**
+- `users`(id, phone_enc, phone_hash UNIQUE, email, email_verified_at, phone_verified_at, real_name_enc, id_card_enc, auth_status[未认证|待审|已实名], created_at)
+- `sms_codes` / `email_codes`（OTP，限流字段照抄 NBDpsy 语义）
+- `realname_verifications`(id, user_id, provider[cloudauth|eid|manual], cert_no, status, raw_meta_enc, created_at)
+- `api_keys`(id, user_id, name, key_hash UNIQUE, scopes, last_used_at, enabled)
+
+**案件档案（心脏）**
+- `cases`(id, user_id, title, stage[风声|约谈中|已收通知|已解除|仲裁准备|已立案|开庭|裁决|一审|二审|执行|结案], district DEFAULT '朝阳', goal, bottom_line, status, created_at)
+- `company_profiles`(id, case_id, name, uscc, role[签约主体|用工主体|关联], reg_capital, legal_rep, risk_notes, sources_json, investigated_at)
+- `timeline_events`(id, case_id, happened_at, kind[公司动作|我方动作|系统动作|期限], title, detail, evidence_ids_json, created_at)  — 只追加，修正用新事件
+- `evidence`(id, case_id, user_id, file_id, name, category[合同|工资|社保|考勤|沟通记录|公司文件|录音|其他], prove_purpose, original_medium, status[已上传|已固化|已出证], created_at)
+- `files`(id, sha256 UNIQUE, size, mime, enc_path, created_at)  — 按哈希去重，落盘加密
+- `attestations`(id, evidence_id, order_no UNIQUE, user_realname_snapshot_enc, sha256, tsa_tst_b64, tsa_gen_time, tsa_serial, tsa_url, cert_pdf_file_id, status, created_at)  — 存证订单，只追加
+- `company_docs`(id, case_id, file_id, ocr_text, doc_type[解除通知|协商协议|调岗通知|PIP|警告|其他], risk_flags_json, advice[签|不签|改签|待定], advice_detail, created_at)
+- `claims`(id, case_id, kind[2N|N|N+1|欠薪|年假|加班费|双倍工资|年终奖|竞业补偿|其他], amount_fen, calc_json, basis, status)
+- `action_items`(id, case_id, title, detail, due_at, priority, status[待办|完成|放弃], source_message_id, created_at)
+- `deadlines`(id, case_id, kind[仲裁时效|起诉15日|上诉15日|举证期限|开庭|申请执行2年|自定义], due_at, derived_from, notified_stages_json)
+- `threads`(id, case_id, mode[问诊|陪跑|文书|录音分析]) / `messages`(id, thread_id, role, content, model, tokens_json, created_at)
+- `emotion_log`(id, case_id, level[平稳|低落|焦虑|严重], note, referred_nbdpsy, created_at)
+- `share_links`(id, case_id, token UNIQUE, scope[档案只读|单文件下载], expires_at, revoked_at)
+- `drafts`(id, case_id, kind[异议函|被迫解除通知|仲裁申请书|证据清单|答辩状|上诉状|谈判话术|其他], title, content, version, status)
+
+**公道值（抄问爻，改名）**
+- `gongdao`(user_id PK, balance) / `gongdao_ledger`(delta, type, ref_id, feature, meta_json; UNIQUE(type,ref_id) WHERE ref_id NOT NULL)
+- `memberships` / `skus` / `orders` / `redemption_codes` / `token_usage`(+model 列) — 结构照抄
+- `model_rates`(model, token_kind[in|out|cache], gongdao_per_token, effective_at)  — 新增
+- `notify_log`(scene, biz_key 幂等, channel, status) — 照抄 NBDpsy 语义
+
+## 8. 模块规格与验收（摘要）
+
+| 模块 | 要点 | 验收 |
+|---|---|---|
+| auth | 手机 OTP+邮箱验证双必须；JWT；实人认证 H5（CloudAuth，M2 接通） | 新用户 3 分钟内完成注册双验证 |
+| agent | 问诊状态机（首诊清单→补充→陪跑）；每次回复必产出/更新行动卡；重要结论引用 pack 依据（法条条号/判例） | 首诊后自动建档：时间线≥3事件、诉求初算、行动卡≥3 |
+| llm 路由 | task_class[critical|standard|bulk] × 套餐 → 模型；SSE；token 计量→账本结算 | 三套餐路由正确；断流可重试不双扣 |
+| knowledge | packs frontmatter 索引+关键词检索；agent 工具 `knowledge_search` | 命中法条卡逐字原文 |
+| evidence | 上传→加密→SHA256→TSA 固化→存证订单→《存证证明》PDF→`/verify/:no` | 验证页可离线复核哈希与时间戳 |
+| OCR | 拍照→Qwen-VL→风险标红→签/不签/改签建议入 company_docs | 解除通知样张全流程 <60s |
+| 计算器 | N/N+1/2N/年假/加班费/双倍工资，北京口径（分段、三倍社平封顶、12年上限），calc_json 留痕 | 单测覆盖 spec 附录算例 |
+| deadline+notify | 事件→期限→短信/邮件/服务号三通道，幂等 | 模拟开庭前1天触发三通道 |
+| billing | 账本移植+估价预检+支付+兑换码+注册赠送 | 对账脚本 SUM(ledger)=balance；重复回调不双记 |
+| MCP/API | 工具：case_get/update, timeline_add, evidence_upload, docs_ocr, claim_calc, draft_write, knowledge_search, action_*, deadline_list；`/api/manifest` | 用户 Claude 挂 skill 后完成"传证据→固化→列行动卡"全链 |
+| 管理端 | 用户/公道值调整(ADMIN_EMAILS)/兑换码/费率/存证查询 | 发码→用户核销到账 |
+
+## 9. 公道值定价（草案，M3 接入时按官方实价核定费率表）
+
+- 锚点照抄问爻：**1 元模型成本 = 300 公道值**（约 50% 毛利空间）。
+- 费率公式：`gongdao_per_token = 官方单价(元/token) × 300`，按 model×token_kind 写入 `model_rates`（接入时核定，含缓存价）。
+- 套餐草案（月卡=公道值额度+路由策略）：入门 ¥19.9（全 DeepSeek/Qwen）；中配 ¥59（critical 走 Claude）；高配 ¥199（standard 以上走 Claude）。散充 1 元=100 公道值。注册赠送额度以能完整走完一次首诊为准（上线前实测标定）。
+- API/MCP 模式：token 由用户自己的 agent 承担，平台仅对固化出证、存储扩容、短信收定额公道值（`FIXED_PRICING`）。
+
+## 10. 安全·隐私·合规
+
+- 敏感字段（手机号/身份证/实名/认证原始报文）AES-GCM 加密落库，主密钥 env；文件落盘加密；备份加密异地。
+- 首屏一次性免责声明：平台提供法律信息与行动建议，不构成律师意见、不形成委托代理关系；用户协议+隐私政策（M3 前上线）。
+- 录音指引话术固定为"一方知情录音+合法场景"；直接介入模式强制开启提示"已告知对方使用辅助工具"。
+- 情绪引流红线：连续/严重痛苦表达才提示 NBDpsy 与公益热线，一案最多提示一次，禁止推销话术。
+- 服务器若落国内：域名备案；若海外：标注跨境存储于隐私政策并单独同意（PIPL 第39条）。
+- share_links 默认 7 天过期、可撤销；下载链接带水印页脚（案件编号+生成时间）。
+
+## 11. 里程碑（多窗口并行）
+
+- **M1 陪跑最小闭环**（最急，先服务用户本人）：auth(OTP+邮箱) + cases 全套档案表 + agent 问诊/陪跑/行动卡 + 计算器 + drafts 文书 + knowledge 检索（先用已有 packs）
+- **M2 证据链**：上传/去重/加密 + sidecar TSA 固化 + 存证订单 + 验证页 + OCR 解读 + 实人认证接通
+- **M3 商业化**：公道值账本 + 支付 + 套餐路由 + 管理端 + 用户协议/隐私政策
+- **M4 开放与提醒**：MCP + REST + 用户 skill + deadline/notify 三通道
+- **M5 语音一期**：录音上传→ASR 说话人分离→逐句分析→复盘报告；（二期实时耳语/直接介入另立 spec）
+
+## 12. 协作纪律
+
+- 分支 `ws/<角色>`，PR → main，manager 审核合并；commit 遵循 conventional commits。
+- 任务板 `docs/tasks/BOARD.md`：开工前读，收工前写（状态+量级预估+需配合）。
+- 决策疑问 → SendMessage 给 manager，不自行拍板改契约（表结构、API 形状、费率、目录结构）。
+- 汇报节奏：manager 10 分钟盯梢；阻塞立刻报，不空等。
