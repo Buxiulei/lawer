@@ -20,6 +20,7 @@
 - 上线前 OPS：两通人工电话核验、LAWER_DATA_KEY 异地备份登记（值已在 .secrets-backup/）。
 
 ## 已完成
+- 2026-08-19 PR #10 合并：evidence 链（上传/去重/加密/TSA固化/存证订单/验证）+ fromSql 时区修复（canonical 无时区标记裸解析漂移8h的真坑）+ otp 切 toSql，349 测试绿
 - 2026-08-19 PR #7 合并：52 张知识卡（SOP27/计算10/数据5/法条4/模板4/话术2），534号单点事实源卡逐字对照官方PDF；C03 资源定案落卡
 - 2026-08-19 调研员：C04 评测场景集（15剧本+8全局断言，定为 lib/agent 验收基准）结项，转 C05 法务文书三件草稿
 - 2026-08-19 PR #5 合并：sidecar（TSA/PAdES/OCR/ASR，GlobalSign 真通路）+ deploy 三件套（仅 Caddy 暴露端口），22 pytest 绿
