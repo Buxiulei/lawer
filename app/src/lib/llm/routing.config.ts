@@ -32,8 +32,8 @@ import type { ProviderName } from './types';
  *  - bulk：分类、摘要、关键词抽取、OCR 文本清洗等高频小调用。 */
 export type TaskClass = 'critical' | 'standard' | 'bulk';
 
-/** 套餐档（spec §9 月卡）：entry=入门 / mid=中配 / high=高配 */
-export type Plan = 'entry' | 'mid' | 'high';
+/** 套餐档（spec §9 月卡，枚举对齐 WS1 memberships.plan）：entry=入门 / standard=中配 / pro=高配 */
+export type Plan = 'entry' | 'standard' | 'pro';
 
 /** 计费维度变体：同一型号下**计费口径不同**的调用形态（manager 2026-08-19 裁决）。
  *  C01 记载百炼「思考输出与非思考输出价不同」（如 qwen-plus 非思考 2 元 / 思考 8 元），
@@ -99,13 +99,13 @@ export const ROUTING_TABLE: Record<Plan, Record<TaskClass, RouteTarget>> = {
     bulk: { provider: 'deepseek', model: MODELS.DEEPSEEK_FLASH },
   },
   // 中配：只有 critical 升到 Claude（Sonnet 档），其余与入门一致
-  mid: {
+  standard: {
     critical: { provider: 'anthropic', model: MODELS.CLAUDE_SONNET },
     standard: { provider: 'deepseek', model: MODELS.DEEPSEEK_PRO },
     bulk: { provider: 'deepseek', model: MODELS.DEEPSEEK_FLASH },
   },
   // 高配：standard 走 Sonnet 主力，critical 再升一档到 Opus，bulk 仍留在便宜档
-  high: {
+  pro: {
     critical: { provider: 'anthropic', model: MODELS.CLAUDE_OPUS },
     standard: { provider: 'anthropic', model: MODELS.CLAUDE_SONNET },
     bulk: { provider: 'deepseek', model: MODELS.DEEPSEEK_FLASH },

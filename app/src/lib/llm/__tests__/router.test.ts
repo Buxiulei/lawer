@@ -40,19 +40,19 @@ describe('route 三套餐 × 三档位矩阵（spec D3 / §9）', () => {
   });
 
   test('中配：只有 critical 升 Claude，且只升到 Sonnet 档', () => {
-    expect(route('critical', 'mid', allUp)).toEqual({ ...SONNET, degraded: false });
-    expect(route('standard', 'mid', allUp)).toEqual({ ...DS_PRO, degraded: false });
-    expect(route('bulk', 'mid', allUp)).toEqual({ ...DS_FLASH, degraded: false });
+    expect(route('critical', 'standard', allUp)).toEqual({ ...SONNET, degraded: false });
+    expect(route('standard', 'standard', allUp)).toEqual({ ...DS_PRO, degraded: false });
+    expect(route('bulk', 'standard', allUp)).toEqual({ ...DS_FLASH, degraded: false });
   });
 
   test('高配：standard 走 Sonnet 主力，critical 再升一档到 Opus', () => {
-    expect(route('critical', 'high', allUp)).toEqual({ ...OPUS, degraded: false });
-    expect(route('standard', 'high', allUp)).toEqual({ ...SONNET, degraded: false });
-    expect(route('bulk', 'high', allUp)).toEqual({ ...DS_FLASH, degraded: false });
+    expect(route('critical', 'pro', allUp)).toEqual({ ...OPUS, degraded: false });
+    expect(route('standard', 'pro', allUp)).toEqual({ ...SONNET, degraded: false });
+    expect(route('bulk', 'pro', allUp)).toEqual({ ...DS_FLASH, degraded: false });
   });
 
   test('bulk 三档恒不走 Claude（毛利红线）', () => {
-    for (const plan of ['entry', 'mid', 'high'] as Plan[]) {
+    for (const plan of ['entry', 'standard', 'pro'] as Plan[]) {
       expect(route('bulk', plan, allUp).provider).not.toBe('anthropic');
     }
   });
@@ -61,20 +61,20 @@ describe('route 三套餐 × 三档位矩阵（spec D3 / §9）', () => {
     const claudeCount = (plan: Plan) =>
       (['critical', 'standard', 'bulk'] as TaskClass[]).filter((tc) => route(tc, plan, allUp).provider === 'anthropic').length;
     expect(claudeCount('entry')).toBe(0);
-    expect(claudeCount('mid')).toBe(1);
-    expect(claudeCount('high')).toBe(2);
+    expect(claudeCount('standard')).toBe(1);
+    expect(claudeCount('pro')).toBe(2);
 
-    const opusCells = (['entry', 'mid', 'high'] as Plan[]).flatMap((plan) =>
+    const opusCells = (['entry', 'standard', 'pro'] as Plan[]).flatMap((plan) =>
       (['critical', 'standard', 'bulk'] as TaskClass[])
         .filter((tc) => route(tc, plan, allUp).model.api === MODELS.CLAUDE_OPUS.api)
         .map((tc) => `${plan}/${tc}`),
     );
-    expect(opusCells).toEqual(['high/critical']);
+    expect(opusCells).toEqual(['pro/critical']);
   });
 
   test('未知套餐/档位报错，不静默落默认档', () => {
     expect(() => route('critical', 'vip' as Plan, allUp)).toThrow(/未知套餐档 plan=vip/);
-    expect(() => route('urgent' as TaskClass, 'high', allUp)).toThrow(/未知任务档 task_class=urgent/);
+    expect(() => route('urgent' as TaskClass, 'pro', allUp)).toThrow(/未知任务档 task_class=urgent/);
   });
 });
 
@@ -147,7 +147,7 @@ describe('DEGRADE_CHAIN 不变式', () => {
 
 describe('缺 key 降级（manager 2026-08-19 裁决）', () => {
   test('高配 critical 缺 ANTHROPIC_API_KEY → 跳过整个 Claude 段落降到 DeepSeek', () => {
-    expect(route('critical', 'high', only('deepseek', 'dashscope'))).toEqual({
+    expect(route('critical', 'pro', only('deepseek', 'dashscope'))).toEqual({
       ...DS_PRO,
       degraded: true,
       degradedFrom: OPUS,
@@ -155,7 +155,7 @@ describe('缺 key 降级（manager 2026-08-19 裁决）', () => {
   });
 
   test('Claude 与 DeepSeek 都缺 → 继续退到 Qwen（带 variant），degradedFrom 仍是最初的首选', () => {
-    expect(route('standard', 'high', only('dashscope'))).toEqual({
+    expect(route('standard', 'pro', only('dashscope'))).toEqual({
       ...QWEN_MAX,
       degraded: true,
       degradedFrom: SONNET,
@@ -163,7 +163,7 @@ describe('缺 key 降级（manager 2026-08-19 裁决）', () => {
   });
 
   test('bulk 缺 DEEPSEEK → 退到 Qwen 便宜档', () => {
-    expect(route('bulk', 'mid', only('dashscope'))).toEqual({
+    expect(route('bulk', 'standard', only('dashscope'))).toEqual({
       ...QWEN_FLASH,
       degraded: true,
       degradedFrom: DS_FLASH,
@@ -171,7 +171,7 @@ describe('缺 key 降级（manager 2026-08-19 裁决）', () => {
   });
 
   test('降级只向下：中配 critical 缺 Claude 时退到 DeepSeek，绝不升到 Opus', () => {
-    const r = route('critical', 'mid', only('deepseek', 'dashscope'));
+    const r = route('critical', 'standard', only('deepseek', 'dashscope'));
     expect(r).toEqual({ ...DS_PRO, degraded: true, degradedFrom: SONNET });
     expect(r.model.api).not.toBe(MODELS.CLAUDE_OPUS.api);
   });
@@ -183,14 +183,14 @@ describe('缺 key 降级（manager 2026-08-19 裁决）', () => {
   });
 
   test('首选可用时不降级，且不带 degradedFrom', () => {
-    const r = route('critical', 'high', allUp);
+    const r = route('critical', 'pro', allUp);
     expect(r.degraded).toBe(false);
     expect(r).not.toHaveProperty('degradedFrom');
   });
 
   test('降级链全缺 → 明确报错并点名每个环境变量，不返回一个假目标', () => {
-    expect(() => route('critical', 'high', only())).toThrow(
-      /high\/critical 无可用模型[\s\S]*ANTHROPIC_API_KEY\(claude-opus-5\)[\s\S]*DEEPSEEK_API_KEY[\s\S]*DASHSCOPE_API_KEY/,
+    expect(() => route('critical', 'pro', only())).toThrow(
+      /pro\/critical 无可用模型[\s\S]*ANTHROPIC_API_KEY\(claude-opus-5\)[\s\S]*DEEPSEEK_API_KEY[\s\S]*DASHSCOPE_API_KEY/,
     );
     expect(() => route('bulk', 'entry', only())).toThrow(/entry\/bulk 无可用模型[\s\S]*DEEPSEEK_API_KEY[\s\S]*DASHSCOPE_API_KEY/);
   });
@@ -213,19 +213,19 @@ describe('默认可用性判据走环境变量', () => {
   });
 
   test('不传 isAvailable 时按环境变量判断', () => {
-    expect(route('critical', 'high').degraded).toBe(false);
+    expect(route('critical', 'pro').degraded).toBe(false);
     delete process.env.ANTHROPIC_API_KEY;
-    expect(route('critical', 'high')).toMatchObject({ ...DS_PRO, degraded: true, degradedFrom: OPUS });
+    expect(route('critical', 'pro')).toMatchObject({ ...DS_PRO, degraded: true, degradedFrom: OPUS });
   });
 
   test('空串 key 当作未配置（半配置比没配置更容易让人误判）', () => {
     process.env.ANTHROPIC_API_KEY = '';
-    expect(route('critical', 'high').degraded).toBe(true);
+    expect(route('critical', 'pro').degraded).toBe(true);
   });
 
   test('ANTHROPIC_API_KEY 当前缺失就是真实场景：联调不该被阻塞', () => {
     delete process.env.ANTHROPIC_API_KEY;
-    for (const plan of ['entry', 'mid', 'high'] as Plan[]) {
+    for (const plan of ['entry', 'standard', 'pro'] as Plan[]) {
       for (const tc of ['critical', 'standard', 'bulk'] as TaskClass[]) {
         expect(() => route(tc, plan)).not.toThrow();
       }
@@ -251,21 +251,21 @@ describe('getProvider', () => {
   });
 
   test('高配三档分别落到 Opus / Sonnet / DeepSeek-Flash', () => {
-    expect(getProvider('critical', 'high').client).toMatchObject({ name: 'anthropic', model: 'claude-opus-5' });
-    expect(getProvider('standard', 'high').client).toMatchObject({ name: 'anthropic', model: 'claude-sonnet-5' });
-    expect(getProvider('bulk', 'high').client).toMatchObject({ name: 'deepseek', model: 'deepseek-v4-flash' });
+    expect(getProvider('critical', 'pro').client).toMatchObject({ name: 'anthropic', model: 'claude-opus-5' });
+    expect(getProvider('standard', 'pro').client).toMatchObject({ name: 'anthropic', model: 'claude-sonnet-5' });
+    expect(getProvider('bulk', 'pro').client).toMatchObject({ name: 'deepseek', model: 'deepseek-v4-flash' });
   });
 
   test('降级到 qwen 时 variant 参数与计费键同源下发', () => {
     for (const k of ['ANTHROPIC_API_KEY', 'DEEPSEEK_API_KEY']) delete process.env[k];
-    const { client, route: r } = getProvider('bulk', 'high');
+    const { client, route: r } = getProvider('bulk', 'pro');
     expect(r).toMatchObject({ degraded: true, variant: 'nothink' });
     expect(client.billingModel).toBe('qwen3.6-flash:nothink');
   });
 
   test('降级时客户端与 route 结果一致，degraded 可透传到响应头', () => {
     delete process.env.ANTHROPIC_API_KEY;
-    const { client, route: r } = getProvider('critical', 'high');
+    const { client, route: r } = getProvider('critical', 'pro');
     expect(r).toMatchObject({ degraded: true, degradedFrom: OPUS });
     expect(client.name).toBe(r.provider);
     expect(client.model).toBe(r.model.api);
@@ -273,13 +273,13 @@ describe('getProvider', () => {
 
   test('自带 apiKey 时按首选走，不因环境变量没配而降级', () => {
     delete process.env.ANTHROPIC_API_KEY;
-    const { client, route: r } = getProvider('critical', 'high', { apiKey: 'injected' });
+    const { client, route: r } = getProvider('critical', 'pro', { apiKey: 'injected' });
     expect(r.degraded).toBe(false);
     expect(client.name).toBe('anthropic');
   });
 
   test('降级链全缺时仍然报错，不返回半成品客户端', () => {
     for (const k of ['ANTHROPIC_API_KEY', 'DEEPSEEK_API_KEY', 'DASHSCOPE_API_KEY']) delete process.env[k];
-    expect(() => getProvider('critical', 'high')).toThrow(/无可用模型/);
+    expect(() => getProvider('critical', 'pro')).toThrow(/无可用模型/);
   });
 });
