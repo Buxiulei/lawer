@@ -130,9 +130,20 @@ function passesFilters(meta: PackMeta, opts: SearchOptions): boolean {
 }
 
 /**
+ * 同分时的类型优先序（依据优先）：agent 的重要结论必须引法条/算法依据（charter §3），
+ * 所以法条卡、计算规则先于案例与话术出现；判例是佐证不是依据，排最后。
+ */
+const TYPE_TIEBREAK = ['法条卡', '计算规则', '数据卡', '流程SOP', '文书模板', '话术卡', '判例卡', '情绪指南'];
+
+function typeRank(type: string): number {
+  const i = TYPE_TIEBREAK.indexOf(type);
+  return i < 0 ? TYPE_TIEBREAK.length : i;
+}
+
+/**
  * 本地关键词检索。打分确定性、无分词依赖：keyword 命中 +3、applies_to 命中 +2、
  * 标题二元组重合率 ×2。score 为 0 的不返回（宁可空手也不给不相关的法条），
- * 同分按 id 字典序，保证同一 query 每次输出一致。
+ * 同分先按类型优先序（依据优先）再按 id 字典序，保证同一 query 每次输出一致。
  */
 export function search(query: string, opts: SearchOptions = {}): PackHit[] {
   const q = query.trim();
@@ -145,7 +156,12 @@ export function search(query: string, opts: SearchOptions = {}): PackHit[] {
     .filter((meta) => passesFilters(meta, opts))
     .map((meta) => ({ meta, score: scoreOf(meta, q, queryBigrams) }))
     .filter((row) => row.score > 0)
-    .sort((a, b) => b.score - a.score || a.meta.id.localeCompare(b.meta.id))
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        typeRank(a.meta.type) - typeRank(b.meta.type) ||
+        a.meta.id.localeCompare(b.meta.id),
+    )
     .slice(0, limit)
     .map((row) => ({ ...row.meta, score: row.score, content: loadContent(row.meta) }));
 }

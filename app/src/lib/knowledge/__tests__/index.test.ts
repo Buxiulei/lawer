@@ -53,14 +53,19 @@ describe('search', () => {
     expect(search('工资', { limit: 2 })).toHaveLength(2);
   });
 
-  test('结果按 score 降序且可重复（同分按 id 字典序）', () => {
+  test('结果按 score 降序且可重复（同分先依据优先再按 id 字典序）', () => {
+    const TYPE_TIEBREAK = ['法条卡', '计算规则', '数据卡', '流程SOP', '文书模板', '话术卡', '判例卡', '情绪指南'];
+    const rank = (t: string) => TYPE_TIEBREAK.indexOf(t);
     const first = search('调岗降薪', { limit: 10 });
     const second = search('调岗降薪', { limit: 10 });
     expect(second.map((hit) => hit.id)).toEqual(first.map((hit) => hit.id));
     for (let i = 1; i < first.length; i += 1) {
       expect(first[i - 1].score).toBeGreaterThanOrEqual(first[i].score);
       if (first[i - 1].score === first[i].score) {
-        expect(first[i - 1].id.localeCompare(first[i].id)).toBeLessThan(0);
+        expect(rank(first[i - 1].type)).toBeLessThanOrEqual(rank(first[i].type));
+        if (first[i - 1].type === first[i].type) {
+          expect(first[i - 1].id.localeCompare(first[i].id)).toBeLessThan(0);
+        }
       }
     }
   });
