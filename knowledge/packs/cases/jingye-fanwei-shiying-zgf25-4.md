@@ -5,7 +5,7 @@ title: 竞业限制义务范围应与劳动者知悉的商业秘密相适应（�
 keywords: [竞业限制, 范围相适应, 商业秘密, 产品无竞争关系, 郑某, 医药, 驳回原公司]
 applies_to: [竞业限制, 仲裁申请]
 law_refs: [劳动合同法§23, 劳动合同法§24, 法释〔2025〕12号§13]
-related: [case-jingye-jingzheng-guanxi-shizhi-sz26-2, case-jingye-fanhua-jianshen-jiaolian-bjzc24-9, statute-fashi-2025-12-jieshi-2, case-zaizhi-jingye-weiyue-zgf25-5]
+related: [case-jingye-jingzheng-guanxi-shizhi-sz26-2, case-jingye-fanhua-jianshen-jiaolian-bjzc24-9, statute-fashi-2025-12-jieshi-2, case-zaizhi-jingye-weiyue-zgf25-5, statute-rsty-2025-40-jingye-zhiyin]
 region: 全国
 sources:
   - https://www.court.gov.cn/zixun/xiangqing/472681.html

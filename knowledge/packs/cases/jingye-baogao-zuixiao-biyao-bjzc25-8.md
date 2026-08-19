@@ -5,7 +5,7 @@ title: 竞业限制报告义务应遵循"最小必要"原则，过度报告侵�
 keywords: [竞业限制, 报告义务, 最小必要, 工牌自拍, 定位信息, 隐私权, 违约金适用范围]
 applies_to: [竞业限制, 证据固定]
 law_refs: [劳动合同法§23, 民法典§1032, 民法典§1035]
-related: [case-jingye-fanhua-jianshen-jiaolian-bjzc24-9, case-jingye-feifa-quzheng-sz26-6, case-jingye-gongzi-han-buchang-wuxiao-sz26-4]
+related: [case-jingye-fanhua-jianshen-jiaolian-bjzc24-9, case-jingye-feifa-quzheng-sz26-6, case-jingye-gongzi-han-buchang-wuxiao-sz26-4, statute-rsty-2025-40-jingye-zhiyin]
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html
