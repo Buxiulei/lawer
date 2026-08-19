@@ -74,6 +74,18 @@ describe('发码限流', () => {
     expect(other.ok).toBe(true);
   });
 
+  test('限流对 created_at 的两种写法都算数（建表默认 datetime(\'now\') 是空格分隔，本模块写 ISO8601）', async () => {
+    const db = makeTestDb();
+    // 模拟一条走建表默认值落下的行："2026-08-19 10:00:00"，与 T0 同一时刻。
+    // 裸字符串比较下它会排在 ISO 串之前而被当成"很久以前"，从而漏放一次发码。
+    db.prepare(
+      "INSERT INTO sms_codes (phone_hash, code, purpose, expires_at, created_at) VALUES (?, '123456', 'login', ?, '2026-08-19 10:00:00')",
+    ).run(hashLookup(PHONE), at(300).toISOString());
+
+    const blocked = await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(30)).deps);
+    expect(blocked).toMatchObject({ ok: false, errorCode: 'RATE_LIMITED', retryAfter: 60 });
+  });
+
   test('短信上游报流控时映射成 SMS_RATE_LIMITED 而不是 500', async () => {
     const db = makeTestDb();
     const deps = {
