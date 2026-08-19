@@ -24,3 +24,12 @@ export function toSql(date: Date): string {
 export function nowSql(): string {
   return toSql(new Date());
 }
+
+/**
+ * 把库里读出的 canonical 串解析回 Date（toSql 的逆函数）。
+ * 直接 `new Date('YYYY-MM-DD HH:MM:SS')` 是陷阱：无时区标记按**本地时区**解析，
+ * 在 +08:00 机器上整体漂移 8 小时。canonical 恒为 UTC，必须补 'T'+'Z' 再解析。
+ */
+export function fromSql(value: string): Date {
+  return new Date(value.replace(' ', 'T') + 'Z');
+}

@@ -61,7 +61,6 @@ export async function POST(req: Request) {
     name,
     keyHash: hashApiKey(key),
     scopesJson: JSON.stringify(scopes),
-    createdAt: new Date().toISOString(),
   });
 
   return NextResponse.json(

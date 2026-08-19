@@ -24,15 +24,16 @@ export function listApiKeys(db: Database, userId: number): Omit<ApiKeyRow, 'key_
     .all(userId) as Omit<ApiKeyRow, 'key_hash'>[];
 }
 
+/** created_at 交给列 DEFAULT (datetime('now'))，不从 JS 落串（ADR-002） */
 export function insertApiKey(
   db: Database,
-  params: { userId: number; name: string; keyHash: string; scopesJson: string; createdAt: string },
+  params: { userId: number; name: string; keyHash: string; scopesJson: string },
 ): number {
   const info = db
     .prepare(
-      'INSERT INTO api_keys (user_id, name, key_hash, scopes, enabled, created_at) VALUES (?, ?, ?, ?, 1, ?)',
+      'INSERT INTO api_keys (user_id, name, key_hash, scopes, enabled) VALUES (?, ?, ?, ?, 1)',
     )
-    .run(params.userId, params.name, params.keyHash, params.scopesJson, params.createdAt);
+    .run(params.userId, params.name, params.keyHash, params.scopesJson);
   return Number(info.lastInsertRowid);
 }
 
@@ -47,8 +48,9 @@ export function findApiKeyById(db: Database, id: number): ApiKeyRow | undefined 
   return db.prepare('SELECT * FROM api_keys WHERE id = ?').get(id) as ApiKeyRow | undefined;
 }
 
-export function touchApiKeyLastUsed(db: Database, id: number, at: string): void {
-  db.prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ?').run(at, id);
+/** 时间由 SQLite 自己取，不从 JS 落 ISO 串（ADR-002 canonical = datetime('now')） */
+export function touchApiKeyLastUsed(db: Database, id: number): void {
+  db.prepare("UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?").run(id);
 }
 
 /**

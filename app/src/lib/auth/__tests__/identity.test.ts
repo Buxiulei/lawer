@@ -82,15 +82,19 @@ describe('resolveIdentity', () => {
     });
   });
 
-  test('命中即刷新 last_used_at', () => {
+  test('命中即刷新 last_used_at，且写的是 canonical 空格格式（ADR-002）', () => {
     const { db, userA } = makeFixture();
     const key = issueKey(db, userA, ['case:read']);
     expect(db.prepare('SELECT last_used_at FROM api_keys').get()).toEqual({ last_used_at: null });
 
     resolveIdentity(db, headers(`Bearer ${key}`), NOW);
-    expect(db.prepare('SELECT last_used_at FROM api_keys').get()).toEqual({
-      last_used_at: NOW.toISOString(),
-    });
+    const { last_used_at: at } = db.prepare('SELECT last_used_at FROM api_keys').get() as {
+      last_used_at: string;
+    };
+    // 时间由 SQLite datetime('now') 取，不是 JS 的 ISO 串
+    expect(at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    expect(at).not.toContain('T');
+    expect(at).not.toContain('Z');
   });
 
   test('已吊销的 key 一律 null', () => {

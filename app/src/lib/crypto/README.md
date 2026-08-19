@@ -11,6 +11,8 @@ import { encryptField, decryptField, hashLookup } from '@/lib/crypto';
 encryptField(plaintext: string): string   // → "v1:<base64>"
 decryptField(token: string): string       // 前缀/长度/认证标签任一不符则 throw
 hashLookup(value: string): string         // → 64 字符小写 hex，确定性
+encryptBuffer(plaintext: Buffer): Buffer  // 整文件加密 → 裸二进制（证据原件落盘用）
+decryptBuffer(blob: Buffer): Buffer       // magic/长度/认证标签任一不符则 throw
 ```
 
 三个函数都是同步的，首次调用时读取并校验 env 主密钥（之后进程内缓存）。
@@ -36,6 +38,16 @@ v1:base64( iv(12B) || ciphertext || tag(16B) )
 
 AES-256-GCM，密钥即主密钥，iv 每次随机。自包含，解密不需要任何额外元数据。
 密文长度 ≈ `ceil((28 + utf8字节数) / 3) * 4 + 3` 字符，建库时列类型用 `TEXT` 即可。
+
+整文件密文（`encryptBuffer`，证据原件落盘）走**裸二进制**，不做 base64：
+
+```
+magic("LWR1") || iv(12B) || ciphertext || tag(16B)
+```
+
+同为 AES-256-GCM 同一主密钥，只是外壳不同。证据原件可达数十 MB，base64 会让体积涨
+三分之一且必须整串驻留内存，故不复用字段密文那套。magic 头使「是不是本系统的密文文件」
+读头 4 字节即可判定。定长开销 44 字节。
 
 ## 查找列为什么另走 HMAC
 
