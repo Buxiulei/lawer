@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../migrate';
 
-/** 全部表名单（32 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。 */
+/** 全部表名单（34 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。 */
 const ALL_TABLES = [
   // 用户与实名
   'users', 'sms_codes', 'email_codes', 'realname_verifications', 'api_keys',
@@ -15,6 +15,7 @@ const ALL_TABLES = [
   'token_usage', 'model_rates',
   // 公司动态监控
   'company_watches', 'company_watch_events', 'company_watch_checks',
+  'company_relations', 'company_litigation',
   // 通知
   'notify_log',
 ];
@@ -41,6 +42,14 @@ function mkCase(db: Database.Database, userId: number): number {
   );
 }
 
+/** 建一个公司背调档，返回 id。 */
+function mkProfile(db: Database.Database, caseId: number, name: string): number {
+  return Number(
+    db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?,?)').run(caseId, name)
+      .lastInsertRowid,
+  );
+}
+
 describe('runMigrations', () => {
   let db: Database.Database;
 
@@ -50,10 +59,10 @@ describe('runMigrations', () => {
 
   it('幂等：连跑两遍不抛错', () => {
     expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(32);
+    expect(ALL_TABLES.length).toBe(34);
   });
 
-  it('32 张表全部建成', () => {
+  it('34 张表全部建成', () => {
     const rows = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[];
@@ -158,6 +167,21 @@ describe('唯一约束（用实际写入冲突验证）', () => {
     expect(() => ins.run('claude-opus-5', 'embed', 0.001)).toThrow(/CHECK/);
     // 旧的合并档 cache 已作废（缓存读 0.1× 与缓存写 1.25× 不可同价）
     expect(() => ins.run('claude-opus-5', 'cache', 0.001)).toThrow(/CHECK/);
+  });
+
+  it('company_litigation：同 (profile, case_no) 二次 INSERT OR IGNORE 落空，不同主体同案号各留一行', () => {
+    const caseId = mkCase(db, mkUser(db));
+    const p1 = mkProfile(db, caseId, '某某科技有限公司');
+    const p2 = mkProfile(db, caseId, '某某科技（北京）分公司');
+    const ins = db.prepare(
+      'INSERT OR IGNORE INTO company_litigation (company_profile_id, case_no, is_labor) VALUES (?,?,?)',
+    );
+    expect(ins.run(p1, '(2025)京0105民初12345号', 1).changes).toBe(1);
+    // 同一判决被反复抓取（每日轮询、多源交叉）只落一行
+    expect(ins.run(p1, '(2025)京0105民初12345号', 1).changes).toBe(0);
+    // 同一案号在另一被监控主体名下是另一条记录（母公司与分公司同列被告）
+    expect(ins.run(p2, '(2025)京0105民初12345号', 1).changes).toBe(1);
+    expect((db.prepare('SELECT COUNT(*) c FROM company_litigation').get() as { c: number }).c).toBe(2);
   });
 });
 
@@ -276,6 +300,47 @@ describe('删除行为', () => {
     expect(row.company_profile_id).toBeNull();
     expect(row.name).toBe('某某科技有限公司');
     expect(row.status).toBe('active');
+  });
+
+  it('删关联主体任一端：关系边随之消失，另一端主体存活', () => {
+    const caseId = mkCase(db, mkUser(db));
+    const parent = mkProfile(db, caseId, '某某集团有限公司');
+    const child = mkProfile(db, caseId, '某某科技有限公司');
+    const ins = db.prepare(
+      'INSERT INTO company_relations (case_id, from_profile_id, to_profile_id, relation) VALUES (?,?,?,?)',
+    );
+    ins.run(caseId, parent, child, '股权母子');
+
+    // 删 from 端 → 边消失，to 端主体还在
+    db.prepare('DELETE FROM company_profiles WHERE id=?').run(parent);
+    expect((db.prepare('SELECT COUNT(*) c FROM company_relations').get() as { c: number }).c).toBe(0);
+    expect((db.prepare('SELECT COUNT(*) c FROM company_profiles').get() as { c: number }).c).toBe(1);
+
+    // 删 to 端亦然（边随任一端点消亡）
+    const other = mkProfile(db, caseId, '某某网络科技有限公司');
+    ins.run(caseId, child, other, '对外投资');
+    db.prepare('DELETE FROM company_profiles WHERE id=?').run(other);
+    expect((db.prepare('SELECT COUNT(*) c FROM company_relations').get() as { c: number }).c).toBe(0);
+    expect((db.prepare('SELECT COUNT(*) c FROM company_profiles').get() as { c: number }).c).toBe(1);
+  });
+
+  it('删案件级联删关系边与涉诉记录（涉诉记录经 company_profiles 二级级联）', () => {
+    const caseId = mkCase(db, mkUser(db));
+    const a = mkProfile(db, caseId, '某某集团有限公司');
+    const b = mkProfile(db, caseId, '某某科技有限公司');
+    db.prepare(
+      'INSERT INTO company_relations (case_id, from_profile_id, to_profile_id, relation, confidence) VALUES (?,?,?,?,?)',
+    ).run(caseId, a, b, '同法定代表人', '低');
+    db.prepare(
+      'INSERT INTO company_litigation (company_profile_id, case_no, is_labor, role) VALUES (?,?,?,?)',
+    ).run(b, '(2024)京0105民初999号', 1, '被告');
+
+    db.prepare('DELETE FROM cases WHERE id = ?').run(caseId);
+
+    for (const t of ['company_profiles', 'company_relations', 'company_litigation']) {
+      const n = db.prepare(`SELECT COUNT(*) c FROM ${t}`).get() as { c: number };
+      expect(n.c, `${t} 未被级联删除`).toBe(0);
+    }
   });
 
   it('users 无级联：删还有案件的用户被外键挡下', () => {
