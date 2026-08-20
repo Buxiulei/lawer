@@ -1,19 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  OTP_LENGTH,
-  OTP_RESEND_SECONDS,
-  mockSendCode,
-  mockVerifyCode,
-} from '@/app/_mock/authpay';
+import { ApiError, humanError } from '@/app/_ui/api';
+import { OTP_LENGTH, OTP_RESEND_SECONDS } from '@/app/_mock/authpay';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Field';
 import { CodeInput } from './CodeInput';
 
 /**
  * 一个验证通道的完整交互：填标识 → 发码 → 输码 → 校验。
- * 手机与邮箱两步共用，差别只在文案与输入框属性。
+ * 手机与邮箱两步共用，差别只在文案、输入框属性与传进来的两个接口调用。
+ *
+ * 发码/校验都由外部注入：本组件不认识 /auth/sms 还是 /auth/email，
+ * 只负责把失败翻成一句人话摆在用户眼前，以及管住 60 秒重发。
  */
 export function ChannelStep({
   fieldLabel,
@@ -31,7 +30,8 @@ export function ChannelStep({
   gateOk = true,
   gateHint,
   ctaLabel,
-  onSuccess,
+  onSend,
+  onVerify,
 }: {
   fieldLabel: string;
   fieldHint: string;
@@ -48,7 +48,10 @@ export function ChannelStep({
   gateOk?: boolean;
   gateHint?: string;
   ctaLabel: string;
-  onSuccess: () => void;
+  /** 发码；resolve 出的秒数用作重发倒计时，失败请 throw */
+  onSend: () => Promise<number>;
+  /** 校验；成功即推进，失败请 throw */
+  onVerify: (code: string) => Promise<void>;
 }) {
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
@@ -70,23 +73,30 @@ export function ChannelStep({
     }
     setError(null);
     setSending(true);
-    await mockSendCode();
-    setSending(false);
-    setSent(true);
-    setCode('');
-    setCooldown(OTP_RESEND_SECONDS);
+    try {
+      const seconds = await onSend();
+      setSent(true);
+      setCode('');
+      setCooldown(seconds > 0 ? seconds : OTP_RESEND_SECONDS);
+    } catch (err) {
+      setError(humanError(err));
+      // 被限流时倒计时照后端给的 retry_after 走，别让用户再白点一次
+      if (err instanceof ApiError && err.retryAfter) setCooldown(err.retryAfter);
+    } finally {
+      setSending(false);
+    }
   };
 
   const submit = async () => {
     setVerifying(true);
-    const ok = await mockVerifyCode(code);
-    setVerifying(false);
-    if (!ok) {
-      setError('验证码是 6 位数字，再核对一下');
-      return;
+    try {
+      await onVerify(code);
+      setError(null);
+    } catch (err) {
+      setError(humanError(err));
+    } finally {
+      setVerifying(false);
     }
-    setError(null);
-    onSuccess();
   };
 
   if (!sent) {

@@ -5,6 +5,8 @@
  * 非流错误统一 {ok:false, error_code, message, retry_after?}，在这里归一成 error 帧。
  */
 
+import { readToken } from '@/app/_ui/auth';
+
 import type { ErrorFrame, StreamFrame } from './frames';
 import { readSseFrames } from './sse';
 import {
@@ -13,17 +15,9 @@ import {
   type ChatTransport,
 } from './transport';
 
-/** 登录成功后写在这里；mock 登录不写，所以现在恒为空 → 一律走演示数据。 */
-export const TOKEN_STORAGE_KEY = 'lawer.token';
-
-export function readToken(): string | null {
-  try {
-    return localStorage.getItem(TOKEN_STORAGE_KEY);
-  } catch {
-    // 隐私模式下不可读，按未登录处理
-    return null;
-  }
-}
+/** 登录态由 _ui/auth 统一持有；这里只转出，别再写第二份取 token 的实现。 */
+export { TOKEN_STORAGE_KEY } from '@/app/_ui/auth';
+export { readToken };
 
 function errorFrameFrom(body: unknown, status: number): ErrorFrame {
   const payload = (body ?? {}) as Record<string, unknown>;
