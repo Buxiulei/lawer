@@ -155,7 +155,7 @@ describe('feature 键表一致性', () => {
   test('KNOWN_ESTIMATE_FEATURES 恰为 features.ts 登记键去掉只记量不扣费的那些（同一词表，不许分叉）', () => {
     const chargeable = KNOWN_FEATURE_KEYS.filter((k) => !METERED_ONLY_FEATURES.includes(k));
     expect([...KNOWN_ESTIMATE_FEATURES].sort()).toEqual(chargeable.sort());
-    expect(KNOWN_ESTIMATE_FEATURES.length).toBe(8);
+    expect(KNOWN_ESTIMATE_FEATURES.length).toBe(9);
     // 只记量的键必须已登记标签——用量明细照样要出中文
     for (const f of METERED_ONLY_FEATURES) expect(KNOWN_FEATURE_KEYS).toContain(f);
   });

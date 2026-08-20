@@ -230,6 +230,47 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_company_docs_case ON company_docs (case_id, id);
   `);
 
+  // 合同/文件审查记录：一次 AI 审查落一行（company_docs 是被审文件，本表是审查产物的头）。
+  // 与 company_docs 分表而非并列加列：同一份文件可被反复审（换模型/规则库更新后重跑），
+  // 每次审查各自成行才留得住历史结论；summary 是这次审查的整体判断，逐条问题在 review_findings。
+  // case_id 冗余（可经 company_docs 推出）：报告页按案件列全部审查记录，是热路径，免一次 JOIN。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS contract_reviews (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_doc_id  INTEGER NOT NULL REFERENCES company_docs(id) ON DELETE CASCADE,
+      case_id         INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+      contract_type   TEXT,
+      model           TEXT,
+      reviewed_at     TEXT,
+      summary         TEXT,
+      created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_contract_reviews_case ON contract_reviews (case_id);
+  `);
+
+  // 逐条审查发现：一条问题条款一行，坑分三级（must 大坑必修 / strong 中坑强烈修 / suggest 小坑建议修）。
+  // severity/status 只在注释里锁枚举、不加 CHECK（沿 intake_stage 裁决：SQLite 改 CHECK 要重建表）。
+  // status 是**用户侧**的谈判进度：只有用户/agent 工具可改，审查管线重跑一律新写 contract_reviews
+  // 而不回写本列——用户标了「已提出」的条目不得被下一次自动审查抹回「待处理」。
+  // rule_id 可空：命中规则库时回指规则 id（knowledge 的 review-rules 域），纯 LLM 发现的坑留 NULL。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS review_findings (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      review_id       INTEGER NOT NULL REFERENCES contract_reviews(id) ON DELETE CASCADE,
+      clause_ref      TEXT,
+      severity        TEXT NOT NULL,                        -- must | strong | suggest
+      issue           TEXT,
+      basis           TEXT,
+      suggestion      TEXT,
+      negotiation_tip TEXT,
+      status          TEXT NOT NULL DEFAULT '待处理',        -- 待处理 | 已提出 | 已修改 | 接受风险
+      rule_id         TEXT,
+      created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_review_findings_review
+      ON review_findings (review_id, severity);
+  `);
+
   // 请求项（仲裁申请书的「请求事项」逐条）：kind 为诉求类型，amount_fen 为金额（分），
   // calc_json 存算式与输入（工资基数/工龄/上限…）以便当庭复算，basis 存法条依据。
   db.exec(`
@@ -631,4 +672,11 @@ export function runMigrations(db: Database.Database): void {
   // NULL = 非问诊线程，或问诊线程尚未进入状态机。
   // WS2 此前借 timeline_events.kind='系统动作' 落痕记录进度，本列落地后切换到本列。
   addColumnIfMissing(db, 'threads', 'intake_stage', 'TEXT');
+
+  // company_watches.tier：三圈监控档位（spec v3）。daily=圈1 直接责任链、weekly=圈2 责任扩展候选、
+  // archive=圈3 存档不监控。同 intake_stage，**不加 DB 级 CHECK**（SQLite 改 CHECK 要重建表）。
+  // 升级与衰减规则（圈1 出事件→相邻圈2 升每日、30 天无新 urgent 回落、手动钉住）**全在 watcher
+  // 应用层**，库侧不设触发器、不设定时任务、不设任何机制——本列只是哑存储，写什么就是什么。
+  // 存量行取 DDL 默认 'daily'：老库的盯梢都是按每日跑的，默认值即其现状，不需回填。
+  addColumnIfMissing(db, 'company_watches', 'tier', "TEXT NOT NULL DEFAULT 'daily'");
 }

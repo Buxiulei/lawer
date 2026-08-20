@@ -2,14 +2,14 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../migrate';
 
-/** 全部表名单（34 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。 */
+/** 全部表名单（36 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。 */
 const ALL_TABLES = [
   // 用户与实名
   'users', 'sms_codes', 'email_codes', 'realname_verifications', 'api_keys',
   // 案件档案
   'cases', 'company_profiles', 'timeline_events', 'files', 'evidence', 'attestations',
-  'company_docs', 'claims', 'action_items', 'deadlines', 'threads', 'messages',
-  'emotion_log', 'share_links', 'drafts',
+  'company_docs', 'contract_reviews', 'review_findings', 'claims', 'action_items',
+  'deadlines', 'threads', 'messages', 'emotion_log', 'share_links', 'drafts',
   // 公道值
   'gongdao', 'gongdao_ledger', 'memberships', 'skus', 'orders', 'redemption_codes',
   'token_usage', 'model_rates',
@@ -50,6 +50,31 @@ function mkProfile(db: Database.Database, caseId: number, name: string): number 
   );
 }
 
+/** 建一条「被审文件 → 审查记录 → 一条发现」的完整链，返回三级 id。 */
+function mkReview(
+  db: Database.Database,
+  caseId: number,
+  uid: number,
+): { docId: number; reviewId: number; findingId: number } {
+  const fileId = Number(
+    db.prepare('INSERT INTO files (sha256, size, enc_path) VALUES (?,?,?)')
+      .run(`sha-review-${uid}-${caseId}`, 10, '/enc/review').lastInsertRowid,
+  );
+  const docId = Number(
+    db.prepare("INSERT INTO company_docs (case_id, file_id, doc_type) VALUES (?,?,'其他')")
+      .run(caseId, fileId).lastInsertRowid,
+  );
+  const reviewId = Number(
+    db.prepare('INSERT INTO contract_reviews (company_doc_id, case_id, contract_type) VALUES (?,?,?)')
+      .run(docId, caseId, '劳动合同').lastInsertRowid,
+  );
+  const findingId = Number(
+    db.prepare('INSERT INTO review_findings (review_id, clause_ref, severity, issue) VALUES (?,?,?,?)')
+      .run(reviewId, '第三条', 'must', '试用期超法定上限').lastInsertRowid,
+  );
+  return { docId, reviewId, findingId };
+}
+
 describe('runMigrations', () => {
   let db: Database.Database;
 
@@ -59,10 +84,10 @@ describe('runMigrations', () => {
 
   it('幂等：连跑两遍不抛错', () => {
     expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(34);
+    expect(ALL_TABLES.length).toBe(36);
   });
 
-  it('34 张表全部建成', () => {
+  it('36 张表全部建成', () => {
     const rows = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[];
@@ -261,6 +286,49 @@ describe('删除行为', () => {
     ).toBe(0);
   });
 
+  it('删被审文件级联删审查记录，审查记录再二级级联删逐条发现', () => {
+    const uid = mkUser(db);
+    const caseId = mkCase(db, uid);
+    const { docId } = mkReview(db, caseId, uid);
+
+    db.prepare('DELETE FROM company_docs WHERE id = ?').run(docId);
+
+    for (const t of ['contract_reviews', 'review_findings']) {
+      const n = db.prepare(`SELECT COUNT(*) c FROM ${t}`).get() as { c: number };
+      expect(n.c, `${t} 未被级联删除`).toBe(0);
+    }
+  });
+
+  it('删案件直接级联删审查记录（不经 company_docs 也要断干净）', () => {
+    const uid = mkUser(db);
+    const caseId = mkCase(db, uid);
+    mkReview(db, caseId, uid);
+
+    db.prepare('DELETE FROM cases WHERE id = ?').run(caseId);
+
+    for (const t of ['company_docs', 'contract_reviews', 'review_findings']) {
+      const n = db.prepare(`SELECT COUNT(*) c FROM ${t}`).get() as { c: number };
+      expect(n.c, `${t} 未被级联删除`).toBe(0);
+    }
+  });
+
+  it('review_findings.status 默认「待处理」，且无 CHECK（值集由 lib 侧把关）', () => {
+    const uid = mkUser(db);
+    const caseId = mkCase(db, uid);
+    const { findingId } = mkReview(db, caseId, uid);
+    expect(
+      (db.prepare('SELECT status s FROM review_findings WHERE id=?').get(findingId) as { s: string }).s,
+    ).toBe('待处理');
+    // 用户跟踪谈判进度：只有用户/agent 工具改这一列，审查管线不回写
+    db.prepare('UPDATE review_findings SET status = ? WHERE id = ?').run('已提出', findingId);
+    expect(
+      (db.prepare('SELECT status s FROM review_findings WHERE id=?').get(findingId) as { s: string }).s,
+    ).toBe('已提出');
+    expect(() =>
+      db.prepare('UPDATE review_findings SET severity = ? WHERE id = ?').run('二期新增档', findingId),
+    ).not.toThrow();
+  });
+
   it('删案件级联删盯梢，盯梢再二级级联删告警事件与检查日志', () => {
     const uid = mkUser(db);
     const caseId = mkCase(db, uid);
@@ -370,6 +438,53 @@ describe('存量迁移区', () => {
     expect(() =>
       db.prepare('UPDATE threads SET intake_stage = ? WHERE id = ?').run('E-二期新增档', threadId),
     ).not.toThrow();
+  });
+
+  it('company_watches.tier：列存在，默认 daily 且可写读', () => {
+    const db = newDb();
+    const caseId = mkCase(db, mkUser(db));
+    const watchId = Number(
+      db.prepare('INSERT INTO company_watches (case_id, name) VALUES (?,?)')
+        .run(caseId, '某某科技有限公司').lastInsertRowid,
+    );
+    const tier = () =>
+      (db.prepare('SELECT tier t FROM company_watches WHERE id=?').get(watchId) as { t: string }).t;
+    // 新盯梢默认进圈1（每日）
+    expect(tier()).toBe('daily');
+    // 升降档纯粹是应用层写值，库侧不管规则
+    db.prepare('UPDATE company_watches SET tier = ? WHERE id = ?').run('weekly', watchId);
+    expect(tier()).toBe('weekly');
+    db.prepare('UPDATE company_watches SET tier = ? WHERE id = ?').run('archive', watchId);
+    expect(tier()).toBe('archive');
+    // 无 DB 级 CHECK：值集外的串也存得进去（值集由 watcher 侧把关）
+    expect(() =>
+      db.prepare('UPDATE company_watches SET tier = ? WHERE id = ?').run('二期新增圈', watchId),
+    ).not.toThrow();
+  });
+
+  it('老库补 tier 列幂等：跑两遍只补一次，存量盯梢取默认 daily', () => {
+    // 模拟一个 tier 落地之前的老库：建全量表后把该列摘掉，再灌一条存量盯梢
+    const db = newDb();
+    db.exec('ALTER TABLE company_watches DROP COLUMN tier');
+    const caseId = mkCase(db, mkUser(db));
+    db.prepare('INSERT INTO company_watches (case_id, name) VALUES (?,?)')
+      .run(caseId, '某某科技有限公司');
+
+    const tierCols = () =>
+      (db.prepare('PRAGMA table_info(company_watches)').all() as { name: string }[]).filter(
+        (c) => c.name === 'tier',
+      ).length;
+    expect(tierCols()).toBe(0);
+
+    runMigrations(db);
+    expect(tierCols()).toBe(1);
+    runMigrations(db);
+    expect(tierCols()).toBe(1);
+
+    // 存量行还在，老列原样，新列取 DDL 默认值（老库盯梢本来就按每日跑，不需回填）
+    expect(db.prepare('SELECT name, tier FROM company_watches').all()).toEqual([
+      { name: '某某科技有限公司', tier: 'daily' },
+    ]);
   });
 
   it('老库补列幂等：跑两遍只补一次，原有行数据不丢', () => {

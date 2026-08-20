@@ -36,6 +36,7 @@ export const SEED: Record<string, number> = {
   ocr: 100,        // 文件解读（一份公司来函）
   asr: 300,        // 录音分析（一段录音转写 + 摘要）
   knowledge: 50,   // 知识检索（一次向量召回）
+  contract_review: 400, // 合同审查（一份合同逐条审，critical 档；草案值待 M3 核定）
 };
 
 /** 未登记 feature 兜底种子（保守中位，防漏配即放行透支）。 */
@@ -51,7 +52,7 @@ export const FIXED_PRICING: Record<string, number> = {
   export: 1000, // 材料导出（一次含 PDF + Word）
 };
 
-/** 允许估算的 feature 白名单（= 八个扣费端点的 settle feature 键），供 GET 接口防注入。 */
+/** 允许估算的 feature 白名单（= 九个扣费端点的 settle feature 键），供 GET 接口防注入。 */
 export const KNOWN_ESTIMATE_FEATURES: readonly string[] = [
   'intake',
   'companion',
@@ -61,6 +62,7 @@ export const KNOWN_ESTIMATE_FEATURES: readonly string[] = [
   'attest',
   'export',
   'knowledge',
+  'contract_review',
 ];
 
 /** 向上取整到十位（安全边际 + 展示整齐，如「约 300 公道值」）。 */
