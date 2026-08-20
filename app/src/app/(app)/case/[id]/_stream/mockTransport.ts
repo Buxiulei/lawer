@@ -5,7 +5,7 @@
  * （受理即 meta → 思考期每 15s 一 ping → delta 逐 chunk → 流末 usage/done）。
  *
  * 默认在 workbenchReplies 里轮转；`?mock=rs_long` 这类参数可点名跑演示剧本
- * （长考等待态 / 降级 / 草稿确认 / 提示 / 断流），供人工验收用。
+ * （长考等待态 / 降级 / 草稿确认 / 提示 / 断流 / 危机确定性首段），供人工验收用。
  */
 
 import {
@@ -21,6 +21,8 @@ import type { ChatRequest, ChatTransport } from './transport';
 const PING_INTERVAL_MS = 15_000;
 /** 受理到 meta 的耗时 */
 const ACCEPT_DELAY_MS = 150;
+/** meta 到确定性首段的耗时：这一段不过模型，是毫秒级 */
+const DETERMINISTIC_DELAY_MS = 80;
 const CHUNK_MIN_MS = 30;
 const CHUNK_MAX_MS = 60;
 const CHUNK_MIN_CHARS = 2;
@@ -69,9 +71,17 @@ export function createMockTransport(): ChatTransport {
         degraded: script.degraded ?? false,
       };
 
-      // 思考期：每 15s 一 ping，首个 delta 到即停
-      const think = script.thinkMs ?? DEFAULT_THINK_MS;
       const startedAt = Date.now();
+
+      // 危机场景：调模型前先把确定性首段发出去，人不用干等
+      if (script.deterministic) {
+        await sleep(DETERMINISTIC_DELAY_MS, signal);
+        if (signal.aborted) return;
+        yield { type: 'delta', text: script.deterministic, deterministic: true };
+      }
+
+      // 思考期：每 15s 一 ping，首个非 deterministic delta 到即停
+      const think = script.thinkMs ?? DEFAULT_THINK_MS;
       while (Date.now() - startedAt < think) {
         const remaining = think - (Date.now() - startedAt);
         await sleep(Math.min(PING_INTERVAL_MS, remaining), signal);
