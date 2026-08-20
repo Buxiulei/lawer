@@ -361,7 +361,7 @@ export const scenarioReplies: ReplyScript[] = [
     model: 'deepseek-v4-flash',
     taskClass: 'bulk',
     thinkMs: 800,
-    content: `这一轮的提示比较多，正文先给结论：竞业限制条款要看公司有没有按月付补偿，没付满三个月你可以书面提出解除。
+    content: `这一轮的提示比较多，正文先给结论：竞业限制条款要看公司有没有按月付补偿，没付满三个月你可以书面提出解除。类似情形此前有过支持劳动者的裁判（【案号待核实】），拿到逐字案号后我会补进档案。
 
 下面几条是这一轮处理过程中的说明。`,
     lawRefs: [],
@@ -372,6 +372,9 @@ export const scenarioReplies: ReplyScript[] = [
       { code: 'ACTION_CARD_MISSING', message: '本轮无新增行动卡' },
       { code: 'REFERRAL_ALREADY_USED', message: '本案已提示过一次' },
       { code: 'TOOL_INPUT_REJECTED', message: 'claims_upsert 入参校验未通过' },
+      { code: 'CITATION_BLOCKED', message: '正文含案号占位' },
+      { code: 'EMOTIONAL_LEVERAGE_DETECTED', message: '内部治理信号' },
+      { code: 'NBDPSY_PITCH_BLOCKED', message: '内部治理信号' },
     ],
     actions: [],
   },

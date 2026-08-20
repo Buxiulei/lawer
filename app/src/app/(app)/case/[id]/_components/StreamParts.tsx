@@ -155,11 +155,13 @@ export function RecordChip({ frame }: { frame: RecordFrame }) {
   );
 }
 
-/** notice 帧：冷静提示行，六个 code 各有定稿文案 */
+/** notice 帧：冷静提示行。词表里标为静默的 code（多数是系统治理信号）不渲染。 */
 export function NoticeLine({ frame }: { frame: NoticeFrame }) {
+  const copy = noticeCopy(frame);
+  if (!copy) return null;
   return (
     <p className="prose-measure flex gap-2 border-l-2 border-line pl-3 text-[14px] leading-6 text-ink-2">
-      {noticeCopy(frame)}
+      {copy}
     </p>
   );
 }

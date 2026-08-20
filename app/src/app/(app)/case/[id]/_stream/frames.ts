@@ -78,7 +78,10 @@ export type NoticeCode =
   | 'ACTION_CARD_CAPPED'
   | 'ACTION_CARD_MISSING'
   | 'REFERRAL_ALREADY_USED'
-  | 'TOOL_INPUT_REJECTED';
+  | 'TOOL_INPUT_REJECTED'
+  | 'CITATION_BLOCKED'
+  | 'EMOTIONAL_LEVERAGE_DETECTED'
+  | 'NBDPSY_PITCH_BLOCKED';
 
 export interface NoticeFrame {
   type: 'notice';
@@ -189,26 +192,32 @@ export function recordLabel(tool: RecordTool): string {
 }
 
 /**
- * notice 帧文案：冷静、具体、说清「所以对你意味着什么」。
- * 六个 code 全覆盖；后端 message 只在未知 code 时兜底。
+ * notice 帧展示策略（WS2 词表定稿，manager 已入册）：
+ * 只有两个 code 面向用户展示；其余是系统内部治理信号，UI 静默
+ * （EMOTIONAL_LEVERAGE_DETECTED 等尤其不得出现「拦截」类字样）。
+ * CITATION_BLOCKED 不出提示行——正文里的【案号待核实】占位由 RichText 淡色标注承载。
+ * 未知 code：忽略 + console.warn（向前兼容）。
  */
-const NOTICE_COPY: Record<NoticeCode, string> = {
+const NOTICE_COPY: Record<NoticeCode, string | null> = {
   KNOWLEDGE_MISS:
     '这个点法条库暂无逐字依据，以上是通用口径，已标记待补。',
   KNOWLEDGE_UNAVAILABLE:
     '法条库这一轮没连上，以上按通用口径给你，过一会儿再问一次能拿到逐字原文。',
-  ACTION_CARD_CAPPED:
-    '这一轮要做的事不止 3 件，先给最要紧的 3 件，其余下一轮接着给。',
-  ACTION_CARD_MISSING:
-    '这一轮没有新增要做的事，按上面已有的行动卡走就行。',
-  REFERRAL_ALREADY_USED:
-    '情绪支持的转介一个案子只提一次，之前已经提过，这次不重复。',
-  TOOL_INPUT_REJECTED:
-    '刚才那条信息没通过校验，没有写进档案。等下我换个问法再跟你确认一次。',
+  ACTION_CARD_CAPPED: null,
+  ACTION_CARD_MISSING: null,
+  REFERRAL_ALREADY_USED: null,
+  TOOL_INPUT_REJECTED: null,
+  CITATION_BLOCKED: null,
+  EMOTIONAL_LEVERAGE_DETECTED: null,
+  NBDPSY_PITCH_BLOCKED: null,
 };
 
-export function noticeCopy(frame: NoticeFrame): string {
-  return NOTICE_COPY[frame.code] ?? frame.message;
+export function noticeCopy(frame: NoticeFrame): string | null {
+  if (!(frame.code in NOTICE_COPY)) {
+    console.warn('[stream] 未知 notice code，忽略：', frame.code);
+    return null;
+  }
+  return NOTICE_COPY[frame.code];
 }
 
 /** action 帧 → 现有行动卡数据结构，让 ActionCard/档案面板照旧工作。 */
