@@ -143,6 +143,7 @@ lawer/
 | MCP/API | 工具：case_get/update, timeline_add, evidence_upload, docs_ocr, claim_calc, draft_write, knowledge_search, action_*, deadline_list；`/api/manifest` | 用户 Claude 挂 skill 后完成"传证据→固化→列行动卡"全链 |
 | 管理端 | 用户/公道值调整(ADMIN_EMAILS)/兑换码/费率/存证查询 | 发码→用户核销到账 |
 | **companywatch** | **公司主体监控（2026-08-20 用户拍板新增，MCP/API 能力）**：按案件添加被监控主体→调度器每日≥2次经公开渠道（爱企查为主，可插拔源）拉取→diff 出事件：简易注销公告/注销清算备案/经营状态变更/股权法代变更/减资公告/拉取连续失败（静默失效也是告警）。urgent 级（前两类）即时三通道通知+自动落 timeline+生成行动卡（挂债权人异议 SOP）；info 级日报合并。表：company_watches / company_watch_events(只追加)/ 检查日志。工具：company_watch_add/list/events + company_snapshot（按需快照回填 company_profiles）。合规：仅公开信息（D10）、来源留 URL、限频。计费：feature=companywatch 定额（待M3核定，MVP 记量不扣） | 添加监控→模拟注销公告→三通道告警+行动卡出现 |
+| **companywatch v2** | **关联主体图谱+诉讼档案（2026-08-20 用户拍板扩展）**：输入公司→自动发现关联主体（1 跳默认：股东上溯/对外投资下探/分支机构/同法定代表人；2 跳需确认）→ 生成建议清单用户勾选→批量入监控。同时抓取全部关联主体**近 5 年公开可得的裁判文书与涉诉记录**（劳动争议案由优先精读入档：应诉风格/赔付先例/代理律所），存 company_litigation，agent 可检索。表：company_relations（关系类型+证据URL+置信度）/company_litigation（案号/法院/日期/案由/角色/文书URL/摘要/来源）。工具：company_relations_discover / company_litigation_list。**诚实边界写进产品文案**：裁判文书公开率 2021 起持续下降，只能承诺"公开渠道可得"而非"全部"；缺口用涉诉记录条目（有案号无全文）补。**数据源策略**：个人案=用户自己的爱企查登录态；平台规模化=商业数据 API（企查查/天眼查开放平台，按次计费，待用户批预算后接入） | 输入一家公司→关联清单≥法代/股东/分支三类→勾选入监控→5年劳动争议文书列表可检索 |
 
 ## 9. 公道值定价（草案，M3 接入时按官方实价核定费率表）
 
