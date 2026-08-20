@@ -28,6 +28,8 @@ export interface SettledTurn {
   messageId: string;
   meta: MetaFrame | null;
   text: string;
+  /** text 前多少个字符来自 deterministic 首段；0 = 本轮没有。落档案的是全文 */
+  deterministicChars: number;
   records: RecordFrame[];
   actions: ActionFrame[];
   drafts: DraftFrame[];
@@ -40,6 +42,8 @@ interface State {
   phase: StreamPhase;
   meta: MetaFrame | null;
   text: string;
+  /** deterministic 首段在 text 里占的前缀长度，供 UI 单独渲染「即时回应」 */
+  deterministicChars: number;
   records: RecordFrame[];
   actions: ActionFrame[];
   drafts: DraftFrame[];
@@ -49,10 +53,11 @@ interface State {
   waitBaseAt: number | null;
 }
 
-const INITIAL: State = {
+export const INITIAL: State = {
   phase: 'idle',
   meta: null,
   text: '',
+  deterministicChars: 0,
   records: [],
   actions: [],
   drafts: [],
@@ -63,7 +68,7 @@ const INITIAL: State = {
 
 type Action = { type: 'start' } | { type: 'reset' } | { type: 'frame'; frame: StreamFrame };
 
-function reduce(state: State, action: Action): State {
+export function reduce(state: State, action: Action): State {
   if (action.type === 'start') return { ...INITIAL, phase: 'connecting' };
   if (action.type === 'reset') return INITIAL;
 
@@ -75,6 +80,15 @@ function reduce(state: State, action: Action): State {
       // 心跳只校准计时基准，不是错误、也不改阶段
       return { ...state, waitBaseAt: Date.now() - frame.waited_seconds * 1000 };
     case 'delta':
+      // 确定性首段只是先接住人，模型还没开口：追加文本但留在等待态，
+      // waitBaseAt 不清、ping 继续校准，等待卡照旧跳秒。
+      if (frame.deterministic) {
+        return {
+          ...state,
+          text: state.text + frame.text,
+          deterministicChars: state.deterministicChars + frame.text.length,
+        };
+      }
       return {
         ...state,
         phase: 'streaming',
@@ -109,6 +123,7 @@ function emptyTurn(): SettledTurn {
     messageId: '',
     meta: null,
     text: '',
+    deterministicChars: 0,
     records: [],
     actions: [],
     drafts: [],
@@ -164,6 +179,7 @@ export function useChatStream({
               break;
             case 'delta':
               turn.text += frame.text;
+              if (frame.deterministic) turn.deterministicChars += frame.text.length;
               break;
             case 'record':
               turn.records.push(frame);

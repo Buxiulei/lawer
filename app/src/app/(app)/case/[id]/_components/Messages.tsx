@@ -6,7 +6,13 @@ import { ActionCard } from '@/components/case/ActionCard';
 import { LawRefCard } from '@/components/case/LawRefCard';
 import type { DraftFrame, NoticeFrame, RecordFrame } from '../_stream/frames';
 import { MaskedText, RichText } from './RichText';
-import { DegradedBadge, DraftCard, NoticeLine, RecordChip } from './StreamParts';
+import {
+  DegradedBadge,
+  DraftCard,
+  InstantReplyCard,
+  NoticeLine,
+  RecordChip,
+} from './StreamParts';
 
 /**
  * 一条 AI 消息在流里落定后的形状：正文之外还带这一轮的结构化产出。
@@ -18,6 +24,8 @@ export interface StreamedMessage extends Message {
   notices?: NoticeFrame[];
   /** meta.degraded：本轮由备用模型完成 */
   degraded?: boolean;
+  /** content 前多少个字符来自 deterministic 首段，单独渲染成「即时回应」卡 */
+  deterministicChars?: number;
 }
 
 /** 日期分隔：跨天时插一条细线，案件对话往往横跨几周。 */
@@ -62,8 +70,12 @@ export function AssistantMessage({
   onRequestConfirmDraft: (frame: DraftFrame) => void;
   streaming?: boolean;
 }) {
+  // deterministic 首段和模型正文共用一段文本，按前缀长度切开分别渲染
+  const headChars = message.deterministicChars ?? 0;
+  const head = message.content.slice(0, headChars);
+  const rest = message.content.slice(headChars);
   // 流式中末尾可能停在半个 ** 上，先剪掉避免星号一闪
-  const body = streaming ? message.content.replace(/\*{1,2}$/, '') : message.content;
+  const body = streaming ? rest.replace(/\*{1,2}$/, '') : rest;
   const laws = message.lawRefs ?? [];
   const records = message.records ?? [];
   const notices = message.notices ?? [];
@@ -77,7 +89,9 @@ export function AssistantMessage({
         </div>
       )}
 
-      <RichText text={body} />
+      {head && <InstantReplyCard text={head} />}
+
+      {body && <RichText text={body} />}
       {streaming && <StreamCaret />}
 
       {records.length > 0 && (

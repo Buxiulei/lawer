@@ -99,6 +99,25 @@ export function WaitingCard({
   );
 }
 
+/**
+ * deterministic 首段：服务端在调模型前毫秒级下发的接住式安抚 + 求助热线。
+ * 单独成卡，与模型正文分开——这几句不是模型说的，也不该被当成分析结论。
+ * 文案原样渲染（不走 markdown、不打码），热线号码必须一眼可读。
+ */
+export function InstantReplyCard({ text }: { text: string }) {
+  const lines = text.split('\n').filter((line) => line.trim());
+  return (
+    <div className="prose-measure my-2 rounded-[12px] border-l-4 border-primary bg-surface-2 py-3 pr-3.5 pl-3">
+      <p className="text-[12px] leading-5 text-ink-2">即时回应</p>
+      <div className="mt-1.5 space-y-1.5 text-[16px] leading-[1.75] text-ink">
+        {lines.map((line, i) => (
+          <p key={i}>{line}</p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** 降级徽标：冷静措辞，不用警报色 */
 export function DegradedBadge() {
   const [open, setOpen] = useState(false);

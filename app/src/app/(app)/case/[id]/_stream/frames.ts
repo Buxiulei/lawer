@@ -4,6 +4,9 @@
  *
  * 帧序：meta → (ping)* → (delta|record|action|draft|notice)* → usage → done
  *       任何一步都可能被 error 顶替。
+ *
+ * 危机场景多一段：meta 之后毫秒级先到 deterministic=true 的 delta（接住式安抚+求助热线），
+ * 模型正文可能还要 2-4 分钟，这期间 ping 照常。
  */
 
 import type { ActionItem } from '@/app/_mock/types';
@@ -20,7 +23,8 @@ export interface MetaFrame {
   degraded: boolean;
 }
 
-/** meta 之后每 15s 一帧，首个 delta 到即停。推理模型首字前可思考 3-4 分钟，这不是错误。 */
+/** meta 之后每 15s 一帧，首个**非 deterministic** delta 到即停。
+ *  推理模型首字前可思考 3-4 分钟，这不是错误。 */
 export interface PingFrame {
   type: 'ping';
   waited_seconds: number;
@@ -29,6 +33,8 @@ export interface PingFrame {
 export interface DeltaFrame {
   type: 'delta';
   text: string;
+  /** true = 危机场景的确定性首段（服务端调模型前毫秒级下发），不代表模型已开口 */
+  deterministic?: boolean;
 }
 
 export type RecordTool =

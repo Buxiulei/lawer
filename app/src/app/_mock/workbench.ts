@@ -23,6 +23,8 @@ export interface ReplyScript {
   id: string;
   /** 流式输出的正文（轻量 markdown：段落 / 列表 / **加粗**） */
   content: string;
+  /** 危机场景的确定性首段：meta 后毫秒级整段下发，deterministic=true，不结束等待态 */
+  deterministic?: string;
   /** 本轮产出的行动卡，回复完成后加入档案待办 */
   actions: ActionItem[];
   lawRefs: LawRef[];
@@ -370,6 +372,48 @@ export const scenarioReplies: ReplyScript[] = [
       { code: 'TOOL_INPUT_REJECTED', message: 'claims_upsert 入参校验未通过' },
     ],
     actions: [],
+  },
+  {
+    // 危机场景：确定性首段毫秒级先到，模型正文再等 90 秒（演示用，真链路 2-4 分钟）。
+    // 验的是「即时回应卡出现后等待卡仍在跳秒」，以及 60 秒后的安抚文案照常升级。
+    id: 'rs_crisis',
+    model: 'claude-opus-5',
+    taskClass: 'critical',
+    thinkMs: 90_000,
+    deterministic: `我在，先别急着做决定。你说的这些我都看到了，这件事不是你一个人扛得住才算数。
+如果这会儿实在撑不住，北京市心理援助热线 010-82951332 可以打，接线的人会听你说完。
+你的材料和时间我都记着，下面的事我们一件一件来。`,
+    content: `先说结论：你现在最要紧的两件事都还没到期，时间上是来得及的。
+
+**一是仲裁时效**。从收到解除通知那天起算一年，也就是到明年 7 月 15 日之前都能立案。这一年里你什么时候身体和状态允许了再动手，都不算晚。
+
+**二是这个月的开销**。7 月工资和赔偿金是两笔钱、两条路，工资那笔属于公司明确欠付，可以单独走支付令，比仲裁快很多。如果这个月周转不开，先催这一笔。
+
+材料方面你已经固化了六件证据，缺的只有公司主体信息查询页，这一步在网上就能做完，不用出门。
+
+今天如果只做一件事，就做上面那一件。剩下的等你缓过来再说，我一直在。`,
+    lawRefs: [],
+    records: [
+      {
+        tool: 'emotion_log',
+        id: 'em_crisis',
+        summary: '本轮状态：压力偏高，已给到求助渠道',
+      },
+    ],
+    actions: [
+      {
+        id: 'ai_crisis_1',
+        caseId: 'demo',
+        title: '在网上打印公司主体信息查询页',
+        detail:
+          '国家企业信用信息公示系统搜公司全称，结果页连同查询日期一起打印或存 PDF。全程线上，十分钟能做完。今天做这一件就够。',
+        dueAt: '2026-08-27T23:59:00+08:00',
+        priority: 2,
+        status: '待办',
+        sourceMessageId: null,
+        createdAt: '2026-08-19T10:00:00+08:00',
+      },
+    ],
   },
   {
     // 半途断流：验流内错误卡 + 倒计时重试

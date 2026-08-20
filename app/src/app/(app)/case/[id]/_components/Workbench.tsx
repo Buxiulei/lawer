@@ -89,6 +89,7 @@ export function Workbench({ caseId }: { caseId: string }) {
           threadId: turn.meta?.thread_id ?? 'th_1',
           role: 'assistant',
           content: turn.text,
+          deterministicChars: turn.deterministicChars,
           model: turn.meta?.model,
           createdAt: new Date().toISOString(),
           actionItemIds: items.map((a) => a.id),
@@ -186,6 +187,7 @@ export function Workbench({ caseId }: { caseId: string }) {
     threadId: stream.meta?.thread_id ?? 'th_1',
     role: 'assistant',
     content: stream.text,
+    deterministicChars: stream.deterministicChars,
     createdAt: new Date().toISOString(),
     records: stream.records,
     notices: stream.notices,
@@ -231,17 +233,8 @@ export function Workbench({ caseId }: { caseId: string }) {
 
               {stream.phase === 'connecting' && <AcceptedLine />}
 
-              {stream.phase === 'waiting' && stream.waitBaseAt !== null && (
-                <WaitingCard
-                  baseAt={stream.waitBaseAt}
-                  model={stream.meta?.model ?? null}
-                  onJumpToActions={actions.length > 0 ? jumpToActions : undefined}
-                  onLongWait={keepAtBottom}
-                />
-              )}
-
-              {(stream.phase === 'streaming' ||
-                (stream.phase === 'error' && stream.text)) && (
+              {/* 等待态也可能已有文本（deterministic 首段），这时消息排在等待卡上方 */}
+              {(stream.text || stream.phase === 'streaming') && (
                 <AssistantMessage
                   streaming={stream.phase === 'streaming'}
                   message={live}
@@ -250,6 +243,15 @@ export function Workbench({ caseId }: { caseId: string }) {
                   onRequestConfirmDraft={setAskingDraft}
                   actions={[]}
                   onToggleAction={toggleAction}
+                />
+              )}
+
+              {stream.phase === 'waiting' && stream.waitBaseAt !== null && (
+                <WaitingCard
+                  baseAt={stream.waitBaseAt}
+                  model={stream.meta?.model ?? null}
+                  onJumpToActions={actions.length > 0 ? jumpToActions : undefined}
+                  onLongWait={keepAtBottom}
                 />
               )}
 
