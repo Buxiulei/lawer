@@ -194,7 +194,9 @@ export function EvidenceDetailSheet({
                 </Button>
               </div>
               <p className="mt-2 text-[13px] leading-6 text-ink-2">
-                任何人打开这个链接都能核一遍哈希和时间戳，不用注册。
+                {att.tsaGenTime
+                  ? '任何人打开这个链接都能核一遍哈希和时间戳，不用注册。'
+                  : '时间戳还没盖上，这个链接现在只显示「存证处理中」，还不能给对方当凭据。'}
               </p>
             </section>
           )}
