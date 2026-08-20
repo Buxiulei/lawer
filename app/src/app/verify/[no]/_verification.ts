@@ -13,8 +13,10 @@
  * 是仲裁场上会直接害到用户的谎。stamped/certified 只展示**存证记录**本身，
  * 措辞用「记录一致性由时间戳令牌保证」，并给出离线复核指引让人自己算。
  *
- * 待后端提供带 overall_ok 的复核接口后，才恢复「通过 / 未通过」三态判定 UI：
- * 判定入口写在 readRecheckVerdict()，展示挂点是 VerifyResult 的 recheck 属性。
+ * 「通过 / 未通过」只能来自另一条接口：POST /api/v1/verify/:orderNo/recheck
+ * （WS2 在做，公开 + IP 限流，返回 overall_ok 与分项 checks）。页面上那个
+ * 「在线核验」按钮点了才去调它；接口还没上线时按 404 处理，提示改走离线复核。
+ * 裁决入口是 readRecheckVerdict()，解析在 readRecheck()。
  */
 
 /** 页面三态：无法验证 / 存证处理中 / 存证记录 */
@@ -120,17 +122,102 @@ export function statusLabel(status: string): string {
   return '存证处理中';
 }
 
+/* ── 在线核验：POST /api/v1/verify/:orderNo/recheck ───────── */
+
+export type RecheckVerdict = 'pass' | 'fail' | 'unknown';
+
+export interface RecheckCheck {
+  key: string;
+  label: string;
+  /** null = 这一项没跑出结论，既不算过也不算不过 */
+  ok: boolean | null;
+  detail: string | null;
+}
+
+export interface Recheck {
+  verdict: RecheckVerdict;
+  checks: RecheckCheck[];
+}
+
 /**
- * 【挂点，暂未启用】服务端复核结果的裁决入口。
- *
- * 后端补上带 overall_ok 的复核接口后，在 page.tsx 里请求它，把响应体交给本函数，
- * 再把结果通过 VerifyResult 的 recheck 属性传下去——那时（也只有那时）
- * 页面才可以出现「验证通过 / 验证未通过」。裁决只看 overall_ok 布尔值，
- * 其余一切情况（缺字段、解析失败、非布尔）都是 unknown，不得当成通过。
+ * 复核结果的裁决入口。**只看 overall_ok 的布尔值**——这是 DESIGN.md 那条红线的落点：
+ * 后端验签不通过也回 200，缺字段、解析失败、`"true"` 字符串、1 这类都必须是 unknown。
+ * 把 unknown 当通过，等于让无效证据静默过关。
  */
-export function readRecheckVerdict(body: unknown): 'pass' | 'fail' | 'unknown' {
+export function readRecheckVerdict(body: unknown): RecheckVerdict {
   if (!isObject(body)) return 'unknown';
   if (body.overall_ok === true) return 'pass';
   if (body.overall_ok === false) return 'fail';
   return 'unknown';
+}
+
+/** 已知分项的中文名；接口将来加项也不会漏显示——认不出的 key 原样列出（见 toCheck） */
+const CHECK_LABELS: Record<string, string> = {
+  hash_match: '文件哈希一致',
+  hash: '文件哈希一致',
+  tst_valid: '时间戳令牌有效',
+  tst: '时间戳令牌有效',
+  timestamp: '时间戳令牌有效',
+  signature_valid: '签名有效',
+  signature: '签名有效',
+  sig: '签名有效',
+  cert_chain: '证书链可信',
+  chain: '证书链可信',
+};
+
+/** 分项里表示「过了没有」的字段名，按顺序取第一个布尔值 */
+const OK_KEYS = ['ok', 'passed', 'pass', 'valid', 'result', 'success'];
+/** 分项里表示说明文字的字段名 */
+const DETAIL_KEYS = ['detail', 'message', 'reason', 'note', 'description'];
+
+function pickBool(source: Record<string, unknown>): boolean | null {
+  for (const key of OK_KEYS) {
+    if (typeof source[key] === 'boolean') return source[key] as boolean;
+  }
+  return null;
+}
+
+function pickStr(source: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const v = source[key];
+    if (typeof v === 'string' && v !== '') return v;
+  }
+  return null;
+}
+
+function toCheck(key: string, value: unknown): RecheckCheck {
+  // 值本身就是布尔：形如 { checks: { hash_match: true } }
+  if (typeof value === 'boolean') {
+    return { key, label: CHECK_LABELS[key] ?? key, ok: value, detail: null };
+  }
+  if (!isObject(value)) {
+    return { key, label: CHECK_LABELS[key] ?? key, ok: null, detail: null };
+  }
+  const rawKey = pickStr(value, ['key', 'name', 'id']) ?? key;
+  return {
+    key: rawKey,
+    // 认不出的项原样列出：宁可显示一个英文 key，也好过悄悄吞掉一条结论
+    label: pickStr(value, ['label', 'title']) ?? CHECK_LABELS[rawKey] ?? rawKey,
+    ok: pickBool(value),
+    detail: pickStr(value, DETAIL_KEYS),
+  };
+}
+
+/**
+ * 宽松解析复核响应：接口字段名还没最终定下来，所以分项的形状按几种常见写法都认，
+ * 数组和对象映射都吃得下。认不出的项原样列出，绝不因为不认识就丢掉。
+ * 注意 checks 怎么解析都不影响裁决——verdict 只由 overall_ok 决定。
+ */
+export function readRecheck(body: unknown): Recheck {
+  const verdict = readRecheckVerdict(body);
+  const raw = isObject(body) ? body.checks : undefined;
+
+  let checks: RecheckCheck[] = [];
+  if (Array.isArray(raw)) {
+    checks = raw.map((item, i) => toCheck(`check_${i}`, item));
+  } else if (isObject(raw)) {
+    checks = Object.entries(raw).map(([key, value]) => toCheck(key, value));
+  }
+
+  return { verdict, checks };
 }

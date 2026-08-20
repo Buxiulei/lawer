@@ -3,7 +3,12 @@
 // 绝不能因为"接口没报错"就把状态抬成 record。
 import { describe, expect, test } from 'vitest';
 
-import { readRecheckVerdict, readVerification, statusLabel } from '../_verification';
+import {
+  readRecheck,
+  readRecheckVerdict,
+  readVerification,
+  statusLabel,
+} from '../_verification';
 
 /** 一条已盖时间戳的真实响应（形状照 lib/evidence.PublicVerification） */
 function stampedBody(overrides: Record<string, unknown> = {}) {
@@ -102,7 +107,7 @@ describe('statusLabel', () => {
   });
 });
 
-describe('readRecheckVerdict（挂点，暂未启用）', () => {
+describe('readRecheckVerdict', () => {
   test('只有布尔 true 才是 pass', () => {
     expect(readRecheckVerdict({ overall_ok: true })).toBe('pass');
     expect(readRecheckVerdict({ overall_ok: false })).toBe('fail');
@@ -115,5 +120,71 @@ describe('readRecheckVerdict（挂点，暂未启用）', () => {
     ['null 响应体', null],
   ])('%s → unknown，绝不当成通过', (_label, body) => {
     expect(readRecheckVerdict(body)).toBe('unknown');
+  });
+});
+
+describe('readRecheck 的分项宽松解析', () => {
+  test('数组 + {key,label,ok,detail} 标准形状', () => {
+    const r = readRecheck({
+      overall_ok: true,
+      checks: [
+        { key: 'hash_match', label: '文件哈希一致', ok: true, detail: '逐位相同' },
+        { key: 'tst_valid', label: '时间戳令牌有效', ok: true, detail: null },
+      ],
+    });
+    expect(r.verdict).toBe('pass');
+    expect(r.checks).toHaveLength(2);
+    expect(r.checks[0]).toEqual({
+      key: 'hash_match',
+      label: '文件哈希一致',
+      ok: true,
+      detail: '逐位相同',
+    });
+  });
+
+  test('数组 + {name,passed,message} 这类别名字段照样认', () => {
+    const r = readRecheck({
+      overall_ok: false,
+      checks: [{ name: 'signature_valid', passed: false, message: '签名证书已吊销' }],
+    });
+    expect(r.verdict).toBe('fail');
+    expect(r.checks[0].label).toBe('签名有效');
+    expect(r.checks[0].ok).toBe(false);
+    expect(r.checks[0].detail).toBe('签名证书已吊销');
+  });
+
+  test('对象映射 { hash_match: true } 形状', () => {
+    const r = readRecheck({ overall_ok: false, checks: { hash_match: false, tst_valid: true } });
+    expect(r.checks).toEqual([
+      { key: 'hash_match', label: '文件哈希一致', ok: false, detail: null },
+      { key: 'tst_valid', label: '时间戳令牌有效', ok: true, detail: null },
+    ]);
+  });
+
+  test('认不出的分项原样列出，不吞掉', () => {
+    const r = readRecheck({
+      overall_ok: true,
+      checks: [{ key: 'brand_new_check', ok: true }, { key: 'ltv_present', ok: false }],
+    });
+    expect(r.checks.map((c) => c.label)).toEqual(['brand_new_check', 'ltv_present']);
+  });
+
+  test('分项没有布尔结论 → ok 为 null（不算过也不算不过）', () => {
+    const r = readRecheck({ overall_ok: true, checks: [{ key: 'hash_match', detail: '超时' }] });
+    expect(r.checks[0].ok).toBeNull();
+  });
+
+  test.each([
+    ['checks 缺失', { overall_ok: true }],
+    ['checks 是字符串', { overall_ok: true, checks: 'nope' }],
+    ['响应体是 null', null],
+  ])('%s → checks 为空数组，不炸', (_label, body) => {
+    expect(readRecheck(body).checks).toEqual([]);
+  });
+
+  test('分项全 true 但 overall_ok 缺失 → 仍是 unknown（分项不参与裁决）', () => {
+    const r = readRecheck({ checks: [{ key: 'hash_match', ok: true }] });
+    expect(r.verdict).toBe('unknown');
+    expect(r.checks[0].ok).toBe(true);
   });
 });

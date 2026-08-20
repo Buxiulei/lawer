@@ -8,25 +8,13 @@ import {
   type Verification,
 } from '../_verification';
 import { CopyField } from './CopyField';
+import { RecheckPanel } from './RecheckPanel';
 
 /**
  * 公开验证页的主体。三态之间**只有措辞和信息量的差别，没有"通过"这一态**——
  * 本接口不做密码学复核（见 _verification.ts 顶部红线），页面就不许说复核过了。
  */
-export function VerifyResult({
-  no,
-  view,
-  recheck,
-}: {
-  no: string;
-  view: VerifyView;
-  /**
-   * 【挂点，暂未启用】服务端复核结论。后端提供带 overall_ok 的接口后，
-   * 由 page.tsx 传进来，这里才渲染「验证通过 / 验证未通过」的裁决区。
-   * 现在恒为 undefined——没有复核就不显示复核结论。
-   */
-  recheck?: { verdict: 'pass' | 'fail' | 'unknown'; detail: string };
-}) {
+export function VerifyResult({ no, view }: { no: string; view: VerifyView }) {
   const { state, verification } = view;
 
   if (state === 'unavailable') {
@@ -72,7 +60,8 @@ export function VerifyResult({
         title="存证记录"
         summary="下面是这个编号在平台留存的存证记录。记录一致性由 RFC 3161 可信时间戳令牌保证：时间戳证明该摘要在下述时刻已经存在。本页只如实列出记录本身，不代替你自己的复核——按页尾的指引可以离线核一遍。"
       />
-      {recheck && <RecheckPanel recheck={recheck} />}
+      {/* 在线核验只在盖过时间戳的记录上出现：没有令牌就没什么可验的 */}
+      <RecheckPanel orderNo={v.order_no} />
       <RecordSection v={v} />
       <OfflineGuide v={v} />
     </>
@@ -155,30 +144,6 @@ function OfflineGuide({ v }: { v: Verification }) {
         </p>
       </div>
     </details>
-  );
-}
-
-/**
- * 【挂点，暂未启用】服务端复核结论区。只在 recheck 传进来时渲染，
- * 且 unknown 一律走中性态，绝不因"没报错"显示成通过。
- */
-function RecheckPanel({
-  recheck,
-}: {
-  recheck: { verdict: 'pass' | 'fail' | 'unknown'; detail: string };
-}) {
-  const style =
-    recheck.verdict === 'pass'
-      ? { title: '服务端复核：通过', card: 'border-success bg-success-wash' }
-      : recheck.verdict === 'fail'
-        ? { title: '服务端复核：未通过', card: 'border-danger bg-danger-wash' }
-        : { title: '服务端复核：没有结论', card: 'border-line bg-surface-2' };
-
-  return (
-    <section className={cn('mt-6 rounded-[12px] border p-4', style.card)}>
-      <h3 className="text-[17px] font-semibold text-ink">{style.title}</h3>
-      <p className="prose-measure mt-1 text-[15px] leading-7 text-ink-2">{recheck.detail}</p>
-    </section>
   );
 }
 
