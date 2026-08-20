@@ -553,6 +553,53 @@ export function runMigrations(db: Database.Database): void {
       ON company_watch_checks (watch_id, id DESC);
   `);
 
+  // 关联主体关系边（companywatch v2）：仲裁列谁当被申请人、往哪追加财产线索，靠这张图。
+  // 边挂在案件下（同一家公司在不同案件里的关联判断可以不同，各案自建各案的图）。
+  // 两端都 ON DELETE CASCADE：边随任一端点消亡——端点没了，这条关系无从谈起，留着即悬空脏边。
+  // relation/confidence 只在注释里锁枚举、不加 CHECK：关系类型随数据源扩展（同前 intake_stage 裁决，
+  // SQLite 改 CHECK 要重建表），值集由 lib 侧把关；confidence 记的是自动发现的可信度，
+  // 「同地址」这类弱信号默认低置信，用户勾选入监控前得看得见这个分档。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_relations (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id         INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+      from_profile_id INTEGER NOT NULL REFERENCES company_profiles(id) ON DELETE CASCADE,
+      to_profile_id   INTEGER NOT NULL REFERENCES company_profiles(id) ON DELETE CASCADE,
+      relation        TEXT NOT NULL,                            -- 股权母子|对外投资|分支机构|同法定代表人|同实际控制人|发薪链|同地址|其他
+      evidence_url    TEXT,
+      confidence      TEXT NOT NULL DEFAULT '中',                -- 高 | 中 | 低
+      created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_company_relations_case ON company_relations (case_id);
+  `);
+
+  // 涉诉记录（companywatch v2）：判断这家公司「爱不爱赖账」与有无劳动争议前科。
+  // uq_company_litigation 防重录——同一判决被反复抓取（每日轮询、多源交叉）只落一行，
+  // 写入侧一律 INSERT OR IGNORE 消费本约束，据 changes 判定是不是新增。
+  // is_labor=1 即劳动争议案由，agent 优先精读（应诉风格/赔付先例/代理律所）；
+  // 裁判文书公开率 2021 起持续下降，故 doc_url 可空——只有案号没有全文的涉诉条目照样入档补缺口。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_litigation (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_profile_id INTEGER NOT NULL REFERENCES company_profiles(id) ON DELETE CASCADE,
+      case_no            TEXT NOT NULL,
+      court              TEXT,
+      judged_at          TEXT,
+      cause              TEXT,
+      is_labor           INTEGER NOT NULL DEFAULT 0,
+      role               TEXT,                                  -- 被告 | 原告 | 被执行 | 第三人
+      doc_url            TEXT,
+      summary            TEXT,
+      source             TEXT,
+      fetched_at         TEXT,
+      created_at         TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_company_litigation
+      ON company_litigation (company_profile_id, case_no);
+    CREATE INDEX IF NOT EXISTS idx_company_litigation_lookup
+      ON company_litigation (company_profile_id, is_labor, judged_at DESC);
+  `);
+
   // ───────────────── 通知 ─────────────────
   // 发送台账 + 幂等闸门：uq_notify_sent 保证同一业务键（scene, biz_key）每通道最多一条 status='sent'，
   // 失败/跳过行不受约束可重复落行（重试留痕）。

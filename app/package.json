@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run --passWithNoTests",
-    "reconcile": "tsx ../scripts/reconcile.ts"
+    "reconcile": "tsx ../scripts/reconcile.ts",
+    "gc:files": "tsx ../scripts/gc-files.ts"
   },
   "dependencies": {
     "argon2": "^0.44.0",
