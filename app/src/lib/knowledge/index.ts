@@ -8,7 +8,7 @@ import path from 'node:path';
 
 /** 结构化事实（规范 §2.1）：被代码消费的数据的唯一读取面——代码只读 facts，禁啃正文散文 */
 export interface PackFacts {
-  hotlines?: Array<{ name: string; phone: string; status: 'usable' | 'forbidden'; hours?: string; note?: string }>;
+  hotlines?: Array<{ name: string; phone: string; category: 'crisis' | 'legal' | 'union' | 'inspection'; status: 'usable' | 'forbidden'; hours?: string; note?: string }>;
   values?: Array<{ key: string; value: number; unit: string; effective_from: string; confidence: string; source_idx: number }>;
   statute_quotes?: Array<{ law: string; article: string; text: string }>;
 }

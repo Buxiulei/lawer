@@ -67,11 +67,13 @@ def check_facts(path: Path, fm: dict, body_norm: str, seen_keys: dict) -> None:
         if num not in body_norm:
             die(f"{path} facts 数值 {v['key']}={num} 未出现在正文（两面不一致）")
     for h in facts.get("hotlines", []):
-        for field in ("name", "phone", "status"):
+        for field in ("name", "phone", "category", "status"):
             if field not in h:
                 die(f"{path} facts.hotlines 缺字段 {field}：{h}")
         if h["status"] not in ("usable", "forbidden"):
             die(f"{path} hotlines status 非法：{h['status']}")
+        if h["category"] not in ("crisis", "legal", "union", "inspection"):
+            die(f"{path} hotlines category 非法：{h['category']}")
         if normalize(h["phone"]) not in body_norm:
             die(f"{path} facts 号码 {h['phone']} 未出现在正文（两面不一致）")
     for q in facts.get("statute_quotes", []):

@@ -149,6 +149,8 @@ describe('facts 结构化透传（规范 §2.1：代码只读 facts，禁啃正�
     const hotlines = card.facts?.hotlines ?? [];
     expect(hotlines.length).toBeGreaterThan(0);
     expect(hotlines.find((h) => h.phone === '12356')?.status).toBe('usable');
+    expect(hotlines.find((h) => h.phone === '12356')?.category).toBe('crisis');
+    expect(hotlines.filter((h) => h.category === 'crisis' && h.status === 'usable').length).toBeGreaterThanOrEqual(3);
     const forbidden = hotlines.filter((h) => h.status === 'forbidden').map((h) => h.phone);
     expect(forbidden).toContain('010-85961236');
     expect(forbidden).toContain('010-65060953');
