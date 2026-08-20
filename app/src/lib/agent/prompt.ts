@@ -145,6 +145,8 @@ export interface BuildSystemPromptInput {
   crisis?: boolean;
   /** 本案此前已给过危机资源卡：指令照下，但不再重复整张卡（spec §10 不刷屏） */
   crisisCardAlreadyGiven?: boolean;
+  /** 本轮是否够格提及付费心理咨询（charter §5 持续焦虑抑郁表现 且 未转介过） */
+  nbdpsyEligible?: boolean;
 }
 
 export function buildSystemPrompt(input: BuildSystemPromptInput): string {
@@ -166,6 +168,20 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
     // 陪跑/文书这类"回头继续"的模式先给前情提要；首诊(问诊)不需要，用户刚开口
     input.mode === '问诊' ? intakeDirective(input.stage) : `${recapBrief(input.snapshot)}\n\n${intakeDirective(input.stage)}`,
     outputDiscipline(),
+    // 【前置禁令 > 事后剥句】不够格时**在生成前就禁掉**，而不是等它说完再剥——
+    // 普通轮是流式的，剥句只能清掉入库正文，用户早看见了。
+    // 事后剥句仍保留作兜底，但真正管用的是这条前置约束。
+    input.nbdpsyEligible === false
+      ? [
+          '## 本轮禁止提及付费心理咨询（硬性）',
+          '',
+          '不得以任何形式提及、推荐、或提出代为预约 NBDpsy 及任何付费心理咨询服务',
+          '（含「我可以帮你约」「安排一次专业咨询」这类说法）。',
+          '理由：charter §5 只允许在**持续焦虑抑郁表现**时提一次，本案尚未达到该条件；',
+          'spec D9 明令禁止趁人之危观感——在用户刚说出痛苦的那一刻推销服务，正是它要禁的事。',
+          '需要给支持资源时，给**免费公益资源**（心理援助热线、工会、法援），不要给我们的付费服务。',
+        ].join('\n')
+      : '',
     packsSection(
       input.packs,
       // 「别重印整张卡」这条**紧贴卡本身**下发，不放通用指令区：

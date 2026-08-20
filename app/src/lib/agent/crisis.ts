@@ -205,6 +205,87 @@ export function compactCrisisCard<T extends { id: string; body: string; title: s
   };
 }
 
+/**
+ * NBDpsy / 付费心理咨询的推介句式。
+ *
+ * 【为什么又要一个确定性开关】`hasReferredNbdpsy` 挂在 emotion_log 工具上，
+ * 只有模型**调工具且 refer_nbdpsy=true** 时才生效。实测（S08 补跑 2026-08-20）模型
+ * 根本没调工具，直接在正文里写「如果你愿意，我可以帮你约 NBDpsy」——
+ * **这是同一模式的第三次绕过**（危机卡自取检索、案号自取检索、现在是正文直提）。
+ * 教训同前：开关必须挂在**输出侧**，因为那是所有通道的共同出口。
+ */
+const NBDPSY_PITCH_RE =
+  /NBDpsy|帮你约.{0,6}(咨询|心理)|(接|安排|预约).{0,4}一次?.{0,6}(专业)?心理咨询|付费(心理)?咨询|咨询师.{0,6}(预约|对接)/;
+
+/** 这段回复里有没有推介付费心理咨询；命中返回片段，没有返回 null。 */
+export function detectNbdpsyPitch(text: string): string | null {
+  return NBDPSY_PITCH_RE.exec(text)?.[0] ?? null;
+}
+
+/**
+ * 允许推介 NBDpsy 的**四个条件**（manager 2026-08-20 定版，全部满足才准提）。
+ * 判定写成纯函数，四条逐一可测。
+ */
+export interface NbdpsyEligibilityInput {
+  /** 本案「焦虑/严重」记录条数 */
+  distressEntries: number;
+  /** 这些记录跨越几个自然日 */
+  distressDistinctDays: number;
+  /** 本案是否已转介过 */
+  alreadyReferred: boolean;
+  /** 本轮是否触发危机判据 */
+  crisisTurn: boolean;
+}
+
+export interface NbdpsyEligibility {
+  allowed: boolean;
+  /** 不允许时说明卡在哪一条，供 notice 与日志 */
+  reason: string;
+}
+
+/**
+ * 四条件：
+ * 1. ≥2 条焦虑/严重，且**跨 ≥2 个自然日**——「持续」的语义在时间跨度，同一小时连记两条不算；
+ * 2. 未转介过；
+ * 3. **危机轮绝对静默**——即使前两条满足，本轮触发危机判据也禁止提及：
+ *    危机轮只有免费热线，没有任何付费转介（spec D9 禁止趁人之危观感）；
+ * 4. 一案一次（由条件 2 承担）。
+ */
+export function assessNbdpsyEligibility(input: NbdpsyEligibilityInput): NbdpsyEligibility {
+  if (input.crisisTurn) {
+    return { allowed: false, reason: '本轮是危机轮——危机时刻只给免费公益热线，禁止任何付费转介（spec D9）' };
+  }
+  if (input.alreadyReferred) {
+    return { allowed: false, reason: '本案已转介过一次（spec §10：一案最多一次）' };
+  }
+  if (input.distressEntries < NBDPSY_MIN_DISTRESS_ENTRIES) {
+    return { allowed: false, reason: `焦虑/严重记录仅 ${input.distressEntries} 条，未达 ${NBDPSY_MIN_DISTRESS_ENTRIES} 条` };
+  }
+  if (input.distressDistinctDays < NBDPSY_MIN_DISTINCT_DAYS) {
+    return {
+      allowed: false,
+      reason: `记录集中在 ${input.distressDistinctDays} 个自然日内，不构成「持续」（需跨 ≥${NBDPSY_MIN_DISTINCT_DAYS} 日）`,
+    };
+  }
+  return { allowed: true, reason: '满足持续焦虑抑郁表现且未转介过' };
+}
+
+/** 条件 1 的两个阈值（manager 定版：≥2 条且跨 ≥2 个自然日） */
+export const NBDPSY_MIN_DISTRESS_ENTRIES = 2;
+export const NBDPSY_MIN_DISTINCT_DAYS = 2;
+
+/**
+ * 允许推介 NBDpsy 的门槛（charter §5「持续焦虑抑郁表现」的操作化定义）。
+ *
+ * 【为什么不含「本轮触发危机判据」这一分支】我最初的提案带这条，被 team-lead 砍掉——
+ * 理由成立且重要：spec D9 明令「禁止趁人之危观感」，而**急性危机轮正是提付费咨询
+ * 最像趁人之危的时刻**；charter §5 原文也只认「持续焦虑抑郁表现」，危机本身不构成资格。
+ * 危机轮该给的是免费公益热线，不是我们的付费服务。
+ *
+ * 【阈值待 manager 裁】≥2 条是「持续」的提议值，写成常量便于改。
+ */
+export const NBDPSY_PERSISTENT_DISTRESS_THRESHOLD = NBDPSY_MIN_DISTRESS_ENTRIES;
+
 /** 从资源卡正文里抽出热线号码（12356 / 800-810-1117 / 010-82951332 形态） */
 export function extractHotlines(cardBody: string): string[] {
   return [...new Set(cardBody.match(/\b\d{3,4}-\d{3,4}-\d{4}\b|\b\d{3}-\d{8}\b|\b1235\d\b/g) ?? [])];
@@ -248,9 +329,19 @@ export const CRISIS_SAFE_FALLBACK = [
 
 /** 把命中情感杠杆的句子整句剥掉（比重生成快：危机轮不该再等 2-4 分钟） */
 export function stripLeverageSentences(text: string): string {
+  return stripSentencesMatching(text, detectEmotionalLeverage);
+}
+
+/** 把推介付费咨询的句子整句剥掉（不够格时用；复用同一套剥句机制） */
+export function stripNbdpsyPitch(text: string): string {
+  return stripSentencesMatching(text, detectNbdpsyPitch);
+}
+
+/** 按句切分后剔除命中的句子。中文句末标点与换行都算边界。 */
+function stripSentencesMatching(text: string, hit: (s: string) => string | null): string {
   return text
     .split(/(?<=[。！？\n])/)
-    .filter((sentence) => !detectEmotionalLeverage(sentence))
+    .filter((sentence) => !hit(sentence))
     .join('')
     .replace(/\n{3,}/g, '\n\n')
     .trim();

@@ -19,6 +19,7 @@ import type { ToolDef } from '@/lib/llm';
 import type { AgentEventSink } from './events';
 import * as calc from './calc';
 import { citationCorrectionDirective, type CitationGuard } from './citation-guard';
+import { compactCrisisCard, CRISIS_RESOURCE_PACK_ID } from './crisis';
 import * as deadline from '@/lib/deadline';
 import type { InputSource } from './calc';
 import {
@@ -87,6 +88,11 @@ export interface AgentToolContext {
   searcher?: KnowledgeSearcher;
   /** 案号运行时闸门。文书落库前过一遍，查无此号的直接拒收 */
   citations: CitationGuard;
+  /**
+   * 本案 24 小时内是否已给过危机资源卡。
+   * knowledge_search 的返回要据此执行**同一套呈现规则**——见该 handler 内注释。
+   */
+  crisisCardAlreadyGiven: boolean;
   state: TurnState;
   emit: AgentEventSink;
 }
@@ -419,9 +425,18 @@ const HANDLERS: Record<string, Handler> = {
       });
       return ok({ packs: [], note: KNOWLEDGE_MISS_DIRECTIVE });
     }
+    // 【呈现规则必须覆盖每一条文本进上下文的通道】
+    // 实测（S08 补跑，2026-08-20）：混合形态管住了「注入」通道（窗内注入紧凑版），
+    // 但模型在任一轮都能自己调 knowledge_search 把**整卡全文**拉回上下文再复述——
+    // 于是用户连着两轮看见整张卡。这是上一次教训的完整版：
+    // 去重的对象是**用户看到了什么**，那就必须在每一个能把文本送进上下文的通道上执行同一套规则，
+    // 少堵一个通道，模型就从那个通道绕过去。
+    const applyPresentationRule = <T extends { id: string; body: string; title: string }>(p: T): T =>
+      p.id === CRISIS_RESOURCE_PACK_ID && ctx.crisisCardAlreadyGiven ? compactCrisisCard(p) : p;
+
     // 新卡的 body 原样返回，一个字都不摘要——理由见 retrieval.ts KnowledgePack.body 注释
     return ok({
-      packs: packs.map((p) => ({
+      packs: packs.map(applyPresentationRule).map((p) => ({
         id: p.id,
         type: p.type,
         title: p.title,

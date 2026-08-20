@@ -35,7 +35,9 @@ export type NoticeCode =
   /** 模型输出了知识库里不存在的案号，已被运行时闸门拦下（charter §7.1 零编造） */
   | 'CITATION_BLOCKED'
   /** 危机轮回复里检出情感杠杆劝阻（charter §5）。**只告警不阻断**，理由见 orchestrator */
-  | 'EMOTIONAL_LEVERAGE_DETECTED';
+  | 'EMOTIONAL_LEVERAGE_DETECTED'
+  /** 输出里推介了付费心理咨询但不满足 charter §5「持续焦虑抑郁表现」门槛，已剥除 */
+  | 'NBDPSY_PITCH_BLOCKED';
 
 export type AgentEvent =
   | {

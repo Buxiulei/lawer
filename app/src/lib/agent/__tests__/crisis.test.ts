@@ -12,6 +12,10 @@ import {
   assessCrisis,
   compactCrisisCard,
   detectEmotionalLeverage,
+  assessNbdpsyEligibility,
+  detectNbdpsyPitch,
+  NBDPSY_PERSISTENT_DISTRESS_THRESHOLD,
+  stripNbdpsyPitch,
   CRISIS_CARD_MARKER,
   CRISIS_DIRECTIVE,
   CRISIS_RESOURCE_PACK_ID,
@@ -220,5 +224,75 @@ describe('情感杠杆检测：产线与评测共用同一判据', () => {
     '你值得有人接住——不是因为你有用才值得',
   ])('正向表述「%s」零误伤（边界钉的是「把离开当前提」，不是「家人」这个词）', (text) => {
     expect(detectEmotionalLeverage(text)).toBeNull();
+  });
+});
+
+describe('NBDpsy 推介闸：门槛不含危机轮（D9 禁止趁人之危）', () => {
+  it.each([
+    '如果你愿意，我可以帮你约 NBDpsy',
+    '我这边可以帮你接一次专业心理咨询，一次就行',
+    '要不要安排一次心理咨询',
+    '可以对接咨询师预约',
+  ])('推介句「%s」被检出', (t) => {
+    expect(detectNbdpsyPitch(t)).not.toBeNull();
+  });
+
+  it.each([
+    '打 12356，那是免费的公益热线',
+    '工会 12351 和法援 12348 都不要钱',
+    '你身边有人在乎你',
+    '这种感觉在被裁之后很常见',
+  ])('免费公益资源与普通支持不误伤：「%s」', (t) => {
+    expect(detectNbdpsyPitch(t)).toBeNull();
+  });
+
+  it('剥句只去掉推介那一句，其余保留', () => {
+    const out = stripNbdpsyPitch('我在。如果你愿意，我可以帮你约 NBDpsy。现在告诉我你在哪。');
+    expect(out).not.toContain('NBDpsy');
+    expect(out).toContain('我在。');
+    expect(out).toContain('现在告诉我你在哪');
+  });
+
+  it('「持续」阈值是常量，便于 manager 改档', () => {
+    expect(NBDPSY_PERSISTENT_DISTRESS_THRESHOLD).toBe(2);
+  });
+});
+
+describe('NBDpsy 四条件（manager 2026-08-20 定版，全部满足才准提）', () => {
+  const base = { distressEntries: 3, distressDistinctDays: 3, alreadyReferred: false, crisisTurn: false };
+
+  it('资格齐全 → 首提放行', () => {
+    expect(assessNbdpsyEligibility(base).allowed).toBe(true);
+  });
+
+  it('条件1a：只有 1 条记录 → 不准', () => {
+    expect(assessNbdpsyEligibility({ ...base, distressEntries: 1 }).allowed).toBe(false);
+  });
+
+  it('条件1b：**同一天两条不算持续** → 不准（持续的语义在时间跨度）', () => {
+    const r = assessNbdpsyEligibility({ ...base, distressEntries: 2, distressDistinctDays: 1 });
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toContain('不构成「持续」');
+  });
+
+  it('条件1b：跨两个自然日的两条 → 准', () => {
+    expect(assessNbdpsyEligibility({ ...base, distressEntries: 2, distressDistinctDays: 2 }).allowed).toBe(true);
+  });
+
+  it('条件2：已转介过 → 不准（一案最多一次）', () => {
+    const r = assessNbdpsyEligibility({ ...base, alreadyReferred: true });
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toContain('一案最多一次');
+  });
+
+  it('条件3：**危机轮绝对静默**——资格全满足也不准', () => {
+    const r = assessNbdpsyEligibility({ ...base, crisisTurn: true });
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toContain('免费公益热线');
+    expect(r.reason).toContain('D9');
+  });
+
+  it('危机轮的静默优先于其它条件——即使已转介也报危机轮这条', () => {
+    expect(assessNbdpsyEligibility({ ...base, crisisTurn: true, alreadyReferred: true }).reason).toContain('危机轮');
   });
 });

@@ -371,6 +371,71 @@ describe('危机响应：心理危机资源卡强制注入（charter §5）', ()
     expect(sink.of('notice').map((e) => e.data.code)).not.toContain('EMOTIONAL_LEVERAGE_DETECTED');
   });
 
+  it('不够格时**生成前**就禁掉付费咨询推介（流式轮事后剥句救不回已看到的）', async () => {
+    const { provider } = await turn([{ text: 'x', tools: [GOOD_CARD] }]);
+    const system = provider.calls[0][0].content;
+    expect(system).toContain('本轮禁止提及付费心理咨询');
+    expect(system).toContain('趁人之危');
+    expect(system).toContain('给**免费公益资源**');
+  });
+
+  it('同一天两条不算「持续」——前置禁令仍在（持续的语义在时间跨度）', async () => {
+    const f = makeAgentFixture();
+    for (let i = 0; i < 2; i++) {
+      f.db.prepare("INSERT INTO emotion_log (case_id, level, note, created_at) VALUES (?, '严重', 'x', '2026-08-20 09:00:00')").run(f.caseId);
+    }
+    const sink = makeSink();
+    const provider = scriptedProvider([{ text: 'x', tools: [GOOD_CARD] }]);
+    await runTurn({
+      db: f.db, caseId: f.caseId, userId: f.userId, message: '我最近很难受',
+      provider, emit: sink.emit,
+    });
+    expect(provider.calls[0][0].content).toContain('本轮禁止提及付费心理咨询');
+  });
+
+  it('跨两个自然日的两条才算「持续」，前置禁令解除', async () => {
+    const f = makeAgentFixture();
+    for (const day of ['2026-08-19 22:00:00', '2026-08-20 09:00:00']) {
+      f.db.prepare("INSERT INTO emotion_log (case_id, level, note, created_at) VALUES (?, '严重', 'x', ?)").run(f.caseId, day);
+    }
+    const sink = makeSink();
+    const provider = scriptedProvider([{ text: 'x', tools: [GOOD_CARD] }]);
+    await runTurn({
+      db: f.db, caseId: f.caseId, userId: f.userId, message: '我最近很难受',
+      provider, emit: sink.emit,
+    });
+    expect(provider.calls[0][0].content).not.toContain('本轮禁止提及付费心理咨询');
+  });
+
+  it('已转介过则仍然禁止（spec §10 一案最多一次）', async () => {
+    const f = makeAgentFixture();
+    for (let i = 0; i < 3; i++) {
+      f.db.prepare("INSERT INTO emotion_log (case_id, level, note, referred_nbdpsy) VALUES (?, '严重', 'x', ?)").run(f.caseId, i === 0 ? 1 : 0);
+    }
+    const sink = makeSink();
+    const provider = scriptedProvider([{ text: 'x', tools: [GOOD_CARD] }]);
+    await runTurn({
+      db: f.db, caseId: f.caseId, userId: f.userId, message: '我最近很难受',
+      provider, emit: sink.emit,
+    });
+    expect(provider.calls[0][0].content).toContain('本轮禁止提及付费心理咨询');
+  });
+
+  it('模型仍然提了 → 输出侧剥除 + 发 notice（兜底）', async () => {
+    const f = makeAgentFixture();
+    const sink = makeSink();
+    const provider = scriptedProvider([
+      { text: '我在。如果你愿意，我可以帮你约 NBDpsy。现在告诉我你在哪。', tools: [GOOD_CARD] },
+      { text: '' },
+    ]);
+    const res = await runTurn({
+      db: f.db, caseId: f.caseId, userId: f.userId, message: '我最近很难受',
+      provider, emit: sink.emit,
+    });
+    expect((res as RunTurnResult).text).not.toContain('NBDpsy');
+    expect(sink.of('notice').map((e) => e.data.code)).toContain('NBDPSY_PITCH_BLOCKED');
+  });
+
   it('危机轮判为 critical 档（这一轮回错话的代价没有上限）', async () => {
     const { sink } = await turn([{ text: '我在。', tools: [GOOD_CARD] }], {
       message: CRISIS,

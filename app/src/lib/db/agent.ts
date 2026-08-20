@@ -307,6 +307,26 @@ export function recordCrisisCardGiven(db: Database, caseId: number, marker: stri
   ).run(caseId, marker, detail);
 }
 
+/**
+ * 本案「焦虑/严重」情绪记录的条数与**跨越的自然日数**。
+ *
+ * 【为什么要看自然日跨度】（manager 2026-08-20 定版）
+ * 「持续」的语义在**时间跨度**上，不在条数上：同一小时里连记两条只说明那一刻很难受，
+ * 不说明这个人处在持续的焦虑抑郁状态。只数条数会把一次急性发作误判成「持续」，
+ * 而那正是最不该推销付费咨询的时刻。
+ *
+ * 自然日按 ADR-002 canonical 串的日期部分比对（created_at 是 'YYYY-MM-DD HH:MM:SS'，
+ * 取前 10 字符即当日；canonical 恒为 UTC，跨时区不会因为本地时区飘移而多算一天）。
+ */
+export function distressEvidence(db: Database, caseId: number): { entries: number; distinctDays: number } {
+  const row = db
+    .prepare(
+      "SELECT COUNT(*) AS entries, COUNT(DISTINCT substr(created_at, 1, 10)) AS days FROM emotion_log WHERE case_id = ? AND level IN ('焦虑','严重')",
+    )
+    .get(caseId) as { entries: number; days: number };
+  return { entries: row.entries, distinctDays: row.days };
+}
+
 /** 本案是否已经转介过 NBDpsy。spec §10：一案最多提示一次，这是那条红线的判据。 */
 export function hasReferredNbdpsy(db: Database, caseId: number): boolean {
   const row = db

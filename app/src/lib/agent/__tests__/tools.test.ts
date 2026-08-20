@@ -19,6 +19,7 @@ function makeCtx(over: Partial<AgentToolContext> = {}) {
     threadId: 1,
     sourceMessageId: null,
     citations: new CitationGuard(),
+    crisisCardAlreadyGiven: false,
     searcher: fixtureSearcher(),
     state: newTurnState(),
     emit: sink.emit,
@@ -140,6 +141,40 @@ describe('emotion_log：心理转介一案最多一次（spec §10）', () => {
     const res = JSON.parse(run(ctx, 'emotion_log', { level: '低落', refer_nbdpsy: true }).content);
     expect(res.referred).toBe(false);
     expect(res.note).toContain('引流红线');
+  });
+});
+
+describe('knowledge_search：呈现规则覆盖工具通道（去重对象是用户看到了什么）', () => {
+  const CARD = {
+    id: 'data-beijing-qiuzhu-ziyuan',
+    type: '数据卡',
+    title: '北京免费求助资源卡',
+    keywords: [],
+    applies_to: [],
+    region: '北京',
+    confidence: '待核实',
+    updated: '2026-08-19',
+    body: '回龙观医院·北京心理危机研究与干预中心：12356 / 座机 800-810-1117 / 手机 010-82951332，7×24 人工接听',
+  };
+
+  it('已给过时，搜索结果里的资源卡也切成紧凑版——堵住模型自取整卡这条通道', () => {
+    const { ctx } = makeCtx({ searcher: fixtureSearcher([CARD]), crisisCardAlreadyGiven: true });
+    const res = JSON.parse(run(ctx, 'knowledge_search', { query: '心理热线' }).content);
+    expect(res.packs[0].body).toContain('12356');
+    expect(res.packs[0].body).not.toContain('回龙观'); // 整卡描述被裁掉
+    expect(res.packs[0].body).toContain('不要再整张重印');
+  });
+
+  it('还没给过时，搜索结果照常给整张卡（首次需要完整信息）', () => {
+    const { ctx } = makeCtx({ searcher: fixtureSearcher([CARD]), crisisCardAlreadyGiven: false });
+    const res = JSON.parse(run(ctx, 'knowledge_search', { query: '心理热线' }).content);
+    expect(res.packs[0].body).toContain('回龙观');
+  });
+
+  it('其余卡不受影响（规则只针对危机资源卡）', () => {
+    const { ctx } = makeCtx({ crisisCardAlreadyGiven: true });
+    const res = JSON.parse(run(ctx, 'knowledge_search', { query: '被迫解除' }).content);
+    expect(res.packs[0].body).toBe(FIXTURE_PACK.body);
   });
 });
 

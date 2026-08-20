@@ -29,7 +29,10 @@ import {
   CRISIS_CARD_MARKER,
   CRISIS_SAFE_FALLBACK,
   detectEmotionalLeverage,
+  assessNbdpsyEligibility,
+  detectNbdpsyPitch,
   stripLeverageSentences,
+  stripNbdpsyPitch,
   responseGaveCrisisCard,
   shouldInjectCrisisCard,
 } from './crisis';
@@ -169,6 +172,15 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   const crisis = assessCrisis(message);
   /** 危机资源卡正文，供确定性首段抽号码 */
   let crisisCardBody = '';
+
+  // NBDpsy 推介资格：四条件一次算清（manager 2026-08-20 定版），前置禁令与事后兜底共用同一结论
+  const distress = store.distressEvidence(db, caseId);
+  const nbdpsy = assessNbdpsyEligibility({
+    distressEntries: distress.entries,
+    distressDistinctDays: distress.distinctDays,
+    alreadyReferred: snapshot.referredNbdpsy,
+    crisisTurn: crisis.triggered,
+  });
   // 24 小时窗口（manager 裁决）只决定**怎么给**，不决定**给不给**。
   //
   // 【实测教训，C04 S08 2026-08-19】起初把窗口做成「窗内不注入」，结果：模型在轮1（用户只是
@@ -211,6 +223,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     // 一次性的是**资源卡本身**，不是「认真对待自伤表述」这件事。
     crisis: crisis.triggered,
     crisisCardAlreadyGiven: alreadyGiven,
+    // 生成前就决定够不够格提付费咨询——普通轮是流式的，事后剥句救不回用户已经看到的
+    nbdpsyEligible: nbdpsy.allowed,
   });
   const messages: ChatMessage[] = [
     { role: 'system', content: system },
@@ -237,6 +251,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     sourceMessageId: messageId,
     searcher: input.searcher,
     citations,
+    // 工具通道也要执行同一套呈现规则（见 tools.knowledge_search 内注释）
+    crisisCardAlreadyGiven: alreadyGiven,
     state,
     emit,
   };
@@ -359,6 +375,19 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
       emit({ event: 'delta', data: { text: body } });
       text += body;
     }
+  }
+
+  // NBDpsy 推介闸：不满足 charter §5「持续焦虑抑郁表现」门槛就剥掉那句。
+  // 门槛**不含「本轮是危机轮」**——spec D9 禁止趁人之危观感，而急性危机轮正是提付费咨询
+  // 最像趁人之危的时刻；那一刻该给的是免费公益热线，不是我们的付费服务。
+  // 挂在输出侧而不是 emotion_log 工具上：模型可以完全不调工具、直接在正文里提（实测如此），
+  // 输出侧才是所有通道的共同出口——同一模式的第三次绕过，教训见 crisis.ts。
+  if (detectNbdpsyPitch(text) && !nbdpsy.allowed) {
+    text = stripNbdpsyPitch(text);
+    emit({
+      event: 'notice',
+      data: { code: 'NBDPSY_PITCH_BLOCKED', message: `付费咨询推介已剥除：${nbdpsy.reason}。` },
+    });
   }
 
   // 危机轮情感杠杆：**闸门拦了几次**（运维指标），不再是「对用户说了几次」（事故记录）——
