@@ -54,7 +54,7 @@ describe('search', () => {
   });
 
   test('结果按 score 降序且可重复（同分先依据优先再按 id 字典序）', () => {
-    const TYPE_TIEBREAK = ['法条卡', '计算规则', '数据卡', '流程SOP', '文书模板', '话术卡', '判例卡', '情绪指南'];
+    const TYPE_TIEBREAK = ['法条卡', '计算规则', '数据卡', '审查规则', '流程SOP', '文书模板', '话术卡', '判例卡', '情绪指南'];
     const rank = (t: string) => TYPE_TIEBREAK.indexOf(t);
     const first = search('调岗降薪', { limit: 10 });
     const second = search('调岗降薪', { limit: 10 });

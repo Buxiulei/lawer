@@ -15,7 +15,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent / "knowledge"
-TYPES = {"法条卡", "判例卡", "计算规则", "流程SOP", "文书模板", "话术卡", "情绪指南", "数据卡"}
+TYPES = {"法条卡", "判例卡", "计算规则", "流程SOP", "文书模板", "话术卡", "情绪指南", "数据卡", "审查规则"}
 CONFIDENCES = {"原文核实", "二手转述", "待核实"}
 REQUIRED = ["id", "type", "title", "keywords", "applies_to", "sources", "confidence", "updated"]
 INDEX_FIELDS = ["id", "type", "title", "keywords", "applies_to", "region", "confidence", "updated"]
@@ -76,6 +76,20 @@ def check_facts(path: Path, fm: dict, body_norm: str, seen_keys: dict) -> None:
             die(f"{path} hotlines category 非法：{h['category']}")
         if normalize(h["phone"]) not in body_norm:
             die(f"{path} facts 号码 {h['phone']} 未出现在正文（两面不一致）")
+    for r in facts.get("review_rules", []):
+        for field in ("id", "severity", "title", "pattern_hint", "basis", "suggestion"):
+            if field not in r or not r[field]:
+                die(f"{path} review_rules 缺字段 {field}：{r.get('id', r)}")
+        if r["severity"] not in ("must", "strong", "suggest"):
+            die(f"{path} review_rules[{r['id']}].severity 非法：{r['severity']}")
+        if r["id"] in seen_keys:
+            die(f"review_rules id 重复：{r['id']}（{seen_keys[r['id']]} 与 {path}）")
+        seen_keys[r["id"]] = path
+        law_refs = fm.get("law_refs") or []
+        for ref in re.split(r"[；;、]", str(r["basis"])):
+            ref = ref.strip()
+            if ref and not any(ref in str(lr) or str(lr) in ref for lr in law_refs):
+                die(f"{path} review_rules[{r['id']}].basis「{ref}」在 law_refs 中无对应条目")
     for q in facts.get("statute_quotes", []):
         for field in ("law", "article", "text"):
             if field not in q:
