@@ -3,9 +3,10 @@
 import { describe, expect, test } from 'vitest';
 import { FEATURE_LABELS, KNOWN_FEATURE_KEYS, featureLabel, UNKNOWN_FEATURE_LABEL } from '../features';
 
-/** 八个扣费端点的 feature 键全集（新增计费功能须同步补此表与 FEATURE_LABELS）。 */
+/** 生产在用的 feature 键全集（新增计费功能须同步补此表与 FEATURE_LABELS）。
+ *  companywatch 目前只记量不扣费（扣费口径待 M3），但用量明细同样要出中文标签，故一并登记。 */
 const PRODUCTION_FEATURE_KEYS = [
-  'intake', 'companion', 'draft', 'ocr', 'asr', 'attest', 'export', 'knowledge',
+  'intake', 'companion', 'draft', 'ocr', 'asr', 'attest', 'export', 'knowledge', 'companywatch',
 ];
 
 describe('用量功能标签单一事实源', () => {

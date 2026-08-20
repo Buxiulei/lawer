@@ -149,9 +149,15 @@ describe('ensureGongdaoFor · 服务端 gate（余额 ≥ 预计）', () => {
 });
 
 describe('feature 键表一致性', () => {
-  test('KNOWN_ESTIMATE_FEATURES 恰为 features.ts 登记的八个键（同一词表，不许分叉）', () => {
-    expect([...KNOWN_ESTIMATE_FEATURES].sort()).toEqual([...KNOWN_FEATURE_KEYS].sort());
+  /** 已登记标签但只记量不扣费的键：不进估算白名单（无从估、也无须预检余额）。 */
+  const METERED_ONLY_FEATURES = ['companywatch']; // 扣费口径待 M3，届时移出本表并补 SEED
+
+  test('KNOWN_ESTIMATE_FEATURES 恰为 features.ts 登记键去掉只记量不扣费的那些（同一词表，不许分叉）', () => {
+    const chargeable = KNOWN_FEATURE_KEYS.filter((k) => !METERED_ONLY_FEATURES.includes(k));
+    expect([...KNOWN_ESTIMATE_FEATURES].sort()).toEqual(chargeable.sort());
     expect(KNOWN_ESTIMATE_FEATURES.length).toBe(8);
+    // 只记量的键必须已登记标签——用量明细照样要出中文
+    for (const f of METERED_ONLY_FEATURES) expect(KNOWN_FEATURE_KEYS).toContain(f);
   });
 
   test('每个可估算 feature 要么有 SEED 要么有 FIXED_PRICING（不靠兜底默认值蒙混）', () => {

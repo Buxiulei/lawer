@@ -5,7 +5,7 @@ title: 公司注销 / 清算 / 破产：告谁、职工债权怎么走、股东�
 keywords: [公司注销, 简易注销, 清算组, 破产, 职工债权, 无需申报, 优先受偿, 股东责任, 出资人, 吊销营业执照, 提前解散, 财产保全]
 applies_to: [裁员, 协商解除, 欠薪, 仲裁申请, 执行, 证据固定]
 law_refs: [劳动合同法§44, 劳动合同法§46, 企业破产法§48, 企业破产法§113, 劳动争议解释一§29, 劳动争议解释一§30, 劳动争议解释一§48, 劳动争议解释一§49, 司法解释二§16, 工伤保险条例§41, 京高法发〔2024〕534号§27, 京高法发〔2024〕534号§28, 京高法发〔2024〕534号§36, 京高法发〔2024〕534号§37]
-related: [case-hunton-zhuxiao-gudong-16816, case-tiqian-jiesan-buchang-qisuan-20285, sop-zhuan-guanlian-gongsi, statute-jgf-2024-534-jieda-1, statute-fashi-2025-12-jieshi-2, calc-jingji-buchang-n, sop-zhixing-sop, sop-dianzi-shuju-guzheng]
+related: [sop-jianyi-zhuxiao-yiyi, case-hunton-zhuxiao-gudong-16816, case-tiqian-jiesan-buchang-qisuan-20285, sop-zhuan-guanlian-gongsi, statute-jgf-2024-534-jieda-1, statute-fashi-2025-12-jieshi-2, calc-jingji-buchang-n, sop-zhixing-sop, sop-dianzi-shuju-guzheng]
 region: 北京
 sources:
   - http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm
@@ -87,9 +87,8 @@ updated: 2026-08-19
 
 - 公司解散后**董事为清算义务人**，应在解散事由出现之日起 15 日内组成清算组；清算义务人未及时履行清算义务给债权人造成损失的，应当承担赔偿责任；
 - 《公司法解释（二）》（法释〔2008〕6号，2020 年修正）中：股东怠于履行义务导致主要财产、账册、重要文件灭失无法清算的，对公司债务承担**连带清偿责任**；未经清算即办理注销登记导致公司无法清算的，股东/清算义务人对公司债务承担**清偿责任**；办理注销登记时股东或第三人**承诺对公司债务承担责任**的，债权人可主张其承担相应民事责任；
-- **简易注销**中全体投资人作出的**书面承诺**（《市场主体登记管理条例》）；简易注销的公示期天数与异议提出方式。
-
-核实路径：国家法律法规数据库 / 最高人民法院官网 / 国家市场监督管理总局。
+- **简易注销**的条件、全体投资人书面承诺、20 日公示期与债权人异议实操：已单独成卡，
+  条例第 33 条逐字与公司法解释（二）第 19/20 条逐字均见 [[sop-jianyi-zhuxiao-yiyi]]。
 
 ## 动作
 

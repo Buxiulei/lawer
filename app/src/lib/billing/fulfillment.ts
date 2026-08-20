@@ -163,22 +163,46 @@ export function getMembership(db: Database.Database, userId: number): Membership
 /**
  * 幂等种入计费 SKU（三档月卡 + 固定散充面额 + 自定义散充挂靠行）。
  * migrate.ts 不含 SKU 种子，改价改额只此一处；按 name upsert，重复调用安全。
+ * 中配/高配待开发（D3 修订 2026-08-20），entry 为唯一可售档：两档仍保留行与定价草案
+ * （历史订单要按 sku_id 溯源，改回可售也只是把 enabled 翻回 1），但 enabled=0 关掉购买入口。
  */
 export function ensureBillingSkus(db: Database.Database): void {
-  const upsert = (name: string, priceFen: number, gongdao: number) => {
+  const upsert = (name: string, priceFen: number, gongdao: number, enabled: 0 | 1) => {
     const row = db.prepare('SELECT id FROM skus WHERE name=?').get(name) as { id: number } | undefined;
-    if (row) db.prepare('UPDATE skus SET gongdao=?, price_fen=?, enabled=1 WHERE id=?').run(gongdao, priceFen, row.id);
-    else db.prepare('INSERT INTO skus (name, gongdao, price_fen, enabled) VALUES (?,?,?,1)').run(name, gongdao, priceFen);
+    if (row) db.prepare('UPDATE skus SET gongdao=?, price_fen=?, enabled=? WHERE id=?').run(gongdao, priceFen, enabled, row.id);
+    else db.prepare('INSERT INTO skus (name, gongdao, price_fen, enabled) VALUES (?,?,?,?)').run(name, gongdao, priceFen, enabled);
   };
   db.transaction(() => {
     for (const plan of ['entry', 'standard', 'pro'] as const) {
       // 入门档 19.9 元 → 1990 分：priceYuan 可含小数，一律 round 到分
-      upsert(MEMBERSHIP_SKU_NAME[plan], Math.round(MEMBERSHIP[plan].priceYuan * 100), MEMBERSHIP[plan].gongdao);
+      upsert(
+        MEMBERSHIP_SKU_NAME[plan],
+        Math.round(MEMBERSHIP[plan].priceYuan * 100),
+        MEMBERSHIP[plan].gongdao,
+        plan === 'entry' ? 1 : 0,
+      );
     }
-    for (const yuan of RECHARGE_SKU_YUAN) upsert(`散充·${yuan}元`, yuan * 100, rechargeGongdao(yuan));
+    for (const yuan of RECHARGE_SKU_YUAN) upsert(`散充·${yuan}元`, yuan * 100, rechargeGongdao(yuan), 1);
     // 自定义金额散充的挂靠 SKU（orders.sku_id 外键需要一行；实付与公道值按订单动态记）。
     // enabled=0：不进 GET SKU 列表（¥0 占位行对外无意义），orders 路由按名内部引用。
-    upsert(CUSTOM_RECHARGE_SKU_NAME, 0, 0);
-    db.prepare('UPDATE skus SET enabled=0 WHERE name=?').run(CUSTOM_RECHARGE_SKU_NAME);
+    upsert(CUSTOM_RECHARGE_SKU_NAME, 0, 0, 0);
   })();
+}
+
+/**
+ * 下单守门：SKU 不可售（不存在或 enabled=0）即抛。
+ * M3 支付移植建 orders 路由时，下单前必须先走本函数——**这是 disabled 拒单的唯一守门**，
+ * 别处没有第二道，漏调即等于把待开发档与内部挂靠行重新摆上货架。
+ *
+ * 语义分界（钱的事故高发区，两侧混判必错）：
+ *   - 下单侧（本函数）看 enabled —— 现在还能不能卖。
+ *   - 履约侧（fulfillOrder）**有意不看 enabled** —— 履约发生在支付回调，钱已经收了；
+ *     用户下单后 SKU 才被下架（或本就是内部挂靠的散充行），该笔历史订单仍必须照常入账，
+ *     否则就是收了钱不发货。拒单只归下单侧。
+ */
+export function assertSkuSellable(db: Database.Database, skuId: number): void {
+  const sku = db.prepare('SELECT name, enabled FROM skus WHERE id=?').get(skuId) as
+    { name: string; enabled: number } | undefined;
+  if (!sku) throw new Error(`SKU 不存在：${skuId}`);
+  if (sku.enabled !== 1) throw new Error(`SKU 已下架不可售：${skuId}（${sku.name}）`);
 }

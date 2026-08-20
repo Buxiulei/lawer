@@ -20,7 +20,7 @@
 | D1 | 实名制：手机号+邮箱双验证才能用；上传材料绑定实名+存证订单记录；数据加密存储；原件上传 |
 | D2 | 收费只赚 token 钱；点数名「公道值」；计费逻辑照抄问爻「功德」账本 |
 | D3 | 三档套餐：入门=全 DeepSeek；中配=关键环节 Claude；高配=主力 Claude；支持 Claude/GPT/Qwen/DeepSeek。**修订(2026-08-20 用户拍板)：需要 Anthropic key 的中配/高配设为「待开发」不可购**，上线仅售入门档；质量目标以入门档达标为准（闸门+提示词优化，不许把质量赌在换模型上）；key 到位后再开两档 |
-| D4 | MCP+API 开放：用户自己的 agent 直连档案库；下发用户 skill；无 MCP 用户网页全功能；移动端+PC |
+| D4 | MCP+API 开放：用户自己的 agent 直连档案库；下发接入说明；无 MCP 用户网页全功能；移动端+PC。**修订(2026-08-20)：接入面 agent 无关**——用户可能用 Claude/Codex/豆包/WorkBuddy/Trae 等任意 AI：MCP 走标准 Streamable HTTP+通用 JSON 配置；不支持 MCP 的走 REST（manifest 自描述）；接入话术提供 通用/Claude/Codex/仅REST 多版本，Claude skill 仅是其中一个变体 |
 | D5 | 语音：事后录音分析（M5 一期）→ 实时耳语+直接介入（二期，需明确开启并告知对方） |
 | D6 | MVP 主线=解除/裁员/逼迫离职（含 N/N+1/2N、欠薪、年假、加班费、双倍工资、社保、竞业、年终奖）；朝阳深耕，分区差异化；阶段全覆盖（仲裁前博弈→执行→被告应诉） |
 | D7 | 通知复用 NBDpsy：阿里云短信+企业邮/DirectMail+服务号模板消息 |
@@ -142,6 +142,7 @@ lawer/
 | billing | 账本移植+估价预检+支付+兑换码+注册赠送 | 对账脚本 SUM(ledger)=balance；重复回调不双记 |
 | MCP/API | 工具：case_get/update, timeline_add, evidence_upload, docs_ocr, claim_calc, draft_write, knowledge_search, action_*, deadline_list；`/api/manifest` | 用户 Claude 挂 skill 后完成"传证据→固化→列行动卡"全链 |
 | 管理端 | 用户/公道值调整(ADMIN_EMAILS)/兑换码/费率/存证查询 | 发码→用户核销到账 |
+| **companywatch** | **公司主体监控（2026-08-20 用户拍板新增，MCP/API 能力）**：按案件添加被监控主体→调度器每日≥2次经公开渠道（爱企查为主，可插拔源）拉取→diff 出事件：简易注销公告/注销清算备案/经营状态变更/股权法代变更/减资公告/拉取连续失败（静默失效也是告警）。urgent 级（前两类）即时三通道通知+自动落 timeline+生成行动卡（挂债权人异议 SOP）；info 级日报合并。表：company_watches / company_watch_events(只追加)/ 检查日志。工具：company_watch_add/list/events + company_snapshot（按需快照回填 company_profiles）。合规：仅公开信息（D10）、来源留 URL、限频。计费：feature=companywatch 定额（待M3核定，MVP 记量不扣） | 添加监控→模拟注销公告→三通道告警+行动卡出现 |
 
 ## 9. 公道值定价（草案，M3 接入时按官方实价核定费率表）
 

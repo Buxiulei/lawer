@@ -15,6 +15,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   attest: '证据固化',
   export: '材料导出',
   knowledge: '知识检索',
+  companywatch: '公司动态监控', // MVP 记量不扣费，扣费口径待 M3
 };
 
 /** 未登记键的兜底标签（不再直出英文原始键）。 */
