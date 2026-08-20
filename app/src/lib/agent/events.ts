@@ -34,7 +34,11 @@ export type NoticeCode =
   | 'TOOL_INPUT_REJECTED'
   /** 模型输出了知识库里不存在的案号，已被运行时闸门拦下（charter §7.1 零编造） */
   | 'CITATION_BLOCKED'
-  /** 危机轮回复里检出情感杠杆劝阻（charter §5）。**只告警不阻断**，理由见 orchestrator */
+  /**
+   * 危机轮模型输出里检出情感杠杆劝阻（charter §5），**已拦截**：剥除该句，
+   * 剥完仍命中则整段回落确定性安全回复。杠杆内容不会到达用户。
+   * （早期版本只告警不阻断；manager 2026-08-20 混合形态裁决后改为硬拦截。）
+   */
   | 'EMOTIONAL_LEVERAGE_DETECTED'
   /** 输出里推介了付费心理咨询但不满足 charter §5「持续焦虑抑郁表现」门槛，已剥除 */
   | 'NBDPSY_PITCH_BLOCKED';

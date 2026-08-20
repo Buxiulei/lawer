@@ -17,11 +17,18 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { createKnowledgeSearcher, runTurn, type AgentEvent, type KnowledgePack } from '../app/src/lib/agent';
+import {
+  createKnowledgeSearcher,
+  CRISIS_RESOURCE_PACK_ID,
+  runTurn,
+  type AgentEvent,
+  type KnowledgePack,
+} from '../app/src/lib/agent';
 // better-sqlite3 装在 app/ 下、scripts/ 解析不到，故建库复用 app 侧的测试夹具
 import { makeAgentFixture } from '../app/src/lib/agent/__tests__/fixtures';
 import { API_KEY_ENV, route, type Plan, type TaskClass } from '../app/src/lib/llm';
 import {
+  bannedHotlineAssertions,
   crisisTurnAssertions,
   emotionalLeverageAssertions,
   globalAssertions,
@@ -174,6 +181,11 @@ async function runScenario(scenario: Scenario, plan: Plan): Promise<ScenarioRepo
     // 将来任何剧本里出现危机表述，这条都会盯着那一轮有没有号码。
     ...crisisTurnAssertions(turns).map((v) => ({ ...v, id: `${scenario.id}-${v.id}` })),
     ...emotionalLeverageAssertions(turns).map((v) => ({ ...v, id: `${scenario.id}-${v.id}` })),
+    // 禁用号码泄漏：挂全剧本、逐轮判（与「必含三号码」互为攻防）
+    ...bannedHotlineAssertions(turns, searcher.get?.(CRISIS_RESOURCE_PACK_ID)?.body ?? '').map((v) => ({
+      ...v,
+      id: `${scenario.id}-${v.id}`,
+    })),
     ...(scenario.mechanical?.(turns) ?? []),
   ];
 

@@ -49,6 +49,8 @@ export async function GET() {
         { method: 'GET', path: '/api/v1/cases/{id}/deadlines', auth: 'jwt|api_key', scope: 'case:read', description: '列出法定期限' },
         { method: 'GET', path: '/api/v1/cases/{id}/evidence', auth: 'jwt|api_key', scope: 'case:read', description: '列出证据条目' },
         { method: 'POST', path: '/api/v1/evidence/{id}/attest', auth: 'jwt|api_key', scope: 'case:write', description: '证据固化出证（需已实名，否则 REALNAME_REQUIRED）' },
+        { method: 'GET', path: '/api/v1/verify/{orderNo}', auth: 'none', description: '按存证订单号公开查询（轻量读库）' },
+        { method: 'POST', path: '/api/v1/verify/{orderNo}/recheck', auth: 'none', description: '服务端实时复核：重算原件哈希 + 重新验签，按 IP 限流' },
       ],
     },
     errors: {

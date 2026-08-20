@@ -286,10 +286,46 @@ export const NBDPSY_MIN_DISTINCT_DAYS = 2;
  */
 export const NBDPSY_PERSISTENT_DISTRESS_THRESHOLD = NBDPSY_MIN_DISTRESS_ENTRIES;
 
-/** 从资源卡正文里抽出热线号码（12356 / 800-810-1117 / 010-82951332 形态） */
+/**
+ * 从资源卡正文里抽出**心理危机热线**号码。
+ *
+ * 【为什么不能直接全文抓号码】实测事故（S08 5 连跑，2026-08-20）：早期实现对整张卡做正则，
+ * 抽出 8 个号码全塞进确定性首段——里面混进了法援、工会、劳动监察，
+ * 更严重的是混进了卡里**明令禁止输出**的两个号码：
+ *   ⛔ 010-85961236（实为北京市正阳公证处）、010-65060953（官方无踪）
+ * 也就是说，那句我特意写死、号称「最坏的夜里读到的第一句话」，把一个公证处的电话
+ * 给了一个正在说不想活的人。确定性代码写错，比模型说错更难发现——它每次都一样地错。
+ *
+ * 现在两道限制：
+ *   ① **只取「心理热线」小节**（到下一个二级标题为止），法援/工会/监察不在危机首段里给；
+ *   ② **排除卡里标注禁用的号码**（⛔/禁用/绝不输出 所在行里的号码一律剔除）。
+ */
 export function extractHotlines(cardBody: string): string[] {
-  return [...new Set(cardBody.match(/\b\d{3,4}-\d{3,4}-\d{4}\b|\b\d{3}-\d{8}\b|\b1235\d\b/g) ?? [])];
+  // ① 截到「心理热线」小节
+  const start = cardBody.search(/^#{1,4}\s*.*心理热线/m);
+  const section = start >= 0 ? cardBody.slice(start).split(/\n#{1,4}\s(?!.*心理热线)/)[0] : cardBody;
+
+  const banned = bannedHotlines(cardBody);
+  return [...new Set(section.match(PHONE_RE) ?? [])].filter((n) => !banned.has(n));
 }
+
+/**
+ * 卡里用 ⛔ 明令禁止输出的号码（如 010-85961236 实为公证处、010-65060953 官方无踪）。
+ *
+ * 【判据同源】导出给评测侧共用——评测的「禁用号绝不出现」断言与产线的过滤读**同一份名单**，
+ * 且都从卡里现读、不写死在代码里。两边各写一份的话，卡更新时必然有一边落后。
+ */
+export function bannedHotlines(cardBody: string): Set<string> {
+  const banned = new Set<string>();
+  for (const line of cardBody.split('\n')) {
+    if (/⛔|禁用号码|绝不输出/.test(line)) {
+      for (const n of line.match(PHONE_RE) ?? []) banned.add(n);
+    }
+  }
+  return banned;
+}
+
+const PHONE_RE = /\b\d{3,4}-\d{3,4}-\d{4}\b|\b\d{3}-\d{8}\b|\b1235\d\b/g;
 
 /**
  * **确定性首段**：危机判据一触发就毫秒级下发，不经模型（manager 2026-08-20 混合形态裁决）。

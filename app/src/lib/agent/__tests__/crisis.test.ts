@@ -5,6 +5,8 @@
 //   ③ 重复触发只注入一次（案件级去重，且与 NBDpsy 引流是两个独立开关）
 //
 // 这一层是纯函数，所以①②完全离线可断；③要落库，用真库跑。
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import * as store from '@/lib/db/agent';
@@ -13,6 +15,8 @@ import {
   compactCrisisCard,
   detectEmotionalLeverage,
   assessNbdpsyEligibility,
+  buildCrisisOpener,
+  extractHotlines,
   detectNbdpsyPitch,
   NBDPSY_PERSISTENT_DISTRESS_THRESHOLD,
   stripNbdpsyPitch,
@@ -294,5 +298,35 @@ describe('NBDpsy 四条件（manager 2026-08-20 定版，全部满足才准提�
 
   it('危机轮的静默优先于其它条件——即使已转介也报危机轮这条', () => {
     expect(assessNbdpsyEligibility({ ...base, crisisTurn: true, alreadyReferred: true }).reason).toContain('危机轮');
+  });
+});
+
+describe('确定性首段的号码抽取：只给危机热线，且绝不输出卡里禁用的号码', () => {
+  // 用**真实的卡**跑，不用简化夹具——这个 bug 正是简化夹具测不出来的那类
+  const realCard = readFileSync(
+    path.resolve(__dirname, '../../../../../knowledge/packs/data/beijing-qiuzhu-ziyuan.md'),
+    'utf8',
+  );
+
+  it('恰好抽出三个心理危机热线，不多不少', () => {
+    expect(extractHotlines(realCard)).toEqual(['12356', '800-810-1117', '010-82951332']);
+  });
+
+  it('**绝不输出卡里 ⛔ 标注的禁用号码**（010-85961236 实为公证处 / 010-65060953 官方无踪）', () => {
+    const opener = buildCrisisOpener(realCard);
+    expect(opener).not.toContain('010-85961236');
+    expect(opener).not.toContain('010-65060953');
+  });
+
+  it('法援/工会/劳动监察号码不进危机首段（它们不是危机热线）', () => {
+    const opener = buildCrisisOpener(realCard);
+    for (const n of ['010-85963226', '12351', '010-53918580', '12348', '12333']) {
+      expect(opener).not.toContain(n);
+    }
+  });
+
+  it('禁用名单从卡里读，不写死在代码里——卡改了跟着改', () => {
+    const doctored = realCard.replace('⛔ **禁用号码**（agent 绝不输出）：010-85961236', '⛔ **禁用号码**（agent 绝不输出）：12356');
+    expect(extractHotlines(doctored)).not.toContain('12356');
   });
 });
