@@ -142,6 +142,7 @@ lawer/
 | billing | 账本移植+估价预检+支付+兑换码+注册赠送 | 对账脚本 SUM(ledger)=balance；重复回调不双记 |
 | MCP/API | 工具：case_get/update, timeline_add, evidence_upload, docs_ocr, claim_calc, draft_write, knowledge_search, action_*, deadline_list；`/api/manifest` | 用户 Claude 挂 skill 后完成"传证据→固化→列行动卡"全链 |
 | 管理端 | 用户/公道值调整(ADMIN_EMAILS)/兑换码/费率/存证查询 | 发码→用户核销到账 |
+| **companywatch** | **公司主体监控（2026-08-20 用户拍板新增，MCP/API 能力）**：按案件添加被监控主体→调度器每日≥2次经公开渠道（爱企查为主，可插拔源）拉取→diff 出事件：简易注销公告/注销清算备案/经营状态变更/股权法代变更/减资公告/拉取连续失败（静默失效也是告警）。urgent 级（前两类）即时三通道通知+自动落 timeline+生成行动卡（挂债权人异议 SOP）；info 级日报合并。表：company_watches / company_watch_events(只追加)/ 检查日志。工具：company_watch_add/list/events + company_snapshot（按需快照回填 company_profiles）。合规：仅公开信息（D10）、来源留 URL、限频。计费：feature=companywatch 定额（待M3核定，MVP 记量不扣） | 添加监控→模拟注销公告→三通道告警+行动卡出现 |
 
 ## 9. 公道值定价（草案，M3 接入时按官方实价核定费率表）
 
