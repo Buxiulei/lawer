@@ -19,6 +19,7 @@ knowledge/
     scripts/           # 话术卡
     emotion/           # 情绪指南
     data/              # 数据卡（社平/最低工资/基数等硬数字）
+    review-rules/      # 审查规则（合同/文件逐条审查规则库，facts.review_rules 结构化）
 ```
 
 - 文件名 = slug，小写拼音/英文加连字符（如 `lhtf-38-beipo-jiechu.md`）。
@@ -29,7 +30,7 @@ knowledge/
 ```yaml
 ---
 id: statute-lhtf-38-beipo-jiechu
-type: 法条卡          # 法条卡|判例卡|计算规则|流程SOP|文书模板|话术卡|情绪指南|数据卡
+type: 法条卡          # 法条卡|判例卡|计算规则|流程SOP|文书模板|话术卡|情绪指南|数据卡|审查规则
 title: 劳动合同法第38条：被迫解除（劳动者单方解除拿N）
 keywords: [被迫解除, 第38条, 拖欠工资, 未缴社保, 经济补偿]
 applies_to: [逼迫离职, 欠薪, 社保断缴, 协商解除]   # 场景标签，见 §5 受控词表
@@ -64,6 +65,19 @@ facts:
 - `category`: `crisis`（心理危机）| `legal`（法援/法律咨询）| `union`（工会）| `inspection`（人社/监察）——代码按 category 筛线，禁按 name 关键词猜。
 - `key`: 全库唯一的 snake_case 英文键，代码按 key 取数；`source_idx` 指向本卡 sources 数组下标。
 - `statute_quotes.text` 必须与正文引用块**逐字一致**（空白归一后比对）。
+- `review_rules`（审查规则卡，contract-review 消费面）：
+  ```yaml
+  review_rules:
+    - id: ldht-001                    # 全库唯一，<合同类型缩写>-<三位序号>
+      severity: must                  # must=违法/无效/剥夺法定权利 | strong=合法但显失公平/埋雷 | suggest=可优化
+      title: 试用期超过法定上限
+      pattern_hint: 合同期限与试用期长度组合违反 §19 阶梯（如一年期合同约定三个月以上试用期）   # 触发特征描述，给 LLM 不给正则
+      basis: 劳动合同法§19            # 条号，必须同时出现在本卡 law_refs；正文有逐字或经单点事实源卡可溯
+      suggestion: 要求将试用期改为不超过 X 个月，并注明"依《劳动合同法》第十九条"   # 可照抄的修改要求话术
+      negotiation_tip: 试用期工资不得低于转正工资 80%，可一并提   # 可选
+  ```
+  校验：rule id 全库唯一；severity 枚举合法；必填 id/severity/title/pattern_hint/basis/suggestion；
+  basis 中出现的每个条号引用须能在本卡 law_refs 找到对应条目。
 - 校验规则（gen-knowledge-index.py 内建）：values 的 value 必须出现在本卡正文（千分位归一后），
   hotlines 的 phone 必须出现在本卡正文，statute_quotes.text 必须是正文子串；
   全库唯一性：key 不重复；status=forbidden 的号码不得出现在其他任何卡正文。
@@ -84,6 +98,8 @@ facts:
 - **话术卡**：场景 → 对方话术 → 应对话术（可直接照读）→ 禁忌语 → 依据。
 - **情绪指南**：情绪状态识别 → 陪伴话术 → 行动锚点 → 引流红线（遵守 spec §10）。
 - **数据卡**：数据表（值/适用期间/发布机关/文号）→ 用途与常见混用错误 → 更新触发条件。
+- **审查规则**：适用文件类型判定 → 按 severity 分节的规则详解（每条：适用要点/例外/关联判例 related）
+  → 整体审查顺序建议。规则本体在 facts.review_rules，正文写机器装不下的判断力。
 
 ## 4. 质量线
 
@@ -93,7 +109,7 @@ facts:
 3. 法条**逐字**引用原文块，不改写、不省略号截断关键句；转述放「适用要点」。
 4. `confidence` 取整包最低档：正文只要有一处待核实即标 `待核实`。
 5. 每 pack 控制在 200 行内；超长拆分并用 `related` 互链。
-   **例外**：单点事实源汇编卡（见 #6）可放宽行数。
+   **例外**：单点事实源汇编卡（见 #6）与审查规则卡（facts.review_rules 本体占行数大头，拆卡会切碎 contract-review 的单一消费面）可放宽行数。
 6. **单点事实源**（manager 修订 2026-08-19）：被 ≥2 个 pack 引用的文号/数据，
    建一张专卡收录（逐字条目+原文直链），其他 pack 一律经 `related` 引用该卡、
    confidence 跟随该卡，不各自转述——防止核实状态发散。

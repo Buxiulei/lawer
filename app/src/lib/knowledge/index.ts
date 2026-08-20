@@ -11,6 +11,7 @@ export interface PackFacts {
   hotlines?: Array<{ name: string; phone: string; category: 'crisis' | 'legal' | 'union' | 'inspection'; status: 'usable' | 'forbidden'; hours?: string; note?: string }>;
   values?: Array<{ key: string; value: number; unit: string; effective_from: string; confidence: string; source_idx: number }>;
   statute_quotes?: Array<{ law: string; article: string; text: string }>;
+  review_rules?: Array<{ id: string; severity: 'must' | 'strong' | 'suggest'; title: string; pattern_hint: string; basis: string; suggestion: string; negotiation_tip?: string }>;
 }
 
 /** index.json 里一条卡的元数据，字段与文件内 frontmatter 同名同义（ADR-002：updated 保持 YYYY-MM-DD 字符串，不转 Date） */
@@ -142,7 +143,7 @@ function passesFilters(meta: PackMeta, opts: SearchOptions): boolean {
  * 同分时的类型优先序（依据优先）：agent 的重要结论必须引法条/算法依据（charter §3），
  * 所以法条卡、计算规则先于案例与话术出现；判例是佐证不是依据，排最后。
  */
-const TYPE_TIEBREAK = ['法条卡', '计算规则', '数据卡', '流程SOP', '文书模板', '话术卡', '判例卡', '情绪指南'];
+const TYPE_TIEBREAK = ['法条卡', '计算规则', '数据卡', '审查规则', '流程SOP', '文书模板', '话术卡', '判例卡', '情绪指南'];
 
 function typeRank(type: string): number {
   const i = TYPE_TIEBREAK.indexOf(type);
