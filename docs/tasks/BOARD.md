@@ -16,7 +16,7 @@
 - 已合并 PR：#1 scaffold+crypto / #2 29表 / #3 auth+notify / #5 sidecar+deploy / #6 llm路由 / #7 52知识卡 / #8 billing账本+费率种子。main 全绿。
 - PR #9 已合并（清理后复验 315测试+tsc 干净）：api_keys 鉴权+手写 MCP+7 工具+REST。calc_json 类型已批准。WS3 五大页面已合入 ws/frontend（build 零报错），最后一波页面在途今天内提 PR。
 - 在途（各分支持久化，不怕掉线）：WS2 三线=lib/agent（C04验收+PII脱敏+反向还原）、MCP骨架、evidence链，另带 otp/sms 的 nowSql 收尾；WS1 calc 纯函数首批（类型先送审）；WS4 A09+A04 约70卡+loader；WS3 三分支（骨架已好，intake-evidence 完成待复核，workbench/docs-drafts 在途）→合并集成→最后一波页面→PR。
-- 等用户：Anthropic key、服务器选址、退款A案终审、知乎cookie（可选）、援助律师问诊单（公司名→触发调研员公司调查）。
+- 等用户：服务器选址、退款A案终审、知乎cookie（可选）、援助律师问诊单。~~Anthropic key~~→用户拍板：中配/高配标「待开发」，上线仅售入门档（2026-08-20）。
 - 上线前 OPS：两通人工电话核验、LAWER_DATA_KEY 异地备份登记（值已在 .secrets-backup/）。
 
 ## 已完成
