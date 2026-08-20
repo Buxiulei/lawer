@@ -120,6 +120,12 @@
 
 排除留档：**Preline UI**——MIT+“Fair Use License”双许可，含竞品限制/署名/终止条款（"shall not be used to create any product or service that directly competes with Preline UI"），不符宽松许可铁律；**Windmill Dashboard**——license 纯 MIT 但 2024 起无维护、栈老旧。
 
+### 终选（2026-08-20 用户拍板）：组合方案
+- **主骨架**：next-shadcn-dashboard-starter；**区块缺口**：shadcn/ui 官方 Blocks；**数据表格组件**：TailAdmin 免费版按需挖取。三家均 MIT，组合合法。
+- **shadcn/Radix 引入已批准（渐进式）**：新页面用 shadcn 体系；既有手写组件不动、不做存量迁移。
+- **纪律：同一页面内不混两套交互组件**——整页归属一个体系（shadcn 或手写），避免焦点管理/键盘导航行为不一致。
+- 执行顺序：批2 → 新品牌主题重制（基于组合骨架）→ 图谱页直接用新主题。
+
 ## Decisions Log
 | 日期 | 决策 | 理由 |
 |------|------|------|
@@ -128,3 +134,4 @@
 | 2026-08-19 | 系统字体栈不加载 CJK webfont | 移动端体积/弱网 |
 | 2026-08-19 | Tailwind v4 + 手写组件，不引 UI 框架 | manager 规定重型框架需先问；控制体积与风格一致性 |
 | 2026-08-19 | 低调模式 | 地铁偷看场景，隐私即情绪安抚 |
+| 2026-08-20 | 视觉 v2 组合方案 + shadcn/Radix 渐进式引入 | 用户终选；整页单体系纪律防交互不一致 |
