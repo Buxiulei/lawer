@@ -4,7 +4,7 @@ type: 审查规则
 title: 劳动合同逐条审查规则库（北京，23 条：11 must / 8 strong / 4 suggest）
 keywords: [劳动合同审查, 合同体检, 试用期, 违约金, 空白合同, 视为送达, 调岗授权, 工资拆分, 竞业限制, 放弃仲裁]
 applies_to: [调岗降薪, 竞业限制, 加班费, 社保断缴, 欠薪, 双倍工资, 年终奖, 证据固定, 逼迫离职]
-law_refs: [劳动合同法§4, 劳动合同法§14, 劳动合同法§17, 劳动合同法§19, 劳动合同法§20, 劳动合同法§22, 劳动合同法§23, 劳动合同法§25, 劳动合同法§26, 劳动合同法§31, 劳动合同法§83, 劳动合同法§84, 劳动合同法实施条例§13, 劳动合同法实施条例§15, 劳动合同法实施条例§16, 法释〔2025〕12号§13, 法释〔2025〕12号§19, 京高法发〔2024〕534号§55, 京高法发〔2024〕534号§59, 京高法发〔2024〕534号§60, 京高法发〔2024〕534号§61, 北京市工资支付规定§10, 京人社劳发〔2025〕7号, 人社厅发〔2025〕40号]
+law_refs: [劳动合同法§4, 劳动合同法§14, 劳动合同法§17, 劳动合同法§19, 劳动合同法§20, 劳动合同法§22, 劳动合同法§23, 劳动合同法§25, 劳动合同法§26, 劳动合同法§31, 劳动合同法§83, 劳动合同法§84, 劳动合同法实施条例§13, 劳动合同法实施条例§15, 劳动合同法实施条例§16, 法释〔2025〕12号§13, 法释〔2025〕12号§19, 京高法发〔2024〕534号§55, 京高法发〔2024〕534号§59, 京高法发〔2024〕534号§60, 京高法发〔2024〕534号§61, 京高法发〔2024〕534号§50, 京高法发〔2024〕534号§56, 京高法发〔2024〕534号§81, 北京市工资支付规定§10, 京人社劳发〔2025〕7号, 人社厅发〔2025〕40号]
 related: [statute-jgf-2024-534-jieda-1, statute-fashi-2025-12-jieshi-2, statute-beijing-gongzi-zhifu-guiding, statute-rsty-2025-40-jingye-zhiyin, data-beijing-zuidi-gongzi, calc-jingji-buchang-n, calc-weiqian-hetong-shuangbei, calc-jiabanfei, calc-jingye-buchang-weiyuejin, case-gongzi-yiyiqi-wuxiao-bjzc24-3, case-xianjing-tiaokuan-bjzc25-3, case-shebao-yueding-wuxiao-buchang-zgf25-6, case-jingye-fanhua-jianshen-jiaolian-bjzc24-9, case-jingye-gongzi-han-buchang-wuxiao-sz26-4, case-shiye-danwei-peixun-weiyuejin-bjzc24-10, case-jinghu-fuwuqi-sunshi-107, case-shiyongqi-jiechu-minzhu-chengxu-101, sop-shiyongqi-quanli, sop-tiaogang-yingdui, sop-jiangxin-yingdui, sop-yaoqiu-qianzi-wenjian, sop-fuwuqi-baomi-xieyi, sop-shebao-tingjiao-jiangji, sop-wuguding-qixian-hetong, sop-nianzhongjiang-guquan-ticheng, template-xieshang-jiechu-shencha-qingdan]
 region: 北京
 sources:
@@ -116,7 +116,7 @@ facts:
       suggestion: 要求将工作地点具体写明至区县或办公地址，并加注「变更工作地点须经双方书面协商一致」，依据京高法发〔2024〕534 号《解答（一）》第 60 问
       negotiation_tip: 已经签了的不必绝望——第 60 问认定笼统约定属「约定不明」，实际履行地即视为确定的工作地点；但第 61 问要求一旦被调就立刻书面异议，否则实际履行可能被认定为事实变更
     - id: ldht-015
-      severity: strong
+      severity: must
       title: 视为送达条款
       pattern_hint: 出现「公司向合同载明地址或公司邮箱发出的通知，自发出之日起第 X 日视为送达」「员工未及时更新地址的，以原地址寄出即视为送达」等，且适用范围覆盖解除通知、处分决定、调岗通知
       basis: 劳动合同法§26
@@ -178,6 +178,20 @@ facts:
       basis: 劳动合同法§22；劳动合同法实施条例§16
       suggestion: 要求附列有凭证的培训费用清单并写明「违约金不超过用人单位提供的培训费用，且不超过服务期尚未履行部分所应分摊的培训费用」，依据《中华人民共和国劳动合同法》第二十二条、《劳动合同法实施条例》第十六条
       negotiation_tip: 被裁、被违法解除或依第三十八条被迫解除的，均不承担服务期违约金
+    - id: ldht-024
+      severity: must
+      title: 规避无固定期限劳动合同的条款
+      pattern_hint: 合同含"乙方承诺期满后不再续签/自愿放弃订立无固定期限合同请求权"、约定连续工龄自本合同起重新计算、或以关联公司换签主体重新起算合同次数的表述
+      basis: 劳动合同法§14；京高法发〔2024〕534号§50；京高法发〔2024〕534号§81
+      suggestion: 要求删除该条款——连续订立二次固定期限合同后续订应订立无固定期限合同（《劳动合同法》第十四条），预先放弃该权利与换签主体清零工龄的约定不影响法定连续计算（534号解答第50问）
+      negotiation_tip: 已签过一次固定期限合同的，本次续签就是"第二次"，期满即触发无固定期限请求权，别被"重新签"话术带偏
+    - id: ldht-025
+      severity: strong
+      title: 约定不定时或综合计算工时制但无审批依据
+      pattern_hint: 合同写"乙方岗位实行不定时工作制/综合计算工时制，不适用加班费规定"，但未载明人社部门特殊工时审批文号与有效期
+      basis: 劳动合同法§26；京高法发〔2024〕534号§56
+      suggestion: 要求写明特殊工时的审批机关、文号与有效期，或改为标准工时；未经审批的特殊工时约定不能免除加班费支付义务
+      negotiation_tip: 可当场要求出示审批文件；日后主张加班费时，无审批即按标准工时举证（加班认定口径见534号第56问）
 confidence: 待核实
 updated: 2026-08-20
 ---
@@ -388,3 +402,5 @@ updated: 2026-08-20
   → 建议后续以 flk.npc.gov.cn 的 OFD 原文人工比对一次。
 - 【待核实】《劳动合同法实施条例》第十三条、第十五条、第十六条的逐字文本取自中国政府网政策库
   （sources[1]，http 链接）。→ 建议核实该页面现行可访问性并补 https 源。
+
+> 定级修订（manager 裁定 2026-08-20）：ldht-015 视为送达条款由 strong 升 **must**——送达直接决定能否收到仲裁通知、是否被缺席裁决，属程序命脉，剥夺知情救济即无效级。
