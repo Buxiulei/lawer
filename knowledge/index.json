@@ -3613,6 +3613,34 @@
     "path": "packs/sop/jiangxin-yingdui.md"
   },
   {
+    "id": "sop-jianyi-zhuxiao-yiyi",
+    "type": "流程SOP",
+    "title": "简易注销 20 日公示期内的债权人异议实操（阻断公司\"跑路式注销\"）",
+    "keywords": [
+      "简易注销",
+      "债权人异议",
+      "公示期",
+      "20日",
+      "国家企业信用信息公示系统",
+      "gsxt",
+      "阻断注销",
+      "股东责任",
+      "虚假承诺",
+      "清算责任",
+      "companywatch"
+    ],
+    "applies_to": [
+      "裁员",
+      "欠薪",
+      "执行",
+      "证据固定"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-20",
+    "path": "packs/sop/jianyi-zhuxiao-yiyi.md"
+  },
+  {
     "id": "sop-jiaojie-fanyao",
     "type": "流程SOP",
     "title": "公司催促交接后反咬\"未办理交接\"、以此扣补偿的应对",
