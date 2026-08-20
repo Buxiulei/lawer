@@ -47,7 +47,7 @@
 - **sidecar/**：Python 3.11 + FastAPI。电签/时间戳脚本从 `/home/roots/NBDpsy/后端服务/管理后端/scripts/` 移植（`rfc3161_timestamp.py`、`pades_sign.py`、`gen_evidence_pdf.py`、`verify_*.py`、trust_anchors），加 OCR/ASR 编排（DashScope Qwen-VL/Paraformer）。仅内网监听，供 app 调用。
 - **MCP**：跑在 app 内（`/api/mcp` streamable HTTP route handler），鉴权复用 api_keys 表。
 - **前端**：app 内页面（不分仓）。移动优先响应式 + PWA。
-- 部署：Docker Compose（web+sidecar+caddy）；服务器国内/海外可移植，建议国内腾讯云+备案。
+- 部署（2026-08-20 定案）：合并到 **NBDpsy 生产服务器**（211.159.155.210 腾讯云国内，8G/100G数据盘，荷载已核实充足）。数据全放 `/data/lawer/`（SQLite+加密证据库+备份，与 NBDpsy 物理隔离）；app :3010 / sidecar :8110 仅内网；**Caddy 直连** law.nbdpsy.com（自动 TLS）；DNS 用现成 CLOUDFLARE_DNS_API_TOKEN 加 law A 记录→服务器 IP（无需新建 Tunnel token）；**Zero Trust**：主站公开、仅管理后台套 Cloudflare Access 门禁（授权邮箱）；部署对齐 NBDpsy 的 git push→webhook 模式，备份并入 NBDpsy 体系。
 
 ## 5. 系统架构
 
