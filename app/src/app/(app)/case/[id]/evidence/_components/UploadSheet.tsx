@@ -16,6 +16,8 @@ import { CategoryPicker } from './CategoryPicker';
 
 export interface PendingUpload {
   source: UploadSource;
+  /** 原始 File 一路带到上传那一刻：失败重试时不用让用户再选一次 */
+  file: File;
   name: string;
   sizeBytes: number;
 }
