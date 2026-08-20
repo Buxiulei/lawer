@@ -27,22 +27,43 @@ function withMoney(text: string, key: string): ReactNode[] {
   );
 }
 
+/**
+ * 【案号待核实】：服务端拦下编造案号后留的占位（notice: CITATION_BLOCKED）。
+ * 淡色标注表示"此处引用待核实"，不用警报色。
+ */
+const CITE_PENDING = /(【案号待核实】)/g;
+
+function withMarks(text: string, key: string): ReactNode[] {
+  return text.split(CITE_PENDING).flatMap((part, i) =>
+    i % 2 === 1 ? (
+      <span
+        key={`${key}-c${i}`}
+        className="rounded bg-surface-2 px-1 text-[0.92em] text-ink-2"
+      >
+        {part}
+      </span>
+    ) : (
+      withMoney(part, `${key}-w${i}`)
+    ),
+  );
+}
+
 function inline(text: string, key: string): ReactNode[] {
   const out: ReactNode[] = [];
   let cursor = 0;
   let i = 0;
   for (const m of text.matchAll(BOLD)) {
     const at = m.index ?? 0;
-    if (at > cursor) out.push(...withMoney(text.slice(cursor, at), `${key}-t${i}`));
+    if (at > cursor) out.push(...withMarks(text.slice(cursor, at), `${key}-t${i}`));
     out.push(
       <strong key={`${key}-b${i}`} className="font-semibold text-ink">
-        {withMoney(m[1], `${key}-bs${i}`)}
+        {withMarks(m[1], `${key}-bs${i}`)}
       </strong>,
     );
     cursor = at + m[0].length;
     i += 1;
   }
-  out.push(...withMoney(text.slice(cursor), `${key}-e`));
+  out.push(...withMarks(text.slice(cursor), `${key}-e`));
   return out;
 }
 
