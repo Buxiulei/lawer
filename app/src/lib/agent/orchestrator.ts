@@ -170,8 +170,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   // 本处只负责把它说的那张卡取回来（IO）并插到最前——它是本轮唯一真正要紧的那张卡。
   // 不经检索排序：危机表述与资源卡用词天然没有词面交集，靠调权重治不好（见 crisis.ts 文件头）。
   const crisis = assessCrisis(message);
-  /** 危机资源卡正文，供确定性首段抽号码 */
-  let crisisCardBody = '';
+  /** 危机资源卡的结构化事实，供确定性首段取号码与描述（只读 facts，不解析正文） */
+  let crisisCardFacts: KnowledgePack['facts'];
 
   // NBDpsy 推介资格：四条件一次算清（manager 2026-08-20 定版），前置禁令与事后兜底共用同一结论
   const distress = store.distressEvidence(db, caseId);
@@ -200,7 +200,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
       const at = packs.findIndex((p) => p.id === card.id);
       if (at >= 0) packs.splice(at, 1); // 预检索可能也捞到了整张卡，换成该给的那版
       packs.unshift(toInject);
-      crisisCardBody = card.body;
+      crisisCardFacts = card.facts;
     } else {
       // 取不到不是「这个案子没有对应法条」，是安全关键资料缺失/知识库没装好，必须让人看见。
       emit({
@@ -276,7 +276,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   // 非流式的等待由 ① 消解，且危机轮本身稀少，代价可控。
   let text = '';
   if (crisis.triggered) {
-    const opener = buildCrisisOpener(crisisCardBody);
+    // 两态：窗外首次带机构名与时段（描述有安抚价值），窗内复现只给号码行
+    const opener = buildCrisisOpener(crisisCardFacts, { compact: alreadyGiven });
     // deterministic:true —— 心跳不因它停（模型还没开始出字，那 2-4 分钟正是心跳的主场）
     emit({ event: 'delta', data: { text: opener, deterministic: true } });
     text = `${opener}\n\n`;

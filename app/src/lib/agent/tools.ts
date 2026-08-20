@@ -46,6 +46,46 @@ export const DRAFT_KINDS = [
  *  加进来之前不列进 enum——列了模型就会调，然后拿到一个「不支持」的错误。 */
 export const CALC_KINDS = ['N', 'N+1', '2N'] as const;
 
+/** 三倍封顶基数所在的数据卡（值逐年更新，代码里的常量只能当兜底） */
+export const SANBEI_CAP_PACK_ID = 'data-beijing-shepin-fengding';
+
+/**
+ * 从数据卡的**结构化 facts** 里读当前三倍封顶值（分）。
+ *
+ * 【manager 2026-08-20 定式：纯函数保持纯，数据活性归卡】
+ * WS1 的 calc 是纯函数，它的 `SANBEI_CAP_FEN_DEFAULT` 是一个**逐年会变的数字**被写死在代码里——
+ * 卡更新了代码不会变，而这个数直接决定赔偿金额。修法不是去动纯函数，而是在**工具包装层**
+ * 把卡里的当前值注入入参；死常量降级为「卡拿不到时的最后兜底」。
+ *
+ * 【本函数只读 facts，不解析正文】新写的消费者不该再犯「让代码去猜散文」那个错——
+ * 这是号码事故的根因（见 crisis.ts）。facts 基建未到之前，本函数恒返回 null，
+ * 即「卡不可用」是当前常态，走兜底路径（带 notice + calc_json 强制标待核实）。
+ */
+/**
+ * 从数据卡的**结构化 facts** 里读当前三倍封顶基数，返回 { capFen, confidence }。
+ *
+ * 【manager 2026-08-20 定式：纯函数保持纯，数据活性归卡】
+ * WS1 的 calc 是纯函数，其 `SANBEI_CAP_FEN_DEFAULT` 是一个**逐年会变的数字**写死在代码里——
+ * 卡更新了代码不会变，而这个数直接决定赔偿金额。修法不动纯函数，而是在**工具包装层**
+ * 把卡里的当前值注入入参；死常量降级为「卡拿不到时的最后兜底」。
+ *
+ * 【只读 facts，不解析正文】新消费者不该再犯「让代码去猜散文」那个错（见 crisis.ts 的号码事故）。
+ * 【单位换算在这一层做】卡里记的是「元/月」（人读的单位），calc 要「分」——
+ * 换算写在读取处，别让两边各自换一次。
+ */
+export function readSanbeiCap(facts?: KnowledgePack['facts']): { capFen: number; confidence: string } | null {
+  const hit = facts?.values?.find((v) => v?.key === SANBEI_CAP_VALUE_KEY);
+  if (!hit || typeof hit.value !== 'number' || !(hit.value > 0)) return null;
+  if (hit.unit !== '元/月') return null; // 单位不是预期的就别猜，走兜底
+  return { capFen: Math.round(hit.value * 100), confidence: hit.confidence };
+}
+
+/** 期间计算通则卡（逐字条文来源，见 lib/deadline） */
+export const PERIOD_RULE_PACK_ID = 'statute-qijian-jisuan-tongze';
+
+/** 封顶基数在数据卡 values 里的 key */
+export const SANBEI_CAP_VALUE_KEY = 'fengding_jishu_monthly';
+
 /** 与 migrate.ts emotion_log.level 注释逐字对齐 */
 export const EMOTION_LEVELS = ['平稳', '低落', '焦虑', '严重'] as const;
 
@@ -654,9 +694,13 @@ const HANDLERS: Record<string, Handler> = {
     const anchor = str(args.anchor_date);
     if (!rule || !anchor) return reject('rule 与 anchor_date 都必填');
 
+    // 期间计算通则的逐字条文从卡读（不再手抄进代码常量——卡更新代码会跟着变）
+    const ruleCard = ctx.searcher?.get?.(PERIOD_RULE_PACK_ID);
+    const generalRule = deadline.buildPeriodGeneralRule(ruleCard?.facts?.statute_quotes, ruleCard?.confidence);
+
     let computed: deadline.DeadlineComputation;
     try {
-      computed = deadline.computeDeadline(rule, anchor, { days: Number(args.days) });
+      computed = deadline.computeDeadline(rule, anchor, { days: Number(args.days), generalRule });
     } catch (e) {
       return reject(e instanceof Error ? e.message : String(e));
     }
@@ -718,6 +762,35 @@ const HANDLERS: Record<string, Handler> = {
       terminatedAt: sourceOf('terminated_at'),
     };
 
+    // 三倍封顶值：优先取数据卡的当前值，取不到才落到 calc 的内置常量（并如实告知）
+    const capCard = ctx.searcher?.get?.(SANBEI_CAP_PACK_ID);
+    const cap = readSanbeiCap(capCard?.facts);
+    const sanbeiCapFen = cap?.capFen ?? null;
+    if (cap && cap.confidence !== '原文核实') {
+      // 值取到了但卡自己标着待核实——charter §3 要求如实带上这个状态，不能因为「有数」就当它坐实了
+      ctx.emit({
+        event: 'notice',
+        data: {
+          code: 'KNOWLEDGE_MISS',
+          message: `三倍封顶基数取自数据卡当前值，但该值可信度为「${cap.confidence}」——引用金额时须一并告知用户。`,
+        },
+      });
+    }
+    if (sanbeiCapFen === null) {
+      ctx.emit({
+        event: 'notice',
+        data: {
+          code: 'KNOWLEDGE_UNAVAILABLE',
+          message:
+            `三倍封顶基数未能从数据卡 ${SANBEI_CAP_PACK_ID} 取到当前值，本次计算使用代码内置缺省值，` +
+            '结果已标注「社平新值待核实」——引用前须以最新公布值核实。',
+        },
+      });
+    }
+
+    // sanbeiCapFen 传 undefined 时 calc 会用内置常量并自动打上「社平新值待核实」flag
+    const common = { avgMonthlyWageFen: avg, employedFrom, terminatedAt, ...(sanbeiCapFen === null ? {} : { sanbeiCapFen }) };
+
     let result: calc.CalcResult<object>;
     try {
       if (kind === 'N+1') {
@@ -726,11 +799,11 @@ const HANDLERS: Record<string, Handler> = {
           return reject('算 N+1 必须给 last_month_wage_fen（解除前最后一个完整工资月的工资标准，单位分）');
         }
         inputSources.lastMonthWageFen = sourceOf('last_month_wage_fen');
-        result = calc.calcNPlus1({ avgMonthlyWageFen: avg, employedFrom, terminatedAt, lastMonthWageFen: lastMonth, inputSources });
+        result = calc.calcNPlus1({ ...common, lastMonthWageFen: lastMonth, inputSources });
       } else if (kind === '2N') {
-        result = calc.calc2N({ avgMonthlyWageFen: avg, employedFrom, terminatedAt, inputSources });
+        result = calc.calc2N({ ...common, inputSources });
       } else {
-        result = calc.calcN({ avgMonthlyWageFen: avg, employedFrom, terminatedAt, inputSources });
+        result = calc.calcN({ ...common, inputSources });
       }
     } catch (e) {
       // 日期非法一类的输入错误：回喂原文让模型改正，不炸掉整轮

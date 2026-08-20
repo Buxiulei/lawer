@@ -3,7 +3,7 @@
 // 算错一天不是精度问题，是用户的案子没了。
 import { describe, expect, it } from 'vitest';
 
-import { computeDeadline, DEADLINE_RULES, HOLIDAY_CAVEAT } from '../index';
+import { buildPeriodGeneralRule, computeDeadline, DEADLINE_RULES, HOLIDAY_CAVEAT } from '../index';
 
 describe('起算规则：当日起算 vs 次日起算（差的这一天就是生死线本身）', () => {
   it('起诉15日：从签收**次日**起算（北京《解答（一）》第 12 条）', () => {
@@ -102,16 +102,30 @@ describe('末日顺延：周末确定性编码，法定节假日如实标注为�
   });
 });
 
-describe('期间计算通则（依据 WS4 补的通则卡，逐字）', () => {
-  it('推算依据带民诉法 §85 逐字原文与办案规则 §19 桥接', () => {
-    const r = computeDeadline('起诉15日', '2026-08-19');
-    expect(r.derivedFrom).toContain('期间开始的时和日，不计算在期间内');
-    expect(r.derivedFrom).toContain('第八十五条');
-    expect(r.derivedFrom).toContain('第十九条');
+describe('期间计算通则（从卡的 statute_quotes 读逐字条文，不再手抄进代码）', () => {
+  const quotes = [
+    { law: '中华人民共和国民事诉讼法', article: '第八十五条', text: '期间开始的时和日，不计算在期间内。' },
+    { law: '劳动人事争议仲裁办案规则', article: '第十九条', text: '仲裁期间的计算……参照民事诉讼关于期间计算的有关规定执行。' },
+  ];
+
+  it('用卡里的逐字条文拼说明，并如实带上卡的可信度（charter §3）', () => {
+    const rule = buildPeriodGeneralRule(quotes, '待核实');
+    expect(rule).toContain('期间开始的时和日，不计算在期间内');
+    expect(rule).toContain('第八十五条');
+    expect(rule).toContain('第十九条');
+    expect(rule).toContain('待核实');
   });
 
-  it('如实带上依据卡的「待核实」可信度（charter §3）', () => {
-    expect(computeDeadline('起诉15日', '2026-08-19').derivedFrom).toContain('待核实');
+  it('卡读不到时回落内置副本，且**明说可能已陈旧**——不假装依据是新的', () => {
+    const rule = buildPeriodGeneralRule(undefined);
+    expect(rule).toContain('依据卡未取到');
+    expect(rule).toContain('可能已陈旧');
+  });
+
+  it('推算结果带上传入的通则说明', () => {
+    const r = computeDeadline('起诉15日', '2026-08-19', { generalRule: buildPeriodGeneralRule(quotes, '待核实') });
+    expect(r.derivedFrom).toContain('第八十五条');
+    expect(r.derivedFrom).toContain('待核实');
   });
 
   it('每次推算都给「交邮不算过期」的兜底提醒——用户自己跑流程，最后一天常赶不到窗口', () => {

@@ -125,7 +125,12 @@ export const FIXTURE_PACK: KnowledgePack = {
   body: '## 条文原文\n\n> 用人单位有下列情形之一的，劳动者可以解除劳动合同：\n> （二）未及时足额支付劳动报酬的；',
 };
 
-/** 命中就回固定卡；miss=true 时恒空，用来测「检索不到」的降级路径 */
+/** 命中就回固定卡；传空数组即恒空，用来测「检索不到」的降级路径。
+ *  `get` 按 id 精确取——按 id 硬取是危机资源卡与封顶数据卡的实际用法，夹具必须支持，
+ *  否则那两条路径在测试里永远走不到（曾因此漏测过）。 */
 export function fixtureSearcher(packs: KnowledgePack[] = [FIXTURE_PACK]): KnowledgeSearcher {
-  return { search: () => packs };
+  return {
+    search: () => packs,
+    get: (id: string) => packs.find((p) => p.id === id),
+  };
 }

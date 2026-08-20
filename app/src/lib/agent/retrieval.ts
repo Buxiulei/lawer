@@ -28,6 +28,19 @@ export interface KnowledgePack {
    * 可信度是这个产品的生命线，宁可多烧 token 也不能在这里做压缩。
    */
   body: string;
+
+  /**
+   * **结构化事实**（manager 2026-08-20 根治方向）：凡「事实被代码消费」的卡，
+   * 事实应进 frontmatter 结构化字段，代码只读这里，**禁止用正则啃正文散文**。
+   *
+   * 三个读法（WS4 规范）：`values` 按 key 取数、`hotlines` 按 status 过滤、
+   * `statute_quotes` 取逐字条文。形状与 lib/knowledge 的 PackFacts 一致。
+   */
+  facts?: {
+    hotlines?: Array<{ name: string; phone: string; status: 'usable' | 'forbidden'; hours?: string; note?: string }>;
+    values?: Array<{ key: string; value: number; unit: string; effective_from: string; confidence: string }>;
+    statute_quotes?: Array<{ law: string; article: string; text: string }>;
+  };
 }
 
 export interface KnowledgeSearchResult {

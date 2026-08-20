@@ -24,6 +24,9 @@ function toPack(hit: knowledge.PackHit): KnowledgePack {
     confidence: hit.confidence,
     updated: hit.updated,
     body: hit.content,
+    // 结构化事实透传：代码消费事实的**唯一读取面**（manager 2026-08-20 根治方向）。
+    // 正文散文服务人与模型，facts 服务代码，一卡两面。
+    facts: hit.facts,
   };
 }
 

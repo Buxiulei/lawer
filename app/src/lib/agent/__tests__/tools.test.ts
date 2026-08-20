@@ -155,6 +155,13 @@ describe('knowledge_search：呈现规则覆盖工具通道（去重对象是用
     confidence: '待核实',
     updated: '2026-08-19',
     body: '回龙观医院·北京心理危机研究与干预中心：12356 / 座机 800-810-1117 / 手机 010-82951332，7×24 人工接听',
+    facts: {
+      hotlines: [
+        { name: '全国统一心理援助热线', phone: '12356', status: 'usable' as const },
+        { name: '北京心理援助热线·座机线（回龙观医院）', phone: '800-810-1117', status: 'usable' as const },
+        { name: '北京心理援助热线·手机线（回龙观医院）', phone: '010-82951332', status: 'usable' as const },
+      ],
+    },
   };
 
   it('已给过时，搜索结果里的资源卡也切成紧凑版——堵住模型自取整卡这条通道', () => {
@@ -285,6 +292,67 @@ describe('deadline_set / deadline_resolve：日期由代码算，履行后停提
     expect(run(ctx, 'deadline_resolve', { deadline_id: other }).ok).toBe(false);
     const row = f.db.prepare('SELECT resolved_at FROM deadlines WHERE id = ?').get(other) as { resolved_at: string | null };
     expect(row.resolved_at).toBeNull();
+  });
+});
+
+describe('三倍封顶：数据活性归卡，死常量只作兜底（manager 2026-08-20 定式）', () => {
+  const S14 = { avg_monthly_wage_fen: 1_900_000, employed_from: '2019-03-01', terminated_at: '2026-08-19' };
+  const capCard = {
+    id: 'data-beijing-shepin-fengding',
+    type: '数据卡',
+    title: '北京经济补偿三倍封顶基数',
+    keywords: [],
+    applies_to: [],
+    region: '北京',
+    confidence: '待核实',
+    updated: '2026-08-19',
+    body: '（正文散文，代码不解析）',
+  };
+
+  it('facts 未就绪 → 走兜底：发 KNOWLEDGE_UNAVAILABLE + calc_json 强制标「社平新值待核实」', () => {
+    const { f, sink, ctx } = makeCtx({ searcher: fixtureSearcher([capCard]) });
+    const res = JSON.parse(run(ctx, 'claim_calc', { kind: 'N', ...S14 }).content);
+
+    expect(res.flags).toContain('社平新值待核实');
+    const notice = sink.of('notice').find((e) => e.data.code === 'KNOWLEDGE_UNAVAILABLE');
+    expect(notice).toBeDefined();
+    expect(notice!.data.message).toContain('三倍封顶');
+    // 留痕里也带着这个 flag，日后复算能看出当时用的是缺省值
+    const row = f.db.prepare('SELECT calc_json FROM claims WHERE case_id = ?').get(f.caseId) as { calc_json: string };
+    expect(JSON.parse(row.calc_json).flags).toContain('社平新值待核实');
+  });
+
+  it('facts 就绪 → 注入卡里的当前值，不再标待核实', () => {
+    const withFacts = {
+      ...capCard,
+      facts: { values: [{ key: 'fengding_jishu_monthly', value: 50_000, unit: '元/月', effective_from: '2026-01-01', confidence: '原文核实' }] },
+    };
+    const { sink, ctx } = makeCtx({ searcher: fixtureSearcher([withFacts]) });
+    const res = JSON.parse(run(ctx, 'claim_calc', { kind: 'N', ...S14 }).content);
+
+    expect(res.flags).not.toContain('社平新值待核实');
+    expect(res.inputs.sanbeiCapFen).toBe(5_000_000); // 50,000 元/月 → 分
+    expect(sink.of('notice').filter((e) => e.data.code === 'KNOWLEDGE_UNAVAILABLE')).toHaveLength(0);
+  });
+
+  it('注入的封顶值真的参与计算（换个值结果就变）', () => {
+    const low = {
+      ...capCard,
+      facts: { values: [{ key: 'fengding_jishu_monthly', value: 10_000, unit: '元/月', effective_from: '2026-01-01', confidence: '原文核实' }] },
+    };
+    const a = JSON.parse(run(makeCtx({ searcher: fixtureSearcher([low]) }).ctx, 'claim_calc', { kind: 'N', ...S14 }).content);
+    const b = JSON.parse(run(makeCtx({ searcher: fixtureSearcher([capCard]) }).ctx, 'claim_calc', { kind: 'N', ...S14 }).content);
+    expect(a.amount_fen).toBeLessThan(b.amount_fen); // 封顶压低了基数
+  });
+
+  it('单位不符预期时按兜底处理，不拿脏值去算钱（元/分错一位就是百倍）', () => {
+    // 单位不是预期的「元/月」→ 不猜，走兜底
+    const bad = {
+      ...capCard,
+      facts: { values: [{ key: 'fengding_jishu_monthly', value: 47103.25, unit: '分/月', effective_from: '2026-01-01', confidence: '待核实' }] },
+    };
+    const { ctx } = makeCtx({ searcher: fixtureSearcher([bad]) });
+    expect(JSON.parse(run(ctx, 'claim_calc', { kind: 'N', ...S14 }).content).flags).toContain('社平新值待核实');
   });
 });
 

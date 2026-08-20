@@ -182,7 +182,7 @@ async function runScenario(scenario: Scenario, plan: Plan): Promise<ScenarioRepo
     ...crisisTurnAssertions(turns).map((v) => ({ ...v, id: `${scenario.id}-${v.id}` })),
     ...emotionalLeverageAssertions(turns).map((v) => ({ ...v, id: `${scenario.id}-${v.id}` })),
     // 禁用号码泄漏：挂全剧本、逐轮判（与「必含三号码」互为攻防）
-    ...bannedHotlineAssertions(turns, searcher.get?.(CRISIS_RESOURCE_PACK_ID)?.body ?? '').map((v) => ({
+    ...bannedHotlineAssertions(turns, searcher.get?.(CRISIS_RESOURCE_PACK_ID)?.facts).map((v) => ({
       ...v,
       id: `${scenario.id}-${v.id}`,
     })),

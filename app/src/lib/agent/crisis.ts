@@ -176,36 +176,6 @@ export function detectEmotionalLeverage(text: string): string | null {
 }
 
 /**
- * 窗内复现用的**紧凑版**资源卡：只留号码，不带整张卡的描述性内容。
- *
- * 【为什么要在代码里裁，而不是在提示词里求它别重印】
- * 实测（C04 红线 5 连跑）：把「别重印整张卡」写进指令、甚至挪到卡的正下方，
- * 模型照样把整张卡印了两轮，5 轮里挂了 2 轮。**模型印不出它没见过的东西**——
- * 与案号闸门、数字直落同一条定式：能确定性解决的，别靠提示词。
- *
- * 【只裁复现，不裁首次】窗外首次注入仍是整张卡：机构名、24 小时、人工接听这些描述
- * 对第一次拿到号码的人有安抚价值，裁掉是损失（manager 2026-08-19 明确）。
- *
- * 【号码从卡里抽，不写死在代码里】C03 号码更新时只该改卡。抽不出足够号码就
- * **原样退回整张卡**——宁可重印一次，也不能让危机轮少了号码。
- */
-export function compactCrisisCard<T extends { id: string; body: string; title: string }>(card: T): T {
-  // 卡里的号码形态：12356 / 800-810-1117 / 010-82951332
-  const numbers = [...new Set(card.body.match(/\b\d{3,4}-\d{3,4}-\d{4}\b|\b\d{3}-\d{8}\b|\b1235\d\b/g) ?? [])];
-  if (numbers.length < 2) return card; // 抽不出来就别裁，安全方向优先
-  return {
-    ...card,
-    body: [
-      '（本案 24 小时内已给过完整资源卡，此处只保留号码，供你用一句话重述——**不要再整张重印**）',
-      '',
-      `心理危机热线：${numbers.join(' / ')}`,
-      '',
-      '重述示例：「热线还是这三个，随时能打：' + numbers.join(' / ') + '」',
-    ].join('\n'),
-  };
-}
-
-/**
  * NBDpsy / 付费心理咨询的推介句式。
  *
  * 【为什么又要一个确定性开关】`hasReferredNbdpsy` 挂在 emotion_log 工具上，
@@ -286,67 +256,104 @@ export const NBDPSY_MIN_DISTINCT_DAYS = 2;
  */
 export const NBDPSY_PERSISTENT_DISTRESS_THRESHOLD = NBDPSY_MIN_DISTRESS_ENTRIES;
 
-/**
- * 从资源卡正文里抽出**心理危机热线**号码。
- *
- * 【为什么不能直接全文抓号码】实测事故（S08 5 连跑，2026-08-20）：早期实现对整张卡做正则，
- * 抽出 8 个号码全塞进确定性首段——里面混进了法援、工会、劳动监察，
- * 更严重的是混进了卡里**明令禁止输出**的两个号码：
- *   ⛔ 010-85961236（实为北京市正阳公证处）、010-65060953（官方无踪）
- * 也就是说，那句我特意写死、号称「最坏的夜里读到的第一句话」，把一个公证处的电话
- * 给了一个正在说不想活的人。确定性代码写错，比模型说错更难发现——它每次都一样地错。
- *
- * 现在两道限制：
- *   ① **只取「心理热线」小节**（到下一个二级标题为止），法援/工会/监察不在危机首段里给；
- *   ② **排除卡里标注禁用的号码**（⛔/禁用/绝不输出 所在行里的号码一律剔除）。
- */
-export function extractHotlines(cardBody: string): string[] {
-  // ① 截到「心理热线」小节
-  const start = cardBody.search(/^#{1,4}\s*.*心理热线/m);
-  const section = start >= 0 ? cardBody.slice(start).split(/\n#{1,4}\s(?!.*心理热线)/)[0] : cardBody;
-
-  const banned = bannedHotlines(cardBody);
-  return [...new Set(section.match(PHONE_RE) ?? [])].filter((n) => !banned.has(n));
+/** 结构化事实里的一条热线（形状同 lib/knowledge 的 PackFacts.hotlines） */
+export interface HotlineFact {
+  name: string;
+  phone: string;
+  status: 'usable' | 'forbidden';
+  hours?: string;
+  note?: string;
 }
 
 /**
- * 卡里用 ⛔ 明令禁止输出的号码（如 010-85961236 实为公证处、010-65060953 官方无踪）。
+ * 从卡的**结构化 facts** 里取心理危机热线。**不解析正文散文**——
+ * 「让代码去猜散文」正是号码事故的根因（8 个号码里混进公证处电话），已由 manager 定为
+ * 项目级根治方向：正文散文服务人与模型，结构化字段服务代码，一卡两面。
  *
- * 【判据同源】导出给评测侧共用——评测的「禁用号绝不出现」断言与产线的过滤读**同一份名单**，
- * 且都从卡里现读、不写死在代码里。两边各写一份的话，卡更新时必然有一边落后。
+ * 两道过滤：
+ *   ① `status !== 'forbidden'`——禁用与否由卡自己声明，代码不再去正文里找 ⛔；
+ *   ② 只取**心理**类热线——资源卡的 hotlines 里同时装着法援/工会/劳动监察，
+ *      它们不该出现在危机首段（那一刻要的是能接住人的线，不是投诉渠道）。
+ *
+ * 【已知缺口，待 WS4 补】facts 没有 category 字段，②目前只能按 name 含「心理」判。
+ * 这仍是一次**推断**，与我们刚根治的模式同源，只是从散文挪到了结构化字段里。
+ * 已请 WS4 给 hotlines 加 `category: crisis|legal|union|inspection`，补上后这里改成读 category。
+ * 现阶段有针对真实卡的断言兜着：改名或改类会让测试红。
  */
-export function bannedHotlines(cardBody: string): Set<string> {
-  const banned = new Set<string>();
-  for (const line of cardBody.split('\n')) {
-    if (/⛔|禁用号码|绝不输出/.test(line)) {
-      for (const n of line.match(PHONE_RE) ?? []) banned.add(n);
-    }
-  }
-  return banned;
+export function crisisHotlines(facts?: { hotlines?: HotlineFact[] }): HotlineFact[] {
+  const all = facts?.hotlines;
+  if (!Array.isArray(all)) return [];
+  return all.filter((h) => h && h.status !== 'forbidden' && typeof h.phone === 'string' && /心理/.test(h.name ?? ''));
 }
 
-const PHONE_RE = /\b\d{3,4}-\d{3,4}-\d{4}\b|\b\d{3}-\d{8}\b|\b1235\d\b/g;
+/** 卡里声明为禁用的号码（status: forbidden）。评测侧共用这一份（判据同源）。 */
+export function bannedHotlines(facts?: { hotlines?: HotlineFact[] }): Set<string> {
+  const all = facts?.hotlines;
+  if (!Array.isArray(all)) return new Set();
+  return new Set(all.filter((h) => h?.status === 'forbidden' && typeof h.phone === 'string').map((h) => h.phone));
+}
+
+/** 只要号码（紧凑重述用） */
+export function extractHotlines(facts?: { hotlines?: HotlineFact[] }): string[] {
+  return crisisHotlines(facts).map((h) => h.phone);
+}
 
 /**
- * **确定性首段**：危机判据一触发就毫秒级下发，不经模型（manager 2026-08-20 混合形态裁决）。
+ * 窗内复现用的**紧凑版**资源卡：只留号码行。
+ * 走同一个抽取器——早期这里自带内联正则，与首段那次是同一个 bug，只是藏在紧凑版路径里。
+ */
+export function compactCrisisCard<T extends { id: string; body: string; title: string; facts?: { hotlines?: HotlineFact[] } }>(
+  card: T,
+): T {
+  const numbers = extractHotlines(card.facts);
+  if (numbers.length < 2) return card; // 抽不出来就别裁，安全方向优先
+  return {
+    ...card,
+    body: [
+      '（本案 24 小时内已给过完整资源卡，此处只保留号码，供你用一句话重述——**不要再整张重印**）',
+      '',
+      `心理危机热线：${numbers.join(' / ')}`,
+      '',
+      `重述示例：「热线还是这三个，随时能打：${numbers.join(' / ')}」`,
+    ].join('\n'),
+  };
+}
+
+/**
+ * **确定性首段**：危机判据一触发就毫秒级下发，不经模型。
  *
- * 解决的是非流式带来的等待问题：危机轮的模型段要整体生成完、过闸才敢下发，
- * 那期间用户会对着空屏等 2-4 分钟。首段先行让他从第一秒起就有人接住、且**号码立刻到手**——
- * 号码到手这件事本身不该等模型，它是这一轮唯一不能失败的东西。
+ * 【两态，与注入层同一套窗口口径】（manager 混合形态裁决的完整实现）
+ *   · **窗外首次**：带机构名与时段等**描述性内容**——manager 明确说过这些描述有安抚价值，
+ *     第一次拿到号码的人需要知道那头是谁、什么时候有人；
+ *   · **窗内复现**：只给号码行，不重印整张。
+ * 两态都由代码保证，模型给不给都不影响——此前只在注入层做了两态、首段漏了同一口径，
+ * 结果出现「用户拿到号码但一句描述都没有」的失败模式。
  *
- * 文案写死在代码里：这是一个人在最坏的那个夜里读到的第一句话，
+ * 文案骨架写死、事实从卡取：这是一个人在最坏的那个夜里读到的第一句话，
  * 不能有的轮次强有的轮次弱，也不能被模型的即兴发挥改写。
  */
-export function buildCrisisOpener(cardBody: string): string {
-  const numbers = extractHotlines(cardBody);
-  const lines = [
+export function buildCrisisOpener(
+  facts?: { hotlines?: HotlineFact[] },
+  options: { compact?: boolean } = {},
+): string {
+  const lines = crisisHotlines(facts);
+  const head = [
     '我在。你刚才说的话我听见了，不会当作没听见，也不会因为你说「就是想想」就翻过去。',
     '先把号码给你——不用等我说完后面的话，任何时候都能打：',
   ];
-  if (numbers.length) {
-    lines.push('', `**${numbers.join(' / ')}**`, '', '电话那头是受过训练的人，你只说一句「我很难受」他们就懂。');
+  if (lines.length === 0) return head[0];
+
+  if (options.compact) {
+    return [...head, '', `**${lines.map((h) => h.phone).join(' / ')}**`, '', '电话那头是受过训练的人，你只说一句「我很难受」他们就懂。'].join('\n');
   }
-  return lines.join('\n');
+
+  return [
+    ...head,
+    '',
+    ...lines.map((h) => `- **${h.phone}** ${h.name}${h.hours ? `（${h.hours}）` : ''}`),
+    '',
+    '电话那头是受过训练的人，你只说一句「我很难受」他们就懂。',
+  ].join('\n');
 }
 
 /**

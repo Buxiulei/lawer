@@ -134,7 +134,30 @@ export const DEADLINE_RULES: Record<string, DeadlineRule> = {
  * 该卡 confidence 为「待核实」（flk.npc.gov.cn 官方原始页尚未逐字比对，现为维基文库转录
  * + 534 号第 12 问 + 办案规则 §19 三源互证），按 charter §3 引用时如实带上这个状态。
  */
-export const PERIOD_GENERAL_RULE =
+export interface StatuteQuote {
+  law: string;
+  article: string;
+  text: string;
+}
+
+/**
+ * 用卡里的**逐字条文**拼期间计算通则说明。
+ *
+ * 【为什么改成从卡读】原来这段是我**手抄**卡里的条文进代码常量——审计时定为中风险：
+ * 卡更新了代码不会跟着变，而且没有任何东西会报错，条文就那么悄悄陈旧下去。
+ * 现在只读 `facts.statute_quotes`（manager 根治方向：代码只读结构化字段）。
+ *
+ * 卡拿不到时回落到内置常量并**如实标注**——期限推算不能因为卡读不到就停摆，
+ * 但也不能假装依据是新的。
+ */
+export function buildPeriodGeneralRule(quotes?: StatuteQuote[], confidence?: string): string {
+  if (!Array.isArray(quotes) || quotes.length === 0) return `${PERIOD_GENERAL_RULE_FALLBACK}（**依据卡未取到，以上为代码内置副本，可能已陈旧**）`;
+  const cited = quotes.map((q) => `《${q.law}》${q.article}：「${q.text}」`).join('');
+  return `期间计算通则依据 ${cited}（依据卡 statute-qijian-jisuan-tongze，可信度：${confidence ?? '未标注'}）`;
+}
+
+/** 卡不可用时的兜底副本。**只作兜底**，正常路径走 buildPeriodGeneralRule。 */
+export const PERIOD_GENERAL_RULE_FALLBACK =
   '期间计算通则依据《中华人民共和国民事诉讼法》第八十五条：' +
   '「期间以时、日、月、年计算。期间开始的时和日，不计算在期间内。' +
   '期间届满的最后一日是法定休假日的，以法定休假日后的第一日为期间届满的日期。' +
@@ -225,7 +248,7 @@ function addDays(date: Date, days: number): Date {
 export function computeDeadline(
   ruleKey: string,
   anchor: string,
-  options: { days?: number } = {},
+  options: { days?: number; generalRule?: string } = {},
 ): DeadlineComputation {
   const rule = DEADLINE_RULES[ruleKey];
   if (!rule) {
@@ -265,7 +288,7 @@ export function computeDeadline(
     rule,
     derivedFrom:
       `${rule.label}：自 ${fmt(anchorDate)}（${startText}）起 ${spanText} → ${fmt(rolled)}${rolledText}。` +
-      `依据：${rule.basis} ${PERIOD_GENERAL_RULE}`,
+      `依据：${rule.basis} ${options.generalRule ?? buildPeriodGeneralRule()}`,
     caveats: [...(rule.caveats ?? []), HOLIDAY_CAVEAT, MAIL_BEFORE_EXPIRY_CAVEAT],
   };
 }

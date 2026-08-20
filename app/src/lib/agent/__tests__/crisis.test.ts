@@ -13,6 +13,9 @@ import * as store from '@/lib/db/agent';
 import {
   assessCrisis,
   compactCrisisCard,
+  bannedHotlines,
+  crisisHotlines,
+  type HotlineFact,
   detectEmotionalLeverage,
   assessNbdpsyEligibility,
   buildCrisisOpener,
@@ -167,47 +170,6 @@ describe('确定性：与模型、套餐、降级链无关', () => {
   });
 });
 
-describe('窗内注入紧凑版资源卡（模型印不出没见过的整张卡）', () => {
-  const FULL = {
-    id: CRISIS_RESOURCE_PACK_ID,
-    title: '北京免费求助资源卡',
-    body: [
-      '## 心理热线（成对给出，缺一不可）',
-      '| 全国统一心理援助热线（北京由安定医院承接） | **12356** | 24 小时 |',
-      '| 北京心理援助热线（回龙观医院·北京心理危机研究与干预中心） | 座机 **800-810-1117** / 手机 **010-82951332** | 7×24 人工接听 |',
-      '## 法律援助（朝阳）',
-      '- 朝阳区公共法律服务中心：电话 010-85963226',
-    ].join('\n'),
-  };
-
-  it('裁完只剩号码，整张卡的描述性内容不再出现——模型无从重印', () => {
-    const c = compactCrisisCard(FULL);
-    expect(c.body).toContain('12356');
-    expect(c.body).toContain('800-810-1117');
-    expect(c.body).toContain('010-82951332');
-    expect(c.body).not.toContain('回龙观');
-    expect(c.body).not.toContain('安定医院');
-    expect(c.body).not.toContain('人工接听');
-    expect(c.body).toContain('不要再整张重印');
-  });
-
-  it('id 与 title 不变（仍是同一张卡，只是这一轮只给号码）', () => {
-    expect(compactCrisisCard(FULL).id).toBe(FULL.id);
-    expect(compactCrisisCard(FULL).title).toBe(FULL.title);
-  });
-
-  it('号码从卡里抽，不写死在代码里——卡改了裁出来的也跟着改', () => {
-    const changed = { ...FULL, body: '热线 12356 与 座机 800-810-9999 / 手机 010-11112222' };
-    const c = compactCrisisCard(changed);
-    expect(c.body).toContain('800-810-9999');
-    expect(c.body).not.toContain('800-810-1117');
-  });
-
-  it('抽不出足够号码时原样退回整张卡——宁可重印一次，也不能让危机轮少了号码', () => {
-    const noNumbers = { ...FULL, body: '这张卡里没有任何号码' };
-    expect(compactCrisisCard(noNumbers)).toBe(noNumbers);
-  });
-});
 
 describe('情感杠杆检测：产线与评测共用同一判据', () => {
   it.each([
@@ -301,32 +263,68 @@ describe('NBDpsy 四条件（manager 2026-08-20 定版，全部满足才准提�
   });
 });
 
-describe('确定性首段的号码抽取：只给危机热线，且绝不输出卡里禁用的号码', () => {
-  // 用**真实的卡**跑，不用简化夹具——这个 bug 正是简化夹具测不出来的那类
-  const realCard = readFileSync(
-    path.resolve(__dirname, '../../../../../knowledge/packs/data/beijing-qiuzhu-ziyuan.md'),
-    'utf8',
-  );
 
-  it('恰好抽出三个心理危机热线，不多不少', () => {
-    expect(extractHotlines(realCard)).toEqual(['12356', '800-810-1117', '010-82951332']);
+
+
+describe('facts 化后的危机热线抽取（读真实卡的结构化字段，零正则）', () => {
+  /** 从真实卡的 frontmatter 里取 facts —— 与 lib/knowledge 同源的那份 */
+  const realFacts = (() => {
+    const raw = readFileSync(
+      path.resolve(__dirname, '../../../../../knowledge/packs/data/beijing-qiuzhu-ziyuan.md'),
+      'utf8',
+    );
+    const hotlines: HotlineFact[] = [];
+    for (const line of raw.split('\n')) {
+      const m = /\{name:\s*(.+?),\s*phone:\s*"(.+?)",\s*status:\s*(\w+)(?:,\s*hours:\s*(.+?))?(?:,\s*note:.*)?\}/.exec(line);
+      if (m) hotlines.push({ name: m[1], phone: m[2], status: m[3] as 'usable' | 'forbidden', hours: m[4] });
+    }
+    return { hotlines };
+  })();
+
+  it('真实卡里解析出 10 条热线（含 2 条禁用）——夹具本身有效', () => {
+    expect(realFacts.hotlines.length).toBe(10);
+    expect(realFacts.hotlines.filter((h) => h.status === 'forbidden')).toHaveLength(2);
   });
 
-  it('**绝不输出卡里 ⛔ 标注的禁用号码**（010-85961236 实为公证处 / 010-65060953 官方无踪）', () => {
-    const opener = buildCrisisOpener(realCard);
-    expect(opener).not.toContain('010-85961236');
-    expect(opener).not.toContain('010-65060953');
+  it('只取三条心理危机热线，法援/工会/监察/政策咨询都不在内', () => {
+    expect(extractHotlines(realFacts)).toEqual(['12356', '800-810-1117', '010-82951332']);
   });
 
-  it('法援/工会/劳动监察号码不进危机首段（它们不是危机热线）', () => {
-    const opener = buildCrisisOpener(realCard);
-    for (const n of ['010-85963226', '12351', '010-53918580', '12348', '12333']) {
-      expect(opener).not.toContain(n);
+  it('**绝不输出卡里 status: forbidden 的号码**（公证处 / 官方无踪）', () => {
+    const nums = extractHotlines(realFacts);
+    expect(nums).not.toContain('010-85961236');
+    expect(nums).not.toContain('010-65060953');
+    expect([...bannedHotlines(realFacts)]).toEqual(['010-85961236', '010-65060953']);
+  });
+
+  it('首段两态：窗外首次带机构名与时段，窗内复现只给号码行', () => {
+    const first = buildCrisisOpener(realFacts);
+    expect(first).toContain('12356');
+    expect(first).toContain('回龙观');           // 描述性内容在（安抚价值）
+    expect(first).toContain('24小时');
+
+    const repeat = buildCrisisOpener(realFacts, { compact: true });
+    expect(repeat).toContain('12356');
+    expect(repeat).not.toContain('回龙观');       // 复现不重印整张
+  });
+
+  it('两态都不含禁用号与非心理类号码', () => {
+    for (const opener of [buildCrisisOpener(realFacts), buildCrisisOpener(realFacts, { compact: true })]) {
+      for (const n of ['010-85961236', '010-65060953', '010-85963226', '12351', '010-53918580', '12333', '12348']) {
+        expect(opener).not.toContain(n);
+      }
     }
   });
 
-  it('禁用名单从卡里读，不写死在代码里——卡改了跟着改', () => {
-    const doctored = realCard.replace('⛔ **禁用号码**（agent 绝不输出）：010-85961236', '⛔ **禁用号码**（agent 绝不输出）：12356');
-    expect(extractHotlines(doctored)).not.toContain('12356');
+  it('facts 缺失时不编号码——只给那句「我在」，绝不回落去啃正文', () => {
+    expect(buildCrisisOpener(undefined)).toBe('我在。你刚才说的话我听见了，不会当作没听见，也不会因为你说「就是想想」就翻过去。');
+    expect(extractHotlines(undefined)).toEqual([]);
+  });
+
+  it('紧凑版走同一个抽取器，同样不含禁用号', () => {
+    const compact = compactCrisisCard({ id: 'x', title: 'x', body: '正文散文（不解析）', facts: realFacts });
+    expect(compact.body).toContain('12356');
+    expect(compact.body).not.toContain('010-85961236');
+    expect(compact.body).not.toContain('回龙观');
   });
 });
