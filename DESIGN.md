@@ -93,6 +93,33 @@
 ## API 对接约定（前端红线）
 - **存证验证 `/verify`（含公开页 /verify/:no）**：后端即使验签不通过也返回 HTTP 200，**裁决只看响应体 `overall_ok` 字段**。前端绝不许拿 `res.ok`/状态码当验证结果；`overall_ok === false` 时必须明确展示「验证未通过」红态（danger 色允许场景）。`overall_ok === true` 才展示通过绿态。缺字段/解析失败按"无法验证"处理，不得展示为通过。（来源：WS2 sidecar 契约，manager 2026-08-19 转发）
 
+## 视觉方向 v2（spec D13，2026-08-20 用户拍板，重制排批2后）
+
+### NBDpsy 品牌 token（从 /home/roots/NBDpsy/frontend 三端代码提取，以 marketing-web v2 为准）
+- 勃艮第主色：`#8B2942`（light `#A23D55` / dark `#6D1F33`）
+- 淡金辅助：`#B8995E`（哑金亮部 `#D4AF37` / dark `#8A7340`）
+- 米白底：`#FFFCF5` / 暖 `#FAF5EB` / admin `#FAF8F5`；surface `#FFFFFF`；text `#2B1F1A`；border `#E8E4DC`
+- 语义色纪律（重制时执行）：告警/不可逆红**不用** NBDpsy 的 `#B3423A`（与勃艮第区分不足），往亮朱红调并出对比样张报批；期限倒计时独立橙系（`#C07A1A` 方向），避开淡金；深浅双主题+低调模式在新色系下重新映射并实测。
+
+### 开源模板候选（License 已逐字核实原文，留档备查）
+1. **Kiranism/next-shadcn-dashboard-starter**（首选骨架参考）
+   - https://github.com/Kiranism/next-shadcn-dashboard-starter （~6.8k star，活跃）
+   - License：MIT。原文摘录：`MIT License\n\nCopyright (c) 2023 Kiranism`
+   - Next.js 16 + React 19 + Tailwind v4 + shadcn/ui（token=CSS 变量，改色成本最低）；landing+dashboard 全形态
+   - 预览：https://www.shadcn.io/template/kiranism-next-shadcn-dashboard-starter
+   - ⚠ 采用即引入 shadcn/Radix 组件体系，与现有手写组件并存/迁移需拍板
+2. **shadcn/ui 官方 Blocks**（设计语言底座+缺口区块补充）
+   - https://github.com/shadcn-ui/ui （122k star，Vercel 官方）
+   - License：MIT。原文摘录：`MIT License\n\nCopyright (c) 2023 shadcn`
+   - 区块形态（dashboard/sidebar/登录/图表），需自行拼装；预览 https://ui.shadcn.com/blocks
+3. **TailAdmin 免费版**（数据密集组件按需单独移植）
+   - https://github.com/TailAdmin/free-nextjs-admin-dashboard （~2.3k star，2025-12 有提交）
+   - License：MIT。原文摘录：`MIT License\n\nCopyright (c) 2023 TailAdmin`
+   - Next 16+React 19+Tailwind v4；免费版仅 1 个基础 dashboard+50+ 组件，无 landing；非 token 系统改色成本较高
+   - 预览：https://demo.tailadmin.com/
+
+排除留档：**Preline UI**——MIT+“Fair Use License”双许可，含竞品限制/署名/终止条款（"shall not be used to create any product or service that directly competes with Preline UI"），不符宽松许可铁律；**Windmill Dashboard**——license 纯 MIT 但 2024 起无维护、栈老旧。
+
 ## Decisions Log
 | 日期 | 决策 | 理由 |
 |------|------|------|
