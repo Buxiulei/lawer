@@ -101,31 +101,36 @@ export function createMockTransport(): ChatTransport {
       }
 
       const full = script.content;
-      const failAtChars = script.failAt
-        ? Math.floor(full.length * script.failAt.ratio)
-        : Infinity;
-      let sent = 0;
-      while (sent < full.length) {
-        const size =
-          CHUNK_MIN_CHARS +
-          Math.floor(Math.random() * (CHUNK_MAX_CHARS - CHUNK_MIN_CHARS + 1));
-        const next = Math.min(sent + size, full.length);
-        yield { type: 'delta', text: full.slice(sent, next) };
-        sent = next;
-        if (script.failAt && sent >= failAtChars) {
-          yield {
-            type: 'error',
-            code: script.failAt.code,
-            message: script.failAt.message,
-            retry_after: script.failAt.retryAfter,
-          };
-          return;
+      if (script.blockDelivery) {
+        // 危机轮真实形态：正文非流式，过闸后单个大 delta 整块到达
+        yield { type: 'delta', text: full };
+      } else {
+        const failAtChars = script.failAt
+          ? Math.floor(full.length * script.failAt.ratio)
+          : Infinity;
+        let sent = 0;
+        while (sent < full.length) {
+          const size =
+            CHUNK_MIN_CHARS +
+            Math.floor(Math.random() * (CHUNK_MAX_CHARS - CHUNK_MIN_CHARS + 1));
+          const next = Math.min(sent + size, full.length);
+          yield { type: 'delta', text: full.slice(sent, next) };
+          sent = next;
+          if (script.failAt && sent >= failAtChars) {
+            yield {
+              type: 'error',
+              code: script.failAt.code,
+              message: script.failAt.message,
+              retry_after: script.failAt.retryAfter,
+            };
+            return;
+          }
+          await sleep(
+            CHUNK_MIN_MS + Math.random() * (CHUNK_MAX_MS - CHUNK_MIN_MS),
+            signal,
+          );
+          if (signal.aborted) return;
         }
-        await sleep(
-          CHUNK_MIN_MS + Math.random() * (CHUNK_MAX_MS - CHUNK_MIN_MS),
-          signal,
-        );
-        if (signal.aborted) return;
       }
 
       for (const notice of script.notices ?? []) {

@@ -36,6 +36,8 @@ export interface ReplyScript {
   intakeStage?: string | null;
   /** meta 到首个 delta 之间的思考时长；不填按 DEFAULT_THINK_MS */
   thinkMs?: number;
+  /** true = 正文一次性整块下发（危机轮真实形态：非流式，过闸后单个大 delta） */
+  blockDelivery?: boolean;
   records?: ScriptRecord[];
   notices?: { code: NoticeCode; message: string }[];
   drafts?: Omit<DraftFrame, 'type'>[];
@@ -380,6 +382,7 @@ export const scenarioReplies: ReplyScript[] = [
     model: 'claude-opus-5',
     taskClass: 'critical',
     thinkMs: 90_000,
+    blockDelivery: true,
     deterministic: `我在，先别急着做决定。你说的这些我都看到了，这件事不是你一个人扛得住才算数。
 如果这会儿实在撑不住，北京市心理援助热线 010-82951332 可以打，接线的人会听你说完。
 你的材料和时间我都记着，下面的事我们一件一件来。`,
