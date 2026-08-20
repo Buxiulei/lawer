@@ -12,6 +12,11 @@ sources:
   - https://news.qq.com/rain/a/20240625A03N9G00
   - https://rsj.beijing.gov.cn/bm/ywml/202007/t20200717_1950961.html
   - https://www.beijing.gov.cn/zhengce/zhengcefagui/202509/t20250918_4205116.html
+facts:
+  values:
+    - {key: fengding_jishu_monthly, value: 47103.25, unit: 元/月, effective_from: "2024-06-19", confidence: 待核实, source_idx: 1}
+    - {key: geshui_mianzheng_total, value: 565239, unit: 元, effective_from: "2024-06-19", confidence: 待核实, source_idx: 1}
+    - {key: faren_avg_monthly, value: 15701.08, unit: 元/月, effective_from: "2024-06-19", confidence: 待核实, source_idx: 1}
 confidence: 待核实
 updated: 2026-08-19
 ---

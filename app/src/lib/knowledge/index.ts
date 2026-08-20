@@ -6,6 +6,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+/** 结构化事实（规范 §2.1）：被代码消费的数据的唯一读取面——代码只读 facts，禁啃正文散文 */
+export interface PackFacts {
+  hotlines?: Array<{ name: string; phone: string; status: 'usable' | 'forbidden'; hours?: string; note?: string }>;
+  values?: Array<{ key: string; value: number; unit: string; effective_from: string; confidence: string; source_idx: number }>;
+  statute_quotes?: Array<{ law: string; article: string; text: string }>;
+}
+
 /** index.json 里一条卡的元数据，字段与文件内 frontmatter 同名同义（ADR-002：updated 保持 YYYY-MM-DD 字符串，不转 Date） */
 export interface PackMeta {
   id: string;
@@ -17,6 +24,8 @@ export interface PackMeta {
   confidence: string;
   updated: string;
   path: string;
+  /** 仅带结构化事实的卡存在；gen-knowledge-index.py 已做两面一致性校验 */
+  facts?: PackFacts;
 }
 
 /** 检索结果：元数据 + 剥掉 frontmatter 的正文 markdown */

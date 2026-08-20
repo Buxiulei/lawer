@@ -2,12 +2,17 @@
 """从 knowledge/packs/**/*.md 的 frontmatter 再生成 knowledge/index.json。
 
 用法：python3 scripts/gen-knowledge-index.py
-校验：id 唯一、必填字段齐全、type/confidence 枚举合法；失败时报错并退出非零。
+校验：id 唯一、必填字段齐全、type/confidence 枚举合法；
+facts 两面一致性（规范 §2.1）：values/hotlines 的数值与号码必须出现在本卡正文、
+statute_quotes.text 必须与正文逐字一致（空白归一）、facts key 全库唯一、
+status=forbidden 的号码不得出现在其他任何卡正文。失败即退出非零（构建即断）。
 """
 import json
 import re
 import sys
 from pathlib import Path
+
+import yaml
 
 ROOT = Path(__file__).resolve().parent.parent / "knowledge"
 TYPES = {"法条卡", "判例卡", "计算规则", "流程SOP", "文书模板", "话术卡", "情绪指南", "数据卡"}
@@ -16,46 +21,101 @@ REQUIRED = ["id", "type", "title", "keywords", "applies_to", "sources", "confide
 INDEX_FIELDS = ["id", "type", "title", "keywords", "applies_to", "region", "confidence", "updated"]
 
 
-def parse_frontmatter(text: str, path: Path) -> dict:
-    m = re.match(r"\A---\n(.*?)\n---\n", text, re.DOTALL)
+def die(msg: str) -> None:
+    sys.exit(f"错误：{msg}")
+
+
+def normalize(text: str) -> str:
+    """正文归一：去空白/引用符/加粗符/全角空格/千分位逗号，供两面一致性比对。"""
+    return re.sub(r"[\s>＞*　]|(?<=\d)[,，](?=\d)", "", text)
+
+
+def parse(path: Path) -> tuple[dict, str]:
+    text = path.read_text(encoding="utf-8")
+    m = re.match(r"\A---\n(.*?)\n---\n(.*)", text, re.DOTALL)
     if not m:
-        sys.exit(f"错误：{path} 缺少 frontmatter")
-    fm, key = {}, None
-    for line in m.group(1).splitlines():
-        if re.match(r"^\s*-\s+", line) and key:
-            fm[key].append(line.split("-", 1)[1].strip())
-        elif ":" in line:
-            key, _, val = line.partition(":")
-            key, val = key.strip(), val.strip()
-            if val.startswith("[") and val.endswith("]"):
-                fm[key] = [v.strip() for v in val[1:-1].split(",") if v.strip()]
-            elif val == "":
-                fm[key] = []
-            else:
-                fm[key] = val
-    return fm
+        die(f"{path} 缺少 frontmatter")
+    # title 可能以半角引号开头（如 title: "工资异议期"条款无效…），会让 YAML 误判为带引号
+    # 标量；统一把 title 值整体转义成合法 YAML 字符串再解析。
+    fm_text = re.sub(
+        r"^(title:\s*)(.+)$",
+        lambda mm: mm.group(1) + json.dumps(mm.group(2).strip(), ensure_ascii=False),
+        m.group(1),
+        flags=re.M,
+    )
+    try:
+        fm = yaml.safe_load(fm_text)
+    except yaml.YAMLError as e:
+        die(f"{path} frontmatter YAML 解析失败：{e}")
+    return fm, m.group(2)
+
+
+def check_facts(path: Path, fm: dict, body_norm: str, seen_keys: dict) -> None:
+    facts = fm.get("facts") or {}
+    for v in facts.get("values", []):
+        for field in ("key", "value", "unit", "effective_from", "confidence", "source_idx"):
+            if field not in v:
+                die(f"{path} facts.values 缺字段 {field}：{v}")
+        if v["key"] in seen_keys:
+            die(f"facts key 重复：{v['key']}（{seen_keys[v['key']]} 与 {path}）")
+        seen_keys[v["key"]] = path
+        if v["confidence"] not in CONFIDENCES:
+            die(f"{path} facts.values[{v['key']}].confidence 非法：{v['confidence']}")
+        if not 0 <= int(v["source_idx"]) < len(fm.get("sources", [])):
+            die(f"{path} facts.values[{v['key']}].source_idx 越界")
+        num = str(v["value"])
+        if num not in body_norm:
+            die(f"{path} facts 数值 {v['key']}={num} 未出现在正文（两面不一致）")
+    for h in facts.get("hotlines", []):
+        for field in ("name", "phone", "status"):
+            if field not in h:
+                die(f"{path} facts.hotlines 缺字段 {field}：{h}")
+        if h["status"] not in ("usable", "forbidden"):
+            die(f"{path} hotlines status 非法：{h['status']}")
+        if normalize(h["phone"]) not in body_norm:
+            die(f"{path} facts 号码 {h['phone']} 未出现在正文（两面不一致）")
+    for q in facts.get("statute_quotes", []):
+        for field in ("law", "article", "text"):
+            if field not in q:
+                die(f"{path} facts.statute_quotes 缺字段 {field}：{q}")
+        if normalize(q["text"]) not in body_norm:
+            die(f"{path} statute_quotes {q['article']} 与正文不逐字一致")
 
 
 def main() -> None:
-    entries, seen = [], {}
+    entries, seen_ids, seen_keys, forbidden = [], {}, {}, []
+    bodies = {}
     for path in sorted(ROOT.glob("packs/**/*.md")):
-        fm = parse_frontmatter(path.read_text(encoding="utf-8"), path)
+        fm, body = parse(path)
         for field in REQUIRED:
-            if field not in fm or fm[field] in ("", []):
-                sys.exit(f"错误：{path} 缺少必填字段 {field}")
+            if field not in fm or fm[field] in ("", [], None):
+                die(f"{path} 缺少必填字段 {field}")
         if fm["type"] not in TYPES:
-            sys.exit(f"错误：{path} type 非法：{fm['type']}")
+            die(f"{path} type 非法：{fm['type']}")
         if fm["confidence"] not in CONFIDENCES:
-            sys.exit(f"错误：{path} confidence 非法：{fm['confidence']}")
-        if fm["id"] in seen:
-            sys.exit(f"错误：id 重复 {fm['id']}：{seen[fm['id']]} 与 {path}")
-        seen[fm["id"]] = path
-        entry = {f: fm.get(f, "") for f in INDEX_FIELDS}
+            die(f"{path} confidence 非法：{fm['confidence']}")
+        if fm["id"] in seen_ids:
+            die(f"id 重复 {fm['id']}：{seen_ids[fm['id']]} 与 {path}")
+        seen_ids[fm["id"]] = path
+        body_norm = normalize(body)
+        bodies[path] = body_norm
+        check_facts(path, fm, body_norm, seen_keys)
+        for h in (fm.get("facts") or {}).get("hotlines", []):
+            if h["status"] == "forbidden":
+                forbidden.append((normalize(h["phone"]), path))
+        entry = {f: str(fm.get(f, "")) if f == "updated" else fm.get(f, "") for f in INDEX_FIELDS}
         entry["path"] = str(path.relative_to(ROOT))
+        if fm.get("facts"):
+            entry["facts"] = fm["facts"]
         entries.append(entry)
+    # forbidden 号码不得出现在其他卡正文（登记它的资源卡本身除外）
+    for phone, home in forbidden:
+        for path, body_norm in bodies.items():
+            if path != home and phone in body_norm:
+                die(f"禁用号码 {phone} 出现在 {path}（仅允许存在于 {home}）")
     out = ROOT / "index.json"
-    out.write_text(json.dumps(entries, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"OK：{len(entries)} packs → {out}")
+    out.write_text(json.dumps(entries, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
+    print(f"OK：{len(entries)} packs → {out}（facts 卡 {sum(1 for e in entries if 'facts' in e)} 张，facts 校验通过）")
 
 
 if __name__ == "__main__":

@@ -137,3 +137,42 @@ describe('目录解析', () => {
     expect(() => search('被迫解除')).toThrow(/knowledge 索引不存在/);
   });
 });
+
+describe('facts 结构化透传（规范 §2.1：代码只读 facts，禁啃正文散文）', () => {
+  beforeEach(() => {
+    process.env.LAWER_KNOWLEDGE_DIR = KNOWLEDGE_DIR;
+    __resetForTest();
+  });
+
+  test('资源卡 hotlines 透传，含 forbidden 号码供代码层拦截', () => {
+    const card = get('data-beijing-qiuzhu-ziyuan');
+    const hotlines = card.facts?.hotlines ?? [];
+    expect(hotlines.length).toBeGreaterThan(0);
+    expect(hotlines.find((h) => h.phone === '12356')?.status).toBe('usable');
+    const forbidden = hotlines.filter((h) => h.status === 'forbidden').map((h) => h.phone);
+    expect(forbidden).toContain('010-85961236');
+    expect(forbidden).toContain('010-65060953');
+  });
+
+  test('数据卡 values 按 key 取数（claim_calc 消费面）', () => {
+    const values = get('data-beijing-zuidi-gongzi').facts?.values ?? [];
+    expect(values.find((v) => v.key === 'min_wage_monthly')?.value).toBe(2540);
+    expect(values.find((v) => v.key === 'yicai_zhongju_line')?.value).toBe(30480);
+    const fengding = get('data-beijing-shepin-fengding').facts?.values ?? [];
+    expect(fengding.find((v) => v.key === 'fengding_jishu_monthly')?.value).toBe(47103.25);
+  });
+
+  test('期间通则卡 statute_quotes 透传（deadline basis 消费面）', () => {
+    const quotes = get('statute-qijian-jisuan-tongze').facts?.statute_quotes ?? [];
+    const msf = quotes.find((q) => q.article === '第八十五条');
+    expect(msf?.law).toBe('中华人民共和国民事诉讼法');
+    expect(msf?.text).toContain('期间开始的时和日，不计算在期间内');
+    expect(msf?.text).toContain('以法定休假日后的第一日为期间届满的日期');
+  });
+
+  test('search 命中的卡同样带 facts；无 facts 的卡该字段缺省', () => {
+    const hit = search('最低工资', { type: '数据卡' }).find((h) => h.id === 'data-beijing-zuidi-gongzi');
+    expect(hit?.facts?.values?.length).toBeGreaterThan(0);
+    expect(get('statute-lhtf-38-beipo-jiechu').facts).toBeUndefined();
+  });
+});

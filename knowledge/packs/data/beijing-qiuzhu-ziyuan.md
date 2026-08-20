@@ -12,6 +12,18 @@ sources:
   - http://www.bjchy.gov.cn/dynamic/notice/8a24fe976758fe19016759868dce005c.html
   - http://www.bjchy.gov.cn/slh/gsgg/4028805a8a64745f018a6d526a0e04ee.html
   - https://sfj.beijing.gov.cn/sfj/sfdt/ywdt82/flfw93/743831535/index.html
+facts:
+  hotlines:
+    - {name: 全国统一心理援助热线（北京安定医院承接）, phone: "12356", status: usable, hours: 24小时, note: 首选统一入口，偏心理咨询}
+    - {name: 北京心理援助热线·座机线（回龙观医院）, phone: "800-810-1117", status: usable, hours: 官网载7×24（人工核验中）, note: 座机拨打免费，手机打不通，必须与手机线成对给出}
+    - {name: 北京心理援助热线·手机线（回龙观医院）, phone: "010-82951332", status: usable, hours: 官网载7×24（人工核验中）, note: 偏心理危机干预，必须与座机线成对给出}
+    - {name: 朝阳区公共法律服务中心（法律援助受理）, phone: "010-85963226", status: usable, hours: 工作日, note: 六里屯西里7号楼，14号线朝阳公园站D口}
+    - {name: 公共法律服务热线, phone: "12348", status: usable, note: 法援条件咨询}
+    - {name: 北京市职工服务（维权）热线, phone: "12351", status: usable, hours: 365天7×24, note: 工会咨询/帮扶/法援}
+    - {name: 朝阳区劳动保障监察投诉, phone: "010-53918580", status: usable, note: 欠薪投诉，不限农民工}
+    - {name: 人社政策咨询热线, phone: "12333", status: usable, note: 仅政策咨询，不是投诉专线}
+    - {name: 北京市正阳公证处（曾被误传为朝阳法援号）, phone: "010-85961236", status: forbidden, note: 不是法援线，禁止输出}
+    - {name: 官方无踪号码（曾流传为朝阳法援号）, phone: "010-65060953", status: forbidden, note: 官方页面无此号，禁止输出}
 confidence: 待核实
 updated: 2026-08-19
 ---
