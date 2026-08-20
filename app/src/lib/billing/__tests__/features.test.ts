@@ -7,6 +7,7 @@ import { FEATURE_LABELS, KNOWN_FEATURE_KEYS, featureLabel, UNKNOWN_FEATURE_LABEL
  *  companywatch 目前只记量不扣费（扣费口径待 M3），但用量明细同样要出中文标签，故一并登记。 */
 const PRODUCTION_FEATURE_KEYS = [
   'intake', 'companion', 'draft', 'ocr', 'asr', 'attest', 'export', 'knowledge', 'companywatch',
+  'contract_review',
 ];
 
 describe('用量功能标签单一事实源', () => {
