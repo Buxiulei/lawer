@@ -17,6 +17,14 @@ export {
   type RouteTarget,
 } from './routing.config';
 export { emptyUsage } from './types';
+export {
+  createPiiSession,
+  withPiiRedaction,
+  StreamRestorer,
+  OUTBOUND_PROVIDERS,
+  type PiiKind,
+  type PiiSession,
+} from './pii';
 export type {
   ChatMessage,
   ChatStreamOptions,

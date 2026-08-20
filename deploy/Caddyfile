@@ -15,6 +15,16 @@
 		header_up X-Forwarded-Proto {scheme}
 		# LLM 回复走 SSE 流式：禁用响应缓冲，否则整段回复会被攒到最后一次性吐出
 		flush_interval -1
+
+		# 与 lib/llm 的总时长上限（maxDurationMs 900s）对齐。
+		# 推理模型首字前可能思考三四分钟，一轮 tool-loop 叠起来更久；
+		# 读超时短于上游上限的话，Caddy 会先于应用把连接掐断，用户看到的是「莫名其妙断了」。
+		# 应用侧另有 240s 空闲超时与 15s 心跳帧兜底，真挂起不会拖满 900s。
+		transport http {
+			dial_timeout 10s
+			read_timeout 900s
+			write_timeout 900s
+		}
 	}
 
 	# 证据文件与录音上传：放宽请求体上限（默认 Caddy 不限，此处显式声明意图）
@@ -29,6 +39,10 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 	}
 
+	# 注意：SSE 响应带 `Cache-Control: no-transform`（见 chat 路由），
+	# 按 RFC 7234 中间层不得再做编码转换，实测 Caddy 据此**不压缩** text/event-stream，
+	# 所以这条 encode 不会影响流式（2026-08-19 本地 caddy 反代实测：
+	# 经 Caddy 与直连的帧到达节奏一致，响应头无 Content-Encoding）。
 	encode zstd gzip
 
 	log {
