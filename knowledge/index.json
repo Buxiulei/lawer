@@ -7,7 +7,7 @@
       "病假工资",
       "医疗期",
       "80%",
-      "2032",
+      2032,
       "非因工负伤",
       "北京市工资支付规定第21条",
       "劳动合同法第42条"
@@ -30,7 +30,7 @@
       "经济补偿个税",
       "免征",
       "3倍",
-      "565239",
+      565239,
       "财税2001-157号",
       "财税2018-164号",
       "单独计税",
@@ -56,7 +56,7 @@
       "基本生活费",
       "一个工资支付周期",
       "70%",
-      "1778",
+      1778,
       "北京市工资支付规定第27条"
     ],
     "applies_to": [
@@ -105,8 +105,8 @@
       "200%",
       "300%",
       "加班工资基数",
-      "21.75",
-      "20.92",
+      21.75,
+      20.92,
       "综合计算工时",
       "不定时工作制",
       "举证责任"
@@ -184,7 +184,7 @@
       "未休年假",
       "300%",
       "200%差额",
-      "21.75",
+      21.75,
       "折算",
       "累计工作时间",
       "带薪年休假条例"
@@ -1569,8 +1569,8 @@
       "年终奖分摊",
       "应得工资",
       "赔偿金基数",
-      "33740.37",
-      "776028.51",
+      33740.37,
+      776028.51,
       "邮件通知解除",
       "举证不足",
       "钟奇燕"
@@ -2733,16 +2733,16 @@
     "title": "北京免费求助资源卡（心理热线/朝阳法援/工会/劳动监察）",
     "keywords": [
       "心理热线",
-      "12356",
+      12356,
       "回龙观",
       "危机干预",
       "法律援助",
       "朝阳法援",
-      "12348",
-      "12351",
+      12348,
+      12351,
       "工会",
       "劳动监察",
-      "12333",
+      12333,
       "求助电话"
     ],
     "applies_to": [
@@ -2753,7 +2753,76 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/data/beijing-qiuzhu-ziyuan.md"
+    "path": "packs/data/beijing-qiuzhu-ziyuan.md",
+    "facts": {
+      "hotlines": [
+        {
+          "name": "全国统一心理援助热线（北京安定医院承接）",
+          "phone": "12356",
+          "status": "usable",
+          "hours": "24小时",
+          "note": "首选统一入口，偏心理咨询"
+        },
+        {
+          "name": "北京心理援助热线·座机线（回龙观医院）",
+          "phone": "800-810-1117",
+          "status": "usable",
+          "hours": "官网载7×24（人工核验中）",
+          "note": "座机拨打免费，手机打不通，必须与手机线成对给出"
+        },
+        {
+          "name": "北京心理援助热线·手机线（回龙观医院）",
+          "phone": "010-82951332",
+          "status": "usable",
+          "hours": "官网载7×24（人工核验中）",
+          "note": "偏心理危机干预，必须与座机线成对给出"
+        },
+        {
+          "name": "朝阳区公共法律服务中心（法律援助受理）",
+          "phone": "010-85963226",
+          "status": "usable",
+          "hours": "工作日",
+          "note": "六里屯西里7号楼，14号线朝阳公园站D口"
+        },
+        {
+          "name": "公共法律服务热线",
+          "phone": "12348",
+          "status": "usable",
+          "note": "法援条件咨询"
+        },
+        {
+          "name": "北京市职工服务（维权）热线",
+          "phone": "12351",
+          "status": "usable",
+          "hours": "365天7×24",
+          "note": "工会咨询/帮扶/法援"
+        },
+        {
+          "name": "朝阳区劳动保障监察投诉",
+          "phone": "010-53918580",
+          "status": "usable",
+          "note": "欠薪投诉，不限农民工"
+        },
+        {
+          "name": "人社政策咨询热线",
+          "phone": "12333",
+          "status": "usable",
+          "note": "仅政策咨询，不是投诉专线"
+        },
+        {
+          "name": "北京市正阳公证处（曾被误传为朝阳法援号）",
+          "phone": "010-85961236",
+          "status": "forbidden",
+          "note": "不是法援线，禁止输出"
+        },
+        {
+          "name": "官方无踪号码（曾流传为朝阳法援号）",
+          "phone": "010-65060953",
+          "status": "forbidden",
+          "note": "官方页面无此号，禁止输出"
+        }
+      ]
+    }
   },
   {
     "id": "data-beijing-shebao-jishu",
@@ -2763,8 +2832,8 @@
       "社保基数",
       "缴费基数",
       "上下限",
-      "35811",
-      "7162",
+      35811,
+      7162,
       "全口径",
       "城镇单位就业人员平均工资",
       "三倍",
@@ -2788,7 +2857,7 @@
     "keywords": [
       "社平工资",
       "三倍封顶",
-      "47103",
+      47103,
       "法人单位从业人员",
       "全口径",
       "社保基数",
@@ -2802,7 +2871,35 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/data/beijing-shepin-fengding.md"
+    "path": "packs/data/beijing-shepin-fengding.md",
+    "facts": {
+      "values": [
+        {
+          "key": "fengding_jishu_monthly",
+          "value": 47103.25,
+          "unit": "元/月",
+          "effective_from": "2024-06-19",
+          "confidence": "待核实",
+          "source_idx": 1
+        },
+        {
+          "key": "geshui_mianzheng_total",
+          "value": 565239,
+          "unit": "元",
+          "effective_from": "2024-06-19",
+          "confidence": "待核实",
+          "source_idx": 1
+        },
+        {
+          "key": "faren_avg_monthly",
+          "value": 15701.08,
+          "unit": "元/月",
+          "effective_from": "2024-06-19",
+          "confidence": "待核实",
+          "source_idx": 1
+        }
+      ]
+    }
   },
   {
     "id": "data-beijing-shiye-baoxianjin",
@@ -2812,8 +2909,8 @@
       "失业保险金",
       "失业金",
       "北京",
-      "2129",
-      "2286",
+      2129,
+      2286,
       "缴费年限分档",
       "第13个月"
     ],
@@ -2825,7 +2922,59 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/data/beijing-shiye-baoxianjin.md"
+    "path": "packs/data/beijing-shiye-baoxianjin.md",
+    "facts": {
+      "values": [
+        {
+          "key": "ubi_monthly_1_5y",
+          "value": 2129,
+          "unit": "元/月",
+          "effective_from": "2025-09-01",
+          "confidence": "原文核实",
+          "source_idx": 0
+        },
+        {
+          "key": "ubi_monthly_5_10y",
+          "value": 2156,
+          "unit": "元/月",
+          "effective_from": "2025-09-01",
+          "confidence": "原文核实",
+          "source_idx": 0
+        },
+        {
+          "key": "ubi_monthly_10_15y",
+          "value": 2188,
+          "unit": "元/月",
+          "effective_from": "2025-09-01",
+          "confidence": "原文核实",
+          "source_idx": 0
+        },
+        {
+          "key": "ubi_monthly_15_20y",
+          "value": 2215,
+          "unit": "元/月",
+          "effective_from": "2025-09-01",
+          "confidence": "原文核实",
+          "source_idx": 0
+        },
+        {
+          "key": "ubi_monthly_20y_plus",
+          "value": 2286,
+          "unit": "元/月",
+          "effective_from": "2025-09-01",
+          "confidence": "原文核实",
+          "source_idx": 0
+        },
+        {
+          "key": "ubi_monthly_from_month13",
+          "value": 2129,
+          "unit": "元/月",
+          "effective_from": "2025-09-01",
+          "confidence": "原文核实",
+          "source_idx": 0
+        }
+      ]
+    }
   },
   {
     "id": "data-beijing-zhongcai-anliang",
@@ -2838,7 +2987,7 @@
       "98.6%",
       "劳动保障监察",
       "6521件",
-      "12333",
+      12333,
       "城镇调查失业率",
       "新增就业",
       "你不是一个人"
@@ -2861,7 +3010,7 @@
     "keywords": [
       "最低工资",
       "北京",
-      "2540",
+      2540,
       "小时最低工资",
       "非全日制"
     ],
@@ -2873,7 +3022,59 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/data/beijing-zuidi-gongzi.md"
+    "path": "packs/data/beijing-zuidi-gongzi.md",
+    "facts": {
+      "values": [
+        {
+          "key": "min_wage_monthly",
+          "value": 2540,
+          "unit": "元/月",
+          "effective_from": "2025-09-01",
+          "confidence": "原文核实",
+          "source_idx": 0
+        },
+        {
+          "key": "min_wage_hourly",
+          "value": 14.6,
+          "unit": "元/小时",
+          "effective_from": "2025-09-01",
+          "confidence": "原文核实",
+          "source_idx": 0
+        },
+        {
+          "key": "parttime_hourly",
+          "value": 27.7,
+          "unit": "元/小时",
+          "effective_from": "2025-09-01",
+          "confidence": "原文核实",
+          "source_idx": 0
+        },
+        {
+          "key": "parttime_holiday_hourly",
+          "value": 65.1,
+          "unit": "元/小时",
+          "effective_from": "2025-09-01",
+          "confidence": "原文核实",
+          "source_idx": 0
+        },
+        {
+          "key": "daigang_shenghuofei_monthly",
+          "value": 1778,
+          "unit": "元/月",
+          "effective_from": "2025-09-01",
+          "confidence": "原文核实",
+          "source_idx": 0
+        },
+        {
+          "key": "yicai_zhongju_line",
+          "value": 30480,
+          "unit": "元",
+          "effective_from": "2025-09-01",
+          "confidence": "原文核实",
+          "source_idx": 0
+        }
+      ]
+    }
   },
   {
     "id": "emotion-bengkui-jiedian-jijiu",
@@ -3183,7 +3384,7 @@
       "送达回证",
       "签收日期",
       "一裁终局",
-      "30480",
+      30480,
       "15日起诉",
       "撤销裁决",
       "生效证明",
@@ -3208,7 +3409,7 @@
       "朝阳仲裁",
       "立案",
       "将台路5号院",
-      "87983310",
+      87983310,
       "申请仲裁提示",
       "材料清单",
       "一式四份",
@@ -3519,7 +3720,7 @@
       "参保证明",
       "公积金",
       "考勤记录",
-      "12333"
+      12333
     ],
     "applies_to": [
       "证据固定",
@@ -3566,8 +3767,8 @@
     "keywords": [
       "劳动监察",
       "投诉举报",
-      "12333",
-      "12351",
+      12333,
+      12351,
       "工会法律援助",
       "法律援助",
       "监察还是仲裁",
@@ -3945,7 +4146,7 @@
       "公开羞辱",
       "通报批评",
       "事件日志",
-      "12351",
+      12351,
       "工会投诉",
       "仲裁时效"
     ],
@@ -3993,7 +4194,7 @@
     "keywords": [
       "末位淘汰",
       "强制分布",
-      "271",
+      271,
       "指导案例18号",
       "中兴通讯",
       "王鹏",
@@ -4134,7 +4335,7 @@
       "补缴",
       "自愿放弃社保",
       "司法解释二第19条",
-      "12333"
+      12333
     ],
     "applies_to": [
       "社保断缴",
@@ -4538,7 +4739,7 @@
       "10元诉讼费",
       "网上立案",
       "人民法院在线服务",
-      "12368",
+      12368,
       "司法救助",
       "缓交免交"
     ],
@@ -4923,7 +5124,21 @@
     "region": "全国",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/statutes/qijian-jisuan-tongze.md"
+    "path": "packs/statutes/qijian-jisuan-tongze.md",
+    "facts": {
+      "statute_quotes": [
+        {
+          "law": "中华人民共和国民事诉讼法",
+          "article": "第八十五条",
+          "text": "期间包括法定期间和人民法院指定的期间。期间以时、日、月、年计算。期间开始的时和日，不计算在期间内。期间届满的最后一日是法定休假日的，以法定休假日后的第一日为期间届满的日期。期间不包括在途时间，诉讼文书在期满前交邮的，不算过期。"
+        },
+        {
+          "law": "劳动人事争议仲裁办案规则",
+          "article": "第十九条",
+          "text": "仲裁期间包括法定期间和仲裁委员会指定期间。仲裁期间的计算，本规则未规定的，仲裁委员会可以参照民事诉讼关于期间计算的有关规定执行。"
+        }
+      ]
+    }
   },
   {
     "id": "statute-rsty-2025-40-jingye-zhiyin",

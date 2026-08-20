@@ -1,4 +1,4 @@
-# knowledge packs 编译规范 v1.0（manager 2026-08-19 批准）
+# knowledge packs 编译规范 v1.1（manager 2026-08-19 批准；v1.1 增 facts 字段，2026-08-20）
 
 > 供 `lib/knowledge/`（pack 加载与检索）与律师 agent 消费。原料在服务器本地
 > `research/raw/`（不入仓库）；本目录全部为**原创编译产物**，可入库。
@@ -42,6 +42,31 @@ confidence: 原文核实   # 原文核实|二手转述|待核实（取全 pack �
 updated: 2026-08-19
 ---
 ```
+
+## 2.1 facts 结构化字段（v1.1，被代码消费的事实的唯一读取面）
+
+> 事故根治规则（manager 2026-08-20 裁决）：**凡被代码消费的事实，进 frontmatter `facts:`
+> 结构化字段；代码只读 facts，禁止用正则啃卡片散文。** 正文散文服务人与模型，facts 服务代码，
+> 一卡两面；两面数值不一致 = gen-knowledge-index.py 校验失败（构建即断）。
+
+```yaml
+facts:
+  hotlines:            # 资源卡：热线/电话
+    - {name: 全国心理援助热线, phone: "12356", status: usable, hours: 24小时, note: 首选统一入口}
+    - {name: 北京市正阳公证处(误传为法援号), phone: "010-85961236", status: forbidden, note: 禁止输出}
+  values:              # 数据卡：被计算/校验消费的数值
+    - {key: min_wage_monthly, value: 2540, unit: 元/月, effective_from: "2025-09-01", confidence: 原文核实, source_idx: 0}
+  statute_quotes:      # 法条逐字条文（如期间通则供 deadline basis）
+    - {law: 中华人民共和国民事诉讼法, article: 第八十五条, text: "……"}
+```
+
+- `status`: `usable`（可输出给用户）| `forbidden`（已证伪/危险号码，代码层拦截，绝不输出）。
+- `key`: 全库唯一的 snake_case 英文键，代码按 key 取数；`source_idx` 指向本卡 sources 数组下标。
+- `statute_quotes.text` 必须与正文引用块**逐字一致**（空白归一后比对）。
+- 校验规则（gen-knowledge-index.py 内建）：values 的 value 必须出现在本卡正文（千分位归一后），
+  hotlines 的 phone 必须出现在本卡正文，statute_quotes.text 必须是正文子串；
+  全库唯一性：key 不重复；status=forbidden 的号码不得出现在其他任何卡正文。
+- facts 随 index.json 透传给 loader（PackMeta.facts），WS2 adapter 只读它。
 
 ## 3. 各 type 正文骨架
 

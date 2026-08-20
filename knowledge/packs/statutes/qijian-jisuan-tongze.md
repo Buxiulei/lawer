@@ -11,6 +11,10 @@ sources:
   - https://zh.wikisource.org/wiki/中华人民共和国民事诉讼法
   - http://www.bjchy.gov.cn/UserFiles/File/2bb0130a4e614ecdbb06bf2b7933ab77.zip
   - https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf
+facts:
+  statute_quotes:
+    - {law: 中华人民共和国民事诉讼法, article: 第八十五条, text: "期间包括法定期间和人民法院指定的期间。期间以时、日、月、年计算。期间开始的时和日，不计算在期间内。期间届满的最后一日是法定休假日的，以法定休假日后的第一日为期间届满的日期。期间不包括在途时间，诉讼文书在期满前交邮的，不算过期。"}
+    - {law: 劳动人事争议仲裁办案规则, article: 第十九条, text: "仲裁期间包括法定期间和仲裁委员会指定期间。仲裁期间的计算，本规则未规定的，仲裁委员会可以参照民事诉讼关于期间计算的有关规定执行。"}
 confidence: 待核实
 updated: 2026-08-19
 ---

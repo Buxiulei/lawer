@@ -10,6 +10,14 @@ region: 北京
 sources:
   - https://rsj.beijing.gov.cn/xxgk/2024zcwj/202507/t20250729_4161229.html
   - https://www.beijing.gov.cn/fuwu/bmfw/sy/jrts/202507/t20250724_4157680.html
+facts:
+  values:
+    - {key: ubi_monthly_1_5y, value: 2129, unit: 元/月, effective_from: "2025-09-01", confidence: 原文核实, source_idx: 0}
+    - {key: ubi_monthly_5_10y, value: 2156, unit: 元/月, effective_from: "2025-09-01", confidence: 原文核实, source_idx: 0}
+    - {key: ubi_monthly_10_15y, value: 2188, unit: 元/月, effective_from: "2025-09-01", confidence: 原文核实, source_idx: 0}
+    - {key: ubi_monthly_15_20y, value: 2215, unit: 元/月, effective_from: "2025-09-01", confidence: 原文核实, source_idx: 0}
+    - {key: ubi_monthly_20y_plus, value: 2286, unit: 元/月, effective_from: "2025-09-01", confidence: 原文核实, source_idx: 0}
+    - {key: ubi_monthly_from_month13, value: 2129, unit: 元/月, effective_from: "2025-09-01", confidence: 原文核实, source_idx: 0}
 confidence: 原文核实
 updated: 2026-08-19
 ---
