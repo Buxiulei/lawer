@@ -52,8 +52,8 @@ updated: 2026-08-19
 ```yaml
 facts:
   hotlines:            # 资源卡：热线/电话
-    - {name: 全国心理援助热线, phone: "12356", status: usable, hours: 24小时, note: 首选统一入口}
-    - {name: 北京市正阳公证处(误传为法援号), phone: "010-85961236", status: forbidden, note: 禁止输出}
+    - {name: 全国心理援助热线, phone: "12356", category: crisis, status: usable, hours: 24小时, note: 首选统一入口}
+    - {name: 北京市正阳公证处(误传为法援号), phone: "010-85961236", category: legal, status: forbidden, note: 禁止输出}
   values:              # 数据卡：被计算/校验消费的数值
     - {key: min_wage_monthly, value: 2540, unit: 元/月, effective_from: "2025-09-01", confidence: 原文核实, source_idx: 0}
   statute_quotes:      # 法条逐字条文（如期间通则供 deadline basis）
@@ -61,6 +61,7 @@ facts:
 ```
 
 - `status`: `usable`（可输出给用户）| `forbidden`（已证伪/危险号码，代码层拦截，绝不输出）。
+- `category`: `crisis`（心理危机）| `legal`（法援/法律咨询）| `union`（工会）| `inspection`（人社/监察）——代码按 category 筛线，禁按 name 关键词猜。
 - `key`: 全库唯一的 snake_case 英文键，代码按 key 取数；`source_idx` 指向本卡 sources 数组下标。
 - `statute_quotes.text` 必须与正文引用块**逐字一致**（空白归一后比对）。
 - 校验规则（gen-knowledge-index.py 内建）：values 的 value 必须出现在本卡正文（千分位归一后），
