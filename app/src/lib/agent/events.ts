@@ -33,7 +33,9 @@ export type NoticeCode =
   /** 模型请求的工具调用参数不合法，已回喂错误让它改正 */
   | 'TOOL_INPUT_REJECTED'
   /** 模型输出了知识库里不存在的案号，已被运行时闸门拦下（charter §7.1 零编造） */
-  | 'CITATION_BLOCKED';
+  | 'CITATION_BLOCKED'
+  /** 危机轮回复里检出情感杠杆劝阻（charter §5）。**只告警不阻断**，理由见 orchestrator */
+  | 'EMOTIONAL_LEVERAGE_DETECTED';
 
 export type AgentEvent =
   | {
@@ -51,7 +53,18 @@ export type AgentEvent =
       };
     }
   /** 正文增量。PII 占位符已在 lib/llm 出口还原成真值（见 llm/pii.ts） */
-  | { event: 'delta'; data: { text: string } }
+  | {
+      event: 'delta';
+      data: {
+        text: string;
+        /**
+         * true = 由代码直接下发的确定性文本（危机轮首段），不是模型产出。
+         * 心跳据此判断「模型还没开始出字」，继续跑——否则首段一到就把心跳停了，
+         * 而危机轮的模型段恰恰是非流式的，那 2-4 分钟正是心跳的主场。
+         */
+        deterministic?: boolean;
+      };
+    }
   /**
    * 心跳。**只在 meta 之后、首个 delta 之前**按固定间隔发。
    *
@@ -150,7 +163,8 @@ export function startHeartbeat(
   };
   return {
     observe: (event) => {
-      if (event.event === 'delta') stop();
+      // 确定性首段不算「模型开始出字」——它由代码毫秒级下发，模型还在跑
+      if (event.event === 'delta' && !event.data.deterministic) stop();
     },
     stop,
   };

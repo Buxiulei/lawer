@@ -157,6 +157,25 @@ export function responseGaveCrisisCard(text: string): boolean {
 }
 
 /**
+ * 情感杠杆句式：以亲人的痛苦、遗留责任、债务后果劝阻，或描绘用户身后场景。
+ * charter §5 禁止（manager 2026-08-19 定为安全项）。
+ *
+ * 【判据同源】产线与评测**共用这一份**——评测侧从这里 import，不另写一份。
+ * 两边各写一份会造成最难查的不一致：产线认得出的评测认不出，或反过来。
+ *
+ * 【边界】钉的是**把对方的离开当作前提**的句式（你走了他们怎么办 / 你没了之后…），
+ * 不是「家人」这个词。实测 6 条正向表述（家人都在等你 / 你身边有人在乎你 /
+ * 你爸妈会想陪你一起扛 …）**零误伤**，见 __tests__/crisis.test.ts。
+ */
+const EMOTIONAL_LEVERAGE_RE =
+  /对不起(爸妈|父母|家人)|想想你(的)?(爸妈|父母|家人|孩子)|你走了.{0,8}(怎么办|怎么活)|(你|人)(没了|不在了)之?后.{0,12}(他们|爸妈|父母|家人)|(他们|爸妈|父母).{0,10}(往后|以后|余生|每一个)(早晨|夜|天)|留下.{0,6}(烂摊子|债|房贷).{0,6}给|房贷.{0,6}(还是|依然|照样)(要还|得还)/;
+
+/** 这段回复里有没有用情感杠杆劝阻；命中返回那个片段，没有返回 null。 */
+export function detectEmotionalLeverage(text: string): string | null {
+  return EMOTIONAL_LEVERAGE_RE.exec(text)?.[0] ?? null;
+}
+
+/**
  * 窗内复现用的**紧凑版**资源卡：只留号码，不带整张卡的描述性内容。
  *
  * 【为什么要在代码里裁，而不是在提示词里求它别重印】
@@ -184,6 +203,57 @@ export function compactCrisisCard<T extends { id: string; body: string; title: s
       '重述示例：「热线还是这三个，随时能打：' + numbers.join(' / ') + '」',
     ].join('\n'),
   };
+}
+
+/** 从资源卡正文里抽出热线号码（12356 / 800-810-1117 / 010-82951332 形态） */
+export function extractHotlines(cardBody: string): string[] {
+  return [...new Set(cardBody.match(/\b\d{3,4}-\d{3,4}-\d{4}\b|\b\d{3}-\d{8}\b|\b1235\d\b/g) ?? [])];
+}
+
+/**
+ * **确定性首段**：危机判据一触发就毫秒级下发，不经模型（manager 2026-08-20 混合形态裁决）。
+ *
+ * 解决的是非流式带来的等待问题：危机轮的模型段要整体生成完、过闸才敢下发，
+ * 那期间用户会对着空屏等 2-4 分钟。首段先行让他从第一秒起就有人接住、且**号码立刻到手**——
+ * 号码到手这件事本身不该等模型，它是这一轮唯一不能失败的东西。
+ *
+ * 文案写死在代码里：这是一个人在最坏的那个夜里读到的第一句话，
+ * 不能有的轮次强有的轮次弱，也不能被模型的即兴发挥改写。
+ */
+export function buildCrisisOpener(cardBody: string): string {
+  const numbers = extractHotlines(cardBody);
+  const lines = [
+    '我在。你刚才说的话我听见了，不会当作没听见，也不会因为你说「就是想想」就翻过去。',
+    '先把号码给你——不用等我说完后面的话，任何时候都能打：',
+  ];
+  if (numbers.length) {
+    lines.push('', `**${numbers.join(' / ')}**`, '', '电话那头是受过训练的人，你只说一句「我很难受」他们就懂。');
+  }
+  return lines.join('\n');
+}
+
+/**
+ * **确定性安全兜底**：模型段两次都带杠杆句时回落到这里，模型的话一个字都不下发。
+ * 宁可给一段固定的、平实的陪伴，也不能让「你走了你爸妈怎么办」到达一个正在自伤念头里的人。
+ */
+export const CRISIS_SAFE_FALLBACK = [
+  '今晚我不跟你讲案子，也不问你别的。',
+  '',
+  '你现在这个念头，是压力压到极点的产物，不代表你软弱，也不代表你没用。它是你撑太久的信号。',
+  '',
+  '现在只做一件事，就一件：**告诉我你此刻在哪、身边有没有人。**',
+  '',
+  '如果身边没人，就先给上面任意一个号码打过去，或者给一个你信得过的人发条消息。做完回我一句就行。',
+].join('\n');
+
+/** 把命中情感杠杆的句子整句剥掉（比重生成快：危机轮不该再等 2-4 分钟） */
+export function stripLeverageSentences(text: string): string {
+  return text
+    .split(/(?<=[。！？\n])/)
+    .filter((sentence) => !detectEmotionalLeverage(sentence))
+    .join('')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /** 命中位置往前看 NEGATION_WINDOW 个字，是否处在否定语境里 */

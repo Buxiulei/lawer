@@ -21,6 +21,7 @@ export {
   CRISIS_DIRECTIVE,
   CRISIS_RESOURCE_PACK_ID,
   CRISIS_CARD_MARKER,
+  detectEmotionalLeverage,
   responseGaveCrisisCard,
   shouldInjectCrisisCard,
   type CrisisAssessment,

@@ -24,8 +24,12 @@ import { intakeStage, type IntakeStage } from './intake';
 import { buildSystemPrompt } from './prompt';
 import {
   assessCrisis,
+  buildCrisisOpener,
   compactCrisisCard,
   CRISIS_CARD_MARKER,
+  CRISIS_SAFE_FALLBACK,
+  detectEmotionalLeverage,
+  stripLeverageSentences,
   responseGaveCrisisCard,
   shouldInjectCrisisCard,
 } from './crisis';
@@ -163,6 +167,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   // 本处只负责把它说的那张卡取回来（IO）并插到最前——它是本轮唯一真正要紧的那张卡。
   // 不经检索排序：危机表述与资源卡用词天然没有词面交集，靠调权重治不好（见 crisis.ts 文件头）。
   const crisis = assessCrisis(message);
+  /** 危机资源卡正文，供确定性首段抽号码 */
+  let crisisCardBody = '';
   // 24 小时窗口（manager 裁决）只决定**怎么给**，不决定**给不给**。
   //
   // 【实测教训，C04 S08 2026-08-19】起初把窗口做成「窗内不注入」，结果：模型在轮1（用户只是
@@ -182,6 +188,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
       const at = packs.findIndex((p) => p.id === card.id);
       if (at >= 0) packs.splice(at, 1); // 预检索可能也捞到了整张卡，换成该给的那版
       packs.unshift(toInject);
+      crisisCardBody = card.body;
     } else {
       // 取不到不是「这个案子没有对应法条」，是安全关键资料缺失/知识库没装好，必须让人看见。
       emit({
@@ -247,7 +254,17 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     },
   });
 
+  // ── 危机轮混合形态（manager 2026-08-20 裁决）──
+  // ① 确定性首段：毫秒级下发，不经模型——用户从第一秒起就有人接住、号码立刻到手；
+  // ② 模型段整体非流式：全生成完 → 过杠杆闸 → 才下发（杠杆句绝不到达危机中的用户）。
+  // 非流式的等待由 ① 消解，且危机轮本身稀少，代价可控。
   let text = '';
+  if (crisis.triggered) {
+    const opener = buildCrisisOpener(crisisCardBody);
+    // deterministic:true —— 心跳不因它停（模型还没开始出字，那 2-4 分钟正是心跳的主场）
+    emit({ event: 'delta', data: { text: opener, deterministic: true } });
+    text = `${opener}\n\n`;
+  }
   let usage: TokenUsage = { prompt: null, completion: null, cachedRead: null, cachedWrite: null };
   let finishReason: string | null = null;
 
@@ -282,9 +299,13 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     }
   };
 
+  // 危机轮把正文攒着不发（emitText=false），等过完闸再一次性下发
+  const streamProse = !crisis.triggered;
+  let modelBody = '';
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const { text: chunk, toolCalls } = await runOnce(true);
-    text += chunk;
+    const { text: chunk, toolCalls } = await runOnce(streamProse);
+    if (crisis.triggered) modelBody += chunk;
+    else text += chunk;
     if (toolCalls.length === 0) break;
 
     // assistant 轮（含工具调用）与逐条 tool 结果回喂，形成下一轮的上下文
@@ -318,6 +339,57 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
         data: { code: 'ACTION_CARD_MISSING', message: '本轮未能产出行动卡，已记录。请直接问我「现在该做什么」。' },
       });
     }
+  }
+
+  // 危机轮：模型段过杠杆闸后才下发（manager 2026-08-20 混合形态裁决）。
+  // 剥除而不是重生成：重生成要再等 2-4 分钟，而危机轮最不该等；剥句是毫秒级的。
+  // 剥完仍命中 → 回落确定性安全回复，模型的话一个字都不下发。
+  let leverageOutcome: 'clean' | 'stripped' | 'fallback' = 'clean';
+  if (crisis.triggered) {
+    let body = modelBody;
+    if (detectEmotionalLeverage(body)) {
+      body = stripLeverageSentences(body);
+      leverageOutcome = 'stripped';
+      if (detectEmotionalLeverage(body) || !body.trim()) {
+        body = CRISIS_SAFE_FALLBACK;
+        leverageOutcome = 'fallback';
+      }
+    }
+    if (body.trim()) {
+      emit({ event: 'delta', data: { text: body } });
+      text += body;
+    }
+  }
+
+  // 危机轮情感杠杆：**闸门拦了几次**（运维指标），不再是「对用户说了几次」（事故记录）——
+  // 混合形态落地后杠杆句已到不了用户，这里记的是闸门的工作量。
+  //
+  // 【为什么不重生成】与案号闸门的结构性差异：
+  //   · 假案号是**短 token**，能在流上缓冲到闭合再判，用户根本看不到；
+  //     情感杠杆是**整句话**，要拦就得缓冲整句——那等于给危机轮加延迟，
+  //     而危机轮是全产品最不该加延迟的地方（推理模型首字已要 2-4 分钟）。
+  //   · 假案号可原地换成占位符、语义损失可控；一句劝阻话换成占位符只会让回复变得莫名其妙。
+  //   · 正文是流式的，检出时用户已经读到了——重生成不能撤回已发送的内容。
+  // 所以产线动作是「看得见」而不是「拦得住」：发 notice + 落系统动作，
+  // 供人工复核与统计「我们对真实用户说过几次这种话」。
+  // 真正的防线仍是 CRISIS_DIRECTIVE 的具体禁令 + 评测侧机械断言（两者共用同一判据）。
+  if (crisis.triggered && leverageOutcome !== 'clean') {
+    const action = leverageOutcome === 'stripped' ? '已剥除相关语句' : '已回落确定性安全回复';
+    emit({
+      event: 'notice',
+      data: {
+        code: 'EMOTIONAL_LEVERAGE_DETECTED',
+        message: `本轮模型输出含情感杠杆劝阻，${action}（charter §5）。杠杆内容未下发给用户。`,
+      },
+    });
+    cases.addTimelineEvent(db, {
+      caseId,
+      userId,
+      happenedAt: now.toISOString(),
+      kind: '系统动作',
+      title: '危机轮杠杆闸拦截',
+      detail: `处置：${action}｜消息 #${messageId}`,
+    });
   }
 
   if (citations.found.length > 0) {

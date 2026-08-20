@@ -188,6 +188,18 @@ describe('危机响应：心理危机资源卡强制注入（charter §5）', ()
     get: (id: string) => (id === CRISIS_RESOURCE_PACK_ID ? RESOURCE_PACK : undefined),
   };
 
+  /** 跑一轮危机对话，模型段回放指定正文 */
+  async function turnCrisis(modelText: string) {
+    const f = makeAgentFixture();
+    const sink = makeSink();
+    const provider = scriptedProvider([{ text: modelText, tools: [GOOD_CARD] }, { text: '' }]);
+    const result = await runTurn({
+      db: f.db, caseId: f.caseId, userId: f.userId, message: CRISIS,
+      provider, searcher: idOnlySearcher, emit: sink.emit,
+    });
+    return { f, sink, provider, result };
+  }
+
   it('用户说出自伤念头时，资源卡即使检索零命中也会被硬取进 system prompt', async () => {
     const { provider } = await turn([{ text: '我在。', tools: [GOOD_CARD] }], {
       message: CRISIS,
@@ -283,6 +295,80 @@ describe('危机响应：心理危机资源卡强制注入（charter §5）', ()
     expect(noteAt).toBeGreaterThan(cardAt);
     expect(system.slice(cardAt, noteAt).length).toBeLessThan(400);
     expect(system).toContain('仍然必须出现在这一轮回复里');
+  });
+
+  it('确定性首段先行：模型被调用**之前**用户就拿到号码（时序断言）', async () => {
+    const f = makeAgentFixture();
+    const sink = makeSink();
+    const probe = {
+      name: 'deepseek' as const,
+      model: 'x',
+      billingModel: 'x',
+      deltasBeforeCall: 0,
+      async chatStream() {
+        (probe as { deltasBeforeCall: number }).deltasBeforeCall = sink.of('delta').length;
+        return (async function* () {
+          yield '模型正文';
+          return { finishReason: 'stop', toolCalls: [], usage: { model: 'x', usage: { prompt: null, completion: null, cachedRead: null, cachedWrite: null } } };
+        })();
+      },
+    };
+    await runTurn({
+      db: f.db, caseId: f.caseId, userId: f.userId, message: CRISIS,
+      provider: probe as never, searcher: idOnlySearcher, emit: sink.emit,
+    });
+    // 调模型时已经发过首段，且首段里就有号码
+    expect(probe.deltasBeforeCall).toBe(1);
+    const first = sink.of('delta')[0];
+    expect(first.data.deterministic).toBe(true);
+    expect(first.data.text).toContain('12356');
+    expect(first.data.text).toContain('800-810-1117');
+  });
+
+  it('首段标 deterministic，心跳不因它停（模型段还没开始出字）', async () => {
+    const { startHeartbeat } = await import('../events');
+    const pings: number[] = [];
+    const hb = startHeartbeat((e) => { if (e.event === 'ping') pings.push(1); }, { intervalMs: 1000 });
+    hb.observe({ event: 'delta', data: { text: '首段', deterministic: true } });
+    // 确定性首段不停心跳
+    hb.observe({ event: 'delta', data: { text: '模型正文' } });
+    hb.stop();
+    expect(pings).toHaveLength(0); // 只验不抛错；停止语义由 heartbeat.test.ts 逐拍验
+  });
+
+  it('模型段非流式：过闸干净才一次性下发', async () => {
+    const { sink } = await turnCrisis('我听见了，今晚别一个人待着。');
+    const modelDeltas = sink.of('delta').filter((d) => !d.data.deterministic);
+    expect(modelDeltas).toHaveLength(1); // 一次性，不是逐字
+    expect(modelDeltas[0].data.text).toContain('今晚别一个人待着');
+  });
+
+  it('闸命中 → 剥除那句，其余照常下发', async () => {
+    const { sink, result } = await turnCrisis(
+      '我听见了。你走了他们怎么办？现在告诉我你在哪、身边有没有人。',
+    );
+    const body = sink.of('delta').filter((d) => !d.data.deterministic).map((d) => d.data.text).join('');
+    expect(body).not.toContain('你走了他们怎么办');
+    expect(body).toContain('现在告诉我你在哪');
+    expect((result as RunTurnResult).text).not.toContain('你走了他们怎么办');
+    expect(sink.of('notice').map((e) => e.data.code)).toContain('EMOTIONAL_LEVERAGE_DETECTED');
+  });
+
+  it('剥完仍命中 → 回落确定性安全回复，模型的话一个字都不下发', async () => {
+    // 整段都是杠杆句，剥完为空
+    const { sink } = await turnCrisis('你走了他们怎么办。想想你父母怎么办。');
+    const body = sink.of('delta').filter((d) => !d.data.deterministic).map((d) => d.data.text).join('');
+    expect(body).not.toContain('怎么办');
+    expect(body).toContain('告诉我你此刻在哪');
+    expect(sink.of('notice').some((e) => e.data.message.includes('回落'))).toBe(true);
+  });
+
+  it('正向表述放行，不误伤', async () => {
+    const ok = '家人都在等你回家，你身边有人在乎你。现在告诉我你在哪。';
+    const { sink } = await turnCrisis(ok);
+    const body = sink.of('delta').filter((d) => !d.data.deterministic).map((d) => d.data.text).join('');
+    expect(body).toBe(ok);
+    expect(sink.of('notice').map((e) => e.data.code)).not.toContain('EMOTIONAL_LEVERAGE_DETECTED');
   });
 
   it('危机轮判为 critical 档（这一轮回错话的代价没有上限）', async () => {

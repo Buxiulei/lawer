@@ -11,6 +11,7 @@ import * as store from '@/lib/db/agent';
 import {
   assessCrisis,
   compactCrisisCard,
+  detectEmotionalLeverage,
   CRISIS_CARD_MARKER,
   CRISIS_DIRECTIVE,
   CRISIS_RESOURCE_PACK_ID,
@@ -197,5 +198,27 @@ describe('窗内注入紧凑版资源卡（模型印不出没见过的整张卡�
   it('抽不出足够号码时原样退回整张卡——宁可重印一次，也不能让危机轮少了号码', () => {
     const noNumbers = { ...FULL, body: '这张卡里没有任何号码' };
     expect(compactCrisisCard(noNumbers)).toBe(noNumbers);
+  });
+});
+
+describe('情感杠杆检测：产线与评测共用同一判据', () => {
+  it.each([
+    '你没了，对不起爸妈这件事不会停，会变成他们往后每一个醒来的早晨',
+    '想想你父母怎么办',
+    '你走了他们怎么活',
+    '房贷还是要还的，别留下烂摊子给家人',
+  ])('杠杆句「%s」被检出', (text) => {
+    expect(detectEmotionalLeverage(text)).not.toBeNull();
+  });
+
+  it.each([
+    '家人都在等你回家',
+    '你身边有人在乎你',
+    '你爸妈会想陪你一起扛这件事',
+    '有人愿意接住你，你不是一个人',
+    '打给一个你信得过的人，家人朋友都行',
+    '你值得有人接住——不是因为你有用才值得',
+  ])('正向表述「%s」零误伤（边界钉的是「把离开当前提」，不是「家人」这个词）', (text) => {
+    expect(detectEmotionalLeverage(text)).toBeNull();
   });
 });
