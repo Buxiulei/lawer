@@ -274,7 +274,7 @@ export function runMigrations(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS deadlines (
       id                   INTEGER PRIMARY KEY AUTOINCREMENT,
       case_id              INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
-      kind                 TEXT NOT NULL,                   -- 仲裁时效|起诉15日|上诉15日|举证期限|开庭|申请执行2年|自定义
+      kind                 TEXT NOT NULL,                   -- 仲裁时效|起诉15日|上诉15日|举证期限|开庭|申请执行2年|答辩期|自定义
       due_at               TEXT NOT NULL,
       derived_from         TEXT,
       notified_stages_json TEXT,
@@ -497,6 +497,60 @@ export function runMigrations(db: Database.Database): void {
       ON model_rates (model, token_kind, effective_at);
     CREATE INDEX IF NOT EXISTS idx_model_rates_lookup
       ON model_rates (model, token_kind, effective_at DESC);
+  `);
+
+  // ───────────────── 公司动态监控 ─────────────────
+  // 盯梢被监控主体：一案可盯多个主体（签约/用工/关联各自可能先跑路），风声阶段就该开盯——
+  // 简易注销、减资公告是公司跑路前兆，等到裁决生效再发现主体没了，赢了官司也拿不到钱。
+  // company_profile_id 可空：手输一个公司名就能开盯，不必先建背调档（用户往往只知道名字）。
+  // status='paused' 是软停（保留历史事件与检查日志），停盯不删行。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_watches (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id            INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+      company_profile_id INTEGER REFERENCES company_profiles(id) ON DELETE SET NULL,
+      name               TEXT NOT NULL,
+      uscc               TEXT,
+      status             TEXT NOT NULL DEFAULT 'active',    -- active | paused
+      created_at         TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_company_watches_case ON company_watches (case_id);
+  `);
+
+  // 告警事件：只追加不修改。告警一旦发出即成事实（用户可能已据此行动），误报也留痕，
+  // 修正靠补一条新事件而非改旧行——同 timeline_events 的理由，可改即等于可篡改。
+  // severity='urgent'（简易注销公告/注销清算备案）即时三通道通知，'info' 进日报合并。
+  // notified_at 为空表示尚未送达，通知侧回填；source_url 记来源出处（合规要求可溯源）。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_watch_events (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      watch_id    INTEGER NOT NULL REFERENCES company_watches(id) ON DELETE CASCADE,
+      kind        TEXT NOT NULL,                            -- 简易注销公告|注销清算备案|状态变更|股权变更|法代变更|减资公告|拉取失败
+      severity    TEXT NOT NULL,                            -- urgent | info
+      detail      TEXT,
+      source_url  TEXT,
+      detected_at TEXT NOT NULL,
+      notified_at TEXT,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_company_watch_events_watch
+      ON company_watch_events (watch_id, id DESC);
+  `);
+
+  // 检查日志：每次轮询落一行，事件 diff 靠 state_hash 与上一次比对得出。
+  // ok=0 即本次拉取失败也要留行——静默失效（源站改版/限频封禁）是最危险的失败模式，
+  // 没有失败留痕就无从判断「没有事件」是真没事还是根本没拉到。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_watch_checks (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      watch_id   INTEGER NOT NULL REFERENCES company_watches(id) ON DELETE CASCADE,
+      checked_at TEXT NOT NULL DEFAULT (datetime('now')),
+      source     TEXT NOT NULL,
+      state_hash TEXT,
+      ok         INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE INDEX IF NOT EXISTS idx_company_watch_checks_watch
+      ON company_watch_checks (watch_id, id DESC);
   `);
 
   // ───────────────── 通知 ─────────────────

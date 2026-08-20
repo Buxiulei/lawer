@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../migrate';
 
-/** 全部表名单（29 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。 */
+/** 全部表名单（32 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。 */
 const ALL_TABLES = [
   // 用户与实名
   'users', 'sms_codes', 'email_codes', 'realname_verifications', 'api_keys',
@@ -13,6 +13,8 @@ const ALL_TABLES = [
   // 公道值
   'gongdao', 'gongdao_ledger', 'memberships', 'skus', 'orders', 'redemption_codes',
   'token_usage', 'model_rates',
+  // 公司动态监控
+  'company_watches', 'company_watch_events', 'company_watch_checks',
   // 通知
   'notify_log',
 ];
@@ -48,10 +50,10 @@ describe('runMigrations', () => {
 
   it('幂等：连跑两遍不抛错', () => {
     expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(29);
+    expect(ALL_TABLES.length).toBe(32);
   });
 
-  it('29 张表全部建成', () => {
+  it('32 张表全部建成', () => {
     const rows = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[];
@@ -233,6 +235,47 @@ describe('删除行为', () => {
     expect(
       (db.prepare('SELECT notify_verbose v FROM users WHERE id=?').get(uid) as { v: number }).v,
     ).toBe(0);
+  });
+
+  it('删案件级联删盯梢，盯梢再二级级联删告警事件与检查日志', () => {
+    const uid = mkUser(db);
+    const caseId = mkCase(db, uid);
+    const watchId = Number(
+      db.prepare('INSERT INTO company_watches (case_id, name) VALUES (?,?)')
+        .run(caseId, '某某科技有限公司').lastInsertRowid,
+    );
+    db.prepare(
+      "INSERT INTO company_watch_events (watch_id, kind, severity, detected_at) VALUES (?,?,?,?)",
+    ).run(watchId, '简易注销公告', 'urgent', '2026-08-20');
+    db.prepare("INSERT INTO company_watch_checks (watch_id, source) VALUES (?, '爱企查')").run(watchId);
+
+    db.prepare('DELETE FROM cases WHERE id = ?').run(caseId);
+
+    for (const t of ['company_watches', 'company_watch_events', 'company_watch_checks']) {
+      const n = db.prepare(`SELECT COUNT(*) c FROM ${t}`).get() as { c: number };
+      expect(n.c, `${t} 未被级联删除`).toBe(0);
+    }
+  });
+
+  it('删背调档：盯梢的 company_profile_id 置 NULL，盯梢本身存活（手输公司名照盯不误）', () => {
+    const uid = mkUser(db);
+    const caseId = mkCase(db, uid);
+    const profileId = Number(
+      db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?,?)')
+        .run(caseId, '某某科技有限公司').lastInsertRowid,
+    );
+    const watchId = Number(
+      db.prepare('INSERT INTO company_watches (case_id, company_profile_id, name) VALUES (?,?,?)')
+        .run(caseId, profileId, '某某科技有限公司').lastInsertRowid,
+    );
+
+    db.prepare('DELETE FROM company_profiles WHERE id = ?').run(profileId);
+
+    const row = db.prepare('SELECT company_profile_id, name, status FROM company_watches WHERE id=?')
+      .get(watchId) as { company_profile_id: number | null; name: string; status: string };
+    expect(row.company_profile_id).toBeNull();
+    expect(row.name).toBe('某某科技有限公司');
+    expect(row.status).toBe('active');
   });
 
   it('users 无级联：删还有案件的用户被外键挡下', () => {

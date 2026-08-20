@@ -12,6 +12,7 @@ import {
   getMembership,
   MEMBERSHIP_SKU_NAME,
   CUSTOM_RECHARGE_SKU_NAME,
+  assertSkuSellable,
 } from '../fulfillment';
 import { getGongdao, gongdaoGrant, gongdaoSettle } from '../index';
 import { MEMBERSHIP, GONGDAO_LEDGER_TYPE, REGISTER_GRANT_GONGDAO, rechargeGongdao } from '../pricing';
@@ -58,13 +59,26 @@ describe('ensureBillingSkus 种子', () => {
       db.prepare('SELECT gongdao, price_fen, enabled FROM skus WHERE name=?').get(name) as
         { gongdao: number; price_fen: number; enabled: number };
     expect(read(MEMBERSHIP_SKU_NAME.entry)).toEqual({ gongdao: 3000, price_fen: 1990, enabled: 1 });
-    expect(read(MEMBERSHIP_SKU_NAME.standard)).toEqual({ gongdao: 9000, price_fen: 5900, enabled: 1 });
-    expect(read(MEMBERSHIP_SKU_NAME.pro)).toEqual({ gongdao: 30000, price_fen: 19900, enabled: 1 });
+    // 中配/高配待开发（D3 修订）：行与定价草案保留，enabled=0 关掉购买入口
+    expect(read(MEMBERSHIP_SKU_NAME.standard)).toEqual({ gongdao: 9000, price_fen: 5900, enabled: 0 });
+    expect(read(MEMBERSHIP_SKU_NAME.pro)).toEqual({ gongdao: 30000, price_fen: 19900, enabled: 0 });
     expect(db.prepare("SELECT COUNT(*) c FROM skus WHERE name LIKE '散充·%元' AND enabled=1").get()).toEqual({ c: 3 });
     // 自定义散充是内部挂靠行：不对外展示
     expect(read(CUSTOM_RECHARGE_SKU_NAME)).toEqual({ gongdao: 0, price_fen: 0, enabled: 0 });
     // 幂等：SKU 总数不随重复调用增长
     expect(db.prepare('SELECT COUNT(*) c FROM skus').get()).toEqual({ c: 7 });
+  });
+});
+
+describe('assertSkuSellable 下单守门', () => {
+  test('entry 放行；待开发档与内部挂靠行被拒；SKU 不存在被拒', () => {
+    const { db } = makeDb();
+    expect(() => assertSkuSellable(db, skuId(db, MEMBERSHIP_SKU_NAME.entry))).not.toThrow();
+    expect(() => assertSkuSellable(db, skuId(db, '散充·30元'))).not.toThrow();
+    expect(() => assertSkuSellable(db, skuId(db, MEMBERSHIP_SKU_NAME.standard))).toThrow(/下架/);
+    expect(() => assertSkuSellable(db, skuId(db, MEMBERSHIP_SKU_NAME.pro))).toThrow(/下架/);
+    expect(() => assertSkuSellable(db, skuId(db, CUSTOM_RECHARGE_SKU_NAME))).toThrow(/下架/);
+    expect(() => assertSkuSellable(db, 99999)).toThrow(/不存在/);
   });
 });
 
@@ -135,6 +149,16 @@ describe('fulfillOrder 履约', () => {
     payCallback(db, 'R1'); // 重放
     expect(getGongdao(uid, db)).toBe(5000);
     expect(db.prepare("SELECT COUNT(*) c FROM gongdao_ledger WHERE ref_id='R1'").get()).toEqual({ c: 1 });
+  });
+
+  test('已下架 SKU 的历史订单照常入账：履约侧有意不看 enabled（收了钱必须发货）', () => {
+    const { db, uid } = makeDb();
+    insertOrder(db, 'P1', uid, MEMBERSHIP_SKU_NAME.pro, 19900);
+    // 下单侧会拒这一档，但订单既已支付，回调履约不受 enabled 影响
+    expect(() => assertSkuSellable(db, skuId(db, MEMBERSHIP_SKU_NAME.pro))).toThrow();
+    payCallback(db, 'P1');
+    expect(getGongdao(uid, db)).toBe(MEMBERSHIP.pro.gongdao);
+    expect(getMembership(db, uid).plan).toBe('pro');
   });
 
   test('直接二次 fulfillOrder（无状态守卫）仍幂等（ledger + memberships 唯一索引兜底）', () => {
