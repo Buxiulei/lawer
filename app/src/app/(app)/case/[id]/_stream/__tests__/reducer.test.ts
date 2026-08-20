@@ -32,7 +32,9 @@ describe('deterministic delta', () => {
     expect(after.deterministicChars).toBe('我在，先别急。'.length);
   });
 
-  it('首段之后 ping 仍然校准计时', () => {
+  // waited_seconds 从请求受理起算、全程连续、首段后不重置（WS2 确认）。
+  // 等待卡直接用这个总时长，不减去首段之前的那段——这里把口径钉住。
+  it('首段之后 ping 仍按总时长校准，不做差分', () => {
     const state = reduce(waiting(), {
       type: 'frame',
       frame: { type: 'delta', text: '我在。', deterministic: true },
@@ -45,6 +47,19 @@ describe('deterministic delta', () => {
     expect(pinged.phase).toBe('waiting');
     expect(pinged.waitBaseAt).not.toBeNull();
     expect(Math.round((Date.now() - pinged.waitBaseAt!) / 1000)).toBe(45);
+  });
+
+  it('连续递增的 ping 一路照搬总时长，60s 升级按总时长触发', () => {
+    let state = reduce(waiting(), {
+      type: 'frame',
+      frame: { type: 'delta', text: '我在。', deterministic: true },
+    });
+    // 首段之后的心跳：15 → 30 → 75，等待卡读数应逐个跟上
+    for (const waited of [15, 30, 75]) {
+      state = reduce(state, { type: 'frame', frame: { type: 'ping', waited_seconds: waited } });
+      expect(Math.round((Date.now() - state.waitBaseAt!) / 1000)).toBe(waited);
+    }
+    expect(state.phase).toBe('waiting');
   });
 
   it('首个非 deterministic delta 才结束等待态', () => {
