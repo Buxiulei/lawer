@@ -68,6 +68,7 @@ export function RechargePanel({ membership }: { membership: string }) {
                 className={cn(
                   'flex flex-col rounded-[12px] border bg-surface p-4 shadow-soft',
                   current ? 'border-primary' : 'border-line',
+                  !plan.available && 'opacity-60',
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -77,9 +78,19 @@ export function RechargePanel({ membership }: { membership: string }) {
                       当前
                     </span>
                   )}
+                  {!plan.available && (
+                    <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[12px] text-ink-2">
+                      待开发
+                    </span>
+                  )}
                 </div>
 
-                <p className="num mt-2 text-[26px] leading-9 font-semibold text-primary-ink">
+                <p
+                  className={cn(
+                    'num mt-2 text-[26px] leading-9 font-semibold',
+                    plan.available ? 'text-primary-ink' : 'text-ink-2',
+                  )}
+                >
                   ¥{formatFen(plan.priceFen)}
                 </p>
                 <p className="num text-[13px] text-ink-2">
@@ -94,9 +105,10 @@ export function RechargePanel({ membership }: { membership: string }) {
                     size="sm"
                     fullWidth
                     variant={current ? 'secondary' : 'primary'}
+                    disabled={!plan.available}
                     onClick={() => payPlan(plan)}
                   >
-                    {current ? '续一个月' : '选这档'}
+                    {!plan.available ? '敬请期待' : current ? '续一个月' : '选这档'}
                   </Button>
                 </div>
               </li>
