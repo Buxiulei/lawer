@@ -31,7 +31,7 @@ export const demoUser: User = {
   phoneMasked: '138****6027',
   email: 'demo@example.com',
   authStatus: '已实名',
-  membership: '中配',
+  membership: '入门',
   createdAt: '2026-06-04T09:12:00+08:00',
 };
 

@@ -60,6 +60,8 @@ export interface PlanSku {
   routing: string;
   /** 适合谁 */
   fit: string;
+  /** false = 展示但标「待开发」，不可购买（2026-08-20 用户拍板：仅入门档可购） */
+  available: boolean;
 }
 
 export const PLANS: PlanSku[] = [
@@ -69,6 +71,7 @@ export const PLANS: PlanSku[] = [
     gongdao: 1990,
     routing: '全部环节走 DeepSeek / Qwen',
     fit: '情况不复杂，主要要有人陪着把流程走完',
+    available: true,
   },
   {
     key: '中配',
@@ -76,6 +79,7 @@ export const PLANS: PlanSku[] = [
     gongdao: 5900,
     routing: '关键环节（文件解读、文书、金额核算）走 Claude',
     fit: '手上有通知或协议要签，怕看漏条款',
+    available: false,
   },
   {
     key: '高配',
@@ -83,6 +87,7 @@ export const PLANS: PlanSku[] = [
     gongdao: 19900,
     routing: '常规环节以上都走 Claude',
     fit: '已经进仲裁，材料多、来回多',
+    available: false,
   },
 ];
 
