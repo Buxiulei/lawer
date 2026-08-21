@@ -17,6 +17,7 @@ import {
   demoEvidence,
   demoTimeline,
 } from '@/app/_mock/demo';
+import { mockCompanyGraph } from '@/app/_mock/company-graph';
 import { cn } from '@/app/_ui/cn';
 import { formatDate } from '@/app/_ui/format';
 import { AmountText } from '@/components/case/AmountText';
@@ -44,6 +45,7 @@ export function CasePanel({
   return (
     <div className="flex flex-col gap-3">
       <TimelineBlock events={demoTimeline} />
+      <CompanyGraphBlock caseId={caseId} />
       <ClaimsBlock claims={demoClaims} />
       <EvidenceBlock caseId={caseId} items={demoEvidence} />
       <TodoBlock actions={actions} deadlines={demoDeadlines} />
@@ -117,6 +119,34 @@ function TimelineBlock({ events }: { events: TimelineEvent[] }) {
             {all ? '只看最近 4 条' : `展开全部 ${ordered.length} 条`}
           </button>
         )}
+      </CardBody>
+    </Card>
+  );
+}
+
+/* ── 公司图谱入口 ─────────────────────────────────────────── */
+
+function CompanyGraphBlock({ caseId }: { caseId: string }) {
+  return (
+    <Card>
+      <CardHeader
+        title="公司图谱"
+        action={
+          <span className="num text-[13px] text-ink-2">
+            {mockCompanyGraph.nodes.length} 个主体
+          </span>
+        }
+      />
+      <CardBody>
+        <p className="text-[14px] leading-6 text-ink-2">
+          跟你签合同的、给你发工资的、背后控股的，常常不是同一家。
+        </p>
+        <Link
+          href={`/case/${caseId}/graph`}
+          className="mt-1 inline-flex min-h-11 items-center text-[14px] text-primary-ink"
+        >
+          看它们的关系 →
+        </Link>
       </CardBody>
     </Card>
   );
