@@ -55,10 +55,26 @@ export function latestByUser(db: Database, userId: number): RealnameVerification
     .get(userId) as RealnameVerificationRow | undefined;
 }
 
-/** 三方回调落定结论时推进本行状态。合法迁移由 lib/realname 判，本层不拦。 */
-export function setStatus(db: Database, verificationId: number, status: string): void {
-  db.prepare('UPDATE realname_verifications SET status = ? WHERE id = ?').run(
+/**
+ * 三方回调落定结论时推进本行状态。合法迁移由 lib/realname 判，本层不拦。
+ * rawMetaEnc 传了就一并覆盖（落定时通常要把三方原始报文并进信封），不传则不动该列。
+ */
+export function setStatus(
+  db: Database,
+  verificationId: number,
+  status: string,
+  rawMetaEnc?: string,
+): void {
+  if (rawMetaEnc === undefined) {
+    db.prepare('UPDATE realname_verifications SET status = ? WHERE id = ?').run(
+      status,
+      verificationId,
+    );
+    return;
+  }
+  db.prepare('UPDATE realname_verifications SET status = ?, raw_meta_enc = ? WHERE id = ?').run(
     status,
+    rawMetaEnc,
     verificationId,
   );
 }

@@ -1,25 +1,14 @@
 // app/src/lib/notify/sms.ts
 // 阿里云 dysmsapi RPC 裸客户端，整块移植自 /home/roots/六爻/app/src/lib/auth/sms.ts（spec §3.3 抄优于写）。
 // 本文件只负责「把一条短信发出去」：验证码的生成、限流、入库、比对都在 lib/auth，不要往这里塞业务。
-import { createHmac, randomUUID } from 'node:crypto';
+import { buildSignedRpcUrl } from './aliyun-rpc';
 import { smsVerifyTemplateParam } from './copy';
+import { shouldDryRun } from './dry-run';
 
-const SMS_ENDPOINT = 'https://dysmsapi.aliyuncs.com/';
+const SMS_ENDPOINT = 'https://dysmsapi.aliyuncs.com';
 
-/** 供测试注入的 fetch，签名与全局 fetch 一致 */
-export type FetchImpl = typeof fetch;
-
-/**
- * 阿里云 RPC 风格 percentEncode。
- * 未保留字符 A-Za-z0-9-_.~ 原样保留；其余按 UTF-8 字节编码为 %XX（大写十六进制）；
- * 空格须为 %20（encodeURIComponent 会编为 %20，无需额外处理 +）。
- */
-function percentEncode(value: string): string {
-  return encodeURIComponent(value)
-    .replace(/\+/g, '%20')
-    .replace(/\*/g, '%2A')
-    .replace(/%7E/g, '~');
-}
+export type { FetchImpl } from './aliyun-rpc';
+import type { FetchImpl } from './aliyun-rpc';
 
 interface AliyunCredentials {
   accessKeyId: string;
@@ -57,13 +46,6 @@ export function isMainlandPhone(phone: string): boolean {
 }
 
 /**
- * 生成当前 UTC 时间戳，格式 YYYY-MM-DDTHH:mm:ssZ。
- */
-function utcTimestamp(): string {
-  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-}
-
-/**
  * 调用阿里云短信发送 OTP。
  * 失败（响应 Code !== "OK"，或网络/凭证异常）抛 Error。
  */
@@ -75,35 +57,21 @@ async function sendSms(
 ): Promise<void> {
   const { accessKeyId, accessKeySecret, signName } = getCredentials();
 
-  const params: Record<string, string> = {
-    AccessKeyId: accessKeyId,
-    Action: 'SendSms',
-    Format: 'JSON',
-    PhoneNumbers: phone,
-    RegionId: process.env.ALIYUN_REGION ?? 'cn-hangzhou',
-    SignName: signName,
-    SignatureMethod: 'HMAC-SHA1',
-    SignatureNonce: randomUUID(),
-    SignatureVersion: '1.0',
-    TemplateCode: templateCode,
-    TemplateParam: templateParam,
-    Timestamp: utcTimestamp(),
-    Version: '2017-05-25',
-  };
-
-  // 按 key 字典序排序，拼成 "key=percentEncode(value)" 用 & 连接
-  const sortedKeys = Object.keys(params).sort();
-  const canonicalized = sortedKeys
-    .map((key) => `${percentEncode(key)}=${percentEncode(params[key])}`)
-    .join('&');
-
-  const stringToSign = `GET&${percentEncode('/')}&${percentEncode(canonicalized)}`;
-
-  const signature = createHmac('sha1', `${accessKeySecret}&`)
-    .update(stringToSign)
-    .digest('base64');
-
-  const url = `${SMS_ENDPOINT}?${canonicalized}&Signature=${percentEncode(signature)}`;
+  const url = buildSignedRpcUrl({
+    endpoint: SMS_ENDPOINT,
+    accessKeyId,
+    accessKeySecret,
+    signatureMethod: 'HMAC-SHA1',
+    params: {
+      Action: 'SendSms',
+      PhoneNumbers: phone,
+      RegionId: process.env.ALIYUN_REGION ?? 'cn-hangzhou',
+      SignName: signName,
+      TemplateCode: templateCode,
+      TemplateParam: templateParam,
+      Version: '2017-05-25',
+    },
+  });
 
   const res = await fetchImpl(url, { method: 'GET' });
   const data = (await res.json()) as { Code?: string; Message?: string };
@@ -127,6 +95,8 @@ export async function sendOtp(
   if (!isMainlandPhone(phone)) {
     throw new Error('无效的手机号');
   }
+  // 干跑判断放在凭证校验之前：开发机上没配阿里云也要能把注册流程走通
+  if (shouldDryRun('短信', phone)) return;
   const templateCode = process.env.SMS_TEMPLATE_VERIFY_CODE;
   if (!templateCode) {
     throw new Error('阿里云短信凭证未配置');

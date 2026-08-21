@@ -1,8 +1,14 @@
 // app/src/lib/auth/index.ts
 // 认证模块对外出口（spec §3.2 跨模块只经导出接口）。
-// 实人认证（CloudAuth）在 M2 接入，届时在本目录另开文件并从这里导出。
 export { sendPhoneCode, verifyPhoneCode, sendEmailCode, verifyEmailCode } from './otp';
-export type { AuthFailure, SendResult, PhoneVerifyResult, EmailVerifyResult, OtpDeps } from './otp';
+export type {
+  AuthFailure,
+  SendResult,
+  PhoneVerifyResult,
+  EmailVerifyResult,
+  OtpDeps,
+  Onboarding,
+} from './otp';
 export { signToken, verifyToken, verifyAuthHeader, TOKEN_TTL_SECONDS } from './jwt';
 export type { TokenPayload } from './jwt';
 export { normalizePhone, maskPhone } from './phone';
@@ -20,4 +26,8 @@ export {
 export type { Scope } from './api-key';
 export { resolveIdentity, extractBearer, hasScope } from './identity';
 export type { Identity } from './identity';
-export { requireIdentity, requireWebSession, domainFailure, parseId } from './guard';
+export { requireIdentity, requireWebSession, requireRealname, domainFailure, parseId } from './guard';
+export type { GuardResult, GateResult } from './guard';
+// 实人认证（阿里云 CloudAuth H5 活体）
+export { startRealname, refreshRealnameStatus, AUTH_STATUS, VERIFICATION_STATUS } from './realname';
+export type { StartRealnameResult, RealnameStatusResult, RealnameDeps } from './realname';

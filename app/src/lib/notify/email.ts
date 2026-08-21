@@ -3,6 +3,7 @@
 // 文案不在这里拼，全部来自 copy.ts。
 import nodemailer from 'nodemailer';
 import type { MailCopy } from './copy';
+import { shouldDryRun } from './dry-run';
 
 /** nodemailer transporter 的最小契约，测试可注入假实现 */
 export interface MailTransport {
@@ -48,14 +49,18 @@ function fromAddress(): string {
 
 /**
  * 发一封纯文本邮件。
- * @param transport 测试注入用，默认走 env 建出的 SMTP transporter
+ * @param transport 测试注入用，不传则走 env 建出的 SMTP transporter
+ *
+ * transport 不写成默认参数值（`= getTransport()`）：默认值在进函数体前就求值，
+ * 缺 SMTP 配置时会先抛错，NOTIFY_DRY_RUN 的短路根本轮不到执行。
  */
 export async function sendMail(
   to: string,
   copy: MailCopy,
-  transport: MailTransport = getTransport(),
+  transport?: MailTransport,
 ): Promise<void> {
-  await transport.sendMail({
+  if (shouldDryRun('邮件', to)) return;
+  await (transport ?? getTransport()).sendMail({
     from: fromAddress(),
     to,
     subject: copy.subject,

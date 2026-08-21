@@ -10,6 +10,7 @@
 import type { Database } from 'better-sqlite3';
 
 import * as store from '@/lib/db/cases';
+import { nowSql } from '@/lib/db/time';
 
 /** 与 migrate.ts cases.stage 注释逐字对齐 */
 export const CASE_STAGES = [
@@ -81,6 +82,41 @@ function normalizeIsoTime(value: unknown): string | null {
   if (typeof value !== 'string' || !value.trim()) return null;
   const ms = Date.parse(value);
   return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+}
+
+// ========== 建档 ==========
+
+/** 注册后自动建的那个案件；用户想改名走 cases 的更新面，这里只管第一次 */
+const DEFAULT_CASE_TITLE = '我的案件';
+
+/**
+ * 确保用户名下有案件，没有就建一个并写一条欢迎事件（注册完成时由 lib/auth 调用）。
+ *
+ * 幂等判据是"名下有没有**任何**案件"，而不是"有没有叫我的案件的那个"：
+ * 用户第二次验邮箱、或已经自己建过案，都不该再冒出一个空档案。
+ * 建案与欢迎事件同一事务：只有案件没有欢迎事件的半截档案不该存在。
+ */
+export function ensureDefaultCase(
+  db: Database,
+  userId: number,
+): { caseId: number; isNew: boolean } {
+  const existing = store.listCasesByUser(db, userId);
+  if (existing.length > 0) return { caseId: existing[0].id, isNew: false };
+
+  const create = db.transaction(() => {
+    const caseId = store.insertCase(db, { userId, title: DEFAULT_CASE_TITLE });
+    store.insertTimelineEvent(db, {
+      caseId,
+      happenedAt: nowSql(),
+      kind: '系统动作',
+      title: '档案已建立',
+      detail:
+        '从现在起，公司说了什么、发了什么文件、你回了什么，都记到这条时间线上。' +
+        '拿不准下一步做什么，直接问我。',
+    });
+    return caseId;
+  });
+  return { caseId: create(), isNew: true };
 }
 
 // ========== 读 ==========

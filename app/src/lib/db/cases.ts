@@ -61,6 +61,17 @@ export interface EvidenceRow {
 
 // ========== cases ==========
 
+/**
+ * 建一个新案件。stage（风声）与 district（朝阳）取 DDL 默认值，不在这里再写一份——
+ * 默认值只该有一个出处，两处各写一遍迟早会不一致。
+ */
+export function insertCase(db: Database, params: { userId: number; title: string }): number {
+  const info = db
+    .prepare('INSERT INTO cases (user_id, title) VALUES (?, ?)')
+    .run(params.userId, params.title);
+  return Number(info.lastInsertRowid);
+}
+
 export function findCaseById(db: Database, caseId: number): CaseRow | undefined {
   return db.prepare('SELECT * FROM cases WHERE id = ?').get(caseId) as CaseRow | undefined;
 }

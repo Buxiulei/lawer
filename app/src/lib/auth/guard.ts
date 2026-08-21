@@ -4,11 +4,16 @@
 import { NextResponse } from 'next/server';
 import type { Database } from 'better-sqlite3';
 
+import * as users from '@/lib/db/otp';
 import type { Scope } from './api-key';
 import { hasScope, resolveIdentity, type Identity } from './identity';
+import { AUTH_STATUS } from './realname';
 
 /** 失败时给的是可直接 return 的 Response，成功时给 Identity */
 export type GuardResult = { ok: true; identity: Identity } | { ok: false; response: NextResponse };
+
+/** 只判过不过的闸门，过了没有额外产物 */
+export type GateResult = { ok: true } | { ok: false; response: NextResponse };
 
 function deny(status: number, errorCode: string, message: string): NextResponse {
   return NextResponse.json({ ok: false, error_code: errorCode, message }, { status });
@@ -45,6 +50,31 @@ export function requireWebSession(db: Database, req: Request): GuardResult {
     };
   }
   return { ok: true, identity };
+}
+
+/**
+ * 实名闸门（spec D1 / §7 users.auth_status）。
+ *
+ * 【范围】只卡三个**对外产生法律效力**的出口，别往外扩：
+ *   1. 证据固化出证  POST /api/v1/evidence/{id}/attest        —— 已挂
+ *   2. 文书导出 PDF  （drafts 导出路由尚未实现）              —— 待该路由落地时挂上
+ *   3. 分享链接创建  （share_links 创建路由尚未实现）          —— 同上
+ * 聊天、问诊、上传材料一律不卡：目标用户在最慌的时候进来，先让他把事说出来、把材料存下来，
+ * 实名留到"要出一份能拿去仲裁的东西"那一刻再要（spec §1 非目标：不给劳动者加门槛）。
+ *
+ * 待审（H5 认证发起了但人没做完）与未认证同等对待——只有落定的「已实名」才放行。
+ */
+export function requireRealname(db: Database, identity: Identity): GateResult {
+  const user = users.findUserById(db, identity.uid);
+  if (user?.auth_status === AUTH_STATUS.verified) return { ok: true };
+  return {
+    ok: false,
+    response: deny(
+      403,
+      'REALNAME_REQUIRED',
+      '这一步需要先完成实名认证：出证与对外文书要与本人身份绑定',
+    ),
+  };
 }
 
 /** 领域层失败（lib/cases 的 DomainFailure）转 HTTP 响应，形状与 auth 面保持一致 */
