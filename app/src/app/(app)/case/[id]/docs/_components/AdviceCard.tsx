@@ -1,4 +1,5 @@
-import { cn } from '@/app/_ui/cn';
+import { Card } from '@/components/shadcn/card';
+import { cn } from '@/components/shadcn/utils';
 import type { CompanyDoc } from '@/app/_mock/types';
 import { ADVICE_SUMMARY } from './badges';
 import { SensitiveText } from './SensitiveText';
@@ -45,12 +46,9 @@ export function AdviceCard({
   const skin = SKIN[advice];
 
   return (
-    <section
+    <Card
       aria-label={`签署建议：${advice}`}
-      className={cn(
-        'relative overflow-hidden rounded-[12px] border pl-4',
-        skin.box,
-      )}
+      className={cn('relative overflow-hidden pl-4 shadow-none', skin.box)}
     >
       <span className={cn('absolute inset-y-0 left-0 w-1', skin.line)} aria-hidden />
 
@@ -68,7 +66,7 @@ export function AdviceCard({
         </p>
 
         {revisePoints && revisePoints.length > 0 && (
-          <div className="mt-4 rounded-[10px] bg-surface p-3.5">
+          <div className="mt-4 rounded-[10px] bg-card p-3.5">
             <h3 className="text-[15px] font-semibold text-ink">逐条改成这样再签</h3>
             <ol className="mt-2 flex flex-col gap-2">
               {revisePoints.map((point, i) => (
@@ -85,6 +83,6 @@ export function AdviceCard({
           </div>
         )}
       </div>
-    </section>
+    </Card>
   );
 }

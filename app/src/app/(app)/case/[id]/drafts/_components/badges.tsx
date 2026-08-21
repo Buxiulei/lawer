@@ -1,4 +1,4 @@
-import { Badge, type BadgeTone } from '@/components/ui/Badge';
+import { Badge, type BadgeTone } from '@/components/shadcn/badge';
 import type { Draft, DraftKind } from '@/app/_mock/types';
 
 /** 文书类型是分类，用中性色；颜色留给状态。 */

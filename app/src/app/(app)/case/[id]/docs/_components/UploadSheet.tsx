@@ -3,8 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { DEMO_UPLOAD_DOC_ID, OCR_STEPS } from '@/app/_mock/docs-drafts';
-import { Button } from '@/components/ui/Button';
-import { Sheet } from '@/components/ui/Sheet';
+import { AppSheet } from '@/components/shadcn/app-sheet';
+import { Button } from '@/components/shadcn/button';
+import { Progress } from '@/components/shadcn/progress';
 import { useToast } from '@/components/ui/Toast';
 
 /**
@@ -50,16 +51,16 @@ export function UploadSheet({
     : 0;
 
   return (
-    <Sheet open={open} onClose={onClose} title="上传公司给你的文件">
+    <AppSheet open={open} onClose={onClose} title="上传公司给你的文件">
       {!running ? (
         <div className="flex flex-col gap-3">
           <p className="text-[15px] leading-7 text-ink-2">
             解除通知、协商协议、调岗通知、PIP、警告信都可以传。拍照拍全整页，四角要在画面里；多页文件一次传多张。
           </p>
-          <Button fullWidth onClick={() => setStep(0)}>
+          <Button className="w-full" onClick={() => setStep(0)}>
             拍照上传
           </Button>
-          <Button variant="secondary" fullWidth onClick={() => setStep(0)}>
+          <Button variant="secondary" className="w-full" onClick={() => setStep(0)}>
             从文件中选择
           </Button>
           <p className="rounded-[10px] bg-surface-2 px-3 py-2 text-[14px] leading-6 text-ink-2">
@@ -75,19 +76,7 @@ export function UploadSheet({
               </p>
               <span className="num text-[14px] text-ink-2">{percent}%</span>
             </div>
-            <div
-              className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2"
-              role="progressbar"
-              aria-valuenow={percent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label="解读进度"
-            >
-              <div
-                className="h-full rounded-full bg-primary transition-[width] duration-200 ease-out"
-                style={{ width: `${percent}%` }}
-              />
-            </div>
+            <Progress className="mt-2" value={percent} label="解读进度" />
           </div>
 
           <ol className="flex flex-col gap-2">
@@ -107,9 +96,9 @@ export function UploadSheet({
                     className={
                       'flex size-5 shrink-0 items-center justify-center rounded-full text-[12px] ' +
                       (done
-                        ? 'bg-success text-white'
+                        ? 'bg-success text-on-primary'
                         : current
-                          ? 'bg-primary text-white'
+                          ? 'bg-primary text-on-primary'
                           : 'bg-surface-2 text-ink-2')
                     }
                   >
@@ -126,6 +115,6 @@ export function UploadSheet({
           </p>
         </div>
       )}
-    </Sheet>
+    </AppSheet>
   );
 }

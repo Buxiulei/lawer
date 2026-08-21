@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Button } from '@/components/shadcn/button';
+import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
 import { useToast } from '@/components/ui/Toast';
 import { StepBar } from './StepBar';
 import { StepStage } from './StepStage';
@@ -123,13 +123,14 @@ export function IntakeFlow() {
           <p className="text-[14px] leading-6 text-ink-2">
             上次填到第 {step + 1} 步，已经接着打开了。
           </p>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setConfirmReset(true)}
-            className="min-h-11 text-[14px] text-primary-ink"
+            className="px-2 text-[14px]"
           >
             清空重填
-          </button>
+          </Button>
         </div>
       )}
 
@@ -147,11 +148,11 @@ export function IntakeFlow() {
             </Button>
           )}
           {isLast ? (
-            <Button onClick={finish} fullWidth>
+            <Button onClick={finish} className="w-full">
               进入工作台
             </Button>
           ) : (
-            <Button onClick={() => go(step + 1)} disabled={!canAdvance} fullWidth>
+            <Button onClick={() => go(step + 1)} disabled={!canAdvance} className="w-full">
               下一步
             </Button>
           )}

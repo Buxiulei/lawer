@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { Button } from '@/components/shadcn/button';
 import { LampMark } from '@/components/shell/LampMark';
 
 export const metadata: Metadata = { title: '档案已创建' };
@@ -25,18 +26,12 @@ export default function WelcomePage() {
         </header>
 
         <div className="flex flex-col gap-3">
-          <Link
-            href="/intake"
-            className="inline-flex h-12 w-full items-center justify-center rounded-[10px] bg-primary px-5 text-[16px] font-medium text-white transition-opacity duration-150 ease-out hover:opacity-90"
-          >
-            开始首诊
-          </Link>
-          <Link
-            href="/settings#api-keys"
-            className="inline-flex h-12 w-full items-center justify-center rounded-[10px] border border-line bg-surface px-5 text-[16px] font-medium text-ink transition-colors duration-150 ease-out hover:bg-surface-2"
-          >
-            生成接入密钥
-          </Link>
+          <Button asChild className="w-full">
+            <Link href="/intake">开始首诊</Link>
+          </Button>
+          <Button asChild variant="secondary" className="w-full">
+            <Link href="/settings#api-keys">生成接入密钥</Link>
+          </Button>
           <p className="text-[13px] leading-6 text-ink-2">
             接入密钥用来把这个档案接到自己的工具里（例如 Claude
             这类支持 MCP 的客户端）。不需要的话跳过就行，之后在设置里随时能建。

@@ -1,10 +1,12 @@
 'use client';
 
 import { CONTRACT_COUNTS, serviceYearsBetween } from '@/app/_mock/intake-evidence';
-import { Input } from '@/components/ui/Field';
-import { ChoiceCard } from './ChoiceCard';
+import { InputField } from '@/components/shadcn/field';
+import { ChoiceCards } from './ChoiceCard';
 import { DiscreetInput } from './DiscreetInput';
 import type { IntakeDraft } from './draft';
+
+const CONTRACT_CHOICES = CONTRACT_COUNTS.map((value) => ({ value }));
 
 export function StepBasics({
   draft,
@@ -17,7 +19,7 @@ export function StepBasics({
 
   return (
     <div className="flex flex-col gap-5">
-      <Input
+      <InputField
         label="入职时间"
         type="date"
         value={draft.hiredOn}
@@ -40,7 +42,7 @@ export function StepBasics({
         hint="填离职前 12 个月的平均实发工资，含奖金和补贴。低调模式下这一栏会自动打码。"
       />
 
-      <Input
+      <InputField
         label="岗位"
         value={draft.position}
         placeholder="例如 后端工程师"
@@ -58,16 +60,12 @@ export function StepBasics({
 
       <div className="flex flex-col gap-2.5">
         <p className="text-[14px] font-medium text-ink">劳动合同签了几次</p>
-        <div role="radiogroup" aria-label="劳动合同签了几次" className="flex flex-col gap-2">
-          {CONTRACT_COUNTS.map((c) => (
-            <ChoiceCard
-              key={c}
-              title={c}
-              selected={draft.contractCount === c}
-              onSelect={() => patch({ contractCount: c })}
-            />
-          ))}
-        </div>
+        <ChoiceCards
+          ariaLabel="劳动合同签了几次"
+          options={CONTRACT_CHOICES}
+          value={draft.contractCount}
+          onChange={(contractCount) => patch({ contractCount })}
+        />
         <p className="text-[13px] leading-6 text-ink-2">
           续签两次以上、或者没签书面合同，都会直接影响你能主张什么，所以要单独问一句。
         </p>

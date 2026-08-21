@@ -3,8 +3,9 @@ import Link from 'next/link';
 import { GONGDAO_PER_YUAN, gongdaoBalance } from '@/app/_mock/authpay';
 import { demoUser } from '@/app/_mock/demo';
 import { Sensitive } from '@/components/Sensitive';
-import { Badge } from '@/components/ui/Badge';
-import { Card } from '@/components/ui/Card';
+import { Badge } from '@/components/shadcn/badge';
+import { Button } from '@/components/shadcn/button';
+import { Card } from '@/components/shadcn/card';
 import { LedgerList } from './_components/LedgerList';
 import { RechargePanel } from './_components/RechargePanel';
 
@@ -20,15 +21,12 @@ export default function AccountPage() {
             {demoUser.nickname} · {demoUser.phoneMasked}
           </p>
         </div>
-        <Link
-          href="/settings"
-          className="flex min-h-11 items-center rounded-[10px] px-3 text-[15px] text-primary-ink hover:bg-primary-wash"
-        >
-          设置
-        </Link>
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/settings">设置</Link>
+        </Button>
       </header>
 
-      <Card tone="wash" className="p-5">
+      <Card className="border-transparent bg-primary-wash p-5">
         <div className="flex items-start justify-between gap-3">
           <p className="text-[14px] text-ink-2">公道值余额</p>
           <div className="flex shrink-0 gap-1.5">

@@ -3,7 +3,8 @@
 import { useState, type ReactNode } from 'react';
 import { ApiError, apiFetch, humanError } from '@/app/_ui/api';
 import { cn } from '@/app/_ui/cn';
-import { Button } from '@/components/ui/Button';
+import { Button } from '@/components/shadcn/button';
+import { Card } from '@/components/shadcn/card';
 import { useToast } from '@/components/ui/Toast';
 import { readRecheck, type Recheck, type RecheckCheck } from '../_verification';
 
@@ -53,14 +54,15 @@ export function RecheckPanel({ orderNo }: { orderNo: string }) {
 
   return (
     <section className="mt-6">
-      <div className="rounded-[12px] border border-line bg-surface p-4">
+      <Card className="p-4 shadow-none">
         <h3 className="text-[17px] font-semibold text-ink">在线核验</h3>
         <p className="prose-measure mt-1 text-[14px] leading-6 text-ink-2">
           让平台当场重算一遍哈希、验一遍时间戳令牌与签名，把结论摆在这里。
           不想依赖平台的结论，就按下方指引自己离线核。
         </p>
         <Button
-          className="mt-3"
+          // Card 是 flex 列，不自己收一下宽度会被拉成整行
+          className="mt-3 self-start"
           size="sm"
           variant={result ? 'secondary' : 'primary'}
           disabled={running}
@@ -71,7 +73,7 @@ export function RecheckPanel({ orderNo }: { orderNo: string }) {
         {failure && !result && (
           <p className="mt-2 text-[14px] leading-6 text-ink-2">{failure}</p>
         )}
-      </div>
+      </Card>
 
       {result && <Verdict result={result} />}
     </section>
@@ -134,7 +136,7 @@ function Verdict({ result }: { result: Recheck }) {
 
   return (
     <>
-      <div className={cn('mt-3 rounded-[12px] border p-4 sm:p-5', style.card)}>
+      <Card className={cn('mt-3 p-4 shadow-none sm:p-5', style.card)}>
         <div className="flex items-start gap-3">
           <span className="mt-0.5 shrink-0">
             {result.verdict === 'pass' ? (
@@ -152,7 +154,7 @@ function Verdict({ result }: { result: Recheck }) {
             </p>
           </div>
         </div>
-      </div>
+      </Card>
 
       {checks.length > 0 && (
         <div className="mt-4">

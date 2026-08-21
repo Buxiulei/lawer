@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { ApiError, humanError } from '@/app/_ui/api';
 import { OTP_LENGTH, OTP_RESEND_SECONDS } from '@/app/_mock/authpay';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Field';
+import { Button } from '@/components/shadcn/button';
+import { InputField } from '@/components/shadcn/field';
 import { CodeInput } from './CodeInput';
 
 /**
@@ -102,7 +102,7 @@ export function ChannelStep({
   if (!sent) {
     return (
       <div className="flex flex-col gap-4">
-        <Input
+        <InputField
           label={fieldLabel}
           hint={fieldHint}
           error={error ?? undefined}
@@ -116,7 +116,7 @@ export function ChannelStep({
             setError(null);
           }}
         />
-        <Button fullWidth disabled={!valid || !gateOk || sending} onClick={send}>
+        <Button className="w-full" disabled={!valid || !gateOk || sending} onClick={send}>
           {sending ? '正在发送…' : '发送验证码'}
         </Button>
         {!gateOk && gateHint && (
@@ -153,7 +153,7 @@ export function ChannelStep({
       )}
 
       <Button
-        fullWidth
+        className="w-full"
         disabled={code.length < OTP_LENGTH || verifying}
         onClick={submit}
       >
@@ -161,24 +161,26 @@ export function ChannelStep({
       </Button>
 
       <div className="flex items-center justify-between">
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => {
             setSent(false);
             setError(null);
           }}
-          className="num flex min-h-11 items-center text-[14px] text-ink-2 hover:text-ink"
+          className="px-2 text-[14px] text-ink-2"
         >
           换一个{fieldLabel}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           disabled={cooldown > 0 || sending}
           onClick={send}
-          className="num flex min-h-11 items-center text-[14px] text-primary-ink disabled:text-ink-2"
+          className="num px-2 text-[14px]"
         >
           {cooldown > 0 ? `${cooldown} 秒后可重发` : '重新发送'}
-        </button>
+        </Button>
       </div>
     </div>
   );

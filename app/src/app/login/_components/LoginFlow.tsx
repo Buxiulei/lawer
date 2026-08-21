@@ -12,6 +12,9 @@ import {
 import { apiFetch } from '@/app/_ui/api';
 import { writeToken } from '@/app/_ui/auth';
 import { cn } from '@/app/_ui/cn';
+import { Button } from '@/components/shadcn/button';
+import { Card } from '@/components/shadcn/card';
+import { Checkbox } from '@/components/shadcn/checkbox';
 import { ChannelStep } from './ChannelStep';
 
 const STEP_LABELS = ['手机验证', '邮箱验证'];
@@ -41,7 +44,7 @@ export function LoginFlow() {
     <div className="flex flex-col gap-5">
       <Steps current={step} />
 
-      <div className="rounded-[12px] border border-line bg-surface p-5 shadow-soft">
+      <Card className="p-5">
         {step === 0 ? (
           <ChannelStep
             key="phone"
@@ -113,28 +116,30 @@ export function LoginFlow() {
             }}
           />
         )}
-      </div>
+      </Card>
 
       {step === 0 ? (
+        // 点整条由浏览器转发给里面的 Checkbox（button 是 labelable 元素），
+        // 这一层不要再挂 onClick，否则勾选状态会被切两次。
         <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-[10px] bg-surface-2 p-3.5">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={agreed}
-            onChange={(e) => setAgreed(e.target.checked)}
-            className="mt-1 size-5 shrink-0 accent-primary"
+            onCheckedChange={(next) => setAgreed(next === true)}
+            className="mt-1"
           />
           <span className="text-[14px] leading-6 text-ink-2">
             我已阅读并理解：{DISCLAIMER_TEXT}
           </span>
         </label>
       ) : (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => setStep(0)}
-          className="flex min-h-11 items-center self-start text-[14px] text-ink-2 hover:text-ink"
+          className="self-start px-2 text-[14px] text-ink-2"
         >
           返回上一步
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -153,7 +158,7 @@ function Steps({ current }: { current: number }) {
               className={cn(
                 'num flex size-6 items-center justify-center rounded-full text-[13px] font-semibold',
                 done && 'bg-primary-wash text-primary-ink',
-                active && 'bg-primary text-white',
+                active && 'bg-primary text-on-primary',
                 !done && !active && 'bg-surface-2 text-ink-2',
               )}
             >
