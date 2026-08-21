@@ -215,6 +215,10 @@ function computeN(input: JingjiBuchangInput): NCore {
       `月平均应得工资 ${yuan(wage)} 元 < 北京市最低工资 ${yuan(minWageFen)} 元/月` +
       ` → 基数按最低工资 ${yuan(minWageFen)} 元，补偿年限无上限。`;
     flags.push(CALC_FLAG.minWageFloor);
+    // 触底行的基数就是最低工资本身——用的还是内置缺省时必须亮牌（北京最低工资年度调整，
+    // 缺省过期即金额直接算错）。注入当前值归工具层（tools.ts 读 data-beijing-zuidi-gongzi 的
+    // facts，issue #41）；本 flag 是注入缺位时的最后一道提示。
+    if (input.minWageFen === undefined) flags.push(CALC_FLAG.minWageUnverified);
     notes.push('最低工资兜底');
   } else {
     baseFen = wage;
