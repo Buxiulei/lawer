@@ -63,6 +63,10 @@ facts:
 
 - `status`: `usable`（可输出给用户）| `forbidden`（已证伪/危险号码，代码层拦截，绝不输出）。
 - `category`: `crisis`（心理危机）| `legal`（法援/法律咨询）| `union`（工会）| `inspection`（人社/监察）——代码按 category 筛线，禁按 name 关键词猜。
+- `addresses`（坐标卡）：`[{name, address, phone?, status: usable|unverified, agent_note?}]`——
+  usable=官方确认可输出；unverified=二手来源，代码层禁止渲染具体值（agent 只说"以官方查询为准"）。
+- `hours` 只放用户可见纯服务时间（如 `24小时`/`7×24`/`工作日`）；核验状态等内部信息一律进
+  `agent_note`，hours 含"核验中/待核实/官网载/存疑"等内部词即校验失败。
 - `dial_hint`（用户向，可直接渲染给用户）与 `agent_note`（agent 内部指令，**绝不渲染**）严格分离；
   `usable` 热线必须有 `dial_hint`；旧混受众字段 `note` **废弃**，出现即校验失败。
 - `key`: 全库唯一的 snake_case 英文键，代码按 key 取数；`source_idx` 指向本卡 sources 数组下标。

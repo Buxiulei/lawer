@@ -15,8 +15,8 @@ sources:
 facts:
   hotlines:
     - {name: 全国统一心理援助热线（北京安定医院承接）, phone: "12356", category: crisis, status: usable, hours: 24小时, dial_hint: 全国统一心理援助热线，手机座机均可直拨, agent_note: 首选统一入口，偏心理咨询}
-    - {name: 北京心理援助热线·座机线（回龙观医院）, phone: "800-810-1117", category: crisis, status: usable, hours: 官网载7×24（人工核验中）, dial_hint: 用座机拨打（免费）；手机拨打不通，请改拨 010-82951332, agent_note: 必须与手机线成对给出；7×24 为官网口径待人工核验}
-    - {name: 北京心理援助热线·手机线（回龙观医院）, phone: "010-82951332", category: crisis, status: usable, hours: 官网载7×24（人工核验中）, dial_hint: 用手机拨打此号；座机可改拨免费线 800-810-1117, agent_note: 偏心理危机干预（自杀干预）；必须与座机线成对给出}
+    - {name: 北京心理援助热线·座机线（回龙观医院）, phone: "800-810-1117", category: crisis, status: usable, hours: 7×24, dial_hint: 用座机拨打（免费）；手机拨打不通，请改拨 010-82951332, agent_note: 必须与手机线成对给出；7×24 为官网口径待人工核验}
+    - {name: 北京心理援助热线·手机线（回龙观医院）, phone: "010-82951332", category: crisis, status: usable, hours: 7×24, dial_hint: 用手机拨打此号；座机可改拨免费线 800-810-1117, agent_note: 偏心理危机干预（自杀干预）；必须与座机线成对给出}
     - {name: 朝阳区公共法律服务中心（法律援助受理）, phone: "010-85963226", category: legal, status: usable, hours: 工作日, dial_hint: 朝阳区六里屯西里7号楼（14号线朝阳公园站D口），工作日拨打或到场, agent_note: 朝阳法援受理唯一正确号；法援需经济困难审查，勿说免审}
     - {name: 公共法律服务热线, phone: "12348", category: legal, status: usable, dial_hint: 公共法律服务热线，可咨询法律援助申请条件, agent_note: 经济困难标准数额不写死，引导来电咨询}
     - {name: 北京市职工服务（维权）热线, phone: "12351", category: union, status: usable, hours: 365天7×24, dial_hint: 北京市职工服务热线，咨询、帮扶、投诉、法律援助均可, agent_note: 市总工会法律服务中心地址电话存疑，只给本热线由其转接}

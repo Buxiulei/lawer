@@ -17,7 +17,8 @@
 // 「同输入恒同输出」也包括**不随本机时区变**：日期串一律经 db/time 的 fromSql 按 UTC 解析
 // （ADR-002），禁止裸 new Date(串)。理由见 parseDate 上的注释。
 
-import { fromSql, toSql } from '@/lib/db/time';
+import { addMonths, asOrdinal, asUtcMs, parseDate, type Ymd } from './date';
+import { yuan } from './format';
 import {
   CALC_FLAG,
   CALC_VERSION,
@@ -80,51 +81,6 @@ export interface NPlus1Inputs extends JingjiBuchangInputs {
 
 // ───────────────────────────── 工龄折算 ─────────────────────────────
 
-/**
- * 收 'YYYY-MM-DD'、canonical 'YYYY-MM-DD HH:MM:SS'、ISO 'YYYY-MM-DDTHH:MM:SS(.mmm)?Z'。
- * 显式数字时区偏移（'+08:00'）不收：归一成 canonical 后按 UTC 解析会把它悄悄当成 UTC，
- * 宁可报错也不要给出差一天的工龄。
- */
-const DATE_RE = /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}:\d{2})(?:\.\d+)?Z?)?$/;
-
-function daysInMonth(year: number, month1to12: number): number {
-  // Date.UTC 的 day=0 取上个月最后一天，month 传 1-based 即为本月天数。
-  return new Date(Date.UTC(year, month1to12, 0)).getUTCDate();
-}
-
-interface Ymd {
-  y: number;
-  m: number;
-  d: number;
-}
-
-function parseDate(value: string, field: string): Ymd {
-  const matched = DATE_RE.exec(value);
-  if (!matched) {
-    throw new Error(`${field} 不是合法日期串（需 YYYY-MM-DD 或 canonical/ISO 时间串）：${value}`);
-  }
-  // 一律先归一成 canonical 串、再交给 fromSql 按 UTC 解析（ADR-002），不分情况自己 new Date：
-  // 裸 new Date('YYYY-MM-DD HH:MM:SS') 按**本地时区**解析，UTC+8 机器上 '2020-07-01 00:00:00'
-  // 会落到 06-30——工龄恰好卡在六个月档时直接掉一档，N 少算半个月。
-  const at = fromSql(`${matched[1]} ${matched[2] ?? '00:00:00'}`);
-  // 非法月份得 Invalid Date；2 月 30 日这种则会滚到下个月，靠回写比对才抓得住。
-  if (Number.isNaN(at.getTime()) || toSql(at).slice(0, 10) !== matched[1]) {
-    throw new Error(`${field} 不是真实存在的日期：${value}`);
-  }
-  return { y: at.getUTCFullYear(), m: at.getUTCMonth() + 1, d: at.getUTCDate() };
-}
-
-const asOrdinal = (p: Ymd) => p.y * 10000 + p.m * 100 + p.d;
-const asUtcMs = (p: Ymd) => Date.UTC(p.y, p.m - 1, p.d);
-
-/** 加 n 个自然月，日超出目标月长度时截到月末（1-31 加一个月 = 2-28/29）。 */
-function addMonths(p: Ymd, n: number): Ymd {
-  const total = p.y * 12 + (p.m - 1) + n;
-  const y = Math.floor(total / 12);
-  const m = (total % 12) + 1;
-  return { y, m, d: Math.min(p.d, daysInMonth(y, m)) };
-}
-
 interface Tenure {
   /** 日历口径的满年、满月、满日。 */
   years: number;
@@ -175,14 +131,6 @@ export function tenureToMonths(employedFrom: string, terminatedAt: string): numb
 }
 
 // ───────────────────────────── 展示 ─────────────────────────────
-
-/** 分 → 「1,234.56」。手写而非 toLocaleString，避免不同环境 ICU 数据差异导致算式串漂移。 */
-function yuan(fen: number): string {
-  const fixed = (fen / 100).toFixed(2);
-  const negative = fixed.startsWith('-');
-  const [intPart, decPart] = (negative ? fixed.slice(1) : fixed).split('.');
-  return `${negative ? '-' : ''}${intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${decPart}`;
-}
 
 const tenureText = (t: Tenure) => `${t.years} 年 ${t.months} 个月${t.days > 0 ? ` ${t.days} 天` : ''}`;
 
