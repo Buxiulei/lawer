@@ -2728,6 +2728,52 @@
     "path": "packs/cases/zhuanjiao-baoguo-zhiye-daode-12028.md"
   },
   {
+    "id": "data-beijing-lian-zuobiao",
+    "type": "数据卡",
+    "title": "北京劳动仲裁/法院立案坐标（朝阳）",
+    "keywords": [
+      "立案地址",
+      "朝阳仲裁委",
+      "将台路",
+      "立案电话",
+      "朝阳法院",
+      "三中院",
+      "坐标"
+    ],
+    "applies_to": [
+      "仲裁申请",
+      "一审二审"
+    ],
+    "region": "北京",
+    "confidence": "待核实",
+    "updated": "2026-08-21",
+    "path": "packs/data/beijing-lian-zuobiao.md",
+    "facts": {
+      "addresses": [
+        {
+          "name": "北京市朝阳区劳动人事争议仲裁院（立案）",
+          "address": "朝阳区将台路5号院15号楼B座、C座",
+          "phone": "010-87983310",
+          "status": "usable",
+          "agent_note": "A13 官方确认；立案时间工作日9:00-17:00；网上立案 fuwu.rsj.beijing.gov.cn"
+        },
+        {
+          "name": "北京市朝阳区人民法院（立案庭）",
+          "address": "朝阳区南磨房路29号（待核验）",
+          "phone": "010-85998486",
+          "status": "unverified",
+          "agent_note": "电话与地址均二手来源，等调研员核验结论；核验前绝不作为准确信息输出，只能说\"以 12368 查询为准\""
+        },
+        {
+          "name": "北京市第三中级人民法院（二审）",
+          "address": "朝阳区来广营西路81号（待核验）",
+          "status": "unverified",
+          "agent_note": "二手来源待核验；同上纪律"
+        }
+      ]
+    }
+  },
+  {
     "id": "data-beijing-qiuzhu-ziyuan",
     "type": "数据卡",
     "title": "北京免费求助资源卡（心理热线/朝阳法援/工会/劳动监察）",
@@ -2770,7 +2816,7 @@
           "phone": "800-810-1117",
           "category": "crisis",
           "status": "usable",
-          "hours": "官网载7×24（人工核验中）",
+          "hours": "7×24",
           "dial_hint": "用座机拨打（免费）；手机拨打不通，请改拨 010-82951332",
           "agent_note": "必须与手机线成对给出；7×24 为官网口径待人工核验"
         },
@@ -2779,7 +2825,7 @@
           "phone": "010-82951332",
           "category": "crisis",
           "status": "usable",
-          "hours": "官网载7×24（人工核验中）",
+          "hours": "7×24",
           "dial_hint": "用手机拨打此号；座机可改拨免费线 800-810-1117",
           "agent_note": "偏心理危机干预（自杀干预）；必须与座机线成对给出"
         },

@@ -78,6 +78,8 @@ def check_facts(path: Path, fm: dict, body_norm: str, seen_keys: dict) -> None:
             die(f"{path} hotlines[{h['phone']}] 使用已废弃的混受众字段 note——拆为 dial_hint（用户向）/agent_note（内部向）")
         if h["status"] == "usable" and not h.get("dial_hint"):
             die(f"{path} hotlines[{h['phone']}] status=usable 但缺 dial_hint（用户向拨打提示必填）")
+        if any(w in str(h.get("hours", "")) for w in ("核验", "待核实", "官网载", "存疑")):
+            die(f"{path} hotlines[{h['phone']}].hours 含内部词——核验状态进 agent_note，hours 只放纯服务时间")
         if normalize(h["phone"]) not in body_norm:
             die(f"{path} facts 号码 {h['phone']} 未出现在正文（两面不一致）")
     for r in facts.get("review_rules", []):
@@ -94,6 +96,14 @@ def check_facts(path: Path, fm: dict, body_norm: str, seen_keys: dict) -> None:
             ref = ref.strip()
             if ref and not any(ref in str(lr) or str(lr) in ref for lr in law_refs):
                 die(f"{path} review_rules[{r['id']}].basis「{ref}」在 law_refs 中无对应条目")
+    for a in facts.get("addresses", []):
+        for field in ("name", "address", "status"):
+            if field not in a or not a[field]:
+                die(f"{path} facts.addresses 缺字段 {field}：{a}")
+        if a["status"] not in ("usable", "unverified"):
+            die(f"{path} addresses status 非法：{a['status']}")
+        if normalize(str(a["address"])) not in body_norm:
+            die(f"{path} facts 地址「{a['address']}」未出现在正文（两面不一致）")
     for q in facts.get("statute_quotes", []):
         for field in ("law", "article", "text"):
             if field not in q:
