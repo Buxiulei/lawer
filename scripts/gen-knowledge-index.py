@@ -96,12 +96,17 @@ def check_facts(path: Path, fm: dict, body_norm: str, seen_keys: dict) -> None:
             ref = ref.strip()
             if ref and not any(ref in str(lr) or str(lr) in ref for lr in law_refs):
                 die(f"{path} review_rules[{r['id']}].basis「{ref}」在 law_refs 中无对应条目")
+    SCENES = {"仲裁立案", "一审起诉", "二审上诉", "执行申请"}
     for a in facts.get("addresses", []):
-        for field in ("name", "address", "status"):
+        for field in ("name", "scene", "address", "status"):
             if field not in a or not a[field]:
                 die(f"{path} facts.addresses 缺字段 {field}：{a}")
         if a["status"] not in ("usable", "unverified"):
             die(f"{path} addresses status 非法：{a['status']}")
+        scenes = a["scene"] if isinstance(a["scene"], list) else [a["scene"]]
+        for s in scenes:
+            if s not in SCENES:
+                die(f"{path} addresses[{a['name']}].scene 非法：{s}（受控集 {SCENES}）")
         if normalize(str(a["address"])) not in body_norm:
             die(f"{path} facts 地址「{a['address']}」未出现在正文（两面不一致）")
     for q in facts.get("statute_quotes", []):

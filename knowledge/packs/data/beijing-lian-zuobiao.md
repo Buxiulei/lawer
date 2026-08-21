@@ -11,9 +11,9 @@ sources:
   - http://www.bjchy.gov.cn/
 facts:
   addresses:
-    - {name: 朝阳区劳动人事争议仲裁委（仲裁立案）, scene: 仲裁立案, address: 朝阳区将台路5号院15号楼B座、C座, phone: "010-87983310", status: usable, agent_note: A13官方确认；工作日9:00-17:00；网上立案 fuwu.rsj.beijing.gov.cn。劳动争议先仲裁后诉讼，仲裁立案走这里，绝不用法院号}
-    - {name: 朝阳区人民法院立案一庭（对裁决不服起诉法院）, scene: 法院起诉立案, address: 朝阳区广顺北大街32号院7号楼、8号楼, phone: "010-85998486", status: usable, agent_note: A13b官方确认（2023-09-25新址，邮编100102，10+官媒源零冲突）；配合12368。仅用于"对仲裁裁决不服起诉法院"场景，绝不用于仲裁立案}
-    - {name: 北京市第三中级人民法院（二审/撤裁）, scene: 二审, address: 朝阳区来广营西路81号（待核验）, status: unverified, agent_note: 二手来源待核验；核验前只说"以12368查询为准"}
+    - {name: 朝阳区劳动人事争议仲裁委（仲裁立案）, scene: [仲裁立案], address: 朝阳区将台路5号院15号楼B座、C座, phone: "010-87983310", status: usable, agent_note: A13官方确认；工作日9:00-17:00；网上立案 fuwu.rsj.beijing.gov.cn。劳动争议先仲裁后诉讼，仲裁立案走这里，绝不用法院号}
+    - {name: 朝阳区人民法院立案一庭（对裁决不服起诉法院）, scene: [一审起诉], address: 朝阳区广顺北大街32号院7号楼、8号楼, phone: "010-85998486", status: usable, agent_note: A13b官方确认（2023-09-25新址，邮编100102，10+官媒源零冲突）；配合12368。仅用于"对仲裁裁决不服起诉法院"场景，绝不用于仲裁立案}
+    - {name: 北京市第三中级人民法院（二审/撤裁）, scene: [二审上诉], address: 朝阳区来广营西路81号（待核验）, status: unverified, agent_note: 二手来源待核验；核验前只说"以12368查询为准"}
 confidence: 待核实
 updated: 2026-08-21
 ---
