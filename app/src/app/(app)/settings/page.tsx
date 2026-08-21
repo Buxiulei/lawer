@@ -10,10 +10,10 @@ export default function SettingsPage() {
   return (
     <div className="pt-1 pb-4">
       <header className="py-3">
-        <h1 className="text-[20px] font-semibold text-ink">设置</h1>
+        <h1 className="text-[22px] leading-8 font-semibold tracking-tight text-ink">设置</h1>
       </header>
 
-      <div className="flex flex-col gap-4">
+      <div className="mt-2 flex flex-col gap-4">
         <RealnameCard />
         <ApiKeysCard />
         <AgentSetupCard />

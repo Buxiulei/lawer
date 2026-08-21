@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { useDiscreet } from '@/app/_ui/discreet';
-import { Button } from '@/components/ui/Button';
-import { Card, CardBody, CardHeader } from '@/components/ui/Card';
+import { Button } from '@/components/shadcn/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/shadcn/card';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { SetupPrompt } from './SetupPrompt';
 import { useAgentSetup } from './useAgentSetup';
@@ -26,8 +26,10 @@ export function AgentSetupCard() {
 
   return (
     <Card>
-      <CardHeader title={discreet ? '接入配置' : '接到你自己的 AI 助手上'} />
-      <CardBody>
+      <CardHeader>
+        <CardTitle>{discreet ? '接入配置' : '接到你自己的 AI 助手上'}</CardTitle>
+      </CardHeader>
+      <CardContent>
         {collapsed ? (
           <button
             type="button"
@@ -79,7 +81,7 @@ export function AgentSetupCard() {
             )}
           </>
         )}
-      </CardBody>
+      </CardContent>
     </Card>
   );
 }

@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Button } from '@/components/shadcn/button';
+import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
 import {
   formatWaited,
   noticeCopy,
@@ -193,12 +193,9 @@ export function DraftCard({
       <h3 className="mt-2 text-[16px] leading-7 font-semibold text-ink">{frame.title}</h3>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Link
-          href={`/case/${caseId}/drafts/${frame.id}`}
-          className="inline-flex h-11 items-center justify-center rounded-[10px] border border-line bg-surface px-4 text-[15px] font-medium text-ink transition-colors duration-150 ease-out hover:bg-surface-2"
-        >
-          查看草稿
-        </Link>
+        <Button asChild size="sm" variant="secondary">
+          <Link href={`/case/${caseId}/drafts/${frame.id}`}>查看草稿</Link>
+        </Button>
         {!confirmed && (
           <Button size="sm" variant="ghost" onClick={() => onRequestConfirm(frame)}>
             确认口径无误
@@ -213,8 +210,7 @@ export function DraftCard({
   );
 }
 
-/** 草稿确认弹窗。必须渲染在工作台的 lg:-translate-x-1/2 容器之外——
- *  祖先有 transform 时 position:fixed 会以它为参照，弹窗会偏出屏幕。 */
+/** 草稿确认弹窗。Radix 会 portal 到 body，不受工作台那层布局容器影响。 */
 export function DraftConfirmDialog({
   draft,
   onCancel,

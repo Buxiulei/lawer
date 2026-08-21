@@ -1,6 +1,7 @@
 'use client';
 
 import { useLayoutEffect, useRef, useState } from 'react';
+import { Button } from '@/components/shadcn/button';
 
 const MAX_HEIGHT_PX = 168;
 
@@ -54,21 +55,23 @@ export function Composer({
         />
 
         {streaming ? (
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="icon"
             onClick={onStop}
             aria-label="停止输出"
-            className="flex size-11 shrink-0 items-center justify-center rounded-[10px] border border-line bg-surface text-ink-2 transition-colors duration-150 ease-out hover:bg-surface-2"
+            className="text-ink-2"
           >
             <span aria-hidden className="size-3.5 rounded-[3px] bg-current" />
-          </button>
+          </Button>
         ) : (
-          <button
+          <Button
             type="button"
+            size="icon"
             onClick={send}
             disabled={!value.trim()}
             aria-label="发送"
-            className="flex size-11 shrink-0 items-center justify-center rounded-[10px] bg-primary text-white transition-opacity duration-150 ease-out hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <svg
               viewBox="0 0 24 24"
@@ -83,7 +86,7 @@ export function Composer({
               <path d="M4.5 19.5L20 12 4.5 4.5l2.6 7.5-2.6 7.5z" />
               <path d="M7.1 12H20" />
             </svg>
-          </button>
+          </Button>
         )}
       </div>
       <p className="mt-1.5 hidden text-[13px] text-ink-2 lg:block">

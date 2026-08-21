@@ -5,9 +5,15 @@ import { ApiError, apiFetch, humanError } from '@/app/_ui/api';
 import { REALNAME_ANCHOR } from '@/app/_ui/realname';
 import { Sensitive } from '@/components/Sensitive';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { Card, CardBody, CardHeader } from '@/components/ui/Card';
-import { Input } from '@/components/ui/Field';
+import { Button } from '@/components/shadcn/button';
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/shadcn/card';
+import { InputField } from '@/components/shadcn/field';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { CodeBlock } from './CodeBlock';
 
@@ -172,11 +178,13 @@ export function RealnameCard() {
   return (
     <Card>
       <span id={REALNAME_ANCHOR} className="block scroll-mt-20" />
-      <CardHeader
-        title="实名认证"
-        action={<StatusBadge status={status?.auth_status} loading={loading} />}
-      />
-      <CardBody>
+      <CardHeader>
+        <CardTitle>实名认证</CardTitle>
+        <CardAction>
+          <StatusBadge status={status?.auth_status} loading={loading} />
+        </CardAction>
+      </CardHeader>
+      <CardContent>
         <p className="text-[14px] leading-6 text-ink-2">
           出具法律效力文件需要实名。实名信息仅用于存证证明与实人认证，不会出现在其他页面。
         </p>
@@ -221,7 +229,7 @@ export function RealnameCard() {
                   </p>
                 )}
 
-                <Input
+                <InputField
                   label="姓名"
                   hint="与身份证上一致"
                   autoComplete="name"
@@ -229,7 +237,7 @@ export function RealnameCard() {
                   onChange={(e) => setName(e.target.value)}
                   maxLength={30}
                 />
-                <Input
+                <InputField
                   label="身份证号"
                   hint="18 位，末位是 X 的直接输 X"
                   inputMode="text"
@@ -256,7 +264,7 @@ export function RealnameCard() {
             )}
           </div>
         )}
-      </CardBody>
+      </CardContent>
     </Card>
   );
 }

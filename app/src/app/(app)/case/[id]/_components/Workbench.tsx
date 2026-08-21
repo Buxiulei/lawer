@@ -13,8 +13,10 @@ import { mockLawRefs } from '@/app/_mock/workbench';
 import { formatDate } from '@/app/_ui/format';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Sheet } from '@/components/ui/Sheet';
+import { AppSheet } from '@/components/shadcn/app-sheet';
+import { Button } from '@/components/shadcn/button';
 import { DeadlineChip } from '@/components/case/DeadlineChip';
+import { useRegisterCasePanel } from '@/components/shell/casePanel';
 import { toActionItem, type DraftFrame } from '../_stream/frames';
 import { readToken } from '../_stream/httpTransport';
 import { useChatStream, type SettledTurn } from '../_stream/useChatStream';
@@ -56,6 +58,10 @@ export function Workbench({ caseId }: { caseId: string }) {
   const follow = useRef(false);
 
   useEffect(() => setSignedIn(Boolean(readToken())), []);
+
+  // 顶栏那个「案件档案」按钮由壳层渲染，这里把开抽屉的动作交给它
+  const openPanel = useCallback(() => setPanelOpen(true), []);
+  useRegisterCasePanel(seeded ? openPanel : null);
 
   // 滚到文档末尾而不是锚点：末尾处输入区回到静态位置，最后一行不会被它压住
   const scrollToBottom = useCallback((smooth = true) => {
@@ -169,12 +175,9 @@ export function Workbench({ caseId }: { caseId: string }) {
           title="这个案件还没有对话记录"
           description="先做一次首诊：把被裁的经过、工资和司龄讲清楚。首诊结束后这里会有时间线、诉求初算金额，以及接下来 7 天要做的事。"
           action={
-            <Link
-              href="/intake"
-              className="inline-flex h-12 items-center justify-center rounded-[10px] bg-primary px-5 text-[16px] font-medium text-white transition-opacity duration-150 ease-out hover:opacity-90"
-            >
-              去做首诊
-            </Link>
+            <Button asChild>
+              <Link href="/intake">去做首诊</Link>
+            </Button>
           }
         />
       </div>
@@ -197,12 +200,13 @@ export function Workbench({ caseId }: { caseId: string }) {
 
   return (
     <>
-      {/* AppShell 的 main 限宽 860px；工作台在 PC 需要双栏，这里向两侧扩展。 */}
-      <div className="lg:relative lg:left-1/2 lg:w-[min(1180px,calc(100vw-160px))] lg:-translate-x-1/2">
-        {seeded && <MobileBar onOpenPanel={() => setPanelOpen(true)} />}
+      {/* data-wide 让 AppShell 的 main 把限宽抬到 1280；双栏在 xl 起排开，
+          再窄就只剩对话流，档案走顶栏按钮的抽屉。 */}
+      <div data-wide>
+        {seeded && <CaseStatusBar />}
 
-        <div className="lg:flex lg:items-start lg:gap-6">
-          <div className="min-w-0 lg:flex-1">
+        <div className="xl:flex xl:items-start xl:gap-6">
+          <div className="min-w-0 xl:flex-1">
             {stream.demoFallback && <DemoDataBanner />}
 
             <div className="flex flex-col">
@@ -264,16 +268,16 @@ export function Workbench({ caseId }: { caseId: string }) {
           </div>
 
           {seeded && (
-            <aside className="hidden lg:sticky lg:top-[68px] lg:block lg:max-h-[calc(100dvh-88px)] lg:w-[360px] lg:shrink-0 lg:overflow-y-auto lg:pb-4">
+            <aside className="hidden xl:sticky xl:top-[68px] xl:block xl:max-h-[calc(100dvh-88px)] xl:w-[360px] xl:shrink-0 xl:overflow-y-auto xl:pb-4">
               <h2 className="mb-2 px-1 text-[15px] font-semibold text-ink">案件档案</h2>
               <CasePanel caseId={caseId} actions={actions} />
             </aside>
           )}
         </div>
 
-        <Sheet open={panelOpen} onClose={() => setPanelOpen(false)} title="案件档案">
+        <AppSheet open={panelOpen} onClose={() => setPanelOpen(false)} title="案件档案">
           <CasePanel caseId={caseId} actions={actions} />
-        </Sheet>
+        </AppSheet>
       </div>
 
       {/* 变换容器会成为 fixed 的参照系，确认弹窗必须挂在它外面 */}
@@ -286,23 +290,19 @@ export function Workbench({ caseId }: { caseId: string }) {
   );
 }
 
-/** 移动端：档案入口 + 最近截止日，PC 上档案常驻右栏，这条不出现 */
-function MobileBar({ onOpenPanel }: { onOpenPanel: () => void }) {
+/**
+ * 阶段 + 最近截止日。双栏排开（xl）之后这两条在右栏档案里都有，就不再重复。
+ * 档案入口本身已经上移到壳层顶栏。
+ */
+function CaseStatusBar() {
   const nearest = [...demoDeadlines].sort((a, b) =>
     a.dueAt.localeCompare(b.dueAt),
   )[0];
 
   return (
-    <div className="sticky top-14 z-30 -mx-4 mb-1 flex items-center gap-2 border-b border-line bg-bg/95 px-4 py-2 backdrop-blur-sm lg:hidden">
+    <div className="sticky top-14 z-30 -mx-4 mb-1 flex items-center gap-2 border-b border-line bg-bg/95 px-4 py-2 backdrop-blur-sm xl:hidden">
       <Badge tone="primary">{demoCase.stage}</Badge>
       {nearest && <DeadlineChip dueAt={nearest.dueAt} />}
-      <button
-        type="button"
-        onClick={onOpenPanel}
-        className="ml-auto flex h-11 shrink-0 items-center rounded-[10px] border border-line bg-surface px-3 text-[14px] text-ink transition-colors duration-150 ease-out active:bg-surface-2"
-      >
-        案件档案
-      </button>
     </div>
   );
 }
