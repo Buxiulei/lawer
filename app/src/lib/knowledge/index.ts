@@ -11,7 +11,7 @@ export interface PackFacts {
   hotlines?: Array<{ name: string; phone: string; category: 'crisis' | 'legal' | 'union' | 'inspection'; status: 'usable' | 'forbidden'; hours?: string; dial_hint?: string; agent_note?: string }>;
   values?: Array<{ key: string; value: number; unit: string; effective_from: string; confidence: string; source_idx: number }>;
   statute_quotes?: Array<{ law: string; article: string; text: string }>;
-  addresses?: Array<{ name: string; address: string; phone?: string; status: 'usable' | 'unverified'; agent_note?: string }>;
+  addresses?: Array<{ name: string; scene: Array<'仲裁立案' | '一审起诉' | '二审上诉' | '执行申请'>; address: string; phone?: string; status: 'usable' | 'unverified'; hours?: string; agent_note?: string; source?: string; confidence?: string }>;
   review_rules?: Array<{ id: string; severity: 'must' | 'strong' | 'suggest'; title: string; pattern_hint: string; basis: string; suggestion: string; negotiation_tip?: string }>;
 }
 

@@ -63,8 +63,11 @@ facts:
 
 - `status`: `usable`（可输出给用户）| `forbidden`（已证伪/危险号码，代码层拦截，绝不输出）。
 - `category`: `crisis`（心理危机）| `legal`（法援/法律咨询）| `union`（工会）| `inspection`（人社/监察）——代码按 category 筛线，禁按 name 关键词猜。
-- `addresses`（坐标卡）：`[{name, address, phone?, status: usable|unverified, agent_note?}]`——
+- `addresses`（坐标卡）：`[{name, scene: [仲裁立案|一审起诉|二审上诉|执行申请], address, phone?, status: usable|unverified, hours?, agent_note?, source?, confidence?}]`——
   usable=官方确认可输出；unverified=二手来源，代码层禁止渲染具体值（agent 只说"以官方查询为准"）。
+  **铁律：name 只用于展示，消费方判断一律走 scene+status 双键，禁止按 name 含"仲裁院/法院"等关键词取条目**
+  （这是"代码按名字猜"的同型坑第三次——热线 category、坐标 scene 均为根治）。scene 是数组，一个机构
+  可挂多场景，或同机构建多条。校验器强制 scene 非空且值在受控集内。
 - `hours` 只放用户可见纯服务时间（如 `24小时`/`7×24`/`工作日`）；核验状态等内部信息一律进
   `agent_note`，hours 含"核验中/待核实/官网载/存疑"等内部词即校验失败。
 - `dial_hint`（用户向，可直接渲染给用户）与 `agent_note`（agent 内部指令，**绝不渲染**）严格分离；
