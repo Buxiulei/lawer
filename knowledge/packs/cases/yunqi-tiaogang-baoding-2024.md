@@ -9,6 +9,15 @@ related: [sop-tiaogang-yingdui, template-jujue-tiaogang-huifuhan, statute-jgf-20
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    court: "仲裁裁决 → 一审、二审判决与仲裁结果一致"
+    judged_at: ""
+    gist: "邓某原在北京工作。她将怀孕情况告知公司当日，公司即通知将其调岗至河北保定，给出的理由\n是\"日志作假\"，但未能提供充分证据。邓某表示希望产假结束后再前往。公司随后以邓某\"不遵守\n公司制度、弄虚作假\"为由解除劳动合同。"
+    issue: "跨省调整工作地点属于一般用工管理，还是须协商一致的劳动合同重大变更？"
+    holding: "仲裁委支持邓某继续履行劳动合同，一审、二审判决结果与仲裁一致。"
+    reasoning: "调整工作地点和工作岗位属于劳动合同的**重大变更**，需与劳动者**书面协商一致**"
 confidence: 二手转述
 updated: 2026-08-19
 ---

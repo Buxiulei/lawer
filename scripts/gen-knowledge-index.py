@@ -97,6 +97,13 @@ def check_facts(path: Path, fm: dict, body_norm: str, seen_keys: dict) -> None:
             if ref and not any(ref in str(lr) or str(lr) in ref for lr in law_refs):
                 die(f"{path} review_rules[{r['id']}].basis「{ref}」在 law_refs 中无对应条目")
     SCENES = {"仲裁立案", "一审起诉", "二审上诉", "执行申请"}
+    cf = facts.get("case_facts")
+    if cf:
+        for k, v in cf.items():
+            if k not in ("case_no", "court", "judged_at", "gist", "issue", "holding", "reasoning"):
+                die(f"{path} case_facts 含未知字段 {k}")
+            if v and normalize(str(v)) not in body_norm:
+                die(f"{path} case_facts.{k} 值未出现在正文（两面不一致）：{str(v)[:40]}")
     for a in facts.get("addresses", []):
         for field in ("name", "scene", "address", "status"):
             if field not in a or not a[field]:
