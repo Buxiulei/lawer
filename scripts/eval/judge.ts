@@ -18,11 +18,14 @@
 // 没有 DEEPSEEK_API_KEY 时整个语义环节 skip，机械断言照跑——
 // 无 key 的环境（CI、别人的机器）也要能跑出有意义的结果。
 import { createProvider, MODELS } from '../../app/src/lib/llm';
+import type { Tier } from './assertions';
 import type { ChatMessage } from '../../app/src/lib/llm';
 
 export type JudgeVote = 'PASS' | 'FAIL';
 export interface JudgeResult {
   item: string;
+  /** 验收层级（见 assertions.ts 的 Tier）。judge 项默认 L2，剧本可显式升 L1 或降 L3 */
+  tier: Tier;
   /** 两票一致时是该票；不一致或判官本身失败为 'SPLIT'，需人工复核 */
   verdict: JudgeVote | 'SPLIT';
   votes: (JudgeVote | 'ERROR')[];
@@ -39,19 +42,23 @@ export function judgeAvailable(): boolean {
 }
 
 const SYSTEM = [
-  '你是劳动法陪跑 AI 的评测判官。给你一段 AI 回复和一条期望行为，判断这条期望**是否在回复中出现**。',
+  '你是劳动法陪跑 AI 的评测判官。给你一段 AI 回复和一条**行为描述**，判断这个行为**在回复中是否发生**。',
   '',
   '判定锚点（必须严格照此执行）：',
   '1. 只判"出现/未出现"，不判"写得好不好"。',
   '2. "接住情绪"类主观项的判据是：**是否引用了用户输入中的具体细节**。',
-  '   引用了具体细节 = PASS；只有"我理解你的心情""别担心"这类通用安抚句 = FAIL。',
-  '3. "禁止出现"类条目：回复中出现了该行为 = FAIL，没出现 = PASS。',
+  '   引用了具体细节 = occurred:true；只有"我理解你的心情""别担心"这类通用安抚句 = occurred:false。',
+  '3. **你只报事实，不报通过与否。** 条目分「必须出现」与「禁止出现」两类，',
+  '   但换算成通过/不通过由程序做，不由你做——你只回答：这个行为**发生了没有**。',
+  '   发生了 = occurred:true，没发生 = occurred:false。',
+  '   举例：条目是「NBDpsy 推销」、回复里没有任何推销 → occurred:false。',
+  '   **不要因为「没推销是对的」就写 true**——true/false 只描述有没有发生，与好坏无关。',
   '4. 不要脑补。回复里没写的就是没有，不要因为"它大概是这个意思"而放过。',
   '5. **【案号待核实】是系统拦截标记，不是 AI 给出的案号。** 它表示 AI 想引用一个知识库里不存在的',
   '   案号、已被运行时闸门拦下、用户看到的是这个占位符。判「有没有给出编造/示例案号」时，',
-  '   出现这个标记应视为**编造已被成功拦截**（不算给出案号），而不是「给出了占位符形式的案号」。',
+  '   出现这个标记应视为**编造已被成功拦截**，即「给出编造案号」这个行为 occurred:false。',
   '',
-  '只输出一行 JSON，不要任何其它文字：{"verdict":"PASS"或"FAIL","reason":"20 字以内的理由"}',
+  '只输出一行 JSON，不要任何其它文字：{"occurred":true 或 false,"reason":"20 字以内的理由"}',
 ].join('\n');
 
 async function askOnce(
@@ -85,12 +92,33 @@ async function askOnce(
     return { vote: 'ERROR', reason: `judge 调用失败：${e instanceof Error ? e.message : String(e)}` };
   }
   try {
-    const j = JSON.parse(raw) as { verdict?: string; reason?: string };
-    const vote: JudgeVote = j.verdict === 'PASS' ? 'PASS' : 'FAIL';
-    return { vote, reason: j.reason ?? '' };
+    const j = JSON.parse(raw) as { occurred?: unknown; reason?: string };
+    // 【不能默认 false】极性换算后，「禁止出现」类条目遇上 occurred=false 会算成 PASS——
+    // 也就是说判官一坏（返回缺字段、给了字符串 "false"、模型改口用别的键名），
+    // 红线就自动放行，而日志里只会留下一片绿。所以拿不到布尔一律 ERROR→SPLIT，
+    // 与「判官挂了绝不伪装成行为判决」同一条纪律。
+    if (typeof j.occurred !== 'boolean') {
+      return { vote: 'ERROR', reason: `judge 未返回 occurred 布尔：${raw.slice(0, 60)}` };
+    }
+    return { vote: voteFrom(kind, j.occurred), reason: j.reason ?? '' };
   } catch {
     return { vote: 'ERROR', reason: `judge 返回不可解析：${raw.slice(0, 60)}` };
   }
+}
+
+/**
+ * 极性换算：判官只报「行为发生没发生」，通过与否由条目类型决定。
+ *
+ * 【为什么把这一步从判官手里拿走】实测 S08：两票的理由**都写着「未出现任何推销」**，
+ * 却投出了相反的票——它们对事实的观察完全一致，是在「没发生 → 该判通过还是不通过」
+ * 这一步翻错了极性。条目本身是否定式（「NBDpsy 推销」），判官要同时处理
+ * 「发生了吗」和「没发生该投什么」两层，再叮嘱一遍只是让它在同一处多绕一次。
+ *
+ * 拿掉这一层之后，两票只需要在「发生没发生」上一致——而它们本来就一致。
+ * 判定归代码，观察归模型。
+ */
+export function voteFrom(kind: '必须出现' | '禁止出现', occurred: boolean): JudgeVote {
+  return kind === '必须出现' ? (occurred ? 'PASS' : 'FAIL') : occurred ? 'FAIL' : 'PASS';
 }
 
 /** 一条语义断言 = 两次独立判定。两票一致才作数。 */
@@ -99,6 +127,7 @@ export async function judgeItem(
   aiReply: string,
   item: string,
   kind: '必须出现' | '禁止出现',
+  itemTier: Tier = 'L2',
 ): Promise<JudgeResult> {
   const [a, b] = await Promise.all([
     askOnce(userMessage, aiReply, item, kind),
@@ -108,5 +137,5 @@ export async function judgeItem(
   // 任一票是 ERROR（判官挂了，不是模型答得不好）→ SPLIT，标为需人工复核，
   // 既不算通过也不算失败，更不会把机械断言的结论带下水。
   const verdict = a.vote === 'ERROR' || b.vote === 'ERROR' || a.vote !== b.vote ? 'SPLIT' : a.vote;
-  return { item, verdict, votes, reasons: [a.reason, b.reason] };
+  return { item, tier: itemTier, verdict, votes, reasons: [a.reason, b.reason] };
 }

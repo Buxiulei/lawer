@@ -5,13 +5,14 @@
 //   ③ 重复触发只注入一次（案件级去重，且与 NBDpsy 引流是两个独立开关）
 //
 // 这一层是纯函数，所以①②完全离线可断；③要落库，用真库跑。
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import * as store from '@/lib/db/agent';
+import { createKnowledgeSearcher } from '../knowledge-adapter';
 import {
   assessCrisis,
+  isLandlineOnly,
+  LANDLINE_MARK,
   compactCrisisCard,
   bannedHotlines,
   crisisHotlines,
@@ -23,6 +24,7 @@ import {
   detectNbdpsyPitch,
   NBDPSY_PERSISTENT_DISTRESS_THRESHOLD,
   stripNbdpsyPitch,
+  stripDuplicateHotlineList,
   CRISIS_CARD_MARKER,
   CRISIS_DIRECTIVE,
   CRISIS_RESOURCE_PACK_ID,
@@ -267,27 +269,59 @@ describe('NBDpsy 四条件（manager 2026-08-20 定版，全部满足才准提�
 
 
 describe('facts 化后的危机热线抽取（读真实卡的结构化字段，零正则）', () => {
-  /** 从真实卡的 frontmatter 里取 facts —— 与 lib/knowledge 同源的那份 */
+  /**
+   * 真实卡的 facts，**走产线同一个装载器**取。
+   *
+   * 这里原本是本文件自己写的一段正则去啃 frontmatter。PR #30 在 phone 与 status 之间
+   * 插入 category 后，那段正则一条都匹配不上，realFacts 变成空数组，本组 5 例全红——
+   * 而产线代码从头到尾没坏（装载器是正经 YAML 解析，多一个键无所谓）。
+   *
+   * 也就是说：我们把散文解析从产线里清干净了，却在测试夹具里留了一份私有副本，
+   * 于是「判据同源」这条在测试侧破了功。夹具与产线读的必须是同一条路径，
+   * 否则红的时候分不清是卡坏了、产线坏了、还是夹具自己坏了。
+   */
   const realFacts = (() => {
-    const raw = readFileSync(
-      path.resolve(__dirname, '../../../../../knowledge/packs/data/beijing-qiuzhu-ziyuan.md'),
-      'utf8',
-    );
-    const hotlines: HotlineFact[] = [];
-    for (const line of raw.split('\n')) {
-      const m = /\{name:\s*(.+?),\s*phone:\s*"(.+?)",\s*status:\s*(\w+)(?:,\s*hours:\s*(.+?))?(?:,\s*note:.*)?\}/.exec(line);
-      if (m) hotlines.push({ name: m[1], phone: m[2], status: m[3] as 'usable' | 'forbidden', hours: m[4] });
-    }
-    return { hotlines };
+    const card = createKnowledgeSearcher().get?.(CRISIS_RESOURCE_PACK_ID);
+    if (!card) throw new Error(`真实卡未装载：${CRISIS_RESOURCE_PACK_ID}`);
+    return card.facts as { hotlines?: HotlineFact[] };
   })();
 
-  it('真实卡里解析出 10 条热线（含 2 条禁用）——夹具本身有效', () => {
-    expect(realFacts.hotlines.length).toBe(10);
-    expect(realFacts.hotlines.filter((h) => h.status === 'forbidden')).toHaveLength(2);
+  it('真实卡里装载出 10 条热线（含 2 条禁用）——夹具本身有效', () => {
+    const all = realFacts.hotlines ?? [];
+    expect(all.length).toBe(10);
+    expect(all.filter((h) => h.status === 'forbidden')).toHaveLength(2);
+    // 每条都得有 category，否则危机过滤会静默漏掉它
+    expect(all.every((h) => typeof h.category === 'string')).toBe(true);
   });
 
   it('只取三条心理危机热线，法援/工会/监察/政策咨询都不在内', () => {
     expect(extractHotlines(realFacts)).toEqual(['12356', '800-810-1117', '010-82951332']);
+  });
+
+  it('**危机集合恰好 3 条且非空**——空集会让首段一个号码都不给，恰在最不能失败的那一轮', () => {
+    const crisis = crisisHotlines(realFacts);
+    expect(crisis.length).toBe(3);
+    expect(crisis.every((h) => h.category === 'crisis' && h.status === 'usable')).toBe(true);
+    // 「该在的在」与「不该在的不在」分别设防：上一条守后者，这条守前者
+    expect(buildCrisisOpener(realFacts)).toContain('12356');
+  });
+
+  it('座机专线判据钉在号码形状上，不看 name/note 的措辞', () => {
+    expect(isLandlineOnly('800-810-1117')).toBe(true);
+    expect(isLandlineOnly('010-82951332')).toBe(false);
+    expect(isLandlineOnly('12356')).toBe(false);
+  });
+
+  it('**800 号出现的每一处都带座机标记**——手机拨 800 是空响，危机轮不能踩这个坑', () => {
+    const first = buildCrisisOpener(realFacts);
+    expect(first).toContain('800-810-1117');
+    expect(first).toContain(LANDLINE_MARK);
+    // 复现态只剩号码行，标记同样不能省
+    const repeat = buildCrisisOpener(realFacts, { compact: true });
+    expect(repeat).toContain('800-810-1117（座机）');
+    // 进模型上下文的紧凑卡也带：模型重述号码时才不会裸引
+    const card = compactCrisisCard({ id: 'x', title: 'x', body: '正文散文（不解析）', facts: realFacts });
+    expect(card.body).toContain(`800-810-1117（${LANDLINE_MARK}）`);
   });
 
   it('**绝不输出卡里 status: forbidden 的号码**（公证处 / 官方无踪）', () => {
@@ -326,5 +360,43 @@ describe('facts 化后的危机热线抽取（读真实卡的结构化字段，�
     expect(compact.body).toContain('12356');
     expect(compact.body).not.toContain('010-85961236');
     expect(compact.body).not.toContain('回龙观');
+  });
+});
+
+describe('危机轮出口闸：剥掉模型段重复列出的热线清单', () => {
+  const P = ['12356', '800-810-1117', '010-82951332'];
+
+  it('模型把整张卡又列一遍 → 清单被剥掉，其余正文保留', () => {
+    const body = [
+      '你这两句，我不会当成「就是想想」就翻过去。',
+      '',
+      '热线还是这三个，随时能打：',
+      '- **12356**（全国统一心理援助热线，24 小时）',
+      '- 座机 **800-810-1117**（手机打不通）',
+      '- 手机 **010-82951332**',
+      '',
+      '我在这儿，你回我一句就行。',
+    ].join('\n');
+    const out = stripDuplicateHotlineList(body, P);
+    for (const p of P) expect(out).not.toContain(p);
+    expect(out).toContain('我不会当成「就是想想」就翻过去');
+    expect(out).toContain('我在这儿，你回我一句就行');
+    expect(out).not.toMatch(/\n{3,}/); // 剥完不留天窗
+  });
+
+  it('**单行行内提及保留**——「一句话重述号码」正是我们要的行为，禁的是再印一遍整张卡', () => {
+    const body = '如果撑不住，随时打 12356，24 小时有人接。';
+    expect(stripDuplicateHotlineList(body, P)).toBe(body);
+  });
+
+  it('**首段没给出号码时一个字都不剥**（守卫：L1 号码在场优先于 L3 别啰嗦）', () => {
+    const body = '- 12356\n- 800-810-1117';
+    // phones 为空 = 首段没发出任何号码，此时剥了会让用户一个号码都拿不到
+    expect(stripDuplicateHotlineList(body, [])).toBe(body);
+  });
+
+  it('正文完全没有号码时原样返回', () => {
+    const body = '我在。你现在在哪，身边有没有人？';
+    expect(stripDuplicateHotlineList(body, P)).toBe(body);
   });
 });

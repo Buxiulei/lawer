@@ -186,9 +186,9 @@ describe('危机响应：心理危机资源卡强制注入（charter §5）', ()
     // 代码只读这一面
     facts: {
       hotlines: [
-        { name: '全国统一心理援助热线', phone: '12356', status: 'usable' as const, hours: '24小时' },
-        { name: '北京心理援助热线·座机线（回龙观医院）', phone: '800-810-1117', status: 'usable' as const },
-        { name: '北京心理援助热线·手机线（回龙观医院）', phone: '010-82951332', status: 'usable' as const },
+        { name: '全国统一心理援助热线', phone: '12356', category: 'crisis' as const, status: 'usable' as const, hours: '24小时' },
+        { name: '北京心理援助热线·座机线（回龙观医院）', phone: '800-810-1117', category: 'crisis' as const, status: 'usable' as const },
+        { name: '北京心理援助热线·手机线（回龙观医院）', phone: '010-82951332', category: 'crisis' as const, status: 'usable' as const },
       ],
     },
   };

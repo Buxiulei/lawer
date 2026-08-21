@@ -32,6 +32,8 @@ import {
   assessNbdpsyEligibility,
   detectNbdpsyPitch,
   stripLeverageSentences,
+  stripDuplicateHotlineList,
+  extractHotlines,
   stripNbdpsyPitch,
   responseGaveCrisisCard,
   shouldInjectCrisisCard,
@@ -275,9 +277,12 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   // ② 模型段整体非流式：全生成完 → 过杠杆闸 → 才下发（杠杆句绝不到达危机中的用户）。
   // 非流式的等待由 ① 消解，且危机轮本身稀少，代价可控。
   let text = '';
+  // 首段实际发出的号码。空数组 = 首段没给出号码（卡取不到），此时出口闸**不许剥**模型段
+  let openerPhones: string[] = [];
   if (crisis.triggered) {
     // 两态：窗外首次带机构名与时段（描述有安抚价值），窗内复现只给号码行
     const opener = buildCrisisOpener(crisisCardFacts, { compact: alreadyGiven });
+    openerPhones = extractHotlines(crisisCardFacts).filter((p) => opener.includes(p));
     // deterministic:true —— 心跳不因它停（模型还没开始出字，那 2-4 分钟正是心跳的主场）
     emit({ event: 'delta', data: { text: opener, deterministic: true } });
     text = `${opener}\n\n`;
@@ -371,6 +376,12 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
         body = CRISIS_SAFE_FALLBACK;
         leverageOutcome = 'fallback';
       }
+    }
+    // 首段已经把号码摆在用户眼前了，模型段就不该再整张列一遍（定版批两次 L2 失败的病灶）。
+    // 守卫：**只有首段确实发出过号码**才允许剥——openerPhones 为空时一个字都不动，
+    // 否则会把唯一一处号码剥掉，L1「危机轮号码必须在场」优先于「别啰嗦」。
+    if (openerPhones.length > 0 && leverageOutcome !== 'fallback') {
+      body = stripDuplicateHotlineList(body, openerPhones);
     }
     if (body.trim()) {
       emit({ event: 'delta', data: { text: body } });

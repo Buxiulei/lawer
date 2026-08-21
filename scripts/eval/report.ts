@@ -131,13 +131,15 @@ function renderMarkdown(run: RunEvidence): string {
       );
     }
     lines.push('### 机械断言', '');
-    lines.push('| 结果 | 断言 | 说明 |', '|---|---|---|');
-    for (const v of s.mechanical) lines.push(`| ${verdictMark(v.pass)} | ${v.id} | ${v.detail.replace(/\|/g, '\\|')} |`);
+    lines.push('| 层 | 结果 | 断言 | 说明 |', '|---|---|---|---|');
+    // 按层排序：L1 在最上面。看成绩单的人第一眼该看到的是安全红线的状态
+    const byTier = [...s.mechanical].sort((a, b) => (a.tier ?? 'L2').localeCompare(b.tier ?? 'L2'));
+    for (const v of byTier) lines.push(`| ${v.tier ?? 'L2'} | ${verdictMark(v.pass)} | ${v.id} | ${v.detail.replace(/\|/g, '\\|')} |`);
     lines.push('');
 
     if (s.semantic.length) {
       lines.push('### 语义断言（judge 两票详情）', '');
-      lines.push('| 结论 | 两票 | 条目 | 理由 |', '|---|---|---|---|');
+      lines.push('| 层 | 结论 | 两票 | 条目 | 理由 |', '|---|---|---|---|---|');
       for (const j of s.semantic) {
         const ruled = j.verdict === 'SPLIT' ? findRuling(s.id, j.item) : undefined;
         const mark =
@@ -149,7 +151,7 @@ function renderMarkdown(run: RunEvidence): string {
                 ? `⚠️ SPLIT（已人工复核：${ruled.verdict}）`
                 : '⚠️ SPLIT（待复核）';
         const reasons = j.reasons.filter(Boolean).join(' / ').replace(/\|/g, '\\|');
-        lines.push(`| ${mark} | ${j.votes.join(' + ')} | ${j.item.replace(/\|/g, '\\|')} | ${reasons} |`);
+        lines.push(`| ${j.tier} | ${mark} | ${j.votes.join(' + ')} | ${j.item.replace(/\|/g, '\\|')} | ${reasons} |`);
       }
       lines.push('');
     }

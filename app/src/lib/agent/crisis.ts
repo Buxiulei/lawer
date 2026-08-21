@@ -260,10 +260,30 @@ export const NBDPSY_PERSISTENT_DISTRESS_THRESHOLD = NBDPSY_MIN_DISTRESS_ENTRIES;
 export interface HotlineFact {
   name: string;
   phone: string;
+  /** 资源类别（WS4 PR #30）。危机首段只取 crisis，不再靠 name 含「心理」猜 */
+  category?: 'crisis' | 'legal' | 'union' | 'inspection';
   status: 'usable' | 'forbidden';
   hours?: string;
   note?: string;
 }
+
+/**
+ * 该号码是否**只能座机拨打**。
+ *
+ * 依据的是中国电信编号规则而非卡里的文案：800 开头是被叫付费号，**手机拨打不通**
+ * （与之配对的 400 号则手机座机都能打）。这是号码本身的属性，任何卡、任何时候都成立，
+ * 所以判据放在号码形状上，而不是去读 name 里有没有「座机」或 note 里有没有「打不通」——
+ * 那两处都是散文，改一个字这层保护就没了。
+ *
+ * 为什么必须有这层：危机首段的全部意义是「不用等我说完，现在就能打」。一个自杀念头
+ * 正强的人拿手机拨 800-810-1117 得到的是空响，那一刻的失败比不给号码更伤人。
+ */
+export function isLandlineOnly(phone: string): boolean {
+  return /^800[-\s]?\d/.test(phone.trim());
+}
+
+/** 座机专线在用户可见文案里必须携带的标记（评测侧按同一常量校验，判据同源） */
+export const LANDLINE_MARK = '座机拨打，手机打不通';
 
 /**
  * 从卡的**结构化 facts** 里取心理危机热线。**不解析正文散文**——
@@ -283,7 +303,7 @@ export interface HotlineFact {
 export function crisisHotlines(facts?: { hotlines?: HotlineFact[] }): HotlineFact[] {
   const all = facts?.hotlines;
   if (!Array.isArray(all)) return [];
-  return all.filter((h) => h && h.status !== 'forbidden' && typeof h.phone === 'string' && /心理/.test(h.name ?? ''));
+  return all.filter((h) => h && h.category === 'crisis' && h.status === 'usable' && typeof h.phone === 'string');
 }
 
 /** 卡里声明为禁用的号码（status: forbidden）。评测侧共用这一份（判据同源）。 */
@@ -307,14 +327,17 @@ export function compactCrisisCard<T extends { id: string; body: string; title: s
 ): T {
   const numbers = extractHotlines(card.facts);
   if (numbers.length < 2) return card; // 抽不出来就别裁，安全方向优先
+  // 号码进模型上下文时就带上座机标记：模型重述号码时也得把这条限制带出去，
+  // 否则它裸引 800 号，用户拿手机拨空响——首段的代码保护挡不住模型正文这条通路
+  const marked = numbers.map((n) => (isLandlineOnly(n) ? `${n}（${LANDLINE_MARK}）` : n));
   return {
     ...card,
     body: [
       '（本案 24 小时内已给过完整资源卡，此处只保留号码，供你用一句话重述——**不要再整张重印**）',
       '',
-      `心理危机热线：${numbers.join(' / ')}`,
+      `心理危机热线：${marked.join(' / ')}`,
       '',
-      `重述示例：「热线还是这三个，随时能打：${numbers.join(' / ')}」`,
+      `重述示例：「热线还是这三个，随时能打：${marked.join(' / ')}」`,
     ].join('\n'),
   };
 }
@@ -344,13 +367,21 @@ export function buildCrisisOpener(
   if (lines.length === 0) return head[0];
 
   if (options.compact) {
-    return [...head, '', `**${lines.map((h) => h.phone).join(' / ')}**`, '', '电话那头是受过训练的人，你只说一句「我很难受」他们就懂。'].join('\n');
+    // 复现态只剩号码行，但座机标记不能省：用户可能只看这一行就去拨号
+    const nums = lines.map((h) => (isLandlineOnly(h.phone) ? `${h.phone}（座机）` : h.phone));
+    return [...head, '', `**${nums.join(' / ')}**`, '', '电话那头是受过训练的人，你只说一句「我很难受」他们就懂。'].join('\n');
   }
 
   return [
     ...head,
     '',
-    ...lines.map((h) => `- **${h.phone}** ${h.name}${h.hours ? `（${h.hours}）` : ''}`),
+    ...lines.map((h) => {
+      const hours = h.hours ? `（${h.hours}）` : '';
+      // 座机线单独给出拨打限制，并直接把配对的手机线指出来——两条线在同一段里，
+      // 用户不必自己在列表里比对哪条能用手机打
+      const caveat = isLandlineOnly(h.phone) ? `\n  ——**${LANDLINE_MARK}**；用手机请拨下面那条` : '';
+      return `- **${h.phone}** ${h.name}${hours}${caveat}`;
+    }),
     '',
     '电话那头是受过训练的人，你只说一句「我很难受」他们就懂。',
   ].join('\n');
@@ -429,4 +460,32 @@ export function assessCrisis(message: string): CrisisAssessment {
     directive: triggered ? CRISIS_DIRECTIVE : null,
     resourcePackId: triggered ? CRISIS_RESOURCE_PACK_ID : null,
   };
+}
+
+/**
+ * 剥掉模型段里**重复列出**的热线清单（危机轮出口闸）。
+ *
+ * 【为什么压缩注入物不管用】实测（定版批第 2/4 跑）：即使模型手里拿到的已经是紧凑卡，
+ * 它照样把三个号码连名带时段重新列了一遍。证据是它写出了「全国统一心理援助热线」
+ * 「24 小时」这些**紧凑卡里根本没有**的字——那些字来自**对话历史**里它自己上一轮的回复。
+ *
+ * 这是同一模式的第五次：去重开关挂在「我们注入了什么」上，就会被另一条通路绕过。
+ * 前四次是模型自取整卡、自取案号、不调工具直接在正文提 NBDpsy、我们自己的确定性首段；
+ * 这次是历史回流。**用户看见过的内容永远可能回流——出口闸是唯一对所有通路收敛的位置。**
+ *
+ * 判据：**成清单**才剥（≥2 行各自含号码），单行行内提及（「随时打 12356」）保留——
+ * 「一句话重述号码」是我们要的行为，禁的是把整张卡再印一遍。
+ *
+ * ⚠️ 调用方必须保证**本轮首段确实已经发出过号码**（见 orchestrator）。
+ * 剥重复的前提是号码已经在用户眼前；前提不成立就剥，会让用户一个号码都拿不到——
+ * L1「危机轮号码必须在场」优先于 L3「别啰嗦」，宁可啰嗦，不可缺号。
+ */
+export function stripDuplicateHotlineList(body: string, phones: string[]): string {
+  if (phones.length === 0) return body;
+  const lines = body.split('\n');
+  const hasNumber = (l: string) => phones.some((p) => l.includes(p));
+  if (lines.filter(hasNumber).length < 2) return body;
+  const kept = lines.filter((l) => !hasNumber(l));
+  // 收掉剥完留下的连续空行，别让正文中间开个天窗
+  return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
