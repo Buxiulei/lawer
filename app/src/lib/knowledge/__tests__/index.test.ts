@@ -179,6 +179,20 @@ describe('facts 结构化透传（规范 §2.1：代码只读 facts，禁啃正�
   test('search 命中的卡同样带 facts；无 facts 的卡该字段缺省', () => {
     const hit = search('最低工资', { type: '数据卡' }).find((h) => h.id === 'data-beijing-zuidi-gongzi');
     expect(hit?.facts?.values?.length).toBeGreaterThan(0);
-    expect(get('statute-lhtf-38-beipo-jiechu').facts).toBeUndefined();
+    expect(get('case-ai-tidai-gangwei-2025-zhongcai').facts).toBeUndefined();
   });
+
+  test('判例卡 case_facts 透传（判例引用消费面，字段取自正文）', () => {
+    const cf = get('case-yunqi-tiaogang-baoding-2024').facts?.case_facts;
+    expect(cf?.holding).toContain('继续履行');
+    expect(cf?.issue).toContain('重大变更');
+    expect(cf?.case_no).toBe('官方案例，未公开案号');
+  });
+
+  test('法条卡 statute_quotes 全部有条文（G4 预格式化引用块消费面）', () => {
+    const q = get('statute-fashi-2025-12-jieshi-2').facts?.statute_quotes ?? [];
+    expect(q.length).toBeGreaterThanOrEqual(16);
+    expect(q.every((x) => x.text && x.law && x.article)).toBe(true);
+  });
+
 });
