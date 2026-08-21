@@ -8,9 +8,9 @@ import {
   type UploadSource,
 } from '@/app/_mock/intake-evidence';
 import { formatBytes } from '@/app/_ui/format';
-import { Button } from '@/components/ui/Button';
-import { Input, Textarea } from '@/components/ui/Field';
-import { Sheet } from '@/components/ui/Sheet';
+import { AppSheet } from '@/components/shadcn/app-sheet';
+import { Button } from '@/components/shadcn/button';
+import { InputField, TextareaField } from '@/components/shadcn/field';
 import type { EvidenceCategory } from '@/app/_mock/types';
 import { CategoryPicker } from './CategoryPicker';
 
@@ -51,7 +51,7 @@ export function UploadSheet({
   }, [pending]);
 
   return (
-    <Sheet
+    <AppSheet
       open={pending !== null}
       onClose={onCancel}
       title="补两句说明再入库"
@@ -61,7 +61,7 @@ export function UploadSheet({
             取消
           </Button>
           <Button
-            fullWidth
+            className="w-full"
             onClick={() => onConfirm({ category, provePurpose, originalMedium })}
           >
             存进证据库
@@ -87,7 +87,7 @@ export function UploadSheet({
             />
           </div>
 
-          <Textarea
+          <TextareaField
             label="这份材料想证明什么"
             rows={3}
             value={provePurpose}
@@ -96,7 +96,7 @@ export function UploadSheet({
             hint="一句话就够。现在想不出来可以留空，之后在详情里补。"
           />
 
-          <Input
+          <InputField
             label="原始载体在哪"
             value={originalMedium}
             onChange={(e) => setOriginalMedium(e.target.value)}
@@ -105,6 +105,6 @@ export function UploadSheet({
           />
         </div>
       )}
-    </Sheet>
+    </AppSheet>
   );
 }

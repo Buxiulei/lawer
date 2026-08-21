@@ -1,5 +1,6 @@
 import { EVIDENCE_CHECKLIST } from '@/app/_mock/intake-evidence';
-import { Badge } from '@/components/ui/Badge';
+import { Badge } from '@/components/shadcn/badge';
+import { Card } from '@/components/shadcn/card';
 
 const LEAD = '权限被收走之后很多材料就取不到了。按下面这几项对一遍，有哪份传哪份，不用一次传全。';
 
@@ -35,12 +36,14 @@ function List() {
   return (
     <ul className="mt-3 flex flex-col gap-2.5">
       {EVIDENCE_CHECKLIST.map((c) => (
-        <li key={c.name} className="rounded-[12px] border border-line bg-surface p-3.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge>{c.category}</Badge>
-            <span className="text-[15px] leading-7 font-semibold text-ink">{c.name}</span>
-          </div>
-          <p className="mt-1 text-[14px] leading-6 text-ink-2">{c.why}</p>
+        <li key={c.name}>
+          <Card className="p-3.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge>{c.category}</Badge>
+              <span className="text-[15px] leading-7 font-semibold text-ink">{c.name}</span>
+            </div>
+            <p className="mt-1 text-[14px] leading-6 text-ink-2">{c.why}</p>
+          </Card>
         </li>
       ))}
     </ul>

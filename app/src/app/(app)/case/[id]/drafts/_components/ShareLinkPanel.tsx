@@ -8,10 +8,11 @@ import {
   type ShareLink,
 } from '@/app/_mock/docs-drafts';
 import { formatDate, formatDateTime } from '@/app/_ui/format';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { Sheet } from '@/components/ui/Sheet';
+import { AppSheet } from '@/components/shadcn/app-sheet';
+import { Badge } from '@/components/shadcn/badge';
+import { Button } from '@/components/shadcn/button';
+import { Card } from '@/components/shadcn/card';
+import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
 import { useToast } from '@/components/ui/Toast';
 
 type LinkState = '有效' | '已撤销' | '已过期';
@@ -81,12 +82,12 @@ export function ShareLinkPanel({
 
   return (
     <>
-      <Sheet
+      <AppSheet
         open={open}
         onClose={onClose}
         title="只读分享链接"
         footer={
-          <Button fullWidth onClick={() => setConfirmOpen(true)}>
+          <Button className="w-full" onClick={() => setConfirmOpen(true)}>
             生成新的分享链接
           </Button>
         }
@@ -106,7 +107,8 @@ export function ShareLinkPanel({
               const state = stateOf(link, now);
               const alive = state === '有效';
               return (
-                <li key={link.id} className="rounded-[12px] border border-line bg-surface p-3.5">
+                <li key={link.id}>
+                  <Card className="p-3.5">
                   <div className="flex items-center justify-between gap-2">
                     <Badge tone={alive ? 'success' : 'neutral'}>{state}</Badge>
                     <span className="num text-[13px] text-ink-2">
@@ -133,12 +135,13 @@ export function ShareLinkPanel({
                       撤销
                     </Button>
                   </div>
+                  </Card>
                 </li>
               );
             })}
           </ul>
         )}
-      </Sheet>
+      </AppSheet>
 
       <ConfirmDialog
         open={confirmOpen}

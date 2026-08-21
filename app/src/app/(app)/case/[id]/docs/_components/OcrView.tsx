@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import type { AnnotatedRiskFlag } from '@/app/_mock/docs-drafts';
 import { LawRefCard } from '@/components/case/LawRefCard';
-import { Badge, type BadgeTone } from '@/components/ui/Badge';
-import { Sheet } from '@/components/ui/Sheet';
+import { AppSheet } from '@/components/shadcn/app-sheet';
+import { Badge, type BadgeTone } from '@/components/shadcn/badge';
+import { Card } from '@/components/shadcn/card';
 import { SensitiveText } from './SensitiveText';
 
 const LEVEL_TONE: Record<AnnotatedRiskFlag['level'], BadgeTone> = {
@@ -53,8 +54,8 @@ export function OcrView({
   const lines = ocrText.split('\n').filter((l) => l.trim().length > 0);
 
   return (
-    <section className="rounded-[12px] border border-line bg-surface">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
+    <Card>
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <h2 className="text-[15px] font-semibold text-ink">识别出的原文</h2>
         <p className="text-[14px] text-ink-2">
           {riskFlags.length > 0
@@ -88,12 +89,12 @@ export function OcrView({
           </p>
         ))}
 
-        <p className="mt-5 border-t border-line pt-3 text-[13px] leading-6 text-ink-2">
+        <p className="mt-5 border-t border-border pt-3 text-[13px] leading-6 text-ink-2">
           原文按识别顺序分段呈现，未做改写。识别可能有个别错字，以你手上的纸质件或原始文件为准。
         </p>
       </div>
 
-      <Sheet
+      <AppSheet
         open={active !== null}
         onClose={() => setActive(null)}
         title={active ? `第 ${active.index} 处风险条款` : '风险条款'}
@@ -130,7 +131,7 @@ export function OcrView({
             )}
           </div>
         )}
-      </Sheet>
-    </section>
+      </AppSheet>
+    </Card>
   );
 }

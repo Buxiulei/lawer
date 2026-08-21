@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useCallback, useState } from 'react';
 import type { AnnotatedDoc } from '@/app/_mock/docs-drafts';
 import { formatDate } from '@/app/_ui/format';
-import { Button } from '@/components/ui/Button';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { Button } from '@/components/shadcn/button';
+import { Card } from '@/components/shadcn/card';
+import { EmptyState } from '@/components/shadcn/empty-state';
 import { AdviceBadge, DocTypeBadge, RiskCountBadge } from './badges';
 import { SensitiveText } from './SensitiveText';
 import { UploadSheet } from './UploadSheet';
@@ -42,10 +43,8 @@ export function DocsListView({
         <ul className="flex flex-col gap-3">
           {docs.map((doc) => (
             <li key={doc.id}>
-              <Link
-                href={`/case/${caseId}/docs/${doc.id}`}
-                className="block rounded-[12px] border border-line bg-surface p-4 shadow-soft transition-colors duration-150 ease-out hover:bg-surface-2"
-              >
+              <Link href={`/case/${caseId}/docs/${doc.id}`} className="group block">
+                <Card className="p-4 transition-colors duration-150 ease-out group-hover:bg-muted">
                 <div className="flex flex-wrap items-center gap-2">
                   <DocTypeBadge docType={doc.docType} />
                   <AdviceBadge advice={doc.advice} />
@@ -62,6 +61,7 @@ export function DocsListView({
                 <p className="num mt-2 text-[13px] text-ink-2">
                   {formatDate(doc.createdAt)} · {doc.fileName}
                 </p>
+                </Card>
               </Link>
             </li>
           ))}

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { mockDrafts } from '@/app/_mock/docs-drafts';
 import { formatDateTime } from '@/app/_ui/format';
+import { Card } from '@/components/shadcn/card';
 import { DraftKindBadge, DraftStatusBadge } from './_components/badges';
 
 export const metadata: Metadata = { title: '文书' };
@@ -31,10 +32,8 @@ export default async function DraftsPage({
       <ul className="flex flex-col gap-3">
         {drafts.map((draft) => (
           <li key={draft.id}>
-            <Link
-              href={`/case/${id}/drafts/${draft.id}`}
-              className="block rounded-[12px] border border-line bg-surface p-4 shadow-soft transition-colors duration-150 ease-out hover:bg-surface-2"
-            >
+            <Link href={`/case/${id}/drafts/${draft.id}`} className="group block">
+              <Card className="p-4 transition-colors duration-150 ease-out group-hover:bg-muted">
               <div className="flex flex-wrap items-center gap-2">
                 <DraftKindBadge kind={draft.kind} />
                 <DraftStatusBadge status={draft.status} />
@@ -47,6 +46,7 @@ export default async function DraftsPage({
               <p className="num mt-1.5 text-[13px] text-ink-2">
                 更新于 {formatDateTime(draft.updatedAt)}
               </p>
+              </Card>
             </Link>
           </li>
         ))}

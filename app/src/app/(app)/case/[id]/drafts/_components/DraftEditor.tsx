@@ -6,8 +6,10 @@ import type { Draft } from '@/app/_mock/types';
 import { cn } from '@/app/_ui/cn';
 import { useDiscreet } from '@/app/_ui/discreet';
 import { formatDateTime } from '@/app/_ui/format';
-import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Button } from '@/components/shadcn/button';
+import { Card } from '@/components/shadcn/card';
+import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
+import { Textarea } from '@/components/shadcn/textarea';
 import { useToast } from '@/components/ui/Toast';
 import { DraftKindBadge, DraftStatusBadge } from './badges';
 import { ShareLinkPanel } from './ShareLinkPanel';
@@ -32,12 +34,13 @@ function AutoTextarea({
   }, [value]);
 
   return (
-    <textarea
+    <Textarea
       ref={ref}
       value={value}
       aria-label={label}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full resize-none overflow-hidden rounded-[10px] border border-line bg-surface-2 px-3.5 py-3 text-[16px] leading-8 text-ink transition-colors duration-150 ease-out focus:border-primary focus:outline-none"
+      // 高度由上面的 useLayoutEffect 接管，这里要关掉手动拖拽和滚动条
+      className="resize-none overflow-hidden px-3.5 py-3 leading-8"
     />
   );
 }
@@ -127,15 +130,15 @@ export function DraftEditor({ draft }: { draft: Draft }) {
 
       {discreet ? (
         // 文书正文整篇都是公司名、金额和主张，低调模式下不适合只打码局部
-        <section className="rounded-[10px] border border-dashed border-line bg-surface px-4 py-10 text-center">
+        <Card className="border-dashed px-4 py-10 text-center shadow-none">
           <p className="prose-measure mx-auto text-[15px] leading-7 text-ink-2">
             低调模式开着，正文先不显示。要看或者要改，点顶栏那只眼睛关掉低调模式。
           </p>
-        </section>
+        </Card>
       ) : onLatest ? (
         <AutoTextarea value={content} onChange={setContent} label={`${draft.title} 正文`} />
       ) : (
-        <section className="rounded-[10px] border border-line bg-surface-2 px-3.5 py-3">
+        <Card className="bg-secondary px-3.5 py-3 shadow-none">
           <p className="mb-2 text-[14px] text-ink-2">
             正在看 v{current.version}（{formatDateTime(current.updatedAt)}），历史版本不能直接改。
           </p>
@@ -147,10 +150,10 @@ export function DraftEditor({ draft }: { draft: Draft }) {
               恢复这一版
             </Button>
           </div>
-        </section>
+        </Card>
       )}
 
-      <section className="rounded-[12px] border border-line bg-surface p-4">
+      <Card className="p-4">
         <h2 className="text-[15px] font-semibold text-ink">版本历史</h2>
         <p className="mt-1 text-[14px] leading-6 text-ink-2">
           恢复旧版本不会覆盖现在这一版，会另存成新的一版，两版都留着。
@@ -186,7 +189,7 @@ export function DraftEditor({ draft }: { draft: Draft }) {
             );
           })}
         </ul>
-      </section>
+      </Card>
 
       <ShareLinkPanel
         open={shareOpen}

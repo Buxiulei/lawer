@@ -1,4 +1,4 @@
-import { Badge, type BadgeTone } from '@/components/ui/Badge';
+import { Badge, type BadgeTone } from '@/components/shadcn/badge';
 import type { CompanyDoc, CompanyDocType } from '@/app/_mock/types';
 
 /** 文件类型徽标一律中性色：颜色留给结论，不给分类。 */

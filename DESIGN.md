@@ -140,6 +140,59 @@
 配套：阴影/圆角向 NBDpsy 靠（卡 12px 不变、阴影仍极轻）；低调模式打码规则不变，新色系下 blur 底色随 surface；theme_color（manifest/viewport）同步 `#FFFCF5`/`#171310`。
 可辨识性自查线：勃艮第 vs 朱红 ΔHue≈25°+明度差；淡金 vs 期限橙在 wash 底上并排可区分（实测截图为证）。
 
+### 第三方组件体系引入清单（manager 2026-08-21 立规，每次引入必做）
+1. **token 桥接同步验证**：把某个核心 token（如 --primary）临时改成显眼测试色，起 dev 确认新旧两套组件**同时**变色，截图留证后改回——凡有一处不变，即存在"第二套色值"，先修桥接再继续。（B1 实录：此法抓出桥接层一处写死白色）
+2. 焦点圈/键盘行为与既有体系统一（全局 outline 一套观感；ESC 语义一致），跨页导航流实测。
+3. 整页单体系：内容区交互组件整页归一；壳层全站统一切换不算混用。
+
+### shadcn 基元清单（B2 第一波补齐，第二波只消费不新增）
+`src/components/shadcn/` 现有基元一览。**新增基元只在补齐波做**，后续波次直接用；
+确实缺件时先提出来，不要在页面里就地手写第二套。
+
+- B1 建：`button` `card` `input` `label` `field` `separator` `switch` `checkbox` `tabs`
+  `tooltip` `dialog` `alert-dialog` `sheet` `dropdown-menu` `collapsible` `breadcrumb`
+  `sidebar` `icons` `utils`，以及三个薄封装 `app-sheet`（=旧 `ui/Sheet` 的 props）、
+  `confirm-dialog`（=旧 `ui/ConfirmDialog` 的 props）、`use-focus-restore`。
+- B2 补：`table` `data-table` `textarea`（+`field` 里的 `TextareaField`）`badge` `progress`
+  `skeleton` `alert` `empty-state` `radio-group` `select`。
+
+只有 `radio-group` 拉了新依赖（`@radix-ui/react-radio-group`），换来一组单选在 Tab 序里
+只占一个停靠点、组内方向键走位；其余基元都是原生元素 + token，没加包。
+`select` 是**原生 `<select>`** 的封装（手机上出系统滚轮，比自绘浮层好按），
+本波没有消费方，是给第二波表单预置的；富内容菜单走 `dropdown-menu`。
+
+### 数据表格 `DataTable` 用法（给第二波：账户流水等）
+`src/components/shadcn/data-table.tsx`。一份 `columns` 同时喂两副面孔：
+**≥sm 出 TailAdmin 风格表格，<sm 降级成卡片列表**——390 宽下六列必然溢出，
+而横向拖动会把「这一行是什么」拖出视野，所以窄屏不留横向滚动条，改每行一张卡。
+
+```tsx
+const COLUMNS: DataTableColumn<Ledger>[] = [
+  { key: 'item', header: '项目', card: 'title', cell: (r) => r.item },
+  { key: 'amount', header: '金额', numeric: true, sensitive: true,
+    card: 'footnote', cell: (r) => formatAmount(r.amount) },
+  { key: 'state', header: '状态', card: 'badge', cell: (r) => <Badge>{r.state}</Badge> },
+];
+
+<DataTable columns={COLUMNS} rows={rows} rowKey={(r) => r.id}
+           caption="账户流水" onRowClick={(r) => setOpenId(r.id)} />
+```
+
+- `card` 说明这一列在窄屏卡片里落到哪：`title` 主标题、`badge` 与标题同排、
+  `meta` 副行、`footnote` 末行小字（多列以 · 相连、空列自动跳过）、`hide` 窄屏不显示。
+  不写默认 `meta`。**加列时两副面孔一起改**，就是靠这个字段绑在一起的。
+- `numeric` 右对齐并走等宽数字。
+- `sensitive` 管低调模式：行可点时只打码不接管点击（点按要留给「打开详情」，
+  去详情里看），行不可点时包 `<Sensitive>`，点按临时显示 3 秒。
+  **凡列里可能出现金额、公司名、案件标题就要标**——证据库的「证明目的」栏
+  正因为写着「平均工资为 25000 元」才补标的。
+- `onRowClick` 让首列文字变成按钮、整行是它的热区（行的点击冒泡上去，
+  不重复挂 handler）；`rowLabel` 不给就用首列文字当无障碍名字。
+- 列宽靠 `cell` 里内层 `<span>` 的 `max-w` 卡住：表格是 auto 布局，
+  光给 `td` 加 `max-w` 不生效，长文本记得配 `truncate` 或 `sm:line-clamp-2`。
+- 两副面孔分组方式不同时用 `faces`：证据库 ≥sm 是一张平表（类别是列）、
+  <sm 按类别分节，于是表格那半 `faces="table"`、每节各来一次 `faces="cards"`。
+
 ### 重制执行分两个 PR
 - **PR-A token 换肤**：globals.css 全量替换 + 组件内写死色值清查 + 深浅/低调模式重映射 + 全页面截图实测。
 - **PR-B 组合骨架布局重制**：引 shadcn 基建（CSS 变量对接自家 token），按 Kiranism/Blocks/TailAdmin 逐页重制布局，整页单体系纪律。

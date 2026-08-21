@@ -12,14 +12,17 @@ import { formatBytes, formatDate } from '@/app/_ui/format';
 import { humanError } from '@/app/_ui/api';
 import { readToken, useSignedIn } from '@/app/_ui/auth';
 import { useRealnameGate } from '@/app/_ui/realname';
-import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { SkeletonList } from '@/components/ui/Skeleton';
+import { Alert, AlertDescription, AlertTitle } from '@/components/shadcn/alert';
+import { Badge } from '@/components/shadcn/badge';
+import { Button } from '@/components/shadcn/button';
+import { Card } from '@/components/shadcn/card';
+import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
+import { DataTable, type DataTableColumn } from '@/components/shadcn/data-table';
+import { EmptyState } from '@/components/shadcn/empty-state';
+import { Progress } from '@/components/shadcn/progress';
+import { SkeletonList } from '@/components/shadcn/skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { EvidenceBadge, OriginalMediumNotice } from '@/components/case/EvidenceBadge';
-import { cn } from '@/app/_ui/cn';
-import { useDiscreet } from '@/app/_ui/discreet';
 import type { EvidenceCategory } from '@/app/_mock/types';
 import {
   attestEvidence,
@@ -43,6 +46,69 @@ interface UploadJob {
   ratio: number;
   error: string | null;
 }
+
+/**
+ * ≥sm 的表格列。<sm 走同一份定义降级成卡片：
+ * 名称当标题、状态当徽标、证明目的当副行、大小与时间连成脚注，
+ * 类别在卡片上不显示——那边按类别分了节，节标题已经说过一遍。
+ */
+const COLUMNS: DataTableColumn<EvidenceView>[] = [
+  {
+    key: 'name',
+    header: '名称',
+    // 文件名常带公司名和文件性质，低调模式下整格打码；点开详情再看。
+    sensitive: true,
+    card: 'title',
+    // 列宽靠内层 span 的 max-w 卡住：表格是 auto 布局，光给 td 加 max-w 不生效
+    cell: (item) => (
+      <span className="block max-w-[18rem] truncate font-medium">{item.name}</span>
+    ),
+  },
+  {
+    key: 'category',
+    header: '类别',
+    card: 'hide',
+    cell: (item) => <Badge>{item.category}</Badge>,
+  },
+  {
+    key: 'purpose',
+    header: '证明目的',
+    card: 'meta',
+    // 证明目的几乎必然写着金额和公司名（「证明离职前 12 个月平均工资为 25000 元」），
+    // 低调模式下和文件名一样整格打码
+    sensitive: true,
+    className: 'text-muted-foreground',
+    // 表格里夹到两行，全文在详情 Sheet 里；卡片那边不夹，窄屏本来就是竖着读
+    cell: (item) =>
+      item.provePurpose ? (
+        <span className="block max-w-[22rem] text-[14px] leading-6 sm:line-clamp-2">
+          {item.provePurpose}
+        </span>
+      ) : (
+        ''
+      ),
+  },
+  {
+    key: 'status',
+    header: '状态',
+    card: 'badge',
+    cell: (item) => <EvidenceBadge status={item.status} />,
+  },
+  {
+    key: 'size',
+    header: '大小',
+    numeric: true,
+    card: 'footnote',
+    cell: (item) => (item.sizeBytes === null ? '' : formatBytes(item.sizeBytes)),
+  },
+  {
+    key: 'createdAt',
+    header: '入库时间',
+    numeric: true,
+    card: 'footnote',
+    cell: (item) => formatDate(item.createdAt),
+  },
+];
 
 export function EvidenceLibrary({ caseId }: { caseId: string }) {
   const toast = useToast();
@@ -225,25 +291,22 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
       {loading ? (
         <SkeletonList />
       ) : needSignIn ? (
-        <div className="rounded-[12px] border border-line bg-surface p-5">
-          <p className="text-[15px] leading-7 text-ink">登录状态已失效，材料没丢，重新验证一下手机号就能看到。</p>
-          <Link
-            href="/login"
-            className="mt-3 inline-flex h-11 items-center justify-center rounded-[10px] bg-primary px-4 text-[15px] font-medium text-white transition-opacity duration-150 ease-out hover:opacity-90"
-          >
-            去登录
-          </Link>
-        </div>
+        <Alert>
+          <AlertTitle>登录状态已失效，材料没丢，重新验证一下手机号就能看到。</AlertTitle>
+          <Button size="sm" className="mt-3" asChild>
+            <Link href="/login">去登录</Link>
+          </Button>
+        </Alert>
       ) : loadError ? (
-        <div className="rounded-[12px] border border-line bg-surface p-5">
-          <p className="text-[15px] leading-7 text-ink">{loadError}</p>
-          <p className="mt-1 text-[14px] leading-6 text-ink-2">
+        <Alert>
+          <AlertTitle>{loadError}</AlertTitle>
+          <AlertDescription className="mt-1">
             已经上传的材料还在，只是这次没读出来。
-          </p>
+          </AlertDescription>
           <Button size="sm" className="mt-3" onClick={() => void load()}>
             重新加载
           </Button>
-        </div>
+        </Alert>
       ) : items.length === 0 ? (
         <div className="flex flex-col gap-5">
           <EmptyState
@@ -258,7 +321,18 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
             共 {items.length} 份 · 已固化 {frozen} 份 · 已出证 {issued} 份
           </p>
 
-          <div className="flex flex-col gap-5">
+          {/* ≥sm 一张平表，类别在表里是一列 */}
+          <DataTable
+            faces="table"
+            caption="证据库"
+            columns={COLUMNS}
+            rows={items}
+            rowKey={(item) => item.id}
+            onRowClick={(item) => setOpenId(item.id)}
+          />
+
+          {/* <sm 仍按类别分节，节标题带条数 */}
+          <div className="flex flex-col gap-5 sm:hidden">
             {groups.map((g) => (
               <section key={g.category}>
                 <h3 className="mb-2 flex items-baseline gap-2 text-[15px] font-semibold text-ink">
@@ -267,13 +341,13 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
                     {g.list.length}
                   </span>
                 </h3>
-                <ul className="flex flex-col gap-2">
-                  {g.list.map((item) => (
-                    <li key={item.id}>
-                      <EvidenceRow item={item} onOpen={() => setOpenId(item.id)} />
-                    </li>
-                  ))}
-                </ul>
+                <DataTable
+                  faces="cards"
+                  columns={COLUMNS}
+                  rows={g.list}
+                  rowKey={(item) => item.id}
+                  onRowClick={(item) => setOpenId(item.id)}
+                />
               </section>
             ))}
           </div>
@@ -343,7 +417,7 @@ function UploadProgress({
   const percent = Math.round(job.ratio * 100);
 
   return (
-    <div className="rounded-[12px] border border-line bg-surface p-3.5">
+    <Card className="p-3.5">
       <div className="flex items-start justify-between gap-3">
         <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink">
           {job.input.name}
@@ -367,55 +441,10 @@ function UploadProgress({
         </>
       ) : (
         <>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-150 ease-out"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
+          <Progress className="mt-2" value={percent} label="上传进度" />
           <p className="num mt-1.5 text-[13px] text-ink-2">正在上传 {percent}%</p>
         </>
       )}
-    </div>
-  );
-}
-
-function EvidenceRow({
-  item,
-  onOpen,
-}: {
-  item: EvidenceView;
-  onOpen: () => void;
-}) {
-  const { discreet } = useDiscreet();
-
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex w-full flex-col gap-1.5 rounded-[12px] border border-line bg-surface p-3.5 text-left transition-colors duration-150 ease-out hover:bg-surface-2"
-    >
-      <div className="flex items-start justify-between gap-3">
-        {/* 文件名常带公司名和文件性质，低调模式下整行打码；点开详情再点按查看。 */}
-        <span
-          className={cn(
-            'min-w-0 flex-1 text-[15px] leading-7 font-medium text-ink',
-            discreet && 'discreet-blur',
-          )}
-        >
-          {item.name}
-        </span>
-        <span className="shrink-0">
-          <EvidenceBadge status={item.status} />
-        </span>
-      </div>
-      {item.provePurpose && (
-        <span className="text-[14px] leading-6 text-ink-2">{item.provePurpose}</span>
-      )}
-      <span className="num text-[13px] text-ink-2">
-        {item.sizeBytes === null ? '' : `${formatBytes(item.sizeBytes)} · `}
-        {formatDate(item.createdAt)}
-      </span>
-    </button>
+    </Card>
   );
 }

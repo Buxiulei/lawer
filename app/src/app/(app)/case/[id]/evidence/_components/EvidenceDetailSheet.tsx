@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { formatBytes, formatDateTime } from '@/app/_ui/format';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { Textarea } from '@/components/ui/Field';
-import { Sheet } from '@/components/ui/Sheet';
+import { AppSheet } from '@/components/shadcn/app-sheet';
+import { Badge } from '@/components/shadcn/badge';
+import { Button } from '@/components/shadcn/button';
+import { Card } from '@/components/shadcn/card';
+import { TextareaField } from '@/components/shadcn/field';
 import { useToast } from '@/components/ui/Toast';
 import { EvidenceBadge } from '@/components/case/EvidenceBadge';
 import { Sensitive } from '@/components/Sensitive';
@@ -59,7 +60,7 @@ export function EvidenceDetailSheet({
   const att = item?.attestation ?? null;
 
   return (
-    <Sheet
+    <AppSheet
       open={item !== null}
       onClose={onClose}
       title="证据详情"
@@ -67,18 +68,18 @@ export function EvidenceDetailSheet({
         item && (
           <div className="flex flex-col gap-2.5">
             {item.status === '已上传' && (
-              <Button fullWidth disabled={busy} onClick={() => onRequestFreeze(item)}>
+              <Button className="w-full" disabled={busy} onClick={() => onRequestFreeze(item)}>
                 {busy ? '正在固化…' : '固化这份证据'}
               </Button>
             )}
             {item.status === '已固化' && (
-              <Button fullWidth disabled={busy} onClick={() => onIssue(item)}>
+              <Button className="w-full" disabled={busy} onClick={() => onIssue(item)}>
                 {busy ? '正在出具…' : '出具《存证证明》'}
               </Button>
             )}
             <Button
               variant={item.status === '已出证' && certDownloadable ? 'primary' : 'secondary'}
-              fullWidth
+              className="w-full"
               disabled={item.status !== '已出证' || !certDownloadable}
               onClick={() => onDownload(item)}
             >
@@ -117,7 +118,7 @@ export function EvidenceDetailSheet({
           </p>
 
           <div className="flex flex-col gap-2">
-            <Textarea
+            <TextareaField
               label="这份材料想证明什么"
               rows={3}
               value={purpose}
@@ -158,7 +159,7 @@ export function EvidenceDetailSheet({
           </dl>
 
           {att && (
-            <section className="rounded-[12px] border border-line bg-surface-2 p-3.5">
+            <Card className="bg-secondary p-3.5">
               <h3 className="text-[15px] font-semibold text-ink">存证订单</h3>
               <dl className="mt-2 flex flex-col divide-y divide-line text-[15px]">
                 <Row label="存证编号" value={att.orderNo} numeric />
@@ -198,7 +199,7 @@ export function EvidenceDetailSheet({
                   ? '任何人打开这个链接都能核一遍哈希和时间戳，不用注册。'
                   : '时间戳还没盖上，这个链接现在只显示「存证处理中」，还不能给对方当凭据。'}
               </p>
-            </section>
+            </Card>
           )}
 
           {item.sha256 && (
@@ -211,7 +212,7 @@ export function EvidenceDetailSheet({
           )}
         </div>
       )}
-    </Sheet>
+    </AppSheet>
   );
 }
 
