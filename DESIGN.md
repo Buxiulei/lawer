@@ -120,6 +120,30 @@
 
 排除留档：**Preline UI**——MIT+“Fair Use License”双许可，含竞品限制/署名/终止条款（"shall not be used to create any product or service that directly competes with Preline UI"），不符宽松许可铁律；**Windmill Dashboard**——license 纯 MIT 但 2024 起无维护、栈老旧。
 
+### 品牌主题 token 定稿（2026-08-21，主会话设计，语义变量名不变=全站一次换肤）
+
+语义名沿用 v1（--bg/--surface/--surface-2/--ink/--ink-2/--line/--primary/--primary-ink/--primary-wash/--amber*/--danger*/--success*），新增 --gold/--gold-wash。
+
+| 语义 | Light | Dark | 用法纪律 |
+|---|---|---|---|
+| bg | `#FFFCF5` 米白 | `#171310` 暖黑 | 页面底 |
+| surface | `#FFFFFF` | `#201A17` | 卡片 |
+| surface-2 | `#F5EFE3` | `#2A2320` | 次级面/输入底/引用块 |
+| ink / ink-2 | `#2B1F1A` / `#6E5C50` | `#EAE3D9` / `#A3988B` | 正文/次要 |
+| line | `#E8E4DC` | `#3A322D` | 分隔线 |
+| **primary 勃艮第** | `#8B2942` | `#C55D76` | 按钮/链接/选中；primary-ink `#6D1F33`/`#D98BA0`；wash `#F5E7EB`/`#332026` |
+| **gold 淡金** | `#8A7340`（文字级）/装饰 `#B8995E` | `#C9A75B` | **仅品牌点缀**：logo、会员/成就徽标、选中高光、图表次系列；**禁止**用于警示、倒计时、可点击主操作；wash `#F5E6C8`/`#2E2717` |
+| **danger 亮朱红** | `#D9442F` | `#E5705C` | 风险条款标红/不可逆确认，**与勃艮第显著区分**（朱红偏橙、勃艮第偏紫深）；wash `#FBE9E5`/`#3B1F1A` |
+| **amber→期限橙** | `#B4690E` | `#E09A46` | 截止日/倒计时专用，独立橙系不与淡金混（金偏黄褐、橙偏橘）；wash `#FAF0E1`/`#33270F` |
+| success | `#2F7D5D` | `#5CAF8A` | 已固化/完成；wash `#E8F3EE`/`#1C2F26` |
+
+配套：阴影/圆角向 NBDpsy 靠（卡 12px 不变、阴影仍极轻）；低调模式打码规则不变，新色系下 blur 底色随 surface；theme_color（manifest/viewport）同步 `#FFFCF5`/`#171310`。
+可辨识性自查线：勃艮第 vs 朱红 ΔHue≈25°+明度差；淡金 vs 期限橙在 wash 底上并排可区分（实测截图为证）。
+
+### 重制执行分两个 PR
+- **PR-A token 换肤**：globals.css 全量替换 + 组件内写死色值清查 + 深浅/低调模式重映射 + 全页面截图实测。
+- **PR-B 组合骨架布局重制**：引 shadcn 基建（CSS 变量对接自家 token），按 Kiranism/Blocks/TailAdmin 逐页重制布局，整页单体系纪律。
+
 ### 终选（2026-08-20 用户拍板）：组合方案
 - **主骨架**：next-shadcn-dashboard-starter；**区块缺口**：shadcn/ui 官方 Blocks；**数据表格组件**：TailAdmin 免费版按需挖取。三家均 MIT，组合合法。
 - **shadcn/Radix 引入已批准（渐进式）**：新页面用 shadcn 体系；既有手写组件不动、不做存量迁移。

@@ -32,7 +32,7 @@ export default function AccountPage() {
         <div className="flex items-start justify-between gap-3">
           <p className="text-[14px] text-ink-2">公道值余额</p>
           <div className="flex shrink-0 gap-1.5">
-            <Badge tone="primary">{demoUser.membership}套餐</Badge>
+            <Badge tone="gold">{demoUser.membership}套餐</Badge>
             <Badge tone={demoUser.authStatus === '已实名' ? 'success' : 'amber'}>
               {demoUser.authStatus}
             </Badge>
