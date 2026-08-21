@@ -1,10 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useDiscreet } from '@/app/_ui/discreet';
 import { Button } from '@/components/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/shadcn/card';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { Skeleton } from '@/components/shadcn/skeleton';
+import { Tabs, TabsList, TabsTrigger } from '@/components/shadcn/tabs';
+import { SETUP_TABS } from './agentSetup';
 import { SetupPrompt } from './SetupPrompt';
 import { useAgentSetup } from './useAgentSetup';
 
@@ -19,7 +22,7 @@ import { useAgentSetup } from './useAgentSetup';
  */
 export function AgentSetupCard() {
   const { discreet } = useDiscreet();
-  const { info, loading, error } = useAgentSetup();
+  const { info, loading, error, unauthorized } = useAgentSetup();
   const [expanded, setExpanded] = useState(false);
 
   const collapsed = discreet && !expanded;
@@ -47,7 +50,9 @@ export function AgentSetupCard() {
 
             {loading && <Skeleton className="mt-3 h-40 w-full" />}
 
-            {error && !loading && (
+            {unauthorized && !loading && <LoggedOutTabs />}
+
+            {error && !loading && !unauthorized && (
               <p className="mt-3 text-[14px] leading-6 text-ink-2">
                 接入信息这次没取到（{error}），稍后回来再看。
               </p>
@@ -83,6 +88,36 @@ export function AgentSetupCard() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * 未登录时的禁用态：Tab 结构照常摆着，让人看得出接入卡长什么样、有哪几种客户端，
+ * 只是内容取不到。比一句「没取到」更能说明"差的是登录，不是这功能坏了"。
+ */
+function LoggedOutTabs() {
+  return (
+    <div className="mt-3">
+      <Tabs value={SETUP_TABS[0].key}>
+        <TabsList aria-label="接入话术（登录后可见）">
+          {SETUP_TABS.map((item) => (
+            <TabsTrigger key={item.key} value={item.key} disabled className="opacity-45">
+              {item.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
+      <div className="mt-3 rounded-[10px] border border-dashed border-line p-4">
+        <Skeleton className="h-4 w-3/5" />
+        <Skeleton className="mt-2 h-4 w-full" />
+        <Skeleton className="mt-2 h-4 w-2/5" />
+        <p className="mt-3 text-[14px] leading-6 text-ink-2">登录后可见接入信息</p>
+        <Button asChild size="sm" variant="secondary" className="mt-2">
+          <Link href="/login">去登录</Link>
+        </Button>
+      </div>
+    </div>
   );
 }
 

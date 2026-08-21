@@ -1,7 +1,9 @@
 'use client';
 
-import { Button } from '@/components/ui/Button';
-import { Textarea } from '@/components/ui/Field';
+import { Button } from '@/components/shadcn/button';
+import { Card } from '@/components/shadcn/card';
+import { TextareaField } from '@/components/shadcn/field';
+import { Input } from '@/components/shadcn/input';
 import type { EventNote, IntakeDraft } from './draft';
 
 const EXAMPLES = [
@@ -45,43 +47,45 @@ export function StepTimeline({
         )}
 
         {events.map((e, i) => (
-          <div key={e.id} className="rounded-[12px] border border-line bg-surface p-3">
+          <Card key={e.id} className="p-3 shadow-none">
             <div className="flex items-center justify-between gap-2">
               <span className="num text-[13px] text-ink-2">第 {i + 1} 条</span>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => remove(e.id)}
                 aria-label={`删除第 ${i + 1} 条`}
-                className="min-h-11 px-2 text-[14px] text-ink-2 hover:text-ink"
+                className="px-2 text-[14px] text-ink-2"
               >
                 删掉
-              </button>
+              </Button>
             </div>
             <div className="mt-1 flex flex-col gap-2 sm:flex-row">
-              <input
+              <Input
                 type="date"
                 value={e.date}
                 onChange={(ev) => update(e.id, { date: ev.target.value })}
                 aria-label={`第 ${i + 1} 条的日期`}
-                className="num h-12 rounded-[10px] border border-line bg-surface-2 px-3 text-[16px] text-ink focus:border-primary focus:outline-none sm:w-[160px]"
+                className="num sm:w-[160px]"
               />
-              <input
+              <Input
                 value={e.text}
                 onChange={(ev) => update(e.id, { text: ev.target.value })}
                 placeholder={EXAMPLES[i % EXAMPLES.length]}
                 aria-label={`第 ${i + 1} 条发生了什么`}
-                className="h-12 min-w-0 flex-1 rounded-[10px] border border-line bg-surface-2 px-3 text-[16px] text-ink placeholder:text-ink-2/70 focus:border-primary focus:outline-none"
+                // flex-1 只在 ≥sm 的横排里给：竖排时 flex-basis:0 会把 h-12 压成一行文字高
+                className="min-w-0 sm:flex-1"
               />
             </div>
-          </div>
+          </Card>
         ))}
 
-        <Button variant="secondary" onClick={add} fullWidth>
+        <Button variant="secondary" onClick={add} className="w-full">
           + 再记一条
         </Button>
       </div>
 
-      <Textarea
+      <TextareaField
         label="或者整段粘进来"
         rows={6}
         value={draft.freeText}

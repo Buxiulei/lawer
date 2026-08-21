@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { OTP_LENGTH } from '@/app/_mock/authpay';
-import { cn } from '@/app/_ui/cn';
+import { Input } from '@/components/shadcn/input';
 
 /**
  * 6 位验证码输入：一位一格，自动前进/后退，支持整串粘贴。
@@ -75,7 +75,7 @@ export function CodeInput({
   return (
     <div className="flex gap-2" role="group" aria-label={`${OTP_LENGTH} 位验证码`}>
       {Array.from({ length: OTP_LENGTH }, (_, i) => (
-        <input
+        <Input
           key={i}
           ref={(el) => {
             boxes.current[i] = el;
@@ -89,13 +89,7 @@ export function CodeInput({
           autoComplete={i === 0 ? 'one-time-code' : 'off'}
           aria-label={`第 ${i + 1} 位`}
           aria-invalid={invalid ? true : undefined}
-          className={cn(
-            'num h-12 w-full min-w-11 rounded-[10px] border bg-surface-2 text-center',
-            'text-[20px] font-semibold text-ink caret-primary',
-            'transition-colors duration-150 ease-out focus:border-primary focus:outline-none',
-            'disabled:opacity-50',
-            invalid ? 'border-danger' : 'border-line',
-          )}
+          className="num min-w-11 px-0 text-center text-[20px] font-semibold caret-primary"
         />
       ))}
     </div>

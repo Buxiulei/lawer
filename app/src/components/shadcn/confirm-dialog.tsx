@@ -16,8 +16,8 @@ import { cn } from './utils';
 import { useFocusRestore } from './use-focus-restore';
 
 /**
- * 二次确认（shadcn AlertDialog 版）：props 与手写版 @/components/ui/ConfirmDialog
- * 逐字一致，转体系的页面换 import 即可，未转页面继续用手写那份。
+ * 二次确认（shadcn AlertDialog 版）：props 沿用被它取代的手写版 ui/ConfirmDialog，
+ * 逐字一致，转体系的页面换 import 即可。
  *
  * 规矩不变：凡"会被公司看到 / 不可逆"的操作必须弹，
  * confirmLabel 必须写明后果（如「确认发送给公司」），不许写「确定」。

@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react';
-import { Badge } from '@/components/ui/Badge';
+import { Badge } from '@/components/shadcn/badge';
+import { Card } from '@/components/shadcn/card';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/shadcn/collapsible';
+import { Table, TableBody, TableCell, TableHead, TableRow } from '@/components/shadcn/table';
 import { cn } from '@/app/_ui/cn';
 import { formatBytes, formatDateTime } from '@/app/_ui/format';
 import {
@@ -28,9 +35,11 @@ export function VerifyResult({ no, view }: { no: string; view: VerifyView }) {
         />
         <section className="mt-6">
           <h3 className="text-[17px] font-semibold text-ink">你查的编号</h3>
-          <dl className="mt-2">
-            <Row label="存证编号" value={no} mono />
-          </dl>
+          <Table className="mt-2">
+            <TableBody>
+              <Row label="存证编号" value={no} mono />
+            </TableBody>
+          </Table>
         </section>
       </>
     );
@@ -80,35 +89,39 @@ function RecordSection({ v }: { v: Verification }) {
           </Badge>
         </div>
 
-        <dl className="mt-2">
-          <Row label="存证编号" value={v.order_no} mono />
-          <Row label="建单时间" value={v.created_at ? formatDateTime(v.created_at) : undefined} mono />
-          {v.evidence ? (
-            <>
-              <Row label="文件名" value={v.evidence.name} />
-              <Row label="类别" value={v.evidence.category} />
-              <Row label="文件大小" value={formatBytes(v.evidence.file_size)} mono />
-              <Row label="文件类型" value={v.evidence.mime ?? undefined} mono />
-            </>
-          ) : (
-            <Row label="文件" value={undefined} />
-          )}
-        </dl>
+        <Table className="mt-2">
+          <TableBody>
+            <Row label="存证编号" value={v.order_no} mono />
+            <Row label="建单时间" value={v.created_at ? formatDateTime(v.created_at) : undefined} mono />
+            {v.evidence ? (
+              <>
+                <Row label="文件名" value={v.evidence.name} />
+                <Row label="类别" value={v.evidence.category} />
+                <Row label="文件大小" value={formatBytes(v.evidence.file_size)} mono />
+                <Row label="文件类型" value={v.evidence.mime ?? undefined} mono />
+              </>
+            ) : (
+              <Row label="文件" value={undefined} />
+            )}
+          </TableBody>
+        </Table>
 
         <CopyField label="文件 SHA-256" value={v.sha256} className="mt-4" />
       </section>
 
       <section className="mt-6">
         <h3 className="text-[17px] font-semibold text-ink">可信时间戳</h3>
-        <dl className="mt-2">
-          <Row
-            label="时间戳时间"
-            value={v.timestamp.gen_time ? formatDateTime(v.timestamp.gen_time) : undefined}
-            mono
-          />
-          <Row label="时间戳序列号" value={v.timestamp.serial ?? undefined} mono />
-          <Row label="时间戳服务" value={v.timestamp.tsa_url ?? undefined} mono />
-        </dl>
+        <Table className="mt-2">
+          <TableBody>
+            <Row
+              label="时间戳时间"
+              value={v.timestamp.gen_time ? formatDateTime(v.timestamp.gen_time) : undefined}
+              mono
+            />
+            <Row label="时间戳序列号" value={v.timestamp.serial ?? undefined} mono />
+            <Row label="时间戳服务" value={v.timestamp.tsa_url ?? undefined} mono />
+          </TableBody>
+        </Table>
       </section>
     </>
   );
@@ -117,33 +130,35 @@ function RecordSection({ v }: { v: Verification }) {
 /** 离线复核指引：spec §8「可离线复核」落到具体几步，不假手于本页 */
 function OfflineGuide({ v }: { v: Verification }) {
   return (
-    <details className="mt-6 rounded-[12px] border border-line bg-surface">
-      <summary className="flex min-h-12 cursor-pointer list-none items-center px-4 text-[15px] font-medium text-primary-ink">
-        怎么自己离线核一遍
-      </summary>
-      <div className="px-4 pb-4">
-        <p className="prose-measure text-[14px] leading-6 text-ink-2">
-          不必相信本页。拿到持证人给你的原始文件后，按下面两步自己算，
-          结论和本页无关、和平台也无关。
-        </p>
-        <ol className="mt-3 flex flex-col gap-3">
-          <Step n={1} title="核对文件摘要">
-            对原始文件算一次 SHA-256，和上面「文件 SHA-256」逐位比对。
-            命令行下：<Code>sha256sum 文件名</Code>（macOS 用{' '}
-            <Code>shasum -a 256 文件名</Code>）。对不上，说明文件和存证时的那一份不是同一个。
-          </Step>
-          <Step n={2} title="验时间戳令牌">
-            向持证人索取该订单的 RFC 3161 时间戳令牌（.tsr），用 OpenSSL 验签并读出签发时间：
-            <Code block>openssl ts -verify -digest {v.sha256} -in 存证.tsr -CAfile 时间戳根证书.pem</Code>
-            验签通过即证明：这个摘要在令牌记载的时刻之前就已经存在。
-          </Step>
-        </ol>
-        <p className="prose-measure mt-3 text-[14px] leading-6 text-ink-2">
-          持证人手里的《存证证明》PDF 上另有实名快照与签名。本页不展示持证人身份——
-          本页无需登录，谁拿到编号都能打开，不该顺带把个人信息给出去。
-        </p>
-      </div>
-    </details>
+    <Collapsible asChild>
+      <Card className="mt-6">
+        <CollapsibleTrigger className="flex min-h-12 cursor-pointer items-center px-4 text-left text-[15px] font-medium text-primary-ink">
+          怎么自己离线核一遍
+        </CollapsibleTrigger>
+        <CollapsibleContent className="px-4 pb-4">
+          <p className="prose-measure text-[14px] leading-6 text-ink-2">
+            不必相信本页。拿到持证人给你的原始文件后，按下面两步自己算，
+            结论和本页无关、和平台也无关。
+          </p>
+          <ol className="mt-3 flex flex-col gap-3">
+            <Step n={1} title="核对文件摘要">
+              对原始文件算一次 SHA-256，和上面「文件 SHA-256」逐位比对。
+              命令行下：<Code>sha256sum 文件名</Code>（macOS 用{' '}
+              <Code>shasum -a 256 文件名</Code>）。对不上，说明文件和存证时的那一份不是同一个。
+            </Step>
+            <Step n={2} title="验时间戳令牌">
+              向持证人索取该订单的 RFC 3161 时间戳令牌（.tsr），用 OpenSSL 验签并读出签发时间：
+              <Code block>openssl ts -verify -digest {v.sha256} -in 存证.tsr -CAfile 时间戳根证书.pem</Code>
+              验签通过即证明：这个摘要在令牌记载的时刻之前就已经存在。
+            </Step>
+          </ol>
+          <p className="prose-measure mt-3 text-[14px] leading-6 text-ink-2">
+            持证人手里的《存证证明》PDF 上另有实名快照与签名。本页不展示持证人身份——
+            本页无需登录，谁拿到编号都能打开，不该顺带把个人信息给出去。
+          </p>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }
 
@@ -159,10 +174,10 @@ function Banner({
   summary: string;
 }) {
   return (
-    <section
+    <Card
       className={cn(
-        'flex items-start gap-4 rounded-[12px] border p-5 sm:p-7',
-        tone === 'primary' ? 'border-primary bg-primary-wash' : 'border-line bg-surface-2',
+        'flex-row items-start gap-4 p-5 shadow-none sm:p-7',
+        tone === 'primary' ? 'border-primary bg-primary-wash' : 'border-transparent bg-surface-2',
       )}
     >
       <span className="mt-1 shrink-0">{icon}</span>
@@ -174,7 +189,7 @@ function Banner({
           {summary}
         </p>
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -205,6 +220,10 @@ function Code({ children, block }: { children: ReactNode; block?: boolean }) {
   );
 }
 
+/**
+ * 记录明细的一行。标签用 th scope="row"：读屏器逐格念的时候能带上「文件名：」，
+ * 投影到仲裁庭上时也是一张对得齐的表。
+ */
 function Row({
   label,
   value,
@@ -215,18 +234,20 @@ function Row({
   mono?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-0.5 border-t border-line py-3 sm:flex-row sm:gap-4">
-      <dt className="shrink-0 text-[14px] leading-6 text-ink-2 sm:w-32">{label}</dt>
-      <dd
+    <TableRow>
+      <TableHead scope="row" className="w-28 align-top whitespace-normal sm:w-32">
+        {label}
+      </TableHead>
+      <TableCell
         className={cn(
-          'min-w-0 text-[14px] leading-6 break-all',
+          'align-top text-[14px] leading-6 break-all',
           mono && 'num font-mono',
-          value ? 'text-ink' : 'text-ink-2',
+          !value && 'text-ink-2',
         )}
       >
         {value ?? '未取到'}
-      </dd>
-    </div>
+      </TableCell>
+    </TableRow>
   );
 }
 

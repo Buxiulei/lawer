@@ -5,13 +5,14 @@ import {
   LEDGER_PAGE_SIZE,
   ledgerPage,
   mockLedger,
+  type LedgerEntry,
   type LedgerType,
 } from '@/app/_mock/authpay';
 import { cn } from '@/app/_ui/cn';
 import { formatDateTime } from '@/app/_ui/format';
-import { Sensitive } from '@/components/Sensitive';
-import { Badge, type BadgeTone } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { Badge, type BadgeTone } from '@/components/shadcn/badge';
+import { Button } from '@/components/shadcn/button';
+import { DataTable, type DataTableColumn } from '@/components/shadcn/data-table';
 
 const TYPE_TONE: Record<LedgerType, BadgeTone> = {
   注册赠送: 'success',
@@ -25,6 +26,69 @@ const TYPE_TONE: Record<LedgerType, BadgeTone> = {
 function formatPoints(n: number): string {
   return Math.abs(n).toLocaleString('zh-CN');
 }
+
+const COLUMNS: DataTableColumn<LedgerEntry>[] = [
+  {
+    key: 'meta',
+    header: '明细',
+    card: 'title',
+    // 表格是 auto 布局，列宽只能靠内层 span 的 max-w 卡住（见 DESIGN.md 用法说明）；
+    // 这一列的文字最长，不卡住的话 1280 下六列会把余额挤出可视区
+    cell: (e) => <span className="line-clamp-2 block max-w-[15rem]">{e.meta}</span>,
+  },
+  {
+    key: 'type',
+    header: '类型',
+    card: 'badge',
+    cell: (e) => <Badge tone={TYPE_TONE[e.type]}>{e.type}</Badge>,
+  },
+  {
+    key: 'feature',
+    header: '用途',
+    card: 'meta',
+    cell: (e) => <span className="block max-w-[8rem] truncate">{e.feature}</span>,
+  },
+  {
+    key: 'createdAt',
+    header: '时间',
+    numeric: true,
+    card: 'footnote',
+    cell: (e) => formatDateTime(e.createdAt),
+  },
+  {
+    key: 'delta',
+    header: '公道值',
+    numeric: true,
+    sensitive: true,
+    card: 'footnote',
+    cell: (e) => (
+      <span
+        className={cn(
+          'font-semibold',
+          // 充值/赠送/退款进账用 success，消耗用正文色——扣费不该是警报
+          e.delta > 0 ? 'text-success' : 'text-ink',
+        )}
+      >
+        {e.delta > 0 ? '+' : '-'}
+        {formatPoints(e.delta)}
+      </span>
+    ),
+  },
+  {
+    key: 'balanceAfter',
+    header: '余额',
+    numeric: true,
+    sensitive: true,
+    card: 'footnote',
+    // 表格里这一列有表头，卡片里没有，所以窄屏自己补个前缀
+    cell: (e) => (
+      <>
+        <span className="sm:hidden">余额 </span>
+        {formatPoints(e.balanceAfter)}
+      </>
+    ),
+  },
+];
 
 /**
  * 公道值流水：只追加不修改（spec §7），余额随每笔结算，便于自己对账。
@@ -43,48 +107,20 @@ export function LedgerList() {
         每一笔都记着，只增不改。对不上账随时把这页截给我们。
       </p>
 
-      <ul className="mt-2">
-        {entries.map((entry) => (
-          <li
-            key={entry.id}
-            className="flex items-start gap-3 border-b border-line py-3 last:border-b-0"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <Badge tone={TYPE_TONE[entry.type]}>{entry.type}</Badge>
-                <span className="truncate text-[13px] text-ink-2">{entry.feature}</span>
-              </div>
-              <p className="mt-1.5 text-[15px] leading-6 text-ink">{entry.meta}</p>
-              <p className="num mt-0.5 text-[13px] text-ink-2">
-                {formatDateTime(entry.createdAt)}
-              </p>
-            </div>
-
-            <Sensitive as="div" className="shrink-0 text-right">
-              <p
-                className={cn(
-                  'num text-[16px] leading-6 font-semibold',
-                  // 充值/赠送/退款进账用 success，消耗用正文色——扣费不该是警报
-                  entry.delta > 0 ? 'text-success' : 'text-ink',
-                )}
-              >
-                {entry.delta > 0 ? '+' : '-'}
-                {formatPoints(entry.delta)}
-              </p>
-              <p className="num mt-0.5 text-[13px] text-ink-2">
-                余额 {formatPoints(entry.balanceAfter)}
-              </p>
-            </Sensitive>
-          </li>
-        ))}
-      </ul>
+      <DataTable
+        className="mt-2"
+        columns={COLUMNS}
+        rows={entries}
+        rowKey={(e) => e.id}
+        caption="公道值流水"
+      />
 
       {hasMore && (
         <div className="pt-3">
           <Button
             variant="secondary"
             size="sm"
-            fullWidth
+            className="w-full"
             onClick={() => setPage((p) => p + 1)}
           >
             再看 {Math.min(LEDGER_PAGE_SIZE, mockLedger.length - entries.length)} 条

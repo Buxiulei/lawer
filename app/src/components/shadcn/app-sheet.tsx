@@ -14,7 +14,7 @@ import { XIcon } from './icons';
 import { useFocusRestore } from './use-focus-restore';
 
 /**
- * 抽屉（shadcn Sheet 版）：props 与手写版 @/components/ui/Sheet 逐字一致，
+ * 抽屉（shadcn Sheet 版）：props 沿用被它取代的手写版 ui/Sheet，逐字一致，
  * 转体系的页面换 import 即可。焦点陷阱、Esc 关闭、滚动锁定由 Radix 接管。
  */
 export function AppSheet({

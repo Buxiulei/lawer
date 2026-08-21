@@ -5,8 +5,14 @@ import { estimateClaims, previewActions } from '@/app/_mock/intake-evidence';
 import { formatDate } from '@/app/_ui/format';
 import { AmountText } from '@/components/case/AmountText';
 import { ActionCard } from '@/components/case/ActionCard';
-import { Badge } from '@/components/ui/Badge';
-import { Card, CardBody, CardHeader } from '@/components/ui/Card';
+import { Badge } from '@/components/shadcn/badge';
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/shadcn/card';
 import { Sensitive } from '@/components/Sensitive';
 import type { ActionItem } from '@/app/_mock/types';
 import type { IntakeDraft } from './draft';
@@ -36,15 +42,19 @@ export function StepPreview({ draft }: { draft: IntakeDraft }) {
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardHeader
-          title={
+        <CardHeader className="items-center">
+          <CardTitle>
             <Sensitive>
               {draft.companyName ? `${draft.companyName} · 应对档案` : '我的应对档案'}
             </Sensitive>
-          }
-          action={draft.stage ? <Badge tone="primary">{draft.stage}</Badge> : undefined}
-        />
-        <CardBody>
+          </CardTitle>
+          {draft.stage && (
+            <CardAction>
+              <Badge tone="primary">{draft.stage}</Badge>
+            </CardAction>
+          )}
+        </CardHeader>
+        <CardContent>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-[15px]">
             <Meta label="管辖" value="北京 · 朝阳区" />
             <Meta
@@ -66,12 +76,14 @@ export function StepPreview({ draft }: { draft: IntakeDraft }) {
               }
             />
           </dl>
-        </CardBody>
+        </CardContent>
       </Card>
 
       <Card>
-        <CardHeader title="预估诉求金额" />
-        <CardBody>
+        <CardHeader>
+          <CardTitle>预估诉求金额</CardTitle>
+        </CardHeader>
+        <CardContent>
           <ul className="flex flex-col divide-y divide-line">
             {estimate.rows.map((row) => (
               <li key={row.key} className="flex flex-col gap-1 py-3 first:pt-0">
@@ -117,7 +129,7 @@ export function StepPreview({ draft }: { draft: IntakeDraft }) {
               另外记下的诉求：{otherGoals.join('、')}。这几项不折算成钱，会写进仲裁请求。
             </p>
           )}
-        </CardBody>
+        </CardContent>
       </Card>
 
       <section>
@@ -140,13 +152,13 @@ export function StepPreview({ draft }: { draft: IntakeDraft }) {
       </section>
 
       {draft.bottomLine.trim() && (
-        <Card tone="plain">
-          <CardBody className="pt-4">
+        <Card className="border-transparent bg-surface-2 shadow-none">
+          <CardContent className="pt-4">
             <p className="text-[13px] font-medium text-ink-2">你写下的底线</p>
             <p className="prose-measure mt-1 text-[15px] leading-7 text-ink">
               {draft.bottomLine}
             </p>
-          </CardBody>
+          </CardContent>
         </Card>
       )}
     </div>

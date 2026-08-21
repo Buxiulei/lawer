@@ -12,8 +12,12 @@ import {
 } from '@/app/_mock/authpay';
 import { cn } from '@/app/_ui/cn';
 import { formatFen } from '@/app/_ui/format';
-import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Badge } from '@/components/shadcn/badge';
+import { Button } from '@/components/shadcn/button';
+import { Card } from '@/components/shadcn/card';
+import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
+import { Input } from '@/components/shadcn/input';
+import { RadioGroup, RadioGroupItem } from '@/components/shadcn/radio-group';
 import { useToast } from '@/components/ui/Toast';
 
 interface PendingPay {
@@ -63,54 +67,47 @@ export function RechargePanel({ membership }: { membership: string }) {
           {PLANS.map((plan) => {
             const current = plan.key === membership;
             return (
-              <li
-                key={plan.key}
-                className={cn(
-                  'flex flex-col rounded-[12px] border bg-surface p-4 shadow-soft',
-                  current ? 'border-primary' : 'border-line',
-                  !plan.available && 'opacity-60',
-                )}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[15px] font-semibold text-ink">{plan.key}</span>
-                  {current && (
-                    <span className="rounded-full bg-primary-wash px-2 py-0.5 text-[12px] text-primary-ink">
-                      当前
-                    </span>
-                  )}
-                  {!plan.available && (
-                    <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[12px] text-ink-2">
-                      待开发
-                    </span>
-                  )}
-                </div>
-
-                <p
+              <li key={plan.key} className="flex">
+                <Card
                   className={cn(
-                    'num mt-2 text-[26px] leading-9 font-semibold',
-                    plan.available ? 'text-primary-ink' : 'text-ink-2',
+                    'w-full p-4',
+                    current && 'border-primary',
+                    !plan.available && 'opacity-60',
                   )}
                 >
-                  ¥{formatFen(plan.priceFen)}
-                </p>
-                <p className="num text-[13px] text-ink-2">
-                  含 {plan.gongdao.toLocaleString('zh-CN')} 公道值 / 月
-                </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[15px] font-semibold text-ink">{plan.key}</span>
+                    {current && <Badge tone="primary">当前</Badge>}
+                    {!plan.available && <Badge>待开发</Badge>}
+                  </div>
 
-                <p className="mt-3 text-[14px] leading-6 text-ink">{plan.routing}</p>
-                <p className="mt-1 text-[13px] leading-6 text-ink-2">{plan.fit}</p>
-
-                <div className="mt-auto pt-4">
-                  <Button
-                    size="sm"
-                    fullWidth
-                    variant={current ? 'secondary' : 'primary'}
-                    disabled={!plan.available}
-                    onClick={() => payPlan(plan)}
+                  <p
+                    className={cn(
+                      'num mt-2 text-[26px] leading-9 font-semibold',
+                      plan.available ? 'text-primary-ink' : 'text-ink-2',
+                    )}
                   >
-                    {!plan.available ? '敬请期待' : current ? '续一个月' : '选这档'}
-                  </Button>
-                </div>
+                    ¥{formatFen(plan.priceFen)}
+                  </p>
+                  <p className="num text-[13px] text-ink-2">
+                    含 {plan.gongdao.toLocaleString('zh-CN')} 公道值 / 月
+                  </p>
+
+                  <p className="mt-3 text-[14px] leading-6 text-ink">{plan.routing}</p>
+                  <p className="mt-1 text-[13px] leading-6 text-ink-2">{plan.fit}</p>
+
+                  <div className="mt-auto pt-4">
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      variant={current ? 'secondary' : 'primary'}
+                      disabled={!plan.available}
+                      onClick={() => payPlan(plan)}
+                    >
+                      {!plan.available ? '敬请期待' : current ? '续一个月' : '选这档'}
+                    </Button>
+                  </div>
+                </Card>
               </li>
             );
           })}
@@ -119,42 +116,34 @@ export function RechargePanel({ membership }: { membership: string }) {
         <p className="mt-3 text-[13px] leading-6 text-ink-2">{PLAN_NOTE}</p>
       </section>
 
-      <section className="mt-6 rounded-[12px] border border-line bg-surface p-4 shadow-soft">
+      <Card className="mt-6 p-4">
         <h2 className="text-[17px] font-semibold text-ink">散充</h2>
         <p className="num mt-0.5 text-[14px] leading-6 text-ink-2">
           1 元 = {GONGDAO_PER_YUAN} 公道值，充多少充多久都行，不过期。
         </p>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          {TOPUP_PRESETS_YUAN.map((preset) => {
-            const active = String(preset) === amount;
-            return (
-              <button
-                key={preset}
-                type="button"
-                onClick={() => setAmount(String(preset))}
-                aria-pressed={active}
-                className={cn(
-                  'num h-11 min-w-20 rounded-[10px] border px-4 text-[15px] transition-colors duration-150 ease-out',
-                  active
-                    ? 'border-primary bg-primary-wash font-semibold text-primary-ink'
-                    : 'border-line bg-surface-2 text-ink',
-                )}
-              >
-                ¥{preset}
-              </button>
-            );
-          })}
-        </div>
+        {/* 常用档位是一组单选：手填别的金额时整组自然落到"没选中"，不用额外清一次 */}
+        <RadioGroup
+          aria-label="常用充值金额"
+          value={amount}
+          onValueChange={setAmount}
+          className="mt-3"
+        >
+          {TOPUP_PRESETS_YUAN.map((preset) => (
+            <RadioGroupItem key={preset} value={String(preset)} className="num min-w-20 px-4">
+              ¥{preset}
+            </RadioGroupItem>
+          ))}
+        </RadioGroup>
 
         <div className="mt-3 flex items-center gap-2">
           <span className="text-[15px] text-ink-2">¥</span>
-          <input
+          <Input
             value={amount}
             onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
             inputMode="numeric"
             aria-label="自定义充值金额（元）"
-            className="num h-12 w-32 rounded-[10px] border border-line bg-surface-2 px-3 text-[16px] text-ink focus:border-primary focus:outline-none"
+            className="num w-32"
           />
           <span className="num text-[14px] text-ink-2">
             {amountOk
@@ -164,11 +153,11 @@ export function RechargePanel({ membership }: { membership: string }) {
         </div>
 
         <div className="mt-4">
-          <Button fullWidth disabled={!amountOk} onClick={payTopup}>
+          <Button className="w-full" disabled={!amountOk} onClick={payTopup}>
             去支付
           </Button>
         </div>
-      </section>
+      </Card>
 
       <ConfirmDialog
         open={pending !== null}

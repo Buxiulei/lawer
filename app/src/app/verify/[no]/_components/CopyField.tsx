@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { cn } from '@/app/_ui/cn';
+import { Button } from '@/components/shadcn/button';
 
 /**
  * 可复制的长字符串（SHA-256 全文、订单号）。
@@ -22,8 +22,9 @@ export function CopyField({
     <div className={className}>
       <div className="flex items-baseline justify-between gap-3">
         <p className="text-[14px] leading-6 text-ink-2">{label}</p>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={async () => {
             try {
               await navigator.clipboard.writeText(value);
@@ -34,16 +35,12 @@ export function CopyField({
               setCopied(false);
             }
           }}
-          className="min-h-11 shrink-0 text-[14px] text-primary-ink hover:underline underline-offset-4"
+          className="px-2 text-[14px]"
         >
           {copied ? '已复制' : '复制'}
-        </button>
+        </Button>
       </div>
-      <p
-        className={cn(
-          'num mt-1 rounded-[10px] bg-surface-2 px-3 py-2 font-mono text-[13px] leading-6 break-all text-ink',
-        )}
-      >
+      <p className="num mt-1 rounded-[10px] bg-surface-2 px-3 py-2 font-mono text-[13px] leading-6 break-all text-ink">
         {value}
       </p>
     </div>

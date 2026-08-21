@@ -1,8 +1,8 @@
 'use client';
 
 import { GOAL_OPTIONS } from '@/app/_mock/intake-evidence';
-import { Textarea } from '@/components/ui/Field';
-import { ChoiceCard } from './ChoiceCard';
+import { TextareaField } from '@/components/shadcn/field';
+import { ChoiceChecks } from './ChoiceCard';
 import type { IntakeDraft } from './draft';
 
 export function StepGoals({
@@ -25,21 +25,15 @@ export function StepGoals({
         <p className="text-[15px] leading-7 text-ink-2">
           能多选。现在选不准也没关系，档案建好后随时改。
         </p>
-        <div aria-label="你想要什么" className="flex flex-col gap-2">
-          {GOAL_OPTIONS.map((g) => (
-            <ChoiceCard
-              key={g.value}
-              title={g.value}
-              plain={g.plain}
-              multiple
-              selected={draft.goals.includes(g.value)}
-              onSelect={() => toggle(g.value)}
-            />
-          ))}
-        </div>
+        <ChoiceChecks
+          ariaLabel="你想要什么"
+          options={GOAL_OPTIONS}
+          values={draft.goals}
+          onToggle={toggle}
+        />
       </div>
 
-      <Textarea
+      <TextareaField
         label="你的底线是什么"
         rows={4}
         value={draft.bottomLine}

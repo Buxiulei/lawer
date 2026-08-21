@@ -1,7 +1,7 @@
 'use client';
 
 import { COMPANY_DOC_QUESTIONS, HAS_DOC_ANSWERS } from '@/app/_mock/intake-evidence';
-import { Textarea } from '@/components/ui/Field';
+import { TextareaField } from '@/components/shadcn/field';
 import { ChoiceRow } from './ChoiceCard';
 import type { IntakeDraft } from './draft';
 
@@ -36,7 +36,7 @@ export function StepCompanyDocs({
         </p>
       )}
 
-      <Textarea
+      <TextareaField
         label="公司口头是怎么说的"
         rows={4}
         value={draft.companyWording}

@@ -14,7 +14,7 @@ import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { ApiError } from './api';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
 
 export const REALNAME_REQUIRED = 'REALNAME_REQUIRED';
 

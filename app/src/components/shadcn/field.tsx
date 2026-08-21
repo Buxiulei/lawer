@@ -12,7 +12,7 @@ import { Label } from './label';
 import { Textarea } from './textarea';
 
 /**
- * 带标签/提示/错误的表单行。API 与手写版 @/components/ui/Field 一致，
+ * 带标签/提示/错误的表单行。API 沿用被它取代的手写版 ui/Field，
  * 转体系的页面换 import 即可。
  */
 export function Field({
