@@ -26,10 +26,17 @@ export function nowSql(): string {
 }
 
 /**
- * 把库里读出的 canonical 串解析回 Date（toSql 的逆函数）。
+ * 把库里读出的 canonical 串解析回 Date（toSql 的逆函数）。**只吃 canonical 串**。
  * 直接 `new Date('YYYY-MM-DD HH:MM:SS')` 是陷阱：无时区标记按**本地时区**解析，
  * 在 +08:00 机器上整体漂移 8 小时。canonical 恒为 UTC，必须补 'T'+'Z' 再解析。
+ *
+ * 喂 ISO8601 会直接 throw（manager 2026-08-19 裁决，fail loud）：ISO 串对
+ * `.replace(' ','T')` 是空操作、尾部再补 'Z' 得双 Z → Invalid Date 静默传播，
+ * 比抛错危险得多。API 入参的 ISO8601 请在路由层自行转换，不要复用本函数。
  */
 export function fromSql(value: string): Date {
+  if (value.includes('T') || value.includes('Z')) {
+    throw new Error(`fromSql 只接受 canonical 串（'YYYY-MM-DD HH:MM:SS'），收到：${value}`);
+  }
   return new Date(value.replace(' ', 'T') + 'Z');
 }

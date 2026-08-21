@@ -30,9 +30,12 @@ export interface UserRow {
   phone_verified_at: string | null;
   /** 0=中性文案，1=用户明确开启的详细文案（见 lib/notify/copy.ts 的产品约束） */
   notify_verbose: number;
+  /** 未认证 | 待审 | 已实名。固化出证等强身份动作的闸门（见 lib/auth/guard.ts requireRealname） */
+  auth_status: string;
 }
 
-const USER_COLUMNS = 'id, phone_hash, email, email_verified_at, phone_verified_at, notify_verbose';
+const USER_COLUMNS =
+  'id, phone_hash, email, email_verified_at, phone_verified_at, notify_verbose, auth_status';
 
 // ========== sms_codes ==========
 
@@ -148,6 +151,28 @@ export function insertUser(
     )
     .run(params.phoneEnc, params.phoneHash, params.verifiedAt, params.verifiedAt);
   return Number(info.lastInsertRowid);
+}
+
+/** 实名闸门状态。取值归 lib/auth/realname（AUTH_STATUS），本层只当字符串存。 */
+export function setUserAuthStatus(db: Database, id: number, authStatus: string): void {
+  db.prepare('UPDATE users SET auth_status = ? WHERE id = ?').run(authStatus, id);
+}
+
+/**
+ * 实名通过后回填姓名与证件号。两列都是密文（lib/crypto 加密后传进来），本层不认识明文。
+ * 与 auth_status 同一条 UPDATE：状态说"已实名"而两列还是空的，这种中间态不该存在。
+ */
+export function setUserRealname(
+  db: Database,
+  id: number,
+  params: { realNameEnc: string; idCardEnc: string; authStatus: string },
+): void {
+  db.prepare('UPDATE users SET real_name_enc = ?, id_card_enc = ?, auth_status = ? WHERE id = ?').run(
+    params.realNameEnc,
+    params.idCardEnc,
+    params.authStatus,
+    id,
+  );
 }
 
 /** 邮箱在验证通过的那一刻才写进 users，避免未验证的邮箱先占住 uq_users_email */

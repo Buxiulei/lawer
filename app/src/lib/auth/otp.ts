@@ -10,6 +10,7 @@
 import crypto from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 
+import { ensureDefaultCase } from '@/lib/cases';
 import { encryptField, hashLookup } from '@/lib/crypto';
 import { emailVerifyCode, isValidEmail, sendMail, sendOtp } from '@/lib/notify';
 import type { MailCopy } from '@/lib/notify';
@@ -34,9 +35,16 @@ export interface AuthFailure {
   retryAfter?: number;
 }
 
+/** 注册完成那一刻自动开通的东西，交给前端决定跳去哪个案件 */
+export interface Onboarding {
+  caseId: number;
+  /** true = 这次刚建的；false = 本来就有案件，什么都没动 */
+  isNew: boolean;
+}
+
 export type SendResult = { ok: true; ttlSeconds: number; retryAfter: number } | AuthFailure;
 export type PhoneVerifyResult = { ok: true; token: string; needEmail: boolean } | AuthFailure;
-export type EmailVerifyResult = { ok: true; token: string } | AuthFailure;
+export type EmailVerifyResult = { ok: true; token: string; onboarding?: Onboarding } | AuthFailure;
 
 /** 外部副作用注入点：单测把短信/邮件换成假实现，绝不真发（真发既费钱又打扰真号） */
 export interface OtpDeps {
@@ -241,6 +249,24 @@ export async function sendEmailCode(
   return { ok: true, ttlSeconds: minutes * 60, retryAfter: RESEND_COOLDOWN_SECONDS };
 }
 
+/**
+ * 手机 + 邮箱双验证齐了（= 注册完成，spec §8）就自动开通默认案件。
+ *
+ * 建案失败不许阻断登录：账号已经建好、验证码也用掉了，这时候回一个错误只会把用户
+ * 卡在登录页反复重试。记日志、返回 undefined，前端照常进站，用户自己建案也走得通。
+ * api key 不在这里发——那是用户主动去 /api/v1/keys 领的东西，不该替他决定（spec D4）。
+ */
+function provisionOnRegistered(db: Database, userId: number): Onboarding | undefined {
+  const user = store.findUserById(db, userId);
+  if (!user?.phone_verified_at || !user.email_verified_at) return undefined;
+  try {
+    return ensureDefaultCase(db, userId);
+  } catch (err) {
+    console.error('[auth] 注册自动建案失败（不阻断登录）', { userId, err });
+    return undefined;
+  }
+}
+
 /** 校验邮箱验证码，通过则把邮箱写进 users 并标记已验证，换发一个新 token */
 export function verifyEmailCode(
   db: Database,
@@ -273,5 +299,10 @@ export function verifyEmailCode(
   store.markEmailCodeUsed(db, row!.id);
   store.setUserEmailVerified(db, input.userId, email, toSql(now));
 
-  return { ok: true, token: signToken(input.userId, now) };
+  const onboarding = provisionOnRegistered(db, input.userId);
+  return {
+    ok: true,
+    token: signToken(input.userId, now),
+    ...(onboarding ? { onboarding } : {}),
+  };
 }

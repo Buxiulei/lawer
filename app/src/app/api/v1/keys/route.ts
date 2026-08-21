@@ -11,6 +11,7 @@ import { requireWebSession } from '@/lib/auth/guard';
 import { readJsonBody, stringField } from '@/lib/auth/http';
 import { getDb } from '@/lib/db/client';
 import * as store from '@/lib/db/api-keys';
+import { setupUrls } from '@/lib/mcp/setup';
 
 export async function GET(req: Request) {
   const guard = requireWebSession(getDb(), req);
@@ -70,6 +71,9 @@ export async function POST(req: Request) {
       name,
       scopes,
       key,
+      // 拿到 key 的下一步一定是"往哪儿连"，顺手给全（字段名与 /api/v1/agent-setup 一致，
+      // 那里还能拿到工具清单与接入说明全文）
+      ...setupUrls(req),
       warning: '这是唯一一次显示 key 明文，请立刻保存；丢了只能吊销后重建。',
     },
     { status: 201 },

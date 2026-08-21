@@ -31,6 +31,12 @@ export {
 } from './attest';
 export { readBytes, storeBytes, type StoredFile } from './files';
 export { SidecarError, verifyPdf, type VerifyVerdict } from './sidecar-client';
+export {
+  recheckVerification,
+  resetRecheckQuota,
+  type RecheckItem,
+  type RecheckReport,
+} from './recheck';
 
 /** spec §7 evidence.category 枚举 */
 export const EVIDENCE_CATEGORIES = [

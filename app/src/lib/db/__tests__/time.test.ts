@@ -4,7 +4,7 @@
 import { describe, test, expect } from 'vitest';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../migrate';
-import { nowSql, toSql } from '../time';
+import { fromSql, nowSql, toSql } from '../time';
 import { nowSql as nowSqlFromIndex, toSql as toSqlFromIndex } from '../index';
 
 /** canonical：UTC、空格分隔、秒精度、无毫秒无时区后缀。 */
@@ -134,5 +134,21 @@ describe('回归钉子：ISO 串混入即排序错乱（ADR-002 事故成因）'
     const fixed = (db.prepare('SELECT kind FROM deadlines WHERE case_id=? ORDER BY datetime(due_at)').all(caseId) as
       { kind: string }[]).map((r) => r.kind);
     expect(fixed).toEqual(['早-ISO', '晚-canonical']);
+  });
+});
+
+describe('fromSql 契约收紧（manager 2026-08-19 裁决：只吃 canonical，fail loud）', () => {
+  test('canonical 串按 UTC 解析（不受本地时区影响）', () => {
+    expect(fromSql('2026-08-19 10:00:00').getTime()).toBe(Date.UTC(2026, 7, 19, 10, 0, 0));
+  });
+
+  test('喂 ISO8601 直接 throw，绝不静默产出 Invalid Date（双 Z 事故成因）', () => {
+    // WS1 复现：'…Z'.replace(' ','T') 空操作 + 补 'Z' = 双 Z → Invalid Date
+    expect(() => fromSql('2025-08-01T23:59:59.000Z')).toThrow(/只接受 canonical/);
+    expect(() => fromSql('2025-08-01T23:59:59')).toThrow(/只接受 canonical/);
+  });
+
+  test('roundtrip：toSql(fromSql(s)) === s', () => {
+    expect(toSql(fromSql('2025-08-01 23:59:59'))).toBe('2025-08-01 23:59:59');
   });
 });
