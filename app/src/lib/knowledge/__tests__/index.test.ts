@@ -179,7 +179,7 @@ describe('facts 结构化透传（规范 §2.1：代码只读 facts，禁啃正�
   test('search 命中的卡同样带 facts；无 facts 的卡该字段缺省', () => {
     const hit = search('最低工资', { type: '数据卡' }).find((h) => h.id === 'data-beijing-zuidi-gongzi');
     expect(hit?.facts?.values?.length).toBeGreaterThan(0);
-    expect(get('case-ai-tidai-gangwei-2025-zhongcai').facts).toBeUndefined();
+    expect(get('calc-bingjia-gongzi').facts).toBeUndefined();
   });
 
   test('判例卡 case_facts 透传（判例引用消费面，字段取自正文）', () => {
