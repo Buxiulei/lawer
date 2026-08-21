@@ -79,7 +79,7 @@ export function OcrView({
                   className="inline box-decoration-clone rounded-r-[4px] border-l-[3px] border-danger bg-danger-wash px-1 py-0.5 text-left text-ink"
                 >
                   <SensitiveText text={seg.text} />
-                  <sup className="num ml-0.5 text-[12px] font-semibold text-danger">
+                  <sup className="num ml-0.5 text-[12px] font-semibold text-danger-ink">
                     {index}
                   </sup>
                 </button>

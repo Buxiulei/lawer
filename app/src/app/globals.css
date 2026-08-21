@@ -18,8 +18,12 @@
   --gold-wash: #f5e6c8;
   --amber: #b4690e;
   --amber-wash: #faf0e1;
+  /* 文字级伴生色：浅底上的小号 amber/danger 文字用它，对白约 6:1；
+     实底按钮/边线/图标与 ≥18.66px 粗体大字仍用主色。 */
+  --amber-ink: #8f540a;
   --danger: #d9442f;
   --danger-wash: #fbe9e5;
+  --danger-ink: #b5361f;
   --success: #2f7d5d;
   --success-wash: #e8f3ee;
 
@@ -45,6 +49,9 @@
     --amber-wash: #33270f;
     --danger: #e5705c;
     --danger-wash: #3b1f1a;
+    /* 深色下主色对深底已够亮，伴生色等于本值 */
+    --amber-ink: var(--amber);
+    --danger-ink: var(--danger);
     --success: #5caf8a;
     --success-wash: #1c2f26;
 
@@ -69,6 +76,9 @@
   --amber-wash: #33270f;
   --danger: #e5705c;
   --danger-wash: #3b1f1a;
+  /* 深色下主色对深底已够亮，伴生色等于本值 */
+  --amber-ink: var(--amber);
+  --danger-ink: var(--danger);
   --success: #5caf8a;
   --success-wash: #1c2f26;
 
@@ -91,8 +101,10 @@
   --color-gold-wash: var(--gold-wash);
   --color-amber: var(--amber);
   --color-amber-wash: var(--amber-wash);
+  --color-amber-ink: var(--amber-ink);
   --color-danger: var(--danger);
   --color-danger-wash: var(--danger-wash);
+  --color-danger-ink: var(--danger-ink);
   --color-success: var(--success);
   --color-success-wash: var(--success-wash);
 

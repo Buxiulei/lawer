@@ -261,7 +261,7 @@ export function StreamErrorCard({
       role="status"
       className="prose-measure my-2 rounded-[12px] border border-line bg-surface-2 p-3.5"
     >
-      <p className="text-[14px] font-medium text-amber">这一轮没说完</p>
+      <p className="text-[14px] font-medium text-amber-ink">这一轮没说完</p>
       <p className="mt-1 text-[15px] leading-7 text-ink">{error.message}</p>
       <p className="num mt-1 text-[13px] text-ink-2">{error.code}</p>
       <div className="mt-3">

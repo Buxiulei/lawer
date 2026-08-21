@@ -176,7 +176,7 @@ function Verdict({ result }: { result: Recheck }) {
                   <p
                     className={cn(
                       'text-[15px] leading-6 font-medium',
-                      check.ok === false ? 'text-danger' : 'text-ink',
+                      check.ok === false ? 'text-danger-ink' : 'text-ink',
                     )}
                   >
                     {check.label}

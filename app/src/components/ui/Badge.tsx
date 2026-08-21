@@ -15,8 +15,8 @@ const TONES: Record<BadgeTone, string> = {
   // gold 仅品牌点缀（会员/成就徽标），不用于警示与倒计时
   gold: 'bg-gold-wash text-gold',
   success: 'bg-success-wash text-success',
-  amber: 'bg-amber-wash text-amber',
-  danger: 'bg-danger-wash text-danger',
+  amber: 'bg-amber-wash text-amber-ink',
+  danger: 'bg-danger-wash text-danger-ink',
 };
 
 export function Badge({

@@ -27,11 +27,11 @@ export function Field({
     <div className="flex flex-col gap-1.5">
       <label htmlFor={htmlFor} className="text-[14px] font-medium text-ink">
         {label}
-        {required && <span className="ml-1 text-amber">必填</span>}
+        {required && <span className="ml-1 text-amber-ink">必填</span>}
       </label>
       {children}
       {error ? (
-        <p className="text-[13px] leading-5 text-danger">{error}</p>
+        <p className="text-[13px] leading-5 text-danger-ink">{error}</p>
       ) : hint ? (
         <p className="text-[13px] leading-5 text-ink-2">{hint}</p>
       ) : null}

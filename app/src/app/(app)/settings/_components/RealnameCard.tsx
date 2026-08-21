@@ -216,7 +216,7 @@ export function RealnameCard() {
                 }}
               >
                 {status.verification_status === '未通过' && (
-                  <p className="rounded-[10px] bg-amber-wash px-3 py-2.5 text-[14px] leading-6 text-amber">
+                  <p className="rounded-[10px] bg-amber-wash px-3 py-2.5 text-[14px] leading-6 text-amber-ink">
                     上一次没通过：{status.message}。姓名和身份证号要与本人证件完全一致，光线足一点再刷一次。
                   </p>
                 )}

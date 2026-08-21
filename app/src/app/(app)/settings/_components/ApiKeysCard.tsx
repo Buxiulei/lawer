@@ -210,7 +210,7 @@ export function ApiKeysCard() {
                   <button
                     type="button"
                     onClick={() => setRevoking(row)}
-                    className="flex min-h-11 shrink-0 items-center text-[14px] text-ink-2 hover:text-danger"
+                    className="flex min-h-11 shrink-0 items-center text-[14px] text-ink-2 hover:text-danger-ink"
                   >
                     吊销
                   </button>
@@ -321,7 +321,7 @@ function IssuedKey({ issued }: { issued: CreatedKey }) {
     <div className="flex flex-col gap-4">
       <p className="text-[15px] leading-7 text-ink">
         现在就复制保存。关掉这一屏之后我们只留下加密后的指纹，
-        <span className="font-semibold text-danger">此密钥不会再次显示</span>
+        <span className="font-semibold text-danger-ink">此密钥不会再次显示</span>
         ——丢了只能吊销后重新生成一把。
       </p>
 
@@ -342,7 +342,7 @@ function IssuedKey({ issued }: { issued: CreatedKey }) {
         </div>
       </div>
 
-      <p className="rounded-[10px] bg-amber-wash px-3 py-2.5 text-[14px] leading-6 text-amber">
+      <p className="rounded-[10px] bg-amber-wash px-3 py-2.5 text-[14px] leading-6 text-amber-ink">
         妥善保管：拿到这串字符的人，就能以你的身份读写案件档案。不要贴进聊天群、截图或公开仓库。
       </p>
     </div>

@@ -355,7 +355,7 @@ function UploadProgress({
 
       {job.error ? (
         <>
-          <p className="mt-1.5 text-[14px] leading-6 text-danger">{job.error}</p>
+          <p className="mt-1.5 text-[14px] leading-6 text-danger-ink">{job.error}</p>
           <div className="mt-2.5 flex gap-2">
             <Button size="sm" onClick={onRetry}>
               重试上传
