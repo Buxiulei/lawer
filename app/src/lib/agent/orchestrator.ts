@@ -42,7 +42,7 @@ import { CitationGuard } from './citation-guard';
 import { MAX_INJECTED_PACKS, type KnowledgePack, type KnowledgeSearcher } from './retrieval';
 import { loadCaseSnapshot } from './snapshot';
 import { classifyTask } from './task-class';
-import { AGENT_TOOLS, executeTool, newTurnState, type AgentToolContext } from './tools';
+import { AGENT_TOOLS, emitCalcFailureNotice, executeTool, newTurnState, type AgentToolContext } from './tools';
 
 /** 喂进模型的历史消息条数上限。再多不如让档案摘要说话——摘要是结构化的、消息是散的。 */
 const HISTORY_LIMIT = 20;
@@ -362,6 +362,10 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
       });
     }
   }
+
+  // 算钱收口：本轮 claim_calc 试过但一次都没成 → 留一条信号（重试成功则安静）。
+  // 必须放在补救轮**之后**：补救轮也可能调 claim_calc，提前收口会把它算成失败。
+  emitCalcFailureNotice(toolCtx);
 
   // 危机轮：模型段过杠杆闸后才下发（manager 2026-08-20 混合形态裁决）。
   // 剥除而不是重生成：重生成要再等 2-4 分钟，而危机轮最不该等；剥句是毫秒级的。

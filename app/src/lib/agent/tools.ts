@@ -44,7 +44,7 @@ export const DRAFT_KINDS = [
 
 /** claim_calc 目前实装的公式（lib/agent/calc）。年假/加班费/双倍工资等后批再加，
  *  加进来之前不列进 enum——列了模型就会调，然后拿到一个「不支持」的错误。 */
-export const CALC_KINDS = ['N', 'N+1', '2N'] as const;
+export const CALC_KINDS = ['N', 'N+1', '2N', '年假', '双倍工资', '加班费', '待岗'] as const;
 
 /** 三倍封顶基数所在的数据卡（值逐年更新，代码里的常量只能当兜底） */
 export const SANBEI_CAP_PACK_ID = 'data-beijing-shepin-fengding';
@@ -73,11 +73,196 @@ export const SANBEI_CAP_PACK_ID = 'data-beijing-shepin-fengding';
  * 【单位换算在这一层做】卡里记的是「元/月」（人读的单位），calc 要「分」——
  * 换算写在读取处，别让两边各自换一次。
  */
-export function readSanbeiCap(facts?: KnowledgePack['facts']): { capFen: number; confidence: string } | null {
-  const hit = facts?.values?.find((v) => v?.key === SANBEI_CAP_VALUE_KEY);
+export function readSanbeiCap(
+  facts?: KnowledgePack['facts'],
+): { capFen: number; confidence: string; effectiveFrom: string; yuan: number } | null {
+  const hit = readCardValueFen(facts, SANBEI_CAP_VALUE_KEY);
+  return hit ? { capFen: hit.fen, ...hit } : null;
+}
+
+/**
+ * 从 data 卡的结构化 values 里读一个「元/月」的钱数，换算成分。
+ *
+ * 【为什么换算写在这一处】卡的单位是元、calc 全程用分。两边各换一次迟早差一个百倍，
+ * 而这个数最后会写进仲裁申请书。单位不是预期值时**返回 null 走兜底，绝不猜**。
+ *
+ * 【为什么这些数不写死在 calc 里】最低工资、社平封顶、生活费标准每年都会调。
+ * 纯函数保持纯、数据活性归卡（manager 2026-08-20 裁决）——calc 只保留内置缺省值当兜底，
+ * 当前值一律现取，卡更新了产品自动跟随，不用改代码。
+ */
+export function readCardValueFen(
+  facts: KnowledgePack['facts'] | undefined,
+  key: string,
+): { fen: number; confidence: string; effectiveFrom: string; yuan: number } | null {
+  const hit = facts?.values?.find((v) => v?.key === key);
   if (!hit || typeof hit.value !== 'number' || !(hit.value > 0)) return null;
   if (hit.unit !== '元/月') return null; // 单位不是预期的就别猜，走兜底
-  return { capFen: Math.round(hit.value * 100), confidence: hit.confidence };
+  return { fen: Math.round(hit.value * 100), confidence: hit.confidence, effectiveFrom: hit.effective_from, yuan: hit.value };
+}
+
+/**
+ * 四个非解除补偿类算法的分派：未休年假 / 未签合同双倍工资 / 加班费 / 待岗工资。
+ *
+ * 返回 null 表示「这个 kind 不归我管」，交回给 N/N+1/2N 那条路。
+ *
+ * 【为什么必填项在代码里校验而不写进 schema】七种算法的必填项互不相同，schema 只能写
+ * 一个七选一的 oneOf——模型对组合约束的遵守率远不如对错误原文的反应。缺什么就回一句
+ * 人话告诉它缺什么，它下一轮就补上了。
+ */
+function calcNonSeverance(
+  kind: string,
+  args: Record<string, unknown>,
+  env: {
+    sourceOf: (field: string) => InputSource;
+    minWageOpt: { minWageFen?: number };
+    ctx: AgentToolContext;
+  },
+): ToolOutcome | null {
+  const { sourceOf, minWageOpt, ctx } = env;
+  const num = (v: unknown): number | null => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const posInt = (v: unknown): number | null => {
+    const n = Number(v);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  };
+
+  let result: calc.CalcResult<object>;
+  const inputSources: Record<string, InputSource> = {};
+
+  try {
+    if (kind === '年假') {
+      const years = num(args.cumulative_work_years);
+      const wage = posInt(args.avg_monthly_wage_ex_overtime_fen);
+      const through = str(args.through_date);
+      const arranged = num(args.arranged_days_this_year);
+      if (years === null || years < 0) return reject('年假必须给 cumulative_work_years（累计工作年限，含跨单位；不满 1 年给小数）');
+      if (wage === null) return reject('年假必须给 avg_monthly_wage_ex_overtime_fen（前 12 个月**剔除加班工资**后的月均工资，单位分）');
+      if (!through) return reject('年假必须给 through_date（结算截止日：离职给离职日，在职按年度给该年 12-31）');
+      if (arranged === null || arranged < 0) return reject('年假必须给 arranged_days_this_year（本年度公司已安排休掉的天数，没休就给 0）');
+      inputSources.cumulativeWorkYears = sourceOf('cumulative_work_years');
+      inputSources.avgMonthlyWageExOvertimeFen = sourceOf('avg_monthly_wage_ex_overtime_fen');
+      inputSources.arrangedDaysThisYear = sourceOf('arranged_days_this_year');
+      result = calc.calcAnnualLeavePay({
+        cumulativeWorkYears: years,
+        avgMonthlyWageExOvertimeFen: wage,
+        throughDate: through,
+        ...(str(args.employed_from) ? { employedFrom: str(args.employed_from)! } : {}),
+        arrangedDaysThisYear: arranged,
+        ...(Array.isArray(args.prior_years) ? { priorYears: args.prior_years as calc.PriorYearUnused[] } : {}),
+        ...(num(args.full_year_days_override) !== null ? { fullYearDaysOverride: num(args.full_year_days_override)! } : {}),
+        ...minWageOpt,
+        inputSources,
+      });
+    } else if (kind === '双倍工资') {
+      const SCENARIOS = ['first-contract', 'renewal-lapse', 'openended-refusal'] as const;
+      const scenario = inEnum(args.scenario, SCENARIOS) as calc.DoubleWageScenario | null;
+      const anchor = str(args.anchor_date);
+      const claimedAt = str(args.claimed_at);
+      const months = Array.isArray(args.months) ? (args.months as calc.DoubleWageMonth[]) : null;
+      if (!scenario) return reject('双倍工资必须给 scenario：first-contract（首次未签）/ renewal-lapse（续签断档）/ openended-refusal（拒订无固定期限）');
+      if (!anchor) return reject('双倍工资必须给 anchor_date（首签=用工之日；断档=原合同期满之日；拒订=应订无固定期限之日）');
+      if (!claimedAt) return reject('双倍工资必须给 claimed_at（主张权利之日）——时效自该日向前一年倒算，这个日期直接决定能要回几个月');
+      if (!months || months.length === 0) return reject('双倍工资必须给 months 逐月明细，形如 [{"month":"2025-03","wageFen":1600000}]');
+      inputSources.months = sourceOf('months');
+      inputSources.anchorDate = sourceOf('anchor_date');
+      result = calc.calcDoubleWage({
+        scenario,
+        anchorDate: anchor,
+        ...(str(args.contract_signed_at) ? { contractSignedAt: str(args.contract_signed_at)! } : {}),
+        claimedAt,
+        months,
+        ...minWageOpt,
+        inputSources,
+      });
+    } else if (kind === '加班费') {
+      const base = posInt(args.monthly_base_fen);
+      if (base === null) return reject('加班费必须给 monthly_base_fen（加班费计算基数，月，单位分）');
+      const hours = {
+        weekdayOvertimeHours: num(args.weekday_overtime_hours) ?? 0,
+        restDayDays: num(args.rest_day_days) ?? 0,
+        restDayHours: num(args.rest_day_hours) ?? 0,
+        holidayDays: num(args.holiday_days) ?? 0,
+        holidayHours: num(args.holiday_hours) ?? 0,
+      };
+      if (Object.values(hours).every((v) => !v)) {
+        return reject('加班费至少要给一项加班时长：weekday_overtime_hours / rest_day_days / rest_day_hours / holiday_days / holiday_hours');
+      }
+      inputSources.monthlyBaseFen = sourceOf('monthly_base_fen');
+      result = calc.calcOvertimePay({ monthlyBaseFen: base, ...hours, ...minWageOpt, inputSources });
+    } else if (kind === '待岗') {
+      const normal = posInt(args.normal_monthly_wage_fen);
+      const months = Array.isArray(args.months) ? (args.months as calc.StandbyMonth[]) : null;
+      if (normal === null) return reject('待岗必须给 normal_monthly_wage_fen（提供正常劳动时的全额月工资，单位分）');
+      if (!months || months.length === 0) return reject('待岗必须给 months 逐月明细，形如 [{"month":"2025-03","paidFen":254000}]，按月升序');
+      if (typeof args.provides_labor !== 'boolean') {
+        return reject('待岗必须给 provides_labor（布尔）：超过第 1 个工资支付周期后单位是否仍安排劳动。true=情形A，false=纯待岗');
+      }
+      // 生活费标准与最低工资同卡，一起现取
+      const allowance = readCardValueFen(ctx.searcher?.get?.(MIN_WAGE_PACK_ID)?.facts, DAIGANG_ALLOWANCE_VALUE_KEY);
+      inputSources.normalMonthlyWageFen = sourceOf('normal_monthly_wage_fen');
+      inputSources.months = sourceOf('months');
+      result = calc.calcStandbyWage({
+        normalMonthlyWageFen: normal,
+        months,
+        providesLabor: args.provides_labor,
+        ...(posInt(args.agreed_monthly_wage_fen) !== null ? { agreedMonthlyWageFen: posInt(args.agreed_monthly_wage_fen)! } : {}),
+        ...(typeof args.genuine_stoppage === 'boolean' ? { genuineStoppage: args.genuine_stoppage } : {}),
+        ...minWageOpt,
+        ...(allowance ? { livingAllowanceFen: allowance.fen } : {}),
+        inputSources,
+      } as calc.StandbyWageInput);
+    } else {
+      return null; // N / N+1 / 2N 不归这里管
+    }
+  } catch (e) {
+    return reject(`计算失败：${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  return persistCalc(kind, result, inputSources, ctx);
+}
+
+/**
+ * 把算完的结果落库并回给模型。**七种算法共用这一段**——金额与算式必须同源，
+ * 由工具直接写而不是让模型再调一次 claims_upsert：中间隔一次模型转述就有抄错一位的机会，
+ * 而这个数字最后要拿到庭上被对方复算。
+ */
+function persistCalc(
+  kind: string,
+  result: calc.CalcResult<object>,
+  inputSources: Record<string, InputSource>,
+  ctx: AgentToolContext,
+  extraNote?: string | null,
+): ToolOutcome {
+  const claim = store.upsertClaim(ctx.db, {
+    caseId: ctx.caseId,
+    kind,
+    amountFen: result.amountFen,
+    calcJson: JSON.stringify(result),
+    basis: result.basis.map((b) => `${b.law}${b.article}`).join('；'),
+    status: 'draft',
+  });
+  ctx.emit({
+    event: 'record',
+    data: { tool: 'claims_upsert', id: claim.id, summary: `${kind}：${(result.amountFen / 100).toFixed(2)} 元` },
+  });
+  return ok({
+    kind: result.kind,
+    amount_fen: result.amountFen,
+    amount_yuan: (result.amountFen / 100).toFixed(2),
+    formula: result.formula,
+    steps: result.steps,
+    flags: result.flags,
+    basis: result.basis,
+    inputs: result.inputs,
+    input_sources: inputSources,
+    calc_version: result.calcVersion,
+    note:
+      '展示给用户时必须同时给出 formula 算式与各输入的来源；标「用户自述」的要明说待证据核实。' +
+      (result.flags.length ? `本次触发的特殊档位要逐条讲清：${result.flags.join('、')}。` : '') +
+      (extraNote ? ` ${extraNote}` : ''),
+  });
 }
 
 /** 期间计算通则卡（逐字条文来源，见 lib/deadline） */
@@ -85,6 +270,12 @@ export const PERIOD_RULE_PACK_ID = 'statute-qijian-jisuan-tongze';
 
 /** 封顶基数在数据卡 values 里的 key */
 export const SANBEI_CAP_VALUE_KEY = 'fengding_jishu_monthly';
+
+/** 最低工资数据卡：年假折算、双倍工资、加班费、待岗四个公式都要用它兜底下限 */
+export const MIN_WAGE_PACK_ID = 'data-beijing-zuidi-gongzi';
+export const MIN_WAGE_VALUE_KEY = 'min_wage_monthly';
+/** 待岗生活费标准（同一张卡） */
+export const DAIGANG_ALLOWANCE_VALUE_KEY = 'daigang_shenghuofei_monthly';
 
 /** 与 migrate.ts emotion_log.level 注释逐字对齐 */
 export const EMOTION_LEVELS = ['平稳', '低落', '焦虑', '严重'] as const;
@@ -108,10 +299,14 @@ export interface TurnState {
   retrieved: KnowledgePack[];
   /** 本轮是否写过文书 */
   drafts: number;
+  /** 本轮 claim_calc 被拒的次数（入参校验不过 / 计算抛错）。重试过程安静，收口时才看它 */
+  calcRejects: number;
+  /** 本轮是否有过一次成功的计算并落库。有就说明重试成功了，前面的拒绝只是过程 */
+  calcSucceeded: boolean;
 }
 
 export function newTurnState(): TurnState {
-  return { actionCards: 0, searches: 0, retrieved: [], drafts: 0 };
+  return { actionCards: 0, searches: 0, retrieved: [], drafts: 0, calcRejects: 0, calcSucceeded: false };
 }
 
 export interface AgentToolContext {
@@ -398,9 +593,13 @@ export const AGENT_TOOLS: ToolDef[] = [
     function: {
       name: 'claim_calc',
       description:
-        '按北京口径计算经济补偿 N / 代通知金 N+1 / 违法解除赔偿金 2N（工龄分段、三倍社平封顶、12 年上限）。' +
-        '一切金额必须走本工具，**禁止自己心算**——分段与封顶规则你算不对，而错的金额会直接写进仲裁申请书。' +
-        '返回值含算式、分步留痕与法条依据，展示时要把算式和「哪些输入是用户自述待证」一起讲给用户。',
+        '按北京口径算钱。七种：经济补偿 N / 代通知金 N+1 / 违法解除赔偿金 2N / 未休年假 / 未签合同双倍工资 / 加班费 / 待岗工资。' +
+        '一切金额必须走本工具，**禁止自己心算**——分段、封顶、时效倒算、折算分母你都算不对，而错的金额会直接写进仲裁申请书。' +
+        '返回值含算式、分步留痕与法条依据，展示时要把算式和「哪些输入是用户自述待证」一起讲给用户。' +
+        '【必填项按 kind 不同】N/N+1/2N 要 avg_monthly_wage_fen+employed_from+terminated_at（N+1 另加 last_month_wage_fen）；' +
+        '年假要 cumulative_work_years+avg_monthly_wage_ex_overtime_fen+through_date+arranged_days_this_year；' +
+        '双倍工资要 scenario+anchor_date+claimed_at+months；加班费要 monthly_base_fen 与至少一项加班时长；' +
+        '待岗要 normal_monthly_wage_fen+months+provides_labor。缺什么工具会回错误告诉你补什么。',
       parameters: {
         type: 'object',
         properties: {
@@ -424,8 +623,68 @@ export const AGENT_TOOLS: ToolDef[] = [
               '哪些输入已有证据支撑（如 ["avg_monthly_wage_fen"]，依据工资流水）。' +
               '不在这个列表里的一律按「用户自述待证」标注',
           },
+
+          // ── 年假 ──
+          cumulative_work_years: { type: 'number', description: '【年假】**累计**工作年限（含跨单位），定 5/10/15 天档；不满 1 年给小数' },
+          avg_monthly_wage_ex_overtime_fen: { type: 'integer', description: '【年假】前 12 个月**剔除加班工资**后的月均工资（分）' },
+          through_date: { type: 'string', description: '【年假】结算截止日：离职给离职日，在职按年度给该年 12-31' },
+          arranged_days_this_year: { type: 'number', description: '【年假】结算年度内公司已安排休掉的年假天数' },
+          prior_years: {
+            type: 'array',
+            description: '【年假】往年未休明细，逐年给',
+            items: {
+              type: 'object',
+              properties: {
+                year: { type: 'integer' },
+                unusedDays: { type: 'number' },
+                fullYearDays: { type: 'number' },
+              },
+              required: ['year', 'unusedDays'],
+            },
+          },
+          full_year_days_override: { type: 'number', description: '【年假】合同/制度约定高于法定时的全年应休天数' },
+
+          // ── 双倍工资 ──
+          scenario: {
+            type: 'string',
+            enum: ['first-contract', 'renewal-lapse', 'openended-refusal'],
+            description: '【双倍工资】首次未签 / 续签断档 / 拒订无固定期限',
+          },
+          anchor_date: { type: 'string', description: '【双倍工资】起算锚点：用工之日 / 原合同期满之日 / 应订无固定期限之日' },
+          contract_signed_at: { type: 'string', description: '【双倍工资】补订书面合同之日；始终未订立就不给' },
+          claimed_at: { type: 'string', description: '【双倍工资】主张权利之日——时效自该日向前一年倒算，最敏感的入参' },
+          months: {
+            type: 'array',
+            description: '【双倍工资/待岗】逐月明细。双倍工资给 {month,wageFen}；待岗给 {month,paidFen,workDays?}',
+            items: {
+              type: 'object',
+              properties: {
+                month: { type: 'string', description: 'YYYY-MM' },
+                wageFen: { type: 'integer' },
+                paidFen: { type: 'integer' },
+                workDays: { type: 'number' },
+              },
+              required: ['month'],
+            },
+          },
+
+          // ── 加班费 ──
+          monthly_base_fen: { type: 'integer', description: '【加班费】加班费计算基数（月，分）。约定优先；未约定按实发全部项目扣除上月加班费与伙食补助' },
+          weekday_overtime_hours: { type: 'number', description: '【加班费】工作日延时加班小时数（1.5 倍）' },
+          rest_day_days: { type: 'number', description: '【加班费】休息日加班**未补休**的天数（2 倍）' },
+          rest_day_hours: { type: 'number', description: '【加班费】休息日未补休的零星小时数' },
+          holiday_days: { type: 'number', description: '【加班费】法定休假日加班天数（3 倍，补休不能替代）' },
+          holiday_hours: { type: 'number', description: '【加班费】法定休假日加班零星小时数' },
+
+          // ── 待岗 ──
+          normal_monthly_wage_fen: { type: 'integer', description: '【待岗】提供正常劳动时的全额月工资（分）' },
+          provides_labor: { type: 'boolean', description: '【待岗】超过第 1 个工资支付周期后单位是否仍安排劳动：true=情形A，false=纯待岗' },
+          agreed_monthly_wage_fen: { type: 'integer', description: '【待岗】情形 A 下双方新约定的月工资标准（分）' },
+          genuine_stoppage: { type: 'boolean', description: '【待岗】单位是否确实停工停业。缺省 true；传 false 表示公司正常经营只对个别人「待岗」，须全额支付' },
         },
-        required: ['kind', 'avg_monthly_wage_fen', 'employed_from', 'terminated_at'],
+        // 只硬性要求 kind：七种算法的必填项各不相同，逐 kind 在代码里校验并回喂具体缺了什么，
+        // 比在 schema 里写一个七选一的 oneOf 更好使——模型看得懂错误原文，看不懂 schema 组合约束
+        required: ['kind'],
       },
     },
   },
@@ -744,6 +1003,33 @@ const HANDLERS: Record<string, Handler> = {
     const kind = inEnum(args.kind, CALC_KINDS);
     if (!kind) return reject(`kind 只能是 ${CALC_KINDS.join(' / ')}`);
 
+    // 未被显式列为「有证据」的输入一律标 用户自述——charter §3 要求说明哪些输入待证，
+    // 默认值往保守那边靠：宁可多标一个待证，也不能让没证据的数字看起来已经坐实。
+    const backed = new Set(Array.isArray(args.evidence_backed) ? args.evidence_backed.map(String) : []);
+    const sourceOf = (field: string): InputSource => (backed.has(field) ? '证据佐证' : '用户自述');
+
+    // 最低工资是**七个公式**的共同下限，同样**现取卡值**：
+    // 写死在 calc 里的话，北京每次调标准都要改代码，而没人会记得回来改。
+    // 【N/N+1/2N 也吃这个下限】第四十七条的基数低于最低工资时按最低工资兜底
+    // （jingji-buchang.ts 的 minWageFloor 档）——早先只把卡值注给了四个新公式，
+    // N 这条最常走的路反而一直在用代码内置常量，触底案例会照着一个过期的数算钱。
+    const minWageCard = ctx.searcher?.get?.(MIN_WAGE_PACK_ID);
+    const minWage = readCardValueFen(minWageCard?.facts, MIN_WAGE_VALUE_KEY);
+    const minWageOpt = minWage ? { minWageFen: minWage.fen } : {};
+    if (!minWage) {
+      ctx.emit({
+        event: 'notice',
+        data: {
+          code: 'KNOWLEDGE_UNAVAILABLE',
+          message: `最低工资未能从数据卡 ${MIN_WAGE_PACK_ID} 取到当前值，本次计算使用代码内置缺省值——引用前须以最新公布值核实。`,
+        },
+      });
+    }
+
+    // ── 四个非解除补偿类算法：各自的必填项在这里逐条校验并回喂 ──
+    const nonSeverance = calcNonSeverance(kind, args, { sourceOf, minWageOpt, ctx });
+    if (nonSeverance) return nonSeverance;
+
     const avg = Number(args.avg_monthly_wage_fen);
     if (!Number.isInteger(avg) || avg <= 0) {
       return reject('avg_monthly_wage_fen 必须是正整数（单位：分，且是**应得**工资不是到手工资）');
@@ -752,10 +1038,6 @@ const HANDLERS: Record<string, Handler> = {
     const terminatedAt = str(args.terminated_at);
     if (!employedFrom || !terminatedAt) return reject('employed_from 与 terminated_at 都必填，格式 YYYY-MM-DD');
 
-    // 未被显式列为「有证据」的输入一律标 用户自述——charter §3 要求说明哪些输入待证，
-    // 默认值往保守那边靠：宁可多标一个待证，也不能让没证据的数字看起来已经坐实。
-    const backed = new Set(Array.isArray(args.evidence_backed) ? args.evidence_backed.map(String) : []);
-    const sourceOf = (field: string): InputSource => (backed.has(field) ? '证据佐证' : '用户自述');
     const inputSources: Record<string, InputSource> = {
       avgMonthlyWageFen: sourceOf('avg_monthly_wage_fen'),
       employedFrom: sourceOf('employed_from'),
@@ -788,8 +1070,22 @@ const HANDLERS: Record<string, Handler> = {
       });
     }
 
-    // sanbeiCapFen 传 undefined 时 calc 会用内置常量并自动打上「社平新值待核实」flag
-    const common = { avgMonthlyWageFen: avg, employedFrom, terminatedAt, ...(sanbeiCapFen === null ? {} : { sanbeiCapFen }) };
+    // 展示要求紧贴数据本身下发：把「这个数怎么讲给用户」写在返回值里，
+    // 比写在通用指令区管用得多（实测：写在开头的「别重印整张卡」被无视了两轮）。
+    const capNote = cap
+      ? `本次三倍封顶基数取自数据卡：**${cap.yuan} 元/月**（生效期间 ${cap.effectiveFrom}，可信度「${cap.confidence}」）。` +
+        `讲封顶检查时这三项要逐字给全${cap.confidence !== '原文核实' ? '，并明说该值仍待核实、以最新公布值为准' : ''}。`
+      : null;
+
+    // sanbeiCapFen 传 undefined 时 calc 会用内置常量并自动打上「社平新值待核实」flag。
+    // minWageOpt 同理：卡取得到就注入当前值，取不到就留空走 calc 的内置缺省（上面已发 notice）。
+    const common = {
+      avgMonthlyWageFen: avg,
+      employedFrom,
+      terminatedAt,
+      ...(sanbeiCapFen === null ? {} : { sanbeiCapFen }),
+      ...minWageOpt,
+    };
 
     let result: calc.CalcResult<object>;
     try {
@@ -810,37 +1106,8 @@ const HANDLERS: Record<string, Handler> = {
       return reject(`计算失败：${e instanceof Error ? e.message : String(e)}`);
     }
 
-    // calc_json 留痕落 claims（charter §3：展示算式与输入）。
-    // 由本工具直接落库而不是让模型再调一次 claims_upsert：金额与算式必须同源，
-    // 中间隔一次模型转述就有抄错一位的机会，而这个数字要拿到庭上被对方复算。
-    const claim = store.upsertClaim(ctx.db, {
-      caseId: ctx.caseId,
-      kind,
-      amountFen: result.amountFen,
-      calcJson: JSON.stringify(result),
-      basis: result.basis.map((b) => `${b.law}${b.article}`).join('；'),
-      status: 'draft',
-    });
-    ctx.emit({
-      event: 'record',
-      data: { tool: 'claims_upsert', id: claim.id, summary: `${kind}：${(result.amountFen / 100).toFixed(2)} 元` },
-    });
-
-    return ok({
-      kind: result.kind,
-      amount_fen: result.amountFen,
-      amount_yuan: (result.amountFen / 100).toFixed(2),
-      formula: result.formula,
-      steps: result.steps,
-      flags: result.flags,
-      basis: result.basis,
-      inputs: result.inputs,
-      input_sources: inputSources,
-      calc_version: result.calcVersion,
-      note:
-        '展示给用户时必须同时给出 formula 算式与各输入的来源；标「用户自述」的要明说待证据核实。' +
-        (result.flags.length ? `本次触发的特殊档位要逐条讲清：${result.flags.join('、')}。` : ''),
-    });
+    // 落库与回报走七种算法共用的那一段（calc_json 留痕，charter §3）
+    return persistCalc(kind, result, inputSources, ctx, capNote);
   },
 };
 
@@ -874,8 +1141,39 @@ export function executeTool(name: string, rawArguments: string, ctx: AgentToolCo
   }
 
   const outcome = handler(args, ctx);
-  if (!outcome.ok && name !== 'claim_calc') {
+  // claim_calc 的拒绝**按轮收口**，不逐次发帧：模型算钱普遍要试两三次（七种算法的必填项
+  // 各不相同，回喂一句「缺什么」它下一轮就补上了），逐次发等于把正常的重试过程报成异常。
+  // 但原先的写法是**整条通路静默**——重试到最后一次都没算出来，也一个信号都不留，
+  // 于是「本轮没算出金额」和「本轮没人要算金额」在事后看起来一模一样。
+  // 收口判定见 emitCalcFailureNotice。
+  if (name === 'claim_calc') {
+    if (outcome.ok) ctx.state.calcSucceeded = true;
+    else ctx.state.calcRejects += 1;
+  } else if (!outcome.ok) {
     ctx.emit({ event: 'notice', data: { code: 'TOOL_INPUT_REJECTED', message: `${name}：${outcome.content}` } });
   }
   return outcome;
+}
+
+/**
+ * 本轮编排结束时的算钱收口：**试过但一次都没成**才发一条 notice，重试成功则全程安静。
+ *
+ * 由 orchestrator 在工具循环与补救轮都跑完之后调一次——必须在补救轮之后，
+ * 否则补救轮里算成功的那次会被漏掉，变成误报。
+ *
+ * code 复用 TOOL_INPUT_REJECTED（词表内既有码，UI 侧本就静默，属内部治理信号），
+ * 不新增码：新码要过 manager 送审，而这里要传达的正是「模型的工具入参最终没通过」，
+ * 与该码的语义一致，只是把粒度从「每次调用」改成了「每轮」。
+ */
+export function emitCalcFailureNotice(ctx: AgentToolContext): void {
+  if (ctx.state.calcRejects === 0 || ctx.state.calcSucceeded) return;
+  ctx.emit({
+    event: 'notice',
+    data: {
+      code: 'TOOL_INPUT_REJECTED',
+      message:
+        `claim_calc：本轮 ${ctx.state.calcRejects} 次入参均未通过校验，最终没有算出任何金额，也没有 claims 落库——` +
+        '本轮回复里如果出现了金额，它不是计算器算的（charter §3 要求一切金额走 claim_calc）。',
+    },
+  });
 }

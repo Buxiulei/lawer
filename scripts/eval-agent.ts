@@ -35,6 +35,8 @@ import {
   crisisTurnAssertions,
   emotionalLeverageAssertions,
   globalAssertions,
+  unverifiedCoordinateAssertions,
+  ZUOBIAO_PACK_ID,
   type TurnRecord,
   type Verdict,
 } from './eval/assertions';
@@ -193,6 +195,12 @@ async function runScenario(scenario: Scenario, plan: Plan): Promise<ScenarioRepo
     ...landlineMarkAssertions(turns, crisisFacts),
     // 禁用号码泄漏：与「必含三号码」互为攻防
     ...bannedHotlineAssertions(turns, crisisFacts),
+    // 未核实坐标泄漏：与 S10 的「地址/电话逐字」互为攻防，且**对全部剧本逐轮生效**——
+    // 卡里那两条二手法院坐标可以出现在任何一场对话里，禁令不该只在 S10 那一场有人守。
+    // cast 的由来：agent 侧 KnowledgePack.facts 的类型少了 addresses，与 lib/knowledge 的
+    // PackFacts 已经漂移（那边注释还写着「形状与 PackFacts 一致」）。scenarios.ts 的
+    // zuobiaoFacts() 同样靠 cast 绕过——两处都是同一处漂移的下游，修在类型定义那边，不在这里。
+    ...unverifiedCoordinateAssertions(turns, searcher.get?.(ZUOBIAO_PACK_ID)?.facts as Parameters<typeof unverifiedCoordinateAssertions>[1]),
     // 剧本自定义机械断言默认 **L2 有效性**（多为「must 坑检出」「依据条号真实」这类）。
     // 要升 L1 必须在剧本里显式写 tier:'L1'——升级是自觉行为，不能靠这里猜。
     ...(scenario.mechanical?.(turns) ?? []).map((v) => ({ ...v, tier: v.tier ?? ('L2' as const) })),

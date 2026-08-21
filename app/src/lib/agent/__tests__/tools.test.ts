@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import * as agentStore from '@/lib/db/agent';
 import { CitationGuard } from '../citation-guard';
-import { executeTool, MAX_ACTION_CARDS, newTurnState, type AgentToolContext } from '../tools';
+import { emitCalcFailureNotice, executeTool, MAX_ACTION_CARDS, newTurnState, type AgentToolContext } from '../tools';
 import { KNOWLEDGE_MISS_DIRECTIVE } from '../retrieval';
 import { FIXTURE_PACK, fixtureSearcher, makeAgentFixture, makeSink } from './fixtures';
 
@@ -314,9 +314,9 @@ describe('三倍封顶：数据活性归卡，死常量只作兜底（manager 20
     const res = JSON.parse(run(ctx, 'claim_calc', { kind: 'N', ...S14 }).content);
 
     expect(res.flags).toContain('社平新值待核实');
-    const notice = sink.of('notice').find((e) => e.data.code === 'KNOWLEDGE_UNAVAILABLE');
+    // 按 message 挑封顶那条：同一个 code 现在也用于最低工资取不到（#41），两条会同时在场
+    const notice = sink.of('notice').find((e) => e.data.code === 'KNOWLEDGE_UNAVAILABLE' && e.data.message.includes('三倍封顶'));
     expect(notice).toBeDefined();
-    expect(notice!.data.message).toContain('三倍封顶');
     // 留痕里也带着这个 flag，日后复算能看出当时用的是缺省值
     const row = f.db.prepare('SELECT calc_json FROM claims WHERE case_id = ?').get(f.caseId) as { calc_json: string };
     expect(JSON.parse(row.calc_json).flags).toContain('社平新值待核实');
@@ -332,7 +332,7 @@ describe('三倍封顶：数据活性归卡，死常量只作兜底（manager 20
 
     expect(res.flags).not.toContain('社平新值待核实');
     expect(res.inputs.sanbeiCapFen).toBe(5_000_000); // 50,000 元/月 → 分
-    expect(sink.of('notice').filter((e) => e.data.code === 'KNOWLEDGE_UNAVAILABLE')).toHaveLength(0);
+    expect(sink.of('notice').filter((e) => e.data.message.includes('三倍封顶'))).toHaveLength(0);
   });
 
   it('注入的封顶值真的参与计算（换个值结果就变）', () => {
@@ -353,6 +353,108 @@ describe('三倍封顶：数据活性归卡，死常量只作兜底（manager 20
     };
     const { ctx } = makeCtx({ searcher: fixtureSearcher([bad]) });
     expect(JSON.parse(run(ctx, 'claim_calc', { kind: 'N', ...S14 }).content).flags).toContain('社平新值待核实');
+  });
+});
+
+describe('claim_calc 失败按轮收口，不逐次发帧也不整条静默（#42）', () => {
+  const S14 = { avg_monthly_wage_fen: 1_900_000, employed_from: '2019-03-01', terminated_at: '2026-08-19' };
+  const notices = (sink: ReturnType<typeof makeCtx>['sink']) =>
+    sink.of('notice').filter((e) => e.data.code === 'TOOL_INPUT_REJECTED');
+
+  it('重试过程安静：被拒当场不发帧', () => {
+    const { sink, ctx } = makeCtx();
+    expect(run(ctx, 'claim_calc', { kind: 'N', ...S14, avg_monthly_wage_fen: 0 }).ok).toBe(false);
+    expect(notices(sink)).toHaveLength(0);
+  });
+
+  it('拒绝后重试成功 → 收口时也不发（前面的拒绝只是过程）', () => {
+    const { sink, ctx } = makeCtx();
+    run(ctx, 'claim_calc', { kind: 'N', ...S14, avg_monthly_wage_fen: 0 });
+    expect(run(ctx, 'claim_calc', { kind: 'N', ...S14 }).ok).toBe(true);
+    emitCalcFailureNotice(ctx);
+    expect(notices(sink)).toHaveLength(0);
+  });
+
+  it('全部失败 → 收口时**恰一条**（不是每次一条）', () => {
+    const { f, sink, ctx } = makeCtx();
+    run(ctx, 'claim_calc', { kind: 'N', ...S14, avg_monthly_wage_fen: 0 });
+    run(ctx, 'claim_calc', { kind: 'N', ...S14, employed_from: '去年三月' });
+    run(ctx, 'claim_calc', { kind: '年假', ...S14 });
+    emitCalcFailureNotice(ctx);
+
+    expect(notices(sink)).toHaveLength(1);
+    expect(notices(sink)[0].data.message).toContain('3 次');
+    // 「没算出金额」要与「没有 claims 落库」对得上，否则这条信号本身在骗人
+    expect(f.db.prepare('SELECT COUNT(*) n FROM claims WHERE case_id = ?').get(f.caseId)).toEqual({ n: 0 });
+  });
+
+  it('本轮压根没调过 claim_calc → 不发（没试过不算失败）', () => {
+    const { sink, ctx } = makeCtx();
+    run(ctx, 'action_card', card(1));
+    emitCalcFailureNotice(ctx);
+    expect(notices(sink)).toHaveLength(0);
+  });
+
+  it('其它工具的拒绝仍然逐次发帧（这次改的只是 claim_calc 那条通路）', () => {
+    const { sink, ctx } = makeCtx();
+    expect(run(ctx, 'timeline_add', {}).ok).toBe(false);
+    expect(notices(sink)).toHaveLength(1);
+  });
+});
+
+describe('最低工资：七个公式共用一个下限，N/N+1/2N 也吃卡值（#41）', () => {
+  /** 触底人设：月应得 2,000 元，低于内置缺省（2,540）也低于卡值（3,000）——两者取哪个看得出来 */
+  const FLOOR = { avg_monthly_wage_fen: 200_000, employed_from: '2019-03-01', terminated_at: '2026-08-19' };
+  const minWageCard = (yuanPerMonth: number) => ({
+    id: 'data-beijing-zuidi-gongzi',
+    type: '数据卡',
+    title: '北京市月最低工资',
+    keywords: [],
+    applies_to: [],
+    region: '北京',
+    confidence: '原文核实',
+    updated: '2026-08-19',
+    body: '（正文散文，代码不解析）',
+    facts: { values: [{ key: 'min_wage_monthly', value: yuanPerMonth, unit: '元/月', effective_from: '2026-01-01', confidence: '原文核实' }] },
+  });
+
+  // 【这条是本次修的那个洞】早先 minWageOpt 只拌进了四个新公式的入参，
+  // N/N+1/2N 的 common 里没有它——于是最常走的那条路一直在用代码内置的 254_000。
+  // 断言必须钉在**卡值**而不是「大于内置缺省」这类模糊说法上，否则漏注入照样能过。
+  it.each(['N', '2N'] as const)('%s 触底时用卡里的最低工资，不用 MIN_WAGE_FEN_DEFAULT', (kind) => {
+    const { ctx } = makeCtx({ searcher: fixtureSearcher([minWageCard(3_000)]) });
+    const res = JSON.parse(run(ctx, 'claim_calc', { kind, ...FLOOR }).content);
+    expect(res.inputs.minWageFen).toBe(300_000);
+    expect(res.inputs.minWageFen).not.toBe(254_000); // 内置缺省
+    expect(res.flags).toContain('最低工资兜底');
+  });
+
+  it('N+1 同样吃卡值（+1 那一个月与 N 段共用同一个下限）', () => {
+    const { ctx } = makeCtx({ searcher: fixtureSearcher([minWageCard(3_000)]) });
+    const res = JSON.parse(run(ctx, 'claim_calc', { kind: 'N+1', ...FLOOR, last_month_wage_fen: 200_000 }).content);
+    expect(res.inputs.minWageFen).toBe(300_000);
+  });
+
+  it('注入的最低工资真的参与算钱（换个卡值结果就变）', () => {
+    const a = JSON.parse(run(makeCtx({ searcher: fixtureSearcher([minWageCard(3_000)]) }).ctx, 'claim_calc', { kind: 'N', ...FLOOR }).content);
+    const b = JSON.parse(run(makeCtx({ searcher: fixtureSearcher([minWageCard(4_000)]) }).ctx, 'claim_calc', { kind: 'N', ...FLOOR }).content);
+    expect(b.amount_fen).toBeGreaterThan(a.amount_fen);
+  });
+
+  // 取不到卡值时**如实说**用了内置缺省——沉默地用一个可能过期的数去算赔偿金，
+  // 比报错更糟：结果看起来完全正常，没人会想到回来核。
+  it('卡取不到 → 发 KNOWLEDGE_UNAVAILABLE 如实说用了内置缺省（N 这条路以前是静默的）', () => {
+    const { sink, ctx } = makeCtx({ searcher: fixtureSearcher([]) });
+    run(ctx, 'claim_calc', { kind: 'N', ...FLOOR });
+    const notice = sink.of('notice').find((e) => e.data.code === 'KNOWLEDGE_UNAVAILABLE' && e.data.message.includes('最低工资'));
+    expect(notice).toBeDefined();
+    expect(notice!.data.message).toContain('内置缺省');
+  });
+
+  it('卡取到了就不发那条 notice', () => {
+    const { sink, ctx } = makeCtx({ searcher: fixtureSearcher([minWageCard(3_000)]) });
+    run(ctx, 'claim_calc', { kind: 'N', ...FLOOR });
+    expect(sink.of('notice').filter((e) => e.data.message.includes('最低工资'))).toHaveLength(0);
   });
 });
 
@@ -432,11 +534,50 @@ describe('claim_calc：算钱走计算器，结果直接落 claims', () => {
     expect(run(ctx, 'claim_calc', { kind: 'N', ...S14, employed_from: '去年三月' }).ok).toBe(false);
   });
 
-  it('未实装的公式（年假/加班费）明确拒绝，不返回一个瞎算的数', () => {
+  // 【这条断言的范围随实装收窄】原文是「年假/加班费未实装 → 明确拒绝」。
+  // WS1 第二批（PR #37）把七个公式补齐后，年假与加班费**已经实装**，
+  // 再断言它们被拒绝就是在钉一个过期事实。现在守的是同一条纪律的当前形态：
+  // **缺必填项时要回喂"缺什么"，而不是拿现有参数瞎算一个数出来。**
+  it('必填项不全时明确拒绝并说清缺什么，绝不拿手头参数瞎算', () => {
     const { ctx } = makeCtx();
+    // 年假给的是解除补偿那套参数（S14），年假自己的必填项一个没有
     const res = run(ctx, 'claim_calc', { kind: '年假', ...S14 });
     expect(res.ok).toBe(false);
-    expect(res.content).toContain('N');
+    expect(res.content).toContain('cumulative_work_years');
+
+    const ot = run(ctx, 'claim_calc', { kind: '加班费', monthly_base_fen: 2000000 });
+    expect(ot.ok).toBe(false);
+    expect(ot.content).toContain('至少要给一项加班时长');
+
+    const dw = run(ctx, 'claim_calc', { kind: '双倍工资', scenario: 'first-contract', anchor_date: '2025-01-01' });
+    expect(dw.ok).toBe(false);
+    expect(dw.content).toContain('claimed_at');
+
+    const sb = run(ctx, 'claim_calc', { kind: '待岗', normal_monthly_wage_fen: 1500000, months: [{ month: '2025-03', paidFen: 254000 }] });
+    expect(sb.ok).toBe(false);
+    expect(sb.content).toContain('provides_labor');
+  });
+
+  it('四个新公式各自算得出数并直接落 claims（金额与算式同源）', () => {
+    const { ctx } = makeCtx();
+    const db = ctx.db;
+    const caseId = ctx.caseId;
+    const cases: [string, Record<string, unknown>][] = [
+      ['年假', { cumulative_work_years: 6, avg_monthly_wage_ex_overtime_fen: 1500000, through_date: '2026-08-19', arranged_days_this_year: 0 }],
+      ['加班费', { monthly_base_fen: 2000000, weekday_overtime_hours: 10, holiday_days: 1 }],
+      ['双倍工资', { scenario: 'first-contract', anchor_date: '2025-03-01', claimed_at: '2026-01-15', months: [{ month: '2025-05', wageFen: 1600000 }] }],
+      ['待岗', { normal_monthly_wage_fen: 1500000, provides_labor: false, months: [{ month: '2025-03', paidFen: 100000 }, { month: '2025-04', paidFen: 100000 }] }],
+    ];
+    for (const [kind, args] of cases) {
+      const res = run(ctx, 'claim_calc', { kind, ...args });
+      expect(res.ok, `${kind}: ${res.content}`).toBe(true);
+      const row = db.prepare('SELECT kind, amount_fen, calc_json FROM claims WHERE case_id = ? AND kind = ?').get(caseId, kind) as
+        | { kind: string; amount_fen: number; calc_json: string }
+        | undefined;
+      expect(row, `${kind} 未落库`).toBeDefined();
+      // 落库金额必须与 calc_json 里的一致——两处不同源就是抄错了一位
+      expect(row!.amount_fen).toBe(JSON.parse(row!.calc_json).amountFen);
+    }
   });
 });
 

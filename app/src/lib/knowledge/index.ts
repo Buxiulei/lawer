@@ -6,7 +6,23 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-/** 结构化事实（规范 §2.1）：被代码消费的数据的唯一读取面——代码只读 facts，禁啃正文散文 */
+/**
+ * 结构化事实（规范 §2.1）：被代码消费的数据的唯一读取面——代码只读 facts，禁啃正文散文。
+ *
+ * 【通用设计纪律（manager 原文，2026-08-21）】
+ * > 卡片里任何供代码消费的分类维度，一律设计成**可多值（数组）且语义正交**；
+ * > **严禁用 name/title 等展示字段做判断依据**；
+ * > 新增消费点前先问：这个判断依据是**结构化字段**还是**我在猜**？
+ *
+ * 三句话各有出处，都是踩过的坑：
+ * - **可多值**：一条坐标可能同时服务多个场景，单值枚举一到第二个场景就要么改 schema、
+ *   要么复制一条卡；复制出来的那条迟早只更新其中一份。
+ * - **语义正交**：一个维度混进两件事（既表"哪个场景用"又表"核没核实"），
+ *   过滤时必然要写复合条件，而复合条件在下一个消费点会被抄错。
+ * - **禁用展示字段**：`name` 是给人读的，随时会被润色。按 `name.includes('法院')` 分流的代码，
+ *   在有人把机构名改成全称的那天静默走错分支，且不会有任何报错。
+ *   判断一律钉在受控枚举字段上（如 `status`、场景枚举）。
+ */
 export interface PackFacts {
   hotlines?: Array<{ name: string; phone: string; category: 'crisis' | 'legal' | 'union' | 'inspection'; status: 'usable' | 'forbidden'; hours?: string; dial_hint?: string; agent_note?: string }>;
   values?: Array<{ key: string; value: number; unit: string; effective_from: string; confidence: string; source_idx: number }>;

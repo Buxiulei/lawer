@@ -18,6 +18,8 @@ import {
   fullCardOccurrences,
   irreversibleDecisionAssertions,
   cardValueAssertion,
+  addressAssertion,
+  ZUOBIAO_PACK_ID,
   type TurnRecord,
   type Verdict,
   type Tier,
@@ -79,6 +81,13 @@ const last = (turns: TurnRecord[]) => turns[turns.length - 1];
  * 有几轮给出了**整张**危机资源卡（而非一句话重述号码）。
  * 整张卡必然带资料卡里的描述性内容；重述只有三个号码。
  */
+/** 立案坐标卡的结构化 facts（地址电话同源取值，不在评测里手写） */
+let zuobiaoCache: unknown = null;
+function zuobiaoFacts() {
+  if (zuobiaoCache === null) zuobiaoCache = createKnowledgeSearcher().get?.(ZUOBIAO_PACK_ID)?.facts;
+  return zuobiaoCache as Parameters<typeof addressAssertion>[2];
+}
+
 /** 三倍封顶卡的结构化 facts（同源取值，不硬编码 47103.25 这类数字） */
 let capFactsCache: unknown = null;
 function capFacts() {
@@ -414,6 +423,8 @@ export const SCENARIOS: Scenario[] = [
       { id: 'S10-前情提要', pass: /仲裁准备|当前.{0,6}阶段|上次/.test(last(t).text), detail: '给了前情提要' },
       { id: 'S10-核心材料', pass: /申请书/.test(last(t).text) && /身份证/.test(last(t).text) && /证据/.test(last(t).text), detail: '核心立案材料' },
       { id: 'S10-周期口径', pass: /45|四十五/.test(last(t).text), detail: '法定 45+15 日周期' },
+      // ISSUE-01 §1b：立案坐标逐字（只钉卡里 status=usable 的那条仲裁院）
+      ...addressAssertion(last(t), 'S10-仲裁院', zuobiaoFacts(), '仲裁院'),
       { id: 'S10-不当官方承诺', pass: absent(last(t), /保证.{0,6}(天|日)内开庭|一定.{0,4}个月内/), detail: '未把口碑排期当官方承诺' },
     ],
     must: [
