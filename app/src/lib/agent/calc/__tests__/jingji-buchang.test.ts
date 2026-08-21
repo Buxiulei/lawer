@@ -222,6 +222,20 @@ describe('calcN：基数判定分支', () => {
     expect(r.amountFen).toBe(762_000); // 2,540 × 3
     expect(r.formula).toBe('2,540.00 × 3 = 7,620.00 元（最低工资兜底）');
     expect(r.flags).toContain(CALC_FLAG.minWageFloor);
+    // 显式传了 minWageFen → 数是调用方给的（工具层从数据卡注入），不打待核实
+    expect(r.flags).not.toContain(CALC_FLAG.minWageUnverified);
+  });
+
+  test('触底且用内置缺省最低工资 → 必须亮「最低工资缺省值待核实」（issue #41 配套）', () => {
+    const base = { avgMonthlyWageFen: 200_000, employedFrom: '2022-01-01', terminatedAt: '2025-01-01' };
+    // 缺省 + 触底：基数就是那个可能过期的缺省值本身，必须亮牌
+    const floored = calcN({ ...base, sanbeiCapFen: CAP });
+    expect(floored.flags).toContain(CALC_FLAG.minWageFloor);
+    expect(floored.flags).toContain(CALC_FLAG.minWageUnverified);
+    // 缺省但未触底：缺省值没参与出数，不加噪音
+    const notFloored = calcN({ ...base, avgMonthlyWageFen: 2_000_000, sanbeiCapFen: CAP });
+    expect(notFloored.flags).not.toContain(CALC_FLAG.minWageFloor);
+    expect(notFloored.flags).not.toContain(CALC_FLAG.minWageUnverified);
   });
 
   test('恰好等于最低工资 → 不兜底', () => {
