@@ -18,8 +18,9 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 export const REALNAME_REQUIRED = 'REALNAME_REQUIRED';
 
-/** 实名页锚点。实名表单本身在下一批实现，这里先把去处定下来。 */
-export const REALNAME_HREF = '/settings#realname';
+/** 实名区块的锚点 id，落在设置页的 RealnameCard 上 */
+export const REALNAME_ANCHOR = 'realname';
+export const REALNAME_HREF = `/settings#${REALNAME_ANCHOR}`;
 
 export function useRealnameGate() {
   const router = useRouter();

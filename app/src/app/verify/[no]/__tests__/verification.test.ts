@@ -142,6 +142,43 @@ describe('readRecheck 的分项宽松解析', () => {
     });
   });
 
+  // 上线后的真实契约：POST /api/v1/verify/:orderNo/recheck 回 {name, passed, detail}，
+  // name 是中文项名（lib/evidence/recheck.ts 的 CHECK_HASH / CHECK_TST / CHECK_SIGNATURE）。
+  // 后端改字段名时这条会先红，免得面板悄悄少列一项。
+  test('真接口形状：{name,passed,detail} + 中文项名', () => {
+    const r = readRecheck({
+      ok: true,
+      order_no: 'LAWER-ATT-20260820-1c99e1b9767f65b5',
+      overall_ok: true,
+      checks: [
+        { name: '哈希一致', passed: true, detail: '原件 SHA-256 与存证记录一致：abc' },
+        { name: 'TST 有效', passed: true, detail: '可信时间戳有效，签发于 2026-08-20T03:38:00Z' },
+        { name: '签名有效', passed: true, detail: '全部签名验签通过' },
+      ],
+      verdict: { num_signatures: 1, signatures: [] },
+    });
+    expect(r.verdict).toBe('pass');
+    expect(r.checks.map((c) => c.label)).toEqual(['哈希一致', 'TST 有效', '签名有效']);
+    expect(r.checks.every((c) => c.ok === true)).toBe(true);
+    expect(r.checks[0].detail).toBe('原件 SHA-256 与存证记录一致：abc');
+  });
+
+  test('真接口形状 + overall_ok=false：分项失败原样带出', () => {
+    const r = readRecheck({
+      ok: true,
+      order_no: 'LAWER-ATT-20260820-1c99e1b9767f65b5',
+      overall_ok: false,
+      checks: [
+        { name: '哈希一致', passed: false, detail: '原件 SHA-256 与存证记录不符：存证 aaa，实得 bbb' },
+        { name: 'TST 有效', passed: true, detail: '可信时间戳有效' },
+      ],
+      verdict: null,
+    });
+    expect(r.verdict).toBe('fail');
+    expect(r.checks[0].ok).toBe(false);
+    expect(r.checks[0].detail).toContain('实得 bbb');
+  });
+
   test('数组 + {name,passed,message} 这类别名字段照样认', () => {
     const r = readRecheck({
       overall_ok: false,

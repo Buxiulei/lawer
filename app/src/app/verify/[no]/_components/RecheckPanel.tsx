@@ -14,9 +14,12 @@ import { readRecheck, type Recheck, type RecheckCheck } from '../_verification';
  * 裁决只认响应体的 overall_ok。这里绝不看 res.ok / 状态码，
  * 也绝不把「没有结论」画成通过——unknown 一律走中性态。
  *
- * 接口（WS2 在做）：POST /api/v1/verify/:orderNo/recheck，公开 + IP 限流。
- * 还没上线时会落到 Next 的 404（响应体不是我们的错误包），
- * apiFetch 把它归一成 HTTP_xxx，此时提示改走页内的离线复核指引。
+ * 接口：POST /api/v1/verify/:orderNo/recheck，公开 + IP 限流（24h/IP 30 次）。
+ * 回 { ok, order_no, overall_ok, checks: [{ name, passed, detail }], verdict }，
+ * 分项交给 readRecheck 宽松解析——字段名将来变了也不会把结论丢掉。
+ *
+ * 打不到这条路由时（部署里还没有它）会落到 Next 的 404，响应体不是我们的错误包，
+ * apiFetch 归一成 HTTP_xxx，此时提示改走页内的离线复核指引。
  */
 export function RecheckPanel({ orderNo }: { orderNo: string }) {
   const toast = useToast();
@@ -39,7 +42,7 @@ export function RecheckPanel({ orderNo }: { orderNo: string }) {
       if (err instanceof ApiError && err.errorCode.startsWith('HTTP_')) {
         toast('在线核验暂未开放，可按下方指引离线复核', 'neutral');
       } else {
-        const message = rateLimitCopy(err) ?? humanError(err);
+        const message = failureCopy(err) ?? humanError(err);
         setFailure(message);
         toast(message, 'amber', '这一步没成功');
       }
@@ -76,14 +79,26 @@ export function RecheckPanel({ orderNo }: { orderNo: string }) {
 }
 
 /**
- * 接口是公开的，按 IP 限流；限流回的是共用的 RATE_LIMITED，
- * 而 humanError 给它的通用文案是「发送太频繁」——这页没有"发送"这回事，就地换掉。
+ * 后端 message 在这几个码上要么太技术（透传 sidecar 原话），要么在这页上说不通，就地换掉。
+ *
+ * ⚠ 措辞红线：RECHECK_UNAVAILABLE / RECHECK_UPSTREAM_FAILED 是**没验成**，不是没通过。
+ * 文案必须把这件事挑明——把服务故障说得像证据有问题，等于在仲裁场上诬告用户自己的材料。
  */
-function rateLimitCopy(err: unknown): string | null {
-  if (!(err instanceof ApiError) || err.errorCode !== 'RATE_LIMITED') return null;
-  return err.retryAfter
-    ? `核验太频繁，${err.retryAfter} 秒后再试`
-    : '核验太频繁，稍后再试';
+function failureCopy(err: unknown): string | null {
+  if (!(err instanceof ApiError)) return null;
+  switch (err.errorCode) {
+    case 'RATE_LIMITED':
+      // 共用的 RATE_LIMITED，humanError 的通用文案是「发送太频繁」——这页没有"发送"这回事
+      return err.retryAfter ? `核验太频繁，${err.retryAfter} 秒后再试` : '核验太频繁，稍后再试';
+    case 'RECHECK_UNAVAILABLE':
+      return '在线核验暂时用不了，是我们这边的复核服务还没就绪——这不代表这份材料有问题。稍后再试，或按下方指引自己离线核。';
+    case 'RECHECK_UPSTREAM_FAILED':
+      return '这次没核成：复核服务没响应，不是核验没通过。过一会儿再点一次，或按下方指引自己离线核。';
+    case 'ORDER_NOT_FOUND':
+      return '没找到这个存证订单号。核对一下单号，或找出具方要一份完整的《存证证明》。';
+    default:
+      return null;
+  }
 }
 
 const VERDICT_STYLE: Record<

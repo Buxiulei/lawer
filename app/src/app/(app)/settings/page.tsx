@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
+import { AgentSetupCard } from './_components/AgentSetupCard';
 import { ApiKeysCard } from './_components/ApiKeysCard';
-import { McpCard } from './_components/McpCard';
 import { PreferencesCard } from './_components/PreferencesCard';
+import { RealnameCard } from './_components/RealnameCard';
 
 export const metadata: Metadata = { title: '设置' };
 
@@ -13,8 +14,9 @@ export default function SettingsPage() {
       </header>
 
       <div className="flex flex-col gap-4">
+        <RealnameCard />
         <ApiKeysCard />
-        <McpCard />
+        <AgentSetupCard />
         <PreferencesCard />
       </div>
     </div>
