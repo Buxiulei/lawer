@@ -74,6 +74,10 @@ def check_facts(path: Path, fm: dict, body_norm: str, seen_keys: dict) -> None:
             die(f"{path} hotlines status 非法：{h['status']}")
         if h["category"] not in ("crisis", "legal", "union", "inspection"):
             die(f"{path} hotlines category 非法：{h['category']}")
+        if "note" in h:
+            die(f"{path} hotlines[{h['phone']}] 使用已废弃的混受众字段 note——拆为 dial_hint（用户向）/agent_note（内部向）")
+        if h["status"] == "usable" and not h.get("dial_hint"):
+            die(f"{path} hotlines[{h['phone']}] status=usable 但缺 dial_hint（用户向拨打提示必填）")
         if normalize(h["phone"]) not in body_norm:
             die(f"{path} facts 号码 {h['phone']} 未出现在正文（两面不一致）")
     for r in facts.get("review_rules", []):
