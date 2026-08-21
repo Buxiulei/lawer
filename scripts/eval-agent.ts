@@ -46,6 +46,7 @@ import {
 } from './eval/assertions';
 import { judgeAvailable, judgeItem, type JudgeResult } from './eval/judge';
 import { collectPending, PENDING_ESCALATE_BATCHES, writePendingCardList } from './eval/pending-cards';
+import { lawsInLibrary } from './eval/assertions';
 import { newRunId, writeEvidence, type ScenarioEvidence } from './eval/report';
 import { findScenarios, type Scenario } from './eval/scenarios';
 
@@ -441,16 +442,19 @@ async function main() {
   const pending = collectPending(
     results.flatMap(({ r }) => r.mechanical.map((v) => ({ scenarioId: r.scenario.id, verdict: v, excerpt: v.detail }))),
   );
-  const { items: pendingItems, escalated } = writePendingCardList(
+  const { items: pendingItems, escalated, byKind } = writePendingCardList(
     path.resolve(import.meta.dirname, 'eval', 'results'),
     runId,
     pending,
+    lawsInLibrary(results.flatMap(({ r }) => r.turns.flatMap((t) => t.retrieved))),
   );
 
   console.log(C.bold(`\n───────── 汇总 ─────────`));
   console.log(`通过 ${results.length - failed.length}/${results.length}`);
   if (pendingItems.length) {
     console.log(C.warn(`补卡需求 ${pendingItems.length} 条条文（详见 results/pending-cards-${runId}.md，须外勤人工核）`));
+    // 两栏分列：第二栏变长 = 模型开始往域外引，比缺卡严重得多
+    console.log(C.dim(`  · 疑似真缺卡 ${byKind.missing_card} 条 / **疑似引用不当 ${byKind.out_of_domain} 条** / 法域未知 ${byKind.unknown_law} 条`));
     if (escalated.length) {
       console.log(
         C.fail(`⚠️ 连续 ${PENDING_ESCALATE_BATCHES} 批未补卡：${escalated.join('、')}——长期红灯会训练所有人无视红灯，请优先处理`),

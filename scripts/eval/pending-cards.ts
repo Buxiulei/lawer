@@ -25,8 +25,23 @@ export interface PendingCardState {
   lastRunId?: string;
 }
 
+/**
+ * 清单**机检预分拣**（agent2 供，manager 转批）：按「该部法律在不在库」分两栏。
+ *
+ *  - `missing_card`「疑似真缺卡」：该法在库（别的卡引过它），只是这一条没有 statute_quotes；
+ *  - `out_of_domain`「疑似引用不当」：**该法整部不在库** —— 模型开始往域外引，
+ *    比缺卡严重得多，优先人核。
+ *
+ * **分栏本身是信号**：第二栏变长意味着引用在离开我们的知识域，
+ * 而这类问题补卡是补不完的——该查的是模型为什么引到域外去。
+ * 预分拣只排序省时，**不替代人核**：两栏都仍需外勤逐条核。
+ */
+export type PendingKind = 'missing_card' | 'out_of_domain' | 'unknown_law';
+
 export interface PendingCardItem {
   article: string;
+  law?: string;
+  kind: PendingKind;
   /** 出现场次（剧本 id 去重） */
   scenarios: string[];
   /** 出现次数（逐轮计） */
@@ -40,17 +55,24 @@ export interface PendingCardItem {
 /** 从本批全部判定里汇出待补卡条文 */
 export function collectPending(
   verdicts: { scenarioId: string; verdict: Verdict; excerpt?: string }[],
-): Map<string, { scenarios: Set<string>; hits: number; excerpts: string[] }> {
-  const out = new Map<string, { scenarios: Set<string>; hits: number; excerpts: string[] }>();
+): Map<string, { scenarios: Set<string>; hits: number; excerpts: string[]; law?: string }> {
+  const out = new Map<string, { scenarios: Set<string>; hits: number; excerpts: string[]; law?: string }>();
   for (const { scenarioId, verdict, excerpt } of verdicts) {
     if (verdict.naKind !== 'pending_card' || !verdict.pendingArticle) continue;
     const cur = out.get(verdict.pendingArticle) ?? { scenarios: new Set<string>(), hits: 0, excerpts: [] };
     cur.scenarios.add(scenarioId);
     cur.hits += 1;
+    if (verdict.pendingLaw) cur.law = verdict.pendingLaw;
     if (excerpt && cur.excerpts.length < 3) cur.excerpts.push(excerpt);
     out.set(verdict.pendingArticle, cur);
   }
   return out;
+}
+
+/** 机检预分拣：该法在库=疑似真缺卡；整部不在库=疑似引用不当；取不到法名=法域未知（并入优先核） */
+export function classifyPending(law: string | undefined, libraryLaws: Set<string>): PendingKind {
+  if (!law) return 'unknown_law';
+  return libraryLaws.has(law.replace(/[《》\s]/g, '')) ? 'missing_card' : 'out_of_domain';
 }
 
 function loadState(file: string): PendingCardState {
@@ -77,7 +99,8 @@ export function writePendingCardList(
   dir: string,
   runId: string,
   collected: ReturnType<typeof collectPending>,
-): { items: PendingCardItem[]; escalated: string[] } {
+  libraryLaws: Set<string> = new Set(),
+): { items: PendingCardItem[]; escalated: string[]; byKind: Record<PendingKind, number> } {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const stateFile = path.join(dir, 'pending-cards-state.json');
   const state = updateStreaks(loadState(stateFile), [...collected.keys()], runId);
@@ -86,6 +109,8 @@ export function writePendingCardList(
   const items: PendingCardItem[] = [...collected.entries()]
     .map(([article, v]) => ({
       article,
+      ...(v.law ? { law: v.law } : {}),
+      kind: classifyPending(v.law, libraryLaws),
       scenarios: [...v.scenarios].sort(),
       hits: v.hits,
       excerpts: v.excerpts,
@@ -95,6 +120,30 @@ export function writePendingCardList(
 
   const escalated = items.filter((i) => i.streak >= PENDING_ESCALATE_BATCHES).map((i) => i.article);
 
+  const byKind: Record<PendingKind, number> = { missing_card: 0, out_of_domain: 0, unknown_law: 0 };
+  for (const i of items) byKind[i.kind] += 1;
+  const KIND_LABEL: Record<PendingKind, string> = {
+    missing_card: '疑似真缺卡（该法在库、此条无原文）',
+    out_of_domain: '⚠️ 疑似引用不当（**该法整部不在库**）',
+    unknown_law: '法域未知（引用处取不到法名）',
+  };
+  const table = (kind: PendingKind) => {
+    const rows = items.filter((i) => i.kind === kind);
+    if (rows.length === 0) return [];
+    return [
+      `### ${KIND_LABEL[kind]}　共 ${rows.length} 条`,
+      '',
+      '| 条文 | 所属法律 | 连续批次 | 出现次数 | 场次 | 人核结论（外勤填） | 引用原文摘录 |',
+      '|---|---|---|---|---|---|---|',
+      ...rows.map(
+        (i) =>
+          `| ${i.article} | ${i.law ?? '（未知）'} | ${i.streak}${i.streak >= PENDING_ESCALATE_BATCHES ? ' ⚠️' : ''} | ${i.hits} | ${i.scenarios.join(' ')} | | ${i.excerpts
+            .map((e) => e.replace(/\|/g, '\\|').slice(0, 60))
+            .join(' / ')} |`,
+      ),
+      '',
+    ];
+  };
   const lines = [
     `# 补卡需求清单（${runId}）`,
     '',
@@ -105,20 +154,18 @@ export function writePendingCardList(
     '> - 判「**该补卡**」→ 进补卡单，补齐 `facts.statute_quotes`；',
     '> - 判「**引用不当**」→ 该条不该在这个场景被引，转回 FAIL 类训练样本。',
     '',
+    '> 下面两栏是**机检预分拣**，只为排序省时，**不替代人核**——两栏都要逐条核。',
+    '> **分栏本身是信号**：第二栏变长意味着模型开始往域外引，比缺卡严重得多，',
+    '> 这类问题补卡是补不完的，该查的是模型为什么引到域外去。',
+    '',
     `> 连续 ${PENDING_ESCALATE_BATCHES} 批仍未处理的条文会升级告警——**长期红灯会训练所有人无视红灯**，`,
     '> 一份越来越长、谁也不看的清单比没有清单更糟。',
     '',
-    '| 条文 | 连续批次 | 出现次数 | 场次 | 人核结论（外勤填） | 引用原文摘录 |',
-    '|---|---|---|---|---|---|',
-    ...items.map(
-      (i) =>
-        `| ${i.article} | ${i.streak}${i.streak >= PENDING_ESCALATE_BATCHES ? ' ⚠️' : ''} | ${i.hits} | ${i.scenarios.join(' ')} | | ${i.excerpts
-          .map((e) => e.replace(/\|/g, '\\|').slice(0, 60))
-          .join(' / ')} |`,
-    ),
-    '',
+    ...table('out_of_domain'),
+    ...table('missing_card'),
+    ...table('unknown_law'),
     items.length === 0 ? '（本批无待补卡条文——全线有源）' : '',
   ];
   writeFileSync(path.join(dir, `pending-cards-${runId}.md`), lines.join('\n'));
-  return { items, escalated };
+  return { items, escalated, byKind };
 }

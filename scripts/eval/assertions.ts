@@ -78,6 +78,8 @@ export interface Verdict {
   naKind?: 'no_decision_point' | 'pending_card';
   /** pending_card 类专用：等哪一条条文补卡 */
   pendingArticle?: string;
+  /** pending_card 类专用：该条所属法律（从引用处就近的《…》取），用于清单预分拣 */
+  pendingLaw?: string;
 }
 
 /**
@@ -983,7 +985,10 @@ export function citationCompletenessAssertions(
   quotedArticles?: Set<string>,
 ): Verdict[] {
   return turns.flatMap((t, i) => {
-    const cited = bareArticleCitations(t.text).map((a) => ({ raw: a, key: normalizeArticle(a) }));
+    const cited = bareArticleCitations(t.text).map((a) => {
+      const at = t.text.indexOf(a);
+      return { raw: a, key: normalizeArticle(a), law: at >= 0 ? nearestLaw(t.text, at) : null };
+    });
     if (cited.length === 0) return [];
     // 【三分支统一判定（manager 2026-08-22 甲案）】
     //   库内有原文而输出没带 → FAIL（该带没带）
@@ -1016,11 +1021,26 @@ export function citationCompletenessAssertions(
         na: true,
         naKind: 'pending_card',
         pendingArticle: p.key,
+        ...(p.law ? { pendingLaw: p.law } : {}),
         detail: `${p.raw} 在知识库里没有逐字原文，本条判定**延迟**至补卡后（不计过不计挂，已进补卡需求清单）`,
       });
     }
     return out;
   });
+}
+
+/** 取条号引用处**就近在前**的《法律名》。取不到返回 null——宁可标"法域未知"，不猜 */
+export function nearestLaw(text: string, at: number, lookBehind = 40): string | null {
+  const before = text.slice(Math.max(0, at - lookBehind), at);
+  const all = [...before.matchAll(/《([^》\n]{2,40})》/g)];
+  return all.length ? all[all.length - 1][1] : null;
+}
+
+/** 库内出现过的法律全集（任何卡的 statute_quotes 引过即算在库） */
+export function lawsInLibrary(packs: { facts?: { statute_quotes?: { law: string; article: string; text: string }[] } }[]): Set<string> {
+  const out = new Set<string>();
+  for (const p of packs) for (const q of p.facts?.statute_quotes ?? []) if (q?.law) out.add(q.law.replace(/[《》\s]/g, ''));
+  return out;
 }
 
 /** 条号归一：抹掉书名号/空格与「第…条」以外的修饰，便于与卡里的 article 字段比对 */
