@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Button } from '@/components/ui/Button';
-import { Tabs } from '@/components/ui/Tabs';
+import { Button } from '@/components/shadcn/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/shadcn/tabs';
 import { CodeBlock } from './CodeBlock';
 import {
   KEY_PLACEHOLDER,
@@ -31,11 +31,16 @@ export function SetupPrompt({
 
   return (
     <div>
-      <Tabs
-        items={SETUP_TABS}
-        value={tab}
-        onChange={(key) => setTab(key as SetupTabKey)}
-      />
+      {/* 四个 Tab 是同一份文本的不同包装，正文只有一份，不用 TabsContent 分四遍 */}
+      <Tabs value={tab} onValueChange={(key) => setTab(key as SetupTabKey)}>
+        <TabsList>
+          {SETUP_TABS.map((item) => (
+            <TabsTrigger key={item.key} value={item.key}>
+              {item.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {!apiKey && (
         <p className="mt-3 text-[13px] leading-5 text-ink-2">

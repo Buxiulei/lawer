@@ -86,6 +86,47 @@
   color-scheme: dark;
 }
 
+/* ── shadcn/Radix 语义变量桥接 ──────────────────────────────
+   shadcn 组件用的是它自己那套语义名（--background/--foreground/…）。
+   这里一律 var() 指回上面的自家 token，**不落第二套色值**：
+   深浅色的切换仍然只发生在上面 :root / .dark 两处，桥接层跟着一起变
+   （自定义属性在使用时才解析，--bg 在 .dark 上被改写，--background 自动跟随）。
+   --primary 语义两边一致（实心按钮底色），沿用自家那个，不重复定义。 */
+:root {
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  /* 实心主色按钮上的文字：与既有 Button 的 text-white 保持一致 */
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--ink-2);
+  --accent: var(--surface-2);
+  --accent-foreground: var(--ink);
+  --destructive: var(--danger);
+  --destructive-foreground: #ffffff;
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--primary);
+
+  /* sidebar 是壳层专用的一组，映到 surface + 主色淡底选中态 */
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--primary-wash);
+  --sidebar-accent-foreground: var(--primary-ink);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--primary);
+
+  /* 圆角基准取 DESIGN.md 的卡片 12px，按钮档正好落在 10px */
+  --radius: 12px;
+}
+
 /* ── Tailwind theme 映射 ────────────────────────────────────── */
 @theme inline {
   --color-bg: var(--bg);
@@ -108,12 +149,46 @@
   --color-success: var(--success);
   --color-success-wash: var(--success-wash);
 
+  /* shadcn 语义色的 Tailwind 工具类（bg-background / text-muted-foreground …） */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
   --font-sans: -apple-system, BlinkMacSystemFont, 'PingFang SC',
     'HarmonyOS Sans SC', 'MiSans', 'Noto Sans SC', 'Microsoft YaHei',
     'Segoe UI', Roboto, sans-serif;
 
   --radius-card: 12px;
   --radius-btn: 10px;
+
+  /* 单一 --radius 派生四档，shadcn 组件的 rounded-md/lg 走这里 */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
 /* ── 基础排版 ───────────────────────────────────────────────── */
@@ -200,6 +275,16 @@
   }
   to {
     opacity: 1;
+  }
+}
+
+/* Radix 的 Presence 靠退场动画决定何时卸载，开场动画必须配一个收场的 */
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
 

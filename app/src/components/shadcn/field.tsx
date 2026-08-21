@@ -1,0 +1,75 @@
+'use client';
+
+import { useId, type InputHTMLAttributes, type ReactNode } from 'react';
+import { cn } from './utils';
+import { Input } from './input';
+import { Label } from './label';
+
+/**
+ * 带标签/提示/错误的表单行。API 与手写版 @/components/ui/Field 一致，
+ * 转体系的页面换 import 即可。
+ */
+export function Field({
+  label,
+  hint,
+  error,
+  required,
+  children,
+  htmlFor,
+}: {
+  label: string;
+  hint?: string;
+  error?: string;
+  required?: boolean;
+  children: ReactNode;
+  htmlFor?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={htmlFor}>
+        {label}
+        {required && <span className="ml-1 text-amber-ink">必填</span>}
+      </Label>
+      {children}
+      {error ? (
+        <p className="text-[13px] leading-5 text-danger-ink">{error}</p>
+      ) : hint ? (
+        <p className="text-[13px] leading-5 text-muted-foreground">{hint}</p>
+      ) : null}
+    </div>
+  );
+}
+
+export interface InputFieldProps extends InputHTMLAttributes<HTMLInputElement> {
+  label: string;
+  hint?: string;
+  error?: string;
+}
+
+export function InputField({
+  label,
+  hint,
+  error,
+  className,
+  id,
+  ...rest
+}: InputFieldProps) {
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
+  return (
+    <Field
+      label={label}
+      hint={hint}
+      error={error}
+      required={rest.required}
+      htmlFor={inputId}
+    >
+      <Input
+        id={inputId}
+        aria-invalid={error ? true : undefined}
+        className={cn(className)}
+        {...rest}
+      />
+    </Field>
+  );
+}

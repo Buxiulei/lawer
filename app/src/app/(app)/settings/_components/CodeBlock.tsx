@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/app/_ui/cn';
-import { Button } from '@/components/ui/Button';
+import { Button } from '@/components/shadcn/button';
 import { useToast } from '@/components/ui/Toast';
 
 /** 配置片段展示：等宽字体、横向可滚，不换行折断命令。 */

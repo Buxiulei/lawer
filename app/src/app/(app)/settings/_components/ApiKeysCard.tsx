@@ -5,11 +5,18 @@ import { apiFetch, humanError } from '@/app/_ui/api';
 import { cn } from '@/app/_ui/cn';
 import { formatDateTime } from '@/app/_ui/format';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { Card, CardBody, CardHeader } from '@/components/ui/Card';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { Input } from '@/components/ui/Field';
-import { Sheet } from '@/components/ui/Sheet';
+import { AppSheet } from '@/components/shadcn/app-sheet';
+import { Button } from '@/components/shadcn/button';
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/shadcn/card';
+import { Checkbox } from '@/components/shadcn/checkbox';
+import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
+import { InputField } from '@/components/shadcn/field';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { CodeBlock } from './CodeBlock';
@@ -151,15 +158,15 @@ export function ApiKeysCard() {
   return (
     <>
       <Card>
-        <CardHeader
-          title="API key"
-          action={
+        <CardHeader>
+          <CardTitle>API key</CardTitle>
+          <CardAction>
             <Button size="sm" variant="secondary" onClick={() => setSheetOpen(true)}>
               新建
             </Button>
-          }
-        />
-        <CardBody>
+          </CardAction>
+        </CardHeader>
+        <CardContent>
           <p className="text-[14px] leading-6 text-ink-2">
             给你自己的 agent 用。一把 key 能做什么由勾选的权限决定，随时可以吊销。
           </p>
@@ -218,21 +225,21 @@ export function ApiKeysCard() {
               </li>
             ))}
           </ul>
-        </CardBody>
+        </CardContent>
       </Card>
 
-      <Sheet
+      <AppSheet
         open={sheetOpen}
         onClose={closeSheet}
         title={issued ? '这把 key 只显示这一次' : '新建 API key'}
         footer={
           issued ? (
-            <Button fullWidth variant="secondary" onClick={closeSheet}>
+            <Button className="w-full" variant="secondary" onClick={closeSheet}>
               我已经存好了
             </Button>
           ) : (
             <Button
-              fullWidth
+              className="w-full"
               disabled={!name.trim() || scopes.length === 0 || creating}
               onClick={() => void create()}
             >
@@ -245,7 +252,7 @@ export function ApiKeysCard() {
           <IssuedKey issued={issued} />
         ) : (
           <div className="flex flex-col gap-5">
-            <Input
+            <InputField
               label="名称"
               hint="写清楚给谁用，比如「我的 Claude 桌面端」，方便以后吊销。"
               placeholder="我的 Claude 桌面端"
@@ -267,11 +274,9 @@ export function ApiKeysCard() {
                       key={scope.key}
                       className="flex min-h-11 cursor-pointer items-center gap-3 border-b border-line py-2 last:border-b-0"
                     >
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={checked}
-                        onChange={() => toggleScope(scope.key)}
-                        className="size-5 shrink-0 accent-primary"
+                        onCheckedChange={() => toggleScope(scope.key)}
                       />
                       <span className="text-[15px] text-ink">{scope.label}</span>
                       <span
@@ -293,7 +298,7 @@ export function ApiKeysCard() {
             )}
           </div>
         )}
-      </Sheet>
+      </AppSheet>
 
       <ConfirmDialog
         open={revoking !== null}

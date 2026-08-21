@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { cn } from '@/app/_ui/cn';
 import type { ActionItem } from '@/app/_mock/types';
+import { Checkbox } from '@/components/shadcn/checkbox';
 import { DeadlineChip } from './DeadlineChip';
 
 /**
@@ -29,15 +30,14 @@ export function ActionCard({
       )}
     >
       <div className="flex items-start gap-3 p-3">
-        <label className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center">
-          <input
-            type="checkbox"
+        {/* 外层撑满 44px 触区，勾选框本体仍是 20px */}
+        <div className="flex min-h-11 min-w-11 items-center justify-center">
+          <Checkbox
             checked={done}
-            onChange={(e) => onToggle?.(item.id, e.target.checked)}
+            onCheckedChange={(next) => onToggle?.(item.id, next === true)}
             aria-label={`标记完成：${item.title}`}
-            className="size-5 accent-[var(--primary)]"
           />
-        </label>
+        </div>
 
         <div className="min-w-0 flex-1">
           <button
