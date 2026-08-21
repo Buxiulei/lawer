@@ -11,8 +11,9 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { TOKEN_STORAGE_KEY } from './bootstrap';
 
-export const TOKEN_STORAGE_KEY = 'lawer.token';
+export { TOKEN_STORAGE_KEY };
 
 const listeners = new Set<() => void>();
 

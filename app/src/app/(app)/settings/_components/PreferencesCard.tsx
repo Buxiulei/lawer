@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { clearToken, useSignedIn } from '@/app/_ui/auth';
 import { cn } from '@/app/_ui/cn';
 import { useDiscreet } from '@/app/_ui/discreet';
 import { useTheme, type ThemeMode } from '@/app/_ui/theme';
@@ -26,6 +27,7 @@ export function PreferencesCard() {
   const router = useRouter();
   const { mode, setMode } = useTheme();
   const { discreet, setDiscreet } = useDiscreet();
+  const signedIn = useSignedIn();
   const [signOutOpen, setSignOutOpen] = useState(false);
 
   return (
@@ -79,11 +81,13 @@ export function PreferencesCard() {
             </div>
           </div>
 
-          <div className="border-t border-line pt-4">
-            <Button variant="secondary" onClick={() => setSignOutOpen(true)}>
-              退出登录
-            </Button>
-          </div>
+          {signedIn && (
+            <div className="border-t border-line pt-4">
+              <Button variant="secondary" onClick={() => setSignOutOpen(true)}>
+                退出登录
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -95,6 +99,8 @@ export function PreferencesCard() {
         tone="primary"
         onConfirm={() => {
           setSignOutOpen(false);
+          // 弹窗答应了「清掉登录状态」，就得真清掉：只跳 /login 的话 token 还留在本机
+          clearToken();
           router.push('/login');
         }}
         onCancel={() => setSignOutOpen(false)}

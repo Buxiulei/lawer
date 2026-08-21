@@ -1,3 +1,17 @@
+import {
+  demoCnDate,
+  demoDate,
+  demoDay,
+  demoDayOfMonth,
+  demoMonth,
+  demoMonthCn,
+  demoMonthOfDay,
+  demoMonthRangeCn,
+  demoShiftMonths,
+  demoShortCnDate,
+  demoShortMonthCn,
+  demoYearOfDay,
+} from './clock';
 import type {
   ActionItem,
   CaseRecord,
@@ -18,12 +32,38 @@ import type {
  * 演示案件「demo」：互联网公司程序员被裁，公司要求签协商解除协议。
  * 数值口径：月工资 25000 元、司龄 8 年、朝阳区。
  * 北京上年度职工月平均工资按 11761 元、三倍封顶线 35283 元计（上线前按官方公布值核定）。
+ *
+ * 日期一律走 ./clock 以「今天」为原点现算，不写死年月日，理由见该模块头注。
  */
 
 export const MONTHLY_WAGE_YUAN = 25000;
 export const SERVICE_YEARS = 8;
 export const BJ_AVG_WAGE_YUAN = 11761;
 export const BJ_CAP_YUAN = BJ_AVG_WAGE_YUAN * 3;
+
+/* ── 叙事锚点：全案日期都挂在这几个常量上，改一处整条时间线跟着动 ── */
+
+/** 解除日：今天往前 35 天。它同时是公司发薪日，所以欠薪逾期天数恒为 35。 */
+export const DEMO_DISMISSAL_DAY = -35;
+/** 解除日所在自然月：欠薪月、社保停缴起始月都用它 */
+export const DEMO_DISMISSAL_MONTH = demoMonthOfDay(DEMO_DISMISSAL_DAY);
+/** 入职日：解除日往前 8 年 2 个月零 1 天，保证司龄按 8 年整算 */
+export const DEMO_HIRE_DAY = demoShiftMonths(DEMO_DISMISSAL_DAY - 1, -(8 * 12 + 2));
+/** 最后一份劳动合同期限：入职日起满 9 年的前一天 */
+export const DEMO_CONTRACT_END_DAY = demoShiftMonths(DEMO_HIRE_DAY, 9 * 12) - 1;
+/** 仲裁时效届满：解除日起一年 */
+export const DEMO_ARBITRATION_DEADLINE_DAY = demoShiftMonths(DEMO_DISMISSAL_DAY, 12);
+/** 工号里的年份跟着入职年 */
+export const DEMO_EMPLOYEE_NO = `SX${demoYearOfDay(DEMO_HIRE_DAY)}****`;
+
+/** 存证编号带解除日，demo.ts 与 authpay.ts 引用的是同一个值 */
+export const DEMO_ATTESTATION_NO = `AT-${demoAttestDate(DEMO_DISMISSAL_DAY)}-000381`;
+
+/** 存证编号里的日期段：AT-YYYY-MMDD-NNNNNN */
+export function demoAttestDate(dayOffset: number): string {
+  const iso = demoDate(dayOffset);
+  return `${iso.slice(0, 4)}-${iso.slice(5, 7)}${iso.slice(8, 10)}`;
+}
 
 export const demoUser: User = {
   id: 'u_demo',
@@ -32,7 +72,7 @@ export const demoUser: User = {
   email: 'demo@example.com',
   authStatus: '已实名',
   membership: '入门',
-  createdAt: '2026-06-04T09:12:00+08:00',
+  createdAt: demoDay(-76, '09:12'),
 };
 
 export const demoCase: CaseRecord = {
@@ -44,7 +84,7 @@ export const demoCase: CaseRecord = {
   goal: '争取 2N 一次性支付，工资、年假、加班费一并结清，社保补缴至离职当月。',
   bottomLine: '低于 2N 不签；不接受"个人原因离职"表述；不签任何放弃全部权利的一揽子条款。',
   status: '进行中',
-  createdAt: '2026-06-04T09:20:00+08:00',
+  createdAt: demoDay(-76, '09:20'),
 };
 
 export const demoCompany: CompanyProfile = {
@@ -61,14 +101,14 @@ export const demoCompany: CompanyProfile = {
     { title: '国家企业信用信息公示系统', url: 'https://www.gsxt.gov.cn/' },
     { title: '中国裁判文书网', url: 'https://wenshu.court.gov.cn/' },
   ],
-  investigatedAt: '2026-07-16T11:00:00+08:00',
+  investigatedAt: demoDay(-34, '11:00'),
 };
 
 export const demoTimeline: TimelineEvent[] = [
   {
     id: 'te_1',
     caseId: 'demo',
-    happenedAt: '2026-05-12T14:00:00+08:00',
+    happenedAt: demoDay(-99, '14:00'),
     kind: '公司动作',
     title: '部门全员会宣布"组织架构调整"',
     detail:
@@ -78,7 +118,7 @@ export const demoTimeline: TimelineEvent[] = [
   {
     id: 'te_2',
     caseId: 'demo',
-    happenedAt: '2026-06-03T10:30:00+08:00',
+    happenedAt: demoDay(-77, '10:30'),
     kind: '公司动作',
     title: 'HR 首次约谈，口头提出协商解除',
     detail:
@@ -88,7 +128,7 @@ export const demoTimeline: TimelineEvent[] = [
   {
     id: 'te_3',
     caseId: 'demo',
-    happenedAt: '2026-06-20T18:05:00+08:00',
+    happenedAt: demoDay(-60, '18:05'),
     kind: '我方动作',
     title: '书面回复公司，要求出具书面方案',
     detail:
@@ -98,7 +138,7 @@ export const demoTimeline: TimelineEvent[] = [
   {
     id: 'te_4',
     caseId: 'demo',
-    happenedAt: '2026-07-15T09:40:00+08:00',
+    happenedAt: demoDay(DEMO_DISMISSAL_DAY, '09:40'),
     kind: '公司动作',
     title: '收到《解除劳动合同通知书》',
     detail:
@@ -108,27 +148,25 @@ export const demoTimeline: TimelineEvent[] = [
   {
     id: 'te_5',
     caseId: 'demo',
-    happenedAt: '2026-07-16T09:00:00+08:00',
+    happenedAt: demoDay(DEMO_DISMISSAL_DAY + 1, '09:00'),
     kind: '公司动作',
-    title: '收回办公权限，7 月工资未发放',
-    detail:
-      '企业微信、代码仓库、VPN 权限于当日上午全部关闭。按公司发薪日 15 日，7 月工资至今未到账。',
+    title: `收回办公权限，${demoShortMonthCn(DEMO_DISMISSAL_MONTH)}工资未发放`,
+    detail: `企业微信、代码仓库、VPN 权限于当日上午全部关闭。按公司发薪日 ${demoDayOfMonth(DEMO_DISMISSAL_DAY)} 日，${demoShortMonthCn(DEMO_DISMISSAL_MONTH)}工资至今未到账。`,
     evidenceIds: ['ev_2'],
   },
   {
     id: 'te_6',
     caseId: 'demo',
-    happenedAt: '2026-08-05T00:00:00+08:00',
+    happenedAt: demoDay(-14, '00:00'),
     kind: '系统动作',
-    title: '社保停缴（7 月起）',
-    detail:
-      '北京人社 App 查询显示 2026 年 7 月起养老、医疗停缴，缴费基数仍按 25000 元。停缴月份需在诉求中一并主张补缴。',
+    title: `社保停缴（${demoShortMonthCn(DEMO_DISMISSAL_MONTH)}起）`,
+    detail: `北京人社 App 查询显示 ${demoMonthCn(DEMO_DISMISSAL_MONTH)}起养老、医疗停缴，缴费基数仍按 25000 元。停缴月份需在诉求中一并主张补缴。`,
     evidenceIds: [],
   },
   {
     id: 'te_7',
     caseId: 'demo',
-    happenedAt: '2026-08-10T20:30:00+08:00',
+    happenedAt: demoDay(-9, '20:30'),
     kind: '我方动作',
     title: '向公司发出《解除通知异议函》第一版',
     detail:
@@ -162,11 +200,14 @@ export const demoClaims: Claim[] = [
     id: 'cl_2',
     caseId: 'demo',
     kind: '欠薪',
-    label: '2026 年 7 月工资',
+    label: `${demoMonthCn(DEMO_DISMISSAL_MONTH)}工资`,
     amountFen: 25_000_00,
     calc: {
       formula: '当月应发工资 = 25000',
-      inputs: { 所属月份: '2026 年 7 月', 发薪日: '每月 15 日' },
+      inputs: {
+        所属月份: demoMonthCn(DEMO_DISMISSAL_MONTH),
+        发薪日: `每月 ${demoDayOfMonth(DEMO_DISMISSAL_DAY)} 日`,
+      },
       capNote: '工资债权不适用封顶。',
     },
     basis: '劳动关系存续期间的工资应当足额支付，解除不影响已发生工资的支付义务。',
@@ -200,7 +241,7 @@ export const demoClaims: Claim[] = [
       formula: '小时工资 × 加班小时 × 200% = (25000 ÷ 21.75 ÷ 8) × 96 × 2',
       inputs: {
         小时工资: '143.68 元',
-        加班小时: '96 小时（2026 年 3—6 月周末）',
+        加班小时: `96 小时（${demoMonthRangeCn(DEMO_DISMISSAL_MONTH - 4, DEMO_DISMISSAL_MONTH - 1)}周末）`,
         倍数: '200%（休息日且未安排调休）',
       },
       capNote: '加班费不适用封顶；需以考勤或钉钉打卡记录逐日对应，仲裁中由公司承担考勤举证责任。',
@@ -222,47 +263,47 @@ export const demoEvidence: EvidenceItem[] = [
     status: '已出证',
     sizeBytes: 486_320,
     sha256: '9f2c4a7b1e0d83c5a6f4b2e9d71c085a3f6b9e2d4c7a1058e3b6d9f2c4a7b1e0d',
-    attestationNo: 'AT-2026-0715-000381',
-    createdAt: '2026-07-15T10:20:00+08:00',
+    attestationNo: DEMO_ATTESTATION_NO,
+    createdAt: demoDay(DEMO_DISMISSAL_DAY, '10:20'),
   },
   {
     id: 'ev_2',
     caseId: 'demo',
     fileId: 'f_2',
-    name: '工资流水 2025-08 至 2026-06.pdf',
+    name: `工资流水 ${demoMonth(DEMO_DISMISSAL_MONTH - 11)} 至 ${demoMonth(DEMO_DISMISSAL_MONTH - 1)}.pdf`,
     category: '工资',
     provePurpose: '证明离职前 12 个月平均工资为 25000 元，作为各项赔偿计算基数。',
     originalMedium: '银行 App 导出 PDF，含银行电子章',
     status: '已固化',
     sizeBytes: 1_204_887,
     sha256: '3a1f8d2c6b9e04a7f5c2d8b1e6a930f4c7b2e5d8a1f4c7b0e3d6a9f2c5b8e1d4',
-    createdAt: '2026-07-18T21:05:00+08:00',
+    createdAt: demoDay(-32, '21:05'),
   },
   {
     id: 'ev_3',
     caseId: 'demo',
     fileId: 'f_3',
-    name: '劳动合同（2018 年签署 + 两次续签）.pdf',
+    name: `劳动合同（${demoYearOfDay(DEMO_HIRE_DAY)} 年签署 + 两次续签）.pdf`,
     category: '合同',
-    provePurpose: '证明入职时间 2018-05-14、岗位、约定工资与工作地点。',
+    provePurpose: `证明入职时间 ${demoDate(DEMO_HIRE_DAY)}、岗位、约定工资与工作地点。`,
     originalMedium: '纸质原件，本人保管',
     status: '已固化',
     sizeBytes: 2_931_004,
     sha256: 'c7b2e5d8a1f4c7b0e3d6a9f2c5b8e1d43a1f8d2c6b9e04a7f5c2d8b1e6a930f4',
-    createdAt: '2026-07-18T21:11:00+08:00',
+    createdAt: demoDay(-32, '21:11'),
   },
   {
     id: 'ev_4',
     caseId: 'demo',
     fileId: 'f_4',
-    name: 'HR 约谈录音 2026-06-03.m4a',
+    name: `HR 约谈录音 ${demoDate(-77)}.m4a`,
     category: '录音',
     provePurpose: '证明公司主动提出解除、承认系裁员而非个人绩效原因。',
     originalMedium: '本人手机录音，原始文件未删除',
     status: '已上传',
     sizeBytes: 18_446_210,
     sha256: 'e3d6a9f2c5b8e1d4c7b2e5d8a1f4c7b03a1f8d2c6b9e04a7f5c2d8b1e6a930f4',
-    createdAt: '2026-07-20T13:40:00+08:00',
+    createdAt: demoDay(-30, '13:40'),
   },
   {
     id: 'ev_5',
@@ -275,20 +316,20 @@ export const demoEvidence: EvidenceItem[] = [
     status: '已上传',
     sizeBytes: 742_115,
     sha256: 'f5c2d8b1e6a930f4c7b2e5d8a1f4c7b0e3d6a9f2c5b8e1d43a1f8d2c6b9e04a7',
-    createdAt: '2026-07-22T08:55:00+08:00',
+    createdAt: demoDay(-28, '08:55'),
   },
   {
     id: 'ev_6',
     caseId: 'demo',
     fileId: 'f_6',
-    name: '钉钉打卡记录 2026-03 至 2026-06.xlsx',
+    name: `钉钉打卡记录 ${demoMonth(DEMO_DISMISSAL_MONTH - 4)} 至 ${demoMonth(DEMO_DISMISSAL_MONTH - 1)}.xlsx`,
     category: '考勤',
     provePurpose: '证明周末加班共 96 小时，且未安排调休。',
     originalMedium: '钉钉后台导出，本人账号可复现',
     status: '已上传',
     sizeBytes: 96_442,
     sha256: 'b9e04a7f5c2d8b1e6a930f4c7b2e5d8a1f4c7b0e3d6a9f2c5b8e1d43a1f8d2c6',
-    createdAt: '2026-07-22T09:02:00+08:00',
+    createdAt: demoDay(-28, '09:02'),
   },
 ];
 
@@ -299,35 +340,33 @@ export const demoActions: ActionItem[] = [
     title: '不要签公司给的《协商解除协议》',
     detail:
       '现有版本把解除原因写成"双方协商一致"，一旦签署，违法解除赔偿金（2N）的主张基础即被削弱，且第 6 条包含放弃全部其他请求的表述。可以先签收通知书本身（写明"仅确认收到，不认可内容"），协议本体不签。',
-    dueAt: '2026-08-20T23:59:00+08:00',
+    dueAt: demoDay(1, '23:59'),
     priority: 1,
     status: '待办',
     sourceMessageId: 'm_4',
-    createdAt: '2026-07-15T10:35:00+08:00',
+    createdAt: demoDay(DEMO_DISMISSAL_DAY, '10:35'),
   },
   {
     id: 'ai_2',
     caseId: 'demo',
     title: '导出并固化钉钉打卡记录',
-    detail:
-      '加班费主张目前缺客观考勤支撑。趁账号仍可登录，导出 2026 年 3—6 月打卡明细，上传后做时间戳固化；原始 Excel 请自己另存一份。',
-    dueAt: '2026-08-21T23:59:00+08:00',
+    detail: `加班费主张目前缺客观考勤支撑。趁账号仍可登录，导出 ${demoMonthRangeCn(DEMO_DISMISSAL_MONTH - 4, DEMO_DISMISSAL_MONTH - 1)}打卡明细，上传后做时间戳固化；原始 Excel 请自己另存一份。`,
+    dueAt: demoDay(2, '23:59'),
     priority: 1,
     status: '待办',
     sourceMessageId: 'm_4',
-    createdAt: '2026-07-15T10:35:00+08:00',
+    createdAt: demoDay(DEMO_DISMISSAL_DAY, '10:35'),
   },
   {
     id: 'ai_3',
     caseId: 'demo',
     title: '向公司发出书面《催告支付工资函》',
-    detail:
-      '7 月工资已逾期 34 天。书面催告一方面固定欠薪事实，另一方面为后续主张被迫解除或加付赔偿金留下时间节点。模板已生成在「文书」页。',
-    dueAt: '2026-08-25T23:59:00+08:00',
+    detail: `${demoShortMonthCn(DEMO_DISMISSAL_MONTH)}工资已逾期 ${-DEMO_DISMISSAL_DAY} 天。书面催告一方面固定欠薪事实，另一方面为后续主张被迫解除或加付赔偿金留下时间节点。模板已生成在「文书」页。`,
+    dueAt: demoDay(6, '23:59'),
     priority: 2,
     status: '待办',
     sourceMessageId: 'm_6',
-    createdAt: '2026-08-10T21:00:00+08:00',
+    createdAt: demoDay(-9, '21:00'),
   },
   {
     id: 'ai_4',
@@ -335,23 +374,22 @@ export const demoActions: ActionItem[] = [
     title: '打印近 12 个月工资流水并加盖银行章',
     detail:
       'App 导出的 PDF 在部分仲裁庭会被要求补充银行盖章版本。朝阳区各支行可现场打印，带身份证即可。',
-    dueAt: '2026-09-05T23:59:00+08:00',
+    dueAt: demoDay(17, '23:59'),
     priority: 2,
     status: '完成',
     sourceMessageId: 'm_4',
-    createdAt: '2026-07-15T10:35:00+08:00',
+    createdAt: demoDay(DEMO_DISMISSAL_DAY, '10:35'),
   },
   {
     id: 'ai_5',
     caseId: 'demo',
     title: '整理仲裁申请书的事实与理由段落',
-    detail:
-      '按时间线把 5 月宣布调整、6 月约谈、7 月解除、7 月起停缴社保四个节点串成一条主线，每个节点对应一份证据编号。草稿已在「文书」页起头。',
-    dueAt: '2026-09-15T23:59:00+08:00',
+    detail: `按时间线把 ${demoShortMonthCn(demoMonthOfDay(-99))}宣布调整、${demoShortMonthCn(demoMonthOfDay(-77))}约谈、${demoShortMonthCn(DEMO_DISMISSAL_MONTH)}解除、${demoShortMonthCn(DEMO_DISMISSAL_MONTH)}起停缴社保四个节点串成一条主线，每个节点对应一份证据编号。草稿已在「文书」页起头。`,
+    dueAt: demoDay(27, '23:59'),
     priority: 3,
     status: '待办',
     sourceMessageId: null,
-    createdAt: '2026-08-11T09:00:00+08:00',
+    createdAt: demoDay(-8, '09:00'),
   },
 ];
 
@@ -361,15 +399,15 @@ export const demoDeadlines: Deadline[] = [
     caseId: 'demo',
     kind: '仲裁时效',
     title: '申请劳动仲裁的一年时效届满',
-    dueAt: '2027-07-15T23:59:00+08:00',
-    derivedFrom: '自 2026-07-15 收到解除通知、劳动关系终止之日起算一年',
+    dueAt: demoDay(DEMO_ARBITRATION_DEADLINE_DAY, '23:59'),
+    derivedFrom: `自 ${demoDate(DEMO_DISMISSAL_DAY)} 收到解除通知、劳动关系终止之日起算一年`,
   },
   {
     id: 'dl_2',
     caseId: 'demo',
     kind: '自定义',
     title: '公司要求签署协商解除协议的答复期限',
-    dueAt: '2026-08-20T23:59:00+08:00',
+    dueAt: demoDay(1, '23:59'),
     derivedFrom: 'HR 邮件中给出的"三个工作日内答复"，非法定期限，逾期不产生失权后果',
   },
   {
@@ -377,7 +415,7 @@ export const demoDeadlines: Deadline[] = [
     caseId: 'demo',
     kind: '自定义',
     title: '钉钉账号预计停用，考勤数据将无法导出',
-    dueAt: '2026-08-21T23:59:00+08:00',
+    dueAt: demoDay(2, '23:59'),
     derivedFrom: '公司离职流程通常在解除后 30 日内回收系统账号',
   },
 ];
@@ -390,26 +428,26 @@ export const demoDrafts: Draft[] = [
     title: '《解除劳动合同通知书》异议函',
     version: 2,
     status: '待定稿',
-    updatedAt: '2026-08-10T20:10:00+08:00',
+    updatedAt: demoDay(-9, '20:10'),
     content: `星曜网络科技（北京）有限公司：
 
-本人陈某，工号 SX2018****，自 2018 年 5 月 14 日起与贵司建立劳动关系，最后担任技术二部高级工程师。2026 年 7 月 15 日，本人收到贵司出具的《解除劳动合同通知书》，现就该通知提出如下异议：
+本人陈某，工号 ${DEMO_EMPLOYEE_NO}，自 ${demoCnDate(DEMO_HIRE_DAY)}起与贵司建立劳动关系，最后担任技术二部高级工程师。${demoCnDate(DEMO_DISMISSAL_DAY)}，本人收到贵司出具的《解除劳动合同通知书》，现就该通知提出如下异议：
 
 一、通知书所载"客观情况发生重大变化"缺乏事实依据。
-贵司于 2026 年 5 月 12 日全员会上宣布的部门合并，属于内部组织架构调整，并非订立劳动合同时所依据的客观情况发生重大变化。贵司经营范围、办公地点、本人岗位职责均未发生实质变更。
+贵司于 ${demoCnDate(-99)}全员会上宣布的部门合并，属于内部组织架构调整，并非订立劳动合同时所依据的客观情况发生重大变化。贵司经营范围、办公地点、本人岗位职责均未发生实质变更。
 
 二、贵司未履行法定的协商变更程序。
-即便存在客观情况变化，法律要求用人单位应先与劳动者协商变更劳动合同内容，协商不成方可解除。本人自 2026 年 6 月 3 日起从未收到任何变更岗位、地点或薪酬的书面方案。
+即便存在客观情况变化，法律要求用人单位应先与劳动者协商变更劳动合同内容，协商不成方可解除。本人自 ${demoCnDate(-77)}起从未收到任何变更岗位、地点或薪酬的书面方案。
 
-三、贵司尚欠付 2026 年 7 月工资。
-本人自 2026 年 7 月 16 日起被收回全部办公权限，7 月工资至今未发放。
+三、贵司尚欠付 ${demoMonthCn(DEMO_DISMISSAL_MONTH)}工资。
+本人自 ${demoCnDate(DEMO_DISMISSAL_DAY + 1)}起被收回全部办公权限，${demoShortMonthCn(DEMO_DISMISSAL_MONTH)}工资至今未发放。
 
 据此，本人不认可上述解除行为的合法性，保留就违法解除赔偿金、欠付工资、未休年休假工资报酬及加班费向劳动人事争议仲裁委员会提起仲裁的全部权利。本人已确认收到通知书，但该确认仅表示收到文件，不代表认可其内容。
 
 请贵司于收到本函之日起五个工作日内书面答复。
 
 异议人：陈某
-2026 年 8 月 10 日`,
+${demoCnDate(-9)}`,
   },
   {
     id: 'dr_2',
@@ -418,26 +456,26 @@ export const demoDrafts: Draft[] = [
     title: '仲裁证据清单（第一批）',
     version: 1,
     status: '草稿',
-    updatedAt: '2026-08-11T09:30:00+08:00',
+    updatedAt: demoDay(-8, '09:30'),
     content: `证据清单（申请人提交，第一批）
 
 证据一：劳动合同及两次续签协议（复印件 3 份，原件质证时出示）
-    证明目的：申请人与被申请人自 2018 年 5 月 14 日起建立劳动关系，工作地点为北京市朝阳区，约定月工资 25000 元。
+    证明目的：申请人与被申请人自 ${demoCnDate(DEMO_HIRE_DAY)}起建立劳动关系，工作地点为北京市朝阳区，约定月工资 25000 元。
 
-证据二：2025 年 8 月至 2026 年 6 月银行工资流水
-    证明目的：申请人解除前 12 个月平均工资为 25000 元，作为赔偿金计算基数；2026 年 7 月工资未发放。
+证据二：${demoMonthRangeCn(DEMO_DISMISSAL_MONTH - 11, DEMO_DISMISSAL_MONTH - 1)}银行工资流水
+    证明目的：申请人解除前 12 个月平均工资为 25000 元，作为赔偿金计算基数；${demoMonthCn(DEMO_DISMISSAL_MONTH)}工资未发放。
 
 证据三：《解除劳动合同通知书》（原件）
-    证明目的：被申请人于 2026 年 7 月 15 日单方解除劳动合同，所载理由为"客观情况发生重大变化"。
+    证明目的：被申请人于 ${demoCnDate(DEMO_DISMISSAL_DAY)}单方解除劳动合同，所载理由为"客观情况发生重大变化"。
 
 证据四：钉钉工作群聊天记录截屏
     证明目的：被申请人内部宣布的是部门合并与人员优化，与通知书所称客观情况变化不符。
 
-证据五：钉钉打卡记录 2026 年 3 月至 6 月
+证据五：钉钉打卡记录 ${demoMonthRangeCn(DEMO_DISMISSAL_MONTH - 4, DEMO_DISMISSAL_MONTH - 1)}
     证明目的：申请人于休息日加班合计 96 小时，被申请人未安排补休亦未支付加班费。
 
 证据六：北京市社会保险个人权益记录
-    证明目的：被申请人自 2026 年 7 月起停止缴纳社会保险费。`,
+    证明目的：被申请人自 ${demoMonthCn(DEMO_DISMISSAL_MONTH)}起停止缴纳社会保险费。`,
   },
 ];
 
@@ -449,14 +487,13 @@ export const demoCompanyDocs: CompanyDoc[] = [
     title: '解除劳动合同通知书',
     docType: '解除通知',
     advice: '不签',
-    adviceDetail:
-      '通知书本体可以签收，但只写"仅确认于 2026 年 7 月 15 日收到本通知，对内容有异议"。随附的《协商解除协议》不要签：它把解除原因改写为协商一致，并附带全面弃权条款，签署后再主张 2N 的难度会显著上升。',
-    createdAt: '2026-07-15T10:22:00+08:00',
+    adviceDetail: `通知书本体可以签收，但只写"仅确认于 ${demoCnDate(DEMO_DISMISSAL_DAY)}收到本通知，对内容有异议"。随附的《协商解除协议》不要签：它把解除原因改写为协商一致，并附带全面弃权条款，签署后再主张 2N 的难度会显著上升。`,
+    createdAt: demoDay(DEMO_DISMISSAL_DAY, '10:22'),
     ocrText: `解除劳动合同通知书
 
 陈某先生：
 
-因公司业务结构调整，订立劳动合同时所依据的客观情况发生重大变化，致使原劳动合同无法履行，经公司研究决定，自 2026 年 7 月 15 日起与您解除劳动合同。
+因公司业务结构调整，订立劳动合同时所依据的客观情况发生重大变化，致使原劳动合同无法履行，经公司研究决定，自 ${demoCnDate(DEMO_DISMISSAL_DAY)}起与您解除劳动合同。
 
 公司将按 N+1 标准向您支付经济补偿，具体金额以人力资源部核算结果为准。请您于收到本通知之日起 3 个工作日内完成工作交接，并签署《协商解除协议》，逾期视为放弃相关权益。
 
@@ -464,7 +501,7 @@ export const demoCompanyDocs: CompanyDoc[] = [
 
 星曜网络科技（北京）有限公司
 人力资源部
-2026 年 7 月 15 日`,
+${demoCnDate(DEMO_DISMISSAL_DAY)}`,
     riskFlags: [
       {
         quote: '客观情况发生重大变化，致使原劳动合同无法履行',
@@ -479,7 +516,7 @@ export const demoCompanyDocs: CompanyDoc[] = [
       {
         quote: '逾期视为放弃相关权益',
         level: '高',
-        note: '公司单方设定的期限不产生失权效果。法定的仲裁时效为一年，自 2026 年 7 月 15 日起算，不因未在 3 日内签字而缩短。',
+        note: `公司单方设定的期限不产生失权效果。法定的仲裁时效为一年，自 ${demoCnDate(DEMO_DISMISSAL_DAY)}起算，不因未在 3 日内签字而缩短。`,
       },
       {
         quote: '您与公司之间再无其他任何争议及权利义务关系',
@@ -508,16 +545,15 @@ export const demoMessages: Message[] = [
     role: 'user',
     content:
       '我在一家互联网公司做了 8 年后端，上周 HR 找我谈，说部门要合并，让我签一份协商解除协议，给 N+1。我月薪 25000，在朝阳上班。这个能签吗？',
-    createdAt: '2026-06-04T09:20:00+08:00',
+    createdAt: demoDay(-76, '09:20'),
   },
   {
     id: 'm_2',
     threadId: 'th_1',
     role: 'assistant',
     model: 'claude',
-    createdAt: '2026-06-04T09:20:40+08:00',
-    content:
-      '先说结论：现在不要签。签了之后解除原因就变成"协商一致"，你能拿到的上限基本锁死在公司给的这个数；不签，主动权还在你手里。\n\n按你说的条件先算一遍：8 年司龄、月工资 25000 元，N+1 大约是 22.5 万元（8 个月 + 1 个月代通知金）。如果公司的解除被认定为违法解除，赔偿金是 2N，也就是 40 万元。差额大约 17.5 万元。\n\n你的月工资 25000 元没有超过北京市上年度职工月平均工资的三倍（35283 元），所以不适用封顶，年限也不受 12 年上限限制——这一点对你有利。\n\n为了判断"部门合并"是否构成合法解除理由，我还需要三件事：\n1. 公司有没有给过书面的岗位变更方案；\n2. 5 月那次全员会有没有留下通知、纪要或聊天记录；\n3. 你最近 12 个月的工资构成（基本工资 + 绩效 + 补贴分别多少）。',
+    createdAt: demoDay(-76, '09:20:40'),
+    content: `先说结论：现在不要签。签了之后解除原因就变成"协商一致"，你能拿到的上限基本锁死在公司给的这个数；不签，主动权还在你手里。\n\n按你说的条件先算一遍：8 年司龄、月工资 25000 元，N+1 大约是 22.5 万元（8 个月 + 1 个月代通知金）。如果公司的解除被认定为违法解除，赔偿金是 2N，也就是 40 万元。差额大约 17.5 万元。\n\n你的月工资 25000 元没有超过北京市上年度职工月平均工资的三倍（35283 元），所以不适用封顶，年限也不受 12 年上限限制——这一点对你有利。\n\n为了判断"部门合并"是否构成合法解除理由，我还需要三件事：\n1. 公司有没有给过书面的岗位变更方案；\n2. ${demoShortMonthCn(demoMonthOfDay(-99))}那次全员会有没有留下通知、纪要或聊天记录；\n3. 你最近 12 个月的工资构成（基本工资 + 绩效 + 补贴分别多少）。`,
     actionItemIds: [],
     lawRefs: [
       {
@@ -535,14 +571,14 @@ export const demoMessages: Message[] = [
     role: 'user',
     content:
       '没有给过书面方案，只是会上说了一句。全员会有钉钉群通知截图。工资是固定的 25000，没有绩效浮动。今天他们直接给我发了《解除劳动合同通知书》。',
-    createdAt: '2026-07-15T10:12:00+08:00',
+    createdAt: demoDay(DEMO_DISMISSAL_DAY, '10:12'),
   },
   {
     id: 'm_4',
     threadId: 'th_1',
     role: 'assistant',
     model: 'claude',
-    createdAt: '2026-07-15T10:35:00+08:00',
+    createdAt: demoDay(DEMO_DISMISSAL_DAY, '10:35'),
     content:
       '通知书我已经解读完，风险点标在「文件解读」页，一共 5 处，其中 4 处是高风险。\n\n最关键的两处：一是公司把解除理由写成"客观情况发生重大变化"，但没有书面变更方案，也没有协商记录，这一步程序缺失，是你主张违法解除、要求 2N 的核心依据；二是通知书末尾那句"再无其他任何争议及权利义务关系"，属于一揽子弃权，欠薪、年假、加班费一旦签字就可能被视为一并结清。\n\n通知书本身可以签收，但要在签名旁写明"仅确认收到，对内容有异议"。随附的《协商解除协议》不要签。\n\n档案已经更新：时间线补到 4 条，诉求初算 4 项合计 46.87 万元。接下来 7 天有三件事要做，都在下面的行动卡里。',
     actionItemIds: ['ai_1', 'ai_2', 'ai_4'],
@@ -566,23 +602,21 @@ export const demoMessages: Message[] = [
     id: 'm_5',
     threadId: 'th_1',
     role: 'user',
-    content: '7 月工资到今天还没发，社保也停了。是不是可以直接去仲裁？',
-    createdAt: '2026-08-10T19:50:00+08:00',
+    content: `${demoShortMonthCn(DEMO_DISMISSAL_MONTH)}工资到今天还没发，社保也停了。是不是可以直接去仲裁？`,
+    createdAt: demoDay(-9, '19:50'),
   },
   {
     id: 'm_6',
     threadId: 'th_1',
     role: 'assistant',
     model: 'claude',
-    createdAt: '2026-08-10T19:51:20+08:00',
-    content:
-      '可以直接申请仲裁，时效到 2027 年 7 月 15 日，不着急。但在立案之前先补一步：发一份书面《催告支付工资函》。\n\n理由是证据角度而不是程序角度——书面催告会把"公司明知欠薪且经催告仍不支付"这个事实固定下来，对后续主张有帮助；同时它也给了对方一个在开庭前和解的台阶，很多案子在这一步就谈成了。\n\n社保停缴属于另一条线：仲裁委通常不直接处理补缴争议，需要向社保稽核部门投诉。这条我另外给你一张行动卡，不占用仲裁的准备时间。\n\n异议函第二版已经写好，在「文书」页。发出去之前会再问你一次——这份是要送到公司的，发出后对方会看到全部内容。',
+    createdAt: demoDay(-9, '19:51:20'),
+    content: `可以直接申请仲裁，时效到 ${demoCnDate(DEMO_ARBITRATION_DEADLINE_DAY)}，不着急。但在立案之前先补一步：发一份书面《催告支付工资函》。\n\n理由是证据角度而不是程序角度——书面催告会把"公司明知欠薪且经催告仍不支付"这个事实固定下来，对后续主张有帮助；同时它也给了对方一个在开庭前和解的台阶，很多案子在这一步就谈成了。\n\n社保停缴属于另一条线：仲裁委通常不直接处理补缴争议，需要向社保稽核部门投诉。这条我另外给你一张行动卡，不占用仲裁的准备时间。\n\n异议函第二版已经写好，在「文书」页。发出去之前会再问你一次——这份是要送到公司的，发出后对方会看到全部内容。`,
     actionItemIds: ['ai_3'],
     lawRefs: [
       {
         cite: '《中华人民共和国劳动争议调解仲裁法》第二十七条',
-        conclusion:
-          '仲裁时效为一年，从知道或应当知道权利被侵害之日起算；本案自 2026 年 7 月 15 日起算。',
+        conclusion: `仲裁时效为一年，从知道或应当知道权利被侵害之日起算；本案自 ${demoCnDate(DEMO_DISMISSAL_DAY)}起算。`,
         fullText:
           '劳动争议申请仲裁的时效期间为一年。仲裁时效期间从当事人知道或者应当知道其权利被侵害之日起计算。……劳动关系存续期间因拖欠劳动报酬发生争议的，劳动者申请仲裁不受本条第一款规定的仲裁时效期间的限制；但是，劳动关系终止的，应当自劳动关系终止之日起一年内提出。',
       },
@@ -599,7 +633,7 @@ export const demoGongdao: Gongdao = {
       type: '注册赠送',
       feature: 'signup',
       meta: '注册赠送，够走完一次完整首诊',
-      createdAt: '2026-06-04T09:12:00+08:00',
+      createdAt: demoDay(-76, '09:12'),
     },
     {
       id: 'gl_2',
@@ -607,7 +641,7 @@ export const demoGongdao: Gongdao = {
       type: '消耗',
       feature: 'agent.问诊',
       meta: '首诊问答 6 轮 · claude',
-      createdAt: '2026-06-04T09:26:00+08:00',
+      createdAt: demoDay(-76, '09:26'),
     },
     {
       id: 'gl_3',
@@ -615,7 +649,7 @@ export const demoGongdao: Gongdao = {
       type: '充值',
       feature: 'order.中配月卡',
       meta: '中配套餐 ¥59',
-      createdAt: '2026-07-15T10:05:00+08:00',
+      createdAt: demoDay(DEMO_DISMISSAL_DAY, '10:05'),
     },
     {
       id: 'gl_4',
@@ -623,15 +657,15 @@ export const demoGongdao: Gongdao = {
       type: '消耗',
       feature: 'ocr.解除通知',
       meta: '解除通知 OCR + 风险解读 · qwen-vl',
-      createdAt: '2026-07-15T10:22:00+08:00',
+      createdAt: demoDay(DEMO_DISMISSAL_DAY, '10:22'),
     },
     {
       id: 'gl_5',
       delta: -1200,
       type: '固化出证',
       feature: 'evidence.attest',
-      meta: '存证订单 AT-2026-0715-000381',
-      createdAt: '2026-07-15T10:31:00+08:00',
+      meta: `存证订单 ${DEMO_ATTESTATION_NO}`,
+      createdAt: demoDay(DEMO_DISMISSAL_DAY, '10:31'),
     },
     {
       id: 'gl_6',
@@ -639,7 +673,7 @@ export const demoGongdao: Gongdao = {
       type: '消耗',
       feature: 'draft.异议函',
       meta: '异议函 v1 → v2 · claude',
-      createdAt: '2026-08-10T20:10:00+08:00',
+      createdAt: demoDay(-9, '20:10'),
     },
   ],
 };

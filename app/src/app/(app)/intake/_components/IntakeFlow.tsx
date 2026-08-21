@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSignedIn } from '@/app/_ui/auth';
 import { Button } from '@/components/shadcn/button';
 import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
 import { useToast } from '@/components/ui/Toast';
@@ -22,6 +23,10 @@ import {
 } from './draft';
 
 const DEMO_CASE_ID = 'demo';
+
+/** 未登录时最后一步的说明：服务器上还没有这份档案，不能说"档案建好了" */
+const DRAFT_REASSURANCE =
+  '这份档案现在只在这台设备上。金额是按你填的信息初算的，注册之后并入你的案件档案，材料补齐会自动更新。';
 
 interface StepDef {
   title: string;
@@ -66,6 +71,7 @@ const STEPS: StepDef[] = [
 export function IntakeFlow() {
   const router = useRouter();
   const toast = useToast();
+  const signedIn = useSignedIn();
   const [draft, setDraft] = useState<IntakeDraft>(EMPTY_DRAFT);
   const [restored, setRestored] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -109,7 +115,20 @@ export function IntakeFlow() {
     window.scrollTo({ top: 0 });
   };
 
+  /**
+   * 末步的去处取决于有没有登录。没登录时这些内容**只在这台设备的浏览器里**，
+   * 服务器上还没有任何东西——按钮和提示都得照实说，不能假装档案已经建好了。
+   */
   const finish = () => {
+    if (!signedIn) {
+      toast(
+        '你填的内容已暂存在这台设备上，注册后我会把它并入你的案件档案',
+        'success',
+        '已经暂存在这台设备上',
+      );
+      router.push('/login');
+      return;
+    }
     toast('档案已建好，正在打开工作台', 'success', '已经准备好了');
     router.push(`/case/${DEMO_CASE_ID}`);
   };
@@ -137,7 +156,7 @@ export function IntakeFlow() {
       <div className="mt-4">{current.render(draft, patch)}</div>
 
       <p className="mt-5 rounded-[10px] bg-surface-2 px-3.5 py-3 text-[14px] leading-6 text-ink-2">
-        {current.reassurance}
+        {isLast && !signedIn ? DRAFT_REASSURANCE : current.reassurance}
       </p>
 
       <div className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 -mx-4 mt-4 border-t border-line bg-bg/95 px-4 py-3 backdrop-blur-sm lg:bottom-0 lg:-mx-6 lg:px-6">
@@ -149,7 +168,7 @@ export function IntakeFlow() {
           )}
           {isLast ? (
             <Button onClick={finish} className="w-full">
-              进入工作台
+              {signedIn ? '进入工作台' : '保存草稿并注册'}
             </Button>
           ) : (
             <Button onClick={() => go(step + 1)} disabled={!canAdvance} className="w-full">

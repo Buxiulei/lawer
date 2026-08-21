@@ -120,7 +120,7 @@ export function StepPreview({ draft }: { draft: IntakeDraft }) {
           </p>
           <p className="mt-2 text-[14px] leading-6 text-ink-2">
             {estimate.incomplete
-              ? '回到第 2 步补上入职时间和月工资，这里就会算出具体金额。现在没填也不影响先进工作台。'
+              ? '回到第 2 步补上入职时间和月工资，这里就会算出具体金额。现在没填也不影响往下走，之后随时能回来补。'
               : '这是按你刚才填的数字先算的一版。传上工资流水和劳动合同后，基数和年限会自动校正，金额也会跟着变。'}
           </p>
 

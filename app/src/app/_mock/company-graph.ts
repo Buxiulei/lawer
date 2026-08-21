@@ -3,7 +3,12 @@
  * 接后端时换数据源、页面组件签名不变。
  *
  * 数据是脱敏演示件：公司名/人名/案号都是化名，不是任何真实主体。
+ *
+ * 日期走 ./clock 相对「今天」现算。这份图谱的叙事基准是「昨天生成、今天更新」，
+ * 所以 meta 两个日期不能落到未来；历史涉诉月份按与更新日的间隔往前推。
  */
+
+import { demoDate, demoMonth, demoYear } from './clock';
 
 export type GraphTier = 1 | 2 | 3;
 
@@ -62,8 +67,8 @@ export interface CompanyGraph {
 
 export const mockCompanyGraph: CompanyGraph = {
   meta: {
-    generated: '2026-08-20',
-    updated: '2026-08-21',
+    generated: demoDate(-1),
+    updated: demoDate(0),
     source: '公开检索（脱敏示例，真实来源不入仓库）',
     confidenceNote:
       'edges 的 confidence 标注一手/多源/单一摘要；A科技—B信用无直接股权链一手证据，仅同实控人（张某）平行主体',
@@ -90,12 +95,12 @@ export const mockCompanyGraph: CompanyGraph = {
     {
       id: 'payroll_b',
       name: 'B信用管理(北京)有限公司',
-      role: '2021-2026发薪主体/目标主体',
+      role: `${demoYear(-5)}-${demoYear(0)}发薪主体/目标主体`,
       tier: 1,
       eventCount: 1,
       litigationCount: 16,
       regCapital: '20亿',
-      note: '实际发薪/用工主体（本案对手）。裁判文书网北京劳动争议 16 件（2022-09~11 单日8-10件批量起诉员工=裁员清退特征），朝阳法院强制执行记录；外地仲裁另在案。追责主战场。',
+      note: `实际发薪/用工主体（本案对手）。裁判文书网北京劳动争议 16 件（${demoMonth(-47)}~${demoMonth(-45).slice(5)} 单日8-10件批量起诉员工=裁员清退特征），朝阳法院强制执行记录；外地仲裁另在案。追责主战场。`,
     },
     {
       id: 'holder_c',
@@ -113,7 +118,7 @@ export const mockCompanyGraph: CompanyGraph = {
       tier: 2,
       eventCount: 1,
       litigationCount: 1,
-      note: '2021-10起限高、2023-03单月4次被执行、累计约50余万、朝阳法院；连接两目标主体的自然人节点',
+      note: `${demoMonth(-58)}起限高、${demoMonth(-41)}单月4次被执行、累计约50余万、朝阳法院；连接两目标主体的自然人节点`,
     },
     {
       id: 'hk_alpha',
@@ -149,7 +154,7 @@ export const mockCompanyGraph: CompanyGraph = {
       tier: 2,
       eventCount: 0,
       litigationCount: 4,
-      note: '裁判文书反挖：2022-09 朝阳法院批量劳动争议 4 件（员工甲/乙/丙/丁同批），保险销售业务线用工主体。',
+      note: `裁判文书反挖：${demoMonth(-47)} 朝阳法院批量劳动争议 4 件（员工甲/乙/丙/丁同批），保险销售业务线用工主体。`,
     },
     {
       id: 'leasing_g',
@@ -193,7 +198,7 @@ export const mockCompanyGraph: CompanyGraph = {
     {
       from: 'person_zhang',
       to: 'brand_d',
-      relation: '持股93.33%(2014旧报道，或已过时)',
+      relation: `持股93.33%(${demoYear(-12)}旧报道，或已过时)`,
       confidence: '低',
       evidenceUrl: 'https://example.com/news/2',
     },
@@ -203,7 +208,7 @@ export const mockCompanyGraph: CompanyGraph = {
       relation: '同属同一品牌矩阵(无股权链一手证据，不作连带责任现成证据)',
       confidence: '中',
       evidenceUrl: 'https://example.com/registry/1',
-      note: '签约壳↔用工主体：同实控人张某+2022-09同期批量案佐证',
+      note: `签约壳↔用工主体：同实控人张某+${demoMonth(-47)}同期批量案佐证`,
     },
     {
       from: 'person_zhang',
@@ -224,7 +229,7 @@ export const mockCompanyGraph: CompanyGraph = {
     {
       id: 'ev_1',
       nodeId: 'payroll_b',
-      happenedAt: '2026-08-18',
+      happenedAt: demoDate(-3),
       kind: '被执行',
       urgent: true,
       title: '新增强制执行记录',
@@ -233,7 +238,7 @@ export const mockCompanyGraph: CompanyGraph = {
     {
       id: 'ev_2',
       nodeId: 'person_zhang',
-      happenedAt: '2026-07-30',
+      happenedAt: demoDate(-22),
       kind: '限高',
       urgent: false,
       title: '限制高消费记录仍在有效期',

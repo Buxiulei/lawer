@@ -2,7 +2,8 @@
  * 登录 / 公道值 / API key / 存证验证 的 mock 数据与假接口。
  * 字段语义对齐 spec §7 数据模型与 §9 定价草案；接后端后本文件整体换成真实调用，页面签名不变。
  */
-import { demoGongdao } from './demo';
+import { demoDate, demoDay, demoYear } from './clock';
+import { DEMO_DISMISSAL_DAY, demoAttestDate, demoGongdao } from './demo';
 import type { GongdaoLedgerEntry } from './types';
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -109,6 +110,11 @@ export interface LedgerEntry extends Omit<GongdaoLedgerEntry, 'type'> {
   balanceAfter: number;
 }
 
+/** 出证失败又重出的那一天：两笔存证编号与退款说明都挂在它上面 */
+const RETRY_ATTEST_DAY = -7;
+const RETRY_ATTEST_NO = `AT-${demoAttestDate(RETRY_ATTEST_DAY)}-000517`;
+const REDONE_ATTEST_NO = `AT-${demoAttestDate(RETRY_ATTEST_DAY)}-000602`;
+
 /** 按时间正序，最早在前；余额由这里累加，不写死。 */
 const LEDGER_SEED: Omit<LedgerEntry, 'balanceAfter'>[] = [
   ...demoGongdao.ledger,
@@ -118,31 +124,31 @@ const LEDGER_SEED: Omit<LedgerEntry, 'balanceAfter'>[] = [
     type: '消耗',
     feature: 'agent.陪跑',
     meta: '开庭材料清单核对 · claude',
-    createdAt: '2026-08-12T21:04:00+08:00',
+    createdAt: demoDay(RETRY_ATTEST_DAY, '21:04'),
   },
   {
     id: 'gl_8',
     delta: -1200,
     type: '固化出证',
     feature: 'evidence.attest',
-    meta: '存证订单 AT-2026-0812-000517',
-    createdAt: '2026-08-12T21:30:00+08:00',
+    meta: `存证订单 ${RETRY_ATTEST_NO}`,
+    createdAt: demoDay(RETRY_ATTEST_DAY, '21:30'),
   },
   {
     id: 'gl_9',
     delta: 1200,
     type: '退款',
     feature: 'evidence.attest',
-    meta: '订单 AT-2026-0812-000517 时间戳超时，已原路退回',
-    createdAt: '2026-08-12T21:41:00+08:00',
+    meta: `订单 ${RETRY_ATTEST_NO} 时间戳超时，已原路退回`,
+    createdAt: demoDay(RETRY_ATTEST_DAY, '21:41'),
   },
   {
     id: 'gl_10',
     delta: -1200,
     type: '固化出证',
     feature: 'evidence.attest',
-    meta: '存证订单 AT-2026-0812-000602 重新出证',
-    createdAt: '2026-08-12T22:03:00+08:00',
+    meta: `存证订单 ${REDONE_ATTEST_NO} 重新出证`,
+    createdAt: demoDay(RETRY_ATTEST_DAY, '22:03'),
   },
   {
     id: 'gl_11',
@@ -150,15 +156,15 @@ const LEDGER_SEED: Omit<LedgerEntry, 'balanceAfter'>[] = [
     type: '消耗',
     feature: 'knowledge.search',
     meta: '北京口径判例检索 12 次 · deepseek',
-    createdAt: '2026-08-14T12:40:00+08:00',
+    createdAt: demoDay(-5, '12:40'),
   },
   {
     id: 'gl_12',
     delta: 3000,
     type: '兑换码',
-    feature: 'redeem.CY-2026-3F7K',
+    feature: `redeem.CY-${demoYear(0)}-3F7K`,
     meta: '兑换码到账',
-    createdAt: '2026-08-15T09:02:00+08:00',
+    createdAt: demoDay(-4, '09:02'),
   },
   {
     id: 'gl_13',
@@ -166,7 +172,7 @@ const LEDGER_SEED: Omit<LedgerEntry, 'balanceAfter'>[] = [
     type: '消耗',
     feature: 'draft.仲裁申请书',
     meta: '仲裁申请书 v1 · claude',
-    createdAt: '2026-08-17T22:15:00+08:00',
+    createdAt: demoDay(-2, '22:15'),
   },
   {
     id: 'gl_14',
@@ -174,7 +180,7 @@ const LEDGER_SEED: Omit<LedgerEntry, 'balanceAfter'>[] = [
     type: '充值',
     feature: 'order.散充',
     meta: '散充 ¥10',
-    createdAt: '2026-08-18T08:31:00+08:00',
+    createdAt: demoDay(-1, '08:31'),
   },
   {
     id: 'gl_15',
@@ -182,7 +188,7 @@ const LEDGER_SEED: Omit<LedgerEntry, 'balanceAfter'>[] = [
     type: '消耗',
     feature: 'agent.陪跑',
     meta: '开庭流程预演 3 轮 · claude',
-    createdAt: '2026-08-19T07:50:00+08:00',
+    createdAt: demoDay(0, '07:50'),
   },
 ];
 
@@ -243,9 +249,9 @@ export const mockApiKeys: ApiKeyRecord[] = [
     name: '我的 Claude 桌面端',
     masked: 'sk-lawer-…9f4c',
     scopes: ['case:read', 'case:write', 'evidence:write', 'draft:write', 'knowledge:read'],
-    lastUsedAt: '2026-08-19T07:48:00+08:00',
+    lastUsedAt: demoDay(0, '07:48'),
     enabled: true,
-    createdAt: '2026-07-20T15:02:00+08:00',
+    createdAt: demoDay(-30, '15:02'),
   },
   {
     id: 'ak_2',
@@ -254,7 +260,7 @@ export const mockApiKeys: ApiKeyRecord[] = [
     scopes: ['case:read', 'knowledge:read'],
     lastUsedAt: null,
     enabled: false,
-    createdAt: '2026-08-02T11:26:00+08:00',
+    createdAt: demoDay(-17, '11:26'),
   },
 ];
 
@@ -381,7 +387,7 @@ function passBody(no: string): VerifyBody {
     overall_ok: true,
     order_no: no,
     sha256: VERIFY_SHA256,
-    tsa_gen_time: '2026-07-15T10:31:42+08:00',
+    tsa_gen_time: demoDay(DEMO_DISMISSAL_DAY, '10:31:42'),
     tsa_serial: '0x4C1F8A2E77B0',
     tsa_url: 'http://timestamp.globalsign.com/tsa/r6advanced1',
     cert_chain_ok: true,
@@ -403,7 +409,7 @@ function failBody(no: string): VerifyBody {
     checks: [
       { key: 'hash', label: '文件哈希一致', ok: false, detail: '重算 SHA256 与时间戳令牌中的摘要不一致，文件在出证后被改动过' },
       { key: 'tsa', label: '时间戳签名有效', ok: true, detail: 'RFC 3161 令牌本身验签通过' },
-      { key: 'chain', label: '证书链可信', ok: false, detail: '签发证书已于 2026-08-01 吊销' },
+      { key: 'chain', label: '证书链可信', ok: false, detail: `签发证书已于 ${demoDate(-18)} 吊销` },
       { key: 'realname', label: '实名快照匹配', ok: true, detail: '出证时的实名信息与存证订单记录一致' },
     ],
   };

@@ -7,6 +7,9 @@
 export const THEME_STORAGE_KEY = 'lawer.theme';
 export const DISCREET_STORAGE_KEY = 'lawer.discreet';
 
+/** 登录态 JWT 的键名。读写一律走 _ui/auth，这里只是给首屏脚本一份字面量。 */
+export const TOKEN_STORAGE_KEY = 'lawer.token';
+
 /** 低调模式开启后对外显示的中性标题（DESIGN.md RISK 1）。 */
 export const NEUTRAL_TITLE = '工作台';
 
@@ -25,3 +28,12 @@ export const themeBootstrapScript = `(function(){try{var m=localStorage.getItem(
 
 /** 在 body 渲染前落定低调模式，避免金额与真实标题一闪而过。 */
 export const discreetBootstrapScript = `(function(){try{if(localStorage.getItem('${DISCREET_STORAGE_KEY}')==='1'){document.documentElement.dataset.discreet='1';document.title='${NEUTRAL_TITLE}'}}catch(e){}})();`;
+
+/**
+ * 落地页专用：已登录的人不该看见 landing。放在落地页正文之前同步执行，
+ * 抢在首帧前跳走，不闪一下营销页。React 里用 useEffect 判断做不到这一点——
+ * 首帧恒为未登录（见 _ui/auth 的 useAuthToken）。
+ *
+ * TODO 接 cases 列表接口后改跳用户自己的案件，现在全站只有 demo 一个去处。
+ */
+export const signedInRedirectScript = `(function(){try{if(localStorage.getItem('${TOKEN_STORAGE_KEY}')){location.replace('/case/demo')}}catch(e){}})();`;
