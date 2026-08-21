@@ -5,7 +5,15 @@ import type { CompanyGraph, GraphNode } from '@/app/_mock/company-graph';
 import { boundingBox, type GraphLayout, type PositionedNode } from '@/lib/graph/layout';
 import { cn } from '@/app/_ui/cn';
 import { Button } from '@/components/shadcn/button';
-import { edgeDash, hasArrow, TIER_RING } from './graphStyle';
+import {
+  EDGE_DASH,
+  EDGE_WIDTH,
+  edgeKind,
+  hasArrow,
+  LOW_CONFIDENCE_OPACITY,
+  PAYROLL_CHAIN_WIDTH,
+  TIER_RING,
+} from './graphStyle';
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
@@ -14,6 +22,8 @@ const FOCUS_PADDING = 28;
 /** 按下后移动超过这个距离才算拖动，否则算点击节点 */
 const DRAG_SLOP = 4;
 const DOUBLE_TAP_MS = 320;
+/** 卡片四周留给焦点圈的余量：全局焦点圈是 offset 2px + 2px 粗，8 够它画完 */
+const FOCUS_ROOM = 8;
 
 interface Box {
   x: number;
@@ -41,12 +51,15 @@ function fitBox(
 export function GraphCanvas({
   graph,
   layout,
+  payrollChain,
   selectedId,
   onSelect,
   discreet,
 }: {
   graph: CompanyGraph;
   layout: GraphLayout;
+  /** 发薪链的边（`from->to`），加粗画 */
+  payrollChain: Set<string>;
   selectedId: string | null;
   onSelect: (id: string) => void;
   discreet: boolean;
@@ -79,13 +92,6 @@ export function GraphCanvas({
     () => new Map(graph.edges.map((e) => [`${e.from}->${e.to}`, e.relation])),
     [graph.edges],
   );
-  /** 发薪链：签约壳与用工主体在同一带里的那条横线，加粗 */
-  const isPayrollChain = useCallback(
-    (from: string, sameRow: boolean) =>
-      sameRow && layout.nodes.find((n) => n.id === from)?.band === 'subject',
-    [layout.nodes],
-  );
-
   const focusBox = useMemo(() => {
     const tier1 = layout.nodes.filter((n) => nodeById.get(n.id)?.tier === 1);
     return boundingBox(tier1, FOCUS_PADDING);
@@ -264,18 +270,19 @@ export function GraphCanvas({
           const key = `${e.from}->${e.to}`;
           const relation = relationOf.get(key) ?? '';
           const low = lowConfidence.has(key);
-          const bold = isPayrollChain(e.from, e.sameRow);
           const labelText = low ? `${e.label} · 低` : e.label;
           const boxWidth = e.labelWidth + (low ? 24 : 0);
 
+          // 线与标签在同一个 g 上一起淡：低置信度是「证据不足」，
+          // 标签留原样会显得比线更实在
           return (
-            <g key={key} opacity={low ? 0.45 : 1}>
+            <g key={key} opacity={low ? LOW_CONFIDENCE_OPACITY : 1}>
               <path
                 d={e.path}
                 fill="none"
                 stroke="var(--ink-2)"
-                strokeWidth={bold ? 2.6 : 1.4}
-                strokeDasharray={edgeDash(relation)}
+                strokeWidth={payrollChain.has(key) ? PAYROLL_CHAIN_WIDTH : EDGE_WIDTH}
+                strokeDasharray={EDGE_DASH[edgeKind(relation)]}
                 markerEnd={hasArrow(relation) ? 'url(#graph-arrow)' : undefined}
               />
               <rect
@@ -362,55 +369,69 @@ function NodeCard({
           strokeWidth={2}
         />
       )}
-      <foreignObject x={pos.x} y={pos.y} width={pos.width} height={pos.height}>
-        <button
-          type="button"
-          onClick={() => onSelect(node.id)}
-          aria-label={`${node.name}，${node.role}`}
-          className={cn(
-            'flex h-full w-full flex-col justify-center gap-1 rounded-[12px] border-2 bg-surface px-3 py-2 text-left shadow-soft transition-colors duration-150 ease-out hover:bg-muted',
-            TIER_RING[node.tier],
-            selected && 'ring-2 ring-primary ring-offset-2 ring-offset-bg',
-          )}
-        >
-          <span
+      {/* foreignObject 会把越界的东西裁掉，而焦点圈画在按钮外 2px 处：
+          框跟卡等大就会被裁掉一半，看着像贴在描边上，深色下与圈1 红环糊成一片。
+          四周留一圈余量给它画完。 */}
+      <foreignObject
+        x={pos.x - FOCUS_ROOM}
+        y={pos.y - FOCUS_ROOM}
+        width={pos.width + FOCUS_ROOM * 2}
+        height={pos.height + FOCUS_ROOM * 2}
+        className="pointer-events-none"
+      >
+        <div className="h-full w-full" style={{ padding: FOCUS_ROOM }}>
+          <button
+            type="button"
+            onClick={() => onSelect(node.id)}
+            aria-label={`${node.name}，${node.role}`}
             className={cn(
-              'line-clamp-2 text-[13px] leading-[17px] font-semibold text-ink',
-              // 可点的元素上只打码不接管点按：点按要留给「打开详情」，
-              // 名称与信用代码在抽屉里点一下临时显示（同 DataTable 的规矩）
-              discreet && 'discreet-blur',
+              // 只过渡底色：transition-colors 连 outline-color 一起过渡，
+              // 焦点圈会从 currentColor（墨色）淡入到主色，头 150ms 是墨色的，
+              // 跟全站"焦点圈立刻是主色"对不上，深色下还容易跟圈1 红环混
+              'pointer-events-auto flex h-full w-full flex-col justify-center gap-1 rounded-[12px] border-2 bg-surface px-3 py-2 text-left shadow-soft transition-[background-color] duration-150 ease-out hover:bg-muted',
+              TIER_RING[node.tier],
+              selected && 'ring-2 ring-primary ring-offset-2 ring-offset-bg',
             )}
           >
-            {node.name}
-          </span>
-          <span
-            className={cn(
-              'truncate text-[11px] leading-4 text-ink-2',
-              discreet && 'discreet-blur',
-            )}
-          >
-            {node.role}
-          </span>
-          <span className="num flex items-center gap-2 text-[11px] leading-4 text-ink-2">
-            <span>
-              近期 <span className="font-semibold text-ink">{node.eventCount}</span>
+            <span
+              className={cn(
+                'line-clamp-2 text-[13px] leading-[17px] font-semibold text-ink',
+                // 可点的元素上只打码不接管点按：点按要留给「打开详情」，
+                // 名称与信用代码在抽屉里点一下临时显示（同 DataTable 的规矩）
+                discreet && 'discreet-blur',
+              )}
+            >
+              {node.name}
             </span>
-            <span aria-hidden className="text-line">
-              |
+            <span
+              className={cn(
+                'truncate text-[11px] leading-4 text-ink-2',
+                discreet && 'discreet-blur',
+              )}
+            >
+              {node.role}
             </span>
-            <span>
-              涉诉{' '}
-              <span
-                className={cn(
-                  'font-semibold',
-                  node.litigationCount > 0 ? 'text-danger-ink' : 'text-ink',
-                )}
-              >
-                {node.litigationCount}
+            <span className="num flex items-center gap-2 text-[11px] leading-4 text-ink-2">
+              <span>
+                近期 <span className="font-semibold text-ink">{node.eventCount}</span>
+              </span>
+              <span aria-hidden className="text-line">
+                |
+              </span>
+              <span>
+                涉诉{' '}
+                <span
+                  className={cn(
+                    'font-semibold',
+                    node.litigationCount > 0 ? 'text-danger-ink' : 'text-ink',
+                  )}
+                >
+                  {node.litigationCount}
+                </span>
               </span>
             </span>
-          </span>
-        </button>
+          </button>
+        </div>
       </foreignObject>
     </g>
   );

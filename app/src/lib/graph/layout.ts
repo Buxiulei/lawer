@@ -18,6 +18,8 @@ export interface LayoutEdgeInput {
   from: string;
   to: string;
   relation: string;
+  /** 边上要显示的短标签。不给就截 relation 到第一个括号 */
+  label?: string;
 }
 
 export interface PositionedNode {
@@ -101,19 +103,31 @@ function labelWidthOf(text: string): number {
   return Math.round(w) + 12;
 }
 
-function bandRows(
+/**
+ * 每个节点归哪条带。页面要按带做语义判断时用它——比如「两端都在主体层」的那条
+ * 边就是签约壳↔用工主体的发薪链，规则只在这里定义一次，两边不会走岔。
+ */
+export function bandsOf(
   nodes: LayoutNodeInput[],
   edges: LayoutEdgeInput[],
-): { rows: string[][]; bands: GraphBand[] } {
+): Map<string, GraphBand> {
   const ids = new Set(nodes.map((n) => n.id));
   const kept = edges.filter((e) => ids.has(e.from) && ids.has(e.to));
   const hasIn = new Set(kept.map((e) => e.to));
   const hasOut = new Set(kept.map((e) => e.from));
 
+  return new Map(
+    nodes.map((n) => [n.id, bandOf(n, hasIn.has(n.id), hasOut.has(n.id))]),
+  );
+}
+
+function bandRows(
+  nodes: LayoutNodeInput[],
+  edges: LayoutEdgeInput[],
+): { rows: string[][]; bands: GraphBand[] } {
+  const assigned = bandsOf(nodes, edges);
   const buckets = new Map<GraphBand, string[]>(BAND_ORDER.map((b) => [b, []]));
-  for (const node of nodes) {
-    buckets.get(bandOf(node, hasIn.has(node.id), hasOut.has(node.id)))!.push(node.id);
-  }
+  for (const node of nodes) buckets.get(assigned.get(node.id)!)!.push(node.id);
 
   const bands = BAND_ORDER.filter((b) => buckets.get(b)!.length > 0);
   return { rows: bands.map((b) => buckets.get(b)!), bands };
@@ -302,7 +316,7 @@ export function layoutCompanyGraph(
   const laidEdges: RawEdge[] = kept.map((e) => {
     const a = byId.get(e.from)!;
     const b = byId.get(e.to)!;
-    const label = shortLabel(e.relation);
+    const label = e.label ?? shortLabel(e.relation);
     const labelWidth = labelWidthOf(label);
     const sameRow = a.row === b.row;
 
