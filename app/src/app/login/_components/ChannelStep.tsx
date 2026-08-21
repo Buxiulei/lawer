@@ -147,7 +147,7 @@ export function ChannelStep({
       />
 
       {error ? (
-        <p className="text-[13px] leading-5 text-danger">{error}</p>
+        <p className="text-[13px] leading-5 text-danger-ink">{error}</p>
       ) : (
         <p className="text-[13px] leading-5 text-ink-2">{codeHint}</p>
       )}

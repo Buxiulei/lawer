@@ -1,14 +1,22 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/app/_ui/cn';
 
-export type BadgeTone = 'neutral' | 'primary' | 'success' | 'amber' | 'danger';
+export type BadgeTone =
+  | 'neutral'
+  | 'primary'
+  | 'gold'
+  | 'success'
+  | 'amber'
+  | 'danger';
 
 const TONES: Record<BadgeTone, string> = {
   neutral: 'bg-surface-2 text-ink-2',
   primary: 'bg-primary-wash text-primary-ink',
+  // gold 仅品牌点缀（会员/成就徽标），不用于警示与倒计时
+  gold: 'bg-gold-wash text-gold',
   success: 'bg-success-wash text-success',
-  amber: 'bg-amber-wash text-amber',
-  danger: 'bg-danger-wash text-danger',
+  amber: 'bg-amber-wash text-amber-ink',
+  danger: 'bg-danger-wash text-danger-ink',
 };
 
 export function Badge({

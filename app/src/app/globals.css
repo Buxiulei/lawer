@@ -5,21 +5,27 @@
 
 /* ── Light（默认）──────────────────────────────────────────── */
 :root {
-  --bg: #f7f6f3;
+  --bg: #fffcf5;
   --surface: #ffffff;
-  --surface-2: #f0eee9;
-  --ink: #26272b;
-  --ink-2: #6b6c70;
-  --line: #e4e2dc;
-  --primary: #146d63;
-  --primary-ink: #0f544c;
-  --primary-wash: #e3efed;
-  --amber: #b45309;
-  --amber-wash: #fbf0e3;
-  --danger: #c0453c;
-  --danger-wash: #f9e9e7;
-  --success: #2f7d4f;
-  --success-wash: #e7f2eb;
+  --surface-2: #f5efe3;
+  --ink: #2b1f1a;
+  --ink-2: #6e5c50;
+  --line: #e8e4dc;
+  --primary: #8b2942;
+  --primary-ink: #6d1f33;
+  --primary-wash: #f5e7eb;
+  --gold: #8a7340;
+  --gold-wash: #f5e6c8;
+  --amber: #b4690e;
+  --amber-wash: #faf0e1;
+  /* 文字级伴生色：浅底上的小号 amber/danger 文字用它，对白约 6:1；
+     实底按钮/边线/图标与 ≥18.66px 粗体大字仍用主色。 */
+  --amber-ink: #8f540a;
+  --danger: #d9442f;
+  --danger-wash: #fbe9e5;
+  --danger-ink: #b5361f;
+  --success: #2f7d5d;
+  --success-wash: #e8f3ee;
 
   --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.06);
   color-scheme: light;
@@ -28,21 +34,26 @@
 /* ── Dark ──────────────────────────────────────────────────── */
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
-    --bg: #151719;
-    --surface: #1e2124;
-    --surface-2: #26292d;
-    --ink: #e8e6e1;
-    --ink-2: #9b9c9e;
-    --line: #33363a;
-    --primary: #3fa396;
-    --primary-ink: #6bc0b4;
-    --primary-wash: #1c3230;
-    --amber: #e0913c;
+    --bg: #171310;
+    --surface: #201a17;
+    --surface-2: #2a2320;
+    --ink: #eae3d9;
+    --ink-2: #a3988b;
+    --line: #3a322d;
+    --primary: #c55d76;
+    --primary-ink: #d98ba0;
+    --primary-wash: #332026;
+    --gold: #c9a75b;
+    --gold-wash: #2e2717;
+    --amber: #e09a46;
     --amber-wash: #33270f;
-    --danger: #e06a5f;
-    --danger-wash: #3a201d;
-    --success: #5caf7e;
-    --success-wash: #1c2f24;
+    --danger: #e5705c;
+    --danger-wash: #3b1f1a;
+    /* 深色下主色对深底已够亮，伴生色等于本值 */
+    --amber-ink: var(--amber);
+    --danger-ink: var(--danger);
+    --success: #5caf8a;
+    --success-wash: #1c2f26;
 
     --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.4);
     color-scheme: dark;
@@ -50,21 +61,26 @@
 }
 
 .dark {
-  --bg: #151719;
-  --surface: #1e2124;
-  --surface-2: #26292d;
-  --ink: #e8e6e1;
-  --ink-2: #9b9c9e;
-  --line: #33363a;
-  --primary: #3fa396;
-  --primary-ink: #6bc0b4;
-  --primary-wash: #1c3230;
-  --amber: #e0913c;
+  --bg: #171310;
+  --surface: #201a17;
+  --surface-2: #2a2320;
+  --ink: #eae3d9;
+  --ink-2: #a3988b;
+  --line: #3a322d;
+  --primary: #c55d76;
+  --primary-ink: #d98ba0;
+  --primary-wash: #332026;
+  --gold: #c9a75b;
+  --gold-wash: #2e2717;
+  --amber: #e09a46;
   --amber-wash: #33270f;
-  --danger: #e06a5f;
-  --danger-wash: #3a201d;
-  --success: #5caf7e;
-  --success-wash: #1c2f24;
+  --danger: #e5705c;
+  --danger-wash: #3b1f1a;
+  /* 深色下主色对深底已够亮，伴生色等于本值 */
+  --amber-ink: var(--amber);
+  --danger-ink: var(--danger);
+  --success: #5caf8a;
+  --success-wash: #1c2f26;
 
   --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.4);
   color-scheme: dark;
@@ -81,10 +97,14 @@
   --color-primary: var(--primary);
   --color-primary-ink: var(--primary-ink);
   --color-primary-wash: var(--primary-wash);
+  --color-gold: var(--gold);
+  --color-gold-wash: var(--gold-wash);
   --color-amber: var(--amber);
   --color-amber-wash: var(--amber-wash);
+  --color-amber-ink: var(--amber-ink);
   --color-danger: var(--danger);
   --color-danger-wash: var(--danger-wash);
+  --color-danger-ink: var(--danger-ink);
   --color-success: var(--success);
   --color-success-wash: var(--success-wash);
 
