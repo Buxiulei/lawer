@@ -35,6 +35,9 @@ export {
   shouldInjectCrisisCard,
   type CrisisAssessment,
 } from './crisis';
+// G4 依据纪律：注入侧的引用块拼装 + 出口侧的光秃条号检测。
+// 评测侧断言直接复用 bareArticleCitations，保证「产品认为哪几处光秃，评测就判哪几处」。
+export { bareArticleCitations, packCitationGuide, statuteBlocks, valueBlocks } from './citation-block';
 export { classifyTask, criticalReasons, type TaskClassInput } from './task-class';
 export { buildSystemPrompt, caseDigest, packsSection, beijingNow } from './prompt';
 export {

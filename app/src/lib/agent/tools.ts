@@ -20,6 +20,7 @@ import type { AgentEventSink } from './events';
 import * as calc from './calc';
 import { citationCorrectionDirective, type CitationGuard } from './citation-guard';
 import { compactCrisisCard, CRISIS_RESOURCE_PACK_ID } from './crisis';
+import { packCitationGuide } from './citation-block';
 import * as deadline from '@/lib/deadline';
 import type { InputSource } from './calc';
 import {
@@ -228,6 +229,34 @@ function calcNonSeverance(
  * 由工具直接写而不是让模型再调一次 claims_upsert：中间隔一次模型转述就有抄错一位的机会，
  * 而这个数字最后要拿到庭上被对方复算。
  */
+/**
+ * 给 calc 返回的法律依据补上**逐字原文**（G4 通过标准 (c)：calc_json.basis 属核心依据条）。
+ *
+ * 【为什么补在这一层而不在 calc 里】calc 是纯函数，把条文原文写进它就等于把一份
+ * 会被修订的法律文本焊死在代码里——数据活性归卡（manager 2026-08-20 定式），
+ * 与封顶值、最低工资走的是同一条路：**纯函数只给条号，工具层现取原文**。
+ *
+ * 取不到就**如实留空**，不编、不摘要、不去正文散文里抠——
+ * 缺原文只是引用不完整，抠错一句是用户当庭念错法条。
+ */
+function enrichBasisWithQuotes(
+  basis: calc.CalcBasis[],
+  ctx: AgentToolContext,
+): Array<calc.CalcBasis & { text?: string; source_card?: string }> {
+  return basis.map((b) => {
+    // 先按 packId 直取，取不到再在全部法条卡里按 law+article 找——
+    // calc 的 packId 指向的常是计算规则卡，逐字条文却在法条卡上
+    const direct = b.packId ? ctx.searcher?.get?.(b.packId) : undefined;
+    const fromDirect = direct?.facts?.statute_quotes?.find((q) => q.article === b.article);
+    const hit = fromDirect ?? ctx.searcher?.search?.(`${b.law} ${b.article}`, { type: '法条卡', limit: 5 })
+      ?.flatMap((p) => (p.facts?.statute_quotes ?? []).map((q) => ({ q, id: p.id })))
+      .find((x) => x.q.article === b.article && b.law.includes(x.q.law.slice(0, 6)));
+    const text = fromDirect ? fromDirect.text : (hit as { q?: { text: string } } | undefined)?.q?.text;
+    const card = fromDirect ? direct!.id : (hit as { id?: string } | undefined)?.id;
+    return { ...b, ...(text ? { text, source_card: card } : {}) };
+  });
+}
+
 function persistCalc(
   kind: string,
   result: calc.CalcResult<object>,
@@ -254,12 +283,15 @@ function persistCalc(
     formula: result.formula,
     steps: result.steps,
     flags: result.flags,
-    basis: result.basis,
+    // G4 (c)：核心依据条必须附逐字原文 + 来源卡，光条号不算数
+    basis: enrichBasisWithQuotes(result.basis, ctx),
     inputs: result.inputs,
     input_sources: inputSources,
     calc_version: result.calcVersion,
     note:
       '展示给用户时必须同时给出 formula 算式与各输入的来源；标「用户自述」的要明说待证据核实。' +
+      'basis 里带了 text 的，引用该条时**把 text 的逐字原文一并给出**（引号内照抄）并注明 source_card；' +
+      '没有 text 的条只给条号，并说明原文待核实。' +
       (result.flags.length ? `本次触发的特殊档位要逐条讲清：${result.flags.join('、')}。` : '') +
       (extraNote ? ` ${extraNote}` : ''),
   });
@@ -303,10 +335,20 @@ export interface TurnState {
   calcRejects: number;
   /** 本轮是否有过一次成功的计算并落库。有就说明重试成功了，前面的拒绝只是过程 */
   calcSucceeded: boolean;
+  /**
+   * 本轮 claim_calc 被拒时点名缺的入参（去重）。用来把用户侧告知从
+   * 「算不出来」变成「还差这几项，补了我立刻重算」——报错没有出路等于没报。
+   */
+  calcMissingFields: Set<string>;
+}
+
+/** 从 reject 原文里摘出被点名的入参字段（形如 avg_monthly_wage_fen）。 */
+function missingFieldsFrom(rejectText: string): string[] {
+  return [...new Set(rejectText.match(/[a-z][a-z0-9]*(?:_[a-z0-9]+)+/g) ?? [])];
 }
 
 export function newTurnState(): TurnState {
-  return { actionCards: 0, searches: 0, retrieved: [], drafts: 0, calcRejects: 0, calcSucceeded: false };
+  return { actionCards: 0, searches: 0, retrieved: [], drafts: 0, calcRejects: 0, calcSucceeded: false, calcMissingFields: new Set() };
 }
 
 export interface AgentToolContext {
@@ -434,7 +476,14 @@ export const AGENT_TOOLS: ToolDef[] = [
               'JSON 字符串：算式与全部输入，每项标注是「用户自述待证」还是「已有证据」。' +
               '未算出时写 {"status":"待计算","missing":[...]}',
           },
-          basis: { type: 'string', description: '法律依据，写 pack id + 条号，如 statute-lhtf-38-beipo-jiechu §38' },
+          basis: {
+            type: 'string',
+            description:
+              '法律依据：条号 + **逐字原文**（引号内照抄，别缩写）+ pack id，'
+              + '如 《劳动合同法》第三十八条："用人单位未及时足额支付劳动报酬的，劳动者可以解除劳动合同"（statute-lhtf-38-beipo-jiechu）。'
+              + '只写条号不写原文的，用户拿去打印、当庭念的时候等于空手（G4 核心依据条要求）。'
+              + '检索不到原文就写条号 + "原文待核实"，不要凭记忆补。',
+          },
           status: { type: 'string', enum: ['draft', 'confirmed'], description: '默认 draft' },
         },
         required: ['kind'],
@@ -745,8 +794,11 @@ const HANDLERS: Record<string, Handler> = {
         ...(alreadyInContext.has(p.id)
           ? { body_omitted: '这张卡的全文已经在你的 system prompt「本轮检索到的依据」里，按 id 往上翻即可，不重复下发。' }
           : { body: p.body }),
+        // G4：引用要求与拼好的引用块**跟着这张卡一起回**，不靠下面那句通用 note——
+        // 工具返回是卡进上下文的第二条通路，两条通路必须执行同一套规则（教训 10）。
+        citation_guide: packCitationGuide(p),
       })),
-      note: '引用时：法条给条号+逐字原文，判例给案号+来源，数字给值与生效期间；confidence 为「待核实」的必须如实带上这个状态。',
+      note: '引用时：法条给条号+逐字原文，判例给案号+来源，数字给值与生效期间；confidence 为「待核实」的必须如实带上这个状态。每张卡的 citation_guide 已经把可引用内容拼好，照抄即可。',
     });
   },
 
@@ -1148,7 +1200,10 @@ export function executeTool(name: string, rawArguments: string, ctx: AgentToolCo
   // 收口判定见 emitCalcFailureNotice。
   if (name === 'claim_calc') {
     if (outcome.ok) ctx.state.calcSucceeded = true;
-    else ctx.state.calcRejects += 1;
+    else {
+      ctx.state.calcRejects += 1;
+      for (const f of missingFieldsFrom(outcome.content)) ctx.state.calcMissingFields.add(f);
+    }
   } else if (!outcome.ok) {
     ctx.emit({ event: 'notice', data: { code: 'TOOL_INPUT_REJECTED', message: `${name}：${outcome.content}` } });
   }
@@ -1167,6 +1222,12 @@ export function executeTool(name: string, rawArguments: string, ctx: AgentToolCo
  */
 export function emitCalcFailureNotice(ctx: AgentToolContext): void {
   if (ctx.state.calcRejects === 0 || ctx.state.calcSucceeded) return;
+
+  // 【失败有痕有两个半边（manager 2026-08-21 记档）】
+  // 运维要能查，用户要能懂且知道下一步。只做前者是工程视角的自满——
+  // 我们查得到了，而屏幕前那个人只看见一段没有金额的回复，不知道是不该有、
+  // 是坏了、还是自己少说了什么。所以这里发**两条**：
+  // ① 运维侧：机器可查的收口记录（复用既有码，UI 静默）
   ctx.emit({
     event: 'notice',
     data: {
@@ -1174,6 +1235,19 @@ export function emitCalcFailureNotice(ctx: AgentToolContext): void {
       message:
         `claim_calc：本轮 ${ctx.state.calcRejects} 次入参均未通过校验，最终没有算出任何金额，也没有 claims 落库——` +
         '本轮回复里如果出现了金额，它不是计算器算的（charter §3 要求一切金额走 claim_calc）。',
+    },
+  });
+  // ② 用户侧：**给出路不只报错 + 明写怎么再来一次**
+  const missing = [...ctx.state.calcMissingFields];
+  ctx.emit({
+    event: 'notice',
+    data: {
+      code: 'CALC_FAILED',
+      message: missing.length
+        ? `这笔金额我暂时算不出来——还差：${missing.join('、')}。你把这几项告诉我，我立刻重算一遍；其他部分不受影响，可以先看。`
+        : '这笔金额我暂时算不出来（系统这一轮没能完成计算）。你可以直接说「再算一次」让我重跑；其他部分不受影响，可以先看。',
+      ...(missing.length ? { missing_fields: missing } : {}),
+      retriable: true,
     },
   });
 }

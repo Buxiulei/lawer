@@ -39,6 +39,7 @@ import {
   shouldInjectCrisisCard,
 } from './crisis';
 import { CitationGuard } from './citation-guard';
+import { bareArticleCitations, precedentContamination } from './citation-block';
 import { MAX_INJECTED_PACKS, type KnowledgePack, type KnowledgeSearcher } from './retrieval';
 import { loadCaseSnapshot } from './snapshot';
 import { classifyTask } from './task-class';
@@ -398,6 +399,46 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   // 最像趁人之危的时刻；那一刻该给的是免费公益热线，不是我们的付费服务。
   // 挂在输出侧而不是 emotion_log 工具上：模型可以完全不调工具、直接在正文里提（实测如此），
   // 输出侧才是所有通道的共同出口——同一模式的第三次绕过，教训见 crisis.ts。
+  // G4 依据纪律的出口侧留痕：只给了条号、附近没有逐字原文的引用。
+  // **只发信号不动正文**——引用不完整是「给少了」，剥掉只会让用户连条号都拿不到；
+  // 与案号闸门（编造 → 必须拦）分属两类，统计口径分开（教训 6 的同一条纪律）。
+  const bareCitations = bareArticleCitations(text);
+  if (bareCitations.length > 0) {
+    emit({
+      event: 'notice',
+      data: {
+        code: 'CITATION_INCOMPLETE',
+        message:
+          `本轮有 ${bareCitations.length} 处只给了条号、附近没有逐字原文的引用：${bareCitations.join('、')}。` +
+          '用户要拿它去打印、标注、当庭念出来，光一个编号等于空手（charter §3 / G4）。',
+      },
+    });
+  }
+
+  // ISSUE-03 (c)：判例引用句里混进了卡里没有的本案事实。
+  // 与光秃条号同一条纪律——**只留痕不改正文**：这是「多给了不属于它的」，
+  // 剥掉会把整段判例分析弄得莫名其妙。真正的防线在注入侧（判例引用块）与提示词第 9 条。
+  const contaminated = precedentContamination(
+    text,
+    state.retrieved.filter((p) => p.type === '判例卡'),
+    [
+      ...snapshot.timeline.map((e) => `${e.title} ${e.detail ?? ''}`),
+      ...snapshot.companies.map((c) => c.name),
+      message,
+    ].join(' '),
+  );
+  if (contaminated.length > 0) {
+    emit({
+      event: 'notice',
+      data: {
+        code: 'PRECEDENT_CONTAMINATED',
+        message:
+          `判例引用句里混进了卡内不存在的本案事实：${contaminated.join('、')}。` +
+          '案号是真的、细节是编的——用户当庭复述会被对方一查即穿（ISSUE-03）。',
+      },
+    });
+  }
+
   if (detectNbdpsyPitch(text) && !nbdpsy.allowed) {
     text = stripNbdpsyPitch(text);
     emit({

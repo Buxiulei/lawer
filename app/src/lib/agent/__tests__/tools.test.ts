@@ -375,6 +375,42 @@ describe('claim_calc 失败按轮收口，不逐次发帧也不整条静默（#4
     expect(notices(sink)).toHaveLength(0);
   });
 
+  // 【失败有痕有两个半边】运维要能查，用户要能懂且知道下一步。
+  // 只做前者是工程视角的自满：我们查得到了，屏幕前那个人还是不知道发生了什么。
+  it('全部失败 → 用户侧 CALC_FAILED：给出路、说清缺什么、标明可重试', () => {
+    const { sink, ctx } = makeCtx();
+    run(ctx, 'claim_calc', { kind: '年假', ...S14 });
+    emitCalcFailureNotice(ctx);
+
+    const u = sink.of('notice').filter((e) => e.data.code === 'CALC_FAILED');
+    expect(u).toHaveLength(1);
+    // 给出路：点名缺的字段，不是一句「算不出来」
+    expect(u[0].data.missing_fields).toContain('cumulative_work_years');
+    expect(u[0].data.message).toContain('cumulative_work_years');
+    // 可恢复：明说补了就重算，别让用户以为功能坏了
+    expect(u[0].data.retriable).toBe(true);
+    expect(u[0].data.message).toContain('重算');
+    // 运维侧那条仍在（两个半边各自到位）
+    expect(notices(sink)).toHaveLength(1);
+  });
+
+  it('拿不到具体缺失字段时也要给可执行的下一步（不留死胡同）', () => {
+    const { sink, ctx } = makeCtx();
+    run(ctx, 'claim_calc', { kind: 'N', ...S14, employed_from: '去年三月' });
+    emitCalcFailureNotice(ctx);
+    const u = sink.of('notice').find((e) => e.data.code === 'CALC_FAILED')!;
+    expect(u.data.retriable).toBe(true);
+    expect(u.data.message).toMatch(/再算一次|重算/);
+  });
+
+  it('重试成功 → 用户侧也不发（没坏就别吓用户）', () => {
+    const { sink, ctx } = makeCtx();
+    run(ctx, 'claim_calc', { kind: 'N', ...S14, avg_monthly_wage_fen: 0 });
+    run(ctx, 'claim_calc', { kind: 'N', ...S14 });
+    emitCalcFailureNotice(ctx);
+    expect(sink.of('notice').filter((e) => e.data.code === 'CALC_FAILED')).toHaveLength(0);
+  });
+
   it('全部失败 → 收口时**恰一条**（不是每次一条）', () => {
     const { f, sink, ctx } = makeCtx();
     run(ctx, 'claim_calc', { kind: 'N', ...S14, avg_monthly_wage_fen: 0 });

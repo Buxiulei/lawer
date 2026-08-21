@@ -1,0 +1,220 @@
+// app/src/lib/agent/citation-block.ts
+// 把卡里**可引用的内容**预格式化成「照抄即合规」的引用块。
+//
+// 【为什么是这个形状——manager 2026-08-21 定的产品价值论据，逐字记住】
+//
+// > 我们的用户是请不起律师、必须自己上庭的人——拿着光秃秃的「劳动合同法第47条」
+// > 既无法自查也无法当庭引用，等于空手；给了逐字原文他才能打印、标出、念出来。
+// > **这不是回复密度问题，是产品价值是否成立。**
+//
+// 【为什么用"预格式化"而不是"下更严的指令"——提示词工程原则（manager 2026-08-21 升格记档）】
+// G4 依据纪律在 S15 定版批 6/6 全挂，而提示词里"必须给逐字原文"这句话一直都在。
+// 再写一遍更严的指令，第 7 次也还是会挂。真正起作用的是**改变成本**：
+// 把条号+逐字原文+生效期间+来源卡拼好放在模型眼前，让**照抄比自己缩写更省力**。
+// 模型走的永远是最省力那条路——与其禁止它走近路，不如把合规那条修成近路。
+//
+// 这条与「指令贴约束对象」是一对：一个管**位置**（指令要挨着它约束的东西），
+// 一个管**成本**（正确行为要比错误行为便宜）。两次修好「别重印整卡」和「卡值三件套」
+// 用的都是这两条。
+//
+// 【边界】本模块只读 facts，**绝不解析正文散文**——那是热线号码事故的根因（见 crisis.ts）。
+// 卡里没有结构化字段时不猜、不抠，改为下发「填空模板」告诉模型输出成什么形状，
+// 原文它手上本来就有（packsSection 下发的是全文）。
+
+import type { KnowledgePack } from './retrieval';
+
+/** 引用块的统一抬头。措辞写死，不交给模型即兴——它要照抄的东西必须每轮长得一样。 */
+const HEADER = '【可直接照抄的引用块】';
+
+/**
+ * 法条引用块：条号 + 逐字原文 + 来源卡。
+ * 只从 `facts.statute_quotes` 取；卡没有这个字段就返回空数组（交给填空模板那条路）。
+ */
+export function statuteBlocks(pack: KnowledgePack): string[] {
+  return (pack.facts?.statute_quotes ?? [])
+    .filter((q) => q?.law && q?.article && q?.text)
+    .map((q) => [`${HEADER}`, `《${q.law.replace(/^《|》$/g, '')}》${q.article}：`, `> ${q.text}`, `（来源卡：${pack.id}）`].join('\n'));
+}
+
+/**
+ * 数字引用块：值 + 单位 + 生效期间 + 可信度 + 来源卡。
+ *
+ * 【生效期间与可信度不是装饰】同一个「社平工资」逐年不同，用户拿一个没有年份的数字上庭，
+ * 对方一句「你说的是哪一年的」就问住了。可信度标「待核实」的还必须带着这个状态说
+ * （charter §3）——不带状态地引用一个待核实值，等于把它说成已核实。
+ */
+export function valueBlocks(pack: KnowledgePack): string[] {
+  return (pack.facts?.values ?? [])
+    .filter((v) => v?.key && typeof v.value === 'number')
+    .map((v) => {
+      const status = v.confidence && v.confidence !== '原文核实' ? `｜可信度「${v.confidence}」，引用时必须一并告诉用户` : '';
+      return [
+        `${HEADER}`,
+        `${v.key}：**${v.value} ${v.unit}**（生效期间 ${v.effective_from} 起${status}｜来源卡：${pack.id}）`,
+      ].join('\n');
+    });
+}
+
+/**
+ * 判例引用块：案号/出处 + 审级 + 案情要旨 + 争议焦点 + 结果 + 裁判理由，**全部取自卡字段**。
+ *
+ * 【为什么判例必须模板化拼装而不是让模型自由复述——ISSUE-03】
+ * S04 实测：模型引用了真卡 `case-yunqi-tiaogang-baoding-2024`（邓某诉某置业公司），
+ * 案由、结果、审级都与卡一致，**却把用户自己的事实**「次日报到」「未明确新岗位及薪资待遇」
+ * **写进了判例案情**——卡里没有这两节。
+ *
+ * 这比光秃条号隐蔽得多，也危险得多：
+ * - 案号是**真的**，所以只验「号码在不在库里」的案号闸**完全拦不住**；
+ * - 不逐字比对卡，人也看不出来——它读起来比真的还贴合；
+ * - 用户当庭复述这个"和我一模一样"的案例，对方一查全文没有该情节，**当庭失信的是用户**。
+ *
+ * 所以本卡的判例段给成**拼好的块**：模型要讲相似点，就另起一句「你的情况与之相似之处是…」，
+ * 把「判例事实」与「你的事实」在结构上分开（与三栏分离纪律同源）。
+ */
+export function precedentBlocks(pack: KnowledgePack): string[] {
+  const c = pack.facts?.case_facts;
+  if (!c || !(c.gist || c.holding)) return [];
+  const line = (label: string, v?: string) => (v && v.trim() ? [`${label}：${v.trim()}`] : []);
+  return [
+    [
+      HEADER,
+      `《${pack.title}》`,
+      ...line('案号/出处', c.case_no),
+      ...line('审级', c.court),
+      ...line('案情要旨', c.gist),
+      ...line('争议焦点', c.issue),
+      ...line('结果', c.holding),
+      ...line('裁判理由', c.reasoning),
+      `（来源卡：${pack.id}）`,
+      '',
+      '⚠️ **判例段只能复述以上字段**。用户自己的情况（时间、岗位、薪资、公司做法……）',
+      '一个字都不许写进判例案情——案号是真的、细节是编的，比整条编造更危险，',
+      '因为它骗得过案号核验、也骗得过读的人。要讲相似点就**另起一句**：',
+      '「你的情况与之相似之处是……」，把判例事实与你的事实分开摆。',
+    ].join('\n'),
+  ];
+}
+
+/**
+ * 卡里**没有**结构化可引用字段时下发的填空模板。
+ *
+ * 【为什么不去正文里抠】库里 8 张法条卡只有 1 张带 `statute_quotes`，103 张判例卡一张都没有；
+ * 逐字原文确实在卡的正文散文里。用正则从散文里抠出来当"逐字原文"发给用户，
+ * 比现在光给条号**更危险**——抠错一句，用户会当庭把它念出来。
+ * 所以这里给的是**形状**不是内容：原文就在它上面的卡全文里，让它照着形状抄。
+ */
+export function citationTemplate(pack: KnowledgePack): string {
+  const shape =
+    pack.type === '判例卡'
+      ? '案号/案例编号 + 来源（哪一批典型案例）+ 卡里写明的裁判要旨与结果'
+      : '条号 + 「逐字原文」（引号内一字不改，从上面这张卡的正文里抄）';
+  return [
+    `【引用本卡的必备形状】${shape} + （来源卡：${pack.id}）。`,
+    '只给条号/案号而不给逐字内容的引用**视为未完成**——用户要拿它去打印、标出、当庭念出来，',
+    '光秃秃一个编号对他等于空手。原文就在上面这张卡里，照抄，不要改写、不要缩写。',
+  ].join('\n');
+}
+
+/**
+ * 一张卡的完整引用指引：有结构化字段就给拼好的引用块，没有就给填空模板。
+ *
+ * 返回的字符串**紧贴该卡正文之后**下发（见 prompt.packsSection / tools.knowledge_search）——
+ * 指令要挨着它约束的那张卡，放通用指令区会被稀释（实测：「别重印整卡」写在开头被无视两轮）。
+ */
+export function packCitationGuide(pack: KnowledgePack): string {
+  const blocks = [...statuteBlocks(pack), ...valueBlocks(pack), ...precedentBlocks(pack)];
+  if (blocks.length === 0) return citationTemplate(pack);
+  return [
+    '【本卡可引用内容已替你拼好，照抄即可（不要改写、不要缩写、不要只留编号）】',
+    '',
+    blocks.join('\n\n'),
+  ].join('\n');
+}
+
+// ───────────────────────── 出口侧：光秃条号检测 ─────────────────────────
+
+/** 条号形态：《X法》第Y条 / 第Y条 / 第Y款。 */
+const ARTICLE = /(?:《[^》\n]{2,30}》\s*)?第\s*[一二三四五六七八九十百零〇0-9]{1,6}\s*条(?:第\s*[一二三四五六七八九十0-9]{1,3}\s*[款项])?/g;
+/** 引号内的一段（中文/直角/英文引号通吃） */
+const QUOTED = /[「“"]([^」”"\n]{1,200})[」”"]/g;
+/**
+ * 引号里多长才算「逐字原文」而不是「加引号的术语」。
+ *
+ * 【这个阈值是被一句真实转录逼出来的】S09 那句
+ * 「依《劳动合同法》第 39 条第 2 项，可能被认定"**严重违反规章制度**"解除」——
+ * 附近确实有引号，但引的是一个 8 字的**术语**，不是条文。首版只要"附近有引号"就放过，
+ * 于是这句货真价实的光秃引用被判成合格。条文原文没有这么短的
+ * （最短的「用人单位未及时足额支付劳动报酬的」也有 16 字），术语则普遍在 10 字以内。
+ */
+const VERBATIM_MIN_LEN = 12;
+/** markdown 引用行：整行以 > 开头，是逐字原文最规范的载体 */
+const BLOCKQUOTE = /^\s*>/m;
+
+function hasVerbatimNear(near: string): boolean {
+  if (BLOCKQUOTE.test(near)) return true;
+  for (const q of near.matchAll(QUOTED)) {
+    if (q[1].trim().length >= VERBATIM_MIN_LEN) return true;
+  }
+  return false;
+}
+
+/**
+ * 找出正文里**只给了条号、附近没有逐字原文**的引用（G4 失败的主形态）。
+ *
+ * 【窗口必须双向】中文两种语序都自然：
+ * 「《劳动合同法》第38条："用人单位有下列情形之一的…"」——原文在**后**；
+ * 「"用人单位未及时足额支付劳动报酬的"（《劳动合同法》第38条）」——原文在**前**。
+ * 只查一侧就是教训 8 的第 N 次重演（那次预设的不是词，是位置）。
+ *
+ * 【这是运维信号，不是闸门】返回值只用来发 notice 留痕，**不剥除、不改写正文**：
+ * 引用不完整是"给少了"，不是"给了有害的东西"，剥掉只会让用户连条号都拿不到。
+ * 与案号闸门（编造 → 必须拦）分属两类，统计口径也分开。
+ */
+/** 判例引用的标记：案例N / 典型案例 / 案号 / 「X 诉 Y」 */
+const PRECEDENT_MARK = /案例\s*[一二三四五六七八九十0-9]+|典型案例|[（(]\s*\d{4}\s*[）)][一-龥A-Za-z0-9]{2,20}号|[一-龥]{1,4}某\s*诉/;
+const CJK_RUN = /[一-鿿]+/g;
+
+function grams(text: string, n = 3): Set<string> {
+  const out = new Set<string>();
+  for (const run of text.match(CJK_RUN) ?? []) {
+    for (let i = 0; i + n <= run.length; i++) out.add(run.slice(i, i + n));
+  }
+  return out;
+}
+
+/**
+ * 【ISSUE-03 (c) 出口侧留痕】判例引用**句**里混进了「本案用户事实里有、判例卡里没有」的内容。
+ *
+ * 与评测侧 `precedentContaminationAssertions` **判据同源、同一个形态**：
+ * 按句隔离（相似点该另起一句）→ 三方比对（在判例句 ∧ 在用户事实 ∧ 不在卡）。
+ * 两边算的必须是同一件事，否则会出现「产线报了评测不报」或反过来（教训 11）。
+ *
+ * 【只留痕，不改正文】与光秃条号同一条纪律：这是「多给了不属于它的内容」，
+ * 剥掉会把整段判例分析弄得莫名其妙。真正的防线是注入侧的判例引用块（模板化拼装）
+ * 与提示词里那条「判例段只复述卡里写的」。
+ *
+ * 【已知限制】3-gram 比对抓得住**抄词**，抓不住**转述**——
+ * 实测那段真实污染里，「次日报到」是模型把用户的「第二天」「明早」改写出来的，字面看不见。
+ * 所以这是筛子不是闸门，judge 的语义判断不能撤。
+ */
+export function precedentContamination(text: string, cards: KnowledgePack[], userFacts: string): string[] {
+  if (!userFacts.trim() || cards.length === 0) return [];
+  const cardGrams = grams(cards.map((c) => `${c.title}\n${c.body}\n${JSON.stringify(c.facts ?? {})}`).join('\n'));
+  const factGrams = grams(userFacts);
+  const dirty = new Set<string>();
+  for (const s of text.split(/[。！？\n]/)) {
+    if (!s.trim() || !PRECEDENT_MARK.test(s)) continue;
+    for (const g of grams(s)) if (factGrams.has(g) && !cardGrams.has(g)) dirty.add(g);
+  }
+  return [...dirty];
+}
+
+export function bareArticleCitations(text: string, windowSize = 60): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(ARTICLE)) {
+    const at = m.index ?? 0;
+    const near = text.slice(Math.max(0, at - windowSize), at + m[0].length + windowSize);
+    if (!hasVerbatimNear(near)) out.push(m[0].replace(/\s+/g, ''));
+  }
+  return out;
+}

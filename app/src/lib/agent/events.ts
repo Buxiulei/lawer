@@ -35,6 +35,32 @@ export type NoticeCode =
   /** 模型输出了知识库里不存在的案号，已被运行时闸门拦下（charter §7.1 零编造） */
   | 'CITATION_BLOCKED'
   /**
+   * 本轮有「只给条号、附近没有逐字原文」的引用（charter §3 / C04 G4），已留痕**未改正文**。
+   *
+   * 【为什么不并进 CITATION_BLOCKED】那条记的是「编造被拦下」，这条记的是「给少了」——
+   * 两种缺陷混用一个 code，两边的统计会同时失真（教训 11：同一个 code 量两件事，
+   * 就一定有一边在骗人）。且这条不阻断、不剥除：引用不完整不是有害内容，
+   * 剥掉只会让用户连条号都拿不到。
+   */
+  | 'CITATION_INCOMPLETE'
+  /**
+   * 判例引用句里混进了卡内不存在的本案事实（ISSUE-03），已留痕**未改正文**。
+   * 与 CITATION_BLOCKED（编造案号被拦）分开：那条是「号是假的」，这条是「号是真的、细节是编的」——
+   * 后者恰好绕过只验号码存在性的案号闸，混用一个 code 会让两边统计同时失真。
+   */
+  | 'PRECEDENT_CONTAMINATED'
+  /**
+   * 本轮金额没算出来，**面向用户**的告知（manager 2026-08-21 批准的契约变更）。
+   *
+   * 【为什么必须有一个用户可见的半边】运维侧的 `TOOL_INPUT_REJECTED` 收口只解决了
+   * 「我们事后查得到」，没解决「用户当时看得懂」——他读到一段没有金额的回复，
+   * 不知道是不该有、还是坏了、还是自己少说了什么。
+   *
+   * 文案两条硬要求：**给出路不只报错**（说清缺什么、能补什么），
+   * **失败必须可恢复**（明确写出怎么再算一次），别让用户以为功能坏了。
+   */
+  | 'CALC_FAILED'
+  /**
    * 危机轮模型输出里检出情感杠杆劝阻（charter §5），**已拦截**：剥除该句，
    * 剥完仍命中则整段回落确定性安全回复。杠杆内容不会到达用户。
    * （早期版本只告警不阻断；manager 2026-08-20 混合形态裁决后改为硬拦截。）
@@ -116,7 +142,17 @@ export type AgentEvent =
         requires_confirmation: true;
       };
     }
-  | { event: 'notice'; data: { code: NoticeCode; message: string } }
+  | {
+      event: 'notice';
+      data: {
+        code: NoticeCode;
+        message: string;
+        /** CALC_FAILED 专用：缺哪些输入导致算不出来，前端据此把「补什么」说具体 */
+        missing_fields?: string[];
+        /** CALC_FAILED 专用：恒 true——补齐信息后可以直接再算一次，不是功能坏了 */
+        retriable?: boolean;
+      };
+    }
   | {
       event: 'usage';
       data: {

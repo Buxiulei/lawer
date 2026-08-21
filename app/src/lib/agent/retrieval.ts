@@ -40,6 +40,13 @@ export interface KnowledgePack {
     hotlines?: Array<{ name: string; phone: string; status: 'usable' | 'forbidden'; hours?: string; note?: string }>;
     values?: Array<{ key: string; value: number; unit: string; effective_from: string; confidence: string }>;
     statute_quotes?: Array<{ law: string; article: string; text: string }>;
+    /**
+     * 判例卡的结构化案情。判例段一律由这些字段拼装，**不许模型自由复述**——
+     * 自由复述会把对话里的用户事实织进判例案情（ISSUE-03：案号是真的、细节是编的，
+     * 恰好绕过只验号码存在性的案号闸），用户当庭复述后对方一查全文没有该情节，
+     * 失信的是用户本人。
+     */
+    case_facts?: { case_no?: string; court?: string; judged_at?: string; gist?: string; issue?: string; holding?: string; reasoning?: string };
   };
 }
 

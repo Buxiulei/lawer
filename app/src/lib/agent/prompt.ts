@@ -13,6 +13,7 @@ import { CHARTER } from './charter';
 import { intakeDirective, recapBrief, type IntakeStage } from './intake';
 import { MAX_ACTION_CARDS } from './tools';
 import { CRISIS_DIRECTIVE, CRISIS_RESOURCE_PACK_ID } from './crisis';
+import { packCitationGuide } from './citation-block';
 import type { KnowledgePack } from './retrieval';
 import type { CaseSnapshot } from './snapshot';
 
@@ -98,6 +99,11 @@ export function packsSection(packs: KnowledgePack[], noteAfter?: { packId: strin
       `类型：${p.type}｜适用地区：${p.region}｜可信度：${p.confidence}｜更新于 ${p.updated}`,
       '',
       p.body,
+      // G4：引用要求**逐卡贴附**，不放段落抬头。抬头那句"法条给条号+逐字原文"一直都在，
+      // 而 G4 在定版批 6/6 全挂——指令离约束对象太远就被稀释，这是第三次同型。
+      // 内容是拼好的引用块（照抄比缩写省力），拼不出来时给填空模板。
+      '',
+      packCitationGuide(p),
       ...(noteAfter && noteAfter.packId === p.id ? ['', `> ⚠️ **本卡使用限制**：${noteAfter.note}`] : []),
     ].join('\n'),
   );
@@ -142,7 +148,12 @@ function outputDiscipline(): string {
     '   「这个我不编」+「编的案号一旦被识破，你后面所有真话都会被当成假的」——这是帮他；',
     '   「你这样不对」「做人要诚信」是训人，**说教会让他觉得你站在对面**，而你必须站在他这边。',
     '   拒绝之后立刻给**更好用的真东西**（真实条文/案号），让他明白拒绝不是不帮忙。',
-    '9. **格式**：短句、编号、直给。不写「以上仅供参考」「建议咨询专业律师」这类话（charter §1、§7.7）。',
+    '9. **引判例**：判例段**只复述卡里写的**（案情要旨/争议焦点/结果/裁判理由），',
+    '   用户自己的情况——时间、岗位、薪资、公司怎么做的——**一个字都不许写进判例案情**。',
+    '   要讲相似点就另起一句：「你的情况与之相似之处是……」，把判例事实与你的事实分开摆。',
+    '   （实测事故：引的是真案例，却把用户的「次日报到」「未明确新岗位及薪资待遇」写进了案情。',
+    '   **案号是真的、细节是编的**——用户当庭复述，对方一查全文没有该情节，失信的是用户自己。）',
+    '10. **格式**：短句、编号、直给。不写「以上仅供参考」「建议咨询专业律师」这类话（charter §1、§7.7）。',
   ].join('\n');
 }
 
