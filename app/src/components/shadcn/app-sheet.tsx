@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import {
   Sheet,
   SheetBody,
@@ -11,6 +11,7 @@ import {
   SheetTitle,
 } from './sheet';
 import { XIcon } from './icons';
+import { useFocusRestore } from './use-focus-restore';
 
 /**
  * 抽屉（shadcn Sheet 版）：props 与手写版 @/components/ui/Sheet 逐字一致，
@@ -29,25 +30,11 @@ export function AppSheet({
   children: ReactNode;
   footer?: ReactNode;
 }) {
-  /**
-   * 开合由外面的按钮控制，没有 SheetTrigger，Radix 就不知道关掉之后该把焦点还给谁，
-   * 会掉回 body。自己记一下开之前停在哪儿，关的时候送回去。
-   */
-  const restoreTo = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    if (open) restoreTo.current = document.activeElement as HTMLElement | null;
-  }, [open]);
+  const onCloseAutoFocus = useFocusRestore(open);
 
   return (
     <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent
-        aria-describedby={undefined}
-        onCloseAutoFocus={(e) => {
-          if (!restoreTo.current?.isConnected) return;
-          e.preventDefault();
-          restoreTo.current.focus();
-        }}
-      >
+      <SheetContent aria-describedby={undefined} onCloseAutoFocus={onCloseAutoFocus}>
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>
           <SheetClose

@@ -14,6 +14,10 @@
   --primary: #8b2942;
   --primary-ink: #6d1f33;
   --primary-wash: #f5e7eb;
+  /* 实心主色/朱红底上的文字。深浅两套都是白，但仍然给个名字：
+     shadcn 的 --primary-foreground/--destructive-foreground 指到这儿，
+     免得白色在桥接层再写一遍、将来改的时候漏掉一处。 */
+  --on-primary: #ffffff;
   --gold: #8a7340;
   --gold-wash: #f5e6c8;
   --amber: #b4690e;
@@ -43,6 +47,7 @@
     --primary: #c55d76;
     --primary-ink: #d98ba0;
     --primary-wash: #332026;
+    --on-primary: #ffffff;
     --gold: #c9a75b;
     --gold-wash: #2e2717;
     --amber: #e09a46;
@@ -70,6 +75,7 @@
   --primary: #c55d76;
   --primary-ink: #d98ba0;
   --primary-wash: #332026;
+  --on-primary: #ffffff;
   --gold: #c9a75b;
   --gold-wash: #2e2717;
   --amber: #e09a46;
@@ -99,8 +105,7 @@
   --card-foreground: var(--ink);
   --popover: var(--surface);
   --popover-foreground: var(--ink);
-  /* 实心主色按钮上的文字：与既有 Button 的 text-white 保持一致 */
-  --primary-foreground: #ffffff;
+  --primary-foreground: var(--on-primary);
   --secondary: var(--surface-2);
   --secondary-foreground: var(--ink);
   --muted: var(--surface-2);
@@ -108,7 +113,7 @@
   --accent: var(--surface-2);
   --accent-foreground: var(--ink);
   --destructive: var(--danger);
-  --destructive-foreground: #ffffff;
+  --destructive-foreground: var(--on-primary);
   --border: var(--line);
   --input: var(--line);
   --ring: var(--primary);
@@ -117,7 +122,7 @@
   --sidebar: var(--surface);
   --sidebar-foreground: var(--ink);
   --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: #ffffff;
+  --sidebar-primary-foreground: var(--on-primary);
   --sidebar-accent: var(--primary-wash);
   --sidebar-accent-foreground: var(--primary-ink);
   --sidebar-border: var(--line);
@@ -138,6 +143,7 @@
   --color-primary: var(--primary);
   --color-primary-ink: var(--primary-ink);
   --color-primary-wash: var(--primary-wash);
+  --color-on-primary: var(--on-primary);
   --color-gold: var(--gold);
   --color-gold-wash: var(--gold-wash);
   --color-amber: var(--amber);

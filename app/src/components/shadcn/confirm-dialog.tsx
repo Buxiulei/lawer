@@ -13,6 +13,7 @@ import {
 } from './alert-dialog';
 import { buttonVariants } from './button';
 import { cn } from './utils';
+import { useFocusRestore } from './use-focus-restore';
 
 /**
  * 二次确认（shadcn AlertDialog 版）：props 与手写版 @/components/ui/ConfirmDialog
@@ -40,9 +41,11 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const onCloseAutoFocus = useFocusRestore(open);
+
   return (
     <AlertDialog open={open} onOpenChange={(next) => !next && onCancel()}>
-      <AlertDialogContent>
+      <AlertDialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription asChild>

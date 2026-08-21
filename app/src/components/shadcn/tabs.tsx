@@ -28,9 +28,8 @@ function TabsTrigger({
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        'relative min-h-11 shrink-0 px-3 text-[15px] text-muted-foreground outline-none',
+        'relative min-h-11 shrink-0 px-3 text-[15px] text-muted-foreground',
         'transition-colors duration-150 ease-out hover:text-foreground',
-        'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
         'data-[state=active]:font-semibold data-[state=active]:text-primary-ink',
         "data-[state=active]:after:absolute data-[state=active]:after:inset-x-2 data-[state=active]:after:-bottom-px data-[state=active]:after:h-0.5 data-[state=active]:after:rounded-full data-[state=active]:after:bg-primary data-[state=active]:after:content-['']",
         className,

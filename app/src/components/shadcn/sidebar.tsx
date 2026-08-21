@@ -255,9 +255,9 @@ function SidebarMenuItem({ className, ...props }: React.ComponentProps<'li'>) {
 
 const sidebarMenuButtonVariants = cva(
   cn(
-    'flex w-full items-center gap-3 overflow-hidden rounded-[10px] p-2 text-left outline-none',
+    'flex w-full items-center gap-3 overflow-hidden rounded-[10px] p-2 text-left',
     'transition-[width,height,padding,background-color,color] duration-150 ease-out',
-    'hover:bg-muted focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+    'hover:bg-muted',
     'data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground',
     // 折叠成图标条时只留图标：文字标签不能靠 overflow 裁，会漏出半个字
     'group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! group-data-[collapsible=icon]:[&>span]:hidden',
