@@ -3241,6 +3241,30 @@
     "path": "packs/emotion/kaiting-xinli-jianshe.md"
   },
   {
+    "id": "method-panli-heyan-sibufa",
+    "type": "方法卡",
+    "title": "判例核验四步法（agent 引用任何判例进对外文书前必过）",
+    "keywords": [
+      "判例核验",
+      "引用判例",
+      "先例",
+      "全文核验",
+      "自认与裁判",
+      "否定性核验",
+      "可用不可用反向",
+      "案号"
+    ],
+    "applies_to": [
+      "仲裁申请",
+      "开庭质证",
+      "一审二审"
+    ],
+    "region": "全国",
+    "confidence": "原文核实",
+    "updated": "2026-08-21",
+    "path": "packs/method/panli-heyan-sibufa.md"
+  },
+  {
     "id": "review-baomi-xieyi",
     "type": "审查规则",
     "title": "保密协议审查规则卡（14 条：违约金无效 / 秘密范围 / 变相竞业 / 脱密期 / 载体返还）",
