@@ -45,7 +45,7 @@ export const DRAFT_KINDS = [
 
 /** claim_calc 目前实装的公式（lib/agent/calc）。年假/加班费/双倍工资等后批再加，
  *  加进来之前不列进 enum——列了模型就会调，然后拿到一个「不支持」的错误。 */
-export const CALC_KINDS = ['N', 'N+1', '2N', '年假', '双倍工资', '加班费', '待岗'] as const;
+export const CALC_KINDS = ['N', 'N+1', '2N', '年假', '双倍工资', '加班费', '待岗', '加付赔偿金', '竞业补偿', '病假工资'] as const;
 
 /** 三倍封顶基数所在的数据卡（值逐年更新，代码里的常量只能当兜底） */
 export const SANBEI_CAP_PACK_ID = 'data-beijing-shepin-fengding';
@@ -214,6 +214,59 @@ function calcNonSeverance(
         ...(allowance ? { livingAllowanceFen: allowance.fen } : {}),
         inputSources,
       } as calc.StandbyWageInput);
+    } else if (kind === '加付赔偿金') {
+      const items = Array.isArray(args.items) ? (args.items as calc.ArrearsItem[]) : null;
+      if (!items || items.length === 0) {
+        return reject('加付赔偿金必须给 items 欠付明细，形如 [{"category":"工资","label":"2026-03 工资","amountFen":1500000}]');
+      }
+      for (const f of ['complaint_filed', 'order_issued', 'overdue_unpaid']) {
+        if (typeof args[f] !== 'boolean') {
+          return reject(
+            `加付赔偿金必须给 ${f}（布尔）。三步行政前置缺一不可：` +
+              '①向劳动监察大队投诉 ②劳动行政部门下达限期支付指令书 ③用人单位逾期仍不支付。' +
+              '**仲裁委不受理这一项**，三步没走完就主张，用户会白跑一趟立案。',
+          );
+        }
+      }
+      inputSources.items = sourceOf('items');
+      result = calc.calcArrearsPenalty({
+        items,
+        complaintFiled: args.complaint_filed as boolean,
+        orderIssued: args.order_issued as boolean,
+        overdueUnpaid: args.overdue_unpaid as boolean,
+        inputSources,
+      });
+    } else if (kind === '竞业补偿') {
+      const avg = posInt(args.avg_monthly_wage_fen);
+      const agreedMonths = num(args.agreed_months);
+      if (avg === null) return reject('竞业补偿必须给 avg_monthly_wage_fen（离职前 12 个月平均工资，单位分）');
+      if (agreedMonths === null || agreedMonths <= 0) return reject('竞业补偿必须给 agreed_months（约定的竞业限制月数）');
+      inputSources.avgMonthlyWageFen = sourceOf('avg_monthly_wage_fen');
+      inputSources.agreedMonths = sourceOf('agreed_months');
+      result = calc.calcNonCompeteComp({
+        avgMonthlyWageFen: avg,
+        agreedMonths,
+        ...(num(args.actual_months) !== null ? { actualMonths: num(args.actual_months)! } : {}),
+        ...(posInt(args.agreed_monthly_comp_fen) !== null ? { agreedMonthlyCompFen: posInt(args.agreed_monthly_comp_fen)! } : {}),
+        ...(typeof args.clause_effective === 'boolean' ? { clauseEffective: args.clause_effective } : {}),
+        ...(posInt(args.paid_comp_fen) !== null ? { paidCompFen: posInt(args.paid_comp_fen)! } : {}),
+        ...minWageOpt,
+        inputSources,
+      } as calc.NonCompeteInput);
+    } else if (kind === '病假工资') {
+      const months = Array.isArray(args.months) ? (args.months as calc.SickLeaveMonth[]) : null;
+      if (!months || months.length === 0) {
+        return reject('病假工资必须给 months 逐月明细，形如 [{"month":"2026-03","paidFen":150000}]');
+      }
+      inputSources.months = sourceOf('months');
+      result = calc.calcSickPay({
+        months,
+        ...(posInt(args.agreed_monthly_sick_pay_fen) !== null
+          ? { agreedMonthlySickPayFen: posInt(args.agreed_monthly_sick_pay_fen)! }
+          : {}),
+        ...minWageOpt,
+        inputSources,
+      });
     } else {
       return null; // N / N+1 / 2N 不归这里管
     }
@@ -221,7 +274,14 @@ function calcNonSeverance(
     return reject(`计算失败：${e instanceof Error ? e.message : String(e)}`);
   }
 
-  return persistCalc(kind, result, inputSources, ctx);
+  // 加付赔偿金：把两条**会让用户白跑一趟**的前置条件贴在返回值上（指令紧贴约束对象）。
+  // 只写进 flags 不够——flags 是给代码看的，这句是逼模型讲给用户听的。
+  const noteFor = (k: string): string | null =>
+    k === '加付赔偿金'
+      ? '**必须同时讲清两件事**：①这一项要先经劳动监察责令限期支付、逾期不付才成立（行政前置）；' +
+        '②**仲裁委不受理加付赔偿金**——把它写进仲裁申请会被驳回，用户会白跑一趟立案。'
+      : null;
+  return persistCalc(kind, result, inputSources, ctx, noteFor(kind));
 }
 
 /**
@@ -730,6 +790,34 @@ export const AGENT_TOOLS: ToolDef[] = [
           provides_labor: { type: 'boolean', description: '【待岗】超过第 1 个工资支付周期后单位是否仍安排劳动：true=情形A，false=纯待岗' },
           agreed_monthly_wage_fen: { type: 'integer', description: '【待岗】情形 A 下双方新约定的月工资标准（分）' },
           genuine_stoppage: { type: 'boolean', description: '【待岗】单位是否确实停工停业。缺省 true；传 false 表示公司正常经营只对个别人「待岗」，须全额支付' },
+
+          // ── 加付赔偿金 ──
+          items: {
+            type: 'array',
+            description: '【加付赔偿金】欠付明细（本金，不含加付部分）',
+            items: {
+              type: 'object',
+              properties: {
+                category: { type: 'string', description: '工资 / 加班费 / 经济补偿 等' },
+                label: { type: 'string', description: '如「2026-03 至 2026-05 工资」' },
+                amountFen: { type: 'integer' },
+              },
+              required: ['category', 'label', 'amountFen'],
+            },
+          },
+          complaint_filed: { type: 'boolean', description: '【加付赔偿金】第 1 步：是否已向劳动监察大队投诉' },
+          order_issued: { type: 'boolean', description: '【加付赔偿金】第 2 步：劳动行政部门是否已下达限期支付/限期改正指令书' },
+          overdue_unpaid: { type: 'boolean', description: '【加付赔偿金】第 3 步：用人单位是否逾期仍不支付' },
+
+          // ── 竞业补偿 ──
+          agreed_months: { type: 'number', description: '【竞业补偿】约定的竞业限制月数' },
+          actual_months: { type: 'number', description: '【竞业补偿】实际已履行月数' },
+          agreed_monthly_comp_fen: { type: 'integer', description: '【竞业补偿】约定的月补偿标准（分）；约定高于法定的从其约定' },
+          clause_effective: { type: 'boolean', description: '【竞业补偿】竞业条款是否有效' },
+          paid_comp_fen: { type: 'integer', description: '【竞业补偿】公司已支付的补偿合计（分）' },
+
+          // ── 病假工资 ──
+          agreed_monthly_sick_pay_fen: { type: 'integer', description: '【病假工资】合同/制度约定的月病假工资标准（分）' },
         },
         // 只硬性要求 kind：七种算法的必填项各不相同，逐 kind 在代码里校验并回喂具体缺了什么，
         // 比在 schema 里写一个七选一的 oneOf 更好使——模型看得懂错误原文，看不懂 schema 组合约束

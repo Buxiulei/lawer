@@ -5,7 +5,15 @@ import { describe, expect, it } from 'vitest';
 
 import * as agentStore from '@/lib/db/agent';
 import { CitationGuard } from '../citation-guard';
-import { emitCalcFailureNotice, executeTool, MAX_ACTION_CARDS, newTurnState, type AgentToolContext } from '../tools';
+import {
+  emitCalcFailureNotice,
+  executeTool,
+  MAX_ACTION_CARDS,
+  MIN_WAGE_PACK_ID,
+  MIN_WAGE_VALUE_KEY,
+  newTurnState,
+  type AgentToolContext,
+} from '../tools';
 import { KNOWLEDGE_MISS_DIRECTIVE } from '../retrieval';
 import { FIXTURE_PACK, fixtureSearcher, makeAgentFixture, makeSink } from './fixtures';
 
@@ -688,4 +696,88 @@ describe('落库工具：枚举与归属', () => {
     expect(res.ok).toBe(false);
     expect(res.content).toContain('knowledge_search');
   });
+});
+
+describe('calc 第三批三映射（加付/竞业/病假）', () => {
+  it('必填项不全时回喂"缺什么"，绝不瞎算', () => {
+    const { ctx } = makeCtx();
+    const jf = run(ctx, 'claim_calc', { kind: '加付赔偿金', items: [{ category: '工资', label: '3月工资', amountFen: 1500000 }] });
+    expect(jf.ok).toBe(false);
+    // 三步行政前置缺一不可，且必须把"仲裁委不受理"讲出来——否则用户白跑一趟立案
+    expect(jf.content).toContain('complaint_filed');
+    expect(jf.content).toContain('仲裁委不受理');
+
+    const jy = run(ctx, 'claim_calc', { kind: '竞业补偿', avg_monthly_wage_fen: 2000000 });
+    expect(jy.ok).toBe(false);
+    expect(jy.content).toContain('agreed_months');
+
+    const bj = run(ctx, 'claim_calc', { kind: '病假工资' });
+    expect(bj.ok).toBe(false);
+    expect(bj.content).toContain('months');
+  });
+
+  it('三个公式各自算得出数并直接落 claims（金额与算式同源）', () => {
+    const { ctx } = makeCtx();
+    const db = ctx.db;
+    const cases: [string, Record<string, unknown>][] = [
+      ['加付赔偿金', {
+        items: [{ category: '工资', label: '2026-03 工资', amountFen: 1500000 }],
+        complaint_filed: true, order_issued: true, overdue_unpaid: true,
+      }],
+      ['竞业补偿', { avg_monthly_wage_fen: 2000000, agreed_months: 12 }],
+      ['病假工资', { months: [{ month: '2026-03', paidFen: 100000 }] }],
+    ];
+    for (const [kind, args] of cases) {
+      const res = run(ctx, 'claim_calc', { kind, ...args });
+      expect(res.ok, `${kind}: ${res.content}`).toBe(true);
+      const row = db.prepare('SELECT amount_fen, calc_json FROM claims WHERE case_id = ? AND kind = ?').get(ctx.caseId, kind) as
+        | { amount_fen: number; calc_json: string } | undefined;
+      expect(row, `${kind} 未落库`).toBeDefined();
+      expect(row!.amount_fen).toBe(JSON.parse(row!.calc_json).amountFen);
+    }
+  });
+
+  it('加付赔偿金的返回值必须带**行政前置 + 仲裁委不受理**两条（贴在数据旁，逼模型讲出来）', () => {
+    const { ctx } = makeCtx();
+    const res = run(ctx, 'claim_calc', {
+      kind: '加付赔偿金',
+      items: [{ category: '工资', label: '2026-03 工资', amountFen: 1500000 }],
+      complaint_filed: true, order_issued: true, overdue_unpaid: true,
+    });
+    expect(res.ok).toBe(true);
+    expect(res.content).toContain('行政前置');
+    expect(res.content).toContain('仲裁委不受理');
+  });
+
+  /**
+   * 【钉陷阱的测试】这条测试存在的意义是**拦住第 11 个公式的作者**。
+   *
+   * 竞业/病假/年假/双倍工资/加班费/待岗都吃 `input.minWageFen ?? MIN_WAGE_FEN_DEFAULT`：
+   * 包装层不显式传卡值，就静默回落写死的常量——**今天碰巧对**（常量恰等于卡里现值），
+   * 北京下次调最低工资那一刻起全部静默算错，零告警。这正是 #41 的形状，
+   * 而受影响的是触底/长期病假这类**最输不起的用户**。
+   */
+  it('**最低工资确实取自卡，不是内置常量**——换一张卡，结果必须跟着变（#41 同形陷阱）', () => {
+    // 造两张最低工资卡：一张写现值 2540，一张写一个明显不同的值。
+    // 若包装层没把卡值传下去，两次结果会**完全相同**（都回落内置常量）——那正是 #41 的形状。
+    const card = (yuan: number) => ({
+      id: MIN_WAGE_PACK_ID,
+      title: '最低工资',
+      type: '数据卡',
+      region: '北京',
+      confidence: '原文核实',
+      updated: '2026-08-19',
+      body: '正文散文（不解析）',
+      facts: { values: [{ key: MIN_WAGE_VALUE_KEY, value: yuan, unit: '元/月', effective_from: '2025-09-01', confidence: '原文核实' }] },
+    });
+    const amountWith = (yuan: number) => {
+      const { ctx } = makeCtx({ searcher: fixtureSearcher([card(yuan) as never]) });
+      const res = run(ctx, 'claim_calc', { kind: '病假工资', months: [{ month: '2026-03', paidFen: 100000 }] });
+      expect(res.ok, res.content).toBe(true);
+      return (JSON.parse(res.content) as { amount_fen: number }).amount_fen;
+    };
+    // 下限 = 最低工资 × 80%，卡值翻倍则应补金额随之变化
+    expect(amountWith(5080)).not.toBe(amountWith(2540));
+  });
+
 });

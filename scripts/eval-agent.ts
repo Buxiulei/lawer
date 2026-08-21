@@ -36,6 +36,7 @@ import {
   emotionalLeverageAssertions,
   globalAssertions,
   citationCompletenessAssertions,
+  quotedArticlesFromCards,
   precedentContaminationAssertions,
   userVisibleText,
   unverifiedCoordinateAssertions,
@@ -44,6 +45,7 @@ import {
   type Verdict,
 } from './eval/assertions';
 import { judgeAvailable, judgeItem, type JudgeResult } from './eval/judge';
+import { collectPending, PENDING_ESCALATE_BATCHES, writePendingCardList } from './eval/pending-cards';
 import { newRunId, writeEvidence, type ScenarioEvidence } from './eval/report';
 import { findScenarios, type Scenario } from './eval/scenarios';
 
@@ -213,7 +215,8 @@ async function runScenario(scenario: Scenario, plan: Plan): Promise<ScenarioRepo
     ...bannedHotlineAssertions(turns, crisisFacts),
     // G4 依据纪律的机械那一半：引了条号就必须带逐字原文。全剧本逐轮，
     // 判据与产线出口侧的留痕检测同源（bareArticleCitations）。
-    ...citationCompletenessAssertions(turns, scenario.id),
+    // 库内已有逐字原文的条号全集：本轮检索到的卡现取（补卡到位即自动升级判定标准）
+    ...citationCompletenessAssertions(turns, scenario.id, quotedArticlesFromCards(turns.flatMap((t) => t.retrieved))),
     // 判例细节污染：判例引用句里混进「夹具有、卡里没有」的用户事实。
     // 比对基准是**本轮实际检索到的判例卡**，不硬编码卡 id——引了哪张就拿哪张对。
     ...precedentContaminationAssertions(
@@ -313,6 +316,11 @@ function printReport(r: ScenarioReport): boolean {
   }
   if (!r.semantic.length) console.log(C.dim(`  语义断言：未跑（${judgeOffReason()}）`));
 
+  const pendingCards = r.mechanical.filter((v) => v.naKind === 'pending_card');
+  if (pendingCards.length) {
+    const arts = [...new Set(pendingCards.map((v) => v.pendingArticle))];
+    console.log(C.warn(`  · 因缺卡延迟判定 ${pendingCards.length} 处，涉 ${arts.length} 条条文：${arts.join('、')}`));
+  }
   const l1Fail = rows.filter((x) => x.tier === 'L1' && x.failed);
   const l2Fail = rows.filter((x) => x.tier === 'L2' && x.failed);
   const l3Fail = rows.filter((x) => x.tier === 'L3' && x.failed);
@@ -428,8 +436,27 @@ async function main() {
     scenarios: evidence,
   });
 
+  // 补卡需求清单：把「判据想判、库里没依据」的条文汇成可交外勤的单子并跨批追踪。
+  // 缺口发现器只有配上闭环才成立——不汇总不追踪，N/A 会安静沉底、缺卡永远补不上。
+  const pending = collectPending(
+    results.flatMap(({ r }) => r.mechanical.map((v) => ({ scenarioId: r.scenario.id, verdict: v, excerpt: v.detail }))),
+  );
+  const { items: pendingItems, escalated } = writePendingCardList(
+    path.resolve(import.meta.dirname, 'eval', 'results'),
+    runId,
+    pending,
+  );
+
   console.log(C.bold(`\n───────── 汇总 ─────────`));
   console.log(`通过 ${results.length - failed.length}/${results.length}`);
+  if (pendingItems.length) {
+    console.log(C.warn(`补卡需求 ${pendingItems.length} 条条文（详见 results/pending-cards-${runId}.md，须外勤人工核）`));
+    if (escalated.length) {
+      console.log(
+        C.fail(`⚠️ 连续 ${PENDING_ESCALATE_BATCHES} 批未补卡：${escalated.join('、')}——长期红灯会训练所有人无视红灯，请优先处理`),
+      );
+    }
+  }
   if (failed.length) console.log(C.fail(`未通过：${failed.map((x) => x.r.scenario.id).join(' ')}`));
   if (redlineFailed.length) console.log(C.fail(`⚠ 红线剧本未通过：${redlineFailed.map((x) => x.r.scenario.id).join(' ')}`));
   if (!judgeAvailable()) console.log(C.warn('注意：本次未跑语义断言（judge），不构成完整验收'));
