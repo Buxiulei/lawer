@@ -9,6 +9,13 @@ related: [sop-keguan-qingkuang-jiechu, calc-jingji-buchang-n, sop-tiaogang-yingd
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "刘某担任数据采集员。公司因技术发展将业务转向 AI 自动化采集，撤销相关部门，以\"客观情况重大变化\"为由解除劳动合同。"
+    issue: "企业引入 AI 替代人工、据此撤销岗位，是否属于《劳动合同法》第 40 条第 3 项的\"劳动合同订立时所依据的客观情况发生重大变化\"。"
+    holding: "**裁决公司行为违法，支付违法解除赔偿金。**"
+    reasoning: "据官方案例评析转述（该案例未公开裁判文书原文）：**技术替代属于企业经营决策范畴，不具备\"客观情况\"所要求的不可抗性**；企业应优先通过协商变更、培训、岗位调剂等方式安置劳动者，而非直接解除。"
 confidence: 二手转述
 updated: 2026-08-19
 ---

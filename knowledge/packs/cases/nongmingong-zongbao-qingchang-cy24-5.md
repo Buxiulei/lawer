@@ -10,6 +10,14 @@ region: 北京
 sources:
   - https://www.sohu.com/a/792253141_121123798
   - https://www.bj148.org/zf1/jcdt/202407/t20240712_1666219.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    court: "北京市朝阳区人民法院"
+    gist: "叶某为架子工，其工资被分包单位拖欠。"
+    issue: "分包单位拖欠农民工工资时，施工总承包单位是否承担付款责任。"
+    holding: "判决某建工集团支付 **85,000 元**。"
+    reasoning: "依据《保障农民工工资支付条例》**第三十条**："
 confidence: 原文核实
 updated: 2026-08-19
 ---

@@ -9,6 +9,13 @@ related: [case-jingye-jingzheng-guanxi-shizhi-sz26-2, case-jingye-fanhua-jianshe
 region: 全国
 sources:
   - https://www.court.gov.cn/zixun/xiangqing/472681.html
+facts:
+  case_facts:
+    case_no: "典型案例，未公开案号"
+    gist: "某甲医药公司主张郑某违反竞业限制义务。郑某新入职公司的产品与原单位**无竞争关系**。"
+    issue: "竞业限制义务的范围如何界定——按协议约定的宽泛表述，还是按劳动者实际知悉的商业秘密范围。"
+    holding: "**驳回原公司诉请。**"
+    reasoning: "据案例评析转述：竞业限制义务应与劳动者**所知悉的商业秘密范围相适应**；新入职公司的产品与原单位不存在竞争关系的，不构成违反竞业限制义务。"
 confidence: 原文核实
 updated: 2026-08-19
 ---

@@ -9,6 +9,13 @@ related: [case-jinghu-fuwuqi-sunshi-107, template-xieshang-jiechu-shencha-qingda
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "柳某系事业单位在编人员。医院出资对其进行**住院医师规范化培训三年**，双方约定服务期五年（2019-09 至 2024-08）。柳某 2022-09 辞职，并按协议**递减**支付违约金 15 万元，后申请返还该款项。"
+    issue: "出资进行专业技术培训并约定服务期的，违约金是否合法；已支付的能否要求返还。"
+    holding: "**仲裁委驳回其返还申请，一审、二审判决一致。**"
+    reasoning: "据案例评析转述：应严格区分\"**专业技术培训**\"与\"普通岗位培训\"；违约金不超过用人单位实际支出为合理。本案培训属专业技术培训、违约金按剩余服务期递减计算，故不予返还。"
 confidence: 原文核实
 updated: 2026-08-19
 ---

@@ -9,6 +9,14 @@ related: [calc-nianjia-300, case-shiyongqi-xiangshou-nianjia-sz25-3, case-fuli-n
 region: 北京
 sources:
   - https://www.sohu.com/a/895348496_121123853
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    court: "北京市第三中级人民法院"
+    gist: "某果业公司《考勤管理办法》规定：\"年休假以自然年度为计算周期，年假天数在当年一月一日至次年二月二十八日间有效，**不得顺延、累积至下年度**。\"公司据此拒付朱某未休年假工资。"
+    issue: "用人单位能否通过规章制度为法定年休假设定有效期并规定过期作废。"
+    holding: "判付 2022 年度未休年休假工资 **3,000 余元**。"
+    reasoning: "\"**职工带薪年休假是法律和行政法规赋予劳动者的法定权利，某果业公司作为用人单位无权以自创的规章制度设定年休假有效期间。**\""
 confidence: 二手转述
 updated: 2026-08-19
 ---

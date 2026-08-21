@@ -9,6 +9,12 @@ related: [sop-weiji-jiechu-yingdui, case-shiyongqi-jiechu-minzhu-chengxu-101, st
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/马某与某息技术公司劳动争议二审民事判决书
+facts:
+  case_facts:
+    gist: "公司《员工手册》明确规定：在外从事第二职业或其他活动的，无论采取何种方式、是否取得"
+    issue: "1. \"禁止一切第二职业（不论是否取酬）\"的手册条款是否有效？"
+    holding: "**解除合法，马某败诉。**"
+    reasoning: "\"**通过民主程序制定的规章制度，不违反国家法律、行政法规及政策规定，并已向劳动者公示的，"
 confidence: 原文核实
 updated: 2026-08-19
 ---

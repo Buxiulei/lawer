@@ -9,6 +9,13 @@ related: [sop-daigang-tinggong, sop-pip-yingdui, case-qunti-zhengyi-duoyuan-tiao
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "王某 2022 年进入某公益二类事业单位。2023 年因机构调整，其所在部门**编制被撤销**，研究院将其**待岗并停发绩效工资**，后以\"**试用期不胜任工作**\"解除聘用合同，但**未能提供有效证据**。"
+    issue: "在待岗、无岗可履职的状态下，能否作出\"不胜任工作\"的评价并据此解聘。"
+    holding: "**裁决研究院支付解除聘用合同经济补偿。**"
+    reasoning: "\"**待岗状态下的评价缺乏履职前提，难以认定工作表现**；改革中应制定系统透明的安置方案，不得因试用期身份简化安置程序。\""
 confidence: 原文核实
 updated: 2026-08-19
 ---

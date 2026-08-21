@@ -9,6 +9,14 @@ related: [sop-weiji-jiechu-yingdui, case-zaizhi-jingshang-chigu-18348, sop-yaoqi
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    court: "仲裁裁决 → 一审判决结果一致，已生效"
+    gist: "俞某任董事总经理。公司规章制度要求员工披露利益冲突。俞某在**两次**合规声明问卷中隐瞒了"
+    issue: "1. 隐瞒利益冲突是否构成严重违反规章制度？"
+    holding: "**仲裁委驳回俞某的违法解除赔偿金申请，一审判决结果与仲裁一致，已生效。**"
+    reasoning: "官方典型意义部分载明的要点："
 confidence: 二手转述
 updated: 2026-08-19
 ---

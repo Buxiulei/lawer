@@ -10,6 +10,13 @@ region: 北京
 sources:
   - https://www.sohu.com/a/895348496_121123853
   - https://www.court.gov.cn/zixun/xiangqing/465001.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "郑某是公司唯一的电工。2020-09-10 至 09-25 期间未上班，主张系因工受伤，但其提交的诊断"
+    issue: "1. 劳动合同中关于出勤、请假的约定是否合法有效？"
+    holding: "**解除合法，郑某败诉。**"
+    reasoning: "\"郑某与某公司签订的劳动合同就员工出勤、请假等基本的劳动纪律作了明确约定，郑某对此是"
 confidence: 二手转述
 updated: 2026-08-19
 ---

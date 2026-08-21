@@ -9,6 +9,12 @@ related: [sop-kaoqin-diaonan, sop-weiji-jiechu-yingdui, template-xieshang-jiechu
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/某某冶金技术（北京）有限公司与隋某某劳动争议二审民事判决书
+facts:
+  case_facts:
+    gist: "公司与隋某某协商解除劳动合同未谈成后，翻查其 2019 年、2020 年的迟到早退记录，将所有"
+    issue: "1. 公司长期默认的考勤瑕疵，能否在协商解除失败后\"倒查\"并累加成旷工作为解除理由？"
+    holding: "认定构成违法解除，判决支付赔偿金 **713,520 元**。"
+    reasoning: "\"对于某某公司主张的严重缺勤行为，其统计了隋某某 2019 年、2020 年的迟到早退情形，"
 confidence: 原文核实
 updated: 2026-08-19
 ---

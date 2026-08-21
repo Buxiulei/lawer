@@ -9,6 +9,12 @@ related: [sop-weiji-jiechu-yingdui, sop-pip-yingdui, statute-jgf-2024-534-jieda-
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/某公司与于某劳动争议二审民事判决书
+facts:
+  case_facts:
+    gist: "公司以于某试用期\"不符合录用条件\"为由解除劳动合同，所依据的是公司《绩效管理考核办法及"
+    issue: "1. 试用期解除，公司拿不出考核过程记录，能否成立？"
+    holding: "认定违法解除，判决支付违法解除劳动关系赔偿金 **5,268 元**。"
+    reasoning: "\"某公司认为于某不符合试用期录用条件，**但其未能提供于某 2020 年 10 月、11 月的绩效"
 confidence: 原文核实
 updated: 2026-08-19
 ---

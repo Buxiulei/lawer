@@ -9,6 +9,12 @@ related: [sop-weiji-jiechu-yingdui, sop-yaoqiu-qianzi-wenjian, script-hongxian-q
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/宗某与某公司劳动争议二审民事判决书
+facts:
+  case_facts:
+    gist: "公司规章制度经合法程序制定并已履行告知义务，宗某对被告知的内容签字确认并作出相应承诺。"
+    issue: "1. 制度经合法程序制定 + 已告知 + 员工签字承诺，三者齐备时解除依据是否充分？"
+    holding: "**解除合法，宗某败诉。**"
+    reasoning: "\"**某公司相应规章制度经过合法程序制定并已履行告知义务，且宗某亦就被告知内容签字确认"
 confidence: 原文核实
 updated: 2026-08-19
 ---

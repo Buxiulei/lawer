@@ -9,6 +9,14 @@ related: [sop-kaoqin-diaonan, sop-weiji-jiechu-yingdui, calc-bingjia-gongzi, cal
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    court: "仲裁裁决 → 一审、二审判决结果与仲裁一致"
+    gist: "袁某因工伤（腰椎间盘突出）持北京某区医院开具的病假单休假。公司**先后七次**要求其到公司"
+    issue: "1. 劳动者能否自主选择就医医院？"
+    holding: "**仲裁委支持袁某的违法解除赔偿金请求，一审、二审判决结果与仲裁一致。**"
+    reasoning: "官方典型意义部分载明的要点："
 confidence: 二手转述
 updated: 2026-08-19
 ---

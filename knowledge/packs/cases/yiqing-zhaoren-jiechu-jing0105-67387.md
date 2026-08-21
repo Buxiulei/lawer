@@ -9,6 +9,12 @@ related: [sop-keguan-qingkuang-jiechu, sop-jiangxin-yingdui, sop-tuoqian-kekou-g
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/北京市朝阳区人民法院（2023）京0105民初67387号民事判决书
+facts:
+  case_facts:
+    gist: "公司以\"受疫情影响，公司发展不佳；郭某一直未帮公司找到合适人员拓展业务\"为由解除劳动关系。案件同时涉及疫情期间单方降薪、以及居家办公期间是否在提供劳动两项争议。"
+    issue: "1. 这种混合了经营理由与个人绩效的说法，能否构成合法解除依据；"
+    holding: "判令支付工资及工资差额共计 10,397.11 元；**违法解除劳动关系赔偿金 24,000 元**。"
+    reasoning: "\"某公司以'**受疫情影响，公司发展不佳；郭某一直未帮公司找到合适人员拓展业务**'等为由提出劳动关系，**于法无据**，本院认定某公司违法解除双方劳动关系。\""
 confidence: 原文核实
 updated: 2026-08-19
 ---

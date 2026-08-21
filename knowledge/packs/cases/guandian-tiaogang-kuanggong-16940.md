@@ -9,6 +9,12 @@ related: [sop-tiaogang-yingdui, sop-weiji-jiechu-yingdui, calc-jingji-buchang-n,
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终16940号民事判决书
+facts:
+  case_facts:
+    gist: "公司关闭徐某所在门店后对其调岗，但既未提供调岗的合法依据，也未告知徐某可以去哪家具体"
+    issue: "1. 公司因自身关店原因调岗、却拿不出具体新岗位，能否以劳动者\"没去\"认定旷工？"
+    holding: "认定构成违法解除，判决支付违法解除劳动关系赔偿金 **95,000 元**；采信徐某关于季度绩效"
+    reasoning: "\"某公司**并未提交充分证据证明其对徐某进行调岗调离具有合法依据，亦未就徐某可以调岗"
 confidence: 原文核实
 updated: 2026-08-19
 ---

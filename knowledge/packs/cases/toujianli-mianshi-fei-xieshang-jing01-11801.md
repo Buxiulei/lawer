@@ -9,6 +9,12 @@ related: [calc-jingji-buchang-n, sop-keguan-qingkuang-jiechu, data-beijing-shepi
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/北京市第一中级人民法院（2023）京01民终11801号民事判决书
+facts:
+  case_facts:
+    gist: "公司称疫情及经济下行导致岗位取消，依《劳动合同法》第 40 条第 3 项解除，并支付经济补偿 392,746 元。公司称已向高某提供了其他岗位机会，但需其提交简历、参加面试、双向选择。高某主张系违法解除。"
+    issue: "1. 岗位取消是否构成客观情况重大变化；"
+    holding: "认定**违法解除**。按第 47 条三倍封顶基数 **41,628 元/月** 核算 2N＝41,628×8.5×2＝**707,676 元**，扣除公司已付 392,746 元，判付**差额 314,930 元**。"
+    reasoning: "一审："
 confidence: 原文核实
 updated: 2026-08-19
 ---

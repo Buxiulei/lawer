@@ -9,6 +9,13 @@ related: [sop-zhuan-guanlian-gongsi, case-huanqian-zhuti-wugu-cy24-4, case-huanq
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "郭某 2019 年入职某集团公司。合同到期前，公司安排其转入**控股子公司**：先与原公司签订**终止协议**，再重新与子公司签订劳动合同。**2025 年 1 月，子公司以业务裁撤为由解除劳动合同，仅按其在子公司的工作年限支付补偿。**"
+    issue: "关联公司间调配、且已签署\"终止协议\"的，此前在原公司的工作年限是否计入经济补偿。"
+    holding: "**裁决子公司按连续工作年限支付解除劳动合同经济补偿。**"
+    reasoning: "\"关联公司间的人员调配**不因终止协议签署而中断工作年限连续计算**。评判标准应综合考察岗位、管理、工资等用工管理延续性。\""
 confidence: 原文核实
 updated: 2026-08-19
 ---

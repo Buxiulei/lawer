@@ -9,6 +9,13 @@ related: [case-guyi-buqian-hetong-bjzc24-2, statute-fashi-2025-12-jieshi-2, calc
 region: 全国
 sources:
   - https://www.court.gov.cn/zixun/xiangqing/472681.html
+facts:
+  case_facts:
+    case_no: "典型案例，未公开案号"
+    gist: "合同到期后，用人单位**多次要求续订**书面劳动合同，冉某**以\"拿二倍工资\"为由拒绝**。公司继续按原合同条款履行并为其缴纳保险。冉某随后主张未签书面合同的二倍工资。"
+    issue: "用人单位已尽到订立义务、劳动者故意拒签的，二倍工资责任是否成立。"
+    holding: "判决**驳回**二倍工资请求。"
+    reasoning: "据案例评析转述：用人单位已多次要求续订并实际按原条款履行、依法缴纳社会保险，未订立书面合同的原因在于劳动者本人故意，故不负担二倍工资责任。"
 confidence: 原文核实
 updated: 2026-08-19
 ---

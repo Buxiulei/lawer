@@ -9,6 +9,12 @@ related: [sop-zhuan-guanlian-gongsi, sop-keguan-qingkuang-jiechu, calc-jingji-bu
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/北京世纪互联宽带数据中心有限公司等与刘旭劳动争议二审民事判决书
+facts:
+  case_facts:
+    gist: "《解除或终止劳动合同通知书》上同时写了\"客观情况发生重大变化\"\"经协商不能就变更达成协议\"\"生产经营发生严重困难\"三条理由。此前双方签过《劳动合同主体变更协议》，2016-07-01 起合同主体由世纪宽带公司变更为光载无限公司。"
+    issue: "1. 解除理由堆了三条但一条都不举证，后果由谁承担；"
+    holding: "认定光载无限公司**违法解除**；认定两公司存在**混同用工**，对给付内容承担**连带责任**。"
+    reasoning: "关于违法解除："
 confidence: 原文核实
 updated: 2026-08-19
 ---

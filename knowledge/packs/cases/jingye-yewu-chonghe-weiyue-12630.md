@@ -9,6 +9,13 @@ related: [case-jingye-jingzheng-guanxi-shizhi-sz26-2, case-jingye-jingzheng-zhen
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/贾某与某美术出版公司劳动争议二审民事判决书
+facts:
+  case_facts:
+    case_no: "北京市第三中级人民法院 （2023）京03民终12630号"
+    gist: "贾某从某出版社离职后入职某美术出版公司。两家单位**业务重合**，贾某在两处**岗位均为编辑且系部门主要负责人**。贾某在诉讼中申请对\"解除协议前两页被替换\"进行鉴定。"
+    issue: "1. 是否构成违反竞业限制义务；"
+    holding: "认定**构成违反竞业限制，判决支付违约金**；对鉴定申请**不予准许**。"
+    reasoning: "据案例评析转述：两单位业务存在重合，贾某前后岗位均为编辑且担任部门主要负责人，属于同一相关市场中争夺相同资源的情形，构成违反竞业限制义务。"
 confidence: 原文核实
 updated: 2026-08-19
 ---

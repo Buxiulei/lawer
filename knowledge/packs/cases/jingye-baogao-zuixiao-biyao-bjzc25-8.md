@@ -9,6 +9,13 @@ related: [case-jingye-fanhua-jianshen-jiaolian-bjzc24-9, case-jingye-feifa-quzhe
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "某技术公司要求离职员工崔某每月提交多项报告材料，包括**工牌自拍原图、月度定位信息**等。崔某未履行，公司据此主张其违反竞业限制。"
+    issue: "竞业限制协议中的\"报告义务\"能设到什么程度；未履行报告义务是否等于违反竞业限制。"
+    holding: "**仲裁驳回公司全部申请。**"
+    reasoning: "\"竞业限制报告义务应遵循'**最小必要**'原则。过度报告义务（如高频定位、强制图像采集）**侵犯隐私权**。**违约金仅适用于从事竞争性业务的行为。**\""
 confidence: 原文核实
 updated: 2026-08-19
 ---

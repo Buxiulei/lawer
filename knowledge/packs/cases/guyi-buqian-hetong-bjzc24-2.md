@@ -9,6 +9,13 @@ related: [case-guyi-buqian-hetong-zgf25-3, case-lizhi-zhengming-jianli-riqi-7215
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "孔某任副总经理，月薪 15,000 元。公司多次提出签订书面劳动合同均被其拒绝；其**微信聊天与视频显示系为索要二倍工资而故意拖延**。"
+    issue: "因劳动者本人故意不订立书面劳动合同的，用人单位是否仍须支付二倍工资。"
+    holding: "**仲裁委驳回其 120,000 元二倍工资请求，一审、二审判决一致。**"
+    reasoning: "\"依据'诚实信用'原则，任何人不得因自己的错误获利……用人单位应及时通知并与不配合签署者终止劳动关系，防范'劳动碰瓷'。\""
 confidence: 原文核实
 updated: 2026-08-19
 ---

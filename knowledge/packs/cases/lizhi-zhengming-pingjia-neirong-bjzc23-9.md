@@ -9,6 +9,13 @@ related: [sop-weixie-beidiao-lizhengming, template-xieshang-jiechu-shencha-qingd
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202312/t20231229_3518105.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "某网络科技公司在《解除劳动合同证明书》上写明：\"**章某与公司签订的服务期协议尚未履行完毕，违反诚实信用原则**\"。"
+    issue: "用人单位能否在离职证明中加入对劳动者的评价性内容。"
+    holding: "**经仲裁调解，公司重新出具**符合规定的证明。"
+    reasoning: "依据《劳动合同法》第 50 条第 1 款；《劳动合同法实施条例》**第二十四条**："
 confidence: 原文核实
 updated: 2026-08-19
 ---

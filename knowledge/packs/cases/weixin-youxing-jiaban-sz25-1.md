@@ -9,6 +9,14 @@ related: [calc-jiabanfei, case-zhengju-caixin-guize-huibian, sop-dianzi-shuju-gu
 region: 北京
 sources:
   - https://www.sohu.com/a/895348496_121123853
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    court: "北京市第三中级人民法院"
+    gist: "董某提交微信记录与邮件截图，证明其在工作日较晚时间、休息日和法定节假日处理工作，主张加班费。公司以未履行加班审批手续等制度理由抗辩。"
+    issue: "未经审批的\"线上隐形加班\"能否认定；加班审批制度能否成为免付加班费的理由。"
+    holding: "采信微信记录作为初步证据，**酌情核定加班费**。"
+    reasoning: "\"董某提交的微信记录，可以初步证明其存在工作日较晚时间、休息日和法定节假日处理工作的实际情况……**相关加班制度的设定不宜过分严苛**\""
 confidence: 二手转述
 updated: 2026-08-19
 ---

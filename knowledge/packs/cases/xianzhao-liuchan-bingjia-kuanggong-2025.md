@@ -10,6 +10,12 @@ region: 北京
 sources:
   - https://www.sohu.com/a/895348496_121123853
   - https://www.court.gov.cn/zixun/xiangqing/465001.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "闫某因先兆流产向公司请病假，并提交了病假条以证明休假的合理性与必要性。公司不同意其病假"
+    issue: "1. 劳动者已提交病假条，公司能否以\"未批准\"为由将休假认定为旷工？"
+    holding: "**认定构成违法解除，判决公司向闫某支付赔偿金（2N）。**"
 confidence: 二手转述
 updated: 2026-08-19
 ---
