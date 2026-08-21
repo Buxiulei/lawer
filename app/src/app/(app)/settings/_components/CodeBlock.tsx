@@ -1,5 +1,6 @@
 'use client';
 
+import { cn } from '@/app/_ui/cn';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 
@@ -8,10 +9,16 @@ export function CodeBlock({
   code,
   copyLabel = '复制',
   copiedMessage = '已复制',
+  wrap = false,
+  maxHeight,
 }: {
   code: string;
   copyLabel?: string;
   copiedMessage?: string;
+  /** 整段话术这类以文字为主的内容要折行，否则在手机上只能横着拖 */
+  wrap?: boolean;
+  /** 超过这个高度就竖向滚，别把整页撑长（如 'max-h-72'） */
+  maxHeight?: string;
 }) {
   const toast = useToast();
 
@@ -24,7 +31,13 @@ export function CodeBlock({
 
   return (
     <div>
-      <pre className="overflow-x-auto rounded-[10px] bg-surface-2 px-3 py-2.5 font-mono text-[13px] leading-6 text-ink">
+      <pre
+        className={cn(
+          'overflow-x-auto rounded-[10px] bg-surface-2 px-3 py-2.5 font-mono text-[13px] leading-6 text-ink',
+          wrap && 'whitespace-pre-wrap break-words',
+          maxHeight && `${maxHeight} overflow-y-auto`,
+        )}
+      >
         <code>{code}</code>
       </pre>
       <div className="mt-2">
