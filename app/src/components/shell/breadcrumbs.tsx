@@ -34,6 +34,7 @@ export function crumbsFor(pathname: string, caseId: string): Crumb[] {
 
   // 只做两级：详情页停在所属栏目，不把文书名/文件名放进顶栏——那里面有公司名。
   if (rest.startsWith('/evidence')) return [workbench, { label: '证据' }];
+  if (rest.startsWith('/graph')) return [workbench, { label: '公司图谱' }];
   if (rest.startsWith('/docs')) return [workbench, { label: '文件解读' }];
   if (rest.startsWith('/drafts')) return [workbench, { label: '文书' }];
   return [{ label: '工作台' }];

@@ -244,6 +244,33 @@
   .shadow-soft {
     box-shadow: var(--shadow-soft);
   }
+
+  /* 图谱上有紧急动态的主体：外环缓慢呼吸，2s 一周期，不是高频闪烁 */
+  .graph-pulse {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: graph-pulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes graph-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.15;
+    transform: scale(1.04);
+  }
+}
+
+/* 减弱动效时环留在静止态，不靠动画传达信息（紧急也写在卡片和抽屉里） */
+@media (prefers-reduced-motion: reduce) {
+  .graph-pulse {
+    animation: none;
+    opacity: 0.5;
+  }
 }
 
 /* 动效：全站过渡 150–250ms ease-out，不做弹跳/视差 */
