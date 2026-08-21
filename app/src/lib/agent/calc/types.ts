@@ -15,10 +15,21 @@
 export const CALC_VERSION = '1.0.0';
 
 /**
- * 公式种类。留开放联合：后批还要加 2倍工资、加班费、年假折算等，
- * 加的时候不该逼所有 switch 一起改。
+ * 公式种类。留开放联合：后批还要继续加，加的时候不该逼所有 switch 一起改。
+ *
+ * 字面量与 claims.kind 的枚举对齐（2N|N|N+1|欠薪|年假|加班费|双倍工资|年终奖|竞业补偿|其他）。
+ * 唯一对不上的是 '待岗工资'——claims.kind 无此项，落库时归 '欠薪'（待岗期间的工资差额本质是
+ * 未足额支付劳动报酬）。该映射是 agent 层的事，calc 层只负责把 kind 如实标出来。
  */
-export type CalcKind = 'N' | 'N+1' | '2N' | (string & {});
+export type CalcKind =
+  | 'N'
+  | 'N+1'
+  | '2N'
+  | '年假'
+  | '双倍工资'
+  | '加班费'
+  | '待岗工资'
+  | (string & {});
 
 /**
  * 计算过程中触发的特殊档位（集中此处，防拼写漂移——学 GONGDAO_LEDGER_TYPE 范式）。
@@ -43,6 +54,59 @@ export const CALC_FLAG = {
    * 当庭或谈判被质疑时，agent 凭此 flag 直接给出口径出处。
    */
   daitongzhijinNoCap: '代通知金不适用三倍封顶（北京无明文口径）',
+
+  /** 用了内置缺省最低工资。北京最低工资随年度调整，引用前须以现行文号核实。 */
+  minWageUnverified: '最低工资缺省值待核实',
+
+  // ── 年假（calc-nianjia-300） ──
+  /** 天数按**累计**工作时间定档（含跨单位、视同工作期间），不是本单位司龄。 */
+  nianjiaCumulativeTenure: '年假天数按累计工龄（含跨单位）',
+  /** 累计工作不满 1 年，不落 5/10/15 任何一档。 */
+  nianjiaNoEntitlement: '累计工作不满一年不享受年休假',
+  /** 折算后不足 1 整天的部分不支付（实施办法第十二条）。 */
+  nianjiaSubDayDropped: '折算不足一整天不支付',
+  /** 已安排天数多于折算应休，差额为 0 且多休不再扣回（实施办法第十二条第三款）。 */
+  nianjiaOverArranged: '已休多于折算，多休不扣回',
+  /** 主张的年度早于「离职当年+上一年度」，按保守口径大概率超时效——提示，不静默剔除。 */
+  nianjiaShixiaoConservative: '早于上一年度的年假时效风险高',
+
+  // ── 二倍工资（calc-weiqian-hetong-shuangbei / 534 号第 41 问） ──
+  /** 534 号第 41 问第 2 项：用工满一年后视为已订无固定期限合同，该期间二倍工资不予支持。 */
+  shuangbeiOneYearBlock: '用工满一年后不支持二倍工资',
+  /** 窗口被 11 / 12 个月上限截断。 */
+  shuangbeiWindowCapped: '二倍工资窗口已按上限截断',
+  /** 窗口两端有不满一月的月份，按该月实际工作日折算（法释〔2025〕12 号第六条）。 */
+  shuangbeiPartialMonth: '不满一月按实际工作日折算',
+  /** 有月份落在「主张之日向前一年」之外，已单列为超时效金额。 */
+  shuangbeiPartlyExpired: '部分月份已过仲裁时效',
+  /** 534 号第 41 问末段：时效抗辩须由用人单位提出，仲裁机构/法院不主动适用。 */
+  shuangbeiShixiaoDefense: '时效抗辩须用人单位提出，不主动适用',
+  /** 同上：有证据证明未超时效（中断/中止）的除外，超时效部分并非必然拿不到。 */
+  shuangbeiShixiaoInterrupt: '有证据证明时效中断/中止的除外',
+  /** 第 41 问第 4 项：应订无固定期限而不订的，不受十二个月上限限制。 */
+  shuangbeiNoTwelveMonthCap: '无固定期限情形不受十二个月上限',
+
+  // ── 加班费（calc-jiabanfei） ──
+  /** 日/小时基数折算天数存冲突：534 号第 57 问第 5 项 21.75，工资支付规定第 43 条 20.92。 */
+  jiabanDivisorDisputed: '折算天数 21.75/20.92 存争议',
+  /** 本次按 20.92 出数（可争取项，非稳拿项）。 */
+  jiabanLegacyDivisor: '按 20.92 折算（可争取项）',
+  /** 基数口径：合同约定优先，但压到最低工资/低于约定工资标准的可被击破（第 57 问第 1 项）。 */
+  jiabanBaseRule: '加班基数约定优先，压低约定可击破',
+  /** 法定节假日加班不得以补休替代，必须付 300%（工资支付规定第十四条第三项）。 */
+  jiabanHolidayNoSwap: '法定节假日加班不得以补休替代',
+
+  // ── 待岗（calc-daigang-gongzi） ──
+  /** 「一个工资支付周期」的起算点北京无明文，本次按入参给的首个月计（争议点 1）。 */
+  daigangFirstCycleDisputed: '首个工资支付周期起算点存争议',
+  /** 超过首个周期且未安排工作，按最低工资 70% 的基本生活费计。 */
+  daigangLivingAllowance: '按最低工资70%计基本生活费',
+  /** 超过首个周期但仍提供劳动，下限是最低工资本身而非 70%。 */
+  daigangProvidesLabor: '仍提供劳动，下限为最低工资',
+  /** 单位并未停工停业（只对个别员工待岗），第二十七条不适用，应按合同全额支付。 */
+  daigangNotGenuineStoppage: '未真实停工停业，第27条不适用',
+  /** 有不满整月的月份，按 21.75 日折算。 */
+  daigangPartialMonth: '不满整月按21.75折算',
 } as const;
 export type CalcFlag = (typeof CALC_FLAG)[keyof typeof CALC_FLAG];
 
