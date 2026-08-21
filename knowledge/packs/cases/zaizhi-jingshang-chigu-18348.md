@@ -9,6 +9,12 @@ related: [sop-weiji-jiechu-yingdui, sop-quxiao-jixiao-jiangjin, script-hongxian-
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/孟某与某公司劳动争议二审民事判决书
+facts:
+  case_facts:
+    gist: "孟某在职期间系禹航贸易（北京）有限公司唯一股东、法定代表人、执行董事、经理，同时是"
+    issue: "1. 在职期间担任与本公司经营范围重合企业的股东、高管，是否构成严重违纪？"
+    holding: "**解除合法，且 2020 年奖金请求不予支持，孟某败诉。**"
+    reasoning: "\"孟某系禹航贸易（北京）有限公司唯一股东、法定代表人、执行董事、经理，北京航隆商贸有限"
 confidence: 原文核实
 updated: 2026-08-19
 ---

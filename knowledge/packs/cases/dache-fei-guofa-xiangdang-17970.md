@@ -9,6 +9,12 @@ related: [sop-weiji-jiechu-yingdui, calc-jingji-buchang-n, statute-jgf-2024-534-
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/某科技公司与王某劳动争议二审民事判决书
+facts:
+  case_facts:
+    gist: "某科技公司以王某擅自使用公司账户支付打车费用 954.03 元为由，径行解除劳动关系。公司在"
+    issue: "1. 违纪事实即使存在，处罚是否必须与过错程度相当？"
+    holding: "认定构成违法解除，判决支付违法解除劳动合同赔偿金 **75,680 元**；另判付疫情隔离期间工资。"
+    reasoning: "\"**用人单位以劳动者严重违反单位的规章制度为由解除劳动合同，法院应当依法审查该规章制度"
 confidence: 原文核实
 updated: 2026-08-19
 ---

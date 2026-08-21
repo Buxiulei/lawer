@@ -9,6 +9,12 @@ related: [sop-jiangxin-yingdui, sop-gongzi-shebao-geshui-beijing, sop-zhengren-y
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/某公司与迟某劳动争议二审民事判决书
+facts:
+  case_facts:
+    gist: "迟某主张其工资自 2020 年 11 月起调整为 30,000 元，此后公司单方降薪 30% 未与其协商。"
+    issue: "1. 工资标准发生争议时，举证责任在谁？"
+    holding: "采信迟某工资自 2020 年 11 月调整为 30,000 元、公司降薪 30% 的事实，核算后支持相应工资"
+    reasoning: "\"**就工资标准而言，某公司作为用人单位，应当就工资标准及具体组成部分进行证明，但未提交"
 confidence: 原文核实
 updated: 2026-08-19
 ---

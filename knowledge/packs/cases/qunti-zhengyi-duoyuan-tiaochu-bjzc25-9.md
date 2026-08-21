@@ -9,6 +9,13 @@ related: [case-pingtai-yonggong-qunti-tiaojie-cy24-7, sop-quxiao-jixiao-jiangjin
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "某中外合资公司因国际制裁和政策变化经营困难，**修改绩效考核办法**，导致员工**大量申请仲裁**；外方投资者施压并威胁撤资。"
+    issue: "群体性劳动争议的处理机制。"
+    holding: "仲裁院启动**多元处理机制**、组建**专项调解小组**，促成各方达成一致意见。"
+    reasoning: "据案例评析转述：本案通过多元调处机制化解，未进入对抗性裁决程序。"
 confidence: 原文核实
 updated: 2026-08-19
 ---

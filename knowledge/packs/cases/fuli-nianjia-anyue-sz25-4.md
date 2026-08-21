@@ -9,6 +9,14 @@ related: [case-nianjia-guoqi-zuofei-wuxiao-sz25-2, case-shiyongqi-xiangshou-nian
 region: 北京
 sources:
   - https://www.sohu.com/a/895348496_121123853
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    court: "北京市第三中级人民法院"
+    gist: "某公司员工手册规定：\"员工年休假除法定年假天数外如含有公司福利年假的，**应先行休完法定年假**；不论何种原因导致员工未休福利年假的，**公司不予任何补偿**。\"索某主张未休年假补偿。"
+    issue: "企业额外给予的\"福利年休假\"未休时是否必须折算补偿。"
+    holding: "只就未休的 **5 天法定年休假**计算补偿；福利年假部分按公司规定处理。"
+    reasoning: "据案例评析转述：**福利年休假属于企业自主经营权范围内额外承诺的福利待遇，在不违反法律规定的情况下应按用人单位规定执行**；本案因此只就未休的法定年休假计算补偿。"
 confidence: 二手转述
 updated: 2026-08-19
 ---

@@ -9,6 +9,13 @@ related: [case-jingye-lanyong-jujue-buchang-sz26-1, case-jingye-fanwei-shiying-z
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "桑某系**普通健身教练**（非高级管理人员、非高级技术人员）。劳动合同约定离职后两年内不得从事竞争工作，违约金 30 万元。桑某离职后到**距离 800 米处**的健身公司工作，原公司据此索赔。"
+    issue: "普通岗位劳动者是否属于法定的竞业限制人员范围；公司未举证商业秘密存在的后果。"
+    holding: "**仲裁委驳回公司仲裁申请，裁决已生效。**"
+    reasoning: "据案例评析转述：法律规定竞业限制仅限于\"**高级管理人员、高级技术人员和负有保密义务的人员**\"，普通教练员不属此列；健身教练掌握的技能系**个人知识**而非因职务获得；公司**未举证商业秘密的存在**。"
 confidence: 原文核实
 updated: 2026-08-19
 ---

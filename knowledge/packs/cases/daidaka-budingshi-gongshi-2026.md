@@ -9,6 +9,12 @@ related: [sop-kaoqin-diaonan, sop-weiji-jiechu-yingdui, script-hongxian-qingdan,
 region: 北京
 sources:
   - https://bj3zy.bjcourt.gov.cn/article/detail/2026/07/id/9399749.shtml
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "王某存在由同事代其打卡 15 次的情形。王某主张自己未授权同事代打卡，但未就此举证，也未"
+    issue: "1. 主张\"没授权别人代打卡\"由谁举证？"
+    holding: "**解除合法，王某败诉。**"
 confidence: 二手转述
 updated: 2026-08-19
 ---

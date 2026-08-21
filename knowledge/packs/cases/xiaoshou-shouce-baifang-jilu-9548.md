@@ -9,6 +9,12 @@ related: [sop-kaoqin-diaonan, sop-weiji-jiechu-yingdui, sop-yaoqiu-qianzi-wenjia
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/北京市第三中级人民法院（2024）京03民终9548号民事判决书
+facts:
+  case_facts:
+    gist: "某公司《销售部管理手册》对出勤作出规定，刘某在手册上签字。该公司的完整考勤需以上班打卡"
+    issue: "1. 劳动者只在手册正文签字，是否视为知晓其**附件**内容？"
+    holding: "**解除具有制度依据，认定不构成违法解除，刘某败诉。**"
+    reasoning: "\"一审法院根据某公司《销售部管理手册》的内容体系安排及刘某签字情况，**认定刘某应知晓"
 confidence: 原文核实
 updated: 2026-08-19
 ---

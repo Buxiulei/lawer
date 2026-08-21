@@ -9,6 +9,13 @@ related: [calc-jingji-buchang-n, case-erci-daoqi-zhongzhi-weifa-4718, sop-koutou
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "阎某 **1965 年出生**。公司在其达到**原法定退休年龄 60 岁**时单方通知其办理退休手续，**未与其协商新的法定退休年龄**（按延迟退休政策延至 **61 岁**）。"
+    issue: "延迟退休政策实施后，用人单位能否按原法定退休年龄单方终止劳动合同。"
+    holding: "**裁决公司违法终止，支付赔偿金。**"
+    reasoning: "\"延迟退休政策下，用人单位应与职工协商确定退休时间，**不得违背职工意愿强制或变相强制提前退休**。\""
 confidence: 原文核实
 updated: 2026-08-19
 ---

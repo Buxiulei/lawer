@@ -9,6 +9,12 @@ related: [calc-daitongzhijin-n1, calc-jingji-buchang-n, sop-zhuan-guanlian-gongs
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/某传媒公司分公司等与边某劳动争议二审民事判决书
+facts:
+  case_facts:
+    gist: "某传媒公司与其分公司以经济性裁员为由解除与边某的劳动合同，但未就此提供充分证据。边某已依第 48 条主张违法解除赔偿金，一审同时判了代通知金，公司上诉。边某曾在总公司安排下转与分公司建立劳动关系。"
+    issue: "1. 以经济性裁员为由解除却不举证，如何定性；"
+    holding: "认定**违法解除**；改判后违法解除赔偿金 **66,588.75 元**；**撤销一审关于代通知金的判项**；认定两公司工龄连续计算并承担连带责任。"
+    reasoning: "关于违法解除："
 confidence: 原文核实
 updated: 2026-08-19
 ---

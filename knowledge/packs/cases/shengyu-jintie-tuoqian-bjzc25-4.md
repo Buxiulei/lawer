@@ -9,6 +9,13 @@ related: [statute-lhtf-38-beipo-jiechu, template-beipo-jiechu-tongzhishu, sop-tu
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "陈某产假 **158 天**期间，某餐饮公司未支付任何工资或生育津贴；产假结束后公司向社保部门申报并领取了生育津贴，**却未转付给陈某，直至三个月后才发放**。陈某据此提出解除劳动关系并主张经济补偿。"
+    issue: "用人单位代领后迟延转付生育津贴，是否构成《劳动合同法》第 38 条意义上的\"未及时足额支付劳动报酬\"，劳动者能否据此被迫解除并拿 N。"
+    holding: "**裁决支持陈某据此解除劳动关系并获经济补偿。**"
+    reasoning: "据案例评析转述：生育津贴属于劳动报酬的组成部分，用人单位代为申领后应及时足额转付劳动者；迟延支付构成拖欠劳动报酬，劳动者有权据此解除劳动合同并要求经济补偿。"
 confidence: 二手转述
 updated: 2026-08-19
 ---

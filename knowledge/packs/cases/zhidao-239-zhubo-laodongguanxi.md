@@ -9,6 +9,11 @@ related: [calc-weiqian-hetong-shuangbei, statute-fashi-2025-12-jieshi-2]
 region: 北京
 sources:
   - https://www.court.gov.cn/shenpan/xiangqing/450741.html
+facts:
+  case_facts:
+    gist: "王某系网络主播，2020 年 3 月与北京某传媒公司签订《独家经纪合同》。王某请求确认 2020-03-01 至 2021-04-13 期间存在劳动关系，并主张奖金 255,217.5 元及未订立书面劳动合同二倍工资差额 11 万元。"
+    issue: "签了《独家经纪合同》、受合同约束的主播，与经纪公司之间是不是劳动关系。"
+    holding: "三级均认定**不存在劳动关系**，二倍工资与奖金请求全部被驳回。"
 confidence: 原文核实
 updated: 2026-08-19
 ---

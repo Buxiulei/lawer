@@ -9,6 +9,13 @@ related: [sop-weiji-jiechu-yingdui, script-hongxian-qingdan, sop-lengbaoli-guli]
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202312/t20231229_3518105.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    court: "仲裁裁决 → 一审、二审判决结果与仲裁一致"
+    gist: "2021 年 10 月，贾某让岳父代替其参加公司年度体检，被发现。此后贾某与妻子多次拨打体检"
+    issue: "1. 代做体检本身是否构成严重违反用人单位规章制度？"
+    holding: "**仲裁委裁决驳回贾某的仲裁请求（88,000 元赔偿金），一审、二审判决结果与仲裁一致。**"
 confidence: 二手转述
 updated: 2026-08-19
 ---

@@ -9,6 +9,13 @@ related: [case-shengyu-jintie-tuoqian-bjzc25-4, case-gongzi-yiyiqi-wuxiao-bjzc24
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202312/t20231229_3518105.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "某医疗公司《行政管理制度》第 27 条规定：\"女职工怀孕前需提交生育申请，未提交申请怀孕者，扣除 14 个月绩效奖金。新来女职工需要工作满一年后方可提交生育申请。\"公司据此扣除王某 **7 个月绩效奖金 14,123 元**。"
+    issue: "用人单位能否通过规章制度对女职工生育设置前置审批条件，并对\"未申请即怀孕\"扣发绩效奖金。"
+    holding: "**经仲裁委主持调解，公司向王某支付了上述期间绩效奖金**，王某撤回申请。"
+    reasoning: "依《妇女权益保障法》第 44 条第 1 款、第 48 条第 1 款、《就业促进法》第 27 条第 3 款："
 confidence: 二手转述
 updated: 2026-08-19
 ---

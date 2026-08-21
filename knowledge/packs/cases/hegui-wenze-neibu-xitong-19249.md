@@ -9,6 +9,12 @@ related: [sop-weiji-jiechu-yingdui, sop-quxiao-jixiao-jiangjin, case-gaoguan-yin
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终19249号民事判决书
+facts:
+  case_facts:
+    gist: "黄某承担管理责任的私募资管业务存在违规行为，导致公司被中国证监会广东监管局出具责令改正"
+    issue: "1. 制度仅公示在公司内部系统，能否认定高管已知晓？"
+    holding: "**解除合法，违法解除赔偿金请求被驳回；年度绩效扣减 50% 获支持，黄某败诉。**"
+    reasoning: "\"黄某虽对《某公司合规问责管理办法》不予认可，**但该制度公示在某公司内部系统，黄某作为"
 confidence: 原文核实
 updated: 2026-08-19
 ---

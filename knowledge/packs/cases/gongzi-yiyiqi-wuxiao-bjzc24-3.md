@@ -9,6 +9,13 @@ related: [sop-tuoqian-kekou-gongzi, case-zhengju-caixin-guize-huibian, statute-b
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "劳动合同约定\"**员工收薪后 3 日内未提出书面异议视为认可**\"。公司据此抗辩劳动者事后不得再主张工资差额。"
+    issue: "用人单位设定的\"工资异议期\"条款是否有效；劳动者未在期限内提出异议是否丧失主张权利。"
+    holding: "该条款**无效**。"
+    reasoning: "\"'工资异议期'约定**免除了用人单位法定责任、排除了劳动者权利，属无效条款**。劳动者以沉默方式对工资的认可不具法律效力。用人单位对工资支付负有举证责任。**劳动者有权追索工资直至法定时效期满。**\""
 confidence: 原文核实
 updated: 2026-08-19
 ---

@@ -9,6 +9,14 @@ related: [case-nianjia-guoqi-zuofei-wuxiao-sz25-2, case-fuli-nianjia-anyue-sz25-
 region: 北京
 sources:
   - https://www.sohu.com/a/895348496_121123853
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    court: "北京市第三中级人民法院"
+    gist: "刘某入职某保险公司前，已在其他单位连续工作满 12 个月以上。新单位以其处于**试用期**为由主张不享受当年度带薪年休假。"
+    issue: "试用期能否成为不享受年休假的理由；\"连续工作满 12 个月\"如何计算。"
+    holding: "支持刘某享受当年度带薪年休假。"
+    reasoning: "\"**劳动者在入职新单位之前，已在其他单位连续工作满 12 个月以上的，即符合在新单位享受当年度带薪年休假的前提条件。即便新单位与劳动者约定了试用期，该试用期亦不影响劳动者享受带薪年休假的权利。**\""
 confidence: 二手转述
 updated: 2026-08-19
 ---

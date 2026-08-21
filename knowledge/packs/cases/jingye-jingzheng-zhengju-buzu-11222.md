@@ -9,6 +9,13 @@ related: [case-jingye-jingzheng-guanxi-shizhi-sz26-2, case-jingye-yewu-chonghe-w
 region: 北京
 sources:
   - https://zh.wikisource.org/zh-hans/北京市第一中级人民法院（2023）京01民终11222号民事判决书
+facts:
+  case_facts:
+    case_no: "北京市第一中级人民法院 （2023）京01民终11222号"
+    gist: "用人单位主张劳动者入职的新单位与其构成竞争关系，要求承担竞业限制违约责任。"
+    issue: "竞争关系的认定标准与举证责任分配。"
+    holding: "证据不足以证明双方形成竞争关系，**驳回公司诉请**。"
+    reasoning: "\"应结合公司的**经营范围、实际经营内容、受众及地域范围**等因素\"判断是否构成竞争关系。"
 confidence: 原文核实
 updated: 2026-08-19
 ---

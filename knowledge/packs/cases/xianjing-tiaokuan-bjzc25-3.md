@@ -9,6 +9,13 @@ related: [template-xieshang-jiechu-shencha-qingdan, case-xieyi-yilanzi-fangqi-16
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "陈某与某贸易公司协商解除劳动关系，协议约定经济补偿 **38,000 元**，但补偿支付以\"**公司账户解封**\"为条件。该公司账户长期冻结，**四年未付**。"
+    issue: "将补偿金支付挂钩于\"公司账户解封\"这类劳动者无法预期、无法控制的事件，该付款条件是否有效。"
+    holding: "**裁决公司五日内支付经济补偿。**"
+    reasoning: "\"**以不确定事件作为支付前提条件属于'陷阱条款'，因显失公平而无效。补偿条款必须具有明确的履行保障。**\""
 confidence: 原文核实
 updated: 2026-08-19
 ---

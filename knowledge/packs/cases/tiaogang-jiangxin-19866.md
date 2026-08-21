@@ -9,6 +9,12 @@ related: [sop-tiaogang-yingdui, statute-lhtf-38-beipo-jiechu, calc-jingji-buchan
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终19866号民事判决书
+facts:
+  case_facts:
+    gist: "李某原月工资标准 20,000 元。公司未与其协商一致，直接将李某调整到月工资标准 12,000 元的"
+    issue: "1. 劳动合同里写了\"公司可调整岗位\"，是否就免除公司证明调岗合理性的责任？"
+    holding: "改判支付解除劳动合同经济补偿 **166,171.82 元**，另补足工资差额及十三薪差额（判决援引"
+    reasoning: "\"工作岗位、劳动报酬系劳动合同约定的重要内容，依据《劳动合同法》第三十五条规定……故"
 confidence: 原文核实
 updated: 2026-08-19
 ---

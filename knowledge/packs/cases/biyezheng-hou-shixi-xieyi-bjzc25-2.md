@@ -9,6 +9,13 @@ related: [case-lizhi-zhengming-jianli-riqi-72152, case-waibao-qixin-juzheng-cy24
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "冯某 2022 年作为在校生实习。**2023 年 1 月获得毕业证书后**，公司仍与其续签实习协议；冯某多次要求签订劳动合同遭拒。2023 年 11 月被公司单方解除。"
+    issue: "已取得毕业证书的劳动者仍以\"实习协议\"用工的，双方是何种法律关系。"
+    holding: "**裁决确认自 2023 年 1 月 20 日起存在劳动关系，公司支付违法解除赔偿金。**"
+    reasoning: "据案例评析转述：取得毕业证书后学生身份终止，具备劳动者主体资格；用工关系符合**人身从属性、经济从属性、组织从属性**三要素，应认定为劳动关系。"
 confidence: 原文核实
 updated: 2026-08-19
 ---

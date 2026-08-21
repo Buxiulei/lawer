@@ -9,6 +9,12 @@ related: [sop-weiji-jiechu-yingdui, sop-quxiao-jixiao-jiangjin, calc-jiabanfei, 
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/某物业管理有限公司与张某劳动争议一审民事判决书
+facts:
+  case_facts:
+    gist: "公司主张张某在物资采购工作中存在严重违纪并造成公司损失，据此解除劳动合同，并扣发其"
+    issue: "1. 公司对\"严重违纪\"和\"损失系劳动者造成\"的举证达到何种程度才算够？"
+    holding: "判决：①绩效工资 **2,000 元**；②年终奖 **10,000 元**；③违法解除劳动合同赔偿金"
+    reasoning: "\"结合张某的岗位职责、张某在物资采购中的角色、物资采购的审批流程以及某物业公司主张"
 confidence: 原文核实
 updated: 2026-08-19
 ---

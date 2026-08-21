@@ -9,6 +9,13 @@ related: [case-nianzhongjiang-beijing-koujing, case-buqian-tongzhi-shuangbei-845
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/某1公司与苏某劳动争议二审民事判决书
+facts:
+  case_facts:
+    case_no: "北京市第三中级人民法院 （2024）京03民终11114号"
+    gist: "聘用合同明确约定\"**按利润总额 20% 作为奖励绩效**\"。公司实际未按该标准发放，主张标准已变更，但**无证据证明该变更经劳动者认可**。"
+    issue: "合同已明确约定的绩效/奖金计算标准，用人单位能否单方调整；未足额发放是否承担约定的违约金。"
+    holding: "支持绩效差额，并按**日万分之三**支付违约金。"
+    reasoning: "据案例评析转述：合同已明确约定奖励绩效的计算方式，属于劳动合同的约定内容，变更须经双方协商一致；公司无证据证明劳动者认可变更，应按原约定标准支付差额，并按合同约定的日万分之三承担逾期付款违约金。"
 confidence: 原文核实
 updated: 2026-08-19
 ---

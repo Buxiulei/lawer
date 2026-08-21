@@ -9,6 +9,13 @@ related: [case-jingye-peiou-daichi-sz26-3, case-jingye-weiyuejin-tiaozheng-sz26-
 region: 全国
 sources:
   - https://www.court.gov.cn/zixun/xiangqing/472681.html
+facts:
+  case_facts:
+    case_no: "典型案例，未公开案号"
+    gist: "黄某系销售经理，与公司签订在职竞业限制协议。查明的获利分为**两段**："
+    issue: "在职期间的竞业限制义务是否成立；哪一部分获利可归入违约。"
+    holding: "认定黄某在协议生效后的行为构成违反在职竞业限制义务，**承担违约责任**。"
+    reasoning: "据案例评析转述：劳动者在职期间负有忠实义务，签订在职竞业限制协议后从事与本单位同类竞争业务并牟利的，应承担违约责任。协议生效前发生的获利不属于违反竞业限制义务的范围。"
 confidence: 原文核实
 updated: 2026-08-19
 ---

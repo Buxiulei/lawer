@@ -9,6 +9,12 @@ related: [statute-lhtf-38-beipo-jiechu, sop-tuoqian-kekou-gongzi, calc-jingji-bu
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终16097号民事判决书
+facts:
+  case_facts:
+    gist: "焦某主张公司欠付其销售佣金。公司认可发放过部分佣金，但未提交完整的佣金核算与发放证据；"
+    issue: "1. 佣金核算资料在公司手里，劳动者举不出全账，举证责任怎么分配？"
+    holding: "判决支付工资差额 **152,006.90 元** + 经济补偿 **33,417.92 元**。"
+    reasoning: "\"**与争议事项有关的证据属于用人单位掌握管理的，用人单位应当提供。**公司虽认可发放过"
 confidence: 原文核实
 updated: 2026-08-19
 ---

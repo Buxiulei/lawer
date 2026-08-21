@@ -9,6 +9,13 @@ related: [sop-weiji-jiechu-yingdui, sop-kaoqin-diaonan, case-daidaka-budingshi-g
 region: 北京
 sources:
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "李某担任电力公司高压配电室值班员。其因个人原因外出期间，未经批准私自安排同事顶替自己"
+    issue: "1. 劳动者能否自行安排他人代替履行劳动义务？"
+    holding: "**仲裁委驳回李某的违法解除赔偿金申请。**"
+    reasoning: "\"劳动关系具有**人格从属性**，亲自履行劳动义务是基本要求。未经批准替岗违背这一原则，"
 confidence: 二手转述
 updated: 2026-08-19
 ---

@@ -9,6 +9,13 @@ related: [sop-luyin-quzheng, case-zhengju-caixin-guize-huibian, case-jingye-feif
 region: 北京
 sources:
   - https://zh.wikisource.org/wiki/姚某与某律所劳动争议二审民事判决书
+facts:
+  case_facts:
+    case_no: "北京市第三中级人民法院 （2023）京03民终14444号"
+    gist: "姚某主张与某律所存在劳动关系，提交两项证据：①微信聊天记录中姚某发送的**证人证言**；②与张某的**电话录音**。"
+    issue: "劳动者单方取得的录音与书面证人证言，能否作为认定劳动关系的依据。"
+    holding: "上述证据**均不予采纳**。"
+    reasoning: "\"微信聊天记录中姚某发送的证人证言**未经张某签字确认，亦未作为证人出庭**，且**电话录音无法直接证明姚某主张的劳动关系，录音中亦显示张某与某律所存在其他争议具有利害关系**，故对上述证据不予采纳\""
 confidence: 原文核实
 updated: 2026-08-19
 ---

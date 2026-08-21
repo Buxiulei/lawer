@@ -10,6 +10,13 @@ region: 北京
 sources:
   - https://www.sohu.com/a/895348496_121123853
   - https://www.court.gov.cn/zixun/xiangqing/465001.html
+facts:
+  case_facts:
+    case_no: "官方案例，未公开案号"
+    gist: "李某任案场策划，通过微信向公司提出休息安排请求：朝九晚六、每周休两天、法定假顺延。"
+    issue: "1. 劳动者提出休息休假请求后被\"劝退\"，随后办理离职，属于劳动者主动辞职、公司违法解除，"
+    holding: "**认定双方协商一致解除劳动关系，公司应支付经济补偿金（N）。**"
+    reasoning: "\"李某对某公司提出的请求，**系正当行使法律赋予其的休息休假权，某公司拒绝并表示李某可以"
 confidence: 二手转述
 updated: 2026-08-19
 ---
