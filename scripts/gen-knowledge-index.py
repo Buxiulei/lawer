@@ -147,6 +147,8 @@ def main() -> None:
                 forbidden.append((normalize(h["phone"]), path))
         entry = {f: str(fm.get(f, "")) if f == "updated" else fm.get(f, "") for f in INDEX_FIELDS}
         entry["path"] = str(path.relative_to(ROOT))
+        if fm.get("law_refs"):
+            entry["law_refs"] = fm["law_refs"]
         if fm.get("facts"):
             entry["facts"] = fm["facts"]
         entries.append(entry)

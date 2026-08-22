@@ -20,7 +20,15 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/calc/bingjia-gongzi.md"
+    "path": "packs/calc/bingjia-gongzi.md",
+    "law_refs": [
+      "北京市工资支付规定§21",
+      "北京市工资支付规定§19",
+      "北京市工资支付规定§22",
+      "劳动合同法§42",
+      "劳动合同法§40",
+      "劳部发〔1994〕479号"
+    ]
   },
   {
     "id": "calc-buchangjin-geshui",
@@ -44,7 +52,12 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/calc/buchangjin-geshui.md"
+    "path": "packs/calc/buchangjin-geshui.md",
+    "law_refs": [
+      "财税〔2001〕157号",
+      "财税〔2018〕164号",
+      "个人所得税法附表一"
+    ]
   },
   {
     "id": "calc-daigang-gongzi",
@@ -68,7 +81,14 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/calc/daigang-gongzi.md"
+    "path": "packs/calc/daigang-gongzi.md",
+    "law_refs": [
+      "北京市工资支付规定§27",
+      "北京市工资支付规定§26",
+      "劳动合同法§38",
+      "京高法发〔2024〕534号§57",
+      "京高法发〔2024〕534号§80"
+    ]
   },
   {
     "id": "calc-daitongzhijin-n1",
@@ -93,7 +113,14 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/calc/daitongzhijin-n1.md"
+    "path": "packs/calc/daitongzhijin-n1.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§41",
+      "劳动合同法§36",
+      "劳动合同法实施条例§20",
+      "劳动合同法实施条例§25"
+    ]
   },
   {
     "id": "calc-jiabanfei",
@@ -121,7 +148,18 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/calc/jiabanfei.md"
+    "path": "packs/calc/jiabanfei.md",
+    "law_refs": [
+      "劳动法§44",
+      "北京市工资支付规定§14",
+      "北京市工资支付规定§15",
+      "北京市工资支付规定§16",
+      "北京市工资支付规定§17",
+      "北京市工资支付规定§43",
+      "北京市工资支付规定§44",
+      "京高法发〔2024〕534号§57",
+      "法释〔2020〕26号§42"
+    ]
   },
   {
     "id": "calc-jingji-buchang-n",
@@ -147,7 +185,15 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/calc/jingji-buchang-n.md"
+    "path": "packs/calc/jingji-buchang-n.md",
+    "law_refs": [
+      "劳动合同法§46",
+      "劳动合同法§47",
+      "劳动合同法§97",
+      "劳动合同法实施条例§27",
+      "京高法发〔2024〕534号§55",
+      "京高法发〔2024〕534号§66"
+    ]
   },
   {
     "id": "calc-jingye-buchang-weiyuejin",
@@ -173,7 +219,20 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/calc/jingye-buchang-weiyuejin.md"
+    "path": "packs/calc/jingye-buchang-weiyuejin.md",
+    "law_refs": [
+      "劳动合同法§23",
+      "劳动合同法§24",
+      "法释〔2020〕26号§36",
+      "法释〔2025〕12号§13",
+      "法释〔2025〕12号§14",
+      "法释〔2025〕12号§15",
+      "人社厅发〔2025〕40号§11",
+      "人社厅发〔2025〕40号§13",
+      "人社厅发〔2025〕40号§14",
+      "人社厅发〔2025〕40号§17",
+      "人社厅发〔2025〕40号§18"
+    ]
   },
   {
     "id": "calc-nianjia-300",
@@ -200,7 +259,20 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/calc/nianjia-300.md"
+    "path": "packs/calc/nianjia-300.md",
+    "law_refs": [
+      "职工带薪年休假条例§3",
+      "职工带薪年休假条例§4",
+      "职工带薪年休假条例§5",
+      "企业职工带薪年休假实施办法§3",
+      "企业职工带薪年休假实施办法§4",
+      "企业职工带薪年休假实施办法§5",
+      "企业职工带薪年休假实施办法§10",
+      "企业职工带薪年休假实施办法§11",
+      "企业职工带薪年休假实施办法§12",
+      "企业职工带薪年休假实施办法§13",
+      "京高法发〔2024〕534号§62"
+    ]
   },
   {
     "id": "calc-shiye-baoxianjin",
@@ -224,7 +296,13 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/calc/shiye-baoxianjin.md"
+    "path": "packs/calc/shiye-baoxianjin.md",
+    "law_refs": [
+      "失业保险条例§14",
+      "失业保险条例§16",
+      "失业保险条例§17",
+      "失业保险条例§18"
+    ]
   },
   {
     "id": "calc-tuoqian-jiafu-peichang",
@@ -249,7 +327,17 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/calc/tuoqian-jiafu-peichang.md"
+    "path": "packs/calc/tuoqian-jiafu-peichang.md",
+    "law_refs": [
+      "劳动合同法§85",
+      "京高法发〔2024〕534号§6",
+      "京高法发〔2024〕534号§54",
+      "北京市工资支付规定§35",
+      "北京市工资支付规定§9",
+      "北京市工资支付规定§11",
+      "北京市工资支付规定§12",
+      "北京市工资支付规定§40"
+    ]
   },
   {
     "id": "calc-weiqian-hetong-shuangbei",
@@ -274,7 +362,22 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/calc/weiqian-hetong-shuangbei.md"
+    "path": "packs/calc/weiqian-hetong-shuangbei.md",
+    "law_refs": [
+      "劳动合同法§10",
+      "劳动合同法§14",
+      "劳动合同法§82",
+      "京高法发〔2024〕534号§41",
+      "京高法发〔2024〕534号§55",
+      "法释〔2025〕12号§6",
+      "法释〔2025〕12号§7",
+      "法释〔2025〕12号§8",
+      "法释〔2025〕12号§9",
+      "法释〔2025〕12号§10",
+      "法释〔2025〕12号§11",
+      "法释〔2025〕12号§20",
+      "劳动争议调解仲裁法§27"
+    ]
   },
   {
     "id": "case-ai-tidai-gangwei-2025-zhongcai",
@@ -300,6 +403,10 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/ai-tidai-gangwei-2025-zhongcai.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -333,6 +440,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/biyezheng-hou-shixi-xieyi-bjzc25-2.md",
+    "law_refs": [
+      "劳动合同法§7",
+      "劳动合同法§10",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -369,6 +481,12 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/buqian-tongzhi-shuangbei-8452.md",
+    "law_refs": [
+      "劳动合同法§82",
+      "劳动合同法§87",
+      "劳动合同法§50",
+      "劳动合同法实施条例§27"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市朝阳区人民法院 （2023）京0105民初8452号（2023-08-11）",
@@ -402,6 +520,12 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/caiyuan-daitongzhijin-jing03-14407.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§41",
+      "劳动合同法§48",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "gist": "某传媒公司与其分公司以经济性裁员为由解除与边某的劳动合同，但未就此提供充分证据。边某已依第 48 条主张违法解除赔偿金，一审同时判了代通知金，公司上诉。边某曾在总公司安排下转与分公司建立劳动关系。",
@@ -434,6 +558,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/caiyuan-kuisun-buzhengju-jing03-18835.md",
+    "law_refs": [
+      "劳动合同法§41",
+      "劳动合同法§87",
+      "法释〔2020〕26号§44"
+    ],
     "facts": {
       "case_facts": {
         "gist": "公司主张因经营困难、为调整经营战略而进行经济性裁员（《劳动合同法》第 41 条），赵某对该事实不予认可，公司未提交任何有效证据。",
@@ -464,6 +593,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/dache-fei-guofa-xiangdang-17970.md",
+    "law_refs": [
+      "劳动合同法§4",
+      "劳动合同法§39",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "gist": "某科技公司以王某擅自使用公司账户支付打车费用 954.03 元为由，径行解除劳动关系。公司在",
@@ -494,6 +628,10 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/daidaka-budingshi-gongshi-2026.md",
+    "law_refs": [
+      "劳动合同法§39",
+      "劳动合同法§43"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -527,6 +665,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/daocha-kaoqin-kuanggong-2002.md",
+    "law_refs": [
+      "劳动合同法§39",
+      "劳动合同法§87",
+      "京高法发〔2024〕534号§80"
+    ],
     "facts": {
       "case_facts": {
         "gist": "公司与隋某某协商解除劳动合同未谈成后，翻查其 2019 年、2020 年的迟到早退记录，将所有",
@@ -559,6 +702,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/di-er-zhiye-zhidu-hefa-13839.md",
+    "law_refs": [
+      "劳动合同法§4",
+      "劳动合同法§39"
+    ],
     "facts": {
       "case_facts": {
         "gist": "公司《员工手册》明确规定：在外从事第二职业或其他活动的，无论采取何种方式、是否取得",
@@ -592,6 +739,13 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/erci-daoqi-zhongzhi-weifa-4718.md",
+    "law_refs": [
+      "劳动合同法§14",
+      "劳动合同法§39",
+      "劳动合同法§40",
+      "劳动合同法§48",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市第三中级人民法院 （2024）京03民终4718号（2024-04-29）",
@@ -623,6 +777,9 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/fuli-nianjia-anyue-sz25-4.md",
+    "law_refs": [
+      "职工带薪年休假条例§3"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -655,6 +812,9 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/gaoguan-yinman-liyi-chongtu-2024.md",
+    "law_refs": [
+      "劳动合同法§39"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -687,6 +847,10 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/gongshang-fuzhen-guodu-diaocha-2024.md",
+    "law_refs": [
+      "劳动合同法§39",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -720,6 +884,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/gongzi-yiyiqi-wuxiao-bjzc24-3.md",
+    "law_refs": [
+      "劳动合同法§26",
+      "劳动争议调解仲裁法§27"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -753,6 +921,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/guandian-tiaogang-kuanggong-16940.md",
+    "law_refs": [
+      "劳动合同法§35",
+      "劳动合同法§39",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "gist": "公司关闭徐某所在门店后对其调岗，但既未提供调岗的合法依据，也未告知徐某可以去哪家具体",
@@ -790,6 +963,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/guanlian-hundong-zeyi-zgf25-2.md",
+    "law_refs": [
+      "法释〔2025〕12号§3",
+      "劳动合同法§10"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -821,6 +998,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/guyi-buqian-hetong-bjzc24-2.md",
+    "law_refs": [
+      "劳动合同法§10",
+      "劳动合同法§82",
+      "法释〔2025〕12号§7"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -852,6 +1034,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/guyi-buqian-hetong-zgf25-3.md",
+    "law_refs": [
+      "劳动合同法§10",
+      "劳动合同法§82",
+      "法释〔2025〕12号§7"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "典型案例，未公开案号",
@@ -884,6 +1071,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/hegui-wenze-neibu-xitong-19249.md",
+    "law_refs": [
+      "劳动合同法§4",
+      "劳动合同法§39"
+    ],
     "facts": {
       "case_facts": {
         "gist": "黄某承担管理责任的私募资管业务存在违规行为，导致公司被中国证监会广东监管局出具责令改正",
@@ -915,6 +1106,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/huanqian-gongling-lianxu-bjzc25-1.md",
+    "law_refs": [
+      "劳动合同法§46",
+      "劳动合同法§47",
+      "劳动合同法实施条例§10"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -949,6 +1145,12 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/huanqian-jiangxin-gongling-11711.md",
+    "law_refs": [
+      "劳动合同法§14",
+      "劳动合同法§35",
+      "劳动合同法§48",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市第三中级人民法院 （2024）京03民终11711号（2024-10-15）",
@@ -981,6 +1183,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/huanqian-zhuti-wugu-cy24-4.md",
+    "law_refs": [
+      "劳动合同法§14",
+      "劳动合同法§48",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -1017,6 +1224,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/hundong-yonggong-liandai-jing01-197.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§41",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "gist": "《解除或终止劳动合同通知书》上同时写了\"客观情况发生重大变化\"\"经协商不能就变更达成协议\"\"生产经营发生严重困难\"三条理由。此前双方签过《劳动合同主体变更协议》，2016-07-01 起合同主体由世纪宽带公司变更为光载无限公司。",
@@ -1048,6 +1260,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/hunton-buchengli-lvsuo-3024.md",
+    "law_refs": [
+      "劳动合同法§44"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市第三中级人民法院 （2024）京03民终3024号（2024-04-09）",
@@ -1081,6 +1296,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/hunton-liandai-cy24-1.md",
+    "law_refs": [
+      "劳动合同法§7"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -1115,6 +1333,12 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/hunton-wugu-shuangbei-43551.md",
+    "law_refs": [
+      "劳动合同法§14",
+      "劳动合同法§38",
+      "劳动合同法§46",
+      "劳动合同法§82"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市朝阳区人民法院 （2022）京0105民初43551号（2023-07-27）",
@@ -1150,6 +1374,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/hunton-yiren-gongsi-liandai-13483.md",
+    "law_refs": [
+      "劳动合同法§30",
+      "劳动合同法§87",
+      "公司法§23"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市朝阳区人民法院 （2024）京0105民初13483号（2024-07-30）",
@@ -1182,6 +1411,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/hunton-zhuxiao-gudong-16816.md",
+    "law_refs": [
+      "劳动合同法§44",
+      "法释〔2020〕26号§35"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市第三中级人民法院 （2023）京03民终16816号（2023-12-25）",
@@ -1213,6 +1446,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jiangxin-30-geshui-zhengju-7478.md",
+    "law_refs": [
+      "劳动合同法§35",
+      "劳动争议调解仲裁法§6"
+    ],
     "facts": {
       "case_facts": {
         "gist": "迟某主张其工资自 2020 年 11 月起调整为 30,000 元，此后公司单方降薪 30% 未与其协商。",
@@ -1245,6 +1482,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jiechu-buzhengju-jing0105-6093.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§87",
+      "劳动合同法§23"
+    ],
     "facts": {
       "case_facts": {
         "gist": "公司解除与樊某的劳动关系，诉讼中既未证明解除符合《劳动合同法》第 40 条规定的情形，也未证明履行了解除程序。樊某另主张竞业限制经济补偿金。",
@@ -1278,6 +1520,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jinghu-fuwuqi-sunshi-107.md",
+    "law_refs": [
+      "劳动合同法§25",
+      "京高法发〔2024〕534号§82"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市第三中级人民法院 （2024）京03民终107号",
@@ -1309,6 +1555,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-baogao-zuixiao-biyao-bjzc25-8.md",
+    "law_refs": [
+      "劳动合同法§23",
+      "民法典§1032",
+      "民法典§1035"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -1340,6 +1591,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-fanhua-jianshen-jiaolian-bjzc24-9.md",
+    "law_refs": [
+      "劳动合同法§24",
+      "法释〔2025〕12号§13"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -1371,6 +1626,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-fanwei-shiying-zgf25-4.md",
+    "law_refs": [
+      "劳动合同法§23",
+      "劳动合同法§24",
+      "法释〔2025〕12号§13"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "典型案例，未公开案号",
@@ -1404,6 +1664,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-feifa-quzheng-sz26-6.md",
+    "law_refs": [
+      "民事诉讼法",
+      "民法典§1032",
+      "民法典§1033"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -1438,6 +1703,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-gongzi-han-buchang-wuxiao-sz26-4.md",
+    "law_refs": [
+      "劳动合同法§23",
+      "劳动合同法§26",
+      "法释〔2020〕26号§36"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -1471,6 +1741,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-jingzheng-guanxi-shizhi-sz26-2.md",
+    "law_refs": [
+      "劳动合同法§23",
+      "劳动合同法§24"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -1505,6 +1779,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-jingzheng-zhengju-buzu-11222.md",
+    "law_refs": [
+      "劳动合同法§23",
+      "劳动合同法§24"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市第一中级人民法院 （2023）京01民终11222号",
@@ -1537,6 +1815,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-lanyong-jujue-buchang-sz26-1.md",
+    "law_refs": [
+      "劳动合同法§23",
+      "劳动合同法§24",
+      "法释〔2025〕12号§13"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -1570,6 +1853,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-peiou-daichi-sz26-3.md",
+    "law_refs": [
+      "劳动合同法§23",
+      "劳动合同法§24",
+      "法释〔2025〕12号§15"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -1603,6 +1891,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-weiyuejin-tiaozheng-sz26-5.md",
+    "law_refs": [
+      "劳动合同法§23",
+      "民法典合同编通则解释§65"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -1635,6 +1927,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-yewu-chonghe-weiyue-12630.md",
+    "law_refs": [
+      "劳动合同法§23",
+      "劳动合同法§24"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市第三中级人民法院 （2023）京03民终12630号",
@@ -1671,6 +1967,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jixiao-gaijin-chengxu-jing03-16660.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§43",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "gist": "公司以越某\"无业绩\"为由于 2021-07-09 解除劳动合同，并称就该解除取得了工会的书面同意回执。双方签有《业务拓展人员绩效考核责任书》，其中约定了绩效未达标时的改进程序。",
@@ -1705,6 +2006,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jujie-xinhuo-jing03-5083.md",
+    "law_refs": [
+      "劳动合同法§31",
+      "劳动合同法§47",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "gist": "高某红 2017-04-21 入职，2020-09-01 转签北京分公司，任华北地区订单员。劳动合同约定\"拒绝正常工作交接、工作安排、出差、培训、调动等\"属严重违纪，可立即解除且不付补偿。2023 年 3 月一位同事离职后她先接手其工作，对接销售由 18 名增至 52 名；同月 22 日公司要求她再接手另一离职同事刘某的电商订单工作，她以工作量饱和为由多次拒绝，公司连发两份书面警告，6-21 发《",
@@ -1739,6 +2045,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/keguan-yiqing-yewuliang-jing03-15429.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§87",
+      "法释〔2020〕26号§44"
+    ],
     "facts": {
       "case_facts": {
         "gist": "两案公司均主张：受新冠疫情影响公司业务量骤减、大量业务条线减少，订立劳动合同时所依据的客观情况发生重大变化，致使劳动合同无法继续履行，据此依第 40 条第 3 项解除。",
@@ -1773,6 +2084,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/keguan-zhanlue-tiaozheng-jing03-20183.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "gist": "公司以\"受行业整体环境影响及公司整体经营战略、组织架构调整的要求\"为由，依《劳动合同法》第 40 条第 3 项解除与吴某的劳动合同。双方就岗位调整有过邮件沟通。",
@@ -1804,6 +2119,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/lirun-20-jixiao-weiyuejin-11114.md",
+    "law_refs": [
+      "劳动合同法§35"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市第三中级人民法院 （2024）京03民终11114号",
@@ -1836,6 +2154,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/lizhi-zhengming-jianli-riqi-72152.md",
+    "law_refs": [
+      "劳动合同法§10",
+      "劳动合同法§82"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市朝阳区人民法院 （2022）京0105民初72152号（2023-05-29）",
@@ -1868,6 +2190,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/lizhi-zhengming-pingjia-neirong-bjzc23-9.md",
+    "law_refs": [
+      "劳动合同法§50",
+      "劳动合同法实施条例§24"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -1900,6 +2226,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/luyin-lihai-guanxi-bucaina-14444.md",
+    "law_refs": [
+      "民事诉讼法",
+      "民事诉讼证据规定§68"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市第三中级人民法院 （2023）京03民终14444号",
@@ -1932,7 +2262,12 @@
     "region": "全国",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/cases/mowei-taotai-shangwei-guize-2016.md"
+    "path": "packs/cases/mowei-taotai-shangwei-guize-2016.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§39",
+      "劳动合同法§48"
+    ]
   },
   {
     "id": "case-nianjia-guoqi-zuofei-wuxiao-sz25-2",
@@ -1955,6 +2290,10 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/nianjia-guoqi-zuofei-wuxiao-sz25-2.md",
+    "law_refs": [
+      "职工带薪年休假条例§3",
+      "企业职工带薪年休假实施办法§9"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -1990,6 +2329,10 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/nianjia-yuerjia-gongzi-sz25-8.md",
+    "law_refs": [
+      "劳动法§45",
+      "北京市人口与计划生育条例§19"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2025,7 +2368,11 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/cases/nianzhongjiang-beijing-koujing.md"
+    "path": "packs/cases/nianzhongjiang-beijing-koujing.md",
+    "law_refs": [
+      "劳动合同法§30",
+      "京高法发〔2024〕534号§55"
+    ]
   },
   {
     "id": "case-nianzhongjiang-jishu-2n-jing0105-33722",
@@ -2051,6 +2398,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/nianzhongjiang-jishu-2n-jing0105-33722.md",
+    "law_refs": [
+      "劳动合同法§47",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "gist": "公司于 2021-07-27 通过邮件通知钟奇燕于 2021-07-30 解除劳动关系，诉讼中未能证明解除的合法性。争议还包括赔偿金基数是否应把年终奖分摊计入。",
@@ -2082,6 +2433,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/nongmingong-zongbao-qingchang-cy24-5.md",
+    "law_refs": [
+      "保障农民工工资支付条例§30"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2114,6 +2468,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/paiqian-gongjijin-guocuo-cy24-6.md",
+    "law_refs": [
+      "劳动合同法§59",
+      "劳动合同法§92"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2147,6 +2505,9 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/peichanjia-shijia-koufa-sz25-7.md",
+    "law_refs": [
+      "北京市人口与计划生育条例§19"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2180,6 +2541,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/peiou-jingye-jing03-683.md",
+    "law_refs": [
+      "劳动合同法§23",
+      "劳动合同法§90"
+    ],
     "facts": {
       "case_facts": {
         "gist": "张某雷 2018-07-31 入职任教学研发中心总经理，签有竞业限制协议（在职期间及离职后 2 年，违约金为解除前 12 个月从公司及关联公司取得收入的 **10 倍**）。2021-07-31 离职，公司支付了 **5 个月**竞业限制经济补偿，其离职前 12 个月平均工资 **34,097.44 元**。2021 年 12 月其妻变更为天津某冠公司投资人（持股 95%），该公司业务与原公司存在",
@@ -2213,6 +2578,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/pingtai-yonggong-qunti-tiaojie-cy24-7.md",
+    "law_refs": [
+      "劳动合同法§7"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2247,6 +2615,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/qianfu-yongjin-38-jiechu-16097.md",
+    "law_refs": [
+      "劳动合同法§38",
+      "劳动合同法§46",
+      "劳动争议调解仲裁法§6"
+    ],
     "facts": {
       "case_facts": {
         "gist": "焦某主张公司欠付其销售佣金。公司认可发放过部分佣金，但未提交完整的佣金核算与发放证据；",
@@ -2279,6 +2652,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/qingjia-benshang-jing03-9422.md",
+    "law_refs": [
+      "劳动合同法§39",
+      "劳动合同法§48",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "gist": "乔某伟 2023-04-08 入职任厨师。《劳动合同书》第二十四条约定\"月度旷工三天、年度旷工 5 天\"可单方终止且不给补偿。2023-08-19 因哥哥病危请假 15 天，被后厨经理高某以假期过长为由拒绝，他随即申请不带薪事假；8-20 哥哥去世，再次微信请假，8-21 回乡奔丧；8-25 返京途中被告知无需再回公司；8-28 公司以 8/21—8/25 擅自离岗、严重违反规章制度为由发出辞退信",
@@ -2309,6 +2687,9 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/qingjia-shouxu-maodun-kuanggong-2025.md",
+    "law_refs": [
+      "劳动合同法§39"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2342,6 +2723,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/qunti-zhengyi-duoyuan-tiaochu-bjzc25-9.md",
+    "law_refs": [
+      "劳动争议调解仲裁法§7"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2375,6 +2759,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/rsu-guquan-jili-bushouli-23429.md",
+    "law_refs": [
+      "劳动争议调解仲裁法§2"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市朝阳区人民法院 （2023）京0105民初23429号（2024-03-27）",
@@ -2409,6 +2796,13 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/shebao-yueding-wuxiao-buchang-zgf25-6.md",
+    "law_refs": [
+      "劳动合同法§38",
+      "劳动合同法§46",
+      "法释〔2025〕12号§19",
+      "京高法发〔2024〕534号§71",
+      "京高法发〔2024〕534号§72"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2443,6 +2837,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/shengyu-jintie-buji-jishu-jing0105-2357.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§47",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "gist": "袁培 2008-03-31 经北京市外企人力资源服务有限公司派遣至施耐德，2008-11-14 起直接与施耐德签合同，2015-01-01 起为无固定期限合同。公司主张 2014 年底至 2015 年已决定将其所在部门调整至武汉，2019 年因其怀二胎\"关照\"而调岗，2020-11-04 以\"客观情形发生重大变化\"解除。",
@@ -2475,6 +2874,10 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/shengyu-jintie-tuoqian-bjzc25-4.md",
+    "law_refs": [
+      "劳动合同法§38",
+      "劳动合同法§46"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2506,6 +2909,12 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/shengyu-shenqing-tiaokuan-bjzc23-7.md",
+    "law_refs": [
+      "妇女权益保障法§44",
+      "妇女权益保障法§48",
+      "就业促进法§27",
+      "劳动合同法§26"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2540,6 +2949,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/shiye-danwei-daigang-jiepin-bjzc25-10.md",
+    "law_refs": [
+      "事业单位人事管理条例"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2571,6 +2983,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/shiye-danwei-peixun-weiyuejin-bjzc24-10.md",
+    "law_refs": [
+      "劳动合同法§22",
+      "劳动合同法实施条例§16",
+      "劳动合同法实施条例§17"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2603,6 +3020,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/shiyongqi-jiechu-minzhu-chengxu-101.md",
+    "law_refs": [
+      "劳动合同法§4",
+      "劳动合同法§39",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "gist": "公司以于某试用期\"不符合录用条件\"为由解除劳动合同，所依据的是公司《绩效管理考核办法及",
@@ -2631,6 +3053,10 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/shiyongqi-xiangshou-nianjia-sz25-3.md",
+    "law_refs": [
+      "职工带薪年休假条例§2",
+      "企业职工带薪年休假实施办法§3"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2663,6 +3089,9 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/sizi-tigang-rengge-congshuxing-2025.md",
+    "law_refs": [
+      "劳动合同法§39"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2696,6 +3125,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/tanpan-poulie-shiwei-xieshang-15407.md",
+    "law_refs": [
+      "劳动合同法§36",
+      "劳动合同法§46",
+      "劳动合同法§47"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市第三中级人民法院 （2023）京03民终15407号（2023-12-01）",
@@ -2728,6 +3162,14 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/tiaogang-jiangxin-19866.md",
+    "law_refs": [
+      "劳动合同法§30",
+      "劳动合同法§35",
+      "劳动合同法§38",
+      "劳动合同法§46",
+      "劳动合同法§47",
+      "劳动合同法实施条例§27"
+    ],
     "facts": {
       "case_facts": {
         "gist": "李某原月工资标准 20,000 元。公司未与其协商一致，直接将李某调整到月工资标准 12,000 元的",
@@ -2760,6 +3202,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/tiqian-jiesan-buchang-qisuan-20285.md",
+    "law_refs": [
+      "劳动合同法§44",
+      "劳动合同法§46",
+      "劳动合同法§97"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市第三中级人民法院 （2023）京03民终20285号 / （2023）京03民终20284号（均 2024-01-13）",
@@ -2794,6 +3241,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/toujianli-mianshi-fei-xieshang-jing01-11801.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§47",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "gist": "公司称疫情及经济下行导致岗位取消，依《劳动合同法》第 40 条第 3 项解除，并支付经济补偿 392,746 元。公司称已向高某提供了其他岗位机会，但需其提交简历、参加面试、双向选择。高某主张系违法解除。",
@@ -2826,6 +3278,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/waibao-qixin-juzheng-cy24-3.md",
+    "law_refs": [
+      "劳动合同法§7"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2860,6 +3315,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/weifa-tuihui-paiqian-cy24-2.md",
+    "law_refs": [
+      "劳动合同法§65",
+      "劳务派遣暂行规定§12",
+      "劳务派遣暂行规定§13"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2895,6 +3355,12 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/weiji-zhengju-buzu-jixiao-87802.md",
+    "law_refs": [
+      "劳动合同法§39",
+      "劳动合同法§50",
+      "劳动合同法§87",
+      "劳动争议调解仲裁法§6"
+    ],
     "facts": {
       "case_facts": {
         "gist": "公司主张张某在物资采购工作中存在严重违纪并造成公司损失，据此解除劳动合同，并扣发其",
@@ -2929,6 +3395,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/weixin-jilu-jiechu-jueding-99.md",
+    "law_refs": [
+      "劳动合同法§17",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市第三中级人民法院 （2024）京03民终99号",
@@ -2962,6 +3432,10 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/weixin-youxing-jiaban-sz25-1.md",
+    "law_refs": [
+      "劳动法§44",
+      "劳动合同法§31"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -2996,6 +3470,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/xianjing-tiaokuan-bjzc25-3.md",
+    "law_refs": [
+      "劳动合同法§26",
+      "劳动合同法§50"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -3028,6 +3506,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/xianshi-gongping-chexiao-49641.md",
+    "law_refs": [
+      "民法典§151"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市朝阳区人民法院 （2023）京0105民初49641号（2023-08-22）",
@@ -3060,6 +3541,11 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/xianzhao-liuchan-bingjia-kuanggong-2025.md",
+    "law_refs": [
+      "劳动合同法§39",
+      "劳动合同法§42",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -3093,6 +3579,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/xiaoji-daigong-minzhuchengxu-jing03-94.md",
+    "law_refs": [
+      "劳动合同法§4",
+      "劳动合同法§39",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "gist": "公司主张郭某消极怠工、传播扩散负面信息，以严重违反公司规章制度为由解除劳动合同。争议中还涉及离职时未休年假是否自动清零。",
@@ -3124,6 +3615,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/xiaoshou-shouce-baifang-jilu-9548.md",
+    "law_refs": [
+      "劳动合同法§39",
+      "劳动争议调解仲裁法§6"
+    ],
     "facts": {
       "case_facts": {
         "gist": "某公司《销售部管理手册》对出勤作出规定，刘某在手册上签字。该公司的完整考勤需以上班打卡",
@@ -3156,6 +3651,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/xieyi-yilanzi-fangqi-16272.md",
+    "law_refs": [
+      "法释〔2020〕26号§35",
+      "劳动合同法§36",
+      "劳动合同法§46"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "北京市第三中级人民法院 （2023）京03民终16272号（2023-12-19）",
@@ -3188,6 +3688,11 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/xiujia-qingqiu-youdao-lizhi-2025.md",
+    "law_refs": [
+      "劳动合同法§36",
+      "劳动合同法§46",
+      "劳动法§3"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -3219,6 +3724,9 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/xujia-tijian-daijian-2023.md",
+    "law_refs": [
+      "劳动合同法§39"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -3251,6 +3759,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/yanchi-tuixiu-weifa-zhongzhi-bjzc25-7.md",
+    "law_refs": [
+      "劳动合同法§44",
+      "劳动合同法§48",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -3284,6 +3797,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/yinxing-jiaban-jing03-9602.md",
+    "law_refs": [
+      "劳动法§39",
+      "劳动法§44"
+    ],
     "facts": {
       "case_facts": {
         "gist": "李某艳 2019-04-01 入职任产品运营。劳动合同约定执行不定时工作制，但**公司自认未办理不定时工作制审批**。她主张下班后延时加班 140.6 小时、未调休的休息日加班 397.9 小时、法定节假日加班 57.3 小时，举证为微信聊天记录与《假期社群官方账号值班表》。",
@@ -3318,6 +3835,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/yiqing-zhaoren-jiechu-jing0105-67387.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§87",
+      "法释〔2020〕26号§44"
+    ],
     "facts": {
       "case_facts": {
         "gist": "公司以\"受疫情影响，公司发展不佳；郭某一直未帮公司找到合适人员拓展业务\"为由解除劳动关系。案件同时涉及疫情期间单方降薪、以及居家办公期间是否在提供劳动两项争议。",
@@ -3351,6 +3873,12 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/yunqi-tiaogang-baoding-2024.md",
+    "law_refs": [
+      "劳动合同法§35",
+      "劳动合同法§39",
+      "劳动合同法§48",
+      "女职工劳动保护特别规定§5"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -3387,6 +3915,12 @@
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/yunqi-tiqian-jiesan-hunton-sz2512.md",
+    "law_refs": [
+      "劳动合同法§42",
+      "劳动合同法§44",
+      "劳动合同法§48",
+      "劳动合同法§87"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -3421,6 +3955,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/zaizhi-jingshang-chigu-18348.md",
+    "law_refs": [
+      "劳动合同法§39"
+    ],
     "facts": {
       "case_facts": {
         "gist": "孟某在职期间系禹航贸易（北京）有限公司唯一股东、法定代表人、执行董事、经理，同时是",
@@ -3452,6 +3989,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/zaizhi-jingye-weiyue-zgf25-5.md",
+    "law_refs": [
+      "劳动合同法§23",
+      "劳动合同法§39"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "典型案例，未公开案号",
@@ -3487,7 +4028,11 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/cases/zhengju-caixin-guize-huibian.md"
+    "path": "packs/cases/zhengju-caixin-guize-huibian.md",
+    "law_refs": [
+      "京高法发〔2024〕534号§56",
+      "民事诉讼证据规定§15"
+    ]
   },
   {
     "id": "case-zhichang-baling-38tiao-bjzc24-7",
@@ -3513,6 +4058,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/zhichang-baling-38tiao-bjzc24-7.md",
+    "law_refs": [
+      "劳动合同法§38",
+      "劳动合同法§46"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号",
@@ -3545,6 +4094,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/zhidao-239-zhubo-laodongguanxi.md",
+    "law_refs": [
+      "劳动合同法§7"
+    ],
     "facts": {
       "case_facts": {
         "gist": "王某系网络主播，2020 年 3 月与北京某传媒公司签订《独家经纪合同》。王某请求确认 2020-03-01 至 2021-04-13 期间存在劳动关系，并主张奖金 255,217.5 元及未订立书面劳动合同二倍工资差额 11 万元。",
@@ -3578,6 +4130,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/zhuanbao-gongshang-daiyu-zgf25-1.md",
+    "law_refs": [
+      "法释〔2025〕12号§1",
+      "最高法审理工伤保险行政案件规定§3"
+    ],
     "facts": {
       "case_facts": {
         "case_no": "官方案例，未公开案号（最高法典型案例统一化名，不公布案号与审理法院）",
@@ -3609,6 +4165,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/zhuanjiao-baoguo-zhiye-daode-12028.md",
+    "law_refs": [
+      "劳动合同法§4",
+      "劳动合同法§39"
+    ],
     "facts": {
       "case_facts": {
         "gist": "公司规章制度经合法程序制定并已履行告知义务，宗某对被告知的内容签字确认并作出相应承诺。",
@@ -3890,6 +4450,10 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/data/beijing-shiye-baoxianjin.md",
+    "law_refs": [
+      "失业保险条例§17",
+      "失业保险条例§18"
+    ],
     "facts": {
       "values": [
         {
@@ -3990,6 +4554,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/data/beijing-zuidi-gongzi.md",
+    "law_refs": [
+      "京人社劳发〔2025〕7号"
+    ],
     "facts": {
       "values": [
         {
@@ -4186,6 +4753,28 @@
     "confidence": "原文核实",
     "updated": "2026-08-20",
     "path": "packs/review-rules/baomi-xieyi.md",
+    "law_refs": [
+      "劳动合同法§4",
+      "劳动合同法§22",
+      "劳动合同法§23",
+      "劳动合同法§24",
+      "劳动合同法§25",
+      "劳动合同法§26",
+      "劳动合同法§35",
+      "劳动合同法§37",
+      "劳动合同法§39",
+      "劳动合同法§50",
+      "劳动合同法§90",
+      "劳动合同法§91",
+      "法释〔2020〕26号§36",
+      "法释〔2025〕12号§13",
+      "人社厅发〔2025〕40号§4",
+      "人社厅发〔2025〕40号§5",
+      "人社厅发〔2025〕40号§6",
+      "人社厅发〔2025〕40号§7",
+      "人社厅发〔2025〕40号§8",
+      "人社厅发〔2025〕40号§9"
+    ],
     "facts": {
       "review_rules": [
         {
@@ -4345,6 +4934,19 @@
     "confidence": "待核实",
     "updated": "2026-08-20",
     "path": "packs/review-rules/guizhang-querenshu.md",
+    "law_refs": [
+      "劳动合同法§4",
+      "劳动合同法§25",
+      "劳动合同法§26",
+      "劳动合同法§39",
+      "劳动合同法§43",
+      "劳动合同法§80",
+      "法释〔2020〕26号§44",
+      "法释〔2020〕26号§47",
+      "法释〔2020〕26号§50",
+      "京高法发〔2024〕534号§63",
+      "京高法发〔2024〕534号§80"
+    ],
     "facts": {
       "review_rules": [
         {
@@ -4495,6 +5097,31 @@
     "confidence": "原文核实",
     "updated": "2026-08-20",
     "path": "packs/review-rules/jingye-xianzhi.md",
+    "law_refs": [
+      "劳动合同法§23",
+      "劳动合同法§24",
+      "劳动合同法§26",
+      "法释〔2020〕26号§36",
+      "法释〔2025〕12号§13",
+      "法释〔2025〕12号§14",
+      "法释〔2025〕12号§15",
+      "人社厅发〔2025〕40号§7",
+      "人社厅发〔2025〕40号§9",
+      "人社厅发〔2025〕40号§10",
+      "人社厅发〔2025〕40号§11",
+      "人社厅发〔2025〕40号§12",
+      "人社厅发〔2025〕40号§13",
+      "人社厅发〔2025〕40号§14",
+      "人社厅发〔2025〕40号§15",
+      "人社厅发〔2025〕40号§16",
+      "人社厅发〔2025〕40号§17",
+      "人社厅发〔2025〕40号§18",
+      "人社厅发〔2025〕40号§19",
+      "人社厅发〔2025〕40号§23",
+      "民法典§1032",
+      "民法典§1035",
+      "民法典合同编通则解释§65"
+    ],
     "facts": {
       "review_rules": [
         {
@@ -4693,6 +5320,35 @@
     "confidence": "待核实",
     "updated": "2026-08-20",
     "path": "packs/review-rules/laodong-hetong.md",
+    "law_refs": [
+      "劳动合同法§4",
+      "劳动合同法§14",
+      "劳动合同法§17",
+      "劳动合同法§19",
+      "劳动合同法§20",
+      "劳动合同法§22",
+      "劳动合同法§23",
+      "劳动合同法§25",
+      "劳动合同法§26",
+      "劳动合同法§31",
+      "劳动合同法§83",
+      "劳动合同法§84",
+      "劳动合同法实施条例§13",
+      "劳动合同法实施条例§15",
+      "劳动合同法实施条例§16",
+      "法释〔2025〕12号§13",
+      "法释〔2025〕12号§19",
+      "京高法发〔2024〕534号§55",
+      "京高法发〔2024〕534号§59",
+      "京高法发〔2024〕534号§60",
+      "京高法发〔2024〕534号§61",
+      "京高法发〔2024〕534号§50",
+      "京高法发〔2024〕534号§56",
+      "京高法发〔2024〕534号§81",
+      "北京市工资支付规定§10",
+      "京人社劳发〔2025〕7号",
+      "人社厅发〔2025〕40号"
+    ],
     "facts": {
       "review_rules": [
         {
@@ -4953,6 +5609,22 @@
     "confidence": "待核实",
     "updated": "2026-08-20",
     "path": "packs/review-rules/offer-ruzhi-wenjian.md",
+    "law_refs": [
+      "劳动合同法§8",
+      "劳动合同法§10",
+      "劳动合同法§17",
+      "劳动合同法§21",
+      "劳动合同法§25",
+      "劳动合同法§26",
+      "劳动合同法§82",
+      "劳动合同法§84",
+      "法释〔2020〕26号§44",
+      "法释〔2025〕12号§19",
+      "京高法发〔2024〕534号§41",
+      "京高法发〔2024〕534号§55",
+      "京高法发〔2024〕534号§78",
+      "民法典§1035"
+    ],
     "facts": {
       "review_rules": [
         {
@@ -5116,6 +5788,23 @@
     "confidence": "原文核实",
     "updated": "2026-08-20",
     "path": "packs/review-rules/peixun-fuwuqi.md",
+    "law_refs": [
+      "劳动合同法§22",
+      "劳动合同法§25",
+      "劳动合同法§26",
+      "劳动合同法§37",
+      "劳动合同法§46",
+      "劳动合同法§50",
+      "劳动合同法§87",
+      "劳动合同法实施条例§16",
+      "劳动合同法实施条例§17",
+      "劳动合同法实施条例§26",
+      "法释〔2025〕12号§8",
+      "法释〔2025〕12号§12",
+      "京高法发〔2024〕534号§74",
+      "京高法发〔2024〕534号§82",
+      "京高法发〔2024〕534号§83"
+    ],
     "facts": {
       "review_rules": [
         {
@@ -5293,6 +5982,28 @@
     "confidence": "待核实",
     "updated": "2026-08-20",
     "path": "packs/review-rules/xieshang-jiechu-xieyi.md",
+    "law_refs": [
+      "劳动合同法§16",
+      "劳动合同法§25",
+      "劳动合同法§26",
+      "劳动合同法§46",
+      "劳动合同法§47",
+      "劳动合同法§50",
+      "劳动合同法实施条例§24",
+      "京高法发〔2024〕534号§55",
+      "京高法发〔2024〕534号§62",
+      "京高法发〔2024〕534号§68",
+      "京高法发〔2024〕534号§70",
+      "京高法发〔2024〕534号§73",
+      "京高法发〔2024〕534号§83",
+      "京人社评发〔2024〕17号§5",
+      "法释〔2025〕12号§13",
+      "法释〔2025〕12号§15",
+      "法释〔2025〕12号§19",
+      "北京市工资支付规定§12",
+      "北京市工资支付规定§13",
+      "财税〔2001〕157号§1"
+    ],
     "facts": {
       "review_rules": [
         {
@@ -5520,7 +6231,14 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/scripts/goutong-huashu-ku.md"
+    "path": "packs/scripts/goutong-huashu-ku.md",
+    "law_refs": [
+      "劳动合同法§35",
+      "劳动合同法§39",
+      "劳动合同法实施条例§24",
+      "京高法发〔2024〕534号§73",
+      "民事诉讼证据规定§94"
+    ]
   },
   {
     "id": "script-hongxian-qingdan",
@@ -5550,7 +6268,18 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/scripts/hongxian-qingdan.md"
+    "path": "packs/scripts/hongxian-qingdan.md",
+    "law_refs": [
+      "劳动合同法§38",
+      "劳动合同法§39",
+      "劳动合同法§40",
+      "劳动合同法实施条例§24",
+      "法释〔2025〕12号§16",
+      "法释〔2025〕12号§19",
+      "劳动争议调解仲裁法§27",
+      "京高法发〔2024〕534号§76",
+      "京高法发〔2024〕534号§80"
+    ]
   },
   {
     "id": "script-hr-huashu-chaijie",
@@ -5581,7 +6310,14 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/scripts/hr-huashu-chaijie.md"
+    "path": "packs/scripts/hr-huashu-chaijie.md",
+    "law_refs": [
+      "劳动合同法§47",
+      "劳动合同法实施条例§24",
+      "劳动争议调解仲裁法§27",
+      "京高法发〔2024〕534号§73",
+      "京高法发〔2024〕534号§83"
+    ]
   },
   {
     "id": "script-hr-taolu-fangyu",
@@ -5617,7 +6353,15 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/scripts/hr-taolu-fangyu.md"
+    "path": "packs/scripts/hr-taolu-fangyu.md",
+    "law_refs": [
+      "劳动合同法§35",
+      "劳动合同法§39",
+      "劳动合同法§40",
+      "京高法发〔2024〕534号§73",
+      "京高法发〔2024〕534号§79",
+      "京高法发〔2024〕534号§80"
+    ]
   },
   {
     "id": "script-kaiting-huashu",
@@ -5643,7 +6387,20 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/scripts/kaiting-huashu.md"
+    "path": "packs/scripts/kaiting-huashu.md",
+    "law_refs": [
+      "京高法发〔2024〕534号§18",
+      "劳动争议调解仲裁法§6",
+      "劳动争议调解仲裁法§39",
+      "劳动人事争议仲裁办案规则§13",
+      "劳动合同法§48",
+      "劳动合同法§87",
+      "劳动合同法实施条例§27",
+      "民事诉讼证据规定§15",
+      "民事诉讼证据规定§90",
+      "民事诉讼证据规定§95",
+      "劳动人事争议仲裁办案规则§18"
+    ]
   },
   {
     "id": "script-tanpan-xinli-gongju",
@@ -5673,7 +6430,13 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/scripts/tanpan-xinli-gongju.md"
+    "path": "packs/scripts/tanpan-xinli-gongju.md",
+    "law_refs": [
+      "劳动合同法§47",
+      "劳动争议调解仲裁法§27",
+      "京高法发〔2024〕534号§53",
+      "京高法发〔2024〕534号§73"
+    ]
   },
   {
     "id": "script-zhizheng-yaodian",
@@ -5703,7 +6466,16 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/scripts/zhizheng-yaodian.md"
+    "path": "packs/scripts/zhizheng-yaodian.md",
+    "law_refs": [
+      "京高法发〔2024〕534号§63",
+      "劳动合同法§4",
+      "劳动合同法§39",
+      "劳动合同法§40",
+      "劳动合同法§43",
+      "劳动争议调解仲裁法§6",
+      "劳动争议调解仲裁法§39"
+    ]
   },
   {
     "id": "sop-caijue-yicaizhongju",
@@ -5729,7 +6501,20 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/caijue-yicaizhongju.md"
+    "path": "packs/sop/caijue-yicaizhongju.md",
+    "law_refs": [
+      "劳动争议调解仲裁法§46",
+      "劳动争议调解仲裁法§47",
+      "劳动争议调解仲裁法§48",
+      "劳动争议调解仲裁法§49",
+      "劳动争议调解仲裁法§50",
+      "劳动人事争议仲裁办案规则§20",
+      "劳动人事争议仲裁办案规则§50",
+      "劳动人事争议仲裁办案规则§53",
+      "劳动人事争议仲裁办案规则§54",
+      "京高法发〔2024〕534号§9",
+      "京高法发〔2024〕534号§12"
+    ]
   },
   {
     "id": "sop-chaoyang-lian-sop",
@@ -5759,7 +6544,15 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/chaoyang-lian-sop.md"
+    "path": "packs/sop/chaoyang-lian-sop.md",
+    "law_refs": [
+      "劳动争议调解仲裁法§28",
+      "劳动争议调解仲裁法§29",
+      "劳动争议调解仲裁法§47",
+      "劳动争议调解仲裁法§48",
+      "劳动争议调解仲裁法§49",
+      "劳动争议调解仲裁法§53"
+    ]
   },
   {
     "id": "sop-daigang-tinggong",
@@ -5784,7 +6577,16 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/daigang-tinggong.md"
+    "path": "packs/sop/daigang-tinggong.md",
+    "law_refs": [
+      "劳动合同法§35",
+      "劳动合同法§38",
+      "劳动合同法§39",
+      "劳动合同法实施条例§13",
+      "北京市工资支付规定§27",
+      "北京市工资支付规定§26",
+      "京高法发〔2024〕534号§54"
+    ]
   },
   {
     "id": "sop-daoqi-buxuqian",
@@ -5808,7 +6610,16 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/daoqi-buxuqian.md"
+    "path": "packs/sop/daoqi-buxuqian.md",
+    "law_refs": [
+      "劳动合同法§46",
+      "劳动合同法§44",
+      "劳动合同法§14",
+      "司法解释二§10",
+      "司法解释二§11",
+      "京高法发〔2024〕534号§67",
+      "京高法发〔2024〕534号§81"
+    ]
   },
   {
     "id": "sop-dianzi-shuju-guzheng",
@@ -5836,7 +6647,13 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/dianzi-shuju-guzheng.md"
+    "path": "packs/sop/dianzi-shuju-guzheng.md",
+    "law_refs": [
+      "民事诉讼证据规定§14",
+      "民事诉讼证据规定§15",
+      "民事诉讼证据规定§93",
+      "民事诉讼证据规定§94"
+    ]
   },
   {
     "id": "sop-fangjia-dengtongzhi",
@@ -5860,7 +6677,14 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/fangjia-dengtongzhi.md"
+    "path": "packs/sop/fangjia-dengtongzhi.md",
+    "law_refs": [
+      "北京市工资支付规定§27",
+      "劳动合同法§35",
+      "劳动合同法§38",
+      "劳动合同法实施条例§13",
+      "京高法发〔2024〕534号§80"
+    ]
   },
   {
     "id": "sop-fuwuqi-baomi-xieyi",
@@ -5889,7 +6713,20 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/fuwuqi-baomi-xieyi.md"
+    "path": "packs/sop/fuwuqi-baomi-xieyi.md",
+    "law_refs": [
+      "劳动合同法§22",
+      "劳动合同法§23",
+      "劳动合同法§25",
+      "劳动合同法§90",
+      "劳动合同法§91",
+      "劳动合同法实施条例§16",
+      "劳动合同法实施条例§17",
+      "劳动合同法实施条例§26",
+      "司法解释二§12",
+      "京高法发〔2024〕534号§74",
+      "京高法发〔2024〕534号§82"
+    ]
   },
   {
     "id": "sop-gaoguan-hehuoren-rending",
@@ -5921,7 +6758,19 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/gaoguan-hehuoren-rending.md"
+    "path": "packs/sop/gaoguan-hehuoren-rending.md",
+    "law_refs": [
+      "劳动合同法§39",
+      "劳动合同法§48",
+      "劳动合同法§87",
+      "劳动合同法实施条例§3",
+      "企业破产法§113",
+      "京高法发〔2024〕534号§21",
+      "京高法发〔2024〕534号§29",
+      "京高法发〔2024〕534号§34",
+      "京高法发〔2024〕534号§44",
+      "京高法发〔2024〕534号§76"
+    ]
   },
   {
     "id": "sop-gongmin-daili-peiting",
@@ -5950,7 +6799,25 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/gongmin-daili-peiting.md"
+    "path": "packs/sop/gongmin-daili-peiting.md",
+    "law_refs": [
+      "民事诉讼法§61",
+      "民事诉讼法§62",
+      "法释〔2022〕11号§84",
+      "法释〔2022〕11号§85",
+      "法释〔2022〕11号§86",
+      "法释〔2022〕11号§87",
+      "法释〔2022〕11号§88",
+      "法释〔2022〕11号§89",
+      "劳动争议调解仲裁法§24",
+      "劳动争议调解仲裁法§25",
+      "劳动争议调解仲裁法§26",
+      "劳动人事争议仲裁办案规则§25",
+      "劳动人事争议仲裁办案规则§39",
+      "劳动人事争议仲裁办案规则§63",
+      "律师法§13",
+      "律师法§55"
+    ]
   },
   {
     "id": "sop-gongshang-jiechu-xianzhi",
@@ -5977,7 +6844,18 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/gongshang-jiechu-xianzhi.md"
+    "path": "packs/sop/gongshang-jiechu-xianzhi.md",
+    "law_refs": [
+      "劳动合同法§42",
+      "劳动合同法§45",
+      "劳动合同法§48",
+      "劳动合同法§87",
+      "工伤保险条例§33",
+      "工伤保险条例§41",
+      "劳动合同法实施条例§23",
+      "法释〔2025〕12号§17",
+      "京高法发〔2024〕534号§68/§88"
+    ]
   },
   {
     "id": "sop-gongsi-zhuxiao-pochan",
@@ -6008,7 +6886,23 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/gongsi-zhuxiao-pochan.md"
+    "path": "packs/sop/gongsi-zhuxiao-pochan.md",
+    "law_refs": [
+      "劳动合同法§44",
+      "劳动合同法§46",
+      "企业破产法§48",
+      "企业破产法§113",
+      "劳动争议解释一§29",
+      "劳动争议解释一§30",
+      "劳动争议解释一§48",
+      "劳动争议解释一§49",
+      "司法解释二§16",
+      "工伤保险条例§41",
+      "京高法发〔2024〕534号§27",
+      "京高法发〔2024〕534号§28",
+      "京高法发〔2024〕534号§36",
+      "京高法发〔2024〕534号§37"
+    ]
   },
   {
     "id": "sop-gongzheng-baoquan",
@@ -6036,7 +6930,12 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/gongzheng-baoquan.md"
+    "path": "packs/sop/gongzheng-baoquan.md",
+    "law_refs": [
+      "民事诉讼证据规定§94",
+      "在线诉讼规则§13",
+      "民事诉讼法§72"
+    ]
   },
   {
     "id": "sop-gongzi-shebao-geshui-beijing",
@@ -6063,7 +6962,13 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/gongzi-shebao-geshui-beijing.md"
+    "path": "packs/sop/gongzi-shebao-geshui-beijing.md",
+    "law_refs": [
+      "劳动争议调解仲裁法§6",
+      "民事诉讼证据规定§95",
+      "京高法发〔2024〕534号§55",
+      "京高法发〔2024〕534号§71"
+    ]
   },
   {
     "id": "sop-jiakong-shouquan-quanxian",
@@ -6088,7 +6993,13 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/jiakong-shouquan-quanxian.md"
+    "path": "packs/sop/jiakong-shouquan-quanxian.md",
+    "law_refs": [
+      "劳动合同法§38",
+      "劳动合同法§46",
+      "劳动合同法实施条例§18",
+      "京高法发〔2024〕534号§80"
+    ]
   },
   {
     "id": "sop-jiancha-vs-zhongcai",
@@ -6116,7 +7027,21 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/jiancha-vs-zhongcai.md"
+    "path": "packs/sop/jiancha-vs-zhongcai.md",
+    "law_refs": [
+      "劳动保障监察条例§11",
+      "劳动保障监察条例§17",
+      "劳动保障监察条例§20",
+      "劳动保障监察条例§21",
+      "劳动保障监察条例§26",
+      "劳动争议调解仲裁法§27",
+      "劳动争议调解仲裁法§53",
+      "劳动人事争议仲裁办案规则§27",
+      "工会法律援助办法§10",
+      "工会法律援助办法§11",
+      "法律援助法§31",
+      "京高法发〔2024〕534号§6"
+    ]
   },
   {
     "id": "sop-jiangxin-yingdui",
@@ -6141,7 +7066,18 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/jiangxin-yingdui.md"
+    "path": "packs/sop/jiangxin-yingdui.md",
+    "law_refs": [
+      "劳动合同法§29",
+      "劳动合同法§30",
+      "劳动合同法§35",
+      "劳动合同法§38",
+      "劳动合同法§4",
+      "北京市工资支付规定§11",
+      "京高法发〔2024〕534号§54",
+      "京高法发〔2024〕534号§55",
+      "京高法发〔2024〕534号§59"
+    ]
   },
   {
     "id": "sop-jianyi-zhuxiao-yiyi",
@@ -6169,7 +7105,14 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-20",
-    "path": "packs/sop/jianyi-zhuxiao-yiyi.md"
+    "path": "packs/sop/jianyi-zhuxiao-yiyi.md",
+    "law_refs": [
+      "市场主体登记管理条例§33",
+      "公司法司法解释二§19",
+      "公司法司法解释二§20",
+      "京高法发〔2024〕534号§27",
+      "京高法发〔2024〕534号§28"
+    ]
   },
   {
     "id": "sop-jiaojie-fanyao",
@@ -6192,7 +7135,11 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/jiaojie-fanyao.md"
+    "path": "packs/sop/jiaojie-fanyao.md",
+    "law_refs": [
+      "劳动合同法§50",
+      "京高法发〔2024〕534号§70"
+    ]
   },
   {
     "id": "sop-jingjixing-caiyuan-chengxu",
@@ -6223,7 +7170,17 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/jingjixing-caiyuan-chengxu.md"
+    "path": "packs/sop/jingjixing-caiyuan-chengxu.md",
+    "law_refs": [
+      "劳动合同法§41",
+      "劳动合同法§42",
+      "劳动合同法§43",
+      "劳动合同法§46",
+      "劳动合同法§87",
+      "劳动合同法实施条例§19",
+      "劳动争议解释一§47",
+      "京高法发〔2024〕534号§79"
+    ]
   },
   {
     "id": "sop-jixu-lvxing-vs-2n",
@@ -6250,7 +7207,15 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/jixu-lvxing-vs-2n.md"
+    "path": "packs/sop/jixu-lvxing-vs-2n.md",
+    "law_refs": [
+      "劳动合同法§48",
+      "劳动合同法§87",
+      "法释〔2025〕12号§16",
+      "法释〔2025〕12号§18",
+      "京高法发〔2024〕534号§75",
+      "京高法发〔2024〕534号§76"
+    ]
   },
   {
     "id": "sop-juzheng-xuzhi-sop",
@@ -6282,7 +7247,25 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/juzheng-xuzhi-sop.md"
+    "path": "packs/sop/juzheng-xuzhi-sop.md",
+    "law_refs": [
+      "劳动人事争议仲裁办案规则§13",
+      "劳动人事争议仲裁办案规则§15",
+      "劳动人事争议仲裁办案规则§16",
+      "劳动人事争议仲裁办案规则§18",
+      "劳动争议调解仲裁法§6",
+      "民事诉讼证据规定§14",
+      "民事诉讼证据规定§15",
+      "民事诉讼证据规定§19",
+      "民事诉讼证据规定§68",
+      "民事诉讼证据规定§69",
+      "民事诉讼证据规定§71",
+      "民事诉讼证据规定§72",
+      "民事诉讼证据规定§90",
+      "民事诉讼证据规定§93",
+      "民事诉讼证据规定§94",
+      "民事诉讼证据规定§95"
+    ]
   },
   {
     "id": "sop-kaiting-liucheng-sop",
@@ -6310,7 +7293,16 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/kaiting-liucheng-sop.md"
+    "path": "packs/sop/kaiting-liucheng-sop.md",
+    "law_refs": [
+      "劳动人事争议仲裁办案规则§41",
+      "劳动人事争议仲裁办案规则§42",
+      "劳动人事争议仲裁办案规则§43",
+      "劳动人事争议仲裁办案规则§22",
+      "劳动人事争议仲裁办案规则§23",
+      "劳动争议调解仲裁法§38",
+      "劳动争议调解仲裁法§40"
+    ]
   },
   {
     "id": "sop-kaoqin-diaonan",
@@ -6335,7 +7327,13 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/kaoqin-diaonan.md"
+    "path": "packs/sop/kaoqin-diaonan.md",
+    "law_refs": [
+      "劳动合同法§4",
+      "劳动合同法§39",
+      "劳动争议调解仲裁法§6",
+      "京高法发〔2024〕534号§80"
+    ]
   },
   {
     "id": "sop-keguan-qingkuang-jiechu",
@@ -6359,7 +7357,14 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/keguan-qingkuang-jiechu.md"
+    "path": "packs/sop/keguan-qingkuang-jiechu.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§46",
+      "劳动合同法§87",
+      "劳动合同法实施条例§20",
+      "京高法发〔2024〕534号§79"
+    ]
   },
   {
     "id": "sop-koutou-chengnuo-xianzou",
@@ -6382,7 +7387,12 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/koutou-chengnuo-xianzou.md"
+    "path": "packs/sop/koutou-chengnuo-xianzou.md",
+    "law_refs": [
+      "劳动合同法§50",
+      "劳动合同法§26",
+      "京高法发〔2024〕534号§68"
+    ]
   },
   {
     "id": "sop-koutou-jiechu-yingdui",
@@ -6407,7 +7417,14 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/koutou-jiechu-yingdui.md"
+    "path": "packs/sop/koutou-jiechu-yingdui.md",
+    "law_refs": [
+      "劳动合同法§50",
+      "劳动合同法§89",
+      "京高法发〔2024〕534号§78",
+      "京高法发〔2024〕534号§83",
+      "北京市工资支付规定§27"
+    ]
   },
   {
     "id": "sop-kpi-bukeneng-renwu",
@@ -6433,7 +7450,14 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/kpi-bukeneng-renwu.md"
+    "path": "packs/sop/kpi-bukeneng-renwu.md",
+    "law_refs": [
+      "劳动合同法§31",
+      "劳动合同法§40",
+      "劳动合同法§4",
+      "劳动合同法实施条例§20",
+      "京高法发〔2024〕534号§56"
+    ]
   },
   {
     "id": "sop-laowu-paiqian-waibao",
@@ -6463,7 +7487,30 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/laowu-paiqian-waibao.md"
+    "path": "packs/sop/laowu-paiqian-waibao.md",
+    "law_refs": [
+      "劳动合同法§58",
+      "劳动合同法§62",
+      "劳动合同法§63",
+      "劳动合同法§65",
+      "劳动合同法§66",
+      "劳动合同法§67",
+      "劳动合同法§92",
+      "劳务派遣暂行规定§4",
+      "劳务派遣暂行规定§12",
+      "劳务派遣暂行规定§13",
+      "劳务派遣暂行规定§15",
+      "劳务派遣暂行规定§17",
+      "劳务派遣暂行规定§18",
+      "劳务派遣暂行规定§25",
+      "劳务派遣暂行规定§27",
+      "京高法发〔2024〕534号§5",
+      "京高法发〔2024〕534号§30",
+      "京高法发〔2024〕534号§31",
+      "京高法发〔2024〕534号§32",
+      "司法解释二§1",
+      "司法解释二§2"
+    ]
   },
   {
     "id": "sop-lengbaoli-guli",
@@ -6488,7 +7535,13 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/lengbaoli-guli.md"
+    "path": "packs/sop/lengbaoli-guli.md",
+    "law_refs": [
+      "劳动合同法§38",
+      "劳动合同法§88",
+      "劳动合同法实施条例§18",
+      "劳动争议调解仲裁法§27"
+    ]
   },
   {
     "id": "sop-luyin-quzheng",
@@ -6515,7 +7568,13 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/luyin-quzheng.md"
+    "path": "packs/sop/luyin-quzheng.md",
+    "law_refs": [
+      "民诉法解释§106",
+      "民事诉讼证据规定§15",
+      "民法典§1032",
+      "民法典§1033"
+    ]
   },
   {
     "id": "sop-mowei-taotai",
@@ -6540,7 +7599,13 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/mowei-taotai.md"
+    "path": "packs/sop/mowei-taotai.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§4",
+      "京高法发〔2024〕534号§73",
+      "京高法发〔2024〕534号§80"
+    ]
   },
   {
     "id": "sop-nianzhongjiang-guquan-ticheng",
@@ -6573,7 +7638,19 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/nianzhongjiang-guquan-ticheng.md"
+    "path": "packs/sop/nianzhongjiang-guquan-ticheng.md",
+    "law_refs": [
+      "劳动合同法§26",
+      "劳动合同法§30",
+      "劳动合同法§47",
+      "劳动争议调解仲裁法§27",
+      "劳动争议解释一§44",
+      "劳动争议解释一§50",
+      "司法解释二§12",
+      "京高法发〔2024〕534号§53",
+      "京高法发〔2024〕534号§55",
+      "京高法发〔2024〕534号§74"
+    ]
   },
   {
     "id": "sop-pip-yingdui",
@@ -6596,7 +7673,13 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/pip-yingdui.md"
+    "path": "packs/sop/pip-yingdui.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§39",
+      "劳动合同法§4",
+      "京高法发〔2024〕534号§73"
+    ]
   },
   {
     "id": "sop-quxiao-jixiao-jiangjin",
@@ -6621,7 +7704,16 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/quxiao-jixiao-jiangjin.md"
+    "path": "packs/sop/quxiao-jixiao-jiangjin.md",
+    "law_refs": [
+      "劳动合同法§4",
+      "劳动合同法§26",
+      "劳动合同法§30",
+      "劳动合同法§38",
+      "劳动争议调解仲裁法§6",
+      "京高法发〔2024〕534号§53",
+      "京高法发〔2024〕534号§55"
+    ]
   },
   {
     "id": "sop-sanqi-nvzhigong",
@@ -6650,7 +7742,21 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/sanqi-nvzhigong.md"
+    "path": "packs/sop/sanqi-nvzhigong.md",
+    "law_refs": [
+      "劳动合同法§42",
+      "劳动合同法§45",
+      "劳动合同法§48",
+      "劳动合同法§87",
+      "女职工劳动保护特别规定§5",
+      "女职工劳动保护特别规定§6",
+      "女职工劳动保护特别规定§7",
+      "女职工劳动保护特别规定§8",
+      "女职工劳动保护特别规定§9",
+      "妇女权益保障法§48",
+      "京高法发〔2024〕534号§69/§75/§76/§77",
+      "法释〔2025〕12号§16/§18"
+    ]
   },
   {
     "id": "sop-shebao-tingjiao-jiangji",
@@ -6675,7 +7781,17 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/shebao-tingjiao-jiangji.md"
+    "path": "packs/sop/shebao-tingjiao-jiangji.md",
+    "law_refs": [
+      "劳动合同法§38",
+      "劳动合同法§46",
+      "法释〔2025〕12号§19",
+      "京高法发〔2024〕534号§4",
+      "京高法发〔2024〕534号§71",
+      "京高法发〔2024〕534号§72",
+      "劳动争议调解仲裁法§9",
+      "劳动争议调解仲裁法§27"
+    ]
   },
   {
     "id": "sop-shijianchuo-cunzheng",
@@ -6703,7 +7819,16 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/shijianchuo-cunzheng.md"
+    "path": "packs/sop/shijianchuo-cunzheng.md",
+    "law_refs": [
+      "民事诉讼证据规定§94",
+      "在线诉讼规则§16",
+      "在线诉讼规则§17",
+      "在线诉讼规则§18",
+      "互联网法院规定§11",
+      "电子签名法§5",
+      "电子签名法§18"
+    ]
   },
   {
     "id": "sop-shiwunian-laoyuangong",
@@ -6730,7 +7855,16 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/shiwunian-laoyuangong.md"
+    "path": "packs/sop/shiwunian-laoyuangong.md",
+    "law_refs": [
+      "劳动合同法§42",
+      "劳动合同法§45",
+      "劳动合同法§48",
+      "劳动合同法§87",
+      "劳动合同法实施条例§10",
+      "京高法发〔2024〕534号§50/§25/§26",
+      "法释〔2025〕12号§21"
+    ]
   },
   {
     "id": "sop-shiyongqi-quanli",
@@ -6757,7 +7891,19 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/shiyongqi-quanli.md"
+    "path": "packs/sop/shiyongqi-quanli.md",
+    "law_refs": [
+      "劳动合同法§19",
+      "劳动合同法§20",
+      "劳动合同法§21",
+      "劳动合同法§39",
+      "劳动合同法§40",
+      "劳动合同法§83",
+      "劳动合同法§87",
+      "劳动合同法实施条例§15",
+      "京高法发〔2024〕534号§78/§6",
+      "法释〔2020〕26号§44"
+    ]
   },
   {
     "id": "sop-shumian-songda-liucun",
@@ -6785,7 +7931,12 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/shumian-songda-liucun.md"
+    "path": "packs/sop/shumian-songda-liucun.md",
+    "law_refs": [
+      "劳动争议调解仲裁法§6",
+      "民事诉讼证据规定§95",
+      "京高法发〔2024〕534号§73"
+    ]
   },
   {
     "id": "sop-tiaogang-yingdui",
@@ -6809,7 +7960,12 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/tiaogang-yingdui.md"
+    "path": "packs/sop/tiaogang-yingdui.md",
+    "law_refs": [
+      "劳动合同法§35",
+      "劳动合同法§40",
+      "京高法发〔2024〕534号§59-61"
+    ]
   },
   {
     "id": "sop-tiaojie-sop",
@@ -6838,7 +7994,16 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/tiaojie-sop.md"
+    "path": "packs/sop/tiaojie-sop.md",
+    "law_refs": [
+      "劳动争议调解仲裁法§16",
+      "劳动争议调解仲裁法§41",
+      "劳动争议调解仲裁法§42",
+      "劳动争议调解仲裁法§51",
+      "劳动人事争议仲裁办案规则§35",
+      "京人社评发〔2024〕17号§5",
+      "劳动合同法§50"
+    ]
   },
   {
     "id": "sop-tingqian-zhunbei-sop",
@@ -6865,7 +8030,14 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/tingqian-zhunbei-sop.md"
+    "path": "packs/sop/tingqian-zhunbei-sop.md",
+    "law_refs": [
+      "劳动争议调解仲裁法§35",
+      "劳动人事争议仲裁办案规则§10",
+      "劳动人事争议仲裁办案规则§11",
+      "劳动人事争议仲裁办案规则§36",
+      "劳动人事争议仲裁办案规则§44"
+    ]
   },
   {
     "id": "sop-tuoqian-kekou-gongzi",
@@ -6891,7 +8063,19 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/tuoqian-kekou-gongzi.md"
+    "path": "packs/sop/tuoqian-kekou-gongzi.md",
+    "law_refs": [
+      "劳动合同法§30",
+      "劳动合同法§38",
+      "劳动合同法§85",
+      "京高法发〔2024〕534号§53",
+      "京高法发〔2024〕534号§54",
+      "北京市工资支付规定§11",
+      "北京市工资支付规定§12",
+      "北京市工资支付规定§26",
+      "北京市工资支付规定§42",
+      "劳动争议调解仲裁法§27"
+    ]
   },
   {
     "id": "sop-waiqi-cheli-yingdui",
@@ -6921,7 +8105,20 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/waiqi-cheli-yingdui.md"
+    "path": "packs/sop/waiqi-cheli-yingdui.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§41",
+      "劳动合同法§44",
+      "劳动合同法§46",
+      "劳动合同法§87",
+      "司法解释二§4",
+      "司法解释二§5",
+      "劳务派遣暂行规定§25",
+      "京高法发〔2024〕534号§23",
+      "京高法发〔2024〕534号§24",
+      "京高法发〔2024〕534号§79"
+    ]
   },
   {
     "id": "sop-weiji-jiechu-yingdui",
@@ -6948,7 +8145,19 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/weiji-jiechu-yingdui.md"
+    "path": "packs/sop/weiji-jiechu-yingdui.md",
+    "law_refs": [
+      "劳动合同法§39",
+      "劳动合同法§4",
+      "劳动合同法§43",
+      "劳动合同法§48",
+      "劳动合同法§50",
+      "劳动合同法§87",
+      "京高法发〔2024〕534号§78",
+      "京高法发〔2024〕534号§80",
+      "法释〔2025〕12号§18",
+      "劳动争议调解仲裁法§27"
+    ]
   },
   {
     "id": "sop-weixie-beidiao-lizhengming",
@@ -6973,7 +8182,15 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/weixie-beidiao-lizhengming.md"
+    "path": "packs/sop/weixie-beidiao-lizhengming.md",
+    "law_refs": [
+      "劳动合同法§50",
+      "劳动合同法§89",
+      "劳动合同法实施条例§24",
+      "北京市工资支付规定§12",
+      "京高法发〔2024〕534号§83",
+      "京高法发〔2024〕534号§84"
+    ]
   },
   {
     "id": "sop-wuguding-qixian-hetong",
@@ -7000,7 +8217,16 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/wuguding-qixian-hetong.md"
+    "path": "packs/sop/wuguding-qixian-hetong.md",
+    "law_refs": [
+      "劳动合同法§14",
+      "劳动合同法§82",
+      "劳动合同法实施条例§9",
+      "劳动合同法实施条例§11",
+      "法释〔2025〕12号§9/§10/§11",
+      "京高法发〔2024〕534号§41/§46/§47/§48/§50/§52/§81/§85",
+      "法释〔2020〕26号§34"
+    ]
   },
   {
     "id": "sop-yaoqiu-qianzi-wenjian",
@@ -7027,7 +8253,18 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/yaoqiu-qianzi-wenjian.md"
+    "path": "packs/sop/yaoqiu-qianzi-wenjian.md",
+    "law_refs": [
+      "劳动合同法§26",
+      "劳动合同法§36",
+      "劳动合同法§46",
+      "劳动合同法§47",
+      "劳动合同法§50",
+      "劳动合同法实施条例§24",
+      "京高法发〔2024〕534号§68",
+      "京高法发〔2024〕534号§73",
+      "法释〔2025〕12号§13"
+    ]
   },
   {
     "id": "sop-yiliaoqi-baohu",
@@ -7054,7 +8291,18 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/yiliaoqi-baohu.md"
+    "path": "packs/sop/yiliaoqi-baohu.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "劳动合同法§42",
+      "劳动合同法§45",
+      "劳动合同法§48",
+      "劳动合同法§87",
+      "劳部发〔1994〕479号",
+      "劳部发〔1995〕236号",
+      "法释〔2025〕12号§8",
+      "京高法发〔2024〕534号§43"
+    ]
   },
   {
     "id": "sop-yishen-ersheng-sop",
@@ -7082,7 +8330,34 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/yishen-ersheng-sop.md"
+    "path": "packs/sop/yishen-ersheng-sop.md",
+    "law_refs": [
+      "京高法发〔2024〕534号§11",
+      "京高法发〔2024〕534号§16",
+      "京高法发〔2024〕534号§19",
+      "京高法发〔2024〕534号§20",
+      "劳动争议调解仲裁法§48",
+      "劳动争议调解仲裁法§50",
+      "民事诉讼法§122",
+      "民事诉讼法§126",
+      "民事诉讼法§128",
+      "民事诉讼法§141",
+      "民事诉讼法§144",
+      "民事诉讼法§146",
+      "民事诉讼法§147",
+      "民事诉讼法§151",
+      "民事诉讼法§171",
+      "民事诉讼法§172",
+      "民事诉讼法§173",
+      "民事诉讼法§175",
+      "民事诉讼法§176",
+      "民事诉讼法§183",
+      "诉讼费用交纳办法§13",
+      "诉讼费用交纳办法§22",
+      "诉讼费用交纳办法§29",
+      "诉讼费用交纳办法§45",
+      "诉讼费用交纳办法§47"
+    ]
   },
   {
     "id": "sop-zhengju-mulu-xiezuo",
@@ -7113,7 +8388,19 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/zhengju-mulu-xiezuo.md"
+    "path": "packs/sop/zhengju-mulu-xiezuo.md",
+    "law_refs": [
+      "民事诉讼证据规定§19",
+      "民事诉讼证据规定§15",
+      "民事诉讼证据规定§20",
+      "民事诉讼证据规定§23",
+      "民事诉讼证据规定§90",
+      "民事诉讼证据规定§95",
+      "劳动争议调解仲裁法§6",
+      "劳动争议调解仲裁法§39",
+      "劳动人事争议仲裁办案规则§13",
+      "劳动人事争议仲裁办案规则§16"
+    ]
   },
   {
     "id": "sop-zhengren-yu-zhengju-qingdan",
@@ -7139,7 +8426,18 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/zhengren-yu-zhengju-qingdan.md"
+    "path": "packs/sop/zhengren-yu-zhengju-qingdan.md",
+    "law_refs": [
+      "民事诉讼证据规定§68",
+      "民事诉讼证据规定§69",
+      "民事诉讼证据规定§71",
+      "民事诉讼证据规定§72",
+      "民事诉讼证据规定§76",
+      "民事诉讼证据规定§77",
+      "民事诉讼证据规定§90",
+      "民事诉讼证据规定§95",
+      "劳动争议调解仲裁法§6"
+    ]
   },
   {
     "id": "sop-zhixing-sop",
@@ -7168,7 +8466,27 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/zhixing-sop.md"
+    "path": "packs/sop/zhixing-sop.md",
+    "law_refs": [
+      "劳动争议调解仲裁法§44",
+      "劳动争议调解仲裁法§49",
+      "劳动争议调解仲裁法§51",
+      "民事诉讼法§103",
+      "民事诉讼法§104",
+      "民事诉讼法§109",
+      "民事诉讼法§110",
+      "民事诉讼法§235",
+      "民事诉讼法§237",
+      "民事诉讼法§248",
+      "民事诉讼法§250",
+      "民事诉讼法§264",
+      "民事诉讼法§265",
+      "民事诉讼法§266",
+      "企业破产法§113",
+      "诉讼费用交纳办法§14",
+      "诉讼费用交纳办法§38",
+      "京高法发〔2024〕534号§10"
+    ]
   },
   {
     "id": "sop-zhongcai-guanxia-shixiao",
@@ -7197,7 +8515,17 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/zhongcai-guanxia-shixiao.md"
+    "path": "packs/sop/zhongcai-guanxia-shixiao.md",
+    "law_refs": [
+      "京高法发〔2024〕534号§41",
+      "劳动争议调解仲裁法§21",
+      "劳动争议调解仲裁法§27",
+      "劳动人事争议仲裁办案规则§8",
+      "劳动人事争议仲裁办案规则§10",
+      "劳动人事争议仲裁办案规则§27",
+      "京人社仲发〔2022〕5号",
+      "法释〔2025〕12号§20"
+    ]
   },
   {
     "id": "sop-zhongcai-qijian-zijiu",
@@ -7226,7 +8554,24 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/zhongcai-qijian-zijiu.md"
+    "path": "packs/sop/zhongcai-qijian-zijiu.md",
+    "law_refs": [
+      "北京市失业保险金申领发放实施办法（试行）§4",
+      "北京市失业保险金申领发放实施办法（试行）§5",
+      "北京市失业保险金申领发放实施办法（试行）§6",
+      "北京市失业保险金申领发放实施办法（试行）§7",
+      "北京市失业保险金申领发放实施办法（试行）§8",
+      "北京市失业保险金申领发放实施办法（试行）§10",
+      "北京市失业保险金申领发放实施办法（试行）§12",
+      "北京市失业保险金申领发放实施办法（试行）§15",
+      "北京市失业保险金申领发放实施办法（试行）§17",
+      "劳动争议调解仲裁法§16",
+      "劳动争议调解仲裁法§44",
+      "诉讼费用交纳办法§14",
+      "诉讼费用交纳办法§45",
+      "法释〔2025〕12号§19",
+      "京高法发〔2024〕534号§1"
+    ]
   },
   {
     "id": "sop-zhuan-guanlian-gongsi",
@@ -7250,7 +8595,14 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/sop/zhuan-guanlian-gongsi.md"
+    "path": "packs/sop/zhuan-guanlian-gongsi.md",
+    "law_refs": [
+      "劳动合同法实施条例§10",
+      "司法解释二§3",
+      "司法解释二§10",
+      "京高法发〔2024〕534号§38",
+      "京高法发〔2024〕534号§50"
+    ]
   },
   {
     "id": "statute-beijing-gongzi-zhifu-guiding",
@@ -7279,6 +8631,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/beijing-gongzi-zhifu-guiding.md",
+    "law_refs": [
+      "北京市工资支付规定"
+    ],
     "facts": {
       "statute_quotes": [
         {
@@ -7346,6 +8701,34 @@
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/dianzi-qianming-fa.md",
+    "law_refs": [
+      "电子签名法§2",
+      "电子签名法§3",
+      "电子签名法§4",
+      "电子签名法§5",
+      "电子签名法§6",
+      "电子签名法§7",
+      "电子签名法§8",
+      "电子签名法§13",
+      "电子签名法§14",
+      "电子签名法§16",
+      "电子签名法§17",
+      "电子签名法§18",
+      "电子签名法§19",
+      "电子签名法§26",
+      "互联网法院规定§2",
+      "互联网法院规定§10",
+      "互联网法院规定§11",
+      "在线诉讼规则§12",
+      "在线诉讼规则§13",
+      "在线诉讼规则§14",
+      "在线诉讼规则§15",
+      "在线诉讼规则§16",
+      "在线诉讼规则§17",
+      "在线诉讼规则§18",
+      "在线诉讼规则§19",
+      "区块链信息服务管理规定§11"
+    ],
     "facts": {
       "statute_quotes": [
         {
@@ -7516,6 +8899,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/fashi-2025-12-jieshi-2.md",
+    "law_refs": [
+      "法释〔2025〕12号"
+    ],
     "facts": {
       "statute_quotes": [
         {
@@ -7632,6 +9018,9 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/jgf-2024-534-jieda-1.md",
+    "law_refs": [
+      "京高法发〔2024〕534号"
+    ],
     "facts": {
       "statute_quotes": [
         {
@@ -7882,6 +9271,11 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/lhtf-38-beipo-jiechu.md",
+    "law_refs": [
+      "劳动合同法§38",
+      "劳动合同法§46",
+      "法释〔2025〕12号§19"
+    ],
     "facts": {
       "statute_quotes": [
         {
@@ -7921,6 +9315,16 @@
     "confidence": "原文核实",
     "updated": "2026-08-21",
     "path": "packs/statutes/lhtf-jiechu-buchang-core.md",
+    "law_refs": [
+      "劳动合同法§39",
+      "劳动合同法§40",
+      "劳动合同法§41",
+      "劳动合同法§46",
+      "劳动合同法§47",
+      "劳动合同法§87",
+      "劳动合同法实施条例§25",
+      "劳动合同法实施条例§27"
+    ],
     "facts": {
       "statute_quotes": [
         {
@@ -7997,6 +9401,37 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/minsu-zhengju-guiding.md",
+    "law_refs": [
+      "民事诉讼法§66",
+      "民事诉讼法§72",
+      "民事诉讼法§73",
+      "民事诉讼法§84",
+      "民事诉讼证据规定§14",
+      "民事诉讼证据规定§15",
+      "民事诉讼证据规定§19",
+      "民事诉讼证据规定§20",
+      "民事诉讼证据规定§23",
+      "民事诉讼证据规定§25",
+      "民事诉讼证据规定§26",
+      "民事诉讼证据规定§65",
+      "民事诉讼证据规定§67",
+      "民事诉讼证据规定§68",
+      "民事诉讼证据规定§69",
+      "民事诉讼证据规定§70",
+      "民事诉讼证据规定§71",
+      "民事诉讼证据规定§72",
+      "民事诉讼证据规定§76",
+      "民事诉讼证据规定§77",
+      "民事诉讼证据规定§90",
+      "民事诉讼证据规定§93",
+      "民事诉讼证据规定§94",
+      "民事诉讼证据规定§95",
+      "民事诉讼证据规定§99",
+      "民诉法解释§103",
+      "民诉法解释§104",
+      "民诉法解释§106",
+      "民诉法解释§108"
+    ],
     "facts": {
       "statute_quotes": [
         {
@@ -8173,6 +9608,11 @@
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/qijian-jisuan-tongze.md",
+    "law_refs": [
+      "民事诉讼法§85",
+      "劳动人事争议仲裁办案规则§19",
+      "京高法发〔2024〕534号§12"
+    ],
     "facts": {
       "statute_quotes": [
         {
@@ -8216,6 +9656,15 @@
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/rsty-2025-40-jingye-zhiyin.md",
+    "law_refs": [
+      "人社厅发〔2025〕40号",
+      "劳动合同法§23",
+      "劳动合同法§24",
+      "法释〔2025〕12号§13",
+      "法释〔2025〕12号§14",
+      "法释〔2025〕12号§15",
+      "法释〔2020〕26号§36"
+    ],
     "facts": {
       "statute_quotes": [
         {
@@ -8370,7 +9819,15 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/templates/beipo-jiechu-tongzhishu.md"
+    "path": "packs/templates/beipo-jiechu-tongzhishu.md",
+    "law_refs": [
+      "劳动合同法§38",
+      "劳动合同法§46",
+      "劳动合同法§47",
+      "劳动合同法§50",
+      "劳动合同法实施条例§18",
+      "京高法发〔2024〕534号§73"
+    ]
   },
   {
     "id": "template-jujue-tiaogang-huifuhan",
@@ -8393,7 +9850,12 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/templates/jujue-tiaogang-huifuhan.md"
+    "path": "packs/templates/jujue-tiaogang-huifuhan.md",
+    "law_refs": [
+      "劳动合同法§40",
+      "京高法发〔2024〕534号§59",
+      "京高法发〔2024〕534号§60"
+    ]
   },
   {
     "id": "template-minshi-qisuzhuang",
@@ -8419,7 +9881,22 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/templates/minshi-qisuzhuang.md"
+    "path": "packs/templates/minshi-qisuzhuang.md",
+    "law_refs": [
+      "京高法发〔2024〕534号§19",
+      "民事诉讼法§122",
+      "民事诉讼法§123",
+      "民事诉讼法§124",
+      "民事诉讼法§128",
+      "劳动争议调解仲裁法§6",
+      "劳动争议调解仲裁法§48",
+      "劳动争议调解仲裁法§50",
+      "劳动合同法§4",
+      "劳动合同法§48",
+      "劳动合同法§87",
+      "劳动合同法实施条例§27",
+      "京高法发〔2024〕534号§55"
+    ]
   },
   {
     "id": "template-minshi-shangsuzhuang",
@@ -8442,7 +9919,20 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/templates/minshi-shangsuzhuang.md"
+    "path": "packs/templates/minshi-shangsuzhuang.md",
+    "law_refs": [
+      "民事诉讼法§171",
+      "民事诉讼法§172",
+      "民事诉讼法§173",
+      "民事诉讼法§175",
+      "民事诉讼法§176",
+      "民事诉讼法§177",
+      "诉讼费用交纳办法§13",
+      "诉讼费用交纳办法§22",
+      "劳动合同法实施条例§27",
+      "法释〔2025〕12号",
+      "京高法发〔2024〕534号§55"
+    ]
   },
   {
     "id": "template-qingqiu-shixiang-ku",
@@ -8477,7 +9967,30 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/templates/qingqiu-shixiang-ku.md"
+    "path": "packs/templates/qingqiu-shixiang-ku.md",
+    "law_refs": [
+      "京高法发〔2024〕534号§1",
+      "京高法发〔2024〕534号§4",
+      "京高法发〔2024〕534号§20",
+      "劳动合同法§40",
+      "劳动合同法§41",
+      "劳动合同法§46",
+      "劳动合同法§47",
+      "劳动合同法§48",
+      "劳动合同法§50",
+      "劳动合同法§82",
+      "劳动合同法§85",
+      "劳动合同法§87",
+      "劳动合同法实施条例§20",
+      "劳动合同法实施条例§25",
+      "劳动法§44",
+      "法释〔2025〕12号§13",
+      "法释〔2025〕12号§16",
+      "法释〔2025〕12号§18",
+      "法释〔2025〕12号§19",
+      "劳动人事争议仲裁办案规则§30",
+      "劳动人事争议仲裁办案规则§44"
+    ]
   },
   {
     "id": "template-shouquan-weituoshu",
@@ -8503,7 +10016,11 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/templates/shouquan-weituoshu.md"
+    "path": "packs/templates/shouquan-weituoshu.md",
+    "law_refs": [
+      "民事诉讼法§61",
+      "劳动人事争议仲裁办案规则§39"
+    ]
   },
   {
     "id": "template-songda-dizhi-querenshu",
@@ -8529,7 +10046,10 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/templates/songda-dizhi-querenshu.md"
+    "path": "packs/templates/songda-dizhi-querenshu.md",
+    "law_refs": [
+      "劳动人事争议仲裁办案规则§25"
+    ]
   },
   {
     "id": "template-xieshang-jiechu-shencha-qingdan",
@@ -8555,7 +10075,23 @@
     "region": "北京",
     "confidence": "待核实",
     "updated": "2026-08-19",
-    "path": "packs/templates/xieshang-jiechu-shencha-qingdan.md"
+    "path": "packs/templates/xieshang-jiechu-shencha-qingdan.md",
+    "law_refs": [
+      "劳动合同法§25",
+      "劳动合同法§26",
+      "劳动合同法§46",
+      "劳动合同法§47",
+      "劳动合同法§50",
+      "劳动合同法实施条例§24",
+      "京高法发〔2024〕534号§55",
+      "京高法发〔2024〕534号§68",
+      "京高法发〔2024〕534号§70",
+      "京高法发〔2024〕534号§73",
+      "北京市工资支付规定§12",
+      "法释〔2025〕12号§13",
+      "法释〔2025〕12号§14",
+      "法释〔2025〕12号§15"
+    ]
   },
   {
     "id": "template-yiyihan-tongyong",
@@ -8580,7 +10116,15 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/templates/yiyihan-tongyong.md"
+    "path": "packs/templates/yiyihan-tongyong.md",
+    "law_refs": [
+      "劳动合同法§29",
+      "劳动合同法§35",
+      "劳动合同法§4",
+      "劳动合同法§38",
+      "劳动合同法实施条例§18",
+      "京高法发〔2024〕534号§61"
+    ]
   },
   {
     "id": "template-zhengju-cailiao-qingdan",
@@ -8610,7 +10154,12 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/templates/zhengju-cailiao-qingdan.md"
+    "path": "packs/templates/zhengju-cailiao-qingdan.md",
+    "law_refs": [
+      "劳动争议调解仲裁法§6",
+      "劳动人事争议仲裁办案规则§13",
+      "民事诉讼证据规定§19"
+    ]
   },
   {
     "id": "template-zhongcai-shenqingshu",
@@ -8639,6 +10188,15 @@
     "region": "北京",
     "confidence": "原文核实",
     "updated": "2026-08-19",
-    "path": "packs/templates/zhongcai-shenqingshu.md"
+    "path": "packs/templates/zhongcai-shenqingshu.md",
+    "law_refs": [
+      "劳动争议调解仲裁法§28",
+      "劳动争议调解仲裁法§29",
+      "劳动人事争议仲裁办案规则§29",
+      "劳动人事争议仲裁办案规则§30",
+      "劳动人事争议仲裁办案规则§31",
+      "劳动人事争议仲裁办案规则§44",
+      "法释〔2025〕12号§3"
+    ]
   }
 ]
