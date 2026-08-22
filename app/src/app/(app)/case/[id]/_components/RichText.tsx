@@ -101,7 +101,10 @@ function parse(text: string): Block[] {
 export function RichText({ text }: { text: string }) {
   const blocks = parse(text);
   return (
-    <div className="prose-measure space-y-3 text-[16px] leading-[1.75] text-ink">
+    <div
+      data-veil=""
+      className="prose-measure space-y-3 text-[16px] leading-[1.75] text-ink"
+    >
       {blocks.map((block, i) => {
         if (block.type === 'p') {
           return <p key={i}>{inline(block.text, `p${i}`)}</p>;

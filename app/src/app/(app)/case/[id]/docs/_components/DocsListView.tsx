@@ -44,7 +44,10 @@ export function DocsListView({
           {docs.map((doc) => (
             <li key={doc.id}>
               <Link href={`/case/${caseId}/docs/${doc.id}`} className="group block">
-                <Card className="p-4 transition-colors duration-150 ease-out group-hover:bg-muted">
+                <Card
+                  data-veil=""
+                  className="p-4 transition-colors duration-150 ease-out group-hover:bg-muted"
+                >
                 <div className="flex flex-wrap items-center gap-2">
                   <DocTypeBadge docType={doc.docType} />
                   <AdviceBadge advice={doc.advice} />

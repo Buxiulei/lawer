@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useDiscreet } from '@/app/_ui/discreet';
 import { formatBytes, formatDateTime } from '@/app/_ui/format';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { AppSheet } from '@/components/shadcn/app-sheet';
 import { Badge } from '@/components/shadcn/badge';
 import { Button } from '@/components/shadcn/button';
@@ -50,6 +52,7 @@ export function EvidenceDetailSheet({
   onDownload: (item: EvidenceView) => void;
 }) {
   const toast = useToast();
+  const { discreet } = useDiscreet();
   const [purpose, setPurpose] = useState('');
 
   useEffect(() => {
@@ -63,18 +66,31 @@ export function EvidenceDetailSheet({
     <AppSheet
       open={item !== null}
       onClose={onClose}
-      title="证据详情"
+      title={`${discreet ? NEUTRAL_WORD.evidence : '证据'}详情`}
       footer={
         item && (
           <div className="flex flex-col gap-2.5">
+            {/* 三个主操作必须看得懂才能点，不能进糊层：低调模式下只换字 */}
             {item.status === '已上传' && (
               <Button className="w-full" disabled={busy} onClick={() => onRequestFreeze(item)}>
-                {busy ? '正在固化…' : '固化这份证据'}
+                {discreet
+                  ? busy
+                    ? `正在${NEUTRAL_WORD.freeze}…`
+                    : `${NEUTRAL_WORD.freeze}这份${NEUTRAL_WORD.evidence}`
+                  : busy
+                    ? '正在固化…'
+                    : '固化这份证据'}
               </Button>
             )}
             {item.status === '已固化' && (
               <Button className="w-full" disabled={busy} onClick={() => onIssue(item)}>
-                {busy ? '正在出具…' : '出具《存证证明》'}
+                {discreet
+                  ? busy
+                    ? '正在生成…'
+                    : `生成${NEUTRAL_WORD.cert}`
+                  : busy
+                    ? '正在出具…'
+                    : '出具《存证证明》'}
               </Button>
             )}
             <Button
@@ -83,15 +99,15 @@ export function EvidenceDetailSheet({
               disabled={item.status !== '已出证' || !certDownloadable}
               onClick={() => onDownload(item)}
             >
-              下载《存证证明》
+              {discreet ? `下载${NEUTRAL_WORD.cert}` : '下载《存证证明》'}
             </Button>
             {item.status !== '已出证' ? (
-              <p className="text-[13px] leading-5 text-ink-2">
+              <p data-veil="" className="text-[13px] leading-5 text-ink-2">
                 《存证证明》要先固化、再出证才能下载。
               </p>
             ) : (
               !certDownloadable && (
-                <p className="text-[13px] leading-5 text-ink-2">
+                <p data-veil="" className="text-[13px] leading-5 text-ink-2">
                   证明文件已经生成好了，下载入口还在接。现在先把下面的验证链接给对方，
                   编号和时间戳一样可以当场核。
                 </p>
@@ -103,7 +119,7 @@ export function EvidenceDetailSheet({
     >
       {item && (
         <div className="flex flex-col gap-5">
-          <div>
+          <div data-veil="">
             <div className="flex flex-wrap items-center gap-2">
               <EvidenceBadge status={item.status} />
               <Badge>{item.category}</Badge>
@@ -113,11 +129,14 @@ export function EvidenceDetailSheet({
             </Sensitive>
           </div>
 
-          <p className="rounded-[10px] bg-surface-2 px-3.5 py-3 text-[14px] leading-6 text-ink-2">
+          <p
+            data-veil=""
+            className="rounded-[10px] bg-surface-2 px-3.5 py-3 text-[14px] leading-6 text-ink-2"
+          >
             {STATUS_EXPLAIN[item.status]}
           </p>
 
-          <div className="flex flex-col gap-2">
+          <div data-veil="" className="flex flex-col gap-2">
             <TextareaField
               label="这份材料想证明什么"
               rows={3}
@@ -148,7 +167,7 @@ export function EvidenceDetailSheet({
             )}
           </div>
 
-          <dl className="flex flex-col divide-y divide-line text-[15px]">
+          <dl data-veil="" className="flex flex-col divide-y divide-line text-[15px]">
             <Row label="原始载体" value={item.originalMedium || '未填写'} />
             <Row
               label="大小"
@@ -159,7 +178,7 @@ export function EvidenceDetailSheet({
           </dl>
 
           {att && (
-            <Card className="bg-secondary p-3.5">
+            <Card data-veil="" className="bg-secondary p-3.5">
               <h3 className="text-[15px] font-semibold text-ink">存证订单</h3>
               <dl className="mt-2 flex flex-col divide-y divide-line text-[15px]">
                 <Row label="存证编号" value={att.orderNo} numeric />
@@ -203,7 +222,7 @@ export function EvidenceDetailSheet({
           )}
 
           {item.sha256 && (
-            <div>
+            <div data-veil="">
               <p className="text-[13px] text-ink-2">SHA-256 哈希值</p>
               <p className="num mt-1 break-all rounded-[10px] bg-surface-2 px-3 py-2 text-[13px] leading-6 text-ink-2">
                 {item.sha256}

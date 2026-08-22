@@ -42,7 +42,7 @@ export function StepPreview({ draft }: { draft: IntakeDraft }) {
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardHeader className="items-center">
+        <CardHeader data-veil="" className="items-center">
           <CardTitle>
             <Sensitive>
               {draft.companyName ? `${draft.companyName} · 应对档案` : '我的应对档案'}
@@ -55,7 +55,7 @@ export function StepPreview({ draft }: { draft: IntakeDraft }) {
           )}
         </CardHeader>
         <CardContent>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-[15px]">
+          <dl data-veil="" className="grid grid-cols-2 gap-x-4 gap-y-3 text-[15px]">
             <Meta label="管辖" value="北京 · 朝阳区" />
             <Meta
               label="入职时间"
@@ -86,7 +86,7 @@ export function StepPreview({ draft }: { draft: IntakeDraft }) {
         <CardContent>
           <ul className="flex flex-col divide-y divide-line">
             {estimate.rows.map((row) => (
-              <li key={row.key} className="flex flex-col gap-1 py-3 first:pt-0">
+              <li key={row.key} data-veil="" className="flex flex-col gap-1 py-3 first:pt-0">
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="text-[15px] leading-7 font-medium text-ink">
                     {row.label}
@@ -105,7 +105,10 @@ export function StepPreview({ draft }: { draft: IntakeDraft }) {
           </ul>
 
           {known.length > 1 && (
-            <div className="mt-3 flex items-baseline justify-between gap-3 rounded-[10px] bg-primary-wash px-3.5 py-3">
+            <div
+              data-veil=""
+              className="mt-3 flex items-baseline justify-between gap-3 rounded-[10px] bg-primary-wash px-3.5 py-3"
+            >
               <span className="text-[15px] font-medium text-primary-ink">
                 已能算出的部分合计
               </span>
@@ -115,17 +118,20 @@ export function StepPreview({ draft }: { draft: IntakeDraft }) {
             </div>
           )}
 
-          <p className="mt-3 border-l-4 border-primary bg-surface-2 px-3.5 py-2.5 text-[14px] leading-6 text-ink-2">
+          <p
+            data-veil=""
+            className="mt-3 border-l-4 border-primary bg-surface-2 px-3.5 py-2.5 text-[14px] leading-6 text-ink-2"
+          >
             {estimate.capNote}
           </p>
-          <p className="mt-2 text-[14px] leading-6 text-ink-2">
+          <p data-veil="" className="mt-2 text-[14px] leading-6 text-ink-2">
             {estimate.incomplete
               ? '回到第 2 步补上入职时间和月工资，这里就会算出具体金额。现在没填也不影响往下走，之后随时能回来补。'
               : '这是按你刚才填的数字先算的一版。传上工资流水和劳动合同后，基数和年限会自动校正，金额也会跟着变。'}
           </p>
 
           {otherGoals.length > 0 && (
-            <p className="mt-2 text-[14px] leading-6 text-ink-2">
+            <p data-veil="" className="mt-2 text-[14px] leading-6 text-ink-2">
               另外记下的诉求：{otherGoals.join('、')}。这几项不折算成钱，会写进仲裁请求。
             </p>
           )}
@@ -152,7 +158,7 @@ export function StepPreview({ draft }: { draft: IntakeDraft }) {
       </section>
 
       {draft.bottomLine.trim() && (
-        <Card className="border-transparent bg-surface-2 shadow-none">
+        <Card data-veil="" className="border-transparent bg-surface-2 shadow-none">
           <CardContent className="pt-4">
             <p className="text-[13px] font-medium text-ink-2">你写下的底线</p>
             <p className="prose-measure mt-1 text-[15px] leading-7 text-ink">

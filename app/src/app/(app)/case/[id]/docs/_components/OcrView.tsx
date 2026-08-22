@@ -66,7 +66,11 @@ export function OcrView({
 
       <div className="px-4 py-4">
         {lines.map((line, i) => (
-          <p key={i} className="prose-measure mt-3 text-[16px] leading-8 text-ink first:mt-0">
+          <p
+            key={i}
+            data-veil=""
+            className="prose-measure mt-3 text-[16px] leading-8 text-ink first:mt-0"
+          >
             {segmentLine(line, riskFlags).map((seg, j) => {
               const { flag, index } = seg;
               if (!flag || !index) return <SensitiveText key={j} text={seg.text} />;
@@ -103,14 +107,17 @@ export function OcrView({
           <div className="flex flex-col gap-4">
             <div>
               <Badge tone={LEVEL_TONE[active.flag.level]}>风险 {active.flag.level}</Badge>
-              <blockquote className="mt-2.5 border-l-4 border-danger bg-danger-wash px-3.5 py-3 text-[15px] leading-7 text-ink">
+              <blockquote
+                data-veil=""
+                className="mt-2.5 border-l-4 border-danger bg-danger-wash px-3.5 py-3 text-[15px] leading-7 text-ink"
+              >
                 <SensitiveText text={active.flag.quote} />
               </blockquote>
             </div>
 
             <div>
               <h3 className="text-[15px] font-semibold text-ink">为什么有风险</h3>
-              <p className="mt-1.5 text-[15px] leading-7 text-ink-2">
+              <p data-veil="" className="mt-1.5 text-[15px] leading-7 text-ink-2">
                 <SensitiveText text={active.flag.note} />
               </p>
             </div>

@@ -15,7 +15,7 @@ export function StepCompanyDocs({
   const hasAny = COMPANY_DOC_QUESTIONS.some((q) => draft[q.key] === '有');
 
   return (
-    <div className="flex flex-col gap-5">
+    <div data-veil="" className="flex flex-col gap-5">
       {COMPANY_DOC_QUESTIONS.map((q) => (
         <div key={q.key} className="flex flex-col gap-2">
           <p className="text-[15px] leading-7 font-medium text-ink">{q.label}</p>

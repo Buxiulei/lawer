@@ -19,6 +19,7 @@ export function LawRefCard({ law }: { law: LawRef }) {
     <Collapsible
       open={open}
       onOpenChange={setOpen}
+      data-veil=""
       className="rounded-[12px] border border-line bg-surface"
     >
       <CollapsibleTrigger className="flex w-full items-start gap-3 px-3.5 py-3 text-left">

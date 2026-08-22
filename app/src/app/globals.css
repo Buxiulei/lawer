@@ -330,3 +330,48 @@
     opacity: 0.45;
   }
 }
+
+/* ── 低调模式二档：正文整体模糊，点住哪一块看清哪一块 ──────────
+   开关挂在 html[data-discreet] 上而不是 React state：首屏脚本已经把属性落好，
+   正文不会先清晰地闪一帧。揭开/糊回只加减属性，滚动期间没有 JS 参与。
+   放在 @layer 外面是为了盖过 utilities 里的 .discreet-blur。
+
+   用 filter 不用 color:transparent + text-shadow：后者是继承属性，
+   子元素只要自己写了 color（本仓库几乎每个 span 都带 Tailwind 文字色）
+   就把糊打穿、原样可读；filter 对子孙一视同仁。实测见任务记录。 */
+html[data-discreet='1'] [data-veil] {
+  filter: blur(5px);
+  transition: filter 120ms ease-out;
+  /* 长按不弹系统选择菜单，划选复制也拿不到内容 */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* 按住的那一块；块里的输入框拿到焦点时也清晰，否则没法填 */
+html[data-discreet='1'] [data-veil][data-veil-open],
+html[data-discreet='1'] [data-veil][data-veil-focus] {
+  filter: none;
+}
+
+/* 正在打字的输入框要能挪光标、能选词 */
+html[data-discreet='1'] [data-veil] :is(input, textarea, [contenteditable='true']) {
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+
+/* 块内的单字段打码（金额、公司名）交给外面这一层：
+   叠两层 blur 白费一遍性能，揭开时还会剩一层糊着。 */
+html[data-discreet='1'] [data-veil] .discreet-blur {
+  filter: none;
+}
+
+/* 块套块时两层一起亮。行动卡、法条卡这类共享卡片会落在别的块里，
+   各糊各的就会出现「点住了却还是看不清」——揭开外层内层跟着亮，
+   点中内层外层也让开，两个方向都要写。 */
+html[data-discreet='1'] [data-veil][data-veil-open] [data-veil],
+html[data-discreet='1'] [data-veil][data-veil-focus] [data-veil],
+html[data-discreet='1'] [data-veil]:has([data-veil][data-veil-open]),
+html[data-discreet='1'] [data-veil]:has([data-veil][data-veil-focus]) {
+  filter: none;
+}

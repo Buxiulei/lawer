@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { Fragment } from 'react';
+import { useDiscreet } from '@/app/_ui/discreet';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -13,6 +15,8 @@ import {
 
 interface Crumb {
   label: string;
+  /** 低调模式下顶替 label 的中性词；不给就是本来就中性的栏目名。 */
+  discreetLabel?: string;
   href?: string;
 }
 
@@ -33,10 +37,13 @@ export function crumbsFor(pathname: string, caseId: string): Crumb[] {
   const workbench = { label: '工作台', href: `/case/${caseId}` };
 
   // 只做两级：详情页停在所属栏目，不把文书名/文件名放进顶栏——那里面有公司名。
-  if (rest.startsWith('/evidence')) return [workbench, { label: '证据' }];
-  if (rest.startsWith('/graph')) return [workbench, { label: '公司图谱' }];
+  if (rest.startsWith('/evidence'))
+    return [workbench, { label: '证据', discreetLabel: NEUTRAL_WORD.evidence }];
+  if (rest.startsWith('/graph'))
+    return [workbench, { label: '公司图谱', discreetLabel: NEUTRAL_WORD.graph }];
   if (rest.startsWith('/docs')) return [workbench, { label: '文件解读' }];
-  if (rest.startsWith('/drafts')) return [workbench, { label: '文书' }];
+  if (rest.startsWith('/drafts'))
+    return [workbench, { label: '文书', discreetLabel: NEUTRAL_WORD.drafts }];
   return [{ label: '工作台' }];
 }
 
@@ -48,6 +55,7 @@ export function Breadcrumbs({
   caseId: string;
 }) {
   const crumbs = crumbsFor(pathname, caseId);
+  const { discreet } = useDiscreet();
 
   return (
     <Breadcrumb>
@@ -58,10 +66,10 @@ export function Breadcrumbs({
             <BreadcrumbItem>
               {crumb.href ? (
                 <BreadcrumbLink asChild>
-                  <Link href={crumb.href}>{crumb.label}</Link>
+                  <Link href={crumb.href}>{labelOf(crumb, discreet)}</Link>
                 </BreadcrumbLink>
               ) : (
-                <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+                <BreadcrumbPage>{labelOf(crumb, discreet)}</BreadcrumbPage>
               )}
             </BreadcrumbItem>
           </Fragment>
@@ -69,4 +77,8 @@ export function Breadcrumbs({
       </BreadcrumbList>
     </Breadcrumb>
   );
+}
+
+function labelOf(crumb: Crumb, discreet: boolean): string {
+  return discreet ? (crumb.discreetLabel ?? crumb.label) : crumb.label;
 }

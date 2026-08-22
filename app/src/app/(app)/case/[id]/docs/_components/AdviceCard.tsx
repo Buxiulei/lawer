@@ -52,7 +52,7 @@ export function AdviceCard({
     >
       <span className={cn('absolute inset-y-0 left-0 w-1', skin.line)} aria-hidden />
 
-      <div className="px-4 py-4">
+      <div data-veil="" className="px-4 py-4">
         <p className="text-[13px] font-medium text-ink-2">签署建议</p>
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <strong className={cn('text-[30px] leading-10 font-semibold', skin.word)}>

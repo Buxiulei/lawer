@@ -54,7 +54,6 @@ export function GraphCanvas({
   payrollChain,
   selectedId,
   onSelect,
-  discreet,
 }: {
   graph: CompanyGraph;
   layout: GraphLayout;
@@ -62,7 +61,6 @@ export function GraphCanvas({
   payrollChain: Set<string>;
   selectedId: string | null;
   onSelect: (id: string) => void;
-  discreet: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [view, setView] = useState<Box>({ x: 0, y: 0, w: layout.width, h: layout.height });
@@ -293,7 +291,11 @@ export function GraphCanvas({
                 rx={5}
                 fill="var(--bg)"
               />
+              {/* 关系名是这个案子查出来的东西（「签约壳↔用工主体」），
+                  跟节点名一样进糊层；底下那块 bg 色垫片留着不糊，
+                  糊了会在线上留一团脏边。图例是固定说明，不在层里。 */}
               <text
+                data-veil=""
                 x={e.labelX}
                 y={e.labelY}
                 textAnchor="middle"
@@ -317,7 +319,6 @@ export function GraphCanvas({
               node={node}
               urgent={urgentIds.has(pos.id)}
               selected={selectedId === pos.id}
-              discreet={discreet}
               onSelect={onSelect}
             />
           );
@@ -344,14 +345,12 @@ function NodeCard({
   node,
   urgent,
   selected,
-  discreet,
   onSelect,
 }: {
   pos: PositionedNode;
   node: GraphNode;
   urgent: boolean;
   selected: boolean;
-  discreet: boolean;
   onSelect: (id: string) => void;
 }) {
   return (
@@ -393,40 +392,35 @@ function NodeCard({
               selected && 'ring-2 ring-primary ring-offset-2 ring-offset-bg',
             )}
           >
-            <span
-              className={cn(
-                'line-clamp-2 text-[13px] leading-[17px] font-semibold text-ink',
-                // 可点的元素上只打码不接管点按：点按要留给「打开详情」，
-                // 名称与信用代码在抽屉里点一下临时显示（同 DataTable 的规矩）
-                discreet && 'discreet-blur',
-              )}
-            >
-              {node.name}
-            </span>
-            <span
-              className={cn(
-                'truncate text-[11px] leading-4 text-ink-2',
-                discreet && 'discreet-blur',
-              )}
-            >
-              {node.role}
-            </span>
-            <span className="num flex items-center gap-2 text-[11px] leading-4 text-ink-2">
-              <span>
-                近期 <span className="font-semibold text-ink">{node.eventCount}</span>
+            {/* 卡上说得出用途的几行——名称、角色、涉诉计数——合成一个语义块：
+                点住看清、松手 1.5 秒糊回去，跟全站正文一套手势（见 _ui/veil）。
+                糊只包住文字、不包整张按钮：filter 会把描边、焦点圈和紧急红环
+                一起糊出毛边，而它们正贴着 foreignObject 的裁切边。
+                这层不接管点按，短按照旧冒泡上去开详情抽屉，长按才揭。 */}
+            <span data-veil="" className="flex min-w-0 flex-col gap-1">
+              <span className="line-clamp-2 text-[13px] leading-[17px] font-semibold text-ink">
+                {node.name}
               </span>
-              <span aria-hidden className="text-line">
-                |
+              <span className="truncate text-[11px] leading-4 text-ink-2">
+                {node.role}
               </span>
-              <span>
-                涉诉{' '}
-                <span
-                  className={cn(
-                    'font-semibold',
-                    node.litigationCount > 0 ? 'text-danger-ink' : 'text-ink',
-                  )}
-                >
-                  {node.litigationCount}
+              <span className="num flex items-center gap-2 text-[11px] leading-4 text-ink-2">
+                <span>
+                  近期 <span className="font-semibold text-ink">{node.eventCount}</span>
+                </span>
+                <span aria-hidden className="text-line">
+                  |
+                </span>
+                <span>
+                  涉诉{' '}
+                  <span
+                    className={cn(
+                      'font-semibold',
+                      node.litigationCount > 0 ? 'text-danger-ink' : 'text-ink',
+                    )}
+                  >
+                    {node.litigationCount}
+                  </span>
                 </span>
               </span>
             </span>

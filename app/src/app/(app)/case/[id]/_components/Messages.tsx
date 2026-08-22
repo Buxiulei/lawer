@@ -42,7 +42,10 @@ export function DateDivider({ iso }: { iso: string }) {
 export function UserMessage({ message }: { message: Message }) {
   return (
     <div className="flex justify-end py-2">
-      <p className="max-w-[85%] rounded-[12px] bg-surface-2 px-3.5 py-2.5 text-[16px] leading-[1.75] text-ink lg:max-w-[75%]">
+      <p
+        data-veil=""
+        className="max-w-[85%] rounded-[12px] bg-surface-2 px-3.5 py-2.5 text-[16px] leading-[1.75] text-ink lg:max-w-[75%]"
+      >
         <MaskedText text={message.content} />
       </p>
     </div>

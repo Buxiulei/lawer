@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { cn } from '@/app/_ui/cn';
-import { DocumentTitle } from '@/app/_ui/discreet';
+import { DocumentTitle, useDiscreet } from '@/app/_ui/discreet';
+import { DiscreetVeil } from '@/app/_ui/veil';
 import { SidebarInset, SidebarProvider } from '@/components/shadcn/sidebar';
 import { TooltipProvider } from '@/components/shadcn/tooltip';
 import { AppSidebar } from './AppSidebar';
@@ -45,6 +46,7 @@ export function AppShell({
       <CasePanelProvider>
         <SidebarProvider>
           <DocumentTitle title={`${caseTitle} · 裁员应对专员`} />
+          <DiscreetVeil />
           <AppSidebar caseId={caseId} caseTitle={caseTitle} pathname={pathname} />
           <SidebarInset>
             <ShellHeader pathname={pathname} caseId={caseId} />
@@ -63,6 +65,7 @@ export function AppShell({
 }
 
 function BottomTabs({ pathname, caseId }: { pathname: string; caseId: string }) {
+  const { discreet } = useDiscreet();
   return (
     <nav
       aria-label="主导航"
@@ -71,6 +74,8 @@ function BottomTabs({ pathname, caseId }: { pathname: string; caseId: string }) 
       <ul className="mx-auto flex h-14 max-w-[860px]">
         {NAV_ITEMS.map((item) => {
           const active = item.match(pathname, caseId);
+          // 低调下换中性词，图标和位置不动：肌肉记忆按的是那个位置，不是那两个字
+          const label = (discreet && item.discreetLabel) || item.label;
           return (
             <li key={item.key} className="flex-1">
               <Link
@@ -82,7 +87,7 @@ function BottomTabs({ pathname, caseId }: { pathname: string; caseId: string }) 
                 )}
               >
                 {item.icon}
-                <span className="text-[11px] leading-none">{item.label}</span>
+                <span className="text-[11px] leading-none">{label}</span>
               </Link>
             </li>
           );

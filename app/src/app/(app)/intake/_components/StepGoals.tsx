@@ -20,7 +20,7 @@ export function StepGoals({
     });
 
   return (
-    <div className="flex flex-col gap-5">
+    <div data-veil="" className="flex flex-col gap-5">
       <div className="flex flex-col gap-2.5">
         <p className="text-[15px] leading-7 text-ink-2">
           能多选。现在选不准也没关系，档案建好后随时改。

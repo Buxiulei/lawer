@@ -1,8 +1,14 @@
 import type { ReactNode } from 'react';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 
 export interface NavItem {
   key: string;
   label: string;
+  /**
+   * 低调模式下顶替 label 的中性词。不给就说明这个栏目名本来就中性
+   * （「工作台」「我的」），两种模式下写法一致。
+   */
+  discreetLabel?: string;
   /** 相对当前案件的路径构造 */
   href: (caseId: string) => string;
   /** 命中判定：pathname 是否属于该 tab */
@@ -33,6 +39,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     key: 'evidence',
     label: '证据',
+    discreetLabel: NEUTRAL_WORD.evidence,
     href: (id) => `/case/${id}/evidence`,
     match: (p, id) => p.startsWith(`/case/${id}/evidence`),
     icon: (
@@ -45,6 +52,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     key: 'drafts',
     label: '文书',
+    discreetLabel: NEUTRAL_WORD.drafts,
     href: (id) => `/case/${id}/drafts`,
     match: (p, id) => p.startsWith(`/case/${id}/drafts`) || p.startsWith(`/case/${id}/docs`),
     icon: (

@@ -9,7 +9,9 @@ import {
   type LedgerType,
 } from '@/app/_mock/authpay';
 import { cn } from '@/app/_ui/cn';
+import { useDiscreet } from '@/app/_ui/discreet';
 import { formatDateTime } from '@/app/_ui/format';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Badge, type BadgeTone } from '@/components/shadcn/badge';
 import { Button } from '@/components/shadcn/button';
 import { DataTable, type DataTableColumn } from '@/components/shadcn/data-table';
@@ -27,7 +29,8 @@ function formatPoints(n: number): string {
   return Math.abs(n).toLocaleString('zh-CN');
 }
 
-const COLUMNS: DataTableColumn<LedgerEntry>[] = [
+// 「公道值」那一列的表头要跟着低调模式换词，所以列定义要拿到当前用词
+const columnsWith = (creditWord: string): DataTableColumn<LedgerEntry>[] => [
   {
     key: 'meta',
     header: '明细',
@@ -57,7 +60,7 @@ const COLUMNS: DataTableColumn<LedgerEntry>[] = [
   },
   {
     key: 'delta',
-    header: '公道值',
+    header: creditWord,
     numeric: true,
     sensitive: true,
     card: 'footnote',
@@ -96,6 +99,8 @@ const COLUMNS: DataTableColumn<LedgerEntry>[] = [
 export function LedgerList() {
   const [page, setPage] = useState(0);
   const { entries, hasMore } = ledgerPage(page);
+  const { discreet } = useDiscreet();
+  const creditWord = discreet ? NEUTRAL_WORD.credits : '公道值';
 
   return (
     <div>
@@ -109,10 +114,10 @@ export function LedgerList() {
 
       <DataTable
         className="mt-2"
-        columns={COLUMNS}
+        columns={columnsWith(creditWord)}
         rows={entries}
         rowKey={(e) => e.id}
-        caption="公道值流水"
+        caption={`${creditWord}流水`}
       />
 
       {hasMore && (

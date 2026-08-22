@@ -12,11 +12,14 @@ export function StepStage({
   patch: (p: Partial<IntakeDraft>) => void;
 }) {
   return (
-    <ChoiceCards
-      ariaLabel="现在处于哪一步"
-      options={INTAKE_STAGES}
-      value={draft.stage}
-      onChange={(stage) => patch({ stage })}
-    />
+    // ChoiceCards 不透传多余 props，包一层原生元素承载 data-veil
+    <div data-veil="">
+      <ChoiceCards
+        ariaLabel="现在处于哪一步"
+        options={INTAKE_STAGES}
+        value={draft.stage}
+        onChange={(stage) => patch({ stage })}
+      />
+    </div>
   );
 }
