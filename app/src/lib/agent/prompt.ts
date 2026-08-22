@@ -13,7 +13,7 @@ import { CHARTER } from './charter';
 import { intakeDirective, recapBrief, type IntakeStage } from './intake';
 import { MAX_ACTION_CARDS } from './tools';
 import { CRISIS_DIRECTIVE, CRISIS_RESOURCE_PACK_ID } from './crisis';
-import { packCitationGuide } from './citation-block';
+import { coreArticleKeys, packCitationGuide } from './citation-block';
 import type { KnowledgePack } from './retrieval';
 import type { CaseSnapshot } from './snapshot';
 
@@ -91,7 +91,11 @@ export function caseDigest(s: CaseSnapshot): string {
 /** 检索到的 packs 逐字原文段。
  *  noteAfter：紧贴某张卡的正文之后追加一条指令——模型对**邻近**指令的依从性明显好于
  *  放在通用指令区的同一句话（实测：危机轮「别重印整张卡」写在开头时被无视，卡给了两轮）。 */
-export function packsSection(packs: KnowledgePack[], noteAfter?: { packId: string; note: string }): string {
+export function packsSection(
+  packs: KnowledgePack[],
+  noteAfter?: { packId: string; note: string },
+  coreArticles: Set<string> = new Set(),
+): string {
   if (packs.length === 0) return '';
   const blocks = packs.map((p) =>
     [
@@ -103,7 +107,7 @@ export function packsSection(packs: KnowledgePack[], noteAfter?: { packId: strin
       // 而 G4 在定版批 6/6 全挂——指令离约束对象太远就被稀释，这是第三次同型。
       // 内容是拼好的引用块（照抄比缩写省力），拼不出来时给填空模板。
       '',
-      packCitationGuide(p),
+      packCitationGuide(p, coreArticles),
       ...(noteAfter && noteAfter.packId === p.id ? ['', `> ⚠️ **本卡使用限制**：${noteAfter.note}`] : []),
     ].join('\n'),
   );
@@ -226,6 +230,13 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
               '绝不能让用户在这种时刻回头翻聊天记录找号码。',
           }
         : undefined,
+      // 核心依据条**由结构化事实判定**（claims.basis / 行动卡 detail / 期限推算依据），
+      // 不让模型自己勾——见 citation-block.coreArticleKeys
+      coreArticleKeys({
+        claims: input.snapshot.claims,
+        openActions: input.snapshot.openActions,
+        deadlines: input.snapshot.deadlines,
+      }),
     ),
   ];
   return parts.filter((p) => p.trim()).join('\n\n---\n\n');

@@ -121,14 +121,66 @@ export function citationTemplate(pack: KnowledgePack): string {
  * 返回的字符串**紧贴该卡正文之后**下发（见 prompt.packsSection / tools.knowledge_search）——
  * 指令要挨着它约束的那张卡，放通用指令区会被稀释（实测：「别重印整卡」写在开头被无视两轮）。
  */
-export function packCitationGuide(pack: KnowledgePack): string {
+/**
+ * 本轮的**核心依据条**（`法名|条号` 集合），**由结构化事实判定，不让模型自己勾**。
+ *
+ * 【为什么必须结构化判定】（manager 2026-08-23 落地约束）
+ * 「哪几条是核心」如果交给模型自己判断，等于把分层的判定权交还给我们本想约束的那一方——
+ * 它会把"我打算详细讲的"标成核心，而不是"用户拿去主张权利要用的"。
+ * 所以核心条只从**已经落库的结构化事实**里取：
+ *   ① `claims.basis`——calc_calc 落库时写的法条串（**这是钱的依据**，用户会拿它去主张）；
+ *   ② 行动卡 detail 里出现的条号（行动卡是「现在做什么」，其依据必然是核心）；
+ *   ③ 生效中的期限推算依据（`deadlines.derived_from`）。
+ *
+ * 【它解决的是什么】S03#2：同一回复对《调解仲裁法》§27 引了全文、对《实施条例》§27 只给条号，
+ * 而后者恰恰是**结论句同句**的那条（补偿基数）。模型不是不会引，是**不知道哪条值得引全**。
+ * 与其加一条"每条都必须带原文"的粗规则（会盖掉核心/辅助分层与 pending 三分支），
+ * 不如**把"哪条是核心"从模型的判断变成注入的事实**——降低正确行为的成本，而不是提高错误行为的代价。
+ */
+export function coreArticleKeys(input: {
+  claims?: { basis: string | null }[];
+  openActions?: { detail: string | null }[];
+  deadlines?: { derived_from: string | null }[];
+}): Set<string> {
+  const out = new Set<string>();
+  const collect = (text: string | null | undefined) => {
+    if (!text) return;
+    for (const m of text.matchAll(ARTICLE)) {
+      const raw = m[0].replace(/\s+/g, '');
+      const law = /《([^》]{2,40})》/.exec(raw)?.[1] ?? '';
+      const art = raw.replace(/《[^》]{2,40}》/, '');
+      out.add(`${law.replace(/^中华人民共和国/, '')}|${art}`);
+    }
+  };
+  for (const c of input.claims ?? []) collect(c.basis);
+  for (const a of input.openActions ?? []) collect(a.detail);
+  for (const d of input.deadlines ?? []) collect(d.derived_from);
+  return out;
+}
+
+/** 该引用块讲的是不是核心条 */
+function isCoreBlock(law: string, article: string, core: Set<string>): boolean {
+  const norm = law.replace(/[《》\s]/g, '').replace(/^中华人民共和国/, '');
+  const art = article.replace(/\s+/g, '');
+  return core.has(`${norm}|${art}`) || core.has(`|${art}`);
+}
+
+export function packCitationGuide(pack: KnowledgePack, core: Set<string> = new Set()): string {
+  const quotes = pack.facts?.statute_quotes ?? [];
+  const coreHere = quotes.filter((q) => q?.law && q?.article && isCoreBlock(q.law, q.article, core));
   const blocks = [...statuteBlocks(pack), ...valueBlocks(pack), ...precedentBlocks(pack)];
   if (blocks.length === 0) return citationTemplate(pack);
-  return [
-    '【本卡可引用内容已替你拼好，照抄即可（不要改写、不要缩写、不要只留编号）】',
-    '',
-    blocks.join('\n\n'),
-  ].join('\n');
+  const head = ['【本卡可引用内容已替你拼好，照抄即可（不要改写、不要缩写、不要只留编号）】'];
+  if (coreHere.length > 0) {
+    head.push(
+      '',
+      `⭐ **本轮核心依据条**（档案里的诉求金额/行动卡/期限直接依赖它们）：` +
+        coreHere.map((q) => `《${q.law.replace(/^《|》$/g, '')}》${q.article}`).join('、'),
+      '**这几条必须带逐字原文引用**——用户要拿它们去主张权利、当庭念出来；只给条号等于没给。',
+      '其余条文可只给条号 + 一句大意。',
+    );
+  }
+  return [...head, '', blocks.join('\n\n')].join('\n');
 }
 
 // ───────────────────────── 出口侧：光秃条号检测 ─────────────────────────
@@ -150,12 +202,39 @@ const VERBATIM_MIN_LEN = 12;
 /** markdown 引用行：整行以 > 开头，是逐字原文最规范的载体 */
 const BLOCKQUOTE = /^\s*>/m;
 
+/**
+ * 我们**自己注入块**的标准格式：`第二十七条　劳动合同法第四十七条规定的…`
+ * ——条号 + **全角空格** + 正文。这是 statuteBlocks() 拼出来的形状，
+ * 引用它本身就是「带了逐字原文」，不该被判光秃。
+ * 【为什么单独认】它既没有引号也不在 blockquote 里，靠通用规则识别不出来——
+ * **判据不认识自家产出的格式**，就会把最规范的那种引用judged成最差的。
+ */
+const OWN_QUOTE_FORMAT = /第[一二三四五六七八九十百零〇0-9]+条[　\u3000][^\n]{10,}/;
+
 function hasVerbatimNear(near: string): boolean {
   if (BLOCKQUOTE.test(near)) return true;
+  if (OWN_QUOTE_FORMAT.test(near)) return true;
   for (const q of near.matchAll(QUOTED)) {
     if (q[1].trim().length >= VERBATIM_MIN_LEN) return true;
   }
   return false;
+}
+
+/**
+ * 该位置是否落在**逐字原文内部**（引号内或 blockquote 行内）。
+ *
+ * 【为什么要排除】法条原文自己会**交叉引用**别的条：
+ * §87 的原文里写着「应当依照本法**第四十七条**规定的经济补偿标准的二倍」。
+ * 那个「第四十七条」是**立法者写的**，不是 agent 自己给的光秃引用——
+ * 判它「没带原文」等于要求 agent 把被引法条的原文也一并附上，无限递归。
+ */
+function insideVerbatim(text: string, at: number): boolean {
+  const lineStart = text.lastIndexOf('\n', at) + 1;
+  if (/^\s*>/.test(text.slice(lineStart, at))) return true; // blockquote 行
+  // 引号内：数该位置之前同一行有几个引号，奇数即在引号内
+  const before = text.slice(lineStart, at);
+  const marks = (before.match(/["「『“”」』]/g) ?? []).length;
+  return marks % 2 === 1;
 }
 
 /**
@@ -213,6 +292,8 @@ export function bareArticleCitations(text: string, windowSize = 60): string[] {
   const out: string[] = [];
   for (const m of text.matchAll(ARTICLE)) {
     const at = m.index ?? 0;
+    // 法条原文内部的交叉引用不算 agent 的光秃引用（立法者写的，不是它写的）
+    if (insideVerbatim(text, at)) continue;
     const near = text.slice(Math.max(0, at - windowSize), at + m[0].length + windowSize);
     if (!hasVerbatimNear(near)) out.push(m[0].replace(/\s+/g, ''));
   }
@@ -239,8 +320,38 @@ const STATUTE_SHAPE_IN_QUOTE =
 /** 条件之二：引号前紧跟「宣称逐字」的引导语 */
 const VERBATIM_LEAD = /(原文|规定|写的是|载明|明确|条文|第\s*[一二三四五六七八九十百零〇0-9]+\s*[条问项款][^。！？\n]{0,8})[：:是]?\s*$/;
 
-/** 成对引号（中英文），内容 8-300 字（第五闸专用，与上文 QUOTED 用途不同故另名） */
-const QUOTED_SPAN = /[「『"“]([^」』"”\n]{8,300})[」』"”]/g;
+/** 非对称引号（「」『』“”）：开闭可区分，直接配对 */
+const QUOTED_ASYM = /[「『“]([^」』”\n]{8,300})[」』”]/g;
+
+/**
+ * 取出所有「被引号包起来」的片段。
+ *
+ * 【为什么不能用一条正则通吃】真语料（S03 转录）用的是**对称的 ASCII 直引号 `"`**：
+ * 「基数按前 12 个月"应得工资"，含奖金…年限从…（《实施条例》第二十七条）。第二，N 只是"公司提出…"」
+ * 对称引号**开闭同形**，正则无法从字符本身判断哪个是开、哪个是闭，于是它把
+ * **第 2 个引号（上一段的闭）与第 3 个引号（下一段的开）配成一对**，
+ * 把中间那段**模型自己的正文**当成了"引文"——一个会剥掉正当内容的假阳性。
+ *
+ * 所以对称引号必须**按出现次序奇偶配对**（第 1↔2、3↔4…），不能靠正则贪心匹配。
+ */
+function quotedChunks(text: string): { quote: string; at: number }[] {
+  const out: { quote: string; at: number }[] = [];
+  for (const m of text.matchAll(QUOTED_ASYM)) out.push({ quote: m[1], at: m.index ?? 0 });
+  // 对称直引号：逐行按奇偶配对，避免跨句误配
+  for (const line of text.split('\n')) {
+    const base = text.indexOf(line);
+    const parts = line.split('"');
+    // parts[1], parts[3], … 才是被引起来的内容
+    let cursor = 0;
+    for (let k = 0; k < parts.length; k++) {
+      if (k % 2 === 1 && parts[k].length >= 8 && parts[k].length <= 300) {
+        out.push({ quote: parts[k], at: base + cursor + 1 });
+      }
+      cursor += parts[k].length + 1;
+    }
+  }
+  return out;
+}
 
 /**
  * 引号内**被呈现为法条原文**的片段。
@@ -252,10 +363,9 @@ const QUOTED_SPAN = /[「『"“]([^」』"”\n]{8,300})[」』"”]/g;
  */
 export function quotedStatuteSpans(text: string): { quote: string; at: number }[] {
   const out: { quote: string; at: number }[] = [];
-  for (const m of text.matchAll(QUOTED_SPAN)) {
-    const at = m.index ?? 0;
+  for (const { quote, at } of quotedChunks(text)) {
     const before = text.slice(Math.max(0, at - 30), at);
-    if (STATUTE_SHAPE_IN_QUOTE.test(m[1]) || VERBATIM_LEAD.test(before)) out.push({ quote: m[1], at });
+    if (STATUTE_SHAPE_IN_QUOTE.test(quote) || VERBATIM_LEAD.test(before)) out.push({ quote, at });
   }
   return out;
 }

@@ -44,6 +44,7 @@ import {
   ZUOBIAO_PACK_ID,
   type TurnRecord,
 } from './assertions';
+import { bareArticleCitations } from '../../app/src/lib/agent';
 import { findScenarios } from './scenarios';
 import { voteFrom } from './judge';
 import { createKnowledgeSearcher, type KnowledgePack } from '../../app/src/lib/agent';
@@ -1095,5 +1096,42 @@ describe('判例污染 · span 收窄与卡内原文比对（防误报干净引�
 
   it('引入句后无 blockquote 时，span 只有引入句本身', () => {
     expect(precedentSpans('北京同类典型案例：某公司违法解除。\n下一段说别的。')[0]).not.toContain('下一段');
+  });
+});
+
+describe('G4 断言三缺陷修（离线重判第 4 项）', () => {
+  const t = (text: string, cards: { title: string; detail: string; due_at: string | null }[] = []): TurnRecord => ({
+    input: 'x', text, events: [], retrieved: [], actionCards: cards, drafts: [],
+    model: 'deepseek-v4-pro', degraded: false, taskClass: 'critical',
+  });
+
+  // 【缺陷一】按 (法名,条号)×轮 聚合：行动卡里重提条号是**好行为**，
+  // 用户看卡就知道依据是哪条。按出现次数计 = 惩罚我们自己要求的行为。
+  it('同一轮里同一条被提两次，只计一次', () => {
+    const text = '依据《劳动合同法》第八十七条应支付二倍赔偿金。\n再说一遍：《劳动合同法》第八十七条。';
+    const v = citationCompletenessAssertions([t(text)], 'X', new Set([citationKey('劳动合同法', '第八十七条')]));
+    expect(v).toHaveLength(1); // 不是 2
+  });
+
+  // 【缺陷二】识别我们自己注入块的标准格式：条号 + 全角空格 + 正文
+  it('自家 statute_quotes 格式（条号　全角空格　正文）算带了原文', () => {
+    const text = '依据：第二十七条　劳动合同法第四十七条规定的经济补偿的月工资按照劳动者应得工资计算，包括计时工资等。';
+    expect(bareArticleCitations(text)).toEqual([]);
+  });
+
+  // 【缺陷三】法条原文内部的交叉引用是**立法者写的**，不是 agent 的光秃引用；
+  // 判它「没带原文」等于要求把被引法条的原文也附上，无限递归。
+  it('引号内法条原文里的交叉引用不算光秃', () => {
+    const text = '《劳动合同法》第八十七条："用人单位违反本法规定解除或者终止劳动合同的，应当依照本法第四十七条规定的经济补偿标准的二倍向劳动者支付赔偿金。"';
+    expect(bareArticleCitations(text).some((a) => a.includes('第四十七条'))).toBe(false);
+  });
+
+  it('blockquote 里的交叉引用同样不算', () => {
+    const text = '依据如下：\n> 第八十七条　用人单位违反本法规定的，应当依照本法第四十七条规定的标准支付赔偿金。';
+    expect(bareArticleCitations(text).some((a) => a.includes('第四十七条'))).toBe(false);
+  });
+
+  it('真·光秃引用仍要抓：条号孤零零出现、附近无原文', () => {
+    expect(bareArticleCitations('这一点依据《劳动合同法》第八十七条，你可以主张二倍赔偿。').length).toBeGreaterThan(0);
   });
 });

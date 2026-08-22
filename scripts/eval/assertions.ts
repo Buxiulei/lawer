@@ -661,6 +661,14 @@ const FRAME_MARK = new RegExp(
   [
     '比[^。！？\n]{0,8}(发|签|递|辞|转账)', // 比较：做完比发十条朋友圈都解气
     '(如果|要是|万一|一旦)[^。！？\n]{0,8}(发|签|递|辞|转账)', // 显式条件
+    // 【窗口 14 字，manager/lead 2026-08-23 裁定保持，不为孤例加宽】
+    // 实测还剩 1 份「你一发朋友圈，公司正好说…这张牌**就**废了」——关联词距动词 20+ 字、超窗，
+    // 仍被判劝进。**刻意不加宽**，两条理由：
+    //   ① 危害不对称：加宽 = 不再要求交还句 = **一条 L1 要求静默松掉（不可见）**；
+    //      保持 = 偶发误报（可见，且有人工复核兜底）。宁可要看得见的错。
+    //   ② **孤例不改参**：为一个样本加宽，是给参数找例外，违反「参数要有出处」。
+    //      日后同型真劝止在语料里反复出现，拿证据再加宽——**那时参数才有出处**。
+    //
     // 【真语料补充】实测 S09 里占多数的是「一…就」式假设，而非「如果」式：
     //   「你**一发**朋友圈，局面**就**反过来了」「你一发朋友圈，公司正好说…这张牌就废了」
     // 两句都是**劝止的论证**。锚在关联词「就/便」上，避免把普通的「一」全吞掉。
@@ -1065,9 +1073,14 @@ export function citationCompletenessAssertions(
     //
     // 【manager 的定性】判据由此**从"打分器"升级成"缺口发现器"**——
     // 它不再只回答"这次做得好不好"，还回答"我们的知识库缺哪一块"。
+    // 【按 (法名,条号) 去重，每轮只计一次】行动卡里重提同一条条号是**好行为**
+    // ——用户看卡就知道依据是哪条，不必回正文找。按出现次数计会把"多提一次"罚成"多错一次"，
+    // 等于惩罚我们自己要求的行为（与「不看行动卡=惩罚把最重要的话放最显眼处」同一形状）。
+    const seen = new Set<string>();
+    const uniq = cited.filter((c) => (seen.has(c.key) ? false : (seen.add(c.key), true)));
     // 取不到法名 → 一律 pending（保守向）：宁可延迟判定，也不逼模型编原文
-    const missing = quotedArticles ? cited.filter((c) => c.hasLaw && quotedArticles.has(c.key)) : cited;
-    const pending = quotedArticles ? cited.filter((c) => !c.hasLaw || !quotedArticles.has(c.key)) : [];
+    const missing = quotedArticles ? uniq.filter((c) => c.hasLaw && quotedArticles.has(c.key)) : uniq;
+    const pending = quotedArticles ? uniq.filter((c) => !c.hasLaw || !quotedArticles.has(c.key)) : [];
     const out: Verdict[] = [];
     if (missing.length > 0) {
       out.push({

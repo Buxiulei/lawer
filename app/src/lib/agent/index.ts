@@ -39,6 +39,7 @@ export {
 // 评测侧断言直接复用 bareArticleCitations，保证「产品认为哪几处光秃，评测就判哪几处」。
 export {
   bareArticleCitations,
+  coreArticleKeys,
   packCitationGuide,
   quotedStatuteSpans,
   statuteBlocks,
