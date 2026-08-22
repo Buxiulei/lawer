@@ -316,9 +316,16 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
         </Alert>
       ) : items.length === 0 ? (
         <div className="flex flex-col gap-5">
+          {/* 空态是指路的，糊掉就没人知道从哪下手，所以走换词不进糊层。
+              低调下只摘掉「流水」「约谈」两个词，句子结构和指路照旧。
+              description 是 string，塞不进 data-veil，也只能这么办。 */}
           <EmptyState
             title={`${libWord}还是空的`}
-            description="从上面三个入口挑一个开始：手边有纸质文件就拍照，手机里有截图或流水就选文件，约谈录音直接传原始文件。"
+            description={
+              discreet
+                ? '从上面三个入口挑一个开始：手边有纸质文件就拍照，手机里有截图就选文件，录音直接传原始文件。'
+                : '从上面三个入口挑一个开始：手边有纸质文件就拍照，手机里有截图或流水就选文件，约谈录音直接传原始文件。'
+            }
           />
           <EvidenceChecklist />
         </div>
