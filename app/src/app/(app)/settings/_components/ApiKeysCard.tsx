@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiFetch, humanError } from '@/app/_ui/api';
+import { ApiError, apiFetch, humanError } from '@/app/_ui/api';
 import { cn } from '@/app/_ui/cn';
 import { formatDateTime } from '@/app/_ui/format';
 import { Badge } from '@/components/ui/Badge';
@@ -21,6 +21,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { CodeBlock } from './CodeBlock';
 import { SetupPrompt } from './SetupPrompt';
+import { SignInHint } from './SignInHint';
 import type { SetupUrls } from './agentSetup';
 
 /**
@@ -74,6 +75,8 @@ export function ApiKeysCard() {
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /** 没登录（或 token 已失效）：key 是绑账号的，整卡换成登录引导 */
+  const [unauthorized, setUnauthorized] = useState(false);
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [name, setName] = useState('');
@@ -95,7 +98,8 @@ export function ApiKeysCard() {
       },
       (err) => {
         if (!alive) return;
-        setLoadError(humanError(err));
+        if (err instanceof ApiError && err.errorCode === 'UNAUTHORIZED') setUnauthorized(true);
+        else setLoadError(humanError(err));
         setLoading(false);
       },
     );
@@ -161,9 +165,11 @@ export function ApiKeysCard() {
         <CardHeader>
           <CardTitle>API key</CardTitle>
           <CardAction>
-            <Button size="sm" variant="secondary" onClick={() => setSheetOpen(true)}>
-              新建
-            </Button>
+            {!unauthorized && (
+              <Button size="sm" variant="secondary" onClick={() => setSheetOpen(true)}>
+                新建
+              </Button>
+            )}
           </CardAction>
         </CardHeader>
         <CardContent>
@@ -173,13 +179,17 @@ export function ApiKeysCard() {
 
           {loading && <Skeleton className="mt-3 h-20 w-full" />}
 
-          {!loading && loadError && (
+          {!loading && unauthorized && (
+            <SignInHint>key 是你账号的凭据，登录之后才能生成。</SignInHint>
+          )}
+
+          {!loading && !unauthorized && loadError && (
             <p className="mt-3 text-[14px] leading-6 text-ink-2">
               key 列表这次没读到（{loadError}），稍后回来再看。
             </p>
           )}
 
-          {!loading && !loadError && keys.length === 0 && (
+          {!loading && !loadError && !unauthorized && keys.length === 0 && (
             <p className="mt-3 text-[14px] leading-6 text-ink-2">
               还没有 key。要让自己的 AI 助手接进来，先在这儿生成一把。
             </p>

@@ -11,6 +11,19 @@ import type {
   NoticeCode,
   RecordTool,
 } from '@/app/(app)/case/[id]/_stream/frames';
+import {
+  demoCnDate,
+  demoDay,
+  demoMonthCn,
+  demoMonthOfDay,
+  demoShortCnDate,
+  demoShortMonthCn,
+} from './clock';
+import {
+  DEMO_ARBITRATION_DEADLINE_DAY,
+  DEMO_DISMISSAL_DAY,
+  DEMO_DISMISSAL_MONTH,
+} from './demo';
 import type { ActionItem, LawRef } from './types';
 
 export interface ScriptRecord {
@@ -58,14 +71,14 @@ export const workbenchReplies: ReplyScript[] = [
       {
         tool: 'timeline_add',
         id: 'tl_r1',
-        summary: '7 月 15 日收到解除通知（立案材料清单已按此生成）',
+        summary: `${demoShortCnDate(DEMO_DISMISSAL_DAY)}收到解除通知（立案材料清单已按此生成）`,
       },
     ],
     content: `立案本身不难，材料齐了当场就能收。朝阳区劳动人事争议仲裁委员会在朝阳区人力资源和社会保障局的仲裁接待窗口收件，也可以走北京市网上仲裁服务平台先提交，通过初审再去现场核验原件。
 
 按你现在的档案，要带的东西是这四类：
 
-1. **仲裁申请书**，一式三份（本人一份、仲裁委一份、送达公司一份）。事实与理由部分按时间线写：5 月宣布部门合并、6 月 3 日 HR 首次约谈、7 月 15 日收到解除通知、7 月起停缴社保。
+1. **仲裁申请书**，一式三份（本人一份、仲裁委一份、送达公司一份）。事实与理由部分按时间线写：${demoShortMonthCn(demoMonthOfDay(-99))}宣布部门合并、${demoShortCnDate(-77)} HR 首次约谈、${demoShortCnDate(DEMO_DISMISSAL_DAY)}收到解除通知、${demoShortMonthCn(DEMO_DISMISSAL_MONTH)}起停缴社保。
 2. **本人身份证复印件**一份，正反面复印在同一页。
 3. **公司主体信息**：在国家企业信用信息公示系统查询后打印，要有查询日期。这一步是为了写准被申请人的名称、统一社会信用代码和住所地，写错会被要求补正。
 4. **证据清单加证据复印件**各三份，按你已经固化的六件编号，原件开庭时带去质证。
@@ -96,23 +109,22 @@ export const workbenchReplies: ReplyScript[] = [
         title: '打印公司主体信息查询页',
         detail:
           '在国家企业信用信息公示系统搜"星曜网络科技（北京）有限公司"，把结果页连同查询日期一起打印。被申请人名称、统一社会信用代码、住所地三项要和打印件完全一致，写错会被要求补正、耽误立案。',
-        dueAt: '2026-08-24T23:59:00+08:00',
+        dueAt: demoDay(5, '23:59'),
         priority: 1,
         status: '待办',
         sourceMessageId: null,
-        createdAt: '2026-08-19T10:00:00+08:00',
+        createdAt: demoDay(0, '10:00'),
       },
       {
         id: 'ai_r1_2',
         caseId: 'demo',
         title: '把仲裁申请书的请求事项逐条写出金额',
-        detail:
-          '四项请求分别写死数字：违法解除赔偿金 400000 元、2026 年 7 月工资 25000 元、未休年休假工资 16092.02 元、休息日加班费 27586.21 元。不要写"依法计算"，仲裁庭按你写的金额审。写完发我核一遍。',
-        dueAt: '2026-08-26T23:59:00+08:00',
+        detail: `四项请求分别写死数字：违法解除赔偿金 400000 元、${demoMonthCn(DEMO_DISMISSAL_MONTH)}工资 25000 元、未休年休假工资 16092.02 元、休息日加班费 27586.21 元。不要写"依法计算"，仲裁庭按你写的金额审。写完发我核一遍。`,
+        dueAt: demoDay(7, '23:59'),
         priority: 1,
         status: '待办',
         sourceMessageId: null,
-        createdAt: '2026-08-19T10:00:00+08:00',
+        createdAt: demoDay(0, '10:00'),
       },
     ],
   },
@@ -139,7 +151,7 @@ export const workbenchReplies: ReplyScript[] = [
 
 谈判时能松动的空间在支付时间和保密条款，不在解除原因的定性——一旦写成协商一致，2N 的主张基础就没了，这一条不换。
 
-另外 7 月工资已经逾期 34 天，这一笔不属于争议金额，属于公司明确欠付。催告函发出去之后如果还是不给，这笔可以单独走支付令，比仲裁快。`,
+另外 ${demoShortMonthCn(DEMO_DISMISSAL_MONTH)}工资已经逾期 ${-DEMO_DISMISSAL_DAY} 天，这一笔不属于争议金额，属于公司明确欠付。催告函发出去之后如果还是不给，这笔可以单独走支付令，比仲裁快。`,
     lawRefs: [
       {
         cite: '《中华人民共和国劳动合同法》第三十条',
@@ -156,11 +168,11 @@ export const workbenchReplies: ReplyScript[] = [
         title: '把谈判三句话存进手机备忘录',
         detail:
           'HR 来电时容易被带节奏。三句话写在备忘录第一条，接电话前扫一眼：只认书面、不认可协商一致的定性、各项分开列明。电话里不给数字、不做承诺、不签任何东西。',
-        dueAt: '2026-08-21T23:59:00+08:00',
+        dueAt: demoDay(2, '23:59'),
         priority: 2,
         status: '待办',
         sourceMessageId: null,
-        createdAt: '2026-08-19T10:00:00+08:00',
+        createdAt: demoDay(0, '10:00'),
       },
     ],
   },
@@ -182,7 +194,7 @@ export const workbenchReplies: ReplyScript[] = [
     ],
     content: `收到。我把这条并进档案了，下面是它对现有主张的影响。
 
-**对时间线**：这是一个新的公司动作节点，和 7 月 15 日的解除通知形成前后呼应，写进申请书的事实部分能让"客观情况重大变化"这个说法更站不住。
+**对时间线**：这是一个新的公司动作节点，和 ${demoShortCnDate(DEMO_DISMISSAL_DAY)}的解除通知形成前后呼应，写进申请书的事实部分能让"客观情况重大变化"这个说法更站不住。
 
 **对证据**：这类沟通记录的关键是可复现——原始的聊天窗口、邮件、短信都不要删，截屏只是副本。原件还在你手机里这件事，比截屏本身更重要。
 
@@ -197,11 +209,11 @@ export const workbenchReplies: ReplyScript[] = [
         title: '把新的沟通记录补进证据库并固化',
         detail:
           '上传后做时间戳固化，证明目的写清楚"证明公司在某月某日就该事项的表态"。原始聊天记录、邮件不要删除，仲裁时可能被要求当庭打开原始载体核对。',
-        dueAt: '2026-08-23T23:59:00+08:00',
+        dueAt: demoDay(4, '23:59'),
         priority: 2,
         status: '待办',
         sourceMessageId: null,
-        createdAt: '2026-08-19T10:00:00+08:00',
+        createdAt: demoDay(0, '10:00'),
       },
     ],
   },
@@ -240,11 +252,11 @@ export const scenarioReplies: ReplyScript[] = [
         title: '先回一句"需要核对，三个工作日内答复"',
         detail:
           '书面回一句就够，不解释理由、不给数字。这句话不构成承诺，也不会被解读为拒绝谈判，同时把签字压力挪后三天。',
-        dueAt: '2026-08-20T23:59:00+08:00',
+        dueAt: demoDay(1, '23:59'),
         priority: 1,
         status: '待办',
         sourceMessageId: null,
-        createdAt: '2026-08-19T10:00:00+08:00',
+        createdAt: demoDay(0, '10:00'),
       },
     ],
   },
@@ -275,11 +287,11 @@ export const scenarioReplies: ReplyScript[] = [
         title: '约谈前把手机录音测试一遍',
         detail:
           '提前录 30 秒回放，确认收音清楚、存储够用。原始文件不要剪辑、不要转存后删除原件，仲裁时可能要求当庭打开原始载体核对。',
-        dueAt: '2026-08-22T23:59:00+08:00',
+        dueAt: demoDay(3, '23:59'),
         priority: 2,
         status: '待办',
         sourceMessageId: null,
-        createdAt: '2026-08-19T10:00:00+08:00',
+        createdAt: demoDay(0, '10:00'),
       },
     ],
   },
@@ -347,11 +359,11 @@ export const scenarioReplies: ReplyScript[] = [
         title: '翻出员工手册里写年终奖的那一页',
         detail:
           '拍照或截屏，要能看到页码和条款编号。手册是公司单方制定的，庭上会核对版本，最好连同签收记录一起找出来。',
-        dueAt: '2026-08-25T23:59:00+08:00',
+        dueAt: demoDay(6, '23:59'),
         priority: 2,
         status: '待办',
         sourceMessageId: null,
-        createdAt: '2026-08-19T10:00:00+08:00',
+        createdAt: demoDay(0, '10:00'),
       },
     ],
   },
@@ -391,9 +403,9 @@ export const scenarioReplies: ReplyScript[] = [
 你的材料和时间我都记着，下面的事我们一件一件来。`,
     content: `先说结论：你现在最要紧的两件事都还没到期，时间上是来得及的。
 
-**一是仲裁时效**。从收到解除通知那天起算一年，也就是到明年 7 月 15 日之前都能立案。这一年里你什么时候身体和状态允许了再动手，都不算晚。
+**一是仲裁时效**。从收到解除通知那天起算一年，也就是到 ${demoCnDate(DEMO_ARBITRATION_DEADLINE_DAY)}之前都能立案。这一年里你什么时候身体和状态允许了再动手，都不算晚。
 
-**二是这个月的开销**。7 月工资和赔偿金是两笔钱、两条路，工资那笔属于公司明确欠付，可以单独走支付令，比仲裁快很多。如果这个月周转不开，先催这一笔。
+**二是这个月的开销**。${demoShortMonthCn(DEMO_DISMISSAL_MONTH)}工资和赔偿金是两笔钱、两条路，工资那笔属于公司明确欠付，可以单独走支付令，比仲裁快很多。如果这个月周转不开，先催这一笔。
 
 材料方面你已经固化了六件证据，缺的只有公司主体信息查询页，这一步在网上就能做完，不用出门。
 
@@ -413,11 +425,11 @@ export const scenarioReplies: ReplyScript[] = [
         title: '在网上打印公司主体信息查询页',
         detail:
           '国家企业信用信息公示系统搜公司全称，结果页连同查询日期一起打印或存 PDF。全程线上，十分钟能做完。今天做这一件就够。',
-        dueAt: '2026-08-27T23:59:00+08:00',
+        dueAt: demoDay(8, '23:59'),
         priority: 2,
         status: '待办',
         sourceMessageId: null,
-        createdAt: '2026-08-19T10:00:00+08:00',
+        createdAt: demoDay(0, '10:00'),
       },
     ],
   },
@@ -433,7 +445,7 @@ export const scenarioReplies: ReplyScript[] = [
       message: '这一轮中途断了，刚才那段没说完。',
       retryAfter: 10,
     },
-    content: `社保这一项跟赔偿金是两条线，分开走。公司从 7 月起停缴，这段属于欠缴，补缴由社保经办机构追缴，不在仲裁委的受理范围里。
+    content: `社保这一项跟赔偿金是两条线，分开走。公司从 ${demoShortMonthCn(DEMO_DISMISSAL_MONTH)}起停缴，这段属于欠缴，补缴由社保经办机构追缴，不在仲裁委的受理范围里。
 
 具体做法是先在北京市社会保险网上服务平台打一份个人权益记录，把断缴月份圈出来，然后向参保区的社保经办机构反映。`,
     lawRefs: [],

@@ -6,7 +6,24 @@
  * - 文书要能切版本、能分享 → 版本表与分享链接表
  */
 
-import { demoCompanyDocs, demoDrafts } from './demo';
+import {
+  demoCnDate,
+  demoDate,
+  demoDay,
+  demoMonthCn,
+  demoMonthRangeCn,
+  demoShortCnDate,
+  demoYearOfDay,
+} from './clock';
+import {
+  DEMO_CONTRACT_END_DAY,
+  DEMO_DISMISSAL_DAY,
+  DEMO_DISMISSAL_MONTH,
+  DEMO_EMPLOYEE_NO,
+  DEMO_HIRE_DAY,
+  demoCompanyDocs,
+  demoDrafts,
+} from './demo';
 import type { CompanyDoc, Draft, LawRef, RiskFlag } from './types';
 
 /* ── 法条原文（逐字，供风险条款与文书页引用）───────────────── */
@@ -107,7 +124,7 @@ const LAWS_BY_QUOTE: Record<string, LawRef[]> = {
 
 const dismissalDoc: AnnotatedDoc = {
   ...demoCompanyDocs[0],
-  fileName: '解除劳动合同通知书_20260715.jpg',
+  fileName: `解除劳动合同通知书_${demoDate(DEMO_DISMISSAL_DAY).replace(/-/g, '')}.jpg`,
   riskFlags: demoCompanyDocs[0].riskFlags.map((f) => ({
     ...f,
     laws: LAWS_BY_QUOTE[f.quote] ?? [],
@@ -124,7 +141,7 @@ const settlementDoc: AnnotatedDoc = {
   advice: '改签',
   adviceDetail:
     '这份协议本身可以成为你想要的结果，但现在这一版不能签：它把解除原因改成"个人原因离职"，把 175,000 元包装成"包含一切款项"，还塞了弃权、保密违约金和无补偿竞业三条。逐条改掉后再签，谈判空间仍然在你这边。',
-  createdAt: '2026-07-15T10:26:00+08:00',
+  createdAt: demoDay(DEMO_DISMISSAL_DAY, '10:26'),
   ocrText: `协商解除劳动合同协议书
 
 甲方：星曜网络科技（北京）有限公司
@@ -132,7 +149,7 @@ const settlementDoc: AnnotatedDoc = {
 
 甲乙双方经友好协商，就解除劳动合同事宜达成如下协议：
 
-一、双方一致同意，劳动合同于 2026 年 7 月 15 日解除。解除原因为乙方个人原因申请离职，双方协商一致，甲方无需出具解除劳动合同证明中的用人单位提出字样。
+一、双方一致同意，劳动合同于 ${demoCnDate(DEMO_DISMISSAL_DAY)}解除。解除原因为乙方个人原因申请离职，双方协商一致，甲方无需出具解除劳动合同证明中的用人单位提出字样。
 
 二、甲方于本协议签署后 30 个工作日内，向乙方一次性支付经济补偿金人民币 175,000 元（税前），该款项已包含乙方在职期间的全部工资、奖金、加班费、未休年休假工资及其他一切款项。
 
@@ -145,7 +162,7 @@ const settlementDoc: AnnotatedDoc = {
 六、本协议经双方签字盖章后生效。乙方确认已充分理解本协议全部条款，签署后不得以任何理由撤销或要求变更。
 
 甲方（盖章）：                乙方（签字）：
-2026 年 7 月 15 日`,
+${demoCnDate(DEMO_DISMISSAL_DAY)}`,
   riskFlags: [
     {
       quote: '解除原因为乙方个人原因申请离职',
@@ -189,7 +206,7 @@ const settlementDoc: AnnotatedDoc = {
 // 修改要点单独挂，避免和 spec 的 company_docs 字段混在一起
 const settlementRevisePoints = [
   '第一条：解除原因改为"甲方提出解除，双方协商一致"，删除关于解除证明表述的约定。',
-  '第二条：金额分项列明——违法解除赔偿金、2026 年 7 月工资、未休年休假工资、加班费各自单列；支付期限改为解除之日起 15 日内，写明逾期违约责任与收款账户。',
+  `第二条：金额分项列明——违法解除赔偿金、${demoMonthCn(DEMO_DISMISSAL_MONTH)}工资、未休年休假工资、加班费各自单列；支付期限改为解除之日起 15 日内，写明逾期违约责任与收款账户。`,
   '第三条：整条删除。确需概括性表述的，改为"除本协议列明款项外，双方就已列明事项无其他争议"。',
   '第四条：违约金删除；保密义务改为双向，范围限定为商业秘密。',
   '第五条：整条删除；公司坚持保留的，写明竞业限制期限、按月补偿金额与支付方式。',
@@ -206,18 +223,18 @@ const transferDoc: AnnotatedDoc = {
   advice: '待定',
   adviceDetail:
     '这是一份通知，不是要你签字的协议，签收本身不等于同意。现在还不能判断该不该接受——取决于你打算争 2N 还是保工作。要做的是在 3 日内书面回复：不同意变更，但服从公司安排先到岗提供劳动，保留异议。等谈判方向定了再回来更新这份文件的结论。',
-  createdAt: '2026-06-18T19:40:00+08:00',
+  createdAt: demoDay(-62, '19:40'),
   ocrText: `岗位调整通知书
 
 陈某：
 
-因公司业务结构调整，经研究决定，自 2026 年 6 月 20 日起将您的工作岗位由技术二部高级工程师调整为客户成功部实施支持岗，工作地点由北京市朝阳区望京变更为北京市大兴区亦庄经济技术开发区，薪酬结构按新岗位标准执行。
+因公司业务结构调整，经研究决定，自 ${demoCnDate(-60)}起将您的工作岗位由技术二部高级工程师调整为客户成功部实施支持岗，工作地点由北京市朝阳区望京变更为北京市大兴区亦庄经济技术开发区，薪酬结构按新岗位标准执行。
 
-请您于 2026 年 6 月 19 日 18:00 前确认并到岗报到，逾期未报到的，公司将按旷工处理。
+请您于 ${demoCnDate(-61)} 18:00 前确认并到岗报到，逾期未报到的，公司将按旷工处理。
 
 星曜网络科技（北京）有限公司
 人力资源部
-2026 年 6 月 18 日`,
+${demoCnDate(-62)}`,
   riskFlags: [
     {
       quote: '工作地点由北京市朝阳区望京变更为北京市大兴区亦庄经济技术开发区',
@@ -246,11 +263,11 @@ const handoverDoc: AnnotatedDoc = {
   fileId: 'f_4',
   title: '工作交接确认单',
   docType: '其他',
-  fileName: '工作交接确认单_20260718.jpg',
+  fileName: `工作交接确认单_${demoDate(-32).replace(/-/g, '')}.jpg`,
   advice: '签',
   adviceDetail:
     '这张单子只确认物品和资料交接的事实，不涉及解除原因、金额和弃权，如实交接完就可以签。签之前把清单逐项核对一遍，签完先拍照留一份自己手里。唯一要盯住的是：不要让人在这张单子上添"薪资已结清""双方再无争议"之类的话，真被加了就当场划掉并注明。',
-  createdAt: '2026-07-18T16:05:00+08:00',
+  createdAt: demoDay(-32, '16:05'),
   ocrText: `工作交接确认单
 
 交接人：陈某（技术二部）    接收人：李某（技术二部）
@@ -261,7 +278,7 @@ const handoverDoc: AnnotatedDoc = {
 3. 代码仓库与内部系统权限，已于交接日移交并注销；
 4. 在办项目文档 12 份，清单见附页。
 
-双方确认上述物品及资料已于 2026 年 7 月 18 日交接完毕，物品外观完好。
+双方确认上述物品及资料已于 ${demoCnDate(-32)}交接完毕，物品外观完好。
 
 交接人签字：            接收人签字：            部门负责人：`,
   riskFlags: [],
@@ -310,7 +327,7 @@ const arbitrationDraft: Draft = {
   title: '劳动仲裁申请书（朝阳区仲裁委）',
   version: 1,
   status: '草稿',
-  updatedAt: '2026-08-14T21:05:00+08:00',
+  updatedAt: demoDay(-5, '21:05'),
   content: `劳动仲裁申请书
 
 申请人：陈某，男，1990 年 3 月 12 日出生，汉族，住北京市朝阳区。
@@ -320,15 +337,15 @@ const arbitrationDraft: Draft = {
 
 仲裁请求：
 一、请求裁决被申请人支付违法解除劳动合同赔偿金 400,000 元；
-二、请求裁决被申请人支付 2026 年 7 月 1 日至 7 月 15 日工资 12,500 元；
-三、请求裁决被申请人支付 2024 年至 2026 年未休年休假工资报酬 18,965 元；
-四、请求裁决被申请人支付 2026 年 3 月至 6 月休息日加班工资 33,103 元；
-五、请求裁决被申请人为申请人补缴 2026 年 7 月社会保险费。
+二、请求裁决被申请人支付 ${demoMonthCn(DEMO_DISMISSAL_MONTH)} 1 日至 ${demoShortCnDate(DEMO_DISMISSAL_DAY)}工资 12,500 元；
+三、请求裁决被申请人支付 ${demoYearOfDay(DEMO_DISMISSAL_DAY) - 2} 年至 ${demoYearOfDay(DEMO_DISMISSAL_DAY)} 年未休年休假工资报酬 18,965 元；
+四、请求裁决被申请人支付 ${demoMonthRangeCn(DEMO_DISMISSAL_MONTH - 4, DEMO_DISMISSAL_MONTH - 1)}休息日加班工资 33,103 元；
+五、请求裁决被申请人为申请人补缴 ${demoMonthCn(DEMO_DISMISSAL_MONTH)}社会保险费。
 
 事实与理由：
-申请人自 2018 年 5 月 14 日入职被申请人处，双方签订三份书面劳动合同，最后一份期限至 2027 年 5 月 13 日，岗位为技术二部高级工程师，工作地点北京市朝阳区，解除前十二个月平均工资 25,000 元。
+申请人自 ${demoCnDate(DEMO_HIRE_DAY)}入职被申请人处，双方签订三份书面劳动合同，最后一份期限至 ${demoCnDate(DEMO_CONTRACT_END_DAY)}，岗位为技术二部高级工程师，工作地点北京市朝阳区，解除前十二个月平均工资 25,000 元。
 
-2026 年 7 月 15 日，被申请人向申请人出具《解除劳动合同通知书》，以"订立劳动合同时所依据的客观情况发生重大变化"为由单方解除劳动合同。但被申请人所称的客观情况变化实为内部部门合并，属于经营自主决策范畴，不构成法定的客观情况重大变化；且被申请人从未就变更劳动合同内容与申请人协商，直接作出解除决定，程序亦不合法。
+${demoCnDate(DEMO_DISMISSAL_DAY)}，被申请人向申请人出具《解除劳动合同通知书》，以"订立劳动合同时所依据的客观情况发生重大变化"为由单方解除劳动合同。但被申请人所称的客观情况变化实为内部部门合并，属于经营自主决策范畴，不构成法定的客观情况重大变化；且被申请人从未就变更劳动合同内容与申请人协商，直接作出解除决定，程序亦不合法。
 
 综上，被申请人的解除行为构成违法解除，依法应支付赔偿金。为此，申请人依据《劳动争议调解仲裁法》相关规定提起仲裁，请依法裁决。
 
@@ -336,27 +353,27 @@ const arbitrationDraft: Draft = {
 北京市朝阳区劳动人事争议仲裁委员会
 
 申请人：
-2026 年 8 月 14 日`,
+${demoCnDate(-5)}`,
 };
 
 const wageDemandDraft: Draft = {
   id: 'dr_4',
   caseId: 'demo',
   kind: '其他',
-  title: '2026 年 7 月工资催告函',
+  title: `${demoMonthCn(DEMO_DISMISSAL_MONTH)}工资催告函`,
   version: 1,
   status: '已发出',
-  updatedAt: '2026-08-12T10:20:00+08:00',
+  updatedAt: demoDay(-7, '10:20'),
   content: `星曜网络科技（北京）有限公司：
 
-本人陈某，工号 SX2018****，与贵司的劳动关系已于 2026 年 7 月 15 日解除。截至本函发出之日，贵司尚未支付本人 2026 年 7 月 1 日至 7 月 15 日的工资 12,500 元。
+本人陈某，工号 ${DEMO_EMPLOYEE_NO}，与贵司的劳动关系已于 ${demoCnDate(DEMO_DISMISSAL_DAY)}解除。截至本函发出之日，贵司尚未支付本人 ${demoMonthCn(DEMO_DISMISSAL_MONTH)} 1 日至 ${demoShortCnDate(DEMO_DISMISSAL_DAY)}的工资 12,500 元。
 
 工资应当以货币形式按月足额支付，不得克扣或者无故拖欠。现要求贵司于收到本函之日起三个工作日内，将上述款项支付至本人工资卡（尾号 4471）。
 
 逾期未付的，本人将就该笔工资一并提起劳动仲裁，并主张相应经济补偿。
 
 陈某
-2026 年 8 月 12 日`,
+${demoCnDate(-7)}`,
 };
 
 export const mockDrafts: Draft[] = [...demoDrafts, arbitrationDraft, wageDemandDraft];
@@ -378,20 +395,20 @@ const VERSION_HISTORY: Record<string, DraftVersion[]> = {
   dr_1: [
     {
       version: 1,
-      updatedAt: '2026-08-08T22:40:00+08:00',
+      updatedAt: demoDay(-11, '22:40'),
       note: '首版：只写了对解除理由的异议',
       content: `星曜网络科技（北京）有限公司：
 
-本人陈某，自 2018 年 5 月 14 日起与贵司建立劳动关系。2026 年 7 月 15 日，本人收到贵司《解除劳动合同通知书》，现提出异议如下：
+本人陈某，自 ${demoCnDate(DEMO_HIRE_DAY)}起与贵司建立劳动关系。${demoCnDate(DEMO_DISMISSAL_DAY)}，本人收到贵司《解除劳动合同通知书》，现提出异议如下：
 
-贵司以"客观情况发生重大变化"为由解除劳动合同，但 2026 年 5 月 12 日全员会上宣布的是部门合并，属于内部组织架构调整，不构成客观情况重大变化。本人不认可该解除行为的合法性。
+贵司以"客观情况发生重大变化"为由解除劳动合同，但 ${demoCnDate(-99)}全员会上宣布的是部门合并，属于内部组织架构调整，不构成客观情况重大变化。本人不认可该解除行为的合法性。
 
 异议人：陈某
-2026 年 8 月 8 日`,
+${demoCnDate(-11)}`,
     },
     {
       version: 2,
-      updatedAt: '2026-08-10T20:10:00+08:00',
+      updatedAt: demoDay(-9, '20:10'),
       note: '补充未协商变更、7 月欠薪两项，并写明签收不等于认可',
       content: demoDrafts[0].content,
     },
@@ -431,8 +448,8 @@ export const mockShareLinks: ShareLink[] = [
     draftId: 'dr_1',
     token: 'k3f9x2qm7ab4',
     scope: '单文件下载',
-    createdAt: '2026-08-16T09:05:00+08:00',
-    expiresAt: '2026-08-23T09:05:00+08:00',
+    createdAt: demoDay(-3, '09:05'),
+    expiresAt: demoDay(-3 + SHARE_TTL_DAYS, '09:05'),
     revokedAt: null,
   },
   {
@@ -440,9 +457,9 @@ export const mockShareLinks: ShareLink[] = [
     draftId: 'dr_1',
     token: 'p8w1nd5tz6cv',
     scope: '单文件下载',
-    createdAt: '2026-08-11T14:30:00+08:00',
-    expiresAt: '2026-08-18T14:30:00+08:00',
-    revokedAt: '2026-08-12T08:15:00+08:00',
+    createdAt: demoDay(-8, '14:30'),
+    expiresAt: demoDay(-8 + SHARE_TTL_DAYS, '14:30'),
+    revokedAt: demoDay(-7, '08:15'),
   },
 ];
 

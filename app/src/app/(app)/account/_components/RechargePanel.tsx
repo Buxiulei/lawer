@@ -26,7 +26,8 @@ interface PendingPay {
   confirmLabel: string;
 }
 
-export function RechargePanel({ membership }: { membership: string }) {
+/** membership=null 表示还没登录：没有"当前档"，每一档都是可以挑的 */
+export function RechargePanel({ membership }: { membership: string | null }) {
   const toast = useToast();
   const [pending, setPending] = useState<PendingPay | null>(null);
   const [amount, setAmount] = useState('30');

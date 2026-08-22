@@ -292,7 +292,8 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
         <SkeletonList />
       ) : needSignIn ? (
         <Alert>
-          <AlertTitle>登录状态已失效，材料没丢，重新验证一下手机号就能看到。</AlertTitle>
+          {/* needSignIn 只在本机压根没有 token 时置起，说"失效"会让从没登录过的人以为自己弄坏了什么 */}
+          <AlertTitle>登录后才能看到这个案件里的材料。</AlertTitle>
           <Button size="sm" className="mt-3" asChild>
             <Link href="/login">去登录</Link>
           </Button>

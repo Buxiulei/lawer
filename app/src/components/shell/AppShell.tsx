@@ -9,6 +9,8 @@ import { SidebarInset, SidebarProvider } from '@/components/shadcn/sidebar';
 import { TooltipProvider } from '@/components/shadcn/tooltip';
 import { AppSidebar } from './AppSidebar';
 import { CasePanelProvider } from './casePanel';
+import { DemoBanner } from './DemoBanner';
+import { PanicButton } from './PanicButton';
 import { ShellHeader } from './ShellHeader';
 import { NAV_ITEMS } from './navItems';
 
@@ -32,6 +34,11 @@ export function AppShell({
 }) {
   const pathname = usePathname() ?? '/';
   const caseId = caseIdFrom(pathname);
+  // caseIdFrom 对非案件页也回 demo，所以横幅要另外确认这确实是 demo 案件的页面
+  const onDemoCase = /^\/case\/demo(\/|$)/.test(pathname);
+  // 这两页底部压着一条 sticky 操作条（工作台的输入区、首诊的下一步条），
+  // 悬浮钮得抬到它上面，否则正好盖住发送键 / 主按钮的右端
+  const hasBottomBar = /^\/case\/[^/]+$/.test(pathname) || pathname === '/intake';
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -41,11 +48,13 @@ export function AppShell({
           <AppSidebar caseId={caseId} caseTitle={caseTitle} pathname={pathname} />
           <SidebarInset>
             <ShellHeader pathname={pathname} caseId={caseId} />
+            {onDemoCase && <DemoBanner />}
             {/* 正文默认限宽在可读区间；工作台那种双栏页面自己挂 data-wide 把上限抬上去 */}
             <main className="mx-auto w-full max-w-[900px] flex-1 px-4 pt-3 pb-[calc(56px+env(safe-area-inset-bottom)+16px)] has-[[data-wide]]:max-w-[1280px] lg:px-6 lg:pb-10">
               {children}
             </main>
             <BottomTabs pathname={pathname} caseId={caseId} />
+            <PanicButton raised={hasBottomBar} />
           </SidebarInset>
         </SidebarProvider>
       </CasePanelProvider>

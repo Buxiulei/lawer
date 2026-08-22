@@ -18,6 +18,11 @@ export class ApiError extends Error {
     message: string,
     readonly status: number,
     readonly retryAfter?: number,
+    /**
+     * 401 时本机原本有没有 token。构造时就要定下来——handleUnauthorized 会把
+     * token 清掉，等到显示文案的时候再去读就永远读成"没登录"了。
+     */
+    readonly hadToken = false,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -46,7 +51,6 @@ const COPY: Record<string, (retryAfter?: number) => string> = {
   OTP_LOCKED: () => '验证码输错太多次了，重新获取一条',
   OTP_EXPIRED: () => '验证码已经失效，重新获取一条',
   OTP_NOT_FOUND: () => '还没收到验证码，先点发送',
-  UNAUTHORIZED: () => '登录状态已失效，重新验证手机号',
   FORBIDDEN_SCOPE: () => '当前凭据没有这个权限',
   ATTEST_UNAVAILABLE: () => '存证服务还没就绪，稍后再固化',
   ATTEST_UPSTREAM_FAILED: () => '时间戳服务这次没响应，过一会儿再点一次，已完成的步骤不会重来',
@@ -55,6 +59,10 @@ const COPY: Record<string, (retryAfter?: number) => string> = {
 /** 任意异常 → 可以直接显示给用户的一句话 */
 export function humanError(err: unknown): string {
   if (err instanceof ApiError) {
+    // 「从没登录过」和「登录过期了」是两件事，后者才需要解释为什么要重来一遍
+    if (err.errorCode === 'UNAUTHORIZED') {
+      return err.hadToken ? '登录状态已失效，请重新验证' : '请先登录';
+    }
     const custom = COPY[err.errorCode];
     if (custom) return custom(err.retryAfter);
     return err.message || '这一步没成功，稍后再试一次。';
@@ -63,12 +71,17 @@ export function humanError(err: unknown): string {
   return '这一步没成功，稍后再试一次。';
 }
 
-/** 401：token 已经不作数了，就地清掉，登录态 hook 会跟着翻成未登录 */
-function handleUnauthorized(): void {
+/**
+ * 401：token 已经不作数了，就地清掉，登录态 hook 会跟着翻成未登录。
+ * 回传清掉之前有没有 token——文案要靠它区分「没登录」和「登录过期」。
+ */
+function handleUnauthorized(): boolean {
+  const hadToken = readToken() !== null;
   clearToken();
+  return hadToken;
 }
 
-function toApiError(body: unknown, status: number): ApiError {
+function toApiError(body: unknown, status: number, hadToken = false): ApiError {
   const payload = (body ?? {}) as Record<string, unknown>;
   const code = typeof payload.error_code === 'string' ? payload.error_code : `HTTP_${status}`;
   const message =
@@ -76,7 +89,7 @@ function toApiError(body: unknown, status: number): ApiError {
       ? payload.message
       : '这一步没成功，稍后再试一次。';
   const retryAfter = typeof payload.retry_after === 'number' ? payload.retry_after : undefined;
-  return new ApiError(code, message, status, retryAfter);
+  return new ApiError(code, message, status, retryAfter, hadToken);
 }
 
 export interface RequestOptions {
@@ -110,11 +123,11 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   }
 
   const payload = await res.json().catch(() => null);
-  if (res.status === 401) handleUnauthorized();
+  const hadToken = res.status === 401 ? handleUnauthorized() : false;
 
   // ok:false 也可能配 200（防守性）：只认响应体，不认状态码
   const failed = !res.ok || (payload as { ok?: unknown } | null)?.ok === false;
-  if (failed) throw toApiError(payload, res.status);
+  if (failed) throw toApiError(payload, res.status, hadToken);
 
   return payload as T;
 }
@@ -155,10 +168,10 @@ export function apiUpload<T>(
       } catch {
         payload = null;
       }
-      if (xhr.status === 401) handleUnauthorized();
+      const hadToken = xhr.status === 401 ? handleUnauthorized() : false;
       const failed = xhr.status < 200 || xhr.status >= 300 || (payload as { ok?: unknown } | null)?.ok === false;
       if (failed) {
-        reject(toApiError(payload, xhr.status));
+        reject(toApiError(payload, xhr.status, hadToken));
         return;
       }
       resolve(payload as T);

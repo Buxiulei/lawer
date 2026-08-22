@@ -16,6 +16,7 @@ import {
 import { InputField } from '@/components/shadcn/field';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { CodeBlock } from './CodeBlock';
+import { SignInHint } from './SignInHint';
 
 /**
  * 实人认证。锚点 #realname——REALNAME_REQUIRED 拦截框的「去实名」按钮落在这儿。
@@ -106,6 +107,8 @@ export function RealnameCard() {
   const [status, setStatus] = useState<RealnameStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /** 没登录（或 token 已失效）：这张卡整体换成登录引导，不报错 */
+  const [unauthorized, setUnauthorized] = useState(false);
   const [maskedName, setMaskedName] = useState<string | null>(null);
 
   const [name, setName] = useState('');
@@ -128,7 +131,14 @@ export function RealnameCard() {
       const body = await apiFetch<RealnameStatus>('/realname/status');
       setStatus(body);
       setLoadError(null);
+      setUnauthorized(false);
     } catch (err) {
+      if (err instanceof ApiError && err.errorCode === 'UNAUTHORIZED') {
+        setUnauthorized(true);
+        setStatus(null);
+        setLoadError(null);
+        return;
+      }
       setLoadError(humanError(err));
     }
   }, []);
@@ -181,7 +191,7 @@ export function RealnameCard() {
       <CardHeader>
         <CardTitle>实名认证</CardTitle>
         <CardAction>
-          <StatusBadge status={status?.auth_status} loading={loading} />
+          {!unauthorized && <StatusBadge status={status?.auth_status} loading={loading} />}
         </CardAction>
       </CardHeader>
       <CardContent>
@@ -194,7 +204,11 @@ export function RealnameCard() {
 
         {loading && <Skeleton className="mt-4 h-24 w-full" />}
 
-        {!loading && loadError && (
+        {!loading && unauthorized && (
+          <SignInHint>实人认证要绑到你自己的账号上，登录之后在这里做，几分钟就能完成。</SignInHint>
+        )}
+
+        {!loading && !unauthorized && loadError && (
           <p className="mt-4 text-[14px] leading-6 text-ink-2">
             实名状态这次没读到（{loadError}），稍后回来再看。
           </p>
