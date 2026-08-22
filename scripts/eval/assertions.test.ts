@@ -1135,3 +1135,60 @@ describe('G4 断言三缺陷修（离线重判第 4 项）', () => {
     expect(bareArticleCitations('这一点依据《劳动合同法》第八十七条，你可以主张二倍赔偿。').length).toBeGreaterThan(0);
   });
 });
+
+describe('G4 四态（manager 2026-08-23 终裁）：三条路径分开判，不合并', () => {
+  const t = (text: string): TurnRecord => ({
+    input: 'x', text, events: [], retrieved: [], actionCards: [], drafts: [],
+    model: 'deepseek-v4-pro', degraded: false, taskClass: 'critical',
+  });
+  const KEY = citationKey('劳动合同法', '第八十七条');
+  const injected = new Set([KEY]);
+  const library = new Set([KEY]);
+  const bare = '依据《劳动合同法》第八十七条，公司应当支付二倍赔偿金。';
+
+  it('② 本轮已注入却仍光秃 = FAIL（真省略，S03#2 型）', () => {
+    const v = citationCompletenessAssertions([t(bare)], 'X', injected, library);
+    expect(v[0].pass).toBe(false);
+    expect(v[0].na).toBeUndefined();
+  });
+
+  it('③ 库内没有原文 = pending_card（外勤补卡，不记模型）', () => {
+    const v = citationCompletenessAssertions([t(bare)], 'X', new Set(), new Set());
+    expect(v[0].naKind).toBe('pending_card');
+  });
+
+  // ④ 的**硬要件是"已明说待核实"**——它把"我方召回没做好"与"模型偷懒"分开
+  it('④ 库内有、本轮未注入、且已明说待核实 = pending_injection（我方改进，不记模型）', () => {
+    const v = citationCompletenessAssertions([t(bare + '这一条我需要核实原文再引给你。')], 'X', new Set(), library);
+    expect(v[0].naKind).toBe('pending_injection');
+  });
+
+  it('**未注入 + 直接光秃（没说待核实）= FAIL**——不能拿"没检索到"当免责', () => {
+    const v = citationCompletenessAssertions([t(bare)], 'X', new Set(), library);
+    expect(v[0].pass).toBe(false);
+    expect(v[0].na).toBeUndefined();
+  });
+
+  it('③④ 分类标记不同，可独立统计', () => {
+    const card = citationCompletenessAssertions([t(bare)], 'X', new Set(), new Set())[0];
+    const inj = citationCompletenessAssertions([t(bare + '需要核实')], 'X', new Set(), library)[0];
+    expect(card.naKind).not.toBe(inj.naKind);
+  });
+});
+
+describe('交叉引用必须绑**原**法名，不绑"当前在讲的那部法"', () => {
+  const t = (text: string): TurnRecord => ({
+    input: 'x', text, events: [], retrieved: [], actionCards: [], drafts: [],
+    model: 'deepseek-v4-pro', degraded: false, taskClass: 'critical',
+  });
+
+  // 实测：实施条例§27 的正文写着「劳动合同法第四十七条规定的经济补偿」——
+  // 那个第四十七条属于**劳动合同法**，不是实施条例的第 47 条。
+  it('裸写法名紧邻条号时，按裸写的那部法绑定', () => {
+    const text = '按《劳动合同法实施条例》第二十七条的口径，劳动合同法第四十七条规定的经济补偿按应得工资算。';
+    const v = citationCompletenessAssertions([t(text)], 'X', new Set(), new Set());
+    const laws = v.map((x) => x.pendingLaw);
+    expect(laws).toContain('劳动合同法');       // 第四十七条绑到劳动合同法
+    expect(laws).not.toContain(undefined);
+  });
+});

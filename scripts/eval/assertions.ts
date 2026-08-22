@@ -75,7 +75,7 @@ export interface Verdict {
    * `pending_card` 类是「**判据想判但知识库还没有依据**」，是**缺口**，要进补卡清单并被追踪。
    * 混在一起统计，缺口会沉进"正常 N/A"里没人管。
    */
-  naKind?: 'no_decision_point' | 'pending_card';
+  naKind?: 'no_decision_point' | 'pending_card' | 'pending_injection';
   /** pending_card 类专用：等哪一条条文补卡 */
   pendingArticle?: string;
   /** pending_card 类专用：该条所属法律（从引用处就近的《…》取），用于清单预分拣 */
@@ -1050,15 +1050,20 @@ export function citationCompletenessAssertions(
   turns: TurnRecord[],
   scenarioId: string,
   quotedArticles?: Set<string>,
+  libraryArticles?: Set<string>,
 ): Verdict[] {
   return turns.flatMap((t, i) => {
     const cited = bareArticleCitations(t.text).map((a) => {
       // 【法名可能就在匹配串里】ARTICLE 正则本身允许带《…》前缀，命中串常是「《劳动合同法》第八十七条」。
       // 只朝命中点**之前**找法名会漏掉这种——法名在命中串**内部**，位置在 at 之后。
-      // 先看串内，取不到再就近向前找。
       const inner = /《([^》\n]{2,40})》/.exec(a);
       const at = t.text.indexOf(a);
-      const law = inner ? inner[1] : at >= 0 ? nearestLaw(t.text, at) : null;
+      // 【交叉引用必须带**原**法名】法条原文里会引别的法：实施条例§27 的正文写着
+      // 「劳动合同法第四十七条规定的经济补偿」。那个「第四十七条」属于**劳动合同法**，
+      // 不是实施条例的第 47 条。就近向前找法名会取到"当前在讲的那部法"，**绑错法**。
+      // 所以先看条号**紧邻之前**有没有裸写的法名（不带书名号的「劳动合同法第四十七条」）。
+      const adjacent = at >= 0 ? /([\u4e00-\u9fa5]{2,20}(?:法|条例|办法|规定|解释|意见))\s*$/.exec(t.text.slice(Math.max(0, at - 24), at)) : null;
+      const law = inner ? inner[1] : (adjacent?.[1] ?? (at >= 0 ? nearestLaw(t.text, at) : null));
       const article = normalizeArticle(a);
       return { raw: a, law, article, key: citationKey(law, a), hasLaw: !!law };
     });
@@ -1078,9 +1083,27 @@ export function citationCompletenessAssertions(
     // 等于惩罚我们自己要求的行为（与「不看行动卡=惩罚把最重要的话放最显眼处」同一形状）。
     const seen = new Set<string>();
     const uniq = cited.filter((c) => (seen.has(c.key) ? false : (seen.add(c.key), true)));
-    // 取不到法名 → 一律 pending（保守向）：宁可延迟判定，也不逼模型编原文
-    const missing = quotedArticles ? uniq.filter((c) => c.hasLaw && quotedArticles.has(c.key)) : uniq;
-    const pending = quotedArticles ? uniq.filter((c) => !c.hasLaw || !quotedArticles.has(c.key)) : [];
+    // 【G4 四态（manager 2026-08-23 终裁）】三条路径分开判，不合并：
+    //   ① PASS            带了逐字原文（压根不进 bareArticleCitations）
+    //   ② FAIL            **本轮已注入**却仍光秃 = 真省略（S03#2 型）
+    //   ③ pending_card    库内**没有**原文 → 外勤补卡清单，不记模型
+    //   ④ pending_injection  库内**有**、本轮**未注入**、**且已明说待核实**
+    //                     → 我方召回/enrich 改进清单，不记模型
+    // 硬要件：④ 必须"已明说待核实"。未注入 + 直接光秃 = FAIL（不能拿"没检索到"当免责）；
+    // 未注入 + 凭记忆编原文 = G1 红线，归第五闸管，不在本断言。
+    const saysUnverified = /需要核实|待核实|需核实|以官方.{0,6}为准|尚未核实|再引给你/.test(t.text);
+    const missing: typeof uniq = [];
+    const pendingCard: typeof uniq = [];
+    const pendingInjection: typeof uniq = [];
+    for (const c of uniq) {
+      if (!quotedArticles) { missing.push(c); continue; }
+      if (c.hasLaw && quotedArticles.has(c.key)) { missing.push(c); continue; } // 已注入仍光秃
+      const inLibrary = c.hasLaw && libraryArticles?.has(c.key);
+      if (inLibrary && saysUnverified) pendingInjection.push(c);
+      else if (inLibrary) missing.push(c); // 库里有、没注入、又没说待核实 → 仍是 FAIL
+      else pendingCard.push(c);
+    }
+    const pending = pendingCard;
     const out: Verdict[] = [];
     if (missing.length > 0) {
       out.push({
@@ -1090,6 +1113,19 @@ export function citationCompletenessAssertions(
         detail:
           `第 ${i + 1} 轮有 ${missing.length} 处只给条号、附近无逐字原文的引用：${missing.map((m) => m.raw).join('、')}` +
           '——用户要拿它去打印、标注、当庭念出来（charter §3 / G4）',
+      });
+    }
+    for (const p of pendingInjection) {
+      out.push({
+        id: `${scenarioId}-轮${i + 1}-待注入-${p.article}`,
+        tier: 'L2',
+        pass: true,
+        na: true,
+        naKind: 'pending_injection',
+        pendingArticle: p.article,
+        ...(p.law ? { pendingLaw: p.law } : {}),
+        detail:
+          `${p.raw} 库内有原文但**本轮未注入**，回复已明说待核实 → 计入我方召回/enrich 改进清单，不记模型`,
       });
     }
     for (const p of pending) {

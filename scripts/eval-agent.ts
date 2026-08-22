@@ -48,6 +48,7 @@ import { judgeAvailable, judgeItem, type JudgeResult } from './eval/judge';
 import { collectPending, PENDING_ESCALATE_BATCHES, writePendingCardList } from './eval/pending-cards';
 import { lawsInLibrary } from './eval/assertions';
 import { newRunId, writeEvidence, type ScenarioEvidence } from './eval/report';
+import { listPacks } from '../app/src/lib/knowledge';
 import { findScenarios, type Scenario } from './eval/scenarios';
 
 /** 手工加载 app/.env.local（不引 dotenv：只为一个脚本加依赖不划算）。
@@ -111,6 +112,18 @@ const TRANSIENT_ERROR_RE = /terminated|aborted|fetch failed|ECONNRESET|ETIMEDOUT
 
 /** 剧本级重试次数。只重试一次：再挂就不像抖动，值得人看一眼。 */
 const SCENARIO_RETRIES = 1;
+
+/** 全库已有逐字原文的条号全集（四态里区分 pending_card 与 pending_injection 用）。
+ *  取一次缓存——每剧本重算一遍全库是纯浪费。 */
+let libraryCache: Set<string> | null = null;
+function libraryQuotedArticles(searcher: { get?: (id: string) => KnowledgePack | undefined }): Set<string> {
+  if (libraryCache) return libraryCache;
+  const packs = listPacks()
+    .map((m) => searcher.get?.(m.id))
+    .filter(Boolean) as KnowledgePack[];
+  libraryCache = quotedArticlesFromCards(packs);
+  return libraryCache;
+}
 
 /** 限并发的 map，保持输入顺序（报告要按 must / mustNot 的原始顺序读） */
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -217,7 +230,13 @@ async function runScenario(scenario: Scenario, plan: Plan): Promise<ScenarioRepo
     // G4 依据纪律的机械那一半：引了条号就必须带逐字原文。全剧本逐轮，
     // 判据与产线出口侧的留痕检测同源（bareArticleCitations）。
     // 库内已有逐字原文的条号全集：本轮检索到的卡现取（补卡到位即自动升级判定标准）
-    ...citationCompletenessAssertions(turns, scenario.id, quotedArticlesFromCards(turns.flatMap((t) => t.retrieved))),
+    // 四态判定要两个集合：**本轮注入**的（判 FAIL vs pending）与**全库**的（分 pending 两态）
+    ...citationCompletenessAssertions(
+      turns,
+      scenario.id,
+      quotedArticlesFromCards(turns.flatMap((t) => t.retrieved)),
+      libraryQuotedArticles(searcher),
+    ),
     // 判例细节污染：判例引用句里混进「夹具有、卡里没有」的用户事实。
     // 比对基准是**本轮实际检索到的判例卡**，不硬编码卡 id——引了哪张就拿哪张对。
     ...precedentContaminationAssertions(
@@ -317,10 +336,19 @@ function printReport(r: ScenarioReport): boolean {
   }
   if (!r.semantic.length) console.log(C.dim(`  语义断言：未跑（${judgeOffReason()}）`));
 
+  // ③④ 分列统计：两者处置对象完全不同——③ 派外勤补卡，④ 是我方召回/enrich 的活。
+  // 合并统计会让"我们自己没检索到"藏进"知识库缺卡"里，把内部问题记成外部欠账。
   const pendingCards = r.mechanical.filter((v) => v.naKind === 'pending_card');
   if (pendingCards.length) {
     const arts = [...new Set(pendingCards.map((v) => v.pendingArticle))];
     console.log(C.warn(`  · 因缺卡延迟判定 ${pendingCards.length} 处，涉 ${arts.length} 条条文：${arts.join('、')}`));
+  }
+  const pendingInj = r.mechanical.filter((v) => v.naKind === 'pending_injection');
+  if (pendingInj.length) {
+    const arts = [...new Set(pendingInj.map((v) => v.pendingArticle))];
+    console.log(
+      C.warn(`  · 因**本轮未注入**延迟判定 ${pendingInj.length} 处，涉 ${arts.length} 条条文：${arts.join('、')}——我方召回/enrich 改进项`),
+    );
   }
   const l1Fail = rows.filter((x) => x.tier === 'L1' && x.failed);
   const l2Fail = rows.filter((x) => x.tier === 'L2' && x.failed);
