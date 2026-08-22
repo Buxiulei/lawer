@@ -218,3 +218,84 @@ export function bareArticleCitations(text: string, windowSize = 60): string[] {
   }
   return out;
 }
+
+// ───────────────────────── 第五道确定性闸：伪逐字引号引用 ─────────────────────────
+//
+// 【为什么这是 G1 零编造，不是 G4「引用不完整」】（manager 2026-08-23 定性）
+// 带引号的逐字引用是**最高可信度表达**——用户会原样搬进书状、当庭念出。
+// 编一个不存在的「第(4)项」，后果与编案号完全等同；**且比明显编造更危险：
+// 它有真实法条名做外衣**，用户与对方律师都要查到原文才会发现不对。
+//
+// 三态区分：G4 =「给少了」；G1 显性 =「编造」；**本闸 =「真法条名 + 编的内容与子项」**。
+//
+// 实测（S14 #3，b7d0589 批）：本轮检索包 6 张卡**无任何 534/statute pack**，
+// 模型却写出「第55问第(4)项："…应得工资包含由个人缴纳的社会保险费…"」——
+// 卡内真身在 §55(1)、措辞不同。
+
+/** 引号内被**当作法条原文**呈现时的两个识别条件之一：内容带法条形态 */
+const STATUTE_SHAPE_IN_QUOTE =
+  /第[一二三四五六七八九十百零〇0-9]+条|第[一二三四五六七八九十百零〇0-9]+问|[〔[【]\s*\d{4}\s*[〕\]】]\s*\d+\s*号|第[一二三四五六七八九十]+款/;
+
+/** 条件之二：引号前紧跟「宣称逐字」的引导语 */
+const VERBATIM_LEAD = /(原文|规定|写的是|载明|明确|条文|第\s*[一二三四五六七八九十百零〇0-9]+\s*[条问项款][^。！？\n]{0,8})[：:是]?\s*$/;
+
+/** 成对引号（中英文），内容 8-300 字（第五闸专用，与上文 QUOTED 用途不同故另名） */
+const QUOTED_SPAN = /[「『"“]([^」』"”\n]{8,300})[」』"”]/g;
+
+/**
+ * 引号内**被呈现为法条原文**的片段。
+ *
+ * 【为什么不能见引号就查】引号在我们的输出里是高频且**正当**的结构：
+ * 引用户自己说过的话（charter §6 要求引具体细节）、给**可照读话术**（§6 要求给能直接念的原句）、
+ * 标注「这几句绝不能说」。见引号就查会把这三类全卷进来，
+ * 而它们恰恰是产品最有用的部分——**误剥会把可照读话术剥掉**。
+ */
+export function quotedStatuteSpans(text: string): { quote: string; at: number }[] {
+  const out: { quote: string; at: number }[] = [];
+  for (const m of text.matchAll(QUOTED_SPAN)) {
+    const at = m.index ?? 0;
+    const before = text.slice(Math.max(0, at - 30), at);
+    if (STATUTE_SHAPE_IN_QUOTE.test(m[1]) || VERBATIM_LEAD.test(before)) out.push({ quote: m[1], at });
+  }
+  return out;
+}
+
+/** 比对前只抹排版差异，**不抹字**——「记忆改写冒充逐字」正是改了字，抹字就把要抓的东西抹没了 */
+const normQuote = (s: string) => s.replace(/[\s　]/g, '').replace(/[（）()〔〕[\]【】《》""''「」『』]/g, '');
+
+/**
+ * 引号内容在**本轮注入块**里没有支撑的那些（= 伪逐字引用）。
+ *
+ * 【为什么必须是「本轮注入」而不是「整个知识库」】S14 那轮根本没检索到 534 卡。
+ * 拿全库比对会让「这轮没查却背出来」通过——而**背出来的那次恰恰最危险**：
+ * 它没有经过检索，也就没有经过任何新鲜度与版本校验（子项从 (1) 记成 (4) 正是记忆复述的形态）。
+ */
+export function unsupportedVerbatimQuotes(text: string, injected: KnowledgePack[]): string[] {
+  const corpus = normQuote(injected.map((p) => `${p.title}\n${p.body}\n${JSON.stringify(p.facts ?? {})}`).join('\n'));
+  return quotedStatuteSpans(text)
+    .filter(({ quote }) => !corpus.includes(normQuote(quote)))
+    .map(({ quote }) => quote);
+}
+
+/** 改口用语：整句改口而不是换占位符——法条原文换成占位符会读不通 */
+export const VERBATIM_UNVERIFIED = '（这一条我需要核实原文再引给你——我不凭记忆复述条文）';
+
+/**
+ * 把伪逐字引用**改口**，不静默删。
+ *
+ * 【为什么宁可改口也不留】留着的伪逐字**看起来完全可用**，用户会照抄进申请书、当庭念出来；
+ * 剥掉只是少一句依据，留着是给他**一件一碰就碎的证据**。
+ *
+ * 【与判据侧的保守方向相反，这点必须记住】判据误判是冤枉一次做对了的输出，所以**宁可漏判**；
+ * 闸门漏拦是把伪造内容交到用户手上，所以**宁可少说**。同一个「保守」，两层含义相反。
+ */
+export function stripUnsupportedQuotes(text: string, injected: KnowledgePack[]): { text: string; stripped: string[] } {
+  const bad = unsupportedVerbatimQuotes(text, injected);
+  if (bad.length === 0) return { text, stripped: [] };
+  let out = text;
+  for (const q of bad) {
+    // 连同包裹它的引号一起替换，避免留下半个引号
+    out = out.replace(new RegExp(`[「『"“]${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[」』"”]`, 'g'), VERBATIM_UNVERIFIED);
+  }
+  return { text: out, stripped: bad };
+}

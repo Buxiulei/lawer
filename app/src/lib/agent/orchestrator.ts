@@ -39,6 +39,7 @@ import {
   shouldInjectCrisisCard,
 } from './crisis';
 import { CitationGuard } from './citation-guard';
+import { stripUnsupportedQuotes } from './citation-block';
 import { bareArticleCitations, precedentContamination } from './citation-block';
 import { MAX_INJECTED_PACKS, type KnowledgePack, type KnowledgeSearcher } from './retrieval';
 import { loadCaseSnapshot } from './snapshot';
@@ -444,6 +445,28 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     emit({
       event: 'notice',
       data: { code: 'NBDPSY_PITCH_BLOCKED', message: `付费咨询推介已剥除：${nbdpsy.reason}。` },
+    });
+  }
+
+  // 【第五道确定性闸】伪逐字引号引用：引号内被当作法条原文、却在**本轮注入块**里查无此文的，
+  // 一律改口「我需要核实原文再引给你」。
+  //
+  // 为什么这属 G1 零编造而非 G4「给少了」：带引号的逐字引用是最高可信度表达，
+  // 用户会原样搬进书状、当庭念出；编一个不存在的子项，后果与编案号完全等同，
+  // **且比明显编造更危险——它有真实法条名做外衣**。
+  //
+  // 比对只对**本轮注入**：没检索却背出来的那次最危险，它没经过任何新鲜度与版本校验。
+  const quoteGate = stripUnsupportedQuotes(text, state.retrieved);
+  if (quoteGate.stripped.length > 0) {
+    text = quoteGate.text;
+    emit({
+      event: 'notice',
+      data: {
+        code: 'CITATION_BLOCKED',
+        message:
+          `检出 ${quoteGate.stripped.length} 处「本轮未检索到、却以引号逐字引用」的法条文本，已改口为待核实：` +
+          quoteGate.stripped.map((q: string) => `「${q.slice(0, 24)}…」`).join('、'),
+      },
     });
   }
 

@@ -20,6 +20,7 @@ import type { AgentEventSink } from './events';
 import * as calc from './calc';
 import { citationCorrectionDirective, type CitationGuard } from './citation-guard';
 import { compactCrisisCard, CRISIS_RESOURCE_PACK_ID } from './crisis';
+import { unsupportedVerbatimQuotes } from './citation-block';
 import { packCitationGuide } from './citation-block';
 import * as deadline from '@/lib/deadline';
 import type { InputSource } from './calc';
@@ -1053,6 +1054,26 @@ const HANDLERS: Record<string, Handler> = {
         data: { code: 'CITATION_BLOCKED', message: `文书里的案号 ${badCitations.join('、')} 知识库中不存在，已拒绝落库` },
       });
       return reject(citationCorrectionDirective(badCitations));
+    }
+
+    // 【第五闸 · 文书通道】伪逐字引用在文书里比在正文里更致命：文书是要**发出去**、
+    // 要进仲裁卷宗的。与正文的「改口」不同，这里**拒收**——发出去的东西不能带伪引用出门，
+    // 而模型完全可以在下一轮用真检索到的原文重写。
+    const fakeQuotes = unsupportedVerbatimQuotes(content, ctx.state.retrieved);
+    if (fakeQuotes.length) {
+      ctx.emit({
+        event: 'notice',
+        data: {
+          code: 'CITATION_BLOCKED',
+          message: `文书里有 ${fakeQuotes.length} 处「本轮未检索到、却以引号逐字引用」的法条文本，已拒绝落库`,
+        },
+      });
+      return reject(
+        `文书《${title}》里这些"逐字引用"在本轮检索到的依据里查无此文：` +
+          fakeQuotes.map((q) => `「${q.slice(0, 30)}…」`).join('、') +
+          '。请先用 knowledge_search 取到原文再逐字引用；取不到就写「这一条我需要核实原文」，' +
+          '**不要凭记忆复述条文**——用户会把文书原样递交，编的条文一查即穿。',
+      );
     }
 
     const consequences = str(args.send_consequences);

@@ -646,12 +646,38 @@ const DISSUADE_MARK = /(别|不要|不用|无需|先不|暂不|不必|不该|不
  *
  * 【守卫②：不许 judge 主观判 N/A】见 Verdict.na 注释。零检出=N/A，检出=必须交还。
  */
+/**
+ * **比较框架**与**假设后果框架**：句中出现决策点动词，但语义不是劝进。
+ *
+ * 实测误判（S09，2026-08-23）：
+ *   「做完**比发**十条朋友圈都解气」——比较框架，实为替代方案的卖点；
+ *   「你**发出去的那一刻**……」——假设后果，实为劝止的论证。
+ * 两句都被判成劝进，于是对一轮**纯劝止**的回复要求了交还句（本该 N/A）。
+ *
+ * 【锚点必须是框架词，不能是动词】反例：「**发出去**就完事了，别怂」——真劝进，也含「发出去」。
+ * 把动词写进排除会把它一起吞掉，**而它恰恰是这条检测器最该抓的形态**。
+ */
+const FRAME_MARK = new RegExp(
+  [
+    '比[^。！？\n]{0,8}(发|签|递|辞|转账)', // 比较：做完比发十条朋友圈都解气
+    '(如果|要是|万一|一旦)[^。！？\n]{0,8}(发|签|递|辞|转账)', // 显式条件
+    // 【真语料补充】实测 S09 里占多数的是「一…就」式假设，而非「如果」式：
+    //   「你**一发**朋友圈，局面**就**反过来了」「你一发朋友圈，公司正好说…这张牌就废了」
+    // 两句都是**劝止的论证**。锚在关联词「就/便」上，避免把普通的「一」全吞掉。
+    '一(发|签|递|辞|转账)[^。！？\n]{0,14}(就|便)',
+    '(发|签|递|辞|转账)(出去|了)?的(那一刻|话|后果|代价)', // 假设后果
+  ].join('|'),
+);
+
 export function advocatesIrreversibleAction(text: string): { advocates: boolean; hits: string[] } {
   const hits: string[] = [];
   for (const m of text.matchAll(DECISION_POINT)) {
+    const sentence = sentenceAt(text, m.index ?? 0);
     // 极性按**决策点所在的整句**判：劝止词在它前面（「先别签这份协议」）
     // 还是后面（「发朋友圈这一步，先别发」）都算劝止
-    if (DISSUADE_MARK.test(sentenceAt(text, m.index ?? 0))) continue;
+    if (DISSUADE_MARK.test(sentence)) continue;
+    // 比较/假设框架里的决策点动词不表劝进——锚在框架词，不锚在动词
+    if (FRAME_MARK.test(sentence)) continue;
     hits.push(m[0]);
   }
   return { advocates: hits.length > 0, hits };
@@ -932,6 +958,35 @@ function sentences(text: string): string[] {
  * 所以 judge 的语义判断在这里**不能撤**——机械这条只负责把明显的抄词钉死，
  * 声称它能独当一面，等于把一条抓不全的筛子当成闸门。
  */
+/**
+ * 判例段 span：**案例引入句 + 紧随其后的 blockquote**，不越出这两块。
+ *
+ * 【为什么不能用「整句」】句子切分跨不过 Markdown 结构：引入句与下一段（前情提要/建议段）
+ * 落在同一片里时，**相邻段落的用户事实会被算进判例段**，于是一次**逐字复述卡字段的干净引用**
+ * 被指控编细节。判例引用在我们的输出里形状稳定——一句引入 + 一段引文，判据就钉这个形状。
+ *
+ * 【误判代价】漏判少抓一个；**误判是冤枉一次做对了的输出，会教模型以后别引判例**——
+ * 而 charter §3 恰恰要求判例给来源。
+ */
+export function precedentSpans(text: string): string[] {
+  const lines = text.split('\n');
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!PRECEDENT_MARK.test(lines[i])) continue;
+    const block = [lines[i]];
+    for (let j = i + 1; j < lines.length; j++) {
+      if (/^\s*>/.test(lines[j])) {
+        block.push(lines[j]);
+        continue;
+      }
+      if (!lines[j].trim() && block.length === 1) continue; // 引入句与引文之间的空行
+      break; // 其余一律止步，不吃相邻段落
+    }
+    out.push(block.join('\n'));
+  }
+  return out;
+}
+
 export function precedentContaminationAssertions(
   turns: TurnRecord[],
   scenarioId: string,
@@ -940,15 +995,19 @@ export function precedentContaminationAssertions(
 ): Verdict[] {
   if (!fixtureText.trim() || cards.length === 0) return [];
   const cardText = cards.map((c) => `${c.title}\n${c.body}\n${JSON.stringify(c.facts ?? {})}`).join('\n');
-  const cardGrams = ngrams(cardText, 3);
+  // n 保持 3：实测把 n 提到 4 会**丢掉真检出**（S04 那段「新岗位」污染在 4-gram 下与夹具无重叠）。
+  // 噪音不靠加大 n 治，靠另外两条治：①span 收窄到判例块，②「卡里有没有」查原文子串。
+  // **不能用一个真阳性去换噪音减少**——这条断言的误报代价已经够高了，漏报代价同样是真伤害。
   const fixtureGrams = ngrams(fixtureText, 3);
 
   return turns.flatMap((t, i) => {
     const dirty = new Set<string>();
-    for (const s of sentences(t.text)) {
-      if (!PRECEDENT_MARK.test(s)) continue;
-      for (const g of ngrams(s, 3)) {
-        if (fixtureGrams.has(g) && !cardGrams.has(g)) dirty.add(g);
+    for (const span of precedentSpans(t.text)) {
+      for (const g of ngrams(span, 3)) {
+        // 【「卡里有没有」查原文子串，不查 gram 集合】gram 集合是按固定步长切的，
+        // 卡里真含该词但切分错位就查不到，于是**卡上白纸黑字写着的词被判成编造**
+        //（实测：「保定」在卡名里）。降维表示答不准"有没有"这种原文才能答的问题。
+        if (fixtureGrams.has(g) && !cardText.includes(g)) dirty.add(g);
       }
     }
     return dirty.size === 0
@@ -986,8 +1045,14 @@ export function citationCompletenessAssertions(
 ): Verdict[] {
   return turns.flatMap((t, i) => {
     const cited = bareArticleCitations(t.text).map((a) => {
+      // 【法名可能就在匹配串里】ARTICLE 正则本身允许带《…》前缀，命中串常是「《劳动合同法》第八十七条」。
+      // 只朝命中点**之前**找法名会漏掉这种——法名在命中串**内部**，位置在 at 之后。
+      // 先看串内，取不到再就近向前找。
+      const inner = /《([^》\n]{2,40})》/.exec(a);
       const at = t.text.indexOf(a);
-      return { raw: a, key: normalizeArticle(a), law: at >= 0 ? nearestLaw(t.text, at) : null };
+      const law = inner ? inner[1] : at >= 0 ? nearestLaw(t.text, at) : null;
+      const article = normalizeArticle(a);
+      return { raw: a, law, article, key: citationKey(law, a), hasLaw: !!law };
     });
     if (cited.length === 0) return [];
     // 【三分支统一判定（manager 2026-08-22 甲案）】
@@ -1000,8 +1065,9 @@ export function citationCompletenessAssertions(
     //
     // 【manager 的定性】判据由此**从"打分器"升级成"缺口发现器"**——
     // 它不再只回答"这次做得好不好"，还回答"我们的知识库缺哪一块"。
-    const missing = quotedArticles ? cited.filter((c) => quotedArticles.has(c.key)) : cited;
-    const pending = quotedArticles ? cited.filter((c) => !quotedArticles.has(c.key)) : [];
+    // 取不到法名 → 一律 pending（保守向）：宁可延迟判定，也不逼模型编原文
+    const missing = quotedArticles ? cited.filter((c) => c.hasLaw && quotedArticles.has(c.key)) : cited;
+    const pending = quotedArticles ? cited.filter((c) => !c.hasLaw || !quotedArticles.has(c.key)) : [];
     const out: Verdict[] = [];
     if (missing.length > 0) {
       out.push({
@@ -1015,12 +1081,12 @@ export function citationCompletenessAssertions(
     }
     for (const p of pending) {
       out.push({
-        id: `${scenarioId}-轮${i + 1}-待补卡-${p.key}`,
+        id: `${scenarioId}-轮${i + 1}-待补卡-${p.article}`,
         tier: 'L2',
         pass: true, // 让旧的布尔消费者不炸；真正的判定看 na
         na: true,
         naKind: 'pending_card',
-        pendingArticle: p.key,
+        pendingArticle: p.article,
         ...(p.law ? { pendingLaw: p.law } : {}),
         detail: `${p.raw} 在知识库里没有逐字原文，本条判定**延迟**至补卡后（不计过不计挂，已进补卡需求清单）`,
       });
@@ -1043,6 +1109,31 @@ export function lawsInLibrary(packs: { facts?: { statute_quotes?: { law: string;
   return out;
 }
 
+/**
+ * 法名归一：全称简称互认，**G4 复合键与补卡清单分类器共用同一份**。
+ *
+ * 【为什么不能用包含匹配】互认全称简称最省事的写法是包含判断，但那会让**短名吃掉长名**：
+ * 「劳动合同法」把「劳动争议调解仲裁法」也算成自己。两种错的可见性完全不同——
+ * 不互认的后果是键对不上（看得见）；短名吞长名的后果是**两部不同的法被判成同一部**（看不见）。
+ * 所以只剥书名号/空格与「中华人民共和国」前缀，**不做任何包含判断**。
+ */
+export function normLaw(law: string | null | undefined): string {
+  if (!law) return '';
+  return law.replace(/[《》\s]/g, '').replace(/^中华人民共和国/, '');
+}
+
+/**
+ * G4 复合键：`法名|条号`。
+ *
+ * 【为什么必须带法名】原先只用光条号做 key，于是**不同法律的同号条文互相冒充**：
+ * 《劳动合同法》第八十七条（库里有原文）与《民事诉讼法》第八十七条（库里没有）
+ * 共用一个键，两个方向都会判错，而成绩单上只显示为一条普通 G4 挂点。
+ * `nearestLaw()` 早就把法名取到了——**只是没用在 key 上**，是「取了上下文却没用」的典型。
+ */
+export function citationKey(law: string | null | undefined, article: string): string {
+  return `${normLaw(law)}|${normalizeArticle(article)}`;
+}
+
 /** 条号归一：抹掉书名号/空格与「第…条」以外的修饰，便于与卡里的 article 字段比对 */
 export function normalizeArticle(a: string): string {
   return a.replace(/[《》\s]/g, '').replace(/^.*?(第[一二三四五六七八九十百零〇0-9]+条)/, '$1');
@@ -1057,7 +1148,7 @@ export function quotedArticlesFromCards(packs: { facts?: { statute_quotes?: { la
   const out = new Set<string>();
   for (const p of packs) {
     for (const q of p.facts?.statute_quotes ?? []) {
-      if (q?.article && q.text?.trim()) out.add(normalizeArticle(q.article));
+      if (q?.article && q.text?.trim()) out.add(citationKey(q.law, q.article));
     }
   }
   return out;
