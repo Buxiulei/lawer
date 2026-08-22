@@ -103,7 +103,7 @@ export function EvidenceDetailSheet({
     >
       {item && (
         <div className="flex flex-col gap-5">
-          <div>
+          <div data-veil="">
             <div className="flex flex-wrap items-center gap-2">
               <EvidenceBadge status={item.status} />
               <Badge>{item.category}</Badge>
@@ -117,7 +117,7 @@ export function EvidenceDetailSheet({
             {STATUS_EXPLAIN[item.status]}
           </p>
 
-          <div className="flex flex-col gap-2">
+          <div data-veil="" className="flex flex-col gap-2">
             <TextareaField
               label="这份材料想证明什么"
               rows={3}
@@ -148,7 +148,7 @@ export function EvidenceDetailSheet({
             )}
           </div>
 
-          <dl className="flex flex-col divide-y divide-line text-[15px]">
+          <dl data-veil="" className="flex flex-col divide-y divide-line text-[15px]">
             <Row label="原始载体" value={item.originalMedium || '未填写'} />
             <Row
               label="大小"
@@ -159,7 +159,7 @@ export function EvidenceDetailSheet({
           </dl>
 
           {att && (
-            <Card className="bg-secondary p-3.5">
+            <Card data-veil="" className="bg-secondary p-3.5">
               <h3 className="text-[15px] font-semibold text-ink">存证订单</h3>
               <dl className="mt-2 flex flex-col divide-y divide-line text-[15px]">
                 <Row label="存证编号" value={att.orderNo} numeric />
@@ -203,7 +203,7 @@ export function EvidenceDetailSheet({
           )}
 
           {item.sha256 && (
-            <div>
+            <div data-veil="">
               <p className="text-[13px] text-ink-2">SHA-256 哈希值</p>
               <p className="num mt-1 break-all rounded-[10px] bg-surface-2 px-3 py-2 text-[13px] leading-6 text-ink-2">
                 {item.sha256}

@@ -34,8 +34,10 @@ export default async function DocDetailPage({
             解读于 {formatDateTime(doc.createdAt)}
           </span>
         </div>
-        <h1 className="mt-1.5 text-[22px] leading-8 font-semibold text-ink">{doc.title}</h1>
-        <p className="mt-1 text-[14px] text-ink-2">{doc.fileName}</p>
+        <div data-veil="">
+          <h1 className="mt-1.5 text-[22px] leading-8 font-semibold text-ink">{doc.title}</h1>
+          <p className="mt-1 text-[14px] text-ink-2">{doc.fileName}</p>
+        </div>
       </header>
 
       <AdviceCard

@@ -155,7 +155,10 @@ export function IntakeFlow() {
 
       <div className="mt-4">{current.render(draft, patch)}</div>
 
-      <p className="mt-5 rounded-[10px] bg-surface-2 px-3.5 py-3 text-[14px] leading-6 text-ink-2">
+      <p
+        data-veil=""
+        className="mt-5 rounded-[10px] bg-surface-2 px-3.5 py-3 text-[14px] leading-6 text-ink-2"
+      >
         {isLast && !signedIn ? DRAFT_REASSURANCE : current.reassurance}
       </p>
 

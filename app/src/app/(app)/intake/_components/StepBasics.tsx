@@ -18,7 +18,7 @@ export function StepBasics({
   const years = draft.hiredOn ? serviceYearsBetween(draft.hiredOn, new Date()) : null;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div data-veil="" className="flex flex-col gap-5">
       <InputField
         label="入职时间"
         type="date"

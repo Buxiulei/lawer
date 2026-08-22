@@ -13,7 +13,9 @@ export function EvidenceChecklist({ collapsible = false }: { collapsible?: boole
     return (
       <section>
         <h3 className="text-[16px] font-semibold text-ink">这些先传，越早越好</h3>
-        <p className="prose-measure mt-1 text-[15px] leading-7 text-ink-2">{LEAD}</p>
+        <p data-veil="" className="prose-measure mt-1 text-[15px] leading-7 text-ink-2">
+          {LEAD}
+        </p>
         <List />
       </section>
     );
@@ -21,11 +23,16 @@ export function EvidenceChecklist({ collapsible = false }: { collapsible?: boole
 
   return (
     <details className="rounded-[12px] border border-line bg-surface">
-      <summary className="flex min-h-12 cursor-pointer list-none items-center px-3.5 text-[15px] font-medium text-primary-ink">
+      <summary
+        data-veil=""
+        className="flex min-h-12 cursor-pointer list-none items-center px-3.5 text-[15px] font-medium text-primary-ink"
+      >
         对一遍常见证据清单，看还差什么
       </summary>
       <div className="px-3.5 pb-3.5">
-        <p className="prose-measure text-[14px] leading-6 text-ink-2">{LEAD}</p>
+        <p data-veil="" className="prose-measure text-[14px] leading-6 text-ink-2">
+          {LEAD}
+        </p>
         <List />
       </div>
     </details>
@@ -37,7 +44,7 @@ function List() {
     <ul className="mt-3 flex flex-col gap-2.5">
       {EVIDENCE_CHECKLIST.map((c) => (
         <li key={c.name}>
-          <Card className="p-3.5">
+          <Card data-veil="" className="p-3.5">
             <div className="flex flex-wrap items-center gap-2">
               <Badge>{c.category}</Badge>
               <span className="text-[15px] leading-7 font-semibold text-ink">{c.name}</span>

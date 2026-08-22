@@ -95,7 +95,10 @@ export function RechargePanel({ membership }: { membership: string | null }) {
                   </p>
 
                   <p className="mt-3 text-[14px] leading-6 text-ink">{plan.routing}</p>
-                  <p className="mt-1 text-[13px] leading-6 text-ink-2">{plan.fit}</p>
+                  {/* 「适合谁」这句会写到「已经进仲裁」，价格和套餐名不会 */}
+                  <p data-veil="" className="mt-1 text-[13px] leading-6 text-ink-2">
+                    {plan.fit}
+                  </p>
 
                   <div className="mt-auto pt-4">
                     <Button

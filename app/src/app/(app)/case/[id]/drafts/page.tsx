@@ -33,7 +33,10 @@ export default async function DraftsPage({
         {drafts.map((draft) => (
           <li key={draft.id}>
             <Link href={`/case/${id}/drafts/${draft.id}`} className="group block">
-              <Card className="p-4 transition-colors duration-150 ease-out group-hover:bg-muted">
+              <Card
+                data-veil=""
+                className="p-4 transition-colors duration-150 ease-out group-hover:bg-muted"
+              >
               <div className="flex flex-wrap items-center gap-2">
                 <DraftKindBadge kind={draft.kind} />
                 <DraftStatusBadge status={draft.status} />

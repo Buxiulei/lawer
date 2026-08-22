@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { cn } from '@/app/_ui/cn';
 import { DocumentTitle } from '@/app/_ui/discreet';
+import { DiscreetVeil } from '@/app/_ui/veil';
 import { SidebarInset, SidebarProvider } from '@/components/shadcn/sidebar';
 import { TooltipProvider } from '@/components/shadcn/tooltip';
 import { AppSidebar } from './AppSidebar';
@@ -45,6 +46,7 @@ export function AppShell({
       <CasePanelProvider>
         <SidebarProvider>
           <DocumentTitle title={`${caseTitle} · 裁员应对专员`} />
+          <DiscreetVeil />
           <AppSidebar caseId={caseId} caseTitle={caseTitle} pathname={pathname} />
           <SidebarInset>
             <ShellHeader pathname={pathname} caseId={caseId} />

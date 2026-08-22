@@ -91,7 +91,7 @@ function TimelineBlock({ events }: { events: TimelineEvent[] }) {
             className="absolute top-2 bottom-2 left-[3.5px] w-px bg-line"
           />
           {shown.map((e) => (
-            <li key={e.id} className="relative">
+            <li key={e.id} data-veil="" className="relative">
               <span
                 aria-hidden
                 className={cn(
@@ -138,7 +138,7 @@ function CompanyGraphBlock({ caseId }: { caseId: string }) {
         }
       />
       <CardBody>
-        <p className="text-[14px] leading-6 text-ink-2">
+        <p data-veil="" className="text-[14px] leading-6 text-ink-2">
           跟你签合同的、给你发工资的、背后控股的，常常不是同一家。
         </p>
         <Link
@@ -165,13 +165,17 @@ function ClaimsBlock({ claims }: { claims: Claim[] }) {
 
   return (
     <Card>
-      <CardHeader title="诉求金额" />
+      <CardHeader title={<span data-veil="">诉求金额</span>} />
       <CardBody>
         <table className="w-full border-collapse">
           <caption className="sr-only">诉求种类、金额与依据</caption>
           <tbody>
             {claims.map((c) => (
-              <tr key={c.id} className="border-t border-line align-top first:border-t-0">
+              <tr
+                key={c.id}
+                data-veil=""
+                className="border-t border-line align-top first:border-t-0"
+              >
                 <th scope="row" className="py-2.5 pr-2 text-left font-normal">
                   <span className="block text-[15px] leading-6 font-medium text-ink">
                     {c.label}
@@ -192,7 +196,7 @@ function ClaimsBlock({ claims }: { claims: Claim[] }) {
             ))}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-line">
+            <tr data-veil="" className="border-t-2 border-line">
               <th scope="row" className="py-3 text-left text-[15px] font-semibold text-ink">
                 合计
               </th>
@@ -204,7 +208,7 @@ function ClaimsBlock({ claims }: { claims: Claim[] }) {
             </tr>
           </tfoot>
         </table>
-        <p className="mt-1 text-[13px] leading-6 text-ink-2">
+        <p data-veil="" className="mt-1 text-[13px] leading-6 text-ink-2">
           初算值，随证据补充调整；北京口径，月工资未触及三倍社平封顶。
         </p>
       </CardBody>
@@ -231,11 +235,11 @@ function EvidenceBlock({
   return (
     <Card>
       <CardHeader
-        title="证据清单"
+        title={<span data-veil="">证据清单</span>}
         action={<span className="num text-[13px] text-ink-2">{items.length} 件</span>}
       />
       <CardBody>
-        <div className="flex flex-wrap items-center gap-2">
+        <div data-veil="" className="flex flex-wrap items-center gap-2">
           {counts.map(({ status, n }) => (
             <span key={status} className="inline-flex items-center gap-1">
               <EvidenceBadge status={status} />
@@ -246,7 +250,7 @@ function EvidenceBlock({
 
         <ul className="mt-3 flex flex-col gap-2">
           {items.slice(0, 3).map((item) => (
-            <li key={item.id} className="flex items-start gap-2">
+            <li key={item.id} data-veil="" className="flex items-start gap-2">
               <span className="mt-2 size-1.5 shrink-0 rounded-full bg-line" aria-hidden />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[14px] leading-6 text-ink">
@@ -260,6 +264,7 @@ function EvidenceBlock({
 
         <Link
           href={`/case/${caseId}/evidence`}
+          data-veil=""
           className="mt-2 inline-flex min-h-11 items-center text-[14px] text-primary-ink"
         >
           查看全部 {items.length} 件证据 →
@@ -301,7 +306,7 @@ function TodoBlock({
       <CardBody>
         <ul className="flex flex-col gap-3">
           {open.map((a) => (
-            <li key={a.id}>
+            <li key={a.id} data-veil="">
               <p className="text-[15px] leading-6 text-ink">{a.title}</p>
               {a.dueAt && (
                 <span className="mt-1 inline-block">
@@ -311,7 +316,11 @@ function TodoBlock({
             </li>
           ))}
           {done.map((a) => (
-            <li key={a.id} className="text-[15px] leading-6 text-ink-2 line-through">
+            <li
+              key={a.id}
+              data-veil=""
+              className="text-[15px] leading-6 text-ink-2 line-through"
+            >
               {a.title}
             </li>
           ))}
@@ -321,7 +330,7 @@ function TodoBlock({
           <h3 className="mb-2 text-[14px] font-semibold text-ink">截止日</h3>
           <ul className="flex flex-col gap-3">
             {sortedDeadlines.map((d) => (
-              <li key={d.id}>
+              <li key={d.id} data-veil="">
                 <p className="text-[15px] leading-6 text-ink">{d.title}</p>
                 <span className="mt-1 inline-block">
                   <DeadlineChip dueAt={d.dueAt} showDate />

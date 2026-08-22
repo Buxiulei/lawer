@@ -14,7 +14,10 @@ export function EvidenceBadge({ status }: { status: EvidenceStatus }) {
 /** 常驻提示条：固化不替代原件，原始载体必须自己留着。 */
 export function OriginalMediumNotice() {
   return (
-    <p className="rounded-[10px] bg-surface-2 px-3 py-2 text-[14px] leading-6 text-ink-2">
+    <p
+      data-veil=""
+      className="rounded-[10px] bg-surface-2 px-3 py-2 text-[14px] leading-6 text-ink-2"
+    >
       固化只锁定文件内容与时间，不替代原件。原始载体（纸质件、手机里的录音和聊天记录）请自己保留到案件结束。
     </p>
   );

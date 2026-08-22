@@ -71,14 +71,14 @@ export function UploadSheet({
     >
       {pending && (
         <div className="flex flex-col gap-5">
-          <div className="rounded-[10px] bg-surface-2 px-3.5 py-3">
+          <div data-veil="" className="rounded-[10px] bg-surface-2 px-3.5 py-3">
             <p className="truncate text-[15px] font-medium text-ink">{pending.name}</p>
             <p className="num mt-0.5 text-[13px] text-ink-2">
               {formatBytes(pending.sizeBytes)}
             </p>
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div data-veil="" className="flex flex-col gap-2">
             <p className="text-[14px] font-medium text-ink">归到哪一类</p>
             <CategoryPicker
               categories={EVIDENCE_CATEGORIES}

@@ -108,6 +108,9 @@ export function DataTable<T>({
               {rows.map((row) => (
                 <TableRow
                   key={rowKey(row)}
+                  // 低调模式二档：整行是一个语义块，点住这一行才看清这一行。
+                  // 表头留在层外——列名是"名称/类别/时间"这种壳层字样，说不出用途。
+                  data-veil=""
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   className={cn(onRowClick && 'cursor-pointer hover:bg-muted')}
                 >
@@ -152,6 +155,7 @@ export function DataTable<T>({
               {onRowClick ? (
                 <button
                   type="button"
+                  data-veil=""
                   onClick={() => onRowClick(row)}
                   aria-label={rowLabel?.(row)}
                   className="w-full rounded-[12px] border border-border bg-card p-3.5 text-left transition-colors duration-150 ease-out hover:bg-muted"
@@ -159,7 +163,7 @@ export function DataTable<T>({
                   {inner}
                 </button>
               ) : (
-                <div className="rounded-[12px] border border-border bg-card p-3.5">
+                <div data-veil="" className="rounded-[12px] border border-border bg-card p-3.5">
                   {inner}
                 </div>
               )}

@@ -3,7 +3,8 @@ import type { CompanyDoc, CompanyDocType } from '@/app/_mock/types';
 
 /** 文件类型徽标一律中性色：颜色留给结论，不给分类。 */
 export function DocTypeBadge({ docType }: { docType: CompanyDocType }) {
-  return <Badge tone="neutral">{docType}</Badge>;
+  // 类型名本身就是「协商协议」「解除通知」这类用途词，跟着正文一起进糊层
+  return <Badge data-veil="" tone="neutral">{docType}</Badge>;
 }
 
 type Advice = CompanyDoc['advice'];
@@ -24,7 +25,7 @@ export const ADVICE_SUMMARY: Record<Advice, string> = {
 };
 
 export function AdviceBadge({ advice }: { advice: Advice }) {
-  return <Badge tone={ADVICE_TONE[advice]}>{advice}</Badge>;
+  return <Badge data-veil="" tone={ADVICE_TONE[advice]}>{advice}</Badge>;
 }
 
 export function RiskCountBadge({ count }: { count: number }) {

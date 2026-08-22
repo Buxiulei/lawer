@@ -273,7 +273,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
     <div className="flex flex-col gap-4 pt-1">
       <div className="flex flex-col gap-1.5">
         <OriginalMediumNotice />
-        <p className="px-3.5 text-[13px] leading-6 text-ink-2">
+        <p data-veil="" className="px-3.5 text-[13px] leading-6 text-ink-2">
           公司要求交回原件时，先自己拍照或复印留一份再交。
         </p>
       </div>
@@ -318,7 +318,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
         </div>
       ) : (
         <>
-          <p className="num text-[14px] text-ink-2">
+          <p data-veil="" className="num text-[14px] text-ink-2">
             共 {items.length} 份 · 已固化 {frozen} 份 · 已出证 {issued} 份
           </p>
 
@@ -420,7 +420,10 @@ function UploadProgress({
   return (
     <Card className="p-3.5">
       <div className="flex items-start justify-between gap-3">
-        <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink">
+        <span
+          data-veil=""
+          className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink"
+        >
           {job.input.name}
         </span>
         <span className="num shrink-0 text-[13px] text-ink-2">

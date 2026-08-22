@@ -107,7 +107,10 @@ export function WaitingCard({
 export function InstantReplyCard({ text }: { text: string }) {
   const lines = text.split('\n').filter((line) => line.trim());
   return (
-    <div className="prose-measure my-2 rounded-[12px] border-l-4 border-primary bg-surface-2 py-3 pr-3.5 pl-3">
+    <div
+      data-veil=""
+      className="prose-measure my-2 rounded-[12px] border-l-4 border-primary bg-surface-2 py-3 pr-3.5 pl-3"
+    >
       <p className="text-[12px] leading-5 text-ink-2">即时回应</p>
       <div className="mt-1.5 space-y-1.5 text-[16px] leading-[1.75] text-ink">
         {lines.map((line, i) => (
@@ -146,6 +149,7 @@ export function DegradedBadge() {
 export function RecordChip({ frame }: { frame: RecordFrame }) {
   return (
     <span
+      data-veil=""
       title={recordLabel(frame.tool)}
       className="inline-flex items-start gap-1.5 rounded-[10px] bg-primary-wash px-2.5 py-1 text-[13px] leading-6 text-primary-ink"
     >
@@ -160,7 +164,10 @@ export function NoticeLine({ frame }: { frame: NoticeFrame }) {
   const copy = noticeCopy(frame);
   if (!copy) return null;
   return (
-    <p className="prose-measure flex gap-2 border-l-2 border-line pl-3 text-[14px] leading-6 text-ink-2">
+    <p
+      data-veil=""
+      className="prose-measure flex gap-2 border-l-2 border-line pl-3 text-[14px] leading-6 text-ink-2"
+    >
       {copy}
     </p>
   );
@@ -183,7 +190,10 @@ export function DraftCard({
   onRequestConfirm: (frame: DraftFrame) => void;
 }) {
   return (
-    <article className="prose-measure rounded-[12px] border border-line bg-surface p-3.5 shadow-soft">
+    <article
+      data-veil=""
+      className="prose-measure rounded-[12px] border border-line bg-surface p-3.5 shadow-soft"
+    >
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone="primary">{frame.kind}</Badge>
         <span className="num text-[13px] text-ink-2">v{frame.version}</span>

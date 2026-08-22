@@ -301,7 +301,11 @@ function CaseStatusBar() {
 
   return (
     <div className="sticky top-14 z-30 -mx-4 mb-1 flex items-center gap-2 border-b border-line bg-bg/95 px-4 py-2 backdrop-blur-sm xl:hidden">
-      <Badge tone="primary">{demoCase.stage}</Badge>
+      {/* data-veil 不能挂在上面那层 sticky 上（filter 会拽走 fixed 子孙），
+          Badge 又不透传 props，只好在它外面包一层 inline-flex */}
+      <span data-veil="" className="inline-flex">
+        <Badge tone="primary">{demoCase.stage}</Badge>
+      </span>
       {nearest && <DeadlineChip dueAt={nearest.dueAt} />}
     </div>
   );

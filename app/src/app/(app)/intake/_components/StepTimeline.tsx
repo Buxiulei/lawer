@@ -38,7 +38,7 @@ export function StepTimeline({
   const add = () => patch({ events: [...events, newNote()] });
 
   return (
-    <div className="flex flex-col gap-5">
+    <div data-veil="" className="flex flex-col gap-5">
       <div className="flex flex-col gap-3">
         {events.length === 0 && (
           <p className="rounded-[10px] bg-surface-2 px-3.5 py-3 text-[15px] leading-7 text-ink-2">

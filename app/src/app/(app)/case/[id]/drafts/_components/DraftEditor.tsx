@@ -4,7 +4,6 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { versionsOf, type DraftVersion } from '@/app/_mock/docs-drafts';
 import type { Draft } from '@/app/_mock/types';
 import { cn } from '@/app/_ui/cn';
-import { useDiscreet } from '@/app/_ui/discreet';
 import { formatDateTime } from '@/app/_ui/format';
 import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
@@ -47,7 +46,6 @@ function AutoTextarea({
 
 export function DraftEditor({ draft }: { draft: Draft }) {
   const toast = useToast();
-  const { discreet } = useDiscreet();
 
   const [versions, setVersions] = useState<DraftVersion[]>(() => versionsOf(draft));
   const latest = versions[versions.length - 1];
@@ -104,7 +102,9 @@ export function DraftEditor({ draft }: { draft: Draft }) {
             v{latest.version} · 更新于 {formatDateTime(latest.updatedAt)}
           </span>
         </div>
-        <h1 className="mt-1.5 text-[22px] leading-8 font-semibold text-ink">{draft.title}</h1>
+        <h1 data-veil="" className="mt-1.5 text-[22px] leading-8 font-semibold text-ink">
+          {draft.title}
+        </h1>
       </header>
 
       <div className="flex flex-wrap gap-2">
@@ -128,21 +128,20 @@ export function DraftEditor({ draft }: { draft: Draft }) {
         )}
       </div>
 
-      {discreet ? (
-        // 文书正文整篇都是公司名、金额和主张，低调模式下不适合只打码局部
-        <Card className="border-dashed px-4 py-10 text-center shadow-none">
-          <p className="prose-measure mx-auto text-[15px] leading-7 text-ink-2">
-            低调模式开着，正文先不显示。要看或者要改，点顶栏那只眼睛关掉低调模式。
-          </p>
-        </Card>
-      ) : onLatest ? (
-        <AutoTextarea value={content} onChange={setContent} label={`${draft.title} 正文`} />
+      {onLatest ? (
+        // 正文整篇都是公司名、金额和主张：低调模式下整块糊着，点住或聚焦才清晰
+        <div data-veil="">
+          <AutoTextarea value={content} onChange={setContent} label={`${draft.title} 正文`} />
+        </div>
       ) : (
         <Card className="bg-secondary px-3.5 py-3 shadow-none">
           <p className="mb-2 text-[14px] text-ink-2">
             正在看 v{current.version}（{formatDateTime(current.updatedAt)}），历史版本不能直接改。
           </p>
-          <pre className="font-sans text-[16px] leading-8 whitespace-pre-wrap text-ink">
+          <pre
+            data-veil=""
+            className="font-sans text-[16px] leading-8 whitespace-pre-wrap text-ink"
+          >
             {current.content}
           </pre>
           <div className="mt-3">
@@ -167,6 +166,7 @@ export function DraftEditor({ draft }: { draft: Draft }) {
                   type="button"
                   onClick={() => setViewing(v.version)}
                   aria-pressed={active}
+                  data-veil=""
                   className={cn(
                     'flex min-h-11 w-full items-start gap-3 rounded-[10px] border px-3 py-2.5 text-left transition-colors duration-150 ease-out',
                     active

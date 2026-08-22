@@ -24,6 +24,7 @@ export function ActionCard({
 
   return (
     <article
+      data-veil=""
       className={cn(
         'rounded-[12px] border transition-colors duration-150 ease-out',
         done ? 'border-line bg-surface-2' : 'border-line bg-primary-wash',
