@@ -27,6 +27,8 @@ export interface PackMeta {
   confidence: string;
   updated: string;
   path: string;
+  /** 规范化法条引用（如 劳动合同法§47）；仅 frontmatter 声明了 law_refs 的卡带此字段 */
+  law_refs?: string[];
   /** 仅带结构化事实的卡存在；gen-knowledge-index.py 已做两面一致性校验 */
   facts?: PackFacts;
 }

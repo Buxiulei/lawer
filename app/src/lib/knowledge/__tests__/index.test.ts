@@ -189,6 +189,13 @@ describe('facts 结构化透传（规范 §2.1：代码只读 facts，禁啃正�
     expect(cf?.case_no).toBe('官方案例，未公开案号');
   });
 
+  test('law_refs 透传（法域分类消费面，走loader不直读md）', () => {
+    const refs = get('calc-jingji-buchang-n').law_refs ?? [];
+    expect(refs.length).toBeGreaterThan(0);
+    expect(refs.some((r) => r.includes('劳动合同法§47'))).toBe(true);
+    expect(get('data-beijing-shepin-fengding').law_refs).toBeUndefined();
+  });
+
   test('法条卡 statute_quotes 全部有条文（G4 预格式化引用块消费面）', () => {
     const q = get('statute-fashi-2025-12-jieshi-2').facts?.statute_quotes ?? [];
     expect(q.length).toBeGreaterThanOrEqual(16);
