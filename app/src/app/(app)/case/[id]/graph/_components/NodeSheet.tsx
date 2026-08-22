@@ -48,7 +48,11 @@ export function NodeSheet({
             <Sensitive as="div">
               <h3 className="text-[18px] leading-7 font-semibold text-ink">{node.name}</h3>
             </Sensitive>
-            <p className="mt-1 text-[14px] leading-6 text-ink-2">{node.role}</p>
+            {/* 角色写的是「现用人单位/目标主体」「发薪主体」这类判断，
+                比公司名还直白，跟画布上的节点卡一样进糊层 */}
+            <p data-veil="" className="mt-1 text-[14px] leading-6 text-ink-2">
+              {node.role}
+            </p>
             <div className="mt-2 flex flex-wrap gap-2">
               {/* 圈层是监控节奏不是风险结论，红只留给那圈 2px 的环 */}
               <Badge tone="neutral" className="gap-1.5">
@@ -58,7 +62,9 @@ export function NodeSheet({
               {events.some((e) => e.urgent) && <Badge tone="danger">有紧急动态</Badge>}
             </div>
 
-            <dl className="mt-3 flex flex-col gap-1.5 text-[14px] leading-6">
+            {/* 工商信息整块进糊层：「涉诉 N 件 · 近 5 年劳动争议相关」这一行
+                单看就说得出用途，内层已有的 Sensitive 由外层接管 */}
+            <dl data-veil="" className="mt-3 flex flex-col gap-1.5 text-[14px] leading-6">
               {node.creditCode && (
                 <Field label="统一社会信用代码">
                   <Sensitive>
@@ -91,7 +97,7 @@ export function NodeSheet({
                 {node.note}
               </blockquote>
             </Sensitive>
-            <p className="mt-1.5 text-[13px] leading-6 text-ink-2">
+            <p data-veil="" className="mt-1.5 text-[13px] leading-6 text-ink-2">
               依据：公开检索与裁判文书
             </p>
           </section>
@@ -105,7 +111,7 @@ export function NodeSheet({
             </h4>
             <ul className="mt-2 flex flex-col gap-3">
               {links.map(({ edge, outgoing, other }) => (
-                <li key={`${edge.from}->${edge.to}`}>
+                <li key={`${edge.from}->${edge.to}`} data-veil="">
                   <p className="text-[14px] leading-6 text-ink">
                     {outgoing && <span className="text-ink-2">这家 → </span>}
                     {other ? (
@@ -146,7 +152,7 @@ export function NodeSheet({
             <h4 className="text-[15px] font-semibold text-ink">近期事件</h4>
             <ul className="mt-2 flex flex-col gap-3">
               {events.map((e) => (
-                <li key={e.id}>
+                <li key={e.id} data-veil="">
                   <p className="num text-[13px] leading-6 text-ink-2">
                     {formatDate(e.happenedAt)} · {e.kind}
                   </p>

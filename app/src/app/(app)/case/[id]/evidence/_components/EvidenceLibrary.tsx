@@ -8,7 +8,9 @@ import {
   mockUploadEvidence,
   type UploadSource,
 } from '@/app/_mock/intake-evidence';
+import { useDiscreet } from '@/app/_ui/discreet';
 import { formatBytes, formatDate } from '@/app/_ui/format';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { humanError } from '@/app/_ui/api';
 import { readToken, useSignedIn } from '@/app/_ui/auth';
 import { useRealnameGate } from '@/app/_ui/realname';
@@ -114,6 +116,9 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
   const toast = useToast();
   const signedIn = useSignedIn();
   const { guard, dialog: realnameDialog } = useRealnameGate();
+  const { discreet } = useDiscreet();
+  // 空状态标题与表格说明都不进糊层（一个是唯一的指路，一个是读屏用），低调下换中性词
+  const libWord = discreet ? NEUTRAL_WORD.evidenceLib : '证据库';
 
   // 只有 demo 这个假案件走演示数据。真实案件登录失效时给「重新登录」，
   // 绝不回落到演示证据——在真案件下摆一堆别人的材料，比空列表危险得多。
@@ -293,15 +298,16 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
       ) : needSignIn ? (
         <Alert>
           {/* needSignIn 只在本机压根没有 token 时置起，说"失效"会让从没登录过的人以为自己弄坏了什么 */}
-          <AlertTitle>登录后才能看到这个案件里的材料。</AlertTitle>
+          {/* 糊在标题上而不是整块 Alert：下面的「去登录」得看得见才点得动 */}
+          <AlertTitle data-veil="">登录后才能看到这个案件里的材料。</AlertTitle>
           <Button size="sm" className="mt-3" asChild>
             <Link href="/login">去登录</Link>
           </Button>
         </Alert>
       ) : loadError ? (
         <Alert>
-          <AlertTitle>{loadError}</AlertTitle>
-          <AlertDescription className="mt-1">
+          <AlertTitle data-veil="">{loadError}</AlertTitle>
+          <AlertDescription data-veil="" className="mt-1">
             已经上传的材料还在，只是这次没读出来。
           </AlertDescription>
           <Button size="sm" className="mt-3" onClick={() => void load()}>
@@ -311,7 +317,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
       ) : items.length === 0 ? (
         <div className="flex flex-col gap-5">
           <EmptyState
-            title="证据库还是空的"
+            title={`${libWord}还是空的`}
             description="从上面三个入口挑一个开始：手边有纸质文件就拍照，手机里有截图或流水就选文件，约谈录音直接传原始文件。"
           />
           <EvidenceChecklist />
@@ -325,7 +331,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
           {/* ≥sm 一张平表，类别在表里是一列 */}
           <DataTable
             faces="table"
-            caption="证据库"
+            caption={libWord}
             columns={COLUMNS}
             rows={items}
             rowKey={(item) => item.id}
@@ -336,7 +342,10 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
           <div className="flex flex-col gap-5 sm:hidden">
             {groups.map((g) => (
               <section key={g.category}>
-                <h3 className="mb-2 flex items-baseline gap-2 text-[15px] font-semibold text-ink">
+                <h3
+                  data-veil=""
+                  className="mb-2 flex items-baseline gap-2 text-[15px] font-semibold text-ink"
+                >
                   {g.category}
                   <span className="num text-[13px] font-normal text-ink-2">
                     {g.list.length}
@@ -386,15 +395,21 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
 
       <ConfirmDialog
         open={freezeTarget !== null}
-        title="固化后这份证据不能再改"
+        // title 是 string，挂不上 data-veil，只能换词
+        title={
+          discreet
+            ? `${NEUTRAL_WORD.freeze}后这份${NEUTRAL_WORD.evidence}不能再改`
+            : '固化后这份证据不能再改'
+        }
         description={
-          <>
+          // 糊层挂在描述自己身上：弹窗根容器是 fixed，filter 会把它拽进自己的坐标系
+          <div data-veil="">
             固化会算出文件的哈希值并申请可信时间戳，从此内容和时间都被锁死，
             <strong className="font-semibold text-ink">删不掉也换不了</strong>
             。传错文件的话，先取消，删掉重传再固化。
-          </>
+          </div>
         }
-        confirmLabel="确认固化，不再修改"
+        confirmLabel={discreet ? `确认${NEUTRAL_WORD.freeze}，不再修改` : '确认固化，不再修改'}
         cancelLabel="再检查一下"
         onConfirm={() => freezeTarget && void runAttest(freezeTarget)}
         onCancel={() => setFreezeTarget(null)}

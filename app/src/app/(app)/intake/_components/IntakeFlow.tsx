@@ -194,7 +194,12 @@ export function IntakeFlow() {
       <ConfirmDialog
         open={confirmReset}
         title="清空已经填的内容"
-        description="这一步会删掉本机保存的首诊草稿，包括时间线和底线，删掉之后找不回来。"
+        description={
+          // 糊层挂在描述自己身上：弹窗根容器是 fixed，filter 会把它拽进自己的坐标系
+          <div data-veil="">
+            这一步会删掉本机保存的首诊草稿，包括时间线和底线，删掉之后找不回来。
+          </div>
+        }
         confirmLabel="确认清空重填"
         cancelLabel="再想想"
         onConfirm={reset}

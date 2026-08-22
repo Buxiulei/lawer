@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useDiscreet } from '@/app/_ui/discreet';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
 import { useToast } from '@/components/ui/Toast';
@@ -12,7 +14,10 @@ import { useToast } from '@/components/ui/Toast';
  */
 export function DocActions({ caseId, docTitle }: { caseId: string; docTitle: string }) {
   const toast = useToast();
+  const { discreet } = useDiscreet();
   const [added, setAdded] = useState(false);
+  // 这个按钮必须看得懂才能点，不能进糊层：低调模式下换成中性词
+  const libWord = discreet ? NEUTRAL_WORD.evidenceLib : '证据库';
 
   return (
     <Card className="p-4">
@@ -32,7 +37,7 @@ export function DocActions({ caseId, docTitle }: { caseId: string; docTitle: str
             toast(`《${docTitle}》已加入证据库`, 'success', '已保存到资料库');
           }}
         >
-          {added ? '已加入证据库' : '加入证据库'}
+          {added ? `已加入${libWord}` : `加入${libWord}`}
         </Button>
       </div>
     </Card>

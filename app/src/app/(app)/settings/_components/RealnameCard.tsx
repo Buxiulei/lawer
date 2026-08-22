@@ -195,10 +195,11 @@ export function RealnameCard() {
         </CardAction>
       </CardHeader>
       <CardContent>
-        <p className="text-[14px] leading-6 text-ink-2">
+        {/* 这两段说明里有「存证证明」「证据固化出证」，进糊层 */}
+        <p data-veil="" className="text-[14px] leading-6 text-ink-2">
           出具法律效力文件需要实名。实名信息仅用于存证证明与实人认证，不会出现在其他页面。
         </p>
-        <p className="mt-1.5 text-[14px] leading-6 text-ink-2">
+        <p data-veil="" className="mt-1.5 text-[14px] leading-6 text-ink-2">
           不实名也能正常用其他功能，只有证据固化出证那一步会拦一下。
         </p>
 

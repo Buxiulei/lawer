@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { GONGDAO_PER_YUAN, gongdaoBalance } from '@/app/_mock/authpay';
 import { demoUser } from '@/app/_mock/demo';
 import { useSignedIn } from '@/app/_ui/auth';
+import { useDiscreet } from '@/app/_ui/discreet';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Sensitive } from '@/components/Sensitive';
 import { Badge } from '@/components/shadcn/badge';
 import { Button } from '@/components/shadcn/button';
@@ -52,10 +54,14 @@ export function AccountView() {
 }
 
 function BalanceCard() {
+  const { discreet } = useDiscreet();
+
   return (
     <Card className="border-transparent bg-primary-wash p-5">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[14px] text-ink-2">公道值余额</p>
+        <p className="text-[14px] text-ink-2">
+          {discreet ? NEUTRAL_WORD.credits : '公道值'}余额
+        </p>
         <div className="flex shrink-0 gap-1.5">
           <Badge tone="gold">{demoUser.membership}套餐</Badge>
           <Badge tone={demoUser.authStatus === '已实名' ? 'success' : 'amber'}>
@@ -70,7 +76,7 @@ function BalanceCard() {
         </span>
       </Sensitive>
 
-      <p className="prose-measure mt-1 text-[14px] leading-6 text-ink-2">
+      <p data-veil="" className="prose-measure mt-1 text-[14px] leading-6 text-ink-2">
         公道值是模型用量的计价单位，用多少扣多少：散充 1 元 = {GONGDAO_PER_YUAN}{' '}
         公道值，套餐月卡另含当月额度。
       </p>
@@ -81,8 +87,10 @@ function BalanceCard() {
 function SignInCard() {
   return (
     <Card className="p-5">
-      <h2 className="text-[17px] font-semibold text-ink">登录后查看你的公道值与套餐</h2>
-      <p className="prose-measure mt-1.5 text-[14px] leading-6 text-ink-2">
+      <h2 data-veil="" className="text-[17px] font-semibold text-ink">
+        登录后查看你的公道值与套餐
+      </h2>
+      <p data-veil="" className="prose-measure mt-1.5 text-[14px] leading-6 text-ink-2">
         公道值是模型用量的计价单位，用多少扣多少：散充 1 元 = {GONGDAO_PER_YUAN}{' '}
         公道值，套餐月卡另含当月额度。下面的定价现在就能看，登录之后才能买。
       </p>

@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { mockDrafts } from '@/app/_mock/docs-drafts';
 import { formatDateTime } from '@/app/_ui/format';
+import { NeutralLabel } from '@/app/_ui/NeutralLabel';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Card } from '@/components/shadcn/card';
 import { DraftKindBadge, DraftStatusBadge } from './_components/badges';
 
@@ -19,8 +21,11 @@ export default async function DraftsPage({
   return (
     <div className="pt-1">
       <header className="py-3">
-        <h1 className="text-[20px] font-semibold text-ink">文书</h1>
-        <p className="mt-0.5 text-[15px] leading-7 text-ink-2">
+        <h1 className="text-[20px] font-semibold text-ink">
+          <NeutralLabel plain="文书" neutral={NEUTRAL_WORD.drafts} />
+        </h1>
+        {/* 标题换了中性词，这句导语里还有「仲裁委」，得进糊层 */}
+        <p data-veil="" className="mt-0.5 text-[15px] leading-7 text-ink-2">
           写给公司和仲裁委的东西都在这儿。需要新的一份，去
           <Link href={`/case/${id}`} className="mx-1 text-primary-ink underline underline-offset-4">
             工作台

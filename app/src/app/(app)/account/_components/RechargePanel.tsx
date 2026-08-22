@@ -11,7 +11,9 @@ import {
   type PlanSku,
 } from '@/app/_mock/authpay';
 import { cn } from '@/app/_ui/cn';
+import { useDiscreet } from '@/app/_ui/discreet';
 import { formatFen } from '@/app/_ui/format';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Badge } from '@/components/shadcn/badge';
 import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
@@ -31,6 +33,9 @@ export function RechargePanel({ membership }: { membership: string | null }) {
   const toast = useToast();
   const [pending, setPending] = useState<PendingPay | null>(null);
   const [amount, setAmount] = useState('30');
+  const { discreet } = useDiscreet();
+  // 价目要买东西的人看得懂，不能进糊层，低调模式下只换词
+  const creditWord = discreet ? NEUTRAL_WORD.credits : '公道值';
 
   const yuan = Number(amount);
   const amountOk =
@@ -42,7 +47,7 @@ export function RechargePanel({ membership }: { membership: string | null }) {
   const payPlan = (plan: PlanSku) => {
     setPending({
       title: `${plan.key}套餐 · 按月`,
-      description: `到账 ${plan.gongdao.toLocaleString('zh-CN')} 公道值，本月内${plan.routing}。到期不自动续费。`,
+      description: `到账 ${plan.gongdao.toLocaleString('zh-CN')} ${creditWord}，本月内${plan.routing}。到期不自动续费。`,
       confirmLabel: `确认支付 ¥${formatFen(plan.priceFen)}`,
     });
   };
@@ -50,8 +55,8 @@ export function RechargePanel({ membership }: { membership: string | null }) {
   const payTopup = () => {
     if (!amountOk) return;
     setPending({
-      title: '散充公道值',
-      description: `到账 ${(yuan * GONGDAO_PER_YUAN).toLocaleString('zh-CN')} 公道值，不限使用期限，模型路由仍按当前套餐走。`,
+      title: `散充${creditWord}`,
+      description: `到账 ${(yuan * GONGDAO_PER_YUAN).toLocaleString('zh-CN')} ${creditWord}，不限使用期限，模型路由仍按当前套餐走。`,
       confirmLabel: `确认支付 ¥${yuan}`,
     });
   };
@@ -91,7 +96,7 @@ export function RechargePanel({ membership }: { membership: string | null }) {
                     ¥{formatFen(plan.priceFen)}
                   </p>
                   <p className="num text-[13px] text-ink-2">
-                    含 {plan.gongdao.toLocaleString('zh-CN')} 公道值 / 月
+                    含 {plan.gongdao.toLocaleString('zh-CN')} {creditWord} / 月
                   </p>
 
                   <p className="mt-3 text-[14px] leading-6 text-ink">{plan.routing}</p>
@@ -117,13 +122,15 @@ export function RechargePanel({ membership }: { membership: string | null }) {
           })}
         </ul>
 
-        <p className="mt-3 text-[13px] leading-6 text-ink-2">{PLAN_NOTE}</p>
+        <p data-veil="" className="mt-3 text-[13px] leading-6 text-ink-2">
+          {PLAN_NOTE}
+        </p>
       </section>
 
       <Card className="mt-6 p-4">
         <h2 className="text-[17px] font-semibold text-ink">散充</h2>
         <p className="num mt-0.5 text-[14px] leading-6 text-ink-2">
-          1 元 = {GONGDAO_PER_YUAN} 公道值，充多少充多久都行，不过期。
+          1 元 = {GONGDAO_PER_YUAN} {creditWord}，充多少充多久都行，不过期。
         </p>
 
         {/* 常用档位是一组单选：手填别的金额时整组自然落到"没选中"，不用额外清一次 */}
@@ -151,7 +158,7 @@ export function RechargePanel({ membership }: { membership: string | null }) {
           />
           <span className="num text-[14px] text-ink-2">
             {amountOk
-              ? `到账 ${(yuan * GONGDAO_PER_YUAN).toLocaleString('zh-CN')} 公道值`
+              ? `到账 ${(yuan * GONGDAO_PER_YUAN).toLocaleString('zh-CN')} ${creditWord}`
               : `请填 ${TOPUP_MIN_YUAN}–${TOPUP_MAX_YUAN} 之间的整数`}
           </span>
         </div>

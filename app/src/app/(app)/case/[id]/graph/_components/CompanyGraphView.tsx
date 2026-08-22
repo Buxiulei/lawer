@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react';
 import type { CompanyGraph } from '@/app/_mock/company-graph';
 import { formatDate } from '@/app/_ui/format';
+import { NeutralLabel } from '@/app/_ui/NeutralLabel';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import {
   bandsOf,
   layoutCompanyGraph,
@@ -102,8 +104,13 @@ export function CompanyGraphView({ graph }: { graph: CompanyGraph | null }) {
         onSelect={setSelectedId}
       />
 
-      {/* 图例只列这份数据里真出现的样式，不声明没人用的线型 */}
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] leading-6 text-ink-2">
+      {/* 图例只列这份数据里真出现的样式，不声明没人用的线型。
+          整条进糊层：「发薪链」这种线型名说得出用途，而图本身已经糊着，
+          图例在揭开某个节点之前也没什么可读的。 */}
+      <div
+        data-veil=""
+        className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] leading-6 text-ink-2"
+      >
         {legendKinds.map((kind) => (
           <LegendLine key={kind} label={EDGE_KIND_LABEL[kind]} dash={EDGE_DASH[kind]} />
         ))}
@@ -169,7 +176,9 @@ function LegendLine({
 function Header() {
   return (
     <header className="py-3">
-      <h1 className="text-[20px] font-semibold text-ink">公司图谱</h1>
+      <h1 className="text-[20px] font-semibold text-ink">
+        <NeutralLabel plain="公司图谱" neutral={NEUTRAL_WORD.graph} />
+      </h1>
       {/* 「告谁、向谁要钱」是这页最露的一句，标题「公司图谱」中性可以留着 */}
       <p data-veil="" className="prose-measure mt-0.5 text-[15px] leading-7 text-ink-2">
         跟你签合同的、给你发工资的、背后控股的，常常不是同一家。这张图把它们的关系摆开，

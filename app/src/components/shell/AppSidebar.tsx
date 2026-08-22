@@ -76,21 +76,24 @@ export function AppSidebar({
         <SidebarGroup>
           <SidebarGroupLabel>案件</SidebarGroupLabel>
           <SidebarMenu>
-            {NAV_ITEMS.map((item) => (
+            {NAV_ITEMS.map((item) => {
+              const label = (discreet && item.discreetLabel) || item.label;
+              return (
               <SidebarMenuItem key={item.key}>
                 <SidebarMenuButton
                   asChild
-                  tooltip={item.label}
+                  tooltip={label}
                   isActive={item.match(pathname, caseId)}
                   className={NAV_ICON}
                 >
                   <Link href={item.href(caseId)}>
                     {item.icon}
-                    <span>{item.label}</span>
+                    <span>{label}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-            ))}
+              );
+            })}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>

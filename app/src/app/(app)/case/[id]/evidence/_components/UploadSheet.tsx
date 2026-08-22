@@ -7,7 +7,9 @@ import {
   UPLOAD_DEFAULT_MEDIUM,
   type UploadSource,
 } from '@/app/_mock/intake-evidence';
+import { useDiscreet } from '@/app/_ui/discreet';
 import { formatBytes } from '@/app/_ui/format';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { AppSheet } from '@/components/shadcn/app-sheet';
 import { Button } from '@/components/shadcn/button';
 import { InputField, TextareaField } from '@/components/shadcn/field';
@@ -39,6 +41,7 @@ export function UploadSheet({
     originalMedium: string;
   }) => void;
 }) {
+  const { discreet } = useDiscreet();
   const [category, setCategory] = useState<EvidenceCategory>('其他');
   const [provePurpose, setProvePurpose] = useState('');
   const [originalMedium, setOriginalMedium] = useState('');
@@ -64,7 +67,7 @@ export function UploadSheet({
             className="w-full"
             onClick={() => onConfirm({ category, provePurpose, originalMedium })}
           >
-            存进证据库
+            存进{discreet ? NEUTRAL_WORD.evidenceLib : '证据库'}
           </Button>
         </div>
       }
@@ -87,14 +90,17 @@ export function UploadSheet({
             />
           </div>
 
-          <TextareaField
-            label="这份材料想证明什么"
-            rows={3}
-            value={provePurpose}
-            onChange={(e) => setProvePurpose(e.target.value)}
-            placeholder="例如：证明公司单方解除的时间、理由与补偿标准。"
-            hint="一句话就够。现在想不出来可以留空，之后在详情里补。"
-          />
+          {/* placeholder 里带着「解除」「公司」：整块进糊层，聚焦时 data-veil-focus 会让它清晰 */}
+          <div data-veil="">
+            <TextareaField
+              label="这份材料想证明什么"
+              rows={3}
+              value={provePurpose}
+              onChange={(e) => setProvePurpose(e.target.value)}
+              placeholder="例如：证明公司单方解除的时间、理由与补偿标准。"
+              hint="一句话就够。现在想不出来可以留空，之后在详情里补。"
+            />
+          </div>
 
           <InputField
             label="原始载体在哪"

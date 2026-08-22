@@ -18,6 +18,8 @@ import {
   demoTimeline,
 } from '@/app/_mock/demo';
 import { mockCompanyGraph } from '@/app/_mock/company-graph';
+import { useDiscreet } from '@/app/_ui/discreet';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { cn } from '@/app/_ui/cn';
 import { formatDate } from '@/app/_ui/format';
 import { AmountText } from '@/components/case/AmountText';
@@ -227,6 +229,7 @@ function EvidenceBlock({
   caseId: string;
   items: EvidenceItem[];
 }) {
+  const { discreet } = useDiscreet();
   const counts = EVIDENCE_ORDER.map((status) => ({
     status,
     n: items.filter((i) => i.status === status).length,
@@ -262,12 +265,13 @@ function EvidenceBlock({
           ))}
         </ul>
 
+        {/* 链接文字得留着能读（进糊层就没法当入口用了），所以走换词：
+            低调下「证据」一律读作「资料」，与底部 Tab 同一套 */}
         <Link
           href={`/case/${caseId}/evidence`}
-          data-veil=""
           className="mt-2 inline-flex min-h-11 items-center text-[14px] text-primary-ink"
         >
-          查看全部 {items.length} 件证据 →
+          查看全部 {items.length} 件{discreet ? NEUTRAL_WORD.evidence : '证据'} →
         </Link>
 
         <div className="mt-1">
