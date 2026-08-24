@@ -16,3 +16,4 @@ research/
 .DS_Store
 # C04 评测证据产物：含大段模型原文与案情夹具，留在服务器供验收查阅，不进仓库
 scripts/eval/results/
+.claude/worktrees/
