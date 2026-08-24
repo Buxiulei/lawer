@@ -39,7 +39,7 @@ import {
   shouldInjectCrisisCard,
 } from './crisis';
 import { CitationGuard } from './citation-guard';
-import { CORE_ARTICLE_MAP_PACK_ID, sceneCoreArticles, stripUnsupportedQuotes, type CoreArticleSources } from './citation-block';
+import { articleKey, coreArticleKeys, CORE_ARTICLE_MAP_PACK_ID, sceneCoreArticles, stripUnsupportedQuotes, type CoreArticleSources } from './citation-block';
 import { bareArticleCitations, precedentContamination } from './citation-block';
 import { MAX_INJECTED_PACKS, type KnowledgePack, type KnowledgeSearcher } from './retrieval';
 import { loadCaseSnapshot } from './snapshot';
@@ -232,6 +232,40 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     ),
   };
 
+  /** S3b 本轮定向补入的核心法条卡 id（留痕用，帧序要求它必须在 meta 之后才发） */
+  let injectedCoreCards: string[] = [];
+  // ── S3b 映射驱动的定向注入（manager 2026-08-25）──
+  //
+  // 【解的是什么】4e10b7c 批实测：三跑的**预检索注入包全是话术/SOP/判例卡，
+  // 一张带 statute_quotes 的法条卡都没有**，⭐ 只能等模型自己调 knowledge_search 时才产生。
+  // 于是 #3 那跑模型没调工具 → 取料面 6 张全无原文 → ⭐ 整轮不存在。
+  // **把核心条送到模型面前这件事，不能挂在模型自愿调工具上。**
+  //
+  // 映射表既然已经声明了"这个场景的核心条是哪几条"，系统就该**主动送料**——
+  // 这才是陪跑者的产品本意：用户请不起律师，我们不能等他先问对问题才给依据。
+  //
+  // 【边界】只在 S1 空（首诊形态）且映射命中、且取料面里确实没有该条时补；
+  // 补进来的卡去重；总数不超 MAX_INJECTED_PACKS，超了从尾部挤掉**非法条卡**
+  //（尾部得分最低，且法条卡是本轮要引全的那种料，不能被自己挤掉）。
+  // **只动注入组成，不动检索打分**。
+  if (coreSources.sceneArticles?.length && coreArticleKeys({ ...coreSources, retrieved: packs }).size === 0) {
+    const have = new Set(packs.flatMap((p) => (p.facts?.statute_quotes ?? []).map((q) => articleKey(q.law, q.article))));
+    const want = coreSources.sceneArticles.filter((k) => !have.has(k));
+    const extra = (input.searcher?.findByArticleKeys?.(want) ?? []).filter((p) => !packs.some((x) => x.id === p.id));
+    for (const card of extra) {
+      if (packs.length >= MAX_INJECTED_PACKS) {
+        // 从尾部找一张非法条卡挤掉；全是法条卡就不再补（宁可少补，不挤掉原文）
+        const victim = [...packs].reverse().find((p) => !(p.facts?.statute_quotes ?? []).length);
+        if (!victim) break;
+        packs.splice(packs.indexOf(victim), 1);
+      }
+      packs.push(card);
+    }
+    // 【为什么记账而不当场 emit】meta 必须是**第一帧**（前端靠它渲染等待态，
+    // orchestrator.test 有专门的帧序断言）。这里离 meta 还有几十行，当场发就把 notice 顶到了前面。
+    injectedCoreCards = extra.map((p) => p.id);
+  }
+
   const system = buildSystemPrompt({
     snapshot,
     mode,
@@ -291,6 +325,17 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
       degraded: routed.route.degraded,
     },
   });
+
+  if (injectedCoreCards.length > 0) {
+    emit({
+      event: 'notice',
+      data: {
+        code: 'CORE_ARTICLE_INJECTED',
+        message:
+          `本轮档案为空且检索未命中核心条，已按场景映射（${snapshot.case.stage}）定向补入 ${injectedCoreCards.join('、')}`,
+      },
+    });
+  }
 
   // ── 危机轮混合形态（manager 2026-08-20 裁决）──
   // ① 确定性首段：毫秒级下发，不经模型——用户从第一秒起就有人接住、号码立刻到手；

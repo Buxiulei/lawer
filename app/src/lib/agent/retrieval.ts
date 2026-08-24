@@ -67,6 +67,14 @@ export interface KnowledgeSearcher {
   search(query: string, options?: { limit?: number; type?: string }): KnowledgePack[];
   /** 按 id 精确取卡（模型引用了某张卡的 related 时用） */
   get?(id: string): KnowledgePack | undefined;
+  /**
+   * 按 `法名|条号` 复合键找**收录了该条逐字原文**的卡（S3b 定向注入用）。
+   *
+   * 【为什么不用 search】这是**按事实精确取料**，不是按词面相关性取料——
+   * 映射表已经声明了"本场景核心条是哪几条"，剩下的是把那几条的原文取回来，
+   * 让检索打分插一脚只会引入不确定性（且 manager 明令本轮不动检索打分）。
+   */
+  findByArticleKeys?(keys: string[]): KnowledgePack[];
 }
 
 /** 单次回复最多注入多少张卡的全文。超过这个数 system prompt 会挤掉案件档案本身。 */

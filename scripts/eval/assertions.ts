@@ -100,7 +100,7 @@ export interface Verdict {
    * 老批转录里没有 `stripped_articles`，一律按四态判——判据的每次语义变更都要声明
    * 它适用的行为机制版本区间，跨版本回放用被判行为当时的语义。
    */
-  naKind?: 'no_decision_point' | 'pending_card' | 'pending_injection' | 'unstructured_source' | 'mechanism_unavailable' | 'gate_stripped';
+  naKind?: 'no_decision_point' | 'pending_card' | 'pending_injection' | 'unstructured_source' | 'mechanism_unavailable' | 'gate_stripped' | 'law_ambiguous';
   /** pending_card 类专用：等哪一条条文补卡 */
   pendingArticle?: string;
   /** pending_card 类专用：该条所属法律（从引用处就近的《…》取），用于清单预分拣 */
@@ -1176,9 +1176,29 @@ export function citationCompletenessAssertions(
     const pendingCard: typeof uniq = [];
     const pendingInjection: typeof uniq = [];
     const gateStripped: typeof uniq = [];
+    const lawAmbiguous: typeof uniq = [];
     // 态⑤三要件之(a)：闸写下的剥除留痕。空集 = 本轮闸没开火 = 一律照四态判。
     const stripped = gateStrippedArticles(t);
-    for (const c of uniq) {
+    for (const c0 of uniq) {
+      // 【裸条号回绑（4e10b7c 批 S14#2/#3 实测）】正文写「第 40 条」而前后 40 字内没有法名，
+      // 旧实现 hasLaw=false → 直落 pending_card「知识库里没有逐字原文」。可 §40 的原文
+      // **库里有、本轮还注入了**（statute-lhtf-jiechu-buchang-core 在 retrievedIds 里），
+      // 于是模型的真漏引被洗成"我方缺卡"，还把**库内已有的卡**灌进了外勤补卡清单——
+      // 正是当初设乙态要防的那件事。
+      //
+      // 【回绑只认已注入卡，且只认唯一解】在**本轮已注入**的 statute_quotes 里按条号找法名：
+      // 恰好一法命中 → 按该法名走四态（这是有依据的推断，不是猜）；
+      // 多法命中 → 不赌，留「法域未知」人工堆；零命中 → pending_card 照旧。
+      const c = ((): typeof c0 => {
+        if (c0.hasLaw || !quotedArticles) return c0;
+        const laws = [...quotedArticles].filter((k) => k.endsWith(`|${c0.article}`)).map((k) => k.split('|')[0]);
+        if (laws.length !== 1) return c0;
+        return { ...c0, law: laws[0], key: `${laws[0]}|${c0.article}`, hasLaw: true };
+      })();
+      if (!c.hasLaw && quotedArticles && [...quotedArticles].filter((k) => k.endsWith(`|${c.article}`)).length > 1) {
+        lawAmbiguous.push(c);
+        continue;
+      }
       if (!quotedArticles) { missing.push(c); continue; }
       if (c.hasLaw && quotedArticles.has(c.key)) {
         // 【态⑤ gate_stripped·闸剥致秃】三要件齐全才改判：
@@ -1224,6 +1244,20 @@ export function citationCompletenessAssertions(
         detail:
           `第 ${i + 1} 轮有 ${missing.length} 处只给条号、附近无逐字原文的引用：${missing.map((m) => m.raw).join('、')}` +
           '——用户要拿它去打印、标注、当庭念出来（charter §3 / G4）',
+      });
+    }
+    for (const p of lawAmbiguous) {
+      out.push({
+        id: `${scenarioId}-轮${i + 1}-法域未知-${p.article}`,
+        tier: 'L2',
+        pass: true, // 让旧的布尔消费者不炸；真正的判定看 na
+        na: true,
+        naKind: 'law_ambiguous',
+        pendingArticle: p.article,
+        detail:
+          `${p.raw} 没写法名，而本轮注入的卡里**有多部法**都有同号条文 → 无法确定它指哪一部，` +
+          `judge 不赌：留**人工堆**等人看一眼。**不进外勤补卡栏**——补卡与否取决于是哪部法，` +
+          `现在还不知道，灌进去就是让外勤替判据猜。`,
       });
     }
     for (const p of gateStripped) {

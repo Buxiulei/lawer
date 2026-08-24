@@ -566,6 +566,85 @@ describe('检索缺失降级', () => {
       expect(star).not.toContain('第四十一条');
     });
 
+    // ── S3b 件：映射驱动的定向注入 ──
+    //
+    // 【解的是什么】4e10b7c 批实测：三跑预检索注入包全是话术/SOP/判例卡，⭐ 只能等模型
+    // 自己调 knowledge_search 才产生；#3 那跑模型没调工具 → 整轮没有⭐。
+    // **把核心条送到模型面前不能挂在模型自愿调工具上。**
+    describe('★S3b 定向注入：模型不调工具也要有⭐（S03#3 形态）', () => {
+      /** S03#3 的取料面形态：预检索 6 张全无 statute_quotes，且模型全程不调工具 */
+      const noStatuteSearcher = () => {
+        const real = createKnowledgeSearcher();
+        return {
+          search: () => [FIXTURE_PACK],
+          get: (id: string) => (id === CORE_ARTICLE_MAP_PACK_ID ? real.get?.(id) : undefined),
+          findByArticleKeys: (keys: string[]) => real.findByArticleKeys?.(keys) ?? [],
+        };
+      };
+
+      it('S1 空 + 映射命中 + 取料面无该卡 → 核心条卡被主动补入，⭐ 非空', async () => {
+        const { provider, sink } = await turn([{ text: 'x', tools: [GOOD_CARD] }], { searcher: noStatuteSearcher() });
+        const system = provider.calls[0][0].content;
+        expect(system).toContain('本轮核心依据条');
+        // 夹具 stage='已收通知' → 映射声明 §40/§46/§87
+        const star = system.split('本轮核心依据条')[1]?.split('\n')[0] ?? '';
+        expect(star).toContain('第四十六条');
+        // 定向注入留痕（且帧序上必须在 meta 之后）
+        const codes = sink.of('notice').map((e) => e.data.code);
+        expect(codes).toContain('CORE_ARTICLE_INJECTED');
+        expect(sink.events.map((e) => e.event)[0]).toBe('meta');
+      });
+
+      it('取料面里已经有核心条 → 不重复补入（去重）', async () => {
+        const real = createKnowledgeSearcher();
+        const core = real.get?.('statute-lhtf-jiechu-buchang-core')!;
+        const { sink } = await turn([{ text: 'x', tools: [GOOD_CARD] }], {
+          searcher: {
+            search: () => [core],
+            get: (id: string) => (id === CORE_ARTICLE_MAP_PACK_ID ? real.get?.(id) : undefined),
+            findByArticleKeys: (keys: string[]) => real.findByArticleKeys?.(keys) ?? [],
+          },
+        });
+        expect(sink.of('notice').map((e) => e.data.code)).not.toContain('CORE_ARTICLE_INJECTED');
+      });
+
+      it('注入总数不超 MAX_INJECTED_PACKS（挤掉的是非法条卡，不是原文卡）', async () => {
+        const real = createKnowledgeSearcher();
+        const filler = Array.from({ length: 6 }, (_, i) => ({ ...FIXTURE_PACK, id: `filler-${i}` }));
+        const { provider } = await turn([{ text: 'x', tools: [GOOD_CARD] }], {
+          searcher: {
+            search: () => filler,
+            get: (id: string) => (id === CORE_ARTICLE_MAP_PACK_ID ? real.get?.(id) : undefined),
+            findByArticleKeys: (keys: string[]) => real.findByArticleKeys?.(keys) ?? [],
+          },
+        });
+        const system = provider.calls[0][0].content;
+        const injected = [...system.matchAll(/^### \[([^\]]+)\]/gm)].map((m) => m[1]);
+        expect(injected.length).toBeLessThanOrEqual(6);
+        expect(injected).toContain('statute-lhtf-jiechu-buchang-core');
+      });
+
+      it('映射没命中该场景（stage 未列入）→ 不补，维持现状', async () => {
+        const f = makeAgentFixture();
+        f.db.prepare("UPDATE cases SET stage = '二审' WHERE id = ?").run(f.caseId);
+        const sink = makeSink();
+        const real = createKnowledgeSearcher();
+        await runTurn({
+          db: f.db, caseId: f.caseId, userId: f.userId,
+          message: '公司要裁我怎么办',
+          provider: scriptedProvider([{ text: 'x', tools: [GOOD_CARD] }]),
+          searcher: {
+            search: () => [FIXTURE_PACK],
+            get: (id: string) => (id === CORE_ARTICLE_MAP_PACK_ID ? real.get?.(id) : undefined),
+            findByArticleKeys: (keys: string[]) => real.findByArticleKeys?.(keys) ?? [],
+          },
+          emit: sink.emit,
+          now: new Date('2026-08-19T12:40:00Z'),
+        });
+        expect(sink.of('notice').map((e) => e.data.code)).not.toContain('CORE_ARTICLE_INJECTED');
+      });
+    });
+
     it('工具通道拉回来的卡没有 statute_quotes → 仍然不标⭐（不无中生有）', async () => {
       const { provider } = await turn(
         [

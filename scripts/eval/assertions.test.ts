@@ -1280,6 +1280,38 @@ describe('乙态「有原文未结构化」与⭐机制不可用（2026-08-24 �
   });
 });
 
+describe('判据修二 · 裸条号回绑（4e10b7c 批 S14#2/#3 真实样本）', () => {
+  const t = (text: string): TurnRecord => ({
+    input: '我能拿多少钱', text, events: [], retrieved: [], actionCards: [], drafts: [],
+    model: 'deepseek-v4-pro', degraded: false, taskClass: 'critical',
+  });
+  /** 逐字取自 2026-08-24T17-59-36Z.json（S14 第2/3跑）的回复正文表格行 */
+  const S14_2 = '| 第 40 条（不胜任/客观情况变化） | N+1，再加一个月工资 | 约 16 万上下 |';
+  /** 该跑注入了 statute-lhtf-jiechu-buchang-core，§40 的逐字原文在库、也在注入包里 */
+  const injected = quotedArticlesFromCards([
+    { facts: { statute_quotes: [
+      { law: '中华人民共和国劳动合同法', article: '第四十条', text: '有下列情形之一的，用人单位提前三十日……' },
+      { law: '中华人民共和国劳动合同法', article: '第四十七条', text: '经济补偿按劳动者在本单位工作的年限……' },
+    ] } },
+  ]);
+
+  // 【修前必挂】旧实现 hasLaw=false → 直落 pending_card「知识库里没有逐字原文」，
+  // 而 §40 的原文库里有、本轮还注入了。真漏引被洗成"我方缺卡"，
+  // 并把库内已有的卡灌进外勤补卡清单（实测污染：pending-cards-2026-08-24T17-59-36Z.md）。
+  it('★S14#2：裸「第 40 条」回绑到已注入的劳动合同法 → 态② FAIL，不再误落补卡', () => {
+    const v = citationCompletenessAssertions([t(S14_2)], 'S14', injected, injected);
+    expect(v).toHaveLength(1);
+    expect(v[0].pass).toBe(false);
+    expect(v[0].id).toContain('光秃条号');
+    expect(v[0].naKind).not.toBe('pending_card');
+  });
+
+  it('★回绑后不得进补卡清单（naKind 非 pending_card 即天然不进 collectPending）', () => {
+    const v = citationCompletenessAssertions([t(S14_2)], 'S14', injected, injected);
+    expect(v.filter((x) => x.naKind === 'pending_card')).toEqual([]);
+  });
+});
+
 describe('G4 复合键：同号条文不得互相冒充', () => {
   const turn2 = (text: string): TurnRecord => ({
     input: 'x', text, events: [], retrieved: [], actionCards: [], drafts: [],
@@ -1311,9 +1343,37 @@ describe('G4 复合键：同号条文不得互相冒充', () => {
     expect(normLaw('《中华人民共和国劳动合同法》')).toBe(normLaw('《劳动合同法》'));
   });
 
-  it('取不到法名 → pending（保守向），不逼模型编原文', () => {
+  // 【口径变更 2026-08-25：裸条号回绑（原为"取不到法名一律 pending"）】
+  //
+  // 4e10b7c 批 S14#2/#3 实测暴露了旧口径的代价：正文写「第 40 条」而附近没有法名，
+  // 于是判成「知识库里没有逐字原文」——可 §40 的原文**库里有、本轮还注入了**。
+  // 结果模型的真漏引被洗成"我方缺卡"，还把**库内已有的卡**灌进了外勤补卡清单
+  //（补卡清单实测被污染：pending-cards-2026-08-24T17-59-36Z.md 多出一行「第40条」）。
+  //
+  // 新口径：在**本轮已注入**的 statute_quotes 里按条号回绑法名——
+  // 恰好一法命中就按它判（有依据的推断，不是猜）；多法命中留人工堆；零命中照旧 pending。
+  it('★裸条号在已注入卡里唯一命中 → 回绑该法名走四态（已注入仍光秃 = FAIL）', () => {
     const v = citationCompletenessAssertions([turn2('第八十七条规定……')], 'X', quoted);
+    expect(v[0].pass).toBe(false);
+    expect(v[0].na).toBeUndefined();
+    expect(v[0].id).toContain('光秃条号');
+  });
+
+  it('★裸条号在多部法下同号命中 → 不赌，留「法域未知」人工堆，且不进补卡清单', () => {
+    const multi = quotedArticlesFromCards([
+      { facts: { statute_quotes: [{ law: '中华人民共和国劳动合同法', article: '第八十七条', text: '用人单位违反本法规定…' }] } },
+      { facts: { statute_quotes: [{ law: '民事诉讼法', article: '第八十七条', text: '人民法院送达诉讼文书…' }] } },
+    ]);
+    const v = citationCompletenessAssertions([turn2('第八十七条规定……')], 'X', multi);
     expect(v[0].na).toBe(true);
+    expect(v[0].naKind).toBe('law_ambiguous');
+    expect(v[0].naKind).not.toBe('pending_card');
+  });
+
+  it('裸条号在已注入卡里零命中 → pending_card 照旧（保守向，不逼模型编原文）', () => {
+    const v = citationCompletenessAssertions([turn2('第九十九条规定……')], 'X', quoted);
+    expect(v[0].na).toBe(true);
+    expect(v[0].naKind).toBe('pending_card');
   });
 });
 

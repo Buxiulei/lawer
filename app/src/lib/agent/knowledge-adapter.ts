@@ -12,6 +12,7 @@
 // 传了只会诱使日后有人拿它做阈值截断，而截断阈值是该由检索器负责的事。
 import * as knowledge from '@/lib/knowledge';
 import type { KnowledgePack, KnowledgeSearcher } from './retrieval';
+import { articleKey } from './citation-block';
 
 function toPack(hit: knowledge.PackHit): KnowledgePack {
   return {
@@ -56,5 +57,35 @@ export function createKnowledgeSearcher(): KnowledgeSearcher {
         return undefined;
       }
     },
+    findByArticleKeys(keys) {
+      const want = new Set(keys);
+      const out: KnowledgePack[] = [];
+      for (const [key, id] of articleIndex()) {
+        if (!want.has(key)) continue;
+        const pack = this.get?.(id);
+        if (pack && !out.some((p) => p.id === pack.id)) out.push(pack);
+      }
+      return out;
+    },
   };
+}
+
+/**
+ * `法名|条号` → 收录该条逐字原文的卡 id。进程级建一次——
+ * 每轮重扫全库是纯浪费，而库是只读的（同 lib/knowledge 的 index 缓存口径）。
+ */
+let articleIndexCache: Map<string, string> | null = null;
+function articleIndex(): Map<string, string> {
+  if (articleIndexCache) return articleIndexCache;
+  const out = new Map<string, string>();
+  for (const meta of knowledge.listPacks()) {
+    for (const q of meta.facts?.statute_quotes ?? []) {
+      if (!q?.article || !q.text?.trim()) continue;
+      const key = articleKey(q.law, q.article);
+      // 同一条被多张卡收录时取第一张（index 顺序稳定），不做取舍——注入一张就够
+      if (!out.has(key)) out.set(key, meta.id);
+    }
+  }
+  articleIndexCache = out;
+  return out;
 }

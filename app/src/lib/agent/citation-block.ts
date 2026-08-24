@@ -383,9 +383,46 @@ const BLOCKQUOTE = /^\s*>/m;
  */
 const OWN_QUOTE_FORMAT = /第[一二三四五六七八九十百零〇0-9]+条[　\u3000][^\n]{10,}/;
 
-function hasVerbatimNear(near: string): boolean {
-  if (BLOCKQUOTE.test(near)) return true;
-  if (OWN_QUOTE_FORMAT.test(near)) return true;
+/**
+ * 一段"疑似逐字原文"到底在讲哪几条：取其中出现的全部条号（归一后，不带法名）。
+ * 空集 = 这段原文没自报条号。
+ */
+function articlesIn(span: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of span.matchAll(ARTICLE)) {
+    out.add(normalizeArticle(m[0].replace(/\s+/g, '').replace(/《[^》]{2,40}》/, '')));
+  }
+  return out;
+}
+
+/**
+ * 这段**无引号的**逐字原文能不能给「第 X 条」免责。
+ *
+ * 【为什么要问归属（4e10b7c 批 S03#2 实测）】原文：
+ *   `……给的是 N（第四十六条第（二）项）。但如果是公司违法解除——`
+ *   `> 第八十七条　用人单位违反本法规定解除或者终止劳动合同的……`
+ * §46 是**光秃引用**，可 ±60 窗口里落进了讲 **§87** 的那行 blockquote，
+ * 旧实现只问"窗口里有没有 blockquote"，于是**邻条的原文替本条免了责**——
+ * 机械判据报全过、judge 报 FAIL，两层结论相反，正是发版前被拦下的那个读数。
+ *
+ * 【判定与保守方向】原文自报了条号 → 必须**是本条**才算数；
+ * 原文**没自报任何条号** → 仍然放行。后者是有意的：判据误判是冤枉一次做对了的输出，
+ * 方向上**宁可漏判**（与闸门的"宁可少说"相反，见 stripUnsupportedQuotes 注释）。
+ */
+function unquotedVerbatimCovers(span: string, article: string): boolean {
+  const arts = articlesIn(span);
+  return arts.size === 0 || arts.has(article);
+}
+
+function hasVerbatimNear(near: string, article: string): boolean {
+  // blockquote 行：逐行取内容问归属，不再"窗口里有 > 就整窗放行"
+  for (const line of near.split('\n')) {
+    if (/^\s*>/.test(line) && unquotedVerbatimCovers(line, article)) return true;
+  }
+  const own = OWN_QUOTE_FORMAT.exec(near);
+  if (own && unquotedVerbatimCovers(own[0], article)) return true;
+  // 引号内的逐字原文**不问归属**：法条原文自己会交叉引用别的条
+  //（§46 第(二)项的正文里就写着"依照本法第三十六条规定"），问归属会把正确引用判成光秃。
   for (const q of near.matchAll(QUOTED)) {
     if (q[1].trim().length >= VERBATIM_MIN_LEN) return true;
   }
@@ -467,7 +504,9 @@ export function bareArticleCitations(text: string, windowSize = 60): string[] {
     // 法条原文内部的交叉引用不算 agent 的光秃引用（立法者写的，不是它写的）
     if (insideVerbatim(text, at)) continue;
     const near = text.slice(Math.max(0, at - windowSize), at + m[0].length + windowSize);
-    if (!hasVerbatimNear(near)) out.push(m[0].replace(/\s+/g, ''));
+    const raw = m[0].replace(/\s+/g, '');
+    // 归属到**本条**：窗口里的无引号原文必须讲的是它自己，邻条的原文不算（见 unquotedVerbatimCovers）
+    if (!hasVerbatimNear(near, normalizeArticle(raw.replace(/《[^》]{2,40}》/, '')))) out.push(raw);
   }
   return out;
 }
