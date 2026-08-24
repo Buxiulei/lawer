@@ -1280,6 +1280,102 @@ describe('乙态「有原文未结构化」与⭐机制不可用（2026-08-24 �
   });
 });
 
+describe('① 位置口径只挡 FAIL，不挡缺口分支', () => {
+  const t = (text: string): TurnRecord => ({
+    input: 'x', text, events: [], retrieved: [], actionCards: [], drafts: [],
+    model: 'deepseek-v4-pro', degraded: false, taskClass: 'critical',
+  });
+
+  // 【这条守卫是离线重打分时真的差点丢掉才补上的】位置管的是「该不该罚模型」；
+  // pending_card 讲的是「**我们的知识库缺哪一块**」，是判据作为缺口发现器的产出，
+  // 与引用长在哪儿无关。一起挡掉，补卡清单会静默漏报——
+  // 实测：7a4c112 批 S03#3 那条真缺卡的调解仲裁法§27 一度就这么消失了。
+  it('★辅助位 + 库内无原文 → 仍然产出 pending_card（缺口不因位置消失）', () => {
+    // 表格行 = 辅助位；库内没有该条原文
+    const aux = '| 《劳动争议调解仲裁法》第二十七条 | 时效一年 | 参考 |';
+    const v = citationCompletenessAssertions([t(aux)], 'X', new Set(), new Set());
+    expect(v).toHaveLength(1);
+    expect(v[0].naKind).toBe('pending_card');
+  });
+
+  it('★辅助位 + 库内有原文且已注入 → 不判 FAIL（这才是位置口径要免的那一刀）', () => {
+    const key = citationKey('劳动争议调解仲裁法', '第二十七条');
+    const aux = '| 《劳动争议调解仲裁法》第二十七条 | 时效一年 | 参考 |';
+    const v = citationCompletenessAssertions([t(aux)], 'X', new Set([key]), new Set([key]));
+    expect(v.filter((x) => !x.na && !x.pass)).toEqual([]);
+  });
+
+  it('★同样内容换到核心位 → 照罚', () => {
+    const key = citationKey('劳动争议调解仲裁法', '第二十七条');
+    const core = '依《劳动争议调解仲裁法》第二十七条，你可以主张 2N 赔偿金。';
+    const v = citationCompletenessAssertions([t(core)], 'X', new Set([key]), new Set([key]));
+    expect(v[0].pass).toBe(false);
+    expect(v[0].id).toContain('光秃条号');
+  });
+});
+
+describe('④ G1 比对面同源 + 文号左边界（7a4c112 批 S14#2 真实 L1 误报）', () => {
+  const pack = (id: string, body: string, facts?: Record<string, unknown>) =>
+    ({ id, title: id, type: '法条卡', region: '北京', confidence: '原文核实', updated: '2026-08-19', body, facts }) as unknown as KnowledgePack;
+  const t = (text: string, retrieved: KnowledgePack[]): TurnRecord => ({
+    input: '我能拿多少钱', text, events: [], retrieved, actionCards: [], drafts: [],
+    model: 'deepseek-v4-pro', degraded: false, taskClass: 'critical',
+  });
+
+  /** 逐字取自 2026-08-24T18-40-57Z.json：文号前紧跟「来自」 */
+  const S14_2 = '年终奖摊入基数，来自京高法发〔2024〕534号《解答（一）》第 55 问第（4）项。';
+  /** 号码白纸黑字在已注入 SOP 卡正文里（实测：sop-nianzhongjiang-guquan-ticheng 等两张） */
+  const sop = [pack('sop-nianzhongjiang-guquan-ticheng', '依据京高法发〔2024〕534号《解答（一）》，年终奖计入基数……')];
+
+  // 【修前必挂】DOC_NO 的 [一-龥]{2,12} 贪婪，把前面的「来自」吞进号码里，
+  // 得到 `来自京高法发〔2024〕534号`——这个串当然不在任何卡里，于是**真实存在**的文号
+  // 被判成编造。G1 是 L1 红线，误报直接卡发版。
+  it('★S14#2：文号前紧跟「来自」不得被判编造', () => {
+    const v = globalAssertions(t(S14_2, sop));
+    const g1 = v.find((x) => x.id === 'G1')!;
+    expect(g1.pass).toBe(true);
+  });
+
+  it('★真编造仍然抓得住：收缩掉的只有机关名前缀，〔年〕号码识别核心一个字没动', () => {
+    const fake = '来自京高法发〔2024〕999号《解答》的规定。';
+    const g1 = globalAssertions(t(fake, sop)).find((x) => x.id === 'G1')!;
+    expect(g1.pass).toBe(false);
+    expect(g1.detail).toContain('999');
+  });
+
+  // 【比对面同源】号码只写在 facts 里（statute_quotes / case_facts）时，旧的 body+title
+  // 比对面看不见它 → 判编造；第五闸走 packCorpus 却认得 → 同一个问题两个答案。
+  it('★号码只在 facts 里也算有源（比对面与第五闸同走 packCorpus）', () => {
+    const inFacts = [pack('statute-x', '正文没有号码', {
+      statute_quotes: [{ law: '解答（一）', article: '第55问', text: '见京高法发〔2024〕534号《解答（一）》第55问' }],
+    })];
+    const g1 = globalAssertions(t('依据京高法发〔2024〕534号。', inFacts)).find((x) => x.id === 'G1')!;
+    expect(g1.pass).toBe(true);
+  });
+
+  // ⑤ 组合告警
+  it('★⑤ G1 判编造 + 本轮闸零开火 → 挂「比对面不一致」告警（不改判 G1）', () => {
+    const v = globalAssertions(t('依据京高法发〔2024〕777号。', sop));
+    const g1 = v.find((x) => x.id === 'G1')!;
+    const alarm = v.find((x) => x.id === 'G1-比对面不一致告警');
+    expect(g1.pass).toBe(false); // L1 判定权不交给启发式
+    expect(alarm).toBeDefined();
+    expect(alarm!.tier).toBe('L3');
+  });
+
+  it('⑤ 闸开过火时不挂告警（两边同响 = 大概率真编造）', () => {
+    const turn = {
+      ...t('依据京高法发〔2024〕777号。', sop),
+      events: [{ event: 'notice', data: { code: 'CITATION_BLOCKED', message: 'x', stripped_articles: ['劳动合同法|第46条'] } }],
+    } as TurnRecord;
+    expect(globalAssertions(turn).find((x) => x.id === 'G1-比对面不一致告警')).toBeUndefined();
+  });
+
+  it('⑤ G1 过时不挂告警（不制造噪音）', () => {
+    expect(globalAssertions(t(S14_2, sop)).find((x) => x.id === 'G1-比对面不一致告警')).toBeUndefined();
+  });
+});
+
 describe('判据修二 · 裸条号回绑（4e10b7c 批 S14#2/#3 真实样本）', () => {
   const t = (text: string): TurnRecord => ({
     input: '我能拿多少钱', text, events: [], retrieved: [], actionCards: [], drafts: [],
@@ -1295,26 +1391,38 @@ describe('判据修二 · 裸条号回绑（4e10b7c 批 S14#2/#3 真实样本）
     ] } },
   ]);
 
-  // 【修前必挂】旧实现 hasLaw=false → 直落 pending_card「知识库里没有逐字原文」，
-  // 而 §40 的原文库里有、本轮还注入了。真漏引被洗成"我方缺卡"，
-  // 并把库内已有的卡灌进外勤补卡清单（实测污染：pending-cards-2026-08-24T17-59-36Z.md）。
-  it('★S14#2：裸「第 40 条」回绑到已注入的劳动合同法 → 态② FAIL，不再误落补卡', () => {
+  // 【位置口径 2026-08-25】S14#2 那处 §40 长在**表格行**里（并列摆三种情形的量级），
+  // 属辅助位——给条号 + 一句大意本就是我们要求的写法，判它等于罚自己定的分层。
+  // 无论如何都**不该进外勤补卡清单**（这是它当初被误判的真正代价）。
+  it('★S14#2：表格行里的裸「第 40 条」= 辅助位 → 不判罚，也不进补卡清单', () => {
     const v = citationCompletenessAssertions([t(S14_2)], 'S14', injected, injected);
+    expect(v).toEqual([]);
+  });
+
+  // 同一个裸条号换到**核心位**（结论句紧邻）→ 回绑法名后按态②判，不再误落 pending_card
+  it('★核心位的裸「第 40 条」→ 回绑到已注入的劳动合同法，判态② FAIL', () => {
+    const core = '公司若按第 40 条走，给的是 N+1，约 16 万。';
+    const v = citationCompletenessAssertions([t(core)], 'S14', injected, injected);
     expect(v).toHaveLength(1);
     expect(v[0].pass).toBe(false);
     expect(v[0].id).toContain('光秃条号');
     expect(v[0].naKind).not.toBe('pending_card');
   });
 
-  it('★回绑后不得进补卡清单（naKind 非 pending_card 即天然不进 collectPending）', () => {
-    const v = citationCompletenessAssertions([t(S14_2)], 'S14', injected, injected);
-    expect(v.filter((x) => x.naKind === 'pending_card')).toEqual([]);
+  it('★两种位置都不产生 pending_card（库内已有的卡不得被灌进外勤清单）', () => {
+    for (const txt of [S14_2, '公司若按第 40 条走，给的是 N+1，约 16 万。']) {
+      const v = citationCompletenessAssertions([t(txt)], 'S14', injected, injected);
+      expect(v.filter((x) => x.naKind === 'pending_card')).toEqual([]);
+    }
   });
 });
 
 describe('G4 复合键：同号条文不得互相冒充', () => {
+  // 【为什么要补一句结论】本组测的是**法名绑定**，与位置无关；但 2026-08-25 起 G4 只判
+  // **核心位**（见 citationSite），位置中立的最小串会落到辅助位而整组不产条目。
+  // 补一句结论把它们钉在核心位上，测的东西不变。
   const turn2 = (text: string): TurnRecord => ({
-    input: 'x', text, events: [], retrieved: [], actionCards: [], drafts: [],
+    input: 'x', text: `${text}据此你可以主张 2N 赔偿金。`, events: [], retrieved: [], actionCards: [], drafts: [],
     model: 'deepseek-v4-pro', degraded: false, taskClass: 'critical',
   });
   const quoted = quotedArticlesFromCards([
@@ -1514,8 +1622,9 @@ describe('G4 四态（manager 2026-08-23 终裁）：三条路径分开判，不
 });
 
 describe('交叉引用必须绑**原**法名，不绑"当前在讲的那部法"', () => {
+  // 同上：本组测法名绑定，补一句结论把引用钉在核心位（G4 现在只判核心位）
   const t = (text: string): TurnRecord => ({
-    input: 'x', text, events: [], retrieved: [], actionCards: [], drafts: [],
+    input: 'x', text: `${text}据此你可以主张 2N 赔偿金。`, events: [], retrieved: [], actionCards: [], drafts: [],
     model: 'deepseek-v4-pro', degraded: false, taskClass: 'critical',
   });
 

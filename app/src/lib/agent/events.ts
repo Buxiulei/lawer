@@ -26,6 +26,8 @@ export type NoticeCode =
   | 'KNOWLEDGE_UNAVAILABLE'
   /** 首诊形态下按场景映射**定向补入**了核心法条卡（S3b：核心条不挂在模型自愿调工具上） */
   | 'CORE_ARTICLE_INJECTED'
+  /** ⭐核心条在核心位仍光秃，已自动补上卡内逐字原文（消灭「核心位光秃」这个类别本身） */
+  | 'CORE_ARTICLE_RENDERED'
   /** 本轮行动卡已达 3 张上限，第 4 张起被拒（charter §2） */
   | 'ACTION_CARD_CAPPED'
   /** 补救后仍未产出行动卡，本轮违反 charter §2，已记录 */

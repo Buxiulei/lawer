@@ -35,7 +35,7 @@ import {
  * `citationKey` 是产线 `articleKey` 的别名——保留旧名以免call site 与既有测试大面积改名，
  * **实现是同一个函数**，不是同名两份。
  */
-import { normalizeArticle, normLaw, articleKey as citationKey, packCorpus } from '../../app/src/lib/agent/citation-block';
+import { normalizeArticle, normLaw, articleKey as citationKey, packCorpus, bareArticleSpans } from '../../app/src/lib/agent/citation-block';
 export { normalizeArticle, normLaw, citationKey, packCorpus };
 
 export interface TurnRecord {
@@ -172,12 +172,38 @@ export function normalizeForCompare(s: string): string {
     .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
 }
 
-/** 出现在正文里但检索原文中查无此串的引用 = 编造 */
+/**
+ * 出现在正文里但检索原文中查无此串的引用 = 编造。
+ *
+ * 【比对面与第五闸同源（manager 2026-08-25 ④）】语料一律走产线的 `packCorpus`
+ * （`title\nbody\nJSON(facts)`），**不在判据侧另拼一份**。各拼各的必然出现
+ * 「闸认为有源所以放行、G1 认为无源所以判编造」——同一个问题两个答案，教训 11 的原样重演。
+ * 旧实现只取 `body+title`，漏掉 `facts` 里的号码（statute_quotes / case_facts.case_no）。
+ *
+ * 【左边界：发文机关名不得吃进前面的连接词】`DOC_NO` 的 `[一-龥]{2,12}` 是贪婪的，
+ * 遇到「……年终奖摊入基数，**来自**京高法发〔2024〕534号」会把「来自」一起吞进去，
+ * 得到 `来自京高法发〔2024〕534号` —— 这个串当然不在任何卡里，于是**真实存在**的文号
+ * 被判成编造（7a4c112 批 S14#2 的 L1 误报，逐字复核：号码就在两张已注入 SOP 卡正文里）。
+ * G1 是 L1 红线，误报会直接卡住发版。
+ *
+ * 修法是**从左逐字收缩**：只要某个后缀（仍完整保留〔年〕号码部分）在语料里命中即算有源。
+ * 这不会放过编造——被收缩掉的只有机关名前缀，**〔2024〕534号这个识别核心一个字都没动**，
+ * 编错年份或编错号码的串，收缩到底也命不中。
+ */
 function unsupported(text: string, packs: KnowledgePack[], re: RegExp): string[] {
-  const corpus = packs.map((p) => `${p.body}\n${p.title}`).join('\n');
+  const normCorpus = normalizeForCompare(packs.map(packCorpus).join('\n'));
   const found = [...new Set(text.match(re) ?? [])];
-  const normCorpus = normalizeForCompare(corpus);
-  return found.filter((f) => !normCorpus.includes(normalizeForCompare(f)));
+  return found.filter((f) => !supportedAfterLeftTrim(f, normCorpus));
+}
+
+/** 从左逐字收缩汉字前缀（保留〔…〕之后的识别核心），任一后缀在语料命中即算有源 */
+function supportedAfterLeftTrim(found: string, normCorpus: string): boolean {
+  const bracket = found.search(/[〔[【（(]/);
+  const maxTrim = bracket < 0 ? 0 : bracket;
+  for (let i = 0; i <= maxTrim; i++) {
+    if (normCorpus.includes(normalizeForCompare(found.slice(i)))) return true;
+  }
+  return false;
 }
 
 /**
@@ -197,6 +223,34 @@ function countQuestions(text: string): number {
   return (text.match(/[？?]/g) ?? []).length;
 }
 
+/**
+ * 【⑤ 组合告警】G1 判"编造"、而本轮第五闸**一次都没开火** → 大概率是**比对面不一致**，
+ * 不是模型真编了。
+ *
+ * 【为什么这两件事能互证】第五闸与 G1 问的是同一个问题的两面：
+ * 闸问"引号里这段有没有出处"，G1 问"这个号码有没有出处"，**语料面同源**（都走 packCorpus）。
+ * 模型真编造时，两边通常一起响；只有 G1 响而闸全程沉默，更可能是 G1 这一侧的
+ * 取串/归一/比对面出了偏差——7a4c112 批 S14#2 就是这么挂的（文号把前面的「来自」吞了进去，
+ * 号码其实白纸黑字在两张已注入卡里）。
+ *
+ * 【只告警不改判】L1 红线的判定权不交给启发式：这条**不动 G1 的 pass**，
+ * 只多挂一条 L3 提示，让人在签发前先去核字节级证据。红线宁可误报也不能被自动洗白。
+ */
+export function comparisonSurfaceAlarm(turn: TurnRecord, g1: Verdict): Verdict[] {
+  if (g1.pass || gateStrippedArticles(turn).size > 0) return [];
+  return [
+    {
+      id: 'G1-比对面不一致告警',
+      tier: 'L3',
+      pass: true,
+      detail:
+        'G1 判了编造，但本轮第五闸一次都没开火（无 CITATION_BLOCKED 留痕）。' +
+        '两者语料面同源，正常应当同响——只响一边，**先查 G1 侧的取串与比对面**，' +
+        '再下"模型编造"的结论。本告警不改判 G1（L1 的判定权不交给启发式）。',
+    },
+  ];
+}
+
 /** 全局断言 G1-G8 中可机械判定的**四条**（G1/G2/G3/G7）。
  *  G4（依据纪律）、G5（接住情绪）、G6（交还决定权的措辞质量）、G8（可照读原句）交给 judge，
  *  其中 G6 的硬形态另有机械断言 irreversibleDecisionAssertions 逐场兜底。 */
@@ -205,7 +259,7 @@ export function globalAssertions(turn: TurnRecord): Verdict[] {
   const fakeDocs = unsupported(turn.text, turn.retrieved, DOC_NO);
   const cards = turn.actionCards;
 
-  return [
+  const out: Verdict[] = [
     {
       id: 'G1',
       tier: 'L1',
@@ -236,6 +290,7 @@ export function globalAssertions(turn: TurnRecord): Verdict[] {
       detail: `本轮问了 ${countQuestions(turn.text)} 个问题`,
     },
   ];
+  return [...out, ...comparisonSurfaceAlarm(turn, out[0])];
 }
 
 // ───────── S15「拒绝编造」的判据（语义层）─────────
@@ -1133,6 +1188,22 @@ export function citationCompletenessAssertions(
   // 与⭐标注机制是两件事，混在一起会让缺口清单又被灌一批性质不同的东西。
   const mechanismUnavailable = !!coreMechanism && coreMechanism.coreKeyCount === 0;
   return turns.flatMap((t, i) => {
+    // 【① 位置口径（manager 2026-08-25）】只有**核心位**光秃才罚。
+    // 辅助位（表格行/列举句/旁引）给条号 + 一句大意本就是 packCitationGuide 要求的写法，
+    // 罚它等于罚我们自己定的核心/辅助分层，还会把模型逼进防御性省略（干脆不提条号最安全）。
+    // 位置判定 import 产线的 citationSite——**同源公理**，产线据以补原文、判据据以判罚，
+    // 两边必须是同一次判断（行为件「核心位保底渲染」用的就是这个函数）。
+    //
+    // 【只挡 FAIL 分支，不挡缺口分支】位置管的是「该不该罚模型」，
+    // 而 pending_card / pending_injection / 乙态讲的是「**我们的知识库缺哪一块**」——
+    // 那是判据作为**缺口发现器**的产出，与引用长在哪儿无关。
+    // 一起挡掉会让「库里没有这条原文」这个事实静默消失（实测：离线重打分时
+    // S03#3 那条真缺卡的调解仲裁法§27 差点就这么没了），补卡清单从此漏报。
+    const auxiliary = new Set(
+      bareArticleSpans(t.text)
+        .filter((x) => x.site === '辅助位')
+        .map((x) => x.raw),
+    );
     const cited = bareArticleCitations(t.text).map((a) => {
       // 【法名可能就在匹配串里】ARTICLE 正则本身允许带《…》前缀，命中串常是「《劳动合同法》第八十七条」。
       // 只朝命中点**之前**找法名会漏掉这种——法名在命中串**内部**，位置在 at 之后。
@@ -1219,8 +1290,10 @@ export function citationCompletenessAssertions(
     // **不进外勤补卡栏**（外勤打开卡会发现原文就在那儿，等于白派一趟）。
     const unstructured = unstructuredArticles ? pendingCard.filter((c) => unstructuredArticles.has(c.article)) : [];
     const pending = unstructuredArticles ? pendingCard.filter((c) => !unstructuredArticles.has(c.article)) : pendingCard;
+    // 辅助位的光秃只免**罚**（不进 missing），缺口分支上面已各自归好，不受影响
+    const missingCore = missing.filter((c) => !auxiliary.has(c.raw));
     const out: Verdict[] = [];
-    if (missing.length > 0 && mechanismUnavailable) {
+    if (missingCore.length > 0 && mechanismUnavailable) {
       // ⭐机制没覆盖本场景（候选池空：档案三来源空、本轮又没检索到带原文的法条卡）→
       // 记「已知缺口」，不记模型。
       // 单列不并 pending_card：成因不同（"机制没覆盖" vs "库里没料"），
@@ -1232,17 +1305,17 @@ export function citationCompletenessAssertions(
         na: true,
         naKind: 'mechanism_unavailable',
         detail:
-          `第 ${i + 1} 轮有 ${missing.length} 处光秃条号，但本跑⭐候选池为空（档案三来源 + 检索候选 + 用户点名皆空）→ ⭐核心条机制未覆盖该场景，` +
+          `第 ${i + 1} 轮有 ${missingCore.length} 处光秃条号，但本跑⭐候选池为空（档案三来源 + 检索候选 + 用户点名皆空）→ ⭐核心条机制未覆盖该场景，` +
           `模型没拿到"哪几条是核心条"的信号。记**已知缺口**（我方机制问题），不记模型：` +
-          missing.map((m) => m.raw).join('、'),
+          missingCore.map((m) => m.raw).join('、'),
       });
-    } else if (missing.length > 0) {
+    } else if (missingCore.length > 0) {
       out.push({
         id: `${scenarioId}-轮${i + 1}-光秃条号`,
         tier: 'L2',
         pass: false,
         detail:
-          `第 ${i + 1} 轮有 ${missing.length} 处只给条号、附近无逐字原文的引用：${missing.map((m) => m.raw).join('、')}` +
+          `第 ${i + 1} 轮有 ${missingCore.length} 处**核心位**只给条号、附近无逐字原文的引用：${missingCore.map((m) => m.raw).join('、')}` +
           '——用户要拿它去打印、标注、当庭念出来（charter §3 / G4）',
       });
     }

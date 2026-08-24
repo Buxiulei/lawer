@@ -382,6 +382,8 @@ const BLOCKQUOTE = /^\s*>/m;
  * **判据不认识自家产出的格式**，就会把最规范的那种引用judged成最差的。
  */
 const OWN_QUOTE_FORMAT = /第[一二三四五六七八九十百零〇0-9]+条[　\u3000][^\n]{10,}/;
+/** 同上，全局版——用来定位「落在自家格式原文内部」的交叉引用 */
+const OWN_QUOTE_FORMAT_G = /第[一二三四五六七八九十百零〇0-9]+条[　\u3000][^\n]{10,}/g;
 
 /**
  * 一段"疑似逐字原文"到底在讲哪几条：取其中出现的全部条号（归一后，不带法名）。
@@ -410,8 +412,43 @@ function articlesIn(span: string): Set<string> {
  * 方向上**宁可漏判**（与闸门的"宁可少说"相反，见 stripUnsupportedQuotes 注释）。
  */
 function unquotedVerbatimCovers(span: string, article: string): boolean {
-  const arts = articlesIn(span);
-  return arts.size === 0 || arts.has(article);
+  const self = SELF_LABELED.exec(span);
+  return !self || normalizeArticle(self[1]) === article;
+}
+
+/**
+ * 这段原文**自报**了自己是第几条：`> 第八十七条　用人单位…`——条号打头 + 全角空格，
+ * 正是卡里 `statute_quotes.text` 的存储形态（也是 statuteBlocks() 拼出来的形态）。
+ *
+ * 【为什么只认"打头"，不认段内任意条号（4e10b7c 批 S14#2 两处误报）】法条原文**内部**
+ * 交叉引用别的条是立法常态：§87 的原文里写着"依照本法**第四十七条**规定的…"，
+ * 实施条例§27 的原文以"**劳动合同法第四十七条**规定的经济补偿…"开头。
+ * 若把段内任意条号都当成"这段在讲那一条"，下面这种**最规范**的引用形态会被判光秃：
+ *   `《劳动合同法》第八十七条：`
+ *   `> 用人单位违反本法规定解除或者终止劳动合同的，应当依照本法第四十七条…`
+ * ——标题行点名、紧跟的 blockquote 给原文，段内那个 §47 只是立法者的交叉引用。
+ *
+ * 只认打头即可区分它与 S03#2 那种真误免责（`> 第八十七条　…` 自报是 §87，
+ * 替不了隔壁那个光秃的 §46）。取不到打头条号 → 归属未知 → 放行（宁可漏判）。
+ */
+const SELF_LABELED = /^\s*>?\s*(第[一二三四五六七八九十百零〇0-9]+条)[　\u3000]/;
+
+/**
+ * 该位置是否落在**自家注入块格式**（`第二十七条　正文…`）的**正文内部**。
+ *
+ * 【与 insideVerbatim 同一条道理，只是载体不同】法条原文自己会交叉引用别的条：
+ * 实施条例§27 的正文写着"劳动合同法**第四十七条**规定的经济补偿"。
+ * 那个 §47 是**立法者写的**，不是 agent 的光秃引用——判它"没带原文"
+ * 等于要求把被引法条的原文也一并附上，无限递归。
+ * insideVerbatim 只认引号与 blockquote 两种载体，认不出无引号的自家格式。
+ */
+function insideOwnFormatQuote(text: string, at: number): boolean {
+  for (const m of text.matchAll(OWN_QUOTE_FORMAT_G)) {
+    const start = m.index ?? 0;
+    // 打头那个条号本身要判（它才是这段原文的主语），正文里的交叉引用才跳过
+    if (at > start && at < start + m[0].length) return true;
+  }
+  return false;
 }
 
 function hasVerbatimNear(near: string, article: string): boolean {
@@ -497,19 +534,118 @@ export function precedentContamination(text: string, cards: KnowledgePack[], use
   return [...dirty];
 }
 
+/**
+ * 引用**位置**的口径：核心位 vs 辅助位（manager 2026-08-25 定，产线与判据同源）。
+ *
+ * 【为什么位置决定后果】同一个光秃条号，落在不同位置对用户的伤害完全不同：
+ * - **核心位**：行动卡的「为什么（依据）」、`claims.calc_json.basis`、以及**结论句紧邻**
+ *   （"给的是 N（第四十六条）"）。用户会拿着这一处去主张权利、当庭念出来，
+ *   只给编号等于**空手**——这才是 G4 要罚的那件事。
+ * - **辅助位**：表格行、列举句、旁引（"第 40 条（不胜任/客观情况变化）"这种**说明性**提及）。
+ *   这里给条号 + 一句大意本来就是我们**要求**的写法（见 packCitationGuide 的"其余条文可只给条号"）。
+ *   罚它等于罚我们自己定的分层，还会把模型逼进**防御性省略**——干脆不提条号最安全，
+ *   那才是真正的损失。
+ *
+ * 【保守方向】判不准就算辅助位。G4 是质量项不是红线，误判的代价是把模型逼向防御性省略、
+ * 把修向指错（这几天的主线教训），所以方向上**宁可漏判**。
+ *
+ * 【行动卡 basis 不走本函数】那是**结构化字段**，字段语义即依据，调用方直接按核心位处理。
+ */
+export type CitationSite = '核心位' | '辅助位';
+
+/** 结论标记：金额、倍数（N / 2N / N+1）、权利主张断言。命中即认为该处在下结论。 */
+const CONCLUSION_NEAR =
+  /(?:^|[^A-Za-z0-9])(?:2\s*N|N\s*\+\s*1|N)(?:[^A-Za-z0-9]|$)|[\d.]+\s*万|\d[\d,]{2,}\s*元|应当(?:向劳动者)?支付|可以(?:要求|主张)|赔偿金|二倍/;
+
+export function citationSite(text: string, at: number, windowSize = 60): CitationSite {
+  const lineStart = text.lastIndexOf('\n', at) + 1;
+  const lineEnd = text.indexOf('\n', at);
+  const line = text.slice(lineStart, lineEnd < 0 ? text.length : lineEnd);
+  // 表格行：整行是 markdown 表格，天然是"并列摆事实"，不是结论落点
+  if (/^\s*\|/.test(line)) return '辅助位';
+  const near = text.slice(Math.max(0, at - windowSize), at + windowSize);
+  return CONCLUSION_NEAR.test(near) ? '核心位' : '辅助位';
+}
+
 export function bareArticleCitations(text: string, windowSize = 60): string[] {
-  const out: string[] = [];
+  return bareArticleSpans(text, windowSize).map((x) => x.raw);
+}
+
+/** 同 bareArticleCitations，但带上**位置与偏移**——判据按位置分级、产线按位置补原文都要用它。 */
+export function bareArticleSpans(text: string, windowSize = 60): { raw: string; at: number; article: string; site: CitationSite }[] {
+  const out: { raw: string; at: number; article: string; site: CitationSite }[] = [];
   for (const m of text.matchAll(ARTICLE)) {
     const at = m.index ?? 0;
     // 法条原文内部的交叉引用不算 agent 的光秃引用（立法者写的，不是它写的）
     if (insideVerbatim(text, at)) continue;
+    if (insideOwnFormatQuote(text, at)) continue;
     const near = text.slice(Math.max(0, at - windowSize), at + m[0].length + windowSize);
     const raw = m[0].replace(/\s+/g, '');
+    const article = normalizeArticle(raw.replace(/《[^》]{2,40}》/, ''));
     // 归属到**本条**：窗口里的无引号原文必须讲的是它自己，邻条的原文不算（见 unquotedVerbatimCovers）
-    if (!hasVerbatimNear(near, normalizeArticle(raw.replace(/《[^》]{2,40}》/, '')))) out.push(raw);
+    if (!hasVerbatimNear(near, article)) out.push({ raw, at, article, site: citationSite(text, at, windowSize) });
   }
   return out;
 }
+
+/**
+ * 【核心位保底渲染】把⭐核心条在**核心位**的光秃引用，就地补上卡内逐字原文。
+ *
+ * 【为什么这一步不该交给模型自觉（manager 2026-08-25）】到这里，三件事系统全都已经知道：
+ *   · 哪几条是核心条 —— ⭐清单（coreArticleKeys，确定性函数）；
+ *   · 它们的逐字原文 —— 就在本轮注入的卡里（`facts.statute_quotes`）；
+ *   · 这一处是不是核心位 —— citationSite（判据与产线同一个函数）。
+ * 三样齐了还把最后一步寄望于"模型记得引全"，就是把**已知的确定性**换成**概率**。
+ * 这条修法消灭的不是某一次漏引，是**「核心位光秃」这个类别本身**。
+ *
+ * 【与第五闸不冲突】补进去的是卡里的逐字原文，天然在本轮注入语料内，过闸必然放行；
+ * 且本函数在闸之后执行，不存在被自己剥掉的可能。
+ *
+ * 【边界】只动⭐清单内、且**全文任何位置都没有**该条逐字原文的那些核心位引用；
+ * 辅助位不动（那里给条号+大意本就是要求的写法）、非⭐条不动（不把回复灌成法条汇编）、
+ * 已经带了原文的不重复补。
+ */
+export function renderCoreArticleFallback(
+  text: string,
+  core: Set<string>,
+  injected: KnowledgePack[],
+): { text: string; added: string[] } {
+  if (core.size === 0) return { text, added: [] };
+  /** ⭐清单内、本轮有逐字原文可用的条：`法名|条号` → 原文（已去掉打头的条号，便于内联） */
+  const usable = new Map<string, string>();
+  for (const p of injected) {
+    for (const q of p.facts?.statute_quotes ?? []) {
+      if (!q?.law || !q?.article || !q?.text?.trim()) continue;
+      const key = articleKey(q.law, q.article);
+      if (!core.has(key) || usable.has(key)) continue;
+      usable.set(key, q.text.replace(SELF_LABELED_HEAD, '').trim());
+    }
+  }
+  if (usable.size === 0) return { text, added: [] };
+
+  const corpus = normQuote(text);
+  const added: string[] = [];
+  // 从后往前插，避免前面的插入把后面的偏移顶掉
+  const spans = bareArticleSpans(text)
+    .filter((x) => x.site === '核心位')
+    .reverse();
+  let out = text;
+  for (const span of spans) {
+    // 键可能带法名也可能不带（"第46条"），两种都试——与 isCoreBlock 同一套匹配口径
+    const key = [...usable.keys()].find((k) => k === articleKey(null, span.raw.replace(/《[^》]{2,40}》/, '')) || k.endsWith(`|${span.article}`));
+    if (!key) continue;
+    const quote = usable.get(key)!;
+    if (corpus.includes(normQuote(quote))) continue; // 全文已有该条原文，不重复补
+    if (added.includes(key)) continue; // 同一条只补一次，补在最靠前那处（倒序遍历，最后一次覆盖）
+    const at = span.at + span.raw.length;
+    out = `${out.slice(0, at)}「${quote}」${out.slice(at)}`;
+    added.push(key);
+  }
+  return { text: out, added };
+}
+
+/** 卡里 statute_quotes.text 打头的那个条号（`第四十六条　`），内联引用时去掉，免得"第四十六条「第四十六条　…」" */
+const SELF_LABELED_HEAD = /^\s*第[一二三四五六七八九十百零〇0-9]+条[　\u3000]\s*/;
 
 // ───────────────────────── 第五道确定性闸：伪逐字引号引用 ─────────────────────────
 //

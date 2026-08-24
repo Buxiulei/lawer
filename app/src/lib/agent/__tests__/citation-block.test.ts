@@ -2,7 +2,16 @@
 // G4 依据纪律的两侧：注入侧「把合规修成最省力那条路」，出口侧「光秃条号留痕」。
 import { describe, expect, it } from 'vitest';
 
-import { bareArticleCitations, packCitationGuide, precedentContamination, statuteBlocks, valueBlocks } from '../citation-block';
+import {
+  bareArticleCitations,
+  citationSite,
+  packCitationGuide,
+  precedentContamination,
+  renderCoreArticleFallback,
+  statuteBlocks,
+  unsupportedVerbatimQuotes,
+  valueBlocks,
+} from '../citation-block';
 import type { KnowledgePack } from '../retrieval';
 
 const base: KnowledgePack = {
@@ -238,5 +247,98 @@ describe('光秃条号 · 逐字原文的归属', () => {
   it('★引号内原文含交叉引用（§46 正文提到§36）→ 照旧放行，不因归属规则误伤', () => {
     const t = '《劳动合同法》第四十六条：「用人单位依照本法第三十六条规定向劳动者提出解除劳动合同并与劳动者协商一致解除劳动合同的」，应当支付经济补偿。';
     expect(bareArticleCitations(t)).toEqual([]);
+  });
+});
+
+
+// ───────── ② blockquote 形态识别（7a4c112 批 S14#2 两处真实误报）─────────
+describe('光秃条号 · 标题行点名 + 紧跟 blockquote 给原文', () => {
+  /** 逐字取自 2026-08-24T17-59-36Z.json（S14 第2/3跑）「三、依据」段 */
+  const S14_2 = [
+    '《劳动合同法》第八十七条：',
+    '> 用人单位违反本法规定解除或者终止劳动合同的，应当依照本法第四十七条规定的经济补偿标准的二倍向劳动者支付赔偿金。（来源卡：statute-lhtf-jiechu-buchang-core）',
+    '',
+    '《劳动合同法实施条例》第二十七条：',
+    '> 劳动合同法第四十七条规定的经济补偿的月工资按照劳动者应得工资计算，包括计时工资或者计件工资以及奖金、津贴和补贴等货币性收入。（来源卡：statute-lhtf-jiechu-buchang-core）',
+  ].join('\n');
+
+  // 【修前必挂】原文**内部**的交叉引用（§87 正文里的"依照本法第四十七条"、
+  // 实施条例§27 正文开头的"劳动合同法第四十七条"）被当成"这段在讲 §47"，
+  // 于是两处最规范的引用形态双双被判光秃。
+  it('★S14#2：两处「标题+blockquote」引用都不得判光秃', () => {
+    expect(bareArticleCitations(S14_2)).toEqual([]);
+  });
+
+  it('★但自报条号的 blockquote 仍替不了隔壁那条（S03#2 不被放过）', () => {
+    const t = '给的是 N（第四十六条第（二）项）。\n> 第八十七条　用人单位违反本法规定解除或者终止劳动合同的，应当支付赔偿金。';
+    expect(bareArticleCitations(t)).toContain('第四十六条');
+  });
+});
+
+// ───────── ① 位置口径：核心位 vs 辅助位 ─────────
+describe('引用位置口径（判据与产线同源）', () => {
+  it('★表格行 = 辅助位（S14#2 那行三种情形的量级对照）', () => {
+    const t = '| 第 40 条（不胜任/客观情况变化） | N+1，再加一个月工资 | 约 16 万上下 |';
+    expect(citationSite(t, t.indexOf('第 40 条'))).toBe('辅助位');
+  });
+
+  it('★结论句紧邻 = 核心位（S03#2 那句"给的是 N"）', () => {
+    const t = '公司提出、协商一致解除，给的是 N（第四十六条第（二）项）。';
+    expect(citationSite(t, t.indexOf('第四十六条'))).toBe('核心位');
+  });
+
+  it('金额结论紧邻 = 核心位', () => {
+    const t = '按第八十七条，你可以主张 28.5 万赔偿金。';
+    expect(citationSite(t, t.indexOf('第八十七条'))).toBe('核心位');
+  });
+
+  it('纯说明性旁引 = 辅助位（判不准就算辅助位，宁可漏判）', () => {
+    const t = '这部分的立法沿革见第十二条的历次修订说明，供了解。';
+    expect(citationSite(t, t.indexOf('第十二条'))).toBe('辅助位');
+  });
+});
+
+// ───────── 行为件：核心位保底渲染 ─────────
+describe('核心位保底渲染：消灭「核心位光秃」这个类别', () => {
+  const card = (quotes: { law: string; article: string; text: string }[]) =>
+    ({ id: 'statute-x', title: '法条卡', type: '法条卡', region: '北京', confidence: '原文核实', updated: '2026-08-19', body: '正文', facts: { statute_quotes: quotes } }) as unknown as Parameters<typeof renderCoreArticleFallback>[2][number];
+  const S87 = { law: '劳动合同法', article: '第八十七条', text: '第八十七条　用人单位违反本法规定解除或者终止劳动合同的，应当依照本法第四十七条规定的经济补偿标准的二倍向劳动者支付赔偿金。' };
+  const injected = [card([S87])];
+  const core = new Set(['劳动合同法|第87条']);
+
+  // 【修前必挂】S03#1 §87 形态：2N 结论句只括注了条号，用户拿不到能念的原文
+  it('★核心位光秃的⭐条 → 自动补上卡内逐字原文', () => {
+    const t = '如果公司程序有瑕疵，按《劳动合同法》第八十七条，那是 2N。';
+    const r = renderCoreArticleFallback(t, core, injected);
+    expect(r.added).toEqual(['劳动合同法|第87条']);
+    expect(r.text).toContain('用人单位违反本法规定解除或者终止劳动合同的');
+    // 补完之后判据侧不再判它光秃（两侧同源）
+    expect(bareArticleCitations(r.text)).toEqual([]);
+  });
+
+  it('★补进去的是卡内原文 → 天然过第五闸（不会被自己剥掉）', () => {
+    const t = '按《劳动合同法》第八十七条，那是 2N。';
+    const r = renderCoreArticleFallback(t, core, injected);
+    expect(unsupportedVerbatimQuotes(r.text, injected)).toEqual([]);
+  });
+
+  it('辅助位不动（表格行给条号+大意本就是要求的写法）', () => {
+    const t = '| 《劳动合同法》第八十七条 | 违法解除 | 2N |';
+    expect(renderCoreArticleFallback(t, core, injected).added).toEqual([]);
+  });
+
+  it('非⭐条不动（不把回复灌成法条汇编）', () => {
+    const t = '按《劳动合同法》第八十七条，那是 2N。';
+    expect(renderCoreArticleFallback(t, new Set(['劳动合同法|第46条']), injected).added).toEqual([]);
+  });
+
+  it('全文已有该条原文 → 不重复补', () => {
+    const t = '按《劳动合同法》第八十七条：「用人单位违反本法规定解除或者终止劳动合同的，应当依照本法第四十七条规定的经济补偿标准的二倍向劳动者支付赔偿金。」那是 2N。';
+    expect(renderCoreArticleFallback(t, core, injected).added).toEqual([]);
+  });
+
+  it('⭐清单为空 → 一个字都不动', () => {
+    const t = '按《劳动合同法》第八十七条，那是 2N。';
+    expect(renderCoreArticleFallback(t, new Set(), injected)).toEqual({ text: t, added: [] });
   });
 });

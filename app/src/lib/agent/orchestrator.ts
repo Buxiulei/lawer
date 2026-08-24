@@ -39,7 +39,15 @@ import {
   shouldInjectCrisisCard,
 } from './crisis';
 import { CitationGuard } from './citation-guard';
-import { articleKey, coreArticleKeys, CORE_ARTICLE_MAP_PACK_ID, sceneCoreArticles, stripUnsupportedQuotes, type CoreArticleSources } from './citation-block';
+import {
+  articleKey,
+  coreArticleKeys,
+  CORE_ARTICLE_MAP_PACK_ID,
+  renderCoreArticleFallback,
+  sceneCoreArticles,
+  stripUnsupportedQuotes,
+  type CoreArticleSources,
+} from './citation-block';
 import { bareArticleCitations, precedentContamination } from './citation-block';
 import { MAX_INJECTED_PACKS, type KnowledgePack, type KnowledgeSearcher } from './retrieval';
 import { loadCaseSnapshot } from './snapshot';
@@ -531,6 +539,26 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
           quoteGate.stripped.map((q: string) => `「${q.slice(0, 24)}…」`).join('、'),
         // 闸自己写下"我剥了哪一条"，下游只读不推断（态⑤分账的唯一依据）
         stripped_articles: quoteGate.strippedArticles,
+      },
+    });
+  }
+
+  // 【核心位保底渲染】⭐核心条在核心位仍然光秃 → 就地补上卡内逐字原文。
+  // 放在第五闸**之后**：补的是本轮注入卡里的原文，天然过闸，且不给自己留被剥的机会。
+  // 到这一步"哪几条是核心、原文是什么、这一处是不是核心位"系统全都已知，
+  // 再把最后一步寄望于模型自觉，就是拿已知的确定性去换概率（见 renderCoreArticleFallback）。
+  const fallback = renderCoreArticleFallback(
+    text,
+    coreArticleKeys({ ...coreSources, retrieved: state.retrieved }),
+    state.retrieved,
+  );
+  if (fallback.added.length > 0) {
+    text = fallback.text;
+    emit({
+      event: 'notice',
+      data: {
+        code: 'CORE_ARTICLE_RENDERED',
+        message: `核心位仍只给条号的核心依据条 ${fallback.added.join('、')} 已自动补上卡内逐字原文`,
       },
     });
   }
