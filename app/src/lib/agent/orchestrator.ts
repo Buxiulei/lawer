@@ -222,6 +222,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     mode,
     stage,
     packs,
+    // ⭐核心条的 S4「用户点名」档要读用户原话（见 citation-block.coreArticleKeys）
+    userMessage: message,
     now,
     // 危机指令每次都下发（危机轮的行为纪律逐轮都要生效）；
     // 一次性的是**资源卡本身**，不是「认真对待自伤表述」这件事。

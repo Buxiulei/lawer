@@ -1067,16 +1067,24 @@ export function precedentContaminationAssertions(
 /**
  * ⭐核心条机制在本跑是否覆盖得到。
  *
- * 【为什么要这个开关（manager 2026-08-23 裁定）】首诊轮档案是空的 →
- * `coreArticleKeys` 的三来源（`claims.basis` / 行动卡 `detail` / `deadlines.derived_from`）
- * 全空 → 产不出⭐标注 → **模型手里根本没有「哪几条是核心条」的信号**。
- * 此时判 G4 FAIL 等于**拿机制没覆盖的场景罚模型**。
+ * 【为什么要这个开关（manager 2026-08-23 裁定）】⭐段产不出来时，
+ * **模型手里根本没有「哪几条是核心条」的信号**，此时判 G4 FAIL 等于**拿机制没覆盖的场景罚模型**。
  *
- * 【判定依据只用结构化事实】不看轮次序号、不猜"这看起来像首诊"。
+ * 【判定条件 = 候选池空】（manager 2026-08-24 专议，随行为侧 S2/S4 同批落）
+ * 产线 `coreArticleKeys` 的候选池是 S1（档案三来源）∪ S2（本轮检索命中的 statute 卡，封顶 3）
+ * ∪ S4（用户点名且命中候选池的条）。**产出空 ⇔ ⭐段不出现 ⇔ 机制不可用**，
+ * 三者是同一件事，所以这里只认它的产出规模。
  *
- * 【为什么不在评测侧重新枚举三来源】枚举一份就等于给"来源是什么"造了第二个真源——
+ * 【判据语义的版本区间——这条是规矩，不是本次的特例】
+ * **判据的每次语义变更必须声明其适用的行为机制版本区间；跨版本回放时，
+ * 用被判行为当时的判据语义。** 本条件（候选池空）只适用于**含 S2/S4 机制的行为 SHA**；
+ * 老批（b0871a6 系，行为侧只有 S1）的转录回放仍按旧条件「档案三来源空」判——
+ * 拿新判据去判老行为，会把"当时机制确实没覆盖"的轮次判成模型的错。
+ *
+ * 【为什么不在评测侧重新枚举来源】枚举一份就等于给"来源是什么"造了第二个真源——
  * 行为侧哪天改了来源，评测侧的枚举会**静默漂移**（独立同源的错误的温床）。
- * 所以由 runner 把**本跑真实档案**喂给产线的 `coreArticleKeys`，这里只收它的结果。
+ * 所以由 runner 把**本跑真实原料**（档案 + 检索命中 + 用户原话）喂给产线的 `coreArticleKeys`，
+ * 这里只收它的结果。
  *
  * 【证据面优先仍是更好的做法，但需要产线配合】直接看「本轮注入产物里⭐段有没有出现」
  * 是**事实**而非推导，少一次口径分叉的机会。但 `TurnRecord` 现在拿不到注入产物
@@ -1084,7 +1092,7 @@ export function precedentContaminationAssertions(
  * 不在本 PR 范围。**待行为侧把⭐段在场与否随轮次回传后，本函数应改吃那个事实。**
  */
 export interface CoreMechanismState {
-  /** 本跑 `coreArticleKeys(真实档案)` 的产出规模；0 = ⭐机制未覆盖本场景 */
+  /** 本跑 `coreArticleKeys(真实原料)` 的候选池规模；0 = 候选池空 = ⭐机制未覆盖本场景 */
   coreKeyCount: number;
 }
 
@@ -1096,7 +1104,7 @@ export function citationCompletenessAssertions(
   coreMechanism?: CoreMechanismState,
   unstructuredArticles?: Set<string>,
 ): Verdict[] {
-  // ⭐机制不可用 → G4 的 FAIL 分支整体降级为「已知缺口」。
+  // ⭐机制不可用（= 候选池空）→ G4 的 FAIL 分支整体降级为「已知缺口」。
   // pending_card / pending_injection **不受影响**：那两条讲的是"库里有没有料 / 本轮注没注入"，
   // 与⭐标注机制是两件事，混在一起会让缺口清单又被灌一批性质不同的东西。
   const mechanismUnavailable = !!coreMechanism && coreMechanism.coreKeyCount === 0;
@@ -1157,7 +1165,8 @@ export function citationCompletenessAssertions(
     const pending = unstructuredArticles ? pendingCard.filter((c) => !unstructuredArticles.has(c.article)) : pendingCard;
     const out: Verdict[] = [];
     if (missing.length > 0 && mechanismUnavailable) {
-      // ⭐机制没覆盖本场景（首诊档案空）→ 记「已知缺口」，不记模型。
+      // ⭐机制没覆盖本场景（候选池空：档案三来源空、本轮又没检索到带原文的法条卡）→
+      // 记「已知缺口」，不记模型。
       // 单列不并 pending_card：成因不同（"机制没覆盖" vs "库里没料"），
       // 并进去等于往补卡清单里灌一批外勤补不了的东西。
       out.push({
@@ -1167,7 +1176,7 @@ export function citationCompletenessAssertions(
         na: true,
         naKind: 'mechanism_unavailable',
         detail:
-          `第 ${i + 1} 轮有 ${missing.length} 处光秃条号，但本跑档案三来源为空 → ⭐核心条机制未覆盖该场景，` +
+          `第 ${i + 1} 轮有 ${missing.length} 处光秃条号，但本跑⭐候选池为空（档案三来源 + 检索候选 + 用户点名皆空）→ ⭐核心条机制未覆盖该场景，` +
           `模型没拿到"哪几条是核心条"的信号。记**已知缺口**（我方机制问题），不记模型：` +
           missing.map((m) => m.raw).join('、'),
       });

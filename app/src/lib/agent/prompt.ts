@@ -174,6 +174,8 @@ export interface BuildSystemPromptInput {
   stage: IntakeStage;
   /** 预检索到的 packs（逐字原文） */
   packs: KnowledgePack[];
+  /** 本轮用户原话。⭐核心条的 S4「用户点名」档要在这里取条号（见 coreArticleKeys） */
+  userMessage?: string;
   now: Date;
   /** 本轮识别到自伤/极端痛苦表述（见 crisis.assessCrisis） */
   crisis?: boolean;
@@ -230,12 +232,15 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
               '绝不能让用户在这种时刻回头翻聊天记录找号码。',
           }
         : undefined,
-      // 核心依据条**由结构化事实判定**（claims.basis / 行动卡 detail / 期限推算依据），
-      // 不让模型自己勾——见 citation-block.coreArticleKeys
+      // 核心依据条**由结构化事实判定**，不让模型自己勾——见 citation-block.coreArticleKeys：
+      // S1 档案三来源（claims.basis / 行动卡 detail / 期限推算依据）恒优先；S1 空（首诊轮）
+      // 时才取 S2 本轮检索候选与 S4 用户点名，两者都只在注入包里选。
       coreArticleKeys({
         claims: input.snapshot.claims,
         openActions: input.snapshot.openActions,
         deadlines: input.snapshot.deadlines,
+        retrieved: input.packs,
+        userMessage: input.userMessage,
       }),
     ),
   ];

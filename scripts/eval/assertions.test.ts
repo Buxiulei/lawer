@@ -45,7 +45,7 @@ import {
   ZUOBIAO_PACK_ID,
   type TurnRecord,
 } from './assertions';
-import { bareArticleCitations } from '../../app/src/lib/agent';
+import { bareArticleCitations, coreArticleKeys } from '../../app/src/lib/agent';
 import { findScenarios } from './scenarios';
 import { voteFrom } from './judge';
 import { createKnowledgeSearcher, type KnowledgePack } from '../../app/src/lib/agent';
@@ -1114,12 +1114,32 @@ describe('乙态「有原文未结构化」与⭐机制不可用（2026-08-24 �
     expect(v[0].naKind).not.toBe('pending_card');
   });
 
+  /**
+   * 【合成阳性对照】乙态检测器全库现扫 **0 实例**——库里唯一带 blockquote 原文的那张卡
+   * 已经全部结构化过。零实例意味着这条通路**从未在真语料上开过火**：
+   * 检测器返回的键形态哪天与分流分支对不上（比如改成返回 `法名|条号` 复合键），
+   * 全库扫 0 会让它**看起来仍然正常**，而分流分支永远不触发，乙态静默退化成 pending_card。
+   *
+   * **一把从未被证明能开火的枪不算守卫。** 所以这里造一张阳性假卡，
+   * 走**检测器 → 分流分支**的完整链路：上面那条 `★乙态分流` 用的是手写集合，
+   * 只测了分支；单独测检测器又只测了检测器。**衔接处**恰恰是会静默漂移的那一段。
+   */
+  it('★合成阳性对照：假卡（body 有引文、无 statute_quotes）→ 检测器出键 → 分流分支真的开火', () => {
+    const fake = { title: '合成阳性卡', body: '## 条文\n\n> 第八十七条　用人单位违反本法规定解除或者终止劳动合同的，应当依照本法第四十七条规定的经济补偿标准的二倍向劳动者支付赔偿金。' };
+    const detected = unstructuredSourceArticles([fake]);
+    expect(detected.size).toBeGreaterThan(0); // 枪里有子弹
+    // 把检测器的**真实产出**直接喂给分流分支——两侧键形态对不上就会在这里挂
+    const v = citationCompletenessAssertions([t(BARE)], 'X', new Set(), new Set(), undefined, detected);
+    expect(v).toHaveLength(1);
+    expect(v[0].naKind).toBe('unstructured_source');
+  });
+
   it('没给乙态集合时行为不变（仍判 pending_card），不因新参数改判既有结论', () => {
     const v = citationCompletenessAssertions([t(BARE)], 'X', new Set(), new Set());
     expect(v[0].naKind).toBe('pending_card');
   });
 
-  describe('⭐机制不可用：档案三来源为空时不罚模型', () => {
+  describe('⭐机制不可用：候选池为空时不罚模型（口径 2026-08-24 由"档案三来源空"改为"候选池空"）', () => {
     const QUOTED = new Set([citationKey('劳动合同法', '第八十七条')]);
 
     it('★机制可用（coreKeyCount>0）→ 已注入仍光秃 = FAIL，照罚', () => {
@@ -1144,6 +1164,37 @@ describe('乙态「有原文未结构化」与⭐机制不可用（2026-08-24 �
     it('⭐不可用**不影响** pending_card：库里没料是另一回事，不该被一起豁免', () => {
       const v = citationCompletenessAssertions([t(BARE)], 'X', new Set(), new Set(), { coreKeyCount: 0 });
       expect(v[0].naKind).toBe('pending_card');
+    });
+  });
+
+  /**
+   * 【两侧同源】判据侧的「机制不可用」必须与产线的「⭐段不出现」是**同一个函数的同一次判断**，
+   * 不是两边各写一份"看起来一样"的条件。所以这里不手写 `coreKeyCount`，
+   * 而是把与产线完全相同的原料喂给产线的 `coreArticleKeys`，拿它的产出规模当判据输入。
+   *
+   * 【判据语义的版本区间】本条只适用于**含 S2/S4 机制的行为 SHA**；
+   * 老批（b0871a6 系，行为侧只有 S1）的转录回放仍按旧条件「档案三来源空」判。
+   */
+  describe('★候选池空 ⇔ ⭐机制不可用（判据侧与产线同一个函数）', () => {
+    const statuteCard = { facts: { statute_quotes: [{ law: '劳动合同法', article: '第八十七条', text: '用人单位违反本法规定……' }] } };
+
+    it('候选池空（首诊档案空 + 本轮没检索到带原文的法条卡）→ 判「机制不可用」', () => {
+      const pool = coreArticleKeys({ retrieved: [], userMessage: '公司要裁我，怎么办' });
+      expect(pool.size).toBe(0);
+      const v = citationCompletenessAssertions([t(BARE)], 'X', new Set([citationKey('劳动合同法', '第八十七条')]), undefined, {
+        coreKeyCount: pool.size,
+      });
+      expect(v[0].naKind).toBe('mechanism_unavailable');
+    });
+
+    it('★同为空档案，但本轮检索到 statute 卡 → S2 撑起候选池 → 机制可用，光秃照罚', () => {
+      const pool = coreArticleKeys({ retrieved: [statuteCard], userMessage: '公司要裁我，怎么办' });
+      expect(pool.size).toBe(1);
+      const v = citationCompletenessAssertions([t(BARE)], 'X', new Set([citationKey('劳动合同法', '第八十七条')]), undefined, {
+        coreKeyCount: pool.size,
+      });
+      expect(v[0].pass).toBe(false);
+      expect(v[0].id).toContain('光秃条号');
     });
   });
 });

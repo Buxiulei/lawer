@@ -97,6 +97,110 @@ describe('跨数字体系：档案写阿拉伯、卡里存汉字，必须匹配�
     expect(guide).not.toContain('本轮核心依据条');
   });
 
-  // TODO（专议后落）：首轮空档案场景下 ⭐ 块应非空——见 scratchpad/fix-direction-memo.md §三 B。
-  // 本 PR 不做行为修，此处仅记待补，防"必然为空"再次悄悄成立。
+});
+
+// ───────────── 首诊⭐核心条来源（S2 检索候选 / S4 用户点名，manager 2026-08-24 专议裁定）─────────────
+//
+// 【修的是什么】首诊轮档案三来源天然全空 → ⭐段整段不输出 → 模型收不到"哪条是核心"的信号，
+// 而首诊恰恰是它最需要这个信号的一轮。补 S2/S4 两档候选，S1 仍恒优先。
+describe('首诊⭐核心条来源', () => {
+  const statutePack = (quotes: { law: string; article: string; text: string }[]) => ({ facts: { statute_quotes: quotes } });
+  const q = (article: string, law = '劳动合同法') => ({ law, article, text: `${article}的逐字原文……` });
+
+  describe('S2 主来源：S1 空时取本轮检索命中的 statute 卡，按得分序，封顶 3', () => {
+    it('首轮空档案 + 检索含 statute 卡 → ⭐段非空，条目来自 S2', () => {
+      const core = coreArticleKeys({ retrieved: [statutePack([q('第四十七条')])] });
+      expect(core.has('劳动合同法|第47条')).toBe(true);
+      const guide = packCitationGuide(pack([{ law: '劳动合同法', article: '第四十七条', text: '经济补偿按劳动者……' }]), core);
+      expect(guide).toContain('本轮核心依据条');
+      expect(guide).toContain('第四十七条');
+    });
+
+    it('★封顶不是配额：只命中 2 条就只给 2 条，不许凑数', () => {
+      const core = coreArticleKeys({ retrieved: [statutePack([q('第四十六条'), q('第四十七条')])] });
+      expect(core.size).toBe(2);
+    });
+
+    it('★封顶 3 条：命中 5 条只取检索得分序的前 3 条', () => {
+      const core = coreArticleKeys({
+        retrieved: [
+          statutePack([q('第三十九条'), q('第四十条')]),
+          statutePack([q('第四十一条'), q('第四十六条'), q('第四十七条')]),
+        ],
+      });
+      expect(core.size).toBe(3);
+      // 顺序即检索得分序：前一张卡的两条先进，后一张卡只进第一条
+      expect([...core]).toEqual(['劳动合同法|第39条', '劳动合同法|第40条', '劳动合同法|第41条']);
+    });
+
+    it('检索命中的卡没有 statute_quotes → 不进候选池（⭐是"要引全"的指令，手上没原文时毫无意义）', () => {
+      expect(coreArticleKeys({ retrieved: [{ facts: { case_facts: { gist: '案情' } } }] }).size).toBe(0);
+    });
+  });
+
+  describe('S1 恒优先：三来源非空时行为与修前完全一致', () => {
+    // 【回归的验证形式】不是"看起来差不多"，而是**同一份 S1 输入下，加不加 S2/S4 原料，
+    // 产出的键集合必须逐字相同**——S2/S4 一条都不许渗进来。
+    const s1 = { claims: [{ basis: '《劳动合同法实施条例》第二十七条' }] };
+    const noise = {
+      retrieved: [statutePack([q('第四十六条'), q('第四十七条'), q('第三十九条'), q('第四十条')])],
+      userMessage: '我想问《劳动合同法》第40条怎么算',
+    };
+
+    it('★S1 非空时，S2/S4 原料一条都不渗入（键集合与只传 S1 时逐字相同）', () => {
+      expect([...coreArticleKeys({ ...s1, ...noise })]).toEqual([...coreArticleKeys(s1)]);
+    });
+
+    it('★行动卡/期限单独非空时同样恒优先', () => {
+      const byAction = { openActions: [{ detail: '依据《劳动争议调解仲裁法》第二十七条，时效一年' }] };
+      expect([...coreArticleKeys({ ...byAction, ...noise })]).toEqual([...coreArticleKeys(byAction)]);
+      const byDeadline = { deadlines: [{ derived_from: '《民事诉讼法》第八十五条' }] };
+      expect([...coreArticleKeys({ ...byDeadline, ...noise })]).toEqual([...coreArticleKeys(byDeadline)]);
+    });
+  });
+
+  describe('S4 追加：用户点名的条命中库内必入，且不占 3 条上限', () => {
+    // 得分序前 3 条是 39/40/41，用户点名的 46 排在第 4——它必须**额外**进来，把上限撑到 4。
+    const retrieved = [statutePack([q('第三十九条'), q('第四十条'), q('第四十一条'), q('第四十六条')])];
+
+    it('★阿拉伯数字点名「第46条」→ 必入⭐且不占上限', () => {
+      const core = coreArticleKeys({ retrieved, userMessage: '公司说按第46条给我补偿，对吗' });
+      expect(core.has('劳动合同法|第46条')).toBe(true);
+      expect(core.size).toBe(4); // S2 的 3 条 + S4 的 1 条
+    });
+
+    it('★汉字点名「第四十六条」→ 同一条，跨数字体系互认', () => {
+      const core = coreArticleKeys({ retrieved, userMessage: '公司说按第四十六条给我补偿，对吗' });
+      expect(core.has('劳动合同法|第46条')).toBe(true);
+      expect(core.size).toBe(4);
+    });
+
+    it('带法名点名《劳动合同法》第46条也认（用户没写法名时按条号认）', () => {
+      const core = coreArticleKeys({ retrieved, userMessage: '《劳动合同法》第46条是怎么规定的' });
+      expect(core.has('劳动合同法|第46条')).toBe(true);
+    });
+
+    it('★库内无该条 → 不入⭐（回答层由第五闸走「待核实」口径，不在本函数）', () => {
+      const core = coreArticleKeys({ retrieved: [statutePack([q('第四十七条')])], userMessage: '那第99条呢' });
+      expect(core.has('劳动合同法|第99条')).toBe(false);
+      expect([...core]).toEqual(['劳动合同法|第47条']);
+    });
+
+    it('点名的条正好在 S2 前 3 里 → 不重复计数', () => {
+      const core = coreArticleKeys({ retrieved, userMessage: '第39条说的是什么' });
+      expect(core.size).toBe(3);
+    });
+  });
+
+  describe('候选池全空（S1 ∧ S2 ∧ S4 皆空）→ ⭐段照旧不出现', () => {
+    it('★三档全空时产出空集，⭐段不出现', () => {
+      const core = coreArticleKeys({ retrieved: [], userMessage: '公司要裁我，怎么办' });
+      expect(core.size).toBe(0);
+      expect(packCitationGuide(pack([{ law: '劳动合同法', article: '第四十七条', text: '……' }]), core)).not.toContain('本轮核心依据条');
+    });
+
+    it('用户点了名但一张 statute 卡都没检索到 → 仍然空（点名不能凭空造核心条）', () => {
+      expect(coreArticleKeys({ retrieved: [], userMessage: '第46条怎么说' }).size).toBe(0);
+    });
+  });
 });

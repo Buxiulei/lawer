@@ -468,6 +468,54 @@ describe('检索缺失降级', () => {
     const { provider } = await turn([{ text: 'x', tools: [GOOD_CARD] }], { searcher: undefined });
     expect(provider.calls[0][0].content).not.toContain('本轮检索到的依据');
   });
+
+  // ⭐核心条的 S2/S4 两档要真的接到线上：夹具案子档案是空的（S1 空），
+  // 这条走的正是首诊形态。单测只证了函数对，接线断了函数再对也没用。
+  describe('首诊⭐核心条（S1 空时由 S2/S4 撑起）', () => {
+    /** 带逐字原文的法条卡——S2 的候选池只认 facts.statute_quotes */
+    const QUOTED_PACK = {
+      ...FIXTURE_PACK,
+      id: 'statute-lhtf-jiechu-buchang-core',
+      facts: { statute_quotes: [{ law: '劳动合同法', article: '第四十六条', text: '有下列情形之一的，用人单位应当向劳动者支付经济补偿：' }] },
+    };
+
+    /** ⭐那一行本身。**不能拿整份 prompt 断言条号**——引用块里本来就印着同一个条号，
+     *  那样断言在⭐段整段消失时照样通过（本次要修的正是"⭐段不出现"）。 */
+    const starLine = (system: string) => system.split('本轮核心依据条')[1]?.split('\n')[0] ?? '';
+
+    it('首轮空档案 + 检索到带原文的法条卡 → system prompt 里⭐段非空', async () => {
+      const { provider } = await turn([{ text: 'x', tools: [GOOD_CARD] }], { searcher: fixtureSearcher([QUOTED_PACK]) });
+      expect(provider.calls[0][0].content).toContain('本轮核心依据条');
+      expect(starLine(provider.calls[0][0].content)).toContain('第四十六条');
+    });
+
+    describe('★S4 用户点名走的是用户原话——原话没接进来这条就会挂', () => {
+      // 46 排在得分序第 4 位，占不到 S2 的 3 条上限；进不进⭐**只取决于用户有没有点它的名**
+      const searcher = fixtureSearcher([{ ...QUOTED_PACK, facts: { statute_quotes: [
+        { law: '劳动合同法', article: '第三十九条', text: '劳动者有下列情形之一的……' },
+        { law: '劳动合同法', article: '第四十条', text: '有下列情形之一的……' },
+        { law: '劳动合同法', article: '第四十一条', text: '有下列情形之一，需要裁减人员……' },
+        { law: '劳动合同法', article: '第四十六条', text: '有下列情形之一的，用人单位应当向劳动者支付经济补偿：' },
+      ] } }]);
+
+      it('没点名 → 只有得分序前 3 条，46 不在⭐里', async () => {
+        const { provider } = await turn([{ text: 'x', tools: [GOOD_CARD] }], { searcher });
+        expect(starLine(provider.calls[0][0].content)).not.toContain('第四十六条');
+      });
+
+      it('点名「第46条」→ 46 进⭐，且不挤掉前 3 条', async () => {
+        const { provider } = await turn([{ text: 'x', tools: [GOOD_CARD] }], { searcher, message: '公司说按第46条给补偿，这对吗' });
+        const star = starLine(provider.calls[0][0].content);
+        expect(star).toContain('第四十六条');
+        expect(star).toContain('第三十九条');
+      });
+    });
+
+    it('检索到的卡没有 statute_quotes → 候选池空 → ⭐段照旧不出现', async () => {
+      const { provider } = await turn([{ text: 'x', tools: [GOOD_CARD] }]);
+      expect(provider.calls[0][0].content).not.toContain('本轮核心依据条');
+    });
+  });
 });
 
 describe('事件流形状与归属', () => {

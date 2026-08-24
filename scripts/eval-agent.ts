@@ -224,15 +224,19 @@ async function runScenario(scenario: Scenario, plan: Plan): Promise<ScenarioRepo
     });
   }
 
-  // ⭐核心条机制在本跑覆盖得到吗：把**本跑真实档案**喂给产线的 coreArticleKeys。
-  // 【不在评测侧重新枚举三来源】枚举一份就等于给"来源是什么"造第二个真源——
+  // ⭐核心条机制在本跑覆盖得到吗：把**本跑真实档案 + 本跑真实检索命中 + 本跑用户原话**
+  // 一起喂给产线的 coreArticleKeys，收它的产出规模——0 就是候选池空，⭐段必然不出现。
+  // 【不在评测侧重新枚举来源】枚举一份就等于给"来源是什么"造第二个真源——
   // 行为侧改了来源，评测侧会静默漂移。所以字段名只出现在这一次 SQL 里，
-  // 判断逻辑一律交回产线函数（判据同源）。
+  // 判断逻辑一律交回产线函数（判据同源）。S2/S4 两档同理：不在这里复制"取哪些卡、
+  // 封顶几条"，只把原料递进去。
   const coreMechanismState = {
     coreKeyCount: coreArticleKeys({
       claims: db.prepare('SELECT basis FROM claims WHERE case_id = ?').all(caseId) as { basis: string | null }[],
       openActions: db.prepare('SELECT detail FROM action_items WHERE case_id = ?').all(caseId) as { detail: string | null }[],
       deadlines: db.prepare('SELECT derived_from FROM deadlines WHERE case_id = ?').all(caseId) as { derived_from: string | null }[],
+      retrieved: turns.flatMap((t) => t.retrieved),
+      userMessage: turns.map((t) => t.input).join('\n'),
     }).size,
   };
 

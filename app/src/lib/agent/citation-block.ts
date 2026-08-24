@@ -201,16 +201,44 @@ export function articleKey(law: string | null | undefined, article: string): str
   return `${normLaw(law)}|${normalizeArticle(article)}`;
 }
 
+/** 一段文本里出现的全部条号引用键（`法名|条号`；没写法名时法名为空串）。 */
+function articleKeysIn(text: string | null | undefined): Set<string> {
+  const out = new Set<string>();
+  if (!text) return out;
+  for (const m of text.matchAll(ARTICLE)) {
+    const raw = m[0].replace(/\s+/g, '');
+    const law = /《([^》]{2,40})》/.exec(raw)?.[1] ?? '';
+    // 走唯一真源出键：档案里写「第46条第2项」、卡里存「第四十六条」，必须归一到同一个键，
+    // 否则 ⭐ 核心条块匹配不上 → 模型收不到"这条要引全"的指令（本次 bug 的行为侧一半）
+    out.add(articleKey(law, raw.replace(/《[^》]{2,40}》/, '')));
+  }
+  return out;
+}
+
+/** S2 候选**封顶**条数。是封顶不是配额——命中 2 条就给 2 条，不许凑数。 */
+const S2_CAP = 3;
+
 /**
  * 本轮的**核心依据条**（`法名|条号` 集合），**由结构化事实判定，不让模型自己勾**。
  *
  * 【为什么必须结构化判定】（manager 2026-08-23 落地约束）
  * 「哪几条是核心」如果交给模型自己判断，等于把分层的判定权交还给我们本想约束的那一方——
  * 它会把"我打算详细讲的"标成核心，而不是"用户拿去主张权利要用的"。
- * 所以核心条只从**已经落库的结构化事实**里取：
- *   ① `claims.basis`——calc_calc 落库时写的法条串（**这是钱的依据**，用户会拿它去主张）；
- *   ② 行动卡 detail 里出现的条号（行动卡是「现在做什么」，其依据必然是核心）；
- *   ③ 生效中的期限推算依据（`deadlines.derived_from`）。
+ *
+ * 【三档来源，S1 恒优先】（manager 2026-08-24 专议裁定）
+ *   **S1（档案三来源）**：① `claims.basis`——claim_calc 落库时写的法条串（**这是钱的依据**，
+ *     用户会拿它去主张）；② 行动卡 detail 里的条号（行动卡是「现在做什么」，其依据必然核心）；
+ *     ③ 生效中的期限推算依据（`deadlines.derived_from`）。
+ *     **只要 S1 出得来一条，本轮就完全走 S1**，S2/S4 一律不参与——老路径输出零变化。
+ *   **S2（检索候选）**：S1 全空（首诊轮档案还没落任何东西）时，取本轮注入包里
+ *     `facts.statute_quotes` 非空的条目，**按检索得分序**取，封顶 `S2_CAP` 条。
+ *   **S4（用户点名）**：用户这轮消息里正则可取的条号，命中候选池就**必入**且**不占 S2 上限**；
+ *     库内没有那一条就**不入**⭐（回答层由第五闸走「待核实」口径，不在本函数）。
+ *
+ * 【为什么首诊必须有 S2 而不是让⭐整段消失】首诊三来源天然全空 → ⭐段整段不输出 →
+ * 模型收不到"哪条是核心"的信号，而首诊恰恰是它最需要这个信号的一轮。
+ * 检索得分序是**已经算好的结构化事实**，拿它当候选与"让模型自己提名"是两回事：
+ * 本函数每一步的输入都是结构化事实，输出是确定性函数，**模型零提名权**。
  *
  * 【它解决的是什么】S03#2：同一回复对《调解仲裁法》§27 引了全文、对《实施条例》§27 只给条号，
  * 而后者恰恰是**结论句同句**的那条（补偿基数）。模型不是不会引，是**不知道哪条值得引全**。
@@ -221,21 +249,32 @@ export function coreArticleKeys(input: {
   claims?: { basis: string | null }[];
   openActions?: { detail: string | null }[];
   deadlines?: { derived_from: string | null }[];
+  /** 本轮检索命中的卡（注入包），**顺序即检索得分序** */
+  retrieved?: Pick<KnowledgePack, 'facts'>[];
+  /** 本轮用户原话（S4 点名的取料面） */
+  userMessage?: string;
 }): Set<string> {
   const out = new Set<string>();
   const collect = (text: string | null | undefined) => {
-    if (!text) return;
-    for (const m of text.matchAll(ARTICLE)) {
-      const raw = m[0].replace(/\s+/g, '');
-      const law = /《([^》]{2,40})》/.exec(raw)?.[1] ?? '';
-      // 走唯一真源出键：档案里写「第46条第2项」、卡里存「第四十六条」，必须归一到同一个键，
-      // 否则 ⭐ 核心条块匹配不上 → 模型收不到"这条要引全"的指令（本次 bug 的行为侧一半）
-      out.add(articleKey(law, raw.replace(/《[^》]{2,40}》/, '')));
-    }
+    for (const k of articleKeysIn(text)) out.add(k);
   };
   for (const c of input.claims ?? []) collect(c.basis);
   for (const a of input.openActions ?? []) collect(a.detail);
   for (const d of input.deadlines ?? []) collect(d.derived_from);
+  if (out.size > 0) return out; // S1 恒优先
+
+  // 候选池 = 本轮注入包里带逐字原文的法条条目。S2 与 S4 都只在这个池子里取，
+  // 池外的条号一律不入⭐——⭐ 是"这条要引全"的指令，指向一条手上没有原文的条毫无意义。
+  const quotes = (input.retrieved ?? []).flatMap((p) => p.facts?.statute_quotes ?? []).filter((q) => q?.law && q?.article && q?.text);
+  for (const q of quotes) {
+    if (out.size >= S2_CAP) break;
+    out.add(articleKey(q.law, q.article));
+  }
+  const named = articleKeysIn(input.userMessage);
+  // 用户没写法名时键是 `|第46条`，故两种键都比一遍（与 isCoreBlock 同一套匹配口径）
+  for (const q of quotes) {
+    if (named.has(articleKey(q.law, q.article)) || named.has(articleKey(null, q.article))) out.add(articleKey(q.law, q.article));
+  }
   return out;
 }
 
@@ -254,7 +293,9 @@ export function packCitationGuide(pack: KnowledgePack, core: Set<string> = new S
   if (coreHere.length > 0) {
     head.push(
       '',
-      `⭐ **本轮核心依据条**（档案里的诉求金额/行动卡/期限直接依赖它们）：` +
+      // 来源规则见 coreArticleKeys：S1 档案三来源恒优先，S1 空时取 S2 检索候选（封顶 3），
+      // S4 用户点名的条命中候选池必入且不占上限。这里只呈现结果，不让模型参与提名。
+      `⭐ **本轮核心依据条**（依据来源：档案里的诉求金额/行动卡/期限直接依赖的条；档案还空时取本轮检索命中的法条，以及你这轮点名问到的条）：` +
         coreHere.map((q) => `《${q.law.replace(/^《|》$/g, '')}》${q.article}`).join('、'),
       '**这几条必须带逐字原文引用**——用户要拿它们去主张权利、当庭念出来；只给条号等于没给。',
       '其余条文可只给条号 + 一句大意。',
