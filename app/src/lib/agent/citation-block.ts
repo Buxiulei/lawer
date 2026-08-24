@@ -601,47 +601,78 @@ export function bareArticleSpans(text: string, windowSize = 60): { raw: string; 
  * 【与第五闸不冲突】补进去的是卡里的逐字原文，天然在本轮注入语料内，过闸必然放行；
  * 且本函数在闸之后执行，不存在被自己剥掉的可能。
  *
- * 【边界】只动⭐清单内、且**全文任何位置都没有**该条逐字原文的那些核心位引用；
- * 辅助位不动（那里给条号+大意本就是要求的写法）、非⭐条不动（不把回复灌成法条汇编）、
- * 已经带了原文的不重复补。
+ * 【触发条件：原文在手就补，⭐只定优先级（2026-08-25 修正，见下）】
+ * 核心位 ∧ 光秃 ∧ 该条逐字原文在本轮注入包里 ∧ 全文任何位置都没有它 → 补。
+ * 辅助位不动（那里给条号 + 一句大意本就是要求的写法）、已带原文的不重复补、
+ * 一轮封顶 `RENDER_CAP` 条（⭐清单内的优先占额度），防止把回复灌成法条汇编。
+ *
+ * 【为什么触发条件不是"⭐清单内"（c0680d3 批 S14#1 实测）】首版按"⭐清单内"设门，
+ * 结果那一跑挂在 §40：S14 夹具 stage=`风声`，映射行声明的是 §46/§47/实施条例§27，
+ * 三条把 cap=3 占满 → §40 进不了⭐ → 渲染按设计跳过 → 用户面前留下
+ * 「N+1（第40条第3项）」这么个光秃结论，而 §40 的逐字原文**就在本轮注入包里**。
+ *
+ * ⭐的 cap 服务的是**给模型的信号密度**（首诊别让它觉得什么都重要）；
+ * 而本函数在**出口侧**跑，此时模型已经自己选择在核心位引用了这一条——
+ * "信号密度"的考量在这里已经不适用，用户要的只是**手上那份原文出现在他念得到的地方**。
+ * 两个目标不同，cap 不该越界约束第二个。
  */
 export function renderCoreArticleFallback(
   text: string,
   core: Set<string>,
   injected: KnowledgePack[],
 ): { text: string; added: string[] } {
-  if (core.size === 0) return { text, added: [] };
-  /** ⭐清单内、本轮有逐字原文可用的条：`法名|条号` → 原文（已去掉打头的条号，便于内联） */
-  const usable = new Map<string, string>();
+  /** 本轮手上**有逐字原文**的全部条：`法名|条号` → 原文（去掉打头条号，便于内联） */
+  const available = new Map<string, string>();
   for (const p of injected) {
     for (const q of p.facts?.statute_quotes ?? []) {
       if (!q?.law || !q?.article || !q?.text?.trim()) continue;
       const key = articleKey(q.law, q.article);
-      if (!core.has(key) || usable.has(key)) continue;
-      usable.set(key, q.text.replace(SELF_LABELED_HEAD, '').trim());
+      if (!available.has(key)) available.set(key, q.text.replace(SELF_LABELED_HEAD, '').trim());
     }
   }
-  if (usable.size === 0) return { text, added: [] };
+  if (available.size === 0) return { text, added: [] };
 
   const corpus = normQuote(text);
-  const added: string[] = [];
-  // 从后往前插，避免前面的插入把后面的偏移顶掉
-  const spans = bareArticleSpans(text)
-    .filter((x) => x.site === '核心位')
-    .reverse();
-  let out = text;
-  for (const span of spans) {
+  const seen = new Set<string>();
+  const picked: { at: number; key: string; quote: string }[] = [];
+  for (const span of bareArticleSpans(text)) {
+    if (span.site !== '核心位') continue;
     // 键可能带法名也可能不带（"第46条"），两种都试——与 isCoreBlock 同一套匹配口径
-    const key = [...usable.keys()].find((k) => k === articleKey(null, span.raw.replace(/《[^》]{2,40}》/, '')) || k.endsWith(`|${span.article}`));
-    if (!key) continue;
-    const quote = usable.get(key)!;
+    const key = [...available.keys()].find(
+      (k) => k === articleKey(null, span.raw.replace(/《[^》]{2,40}》/, '')) || k.endsWith(`|${span.article}`),
+    );
+    if (!key || seen.has(key)) continue;
+    // 引用点名了第 N 项就只补那一项：模型引的是"第40条第3项"，用户要念的也是那一项，
+    // 把七个子项整段糊上去，等于用噪音淹掉他真正要用的那一句。
+    const quote = subItemOf(available.get(key)!, span.raw) ?? available.get(key)!;
     if (corpus.includes(normQuote(quote))) continue; // 全文已有该条原文，不重复补
-    if (added.includes(key)) continue; // 同一条只补一次，补在最靠前那处（倒序遍历，最后一次覆盖）
-    const at = span.at + span.raw.length;
-    out = `${out.slice(0, at)}「${quote}」${out.slice(at)}`;
-    added.push(key);
+    seen.add(key);
+    picked.push({ at: span.at + span.raw.length, key, quote });
   }
-  return { text: out, added };
+  // ⭐清单内的优先占额度，其余按出现先后；每轮封顶 RENDER_CAP 条，防止把回复灌成法条汇编
+  picked.sort((a, b) => Number(core.has(b.key)) - Number(core.has(a.key)));
+  const chosen = picked.slice(0, RENDER_CAP).sort((a, b) => b.at - a.at); // 倒序插入，免得偏移被顶掉
+  let out = text;
+  for (const c of chosen) out = `${out.slice(0, c.at)}「${c.quote}」${out.slice(c.at)}`;
+  return { text: out, added: chosen.map((c) => c.key) };
+}
+
+/** 一轮最多补几条。核心位光秃本就稀少（实测一轮 1 处），封顶只是防失控的护栏。 */
+const RENDER_CAP = 3;
+
+/**
+ * 引用点名了「第 N 项」时，从整条原文里切出**那一项**。
+ * 取不到（没点名、或原文里找不到该项）返回 null，调用方退回整条。
+ */
+function subItemOf(quote: string, raw: string): string | null {
+  const m = /第\s*([一二三四五六七八九十0-9]{1,3})\s*项/.exec(raw);
+  if (!m) return null;
+  const want = cnNumeral(m[1]);
+  if (want === null) return null;
+  for (const seg of quote.matchAll(/（([一二三四五六七八九十0-9]{1,3})）[^（]*/g)) {
+    if (cnNumeral(seg[1]) === want) return seg[0].trim();
+  }
+  return null;
 }
 
 /** 卡里 statute_quotes.text 打头的那个条号（`第四十六条　`），内联引用时去掉，免得"第四十六条「第四十六条　…」" */

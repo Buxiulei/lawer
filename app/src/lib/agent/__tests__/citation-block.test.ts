@@ -327,18 +327,51 @@ describe('核心位保底渲染：消灭「核心位光秃」这个类别', () =
     expect(renderCoreArticleFallback(t, core, injected).added).toEqual([]);
   });
 
-  it('非⭐条不动（不把回复灌成法条汇编）', () => {
-    const t = '按《劳动合同法》第八十七条，那是 2N。';
-    expect(renderCoreArticleFallback(t, new Set(['劳动合同法|第46条']), injected).added).toEqual([]);
-  });
-
   it('全文已有该条原文 → 不重复补', () => {
     const t = '按《劳动合同法》第八十七条：「用人单位违反本法规定解除或者终止劳动合同的，应当依照本法第四十七条规定的经济补偿标准的二倍向劳动者支付赔偿金。」那是 2N。';
     expect(renderCoreArticleFallback(t, core, injected).added).toEqual([]);
   });
 
-  it('⭐清单为空 → 一个字都不动', () => {
+  it('注入包里没有该条逐字原文 → 不动（补不出来就不补，绝不凭空生成）', () => {
+    const t = '按《劳动合同法》第三十八条，你可以主张 2N。';
+    expect(renderCoreArticleFallback(t, new Set(['劳动合同法|第38条']), injected).added).toEqual([]);
+  });
+
+  // ── c0680d3 批 S14#1 定断点后的口径修正（2026-08-25）──
+  //
+  // 首版按"⭐清单内"设门，S14#1 就挂在这上面：夹具 stage=风声，映射行声明 §46/§47/实施条例§27
+  // 三条占满 cap=3，§40 进不了⭐ → 渲染跳过 → 用户面前留下「N+1（第40条第3项）」这个光秃结论，
+  // 而 §40 的逐字原文**就在本轮注入包里**。⭐的 cap 管的是给模型的信号密度，
+  // 本函数在出口侧跑、模型已经自己选择引用了这一条，cap 不该越界。
+  it('★非⭐条但原文在手 + 核心位光秃 → 照补（S14#1 §40 的真实形态）', () => {
     const t = '按《劳动合同法》第八十七条，那是 2N。';
-    expect(renderCoreArticleFallback(t, new Set(), injected)).toEqual({ text: t, added: [] });
+    expect(renderCoreArticleFallback(t, new Set(['劳动合同法|第46条']), injected).added).toEqual(['劳动合同法|第87条']);
+  });
+
+  it('★⭐清单内的优先占额度（超过封顶时先保核心条）', () => {
+    const many = [
+      { law: '劳动合同法', article: '第三十九条', text: '第三十九条　劳动者有下列情形之一的，用人单位可以解除劳动合同。' },
+      { law: '劳动合同法', article: '第四十条', text: '第四十条　有下列情形之一的，用人单位提前三十日以书面形式通知劳动者本人。' },
+      { law: '劳动合同法', article: '第四十一条', text: '第四十一条　有下列情形之一，需要裁减人员二十人以上的，可以裁减人员。' },
+      S87,
+    ];
+    const t = '按第三十九条、第四十条、第四十一条、《劳动合同法》第八十七条，你可以主张 2N 赔偿金。';
+    const r = renderCoreArticleFallback(t, new Set(['劳动合同法|第87条']), [card(many)]);
+    expect(r.added).toHaveLength(3); // RENDER_CAP
+    expect(r.added).toContain('劳动合同法|第87条'); // ⭐条必在
+  });
+
+  // 模型引的是"第40条第3项"，用户要念的也是那一项；糊上七个子项等于用噪音淹掉他要用的那句
+  it('★点名了第 N 项 → 只补那一项，不糊整条', () => {
+    const s40 = {
+      law: '劳动合同法',
+      article: '第四十条',
+      text: '第四十条　有下列情形之一的，用人单位提前三十日以书面形式通知劳动者本人或者额外支付劳动者一个月工资后，可以解除劳动合同：\n（一）劳动者患病或者非因工负伤，在规定的医疗期满后不能从事原工作的；\n（三）劳动合同订立时所依据的客观情况发生重大变化，致使劳动合同无法履行的。',
+    };
+    const t = '公司按客观情况重大变化辞退（第40条第3项）→ 赔 N+1 = 159,000 元。';
+    const r = renderCoreArticleFallback(t, new Set(['劳动合同法|第40条']), [card([s40])]);
+    expect(r.added).toEqual(['劳动合同法|第40条']);
+    expect(r.text).toContain('（三）劳动合同订立时所依据的客观情况发生重大变化');
+    expect(r.text).not.toContain('劳动者患病或者非因工负伤'); // 第（一）项没被糊上来
   });
 });
