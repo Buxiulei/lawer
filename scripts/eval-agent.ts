@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import {
+  coreArticleKeys,
   createKnowledgeSearcher,
   CRISIS_RESOURCE_PACK_ID,
   runTurn,
@@ -37,6 +38,7 @@ import {
   globalAssertions,
   citationCompletenessAssertions,
   quotedArticlesFromCards,
+  unstructuredSourceArticles,
   precedentContaminationAssertions,
   userVisibleText,
   unverifiedCoordinateAssertions,
@@ -115,6 +117,17 @@ const SCENARIO_RETRIES = 1;
 
 /** 全库已有逐字原文的条号全集（四态里区分 pending_card 与 pending_injection 用）。
  *  取一次缓存——每剧本重算一遍全库是纯浪费。 */
+/** 全库「正文有原文、未结构化」的条号集合（乙态原料）。同样取一次缓存。 */
+let unstructuredCache: Set<string> | null = null;
+function libraryUnstructuredArticles(searcher: { get?: (id: string) => KnowledgePack | undefined }): Set<string> {
+  if (unstructuredCache) return unstructuredCache;
+  const packs = listPacks()
+    .map((m) => searcher.get?.(m.id))
+    .filter(Boolean) as KnowledgePack[];
+  unstructuredCache = unstructuredSourceArticles(packs);
+  return unstructuredCache;
+}
+
 let libraryCache: Set<string> | null = null;
 function libraryQuotedArticles(searcher: { get?: (id: string) => KnowledgePack | undefined }): Set<string> {
   if (libraryCache) return libraryCache;
@@ -211,6 +224,18 @@ async function runScenario(scenario: Scenario, plan: Plan): Promise<ScenarioRepo
     });
   }
 
+  // ⭐核心条机制在本跑覆盖得到吗：把**本跑真实档案**喂给产线的 coreArticleKeys。
+  // 【不在评测侧重新枚举三来源】枚举一份就等于给"来源是什么"造第二个真源——
+  // 行为侧改了来源，评测侧会静默漂移。所以字段名只出现在这一次 SQL 里，
+  // 判断逻辑一律交回产线函数（判据同源）。
+  const coreMechanismState = {
+    coreKeyCount: coreArticleKeys({
+      claims: db.prepare('SELECT basis FROM claims WHERE case_id = ?').all(caseId) as { basis: string | null }[],
+      openActions: db.prepare('SELECT detail FROM action_items WHERE case_id = ?').all(caseId) as { detail: string | null }[],
+      deadlines: db.prepare('SELECT derived_from FROM deadlines WHERE case_id = ?').all(caseId) as { derived_from: string | null }[],
+    }).size,
+  };
+
   const crisisFacts = searcher.get?.(CRISIS_RESOURCE_PACK_ID)?.facts;
   const mechanical = [
     // 全局断言只对最后一轮判（前面几轮是铺垫，C04 的清单也是按最终状态写的）。
@@ -236,6 +261,8 @@ async function runScenario(scenario: Scenario, plan: Plan): Promise<ScenarioRepo
       scenario.id,
       quotedArticlesFromCards(turns.flatMap((t) => t.retrieved)),
       libraryQuotedArticles(searcher),
+      coreMechanismState,
+      libraryUnstructuredArticles(searcher),
     ),
     // 判例细节污染：判例引用句里混进「夹具有、卡里没有」的用户事实。
     // 比对基准是**本轮实际检索到的判例卡**，不硬编码卡 id——引了哪张就拿哪张对。
@@ -297,7 +324,7 @@ function printReport(r: ScenarioReport): boolean {
 
   // 按层归并：机械断言与 judge 项混在一起排，因为**层级决定后果，来源不决定后果**。
   // 一条 L1 挂了就是不能发版，不管它是正则判的还是判官判的。
-  type Row = { tier: Tier; mark: string; label: string; detail: string; failed: boolean; split: boolean; na: boolean };
+  type Row = { tier: Tier; mark: string; label: string; detail: string; failed: boolean; split: boolean; na: boolean; naKind?: string };
   const rows: Row[] = [
     ...r.mechanical.map((v) => ({
       tier: (v.tier ?? 'L2') as Tier,
@@ -308,6 +335,7 @@ function printReport(r: ScenarioReport): boolean {
       failed: !v.na && !v.pass,
       split: false,
       na: !!v.na,
+      naKind: v.naKind,
     })),
     ...r.semantic.map((j) => ({
       tier: j.tier,
@@ -320,6 +348,7 @@ function printReport(r: ScenarioReport): boolean {
       // judge **不产出 N/A**：N/A 的判定权归代码（manager 2026-08-21），
       // 判官不许主观说「这次不适用」——否则 N/A 就成了第二条静默放行通道
       na: false,
+      naKind: undefined,
     })),
   ];
 
@@ -369,6 +398,21 @@ function printReport(r: ScenarioReport): boolean {
     const ratio = Math.round((nas.length / rows.length) * 100);
     const line = `  · N/A ${nas.length}/${rows.length}（${ratio}%）——判据适用范围不及，不计过不计挂`;
     console.log(ratio > NA_REVIEW_THRESHOLD_PCT ? C.warn(`${line}；占比 >${NA_REVIEW_THRESHOLD_PCT}%，**触发复查**：多半是检测器漏检`) : C.dim(line));
+    // 【成因必须分列】五种 N/A 的**去向完全不同**：缺卡派外勤、未结构化派 WS4、
+    // 未注入是我方召回问题、⭐机制不可用是我方机制缺口、无决策点才是"本来就不适用"。
+    // 合成一个数字，等于把四张不同的工单混成一句"有些不适用"，谁都不知道该做什么。
+    const KIND_LABEL: Record<string, string> = {
+      pending_card: '待补卡（派外勤）',
+      unstructured_source: '待结构化（派 WS4，**正文已有原文**，不进外勤补卡栏）',
+      pending_injection: '待注入（我方召回/enrich）',
+      mechanism_unavailable: '⭐机制不可用（我方机制缺口，不记模型）',
+      no_decision_point: '判据不适用（正常）',
+    };
+    const byKind = new Map<string, number>();
+    for (const x of nas) byKind.set(x.naKind ?? '未分类', (byKind.get(x.naKind ?? '未分类') ?? 0) + 1);
+    for (const [k, n] of [...byKind].sort((a, b) => b[1] - a[1])) {
+      console.log(C.dim(`      ${n} 条 · ${KIND_LABEL[k] ?? k}`));
+    }
   }
 
   const allPass = l1Fail.length === 0 && l2Fail.length === 0;

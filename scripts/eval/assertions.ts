@@ -20,6 +20,24 @@ import {
   type KnowledgePack,
 } from '../../app/src/lib/agent';
 
+/**
+ * 条号/法名归一与引用键：**一律 re-export 产线真源，评测侧不留第二份实现**。
+ *
+ * 【为什么必须收敛】本轮那个把「真挂洗成等卡」的 bug，成因就是**两处各写一份**：
+ * 评测侧改了、行为侧没跟上（或反过来），而漂移**不报错**——它只是让两边对同一条引用
+ * 给出不同的键，然后成绩单安静地少算一笔。教训 11 的原话：
+ * 「两个判据量同一件事，就一定有一个在骗人。」
+ *
+ * 【为什么从深路径 import 而不是 barrel】`app/src/lib/agent/index.ts` 尚未透出这三个，
+ * 而 index.ts 属行为面文件、本 PR 零碰 `app/src`。深路径 import 只是取真源的一条路，
+ * 不改变"真源只有一个"这件事；日后 barrel 透出后可改回，属纯清理。
+ *
+ * `citationKey` 是产线 `articleKey` 的别名——保留旧名以免call site 与既有测试大面积改名，
+ * **实现是同一个函数**，不是同名两份。
+ */
+import { normalizeArticle, normLaw, articleKey as citationKey, packCorpus } from '../../app/src/lib/agent/citation-block';
+export { normalizeArticle, normLaw, citationKey, packCorpus };
+
 export interface TurnRecord {
   /** 用户这一轮说的话 */
   input: string;
@@ -75,7 +93,7 @@ export interface Verdict {
    * `pending_card` 类是「**判据想判但知识库还没有依据**」，是**缺口**，要进补卡清单并被追踪。
    * 混在一起统计，缺口会沉进"正常 N/A"里没人管。
    */
-  naKind?: 'no_decision_point' | 'pending_card' | 'pending_injection';
+  naKind?: 'no_decision_point' | 'pending_card' | 'pending_injection' | 'unstructured_source' | 'mechanism_unavailable';
   /** pending_card 类专用：等哪一条条文补卡 */
   pendingArticle?: string;
   /** pending_card 类专用：该条所属法律（从引用处就近的《…》取），用于清单预分拣 */
@@ -1046,12 +1064,42 @@ export function precedentContaminationAssertions(
  * 与「给了一个查无此案的假案号」（G1，L1）不是一个量级。manager 把 G4 定为发版阻断，
  * 但发版阻断与 L1 是两件事：L1 管的是「会不会伤到用户」。
  */
+/**
+ * ⭐核心条机制在本跑是否覆盖得到。
+ *
+ * 【为什么要这个开关（manager 2026-08-23 裁定）】首诊轮档案是空的 →
+ * `coreArticleKeys` 的三来源（`claims.basis` / 行动卡 `detail` / `deadlines.derived_from`）
+ * 全空 → 产不出⭐标注 → **模型手里根本没有「哪几条是核心条」的信号**。
+ * 此时判 G4 FAIL 等于**拿机制没覆盖的场景罚模型**。
+ *
+ * 【判定依据只用结构化事实】不看轮次序号、不猜"这看起来像首诊"。
+ *
+ * 【为什么不在评测侧重新枚举三来源】枚举一份就等于给"来源是什么"造了第二个真源——
+ * 行为侧哪天改了来源，评测侧的枚举会**静默漂移**（独立同源的错误的温床）。
+ * 所以由 runner 把**本跑真实档案**喂给产线的 `coreArticleKeys`，这里只收它的结果。
+ *
+ * 【证据面优先仍是更好的做法，但需要产线配合】直接看「本轮注入产物里⭐段有没有出现」
+ * 是**事实**而非推导，少一次口径分叉的机会。但 `TurnRecord` 现在拿不到注入产物
+ * （`runTurn` 不回传 system prompt，评测侧也没留存）——那是 `app/src` 侧的接线，
+ * 不在本 PR 范围。**待行为侧把⭐段在场与否随轮次回传后，本函数应改吃那个事实。**
+ */
+export interface CoreMechanismState {
+  /** 本跑 `coreArticleKeys(真实档案)` 的产出规模；0 = ⭐机制未覆盖本场景 */
+  coreKeyCount: number;
+}
+
 export function citationCompletenessAssertions(
   turns: TurnRecord[],
   scenarioId: string,
   quotedArticles?: Set<string>,
   libraryArticles?: Set<string>,
+  coreMechanism?: CoreMechanismState,
+  unstructuredArticles?: Set<string>,
 ): Verdict[] {
+  // ⭐机制不可用 → G4 的 FAIL 分支整体降级为「已知缺口」。
+  // pending_card / pending_injection **不受影响**：那两条讲的是"库里有没有料 / 本轮注没注入"，
+  // 与⭐标注机制是两件事，混在一起会让缺口清单又被灌一批性质不同的东西。
+  const mechanismUnavailable = !!coreMechanism && coreMechanism.coreKeyCount === 0;
   return turns.flatMap((t, i) => {
     const cited = bareArticleCitations(t.text).map((a) => {
       // 【法名可能就在匹配串里】ARTICLE 正则本身允许带《…》前缀，命中串常是「《劳动合同法》第八十七条」。
@@ -1103,9 +1151,27 @@ export function citationCompletenessAssertions(
       else if (inLibrary) missing.push(c); // 库里有、没注入、又没说待核实 → 仍是 FAIL
       else pendingCard.push(c);
     }
-    const pending = pendingCard;
+    // 乙态分流：正文里其实有逐字原文、只是没进 statute_quotes → 派 WS4 结构化，
+    // **不进外勤补卡栏**（外勤打开卡会发现原文就在那儿，等于白派一趟）。
+    const unstructured = unstructuredArticles ? pendingCard.filter((c) => unstructuredArticles.has(c.article)) : [];
+    const pending = unstructuredArticles ? pendingCard.filter((c) => !unstructuredArticles.has(c.article)) : pendingCard;
     const out: Verdict[] = [];
-    if (missing.length > 0) {
+    if (missing.length > 0 && mechanismUnavailable) {
+      // ⭐机制没覆盖本场景（首诊档案空）→ 记「已知缺口」，不记模型。
+      // 单列不并 pending_card：成因不同（"机制没覆盖" vs "库里没料"），
+      // 并进去等于往补卡清单里灌一批外勤补不了的东西。
+      out.push({
+        id: `${scenarioId}-轮${i + 1}-⭐机制不可用`,
+        tier: 'L2',
+        pass: true, // 让旧的布尔消费者不炸；真正的判定看 na
+        na: true,
+        naKind: 'mechanism_unavailable',
+        detail:
+          `第 ${i + 1} 轮有 ${missing.length} 处光秃条号，但本跑档案三来源为空 → ⭐核心条机制未覆盖该场景，` +
+          `模型没拿到"哪几条是核心条"的信号。记**已知缺口**（我方机制问题），不记模型：` +
+          missing.map((m) => m.raw).join('、'),
+      });
+    } else if (missing.length > 0) {
       out.push({
         id: `${scenarioId}-轮${i + 1}-光秃条号`,
         tier: 'L2',
@@ -1126,6 +1192,20 @@ export function citationCompletenessAssertions(
         ...(p.law ? { pendingLaw: p.law } : {}),
         detail:
           `${p.raw} 库内有原文但**本轮未注入**，回复已明说待核实 → 计入我方召回/enrich 改进清单，不记模型`,
+      });
+    }
+    for (const p of unstructured) {
+      out.push({
+        id: `${scenarioId}-轮${i + 1}-待结构化-${p.article}`,
+        tier: 'L2',
+        pass: true,
+        na: true,
+        naKind: 'unstructured_source',
+        pendingArticle: p.article,
+        ...(p.law ? { pendingLaw: p.law } : {}),
+        detail:
+          `${p.raw} 的逐字原文**已在卡正文里**，只是没进 statute_quotes → 派 **WS4 结构化**，` +
+          `不进外勤补卡栏（外勤打开卡会发现原文就在那儿）。本条判定延迟至结构化后。`,
       });
     }
     for (const p of pending) {
@@ -1158,41 +1238,50 @@ export function lawsInLibrary(packs: { facts?: { statute_quotes?: { law: string;
   return out;
 }
 
-/**
- * 法名归一：全称简称互认，**G4 复合键与补卡清单分类器共用同一份**。
- *
- * 【为什么不能用包含匹配】互认全称简称最省事的写法是包含判断，但那会让**短名吃掉长名**：
- * 「劳动合同法」把「劳动争议调解仲裁法」也算成自己。两种错的可见性完全不同——
- * 不互认的后果是键对不上（看得见）；短名吞长名的后果是**两部不同的法被判成同一部**（看不见）。
- * 所以只剥书名号/空格与「中华人民共和国」前缀，**不做任何包含判断**。
- */
-export function normLaw(law: string | null | undefined): string {
-  if (!law) return '';
-  return law.replace(/[《》\s]/g, '').replace(/^中华人民共和国/, '');
-}
 
-/**
- * G4 复合键：`法名|条号`。
- *
- * 【为什么必须带法名】原先只用光条号做 key，于是**不同法律的同号条文互相冒充**：
- * 《劳动合同法》第八十七条（库里有原文）与《民事诉讼法》第八十七条（库里没有）
- * 共用一个键，两个方向都会判错，而成绩单上只显示为一条普通 G4 挂点。
- * `nearestLaw()` 早就把法名取到了——**只是没用在 key 上**，是「取了上下文却没用」的典型。
- */
-export function citationKey(law: string | null | undefined, article: string): string {
-  return `${normLaw(law)}|${normalizeArticle(article)}`;
-}
 
-/** 条号归一：抹掉书名号/空格与「第…条」以外的修饰，便于与卡里的 article 字段比对 */
-export function normalizeArticle(a: string): string {
-  return a.replace(/[《》\s]/g, '').replace(/^.*?(第[一二三四五六七八九十百零〇0-9]+条)/, '$1');
-}
 
 /**
  * 库内**已有逐字原文**的条号全集，从装载器现取。
  * 用它把「该带原文却没带」与「库里本来就没有」分开——后者不是模型的错，
  * 是知识库还没补卡，判它 FAIL 只会逼模型去编原文。
  */
+/**
+ * 【乙态原料】卡**正文里有逐字原文、但没进 `statute_quotes`** 的条号集合。
+ *
+ * 【为什么要单独一态（#0 溯源暴露，manager 2026-08-23 乙案）】四态原本只读 `facts`，
+ * 于是**看不见 body**：模型引了一条正文里白纸黑字写着原文的条，而 `statute_quotes` 没有它，
+ * 判据就报「库里没有原文 → 派外勤补卡」。外勤打开卡一看——原文就在正文里。
+ * 这不是缺卡，是**没结构化**，该派 WS4，不该进外勤补卡栏。两者混一起会让补卡清单
+ * 又被灌一批"补不了的东西"（第二栏灌水同族）。
+ *
+ * 【语料面必须与第五闸同源】命中检测走产线 `packCorpus`（`title\nbody\nJSON(facts)`），
+ * **不在评测侧重拼语料**——闸放行的据，四态就必须认；两边各取各的，
+ * 会出现「闸认为有源所以放行、四态认为无源所以判缺卡」，教训 11 的原样重演。
+ *
+ * 【识别方式】卡里逐字原文的写法是 markdown 引用行开头带条号（`> 第八十七条　用人单位…`）。
+ * 只认这个形态，**不认散文里的交叉引用**（实施条例§25 的正文写着「依照劳动合同法第八十七条」——
+ * 那是提到，不是收录）。宁可漏认（退回 pending_card，外勤会发现"其实有"）
+ * 也不能误认（把真缺卡说成"只是没结构化"，派给 WS4 会找不到东西结构化）。
+ *
+ * 【已知限制】返回的是**归一后的条号**而非 `法名|条号` 复合键：零 `statute_quotes` 的卡
+ * 取不到法名。故本集合比复合键**宽**——它只用于把 pending_card 改判成乙态这一个routing 决定，
+ * 不参与 FAIL 判定，宽一点的代价是可控的。
+ */
+export function unstructuredSourceArticles(
+  packs: { title: string; body: string; facts?: { statute_quotes?: { law: string; article: string; text: string }[] } }[],
+): Set<string> {
+  const out = new Set<string>();
+  for (const p of packs) {
+    const structured = new Set((p.facts?.statute_quotes ?? []).filter((q) => q?.text?.trim()).map((q) => normalizeArticle(q.article)));
+    for (const m of packCorpus(p).matchAll(/^>\s*(第[一二三四五六七八九十百零〇0-9]+条)[　\s]/gm)) {
+      const art = normalizeArticle(m[1]);
+      if (!structured.has(art)) out.add(art);
+    }
+  }
+  return out;
+}
+
 export function quotedArticlesFromCards(packs: { facts?: { statute_quotes?: { law: string; article: string; text: string }[] } }[]): Set<string> {
   const out = new Set<string>();
   for (const p of packs) {

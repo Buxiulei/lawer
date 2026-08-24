@@ -122,6 +122,86 @@ export function citationTemplate(pack: KnowledgePack): string {
  * 指令要挨着它约束的那张卡，放通用指令区会被稀释（实测：「别重印整卡」写在开头被无视两轮）。
  */
 /**
+ * 一张卡的**全部可引用文本**：`title\nbody\nJSON(facts)`。
+ *
+ * 【为什么要单独导出】"卡里有没有这段话"这个问题在多处被问到——第五闸比对注入语料、
+ * 判例污染比对卡内容、库内判定。各处各拼一遍字符串，就会出现**同一个问题在不同地方
+ * 用不同语料回答**（本轮 bug 的同族形态）。抽成一处，语料口径天然一致。
+ *
+ * 【为什么含 facts 的 JSON】结构化字段里的逐字原文（statute_quotes.text）也是卡的正文，
+ * 只看 body 会漏掉它；反过来只看 facts 会漏掉写在正文 blockquote 里的原文。**两者都要。**
+ */
+export function packCorpus(pack: Pick<KnowledgePack, 'title' | 'body' | 'facts'>): string {
+  return `${pack.title}\n${pack.body}\n${JSON.stringify(pack.facts ?? {})}`;
+}
+
+/** 汉字数字 → 整数（覆盖 1–999：四十六=46、十九=19、二十=20、一百零八=108）。非法返回 null。 */
+function cnNumeral(s: string): number | null {
+  if (/^[0-9]+$/.test(s)) return Number(s);
+  const D: Record<string, number> = { 〇: 0, 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  let total = 0;
+  let section = 0;
+  let seen = false;
+  for (const ch of s) {
+    if (ch in D) {
+      section = D[ch];
+      seen = true;
+    } else if (ch === '十') {
+      total += (section || 1) * 10;
+      section = 0;
+      seen = true;
+    } else if (ch === '百') {
+      total += (section || 1) * 100;
+      section = 0;
+      seen = true;
+    } else return null;
+  }
+  return seen ? total + section : null;
+}
+
+/**
+ * 条号归一：统一成 `第<阿拉伯数字><条|问>`，**跨数字体系互认并剥掉「第N项/第N款」**。
+ *
+ * **这是条号归一的唯一真源**——产线与评测侧共用本函数（评测侧 import，不另写一份）。
+ * 本 bug 的成因正是"两处各写一份"：判据侧改了、行为侧没跟上，静默漂移。
+ *
+ * 【为什么必须跨数字体系】卡里一律存汉字（`第四十六条`），而模型惯写阿拉伯
+ * （实测原话「《劳动合同法》第46条第2项」）。不互认 → 键对不上 →
+ * 库里**明明有** 280 字原文的核心条文被判成「等卡」，**真挂被洗成 N/A**。
+ * 这个方向是漏判：成绩单显示「0 光秃」，读起来像修法生效——我据此报过一次错误结论。
+ *
+ * 【为什么必须剥项/款】卡按「条」存原文，引用常带到项/款
+ * （`bareArticleCitations` 的正则也会把「第2项」一起捕获）。不剥 → 同样对不上键。
+ *
+ * 【为什么保留单位】`第55问`（534 号解答）与 `第55条` 不是一回事，单位不能丢。
+ *
+ * 【为什么「之N」独立成键】`第四十七条之一` 与 `第四十七条` 是**两条不同的条文**（中文立法通例）。
+ * 合并它们的错误方向与「短法名吞长法名」同族：不互认看得见（键对不上），
+ * 张冠李戴看不见（拿甲条的原文去要求乙条）。
+ */
+export function normalizeArticle(a: string): string {
+  const flat = a.replace(/[《》\s]/g, '');
+  const m = /第([0-9]+|[一二三四五六七八九十百零〇两]+)(条|问)(之([0-9]+|[一二三四五六七八九十]+))?/.exec(flat);
+  if (!m) return flat;
+  const n = cnNumeral(m[1]);
+  const head = n === null ? `第${m[1]}${m[2]}` : `第${n}${m[2]}`;
+  if (!m[4]) return head;
+  const sub = cnNumeral(m[4]);
+  return `${head}之${sub === null ? m[4] : sub}`;
+}
+
+/** 法名归一：全称↔简称互认。**不做包含匹配**——短名吞长名的错误看不见，比键对不上危险。 */
+export function normLaw(law: string | null | undefined): string {
+  if (!law) return '';
+  return law.replace(/[《》\s]/g, '').replace(/^中华人民共和国/, '');
+}
+
+/** 引用键：`法名|条号`。卡侧与引用侧**必须走同一个函数**取键。 */
+export function articleKey(law: string | null | undefined, article: string): string {
+  return `${normLaw(law)}|${normalizeArticle(article)}`;
+}
+
+/**
  * 本轮的**核心依据条**（`法名|条号` 集合），**由结构化事实判定，不让模型自己勾**。
  *
  * 【为什么必须结构化判定】（manager 2026-08-23 落地约束）
@@ -148,8 +228,9 @@ export function coreArticleKeys(input: {
     for (const m of text.matchAll(ARTICLE)) {
       const raw = m[0].replace(/\s+/g, '');
       const law = /《([^》]{2,40})》/.exec(raw)?.[1] ?? '';
-      const art = raw.replace(/《[^》]{2,40}》/, '');
-      out.add(`${law.replace(/^中华人民共和国/, '')}|${art}`);
+      // 走唯一真源出键：档案里写「第46条第2项」、卡里存「第四十六条」，必须归一到同一个键，
+      // 否则 ⭐ 核心条块匹配不上 → 模型收不到"这条要引全"的指令（本次 bug 的行为侧一半）
+      out.add(articleKey(law, raw.replace(/《[^》]{2,40}》/, '')));
     }
   };
   for (const c of input.claims ?? []) collect(c.basis);
@@ -160,9 +241,8 @@ export function coreArticleKeys(input: {
 
 /** 该引用块讲的是不是核心条 */
 function isCoreBlock(law: string, article: string, core: Set<string>): boolean {
-  const norm = law.replace(/[《》\s]/g, '').replace(/^中华人民共和国/, '');
-  const art = article.replace(/\s+/g, '');
-  return core.has(`${norm}|${art}`) || core.has(`|${art}`);
+  // 卡侧与引用侧同函数取键——这是"两处各写一份会静默漂移"的根治
+  return core.has(articleKey(law, article)) || core.has(articleKey(null, article));
 }
 
 export function packCitationGuide(pack: KnowledgePack, core: Set<string> = new Set()): string {
@@ -278,7 +358,7 @@ function grams(text: string, n = 3): Set<string> {
  */
 export function precedentContamination(text: string, cards: KnowledgePack[], userFacts: string): string[] {
   if (!userFacts.trim() || cards.length === 0) return [];
-  const cardGrams = grams(cards.map((c) => `${c.title}\n${c.body}\n${JSON.stringify(c.facts ?? {})}`).join('\n'));
+  const cardGrams = grams(cards.map(packCorpus).join('\n'));
   const factGrams = grams(userFacts);
   const dirty = new Set<string>();
   for (const s of text.split(/[。！？\n]/)) {
@@ -381,7 +461,7 @@ const normQuote = (s: string) => s.replace(/[\s　]/g, '').replace(/[（）()〔
  * 它没有经过检索，也就没有经过任何新鲜度与版本校验（子项从 (1) 记成 (4) 正是记忆复述的形态）。
  */
 export function unsupportedVerbatimQuotes(text: string, injected: KnowledgePack[]): string[] {
-  const corpus = normQuote(injected.map((p) => `${p.title}\n${p.body}\n${JSON.stringify(p.facts ?? {})}`).join('\n'));
+  const corpus = normQuote(injected.map(packCorpus).join('\n'));
   return quotedStatuteSpans(text)
     .filter(({ quote }) => !corpus.includes(normQuote(quote)))
     .map(({ quote }) => quote);

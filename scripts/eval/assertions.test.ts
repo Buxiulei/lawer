@@ -36,6 +36,7 @@ import {
   citationKey,
   normLaw,
   quotedArticlesFromCards,
+  unstructuredSourceArticles,
   normalizeArticle,
   interceptsIrreversibleAction,
   precedentContaminationAssertions,
@@ -978,7 +979,7 @@ describe('G4 光秃条号断言自适应库内原文覆盖（manager 2026-08-22 
     expect(v).toHaveLength(1);
     expect(v[0].na).toBe(true);
     expect(v[0].naKind).toBe('pending_card');
-    expect(v[0].pendingArticle).toBe('第八十七条');
+    expect(v[0].pendingArticle).toBe('第87条'); // 归一后统一成阿拉伯形（跨数字体系互认）
   });
 
   it('补卡到位那一刻判定自动从 N/A 升级为 FAIL，零改评测代码', () => {
@@ -997,9 +998,153 @@ describe('G4 光秃条号断言自适应库内原文覆盖（manager 2026-08-22 
     expect(v[0].naKind).not.toBe('no_decision_point');
   });
 
-  it('条号归一：《》与空格不影响比对', () => {
-    expect(normalizeArticle('《劳动合同法》第八十七条')).toBe('第八十七条');
-    expect(normalizeArticle('第 八十七 条'.replace(/\s/g, ''))).toBe('第八十七条');
+  // 【归一目标形从汉字改成阿拉伯】2026-08-23 收敛到产线真源后，
+  // 条号统一成 `第<阿拉伯数字><条|问>`——三形（带空格/不带/汉字）归到同一个键。
+  // 旧断言写的是"归一后仍是汉字"，那是旧实现的形态，不是这条判据要守的东西。
+  it('条号归一：《》与空格不影响比对，且三形同键', () => {
+    expect(normalizeArticle('《劳动合同法》第八十七条')).toBe('第87条');
+    expect(normalizeArticle('第 八十七 条')).toBe('第87条');
+    expect(normalizeArticle('第 87 条')).toBe('第87条');
+    expect(normalizeArticle('第87条')).toBe('第87条');
+  });
+});
+
+// ───────────────────────────────────────────────────────────────
+// 条号归一（**被测对象是产线真源**，评测侧只 re-export，不另写一份）
+// 2026-08-23 从 scratchpad 补丁移植；样本用**转录原文**：语料里「第 40 条」出现 17 次、
+// 「第40条」35 次——光秃条号在真实输出里就是**带空格的阿拉伯形**。
+// ───────────────────────────────────────────────────────────────
+describe('条号归一：三形互认 + 剥项款 + 之N（真源 normalizeArticle）', () => {
+  it.each([
+    ['第46条第2项', '第46条', '转录原文·N/N+1/2N 结论列举'],
+    ['第 46 条第 2 项', '第46条', '转录原文·带空格'],
+    ['第 40 条', '第40条', '转录原文·语料里 17 次'],
+    ['第\u300040\u3000条', '第40条', '全角空格'],
+    ['第四十六条', '第46条', '卡里写法·汉字'],
+    ['第四十六条第二款', '第46条', '汉字带款'],
+    ['第 四十六 条', '第46条', '汉字带空格'],
+    ['《劳动合同法》第46条', '第46条', '带书名号'],
+    ['第八十七条', '第87条', ''],
+    ['第十九条', '第19条', '十开头'],
+    ['第二十条', '第20条', '整十'],
+    ['第一百零八条', '第108条', '百位'],
+  ])('「%s」→ %s（%s）', (input, want) => {
+    expect(normalizeArticle(input)).toBe(want);
+  });
+
+  it('★三形同键：第 46 条 ≡ 第46条 ≡ 第四十六条', () => {
+    const k = normalizeArticle('第四十六条');
+    expect(normalizeArticle('第 46 条')).toBe(k);
+    expect(normalizeArticle('第46条')).toBe(k);
+  });
+
+  // 负样本：差一条也是差。归一化只该抹掉**书写差异**，不该抹掉**条号差异**
+  it.each([
+    ['第46条', '第四十七条'],
+    ['第4条', '第40条'],
+    ['第十条', '第十九条'],
+    ['第二十条', '第二条'],
+  ])('「%s」≠「%s」', (a, b) => {
+    expect(normalizeArticle(a)).not.toBe(normalizeArticle(b));
+  });
+
+  it('单位不能丢：第55问（534 号按「问」存）≠ 第55条', () => {
+    expect(normalizeArticle('第55问')).toBe('第55问');
+    expect(normalizeArticle('第五十五问')).toBe('第55问');
+    expect(normalizeArticle('第55问')).not.toBe(normalizeArticle('第55条'));
+  });
+
+  // 之N 独立成键：第四十七条之一 与 第四十七条 是两条不同的条文（中文立法通例）。
+  // 合并的错误方向是**静默张冠李戴**——拿甲条的原文去要求乙条。
+  it('之N 不与本条合并，且之一 ≠ 之二', () => {
+    expect(normalizeArticle('第四十七条之一')).not.toBe(normalizeArticle('第四十七条'));
+    expect(normalizeArticle('第47条之一')).toBe(normalizeArticle('第四十七条之一'));
+    expect(normalizeArticle('第47条之一')).not.toBe(normalizeArticle('第47条之二'));
+    expect(normalizeArticle('第47条之一第2款')).toBe('第47条之1');
+  });
+
+  it('不误伤：孤立「第2项」不构成条号；取不到条号只剥书名号空格', () => {
+    expect(normalizeArticle('第2项')).toBe('第2项');
+    expect(normalizeArticle('《劳动合同法》')).toBe('劳动合同法');
+  });
+});
+
+describe('乙态「有原文未结构化」与⭐机制不可用（2026-08-24 四→五态）', () => {
+  const t = (text: string): TurnRecord => ({
+    input: '依据是什么', text, events: [], retrieved: [], actionCards: [], drafts: [],
+    model: 'deepseek-v4-pro', degraded: false, taskClass: 'critical',
+  });
+  const BARE = '依《劳动合同法》第八十七条，公司应支付二倍赔偿金。';
+
+  describe('unstructuredSourceArticles：只认收录形态，不认交叉引用', () => {
+    it('正文 blockquote 里收录了原文、statute_quotes 没有 → 判为未结构化', () => {
+      const pack = { title: 'X', body: '## 条文\n\n> 第八十七条　用人单位违反本法规定解除或者终止劳动合同的……' };
+      expect(unstructuredSourceArticles([pack]).has('第87条')).toBe(true);
+    });
+
+    // 【最要紧的负样本】实施条例§25 的正文写着「依照劳动合同法第八十七条」——
+    // 那是**提到**，不是收录。误认的后果：把真缺卡说成"只是没结构化"，
+    // 派给 WS4 会找不到东西可结构化，而外勤那边永远等不到该补的卡。
+    it('★散文里的交叉引用不算收录（宁可漏认，不可误认）', () => {
+      const pack = { title: 'X', body: '第二十五条　……应当依照劳动合同法第八十七条的规定支付赔偿金。' };
+      expect(unstructuredSourceArticles([pack]).has('第87条')).toBe(false);
+    });
+
+    it('已经结构化的条不再算未结构化（避免重复派单）', () => {
+      const pack = {
+        title: 'X',
+        body: '> 第八十七条　用人单位违反本法规定……',
+        facts: { statute_quotes: [{ law: '劳动合同法', article: '第八十七条', text: '用人单位违反本法规定……' }] },
+      };
+      expect(unstructuredSourceArticles([pack]).size).toBe(0);
+    });
+
+    it('跨数字体系：正文写汉字、引用写阿拉伯，同一条', () => {
+      const pack = { title: 'X', body: '> 第八十七条　用人单位违反本法规定……' };
+      expect(unstructuredSourceArticles([pack]).has(normalizeArticle('第87条'))).toBe(true);
+    });
+  });
+
+  it('★乙态分流：本该 pending_card 的，若正文有原文 → 改判待结构化，且不进外勤补卡栏', () => {
+    const v = citationCompletenessAssertions([t(BARE)], 'X', new Set(), new Set(), undefined, new Set(['第87条']));
+    expect(v).toHaveLength(1);
+    expect(v[0].naKind).toBe('unstructured_source');
+    expect(v[0].detail).toContain('WS4');
+    // pending-cards 只收 naKind==='pending_card'，乙态天然不进外勤清单
+    expect(v[0].naKind).not.toBe('pending_card');
+  });
+
+  it('没给乙态集合时行为不变（仍判 pending_card），不因新参数改判既有结论', () => {
+    const v = citationCompletenessAssertions([t(BARE)], 'X', new Set(), new Set());
+    expect(v[0].naKind).toBe('pending_card');
+  });
+
+  describe('⭐机制不可用：档案三来源为空时不罚模型', () => {
+    const QUOTED = new Set([citationKey('劳动合同法', '第八十七条')]);
+
+    it('★机制可用（coreKeyCount>0）→ 已注入仍光秃 = FAIL，照罚', () => {
+      const v = citationCompletenessAssertions([t(BARE)], 'X', QUOTED, undefined, { coreKeyCount: 3 });
+      expect(v[0].pass).toBe(false);
+      expect(v[0].id).toContain('光秃条号');
+    });
+
+    it('★机制不可用（coreKeyCount===0）→ 同一份输入改判「已知缺口」，不记模型', () => {
+      const v = citationCompletenessAssertions([t(BARE)], 'X', QUOTED, undefined, { coreKeyCount: 0 });
+      expect(v[0].na).toBe(true);
+      expect(v[0].naKind).toBe('mechanism_unavailable');
+      expect(v[0].id).toContain('⭐机制不可用');
+      expect(v[0].detail).toContain('不记模型');
+    });
+
+    it('不传 coreMechanism 时按机制可用处理（不因新参数静默放宽既有判定）', () => {
+      const v = citationCompletenessAssertions([t(BARE)], 'X', QUOTED);
+      expect(v[0].pass).toBe(false);
+    });
+
+    it('⭐不可用**不影响** pending_card：库里没料是另一回事，不该被一起豁免', () => {
+      const v = citationCompletenessAssertions([t(BARE)], 'X', new Set(), new Set(), { coreKeyCount: 0 });
+      expect(v[0].naKind).toBe('pending_card');
+    });
   });
 });
 

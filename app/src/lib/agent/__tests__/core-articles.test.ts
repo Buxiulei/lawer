@@ -20,22 +20,22 @@ const pack = (quotes: { law: string; article: string; text: string }[]): Knowled
 describe('核心条判定：只认结构化事实，不让模型自己勾', () => {
   it('从 claims.basis 取（这是钱的依据，用户会拿它去主张）', () => {
     const keys = coreArticleKeys({ claims: [{ basis: '《劳动合同法实施条例》第二十七条；《劳动合同法》第四十七条' }] });
-    expect(keys.has('劳动合同法实施条例|第二十七条')).toBe(true);
-    expect(keys.has('劳动合同法|第四十七条')).toBe(true);
+    expect(keys.has('劳动合同法实施条例|第27条')).toBe(true);
+    expect(keys.has('劳动合同法|第47条')).toBe(true);
   });
 
   it('从行动卡 detail 取（行动卡是"现在做什么"，其依据必然核心）', () => {
     const keys = coreArticleKeys({ openActions: [{ detail: '为什么：依据《劳动争议调解仲裁法》第二十七条，时效一年' }] });
-    expect(keys.has('劳动争议调解仲裁法|第二十七条')).toBe(true);
+    expect(keys.has('劳动争议调解仲裁法|第27条')).toBe(true);
   });
 
   it('从期限推算依据取', () => {
-    expect(coreArticleKeys({ deadlines: [{ derived_from: '《民事诉讼法》第八十五条' }] }).has('民事诉讼法|第八十五条')).toBe(true);
+    expect(coreArticleKeys({ deadlines: [{ derived_from: '《民事诉讼法》第八十五条' }] }).has('民事诉讼法|第85条')).toBe(true);
   });
 
   it('全称简称互认（卡写全称、档案写简称也要认出来）', () => {
     const keys = coreArticleKeys({ claims: [{ basis: '《中华人民共和国劳动合同法》第四十七条' }] });
-    expect(keys.has('劳动合同法|第四十七条')).toBe(true);
+    expect(keys.has('劳动合同法|第47条')).toBe(true);
   });
 
   it('档案为空时不产出核心条——**不猜**', () => {
@@ -70,4 +70,33 @@ describe('引用块里的核心条标注', () => {
     expect(named).toContain('调解仲裁法');
     expect(named).not.toContain('实施条例');
   });
+});
+
+describe('跨数字体系：档案写阿拉伯、卡里存汉字，必须匹配得上', () => {
+  // 【本次 bug 的行为侧一半】档案 basis 写「第46条第2项」、卡里存「第四十六条」，
+  // 旧实现两边各存各的 → ⭐ 核心条块匹配不上 → 模型收不到"这条要引全"的指令。
+  it('claims.basis 写「第46条第2项」时，⭐ 块能匹配到卡里的「第四十六条」', () => {
+    const core = coreArticleKeys({ claims: [{ basis: '《劳动合同法》第46条第2项' }] });
+    const guide = packCitationGuide(
+      pack([{ law: '中华人民共和国劳动合同法', article: '第四十六条', text: '有下列情形之一的，用人单位应当向劳动者支付经济补偿……' }]),
+      core,
+    );
+    expect(guide).toContain('本轮核心依据条');
+    expect(guide).toContain('第四十六条');
+  });
+
+  it('反向也成立：档案写汉字、卡里存阿拉伯', () => {
+    const core = coreArticleKeys({ claims: [{ basis: '《劳动合同法》第四十条' }] });
+    const guide = packCitationGuide(pack([{ law: '劳动合同法', article: '第40条', text: '有下列情形之一的……' }]), core);
+    expect(guide).toContain('本轮核心依据条');
+  });
+
+  it('**不同条不得互相冒充**：第4条 ≠ 第40条', () => {
+    const core = coreArticleKeys({ claims: [{ basis: '《劳动合同法》第4条' }] });
+    const guide = packCitationGuide(pack([{ law: '劳动合同法', article: '第四十条', text: '……' }]), core);
+    expect(guide).not.toContain('本轮核心依据条');
+  });
+
+  // TODO（专议后落）：首轮空档案场景下 ⭐ 块应非空——见 scratchpad/fix-direction-memo.md §三 B。
+  // 本 PR 不做行为修，此处仅记待补，防"必然为空"再次悄悄成立。
 });
