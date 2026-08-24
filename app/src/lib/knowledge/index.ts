@@ -30,6 +30,12 @@ export interface PackFacts {
   case_facts?: { case_no?: string; court?: string; judged_at?: string; gist?: string; issue?: string; holding?: string; reasoning?: string };
   addresses?: Array<{ name: string; scene: Array<'仲裁立案' | '一审起诉' | '二审上诉' | '执行申请'>; address: string; phone?: string; status: 'usable' | 'unverified'; hours?: string; agent_note?: string; source?: string; confidence?: string }>;
   review_rules?: Array<{ id: string; severity: 'must' | 'strong' | 'suggest'; title: string; pattern_hint: string; basis: string; suggestion: string; negotiation_tip?: string }>;
+  /**
+   * 【⭐核心条的 S3 档】场景 → 核心依据条的**声明式**映射（见 method-core-article-map 卡）。
+   * 键取自已有结构化字段（`cases.stage` / `claims.kind`），`articles` 是 `法名|条号` 归一键。
+   * 它给的是**优先权**（优先占用⭐的 3 条上限），不是追加配额。
+   */
+  core_article_map?: Array<{ scene: string; claim_kind?: string; articles: string[] }>;
 }
 
 /** index.json 里一条卡的元数据，字段与文件内 frontmatter 同名同义（ADR-002：updated 保持 YYYY-MM-DD 字符串，不转 Date） */

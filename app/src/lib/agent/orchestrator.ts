@@ -39,7 +39,7 @@ import {
   shouldInjectCrisisCard,
 } from './crisis';
 import { CitationGuard } from './citation-guard';
-import { stripUnsupportedQuotes } from './citation-block';
+import { CORE_ARTICLE_MAP_PACK_ID, sceneCoreArticles, stripUnsupportedQuotes, type CoreArticleSources } from './citation-block';
 import { bareArticleCitations, precedentContamination } from './citation-block';
 import { MAX_INJECTED_PACKS, type KnowledgePack, type KnowledgeSearcher } from './retrieval';
 import { loadCaseSnapshot } from './snapshot';
@@ -217,13 +217,27 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     }
   }
 
+  // ⭐核心条的取料（S1 档案三来源 / S3 场景映射 / S4 用户原话）一处算清，
+  // 注入侧与工具侧共用同一份——两处各算一份就是"同一个问题两个答案"的老形态。
+  const coreSources: CoreArticleSources = {
+    claims: snapshot.claims,
+    openActions: snapshot.openActions,
+    deadlines: snapshot.deadlines,
+    userMessage: message,
+    // 映射表是知识库里的一张方法卡，按 id 硬取（不经检索：它与用户措辞天然没有词面交集）
+    sceneArticles: sceneCoreArticles(
+      input.searcher?.get?.(CORE_ARTICLE_MAP_PACK_ID),
+      snapshot.case.stage,
+      snapshot.claims.map((c) => c.kind),
+    ),
+  };
+
   const system = buildSystemPrompt({
     snapshot,
     mode,
     stage,
     packs,
-    // ⭐核心条的 S4「用户点名」档要读用户原话（见 citation-block.coreArticleKeys）
-    userMessage: message,
+    coreSources,
     now,
     // 危机指令每次都下发（危机轮的行为纪律逐轮都要生效）；
     // 一次性的是**资源卡本身**，不是「认真对待自伤表述」这件事。
@@ -259,13 +273,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     citations,
     // 工具通道也要执行同一套呈现规则（见 tools.knowledge_search 内注释）
     crisisCardAlreadyGiven: alreadyGiven,
-    // ⭐核心条的 S1/S4 取料：工具通道拿回来的卡也要标⭐（S2 取料面 = state.retrieved，现取）
-    coreSources: {
-      claims: snapshot.claims,
-      openActions: snapshot.openActions,
-      deadlines: snapshot.deadlines,
-      userMessage: message,
-    },
+    // 工具通道拿回来的卡也要标⭐（S2 取料面 = state.retrieved，现取）
+    coreSources,
     state,
     emit,
   };

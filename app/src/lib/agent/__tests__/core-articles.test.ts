@@ -7,7 +7,15 @@
 // 降低正确行为的成本，而不是提高错误行为的代价。
 import { describe, expect, it } from 'vitest';
 
-import { coreArticleKeys, packCitationGuide } from '../citation-block';
+import {
+  articleKey,
+  coreArticleKeys,
+  CORE_ARTICLE_MAP_PACK_ID,
+  packCitationGuide,
+  sceneCoreArticles,
+} from '../citation-block';
+import { createKnowledgeSearcher } from '../knowledge-adapter';
+import { listPacks } from '@/lib/knowledge';
 import type { KnowledgePack } from '../retrieval';
 
 const pack = (quotes: { law: string; article: string; text: string }[]): KnowledgePack =>
@@ -202,5 +210,129 @@ describe('首诊⭐核心条来源', () => {
     it('用户点了名但一张 statute 卡都没检索到 → 仍然空（点名不能凭空造核心条）', () => {
       expect(coreArticleKeys({ retrieved: [], userMessage: '第46条怎么说' }).size).toBe(0);
     });
+  });
+});
+
+
+// ───────── B 件：S3 场景映射表（manager 2026-08-25 批准，语义 = 优先权而非追加配额）─────────
+describe('S3 场景映射：优先占上限，不是追加配额', () => {
+  const statutePack = (arts: string[]) => ({
+    facts: { statute_quotes: arts.map((a) => ({ law: '劳动合同法', article: a, text: `${a}的逐字原文……` })) },
+  });
+  const MAP = {
+    facts: {
+      core_article_map: [
+        { scene: '约谈中', articles: ['劳动合同法|第46条', '劳动合同法|第47条', '劳动合同法|第87条'] },
+        { scene: '风声', articles: ['劳动合同法|第46条'] },
+        { scene: '风声', claim_kind: '欠薪', articles: ['劳动合同法|第38条'] },
+      ],
+    },
+  };
+
+  describe('sceneCoreArticles：键取自现有结构化字段，不新增模型判断', () => {
+    it('二元组精确命中优先于 scene 单键', () => {
+      expect(sceneCoreArticles(MAP, '风声', ['欠薪'])).toEqual(['劳动合同法|第38条']);
+    });
+
+    it('claims 为空（首诊轮）→ 退 scene 单键，这正是本档要覆盖的那一轮', () => {
+      expect(sceneCoreArticles(MAP, '风声', [])).toEqual(['劳动合同法|第46条']);
+    });
+
+    it('claim_kind 对不上时也退单键，不硬套别的行', () => {
+      expect(sceneCoreArticles(MAP, '风声', ['年假'])).toEqual(['劳动合同法|第46条']);
+    });
+
+    it('未列入的阶段不做兜底 → 空，落回 S2 现状', () => {
+      expect(sceneCoreArticles(MAP, '二审', [])).toEqual([]);
+      expect(sceneCoreArticles(MAP, null, [])).toEqual([]);
+      expect(sceneCoreArticles(undefined, '约谈中', [])).toEqual([]);
+    });
+  });
+
+  // 得分序是 39/40/41/46/47/87；映射点名 46/47/87——它们排在得分序第 4-6 位
+  const retrieved = [statutePack(['第三十九条', '第四十条', '第四十一条', '第四十六条', '第四十七条', '第八十七条'])];
+  const scene = sceneCoreArticles(MAP, '约谈中', []);
+
+  it('★映射命中的条优先占满上限，得分序靠前但非核心的被挤出', () => {
+    const core = coreArticleKeys({ retrieved, sceneArticles: scene });
+    expect([...core]).toEqual(['劳动合同法|第46条', '劳动合同法|第47条', '劳动合同法|第87条']);
+    expect(core.has('劳动合同法|第39条')).toBe(false);
+  });
+
+  it('★总数恒 ≤ 3：映射 3 条 + 得分序一堆，仍然只出 3 条', () => {
+    expect(coreArticleKeys({ retrieved, sceneArticles: scene }).size).toBe(3);
+  });
+
+  it('★映射只命中 1 条时，S2 按得分序补足到 3（补位，不是替换）', () => {
+    const core = coreArticleKeys({ retrieved, sceneArticles: ['劳动合同法|第87条'] });
+    expect([...core]).toEqual(['劳动合同法|第87条', '劳动合同法|第39条', '劳动合同法|第40条']);
+  });
+
+  it('★映射点名但取料面里没有的条 → 不入⭐（与用户点名同一条纪律）', () => {
+    const core = coreArticleKeys({ retrieved: [statutePack(['第四十七条'])], sceneArticles: ['劳动合同法|第46条', '劳动合同法|第47条'] });
+    expect(core.has('劳动合同法|第46条')).toBe(false);
+    expect([...core]).toEqual(['劳动合同法|第47条']);
+  });
+
+  it('★S1 恒优先：档案非空时映射一条都渗不进来', () => {
+    const s1 = { claims: [{ basis: '《劳动合同法实施条例》第二十七条' }] };
+    expect([...coreArticleKeys({ ...s1, retrieved, sceneArticles: scene })]).toEqual([...coreArticleKeys(s1)]);
+  });
+
+  it('★S4 仍不占上限：映射占满 3 条后，用户点名的第 4 条照样进', () => {
+    const core = coreArticleKeys({ retrieved, sceneArticles: scene, userMessage: '那第39条呢' });
+    expect(core.size).toBe(4);
+    expect(core.has('劳动合同法|第39条')).toBe(true);
+  });
+});
+
+describe('S3 映射卡与真库的一致性（漂了就红）', () => {
+  const searcher = createKnowledgeSearcher();
+  const mapPack = searcher.get?.(CORE_ARTICLE_MAP_PACK_ID);
+
+  /** 全库 statute_quotes 的真实键集合 */
+  const libraryKeys = new Set<string>();
+  for (const meta of listPacks()) {
+    for (const q of searcher.get?.(meta.id)?.facts?.statute_quotes ?? []) libraryKeys.add(articleKey(q.law, q.article));
+  }
+
+  it('映射卡装得进来', () => {
+    expect(mapPack?.facts?.core_article_map?.length).toBeGreaterThan(0);
+  });
+
+  // 【为什么这条守卫必须有】映射里写一个库内不存在的键，它永远命中不了取料面——
+  // 不报错、不告警，就是**一行装饰**。而⭐会静默退回纯 S2，正是本次要修的那个 bug 的形态。
+  it('★映射里的每个法条键都在库内 statute_quotes 里真实存在', () => {
+    const bad: string[] = [];
+    for (const row of mapPack?.facts?.core_article_map ?? []) {
+      for (const key of row.articles) if (!libraryKeys.has(key)) bad.push(`${row.scene}${row.claim_kind ? `/${row.claim_kind}` : ''} → ${key}`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('★映射键的写法与 articleKey 归一口径一致（否则匹配时静默错过）', () => {
+    for (const row of mapPack?.facts?.core_article_map ?? []) {
+      for (const key of row.articles) {
+        const [law, article] = key.split('|');
+        expect(articleKey(law, article)).toBe(key);
+      }
+    }
+  });
+
+  // 【S03 真实回归】8101783 批三跑里得分序把《司法解释（二）》§3/§6/§7 排在 §46 前面，
+  // 把真正决定补偿的那条挤出了封顶。映射表落地后必须反过来。
+  it('★S03 形态回归：约谈中场景下 §46/§47/§87 占满 3 条，司法解释（二）被挤出', () => {
+    const s = createKnowledgeSearcher();
+    // 用 8101783 批 S03 转录里真实的 retrievedIds 顺序（司法解释二排在补偿核心卡之前）
+    const retrieved = ['statute-fashi-2025-12-jieshi-2', 'statute-jgf-2024-534-jieda-1', 'statute-lhtf-38-beipo-jiechu', 'statute-lhtf-jiechu-buchang-core']
+      .map((id) => s.get?.(id))
+      .filter(Boolean) as { facts?: { statute_quotes?: { law: string; article: string; text: string }[] } }[];
+    const core = coreArticleKeys({
+      retrieved,
+      sceneArticles: sceneCoreArticles(mapPack, '约谈中', []),
+      userMessage: 'HR 给我协议让我今天下班前签，说今天不签明天名额就没了，最多只能给N',
+    });
+    expect([...core]).toEqual(['劳动合同法|第46条', '劳动合同法|第47条', '劳动合同法|第87条']);
+    expect([...core].some((k) => k.includes('司法解释') || k.includes('解释（二）'))).toBe(false);
   });
 });

@@ -215,8 +215,35 @@ function articleKeysIn(text: string | null | undefined): Set<string> {
   return out;
 }
 
-/** S2 候选**封顶**条数。是封顶不是配额——命中 2 条就给 2 条，不许凑数。 */
+/** ⭐**封顶**条数。是封顶不是配额——命中 2 条就给 2 条，不许凑数。 */
 const S2_CAP = 3;
+
+/** 场景映射卡的 id。映射表本身是知识库里的一张方法卡，不是代码里的常量表。 */
+export const CORE_ARTICLE_MAP_PACK_ID = 'method-core-article-map';
+
+/**
+ * 【S3 档】按场景取出**声明的**核心依据条（`法名|条号` 有序数组）。
+ *
+ * 【为什么需要它】S2 的「按检索得分序取前 3」衡量的是**这张卡贴不贴题**，
+ * 不是**这一条是不是本案的钱袋子**。实测 S03 三跑：得分序把《司法解释（二）》§3/§6/§7
+ * 排在前面，把真正决定补偿的《劳动合同法》§46 挤出了封顶——排序副产品当不了核心条判据。
+ *
+ * 【匹配规则】`(scene, claim_kind)` 精确命中优先，命中不到退 `scene` 单键。
+ * 首诊轮 `claims` 为空天然走单键——那正是本档要覆盖的那一轮。
+ * 两个键都取自**已有结构化字段**（`cases.stage` / `claims.kind`），不新增任何模型判断。
+ */
+export function sceneCoreArticles(
+  mapPack: Pick<KnowledgePack, 'facts'> | undefined,
+  scene: string | null | undefined,
+  claimKinds: readonly string[] = [],
+): string[] {
+  const rows = mapPack?.facts?.core_article_map ?? [];
+  if (!scene) return [];
+  const hit =
+    rows.find((r) => r.scene === scene && r.claim_kind && claimKinds.includes(r.claim_kind)) ??
+    rows.find((r) => r.scene === scene && !r.claim_kind);
+  return hit?.articles ?? [];
+}
 
 /**
  * 本轮的**核心依据条**（`法名|条号` 集合），**由结构化事实判定，不让模型自己勾**。
@@ -230,10 +257,17 @@ const S2_CAP = 3;
  *     用户会拿它去主张）；② 行动卡 detail 里的条号（行动卡是「现在做什么」，其依据必然核心）；
  *     ③ 生效中的期限推算依据（`deadlines.derived_from`）。
  *     **只要 S1 出得来一条，本轮就完全走 S1**，S2/S4 一律不参与——老路径输出零变化。
- *   **S2（检索候选）**：S1 全空（首诊轮档案还没落任何东西）时，取本轮注入包里
- *     `facts.statute_quotes` 非空的条目，**按检索得分序**取，封顶 `S2_CAP` 条。
- *   **S4（用户点名）**：用户这轮消息里正则可取的条号，命中候选池就**必入**且**不占 S2 上限**；
+ *   **S3（场景映射）**：S1 全空时，`method-core-article-map` 卡按 `(cases.stage, claims.kind)`
+ *     声明的核心条，**命中取料面的优先占用**封顶名额（见 sceneCoreArticles）。
+ *   **S2（检索候选）**：取本轮注入包里 `facts.statute_quotes` 非空的条目，**按检索得分序**
+ *     把 S3 之后的剩余空位**补足**到 `S2_CAP` 条。
+ *   **S4（用户点名）**：用户这轮消息里正则可取的条号，命中候选池就**必入**且**不占上限**；
  *     库内没有那一条就**不入**⭐（回答层由第五闸走「待核实」口径，不在本函数）。
+ *
+ * 【为什么只有 S4 不占上限（manager 2026-08-25 纠正）】不占上限的特权来自
+ * **「用户点名必答」是问答基线**——那是用户自己提的问题，不答就是没回答他。
+ * S3 是**系统自己的判断**，没有这个特权；给了它追加配额，⭐会膨胀到 5–6 条，
+ * 击穿「封顶 3 = 首诊信息密度」的原裁定。**映射的本质是排序/优先权，不是追加配额。**
  *
  * 【为什么首诊必须有 S2 而不是让⭐整段消失】首诊三来源天然全空 → ⭐段整段不输出 →
  * 模型收不到"哪条是核心"的信号，而首诊恰恰是它最需要这个信号的一轮。
@@ -256,6 +290,11 @@ export interface CoreArticleSources {
   retrieved?: Pick<KnowledgePack, 'facts'>[];
   /** 本轮用户原话（S4 点名的取料面） */
   userMessage?: string;
+  /**
+   * 【S3 档】本场景声明的核心依据条（`sceneCoreArticles` 的产出，有序）。
+   * 语义是**优先权**：命中取料面的按此序**优先占用**封顶名额，剩余空位才由 S2 补足。
+   */
+  sceneArticles?: string[];
 }
 
 export function coreArticleKeys(input: CoreArticleSources): Set<string> {
@@ -268,9 +307,16 @@ export function coreArticleKeys(input: CoreArticleSources): Set<string> {
   for (const d of input.deadlines ?? []) collect(d.derived_from);
   if (out.size > 0) return out; // S1 恒优先
 
-  // 候选池 = 本轮注入包里带逐字原文的法条条目。S2 与 S4 都只在这个池子里取，
+  // 候选池 = 本轮注入包里带逐字原文的法条条目。S3/S2/S4 都只在这个池子里取，
   // 池外的条号一律不入⭐——⭐ 是"这条要引全"的指令，指向一条手上没有原文的条毫无意义。
   const quotes = (input.retrieved ?? []).flatMap((p) => p.facts?.statute_quotes ?? []).filter((q) => q?.law && q?.article && q?.text);
+  const inPool = new Map(quotes.map((q) => [articleKey(q.law, q.article), q]));
+  // S3 先占：映射声明的顺序即优先级，池外的跳过（点名一条手上没原文的条毫无意义）
+  for (const key of input.sceneArticles ?? []) {
+    if (out.size >= S2_CAP) break;
+    if (inPool.has(key)) out.add(key);
+  }
+  // S2 补位：按检索得分序把剩余空位填到封顶为止。总数恒 ≤ S2_CAP
   for (const q of quotes) {
     if (out.size >= S2_CAP) break;
     out.add(articleKey(q.law, q.article));

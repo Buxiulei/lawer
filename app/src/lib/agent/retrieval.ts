@@ -47,6 +47,8 @@ export interface KnowledgePack {
      * 失信的是用户本人。
      */
     case_facts?: { case_no?: string; court?: string; judged_at?: string; gist?: string; issue?: string; holding?: string; reasoning?: string };
+    /** ⭐核心条的 S3 档：场景 → 核心依据条映射（见 method-core-article-map 卡） */
+    core_article_map?: Array<{ scene: string; claim_kind?: string; articles: string[] }>;
   };
 }
 

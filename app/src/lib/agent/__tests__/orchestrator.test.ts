@@ -7,6 +7,8 @@ import { runTurn, type RunTurnResult } from '../orchestrator';
 import * as agentDb from '@/lib/db/agent';
 import { CRISIS_CARD_MARKER, CRISIS_RESOURCE_PACK_ID } from '../crisis';
 import { FIXTURE_PACK, fixtureSearcher, makeAgentFixture, makeSink, scriptedProvider, type ScriptedRound } from './fixtures';
+import { CORE_ARTICLE_MAP_PACK_ID } from '../citation-block';
+import { createKnowledgeSearcher } from '../knowledge-adapter';
 
 const GOOD_CARD = {
   name: 'action_card',
@@ -534,6 +536,34 @@ describe('检索缺失降级', () => {
       const toolMsg = provider.calls[1].filter((m) => m.role === 'tool').map((m) => m.content).join('\n');
       expect(toolMsg).toContain('本轮核心依据条');
       expect(toolMsg).toContain('第四十六条');
+    });
+
+    // ── B 件：S3 场景映射端到端 ──
+    // 夹具案子 stage='已收通知'，映射表该档声明 §40/§46/§87。
+    // 单测证了函数对，这条证**映射卡真的被 orchestrator 取到并递进去了**——接线断了函数再对也没用。
+    it('★S3 映射端到端：得分序靠前的非核心条被映射挤出⭐', async () => {
+      const quotes = [
+        { law: '劳动合同法', article: '第三十九条', text: '劳动者有下列情形之一的……' },
+        { law: '劳动合同法', article: '第四十一条', text: '有下列情形之一，需要裁减人员……' },
+        { law: '劳动合同法', article: '第四十条', text: '有下列情形之一的，用人单位提前三十日……' },
+        { law: '劳动合同法', article: '第四十六条', text: '有下列情形之一的，用人单位应当支付经济补偿：' },
+        { law: '劳动合同法', article: '第八十七条', text: '用人单位违反本法规定解除或者终止劳动合同的……' },
+      ];
+      const real = createKnowledgeSearcher();
+      const { provider } = await turn([{ text: 'x', tools: [GOOD_CARD] }], {
+        searcher: {
+          search: () => [{ ...QUOTED_PACK, facts: { statute_quotes: quotes } }],
+          // 映射卡按 id 硬取，走真库；其余 id 不供给
+          get: (id: string) => (id === CORE_ARTICLE_MAP_PACK_ID ? real.get?.(id) : undefined),
+        },
+      });
+      const star = provider.calls[0][0].content.split('本轮核心依据条')[1]?.split('\n')[0] ?? '';
+      expect(star).toContain('第四十条');
+      expect(star).toContain('第四十六条');
+      expect(star).toContain('第八十七条');
+      // 得分序第 1、2 位但不在映射里 → 被挤出
+      expect(star).not.toContain('第三十九条');
+      expect(star).not.toContain('第四十一条');
     });
 
     it('工具通道拉回来的卡没有 statute_quotes → 仍然不标⭐（不无中生有）', async () => {

@@ -13,7 +13,7 @@ import { CHARTER } from './charter';
 import { intakeDirective, recapBrief, type IntakeStage } from './intake';
 import { MAX_ACTION_CARDS } from './tools';
 import { CRISIS_DIRECTIVE, CRISIS_RESOURCE_PACK_ID } from './crisis';
-import { coreArticleKeys, packCitationGuide } from './citation-block';
+import { coreArticleKeys, packCitationGuide, type CoreArticleSources } from './citation-block';
 import type { KnowledgePack } from './retrieval';
 import type { CaseSnapshot } from './snapshot';
 
@@ -174,8 +174,8 @@ export interface BuildSystemPromptInput {
   stage: IntakeStage;
   /** 预检索到的 packs（逐字原文） */
   packs: KnowledgePack[];
-  /** 本轮用户原话。⭐核心条的 S4「用户点名」档要在这里取条号（见 coreArticleKeys） */
-  userMessage?: string;
+  /** ⭐核心条的取料（S1 档案三来源 / S3 场景映射 / S4 用户原话），由 orchestrator 一处算清 */
+  coreSources?: CoreArticleSources;
   now: Date;
   /** 本轮识别到自伤/极端痛苦表述（见 crisis.assessCrisis） */
   crisis?: boolean;
@@ -233,15 +233,9 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
           }
         : undefined,
       // 核心依据条**由结构化事实判定**，不让模型自己勾——见 citation-block.coreArticleKeys：
-      // S1 档案三来源（claims.basis / 行动卡 detail / 期限推算依据）恒优先；S1 空（首诊轮）
-      // 时才取 S2 本轮检索候选与 S4 用户点名，两者都只在注入包里选。
-      coreArticleKeys({
-        claims: input.snapshot.claims,
-        openActions: input.snapshot.openActions,
-        deadlines: input.snapshot.deadlines,
-        retrieved: input.packs,
-        userMessage: input.userMessage,
-      }),
+      // S1 档案三来源恒优先；S1 空（首诊轮）时 S3 场景映射优先占上限、S2 检索序补足、
+      // S4 用户点名不占上限。取料面在 orchestrator 一处算清，这里只补本通路的注入包。
+      coreArticleKeys({ ...input.coreSources, retrieved: input.packs }),
     ),
   ];
   return parts.filter((p) => p.trim()).join('\n\n---\n\n');
