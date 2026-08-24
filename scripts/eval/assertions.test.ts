@@ -1168,6 +1168,87 @@ describe('乙态「有原文未结构化」与⭐机制不可用（2026-08-24 �
   });
 
   /**
+   * 【态⑤ gate_stripped·闸剥致秃】三要件缺一不判（manager 2026-08-25 批的评测官提案）：
+   *   (a) 该 (法名,条号) 有**闸写下的**剥除标记；
+   *   (b) 库内有原文**且已注入**；
+   *   (c) 正文光秃或改口。
+   *
+   * 【防滑坡】标记只能由闸代码写进转录，判据**只读不推断**。没有标记的光秃照旧按四态判——
+   * 否则这条豁免会变成"凡是改过口的都不算模型的错"，把 G4 整条洗掉。
+   */
+  describe('★态⑤ gate_stripped：闸造成的光秃不记模型账', () => {
+    const KEY = citationKey('劳动合同法', '第八十七条');
+    /** 闸写下的留痕（D 件：CITATION_BLOCKED.stripped_articles） */
+    const withMark = (articles: string[], text = BARE): TurnRecord => ({
+      ...t(text),
+      events: [{ event: 'notice', data: { code: 'CITATION_BLOCKED', message: '已改口为待核实', stripped_articles: articles } }],
+    });
+
+    it('全齐（a∧b∧c）→ 判态⑤，不记模型挂点', () => {
+      const v = citationCompletenessAssertions([withMark([KEY])], 'X', new Set([KEY]), new Set([KEY]), { coreKeyCount: 3 });
+      expect(v).toHaveLength(1);
+      expect(v[0].na).toBe(true);
+      expect(v[0].naKind).toBe('gate_stripped');
+      expect(v[0].pass).toBe(true);
+      expect(v[0].id).toContain('闸剥除');
+    });
+
+    it('缺 (a)：光秃了但闸没点这一条的名 → 照旧 FAIL', () => {
+      // 闸开了火，剥的却是另一条——不能顺带把本条也免了
+      const v = citationCompletenessAssertions(
+        [withMark([citationKey('劳动合同法', '第四十七条')])],
+        'X',
+        new Set([KEY]),
+        new Set([KEY]),
+        { coreKeyCount: 3 },
+      );
+      expect(v[0].pass).toBe(false);
+      expect(v[0].id).toContain('光秃条号');
+    });
+
+    it('★版本分界：老批转录没有任何闸留痕 → 一律按四态判，不因新态静默放宽', () => {
+      const v = citationCompletenessAssertions([t(BARE)], 'X', new Set([KEY]), new Set([KEY]), { coreKeyCount: 3 });
+      expect(v[0].pass).toBe(false);
+      expect(v[0].id).toContain('光秃条号');
+    });
+
+    it('★缺 (b)：库内有原文但**本轮未注入** → 闸剥的是记忆引用，属正当职务，维持态④不动', () => {
+      // 改口句本身带「需要核实」，走 pending_injection（态④）
+      const text = `${BARE}这一条我需要核实原文再引给你。`;
+      const v = citationCompletenessAssertions([withMark([KEY], text)], 'X', new Set(), new Set([KEY]), { coreKeyCount: 3 });
+      expect(v[0].naKind).toBe('pending_injection');
+      expect(v[0].naKind).not.toBe('gate_stripped');
+    });
+
+    it('缺 (c)：正文带了逐字原文 → 压根不进光秃集合，无从改判', () => {
+      const quoted = '依《劳动合同法》第八十七条："用人单位违反本法规定解除或者终止劳动合同的，应当依照本法第四十七条规定的经济补偿标准的二倍向劳动者支付赔偿金。"';
+      expect(citationCompletenessAssertions([withMark([KEY], quoted)], 'X', new Set([KEY]), new Set([KEY]), { coreKeyCount: 3 })).toEqual([]);
+    });
+
+    it('★边界：同一轮里态④与态⑤各判各的，谁也不吞谁', () => {
+      const K27 = citationKey('劳动争议调解仲裁法', '第二十七条');
+      const text = `${BARE}另外依《劳动争议调解仲裁法》第二十七条，时效一年——这一条我需要核实原文再引给你。`;
+      const v = citationCompletenessAssertions(
+        [withMark([KEY], text)],
+        'X',
+        new Set([KEY]), // 只有 §87 已注入
+        new Set([KEY, K27]), // 两条库内都有
+        { coreKeyCount: 3 },
+      );
+      const kinds = v.map((x) => x.naKind).sort();
+      expect(kinds).toEqual(['gate_stripped', 'pending_injection']);
+      // 态⑤不进补卡/注入缺口清单
+      expect(v.filter((x) => x.naKind === 'gate_stripped').every((x) => x.detail.includes('不计模型挂点'))).toBe(true);
+    });
+
+    it('闸留痕只读、不推断：正文里出现改口措辞但没有闸标记 → 不改判', () => {
+      const text = `${BARE}这一条我需要核实原文再引给你。`;
+      const v = citationCompletenessAssertions([t(text)], 'X', new Set([KEY]), new Set([KEY]), { coreKeyCount: 3 });
+      expect(v[0].naKind).not.toBe('gate_stripped');
+    });
+  });
+
+  /**
    * 【两侧同源】判据侧的「机制不可用」必须与产线的「⭐段不出现」是**同一个函数的同一次判断**，
    * 不是两边各写一份"看起来一样"的条件。所以这里不手写 `coreKeyCount`，
    * 而是把与产线完全相同的原料喂给产线的 `coreArticleKeys`，拿它的产出规模当判据输入。

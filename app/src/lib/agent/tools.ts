@@ -21,7 +21,7 @@ import * as calc from './calc';
 import { citationCorrectionDirective, type CitationGuard } from './citation-guard';
 import { compactCrisisCard, CRISIS_RESOURCE_PACK_ID } from './crisis';
 import { unsupportedVerbatimQuotes } from './citation-block';
-import { packCitationGuide } from './citation-block';
+import { coreArticleKeys, packCitationGuide, type CoreArticleSources } from './citation-block';
 import * as deadline from '@/lib/deadline';
 import type { InputSource } from './calc';
 import {
@@ -431,6 +431,16 @@ export interface AgentToolContext {
    * knowledge_search 的返回要据此执行**同一套呈现规则**——见该 handler 内注释。
    */
   crisisCardAlreadyGiven: boolean;
+  /**
+   * ⭐核心条的 S1/S4 取料（档案三来源 + 用户原话）。候选池的 S2 取料面是 `state.retrieved`，
+   * 所以这里只带**不随工具调用变化**的那部分，卡的部分现取。
+   *
+   * 【为什么工具通道也要算⭐】卡进上下文有两条通路，注入是一条、`knowledge_search` 是另一条。
+   * 只在注入侧标⭐，模型自己搜回来的卡就永远收不到「这条要引全」的指令——
+   * 而实测 S03 三跑里，带 `statute_quotes` 的法条卡**全部**是从工具通路进来的
+   * （预检索 6 张全是话术/SOP/判例卡，一条逐字原文都没有）。少堵一个通道，模型就从那个通道绕过去。
+   */
+  coreSources?: CoreArticleSources;
   state: TurnState;
   emit: AgentEventSink;
 }
@@ -871,6 +881,9 @@ const HANDLERS: Record<string, Handler> = {
     const applyPresentationRule = <T extends { id: string; body: string; title: string }>(p: T): T =>
       p.id === CRISIS_RESOURCE_PACK_ID && ctx.crisisCardAlreadyGiven ? compactCrisisCard(p) : p;
 
+    // ⭐核心条：S1 恒优先，S1 空时由 S2（本轮已进上下文的带原文法条卡）与 S4（用户点名）撑起
+    const core = coreArticleKeys({ ...ctx.coreSources, retrieved: ctx.state.retrieved });
+
     // 新卡的 body 原样返回，一个字都不摘要——理由见 retrieval.ts KnowledgePack.body 注释
     return ok({
       packs: packs.map(applyPresentationRule).map((p) => ({
@@ -885,7 +898,9 @@ const HANDLERS: Record<string, Handler> = {
           : { body: p.body }),
         // G4：引用要求与拼好的引用块**跟着这张卡一起回**，不靠下面那句通用 note——
         // 工具返回是卡进上下文的第二条通路，两条通路必须执行同一套规则（教训 10）。
-        citation_guide: packCitationGuide(p),
+        // ⭐核心条同理：候选池的取料面是**注入包 ∪ 本轮已进上下文的卡**（state.retrieved，
+        // 上面刚把新卡 push 进去），两条通路共用同一个确定性函数出键。
+        citation_guide: packCitationGuide(p, core),
       })),
       note: '引用时：法条给条号+逐字原文，判例给案号+来源，数字给值与生效期间；confidence 为「待核实」的必须如实带上这个状态。每张卡的 citation_guide 已经把可引用内容拼好，照抄即可。',
     });

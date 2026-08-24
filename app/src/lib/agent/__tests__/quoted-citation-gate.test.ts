@@ -140,3 +140,82 @@ describe('第五闸 · 对称直引号必须按奇偶配对（真语料 S03 暴�
     expect(quotedStatuteSpans(reply).length).toBeGreaterThan(0);
   });
 });
+
+
+// ───────── C 件：比对单元从"整块"改为"按句/分号/冒号切出的片段" ─────────
+//
+// 【为什么改】8101783 批 S03 三跑的离线复算：§46 的引用形态是「总述句 + 适用的那一项」，
+// 而卡里总述与该项之间隔着**没被引用的其它项**（(一)(三)(四)…）。整块比对必然对不上，
+// 于是一个完全正确、且是法条引用最自然的写法被判成伪逐字、被剥成光秃。
+describe('第五闸 · 跨子项拼接（manager 2026-08-25 裁定为需修）', () => {
+  /** §46 卡的真身：总述 + 若干子项，逐字取自 statute-lhtf-jiechu-buchang-core */
+  const S46 = [
+    '第四十六条　有下列情形之一的，用人单位应当向劳动者支付经济补偿：',
+    '（一）劳动者依照本法第三十八条规定解除劳动合同的；',
+    '（二）用人单位依照本法第三十六条规定向劳动者提出解除劳动合同并与劳动者协商一致解除劳动合同的；',
+    '（三）用人单位依照本法第四十条规定解除劳动合同的；',
+  ].join('\n');
+  const injected = [pack('statute-lhtf-jiechu-buchang-core', `## 条文原文\n\n> ${S46}`)];
+
+  it('★总述 + 跳过(一)直接接(二) → 放行（修前被剥，S03 #2/#3 的真实形态）', () => {
+    const reply =
+      '《劳动合同法》第四十六条："有下列情形之一的，用人单位应当向劳动者支付经济补偿：（二）用人单位依照本法第三十六条规定向劳动者提出解除劳动合同并与劳动者协商一致解除劳动合同的"';
+    expect(unsupportedVerbatimQuotes(reply, injected)).toEqual([]);
+  });
+
+  it('整块逐字、只引总述、只引单项 → 照旧放行（不因片段化改变既有结论）', () => {
+    for (const q of [S46, '有下列情形之一的，用人单位应当向劳动者支付经济补偿：', '（三）用人单位依照本法第四十条规定解除劳动合同的']) {
+      expect(unsupportedVerbatimQuotes(`《劳动合同法》第四十六条："${q}"`, injected)).toEqual([]);
+    }
+  });
+
+  // 【防强度下滑的负样本】片段化只放行"跳选子项"，不放行"改字"
+  it('★片段里改了字 → 仍然剥（每一段都得逐字，这是防编造的底线）', () => {
+    const reply =
+      '《劳动合同法》第四十六条："有下列情形之一的，用人单位应当向劳动者支付经济补偿：（二）用人单位提出解除劳动合同并与劳动者协商一致的"';
+    expect(unsupportedVerbatimQuotes(reply, injected)).toHaveLength(1);
+  });
+
+  it('★编一个库里没有的子项 → 仍然剥', () => {
+    const reply =
+      '《劳动合同法》第四十六条："有下列情形之一的，用人单位应当向劳动者支付经济补偿：（八）用人单位单方调岗且劳动者不同意的"';
+    expect(unsupportedVerbatimQuotes(reply, injected)).toHaveLength(1);
+  });
+
+  // 【碎词滥配】切完全是短词时不能算"每段都有支撑"，退回整块比对的结论
+  it('★全是短碎片 → 不因切分而放行（退回整块比对）', () => {
+    const reply = '《劳动合同法》第四十六条规定："劳动者；用人单位；经济补偿；解除的"';
+    expect(unsupportedVerbatimQuotes(reply, injected)).toHaveLength(1);
+  });
+
+  it('S14 那句伪逐字在片段化之后依然被抓住（动闸必回归）', () => {
+    expect(unsupportedVerbatimQuotes(S14_REPLY, S14_INJECTED)).toHaveLength(1);
+  });
+});
+
+// ───────── D 件：剥除留痕（机器可读，判据只读不推断） ─────────
+describe('第五闸 · 剥除留痕归因到条', () => {
+  const injected = [pack('statute-x', '第八十七条　用人单位违反本法规定解除或者终止劳动合同的，应当依照本法第四十七条规定的经济补偿标准的二倍向劳动者支付赔偿金。')];
+
+  it('★剥除时写下被剥的是哪一条（法名|条号）', () => {
+    const reply = '依《劳动合同法》第46条："用人单位应当支付三倍经济补偿并额外补助六个月工资"，你可以主张。';
+    const { stripped, strippedArticles } = stripUnsupportedQuotes(reply, injected);
+    expect(stripped).toHaveLength(1);
+    expect(strippedArticles).toEqual(['劳动合同法|第46条']);
+  });
+
+  it('闸没开火时留痕为空——不制造"看起来有剥除"的假象', () => {
+    const reply =
+      '依《劳动合同法》第八十七条："用人单位违反本法规定解除或者终止劳动合同的，应当依照本法第四十七条规定的经济补偿标准的二倍向劳动者支付赔偿金。"';
+    const { stripped, strippedArticles } = stripUnsupportedQuotes(reply, injected);
+    expect(stripped).toEqual([]);
+    expect(strippedArticles).toEqual([]);
+  });
+
+  it('引号前找不到条号时不硬猜（宁可归因不到，也不绑错条）', () => {
+    const reply = '有人跟我说："用人单位应当支付三倍经济补偿并额外补助六个月的工资待遇"，这靠谱吗？';
+    const { stripped, strippedArticles } = stripUnsupportedQuotes(reply, injected);
+    expect(stripped.length + strippedArticles.length).toBeLessThanOrEqual(1);
+    expect(strippedArticles).toEqual([]);
+  });
+});

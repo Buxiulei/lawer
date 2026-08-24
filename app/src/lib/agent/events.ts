@@ -149,6 +149,12 @@ export type AgentEvent =
         message: string;
         /** CALC_FAILED 专用：缺哪些输入导致算不出来，前端据此把「补什么」说具体 */
         missing_fields?: string[];
+        /**
+         * CITATION_BLOCKED 专用：被闸剥掉原文的那些 `法名|条号`。
+         * **机器可读留痕**：评测侧据此把「闸造成的光秃」与「模型自己没给」分账（态⑤），
+         * 判据只读这个字段、不从正文反推——反推等于给分账开第二个真源。
+         */
+        stripped_articles?: string[];
         /** CALC_FAILED 专用：恒 true——补齐信息后可以直接再算一次，不是功能坏了 */
         retriable?: boolean;
       };

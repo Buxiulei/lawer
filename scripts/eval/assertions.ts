@@ -93,7 +93,14 @@ export interface Verdict {
    * `pending_card` 类是「**判据想判但知识库还没有依据**」，是**缺口**，要进补卡清单并被追踪。
    * 混在一起统计，缺口会沉进"正常 N/A"里没人管。
    */
-  naKind?: 'no_decision_point' | 'pending_card' | 'pending_injection' | 'unstructured_source' | 'mechanism_unavailable';
+  /**
+   * 【态⑤ gate_stripped·闸剥致秃，2026-08-25 四→五→六态】原文是被第五闸拿走的，不是模型没给。
+   * 账记**产线闸行为**（进闸修队列），不计模型挂点、不进补卡/注入缺口清单。
+   * **版本分界**：本态只适用于**闸会写剥除留痕的行为 SHA**（D 件之后）。
+   * 老批转录里没有 `stripped_articles`，一律按四态判——判据的每次语义变更都要声明
+   * 它适用的行为机制版本区间，跨版本回放用被判行为当时的语义。
+   */
+  naKind?: 'no_decision_point' | 'pending_card' | 'pending_injection' | 'unstructured_source' | 'mechanism_unavailable' | 'gate_stripped';
   /** pending_card 类专用：等哪一条条文补卡 */
   pendingArticle?: string;
   /** pending_card 类专用：该条所属法律（从引用处就近的《…》取），用于清单预分拣 */
@@ -1096,6 +1103,23 @@ export interface CoreMechanismState {
   coreKeyCount: number;
 }
 
+/**
+ * 【态⑤原料】本轮**闸自己写下**的剥除留痕：被 `stripUnsupportedQuotes` 拿掉原文的 `法名|条号`。
+ *
+ * 【只读不推断（manager 2026-08-25 防滑坡硬要求）】只认闸在 `CITATION_BLOCKED` notice 里
+ * 写下的 `stripped_articles`，**不从正文反推**（比如"改口句附近有条号"）。
+ * 反推等于给分账开第二个真源：闸的归因窗口一改，判据就静默漂移，
+ * 而漂移的方向恰好是"把模型的漏引洗成闸的锅"——这条豁免只能由闸自己签发。
+ */
+export function gateStrippedArticles(t: TurnRecord): Set<string> {
+  const out = new Set<string>();
+  for (const e of t.events) {
+    if (e.event !== 'notice' || e.data.code !== 'CITATION_BLOCKED') continue;
+    for (const k of e.data.stripped_articles ?? []) out.add(k);
+  }
+  return out;
+}
+
 export function citationCompletenessAssertions(
   turns: TurnRecord[],
   scenarioId: string,
@@ -1151,9 +1175,21 @@ export function citationCompletenessAssertions(
     const missing: typeof uniq = [];
     const pendingCard: typeof uniq = [];
     const pendingInjection: typeof uniq = [];
+    const gateStripped: typeof uniq = [];
+    // 态⑤三要件之(a)：闸写下的剥除留痕。空集 = 本轮闸没开火 = 一律照四态判。
+    const stripped = gateStrippedArticles(t);
     for (const c of uniq) {
       if (!quotedArticles) { missing.push(c); continue; }
-      if (c.hasLaw && quotedArticles.has(c.key)) { missing.push(c); continue; } // 已注入仍光秃
+      if (c.hasLaw && quotedArticles.has(c.key)) {
+        // 【态⑤ gate_stripped·闸剥致秃】三要件齐全才改判：
+        //   (a) 该 (法名,条号) 有闸剥除标记；(b) 库内有原文**且已注入**（就是本分支）；
+        //   (c) 正文光秃或改口（能走到这里就已经进了 bareArticleCitations）。
+        // (b) 卡在"已注入"上是有意的：闸剥「库内有但本轮没注入」的记忆引用是**正当职务**，
+        // 那种情况维持态④/G1 原逻辑不动——否则闸每拦一次编造，模型就被免一次责。
+        if (stripped.has(c.key)) gateStripped.push(c);
+        else missing.push(c);
+        continue;
+      } // 已注入仍光秃
       const inLibrary = c.hasLaw && libraryArticles?.has(c.key);
       if (inLibrary && saysUnverified) pendingInjection.push(c);
       else if (inLibrary) missing.push(c); // 库里有、没注入、又没说待核实 → 仍是 FAIL
@@ -1188,6 +1224,21 @@ export function citationCompletenessAssertions(
         detail:
           `第 ${i + 1} 轮有 ${missing.length} 处只给条号、附近无逐字原文的引用：${missing.map((m) => m.raw).join('、')}` +
           '——用户要拿它去打印、标注、当庭念出来（charter §3 / G4）',
+      });
+    }
+    for (const p of gateStripped) {
+      out.push({
+        id: `${scenarioId}-轮${i + 1}-闸剥除-${p.article}`,
+        tier: 'L2',
+        pass: true, // 让旧的布尔消费者不炸；真正的判定看 na
+        na: true,
+        naKind: 'gate_stripped',
+        pendingArticle: p.article,
+        ...(p.law ? { pendingLaw: p.law } : {}),
+        detail:
+          `${p.raw} 的逐字原文**是被第五闸拿走的**（本轮 CITATION_BLOCKED 留痕点名了这一条），` +
+          `不是模型没给：库内有原文、本轮已注入、闸剥后正文才变光秃。` +
+          `账记**产线闸行为**，进闸修队列——不计模型挂点，也不进补卡/注入缺口清单。`,
       });
     }
     for (const p of pendingInjection) {

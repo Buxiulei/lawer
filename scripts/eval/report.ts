@@ -31,6 +31,14 @@ export interface ScenarioEvidence {
     text: string;
     actionCards: { title: string; detail: string; due_at: string | null }[];
     retrievedIds: string[];
+    /**
+     * 本轮第五闸剥掉原文的那些 `法名|条号`（闸自己写下的留痕）。
+     *
+     * 【为什么必须落进转录】8101783 批 S03 复盘时，转录只有 post-gate 正文——
+     * "这处光秃是模型没给还是闸拿走的"**无法离线判定**，只能记到模型账上。
+     * 留痕落盘之后，同一份转录下次回放就能分账（态⑤ gate_stripped）。
+     */
+    gateStrippedArticles: string[];
     /** 这一轮实际跑在哪个模型上——证据必须自证，不能靠「我记得是 deepseek」 */
     model: string;
     degraded: boolean;
@@ -166,7 +174,8 @@ function renderMarkdown(run: RunEvidence): string {
         lines.push('');
       }
       lines.push(
-        `模型：${t.model}（${t.taskClass}${t.degraded ? '，**已降级**' : '，未降级'}）｜检索到的依据：${t.retrievedIds.join('、') || '（无）'}`,
+        `模型：${t.model}（${t.taskClass}${t.degraded ? '，**已降级**' : '，未降级'}）｜检索到的依据：${t.retrievedIds.join('、') || '（无）'}` +
+          (t.gateStrippedArticles.length ? `｜**第五闸剥除**：${t.gateStrippedArticles.join('、')}` : ''),
         '',
       );
     }

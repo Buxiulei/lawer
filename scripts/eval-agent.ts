@@ -38,6 +38,7 @@ import {
   globalAssertions,
   citationCompletenessAssertions,
   quotedArticlesFromCards,
+  gateStrippedArticles,
   unstructuredSourceArticles,
   precedentContaminationAssertions,
   userVisibleText,
@@ -481,11 +482,20 @@ async function main() {
       redline: !!s.redline,
       pass,
       error: report.error,
+      gateHits: {
+        citation: report.turns.reduce((n, t) => n + gateStrippedArticles(t).size, 0),
+        leverage: report.turns.reduce(
+          (n, t) => n + t.events.filter((e) => e.event === 'notice' && e.data.code === 'EMOTIONAL_LEVERAGE_DETECTED').length,
+          0,
+        ),
+      },
       turns: report.turns.map((t) => ({
         input: t.input,
         text: t.text,
         actionCards: t.actionCards,
         retrievedIds: t.retrieved.map((p) => p.id),
+        // 闸写下的剥除留痕落进转录：没有它，"光秃是谁造成的"下次仍然不可判
+        gateStrippedArticles: [...gateStrippedArticles(t)],
         model: t.model,
         degraded: t.degraded,
         taskClass: t.taskClass,

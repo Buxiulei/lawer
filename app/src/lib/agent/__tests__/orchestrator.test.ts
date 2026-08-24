@@ -515,6 +515,38 @@ describe('检索缺失降级', () => {
       const { provider } = await turn([{ text: 'x', tools: [GOOD_CARD] }]);
       expect(provider.calls[0][0].content).not.toContain('本轮核心依据条');
     });
+
+    // ── A 件：候选池取料面 = 预检索注入包 ∪ 工具通道已注入的卡 ──
+    //
+    // 【为什么必须补这条通路】8101783 批 S03 三跑的离线复算：预检索 6 张全是话术/SOP/判例卡，
+    // **一张带 statute_quotes 的法条卡都没有**；带逐字原文的卡**全部**是模型自己调
+    // knowledge_search 拉回来的。只在注入侧标⭐，那一轮模型永远收不到"这条要引全"的指令。
+    it('★工具通道拉回来的法条卡也带⭐（注入侧一张 statute 卡都没有时，这是唯一的通路）', async () => {
+      const { provider } = await turn(
+        [
+          { text: '先查依据。', tools: [{ name: 'knowledge_search', args: { query: '经济补偿' } }] },
+          { text: '据此……', tools: [GOOD_CARD] },
+        ],
+        // 预检索恒空 → S1、S2 在 system prompt 侧都空；卡只能从工具通道进来
+        { searcher: { search: (q: string) => (q === '经济补偿' ? [QUOTED_PACK] : []), get: () => undefined } },
+      );
+      // 第二轮的消息里带着工具返回，⭐ 必须在 citation_guide 里
+      const toolMsg = provider.calls[1].filter((m) => m.role === 'tool').map((m) => m.content).join('\n');
+      expect(toolMsg).toContain('本轮核心依据条');
+      expect(toolMsg).toContain('第四十六条');
+    });
+
+    it('工具通道拉回来的卡没有 statute_quotes → 仍然不标⭐（不无中生有）', async () => {
+      const { provider } = await turn(
+        [
+          { text: '先查依据。', tools: [{ name: 'knowledge_search', args: { query: '话术' } }] },
+          { text: '据此……', tools: [GOOD_CARD] },
+        ],
+        { searcher: { search: () => [FIXTURE_PACK], get: () => undefined } },
+      );
+      const toolMsg = provider.calls[1].filter((m) => m.role === 'tool').map((m) => m.content).join('\n');
+      expect(toolMsg).not.toContain('本轮核心依据条');
+    });
   });
 });
 

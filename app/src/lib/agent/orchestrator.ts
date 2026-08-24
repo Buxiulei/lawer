@@ -259,6 +259,13 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     citations,
     // 工具通道也要执行同一套呈现规则（见 tools.knowledge_search 内注释）
     crisisCardAlreadyGiven: alreadyGiven,
+    // ⭐核心条的 S1/S4 取料：工具通道拿回来的卡也要标⭐（S2 取料面 = state.retrieved，现取）
+    coreSources: {
+      claims: snapshot.claims,
+      openActions: snapshot.openActions,
+      deadlines: snapshot.deadlines,
+      userMessage: message,
+    },
     state,
     emit,
   };
@@ -468,6 +475,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
         message:
           `检出 ${quoteGate.stripped.length} 处「本轮未检索到、却以引号逐字引用」的法条文本，已改口为待核实：` +
           quoteGate.stripped.map((q: string) => `「${q.slice(0, 24)}…」`).join('、'),
+        // 闸自己写下"我剥了哪一条"，下游只读不推断（态⑤分账的唯一依据）
+        stripped_articles: quoteGate.strippedArticles,
       },
     });
   }

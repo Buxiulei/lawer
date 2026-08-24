@@ -245,15 +245,20 @@ const S2_CAP = 3;
  * 与其加一条"每条都必须带原文"的粗规则（会盖掉核心/辅助分层与 pending 三分支），
  * 不如**把"哪条是核心"从模型的判断变成注入的事实**——降低正确行为的成本，而不是提高错误行为的代价。
  */
-export function coreArticleKeys(input: {
+export interface CoreArticleSources {
   claims?: { basis: string | null }[];
   openActions?: { detail: string | null }[];
   deadlines?: { derived_from: string | null }[];
-  /** 本轮检索命中的卡（注入包），**顺序即检索得分序** */
+  /**
+   * 候选池的取料面：**预检索注入包 ∪ 本轮已进上下文的卡**，顺序即检索得分序。
+   * 产线两条通路各自现取——注入侧传 `input.packs`，工具侧传 `state.retrieved`。
+   */
   retrieved?: Pick<KnowledgePack, 'facts'>[];
   /** 本轮用户原话（S4 点名的取料面） */
   userMessage?: string;
-}): Set<string> {
+}
+
+export function coreArticleKeys(input: CoreArticleSources): Set<string> {
   const out = new Set<string>();
   const collect = (text: string | null | undefined) => {
     for (const k of articleKeysIn(text)) out.add(k);
@@ -495,16 +500,56 @@ export function quotedStatuteSpans(text: string): { quote: string; at: number }[
 const normQuote = (s: string) => s.replace(/[\s　]/g, '').replace(/[（）()〔〕[\]【】《》""''「」『』]/g, '');
 
 /**
- * 引号内容在**本轮注入块**里没有支撑的那些（= 伪逐字引用）。
+ * 逐字比对的**切分单元**：句末、分号、冒号、换行。
+ *
+ * 【为什么冒号也要切】法条的「总述 + 适用项」写法（`……应当支付经济补偿：（二）用人单位依照……`）
+ * 是引用法条最自然的形态，而卡里总述与各项之间隔着**没被引用的其它项**
+ * （(一)(三)(四)…）。整块比对时这种引用必然对不上语料，被判无支撑——
+ * 8101783 批 S03 三跑里 §46 的改口正是这个形态（离线复算已证：整块比对剥、按片比对放行）。
+ */
+const QUOTE_FRAGMENT = /[。；;：:\n]+/;
+
+/**
+ * 一个片段短到什么程度就**不再承载逐字信号**。
+ *
+ * 【这个阈值管的是"碎词滥配"】切分会把「的」「劳动者」这类碎片切出来，它们在任何一份法条语料里
+ * 都能命中，拿它们当"有支撑"的证据等于不设防。所以**只有够长的片段才被要求逐字命中**，
+ * 短片段既不作数也不否决。8 字是下限：库里最短的完整项「（七）法律、行政法规规定的其他情形」
+ * 归一后 14 字，而术语普遍在 8 字以内（见 VERBATIM_MIN_LEN 那条真实语料的教训）。
+ */
+const MIN_FRAGMENT_LEN = 8;
+
+/**
+ * 引号内容在**本轮注入块**里有没有逐字支撑。
+ *
+ * 【比对单元是片段不是整块（manager 2026-08-25 裁定）】把引号块按句/分号/冒号切开，
+ * **每个够长的片段各自**必须在语料里逐字命中；任一片段无支撑 → 整块无支撑。
+ * 这样「总述 + 适用项」这种跳选子项的正当引用能放行，而**每一段仍然必须逐字**——
+ * 改写、记忆复述、编子项内容一个都过不去（S14 那句把 §55(1) 记成「第(4)项」且措辞不同，
+ * 切开后每个片段都对不上语料）。
+ *
+ * 【已知的强度让步，写明不藏】片段化之后，**把真片段重新排序拼起来**不再被拦
+ * （整块比对能拦）。判断是：跳选子项是高频正当行为，重排真片段既罕见、后果也远轻于
+ * 「编一段不存在的原文」——每个字仍是立法者写的。要拦重排得引入顺序校验，
+ * 那是另一个量级的复杂度，YAGNI。
  *
  * 【为什么必须是「本轮注入」而不是「整个知识库」】S14 那轮根本没检索到 534 卡。
  * 拿全库比对会让「这轮没查却背出来」通过——而**背出来的那次恰恰最危险**：
  * 它没有经过检索，也就没有经过任何新鲜度与版本校验（子项从 (1) 记成 (4) 正是记忆复述的形态）。
  */
+function quoteSupported(quote: string, corpus: string): boolean {
+  const whole = normQuote(quote);
+  if (corpus.includes(whole)) return true;
+  const fragments = quote.split(QUOTE_FRAGMENT).map(normQuote).filter((f) => f.length >= MIN_FRAGMENT_LEN);
+  // 一个够长的片段都切不出来 → 退回整块比对的结论（碎片全是短词时不能算"每段都有支撑"）
+  if (fragments.length === 0) return false;
+  return fragments.every((f) => corpus.includes(f));
+}
+
 export function unsupportedVerbatimQuotes(text: string, injected: KnowledgePack[]): string[] {
   const corpus = normQuote(injected.map(packCorpus).join('\n'));
   return quotedStatuteSpans(text)
-    .filter(({ quote }) => !corpus.includes(normQuote(quote)))
+    .filter(({ quote }) => !quoteSupported(quote, corpus))
     .map(({ quote }) => quote);
 }
 
@@ -520,13 +565,51 @@ export const VERBATIM_UNVERIFIED = '（这一条我需要核实原文再引给�
  * 【与判据侧的保守方向相反，这点必须记住】判据误判是冤枉一次做对了的输出，所以**宁可漏判**；
  * 闸门漏拦是把伪造内容交到用户手上，所以**宁可少说**。同一个「保守」，两层含义相反。
  */
-export function stripUnsupportedQuotes(text: string, injected: KnowledgePack[]): { text: string; stripped: string[] } {
+/**
+ * 这处引文是**在讲哪一条**：从引号往前找最近的一个条号引用。
+ *
+ * 【为什么要归因到条】闸剥完，正文在那一条上就变成了光秃引用，而判据分不清
+ * 「模型自己没给原文」与「原文是被闸拿走的」——8101783 批 S03 #3 就把闸的行为记到了模型账上。
+ * 归因到 `法名|条号` 是让下游能**只读不推断**地分账（态⑤ gate_stripped）的前提。
+ *
+ * 取**最后一个**匹配（离引号最近的那个），窗口与光秃判定同宽，口径一致。
+ */
+function articleKeyBefore(text: string, at: number): string | null {
+  const before = text.slice(Math.max(0, at - GATE_ATTRIBUTION_WINDOW), at);
+  const all = [...before.matchAll(ARTICLE)];
+  const m = all[all.length - 1];
+  if (!m) return null;
+  const raw = m[0].replace(/\s+/g, '');
+  const law = /《([^》]{2,40})》/.exec(raw)?.[1] ?? '';
+  return articleKey(law, raw.replace(/《[^》]{2,40}》/, ''));
+}
+
+/** 归因窗口，与 bareArticleCitations 的默认窗口同宽——两边讲的是同一段"附近" */
+const GATE_ATTRIBUTION_WINDOW = 60;
+
+/** 一次闸剥除的机器可读留痕：剥掉的原文 + 它归属的 `法名|条号`（取不到时为 null）。 */
+export interface StrippedQuote {
+  quote: string;
+  articleKey: string | null;
+}
+
+export function stripUnsupportedQuotes(
+  text: string,
+  injected: KnowledgePack[],
+): { text: string; stripped: string[]; strippedArticles: string[] } {
   const bad = unsupportedVerbatimQuotes(text, injected);
-  if (bad.length === 0) return { text, stripped: [] };
+  if (bad.length === 0) return { text, stripped: [], strippedArticles: [] };
+  // 归因必须在改写**之前**做：改口句一插进去，位置就全变了，前面那个条号也可能被顶出窗口
+  const keys = new Set<string>();
+  for (const { quote, at } of quotedStatuteSpans(text)) {
+    if (!bad.includes(quote)) continue;
+    const k = articleKeyBefore(text, at);
+    if (k) keys.add(k);
+  }
   let out = text;
   for (const q of bad) {
     // 连同包裹它的引号一起替换，避免留下半个引号
     out = out.replace(new RegExp(`[「『"“]${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[」』"”]`, 'g'), VERBATIM_UNVERIFIED);
   }
-  return { text: out, stripped: bad };
+  return { text: out, stripped: bad, strippedArticles: [...keys] };
 }
