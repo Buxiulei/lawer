@@ -1430,14 +1430,52 @@ describe('判据修二 · 裸条号回绑（4e10b7c 批 S14#2/#3 真实样本）
 describe('乙态检测：真卡双极对照 + 节选闸', () => {
   const K = new URL('../../knowledge/packs/', import.meta.url).pathname;
   const card = (rel: string) => ({ title: 'X', body: readFileSync(`${K}${rel}`, 'utf8') });
+  // 【阳性对照走快照，不走活卡】（manager 2026-08-25 定式）
+  // 张力：A18 要求"用真语料"（合成卡只证明模式自洽），但活卡会随知识库演化而变——
+  // PR #60 把 §27 旧副本改成引用，这条阳性对照当场碎（1 failed）。
+  // 解法=**真语料的快照**：内容逐字来自活卡（满足 A18），固化后不随库变（满足稳定性）。
+  // 代价与兜底：快照冻结了"当时的收录形态"，**库里演化出新形态它发现不了**——
+  // 那由「全库乙态扫描」（补卡清单产出时本就在扫全库）作为运维检查覆盖，不靠本用例。
+  const F = new URL('./fixtures/', import.meta.url).pathname;
+  const snapshot = (rel: string) => ({ title: 'X', body: readFileSync(`${F}${rel}`, 'utf8') });
 
-  it('★真卡阳性：完整收录（zhongcai-guanxia-shixiao.md:76-79，§27 四款齐）→ 开火', () => {
-    expect(unstructuredSourceArticles([card('sop/zhongcai-guanxia-shixiao.md')]).has('第27条')).toBe(true);
+  it('★真语料快照·阳性：完整收录（tjzcf-core.md:44-52 @7e92b41 单点事实源正文块，§27 四款齐）→ 开火', () => {
+    expect(unstructuredSourceArticles([snapshot('tjzcf-core-27-body-snapshot.md')]).has('第27条')).toBe(true);
   });
 
-  it('假零直证：旧模式（要求条号紧跟 >）在同一张真卡上不开火', () => {
+  // 形态覆盖：库里正文收录**至少两种形态**——事实源用「> 第N条　」，
+  // 而「> **第N条**　」粗体形态活库里 52 张卡在用（多数形态），当年"假零"正是栽在它上面。
+  // 夹具集覆盖的是**形态**不是**某张卡**：少了粗体那份，占多数的形态就没有回归保护。
+  it('★真语料快照·阳性（粗体形态，活库 52 张卡在用）→ 开火', () => {
+    expect(unstructuredSourceArticles([snapshot('bold-form-27-recording-snapshot.md')]).has('第85条')).toBe(true);
+  });
+
+  it('假零直证：旧模式（要求条号紧跟 >）在粗体形态真语料上不开火', () => {
     const OLD = /^>\s*(第[一二三四五六七八九十百零〇0-9]+条)[　\s]/gm;
-    expect(OLD.test(readFileSync(`${K}sop/zhongcai-guanxia-shixiao.md`, 'utf8'))).toBe(false);
+    expect(OLD.test(readFileSync(`${F}bold-form-27-recording-snapshot.md`, 'utf8'))).toBe(false);
+  });
+
+  it('新模式在两种形态上都开火（形态覆盖，不是单卡覆盖）', () => {
+    expect(unstructuredSourceArticles([snapshot('tjzcf-core-27-body-snapshot.md')]).has('第27条')).toBe(true);
+    expect(unstructuredSourceArticles([snapshot('bold-form-27-recording-snapshot.md')]).has('第85条')).toBe(true);
+  });
+
+  it('★活卡回归：PR #60 后该卡已改为引用，乙态不再对它开火（防旧副本回潮）', () => {
+    expect(unstructuredSourceArticles([card('sop/zhongcai-guanxia-shixiao.md')]).has('第27条')).toBe(false);
+  });
+
+  // 【不可见差异的诊断】全角 U+3000 与半角空格肉眼同形，比对失败时只打字符串会看到
+  // "两个一模一样的串不相等"——最耗人的排障形态。失败信息打**码点**。
+  it('快照与事实源正文逐字同源（失败时打码点，不打字符串）', () => {
+    const fx = readFileSync(`${F}tjzcf-core-27-body-snapshot.md`, 'utf8')
+      .split('\n').filter((l) => l.startsWith('> ')).join('\n');
+    const src = readFileSync(`${K}statutes/tjzcf-core.md`, 'utf8')
+      .split('\n').filter((l) => l.startsWith('> ') && l.includes('仲裁时效')).join('\n');
+    const codes = (t: string) => [...t].map((c) => c.codePointAt(0)!.toString(16)).join(' ');
+    if (!fx.includes('劳动争议申请仲裁的时效期间为一年')) throw new Error(`快照缺 §27 正文；码点=${codes(fx.slice(0, 40))}`);
+    if (src && !src.includes('劳动争议申请仲裁的时效期间为一年')) {
+      throw new Error(`事实源正文形态已变，快照需重取。\n事实源码点=${codes(src.slice(0, 40))}\n快照码点=${codes(fx.slice(0, 40))}`);
+    }
   });
 
   // ★节选闸：weiqian:87 卡自标「逐字，节选」、:90 行内 `……`，缺款2款3。
@@ -1456,7 +1494,7 @@ describe('乙态检测：真卡双极对照 + 节选闸', () => {
 
   it('已结构化的条不重复派单', () => {
     const p = {
-      ...card('sop/zhongcai-guanxia-shixiao.md'),
+      ...snapshot('tjzcf-core-27-body-snapshot.md'),
       facts: { statute_quotes: [{ law: '劳动争议调解仲裁法', article: '第二十七条', text: 'x' }] },
     };
     expect(unstructuredSourceArticles([p]).has('第27条')).toBe(false);
