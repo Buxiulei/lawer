@@ -1238,30 +1238,52 @@ describe('乙态「有原文未结构化」与⭐机制不可用（2026-08-24 �
    * 含触发词的恰好 3 条，就是出事的这三条；其余 5 条安全。规则与事故一一对应。
    */
   describe('★元测试：含否定词的禁语不得用剥泛否定的包装', () => {
-    const SRC = readFileSync(new URL('./scenarios.ts', import.meta.url), 'utf8');
+    const SCEN = readFileSync(new URL('./scenarios.ts', import.meta.url), 'utf8');
+    const ASRT = readFileSync(new URL('./assertions.ts', import.meta.url), 'utf8');
     /** 剥泛否定包装的触发词：`stripQuotedAndNegated` 认的否定前缀 */
     const NEGATION_TRIGGER = /不|别/;
-    /** 调用点：absent( / absentOutsideNegation( / absentOutsideDisclaimer( + 首个正则字面量 */
-    const CALL = /\b(absent|absentOutsideNegation|absentOutsideDisclaimer)\s*\(\s*[^,]+,\s*(\/(?:[^/\\\n]|\\.)+\/)/g;
+    const LITERAL = '(\\/(?:[^/\\\\\\n]|\\\\.)+\\/)';
+    /** 调用点第二参：可能是正则字面量，也可能是**具名常量**（OUTCOME_PROMISE 这种） */
+    const CALL = new RegExp('\\b(absent|absentOutsideNegation|absentOutsideDisclaimer)\\s*\\(\\s*[^,]+,\\s*(?:' + LITERAL + '|([A-Z][A-Z0-9_]{2,}))', 'g');
 
-    const sites = [...SRC.matchAll(CALL)].map((m) => ({ fn: m[1], pattern: m[2] }));
+    /** 具名常量 → 正则字面量（两个文件里的 `const NAME = /.../` 都收） */
+    const consts = new Map<string, string>();
+    for (const src of [SCEN, ASRT]) {
+      for (const m of src.matchAll(new RegExp('const\\s+([A-Z][A-Z0-9_]{2,})\\s*=\\s*' + LITERAL, 'g'))) {
+        consts.set(m[1], m[2]);
+      }
+    }
+
+    const sites = [...SCEN.matchAll(CALL)].map((m) => ({
+      fn: m[1],
+      name: m[3],
+      pattern: m[2] ?? (m[3] ? consts.get(m[3]) : undefined),
+    }));
 
     it('扫描到的调用点数量合理（防正则失配导致"零违规"假绿）', () => {
       // A9：先自证扫得到东西。扫不到时下面每条都会"通过"，而那是最不引人追问的答案。
-      expect(sites.length).toBeGreaterThanOrEqual(8);
+      expect(sites.length).toBeGreaterThanOrEqual(9);
+    });
+
+    it('每个调用点的禁语都能取到（具名常量必须解析得出，不许有看不见的模式）', () => {
+      // 【为什么这条必要】第一版扫描只认正则字面量，`absentOutsideNegation(last(t), OUTCOME_PROMISE)`
+      // 这种具名常量**整条看不见**——元测试会对它一路绿灯，而它恰恰是最容易藏东西的写法。
+      // 取不到就判非法：宁可逼人把常量写成可解析的形式，也不接受"扫不到=安全"。
+      const unresolved = sites.filter((x) => !x.pattern).map((x) => `${x.fn}(… , ${x.name})`);
+      expect(unresolved, `以下断言的禁语解析不出来，元测试对它们是瞎的：\n${unresolved.join('\n')}`).toEqual([]);
     });
 
     it('禁语含「不/别」的断言，必须走 absentOutsideDisclaimer（不得用 absent / absentOutsideNegation）', () => {
       const illegal = sites
-        .filter((x) => NEGATION_TRIGGER.test(x.pattern) && x.fn !== 'absentOutsideDisclaimer')
-        .map((x) => `${x.fn}(… , ${x.pattern})`);
+        .filter((x) => x.pattern && NEGATION_TRIGGER.test(x.pattern) && x.fn !== 'absentOutsideDisclaimer')
+        .map((x) => `${x.fn}(… , ${x.name ?? x.pattern})`);
       expect(illegal, `以下断言的禁语自带否定词，用剥泛否定的包装会把禁语连同否定一起剥掉、判定恒 PASS：\n${illegal.join('\n')}`).toEqual([]);
     });
 
     it('规则确有判别力：确实存在含触发词的条目（否则这条元测试是空转的）', () => {
       // 与上一条配对：上面证明"含触发词的都合规"，这条证明"真的有含触发词的"。
       // 只有上面那条时，把 NEGATION_TRIGGER 写错成永不命中也会绿。
-      expect(sites.filter((x) => NEGATION_TRIGGER.test(x.pattern)).length).toBeGreaterThan(0);
+      expect(sites.filter((x) => x.pattern && NEGATION_TRIGGER.test(x.pattern)).length).toBeGreaterThanOrEqual(3);
     });
   });
 
