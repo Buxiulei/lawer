@@ -29,9 +29,31 @@ const CRISIS_OUTPUT_GATES = [
   },
   {
     fn: 'CRISIS_SAFE_FALLBACK',
-    what: '剥完仍命中或剥空 → 模型段整段丢弃，回落确定性安全回复（仅危机轮）',
+    what: '🔴 剥完仍命中或剥空 → 模型段整段丢弃，回落确定性安全回复（仅危机轮）',
     enabled: true,
     note: '影响最大的一道：模型的话一个字都不下发',
+    /**
+     * 【触发条件与上游依赖 — 实测，manager 点名要这一栏】
+     *
+     * **它不是"几句被判杠杆"的问题，是"还剩不剩干净句子"的问题**（实测）：
+     *   0 句杠杆 + 2 句干净 → clean
+     *   1 句杠杆 + 2 句干净 → stripped（只删命中句）
+     *   2 句杠杆 + 1 句干净 → stripped
+     *   3 句杠杆 + 0 句干净 → **fallback**
+     *   **1 句杠杆 + 0 句干净 → fallback**   ← 一句就够，只要它是全部
+     *
+     * 【为什么它是级联放大器】触发条件是**剥完之后一句不剩**，
+     * 所以**上游任何一道闸误判越多，越容易把句子剥光，越容易触发它**；
+     * 而它一触发，用户就只剩确定性首段——**模型说的每一个字都没了**。
+     *
+     * 【本次修法直接削弱了这条级联 — 实测】一段**全是共情复述**的危机轮回复
+     * （「刚才你说的"对不起爸妈"，我一句都没当成小事。」）：
+     *   · 修前：命中 → 剥光 → **fallback，用户只剩确定性首段**
+     *   · 修后：来源判别放行 → **clean，原样下发**
+     * 也就是说旧实现在"模型认真接住用户"时**最容易把整段话吞掉**——
+     * 越是好好接住（整段都在复述他的话），越容易一句不剩。
+     */
+    cascade: true,
   },
   {
     fn: 'stripDuplicateHotlineList',
@@ -81,6 +103,12 @@ describe('危机轮输出流经的闸：登记册与漏登记检测', () => {
 
   it('自证扫得到东西（扫不到时上一条会假绿）', () => {
     expect([...SRC.matchAll(/\bstrip[A-Z]\w+\s*\(/g)].length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('★级联放大器已标注且触发条件已实测（不是"几句"，是"还剩不剩"）', () => {
+    const cascade = CRISIS_OUTPUT_GATES.filter((g) => 'cascade' in g && g.cascade);
+    expect(cascade.map((g) => g.fn)).toEqual(['CRISIS_SAFE_FALLBACK']);
+    expect(cascade[0].what).toContain('🔴');
   });
 
   it('停用中的闸确实没在跑（按代码核实，不按注释）', () => {
