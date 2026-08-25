@@ -32,6 +32,7 @@ import {
   assessNbdpsyEligibility,
   detectNbdpsyPitch,
   stripLeverageSentences,
+  stripLeverageWithTrail,
   stripDuplicateHotlineList,
   extractHotlines,
   stripNbdpsyPitch,
@@ -470,6 +471,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   // 剥除而不是重生成：重生成要再等 2-4 分钟，而危机轮最不该等；剥句是毫秒级的。
   // 剥完仍命中 → 回落确定性安全回复，模型的话一个字都不下发。
   let leverageOutcome: 'clean' | 'stripped' | 'fallback' = 'clean';
+  /** 闸剥掉的原句留痕——归档正文是闸后产物，不写下来就永远查不到它剥了什么 */
+  let strippedSentences: string[] = [];
   if (crisis.triggered) {
     // 【来源判别的比对面：用户自己说过的话】本轮原话 + 本 thread 的历史用户消息。
     // 复述用户原话是 charter §5「先接住」/§6「引用他说过的细节」的产物，不是杠杆——
@@ -478,7 +481,9 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     const userSaid = [message, ...history.filter((h) => h.role === 'user').map((h) => h.content)].join('\n');
     let body = modelBody;
     if (detectEmotionalLeverage(body, userSaid)) {
-      body = stripLeverageSentences(body, userSaid);
+      const trail = stripLeverageWithTrail(body, userSaid);
+      body = trail.text;
+      strippedSentences = trail.stripped;
       leverageOutcome = 'stripped';
       if (detectEmotionalLeverage(body, userSaid) || !body.trim()) {
         body = CRISIS_SAFE_FALLBACK;
@@ -612,7 +617,11 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
       event: 'notice',
       data: {
         code: 'EMOTIONAL_LEVERAGE_DETECTED',
-        message: `本轮模型输出含情感杠杆劝阻，${action}（charter §5）。杠杆内容未下发给用户。`,
+        message:
+          `本轮模型输出含情感杠杆劝阻，${action}（charter §5）。杠杆内容未下发给用户。` +
+          (strippedSentences.length ? `被剥 ${strippedSentences.length} 句。` : ''),
+        stripped_sentences: strippedSentences,
+        leverage_outcome: leverageOutcome === 'fallback' ? 'fallback' : 'stripped',
       },
     });
     cases.addTimelineEvent(db, {
