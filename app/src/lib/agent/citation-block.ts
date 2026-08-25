@@ -453,7 +453,12 @@ function unquotedVerbatimCovers(span: string, article: string): boolean {
  * 只认打头即可区分它与 S03#2 那种真误免责（`> 第八十七条　…` 自报是 §87，
  * 替不了隔壁那个光秃的 §46）。取不到打头条号 → 归属未知 → 放行（宁可漏判）。
  */
-const SELF_LABELED = /^\s*>?\s*(第[一二三四五六七八九十百零〇0-9]+条)[　\u3000]/;
+// 【《法名》前缀（2026-08-25 补）】真语料里最规范的给法形态是
+// `> 《劳动合同法》第八十七条　用人单位违反本法规定解除…`（S15 轮1 实测）。
+// 不认前缀 → 该行"取不到打头条号" → 归属未知 → 按下面的宽容规则放行，于是它既替不了自己、
+// 也拦不住别人；轮级预扫改成**严格正向归属**后，不扩前缀就会把 S15 那条从平反退回 FAIL——
+// **修一个洞不能靠制造一次冤枉来完成**（lead 2026-08-25 批）。
+const SELF_LABELED = /^\s*>?\s*(?:《[^》]{2,40}》)?\s*(第[一二三四五六七八九十百零〇0-9]+条)[　\u3000]/;
 
 /**
  * 该位置是否落在**自家注入块格式**（`第二十七条　正文…`）的**正文内部**。
@@ -473,13 +478,69 @@ function insideOwnFormatQuote(text: string, at: number): boolean {
   return false;
 }
 
-/** 只认**问过归属**的逐字覆盖（blockquote / 自家注入格式）。轮级预扫专用，见 bareArticleSpans */
+/**
+ * 一行文字**打头点名**的条号（归一化后）；没点名返回 null。
+ *
+ * 打头 = 去掉 blockquote 标记与可选《法名》后，条号出现在最前，且后接
+ * 全角空格／冒号／行尾——这三种是真语料里给原文的全部形态：
+ *   `> 第四十六条　有下列情形…`（卡内 statute_quotes 的存储形态）
+ *   `> 《劳动合同法》第八十七条　用人单位违反…`（S15 轮1）
+ *   `《劳动合同法》第38条：用人单位有下列情形…`（S07 轮1）
+ * **关键在"打头"**：`> （一）劳动者依照本法第三十八条规定解除劳动合同的；`
+ * 打头的是「（一）」不是条号，故取不到——那行是 §46 的项，不是"讲 §38 的原文"。
+ */
+const HEAD_LABEL = /^\s*>?\s*(?:《[^》]{2,40}》)?\s*(第[一二三四五六七八九十百零〇0-9]+条)(?:[　　：:]|$)/;
+
+function headLabeledArticle(line: string): string | null {
+  const m = HEAD_LABEL.exec(line);
+  return m ? normalizeArticle(m[1]) : null;
+}
+
+/**
+ * blockquote 行归属的条号：先看它自己打头点名，再回溯到**上一个非引用行**的点名。
+ *
+ * 回溯是必需的——最规范的给法是标题行点名、紧跟的引用行只有正文：
+ *   `《劳动合同法》第四十六条：`
+ *   `> 有下列情形之一的，用人单位应当向劳动者支付经济补偿：（一）…第三十八条…`
+ * 只认自报会把这种形态判成"没给过"，反过来制造冤枉；而回溯到标题行拿到的是 §46，
+ * **那行里的 §38 仍然拿不到归属**——洞照样堵着。
+ */
+function quoteAttribution(lines: string[], idx: number): string | null {
+  const own = headLabeledArticle(lines[idx]);
+  if (own) return own;
+  for (let i = idx - 1; i >= 0; i -= 1) {
+    const prev = lines[i];
+    if (/^\s*>/.test(prev)) continue; // 同一段引用的上一行，继续往上找标题
+    if (!prev.trim()) return null; // 空行截断：隔了空行的标题不再算这段引用的题头
+    return headLabeledArticle(prev);
+  }
+  return null;
+}
+
+/**
+ * 轮级预扫专用：这段窗口里有没有**明确归属于本条**的逐字原文。
+ *
+ * 【与本地窗口判定的关键差别：严格正向归属（2026-08-25 修）】
+ * 本地路径的 `unquotedVerbatimCovers` 有一条宽容规则——**取不到打头条号 → 归属未知 → 放行**
+ *（宁可漏判，判据侧的保守方向）。那条规则在本地的爆炸半径是 ±60；
+ * **搬到轮级就变成整轮**——同一条规则，作用域一换，风险量级完全不同。
+ *
+ * 实测（真语料 S03 轮1 + 最小构造）：§46 的逐字原文里有一行是
+ *   `> （一）劳动者依照本法第三十八条规定解除劳动合同的；`
+ * 它**取不到打头条号**（法条的项/款行天然不自报），于是"归属未知"被当成"归属成立"，
+ * **§38 被登记进本轮已给全文集合，整轮豁免**——4e10b7c 修掉的"邻条原文替本条免责"
+ * 就从轮级这条路重新打开了：后文任何一处光秃引 §38/§40 都会被放行。
+ *
+ * 所以轮级这一侧**必须正向**：原文自报了条号、且**正是本条**，才算"本轮给过它的全文"。
+ * 未知一律不算——**未知不是已给**（同 A3「不知道 ≠ 零」）。
+ */
 function hasAttributedVerbatim(near: string, article: string): boolean {
-  for (const line of near.split('\n')) {
-    if (/^\s*>/.test(line) && unquotedVerbatimCovers(line, article)) return true;
+  const lines = near.split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    if (/^\s*>/.test(lines[i]) && quoteAttribution(lines, i) === article) return true;
   }
   const own = OWN_QUOTE_FORMAT.exec(near);
-  return !!own && unquotedVerbatimCovers(own[0], article);
+  return !!own && headLabeledArticle(own[0]) === article;
 }
 
 function hasVerbatimNear(near: string, article: string): boolean {
