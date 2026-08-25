@@ -430,6 +430,28 @@ describe('缺陷① 同条回指：判定单位是本轮，不是窗口', () => 
     expect(bareArticleCitations(t).some((a) => a.includes('第四十六条'))).toBe(true);
   });
 
+  // 【产物侧钉住·2026-08-25】判定变化要落到**用户看得到的东西**上才算数：
+  // 无题头的引用行拿不到归属 → 远处核心位光秃引同一条 → 保底渲染必须把逐字原文补进去。
+  // 修前这一处被轮级集合豁免（补 0 条），用户手里只剩一个条号——正是花三天修的那件事。
+  it('无题头引用行 + 远处核心位光秃 → 保底渲染把逐字原文补进正文', () => {
+    const pack = {
+      id: 'statute-x', type: '法条卡', title: 't', keywords: [], applies_to: [], region: '全国',
+      confidence: '原文核实', updated: '2026-08-25', body: '',
+      facts: { statute_quotes: [{ law: '劳动合同法', article: '第四十条', text: '第四十条　劳动者患病或者非因工负伤，在规定的医疗期满后不能从事原工作的，用人单位提前三十日以书面形式通知劳动者本人后，可以解除劳动合同。' }] },
+    } as unknown as Parameters<typeof renderCoreArticleFallback>[2][number];
+    const text = [
+      '关于第四十条的解释如下：',
+      '> 用人单位在这类情形下可以单方解除，但要走完法定程序。',
+      '',
+      '（中间隔了很长一段与条文无关的正文。）'.repeat(6),
+      '',
+      '所以按第四十条，你能拿 N+1。',
+    ].join('\n');
+    const r = renderCoreArticleFallback(text, new Set(), [pack]);
+    expect(r.added).toEqual(['劳动合同法|第40条']);
+    expect(r.text).toContain('用人单位提前三十日以书面形式通知劳动者本人后');
+  });
+
   it('跨数字体系的回指也认（第46条 与 第四十六条 同键）', () => {
     const t = `《劳动合同法》第四十六条：\n> ${FULL}\n\n${'（隔行）\n'.repeat(8)}\n综上，第46条支持你的主张。`;
     expect(bareArticleCitations(t).some((a) => a.includes('46'))).toBe(false);
