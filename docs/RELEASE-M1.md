@@ -148,3 +148,19 @@ manager 本轮四次栽在同一族问题上：只看正文即裁定红线 / 只
 保底渲染全量仍零开火（每次不开火均为正确行为），维持"未验"记账。
 
 **部署切流批准（2026-08-25 05:1x）**：law.nbdpsy.com 待 DNS A 记录生效即自动切流。
+
+### 7.7 上线（2026-08-25 01:3x）
+
+**law.nbdpsy.com 已上线**，manager 独立验收证据：
+
+| 项 | 证据 |
+|---|---|
+| 站点可访问 | `https://law.nbdpsy.com` → HTTP/2 **200** |
+| **确属本应用**（非同台其它站兜底） | 外部响应正文与服务器本机 `curl -H "Host: law.nbdpsy.com" http://127.0.0.1:3010` **逐字一致**（同批构建产物 chunk 名相同） |
+| 证书 | Let's Encrypt，2026-08-25 签发 / 11-23 到期，自动续期 |
+| HTTP→HTTPS | 308 跳转正常 |
+| 核心路由 | `/` `/login` `/welcome` `/intake` `/account` `/settings` `/api/health` 全 200（`/case` 为动态路由 `[id]`，裸路径 404 属正常） |
+| **安全边界** | sidecar :8110 外部访问被拒（000），仅内网可达 —— 设计边界成立 |
+| **既有站点无损** | nbdpsy.com 301 / wenyao.nbdpsy.com 200 均正常；**Caddy NRestarts=0**（全程只 reload 从未 restart） |
+
+DNS：A 记录 law → 211.159.155.210，proxied=false（灰云），2026-08-25 由 manager 经 Cloudflare API 创建（用户签发新令牌）。
