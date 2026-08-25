@@ -9,4 +9,5 @@ export { fromSql, nowSql, toSql } from './time';
 // 平铺导出必然打架，调用方也看不出这个 setStatus 改的是哪张表的状态。
 export * as notifyLog from './notify-log';
 export * as realname from './realname';
+export * as referralOffers from './referral-offers';
 export * as shareLinks from './share-links';

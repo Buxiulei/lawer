@@ -2,14 +2,14 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../migrate';
 
-/** 全部表名单（36 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。 */
+/** 全部表名单（37 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。 */
 const ALL_TABLES = [
   // 用户与实名
   'users', 'sms_codes', 'email_codes', 'realname_verifications', 'api_keys',
   // 案件档案
   'cases', 'company_profiles', 'timeline_events', 'files', 'evidence', 'attestations',
   'company_docs', 'contract_reviews', 'review_findings', 'claims', 'action_items',
-  'deadlines', 'threads', 'messages', 'emotion_log', 'share_links', 'drafts',
+  'deadlines', 'threads', 'messages', 'emotion_log', 'referral_offers', 'share_links', 'drafts',
   // 公道值
   'gongdao', 'gongdao_ledger', 'memberships', 'skus', 'orders', 'redemption_codes',
   'token_usage', 'model_rates',
@@ -84,10 +84,10 @@ describe('runMigrations', () => {
 
   it('幂等：连跑两遍不抛错', () => {
     expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(36);
+    expect(ALL_TABLES.length).toBe(37);
   });
 
-  it('36 张表全部建成', () => {
+  it('37 张表全部建成', () => {
     const rows = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[];
