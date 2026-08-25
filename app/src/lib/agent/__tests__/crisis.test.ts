@@ -452,33 +452,75 @@ describe('NBDpsy 机械锚 v2：五类命中 + 邻近豁免（真语料验证过
   });
 });
 
-describe('★杠杆闸·来源判别：复述放行、构造照剥（L1，2026-08-25 实测缺陷）', () => {
-  // 用户的原话（真实形态：他自己说出了"房贷"和"对不起爸妈"）
+describe('★杠杆闸·两层判别（L1，2026-08-25）', () => {
   const USER_SAID = '房贷还有二十年，我对不起爸妈，三十五岁不到就已经废了';
 
-  it('★正：复述用户原话的共情句必须放行（旧实现把它整句删掉）', () => {
-    // 这句正是 charter §5「先接住」+ §6「引用他说过的细节」的产物
-    const empathy = '刚才你说的"房贷""对不起爸妈"，我一句都没当成小事。';
-    expect(detectEmotionalLeverage(empathy)).not.toBeNull(); // 旧行为：命中（就是这个 bug）
-    expect(detectEmotionalLeverage(empathy, USER_SAID)).toBeNull(); // 新行为：放行
+  /**
+   * 【样本必须落在"仅宽读命中"区（manager 升为通则）】
+   * **一个同时满足两种读法的样本，不能用来验证实现取的是哪一种。**
+   * 如 `你没了，对不起爸妈这件事不会停…` **同时**满足宽读（含裸短语）与窄读（离开为前提），
+   * 无论实现取宽取窄它都命中——**加多少条这种样本都验不出实现取的是哪一种**。
+   * 所以下面两条**故意只满足宽读**：裸短语在场、但没有"离开为前提"。
+   * （机理：病灶在**样本与被测对象的关系**里，不在样本本身；逐条读样本永远读不出来。）
+   */
+  describe('第二层·裸内疚短语必须与"离开为前提"同现', () => {
+    it('★仅宽读命中区·必放行：「你说的"对不起爸妈"，我记着」', () => {
+      expect(detectEmotionalLeverage('你说的"对不起爸妈"，我记着。')).toBeNull();
+    });
+
+    it('★仅宽读命中区·必放行：模型自己说的共情（不引用也不该被剥）', () => {
+      // 第一层管不到这种：模型没有引用用户原话，是自己说的——但那同样是共情不是杠杆
+      expect(detectEmotionalLeverage('我知道你现在觉得对不起爸妈。')).toBeNull();
+    });
+
+    it('★两读都命中区·必检出：裸短语 + 离开为前提', () => {
+      expect(detectEmotionalLeverage('你没了以后，对不起爸妈这件事也不会停。')).not.toBeNull();
+    });
+
+    it('★结构支不受影响：本身就把离开写进句式的照旧检出', () => {
+      expect(detectEmotionalLeverage('想想你爸妈，他们该多伤心。')).not.toBeNull();
+      expect(detectEmotionalLeverage('你走了他们怎么办？')).not.toBeNull();
+      expect(detectEmotionalLeverage('房贷还是要还的。')).not.toBeNull();
+    });
+
+    it('★同现范围限句内：跨句凑不成命中', () => {
+      // 「你走了」在前一句，裸短语在后一句——它们不是一句话，不该凑成一次命中
+      expect(detectEmotionalLeverage('你走了他们怎么办？')).not.toBeNull(); // 前句自身成立（结构支）
+      expect(detectEmotionalLeverage('那天你走出门。你说的"对不起爸妈"，我记着。')).toBeNull();
+    });
   });
 
-  it('★反：我们替他构造的情绪照旧剥（不许因为修复述而放行真杠杆）', () => {
-    expect(detectEmotionalLeverage('想想你爸妈，他们该多伤心。', USER_SAID)).not.toBeNull();
-    expect(detectEmotionalLeverage('你走了他们怎么办？', USER_SAID)).not.toBeNull();
-    expect(detectEmotionalLeverage('房贷还是要还的。', USER_SAID)).not.toBeNull();
+  describe('第一层·来源判别（引号内容来自用户原话＝复述）', () => {
+    it('★复述用户原话的共情句放行（两层各自都能放行它，互为兜底）', () => {
+      const empathy = '刚才你说的"房贷""对不起爸妈"，我一句都没当成小事。';
+      expect(detectEmotionalLeverage(empathy, USER_SAID)).toBeNull();
+    });
+
+    it('★第一层单独起作用：即使同现了"离开为前提"，逐字引用用户原话仍放行', () => {
+      // 这条专测第一层——去掉来源判别它就会命中（窄读也成立，两读都命中区）
+      const said = '我没了就不用对不起爸妈了';
+      const quoted = `你说过"${said}"，我一句都没当成小事。`;
+      expect(detectEmotionalLeverage(quoted)).not.toBeNull(); // 不给来源 → 命中
+      expect(detectEmotionalLeverage(quoted, said)).toBeNull(); // 给来源 → 放行
+    });
+
+    it('【已知边界】第一层只认**逐字**引用：换了人称就认不出', () => {
+      // 模型复述时常把「我」改成「你」（"你说过你没了就…"），此时子串比对不命中。
+      // 记录而不修：①放宽比对面会打开误豁免的口子（引号里塞近似句就能脱罪）；
+      // ②第二层已经覆盖了绝大部分——裸内疚短语单独出现本就不再算杠杆，
+      // 只有真同现"离开为前提"时才需要第一层兜底。**修法要有出处，不为一个构造样本放宽。**
+      const said = '我没了就不用对不起爸妈了';
+      const paraphrased = '你说过"你没了就不用对不起爸妈了"，我记着。';
+      expect(detectEmotionalLeverage(paraphrased, said)).not.toBeNull();
+    });
+
+    it('★反：引号里的内容不是用户说过的，不算复述', () => {
+      const notUsers = '你心里在想"你没了就不用对不起爸妈了"吧。';
+      expect(detectEmotionalLeverage(notUsers, '我今天被裁了')).not.toBeNull();
+    });
   });
 
-  it('★反：引号里的内容**不是用户说过的**，不算复述', () => {
-    // 模型自己编一句加上引号，不能靠"带引号"就脱罪
-    expect(detectEmotionalLeverage('你心里在想"对不起爸妈"吧。', '我今天被裁了')).not.toBeNull();
-  });
-
-  it('★反：拿不到用户原话时退回旧行为（保守向不变）', () => {
-    expect(detectEmotionalLeverage('刚才你说的"对不起爸妈"，我记得。')).not.toBeNull();
-  });
-
-  it('★剥句同步：复述句不再被剥，杠杆句仍被剥', () => {
+  it('★剥句同步：共情句不再被剥，真杠杆仍被剥', () => {
     const text = '刚才你说的"对不起爸妈"，我一句都没当成小事。想想你爸妈，他们该多伤心。';
     const out = stripLeverageSentences(text, USER_SAID);
     expect(out).toContain('我一句都没当成小事');
