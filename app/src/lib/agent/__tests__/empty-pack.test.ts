@@ -8,6 +8,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { assessCrisis, CRISIS_DIRECTIVE } from '../crisis';
+
 import { countSubstantiveHits, isSubstantiveHit } from '@/lib/knowledge';
 
 import { buildSystemPrompt, EMPTY_PACK_DIRECTIVE } from '../prompt';
@@ -88,5 +90,44 @@ describe('空包告知指令：只在空包轮出现，且禁令配出路', () =
     expect(directiveAt).toBeGreaterThanOrEqual(0);
     expect(disciplineAt).toBeGreaterThanOrEqual(0); // 先自证两个锚点都真的在
     expect(directiveAt).toBeLessThan(disciplineAt);
+  });
+});
+
+describe('★危机轮豁免空包告知（先修不等实测：收益为零、风险为正）', () => {
+  const { db, caseId } = makeAgentFixture();
+  const snapshot = loadCaseSnapshot(db, caseId);
+  const NOW = new Date('2026-08-25T10:00:00+08:00');
+
+  // 【单变量对照 A52】两条输入**只差 crisis 一个变量**，其余全同。
+  // 不这样写就说不清"指令没出现"到底是豁免生效，还是别的什么把它顺带关掉了。
+  const CRISIS_MSG = '三十五岁不到就已经废了，有时候半夜想，要是人没了是不是就不用还房贷了';
+  const CALM_MSG = '公司让我签一份协议，我想知道该注意什么';
+
+  const build = (userMessage: string) => {
+    const triggered = assessCrisis(userMessage).triggered;
+    return buildSystemPrompt({
+      snapshot, mode: '问诊', stage: 'done', packs: [], now: NOW,
+      crisis: triggered,
+      // 产线口径：空包**已检出**，但危机轮豁免注入（orchestrator 里同一个表达式）
+      emptyPack: true && !triggered,
+    });
+  };
+
+  it('先自证两条孪生输入确实只差 triggered 这一个变量', () => {
+    expect(assessCrisis(CRISIS_MSG).triggered).toBe(true);
+    expect(assessCrisis(CALM_MSG).triggered).toBe(false);
+  });
+
+  it('危机轮：空包告知**不注入**（用户刚说完那种话，回他"我先核实依据"是把人推开）', () => {
+    expect(build(CRISIS_MSG)).not.toContain('【本轮无可引用依据】');
+  });
+
+  it('危机轮：危机指令仍在（豁免的只是空包告知，不许顺带削弱危机通路）', () => {
+    const p = build(CRISIS_MSG);
+    expect(p).toContain(CRISIS_DIRECTIVE.slice(0, 24));
+  });
+
+  it('★反（防修过头）：非危机的空包轮**仍然注入**——别把整条关掉', () => {
+    expect(build(CALM_MSG)).toContain('【本轮无可引用依据】');
   });
 });

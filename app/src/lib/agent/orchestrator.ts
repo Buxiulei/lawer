@@ -346,7 +346,27 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   // 两者修法完全不同：前者是**降级应对**（本指令），后者是**召回改进**（标注/别名/地名税）。
   // 混为一谈会让人以为"空手感知上线了，召回就不用修了"。
   const substantiveHits = countSubstantiveHits(packs, message);
-  const emptyPack = substantiveHits === 0;
+  const emptyPackDetected = substantiveHits === 0;
+
+  // 【危机轮豁免空包告知（manager 2026-08-25，先修不等实测）】
+  //
+  // 【冲突】S08 危机场景实测 **92/92 轮全尘埃** → 危机轮会 **100%** 触发空包告知。
+  // 而空包告知要求模型"问清 1–3 个关键事实""明说我先去核实依据"——
+  // 用户刚说完"三十五岁不到就已经废了"，系统回他"这一问我要先核实依据"，
+  // **那是把人推开**。危机轮要给的是热线和陪伴，不是问诊流程。
+  //
+  // 【为什么不等实测再改】实测只能说"这次没带偏"，而**模型有随机性、危机轮的伤害不可逆**；
+  // 且这一轮里空包告知要解决的问题**本就不存在**——危机轮模型本来就不该给条号和数字。
+  // **收益为零、风险为正，这是设计题不是实证题。**
+  //
+  // 【为什么不做"危机版措辞"】危机轮已经有确定性热线段 + CRISIS_DIRECTIVE，
+  // 再叠一段"你手上没有依据"只会**稀释危机指令**——与"5 个位子会把库里几乎所有情绪卡
+  // 倒进去、反而稀释危机指令"同族。**在危机轮，少说比多说安全。**
+  //
+  // 【检测与注入分开】豁免的只是**给模型的指令**；EMPTY_PACK 指标照常记——
+  // 危机轮 92/92 全尘埃正是召回质量最该被看见的那一块，
+  // 豁免了指令还把指标一起关掉，等于把问题连同告警一起藏起来。
+  const emptyPack = emptyPackDetected && !crisis.triggered;
 
   const system = buildSystemPrompt({
     snapshot,
@@ -707,7 +727,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
 
   // KNOWLEDGE_MISS 与空包指令**挂同一判据**（manager 令，不再各判各的）：
   // 两处各判各的，就会出现"指令说这轮没依据、通知说这轮有依据"，用户看到的是自相矛盾的产品。
-  if (emptyPack) {
+  if (emptyPackDetected) {
     emit({ event: 'notice', data: { code: 'KNOWLEDGE_MISS', message: '本轮没有检索到可引用的依据，相关结论已按保守做法给出' } });
   }
 
@@ -715,12 +735,14 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   // 按场景分层、按日聚合；上线后若维持在实测的 71% 量级，产品实际上大部分时候在说
   // "我要先核实"——那是必须触发召回攻坚的信号，**不能靠人偶尔想起来去查**。
   // 另一半理由：没有留痕就无法从归档判断"这一轮是没料还是有料没用"，而两者修法完全不同。
-  if (emptyPack) {
+  if (emptyPackDetected) {
     emit({
       event: 'notice',
       data: {
         code: 'EMPTY_PACK',
-        message: `本轮注入 ${packs.length} 张卡但**无一实质命中**（keyword/applies_to 全不沾边），已按空包轮降级应对`,
+        message:
+          `本轮注入 ${packs.length} 张卡但**无一实质命中**（keyword/applies_to 全不沾边）` +
+          `${crisis.triggered ? '；本轮为危机轮，**已豁免空包告知指令**（指标照记）' : '，已按空包轮降级应对'}`,
         injection: {
           coreCandidateKeys: [],
           coreBlockRendered: [],
