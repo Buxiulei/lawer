@@ -254,6 +254,42 @@ describe('危机响应：心理危机资源卡强制注入（charter §5）', ()
     expect(system).toContain('010-82951332');
   });
 
+  /**
+   * 【外部通知也要克制】`KNOWLEDGE_MISS` 挂"是否注入"而不是"是否检出"。
+   * **用户刚说完"要是人没了"，屏幕上弹一句"本轮没有检索到可引用的依据"——
+   * 那是系统在谈论自己的能力，而不是在回应这个人。**
+   * 内部指标（EMPTY_PACK）照记，两者不共用一个开关。
+   */
+  it('★危机轮：不发 KNOWLEDGE_MISS 用户通知（内部指标另算）', async () => {
+    const { sink } = await turn([{ text: '我在。', tools: [GOOD_CARD] }], {
+      message: CRISIS,
+      searcher: idOnlySearcher,
+    });
+    const codes = sink.of('notice').map((e) => e.data.code);
+    expect(codes).not.toContain('KNOWLEDGE_MISS');
+    // 先自证这轮**确实是空包轮**——否则"没发通知"可能只是因为压根没检出空包（假绿）
+    expect(codes).toContain('EMPTY_PACK');
+  });
+
+  it('★无检索器时不发 KNOWLEDGE_MISS——"没去找"不能说成"找了没找到"', async () => {
+    // 该通知的字面意思是"本轮没有检索到"，而无检索器时本轮**根本没检索**。
+    // 两者混为一谈，就是又一次把"我没拿到这个输入"读成"这件事没发生"。
+    const { sink } = await turn([{ text: '好的。', tools: [GOOD_CARD] }], {
+      message: '公司让我签一份协议，我想知道该注意什么',
+      searcher: undefined,
+    });
+    expect(sink.of('notice').map((e) => e.data.code)).not.toContain('KNOWLEDGE_MISS');
+  });
+
+  it('★反（防修过头）：非危机的空包轮**仍然**发 KNOWLEDGE_MISS', async () => {
+    const { sink } = await turn([{ text: '好的。', tools: [GOOD_CARD] }], {
+      message: '公司让我签一份协议，我想知道该注意什么',
+      searcher: idOnlySearcher,
+    });
+    const codes = sink.of('notice').map((e) => e.data.code);
+    expect(codes).toContain('KNOWLEDGE_MISS');
+  });
+
   it('危机指令排在 charter 之后、案件档案之前（不能被问诊/行动卡纪律稀释）', async () => {
     const { provider } = await turn([{ text: '我在。', tools: [GOOD_CARD] }], {
       message: CRISIS,
