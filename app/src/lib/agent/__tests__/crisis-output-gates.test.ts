@@ -81,6 +81,60 @@ const CRISIS_OUTPUT_GATES = [
   },
 ] as const;
 
+/**
+ * 【非闸名册】orchestrator 从闸模块导入、但**不改动下发正文**的东西，每项必须写明为什么不是闸。
+ *
+ * 【为什么需要这份反向名册】上面那条漏登记检测只扫 `strip*` 前缀，
+ * 而登记册自己的六道里就有两道（`CRISIS_SAFE_FALLBACK`、`renderCoreArticleFallback`）不叫 strip——
+ * **检测器扫不到它要管的清单里的三分之一**。靠前缀就是靠命名约定，而命名约定会漂。
+ *
+ * 【改用的口径】不推断，只要求**不许有未分类的导入**：
+ * 从 `./crisis` 与 `./citation-block` 导入的每一个值，要么在登记册上，要么在这份名册上并写明理由。
+ * 新加一个导入而不表态，测试就红。
+ *
+ * 【为什么不靠返回类型推断】试过，不成立：`articleKey` 返回 `string` 却不是闸，
+ * 而 `CRISIS_SAFE_FALLBACK` 是个常量数组却是影响最大的一道。
+ * **判断哪个是闸需要人看一眼；这条测试要保证的不是判断正确，是判断没被跳过。**
+ */
+const NON_GATE_IMPORTS: Record<string, string> = {
+  // —— ./crisis ——
+  assessCrisis: '判定，返回 CrisisAssessment，不碰正文',
+  detectEmotionalLeverage: '检测器，返回命中句；剥除动作由 stripLeverageSentences 做',
+  detectNbdpsyPitch: '检测器',
+  assessNbdpsyEligibility: '判定',
+  responseGaveCrisisCard: '判定',
+  shouldInjectCrisisCard: '判定',
+  extractHotlines: '取号码，不改正文',
+  compactCrisisCard: '压的是**喂给模型**的知识卡，不是下发给用户的正文',
+  CRISIS_CARD_MARKER: '常量标记',
+  buildCrisisOpener:
+    '生成确定性首段。**它是增不是改**，且不经手模型正文——' +
+    '危机轮回落时用户唯一还能看到的就是它。它的失效形态是「该给的没给」，' +
+    '由危机轮号码在场断言（L1）管，不由这份登记册管。',
+  // —— ./citation-block ——
+  articleKey: '取键，不碰正文（注意它返回 string，所以按返回类型推断会误判成闸）',
+  coreArticleKeys: '取候选集合',
+  coreBlockRenderedKeys: '取已渲染的键，只读',
+  sceneCoreArticles: '取场景核心条，只读',
+  CORE_ARTICLE_MAP_PACK_ID: '常量 id',
+  bareArticleCitations: '检测器',
+  precedentContamination: '检测器',
+};
+
+/** 从 orchestrator 的 import 语句里取出某模块导入的全部**值**标识符（跳过 `type` 导入）。 */
+function importedValuesFrom(src: string, moduleSpec: string): string[] {
+  const re = new RegExp(String.raw`import\s*\{([^}]*)\}\s*from\s*'${moduleSpec}'`, 'g');
+  const names: string[] = [];
+  for (const m of src.matchAll(re)) {
+    for (const raw of m[1].split(',')) {
+      const name = raw.trim().replace(/\s+as\s+\w+$/, '');
+      if (!name || name.startsWith('type ')) continue;
+      names.push(name);
+    }
+  }
+  return names;
+}
+
 describe('危机轮输出流经的闸：登记册与漏登记检测', () => {
   const SRC = readFileSync(new URL('../orchestrator.ts', import.meta.url), 'utf8');
 
@@ -103,6 +157,46 @@ describe('危机轮输出流经的闸：登记册与漏登记检测', () => {
 
   it('自证扫得到东西（扫不到时上一条会假绿）', () => {
     expect([...SRC.matchAll(/\bstrip[A-Z]\w+\s*\(/g)].length).toBeGreaterThanOrEqual(3);
+  });
+
+  // ↓↓↓ 补 strip* 前缀扫不到的那一类（登记册六道里有两道不叫 strip）
+  const GATE_MODULES = [String.raw`\./crisis`, String.raw`\./citation-block`];
+  const imported = GATE_MODULES.flatMap((m) => importedValuesFrom(SRC, m));
+
+  it('★不许有未分类的导入：闸模块的每个导入，要么在登记册上，要么在非闸名册上', () => {
+    const registered = new Set<string>(CRISIS_OUTPUT_GATES.map((g) => g.fn));
+    const unclassified = [...new Set(imported)].filter(
+      (n) => !registered.has(n) && !(n in NON_GATE_IMPORTS),
+    );
+    expect(
+      unclassified,
+      `以下东西从闸模块导进了 orchestrator，但**没人表态它是不是闸**：${unclassified.join('、')}\n` +
+        `→ 请二选一：登记进 CRISIS_OUTPUT_GATES（并给出危机轮实测影响），` +
+        `或写进 NON_GATE_IMPORTS 并说明为什么它不改下发正文。\n` +
+        `→ 这条不判断你分得对不对，只保证你没跳过这一步。`,
+    ).toEqual([]);
+  });
+
+  it('★负样本：检测器对**不叫 strip 的**新闸也会开火（否则等于没扫）', () => {
+    // 造一个未登记且不含 strip 前缀的导入，确认它会被判为未分类。
+    // 这是上一条的自证——它要防的正是「前缀扫描漏掉非 strip 命名」这个原始缺口。
+    // 密封样本：不掺真实导入。否则 orchestrator 一旦真的多出未分类导入，
+    // 这条负样本会跟着变红，把「自证」污染成「又一条重复告警」。
+    const registered = new Set<string>(CRISIS_OUTPUT_GATES.map((g) => g.fn));
+    const fabricated = ['assessCrisis', 'stripLeverageSentences', 'redactPanicPhrases'];
+    const unclassified = fabricated.filter((n) => !registered.has(n) && !(n in NON_GATE_IMPORTS));
+    expect(unclassified).toEqual(['redactPanicPhrases']);
+    // 同时确认旧的前缀扫描确实抓不到它——这就是为什么需要上面那条
+    expect(/\bstrip[A-Z]\w+/.test('redactPanicPhrases')).toBe(false);
+  });
+
+  it('非闸名册不许留存量（写了理由但东西已经不导入了 → 名册过期）', () => {
+    const stale = Object.keys(NON_GATE_IMPORTS).filter((n) => !imported.includes(n));
+    expect(
+      stale,
+      `非闸名册里这些已经不再从闸模块导入了：${stale.join('、')}\n` +
+        `→ 删掉，否则名册会变成一份没人信的旧账。`,
+    ).toEqual([]);
   });
 
   it('★级联放大器已标注且触发条件已实测（不是"几句"，是"还剩不剩"）', () => {
