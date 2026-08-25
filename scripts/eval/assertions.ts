@@ -1175,6 +1175,21 @@ export function gateStrippedArticles(t: TurnRecord): Set<string> {
   return out;
 }
 
+/**
+ * 【A17 语义版本落款】判据的每次语义变更必须声明其适用的**行为机制版本区间**；
+ * 跨版本回放时，用**被判行为当时**的判据语义。
+ *
+ * 本函数语义版本与适用区间：
+ * - **v1**（≤ `031a6c0` 行为）：条号键仅取条号；`⭐机制不可用` 依「档案三来源空」判。
+ * - **v2**（`8101783` 起，含 S2 候选池机制的行为 SHA）：`⭐机制不可用` ⇔ **候选池空**
+ *   （S1∧S2∧S4 皆空），由产线同源函数判定。
+ * - **v3**（本次，2026-08-25）：条号归一跨数字体系+剥项款+之N；乙态识别容忍强调标记并加**节选闸**；
+ *   消费点改用 `bareArticleSpans` 的 `{raw, at}`（定位与归一分离）。
+ *
+ * ⚠️ **老批（`b0871a6` 及以前）转录按 v1 判是正确的**——那些 SHA 的行为里没有 S2 机制，
+ * **别拿新机制的尺子去翻旧转录的案**。重打分产出必须同时标注
+ * 「判定采用的判据语义版本 + 被判行为 SHA」，两者不匹配即无效判定。
+ */
 export function citationCompletenessAssertions(
   turns: TurnRecord[],
   scenarioId: string,
@@ -1204,11 +1219,15 @@ export function citationCompletenessAssertions(
         .filter((x) => x.site === '辅助位')
         .map((x) => x.raw),
     );
-    const cited = bareArticleCitations(t.text).map((a) => {
+    // 【定位与归一分离（2026-08-25 修二）】原先用 `bareArticleCitations` 拿**去空格形**、
+    // 再 `t.text.indexOf(a)` 回原文找位置——而原文写「第 40 条」时 indexOf 恒为 -1，
+    // 于是 inner/adjacent/nearestLaw **三条取法名的路整条跳过**，key 退化成 `|第N条`，
+    // 该判 FAIL 的被判成 pending_card（**漏判方向**，语料里带空格形占约三分之一）。
+    // 产线 `bareArticleSpans` 早就同时给了 `{raw, at}`——归一串做键、原始位置定位，各用各的。
+    const cited = bareArticleSpans(t.text).map(({ raw: a, at }) => {
       // 【法名可能就在匹配串里】ARTICLE 正则本身允许带《…》前缀，命中串常是「《劳动合同法》第八十七条」。
       // 只朝命中点**之前**找法名会漏掉这种——法名在命中串**内部**，位置在 at 之后。
       const inner = /《([^》\n]{2,40})》/.exec(a);
-      const at = t.text.indexOf(a);
       // 【交叉引用必须带**原**法名】法条原文里会引别的法：实施条例§27 的正文写着
       // 「劳动合同法第四十七条规定的经济补偿」。那个「第四十七条」属于**劳动合同法**，
       // 不是实施条例的第 47 条。就近向前找法名会取到"当前在讲的那部法"，**绑错法**。
@@ -1372,7 +1391,8 @@ export function citationCompletenessAssertions(
         ...(p.law ? { pendingLaw: p.law } : {}),
         detail:
           `${p.raw} 的逐字原文**已在卡正文里**，只是没进 statute_quotes → 派 **WS4 结构化**，` +
-          `不进外勤补卡栏（外勤打开卡会发现原文就在那儿）。本条判定延迟至结构化后。`,
+          `不进外勤补卡栏（外勤打开卡会发现原文就在那儿）。本条判定延迟至结构化后。` +
+          `${UNSTRUCTURED_DISPATCH_NOTE}。`,
       });
     }
     for (const p of pending) {
@@ -1435,15 +1455,62 @@ export function lawsInLibrary(packs: { facts?: { statute_quotes?: { law: string;
  * 取不到法名。故本集合比复合键**宽**——它只用于把 pending_card 改判成乙态这一个routing 决定，
  * 不参与 FAIL 判定，宽一点的代价是可控的。
  */
+/**
+ * 收录行：条号可被 markdown 强调标记包裹。
+ *
+ * 【为什么必须容忍强调标记】库里真实的收录写法普遍是 `> **第二十七条**　…`。
+ * 首版要求条号**紧跟** `> `，于是在 `sop/zhongcai-guanxia-shixiao.md:76` 这类真卡上
+ * **整卡不开火** —— 全库扫描报「乙态 0 实例」，而那个 0 被当成"没有可发现的对象"
+ * 写进了成绩单。**它不是没有对象，是枪打不响。**
+ */
+const RECORD_LINE = /^>\s*(?:\*\*|__)?\s*(第[一二三四五六七八九十百零〇0-9]+条)(?:\*\*|__)?[　\s]/gm;
+
+/** 节选标记：块内出现任一即判为节选（`calc/weiqian-hetong-shuangbei.md:87` 卡自标「逐字，节选」，:90 行内有 `……`） */
+const EXCERPT_MARK = /……|\.{3,}|节\s*选|（略）|\(略\)/;
+
+/** 取 at 落在的**连续引用块**（上下相邻的 `>` 行）——节选标记常在块内的另一行 */
+function blockquoteBlockAt(text: string, at: number): string {
+  const lines = text.split('\n');
+  let idx = 0;
+  let cur = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (cur + lines[i].length + 1 > at) { idx = i; break; }
+    cur += lines[i].length + 1;
+  }
+  let s = idx;
+  let e = idx;
+  while (s > 0 && lines[s - 1].trimStart().startsWith('>')) s--;
+  while (e < lines.length - 1 && lines[e + 1].trimStart().startsWith('>')) e++;
+  return lines.slice(s, e + 1).join('\n');
+}
+
+/**
+ * 乙态派单文案（manager 2026-08-25 指定逐字）——**闸之外的最后一道人工兜底**。
+ *
+ * 【为什么闸之外还要人工】节选闸认的是**卡自己的标记**（`……`/`节选`/`（略）`）——
+ * **没标注的节选，闸认不出来**。所以最后一道完整性确认要写进 WS4/外勤的**动作**里。
+ * 它必须进 detail 与清单文案本身：**写在文档里，没人会在派单那一刻看到。**
+ */
+export const UNSTRUCTURED_DISPATCH_NOTE =
+  '结构化前须对照官方全文核完整性；缺款缺项则补全后再提，补不全降级 pending_card';
+
 export function unstructuredSourceArticles(
   packs: { title: string; body: string; facts?: { statute_quotes?: { law: string; article: string; text: string }[] } }[],
 ): Set<string> {
   const out = new Set<string>();
   for (const p of packs) {
     const structured = new Set((p.facts?.statute_quotes ?? []).filter((q) => q?.text?.trim()).map((q) => normalizeArticle(q.article)));
-    for (const m of packCorpus(p).matchAll(/^>\s*(第[一二三四五六七八九十百零〇0-9]+条)[　\s]/gm)) {
+    const corpus = packCorpus(p);
+    for (const m of corpus.matchAll(RECORD_LINE)) {
       const art = normalizeArticle(m[1]);
-      if (!structured.has(art)) out.add(art);
+      if (structured.has(art)) continue;
+      // 【节选闸】节选**不算可结构化收录**，回落 pending_card。
+      // 把节选搬进 statute_quotes 会产出一张**自称逐字原文、实则缺款**的卡，
+      // 而 statute_quotes.text 是注入侧逐字原文的**唯一真源**，用户会拿它当庭念。
+      // manager 2026-08-25 定性：**「宁缺毋残是权威字段的铁律」**。
+      // 代价不对称：漏抓只是少派一张 WS4 工单，误抓是**造一个残缺的权威**。
+      if (EXCERPT_MARK.test(blockquoteBlockAt(corpus, m.index ?? 0))) continue;
+      out.add(art);
     }
   }
   return out;

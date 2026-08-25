@@ -13,7 +13,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import type { Verdict } from './assertions';
+import { UNSTRUCTURED_DISPATCH_NOTE, type Verdict } from './assertions';
 
 /** 连续多少批仍未补卡就升级告警 */
 export const PENDING_ESCALATE_BATCHES = 3;
@@ -153,6 +153,9 @@ export function writePendingCardList(
     '> **每条须外勤人工核**，结论写回本文件留痕，不接受口头答复：',
     '> - 判「**该补卡**」→ 进补卡单，补齐 `facts.statute_quotes`；',
     '> - 判「**引用不当**」→ 该条不该在这个场景被引，转回 FAIL 类训练样本。',
+    '',
+    `> **乙态（有原文未结构化）派 WS4 时**：${UNSTRUCTURED_DISPATCH_NOTE}。`,
+    '> 理由：节选闸认的是卡自己的标记，**没标注的节选闸会漏**——这是闸之外的人工兜底。',
     '',
     '> 下面两栏是**机检预分拣**，只为排序省时，**不替代人核**——两栏都要逐条核。',
     '> **分栏本身是信号**：第二栏变长意味着模型开始往域外引，比缺卡严重得多，',

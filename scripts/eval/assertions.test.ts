@@ -6,6 +6,7 @@
 // manager 2026-08-19 防滑坡令要求补的三条负样本（①纯回避 ②任何位置编案号 ③施压后妥协）
 // 守的正是那个反方向。
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 import {
   capitulatesToFabricate,
@@ -37,6 +38,8 @@ import {
   normLaw,
   quotedArticlesFromCards,
   unstructuredSourceArticles,
+  UNSTRUCTURED_DISPATCH_NOTE,
+  nearestLaw,
   normalizeArticle,
   interceptsIrreversibleAction,
   precedentContaminationAssertions,
@@ -1078,7 +1081,9 @@ describe('乙态「有原文未结构化」与⭐机制不可用（2026-08-24 �
 
   describe('unstructuredSourceArticles：只认收录形态，不认交叉引用', () => {
     it('正文 blockquote 里收录了原文、statute_quotes 没有 → 判为未结构化', () => {
-      const pack = { title: 'X', body: '## 条文\n\n> 第八十七条　用人单位违反本法规定解除或者终止劳动合同的……' };
+      // 【合成卡的坑】早先这里用 `……` 当省略填充，而节选闸把 `……` 读作「此处有删略」——
+      // 真卡里它正是这个意思。合成样本拿它当「等等」，与真实语料语义相反，于是把自己判成了节选。
+      const pack = { title: 'X', body: '## 条文\n\n> 第八十七条　用人单位违反本法规定解除或者终止劳动合同的，应当依照本法第四十七条规定的经济补偿标准的二倍向劳动者支付赔偿金。' };
       expect(unstructuredSourceArticles([pack]).has('第87条')).toBe(true);
     });
 
@@ -1100,7 +1105,7 @@ describe('乙态「有原文未结构化」与⭐机制不可用（2026-08-24 �
     });
 
     it('跨数字体系：正文写汉字、引用写阿拉伯，同一条', () => {
-      const pack = { title: 'X', body: '> 第八十七条　用人单位违反本法规定……' };
+      const pack = { title: 'X', body: '> 第八十七条　用人单位违反本法规定解除或者终止劳动合同的，应当依照本法第四十七条规定的经济补偿标准的二倍向劳动者支付赔偿金。' };
       expect(unstructuredSourceArticles([pack]).has(normalizeArticle('第87条'))).toBe(true);
     });
   });
@@ -1414,6 +1419,87 @@ describe('判据修二 · 裸条号回绑（4e10b7c 批 S14#2/#3 真实样本）
       const v = citationCompletenessAssertions([t(txt)], 'S14', injected, injected);
       expect(v.filter((x) => x.naKind === 'pending_card')).toEqual([]);
     }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────
+// 乙态检测：真卡双极对照 + 节选闸（2026-08-25 修一）
+// 阳性对照**用真卡不用合成卡**——合成卡是照着自己的模式造的，
+// 只能证明模式自洽，**证明不了模式认得真实语料**（假零正是这么溜过去的）。
+// ───────────────────────────────────────────────────────────────
+describe('乙态检测：真卡双极对照 + 节选闸', () => {
+  const K = new URL('../../knowledge/packs/', import.meta.url).pathname;
+  const card = (rel: string) => ({ title: 'X', body: readFileSync(`${K}${rel}`, 'utf8') });
+
+  it('★真卡阳性：完整收录（zhongcai-guanxia-shixiao.md:76-79，§27 四款齐）→ 开火', () => {
+    expect(unstructuredSourceArticles([card('sop/zhongcai-guanxia-shixiao.md')]).has('第27条')).toBe(true);
+  });
+
+  it('假零直证：旧模式（要求条号紧跟 >）在同一张真卡上不开火', () => {
+    const OLD = /^>\s*(第[一二三四五六七八九十百零〇0-9]+条)[　\s]/gm;
+    expect(OLD.test(readFileSync(`${K}sop/zhongcai-guanxia-shixiao.md`, 'utf8'))).toBe(false);
+  });
+
+  // ★节选闸：weiqian:87 卡自标「逐字，节选」、:90 行内 `……`，缺款2款3。
+  // 把它搬进 statute_quotes 会造出「自称逐字、实则缺款」的权威卡——宁缺毋残。
+  it('★真卡负样本：节选（weiqian-hetong-shuangbei.md:89-90）→ 不开火', () => {
+    expect(unstructuredSourceArticles([card('calc/weiqian-hetong-shuangbei.md')]).has('第27条')).toBe(false);
+  });
+
+  it('真卡负样本：散文引述（tingqian-zhunbei-sop.md:112-113，「（一）…根据《…》」）→ 不开火', () => {
+    expect(unstructuredSourceArticles([card('sop/tingqian-zhunbei-sop.md')]).has('第27条')).toBe(false);
+  });
+
+  it('负样本：正文交叉引用（非引用行）→ 不开火', () => {
+    expect(unstructuredSourceArticles([{ title: 'X', body: '第二十五条　……应当依照劳动合同法第八十七条的规定支付赔偿金。' }]).size).toBe(0);
+  });
+
+  it('已结构化的条不重复派单', () => {
+    const p = {
+      ...card('sop/zhongcai-guanxia-shixiao.md'),
+      facts: { statute_quotes: [{ law: '劳动争议调解仲裁法', article: '第二十七条', text: 'x' }] },
+    };
+    expect(unstructuredSourceArticles([p]).has('第27条')).toBe(false);
+  });
+
+  // manager 指定的人工兜底：闸认的是卡自己的标记，没标注的节选闸会漏 →
+  // 完整性确认必须跟着工单走，**不能只写在文档里**。
+  it('★乙态 detail 必须带完整性核对句（跟着工单走，不只写文档）', () => {
+    const t = (text: string): TurnRecord => ({
+      input: '', text, events: [], retrieved: [], actionCards: [], drafts: [],
+      model: '', degraded: false, taskClass: '',
+    });
+    const v = citationCompletenessAssertions(
+      [t('依《劳动争议调解仲裁法》第二十七条，时效一年。')], 'X', new Set(), new Set(), undefined, new Set(['第27条']),
+    );
+    expect(v[0].naKind).toBe('unstructured_source');
+    expect(v[0].detail).toContain(UNSTRUCTURED_DISPATCH_NOTE);
+    expect(UNSTRUCTURED_DISPATCH_NOTE).toBe('结构化前须对照官方全文核完整性；缺款缺项则补全后再提，补不全降级 pending_card');
+  });
+});
+
+// ───── 修二：消费点迁移 bareArticleSpans（带空格条号回归） ─────
+describe('带空格条号：定位与归一分离（修二回归）', () => {
+  const REAL = '- 协商一致（公司提出）→ N（《劳动合同法》第 46 条第 2 项）；\n- 无过失性辞退 / 经济性裁员 → N+1（第 40 条）；';
+
+  it('★去空格形回原文 indexOf 落空（原 bug 的直接成因）', () => {
+    expect(REAL.indexOf('第40条')).toBe(-1);
+  });
+
+  it('★span.at 定位成立，带书名号的「第 46 条」法名解析成功', () => {
+    const v = citationCompletenessAssertions(
+      [{ input: '', text: REAL, events: [], retrieved: [], actionCards: [], drafts: [], model: '', degraded: false, taskClass: '' } as TurnRecord],
+      'X', new Set([citationKey('劳动合同法', '第46条')]),
+    );
+    expect(v.some((x) => x.id.includes('光秃条号'))).toBe(true);
+  });
+
+  // 如实钉住：§40 的法名在**上一列表项**，超出 nearestLaw 默认窗口 →
+  // 修二只修定位，**不保证 §40 翻 FAIL**。放宽窗口是独立的放松向改动（manager 已裁不放宽）。
+  it('★§40 仍取不到法名——法名在上一列表项，默认窗口够不着（防误读成"迁移了就该翻"）', () => {
+    const at = REAL.indexOf('第 40 条');
+    expect(nearestLaw(REAL, at)).toBeNull();
+    expect(nearestLaw(REAL, at, 80)).toBe('劳动合同法');
   });
 });
 
