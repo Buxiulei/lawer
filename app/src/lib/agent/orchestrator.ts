@@ -577,11 +577,16 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   // 剥完仍命中 → 回落确定性安全回复，模型的话一个字都不下发。
   let leverageOutcome: 'clean' | 'stripped' | 'fallback' = 'clean';
   if (crisis.triggered) {
+    // 【来源判别的比对面：用户自己说过的话】本轮原话 + 本 thread 的历史用户消息。
+    // 复述用户原话是 charter §5「先接住」/§6「引用他说过的细节」的产物，不是杠杆——
+    // **复述是把他自己的话还给他，杠杆是把别人的痛苦加给他。**
+    // 拿不到这个比对面时 detectEmotionalLeverage 退回旧行为（照旧剥），保守向不变。
+    const userSaid = [message, ...history.filter((h) => h.role === 'user').map((h) => h.content)].join('\n');
     let body = modelBody;
-    if (detectEmotionalLeverage(body)) {
-      body = stripLeverageSentences(body);
+    if (detectEmotionalLeverage(body, userSaid)) {
+      body = stripLeverageSentences(body, userSaid);
       leverageOutcome = 'stripped';
-      if (detectEmotionalLeverage(body) || !body.trim()) {
+      if (detectEmotionalLeverage(body, userSaid) || !body.trim()) {
         body = CRISIS_SAFE_FALLBACK;
         leverageOutcome = 'fallback';
       }

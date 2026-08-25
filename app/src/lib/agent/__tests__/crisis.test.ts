@@ -18,6 +18,7 @@ import {
   crisisHotlines,
   type HotlineFact,
   detectEmotionalLeverage,
+  stripLeverageSentences,
   assessNbdpsyEligibility,
   buildCrisisOpener,
   extractHotlines,
@@ -448,5 +449,39 @@ describe('NBDpsy 机械锚 v2：五类命中 + 邻近豁免（真语料验证过
     '电话那头是受过训练的人，你只说一句「我很难受」他们就懂',
   ])('免费公益资源不误伤：「%s」', (t) => {
     expect(detectNbdpsyPitch(t)).toBeNull();
+  });
+});
+
+describe('★杠杆闸·来源判别：复述放行、构造照剥（L1，2026-08-25 实测缺陷）', () => {
+  // 用户的原话（真实形态：他自己说出了"房贷"和"对不起爸妈"）
+  const USER_SAID = '房贷还有二十年，我对不起爸妈，三十五岁不到就已经废了';
+
+  it('★正：复述用户原话的共情句必须放行（旧实现把它整句删掉）', () => {
+    // 这句正是 charter §5「先接住」+ §6「引用他说过的细节」的产物
+    const empathy = '刚才你说的"房贷""对不起爸妈"，我一句都没当成小事。';
+    expect(detectEmotionalLeverage(empathy)).not.toBeNull(); // 旧行为：命中（就是这个 bug）
+    expect(detectEmotionalLeverage(empathy, USER_SAID)).toBeNull(); // 新行为：放行
+  });
+
+  it('★反：我们替他构造的情绪照旧剥（不许因为修复述而放行真杠杆）', () => {
+    expect(detectEmotionalLeverage('想想你爸妈，他们该多伤心。', USER_SAID)).not.toBeNull();
+    expect(detectEmotionalLeverage('你走了他们怎么办？', USER_SAID)).not.toBeNull();
+    expect(detectEmotionalLeverage('房贷还是要还的。', USER_SAID)).not.toBeNull();
+  });
+
+  it('★反：引号里的内容**不是用户说过的**，不算复述', () => {
+    // 模型自己编一句加上引号，不能靠"带引号"就脱罪
+    expect(detectEmotionalLeverage('你心里在想"对不起爸妈"吧。', '我今天被裁了')).not.toBeNull();
+  });
+
+  it('★反：拿不到用户原话时退回旧行为（保守向不变）', () => {
+    expect(detectEmotionalLeverage('刚才你说的"对不起爸妈"，我记得。')).not.toBeNull();
+  });
+
+  it('★剥句同步：复述句不再被剥，杠杆句仍被剥', () => {
+    const text = '刚才你说的"对不起爸妈"，我一句都没当成小事。想想你爸妈，他们该多伤心。';
+    const out = stripLeverageSentences(text, USER_SAID);
+    expect(out).toContain('我一句都没当成小事');
+    expect(out).not.toContain('他们该多伤心');
   });
 });
