@@ -467,27 +467,59 @@ describe('缺陷① 同条回指：判定单位是本轮，不是窗口', () => 
     // 无题头引用行被"归属未知即放行"当成已给全文，用户手里只剩一个条号。
   });
 
-  it('【放宽向】标题行点名 + 紧跟引用块 → 视为已给全文 → **不重复补**', () => {
+  it('【放宽向·评价面】标题行点名 + 紧跟引用块 → 判据不再判光秃', () => {
     const attributed = ['《劳动合同法》第四十条：', '> 用人单位提前三十日以书面形式通知劳动者本人，或者额外支付一个月工资后，可以解除劳动合同。', '', GAP, '', TAIL].join('\n');
-    expect(renderCoreArticleFallback(attributed, new Set(), [PACK40]).added).toEqual([]);
+    expect(bareArticleCitations(attributed).some((a) => a.includes('第四十条'))).toBe(false);
 
-    // 【两态对照·同一份包】把标题行那一句去掉（只留引用块），归属就没了 → 立刻恢复补入。
-    // 这证明上面的"不补"是**归属判断在起作用**，而不是"这轮本来就没料可补"（那会是空测试）。
+    // 【两态对照·同一份输入去掉归属线索】把标题行那句换成不点名的引子 → 归属没了 → 立刻判回光秃。
+    // 这证明上面的"不判光秃"是**归属判断在起作用**，而不是这段文本本来就不含引用（那会是空测试）。
     const unattributed = ['公司这么说：', '> 用人单位提前三十日以书面形式通知劳动者本人，或者额外支付一个月工资后，可以解除劳动合同。', '', GAP, '', TAIL].join('\n');
-    expect(renderCoreArticleFallback(unattributed, new Set(), [PACK40]).added).toEqual(['劳动合同法|第40条']);
-    // 【两态对照】"严格正向但不回溯标题行"的中途实现在 attributed 这份输入上实测：
-    // 判「第四十条@180 核心位」、补 1 条——即**会把已经给过原文的那条再补一遍**，
-    // 且会把 S15 轮1 那类真实轮从平反退回 FAIL。回溯标题行正是为堵这个。
+    expect(bareArticleCitations(unattributed).some((a) => a.includes('第四十条'))).toBe(true);
+    // 【两态对照】"严格正向但不回溯标题行"的中途实现在 attributed 这份输入上实测判「光秃」——
+    // 那会把 S15 轮1 那类真实轮从平反退回 FAIL。回溯标题行正是为堵这个。
   });
 
-  // 【已知语义·本次放宽把它的暴露面扩大了，如实记录】归属判定**只看题头点名、不校验引用块内容**
-  //（`unquotedVerbatimCovers` 从来如此，不是本次引入）。于是"标题行点名 + 引用块给的是**转述**"
-  // 会被认作"已给全文"，保底渲染便不再补真正的逐字原文——用户拿到的是转述而非原文。
-  // 本次的标题行回溯把这条暴露面从"引用块自报条号"扩到了"上一行点名即可"。
-  // 记为已知取舍，是否收紧（要求引用块内容与卡内原文有实质重合）留待裁定。
-  it('【已知边界】归属只看题头、不校验引用块内容——转述也算"已给"', () => {
-    const paraphrase = ['《劳动合同法》第四十条：', '> （这里是模型自己的转述，与卡内原文并不相同。）', '', GAP, '', TAIL].join('\n');
-    expect(renderCoreArticleFallback(paraphrase, new Set(), [PACK40]).added).toEqual([]);
+  // ───── 判据管评价，渲染管交付：同一段文本，两层结论可以不同（2026-08-25 manager 批）─────
+  // 评价标准可以争论（转述算不算"给了依据"）；**交付标准不能含糊**——原文在不在，是就是不是。
+  // 让可争论的东西决定不可含糊的东西，正是"标题行 + 转述 → 不补原文"那条暴露面的根源。
+  it('【交付面】标题行点名但引用块是**转述** → 评价面算已给，渲染仍把逐字原文补上', () => {
+    const paraphrase = ['《劳动合同法》第四十条：', '> 公司可以提前一个月通知你走人，或者多给你一个月工资。', '', GAP, '', TAIL].join('\n');
+    // 评价面：归属成立，判据不判光秃（判据口径不变）
+    expect(bareArticleCitations(paraphrase).some((a) => a.includes('第四十条'))).toBe(false);
+    // 交付面：正文里**没有**这段逐字原文 → 补上，且补的是对的那条
+    const r = renderCoreArticleFallback(paraphrase, new Set(), [PACK40]);
+    expect(r.added).toEqual(['劳动合同法|第40条']);
+    expect(r.text).toContain('劳动者患病或者非因工负伤');
+    // 转述那句原样留着——**不要"优化"掉重复**：先用人话讲清楚、再给可照念的原文，
+    // 两段服务于两个不同的时刻（理解的时候，与站在庭上的时候）。
+    expect(r.text).toContain('公司可以提前一个月通知你走人');
+  });
+
+  // 【补入形态·真语料抓到的两处，2026-08-25】把"补入后的实际形态"贴出来验收时发现：
+  //   `《劳动合同法》第 38「**第三十八条**　用人单位…」条`
+  // 两个毛病叠在一起——插入点切开了条号，且卡内原文打头的条号没被剥掉。
+  // 前者是 A20 归一化镜像那族（拿去空格后的长度去定位原始文本，模型写「第 38 条」时差 2 个字符）；
+  // 后者是"预设文本形状"（卡里存的是 `**第三十八条**　…`，剥离正则不认强调标记）。
+  // 两条都不是本次触发条件改动引入的，但改动让渲染开火轮数从 12 涨到 29，**把它们放大了 17 倍**。
+  it('【补入形态】条号带空格时插在"条"之后，不切开条号', () => {
+    const text = ['公司这么说：', '> 一句无关的引子。', '', GAP, '', '所以按第 四十 条，你能拿 N+1。'].join('\n');
+    const r = renderCoreArticleFallback(text, new Set(), [PACK40]);
+    expect(r.added).toEqual(['劳动合同法|第40条']);
+    expect(r.text).toContain('第 四十 条「劳动者患病');
+    expect(r.text).not.toMatch(/第 四十「/); // 切开条号的坏形态
+  });
+
+  it('【补入形态】卡内原文打头条号带强调标记也要剥掉，不出现叠字', () => {
+    const bold = { ...PACK40, facts: { statute_quotes: [{ law: '劳动合同法', article: '第四十条', text: `**第四十条**　${ART40.replace(/^第四十条　/, '')}` }] } } as typeof PACK40;
+    const text = ['公司这么说：', '> 一句无关的引子。', '', GAP, '', TAIL].join('\n');
+    const r = renderCoreArticleFallback(text, new Set(), [bold]);
+    expect(r.text).toContain('第四十条「劳动者患病');
+    expect(r.text).not.toContain('**第四十条**　劳动者患病'); // 叠字形态
+  });
+
+  it('【交付面·反向】正文里确实已有该条逐字原文 → 不重复补', () => {
+    const withVerbatim = ['《劳动合同法》第四十条：', `> ${ART40}`, '', GAP, '', TAIL].join('\n');
+    expect(renderCoreArticleFallback(withVerbatim, new Set(), [PACK40]).added).toEqual([]);
   });
 
   it('跨数字体系的回指也认（第46条 与 第四十六条 同键）', () => {

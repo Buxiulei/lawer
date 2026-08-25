@@ -659,6 +659,33 @@ export function citationSite(text: string, at: number, windowSize = 60): Citatio
   return CONCLUSION_NEAR.test(near) ? '核心位' : '辅助位';
 }
 
+/**
+ * 本轮里**由 agent 自己写下**的条号引用（法条原文内部的交叉引用不算——那是立法者写的）。
+ *
+ * 【为什么把取材面单独抽出来（2026-08-25）】判据与渲染**共用取材、各加各的过滤**：
+ *   · 判据（`bareArticleSpans`）再过一道**归属**过滤 —— 它问的是「模型有没有给依据」；
+ *   · 渲染（`renderCoreArticleFallback`）过的是**内容**过滤 —— 它问的是「原文在不在正文里」。
+ * 两者从这里分岔，而不是让渲染去消费判据的结论。
+ */
+function authoredCitationSpans(
+  text: string,
+  windowSize: number,
+): { raw: string; at: number; end: number; article: string; site: CitationSite }[] {
+  const out: { raw: string; at: number; end: number; article: string; site: CitationSite }[] = [];
+  for (const m of text.matchAll(ARTICLE)) {
+    const at = m.index ?? 0;
+    if (insideVerbatim(text, at)) continue;
+    if (insideOwnFormatQuote(text, at)) continue;
+    const raw = m[0].replace(/\s+/g, '');
+    const article = normalizeArticle(raw.replace(/《[^》]{2,40}》/, ''));
+    // end 用**原始匹配**的长度，不是去空格后的 raw.length（A20 归一化镜像：
+    // 取值/做键用归一形，定位/插入用原始位置）。模型写「第 38 条」时两者差 2，
+    // 用错就会把条号切开插进去：`第 38「…原文…」条`。
+    out.push({ raw, at, end: at + m[0].length, article, site: citationSite(text, at, windowSize) });
+  }
+  return out;
+}
+
 export function bareArticleCitations(text: string, windowSize = 60): string[] {
   return bareArticleSpans(text, windowSize).map((x) => x.raw);
 }
@@ -684,18 +711,13 @@ export function bareArticleSpans(text: string, windowSize = 60): { raw: string; 
   }
 
   const out: { raw: string; at: number; article: string; site: CitationSite }[] = [];
-  for (const m of text.matchAll(ARTICLE)) {
-    const at = m.index ?? 0;
-    // 法条原文内部的交叉引用不算 agent 的光秃引用（立法者写的，不是它写的）
-    if (insideVerbatim(text, at)) continue;
-    if (insideOwnFormatQuote(text, at)) continue;
-    const raw = m[0].replace(/\s+/g, '');
-    const article = normalizeArticle(raw.replace(/《[^》]{2,40}》/, ''));
+  for (const span of authoredCitationSpans(text, windowSize)) {
+    const { raw, at, article } = span;
     if (givenFullText.has(article)) continue; // 轮级：本轮任何位置**归属明确地**给过全文 → 回指不算光秃
     // 本地窗口判定照旧保留（含"引号内原文不问归属"那条本地豁免）
-    const near = text.slice(Math.max(0, at - windowSize), at + m[0].length + windowSize);
+    const near = text.slice(Math.max(0, at - windowSize), at + raw.length + windowSize);
     if (hasVerbatimNear(near, article)) continue;
-    out.push({ raw, at, article, site: citationSite(text, at, windowSize) });
+    out.push(span);
   }
   return out;
 }
@@ -747,7 +769,21 @@ export function renderCoreArticleFallback(
   const corpus = normQuote(text);
   const seen = new Set<string>();
   const picked: { at: number; key: string; quote: string }[] = [];
-  for (const span of bareArticleSpans(text)) {
+  // 【触发看"原文在不在"，不看判据说光不光秃（2026-08-25 manager 批）】
+  //
+  // **判据管评价，渲染管交付。** 评价标准可以争论（什么算"给了依据"有解释空间：
+  // 自报条号算不算、标题行点名算不算、转述算不算）；**交付标准不能含糊**——
+  // 原文在不在用户手里，是就是，不是就不是。共用一个判定，等于让**可争论的东西
+  // 决定不可含糊的东西**，那正是根源。
+  //
+  // 实例（ws2-agent 自查报出）：「标题行点名《劳动合同法》第四十条 + 引用块给的是**转述**」
+  // 在归属层面算"已给依据"，于是旧触发条件跳过它——而用户手里**根本没有那段原文**，
+  // 拿着一句转述上不了庭。改看内容后，这一处会把逐字原文补上。
+  //
+  // 【不要"优化"掉重复】正文里同时出现转述与原文**是好的法律写作**（manager 定性）：
+  // 先用人话讲清楚，再给可照念的原文——两段服务的是两个不同的时刻，
+  // **理解的时候**，和**站在庭上的时候**。看起来重复，承担的功能不同。
+  for (const span of authoredCitationSpans(text, 60)) {
     if (span.site !== '核心位') continue;
     // 键可能带法名也可能不带（"第46条"），两种都试——与 isCoreBlock 同一套匹配口径
     const key = [...available.keys()].find(
@@ -759,7 +795,7 @@ export function renderCoreArticleFallback(
     const quote = subItemOf(available.get(key)!, span.raw) ?? available.get(key)!;
     if (corpus.includes(normQuote(quote))) continue; // 全文已有该条原文，不重复补
     seen.add(key);
-    picked.push({ at: span.at + span.raw.length, key, quote });
+    picked.push({ at: span.end, key, quote });
   }
   // ⭐清单内的优先占额度，其余按出现先后；每轮封顶 RENDER_CAP 条，防止把回复灌成法条汇编
   picked.sort((a, b) => Number(core.has(b.key)) - Number(core.has(a.key)));
@@ -788,7 +824,9 @@ function subItemOf(quote: string, raw: string): string | null {
 }
 
 /** 卡里 statute_quotes.text 打头的那个条号（`第四十六条　`），内联引用时去掉，免得"第四十六条「第四十六条　…」" */
-const SELF_LABELED_HEAD = /^\s*第[一二三四五六七八九十百零〇0-9]+条[　\u3000]\s*/;
+// 打头条号允许被 markdown 强调包裹：真卡里存的是 `**第三十八条**　用人单位…`，
+// 不认强调标记就剥不掉，补进正文会变成 `第 38「**第三十八条**　…」条` 这种叠字形态。
+const SELF_LABELED_HEAD = /^\s*(?:\*\*|__)?\s*第[一二三四五六七八九十百零〇0-9]+条(?:\*\*|__)?[　\u3000]\s*/;
 
 // ───────────────────────── 第五道确定性闸：伪逐字引号引用 ─────────────────────────
 //
