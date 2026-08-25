@@ -3,6 +3,7 @@
 // 并在这里（且只在这里）从环境变量取 key、把 variant 翻译成厂商请求参数。
 // 上层拿到的永远是统一接口，不认厂商。
 
+import { withPiiRedaction } from '../pii';
 import { API_KEY_ENV, VARIANT_REQUEST_PARAMS, billingKey, type RouteTarget } from '../routing.config';
 import type { Provider, ProviderName, ProviderOptions } from '../types';
 import { createAnthropic } from './anthropic';
@@ -45,14 +46,19 @@ export function createProvider(target: RouteTarget, o: CreateProviderOptions = {
     }
   }
 
-  return FACTORIES[target.provider]({
-    apiKey,
-    model: target.model.api,
-    billingModel: billingKey(target),
-    extraBody,
-    baseUrl: o.baseUrl,
-    fetchImpl: o.fetchImpl,
-  });
+  // 出境脱敏包在最外层（PIPL 39 条，见 ../pii.ts）：本函数是 lib/llm 唯一的实例出口，
+  // 拦在这里才能保证「不管哪个调用方、走哪条路由」，发往 anthropic/openai 的消息都过了一遍。
+  // 境内两家在 withPiiRedaction 内部短路，不产生任何包装开销。
+  return withPiiRedaction(
+    FACTORIES[target.provider]({
+      apiKey,
+      model: target.model.api,
+      billingModel: billingKey(target),
+      extraBody,
+      baseUrl: o.baseUrl,
+      fetchImpl: o.fetchImpl,
+    }),
+  );
 }
 
 export { createAnthropic, createDashScope, createDeepSeek, createOpenAI };

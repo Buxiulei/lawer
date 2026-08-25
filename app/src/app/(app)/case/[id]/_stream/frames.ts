@@ -80,6 +80,9 @@ export type NoticeCode =
   | 'REFERRAL_ALREADY_USED'
   | 'TOOL_INPUT_REJECTED'
   | 'CITATION_BLOCKED'
+  | 'CITATION_INCOMPLETE'
+  | 'PRECEDENT_CONTAMINATED'
+  | 'CALC_FAILED'
   | 'EMOTIONAL_LEVERAGE_DETECTED'
   | 'NBDPSY_PITCH_BLOCKED';
 
@@ -208,6 +211,13 @@ const NOTICE_COPY: Record<NoticeCode, string | null> = {
   REFERRAL_ALREADY_USED: null,
   TOOL_INPUT_REJECTED: null,
   CITATION_BLOCKED: null,
+  // 「只给条号没给逐字原文」是内部质量信号，不对用户出提示行——
+  // 告诉用户「这条引用不完整」既帮不上忙，又会让他怀疑手里已有的内容
+  CITATION_INCOMPLETE: null,
+  PRECEDENT_CONTAMINATED: null,
+  // 唯一一条「失败」类的用户可见提示。文案由后端按缺失项拼好直接下发，
+  // 这里不再套一层固定话术——「还差哪几项」每轮都不一样，写死就只能说废话。
+  CALC_FAILED: '',
   EMOTIONAL_LEVERAGE_DETECTED: null,
   NBDPSY_PITCH_BLOCKED: null,
 };
