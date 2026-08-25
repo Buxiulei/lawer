@@ -7,6 +7,7 @@
 // 守的正是那个反方向。
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import {
   capitulatesToFabricate,
@@ -1646,7 +1647,11 @@ describe('判据修二 · 裸条号回绑（4e10b7c 批 S14#2/#3 真实样本）
 // 只能证明模式自洽，**证明不了模式认得真实语料**（假零正是这么溜过去的）。
 // ───────────────────────────────────────────────────────────────
 describe('乙态检测：真卡双极对照 + 节选闸', () => {
-  const K = new URL('../../knowledge/packs/', import.meta.url).pathname;
+  // 【不要用 .pathname】URL.pathname 会把非 ASCII 百分号编码：仓库路径含中文（本仓库正是
+  // /home/roots/裁员应对员/…）时 readFileSync 拿到 %E8%A3%81… 直接 ENOENT。
+  // fileURLToPath 才是 file:// → 本地路径的正确转换。此坑在中文副本上恒红、纯 ASCII 副本上恒绿，
+  // 是"结论依赖运行环境而我们只在一种环境里验过"的实例（2026-08-25）。
+  const K = fileURLToPath(new URL('../../knowledge/packs/', import.meta.url));
   const card = (rel: string) => ({ title: 'X', body: readFileSync(`${K}${rel}`, 'utf8') });
 
   it('★真卡阳性：完整收录（zhongcai-guanxia-shixiao.md:76-79，§27 四款齐）→ 开火', () => {
