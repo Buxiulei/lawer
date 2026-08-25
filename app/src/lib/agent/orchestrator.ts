@@ -335,11 +335,25 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     injectedCoreCards = extra.map((p) => p.id);
   }
 
+  // 【空手感知·一处判定】本轮注入包里有几张**够格被引用**的卡。
+  //
+  // 【为什么不是 packs.length === 0】旧的 KNOWLEDGE_MISS 判的是"有没有卡"，
+  // 而尘埃形态的本质是**"总能捞到 6 张，只是全无关"**——length 是 6 不是 0，判据永远不触发。
+  // 实测：query「上海高温津贴标准」命中 6 张（北京失业保险金/最低工资/生育津贴判例…），
+  // 没有一张与上海或高温津贴有关，而 notice 帧数 = 0。所以判据从"有没有卡"改成**"卡够不够格"**。
+  //
+  // 【必须写明的区分】**触发空手感知 ≠ 库里没有这张卡**——它只意味着**检索没把料给到手**。
+  // 两者修法完全不同：前者是**降级应对**（本指令），后者是**召回改进**（标注/别名/地名税）。
+  // 混为一谈会让人以为"空手感知上线了，召回就不用修了"。
+  const substantiveHits = countSubstantiveHits(packs, message);
+  const emptyPack = substantiveHits === 0;
+
   const system = buildSystemPrompt({
     snapshot,
     mode,
     stage,
     packs,
+    emptyPack,
     coreSources,
     now,
     // 危机指令每次都下发（危机轮的行为纪律逐轮都要生效）；
@@ -691,8 +705,33 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     });
   }
 
-  if (state.searches > 0 && state.retrieved.length === 0) {
+  // KNOWLEDGE_MISS 与空包指令**挂同一判据**（manager 令，不再各判各的）：
+  // 两处各判各的，就会出现"指令说这轮没依据、通知说这轮有依据"，用户看到的是自相矛盾的产品。
+  if (emptyPack) {
     emit({ event: 'notice', data: { code: 'KNOWLEDGE_MISS', message: '本轮没有检索到可引用的依据，相关结论已按保守做法给出' } });
+  }
+
+  // 【EMPTY_PACK 留痕：这是运营指标，不只是排障留痕】**空包率就是召回质量的直接度量。**
+  // 按场景分层、按日聚合；上线后若维持在实测的 71% 量级，产品实际上大部分时候在说
+  // "我要先核实"——那是必须触发召回攻坚的信号，**不能靠人偶尔想起来去查**。
+  // 另一半理由：没有留痕就无法从归档判断"这一轮是没料还是有料没用"，而两者修法完全不同。
+  if (emptyPack) {
+    emit({
+      event: 'notice',
+      data: {
+        code: 'EMPTY_PACK',
+        message: `本轮注入 ${packs.length} 张卡但**无一实质命中**（keyword/applies_to 全不沾边），已按空包轮降级应对`,
+        injection: {
+          coreCandidateKeys: [],
+          coreBlockRendered: [],
+          renderAdded: [],
+          // 决策口径：**注入前**算的那次（指令是照这个数下的）。
+          // 与 INJECTION_OBSERVED 里的那个数可能不同——那个是**轮末**的，
+          // tool-loop 里模型自己再检索会把它抬上去。两个数回答两个问题，故意分开留。
+          substantiveHitCount: substantiveHits,
+        },
+      },
+    });
   }
 
   // tokens_json 存 {model, usage}：billing 对账要的是「按哪个计费键、四桶各多少」，
