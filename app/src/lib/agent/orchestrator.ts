@@ -58,6 +58,32 @@ import { AGENT_TOOLS, emitCalcFailureNotice, executeTool, newTurnState, type Age
 const HISTORY_LIMIT = 20;
 
 /**
+ * 【临时处置 · manager 2026-08-25 裁定，修好后撤回】危机轮暂停热线去重。
+ *
+ * **它解决的是「悬空」，不是「重复」。** 实测：`stripDuplicateHotlineList` 判"重复"只看
+ * **含号码的行数 ≥2**，命中后把**所有**含号码的行全删。于是危机轮里
+ * 「开头给号码（不用等看完就能打）+ 结尾再给并附照读话术」这种形态被剥成两处悬空句——
+ * 「先把号码放这儿：」后面是空的，「接通了可以照这样说：」后面也是空的（号码与照读句同行，一并删）。
+ *
+ * 四条理由（manager）：
+ *  ① **危机轮悬空的代价不可逆**——用户在最坏的那一刻读到一句失效的承诺，
+ *     他会以为系统坏了，而他此刻**没有力气再试第二次**；
+ *  ② **危机轮刷屏的代价接近零**——多给两遍救命电话不是问题，啰嗦在这一轮根本不算缺点；
+ *  ③ **触发形态恰恰是好的干预设计**（开头给 + 结尾给）——**模型越做对越容易触发**；
+ *  ④ 范围小、可立即滚更、修好后撤回。
+ *
+ * ⚠️ **别把它读成「危机轮本就不该去重」**——该去重，只是不能用「见号码就全删」这种去重。
+ * 撤回条件：四处修法（「整卡」的定义／`cardShapeAgrees` 的产线真实输入域／悬空指代／
+ * **保留第一处、只剥后续重复**）落地后删掉本开关。其中「保留第一处」一条天然连悬空一起解决——
+ * 悬空之所以出现，正是因为它把被指代物整个删光了：**一个判断"有重复"的检查，
+ * 不该有"全部删除"的处置权。**
+ *
+ * 注：`stripDuplicateHotlineList` 全仓**只有这一处产线调用点**，且整块在 `crisis.triggered` 内，
+ * 所以本开关等于让它在产线上停用；纯函数本身一字未动（四处修法要在它上面做）。
+ */
+const CRISIS_HOTLINE_DEDUP_ENABLED = false;
+
+/**
  * tool-loop 最多跑几轮。
  * 8 轮足够「检索 → 落 3 条时间线 → 开 3 张卡 → 收口」这种最重的一轮；
  * 再多基本就是模型在原地打转，与其烧钱不如切断并如实告诉用户。
@@ -457,7 +483,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     // 首段已经把号码摆在用户眼前了，模型段就不该再整张列一遍（定版批两次 L2 失败的病灶）。
     // 守卫：**只有首段确实发出过号码**才允许剥——openerPhones 为空时一个字都不动，
     // 否则会把唯一一处号码剥掉，L1「危机轮号码必须在场」优先于「别啰嗦」。
-    if (openerPhones.length > 0 && leverageOutcome !== 'fallback') {
+    if (CRISIS_HOTLINE_DEDUP_ENABLED && openerPhones.length > 0 && leverageOutcome !== 'fallback') {
       body = stripDuplicateHotlineList(body, openerPhones);
     }
     if (body.trim()) {
