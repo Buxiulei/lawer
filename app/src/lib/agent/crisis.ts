@@ -557,7 +557,34 @@ export const CRISIS_SAFE_FALLBACK = [
 
 /** 把命中情感杠杆的句子整句剥掉（比重生成快：危机轮不该再等 2-4 分钟） */
 export function stripLeverageSentences(text: string, userSaid = ''): string {
-  return stripSentencesMatching(text, (sentence) => detectEmotionalLeverage(sentence, userSaid));
+  return stripLeverageWithTrail(text, userSaid).text;
+}
+
+/**
+ * 剥杠杆句，**并留下被剥的原句**。
+ *
+ * 【为什么要留痕】危机轮正文流经六道剥除/改写环节，**只有第五闸留痕**
+ *（`CITATION_BLOCKED.stripped_articles`）——正因为它留痕，§27 那次才定得了案。
+ * 其余五道删了东西不留任何证据：**归档里的正文是闸后产物，被删的句子不在里面**，
+ * 于是"闸剥了什么"事后永远查不到，只能靠有人恰好撞上。
+ *
+ * **一道 L1 闸在生产上删用户看得到的内容却不留证据**——这件事本身就是缺陷，
+ * 与"要不要再加一层判别"无关。留痕之后，下一批才能真正量出
+ * "剥掉的里面多少是共情复述、多少是真杠杆"。
+ */
+export function stripLeverageWithTrail(text: string, userSaid = ''): { text: string; stripped: string[] } {
+  const stripped: string[] = [];
+  const kept = text
+    .split(/(?<=[。！？\n])/)
+    .filter((sentence) => {
+      if (!detectEmotionalLeverage(sentence, userSaid)) return true;
+      if (sentence.trim()) stripped.push(sentence.trim());
+      return false;
+    })
+    .join('')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return { text: kept, stripped };
 }
 
 /** 把推介付费咨询的句子整句剥掉（不够格时用；复用同一套剥句机制） */

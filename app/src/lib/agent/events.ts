@@ -181,6 +181,15 @@ export type AgentEvent =
          */
         stripped_articles?: string[];
         /**
+         * EMOTIONAL_LEVERAGE_DETECTED 专用：**被剥掉的原句**与处置结果。
+         * 与 `stripped_articles` 同一条纪律——**闸删了什么必须自己写下来**：
+         * 归档正文是闸后产物，被删的句子不在里面，不留痕就永远查不到它剥的是
+         * 共情复述还是真杠杆（而这两者的处置完全相反）。
+         */
+        stripped_sentences?: string[];
+        /** clean｜stripped（只删命中句）｜fallback（模型段整段丢弃，用户只剩确定性首段） */
+        leverage_outcome?: 'stripped' | 'fallback';
+        /**
          * INJECTION_OBSERVED 专用：本轮注入产物的四个可观测量。
          *
          * 【三态语义，四个字段一致（A3「不知道≠零」）】

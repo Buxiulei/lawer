@@ -22,10 +22,13 @@ import { describe, expect, it } from 'vitest';
  */
 const CRISIS_OUTPUT_GATES = [
   {
-    fn: 'stripLeverageSentences',
-    what: '情感杠杆句整句剥除（仅危机轮）',
+    fn: 'stripLeverageWithTrail',
+    what: '情感杠杆句整句剥除（仅危机轮）｜**已留痕**',
     enabled: true,
-    note: '2026-08-25 修：改为来源判别——引号内容来自用户原话＝复述，放行；替他构造的情绪照剥',
+    note:
+      '2026-08-25 两层修：①引号内容来自用户原话＝复述，放行；②裸内疚短语须与"离开为前提"同现。' +
+      '同日补留痕（stripped_sentences + leverage_outcome 入 notice）——' +
+      '在此之前它删了什么事后查不到，六道闸里只有第五闸留痕。',
   },
   {
     fn: 'CRISIS_SAFE_FALLBACK',

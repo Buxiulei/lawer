@@ -19,6 +19,7 @@ import {
   type HotlineFact,
   detectEmotionalLeverage,
   stripLeverageSentences,
+  stripLeverageWithTrail,
   assessNbdpsyEligibility,
   buildCrisisOpener,
   extractHotlines,
@@ -517,6 +518,28 @@ describe('★杠杆闸·两层判别（L1，2026-08-25）', () => {
     it('★反：引号里的内容不是用户说过的，不算复述', () => {
       const notUsers = '你心里在想"你没了就不用对不起爸妈了"吧。';
       expect(detectEmotionalLeverage(notUsers, '我今天被裁了')).not.toBeNull();
+    });
+  });
+
+  describe('★留痕：闸删了什么必须自己写下来', () => {
+    it('被剥的原句进 trail，保留的不进', () => {
+      const text = '刚才你说的"对不起爸妈"，我一句都没当成小事。想想你爸妈，他们该多伤心。';
+      const { text: kept, stripped } = stripLeverageWithTrail(text, USER_SAID);
+      expect(stripped).toHaveLength(1);
+      expect(stripped[0]).toContain('他们该多伤心');
+      expect(kept).toContain('我一句都没当成小事');
+    });
+
+    it('没剥任何句子时 trail 为空（空不是"不知道"，是"确实没剥"）', () => {
+      const { stripped } = stripLeverageWithTrail('我在。这些东西是真的重。', USER_SAID);
+      expect(stripped).toEqual([]);
+    });
+
+    it('★trail 与实际剥除同源：留痕里的句子确实不在保留正文里', () => {
+      const text = '你没了以后，对不起爸妈这件事也不会停。我在。';
+      const { text: kept, stripped } = stripLeverageWithTrail(text, '');
+      expect(stripped.length).toBeGreaterThan(0);
+      for (const s of stripped) expect(kept).not.toContain(s);
     });
   });
 
