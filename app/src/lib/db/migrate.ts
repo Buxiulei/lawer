@@ -367,6 +367,51 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_emotion_log_case ON emotion_log (case_id, id);
   `);
 
+  // 品牌推荐台账 + 频控闸门（spec D14）：本站是 NBDpsy 体系的分支，会在案件关键节点与情绪场景
+  // 主动推荐心理咨询。这张表管的就是「推了几次、谁说过不要」。五条产品语义，改本表前先读完：
+  //
+  // 1) 只追加不修改：推了落一行 offered、用户拒绝落一行 declined、用户去咨询了落一行 accepted，
+  //    永不 UPDATE 旧行。这张表将来可能要用来证明「我们没有反复骚扰用户」——它本身就是那份证据，
+  //    改写过的台账不成其为证据。
+  // 2) 拒绝全局永久生效：declined 按 user_id 查，跨案件、跨场景、**不设 TTL**。一个明确说过
+  //    「不需要」的人，若三个月后又被问一次，他会读出「这个系统在等我改变主意」——那比第一次
+  //    推销伤害更大。所以没有过期时间，也不按案件重置。
+  // 3) 五个可推位点各一次：四个案件节点（收到裁员通知 / 立案后 / 开庭前 / 拿到结果后）与情绪场景
+  //    并列为 scene，各只推一次。情绪场景是状态不是时点、会反复触发，不设限就等于反复推。
+  //    幂等靠 uq_referral_offer_scene（只约束 offered 态；declined/accepted 可多行）——同
+  //    notify_log 只约束 sent 的范式。索引键取 COALESCE(case_id, 0) 而非 case_id 裸列：
+  //    SQLite 唯一索引视 NULL 互不相等，裸列版在 case_id 为空时根本挡不住重复。
+  //    **0 是安全哨兵**：case_id 指向 AUTOINCREMENT 主键，真实值恒 ≥1，不可能与哨兵撞。
+  //    为什么不靠「调用方记得传 caseId」：情绪场景恰恰是最可能不挂案件的那个位点，
+  //    而它正是「状态不是时点、会反复触发」这条要防的重点；把约定变成约束的成本只是一个
+  //    COALESCE，漏传的代价却是用户被反复推——规范的可执行性取决于遵守它的成本。
+  // 4) case_id 绝不 CASCADE：随案级联删会让用户销案后「拒绝记录消失、又被推一遍」。
+  //    **拒绝记录必须比案件活得久**，故可空 + ON DELETE SET NULL。
+  // 5) 「拒绝」约束的是我们**主动推**的动作，不约束用户自己来找：页脚/关于页常驻入口对所有人
+  //    始终可见；declined 之后 agent 不再主动提，但**用户主动问「你们有心理咨询吗」时照常正常
+  //    回答并给入口，这不算违反频控**；用户主动咨询后成交记 accepted，不算「频控被绕过」。
+  //    **拒绝的是被推销，不是拒绝服务**——若把它实现成「拒绝过的人连问都问不到」，
+  //    就从克制变成了赌气。
+  //
+  // 另注：D15 危机轮禁令（识别到自杀念头/严重心理危机的轮次只给免费热线、不得出现任何付费信息）
+  // 是**当轮即时判定**，不落本表，由 lib/agent 层判——本表管的是跨轮次的频控，别把危机轮塞进来。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS referral_offers (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    INTEGER NOT NULL REFERENCES users(id),
+      case_id    INTEGER REFERENCES cases(id) ON DELETE SET NULL,
+      scene      TEXT NOT NULL,                             -- 收到裁员通知 | 立案后 | 开庭前 | 拿到结果后 | 情绪场景
+      outcome    TEXT NOT NULL,                             -- offered | declined | accepted
+      thread_id  INTEGER REFERENCES threads(id) ON DELETE SET NULL,  -- 回指发生推荐的那轮对话，便于审计「当时怎么说的」
+      note       TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_referral_offer_scene
+      ON referral_offers (user_id, COALESCE(case_id, 0), scene)
+      WHERE outcome = 'offered';
+    CREATE INDEX IF NOT EXISTS idx_referral_offers_user ON referral_offers (user_id, id DESC);
+  `);
+
   // 分享链接：把档案给亲友/工会/律师看的免登录入口。token 唯一即访问凭据，
   // 必须有 expires_at（不设永久链），revoked_at 非空即提前失效（撤销不删行，保留审计）。
   db.exec(`
