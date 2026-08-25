@@ -36,7 +36,6 @@ import {
   detectEmotionalLeverage,
   assessNbdpsyEligibility,
   detectNbdpsyPitch,
-  stripLeverageSentences,
   stripLeverageWithTrail,
   stripDuplicateHotlineList,
   extractHotlines,

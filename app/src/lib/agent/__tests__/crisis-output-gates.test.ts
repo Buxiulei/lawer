@@ -102,7 +102,7 @@ const CRISIS_OUTPUT_GATES = [
 const NON_GATE_IMPORTS: Record<string, string> = {
   // —— ./crisis ——
   assessCrisis: '判定，返回 CrisisAssessment，不碰正文',
-  detectEmotionalLeverage: '检测器，返回命中句；剥除动作由 stripLeverageSentences 做',
+  detectEmotionalLeverage: '检测器，返回命中句；剥除动作由 stripLeverageWithTrail 做',
   detectNbdpsyPitch: '检测器',
   assessNbdpsyEligibility: '判定',
   responseGaveCrisisCard: '判定',
@@ -186,7 +186,7 @@ describe('危机轮输出流经的闸：登记册与漏登记检测', () => {
     // 密封样本：不掺真实导入。否则 orchestrator 一旦真的多出未分类导入，
     // 这条负样本会跟着变红，把「自证」污染成「又一条重复告警」。
     const registered = new Set<string>(CRISIS_OUTPUT_GATES.map((g) => g.fn));
-    const fabricated = ['assessCrisis', 'stripLeverageSentences', 'redactPanicPhrases'];
+    const fabricated = ['assessCrisis', 'stripLeverageWithTrail', 'redactPanicPhrases'];
     const unclassified = fabricated.filter((n) => !registered.has(n) && !(n in NON_GATE_IMPORTS));
     expect(unclassified).toEqual(['redactPanicPhrases']);
     // 同时确认旧的前缀扫描确实抓不到它——这就是为什么需要上面那条
