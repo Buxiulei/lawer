@@ -109,7 +109,8 @@ export interface Verdict {
     | 'mechanism_unavailable'
     | 'gate_stripped'
     | 'law_ambiguous'
-    | 'law_unbound';
+    | 'law_unbound'
+    | 'observability_missing';
   /** pending_card 类专用：等哪一条条文补卡 */
   pendingArticle?: string;
   /** pending_card 类专用：该条所属法律（从引用处就近的《…》取），用于清单预分拣 */
@@ -1377,6 +1378,89 @@ export function gateStrippedArticles(t: TurnRecord): Set<string> {
     for (const k of e.data.stripped_articles ?? []) out.add(k);
   }
   return out;
+}
+
+/**
+ * 【注入产物可观测·三态读取】本轮"系统到底给了模型什么"。
+ *
+ * 与 `gateStrippedArticles` 同族：**只读产线写下的留痕，不从正文反推**。
+ * 反推等于给同一件事开第二个真源，两边迟早各说各话（教训 11）。
+ *
+ * 【三态，缺一不可】
+ *  · `undefined` —— 这份产物**不知道**（旧产物 / 跑在旧代码上）→ 判据**跳过**，
+ *    产 `na: observability_missing`，**不计过不计挂**；
+ *  · `[]` / `0` —— 机制跑了，产出**确实为空** → **真信号**（⭐空 / 没渲染 / 无实质命中）；
+ *  · 非空 —— 正常判。
+ *
+ * 【为什么不能写成 `?? []` 或 falsy 判断】那会把"旧产物"与"机制真空了"抹成同一件事，
+ * 而后者恰恰最该报警。这是 A26 四种没有里的两种：**"看不见"不是"不存在"**。
+ * 缺陷⑨（残键零命中≠库内无）与 A29（events 空≠闸没开火）都是同一个形状的复发，
+ * 这里第三次遇到它——所以直接返回 `undefined`，逼调用方把两态分开处理。
+ */
+export function injectionObservability(t: TurnRecord):
+  | { coreCandidateKeys: string[]; coreBlockRendered: string[]; renderAdded: string[]; substantiveHitCount: number }
+  | undefined {
+  for (const e of t.events) {
+    if (e.event !== 'notice' || e.data.code !== 'INJECTION_OBSERVED') continue;
+    if (e.data.injection) return e.data.injection;
+  }
+  return undefined;
+}
+
+/**
+ * ⭐机制的可观测判定：候选池非空、却**一条也没渲染进 prompt**。
+ *
+ * 【这正是 S03 那次没能被发现的形态】当时候选池空、⭐段没出现，而报告写成"给了"——
+ * 没有任何字段能证伪那句话。四个字段的**存在理由**就是让这一类从此可判：
+ * "算出来了"与"模型收到了"是两件事，`coreCandidateKeys` 与 `coreBlockRendered` 分别回答。
+ */
+export function coreRenderedGap(t: TurnRecord): { candidates: string[]; rendered: string[] } | null {
+  const obs = injectionObservability(t);
+  if (!obs) return null; // 不知道 ≠ 没差距
+  return obs.coreCandidateKeys.length > 0 && obs.coreBlockRendered.length === 0
+    ? { candidates: obs.coreCandidateKeys, rendered: obs.coreBlockRendered }
+    : null;
+}
+
+/**
+ * 【⭐机制可观测断言】三态各走各的路，**断言的处置必须三者不同**，否则"写了三态"是假的。
+ *
+ * 产出：
+ *  · 留痕缺失 → `na: observability_missing`（**不计过不计挂**：旧产物不知道，不能因此判 PASS
+ *    也不能判 FAIL——判 PASS 就是拿"没记录"当"没问题"）；
+ *  · 候选池非空 ∧ 渲染为空 → **FAIL**（算出来了却没送到模型手里，是真缺陷）；
+ *  · 其余 → PASS。
+ */
+export function coreRenderObservabilityAssertions(turns: TurnRecord[], scenarioId: string): Verdict[] {
+  return turns.flatMap((t, i): Verdict[] => {
+    const obs = injectionObservability(t);
+    if (!obs) {
+      return [
+        {
+          id: `${scenarioId}-轮${i + 1}-⭐留痕缺失`,
+          tier: 'L3' as const,
+          pass: true, // 让旧的布尔消费者不炸；真正的判定看 na
+          na: true,
+          naKind: 'observability_missing' as const,
+          detail:
+            `第 ${i + 1} 轮没有 INJECTION_OBSERVED 留痕（旧产物或跑在旧代码上）→ ⭐机制这一轮**不可观测**，` +
+            `判据跳过、不计过不计挂。**这不等于机制没跑**，只等于我们看不见它跑没跑。`,
+        },
+      ];
+    }
+    const gap = coreRenderedGap(t);
+    return [
+      {
+        id: `${scenarioId}-轮${i + 1}-⭐候选已渲染`,
+        tier: 'L2' as const,
+        pass: !gap,
+        detail: gap
+          ? `第 ${i + 1} 轮⭐候选池有 ${gap.candidates.length} 条（${gap.candidates.join('、')}），` +
+            `但**一条也没渲染进 prompt**——"系统算出来了"与"模型收到了"是两件事，这轮模型手上没有⭐标注`
+          : `第 ${i + 1} 轮⭐候选 ${obs.coreCandidateKeys.length} 条 / 实际渲染 ${obs.coreBlockRendered.length} 条`,
+      },
+    ];
+  });
 }
 
 /**

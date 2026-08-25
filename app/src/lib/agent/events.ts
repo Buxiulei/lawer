@@ -28,6 +28,13 @@ export type NoticeCode =
   | 'CORE_ARTICLE_INJECTED'
   /** ⭐核心条在核心位仍光秃，已自动补上卡内逐字原文（消灭「核心位光秃」这个类别本身） */
   | 'CORE_ARTICLE_RENDERED'
+  /**
+   * 【注入产物可观测】本轮"系统到底给了模型什么"的留痕，**不改变系统做什么，只让我们知道系统做了什么**。
+   *
+   * 在此之前，「⭐有没有出现」「保底渲染有没有开火」**只能靠侥幸判定**——
+   * §27 那次能定案，纯粹是因为第五闸恰好留了痕。**同样的运气不该指望第二次。**
+   */
+  | 'INJECTION_OBSERVED'
   /** 本轮行动卡已达 3 张上限，第 4 张起被拒（charter §2） */
   | 'ACTION_CARD_CAPPED'
   /** 补救后仍未产出行动卡，本轮违反 charter §2，已记录 */
@@ -167,6 +174,27 @@ export type AgentEvent =
          * 判据只读这个字段、不从正文反推——反推等于给分账开第二个真源。
          */
         stripped_articles?: string[];
+        /**
+         * INJECTION_OBSERVED 专用：本轮注入产物的四个可观测量。
+         *
+         * 【三态语义，四个字段一致（A3「不知道≠零」）】
+         *  · **字段缺失**：这份产物**不知道**（旧产物 / 跑在旧代码上）→ 判据**跳过**，产
+         *    `na: observability_missing`，**不计过不计挂**；
+         *  · **`[]` / `0`**：机制跑了，产出**确实为空** → **真信号**（⭐空 / 渲染没开火 / 无实质命中）；
+         *  · 非空：正常判。
+         *
+         * **合并成 falsy 判断就把"旧产物"和"机制真空了"判成同一件事**，而后者恰恰最该报警。
+         */
+        injection?: {
+          /** ⭐候选池：系统算出哪些是核心条 */
+          coreCandidateKeys: string[];
+          /** ⭐段**实际渲染进 prompt** 的条——"传了≠渲染了" */
+          coreBlockRendered: string[];
+          /** 保底渲染补进正文的条——渲染开没开火 */
+          renderAdded: string[];
+          /** 本轮注入包中**有实质命中**的卡数——手上这几张能不能用 */
+          substantiveHitCount: number;
+        };
         /** CALC_FAILED 专用：恒 true——补齐信息后可以直接再算一次，不是功能坏了 */
         retriable?: boolean;
       };

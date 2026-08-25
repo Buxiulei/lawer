@@ -36,6 +36,8 @@ import {
   fullCardOccurrences,
   cardShapeAgrees,
   citationCompletenessAssertions,
+  coreRenderObservabilityAssertions,
+  injectionObservability,
   absentOutsideDisclaimer,
   precedentSpans,
   citationKey,
@@ -1239,6 +1241,76 @@ describe('乙态「有原文未结构化」与⭐机制不可用（2026-08-24 �
    * 【判别力是完全的，不是启发式】全量静态扫描：具名 absent 家族 8 条，
    * 含触发词的恰好 3 条，就是出事的这三条；其余 5 条安全。规则与事故一一对应。
    */
+  /**
+   * 【批 C 验收：注入产物可观测】规格三条硬条件对应下面三组。
+   * 核心是**三态处置必须不同**——"写了三态但两态同路"等于没写。
+   */
+  describe('★注入产物可观测：三态各走各的路', () => {
+    const obsEvent = (injection: Record<string, unknown>) => ({
+      event: 'notice' as const,
+      data: { code: 'INJECTION_OBSERVED' as const, message: 'x', injection },
+    });
+    const turn = (events: unknown[]): TurnRecord => ({
+      input: '', text: '', events: events as TurnRecord['events'], retrieved: [],
+      actionCards: [], drafts: [], model: '', degraded: false, taskClass: '',
+    });
+
+    it('态一·留痕缺失（旧产物）→ na=observability_missing，不计过不计挂', () => {
+      const v = coreRenderObservabilityAssertions([turn([])], 'S03');
+      expect(v).toHaveLength(1);
+      expect(v[0].na).toBe(true);
+      expect(v[0].naKind).toBe('observability_missing');
+    });
+
+    it('态二·候选非空但渲染为空 → FAIL（这正是 S03 那次没能被发现的形态）', () => {
+      const v = coreRenderObservabilityAssertions(
+        [turn([obsEvent({ coreCandidateKeys: ['劳动合同法|第46条'], coreBlockRendered: [], renderAdded: [], substantiveHitCount: 3 })])],
+        'S03',
+      );
+      expect(v[0].pass).toBe(false);
+      expect(v[0].na).toBeUndefined();
+      expect(v[0].detail).toContain('一条也没渲染进 prompt');
+    });
+
+    it('态三·候选与渲染都有 → PASS', () => {
+      const v = coreRenderObservabilityAssertions(
+        [turn([obsEvent({ coreCandidateKeys: ['劳动合同法|第46条'], coreBlockRendered: ['劳动合同法|第46条'], renderAdded: [], substantiveHitCount: 3 })])],
+        'S03',
+      );
+      expect(v[0].pass).toBe(true);
+      expect(v[0].na).toBeUndefined();
+    });
+
+    it('★三态处置确实两两不同（防"写了三态但两态同路"）', () => {
+      const sig = (v: { pass: boolean; na?: boolean; naKind?: string }) => `${v.pass}|${v.na ?? false}|${v.naKind ?? '-'}`;
+      const missing = sig(coreRenderObservabilityAssertions([turn([])], 'X')[0]);
+      const empty = sig(coreRenderObservabilityAssertions([turn([obsEvent({ coreCandidateKeys: ['a'], coreBlockRendered: [], renderAdded: [], substantiveHitCount: 0 })])], 'X')[0]);
+      const normal = sig(coreRenderObservabilityAssertions([turn([obsEvent({ coreCandidateKeys: ['a'], coreBlockRendered: ['a'], renderAdded: [], substantiveHitCount: 1 })])], 'X')[0]);
+      expect(new Set([missing, empty, normal]).size).toBe(3);
+    });
+
+    it('★空集是真信号，不是"不知道"：substantiveHitCount=0 与字段缺失必须可区分', () => {
+      const zero = injectionObservability(turn([obsEvent({ coreCandidateKeys: [], coreBlockRendered: [], renderAdded: [], substantiveHitCount: 0 })]));
+      expect(zero?.substantiveHitCount).toBe(0); // 机制跑了，结论是 0
+      expect(injectionObservability(turn([]))).toBeUndefined(); // 这份产物不知道
+      // 合并成 falsy 就会把上面两行判成同一件事——而后者最该报警
+      expect(zero).not.toBeUndefined();
+    });
+
+    it('★旧产物零改动可回放：拿真实历史 JSON 验，全部走"缺失=跳过"', () => {
+      const F = '/home/roots/caiyuan-ws/eval/scripts/eval/results/2026-08-24T19-45-04Z.json';
+      const j = JSON.parse(readFileSync(F, 'utf8'));
+      const turns = (j.scenarios[0].turns as { text: string }[]).map((t) => ({
+        input: '', text: t.text, events: [], retrieved: [], actionCards: [], drafts: [], model: '', degraded: false, taskClass: '',
+      })) as TurnRecord[];
+      const v = coreRenderObservabilityAssertions(turns, 'S14');
+      expect(v.length).toBeGreaterThan(0);
+      expect(v.every((x) => x.naKind === 'observability_missing')).toBe(true);
+      // 关键：历史产物**不得因此判 PASS**（判 PASS 就是拿"没记录"当"没问题"）
+      expect(v.every((x) => x.na === true)).toBe(true);
+    });
+  });
+
   describe('★元测试：含否定词的禁语不得用剥泛否定的包装', () => {
     const SCEN = readFileSync(new URL('./scenarios.ts', import.meta.url), 'utf8');
     const ASRT = readFileSync(new URL('./assertions.ts', import.meta.url), 'utf8');

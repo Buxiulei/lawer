@@ -335,9 +335,31 @@ function isCoreBlock(law: string, article: string, core: Set<string>): boolean {
   return core.has(articleKey(law, article)) || core.has(articleKey(null, article));
 }
 
+/**
+ * 这张卡里**会被打上⭐**的那些条（= 渲染进 prompt 的核心条）。
+ *
+ * 【为什么单独抽出来】"候选池里有" ≠ "模型真的收到了⭐标注"：候选池里的条若在本轮
+ * 注入的卡里没有 `statute_quotes`，⭐段根本不会出现它。可观测接口要能把这两者分开
+ * （`coreCandidateKeys` vs `coreBlockRendered`）——**S03 那次就是候选池空、⭐段没出现，
+ * 而报告写成"给了"**，当时没有任何字段能证伪。
+ *
+ * 抽出来给 orchestrator 复用，而不是让它照着 packCitationGuide 再判一遍：
+ * 两份实现必有一天分叉，那时"我们以为渲染了"和"实际渲染了"又会各说各话。
+ */
+export function coreQuotesOf(pack: KnowledgePack, core: Set<string>) {
+  return (pack.facts?.statute_quotes ?? []).filter((q) => q?.law && q?.article && isCoreBlock(q.law, q.article, core));
+}
+
+/** 本轮**实际渲染进 prompt** 的⭐核心条键集（跨全部注入卡去重） */
+export function coreBlockRenderedKeys(packs: KnowledgePack[], core: Set<string>): string[] {
+  const out = new Set<string>();
+  for (const p of packs) for (const q of coreQuotesOf(p, core)) out.add(articleKey(q.law, q.article));
+  return [...out];
+}
+
 export function packCitationGuide(pack: KnowledgePack, core: Set<string> = new Set()): string {
   const quotes = pack.facts?.statute_quotes ?? [];
-  const coreHere = quotes.filter((q) => q?.law && q?.article && isCoreBlock(q.law, q.article, core));
+  const coreHere = coreQuotesOf(pack, core);
   const blocks = [...statuteBlocks(pack), ...valueBlocks(pack), ...precedentBlocks(pack)];
   if (blocks.length === 0) return citationTemplate(pack);
   const head = ['【本卡可引用内容已替你拼好，照抄即可（不要改写、不要缩写、不要只留编号）】'];

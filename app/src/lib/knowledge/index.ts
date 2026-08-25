@@ -69,6 +69,18 @@ export interface SearchOptions {
 }
 
 const DEFAULT_LIMIT = 5;
+
+// ─────────────────── 指标语义常量（改动须 manager 同级审批）───────────────────
+//
+// 【为什么这几个常量被圈起来单独说明】`MIN_KEYWORD_LEN`、`matches()` 的子串规则、
+// 以及 `SUBSTANTIVE_MIN_SCORE`，共同构成 **`substantiveHitCount` 这个指标的语义**。
+// 而该指标同时是「空手感知」的触发判据与「空包率」这项运营指标的分母口径
+// （空包率 = 召回质量的直接度量，单日 >40% 报 manager）。
+//
+// 因此：**改这几个数不是调优，是改指标定义**——历史数据会因此不可比，
+// 昨天的 30% 与今天的 30% 不再是同一件事。改动须 manager 同级审批并说明对历史数据的影响。
+// 规矩写在它保护的东西旁边，而不是写在别处的文档里——写在别处的规矩，改代码的人看不见。
+//
 /** 长度 1 的 keyword（如「N」）与任何 query 都能互为子串，噪音太大，不参与打分 */
 const MIN_KEYWORD_LEN = 2;
 const SCORE_KEYWORD = 3;
@@ -143,6 +155,36 @@ function bigrams(text: string): Set<string> {
 /** 互为子串即算命中：既让「调岗」命中 keyword「调岗降薪」，也让「经济补偿金个税」命中 keyword「经济补偿」 */
 function matches(term: string, query: string): boolean {
   return term.length >= MIN_KEYWORD_LEN && (query.includes(term) || term.includes(query));
+}
+
+/**
+ * 这张卡对本轮 query 是**实质命中**，还是只是被打分排序捞上来的尘埃？
+ *
+ * 【判定】keyword 或 applies_to 与 query 互为子串即算实质命中。
+ * 纯靠标题 bigram 重叠捞上来的（`SCORE_TITLE_MAX` 那一项）**不算**——
+ * 实测形态：query「上海高温津贴标准」命中 6 张卡（北京失业保险金/最低工资/生育津贴判例…），
+ * **没有一张与上海或高温津贴有关**。这类"总能捞到 6 张、只是全无关"的尘埃，
+ * 正是「有没有卡」这个旧判据看不见的东西——它数的是 length，而 length 是 6 不是 0。
+ *
+ * 【为什么必须只有这一处实现】产线用它触发空手感知，运营用它算空包率，判据用它复核
+ * "该触发而没触发"。三处若各写一份，就会出现"产线认为有料、判据认为空手"——
+ * 而这恰恰是这个指标要防的那类分歧。
+ *
+ * **manager 2026-08-25 给的判断标准（这条与「两把尺不共用刻度」看似打架，写在这里防误读）**：
+ * > **问这两处代码"是在互相监督，还是在做同一件事"——监督要独立，同一件事要唯一。**
+ * 判据与产线各自独立判"模型做得对不对"，那是监督，要两把尺；
+ * 而"这张卡算不算实质命中"是**同一件事**，只能有一把尺。
+ */
+export function isSubstantiveHit(pack: Pick<PackMeta, 'keywords' | 'applies_to'>, query: string): boolean {
+  return (
+    (pack.keywords ?? []).some((kw) => matches(kw, query)) ||
+    (pack.applies_to ?? []).some((scene) => matches(scene, query))
+  );
+}
+
+/** 本轮注入包里有几张是实质命中（空手感知的判据本体；0 = 手上这几张都不能用） */
+export function countSubstantiveHits(packs: Pick<PackMeta, 'keywords' | 'applies_to'>[], query: string): number {
+  return packs.filter((p) => isSubstantiveHit(p, query)).length;
 }
 
 function scoreOf(meta: PackMeta, query: string, queryBigrams: Set<string>): number {

@@ -11,6 +11,7 @@ import * as cases from '@/lib/cases';
 import { gongdaoSettle, recordTokenUsage, turnRefId } from '@/lib/billing';
 import { featureOfMode } from '@/lib/billing/features';
 import { costOfUsage, type UsageTokens } from '@/lib/billing/pricing';
+import { countSubstantiveHits } from '@/lib/knowledge';
 import * as store from '@/lib/db/agent';
 import { getRatesForModel } from '@/lib/db/modelRates';
 import { fromSql } from '@/lib/db/time';
@@ -46,6 +47,7 @@ import { CitationGuard } from './citation-guard';
 import {
   articleKey,
   coreArticleKeys,
+  coreBlockRenderedKeys,
   CORE_ARTICLE_MAP_PACK_ID,
   renderCoreArticleFallback,
   sceneCoreArticles,
@@ -606,11 +608,11 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   // 放在第五闸**之后**：补的是本轮注入卡里的原文，天然过闸，且不给自己留被剥的机会。
   // 到这一步"哪几条是核心、原文是什么、这一处是不是核心位"系统全都已知，
   // 再把最后一步寄望于模型自觉，就是拿已知的确定性去换概率（见 renderCoreArticleFallback）。
-  const fallback = renderCoreArticleFallback(
-    text,
-    coreArticleKeys({ ...coreSources, retrieved: state.retrieved }),
-    state.retrieved,
-  );
+  // 候选池**只算一次**：保底渲染与可观测留痕共用同一个集合。
+  // 各算各的会得到两个"本轮候选池"，而留痕的全部意义就是复现渲染当时的依据——
+  // 两份就有一份是**事后重新推导**的，那正是我们在 §27 那次吃过的亏（推导≠证据）。
+  const coreCandidates = coreArticleKeys({ ...coreSources, retrieved: state.retrieved });
+  const fallback = renderCoreArticleFallback(text, coreCandidates, state.retrieved);
   if (fallback.added.length > 0) {
     text = fallback.text;
     emit({
@@ -621,6 +623,31 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
       },
     });
   }
+
+  // 【注入产物可观测】**这四个字段不改变系统做什么，只让我们知道系统做了什么。**
+  //
+  // 写在这里是因为这是**收敛点**：到这一步候选池算完了、prompt 组完了、保底渲染跑完了，
+  // 四个量同时可得。散在各自的分叉点上写，就会变成"记录这件事有四处代码负责"，
+  // 而记录只该有一处负责——否则改了一处忘了另一处，留痕自己先分叉。
+  //
+  // 【为什么无条件发，哪怕全是空】空值是**真信号**（⭐空/没渲染/无实质命中），
+  // 只在非空时发就等于把"机制跑了但产出为空"和"这份产物根本不知道"合并成同一件事——
+  // 而后者恰恰最该报警。三态语义见 events.ts 的 `injection` 字段注释。
+  emit({
+    event: 'notice',
+    data: {
+      code: 'INJECTION_OBSERVED',
+      message:
+        `本轮注入产物：⭐候选 ${coreCandidates.size} 条、⭐实际渲染 ${coreBlockRenderedKeys(state.retrieved, coreCandidates).length} 条、` +
+        `保底补入 ${fallback.added.length} 条、实质命中卡 ${countSubstantiveHits(state.retrieved, message)}/${state.retrieved.length} 张`,
+      injection: {
+        coreCandidateKeys: [...coreCandidates],
+        coreBlockRendered: coreBlockRenderedKeys(state.retrieved, coreCandidates),
+        renderAdded: fallback.added,
+        substantiveHitCount: countSubstantiveHits(state.retrieved, message),
+      },
+    },
+  });
 
   // 危机轮情感杠杆：**闸门拦了几次**（运维指标），不再是「对用户说了几次」（事故记录）——
   // 混合形态落地后杠杆句已到不了用户，这里记的是闸门的工作量。
