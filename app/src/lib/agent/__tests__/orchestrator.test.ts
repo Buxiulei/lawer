@@ -224,6 +224,36 @@ describe('危机响应：心理危机资源卡强制注入（charter §5）', ()
     expect(system).toContain('010-82951332');
   });
 
+  /**
+   * 【危机轮豁免空包告知 · 端到端回归】(manager 2026-08-25)
+   *
+   * **空手感知的逻辑是"没把握就别给"，危机轮的逻辑是"必须给"；
+   * 两者不是措辞冲突，是原则冲突。而原则冲突不会被措辞调整解决，只能靠场景豁免。**
+   *
+   * 这个风险有**两条独立路径**，豁免同时挡住了两条，但要分别验：
+   *  · 路径一·措辞层面：流程性回应（"我先核实"）把人推开；
+   *  · 路径二·行为层面：空手感知教模型"没料时更谨慎地开口"，
+   *    **可能压抑危机轮该有的果断给号**——危机资源卡是**必须给**的，不是"手上没料就别说"。
+   *
+   * 所以本例除了验指令没注入，还要验**危机通路本身没被碰到**：三个号码仍逐字在场。
+   * **"理论上不受影响"是栽过的话**，必须实证。
+   */
+  it('★危机轮：空包告知不注入，且危机通路（指令+三个号码）分毫不动', async () => {
+    // idOnlySearcher 的 search 恒空 → 实质命中 0 → 空包**已检出**（正是会触发的那种轮）
+    const { provider } = await turn([{ text: '我在。', tools: [GOOD_CARD] }], {
+      message: CRISIS,
+      searcher: idOnlySearcher,
+    });
+    const system = provider.calls[0][0].content;
+    // 路径一：流程性回应的源头没有进上下文
+    expect(system).not.toContain('【本轮无可引用依据】');
+    // 路径二：危机通路完好——指令在，且三个号码逐字在（差一个字符即 FAIL 的那套）
+    expect(system).toContain('【危机响应');
+    expect(system).toContain('12356');
+    expect(system).toContain('800-810-1117');
+    expect(system).toContain('010-82951332');
+  });
+
   it('危机指令排在 charter 之后、案件档案之前（不能被问诊/行动卡纪律稀释）', async () => {
     const { provider } = await turn([{ text: '我在。', tools: [GOOD_CARD] }], {
       message: CRISIS,
