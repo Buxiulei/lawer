@@ -7,6 +7,8 @@
 // 布尔用 INTEGER 0/1；金额单位「分」（*_fen）；外键全部显式 REFERENCES（client 恒开 foreign_keys=ON）。
 import type Database from 'better-sqlite3';
 
+import { seedModelRates } from './modelRates';
+
 /** SQLite ALTER TABLE ADD COLUMN 不支持 IF NOT EXISTS；用 PRAGMA table_info 判断后跳过。 */
 function addColumnIfMissing(db: Database.Database, table: string, col: string, ddl: string): void {
   type ColRow = { name: string };
@@ -679,4 +681,12 @@ export function runMigrations(db: Database.Database): void {
   // 应用层**，库侧不设触发器、不设定时任务、不设任何机制——本列只是哑存储，写什么就是什么。
   // 存量行取 DDL 默认 'daily'：老库的盯梢都是按每日跑的，默认值即其现状，不需回填。
   addColumnIfMissing(db, 'company_watches', 'tier', "TEXT NOT NULL DEFAULT 'daily'");
+
+  // ───────────────── 费率种子 ─────────────────
+  // C01 核定的模型费率必须**在建表之后立刻播下去**：缺行时 getRatesForModel 会回落
+  // DEFAULT_RATES（最便宜的 Flash 档），于是每一笔账都按兜底价少收——而账面看起来完全正常。
+  // 2026-08-25 生产冒烟实证：model_rates 0 行。**有 seed 函数不等于 seed 过**，
+  // 所以种子挂在迁移路径上（每次开库都走），而不是等谁记得手动跑一次。
+  // 幂等由 (model, token_kind, effective_at) 唯一索引 + INSERT OR IGNORE 保证：反复开库行数不变。
+  seedModelRates(db);
 }

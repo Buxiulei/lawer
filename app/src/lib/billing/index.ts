@@ -17,6 +17,16 @@ import {
   type UsageTokens,
 } from './pricing';
 
+/**
+ * 一轮对话的记账幂等键：**一轮一笔，与模型往返次数无关**。
+ * 用量行（token_usage.ref_id）与消耗流水（gongdao_ledger.ref_id）共用它——对账靠它把两侧对起来，
+ * 重放同一轮由 (type, ref_id) 唯一索引挡下。实时记账与回填脚本必须用同一个函数生成，
+ * 各写各的格式会让回填在已记过账的轮上再扣一笔。
+ */
+export function turnRefId(messageId: number): string {
+  return `turn-${messageId}`;
+}
+
 /** 读取公道值余额（无行视作 0）。 */
 export function getGongdao(userId: number, db: Database.Database = getDb()): number {
   const row = db.prepare('SELECT balance FROM gongdao WHERE user_id=?').get(userId) as

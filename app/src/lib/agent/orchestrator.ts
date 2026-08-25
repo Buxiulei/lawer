@@ -8,7 +8,11 @@
 import type { Database } from 'better-sqlite3';
 
 import * as cases from '@/lib/cases';
+import { gongdaoSettle, recordTokenUsage, turnRefId } from '@/lib/billing';
+import { featureOfMode } from '@/lib/billing/features';
+import { costOfUsage, type UsageTokens } from '@/lib/billing/pricing';
 import * as store from '@/lib/db/agent';
+import { getRatesForModel } from '@/lib/db/modelRates';
 import { fromSql } from '@/lib/db/time';
 import {
   getProvider,
@@ -130,6 +134,61 @@ function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
     cachedRead: add(a.cachedRead, b.cachedRead),
     cachedWrite: add(a.cachedWrite, b.cachedWrite),
   };
+}
+
+/**
+ * 本轮记账：token 用量流水 + 公道值结算。
+ *
+ * 【为什么接在 runTurn 内部而不是 route 层（lead 2026-08-25 定点）】runTurn 是**收敛点**：
+ * SSE 路由、评测脚本、日后任何新入口调的都是它，接在这里全都自动记账；
+ * 而 route 层是**分叉点**，漏接一个入口就又是一个空账本——那正是本次事故的形状
+ *（设施全写好了，只是没人调，三表 0 行而对账报绿）。
+ *
+ * 【ref_id 约定】`turn-<messageId>`：一轮对话一笔账，与模型往返次数无关。
+ * 用量行与消耗流水共用它，对账靠这个键把两侧对起来；重放同一 messageId 由
+ * gongdao_ledger 的 (type, ref_id) 唯一索引挡下，不会双扣。
+ */
+function chargeTurn(args: {
+  db: Database;
+  userId: number;
+  mode: string;
+  messageId: number;
+  usage: TokenUsage;
+  provider: Provider;
+  emit: AgentEventSink;
+}): void {
+  const { db, userId, mode, messageId, usage, provider, emit } = args;
+  // 四桶全 null = 本次流根本没回报计量。**不许拿 0 冒充**（llm/types.ts 铁律：
+  // null 表示未回报，不可当 0 结算）——记一行 0 成本的用量等于宣称"这轮不要钱"，
+  // 而真相是"这轮花了多少我们不知道"。不知道就要让人看见，不是悄悄记成免费。
+  if (usage.prompt === null && usage.completion === null && usage.cachedRead === null && usage.cachedWrite === null) {
+    emit({
+      event: 'notice',
+      data: {
+        code: 'USAGE_UNREPORTED',
+        message: `本轮未收到模型计量回报（${provider.billingModel}），已跳过记账——这一轮的成本未知，不是零。`,
+      },
+    });
+    return;
+  }
+  // 单桶 null 的常态是「厂商无此档」（如 DeepSeek 无缓存写），按 0 计入即可：
+  // 上面已确认本轮**确实回报过**计量，缺的那桶是结构性不存在，不是未知。
+  const tokens: UsageTokens = {
+    promptTokens: usage.prompt ?? 0,
+    completionTokens: usage.completion ?? 0,
+    cacheReadTokens: usage.cachedRead ?? 0,
+    cacheWriteTokens: usage.cachedWrite ?? 0,
+  };
+  const refId = turnRefId(messageId);
+  const feature = featureOfMode(mode);
+  const cost = costOfUsage(tokens, getRatesForModel(db, provider.billingModel));
+  // 两笔写入同事务：只落其一正是对账器判的「漏账」（用量无消耗流水），不能自己造出来。
+  db.transaction(() => {
+    // model=priced 计费键（决定扣多少），apiModel=厂商回显串（决定真跑了哪个快照）——
+    // 两串不同是设计如此（厂商 API 不收 dated 串），真漂移是同一 priced 键下 api_model 变化。
+    recordTokenUsage(userId, feature, provider.billingModel, tokens, refId, provider.model, db);
+    gongdaoSettle(userId, cost, refId, feature, db);
+  })();
 }
 
 /**
@@ -621,6 +680,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   const usageReport: UsageReport = { model: routed.client.billingModel, usage };
   store.finalizeMessage(db, messageId, { content: text, tokensJson: JSON.stringify(usageReport) });
   store.touchThread(db, thread.id);
+  chargeTurn({ db, userId, mode, messageId, usage, provider: routed.client, emit });
 
   emit({
     event: 'usage',

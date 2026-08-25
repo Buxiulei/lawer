@@ -19,6 +19,22 @@ export const FEATURE_LABELS: Record<string, string> = {
   contract_review: '合同审查',  // critical 档计费，费率待 M3 核定
 };
 
+/**
+ * threads.mode → feature 键。**记账侧与回填脚本共用这一份**：
+ * 两处各写一份映射，就会出现「实时记 intake、回填记 companion」这种同一轮两个功能名的账。
+ */
+export const FEATURE_BY_THREAD_MODE: Record<string, string> = {
+  问诊: 'intake',
+  陪跑: 'companion',
+  文书: 'draft',
+  录音分析: 'asr',
+};
+
+/** 取模式对应的 feature 键；未知模式回落「陪跑」（长期对话的常态，不会把账记到定额端点上）。 */
+export function featureOfMode(mode: string): string {
+  return FEATURE_BY_THREAD_MODE[mode] ?? 'companion';
+}
+
 /** 未登记键的兜底标签（不再直出英文原始键）。 */
 export const UNKNOWN_FEATURE_LABEL = '其他';
 

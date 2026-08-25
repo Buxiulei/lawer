@@ -451,6 +451,15 @@ function insideOwnFormatQuote(text: string, at: number): boolean {
   return false;
 }
 
+/** 只认**问过归属**的逐字覆盖（blockquote / 自家注入格式）。轮级预扫专用，见 bareArticleSpans */
+function hasAttributedVerbatim(near: string, article: string): boolean {
+  for (const line of near.split('\n')) {
+    if (/^\s*>/.test(line) && unquotedVerbatimCovers(line, article)) return true;
+  }
+  const own = OWN_QUOTE_FORMAT.exec(near);
+  return !!own && unquotedVerbatimCovers(own[0], article);
+}
+
 function hasVerbatimNear(near: string, article: string): boolean {
   // blockquote 行：逐行取内容问归属，不再"窗口里有 > 就整窗放行"
   for (const line of near.split('\n')) {
@@ -573,17 +582,37 @@ export function bareArticleCitations(text: string, windowSize = 60): string[] {
 
 /** 同 bareArticleCitations，但带上**位置与偏移**——判据按位置分级、产线按位置补原文都要用它。 */
 export function bareArticleSpans(text: string, windowSize = 60): { raw: string; at: number; article: string; site: CitationSite }[] {
+  // 【判定单位是「本轮」，不是「窗口」】(缺陷① 2026-08-25)
+  // 真实形态是**前文已给全文、后文再回指同一条**（S03#1 §46 全文在 16 行外；S15轮1 §87 同族）。
+  // 按窗口判会把回指判成光秃——而用户其实已经拿到原文了。
+  //
+  // 修法**不是放大窗口**：放大是给参数找例外（A7），且会把**邻条**原文误算成本条。
+  // 改的是判定单位——先扫一遍全文，记下"本轮哪些条已经给过全文"，回指命中即不算光秃。
+  const givenFullText = new Set<string>();
+  for (const m of text.matchAll(ARTICLE)) {
+    const at = m.index ?? 0;
+    const article = normalizeArticle(m[0].replace(/\s+/g, '').replace(/《[^》]{2,40}》/, ''));
+    const near = text.slice(Math.max(0, at - windowSize), at + m[0].length + windowSize);
+    // 【预扫只认**归属明确**的覆盖】窗口判定里"引号内原文不问归属"是刻意的
+    //（法条原文自己会交叉引用别的条，问归属会把正确引用判成光秃）——但那条豁免只能作用在**本地**。
+    // 若把它带进轮级集合，一次局部误覆盖就会**扩散成整轮豁免**：邻条 §46 的引文
+    // 会让全文任何位置的 §47 都不再算光秃。所以预扫只收 blockquote / 自家格式这两条**问过归属**的路径。
+    if (hasAttributedVerbatim(near, article)) givenFullText.add(article);
+  }
+
   const out: { raw: string; at: number; article: string; site: CitationSite }[] = [];
   for (const m of text.matchAll(ARTICLE)) {
     const at = m.index ?? 0;
     // 法条原文内部的交叉引用不算 agent 的光秃引用（立法者写的，不是它写的）
     if (insideVerbatim(text, at)) continue;
     if (insideOwnFormatQuote(text, at)) continue;
-    const near = text.slice(Math.max(0, at - windowSize), at + m[0].length + windowSize);
     const raw = m[0].replace(/\s+/g, '');
     const article = normalizeArticle(raw.replace(/《[^》]{2,40}》/, ''));
-    // 归属到**本条**：窗口里的无引号原文必须讲的是它自己，邻条的原文不算（见 unquotedVerbatimCovers）
-    if (!hasVerbatimNear(near, article)) out.push({ raw, at, article, site: citationSite(text, at, windowSize) });
+    if (givenFullText.has(article)) continue; // 轮级：本轮任何位置**归属明确地**给过全文 → 回指不算光秃
+    // 本地窗口判定照旧保留（含"引号内原文不问归属"那条本地豁免）
+    const near = text.slice(Math.max(0, at - windowSize), at + m[0].length + windowSize);
+    if (hasVerbatimNear(near, article)) continue;
+    out.push({ raw, at, article, site: citationSite(text, at, windowSize) });
   }
   return out;
 }

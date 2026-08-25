@@ -207,11 +207,17 @@ describe('seedModelRates · C01 费率种子', () => {
   const countRows = (db: Database.Database) =>
     (db.prepare('SELECT COUNT(*) c FROM model_rates').get() as { c: number }).c;
 
-  test('幂等：连跑两遍行数不变，第二遍写入 0 行', () => {
+  test('迁移路径已经播过种：新库开出来费率就在（有 seed 函数 ≠ seed 过）', () => {
+    const { db } = makeDb(); // makeDb 走真实 runMigrations
+    // 2026-08-25 生产冒烟：model_rates 0 行——种子函数写好了却没人调，
+    // 于是每笔账都按 DEFAULT_RATES 兜底价少收，而账面看起来完全正常。种子现挂在迁移里。
+    expect(countRows(db)).toBeGreaterThan(0);
+    expect(rateOf(db, 'DeepSeek-V4-Pro-0813', 'in')).toBeGreaterThan(0);
+  });
+
+  test('幂等：迁移已播下后再跑写入 0 行，行数不变', () => {
     const { db } = makeDb();
-    const first = seedModelRates(db);
     const rows = countRows(db);
-    expect(first).toBe(rows);
     expect(rows).toBeGreaterThan(0);
 
     expect(seedModelRates(db)).toBe(0); // 全部命中 uq_model_rates

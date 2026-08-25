@@ -31,6 +31,7 @@ export {
   crisisHotlines,
   type HotlineFact,
   detectEmotionalLeverage,
+  detectNbdpsyPitch,
   responseGaveCrisisCard,
   shouldInjectCrisisCard,
   type CrisisAssessment,

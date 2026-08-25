@@ -36,7 +36,7 @@ export interface PendingCardState {
  * 而这类问题补卡是补不完的——该查的是模型为什么引到域外去。
  * 预分拣只排序省时，**不替代人核**：两栏都仍需外勤逐条核。
  */
-export type PendingKind = 'missing_card' | 'out_of_domain' | 'unknown_law';
+export type PendingKind = 'missing_card' | 'out_of_domain' | 'law_unbound';
 
 export interface PendingCardItem {
   article: string;
@@ -69,9 +69,16 @@ export function collectPending(
   return out;
 }
 
-/** 机检预分拣：该法在库=疑似真缺卡；整部不在库=疑似引用不当；取不到法名=法域未知（并入优先核） */
+/**
+ * 机检预分拣：该法在库=疑似真缺卡；整部不在库=疑似引用不当；取不到法名=法名待定。
+ *
+ * 【`law_unbound` 与判据的同名是有意的（缺陷⑨）】判据侧「法名待定」态与本栏**同一个名字**，
+ * 因为它们是**同一个堆**：一件事两个标签，读的人就要在脑子里维护一张对照表，
+ * 而对照表迟早会有一边先改。判据落 `law_unbound` 的条目根本不会流到 pending_card，
+ * 本栏因此退化成安全网——真空了是对的，不空说明有路径绕过了判据侧那道分流。
+ */
 export function classifyPending(law: string | undefined, libraryLaws: Set<string>): PendingKind {
-  if (!law) return 'unknown_law';
+  if (!law) return 'law_unbound';
   return libraryLaws.has(law.replace(/[《》\s]/g, '')) ? 'missing_card' : 'out_of_domain';
 }
 
@@ -120,12 +127,12 @@ export function writePendingCardList(
 
   const escalated = items.filter((i) => i.streak >= PENDING_ESCALATE_BATCHES).map((i) => i.article);
 
-  const byKind: Record<PendingKind, number> = { missing_card: 0, out_of_domain: 0, unknown_law: 0 };
+  const byKind: Record<PendingKind, number> = { missing_card: 0, out_of_domain: 0, law_unbound: 0 };
   for (const i of items) byKind[i.kind] += 1;
   const KIND_LABEL: Record<PendingKind, string> = {
     missing_card: '疑似真缺卡（该法在库、此条无原文）',
     out_of_domain: '⚠️ 疑似引用不当（**该法整部不在库**）',
-    unknown_law: '法域未知（引用处取不到法名）',
+    law_unbound: '法名待定（引用处取不到法名，且按条号回绑零命中）',
   };
   const table = (kind: PendingKind) => {
     const rows = items.filter((i) => i.kind === kind);
@@ -166,7 +173,7 @@ export function writePendingCardList(
     '',
     ...table('out_of_domain'),
     ...table('missing_card'),
-    ...table('unknown_law'),
+    ...table('law_unbound'),
     items.length === 0 ? '（本批无待补卡条文——全线有源）' : '',
   ];
   writeFileSync(path.join(dir, `pending-cards-${runId}.md`), lines.join('\n'));

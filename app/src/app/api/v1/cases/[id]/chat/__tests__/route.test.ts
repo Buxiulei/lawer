@@ -76,7 +76,12 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  for (const t of ['action_items', 'messages', 'threads', 'timeline_events', 'cases', 'users']) {
+  // 记账接线后，一轮对话也会在 token_usage / gongdao_ledger / gongdao 留行，
+  // 它们都外键指向 users——清 users 之前必须先清它们（子表先于父表）。
+  for (const t of [
+    'action_items', 'messages', 'threads', 'timeline_events', 'cases',
+    'token_usage', 'gongdao_ledger', 'gongdao', 'users',
+  ]) {
     db.prepare(`DELETE FROM ${t}`).run();
   }
   const insertUser = db.prepare("INSERT INTO users (phone_hash, auth_status) VALUES (?, '已实名')");

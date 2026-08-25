@@ -6,7 +6,7 @@
 import BetterSqlite3, { type Database } from 'better-sqlite3';
 
 import { runMigrations } from '@/lib/db/migrate';
-import type { ChatStreamResult, Provider, ToolCall } from '@/lib/llm';
+import type { ChatStreamResult, Provider, TokenUsage, ToolCall } from '@/lib/llm';
 import { emptyUsage } from '@/lib/llm';
 import type { AgentEvent } from '../events';
 import type { KnowledgePack, KnowledgeSearcher } from '../retrieval';
@@ -41,6 +41,12 @@ export interface ScriptedRound {
   text?: string;
   tools?: { name: string; args: Record<string, unknown> }[];
   finishReason?: string;
+  /**
+   * 本轮回报的四桶。缺省 = 常规回报（prompt 100 / completion 20）；
+   * 显式传 null = **本次流没回报计量**（四桶全 null）——计费侧对这种轮的处理
+   * 与「用量为 0」完全不同（types.ts：null 不可当 0 结算），不给夹具这个开关就测不到那条路。
+   */
+  usage?: TokenUsage | null;
 }
 
 export interface ScriptedProvider extends Provider {
@@ -82,7 +88,13 @@ export function scriptedProvider(script: ScriptedRound[]): ScriptedProvider {
         return {
           finishReason: round.finishReason ?? (toolCalls.length ? 'tool_calls' : 'stop'),
           toolCalls,
-          usage: { model: 'DeepSeek-V4-Pro-0813', usage: { ...emptyUsage(), prompt: 100, completion: 20 } },
+          usage: {
+            model: 'DeepSeek-V4-Pro-0813',
+            usage:
+              round.usage === null
+                ? emptyUsage()
+                : { ...emptyUsage(), ...(round.usage ?? { prompt: 100, completion: 20 }) },
+          },
         };
       })();
     },

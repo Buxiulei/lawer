@@ -43,6 +43,16 @@ const SQL_API_MODEL_DRIFT = `
    ORDER BY model, last_id
 `;
 
+/**
+ * 「模型真跑过」的证据：assistant 消息行。content 非空 = 那一轮确实产出了回复
+ *（content 为 NULL 是生成中/中断，见 messages 表注释，不算跑完）。
+ */
+const SQL_ASSISTANT_ACTIVITY = `
+  SELECT COUNT(*) AS n, MIN(created_at) AS first_at, MAX(created_at) AS last_at
+    FROM messages
+   WHERE role = 'assistant' AND content IS NOT NULL
+`;
+
 /** ledger 有消耗行但无 token_usage——定额端点（出证/导出）本就不产 token，只警告不判错。 */
 const SQL_LEDGER_WITHOUT_USAGE = `
   SELECT l.ref_id AS ref_id, l.feature AS feature, l.delta AS delta
@@ -92,9 +102,48 @@ function apiModelDriftWarnings(db: Database.Database): string[] {
   return out;
 }
 
+/**
+ * 空账本检查：**有模型回复产生的时间窗内，账本一行都没有 = 判错，不是"账目一致"**。
+ *
+ * 【为什么这条必须在，2026-08-25 生产冒烟】token_usage / gongdao_ledger / model_rates 三表
+ * 全 0 行时，上面每一条检查都无行可查，于是对账报「零不一致」——**一片绿**。
+ * 而真相是收费的地基根本没建：漏接线迟早会被发现，但**一个报绿的对账器会让所有人
+ * 相信账是对的，从而没人再去看账本**——它是掩盖问题的那一层。
+ *
+ * 判定用「有没有发生过模型回复」而不是「表空不空」：全新库、只有用户消息还没回的库
+ * 都不该报错——**没发生过的事不算漏账**（不知道 ≠ 零）。
+ */
+function emptyLedgerProblems(db: Database.Database): string[] {
+  const act = db.prepare(SQL_ASSISTANT_ACTIVITY).get() as { n: number; first_at: string | null; last_at: string | null };
+  if (act.n === 0 || !act.first_at) return []; // 模型一次都没跑过，无账可记
+
+  const out: string[] = [];
+  const since = act.first_at;
+  const window = `${act.first_at} 起至 ${act.last_at}`;
+  const usage = (db.prepare('SELECT COUNT(*) AS n FROM token_usage WHERE created_at >= ?').get(since) as { n: number }).n;
+  if (usage === 0) {
+    out.push(
+      `账本空表：${window} 有 ${act.n} 条模型回复（messages.role='assistant'），` +
+        `而 token_usage 在该时间窗内一行都没有——这不是账目一致，是根本没记账（用量口径）`,
+    );
+  }
+  const consume = (
+    db
+      .prepare("SELECT COUNT(*) AS n FROM gongdao_ledger WHERE type = '消耗' AND created_at >= ?")
+      .get(since) as { n: number }
+  ).n;
+  if (consume === 0) {
+    out.push(
+      `账本空表：${window} 有 ${act.n} 条模型回复，而 gongdao_ledger 在该时间窗内` +
+        `一条「消耗」流水都没有——这不是账目一致，是根本没扣费（账本口径）`,
+    );
+  }
+  return out;
+}
+
 /** 对一个已打开的库做全量对账（只读，不写任何行）。 */
 export function reconcile(db: Database.Database): ReconcileReport {
-  const problems: string[] = [];
+  const problems: string[] = [...emptyLedgerProblems(db)];
   const warnings: string[] = [];
 
   const rows = db.prepare(SQL_BALANCES).all() as

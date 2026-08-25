@@ -75,7 +75,7 @@ describe('清单机检预分拣：两栏按法域分', () => {
   });
 
   it('取不到法名 → 法域未知，并入优先核而不是当作真缺卡', () => {
-    expect(classifyPending(undefined, LIB)).toBe('unknown_law');
+    expect(classifyPending(undefined, LIB)).toBe('law_unbound');
   });
 
   it('书名号与空格不影响归类', () => {

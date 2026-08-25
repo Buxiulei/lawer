@@ -30,6 +30,7 @@ import { makeAgentFixture } from '../app/src/lib/agent/__tests__/fixtures';
 import { API_KEY_ENV, route, type Plan, type TaskClass } from '../app/src/lib/llm';
 import {
   bannedHotlineAssertions,
+  nbdpsyPitchAssertions,
   landlineMarkAssertions,
   tier,
   type Tier,
@@ -411,6 +412,7 @@ function printReport(r: ScenarioReport): boolean {
       unstructured_source: '待结构化（派 WS4，**正文已有原文**，不进外勤补卡栏）',
       pending_injection: '待注入（我方召回/enrich）',
       mechanism_unavailable: '⭐机制不可用（我方机制缺口，不记模型）',
+      law_unbound: '法名待定（人工堆，**不派外勤**——残键零命中证明不了库内无）',
       no_decision_point: '判据不适用（正常）',
     };
     const byKind = new Map<string, number>();
@@ -540,7 +542,7 @@ async function main() {
   if (pendingItems.length) {
     console.log(C.warn(`补卡需求 ${pendingItems.length} 条条文（详见 results/pending-cards-${runId}.md，须外勤人工核）`));
     // 两栏分列：第二栏变长 = 模型开始往域外引，比缺卡严重得多
-    console.log(C.dim(`  · 疑似真缺卡 ${byKind.missing_card} 条 / **疑似引用不当 ${byKind.out_of_domain} 条** / 法域未知 ${byKind.unknown_law} 条`));
+    console.log(C.dim(`  · 疑似真缺卡 ${byKind.missing_card} 条 / **疑似引用不当 ${byKind.out_of_domain} 条** / 法名待定 ${byKind.law_unbound} 条`));
     if (escalated.length) {
       console.log(
         C.fail(`⚠️ 连续 ${PENDING_ESCALATE_BATCHES} 批未补卡：${escalated.join('、')}——长期红灯会训练所有人无视红灯，请优先处理`),
