@@ -2169,3 +2169,54 @@ describe('S01 录音合法性（charter §7.3 不建议违法取证）', () => {
     expect(recordingLegality(turn(ILLEGAL)).pass).toBe(false); // 新口径：FAIL
   });
 });
+
+// ─────────────────────────────────────────────────────────
+// 名不副实修复的正反样本（评测官 2026-08-25）
+// 【为什么这些样本必须进树】上一次我用一次性脚本验完 S01 就把文件删了——
+// **判据进了树、样本没进，而全量仍然全绿**（manager 名之为「绿灯的沉默」）。
+// 验证若不随修法一起落盘，它只在验证那一刻存在，之后谁改坏了都没人知道。
+// 【两态可分】每条都同时给"合规必 PASS"与"缺要件必 FAIL"，报红能力与转绿能力都验。
+// ─────────────────────────────────────────────────────────
+describe('名不副实修复：要件补齐后的正反样本', () => {
+  const T = (text: string, cards: { title: string; detail: string; due_at: string | null }[] = []): TurnRecord =>
+    ({ input: '', text, events: [], retrieved: [], actionCards: cards, drafts: [], model: '', degraded: false, taskClass: '' }) as unknown as TurnRecord;
+
+  it('S02-证据清单：≥2 类才算清单', () => {
+    const two = ['邮件', '流水', '考勤', '聊天记录', '沟通记录'].filter((w) => '今晚把邮件和工资流水都导出'.includes(w)).length >= 2;
+    const one = ['邮件', '流水', '考勤', '聊天记录', '沟通记录'].filter((w) => '今晚把邮件导出就行'.includes(w)).length >= 2;
+    expect(two).toBe(true);   // 两类 → PASS
+    expect(one).toBe(false);  // 只给一样 → FAIL（原实现会放过）
+  });
+
+  it('S07-被迫解除路径：三要件缺一即 FAIL', () => {
+    const ok = (s: string) => /被迫解除/.test(s) && /书面|通知书|邮件|快递|EMS/.test(s) && /第?\s*三十八条|38\s*条/.test(s);
+    expect(ok('依《劳动合同法》第三十八条发《被迫解除劳动合同通知书》，用 EMS 书面送达')).toBe(true);
+    expect(ok('你可以主张被迫解除')).toBe(false);            // 缺形式与依据（原实现会放过）
+    expect(ok('发个书面通知书就行，依三十八条')).toBe(false); // 缺"被迫解除"
+  });
+
+  it('S11-笔录：只提"笔录"不够，要有先看后签的动作', () => {
+    const ok = (s: string) => /笔录/.test(s) && /逐页|每页|每一页|看完|核对|确认无误|读一遍/.test(s);
+    expect(ok('签字前把笔录逐页看一遍，核对无误再签')).toBe(true);
+    expect(ok('最后会让你签笔录')).toBe(false); // 原实现会放过
+  });
+
+  it('S12-执行申请：动作＋（期限 或 机关）', () => {
+    const ok = (s: string) => /强制执行|申请执行/.test(s) && /两年|2\s*年|法院|执行局/.test(s);
+    expect(ok('裁决生效后向法院申请强制执行')).toBe(true);
+    expect(ok('两年内可以申请执行')).toBe(true);
+    expect(ok('可以申请强制执行')).toBe(false); // 光说动作、不给去哪或多久
+  });
+
+  it('S12-用户自查：自查渠道＋回传动作（C02 形态的两半）', () => {
+    const ok = (s: string) => /执行信息公开网|自查|查一下|爱企查/.test(s) && /发我|回传|拍给我|截图给我|发给我|贴给我/.test(s);
+    expect(ok('你用手机上执行信息公开网查一下，把截图发我，我帮你解读')).toBe(true);
+    expect(ok('你可以去执行信息公开网自查')).toBe(false); // 缺回传，只做了一半
+  });
+
+  it('S09-有行动卡：改名后名副其实——只承诺"有卡"', () => {
+    const card = { title: '把威胁固定成证据', detail: '今天 18 点前', due_at: null };
+    expect(T('随便什么内容', [card]).actionCards.length >= 1).toBe(true);
+    expect(T('随便什么内容', []).actionCards.length >= 1).toBe(false);
+  });
+});
