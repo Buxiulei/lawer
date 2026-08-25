@@ -170,9 +170,39 @@ export function responseGaveCrisisCard(text: string): boolean {
 const EMOTIONAL_LEVERAGE_RE =
   /对不起(爸妈|父母|家人)|想想你(的)?(爸妈|父母|家人|孩子)|你走了.{0,8}(怎么办|怎么活)|(你|人)(没了|不在了)之?后.{0,12}(他们|爸妈|父母|家人)|(他们|爸妈|父母).{0,10}(往后|以后|余生|每一个)(早晨|夜|天)|留下.{0,6}(烂摊子|债|房贷).{0,6}给|房贷.{0,6}(还是|依然|照样)(要还|得还)/;
 
-/** 这段回复里有没有用情感杠杆劝阻；命中返回那个片段，没有返回 null。 */
-export function detectEmotionalLeverage(text: string): string | null {
-  return EMOTIONAL_LEVERAGE_RE.exec(text)?.[0] ?? null;
+/**
+ * 引号内容**来自用户原话**的那些段，从**判定副本**里抹掉。
+ *
+ * 【为什么判别在来源而不在词（manager 2026-08-25 定性）】
+ * **复述是把他自己的话还给他，杠杆是把别人的痛苦加给他。**
+ * 「爸妈」在两侧都会出现，词表层面分不开——分得开的是**引号里的内容是谁说的**：
+ *   · 「刚才你说的"房贷""对不起爸妈"，我一句都没当成小事」→ 内容来自用户 → **复述，放行**
+ *   · 「想想你爸妈，他们该多伤心」→ 我们**替他构造**的情绪 → **照旧剥**
+ *
+ * 【为什么这条必须修（实测，L1 且在生产上）】旧实现把上面第一句判成杠杆并**整句删掉**，
+ * 而它正是 charter §5「先接住」与 §6「引用用户自己说过的细节，不用空话」的产物；
+ * 删完之后留在用户眼前的是更空洞的版本（"你说的每一句我都当真"反而不命中）。
+ * **判据误报只是记一笔错账，闸误报是当场把话删掉——而且用户不知道少了什么。**
+ *
+ * 【只抹被引用的那一段，不放行整句】与否定对比式豁免同一条纪律：整句放行的话，
+ * 「你自己说过"对不起爸妈"，所以你更该撑住」会**整句搭便车**，
+ * 而那后半句（复述 + 对用户的行为要求）恰恰是要单独判的形态。
+ */
+const QUOTED_SPAN = /[「『"“”']([^」』"“”'\n]{2,40})[」』"“”']/g;
+
+function stripUserQuotes(text: string, userSaid: string): string {
+  if (!userSaid.trim()) return text;
+  return text.replace(QUOTED_SPAN, (whole, inner: string) => (userSaid.includes(inner) ? '　' : whole));
+}
+
+/**
+ * 这段回复里有没有用情感杠杆劝阻；命中返回那个片段，没有返回 null。
+ *
+ * `userSaid`：用户此前说过的话（含本轮）拼成的串。**不传则退回旧行为**——
+ * 调用方拿不到用户原话时，宁可维持"照旧剥"的保守向，也不放行（漏剥伤用户，误剥伤表达）。
+ */
+export function detectEmotionalLeverage(text: string, userSaid = ''): string | null {
+  return EMOTIONAL_LEVERAGE_RE.exec(stripUserQuotes(text, userSaid))?.[0] ?? null;
 }
 
 /**
@@ -476,8 +506,8 @@ export const CRISIS_SAFE_FALLBACK = [
 ].join('\n');
 
 /** 把命中情感杠杆的句子整句剥掉（比重生成快：危机轮不该再等 2-4 分钟） */
-export function stripLeverageSentences(text: string): string {
-  return stripSentencesMatching(text, detectEmotionalLeverage);
+export function stripLeverageSentences(text: string, userSaid = ''): string {
+  return stripSentencesMatching(text, (sentence) => detectEmotionalLeverage(sentence, userSaid));
 }
 
 /** 把推介付费咨询的句子整句剥掉（不够格时用；复用同一套剥句机制） */
