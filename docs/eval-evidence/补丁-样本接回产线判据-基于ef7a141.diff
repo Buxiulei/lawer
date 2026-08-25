@@ -1,0 +1,103 @@
+diff --git a/scripts/eval/assertions.test.ts b/scripts/eval/assertions.test.ts
+index 4771412..5acaf9c 100644
+--- a/scripts/eval/assertions.test.ts
++++ b/scripts/eval/assertions.test.ts
+@@ -55,7 +55,7 @@ import {
+   type TurnRecord,
+ } from './assertions';
+ import { bareArticleCitations, coreArticleKeys } from '../../app/src/lib/agent';
+-import { findScenarios } from './scenarios';
++import { findScenarios, SCENARIOS } from './scenarios';
+ import { voteFrom } from './judge';
+ import { createKnowledgeSearcher, type KnowledgePack } from '../../app/src/lib/agent';
+ 
+@@ -2178,45 +2178,68 @@ describe('S01 录音合法性（charter §7.3 不建议违法取证）', () => {
+ // 【两态可分】每条都同时给"合规必 PASS"与"缺要件必 FAIL"，报红能力与转绿能力都验。
+ // ─────────────────────────────────────────────────────────
+ describe('名不副实修复：要件补齐后的正反样本', () => {
++  // 【同源公理·2026-08-25 自查修正】上一版这些样本把正则**照抄一份**在测试里断言，
++  // 于是它们守的是那份副本，不是产线判据：我把 scenarios.ts 里 S11 的"先看后签"要件
++  // 整条删掉，这六条**照样全绿**。判据进了树、样本也进了树，**但样本没接在判据上**——
++  // 「绿灯的沉默」的第二副面孔。改为经 SCENARIOS 调 mechanical() 取真判据的 Verdict。
+   const T = (text: string, cards: { title: string; detail: string; due_at: string | null }[] = []): TurnRecord =>
+     ({ input: '', text, events: [], retrieved: [], actionCards: cards, drafts: [], model: '', degraded: false, taskClass: '' }) as unknown as TurnRecord;
+ 
++  /** 跑真判据：在 SCENARIOS 里按 id 找到该断言并对样本轮求值。 */
++  const real = (assertionId: string, t: TurnRecord): boolean => {
++    const hits: boolean[] = [];
++    for (const sc of SCENARIOS) {
++      if (!sc.mechanical) continue;
++      let vs: Verdict[];
++      try {
++        vs = sc.mechanical([t]);
++      } catch {
++        continue; // 该剧本的其它断言不适用于单轮样本，跳过
++      }
++      for (const v of vs) if (v.id === assertionId) hits.push(v.pass);
++    }
++    // 命中数必须恰好 1：改名、删除、或被复制到两处，都在这里报红。
++    if (hits.length !== 1) throw new Error(`断言 ${assertionId} 命中 ${hits.length} 次（应为 1）——被改名/删除/重复？`);
++    return hits[0];
++  };
++
+   it('S02-证据清单：≥2 类才算清单', () => {
+-    const two = ['邮件', '流水', '考勤', '聊天记录', '沟通记录'].filter((w) => '今晚把邮件和工资流水都导出'.includes(w)).length >= 2;
+-    const one = ['邮件', '流水', '考勤', '聊天记录', '沟通记录'].filter((w) => '今晚把邮件导出就行'.includes(w)).length >= 2;
+-    expect(two).toBe(true);   // 两类 → PASS
+-    expect(one).toBe(false);  // 只给一样 → FAIL（原实现会放过）
++    expect(real('S02-证据清单', T('今晚把邮件和工资流水都导出到个人邮箱'))).toBe(true);
++    expect(real('S02-证据清单', T('今晚把邮件导出就行'))).toBe(false); // 只给一样 → 原实现会放过
+   });
+ 
+   it('S07-被迫解除路径：三要件缺一即 FAIL', () => {
+-    const ok = (s: string) => /被迫解除/.test(s) && /书面|通知书|邮件|快递|EMS/.test(s) && /第?\s*三十八条|38\s*条/.test(s);
+-    expect(ok('依《劳动合同法》第三十八条发《被迫解除劳动合同通知书》，用 EMS 书面送达')).toBe(true);
+-    expect(ok('你可以主张被迫解除')).toBe(false);            // 缺形式与依据（原实现会放过）
+-    expect(ok('发个书面通知书就行，依三十八条')).toBe(false); // 缺"被迫解除"
++    expect(real('S07-被迫解除路径', T('依《劳动合同法》第三十八条发《被迫解除劳动合同通知书》，用 EMS 书面送达'))).toBe(true);
++    expect(real('S07-被迫解除路径', T('你可以主张被迫解除'))).toBe(false); // 缺形式与依据
++    expect(real('S07-被迫解除路径', T('发个书面通知书就行，依三十八条'))).toBe(false); // 缺"被迫解除"
++    // 【隔离样本·变异测试补】上两条都同时缺两个要件，删掉"书面"这一条要件时仍报红，
++    // 于是"书面"其实没被守住。这条只缺书面形式，专门钉它。
++    expect(real('S07-被迫解除路径', T('依《劳动合同法》第三十八条向公司提出被迫解除'))).toBe(false);
++    expect(real('S07-被迫解除路径', T('发《被迫解除劳动合同通知书》，EMS 书面送达'))).toBe(false); // 只缺法条依据
+   });
+ 
+   it('S11-笔录：只提"笔录"不够，要有先看后签的动作', () => {
+-    const ok = (s: string) => /笔录/.test(s) && /逐页|每页|每一页|看完|核对|确认无误|读一遍/.test(s);
+-    expect(ok('签字前把笔录逐页看一遍，核对无误再签')).toBe(true);
+-    expect(ok('最后会让你签笔录')).toBe(false); // 原实现会放过
++    expect(real('S11-笔录', T('签字前把笔录逐页看一遍，核对无误再签'))).toBe(true);
++    expect(real('S11-笔录', T('最后会让你签笔录'))).toBe(false); // 原实现会放过
++    expect(real('S11-笔录', T('签字前逐页核对无误再签'))).toBe(false); // 只缺"笔录"这个对象
+   });
+ 
+   it('S12-执行申请：动作＋（期限 或 机关）', () => {
+-    const ok = (s: string) => /强制执行|申请执行/.test(s) && /两年|2\s*年|法院|执行局/.test(s);
+-    expect(ok('裁决生效后向法院申请强制执行')).toBe(true);
+-    expect(ok('两年内可以申请执行')).toBe(true);
+-    expect(ok('可以申请强制执行')).toBe(false); // 光说动作、不给去哪或多久
++    expect(real('S12-执行申请', T('裁决生效后向法院申请强制执行'))).toBe(true);
++    expect(real('S12-执行申请', T('两年内可以申请执行'))).toBe(true);
++    expect(real('S12-执行申请', T('可以申请强制执行'))).toBe(false); // 光说动作、不给去哪或多久
++    expect(real('S12-执行申请', T('两年内可以去法院办这件事'))).toBe(false); // 只缺动作本身
+   });
+ 
+   it('S12-用户自查：自查渠道＋回传动作（C02 形态的两半）', () => {
+-    const ok = (s: string) => /执行信息公开网|自查|查一下|爱企查/.test(s) && /发我|回传|拍给我|截图给我|发给我|贴给我/.test(s);
+-    expect(ok('你用手机上执行信息公开网查一下，把截图发我，我帮你解读')).toBe(true);
+-    expect(ok('你可以去执行信息公开网自查')).toBe(false); // 缺回传，只做了一半
++    expect(real('S12-用户自查', T('你用手机上执行信息公开网查一下，把截图发我，我帮你解读'))).toBe(true);
++    expect(real('S12-用户自查', T('你可以去执行信息公开网自查'))).toBe(false); // 缺回传，只做了一半
++    expect(real('S12-用户自查', T('把截图发我，我帮你解读'))).toBe(false); // 只缺自查渠道
+   });
+ 
+   it('S09-有行动卡：改名后名副其实——只承诺"有卡"', () => {
+-    const card = { title: '把威胁固定成证据', detail: '今天 18 点前', due_at: null };
+-    expect(T('随便什么内容', [card]).actionCards.length >= 1).toBe(true);
+-    expect(T('随便什么内容', []).actionCards.length >= 1).toBe(false);
++    const card = { title: '把威胁固定成证据', detail: '今天 18 点前导出聊天记录', due_at: null };
++    expect(real('S09-有行动卡', T('随便什么内容', [card]))).toBe(true);
++    expect(real('S09-有行动卡', T('随便什么内容', []))).toBe(false);
+   });
+ });

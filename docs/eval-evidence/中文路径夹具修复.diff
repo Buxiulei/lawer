@@ -1,0 +1,33 @@
+diff --git a/scripts/eval/assertions.test.ts b/scripts/eval/assertions.test.ts
+index 04b879f..3092c94 100644
+--- a/scripts/eval/assertions.test.ts
++++ b/scripts/eval/assertions.test.ts
+@@ -7,6 +7,7 @@
+ // 守的正是那个反方向。
+ import { describe, expect, it } from 'vitest';
+ import { readFileSync } from 'node:fs';
++import { fileURLToPath } from 'node:url';
+ 
+ import {
+   capitulatesToFabricate,
+@@ -1428,7 +1429,10 @@ describe('判据修二 · 裸条号回绑（4e10b7c 批 S14#2/#3 真实样本）
+ // 只能证明模式自洽，**证明不了模式认得真实语料**（假零正是这么溜过去的）。
+ // ───────────────────────────────────────────────────────────────
+ describe('乙态检测：真卡双极对照 + 节选闸', () => {
+-  const K = new URL('../../knowledge/packs/', import.meta.url).pathname;
++  // 【不要用 .pathname】URL.pathname 会把非 ASCII 百分号编码：仓库路径含中文（如 /home/roots/裁员应对员/…）
++  // 时，readFileSync 拿到 %E8%A3%81… 直接 ENOENT。fileURLToPath 才是 file:// → 本地路径的正确转换。
++  // （2026-08-25：本仓库有中文路径的工作副本，此坑在那些副本上恒红、在纯 ASCII 副本上恒绿。）
++  const K = fileURLToPath(new URL('../../knowledge/packs/', import.meta.url));
+   const card = (rel: string) => ({ title: 'X', body: readFileSync(`${K}${rel}`, 'utf8') });
+   // 【阳性对照走快照，不走活卡】（manager 2026-08-25 定式）
+   // 张力：A18 要求"用真语料"（合成卡只证明模式自洽），但活卡会随知识库演化而变——
+@@ -1436,7 +1440,7 @@ describe('乙态检测：真卡双极对照 + 节选闸', () => {
+   // 解法=**真语料的快照**：内容逐字来自活卡（满足 A18），固化后不随库变（满足稳定性）。
+   // 代价与兜底：快照冻结了"当时的收录形态"，**库里演化出新形态它发现不了**——
+   // 那由「全库乙态扫描」（补卡清单产出时本就在扫全库）作为运维检查覆盖，不靠本用例。
+-  const F = new URL('./fixtures/', import.meta.url).pathname;
++  const F = fileURLToPath(new URL('./fixtures/', import.meta.url));
+   const snapshot = (rel: string) => ({ title: 'X', body: readFileSync(`${F}${rel}`, 'utf8') });
+ 
+   it('★真语料快照·阳性：完整收录（tjzcf-core.md:44-52 @7e92b41 单点事实源正文块，§27 四款齐）→ 开火', () => {

@@ -1,0 +1,114 @@
+diff --git a/scripts/eval/assertions.test.ts b/scripts/eval/assertions.test.ts
+index 1a320c5..04b879f 100644
+--- a/scripts/eval/assertions.test.ts
++++ b/scripts/eval/assertions.test.ts
+@@ -1430,14 +1430,52 @@ describe('判据修二 · 裸条号回绑（4e10b7c 批 S14#2/#3 真实样本）
+ describe('乙态检测：真卡双极对照 + 节选闸', () => {
+   const K = new URL('../../knowledge/packs/', import.meta.url).pathname;
+   const card = (rel: string) => ({ title: 'X', body: readFileSync(`${K}${rel}`, 'utf8') });
++  // 【阳性对照走快照，不走活卡】（manager 2026-08-25 定式）
++  // 张力：A18 要求"用真语料"（合成卡只证明模式自洽），但活卡会随知识库演化而变——
++  // PR #60 把 §27 旧副本改成引用，这条阳性对照当场碎（1 failed）。
++  // 解法=**真语料的快照**：内容逐字来自活卡（满足 A18），固化后不随库变（满足稳定性）。
++  // 代价与兜底：快照冻结了"当时的收录形态"，**库里演化出新形态它发现不了**——
++  // 那由「全库乙态扫描」（补卡清单产出时本就在扫全库）作为运维检查覆盖，不靠本用例。
++  const F = new URL('./fixtures/', import.meta.url).pathname;
++  const snapshot = (rel: string) => ({ title: 'X', body: readFileSync(`${F}${rel}`, 'utf8') });
+ 
+-  it('★真卡阳性：完整收录（zhongcai-guanxia-shixiao.md:76-79，§27 四款齐）→ 开火', () => {
+-    expect(unstructuredSourceArticles([card('sop/zhongcai-guanxia-shixiao.md')]).has('第27条')).toBe(true);
++  it('★真语料快照·阳性：完整收录（tjzcf-core.md:44-52 @7e92b41 单点事实源正文块，§27 四款齐）→ 开火', () => {
++    expect(unstructuredSourceArticles([snapshot('tjzcf-core-27-body-snapshot.md')]).has('第27条')).toBe(true);
+   });
+ 
+-  it('假零直证：旧模式（要求条号紧跟 >）在同一张真卡上不开火', () => {
++  // 形态覆盖：库里正文收录**至少两种形态**——事实源用「> 第N条　」，
++  // 而「> **第N条**　」粗体形态活库里 52 张卡在用（多数形态），当年"假零"正是栽在它上面。
++  // 夹具集覆盖的是**形态**不是**某张卡**：少了粗体那份，占多数的形态就没有回归保护。
++  it('★真语料快照·阳性（粗体形态，活库 52 张卡在用）→ 开火', () => {
++    expect(unstructuredSourceArticles([snapshot('bold-form-27-recording-snapshot.md')]).has('第85条')).toBe(true);
++  });
++
++  it('假零直证：旧模式（要求条号紧跟 >）在粗体形态真语料上不开火', () => {
+     const OLD = /^>\s*(第[一二三四五六七八九十百零〇0-9]+条)[　\s]/gm;
+-    expect(OLD.test(readFileSync(`${K}sop/zhongcai-guanxia-shixiao.md`, 'utf8'))).toBe(false);
++    expect(OLD.test(readFileSync(`${F}bold-form-27-recording-snapshot.md`, 'utf8'))).toBe(false);
++  });
++
++  it('新模式在两种形态上都开火（形态覆盖，不是单卡覆盖）', () => {
++    expect(unstructuredSourceArticles([snapshot('tjzcf-core-27-body-snapshot.md')]).has('第27条')).toBe(true);
++    expect(unstructuredSourceArticles([snapshot('bold-form-27-recording-snapshot.md')]).has('第85条')).toBe(true);
++  });
++
++  it('★活卡回归：PR #60 后该卡已改为引用，乙态不再对它开火（防旧副本回潮）', () => {
++    expect(unstructuredSourceArticles([card('sop/zhongcai-guanxia-shixiao.md')]).has('第27条')).toBe(false);
++  });
++
++  // 【不可见差异的诊断】全角 U+3000 与半角空格肉眼同形，比对失败时只打字符串会看到
++  // "两个一模一样的串不相等"——最耗人的排障形态。失败信息打**码点**。
++  it('快照与事实源正文逐字同源（失败时打码点，不打字符串）', () => {
++    const fx = readFileSync(`${F}tjzcf-core-27-body-snapshot.md`, 'utf8')
++      .split('\n').filter((l) => l.startsWith('> ')).join('\n');
++    const src = readFileSync(`${K}statutes/tjzcf-core.md`, 'utf8')
++      .split('\n').filter((l) => l.startsWith('> ') && l.includes('仲裁时效')).join('\n');
++    const codes = (t: string) => [...t].map((c) => c.codePointAt(0)!.toString(16)).join(' ');
++    if (!fx.includes('劳动争议申请仲裁的时效期间为一年')) throw new Error(`快照缺 §27 正文；码点=${codes(fx.slice(0, 40))}`);
++    if (src && !src.includes('劳动争议申请仲裁的时效期间为一年')) {
++      throw new Error(`事实源正文形态已变，快照需重取。\n事实源码点=${codes(src.slice(0, 40))}\n快照码点=${codes(fx.slice(0, 40))}`);
++    }
+   });
+ 
+   // ★节选闸：weiqian:87 卡自标「逐字，节选」、:90 行内 `……`，缺款2款3。
+@@ -1456,7 +1494,7 @@ describe('乙态检测：真卡双极对照 + 节选闸', () => {
+ 
+   it('已结构化的条不重复派单', () => {
+     const p = {
+-      ...card('sop/zhongcai-guanxia-shixiao.md'),
++      ...snapshot('tjzcf-core-27-body-snapshot.md'),
+       facts: { statute_quotes: [{ law: '劳动争议调解仲裁法', article: '第二十七条', text: 'x' }] },
+     };
+     expect(unstructuredSourceArticles([p]).has('第27条')).toBe(false);
+diff --git a/scripts/eval/fixtures/bold-form-27-recording-snapshot.md b/scripts/eval/fixtures/bold-form-27-recording-snapshot.md
+new file mode 100644
+index 0000000..926f22c
+--- /dev/null
++++ b/scripts/eval/fixtures/bold-form-27-recording-snapshot.md
+@@ -0,0 +1,13 @@
++<!-- 测试夹具·真语料快照，非知识库内容：装载器不读、不得当事实源引用 -->
++<!-- 来源：knowledge/packs/statutes/qijian-jisuan-tongze.md 第 33-38 行 @7e92b41，逐字快照；快照区 sha256 前 16 位 = 1a4dd29224056f53 -->
++<!-- 为何需要第二份快照（评测官 2026-08-25 补；manager 原裁只指定了事实源那一份）：
++     库里正文收录至少有两种形态——事实源 tjzcf-core 用「> 第N条+全角空格」（无粗体），
++     而「> 粗体条号 + 全角空格」这种粗体形态，活库里有 52 张卡在用，是多数形态；
++     当年「假零」正是栽在粗体形态上（旧模式要求条号紧跟引用符，粗体一插就不匹配）。
++     夹具集要覆盖的是「形态」而不是「某张卡」：只快照事实源那一份，占多数的粗体形态就没有回归保护。 -->
++《中华人民共和国民事诉讼法》（2023-09-01 第十四届全国人大常委会第五次会议修正）：
++
++> **第八十五条**　期间包括法定期间和人民法院指定的期间。
++> 期间以时、日、月、年计算。期间开始的时和日，不计算在期间内。
++> 期间届满的最后一日是法定休假日的，以法定休假日后的第一日为期间届满的日期。
++> 期间不包括在途时间，诉讼文书在期满前交邮的，不算过期。
+diff --git a/scripts/eval/fixtures/tjzcf-core-27-body-snapshot.md b/scripts/eval/fixtures/tjzcf-core-27-body-snapshot.md
+new file mode 100644
+index 0000000..b747937
+--- /dev/null
++++ b/scripts/eval/fixtures/tjzcf-core-27-body-snapshot.md
+@@ -0,0 +1,19 @@
++<!-- 测试夹具·真语料快照，非知识库内容：装载器不读、不得当事实源引用、不得据此答用户 -->
++<!-- 来源：knowledge/packs/statutes/tjzcf-core.md 第 44–52 行 @7e92b41（**单点事实源**正文块），逐字快照；
++     快照区 sha256 前 16 位 = 652a385fca96e240（补丁审阅时可复算，证明是拷贝不是重打） -->
++<!-- 为何快照事实源而非快照旧副本（manager 2026-08-25 裁）：夹具应当快照事实源，
++     否则夹具从诞生那天起就与事实源有偏差；旧副本条号后是半角空格、事实源是全角 U+3000（照人大网官方排版）。
++     实测：两者做空白+粗体归一后 sha256 相同（2e21d9754d530dbd），差异**仅**在该分隔符。 -->
++<!-- 用途：乙态检测「正文完整收录形态」阳性对照。合成卡只证明模式自洽、证不了模式认得真实语料（A18）。
++     注：本夹具只取事实源的**正文块**、不带其 facts.statute_quotes——事实源本身是已结构化的，
++     这里是拿它的正文形态当"未结构化收录"的样本，不代表该卡缺结构化。 -->
++<!-- 维护：不随知识库演化。库里若演化出新的收录形态，由「全库乙态扫描」运维检查发现，不靠本夹具。 -->
++## 第二十七条　仲裁时效（一年·中断中止·欠薪特例）
++
++> 第二十七条　劳动争议申请仲裁的时效期间为一年。仲裁时效期间从当事人知道或者应当知道其权利被侵害之日起计算。
++> 前款规定的仲裁时效，因当事人一方向对方当事人主张权利，或者向有关部门请求权利救济，或者对方当事人同意履行义务而中断。从中断时起，仲裁时效期间重新计算。
++> 因不可抗力或者有其他正当理由，当事人不能在本条第一款规定的仲裁时效期间申请仲裁的，仲裁时效中止。从中止时效的原因消除之日起，仲裁时效期间继续计算。
++> 劳动关系存续期间因拖欠劳动报酬发生争议的，劳动者申请仲裁不受本条第一款规定的仲裁时效期间的限制；但是，劳动关系终止的，应当自劳动关系终止之日起一年内提出。
++
++要点：仲裁时效：一年，从知道权利被侵害之日起算；主张权利/请求救济/对方同意履行可中断，重新计算；不可抗力等中止；拖欠劳动报酬在劳动关系存续期间不受一年限制、终止后一年内提。
++
