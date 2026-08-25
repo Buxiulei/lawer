@@ -167,8 +167,43 @@ export function responseGaveCrisisCard(text: string): boolean {
  * 不是「家人」这个词。实测 6 条正向表述（家人都在等你 / 你身边有人在乎你 /
  * 你爸妈会想陪你一起扛 …）**零误伤**，见 __tests__/crisis.test.ts。
  */
-const EMOTIONAL_LEVERAGE_RE =
-  /对不起(爸妈|父母|家人)|想想你(的)?(爸妈|父母|家人|孩子)|你走了.{0,8}(怎么办|怎么活)|(你|人)(没了|不在了)之?后.{0,12}(他们|爸妈|父母|家人)|(他们|爸妈|父母).{0,10}(往后|以后|余生|每一个)(早晨|夜|天)|留下.{0,6}(烂摊子|债|房贷).{0,6}给|房贷.{0,6}(还是|依然|照样)(要还|得还)/;
+/**
+ * 结构支：**本身就把"对方的离开"写进句式**的那些形态，单独出现即成立。
+ * 与下面的裸短语支分开，是因为两者成立条件不同——合成一条正则就分不开了。
+ */
+const LEVERAGE_STRUCTURAL =
+  /想想你(的)?(爸妈|父母|家人|孩子)|你走了.{0,8}(怎么办|怎么活)|(你|人)(没了|不在了)之?后.{0,12}(他们|爸妈|父母|家人)|(他们|爸妈|父母).{0,10}(往后|以后|余生|每一个)(早晨|夜|天)|留下.{0,6}(烂摊子|债|房贷).{0,6}给|房贷.{0,6}(还是|依然|照样)(要还|得还)/;
+
+/**
+ * 裸内疚短语。**单独出现不算杠杆**——必须与"离开为前提"的成分同现（见 DEPARTURE_PREMISE）。
+ *
+ * 【为什么改：原写法与它自己的边界注释直接冲突】本函数的边界注释一直写着
+ *   「钉的是**把对方的离开当作前提**的句式（你走了他们怎么办 / 你没了之后…），**不是「家人」这个词**」
+ * 而原正则把 `对不起(爸妈|父母|家人)` 作为**独立一支**——它**不含任何"离开为前提"的成分，
+ * 就是个纯内疚短语**。也就是说实现做的事与注释承诺的边界**相反**：
+ * 注释说"不钉词"，实现恰恰钉了一个词。
+ * **注释也是对读者的承诺**；这次不是名字含糊，是**注释与实现直接冲突**，
+ * 所以来历要写清楚，免得下一个人以为注释写错了而去改注释。
+ *
+ * 【为什么这是高概率风险（manager 上调依据；写"风险"不写"事件"——**目前无现网证据**）】
+ *  ① 触发的是裸短语 `对不起爸妈`，**与引号无关、与是不是复述无关**；
+ *  ② **这句话是我们这个用户群在危机时最可能说出口的一句**——被裁、有房贷、有父母，
+ *     而愧疚感是自杀意念的核心成分之一；**它不是罕见表达，是典型表达**；
+ *  ③ **charter §6 要求模型引用用户自己说过的细节** → **模型越照规范做，越会说出这个短语，越会被删**；
+ *  ④ 归档 **12/24 轮** S08 用户输入含它（夹具固定每跑必现）——这不是真实用户数据，
+ *     但它说明**该短语在这个场景下出现率极高**。
+ * 高概率、可预期、后果严重，且发生在最危急的时刻。
+ */
+const GUILT_PHRASE = /对不起(爸妈|父母|家人)/;
+
+/**
+ * "离开为前提"的成分——裸内疚短语只有与它同现（同一句内）才构成杠杆。
+ *
+ * 【人称要含「我」】被预设离开的是**用户**，而用户说自己时用「我」、模型转述时用「你」：
+ * 「**我没了**就不用对不起爸妈了」是用户原话的常见形态，
+ * 只认「你/人」会把它整类漏掉——**同一件事的两种人称，判据必须都认**。
+ */
+const DEPARTURE_PREMISE = /(你|我|人)(走了|没了|不在了)|离开(之后|以后)|走(了)?之后|身后|不在这个世界/;
 
 /**
  * 引号内容**来自用户原话**的那些段，从**判定副本**里抹掉。
@@ -201,8 +236,23 @@ function stripUserQuotes(text: string, userSaid: string): string {
  * `userSaid`：用户此前说过的话（含本轮）拼成的串。**不传则退回旧行为**——
  * 调用方拿不到用户原话时，宁可维持"照旧剥"的保守向，也不放行（漏剥伤用户，误剥伤表达）。
  */
+function leverageInSentence(sentence: string): string | null {
+  const structural = LEVERAGE_STRUCTURAL.exec(sentence);
+  if (structural) return structural[0];
+  const guilt = GUILT_PHRASE.exec(sentence);
+  // 裸内疚短语只有与"离开为前提"**同句**出现才算杠杆。
+  // 同现范围必须限在**句内**：跨句判会让「你说的"对不起爸妈"我记着。」
+  // 与前后某句里的"你走了"凑成一次误命中，而它们根本不是一句话。
+  return guilt && DEPARTURE_PREMISE.test(sentence) ? guilt[0] : null;
+}
+
 export function detectEmotionalLeverage(text: string, userSaid = ''): string | null {
-  return EMOTIONAL_LEVERAGE_RE.exec(stripUserQuotes(text, userSaid))?.[0] ?? null;
+  const judged = stripUserQuotes(text, userSaid);
+  for (const sentence of judged.split(/(?<=[。！？\n])/)) {
+    const hit = leverageInSentence(sentence);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 /**
@@ -507,7 +557,34 @@ export const CRISIS_SAFE_FALLBACK = [
 
 /** 把命中情感杠杆的句子整句剥掉（比重生成快：危机轮不该再等 2-4 分钟） */
 export function stripLeverageSentences(text: string, userSaid = ''): string {
-  return stripSentencesMatching(text, (sentence) => detectEmotionalLeverage(sentence, userSaid));
+  return stripLeverageWithTrail(text, userSaid).text;
+}
+
+/**
+ * 剥杠杆句，**并留下被剥的原句**。
+ *
+ * 【为什么要留痕】危机轮正文流经六道剥除/改写环节，**只有第五闸留痕**
+ *（`CITATION_BLOCKED.stripped_articles`）——正因为它留痕，§27 那次才定得了案。
+ * 其余五道删了东西不留任何证据：**归档里的正文是闸后产物，被删的句子不在里面**，
+ * 于是"闸剥了什么"事后永远查不到，只能靠有人恰好撞上。
+ *
+ * **一道 L1 闸在生产上删用户看得到的内容却不留证据**——这件事本身就是缺陷，
+ * 与"要不要再加一层判别"无关。留痕之后，下一批才能真正量出
+ * "剥掉的里面多少是共情复述、多少是真杠杆"。
+ */
+export function stripLeverageWithTrail(text: string, userSaid = ''): { text: string; stripped: string[] } {
+  const stripped: string[] = [];
+  const kept = text
+    .split(/(?<=[。！？\n])/)
+    .filter((sentence) => {
+      if (!detectEmotionalLeverage(sentence, userSaid)) return true;
+      if (sentence.trim()) stripped.push(sentence.trim());
+      return false;
+    })
+    .join('')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return { text: kept, stripped };
 }
 
 /** 把推介付费咨询的句子整句剥掉（不够格时用；复用同一套剥句机制） */
