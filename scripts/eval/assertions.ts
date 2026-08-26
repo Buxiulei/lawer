@@ -13,6 +13,7 @@ import {
   isLandlineOnly,
   LANDLINE_MARK,
   extractHotlines,
+  cardOccurrences,
   stripDuplicateHotlineList,
   judgeLeverage,
   leverageSubject,
@@ -939,9 +940,20 @@ export const L1_CHECKLIST: {
 export function fullCardOccurrences(turns: TurnRecord[], facts?: { hotlines?: HotlineFact[] }): number {
   const phones = extractHotlines(facts);
   if (phones.length === 0) return 0;
-  // **逐轮布尔**：一轮里含号码的行 ≥2 即"这轮给了整卡"，计 1；同一轮里给几段都只算一次。
-  // 与产线出口闸 stripDuplicateHotlineList 同口径——它数的也是**含号码的行总数**，不要求相邻。
-  return turns.filter((t) => t.text.split('\n').filter((line) => phones.some((p) => line.includes(p))).length >= 2).length;
+  // **逐次计数**：每一次「三个号码齐现」计 1 次，跨轮累加。判准与实现都在产线原语
+  // `cardOccurrences` 那里（判据同源：**共用的是原语，不是任何一侧的派生量**）。
+  //
+  // 【这一行换掉了什么，以及为什么不是"补一个漏掉的分支"】
+  // 上一版是**逐轮布尔**（一轮里含号码的行 ≥2 → 这轮记 1，然后数轮数），
+  // 于是「一轮里整卡出现 1 次和 5 次，它给的都是 1」——**轮内重复对它结构上不可见**，
+  // 而规则问的恰恰是「跨轮/轮内**均计**」（见本函数上方文档，那一版才是规则本意）。
+  // 逐次计数**本来就有**（`a9bf919`），是 `58557b3` 为了跟产线同口径时**搭车降级**掉的：
+  // 那次编辑里「去掉必须相邻」被论证了，「逐次降级成逐轮」一个字都没写。
+  // ⇒ 本次是**撤销那次搭车的降级**；`cardOccurrences` 完全不看行，所以「不相邻」那一半没有被退回去。
+  //
+  // 【判定面仍是 t.text，本次不动】规则原文说的是「用户可见输出」，而行动卡也算用户可见——
+  // 改判定面是**另一件事**，要有它自己的样本。**一次编辑只动一件，这是这次修法教的。**
+  return turns.reduce((n, t) => n + cardOccurrences(t.text, phones).length, 0);
 }
 
 /**

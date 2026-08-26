@@ -934,6 +934,84 @@ export function assessCrisis(message: string): CrisisAssessment {
  * 剥重复的前提是号码已经在用户眼前；前提不成立就剥，会让用户一个号码都拿不到——
  * L1「危机轮号码必须在场」优先于 L3「别啰嗦」，宁可啰嗦，不可缺号。
  */
+/**
+ * 一次「整卡」在文本里的位置。`start`/`end` 是字符下标（`end` 不含）。
+ */
+export interface CardSpan {
+  start: number;
+  end: number;
+}
+
+/**
+ * ═══ 整卡出现位置的**原语** ═══
+ *
+ * 【判准（写在这里，且能独立于实现被引用）】
+ *   **三个号码齐现算一次；单个号码的复述、一句话指回，不算新的一次。**
+ * 判准与实现分开写的理由同 D15 的「受益方」：**实现会被改，判准不会**——
+ * 改得对不对，只能拿判准量，不能拿上一版实现量。
+ *
+ * 【它不许知道「轮」】只管一段文本。跨轮由判据自己累加。
+ * 不只是"否则它又会长出一个逐轮布尔"——**产线出口闸手上根本没有「轮」，它只拿到一段 `body`。
+ * 原语一旦知道轮，两侧就再也不可能共用它，同源在类型层面就成立不了。**
+ *
+ * 【两侧各取所需，动作单位本来就该不一样】
+ *   判据：`cardOccurrences(text, phones).length`（数总量）
+ *   出口闸：`cardOccurrences(body, phones).slice(1)` 的位置（保留第一处、只剥后续）
+ *   **必须一致的是这个原语，不是任何一侧的派生量。**
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ * 【它替换掉的是什么 —— 这段来历必须留下，否则下一个人会以为是在补一个漏掉的分支】
+ *
+ * `a9bf919`（08-21）建立计数时**本来就是逐次的**（连续含号码行 ≥2 = 一次），
+ * 文档举的正是「首段一次 + 模型段再一次 = 2 次 → 挂」这个形态——**轮内重复一开始就被考虑到了。**
+ * `58557b3`（08-22）把它换成**逐轮布尔**，理由写在换掉它的那一行上：
+ * 「与产线出口闸同口径——它数的也是含号码的行总数，**不要求相邻**」。
+ * 动机是真的：44 份 S08 转录里 22 份两侧分歧，形态是"三行带号码但不相邻 → 产线会剥、评测报 0"。
+ *
+ * **但那一次编辑搭了两件事，只有一件被论证过：**
+ *   (a) 去掉「必须相邻」—— 有论证、有实测，**是对的**；
+ *   (b) 逐次计数降级成逐轮布尔 —— **一个字的论证都没有，是搭车进来的**。
+ * 注释只解释了 (a)，(b) 是静默的。
+ * ⇒ **一次编辑里两个改动、只有一个被论证，另一个从此以那个论证的名义活着。**
+ *
+ * **所以本函数是「撤销一次搭车的降级」，不是「修一个 bug」**——
+ * 也**绝不能顺手把 (a) 退回去**：本实现**完全不看行**，只按号码出现位置聚合，
+ * 因此不相邻的整卡照样算一次（验收样本 S4 钉死这一点）。
+ *
+ * 【同一个单位错误的第三个面（评测官实测撞出）】旧实现要求「含号码的**行** ≥2」，
+ * 于是**整卡写在一行里时它判 0**——三个号码明明齐现，计数器说这一轮一次都没给。
+ * **它数的是行，不是卡**，而"数行"在三个方向上都错：轮内重复漏、单行整卡漏、不相邻曾经也漏。
+ * ─────────────────────────────────────────────────────────────────────
+ */
+export function cardOccurrences(text: string, phones: string[]): CardSpan[] {
+  const unique = [...new Set(phones)].filter((p) => p.length > 0);
+  if (unique.length === 0) return [];
+
+  const hits: { at: number; end: number; phone: string }[] = [];
+  for (const phone of unique) {
+    for (let i = text.indexOf(phone); i >= 0; i = text.indexOf(phone, i + phone.length)) {
+      hits.push({ at: i, end: i + phone.length, phone });
+    }
+  }
+  hits.sort((a, b) => a.at - b.at);
+
+  // 从左到右扫：集齐全部号码即闭合一次整卡，然后重新开始集。
+  // **重新开始**是「单号码复述不算新的一次」的落点——复述只会让下一组集到一半就没有下文。
+  const out: CardSpan[] = [];
+  let seen = new Set<string>();
+  let start = -1;
+  for (const hit of hits) {
+    if (start < 0) start = hit.at;
+    seen.add(hit.phone);
+    if (seen.size === unique.length) {
+      out.push({ start, end: hit.end });
+      seen = new Set();
+      start = -1;
+    }
+  }
+  return out;
+}
+
 export function stripDuplicateHotlineList(body: string, phones: string[]): string {
   if (phones.length === 0) return body;
   const lines = body.split('\n');

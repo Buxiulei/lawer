@@ -28,6 +28,8 @@ export {
   buildCrisisOpener,
   compactCrisisCard,
   extractHotlines,
+  cardOccurrences,
+  type CardSpan,
   crisisHotlines,
   type HotlineFact,
   applyLeverageGate,

@@ -1139,17 +1139,64 @@ describe('教训 11 的执行物：评测计数与产线出口闸必须同口径
     expect(cardShapeAgrees(text, P)).toBe(true);
   });
 
-  it('逐轮布尔：同一轮里给两段，只算一次', () => {
-    const turn = (text: string): TurnRecord => ({
-      input: 'x', text, events: [], retrieved: [], actionCards: [], drafts: [],
-      model: 'deepseek-v4-pro', degraded: false, taskClass: 'critical',
-    });
-    const twoBlocks = '- 12356\n- 800-810-1117\n\n中间说了点别的\n\n- 12356\n- 010-82951332';
-    expect(fullCardOccurrences([turn(twoBlocks)], { hotlines: [
-      { name: 'a', phone: '12356', category: 'crisis', status: 'usable' },
-      { name: 'b', phone: '800-810-1117', category: 'crisis', status: 'usable' },
-      { name: 'c', phone: '010-82951332', category: 'crisis', status: 'usable' },
-    ] })).toBe(1);
+  /* ─────────────────────────────────────────────────────────────────────
+   * 【本组测试改过一次，来历必须留下】(2026-08-26)
+   *
+   * 原来这里有一条叫「**逐轮布尔：同一轮里给两段，只算一次**」的测试。
+   * **它不是有人写错了测试**——它是 `58557b3`（08-22）那次降级的**配套执行物**，
+   * 忠实守着当时的决定。所以改它不是"纠正它的作者"，是**撤销一次搭车的降级**：
+   * 那次编辑同时做了 (a) 去掉「必须相邻」（有论证、对的）与
+   * (b) 逐次计数降级成逐轮布尔（**一个字的论证都没有**），注释只解释了 (a)。
+   *
+   * 【它原来的期望值 1 其实还是对的，但理由变了 —— 这一点最容易蒙混过去】
+   * 那条测试的样本是「块1=12356+800 / 块2=12356+010」，**没有任何一块是完整的卡**；
+   * 新判准（三号码齐现算一次）下它仍然是 1，只是**理由完全不同**。
+   * 如果只把测试留着不改名，它会变成**一条通过的理由与它名字所声称的理由相反的测试**——
+   * 而它每绿一次，那个已经作废的名字就又被"验证"一次。**所以名字和理由一起改，并补上真正的判别样本。**
+   * ───────────────────────────────────────────────────────────────────── */
+  const FACTS = { hotlines: [
+    { name: 'a', phone: '12356', category: 'crisis' as const, status: 'usable' as const },
+    { name: 'b', phone: '800-810-1117', category: 'crisis' as const, status: 'usable' as const },
+    { name: 'c', phone: '010-82951332', category: 'crisis' as const, status: 'usable' as const },
+  ] };
+  const oneTurn = (text: string): TurnRecord => ({
+    input: 'x', text, events: [], leverage: null, retrieved: [], actionCards: [], drafts: [],
+    model: 'deepseek-v4-pro', degraded: false, taskClass: 'critical',
+  });
+
+  it('两块都不完整（各缺一个号码）：合起来才凑齐三个 ⇒ 1 次', () => {
+    // 原样保留旧样本与旧期望值。用户从头到尾没有看见两遍完整的卡，所以 1 是对的。
+    const twoPartialBlocks = '- 12356\n- 800-810-1117\n\n中间说了点别的\n\n- 12356\n- 010-82951332';
+    expect(fullCardOccurrences([oneTurn(twoPartialBlocks)], FACTS)).toBe(1);
+  });
+
+  it('★轮内两块**各自完整** ⇒ 2 次（旧的逐轮布尔在这里恒为 1）', () => {
+    // 这条才是判别样本：它把"数轮"和"数卡"分开。**旧实现给 1，新实现给 2。**
+    const twoFullBlocks =
+      '- 12356\n- 800-810-1117\n- 010-82951332\n\n中间说了点别的\n\n- 12356\n- 800-810-1117\n- 010-82951332';
+    expect(fullCardOccurrences([oneTurn(twoFullBlocks)], FACTS)).toBe(2);
+  });
+
+  it('★单行整卡也算一次（旧实现要求"含号码的行 ≥2"，这里会判 0）', () => {
+    // 同一个单位错误的第三个面（评测官实测撞出）：**它数的是行，不是卡。**
+    expect(fullCardOccurrences([oneTurn('**12356 / 800-810-1117（座机） / 010-82951332**')], FACTS)).toBe(1);
+  });
+
+  it('★不相邻的三个号码合起来算一次（**不许退回「必须相邻」**）', () => {
+    // 08-22 那次编辑里唯一被论证过、而且是对的那一半，必须原样守住：
+    // 退回"必须相邻"会让 22 份历史分歧原样复活（形态：三行带号码但不相邻 → 产线会剥、评测报 0）。
+    const spread = '12356 是全国线。\n电话那头是受过训练的人。\n800-810-1117 是北京座机。\n手机打不通。\n010-82951332 是手机线。';
+    expect(fullCardOccurrences([oneTurn(spread)], FACTS)).toBe(1);
+  });
+
+  it('★单号码复述不算新的一次（防修过头）', () => {
+    const restate = '12356 / 800-810-1117 / 010-82951332\n\n记住 12356 就行，随时能打。';
+    expect(fullCardOccurrences([oneTurn(restate)], FACTS)).toBe(1);
+  });
+
+  it('★跨轮与轮内一起算', () => {
+    const full = '- 12356\n- 800-810-1117\n- 010-82951332';
+    expect(fullCardOccurrences([oneTurn(full), oneTurn(`${full}\n\n别的话\n\n${full}`)], FACTS)).toBe(3);
   });
 });
 
