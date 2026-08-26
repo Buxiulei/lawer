@@ -35,6 +35,7 @@ import {
   tier,
   type Tier,
   crisisTurnAssertions,
+  crisisOpenerCardAssertions,
   emotionalLeverageAssertions,
   globalAssertions,
   citationCompletenessAssertions,
@@ -258,6 +259,9 @@ async function runScenario(scenario: Scenario, plan: Plan): Promise<ScenarioRepo
     ...landlineMarkAssertions(turns, crisisFacts),
     // 禁用号码泄漏：与「必含三号码」互为攻防
     ...bannedHotlineAssertions(turns, crisisFacts),
+    // 首段自身（manager 2026-08-26 裁定②的另一半）：把首段从「重复」计数里摘出去之后，
+    // 必须有人看着首段本身，否则它从此无人管——而它是 L1「号码必须在场」的唯一保证来源。
+    ...crisisOpenerCardAssertions(turns, crisisFacts),
     // G4 依据纪律的机械那一半：引了条号就必须带逐字原文。全剧本逐轮，
     // 判据与产线出口侧的留痕检测同源（bareArticleCitations）。
     // 库内已有逐字原文的条号全集：本轮检索到的卡现取（补卡到位即自动升级判定标准）
