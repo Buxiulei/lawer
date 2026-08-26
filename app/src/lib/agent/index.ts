@@ -29,6 +29,7 @@ export {
   compactCrisisCard,
   extractHotlines,
   cardOccurrences,
+  hotlineStripDeclined,
   type CardSpan,
   crisisHotlines,
   type HotlineFact,

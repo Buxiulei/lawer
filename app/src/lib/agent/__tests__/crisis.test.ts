@@ -11,6 +11,8 @@ import * as store from '@/lib/db/agent';
 import { createKnowledgeSearcher } from '../knowledge-adapter';
 import {
   assessCrisis,
+  cardOccurrences,
+  hotlineStripDeclined,
   isLandlineOnly,
   LANDLINE_MARK,
   compactCrisisCard,
@@ -444,6 +446,26 @@ describe('危机轮出口闸：剥掉模型段重复列出的热线清单', () =
     // 悬空的反面：指代句与被指代物**同时**在场
     expect(out).toContain('热线还是这三个，随时能打：');
     for (const p of P) expect(out).toContain(p);
+  });
+
+  it('★同行两张 → 检出重复但**明示放弃**（不是静默不动）', () => {
+    // 评测官 2026-08-26 探到：「保留第一处」按**行**保护，同行的第二张被一起保住了。
+    // **这是"原语按位置、剥除按行"的粒度差残留。** 不修那个粒度差的理由：
+    // 按字符区间剥会在行中间留下半句（「…010-82951332 —— 再说一遍 」），
+    // **而"删掉被指代物、留下指代句"正是 manager 08-25 撤回本闸的那个理由。**
+    // 实测底数：153 段模型段里 body 内出现 ≥2 张整卡的有 **0 段**，同行是这个空集的子集。
+    // ⇒ 认下边界，**但让它可查询**——静默的"没动手"与"没有重复"在观察端长得一样。
+    const sameLine = '12356 800-810-1117 010-82951332 —— 再说一遍 12356 800-810-1117 010-82951332';
+    expect(cardOccurrences(sameLine, P)).toHaveLength(2);
+    expect(stripDuplicateHotlineList(sameLine, P)).toBe(sameLine);
+    expect(hotlineStripDeclined(sameLine, P), '检出了重复却剥不动 ⇒ 必须自己说出来').toBe(true);
+  });
+
+  it('★"明示放弃"不是"什么都没发生"的同义词（负样本，防它恒真）', () => {
+    const one = '- 12356\n- 800-810-1117\n- 010-82951332';
+    const twoBlocks = `${one}\n\n中间说了点别的\n\n${one}`;
+    expect(hotlineStripDeclined(one, P), '只有一张，本就没有可剥的').toBe(false);
+    expect(hotlineStripDeclined(twoBlocks, P), '两张分块，剥得动').toBe(false);
   });
 
   it('★body 里列两次 → 只剥后一次，第一次与它的引导句都留着', () => {
