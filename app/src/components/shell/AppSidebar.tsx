@@ -138,7 +138,7 @@ function ThemeMenuItem() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <SidebarMenuButton
-            aria-label={`主题：${THEME_LABEL[mode]}`}
+            aria-label={`主题 ${THEME_LABEL[mode]}`}
             tooltip={`主题：${THEME_LABEL[mode]}`}
             className="[&>svg]:size-5"
           >
