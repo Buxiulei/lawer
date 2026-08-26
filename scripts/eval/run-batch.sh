@@ -30,6 +30,9 @@ case "$KB_DIR" in
   *) echo "知识库解析异常：期望 $ROOT/knowledge，实得 ${KB_DIR:-空}" >"$OUT/FAILED"; exit 2 ;;
 esac
 [ "$KB_CARDS" -gt 100 ] || { echo "知识库卡数异常($KB_CARDS)，拒绝开批" >"$OUT/FAILED"; exit 2; }
+# 归档用的时间基准：**开批那一刻**。不能用 META——它每跑都被追加，mtime 永远比转录新，
+# 拿它当 `-newer` 基准会一条转录都找不到，而"找不到"与"本来就没有"长得一模一样。
+touch "$OUT/.batch-start"
 echo "kb_dir=$KB_DIR kb_cards=$KB_CARDS kb_index_blob=$KB_BLOB" >>"$OUT/META"
 echo "sha=$(git rev-parse HEAD) n=$N scenarios=$SCN start=$(date -Is)" >>"$OUT/META"
 # 【自证·2026-08-25 修】上一版这里是 `>` 截断写，把上一行的 kb_index_blob 冲掉了——
@@ -50,4 +53,31 @@ while [ $i -le "$N" ]; do
   done
   i=$((i+1))
 done
+
+# 【跑完即归档 · 2026-08-26 事故后加】把本批产物复制到**不在任何 worktree 内**的目录。
+#
+# 【事故】`fb8257d` 那两份 S08 转录随 `~/caiyuan-ws/ws2-s08` worktree 一并消失，全机搜不到——
+# 而它们是一份成绩单与断代册「断代点二」的**唯一底稿**。后果不是少了两个文件，
+# 是**两份已提交的结论从此不可复核**。
+#
+# 【根因】`.gitignore:18` 的注释写的是「留在服务器供验收查阅」，而实际跑批在**本地一次性 worktree** 里。
+# **声明的存放地与实际的存放地不是同一个地方，而没人发现**——直到有人真去取它。
+# 失败方向仍然是"让人放心"：证据看起来一直都在。
+#
+# 不改 `.gitignore`（转录含大段模型原文与案情夹具，那条政策有它的理由），
+# 只保证**副本不再只存在于一个可被删除的工作副本里**。归档位置待 manager 定版，先落这个。
+ARCH=${EVAL_ARCHIVE_DIR:-$HOME/caiyuan-ws/eval-evidence-archive}/$(date +%Y-%m-%d)
+mkdir -p "$ARCH" || { echo "归档目录建不出来：$ARCH" >"$OUT/FAILED"; exit 4; }
+cp -r "$OUT" "$ARCH/" 2>/dev/null
+# 本批期间新落盘的转录（json/md），按批次开始时间之后取
+find "$ROOT/scripts/eval/results" -maxdepth 1 -newer "$OUT/.batch-start" \( -name '*.json' -o -name '*.md' \) \
+  -exec cp -n {} "$ARCH/" \; 2>/dev/null
+NARCH=$(find "$ROOT/scripts/eval/results" -maxdepth 1 -newer "$OUT/.batch-start" -name '*.json' | wc -l)
+# 【归档必须自证】复制静默失败与"没东西可复制"长得一模一样——本文件开头那条
+# 三轴戳自证是同一个道理：**落款写完必须当场验它在不在**。
+[ -f "$ARCH/$(basename "$OUT")/META" ] || { echo "归档自证失败：$ARCH 下找不到本批 META" >"$OUT/FAILED"; exit 4; }
+# 只验批次目录挡不住"转录一份都没归到"——那正是上一版 `-newer META` 会造成的静默失败。
+[ "$NARCH" -gt 0 ] || { echo "归档自证失败：本批转录 0 份被归档（find 基准或 results 路径不对）" >"$OUT/FAILED"; exit 4; }
+echo "archived_to=$ARCH/$(basename "$OUT")" >>"$OUT/META"
+
 echo done >"$OUT/DONE"
