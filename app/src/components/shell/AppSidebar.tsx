@@ -138,7 +138,11 @@ function ThemeMenuItem() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <SidebarMenuButton
-            aria-label={`主题 ${THEME_LABEL[mode]}`}
+            /* 无障碍名必须**逐字包含**可见文字（WCAG 2.5.3 Label in Name），
+               而可见文字是两个 span 直接相邻＝「主题跟随系统」，中间没有空格。
+               这里加任何分隔符都会断掉子串匹配，让语音控制的人念着屏幕上的字点不动它。
+               中文本来就不分词，连写反而是自然读法。折叠成图标时仍靠它兜底。 */
+            aria-label={`主题${THEME_LABEL[mode]}`}
             tooltip={`主题：${THEME_LABEL[mode]}`}
             className="[&>svg]:size-5"
           >
