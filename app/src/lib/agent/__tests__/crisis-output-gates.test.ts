@@ -97,7 +97,20 @@ const CRISIS_OUTPUT_GATES = [
     fn: 'stripNbdpsyPitch',
     what: '付费心理咨询推介句整句剥除',
     enabled: true,
-    note: '不限危机轮，但危机轮同样流经',
+    note:
+      '不限危机轮，但危机轮同样流经。**2026-08-26 D14 之后口径收紧**：不再看 nbdpsy.allowed，' +
+      '模型段一律剥——推荐只有一条合法通道（产品的确定性推荐段，须占位并落台账）。' +
+      '模型自己提一句不占位、不落行、不受频控，会让 referral_offers 变成一份看起来完整的残缺记录。',
+  },
+  {
+    fn: 'stripCrisisPaidContent',
+    what: '🔴 **D15 兜底（L1）**：危机轮里含付费入口/价格/预约链接的句子整句剥除',
+    enabled: true,
+    impl: 'crisis.ts',
+    note:
+      '开火即事故信号：推荐段在危机轮根本不生成，只可能是模型绕过工具直接在正文里说' +
+      '（本仓已实测三次同形态绕过：危机卡自取检索、案号自取检索、正文直提 NBDpsy）。' +
+      '价格与预约链接**不要求出现服务指向词**——D15 点名它们正因为它们能绕开服务词。',
   },
   {
     fn: 'stripUnsupportedQuotes',
@@ -152,6 +165,7 @@ const NON_GATE_IMPORTS: Record<string, string> = {
     '构造判定对象（模型段 + 用户语料），**不碰正文**。它存在的意义是把"两边传不同输入"' +
     '关成写不出来——2026-08-26 那条假 L1 的机制级修法。',
   detectNbdpsyPitch: '检测器',
+  detectCrisisPaidContent: '检测器（D15 三禁区合一）；剥除动作由 stripCrisisPaidContent 做',
   assessNbdpsyEligibility: '判定',
   responseGaveCrisisCard: '判定',
   shouldInjectCrisisCard: '判定',

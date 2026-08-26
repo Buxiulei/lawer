@@ -34,14 +34,18 @@ import {
   CRISIS_CARD_MARKER,
   applyLeverageGate,
   assessNbdpsyEligibility,
+  detectCrisisPaidContent,
   detectNbdpsyPitch,
   leverageSubject,
+  stripCrisisPaidContent,
   stripDuplicateHotlineList,
   extractHotlines,
   stripNbdpsyPitch,
   responseGaveCrisisCard,
   shouldInjectCrisisCard,
 } from './crisis';
+import { decideOffer, looksLikeDecline, referralScenesOf, renderReferral } from './referral';
+import * as referralOffers from '@/lib/db/referral-offers';
 import { CitationGuard } from './citation-guard';
 import {
   articleKey,
@@ -150,6 +154,12 @@ export interface RunTurnResult {
   usage: UsageReport;
   /** 补救后仍未产出行动卡（charter §2 违规），已发 notice 并记录 */
   actionCardMissing: boolean;
+  /**
+   * 本轮在哪个位点推荐了心理咨询（spec D14 的五个可推位点之一）；null = 本轮没推。
+   * **manager 明令"推了要在返回里报 scene"**：调用方（SSE 路由、评测、日后的管理端）
+   * 不必去翻台账就知道这一轮推没推、推在哪。
+   */
+  referralScene: string | null;
 }
 
 export type RunTurnOutcome = RunTurnResult | { ok: false; status: number; errorCode: string; message: string };
@@ -281,6 +291,46 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     alreadyReferred: snapshot.referredNbdpsy,
     crisisTurn: crisis.triggered,
   });
+  // ── D14 品牌推荐（spec D14/D15，2026-08-25 用户拍板）──
+  // 判定与写库分三步，顺序不能换：**先认拒绝 → 再判位点 → 开口前占位**。
+  //
+  // 【第一步：先认拒绝】必须在判位点之前。倒过来的话，用户这一轮说的"不需要"要到下一轮才生效，
+  // 而这一轮我们可能正好又推了一次——**用户会觉得自己的拒绝没被听见，那比没推过更糟。**
+  //
+  // 【拒绝只在"我们刚问过"的那一轮认】判据落在**上一条 assistant 消息是不是那次推荐**上：
+  // 台账 note 里记着推荐时的 messageId，与本 thread 最后一条 assistant 消息比对。
+  // 不这么钉的话，用户在任何时候说"不需要"（不需要这份证据、不需要开庭…）都会被读成拒绝推荐。
+  const lastOffer = referralOffers
+    .listByUser(db, userId, 20)
+    .find((r) => r.outcome === 'offered' && r.thread_id === thread.id);
+  if (lastOffer && looksLikeDecline(message)) {
+    const lastAssistant = store.lastAssistantMessageId(db, thread.id);
+    if (lastAssistant !== null && lastOffer.note === `message #${lastAssistant}`) {
+      referralOffers.recordDecline(db, {
+        userId,
+        caseId,
+        scene: lastOffer.scene,
+        threadId: thread.id,
+        note: `用户原话：${message.slice(0, 60)}`,
+      });
+      emit({
+        event: 'notice',
+        data: {
+          code: 'REFERRAL_DECLINED',
+          message: '已记下你不需要心理咨询的推荐，此后不会再主动提。你随时想问都可以直接问我。',
+        },
+      });
+    }
+  }
+
+  // 【第二步：判位点】纯函数只读档案，不看本轮说了什么——见 referral.ts 该段注释。
+  const referralDecision = decideOffer({
+    scenes: referralScenesOf({ snapshot, distressEntries: distress.entries, distressDistinctDays: distress.distinctDays }),
+    crisisTurn: crisis.triggered,
+    stopOffering: referralOffers.shouldStopOffering(db, userId),
+    intakeStage: stage,
+  });
+
   // 24 小时窗口（manager 裁决）只决定**怎么给**，不决定**给不给**。
   //
   // 【实测教训，C04 S08 2026-08-19】起初把窗口做成「窗内不注入」，结果：模型在轮1（用户只是
@@ -416,8 +466,12 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     // 一次性的是**资源卡本身**，不是「认真对待自伤表述」这件事。
     crisis: crisis.triggered,
     crisisCardAlreadyGiven: alreadyGiven,
-    // 生成前就决定够不够格提付费咨询——普通轮是流式的，事后剥句救不回用户已经看到的
-    nbdpsyEligible: nbdpsy.allowed,
+    // 【D14 之后恒为 false，不再看资格 —— 与出口闸对齐】
+    // 出口侧现在**一律剥除模型自己的推销**（推荐只走产品的确定性推荐段，须占位并落台账）。
+    // 那么提示词就不该再留一个"够格时可以提"的口子：**允许模型做一件我们随后必剥的事，
+    // 只会制造一堆没有意义的剥除通知，并让模型的合规行为看起来像违规。**
+    // 指令与闸必须说同一句话。（`nbdpsy` 的资格计算仍保留：它还在给 notice 提供理由文本。）
+    nbdpsyEligible: false,
   });
   const messages: ChatMessage[] = [
     { role: 'system', content: system },
@@ -651,12 +705,40 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     });
   }
 
-  if (detectNbdpsyPitch(text) && !nbdpsy.allowed) {
+  // 【D14 之后这道闸守的是什么，变了，写清楚】
+  // 旧口径：不够格提付费咨询就剥（`nbdpsy.allowed`）。
+  // 新口径：**模型段一律不许自己推销**——推荐只有一条合法通道，就是下面那段确定性推荐段。
+  //
+  // 【为什么收得更死而不是更松】D14 把推荐变成了产品动作，于是"推没推过"要**可审计**：
+  // 台账 `referral_offers` 将来要用来证明"我们没有反复骚扰用户"。
+  // 模型自己在正文里提一句，**不占位、不落行、不受频控** ——
+  // 那样这张台账就不再是证据，而是一份**看起来完整的**残缺记录。
+  // 所以：模型说的一律剥，我们说的一律落账。**唯一通道 = 唯一真源。**
+  if (detectNbdpsyPitch(text)) {
     text = stripNbdpsyPitch(text);
     emit({
       event: 'notice',
-      data: { code: 'NBDPSY_PITCH_BLOCKED', message: `付费咨询推介已剥除：${nbdpsy.reason}。` },
+      data: {
+        code: 'NBDPSY_PITCH_BLOCKED',
+        message: '模型段自行提及付费心理咨询，已剥除（spec D14：推荐只走产品的推荐段，须占位并落台账）。',
+      },
     });
+  }
+
+  // 【D15 兜底 · L1】危机轮：付费入口 / 价格 / 预约链接一个都不许留。
+  // 它一旦开火就是事故信号——推荐段在危机轮根本不生成，只可能是模型绕过工具直接在正文里说。
+  if (crisis.triggered) {
+    const paid = detectCrisisPaidContent(text);
+    if (paid) {
+      text = stripCrisisPaidContent(text);
+      emit({
+        event: 'notice',
+        data: {
+          code: 'CRISIS_PAID_CONTENT_BLOCKED',
+          message: `危机轮出现付费内容「${paid}」，已整句剥除（spec D15，L1 红线：此刻只给免费公益热线）。`,
+        },
+      });
+    }
   }
 
   // 【第五道确定性闸】伪逐字引号引用：引号内被当作法条原文、却在**本轮注入块**里查无此文的，
@@ -849,6 +931,41 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
       cached_write: usage.cachedWrite,
     },
   });
+  // ── D14 推荐段：**独立段落追加在正文之后，绝不插进正文中间** ──
+  //
+  // 【为什么放在所有出口闸之后】它是我们自己的确定性文案，不该被判「模型在推销」的那道闸剥掉；
+  // 而它又必须在 `store.finalizeMessage` 之前进 `text`，否则归档里没有它——
+  // **用户看见了、档案里没有，是审计上最坏的一种不一致。**
+  //
+  // 【先占位再开口】`tryOffer` 返回 true 才拼文案。倒过来（先说后记）一旦记录那步失败，
+  // 下一轮会再推一遍——**反复骚扰就是这么来的**（referral-offers.ts 的原话）。
+  // **一轮最多成一次**：按序试，第一个占位成功的就是本轮的推荐，其余不再试。
+  let referralScene: string | null = null;
+  for (const scene of referralDecision.scenes) {
+    const claimed = referralOffers.tryOffer(db, {
+      userId,
+      caseId,
+      scene,
+      threadId: thread.id,
+      note: `message #${messageId}`,
+    });
+    if (claimed) {
+      referralScene = scene;
+      const block = `\n\n---\n\n${renderReferral(scene)}`;
+      emit({ event: 'delta', data: { text: block } });
+      text += block;
+      emit({
+        event: 'notice',
+        data: {
+          code: 'REFERRAL_OFFERED',
+          message: `本轮在「${scene}」位点推荐了一次心理咨询，同一位点不再推第二次。`,
+          referral_scene: scene,
+        },
+      });
+      break;
+    }
+  }
+
   emit({ event: 'done', data: { message_id: messageId, finish_reason: finishReason } });
 
   return {
@@ -867,5 +984,6 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     finishReason,
     usage: usageReport,
     actionCardMissing,
+    referralScene,
   };
 }

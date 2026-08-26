@@ -92,7 +92,17 @@ export type NoticeCode =
    */
   | 'EMOTIONAL_LEVERAGE_DETECTED'
   /** 输出里推介了付费心理咨询但不满足 charter §5「持续焦虑抑郁表现」门槛，已剥除 */
-  | 'NBDPSY_PITCH_BLOCKED';
+  | 'NBDPSY_PITCH_BLOCKED'
+  /** D14：本轮在某个可推位点上向用户推荐了 NBDpsy 心理咨询，台账已落行 */
+  | 'REFERRAL_OFFERED'
+  /** D14：用户表示不需要，已落 declined，此后全局不再主动推荐 */
+  | 'REFERRAL_DECLINED'
+  /**
+   * **D15 兜底开火（L1）**：危机轮的输出里出现了付费入口/价格/预约链接，已整句剥除。
+   * 它一旦出现就是事故信号——我们自己的推荐段在危机轮根本不生成，
+   * 所以只可能是**模型绕过工具直接在正文里说**（本仓已实测三次同形态绕过）。
+   */
+  | 'CRISIS_PAID_CONTENT_BLOCKED';
 
 export type AgentEvent =
   | {
@@ -201,6 +211,8 @@ export type AgentEvent =
          * **一道会删东西的闸，必须能让人事后重建它删之前的样子。**
          */
         model_body_raw?: string;
+        /** REFERRAL_OFFERED 专用：本轮推荐落在哪个位点（spec D14 的五个可推位点之一） */
+        referral_scene?: string;
         /**
          * INJECTION_OBSERVED 专用：本轮注入产物的四个可观测量。
          *

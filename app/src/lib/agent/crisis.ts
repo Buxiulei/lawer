@@ -794,6 +794,18 @@ export function stripNbdpsyPitch(text: string): string {
   return stripSentencesMatching(text, detectNbdpsyPitch);
 }
 
+/**
+ * D15 兜底：把危机轮里含**付费入口 / 价格 / 预约链接**的句子整句剥掉。**只在危机轮调用。**
+ *
+ * 【为什么危机轮还要剥，明明推荐段在危机轮根本不生成】因为**模型是另一条通道**。
+ * 本仓已经三次实测到"开关挂在工具上、模型绕开工具直接在正文里说"
+ *（危机卡自取检索、案号自取检索、正文直提 NBDpsy）。
+ * **D15 是 L1，一票否决，不能只靠"我们自己不生成"。** 出口侧是所有通道的共同出口。
+ */
+export function stripCrisisPaidContent(text: string): string {
+  return stripSentencesMatching(text, detectCrisisPaidContent);
+}
+
 /** 按句切分后剔除命中的句子。中文句末标点与换行都算边界。 */
 function stripSentencesMatching(text: string, hit: (s: string) => string | null): string {
   return text

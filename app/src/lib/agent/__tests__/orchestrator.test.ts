@@ -499,7 +499,17 @@ describe('危机响应：心理危机资源卡强制注入（charter §5）', ()
     expect(provider.calls[0][0].content).toContain('本轮禁止提及付费心理咨询');
   });
 
-  it('跨两个自然日的两条才算「持续」，前置禁令解除', async () => {
+  it('★D14 之后：够格也**不再解除**对模型的禁令（指令与出口闸必须说同一句话）', async () => {
+    // 【这条测试原本断言的是相反的事】旧策略：满足「持续焦虑抑郁表现」→ 解除前置禁令，
+    // 允许模型自己提一次付费咨询。**D14（2026-08-25 用户拍板）之后不成立**：
+    // 推荐改由产品的确定性推荐段发出（须占位 tryOffer + 落 referral_offers 台账），
+    // 而出口闸**一律剥除模型自己的推销**。
+    //
+    // 【为什么禁令必须跟着恒开】允许模型做一件我们随后必剥的事，只会：
+    //  ① 制造一堆没有意义的剥除通知；② 让模型的合规行为看起来像违规；
+    //  ③ 让 referral_offers 变成一份**看起来完整的**残缺记录——模型自己提的那次不占位、不落行、
+    //     不受频控，而这张台账将来要用来证明"我们没有反复骚扰用户"。
+    // **改的是策略不是这条测试写错了**，所以断言反过来并把来历写在这里。
     const f = makeAgentFixture();
     for (const day of ['2026-08-19 22:00:00', '2026-08-20 09:00:00']) {
       f.db.prepare("INSERT INTO emotion_log (case_id, level, note, created_at) VALUES (?, '严重', 'x', ?)").run(f.caseId, day);
@@ -510,7 +520,7 @@ describe('危机响应：心理危机资源卡强制注入（charter §5）', ()
       db: f.db, caseId: f.caseId, userId: f.userId, message: '我最近很难受',
       provider, emit: sink.emit,
     });
-    expect(provider.calls[0][0].content).not.toContain('本轮禁止提及付费心理咨询');
+    expect(provider.calls[0][0].content).toContain('本轮禁止提及付费心理咨询');
   });
 
   it('已转介过则仍然禁止（spec §10 一案最多一次）', async () => {

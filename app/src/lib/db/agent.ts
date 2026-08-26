@@ -135,6 +135,21 @@ export function insertMessage(
   );
 }
 
+/**
+ * 本线程最后一条 assistant 消息的 id（还没回填正文的空壳不算）。
+ *
+ * 【它是干什么用的】D14 的拒绝判定要钉在「**我们刚问过**的那一轮」上：
+ * 推荐时把 messageId 记进台账 note，用户下一轮说"不需要"时拿它比对。
+ * 不这么钉，用户在任何时候说"不需要"（不需要这份证据、不需要开庭…）都会被读成拒绝推荐——
+ * 而拒绝是**全局永久**的，误判一次就再也不推了。
+ */
+export function lastAssistantMessageId(db: Database, threadId: number): number | null {
+  const row = db
+    .prepare("SELECT id FROM messages WHERE thread_id = ? AND role = 'assistant' AND content IS NOT NULL ORDER BY id DESC LIMIT 1")
+    .get(threadId) as { id: number } | undefined;
+  return row?.id ?? null;
+}
+
 /** 流跑完后回填正文与用量。tokensJson 传 null 表示本次没拿到计量（不写 0 冒充） */
 export function finalizeMessage(
   db: Database,
