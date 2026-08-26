@@ -195,13 +195,22 @@ export function recordLabel(tool: RecordTool): string {
 }
 
 /**
+ * 后端 message 原文照搬。用于「每轮内容都不一样」的提示——前端写死一句
+ * 固定话术只能说废话（例：CALC_FAILED 的「还差哪几项」逐轮不同）。
+ */
+const PASSTHROUGH = Symbol('notice-passthrough');
+
+/**
  * notice 帧展示策略（WS2 词表定稿，manager 已入册）：
- * 只有两个 code 面向用户展示；其余是系统内部治理信号，UI 静默
+ * 只有三个 code 面向用户展示；其余是系统内部治理信号，UI 静默
  * （EMOTIONAL_LEVERAGE_DETECTED 等尤其不得出现「拦截」类字样）。
  * CITATION_BLOCKED 不出提示行——正文里的【案号待核实】占位由 RichText 淡色标注承载。
  * 未知 code：忽略 + console.warn（向前兼容）。
+ *
+ * 三种取值，**别用空字符串**：固定文案 / null=静默 / PASSTHROUGH=用后端原文。
+ * `''` 会被渲染层的 `if (!copy)` 当成静默吞掉，看着像「配了文案」其实一个字都不显示。
  */
-const NOTICE_COPY: Record<NoticeCode, string | null> = {
+const NOTICE_COPY: Record<NoticeCode, string | null | typeof PASSTHROUGH> = {
   KNOWLEDGE_MISS:
     '这个点法条库暂无逐字依据，以上是通用口径，已标记待补。',
   KNOWLEDGE_UNAVAILABLE:
@@ -215,9 +224,10 @@ const NOTICE_COPY: Record<NoticeCode, string | null> = {
   // 告诉用户「这条引用不完整」既帮不上忙，又会让他怀疑手里已有的内容
   CITATION_INCOMPLETE: null,
   PRECEDENT_CONTAMINATED: null,
-  // 唯一一条「失败」类的用户可见提示。文案由后端按缺失项拼好直接下发，
+  // 唯一一条「失败」类的用户可见提示。文案由后端按缺失项拼好直接下发
+  // （tools.ts：「还差：入职日期、月工资。你把这几项告诉我，我立刻重算一遍」），
   // 这里不再套一层固定话术——「还差哪几项」每轮都不一样，写死就只能说废话。
-  CALC_FAILED: '',
+  CALC_FAILED: PASSTHROUGH,
   EMOTIONAL_LEVERAGE_DETECTED: null,
   NBDPSY_PITCH_BLOCKED: null,
 };
@@ -227,7 +237,10 @@ export function noticeCopy(frame: NoticeFrame): string | null {
     console.warn('[stream] 未知 notice code，忽略：', frame.code);
     return null;
   }
-  return NOTICE_COPY[frame.code];
+  const copy = NOTICE_COPY[frame.code];
+  // 后端原文缺失或全是空白时宁可静默：空提示行比不出提示更让人心慌。
+  if (copy === PASSTHROUGH) return frame.message?.trim() || null;
+  return copy;
 }
 
 /** action 帧 → 现有行动卡数据结构，让 ActionCard/档案面板照旧工作。 */
