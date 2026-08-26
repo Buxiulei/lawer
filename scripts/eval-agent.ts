@@ -499,11 +499,14 @@ async function main() {
         // 闸写下的剥除留痕落进转录：没有它，"光秃是谁造成的"下次仍然不可判
         gateStrippedArticles: [...gateStrippedArticles(t)],
         // 杠杆闸同理，且更要紧：闸前正文不留，这条 L1 只能永远报绿
+        // 三态：对象=开过火；**null=这一层跑了、闸没开火**；字段缺失=旧转录没有这一层。
+        // 必须**无条件写**（null 也写），否则"没开火"与"没这一层"在归档里长得一样，
+        // 而 events 不进归档 —— 离线回放就只能靠它。
         leverage: (() => {
           const ev = t.events.find(
             (e) => e.event === 'notice' && e.data.code === 'EMOTIONAL_LEVERAGE_DETECTED',
           );
-          if (!ev || ev.event !== 'notice') return undefined;
+          if (!ev || ev.event !== 'notice') return null;
           return {
             outcome: ev.data.leverage_outcome ?? '未记',
             stripped: ev.data.stripped_sentences ?? [],

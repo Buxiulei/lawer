@@ -182,6 +182,10 @@ const NON_GATE_INTERNALS: Record<string, string> = {
   stripUserQuotes:
     '只作用于**判定副本**：把引号里来自用户原话的段抹掉再跑正则，' +
     '**下发正文一个字不动**。它是第一层来源判别的实现，不是剥除器。',
+  stripQuotedAndDisclaimed:
+    '同上，只作用于**判定副本**：把引用与「明说不说」的免责句抹掉再判（诚实税）。' +
+    '真正剥正文的是 stripNbdpsyPitch，它已单独登记。' +
+    '2026-08-26 从评测侧搬到产线侧——此前评测说合规、产线当场剥掉，本身就是一处判据同源断裂。',
 };
 
 /** 从 orchestrator 的 import 语句里取出某模块导入的全部**值**标识符（跳过 `type` 导入）。 */
