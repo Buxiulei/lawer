@@ -979,9 +979,24 @@ export function cardShapeAgrees(text: string, phones: string[]): boolean {
   // 现在两侧共用 `cardOccurrences` 原语，各取各的派生量：
   // 判据取 `.length`，出口闸剥 `.slice(1)` 所占的行。
   // ⇒ 本函数只保证**"两把尺子一样长"**；**"尺子量什么"由原语的判准单独负责、单独被样本钉住。**
-  const evalSaysRepeat = cardOccurrences(text, phones).length >= 2;
-  const prodWouldStrip = stripDuplicateHotlineList(text, phones) !== text;
-  return evalSaysRepeat === prodWouldStrip;
+  //
+  // 【2026-08-26 再改一步：从「两个派生布尔相等」改为「拿原语量剥除的结果」】
+  // 上一版比的是 `卡数>=2` 与 `产线动没动手` 两个**布尔**。**一个从原语算出来的布尔，
+  // 仍然是派生量**——两侧可以在布尔上一致、而实际动作完全不同。
+  //
+  // 实测（把产线闸变异回"数行 + 全删"）：
+  //   旧五条样本抓到 2/5；**而"两块各自完整""两次单行整卡"这两条 2 卡样本，
+  //   上一版判 true —— 放过了变异**。原因：两侧都说"要动手"，
+  //   但一个剥后续、一个全删，**布尔相同、行为相反**。
+  //   本版对同两条判 false，抓住。
+  //
+  // ⇒ **同源守卫要钉的不是"两边要不要动手"，是"动完之后原语看到的是不是同一件事"。**
+  const spans = cardOccurrences(text, phones);
+  const stripped = stripDuplicateHotlineList(text, phones);
+  // 没有重复 ⇒ 产线一个字都不该动（L1 号码在场优先于 L3 别啰嗦）
+  if (spans.length < 2) return stripped === text;
+  // 有重复 ⇒ 必须动，且**动完之后正好剩第一处**（不是全删，也不是没删干净）
+  return stripped !== text && cardOccurrences(stripped, phones).length === 1;
 }
 
 
