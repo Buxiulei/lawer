@@ -14,7 +14,12 @@ secrets/
 research/
 *.log
 .DS_Store
-# C04 评测证据产物：含大段模型原文与案情夹具，留在服务器供验收查阅，不进仓库
+# C04 评测证据产物：含大段模型原文与案情夹具，不进仓库。
+# 【2026-08-26 更正】上一版注释写的是「留在服务器供验收查阅」——**那是错的**：
+# 实际跑批发生在本地一次性 worktree 里，产物随 worktree 一起消失过一次。
+# 真实存放地：`~/caiyuan-ws/eval-evidence-archive/`（不在任何 git 工作树内），
+# 由 `scripts/eval/run-batch.sh` 跑完自动复制、失败即写 FAILED。
+# **一条描述错误存放地的注释，比没有注释更坏——它会让人以为自己知道去哪儿找。**
 scripts/eval/results/
 .claude/worktrees/
 
