@@ -54,30 +54,26 @@ while [ $i -le "$N" ]; do
   i=$((i+1))
 done
 
-# 【跑完即归档 · 2026-08-26 事故后加】把本批产物复制到**不在任何 worktree 内**的目录。
+# 【跑完即归档 · 2026-08-26 事故后加】归档实现在 `archive-batch.sh`，本脚本只调用它。
+# **不在这里再写一份**——手工跑批的人也要能调同一个入口；两份实现里迟早有一份是坏的，
+# 而坏的那份的症状（"归档了但找不到"）与没归档一模一样。规矩与理由见 archive-batch.sh 头部。
 #
-# 【事故】`fb8257d` 那两份 S08 转录随 `~/caiyuan-ws/ws2-s08` worktree 一并消失，全机搜不到——
-# 而它们是一份成绩单与断代册「断代点二」的**唯一底稿**。后果不是少了两个文件，
-# 是**两份已提交的结论从此不可复核**。
-#
-# 【根因】`.gitignore:18` 的注释写的是「留在服务器供验收查阅」，而实际跑批在**本地一次性 worktree** 里。
-# **声明的存放地与实际的存放地不是同一个地方，而没人发现**——直到有人真去取它。
-# 失败方向仍然是"让人放心"：证据看起来一直都在。
-#
-# 不改 `.gitignore`（转录含大段模型原文与案情夹具，那条政策有它的理由），
-# 只保证**副本不再只存在于一个可被删除的工作副本里**。归档位置待 manager 定版，先落这个。
-ARCH=${EVAL_ARCHIVE_DIR:-$HOME/caiyuan-ws/eval-evidence-archive}/$(date +%Y-%m-%d)
-mkdir -p "$ARCH" || { echo "归档目录建不出来：$ARCH" >"$OUT/FAILED"; exit 4; }
-cp -r "$OUT" "$ARCH/" 2>/dev/null
-# 本批期间新落盘的转录（json/md），按批次开始时间之后取
-find "$ROOT/scripts/eval/results" -maxdepth 1 -newer "$OUT/.batch-start" \( -name '*.json' -o -name '*.md' \) \
-  -exec cp -n {} "$ARCH/" \; 2>/dev/null
-NARCH=$(find "$ROOT/scripts/eval/results" -maxdepth 1 -newer "$OUT/.batch-start" -name '*.json' | wc -l)
-# 【归档必须自证】复制静默失败与"没东西可复制"长得一模一样——本文件开头那条
-# 三轴戳自证是同一个道理：**落款写完必须当场验它在不在**。
-[ -f "$ARCH/$(basename "$OUT")/META" ] || { echo "归档自证失败：$ARCH 下找不到本批 META" >"$OUT/FAILED"; exit 4; }
-# 只验批次目录挡不住"转录一份都没归到"——那正是上一版 `-newer META` 会造成的静默失败。
-[ "$NARCH" -gt 0 ] || { echo "归档自证失败：本批转录 0 份被归档（find 基准或 results 路径不对）" >"$OUT/FAILED"; exit 4; }
+# 传两样：本批次目录 + 开批之后新落盘的转录。
+# 基准用开批时 touch 的 `.batch-start`，**不能用 META**——META 每跑都被追加，
+# mtime 永远比转录新，拿它当 `-newer` 基准会一条转录都找不到，
+# 而"找不到"与"本来就没有"长得一模一样。（第一版就是这么错的，被自证当场抓住。）
+ARCHIVE=$ROOT/scripts/eval/archive-batch.sh
+# 【为什么分两次调、而不是把文件名塞进一个变量】上一版写的是 `ARCH=$(... $TRANS)`，
+# 依赖 shell 对未加引号变量做词分割——**而 zsh 默认不分割、sh 分割**。
+# 同一行代码在两个 shell 下行为不同，我自己的仿真（跑在 zsh 里）就把两个路径当成了一个参数。
+# `find -exec {} +` 把文件名作为真正的 argv 传过去，不经过分割，两个 shell 下一致。
+ARCH=$(sh "$ARCHIVE" "$OUT") || { echo "批次目录归档失败" >"$OUT/FAILED"; exit 4; }
+# 本批新落盘的转录。基准用开批时 touch 的 `.batch-start`，**不能用 META**——
+# META 每跑都被追加，mtime 永远比转录新，拿它当 `-newer` 基准会一条转录都找不到，
+# 而"找不到"与"本来就没有"长得一模一样。（第一版就是这么错的，被自证当场抓住。）
+find "$ROOT/scripts/eval/results" -maxdepth 1 -newer "$OUT/.batch-start" \
+  \( -name '*.json' -o -name '*.md' \) -exec sh "$ARCHIVE" {} + \
+  || { echo "转录归档失败" >"$OUT/FAILED"; exit 4; }
 echo "archived_to=$ARCH/$(basename "$OUT")" >>"$OUT/META"
 
 echo done >"$OUT/DONE"
