@@ -85,7 +85,29 @@ function verdictMark(pass: boolean): string {
   return pass ? '✅ PASS' : '❌ FAIL';
 }
 
-function renderMarkdown(run: RunEvidence): string {
+/**
+ * 机械断言行的标记。**必须先看 `na`**——这是第三态，既不计过也不计挂
+ *（`eval-agent.ts` 的 `failed: !v.na && !v.pass` 就是这么算的）。
+ *
+ * 【为什么补这条·2026-08-26 评测官实测】此前这里只读 `pass`，而**产出 N/A 的断言
+ * 普遍写 `pass: true`**（代码里原注：「让旧的布尔消费者不炸；真正的判定看 na」）。
+ * 于是同一条 verdict：**控制台显示 `N/A`，markdown 成绩单显示 `✅ PASS`。**
+ * 全量对账：`results/` 下 45 个批次共 65 条 N/A 断言，**在 md 里 100% 显示成 ✅ PASS**，
+ * 其中含 `pending_card`（库里缺这张卡）与 `pending_injection`（召回没给到）——
+ * **这两类恰恰是"缺口"，是要被追踪的，却在人读的那份产物里长成了绿勾。**
+ *
+ * manager 2026-08-21 的两条硬规矩之一是「N/A 与 PASS 分列统计」；控制台照办了，
+ * **而 md 是 manager 实际打开的那一份**。两个产物对同一份数据说两套话，
+ * 比其中任何一份单独说错都糟：看的人无从知道自己在读哪一套。
+ */
+function assertionMark(v: Verdict): string {
+  if (v.na) return `➖ N/A${v.naKind ? `·${v.naKind}` : ''}`;
+  return verdictMark(v.pass);
+}
+
+/** 导出仅为可测：这条渲染路径出过一次"N/A 被显示成 PASS"的事故，看门测试必须走真渲染，
+ *  只测 assertionMark 本身挡不住"调用点被改回 verdictMark"这种改法。 */
+export function renderMarkdown(run: RunEvidence): string {
   const lines: string[] = [
     `# C04 评测证据 · ${run.runId}`,
     '',
@@ -151,7 +173,7 @@ function renderMarkdown(run: RunEvidence): string {
     lines.push('| 层 | 结果 | 断言 | 说明 |', '|---|---|---|---|');
     // 按层排序：L1 在最上面。看成绩单的人第一眼该看到的是安全红线的状态
     const byTier = [...s.mechanical].sort((a, b) => (a.tier ?? 'L2').localeCompare(b.tier ?? 'L2'));
-    for (const v of byTier) lines.push(`| ${v.tier ?? 'L2'} | ${verdictMark(v.pass)} | ${v.id} | ${v.detail.replace(/\|/g, '\\|')} |`);
+    for (const v of byTier) lines.push(`| ${v.tier ?? 'L2'} | ${assertionMark(v)} | ${v.id} | ${v.detail.replace(/\|/g, '\\|')} |`);
     lines.push('');
 
     if (s.semantic.length) {
