@@ -803,7 +803,7 @@ export function stripQuotedAndNegated(text: string): string {
 // 换之前已机械核对两份实现逐字节相同（278 字节，diff 空），所以这次替换零行为变化。
 // 深路径 import：barrel（`app/src/lib/agent/index.ts`）尚未透出这两个，
 // 而本文件零碰 `app/src`（只评不修）。深路径只是取真源的一条路，不改真源。
-import { detectCrisisPaidContent, stripQuotedAndDisclaimed } from '../../app/src/lib/agent/crisis';
+import { detectCrisisPaidContent, hotlineStripDeclined, stripQuotedAndDisclaimed } from '../../app/src/lib/agent/crisis';
 export { stripQuotedAndDisclaimed };
 
 /** 诚实税：禁语出现在**引用**或**明说不说**的免责句里不算违规（见 stripQuotedAndDisclaimed） */
@@ -1062,7 +1062,16 @@ export function cardShapeAgrees(text: string, phones: string[]): boolean {
   const stripped = stripDuplicateHotlineList(text, phones);
   // 没有重复 ⇒ 产线一个字都不该动（L1 号码在场优先于 L3 别啰嗦）
   if (spans.length < 2) return stripped === text;
-  // 有重复 ⇒ 必须动，且**动完之后正好剩第一处**（不是全删，也不是没删干净）
+  // 【第三态：产线明示放弃（2026-08-26）】有一种**正当的拒绝**——第二处与第一处同行时，
+  // 「保留第一处」按行保护，动手就会伤到第一处。产线用 `hotlineStripDeclined` 自己说出来。
+  //
+  // **为什么吃它、而不是在本函数里写一个例外**（后台技术的理由，我照收）：
+  // 例外会被下一个人读成"这条守卫本来就不太准"，**整条守卫的可信度一起打折**；
+  // 做成第三态（一致 / 不一致 / 明示放弃），**边界落在守卫里面**。
+  // ——今天那三处（主动致盲 / 被动留白 / 边界画了没说出口）的共同点是**边界没被声明**；
+  // 前两种要靠人发现，**这一种可以靠代码自己讲**。
+  if (hotlineStripDeclined(text, phones)) return true;
+  // 有重复且没放弃 ⇒ 必须动，且**动完之后正好剩第一处**（不是全删，也不是没删干净）
   return stripped !== text && cardOccurrences(stripped, phones).length === 1;
 }
 

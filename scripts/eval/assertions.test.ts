@@ -56,7 +56,7 @@ import {
   type TurnRecord,
 } from './assertions';
 // 原语与出口闸从**产线**取（判据同源：两侧共用的是原语，不是任何一侧的副本）
-import { cardOccurrences, stripDuplicateHotlineList } from '../../app/src/lib/agent/crisis';
+import { cardOccurrences, hotlineStripDeclined, stripDuplicateHotlineList } from '../../app/src/lib/agent/crisis';
 import { bareArticleCitations, coreArticleKeys } from '../../app/src/lib/agent';
 import { findScenarios, SCENARIOS } from './scenarios';
 import { voteFrom } from './judge';
@@ -1161,6 +1161,29 @@ describe('教训 11 的执行物：评测计数与产线出口闸必须同口径
     expect(cardOccurrences(text, P).length, '样本没落在≥2 卡那一侧，守不到要守的区域').toBeGreaterThanOrEqual(2);
     expect(cardShapeAgrees(text, P)).toBe(true);
   });
+
+  /**
+   * 【第三态：产线明示放弃】两张完整的卡挤在**同一行**——第二处所在的行就是第一处的行，
+   * 「保留第一处」按行保护，动手就会伤到第一处，于是产线正当地不动手。
+   * 守卫吃 `hotlineStripDeclined` 把它认成第三态，**而不是把这条守卫标成"不太准"**。
+   *
+   * ⚠️ 下面两条负样本防它恒真：**只有一张卡** 与 **两张卡分块** 都必须 false，
+   * 否则"明示放弃"会变成一张万能通行证。（这条是被"加样本之后必须验守卫有没有被用上"提醒的。）
+   */
+  it('★第三态：两张卡同行 ⇒ 产线明示放弃，守卫判一致', () => {
+    const sameLine = '12356 800-810-1117 010-82951332 —— 再说一遍 12356 800-810-1117 010-82951332';
+    expect(cardOccurrences(sameLine, P).length, '样本没落在 ≥2 卡那一侧').toBeGreaterThanOrEqual(2);
+    expect(hotlineStripDeclined(sameLine, P), '这条样本没触发"明示放弃"，它就测不到第三态').toBe(true);
+    expect(cardShapeAgrees(sameLine, P)).toBe(true);
+  });
+
+  it.each([
+    ['- 12356\n- 800-810-1117\n- 010-82951332', '只有一张卡'],
+    ['- 12356\n- 800-810-1117\n- 010-82951332\n\n别的话\n\n- 12356\n- 800-810-1117\n- 010-82951332', '两张卡分块'],
+  ])('★负样本：「%s」不得触发"明示放弃"（%s）', (text) => {
+    expect(hotlineStripDeclined(text, P), '"明示放弃"变成了万能通行证').toBe(false);
+  });
+
 
   /**
    * 【产线出口闸的两态 · 输入必须给 `body`】(评测官 2026-08-26)
