@@ -1,11 +1,14 @@
 #!/bin/sh
 # 列出可用于统计的评测转录，**按内容去重**。任何"N 轮语料里 X 次"的统计都该从这里取文件。
 #
-#   用法: sh scripts/eval/corpus-list.sh              # 每行一个 json 路径（按**文件**内容去重）
-#         sh scripts/eval/corpus-list.sh --count      # 打印 去重后/去重前 两个数（文件层）
-#         sh scripts/eval/corpus-list.sh --scenarios  # 每行 `路径<TAB>剧本下标`（按**剧本实例**去重）
+#   用法: sh scripts/eval/corpus-list.sh [--scenarios|--count] [--include-local]
 #
-# ⚠️ **做轮数/命中率统计一律用 `--scenarios`，不要用默认的文件清单。**
+#         默认**只扫归档**（共享、非一次性、每个人看到的是同一份）。
+#         --scenarios      每行 `路径<TAB>剧本下标`（按**剧本实例**去重）——统计一律用它
+#         --count          打印份数
+#         --include-local  额外扫**本检出的** scripts/eval/results/（**它随检出而变**，见下）
+#
+#   **每次调用都会把实际扫描根打到 stderr**（stderr 不进管道）。**统计要连它一起抄。**
 #
 # ═══ 为什么必须有它（2026-08-26） ═══
 #
@@ -47,24 +50,62 @@
 # 归档机制是今天刚立的，此后每一条统计都在这个膨胀的分母上。
 # 规矩负责覆盖"想不起来"，这个入口负责让"想起来了"的人一行就能做对。
 set -u
+MODE=""
+LOCAL=0
+for a in "$@"; do
+  case "$a" in
+    --include-local) LOCAL=1 ;;
+    --scenarios|--count) MODE=$a ;;
+    *) echo "未知参数：$a" >&2; exit 2 ;;
+  esac
+done
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 ARCH=${EVAL_ARCHIVE_DIR:-$HOME/caiyuan-ws/eval-evidence-archive}
 
-# 归档优先：同内容时留归档那份（它在非一次性位置，`results/` 可能随工作副本消失）
+# ═══ 为什么默认只扫归档（2026-08-26，第二版；第一版在这里犯了今天最贵的一个错）═══
+#
+# 第一版无条件扫 `$ROOT/scripts/eval/results`，而 `ROOT` 来自 `dirname $0`——
+# **`results/` 是 .gitignore 的，每个工作副本各有一份、内容各不相同**。
+# 于是**同一个脚本、同一个参数、同一天，从两个 clone 跑出来的是两个不同的语料**：
+#     从 caiyuan-ws/eval 跑    → 剧本实例 128 / 危机段 153 / 碰撞 11
+#     从 caiyuan-ws/backend 跑 → 剧本实例  98 / 危机段 165 / 碰撞 38
+# **两个输出都完全合理，没有任何一个会触发"这个数不该是这样"。**
+#
+# 【它比 hb.sh 那次更难查】`hb.sh` 用 `dirname $0` 定位**写入**目标，副本会往自己那儿写——
+# 后果至少是"我写的没人看见"。这次是用它定位**读取范围**：
+# **两边各自都自洽，只有把两个数放在一起才暴露**——
+# **而我们上一次把数字放在一起，得出的结论是"两人独立验证，更硬"。**
+#
+# ⇒ 默认只扫归档（共享、非一次性）。要扫本地 `results/` 必须显式 `--include-local`，
+#   且扫描根一律打到 stderr。**范围不再是默认参数，它必须被写出来。**
 list_all() {
   find "$ARCH" -name '2026-*.json' -type f 2>/dev/null
-  find "$ROOT/scripts/eval/results" -maxdepth 1 -name '2026-*.json' -type f 2>/dev/null
+  if [ "$LOCAL" = 1 ]; then
+    find "$ROOT/scripts/eval/results" -maxdepth 1 -name '2026-*.json' -type f 2>/dev/null
+  fi
 }
 
 # 【为什么用 cut -f2- 而不是 awk '$1=""'】第一版用的是 awk：`$1=""` 之后 awk 会按 OFS
 # 重建整行，留下**一个**前导空格，而我按"两个空格"去剥——**剥不掉，路径带着前导空格出去**，
 # 下游 readFileSync 全部失败、被 try/catch 吞掉，读数器打出一个**看起来完全合法的 0 轮**。
 # 用 TAB 分隔 + `cut -f2-` 不重建行，没有这个面。
+# 【范围必须自己说出来】今天立的规矩「任何"零命中／N 轮"的结论必须在同一句话里写明范围」——
+# 第一版这个入口自己不满足它。打到 stderr：不污染管道，但统计的人一定会看见。
+{
+  echo "corpus-list 扫描根："
+  echo "  [归档] $ARCH"
+  if [ "$LOCAL" = 1 ]; then
+    echo "  [本检出 results，**随检出而变**] $ROOT/scripts/eval/results"
+  else
+    echo "  [本检出 results] 未扫（要扫加 --include-local）"
+  fi
+} >&2
+
 DEDUP=$(list_all | while IFS= read -r f; do
   printf '%s\t%s\n' "$(sha256sum "$f" | cut -c1-16)" "$f"
 done | sort -k1,1 -t"$(printf '\t')" -u | cut -f2-)
 
-if [ "${1:-}" = "--scenarios" ]; then
+if [ "$MODE" = "--scenarios" ]; then
   # 剧本实例层去重：同一份 scenarios[i] 只留第一次出现。输出 `路径<TAB>下标`。
   printf '%s\n' "$DEDUP" | python3 -c '
 import hashlib, json, sys
@@ -80,7 +121,7 @@ for line in sys.stdin:
         seen.add(h)
         print(f"{f}\t{i}")
 '
-elif [ "${1:-}" = "--count" ]; then
+elif [ "$MODE" = "--count" ]; then
   printf '去重后 %s 份 / 去重前 %s 份\n' "$(printf '%s\n' "$DEDUP" | grep -c .)" "$(list_all | grep -c .)"
 else
   printf '%s\n' "$DEDUP"
