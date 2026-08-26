@@ -337,6 +337,34 @@ describe('危机响应：心理危机资源卡强制注入（charter §5）', ()
     expect(first.data.text).toContain('800-810-1117');
   });
 
+  // ───── 临时处置：危机轮停用热线去重（manager 2026-08-25，修好后撤回）─────
+  // 修前实测：出口闸判"重复"只看**含号码的行数 ≥2**，命中后把所有含号码的行全删，
+  // 于是「开头给号码 + 结尾再给并附照读话术」这种**好的干预设计**被剥成两处悬空句：
+  // 「先把号码放这儿：」后面是空的，「接通了可以照这样说：」后面也是空的。
+  // 用户在最坏的那一刻读到一句失效的承诺——他会以为系统坏了，而他此刻没有力气再试第二次。
+  it('危机轮的模型段一个字都不剥：开头号码、结尾号码、照读句全部到达用户', async () => {
+    const modelText = [
+      '你现在这个念头，我认真对待。先把号码放这儿，不用等看完就能打：',
+      '**12356**（24 小时，免费）',
+      '',
+      '你说的每一句我都当真，没有一句是小题大做。', // 刻意避开杠杆闸词表：本条验的是去重，不是杠杆
+      '',
+      '如果你现在就想打，接通了可以照这样说：',
+      '「我最近有不想活的念头，想找人说说话。」——**12356**，说不出口就先听着。',
+    ].join('\n');
+    const { sink } = await turnCrisis(modelText);
+    // 模型段（首段是 deterministic:true 的那一条，取其后的正文）
+    const body = sink.of('delta').filter((e) => !e.data.deterministic).map((e) => e.data.text).join('');
+    // **逐字一致**——不是"含号码"，是一个字没动（剥前剥后相同）
+    expect(body).toBe(modelText);
+    // 用户面：两处号码都在，且照读句仍带着它要拨的那个号
+    expect(body.split('\n').filter((l) => l.includes('12356'))).toHaveLength(2);
+    expect(body).toContain('接通了可以照这样说');
+    expect(body).toContain('「我最近有不想活的念头，想找人说说话。」——**12356**');
+    // 反例形态：不得再出现"指着号码却后面是空的"
+    expect(body).not.toMatch(/先把号码放这儿，不用等看完就能打：\n\n/);
+  });
+
   it('首段标 deterministic，心跳不因它停（模型段还没开始出字）', async () => {
     const { startHeartbeat } = await import('../events');
     const pings: number[] = [];

@@ -159,6 +159,15 @@ export type AgentEvent =
          * 判据只读这个字段、不从正文反推——反推等于给分账开第二个真源。
          */
         stripped_articles?: string[];
+        /**
+         * EMOTIONAL_LEVERAGE_DETECTED 专用：**被剥掉的原句**与处置结果。
+         * 与 `stripped_articles` 同一条纪律——**闸删了什么必须自己写下来**：
+         * 归档正文是闸后产物，被删的句子不在里面，不留痕就永远查不到它剥的是
+         * 共情复述还是真杠杆（而这两者的处置完全相反）。
+         */
+        stripped_sentences?: string[];
+        /** clean｜stripped（只删命中句）｜fallback（模型段整段丢弃，用户只剩确定性首段） */
+        leverage_outcome?: 'stripped' | 'fallback';
         /** CALC_FAILED 专用：恒 true——补齐信息后可以直接再算一次，不是功能坏了 */
         retriable?: boolean;
       };

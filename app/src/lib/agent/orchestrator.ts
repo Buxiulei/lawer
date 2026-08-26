@@ -32,6 +32,7 @@ import {
   assessNbdpsyEligibility,
   detectNbdpsyPitch,
   stripLeverageSentences,
+  stripLeverageWithTrail,
   stripDuplicateHotlineList,
   extractHotlines,
   stripNbdpsyPitch,
@@ -56,6 +57,32 @@ import { AGENT_TOOLS, emitCalcFailureNotice, executeTool, newTurnState, type Age
 
 /** 喂进模型的历史消息条数上限。再多不如让档案摘要说话——摘要是结构化的、消息是散的。 */
 const HISTORY_LIMIT = 20;
+
+/**
+ * 【临时处置 · manager 2026-08-25 裁定，修好后撤回】危机轮暂停热线去重。
+ *
+ * **它解决的是「悬空」，不是「重复」。** 实测：`stripDuplicateHotlineList` 判"重复"只看
+ * **含号码的行数 ≥2**，命中后把**所有**含号码的行全删。于是危机轮里
+ * 「开头给号码（不用等看完就能打）+ 结尾再给并附照读话术」这种形态被剥成两处悬空句——
+ * 「先把号码放这儿：」后面是空的，「接通了可以照这样说：」后面也是空的（号码与照读句同行，一并删）。
+ *
+ * 四条理由（manager）：
+ *  ① **危机轮悬空的代价不可逆**——用户在最坏的那一刻读到一句失效的承诺，
+ *     他会以为系统坏了，而他此刻**没有力气再试第二次**；
+ *  ② **危机轮刷屏的代价接近零**——多给两遍救命电话不是问题，啰嗦在这一轮根本不算缺点；
+ *  ③ **触发形态恰恰是好的干预设计**（开头给 + 结尾给）——**模型越做对越容易触发**；
+ *  ④ 范围小、可立即滚更、修好后撤回。
+ *
+ * ⚠️ **别把它读成「危机轮本就不该去重」**——该去重，只是不能用「见号码就全删」这种去重。
+ * 撤回条件：四处修法（「整卡」的定义／`cardShapeAgrees` 的产线真实输入域／悬空指代／
+ * **保留第一处、只剥后续重复**）落地后删掉本开关。其中「保留第一处」一条天然连悬空一起解决——
+ * 悬空之所以出现，正是因为它把被指代物整个删光了：**一个判断"有重复"的检查，
+ * 不该有"全部删除"的处置权。**
+ *
+ * 注：`stripDuplicateHotlineList` 全仓**只有这一处产线调用点**，且整块在 `crisis.triggered` 内，
+ * 所以本开关等于让它在产线上停用；纯函数本身一字未动（四处修法要在它上面做）。
+ */
+const CRISIS_HOTLINE_DEDUP_ENABLED = false;
 
 /**
  * tool-loop 最多跑几轮。
@@ -444,12 +471,21 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   // 剥除而不是重生成：重生成要再等 2-4 分钟，而危机轮最不该等；剥句是毫秒级的。
   // 剥完仍命中 → 回落确定性安全回复，模型的话一个字都不下发。
   let leverageOutcome: 'clean' | 'stripped' | 'fallback' = 'clean';
+  /** 闸剥掉的原句留痕——归档正文是闸后产物，不写下来就永远查不到它剥了什么 */
+  let strippedSentences: string[] = [];
   if (crisis.triggered) {
+    // 【来源判别的比对面：用户自己说过的话】本轮原话 + 本 thread 的历史用户消息。
+    // 复述用户原话是 charter §5「先接住」/§6「引用他说过的细节」的产物，不是杠杆——
+    // **复述是把他自己的话还给他，杠杆是把别人的痛苦加给他。**
+    // 拿不到这个比对面时 detectEmotionalLeverage 退回旧行为（照旧剥），保守向不变。
+    const userSaid = [message, ...history.filter((h) => h.role === 'user').map((h) => h.content)].join('\n');
     let body = modelBody;
-    if (detectEmotionalLeverage(body)) {
-      body = stripLeverageSentences(body);
+    if (detectEmotionalLeverage(body, userSaid)) {
+      const trail = stripLeverageWithTrail(body, userSaid);
+      body = trail.text;
+      strippedSentences = trail.stripped;
       leverageOutcome = 'stripped';
-      if (detectEmotionalLeverage(body) || !body.trim()) {
+      if (detectEmotionalLeverage(body, userSaid) || !body.trim()) {
         body = CRISIS_SAFE_FALLBACK;
         leverageOutcome = 'fallback';
       }
@@ -457,7 +493,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     // 首段已经把号码摆在用户眼前了，模型段就不该再整张列一遍（定版批两次 L2 失败的病灶）。
     // 守卫：**只有首段确实发出过号码**才允许剥——openerPhones 为空时一个字都不动，
     // 否则会把唯一一处号码剥掉，L1「危机轮号码必须在场」优先于「别啰嗦」。
-    if (openerPhones.length > 0 && leverageOutcome !== 'fallback') {
+    if (CRISIS_HOTLINE_DEDUP_ENABLED && openerPhones.length > 0 && leverageOutcome !== 'fallback') {
       body = stripDuplicateHotlineList(body, openerPhones);
     }
     if (body.trim()) {
@@ -581,7 +617,11 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
       event: 'notice',
       data: {
         code: 'EMOTIONAL_LEVERAGE_DETECTED',
-        message: `本轮模型输出含情感杠杆劝阻，${action}（charter §5）。杠杆内容未下发给用户。`,
+        message:
+          `本轮模型输出含情感杠杆劝阻，${action}（charter §5）。杠杆内容未下发给用户。` +
+          (strippedSentences.length ? `被剥 ${strippedSentences.length} 句。` : ''),
+        stripped_sentences: strippedSentences,
+        leverage_outcome: leverageOutcome === 'fallback' ? 'fallback' : 'stripped',
       },
     });
     cases.addTimelineEvent(db, {
