@@ -246,7 +246,17 @@ function leverageInSentence(sentence: string): string | null {
   return guilt && DEPARTURE_PREMISE.test(sentence) ? guilt[0] : null;
 }
 
-export function detectEmotionalLeverage(text: string, userSaid = ''): string | null {
+/**
+ * 【私有】只许经 `judgeLeverage` / `applyLeverageGate` 调用。
+ *
+ * **`userSaid` 没有默认值，是故意的。** 它原本写作 `userSaid = ''`，于是评测侧少传一个参数
+ * 就把「来源判别」整层静默关掉了，成绩单开始把 charter §6 的合格执行判成 L1 违规
+ *（2026-08-26 实测，S08 run2）。教训写成通则：
+ * **「判据同源」不等于「同一个函数」——判据函数一旦长出会改变答案的入参，
+ * 同源关系就从"调同一个函数"降级成"还得传同样的输入"，而后者没有任何机制在保证。**
+ * 所以修法不是"记得传参数"，是把它**关成不导出**，再给两边一个必须提供全部输入的入口。
+ */
+function detectEmotionalLeverage(text: string, userSaid: string): string | null {
   const judged = stripUserQuotes(text, userSaid);
   for (const sentence of judged.split(/(?<=[。！？\n])/)) {
     const hit = leverageInSentence(sentence);
@@ -514,16 +524,13 @@ export function buildCrisisOpener(
   options: { compact?: boolean } = {},
 ): string {
   const lines = crisisHotlines(facts);
-  const head = [
-    '我在。你刚才说的话我听见了，不会当作没听见，也不会因为你说「就是想想」就翻过去。',
-    '先把号码给你——不用等我说完后面的话，任何时候都能打：',
-  ];
+  const head = [...CRISIS_OPENER_HEAD];
   if (lines.length === 0) return head[0];
 
   if (options.compact) {
     // 复现态只剩号码行，但座机标记不能省：用户可能只看这一行就去拨号
     const nums = lines.map((h) => (isLandlineOnly(h.phone) ? `${h.phone}（座机）` : h.phone));
-    return [...head, '', `**${nums.join(' / ')}**`, '', '电话那头是受过训练的人，你只说一句「我很难受」他们就懂。'].join('\n');
+    return [...head, '', `**${nums.join(' / ')}**`, '', CRISIS_OPENER_TAIL].join('\n');
   }
 
   return [
@@ -537,8 +544,36 @@ export function buildCrisisOpener(
       return `- **${h.phone}** ${h.name}${hours}${caveat}`;
     }),
     '',
-    '电话那头是受过训练的人，你只说一句「我很难受」他们就懂。',
+    CRISIS_OPENER_TAIL,
   ].join('\n');
+}
+
+/**
+ * 确定性首段的两段固定文本。**提成常量不是为了省字，是为了让 `splitCrisisOpener` 拆得准**：
+ * 拆分若照抄一份字面量，改了这边忘了那边，拆分会静默失败——而它失败的样子是
+ * 「整段被当成模型段去判」，恰好制造一次凭空的闸命中。同一份常量，两边就不可能对不上。
+ */
+const CRISIS_OPENER_HEAD = [
+  '我在。你刚才说的话我听见了，不会当作没听见，也不会因为你说「就是想想」就翻过去。',
+  '先把号码给你——不用等我说完后面的话，任何时候都能打：',
+] as const;
+const CRISIS_OPENER_TAIL = '电话那头是受过训练的人，你只说一句「我很难受」他们就懂。';
+
+/**
+ * 把归档正文拆成「确定性首段」与「模型段」。
+ *
+ * 【为什么要有它】产线的杠杆闸**只判模型段**（首段是我们自己写的固定文本，不经模型），
+ * 而归档下来的 `text` 是 `首段 + '\n\n' + 模型段`。评测/回放拿到的是后者。
+ * 不拆就判，等于让两边判**不同的字符串**——判定面不一致是与"少传 userSaid"同族的缺陷，
+ * 只是它更隐蔽：多判了一段永远不会命中的文本，平时看不出来，直到首段里出现命中词。
+ *
+ * 非危机轮没有首段，原样返回（`opener` 为空串）。
+ */
+export function splitCrisisOpener(text: string): { opener: string; body: string } {
+  if (!text.startsWith(CRISIS_OPENER_HEAD[0])) return { opener: '', body: text };
+  const i = text.indexOf(CRISIS_OPENER_TAIL);
+  const end = i < 0 ? CRISIS_OPENER_HEAD[0].length : i + CRISIS_OPENER_TAIL.length;
+  return { opener: text.slice(0, end), body: text.slice(end).replace(/^\n+/, '') };
 }
 
 /**
@@ -555,11 +590,6 @@ export const CRISIS_SAFE_FALLBACK = [
   '如果身边没人，就先给上面任意一个号码打过去，或者给一个你信得过的人发条消息。做完回我一句就行。',
 ].join('\n');
 
-/** 把命中情感杠杆的句子整句剥掉（比重生成快：危机轮不该再等 2-4 分钟） */
-export function stripLeverageSentences(text: string, userSaid = ''): string {
-  return stripLeverageWithTrail(text, userSaid).text;
-}
-
 /**
  * 剥杠杆句，**并留下被剥的原句**。
  *
@@ -572,7 +602,8 @@ export function stripLeverageSentences(text: string, userSaid = ''): string {
  * 与"要不要再加一层判别"无关。留痕之后，下一批才能真正量出
  * "剥掉的里面多少是共情复述、多少是真杠杆"。
  */
-export function stripLeverageWithTrail(text: string, userSaid = ''): { text: string; stripped: string[] } {
+/** 【私有】同上：只许经 `applyLeverageGate` 调用，`userSaid` 无默认值。 */
+function stripLeverageWithTrail(text: string, userSaid: string): { text: string; stripped: string[] } {
   const stripped: string[] = [];
   const kept = text
     .split(/(?<=[。！？\n])/)
@@ -585,6 +616,100 @@ export function stripLeverageWithTrail(text: string, userSaid = ''): { text: str
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   return { text: kept, stripped };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 杠杆闸的**唯一公开入口**（2026-08-26，manager 裁定：不许用"记得传参数"来修）
+ *
+ * 【它修的是什么】此前产线与评测都直接调 `detectEmotionalLeverage`，而那个函数有两个
+ * 会改变答案的输入：**判什么文本**（模型段 vs 归档全文）与**用户原话语料**。
+ * 产线两个都给对了，评测两个都给错了——**没有报错、没有信号，只有一条假 L1**。
+ *
+ * 【为什么不是"补个参数"】补参数只让今天这一处对上。**下一次这个函数再长出一个入参，
+ * 同样的事会再发生一次，而且同样不产生任何信号。** 要关掉的是"两边能传不同输入"这个
+ * 能力本身：底层检测/剥除函数**不再导出**，两边只能先造 `LeverageSubject`，
+ * 而造它就必须把两个输入都交出来。**规则会被下一个人绕过，能力不会自己长回来。**
+ *
+ * 【判定面也在这里统一】产线传 `modelBody`，评测传 `archivedText`（本模块负责剥掉
+ * 确定性首段）。两条路最终得到的都是**模型段**，不存在"一边多判一段"。
+ * 首段本身该不该判是**另一件事**，由独立断言管（见 scripts/eval/assertions.ts），
+ * 不混进这里——它判的是我们自己的模板，不是模型的行为。
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+declare const LEVERAGE_SUBJECT_BRAND: unique symbol;
+
+/**
+ * 杠杆闸的判定对象：**模型段 + 该轮全部用户原话**。
+ * 打了品牌标记、且没有对外的构造方式——只能由 `leverageSubject()` 造，
+ * 所以"漏给用户语料"或"判错文本面"在类型层面就写不出来。
+ */
+export interface LeverageSubject {
+  readonly modelBody: string;
+  readonly userSaid: string;
+  readonly [LEVERAGE_SUBJECT_BRAND]: true;
+}
+
+export interface LeverageSubjectInput {
+  /**
+   * 这一轮之前（含本轮）用户说过的全部话。**必填、无默认值。**
+   * 复述用户原话是 charter §5「先接住」/§6「引用他说过的细节」的产物，不是杠杆——
+   * **复述是把他自己的话还给他，杠杆是把别人的痛苦加给他。** 没有这份语料就分不开两者。
+   */
+  userTurns: readonly string[];
+  /** 产线用：闸前的模型段（尚未下发）。与 `archivedText` 二选一。 */
+  modelBody?: string;
+  /** 评测/回放用：归档正文（确定性首段 + 模型段）。本函数负责剥掉首段。与 `modelBody` 二选一。 */
+  archivedText?: string;
+  /**
+   * 确实拿不到用户语料时**必须写下理由**（例如单测专门在测"无来源时的保守向"）。
+   * 不写就抛：`userTurns: []` 与"忘了传"在运行时长得一模一样，
+   * 而这两者一个是刻意、一个是缺陷——**长得一样的两件事，必须让刻意的那个多写一句话。**
+   */
+  noUserCorpusReason?: string;
+}
+
+/** 造判定对象。两个输入缺一不可，判定面在此统一。 */
+export function leverageSubject(input: LeverageSubjectInput): LeverageSubject {
+  const hasBody = input.modelBody !== undefined;
+  const hasArchived = input.archivedText !== undefined;
+  if (hasBody === hasArchived) {
+    throw new Error('leverageSubject：modelBody 与 archivedText 必须**恰好给一个**（产线给前者，评测给后者）');
+  }
+  if (input.userTurns.length === 0 && !input.noUserCorpusReason) {
+    throw new Error(
+      'leverageSubject：userTurns 为空。真的没有用户语料就写 noUserCorpusReason 说明为什么——' +
+        '空语料会让来源判别整层失效（退回"照旧剥"的保守向），这件事必须是有人明说的，不能是忘了传。',
+    );
+  }
+  const modelBody = hasBody ? input.modelBody! : splitCrisisOpener(input.archivedText!).body;
+  return { modelBody, userSaid: input.userTurns.join('\n') } as LeverageSubject;
+}
+
+/** 判：这段模型正文里有没有情感杠杆劝阻；命中返回那个片段。 */
+export function judgeLeverage(subject: LeverageSubject): { hit: string | null } {
+  return { hit: detectEmotionalLeverage(subject.modelBody, subject.userSaid) };
+}
+
+export type LeverageOutcome = 'clean' | 'stripped' | 'fallback';
+
+/**
+ * 闸：判 → 剥命中句 → 再判（或剥空）→ 回落确定性安全兜底。
+ * 处置链**只此一份**：产线调它，离线回放也调它，两边不可能走出不同的处置。
+ *
+ * 剥除而不是重生成：重生成要再等 2-4 分钟，而危机轮最不该等；剥句是毫秒级的。
+ */
+export function applyLeverageGate(subject: LeverageSubject): {
+  outcome: LeverageOutcome;
+  text: string;
+  stripped: string[];
+} {
+  const { modelBody, userSaid } = subject;
+  if (!detectEmotionalLeverage(modelBody, userSaid)) return { outcome: 'clean', text: modelBody, stripped: [] };
+  const trail = stripLeverageWithTrail(modelBody, userSaid);
+  if (detectEmotionalLeverage(trail.text, userSaid) || !trail.text.trim()) {
+    return { outcome: 'fallback', text: CRISIS_SAFE_FALLBACK, stripped: trail.stripped };
+  }
+  return { outcome: 'stripped', text: trail.text, stripped: trail.stripped };
 }
 
 /** 把推介付费咨询的句子整句剥掉（不够格时用；复用同一套剥句机制） */

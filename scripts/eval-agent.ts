@@ -498,6 +498,18 @@ async function main() {
         retrievedIds: t.retrieved.map((p) => p.id),
         // 闸写下的剥除留痕落进转录：没有它，"光秃是谁造成的"下次仍然不可判
         gateStrippedArticles: [...gateStrippedArticles(t)],
+        // 杠杆闸同理，且更要紧：闸前正文不留，这条 L1 只能永远报绿
+        leverage: (() => {
+          const ev = t.events.find(
+            (e) => e.event === 'notice' && e.data.code === 'EMOTIONAL_LEVERAGE_DETECTED',
+          );
+          if (!ev || ev.event !== 'notice') return undefined;
+          return {
+            outcome: ev.data.leverage_outcome ?? '未记',
+            stripped: ev.data.stripped_sentences ?? [],
+            bodyRaw: ev.data.model_body_raw,
+          };
+        })(),
         model: t.model,
         degraded: t.degraded,
         taskClass: t.taskClass,

@@ -22,9 +22,13 @@ import { describe, expect, it } from 'vitest';
  */
 const CRISIS_OUTPUT_GATES = [
   {
-    fn: 'stripLeverageWithTrail',
-    what: '情感杠杆句整句剥除（仅危机轮）｜**已留痕**',
+    fn: 'applyLeverageGate',
+    what: '情感杠杆闸**入口**：判 → 剥命中句 → 再判/剥空则回落兜底（仅危机轮）｜**已留痕**',
     enabled: true,
+    // 2026-08-26 重构：处置链从 orchestrator 搬进 crisis.ts，产线与评测只能经此入口。
+    // 登记册的扫描面**跟着搬**（见下方 SCANNED）——闸换了住处而检测器没跟过去，
+    // 等于把它从清单上悄悄划掉了，而清单还是绿的。
+    impl: 'crisis.ts',
     note:
       '2026-08-25 两层修：①引号内容来自用户原话＝复述，放行；②裸内疚短语须与"离开为前提"同现。' +
       '同日补留痕（stripped_sentences + leverage_outcome 入 notice）——' +
@@ -48,9 +52,17 @@ const CRISIS_OUTPUT_GATES = [
      */
   },
   {
+    fn: 'stripLeverageWithTrail',
+    what: '杠杆闸的剥句动作本体（由 applyLeverageGate 内部调用）',
+    enabled: true,
+    impl: 'crisis.ts',
+    note: '2026-08-26 前由 orchestrator 直接调；现已不导出——两边只能经入口，见 crisis.ts 该段注释',
+  },
+  {
     fn: 'CRISIS_SAFE_FALLBACK',
     what: '🔴 剥完仍命中或剥空 → 模型段整段丢弃，回落确定性安全回复（仅危机轮）',
     enabled: true,
+    impl: 'crisis.ts',
     note: '影响最大的一道：模型的话一个字都不下发',
     /**
      * 【触发条件与上游依赖 — 实测，manager 点名要这一栏】
@@ -136,7 +148,9 @@ const CRISIS_OUTPUT_GATES = [
 const NON_GATE_IMPORTS: Record<string, string> = {
   // —— ./crisis ——
   assessCrisis: '判定，返回 CrisisAssessment，不碰正文',
-  detectEmotionalLeverage: '检测器，返回命中句；剥除动作由 stripLeverageWithTrail 做',
+  leverageSubject:
+    '构造判定对象（模型段 + 用户语料），**不碰正文**。它存在的意义是把"两边传不同输入"' +
+    '关成写不出来——2026-08-26 那条假 L1 的机制级修法。',
   detectNbdpsyPitch: '检测器',
   assessNbdpsyEligibility: '判定',
   responseGaveCrisisCard: '判定',
@@ -158,6 +172,18 @@ const NON_GATE_IMPORTS: Record<string, string> = {
   precedentContamination: '检测器',
 };
 
+/**
+ * 【闸模块内部的 strip*，同样要表态】上面那份名册管的是 orchestrator 的导入；
+ * 这份管的是**闸模块内部**被调用的 strip*——2026-08-26 杠杆闸搬进 crisis.ts 之后，
+ * 只扫 orchestrator 就再也看不见它了。
+ */
+const NON_GATE_INTERNALS: Record<string, string> = {
+  stripSentencesMatching: '按句剔除的**通用机制**，本身不定义剥什么；具体闸各自登记',
+  stripUserQuotes:
+    '只作用于**判定副本**：把引号里来自用户原话的段抹掉再跑正则，' +
+    '**下发正文一个字不动**。它是第一层来源判别的实现，不是剥除器。',
+};
+
 /** 从 orchestrator 的 import 语句里取出某模块导入的全部**值**标识符（跳过 `type` 导入）。 */
 function importedValuesFrom(src: string, moduleSpec: string): string[] {
   const re = new RegExp(String.raw`import\s*\{([^}]*)\}\s*from\s*'${moduleSpec}'`, 'g');
@@ -174,26 +200,58 @@ function importedValuesFrom(src: string, moduleSpec: string): string[] {
 
 describe('危机轮输出流经的闸：登记册与漏登记检测', () => {
   const SRC = readFileSync(new URL('../orchestrator.ts', import.meta.url), 'utf8');
+  const SRC_CRISIS = readFileSync(new URL('../crisis.ts', import.meta.url), 'utf8');
+  /**
+   * 扫描面 = orchestrator + crisis。**2026-08-26 扩的，理由要留下**：
+   * 那天把杠杆闸的处置链从 orchestrator 搬进了 crisis.ts。如果扫描面不跟着搬，
+   * 这条检测会安静地转绿——因为它要找的东西已经不在它看的那个文件里了。
+   * **一个"目标搬走了就自动通过"的检测器，比没有检测器更糟：它还在报绿。**
+   */
+  const SCANNED = SRC + '\n' + SRC_CRISIS;
 
-  it('登记册里的每一项都真的出现在 orchestrator 里（防清单与代码脱节）', () => {
-    const missing = CRISIS_OUTPUT_GATES.filter((g) => !SRC.includes(g.fn)).map((g) => g.fn);
+  it('登记册里的每一项都真的出现在代码里（防清单与代码脱节）', () => {
+    const missing = CRISIS_OUTPUT_GATES.filter((g) => !SCANNED.includes(g.fn)).map((g) => g.fn);
     expect(missing, `登记了但代码里找不到（改名了？删了？）：${missing.join('、')}`).toEqual([]);
   });
 
-  it('★漏登记检测：orchestrator 里所有 strip* 调用都必须在登记册上', () => {
+  it('★漏登记检测：orchestrator 与 crisis 里所有 strip* 调用都必须表态', () => {
     // 扫真实调用，不靠人记得更新清单
-    const called = [...SRC.matchAll(/\b(strip[A-Z]\w+)\s*\(/g)].map((m) => m[1]);
+    const called = [...SCANNED.matchAll(/\b(strip[A-Z]\w+)\s*\(/g)].map((m) => m[1]);
     const registered = new Set<string>(CRISIS_OUTPUT_GATES.map((g) => g.fn));
-    const unregistered = [...new Set(called)].filter((fn) => !registered.has(fn));
+    const unregistered = [...new Set(called)].filter(
+      (fn) => !registered.has(fn) && !(fn in NON_GATE_INTERNALS),
+    );
     expect(
       unregistered,
-      `以下剥除环节在 orchestrator 里被调用但**没有登记**：${unregistered.join('、')}\n` +
-        `→ 危机轮的话会经过它而没人知道。请登记并给出它在危机轮的实测影响。`,
+      `以下剥除环节被调用但**没有表态**：${unregistered.join('、')}\n` +
+        `→ 危机轮的话会经过它而没人知道。请登记进 CRISIS_OUTPUT_GATES（并给出危机轮实测影响），` +
+        `或写进 NON_GATE_INTERNALS 并说明为什么它不改下发正文。`,
     ).toEqual([]);
   });
 
   it('自证扫得到东西（扫不到时上一条会假绿）', () => {
-    expect([...SRC.matchAll(/\bstrip[A-Z]\w+\s*\(/g)].length).toBeGreaterThanOrEqual(3);
+    expect([...SCANNED.matchAll(/\bstrip[A-Z]\w+\s*\(/g)].length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('★底层检测/剥除函数不许再导出（能力级关闭，不是"不该调"）', () => {
+    // 2026-08-26：评测侧少传 userSaid 把来源判别整层静默关掉，报了一条假 L1。
+    // 修法不是"记得传参数"——是让两边**只能**经 leverageSubject 交出全部输入。
+    // 这条测试守的就是"它别再长回来"：重新 export 任何一个，立刻红。
+    for (const name of ['detectEmotionalLeverage', 'stripLeverageWithTrail', 'stripLeverageSentences']) {
+      expect(
+        SRC_CRISIS.includes(`export function ${name}`),
+        `${name} 又被导出了。它一旦可以被两边各自直接调，"传不同输入"就重新变得可写——` +
+          `而那件事发生时不会有任何信号（2026-08-26 实测：tsc 绿、返回值正常、只是判据整层失效）。`,
+      ).toBe(false);
+    }
+  });
+
+  it('★首段与模型段的切分只有一份来源（判定面统一的前提）', () => {
+    // splitCrisisOpener 与 buildCrisisOpener 共用 CRISIS_OPENER_HEAD/TAIL 常量：
+    // 拆分若照抄字面量，改了一边忘了另一边会**静默拆错**，把整段当模型段判。
+    expect(SRC_CRISIS).toContain('const CRISIS_OPENER_HEAD');
+    expect(SRC_CRISIS).toContain('const CRISIS_OPENER_TAIL');
+    expect((SRC_CRISIS.match(/电话那头是受过训练的人/g) ?? []).length).toBe(1);
   });
 
   // ↓↓↓ 补 strip* 前缀扫不到的那一类（登记册六道里有两道不叫 strip）
@@ -220,7 +278,7 @@ describe('危机轮输出流经的闸：登记册与漏登记检测', () => {
     // 密封样本：不掺真实导入。否则 orchestrator 一旦真的多出未分类导入，
     // 这条负样本会跟着变红，把「自证」污染成「又一条重复告警」。
     const registered = new Set<string>(CRISIS_OUTPUT_GATES.map((g) => g.fn));
-    const fabricated = ['assessCrisis', 'stripLeverageWithTrail', 'redactPanicPhrases'];
+    const fabricated = ['assessCrisis', 'applyLeverageGate', 'redactPanicPhrases'];
     const unclassified = fabricated.filter((n) => !registered.has(n) && !(n in NON_GATE_IMPORTS));
     expect(unclassified).toEqual(['redactPanicPhrases']);
     // 同时确认旧的前缀扫描确实抓不到它——这就是为什么需要上面那条

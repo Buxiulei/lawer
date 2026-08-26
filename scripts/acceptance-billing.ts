@@ -75,7 +75,9 @@ async function freshDb() {
   return { db, userId, caseId };
 }
 
-type Db = { prepare: (sql: string) => { all: (...a: unknown[]) => unknown[]; run: (...a: unknown[]) => { lastInsertRowid: number | bigint } }; exec: (sql: string) => unknown; close: () => void };
+// 原生模块在 scripts/ 下**值和类型都解析不到**（与 eval-agent 同）；
+// 绕过去的办法是从产线模块把类型引出来——app/ 那边解析得到。
+type Db = ReturnType<typeof import('../app/src/lib/db/client').getDb>;
 const q = <T>(db: Db, sql: string): T[] => db.prepare(sql).all() as T[];
 let failures = 0;
 function check(name: string, ok: boolean, detail = '') {
@@ -95,7 +97,7 @@ async function main() {
 
   // ── 对照组：模型一次都没跑过的新库必须报绿（"没发生过的事不算漏账"，不知道 ≠ 零）──
   if (!reuse) {
-    const virgin = reconcile(db as never);
+    const virgin = reconcile(db);
     check('对照组：全新库（零 assistant 消息）对账报绿', virgin.problems.length === 0, `problems=${virgin.problems.length}`);
   }
 
@@ -142,7 +144,7 @@ async function main() {
   const mutate = (name: string, sql: string, expect: string) => {
     db.exec('BEGIN');
     db.exec(sql);
-    const r = reconcile(db as never);
+    const r = reconcile(db);
     db.exec('ROLLBACK');
     const hit = r.problems.find((x) => x.includes(expect));
     check(
@@ -169,7 +171,7 @@ async function main() {
     // 余额也要同步扣，否则 balance ≠ SUM(delta) 会先开火——**那样这条反向对照测的就不是它自己了**
     db.exec("INSERT INTO gongdao_ledger (user_id, delta, type, ref_id, feature) SELECT user_id, -3, '消耗', 'fixed-fee-probe', 'export' FROM gongdao LIMIT 1");
     db.exec('UPDATE gongdao SET balance = balance - 3');
-    const r = reconcile(db as never);
+    const r = reconcile(db);
     db.exec('ROLLBACK');
     check('反向：定额端点（有消耗无用量）只告警不判错',
       r.problems.length === 0 && r.warnings.some((w) => w.includes('fixed-fee-probe')),

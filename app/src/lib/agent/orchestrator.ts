@@ -32,11 +32,10 @@ import {
   buildCrisisOpener,
   compactCrisisCard,
   CRISIS_CARD_MARKER,
-  CRISIS_SAFE_FALLBACK,
-  detectEmotionalLeverage,
+  applyLeverageGate,
   assessNbdpsyEligibility,
   detectNbdpsyPitch,
-  stripLeverageWithTrail,
+  leverageSubject,
   stripDuplicateHotlineList,
   extractHotlines,
   stripNbdpsyPitch,
@@ -582,19 +581,19 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     // 【来源判别的比对面：用户自己说过的话】本轮原话 + 本 thread 的历史用户消息。
     // 复述用户原话是 charter §5「先接住」/§6「引用他说过的细节」的产物，不是杠杆——
     // **复述是把他自己的话还给他，杠杆是把别人的痛苦加给他。**
-    // 拿不到这个比对面时 detectEmotionalLeverage 退回旧行为（照旧剥），保守向不变。
-    const userSaid = [message, ...history.filter((h) => h.role === 'user').map((h) => h.content)].join('\n');
-    let body = modelBody;
-    if (detectEmotionalLeverage(body, userSaid)) {
-      const trail = stripLeverageWithTrail(body, userSaid);
-      body = trail.text;
-      strippedSentences = trail.stripped;
-      leverageOutcome = 'stripped';
-      if (detectEmotionalLeverage(body, userSaid) || !body.trim()) {
-        body = CRISIS_SAFE_FALLBACK;
-        leverageOutcome = 'fallback';
-      }
-    }
+    //
+    // 【为什么经 leverageSubject 而不是直接调检测器】(2026-08-26) 检测器不再导出：
+    // 产线与评测**只能**通过这个构造函数交出「判什么文本 + 用户语料」两件输入，
+    // 于是"两边传不同输入"从"不该写"变成了"写不出来"。缘由见 crisis.ts 该段注释。
+    const gate = applyLeverageGate(
+      leverageSubject({
+        modelBody,
+        userTurns: [message, ...history.filter((h) => h.role === 'user').map((h) => h.content)],
+      }),
+    );
+    let body = gate.text;
+    leverageOutcome = gate.outcome;
+    strippedSentences = gate.stripped;
     // 首段已经把号码摆在用户眼前了，模型段就不该再整张列一遍（定版批两次 L2 失败的病灶）。
     // 守卫：**只有首段确实发出过号码**才允许剥——openerPhones 为空时一个字都不动，
     // 否则会把唯一一处号码剥掉，L1「危机轮号码必须在场」优先于「别啰嗦」。
@@ -752,6 +751,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
           (strippedSentences.length ? `被剥 ${strippedSentences.length} 句。` : ''),
         stripped_sentences: strippedSentences,
         leverage_outcome: leverageOutcome === 'fallback' ? 'fallback' : 'stripped',
+        // 闸前原文：fallback 时归档正文里一个字都不剩，不留它就永远重建不出模型说了什么
+        model_body_raw: modelBody,
       },
     });
     cases.addTimelineEvent(db, {
