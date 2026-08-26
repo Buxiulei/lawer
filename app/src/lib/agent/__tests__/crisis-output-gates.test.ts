@@ -104,9 +104,10 @@ const CRISIS_OUTPUT_GATES = [
   },
   {
     fn: 'stripCrisisPaidContent',
-    what: '🔴 **D15 兜底（L1）**：危机轮里含付费入口/价格/预约链接的句子整句剥除',
+    what: '🔴 **D15 兜底（L1）**：危机轮里含付费入口/价格/预约链接的句子整句剥除｜**有剥空兜底**',
     enabled: true,
     impl: 'crisis.ts',
+    cascade: true,
     note:
       '开火即事故信号：推荐段在危机轮根本不生成，只可能是模型绕过工具直接在正文里说' +
       '（本仓已实测三次同形态绕过：危机卡自取检索、案号自取检索、正文直提 NBDpsy）。' +
@@ -166,6 +167,9 @@ const NON_GATE_IMPORTS: Record<string, string> = {
     '关成写不出来——2026-08-26 那条假 L1 的机制级修法。',
   detectNbdpsyPitch: '检测器',
   detectCrisisPaidContent: '检测器（D15 三禁区合一）；剥除动作由 stripCrisisPaidContent 做',
+  splitCrisisOpener:
+    '把归档正文拆成确定性首段与模型段，**不改任何一段的内容**。' +
+    'D15 剥除只作用于模型段——首段是危机轮唯一保证在场的号码来源，不参与剥除。',
   assessNbdpsyEligibility: '判定',
   responseGaveCrisisCard: '判定',
   shouldInjectCrisisCard: '判定',
@@ -314,8 +318,9 @@ describe('危机轮输出流经的闸：登记册与漏登记检测', () => {
 
   it('★级联放大器已标注且触发条件已实测（不是"几句"，是"还剩不剩"）', () => {
     const cascade = CRISIS_OUTPUT_GATES.filter((g) => 'cascade' in g && g.cascade);
-    expect(cascade.map((g) => g.fn)).toEqual(['CRISIS_SAFE_FALLBACK']);
-    expect(cascade[0].what).toContain('🔴');
+    // 2026-08-26 增第二条：D15 兜底同样会把模型段剥空 → 回落。**凡是能把正文剥光的，都要标。**
+    expect(cascade.map((g) => g.fn).sort()).toEqual(['CRISIS_SAFE_FALLBACK', 'stripCrisisPaidContent']);
+    for (const g of cascade) expect(g.what).toContain('🔴');
   });
 
   it('停用中的闸确实没在跑（按代码核实，不按注释）', () => {

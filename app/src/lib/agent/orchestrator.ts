@@ -34,9 +34,11 @@ import {
   CRISIS_CARD_MARKER,
   applyLeverageGate,
   assessNbdpsyEligibility,
+  CRISIS_SAFE_FALLBACK,
   detectCrisisPaidContent,
   detectNbdpsyPitch,
   leverageSubject,
+  splitCrisisOpener,
   stripCrisisPaidContent,
   stripDuplicateHotlineList,
   extractHotlines,
@@ -730,12 +732,26 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   if (crisis.triggered) {
     const paid = detectCrisisPaidContent(text);
     if (paid) {
-      text = stripCrisisPaidContent(text);
+      // 【只剥模型段，且必须有剥空兜底】(评测官 2026-08-26 指出：这道闸原本剥完就走)
+      // 杠杆闸早就有兜底（剥空 → CRISIS_SAFE_FALLBACK），这道没有——于是危机轮里
+      // **正文可能被整段掏空，用户只剩确定性首段**，而那正是级联放大器最坏的形态。
+      // 确定性首段不参与剥除：它是我们自己的固定文本，且是危机轮里唯一保证在场的号码来源。
+      const { opener, body } = splitCrisisOpener(text);
+      const kept = stripCrisisPaidContent(body);
+      const emptied = !kept.trim();
+      text = opener ? `${opener}\n\n${emptied ? CRISIS_SAFE_FALLBACK : kept}` : (emptied ? CRISIS_SAFE_FALLBACK : kept);
       emit({
         event: 'notice',
         data: {
           code: 'CRISIS_PAID_CONTENT_BLOCKED',
-          message: `危机轮出现付费内容「${paid}」，已整句剥除（spec D15，L1 红线：此刻只给免费公益热线）。`,
+          // 【措辞要说准，因为这条挂着 L1 的否决权】(评测官 2026-08-26)
+          // 「出现付费内容」与「模型在算赔偿」是两件性质完全不同的事，后者属 L2
+          //「危机轮继续推进案情」。判据侧已按同句法律钱款语境把赔偿数字排除在本闸之外，
+          // 所以走到这里的命中**确实是商业内容**——但把片段原样写进 notice，
+          // 让人一眼能自己复核，而不是只能相信这条 L1。
+          message:
+            `危机轮出现付费/预约内容「${paid}」，已整句剥除（spec D15，L1 红线：此刻只给免费公益热线）。` +
+            (emptied ? '剥后模型段为空，已回落确定性安全回复。' : ''),
         },
       });
     }
