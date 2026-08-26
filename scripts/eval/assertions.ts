@@ -968,11 +968,20 @@ export function fullCardOccurrences(turns: TurnRecord[], facts?: { hotlines?: Ho
  * （第 14 条教训的形状：**规矩由测试执行，否则只写在文档里**。）
  */
 export function cardShapeAgrees(text: string, phones: string[]): boolean {
-  const lines = text.split('\n').filter((line) => phones.some((p) => line.includes(p)));
-  const evalSaysFullCard = lines.length >= 2;
-  // 产线口径：stripDuplicateHotlineList 在含号码行 ≥2 时才动手剥
+  // 【2026-08-26 改：从钉**派生谓词**改为钉**原语**】
+  // 旧版断言的是两侧对「含号码行 ≥2」这个派生谓词一致——**而那个定义本身是错的**
+  //（它数的是行不是卡）。**钉在派生谓词上，等于把错误定义一起冻结进了执行物，
+  // 而这条测试每跑一次绿，那个错误定义就被"验证"一次。**
+  //
+  // 评测官补的另一面同样要记：**这条断言确实消灭了分歧——分歧消失的方式是
+  // 两边一起搬到了错的定义上。一条断言消灭了它要检测的信号，不等于它解决了问题。**
+  //
+  // 现在两侧共用 `cardOccurrences` 原语，各取各的派生量：
+  // 判据取 `.length`，出口闸剥 `.slice(1)` 所占的行。
+  // ⇒ 本函数只保证**"两把尺子一样长"**；**"尺子量什么"由原语的判准单独负责、单独被样本钉住。**
+  const evalSaysRepeat = cardOccurrences(text, phones).length >= 2;
   const prodWouldStrip = stripDuplicateHotlineList(text, phones) !== text;
-  return evalSaysFullCard === prodWouldStrip;
+  return evalSaysRepeat === prodWouldStrip;
 }
 
 
