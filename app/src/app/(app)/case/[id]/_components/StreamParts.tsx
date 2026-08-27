@@ -109,10 +109,10 @@ export function InstantReplyCard({ text }: { text: string }) {
   return (
     <div
       data-veil=""
-      className="prose-measure my-2 rounded-[12px] border-l-4 border-primary bg-surface-2 py-3 pr-3.5 pl-3"
+      className="prose-measure my-2 rounded-[12px] bg-primary px-3.5 py-3 text-on-primary"
     >
-      <p className="text-[12px] leading-5 text-ink-2">即时回应</p>
-      <div className="mt-1.5 space-y-1.5 text-[16px] leading-[1.75] text-ink">
+      <p className="text-[12px] leading-5 opacity-80">即时回应</p>
+      <div className="mt-1.5 space-y-1.5 text-[16px] leading-[1.75]">
         {lines.map((line, i) => (
           <p key={i}>{line}</p>
         ))}
