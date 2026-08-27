@@ -1,4 +1,4 @@
-import { launchIsolated, lowEndPage, sleep, BASE } from './lib.mjs';
+import { launchIsolated, lowEndPage, sleep, BASE, shutdown } from './lib.mjs';
 const { browser, proc } = await launchIsolated();
 try {
   for (const w of [393, 768, 1280]) {
@@ -21,4 +21,4 @@ try {
     console.log('   按底色:', JSON.stringify(r.按底色分布));
     await ctx.close();
   }
-} finally { await browser.close().catch(()=>{}); proc.kill('SIGTERM'); }
+} finally { await shutdown({ browser, proc }); }

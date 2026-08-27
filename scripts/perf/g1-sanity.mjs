@@ -1,4 +1,4 @@
-import { launchIsolated, lowEndPage, seedDiscreet, sleep, BASE, treeCpuMs } from './lib.mjs';
+import { launchIsolated, lowEndPage, seedDiscreet, sleep, BASE, treeCpuMs, shutdown } from './lib.mjs';
 
 /**
  * 仪器灵敏度检验：如果连 blur(40px) 都测不出代价，那 blur(5px) 测出 0 就不是"没代价"，
@@ -49,5 +49,5 @@ try {
     console.error(`  ${name.padEnd(24)} 掉帧${rows.at(-1).掉帧率pct}% CPU=${rows.at(-1).树CPUms}ms 最大帧${rows.at(-1).最大帧间隔ms}ms`);
     await ctx.close();
   }
-} finally { await browser.close().catch(() => {}); proc.kill('SIGTERM'); }
+} finally { await shutdown({ browser, proc }); }
 console.log(JSON.stringify(rows, null, 1));

@@ -1,4 +1,4 @@
-import { launchIsolated, lowEndPage, seedDiscreet, sleep, BASE, treeCpuMs } from './lib.mjs';
+import { launchIsolated, lowEndPage, seedDiscreet, sleep, BASE, treeCpuMs, shutdown } from './lib.mjs';
 
 const ROUTE = process.argv[2] || '/case/demo';
 const REPEATS = Number(process.argv[3] || 3);
@@ -88,5 +88,5 @@ try {
     out.runs[on ? 'on' : 'off'].push(r);
     console.error(`  [${i + 1}/${REPEATS}] ${on ? 'ON ' : 'OFF'} 滚动${r.scrolledPx}px LCP=${r.lcpMs} 掉帧=${r.scroll.dropRatePct}% 树CPU=${r.浏览器进程树CPUms}ms 长任务=${r.longScroll.count}`);
   }
-} finally { await browser.close().catch(() => {}); proc.kill('SIGTERM'); }
+} finally { await shutdown({ browser, proc }); }
 console.log(JSON.stringify(out, null, 1));

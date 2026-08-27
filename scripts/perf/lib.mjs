@@ -22,9 +22,18 @@ const { chromium } = require('playwright-core');
 
 /** 被测站点。默认 3127，用 PERF_BASE 覆盖。 */
 export const BASE = process.env.PERF_BASE || 'http://127.0.0.1:3127';
-/** Chrome 用户目录。**必须独立**，默认丢临时目录，用 PERF_PROFILE 覆盖。 */
+/**
+ * Chrome 用户目录。**必须独立**。
+ *
+ * 默认**每个进程一个新目录**而不是固定路径：固定路径会被 Chrome 的 SingletonLock
+ * 锁住，于是①两个测量同时跑会撞，②**上一次跑崩了没清干净，之后每次都起不来**——
+ * 而报出来的错只是"Chrome 起不来"，看不出是锁的问题。
+ * 想要可复用的稳定 profile（比如留着登录态）就传 PERF_PROFILE。
+ */
 export const PROFILE =
-  process.env.PERF_PROFILE || path.join(os.tmpdir(), 'lawer-perf-chrome-profile');
+  process.env.PERF_PROFILE || fs.mkdtempSync(path.join(os.tmpdir(), 'lawer-perf-'));
+/** 只清我们自己临时造的那个，PERF_PROFILE 指定的目录不碰。 */
+const PROFILE_IS_TEMP = !process.env.PERF_PROFILE;
 /** 系统 Chrome 路径，用 PERF_CHROME 覆盖。 */
 export const CHROME = process.env.PERF_CHROME || '/usr/bin/google-chrome';
 /** 有头模式用的 X 显示（需先 `Xvfb :95 -screen 0 400x900x24 &`）。 */
@@ -68,7 +77,12 @@ export async function launchIsolated({ headed = false, display = DISPLAY } = {})
     await new Promise((r) => setTimeout(r, 250));
   }
   proc.kill('SIGTERM');
-  throw new Error(headed ? `独立 Chrome 起不来（有头模式需要 Xvfb ${display} 在跑）` : '独立 Chrome 起不来');
+  throw new Error(
+    `独立 Chrome 起不来（15 秒内没等到调试端口 ${port}）。常见原因：\n` +
+      `  - profile ${PROFILE} 被另一个 Chrome 占着（SingletonLock）\n` +
+      (headed ? `  - 有头模式需要 Xvfb ${display} 在跑：Xvfb ${display} -screen 0 400x900x24 &\n` : '') +
+      `  - ${CHROME} 起不来，手动跑一次看报什么`,
+  );
 }
 
 /** 低端机档位：Moto G Power 级 —— 393x852 / DPR2.625 / 触摸 / CPU 4x 降频 / Slow 4G。 */
@@ -120,4 +134,11 @@ export function treeCpuMs(rootPid) {
     stack.push(...kids(pid));
   }
   return +total.toFixed(1);
+}
+
+/** 收尾：关浏览器、停进程、清掉我们自己造的临时 profile。 */
+export async function shutdown({ browser, proc }) {
+  try { await browser?.close(); } catch {}
+  try { proc?.kill('SIGTERM'); } catch {}
+  if (PROFILE_IS_TEMP) { try { fs.rmSync(PROFILE, { recursive: true, force: true }); } catch {} }
 }

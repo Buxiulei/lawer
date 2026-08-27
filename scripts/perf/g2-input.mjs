@@ -1,4 +1,4 @@
-import { launchIsolated, lowEndPage, seedDiscreet, sleep, BASE } from './lib.mjs';
+import { launchIsolated, lowEndPage, seedDiscreet, sleep, BASE, shutdown } from './lib.mjs';
 
 const R = [];
 const rec = (name, pass, detail) => { R.push({ 项: name, 结果: pass === null ? '无法真实模拟' : pass ? 'PASS' : 'FAIL', 实测: detail });
@@ -112,5 +112,5 @@ try {
     }
     await ctx.close();
   }
-} finally { await browser.close().catch(() => {}); proc.kill('SIGTERM'); }
+} finally { await shutdown({ browser, proc }); }
 console.log(JSON.stringify(R, null, 1));
