@@ -571,27 +571,67 @@ describe('L1 全集守卫：每条红线都必须真实存在且判为 L1', () =
    * 所以这条不查函数，**查 runner 的源码里有没有它的调用点**——
    * 静态检查很粗糙，但它守的正是上面那组结构上看不见的那一格。
    */
-  it('★L1 清单里的每个机械判据，runner 里都必须有调用点（不是只有 import）', () => {
-    const raw = readFileSync(new URL('../eval-agent.ts', import.meta.url), 'utf8');
-    // 【必须先剥注释 · 这条守卫第一版就栽在这里】
-    // 我在调用点上方写了段解释，里面引用了 `...nbdpsyPitchAssertions(` 这个形状本身——
-    // **于是把调用点删掉之后，正则仍然匹到了那句注释，守卫照样绿。**
-    // **注释里对 bug 的描述，长得和修复一模一样。**（变异测试当场抓住，否则这条守卫等于没写）
-    const runner = raw
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .split('\n')
-      .filter((l) => !l.trim().startsWith('//'))
-      .join('\n');
-    const missing: string[] = [];
-    for (const { name, probe } of L1_CHECKLIST) {
-      if (probe.kind !== 'mechanical') continue;
-      const fn = probe.fn.split(':')[0]; // globalAssertions:G1 → globalAssertions
-      // 调用点的形状：`...fn(` —— 与 import 行（`  fn,`）区分开
-      if (!new RegExp(`\\.\\.\\.${fn}\\(`).test(runner)) missing.push(`${name}（${fn}）`);
+  /**
+   * 【接线守卫（泛化版）· 2026-08-28 manager 裁定】
+   *
+   * **守一条是补丁，守全部才是机制。** 第一版只守 `L1_CHECKLIST` 里的 mechanical 项——
+   * 而 `coreRenderObservabilityAssertions`（不是 L1）**同样从未被调用过**，
+   * 全历史零调用、它的两个 id 在 174 份归档成绩单里零命中。**它在第一版的作用域外。**
+   *
+   * 我划第一版作用域时的漏洞，比它抓到的 bug 更该记：
+   * > **我划边界的时候没有问"边界外还有谁"。一条守卫的作用域如果没有配一份
+   * >「边界外都有什么」的清单，它的沉默同样无法与缺席区分。**
+   *
+   * 后台技术补的半句是这条的终点：
+   * > **作用域是守卫唯一不能自我检查的部分**——守卫能验它管的每一条，
+   * > **验不了"它该管几条"**，因为那个数只存在于写它的人脑子里。
+   *
+   * ⇒ 本版**枚举 `assertions.ts` 导出的每一个 `*Assertions`**，双向判定：
+   *   · 没接线且不在 `UNWIRED_BY_DESIGN` 名册 ⇒ 红
+   *   · **在名册但其实已接线 ⇒ 也红**（过期的豁免和缺失的豁免一样坏）
+   * **名册把"该管几条"从脑子里搬到了文件里，于是那个数也能被红一次。**
+   */
+  const UNWIRED_BY_DESIGN: Record<string, string> = {
+    // 目前为空。**空表本身是一条断言**：所有导出的判据族都必须接线。
+    // 要豁免某一条，在这里写 fn → 理由，让豁免这件事被看见、被复核。
+  };
+
+  it('★每个导出的 *Assertions 都必须在 runner 或 scenarios 里有调用点（双向）', () => {
+    const stripComments = (src: string) =>
+      src
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .split('\n')
+        .filter((l) => !l.trim().startsWith('//'))
+        .join('\n');
+    // 【必须剥注释】第一版栽在这里：我写在调用点上方的解释注释里引用了调用形状本身，
+    // **删掉调用点后正则仍匹到注释，守卫照样绿**——注释里对 bug 的描述，长得和修复一模一样。
+    const decl = readFileSync(new URL('./assertions.ts', import.meta.url), 'utf8');
+    const callers =
+      stripComments(readFileSync(new URL('../eval-agent.ts', import.meta.url), 'utf8')) +
+      '\n' +
+      // 【必须同时扫 scenarios.ts】irreversibleDecisionAssertions / sceneMismatchAssertions
+      // **只经剧本调用**；只扫 runner 会把这两条误报成未接线（后台技术的比对提示）。
+      stripComments(readFileSync(new URL('./scenarios.ts', import.meta.url), 'utf8'));
+
+    const exported = [...decl.matchAll(/^export function (\w*Assertions)\b/gm)].map((m) => m[1]);
+    expect(exported.length, '一个 *Assertions 都没扫到——正则或路径坏了，不许把这个空当通过').toBeGreaterThan(5);
+
+    const unwired: string[] = [];
+    const staleExemption: string[] = [];
+    for (const fn of exported) {
+      // 匹 `fn(` 而不是 `...fn(`：剧本里未必是展开调用
+      const wired = new RegExp(`\\b${fn}\\(`).test(callers);
+      if (!wired && !(fn in UNWIRED_BY_DESIGN)) unwired.push(fn);
+      if (wired && fn in UNWIRED_BY_DESIGN) staleExemption.push(fn);
     }
     expect(
-      missing,
-      `这些 L1 登记了但 runner 里没有调用点——**它们在跑批里根本不执行，而清单与单测都是绿的**：\n  ${missing.join('\n  ')}`,
+      unwired,
+      `这些判据族没有调用点——**它们在跑批里根本不执行，而单测与清单都是绿的**。\n` +
+        `  要么接线，要么写进 UNWIRED_BY_DESIGN 并给出理由：\n  ${unwired.join('\n  ')}`,
+    ).toEqual([]);
+    expect(
+      staleExemption,
+      `这些在 UNWIRED_BY_DESIGN 名册里、但其实已经接线了——**过期的豁免和缺失的豁免一样坏**：\n  ${staleExemption.join('\n  ')}`,
     ).toEqual([]);
   });
 

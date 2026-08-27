@@ -30,6 +30,7 @@ import { makeAgentFixture } from '../app/src/lib/agent/__tests__/fixtures';
 import { API_KEY_ENV, route, type Plan, type TaskClass } from '../app/src/lib/llm';
 import {
   bannedHotlineAssertions,
+  coreRenderObservabilityAssertions,
   nbdpsyPitchAssertions,
   landlineMarkAssertions,
   tier,
@@ -269,6 +270,11 @@ async function runScenario(scenario: Scenario, plan: Plan): Promise<ScenarioRepo
     // **「干净即无声」把这件事藏了三天**——没产出既可能是合规、也可能是没接线，
     // 两者在成绩单上完全一样。**配置好了不等于接上了。**
     ...nbdpsyPitchAssertions(turns),
+    // 【⭐机制可观测 · 2026-08-28 补接线】同形态第二条：
+    // 它在 `eb898da` 就写好了，**连 import 都没有过**，全历史零调用、
+    // 两个 id 在 174 份归档成绩单里零命中。是泛化后的接线守卫枚举出来的。
+    // 三态各走各的路：留痕缺失 → na(observability_missing)；候选非空∧渲染为空 → FAIL；其余 PASS。
+    ...coreRenderObservabilityAssertions(turns, scenario.id),
     // G4 依据纪律的机械那一半：引了条号就必须带逐字原文。全剧本逐轮，
     // 判据与产线出口侧的留痕检测同源（bareArticleCitations）。
     // 库内已有逐字原文的条号全集：本轮检索到的卡现取（补卡到位即自动升级判定标准）
