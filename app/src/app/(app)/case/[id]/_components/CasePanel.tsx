@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { useState } from 'react';
+import Link from "next/link";
+import { useState } from "react";
 import type {
   ActionItem,
   Claim,
@@ -10,28 +10,33 @@ import type {
   EvidenceStatus,
   TimelineEvent,
   TimelineKind,
-} from '@/app/_mock/types';
+} from "@/app/_mock/types";
 import {
   demoClaims,
   demoDeadlines,
   demoEvidence,
   demoTimeline,
-} from '@/app/_mock/demo';
-import { mockCompanyGraph } from '@/app/_mock/company-graph';
-import { useDiscreet } from '@/app/_ui/discreet';
-import { NEUTRAL_WORD } from '@/app/_ui/neutral';
-import { cn } from '@/app/_ui/cn';
-import { formatDate } from '@/app/_ui/format';
-import { AmountText } from '@/components/case/AmountText';
-import { DeadlineChip } from '@/components/case/DeadlineChip';
+} from "@/app/_mock/demo";
+import { mockCompanyGraph } from "@/app/_mock/company-graph";
+import { useDiscreet } from "@/app/_ui/discreet";
+import { NEUTRAL_WORD } from "@/app/_ui/neutral";
+import { cn } from "@/app/_ui/cn";
+import { formatDate } from "@/app/_ui/format";
+import { AmountText } from "@/components/case/AmountText";
+import { DeadlineChip } from "@/components/case/DeadlineChip";
 import {
   EvidenceBadge,
   OriginalMediumNotice,
-} from '@/components/case/EvidenceBadge';
-import { Badge } from '@/components/shadcn/badge';
-import { Card, CardBody, CardHeader } from '@/components/ui/Card';
-import { Sensitive } from '@/components/Sensitive';
-import { MaskedText } from './RichText';
+} from "@/components/case/EvidenceBadge";
+import { Badge } from "@/components/shadcn/badge";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/shadcn/card";
+import { Sensitive } from "@/components/Sensitive";
+import { MaskedText } from "./RichText";
 
 /**
  * 案件档案面板：时间线 / 诉求金额 / 证据摘要 / 待办与截止日。
@@ -58,30 +63,35 @@ export function CasePanel({
 /* ── 时间线 ───────────────────────────────────────────────── */
 
 const KIND_DOT: Record<TimelineKind, string> = {
-  公司动作: 'bg-amber',
-  我方动作: 'bg-primary',
-  系统动作: 'bg-ink-2',
-  期限: 'bg-amber',
+  公司动作: "bg-amber",
+  我方动作: "bg-primary",
+  系统动作: "bg-ink-2",
+  期限: "bg-amber",
 };
 
 const VISIBLE_EVENTS = 4;
 
 function TimelineBlock({ events }: { events: TimelineEvent[] }) {
   const [all, setAll] = useState(false);
-  const ordered = [...events].sort((a, b) => b.happenedAt.localeCompare(a.happenedAt));
+  const ordered = [...events].sort((a, b) =>
+    b.happenedAt.localeCompare(a.happenedAt),
+  );
   const shown = all ? ordered : ordered.slice(0, VISIBLE_EVENTS);
 
   return (
     <Card>
-      <CardHeader
-        title="时间线"
-        action={<span className="num text-[13px] text-ink-2">{events.length} 条</span>}
-      />
-      <CardBody>
+      <CardHeader className={HEADER_COMPAT}>
+        <CardTitle className={TITLE_COMPAT}>时间线</CardTitle>
+        <span className="num text-[13px] text-ink-2">{events.length} 条</span>
+      </CardHeader>
+      <CardContent>
         <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-ink-2">
-          {(['公司动作', '我方动作', '系统动作'] as const).map((kind) => (
+          {(["公司动作", "我方动作", "系统动作"] as const).map((kind) => (
             <span key={kind} className="inline-flex items-center gap-1.5">
-              <span className={cn('size-2 rounded-full', KIND_DOT[kind])} aria-hidden />
+              <span
+                className={cn("size-2 rounded-full", KIND_DOT[kind])}
+                aria-hidden
+              />
               {kind}
             </span>
           ))}
@@ -97,14 +107,16 @@ function TimelineBlock({ events }: { events: TimelineEvent[] }) {
               <span
                 aria-hidden
                 className={cn(
-                  'absolute top-[7px] -left-5 size-2 rounded-full ring-4 ring-surface',
+                  "absolute top-[7px] -left-5 size-2 rounded-full ring-4 ring-surface",
                   KIND_DOT[e.kind],
                 )}
               />
               <p className="num text-[13px] leading-6 text-ink-2">
                 {formatDate(e.happenedAt)}
               </p>
-              <p className="text-[15px] leading-6 font-medium text-ink">{e.title}</p>
+              <p className="text-[15px] leading-6 font-medium text-ink">
+                {e.title}
+              </p>
               <p className="mt-0.5 line-clamp-2 text-[14px] leading-6 text-ink-2">
                 <MaskedText text={e.detail} />
               </p>
@@ -118,10 +130,10 @@ function TimelineBlock({ events }: { events: TimelineEvent[] }) {
             onClick={() => setAll((v) => !v)}
             className="mt-2 min-h-11 text-[14px] text-primary-ink"
           >
-            {all ? '只看最近 4 条' : `展开全部 ${ordered.length} 条`}
+            {all ? "只看最近 4 条" : `展开全部 ${ordered.length} 条`}
           </button>
         )}
-      </CardBody>
+      </CardContent>
     </Card>
   );
 }
@@ -131,15 +143,13 @@ function TimelineBlock({ events }: { events: TimelineEvent[] }) {
 function CompanyGraphBlock({ caseId }: { caseId: string }) {
   return (
     <Card>
-      <CardHeader
-        title="公司图谱"
-        action={
-          <span className="num text-[13px] text-ink-2">
-            {mockCompanyGraph.nodes.length} 个主体
-          </span>
-        }
-      />
-      <CardBody>
+      <CardHeader className={HEADER_COMPAT}>
+        <CardTitle className={TITLE_COMPAT}>公司图谱</CardTitle>
+        <span className="num text-[13px] text-ink-2">
+          {mockCompanyGraph.nodes.length} 个主体
+        </span>
+      </CardHeader>
+      <CardContent>
         <p data-veil="" className="text-[14px] leading-6 text-ink-2">
           跟你签合同的、给你发工资的、背后控股的，常常不是同一家。
         </p>
@@ -149,17 +159,31 @@ function CompanyGraphBlock({ caseId }: { caseId: string }) {
         >
           看它们的关系 →
         </Link>
-      </CardBody>
+      </CardContent>
     </Card>
   );
 }
 
 /* ── 诉求金额 ─────────────────────────────────────────────── */
 
+/**
+ * 批 0 临时补丁：把 shadcn Card 拉回手写版 Card 的像素。
+ * - header 原本 items-center（15px 标题与 13px 计数视觉居中），shadcn 默认 items-start
+ * - 标题原本没写行高、继承 body 的 1.7（15px→25.5px），CardTitle 自带 leading-7（28px）
+ * 两处都只影响间距不影响语义。**批 1 按 GOV.UK Summary List 重做 CasePanel 时，
+ * 连同这两个常量和旧结构一起删。**
+ *
+ * 右侧计数**不套 CardAction**：那个包裹 <div> 只加 shrink-0（justify-between 本来就够），
+ * 但它自己的 strut 用的是 body 的 16px×1.7=27.2px，比里面 13px span 的 22.1px 高，
+ * 每个 header 因此涨 1.69px。**页面总高看不出来（侧栏自己滚），只有逐像素比对抓得到。**
+ */
+const HEADER_COMPAT = "items-center";
+const TITLE_COMPAT = "leading-[1.7]";
+
 const CLAIM_TONE = {
-  已确认: 'success',
-  待补证: 'amber',
-  初算: 'neutral',
+  已确认: "success",
+  待补证: "amber",
+  初算: "neutral",
 } as const;
 
 function ClaimsBlock({ claims }: { claims: Claim[] }) {
@@ -167,8 +191,12 @@ function ClaimsBlock({ claims }: { claims: Claim[] }) {
 
   return (
     <Card>
-      <CardHeader title={<span data-veil="">诉求金额</span>} />
-      <CardBody>
+      <CardHeader className={HEADER_COMPAT}>
+        <CardTitle className={TITLE_COMPAT}>
+          <span data-veil="">诉求金额</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
         <table className="w-full border-collapse">
           <caption className="sr-only">诉求种类、金额与依据</caption>
           <tbody>
@@ -199,7 +227,10 @@ function ClaimsBlock({ claims }: { claims: Claim[] }) {
           </tbody>
           <tfoot>
             <tr data-veil="" className="border-t-2 border-line">
-              <th scope="row" className="py-3 text-left text-[15px] font-semibold text-ink">
+              <th
+                scope="row"
+                className="py-3 text-left text-[15px] font-semibold text-ink"
+              >
                 合计
               </th>
               <td className="py-3 text-right">
@@ -213,14 +244,14 @@ function ClaimsBlock({ claims }: { claims: Claim[] }) {
         <p data-veil="" className="mt-1 text-[13px] leading-6 text-ink-2">
           初算值，随证据补充调整；北京口径，月工资未触及三倍社平封顶。
         </p>
-      </CardBody>
+      </CardContent>
     </Card>
   );
 }
 
 /* ── 证据摘要 ─────────────────────────────────────────────── */
 
-const EVIDENCE_ORDER: EvidenceStatus[] = ['已出证', '已固化', '已上传'];
+const EVIDENCE_ORDER: EvidenceStatus[] = ["已出证", "已固化", "已上传"];
 
 function EvidenceBlock({
   caseId,
@@ -237,11 +268,13 @@ function EvidenceBlock({
 
   return (
     <Card>
-      <CardHeader
-        title={<span data-veil="">证据清单</span>}
-        action={<span className="num text-[13px] text-ink-2">{items.length} 件</span>}
-      />
-      <CardBody>
+      <CardHeader className={HEADER_COMPAT}>
+        <CardTitle className={TITLE_COMPAT}>
+          <span data-veil="">证据清单</span>
+        </CardTitle>
+        <span className="num text-[13px] text-ink-2">{items.length} 件</span>
+      </CardHeader>
+      <CardContent>
         <div data-veil="" className="flex flex-wrap items-center gap-2">
           {counts.map(({ status, n }) => (
             <span key={status} className="inline-flex items-center gap-1">
@@ -254,12 +287,17 @@ function EvidenceBlock({
         <ul className="mt-3 flex flex-col gap-2">
           {items.slice(0, 3).map((item) => (
             <li key={item.id} data-veil="" className="flex items-start gap-2">
-              <span className="mt-2 size-1.5 shrink-0 rounded-full bg-line" aria-hidden />
+              <span
+                className="mt-2 size-1.5 shrink-0 rounded-full bg-line"
+                aria-hidden
+              />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[14px] leading-6 text-ink">
                   {item.name}
                 </span>
-                <span className="text-[13px] leading-5 text-ink-2">{item.category}</span>
+                <span className="text-[13px] leading-5 text-ink-2">
+                  {item.category}
+                </span>
               </span>
             </li>
           ))}
@@ -271,13 +309,14 @@ function EvidenceBlock({
           href={`/case/${caseId}/evidence`}
           className="mt-2 inline-flex min-h-11 items-center text-[14px] text-primary-ink"
         >
-          查看全部 {items.length} 件{discreet ? NEUTRAL_WORD.evidence : '证据'} →
+          查看全部 {items.length} 件{discreet ? NEUTRAL_WORD.evidence : "证据"}{" "}
+          →
         </Link>
 
         <div className="mt-1">
           <OriginalMediumNotice />
         </div>
-      </CardBody>
+      </CardContent>
     </Card>
   );
 }
@@ -292,22 +331,25 @@ function TodoBlock({
   deadlines: Deadline[];
 }) {
   const open = actions
-    .filter((a) => a.status !== '完成')
-    .sort((a, b) => a.priority - b.priority || (a.dueAt ?? '').localeCompare(b.dueAt ?? ''));
-  const done = actions.filter((a) => a.status === '完成');
-  const sortedDeadlines = [...deadlines].sort((a, b) => a.dueAt.localeCompare(b.dueAt));
+    .filter((a) => a.status !== "完成")
+    .sort(
+      (a, b) =>
+        a.priority - b.priority || (a.dueAt ?? "").localeCompare(b.dueAt ?? ""),
+    );
+  const done = actions.filter((a) => a.status === "完成");
+  const sortedDeadlines = [...deadlines].sort((a, b) =>
+    a.dueAt.localeCompare(b.dueAt),
+  );
 
   return (
     <Card>
-      <CardHeader
-        title="待办与截止日"
-        action={
-          <span className="num text-[13px] text-ink-2">
-            {done.length}/{actions.length}
-          </span>
-        }
-      />
-      <CardBody>
+      <CardHeader className={HEADER_COMPAT}>
+        <CardTitle className={TITLE_COMPAT}>待办与截止日</CardTitle>
+        <span className="num text-[13px] text-ink-2">
+          {done.length}/{actions.length}
+        </span>
+      </CardHeader>
+      <CardContent>
         <ul className="flex flex-col gap-3">
           {open.map((a) => (
             <li key={a.id} data-veil="">
@@ -339,12 +381,14 @@ function TodoBlock({
                 <span className="mt-1 inline-block">
                   <DeadlineChip dueAt={d.dueAt} showDate />
                 </span>
-                <p className="mt-1 text-[13px] leading-6 text-ink-2">{d.derivedFrom}</p>
+                <p className="mt-1 text-[13px] leading-6 text-ink-2">
+                  {d.derivedFrom}
+                </p>
               </li>
             ))}
           </ul>
         </div>
-      </CardBody>
+      </CardContent>
     </Card>
   );
 }
