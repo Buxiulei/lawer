@@ -53,25 +53,25 @@ export function AdviceCard({
       <span className={cn('absolute inset-y-0 left-0 w-1', skin.line)} aria-hidden />
 
       <div data-veil="" className="px-4 py-4">
-        <p className="text-[13px] font-medium text-ink-2">签署建议</p>
+        <p className="fs-xs font-medium text-ink-2">签署建议</p>
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <strong className={cn('text-[30px] leading-10 font-semibold', skin.word)}>
+          <strong className={cn('fs-xl font-semibold', skin.word)}>
             {advice}
           </strong>
-          <span className="text-[15px] leading-7 text-ink">{ADVICE_SUMMARY[advice]}</span>
+          <span className="fs-m text-ink">{ADVICE_SUMMARY[advice]}</span>
         </div>
 
-        <p className="prose-measure mt-3 text-[15px] leading-7 text-ink">
+        <p className="prose-measure mt-3 fs-m text-ink">
           <SensitiveText text={detail} />
         </p>
 
         {revisePoints && revisePoints.length > 0 && (
           <div className="mt-4 rounded-[10px] bg-card p-3.5">
-            <h3 className="text-[15px] font-semibold text-ink">逐条改成这样再签</h3>
+            <h3 className="fs-m font-semibold text-ink">逐条改成这样再签</h3>
             <ol className="mt-2 flex flex-col gap-2">
               {revisePoints.map((point, i) => (
-                <li key={i} className="flex gap-2.5 text-[15px] leading-7 text-ink-2">
-                  <span className="num mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[13px] font-semibold text-ink">
+                <li key={i} className="flex gap-2.5 fs-m text-ink-2">
+                  <span className="num mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-2 fs-xs font-semibold text-ink">
                     {i + 1}
                   </span>
                   <span className="min-w-0">

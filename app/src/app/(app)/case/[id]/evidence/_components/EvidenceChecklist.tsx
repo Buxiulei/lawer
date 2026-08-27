@@ -12,8 +12,8 @@ export function EvidenceChecklist({ collapsible = false }: { collapsible?: boole
   if (!collapsible) {
     return (
       <section>
-        <h3 className="text-[16px] font-semibold text-ink">这些先传，越早越好</h3>
-        <p data-veil="" className="prose-measure mt-1 text-[15px] leading-7 text-ink-2">
+        <h3 className="fs-m font-semibold text-ink">这些先传，越早越好</h3>
+        <p data-veil="" className="prose-measure mt-1 fs-m text-ink-2">
           {LEAD}
         </p>
         <List />
@@ -25,12 +25,12 @@ export function EvidenceChecklist({ collapsible = false }: { collapsible?: boole
     <details className="rounded-[12px] border border-line bg-surface">
       <summary
         data-veil=""
-        className="flex min-h-12 cursor-pointer list-none items-center px-3.5 text-[15px] font-medium text-primary-ink"
+        className="flex min-h-12 cursor-pointer list-none items-center px-3.5 fs-m font-medium text-primary-ink"
       >
         对一遍常见证据清单，看还差什么
       </summary>
       <div className="px-3.5 pb-3.5">
-        <p data-veil="" className="prose-measure text-[14px] leading-6 text-ink-2">
+        <p data-veil="" className="prose-measure fs-s text-ink-2">
           {LEAD}
         </p>
         <List />
@@ -47,9 +47,9 @@ function List() {
           <Card data-veil="" className="p-3.5">
             <div className="flex flex-wrap items-center gap-2">
               <Badge>{c.category}</Badge>
-              <span className="text-[15px] leading-7 font-semibold text-ink">{c.name}</span>
+              <span className="fs-m font-semibold text-ink">{c.name}</span>
             </div>
-            <p className="mt-1 text-[14px] leading-6 text-ink-2">{c.why}</p>
+            <p className="mt-1 fs-s text-ink-2">{c.why}</p>
           </Card>
         </li>
       ))}

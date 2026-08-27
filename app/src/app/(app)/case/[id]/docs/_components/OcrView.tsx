@@ -56,8 +56,8 @@ export function OcrView({
   return (
     <Card>
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-        <h2 className="text-[15px] font-semibold text-ink">识别出的原文</h2>
-        <p className="text-[14px] text-ink-2">
+        <h2 className="fs-m font-semibold text-ink">识别出的原文</h2>
+        <p className="fs-s text-ink-2">
           {riskFlags.length > 0
             ? `标红 ${riskFlags.length} 处，点一下看为什么`
             : '这份文件没有需要标红的条款'}
@@ -69,7 +69,7 @@ export function OcrView({
           <p
             key={i}
             data-veil=""
-            className="prose-measure mt-3 text-[16px] leading-8 text-ink first:mt-0"
+            className="prose-measure mt-3 fs-m text-ink first:mt-0"
           >
             {segmentLine(line, riskFlags).map((seg, j) => {
               const { flag, index } = seg;
@@ -84,7 +84,7 @@ export function OcrView({
                   className="inline box-decoration-clone rounded-r-[4px] border-l-[3px] border-danger bg-danger-wash px-1 py-0.5 text-left text-ink"
                 >
                   <SensitiveText text={seg.text} />
-                  <sup className="num ml-0.5 text-[12px] font-semibold text-danger-ink">
+                  <sup className="num ml-0.5 fs-xs font-semibold text-danger-ink">
                     {index}
                   </sup>
                 </button>
@@ -93,7 +93,7 @@ export function OcrView({
           </p>
         ))}
 
-        <p className="mt-5 border-t border-border pt-3 text-[13px] leading-6 text-ink-2">
+        <p className="mt-5 border-t border-border pt-3 fs-xs text-ink-2">
           原文按识别顺序分段呈现，未做改写。识别可能有个别错字，以你手上的纸质件或原始文件为准。
         </p>
       </div>
@@ -109,22 +109,22 @@ export function OcrView({
               <Badge tone={LEVEL_TONE[active.flag.level]}>风险 {active.flag.level}</Badge>
               <blockquote
                 data-veil=""
-                className="mt-2.5 border-l-4 border-danger bg-danger-wash px-3.5 py-3 text-[15px] leading-7 text-ink"
+                className="mt-2.5 border-l-4 border-danger bg-danger-wash px-3.5 py-3 fs-m text-ink"
               >
                 <SensitiveText text={active.flag.quote} />
               </blockquote>
             </div>
 
             <div>
-              <h3 className="text-[15px] font-semibold text-ink">为什么有风险</h3>
-              <p data-veil="" className="mt-1.5 text-[15px] leading-7 text-ink-2">
+              <h3 className="fs-m font-semibold text-ink">为什么有风险</h3>
+              <p data-veil="" className="mt-1.5 fs-m text-ink-2">
                 <SensitiveText text={active.flag.note} />
               </p>
             </div>
 
             {active.flag.laws.length > 0 ? (
               <div>
-                <h3 className="text-[15px] font-semibold text-ink">法条依据</h3>
+                <h3 className="fs-m font-semibold text-ink">法条依据</h3>
                 <div className="mt-2 flex flex-col gap-2">
                   {active.flag.laws.map((law) => (
                     <LawRefCard key={law.cite} law={law} />
@@ -132,7 +132,7 @@ export function OcrView({
                 </div>
               </div>
             ) : (
-              <p className="rounded-[10px] bg-surface-2 px-3 py-2 text-[14px] leading-6 text-ink-2">
+              <p className="rounded-[10px] bg-surface-2 px-3 py-2 fs-s text-ink-2">
                 这一处是事实和谈判层面的问题，没有对应的具体条文，处理办法写在上面。
               </p>
             )}

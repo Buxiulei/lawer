@@ -75,7 +75,7 @@ function PickButton({
         className="flex min-h-[72px] flex-col items-center justify-center gap-1.5 rounded-[12px] border border-line bg-surface text-primary-ink transition-colors duration-150 ease-out hover:bg-surface-2"
       >
         {icon}
-        <span className="text-[14px] font-medium">{label}</span>
+        <span className="fs-s font-medium">{label}</span>
       </button>
       <input
         ref={ref}

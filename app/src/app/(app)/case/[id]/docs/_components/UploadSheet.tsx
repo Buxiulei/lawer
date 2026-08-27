@@ -54,7 +54,7 @@ export function UploadSheet({
     <AppSheet open={open} onClose={onClose} title="上传公司给你的文件">
       {!running ? (
         <div className="flex flex-col gap-3">
-          <p className="text-[15px] leading-7 text-ink-2">
+          <p className="fs-m text-ink-2">
             解除通知、协商协议、调岗通知、PIP、警告信都可以传。拍照拍全整页，四角要在画面里；多页文件一次传多张。
           </p>
           <Button className="w-full" onClick={() => setStep(0)}>
@@ -63,7 +63,7 @@ export function UploadSheet({
           <Button variant="secondary" className="w-full" onClick={() => setStep(0)}>
             从文件中选择
           </Button>
-          <p className="rounded-[10px] bg-surface-2 px-3 py-2 text-[14px] leading-6 text-ink-2">
+          <p className="rounded-[10px] bg-surface-2 px-3 py-2 fs-s text-ink-2">
             当前是演示版本：这里不会真的读取你的相册或文件，会用一份《协商解除劳动合同协议书》样张走完整套解读流程。
           </p>
         </div>
@@ -71,10 +71,10 @@ export function UploadSheet({
         <div className="flex flex-col gap-4 py-2">
           <div>
             <div className="flex items-baseline justify-between gap-3">
-              <p className="text-[16px] font-semibold text-ink">
+              <p className="fs-m font-semibold text-ink">
                 {OCR_STEPS[Math.min(step, OCR_STEPS.length - 1)].label}
               </p>
-              <span className="num text-[14px] text-ink-2">{percent}%</span>
+              <span className="num fs-s text-ink-2">{percent}%</span>
             </div>
             <Progress className="mt-2" value={percent} label="解读进度" />
           </div>
@@ -87,14 +87,14 @@ export function UploadSheet({
                 <li
                   key={s.label}
                   className={
-                    'flex items-center gap-2.5 text-[15px] leading-7 ' +
+                    'flex items-center gap-2.5 fs-m ' +
                     (done || current ? 'text-ink' : 'text-ink-2')
                   }
                 >
                   <span
                     aria-hidden
                     className={
-                      'flex size-5 shrink-0 items-center justify-center rounded-full text-[12px] ' +
+                      'flex size-5 shrink-0 items-center justify-center rounded-full fs-xs ' +
                       (done
                         ? 'bg-success text-on-primary'
                         : current
@@ -110,7 +110,7 @@ export function UploadSheet({
             })}
           </ol>
 
-          <p className="text-[14px] leading-6 text-ink-2">
+          <p className="fs-s text-ink-2">
             文件在服务器上加密存放，只有你自己能看到。
           </p>
         </div>

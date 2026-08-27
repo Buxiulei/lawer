@@ -3,11 +3,12 @@
 import Link from 'next/link';
 import { useCallback, useState } from 'react';
 import type { AnnotatedDoc } from '@/app/_mock/docs-drafts';
+import { cn } from '@/app/_ui/cn';
 import { formatDate } from '@/app/_ui/format';
 import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
 import { EmptyState } from '@/components/shadcn/empty-state';
-import { AdviceBadge, DocTypeBadge, RiskCountBadge } from './badges';
+import { ADVICE_INK, DocTypeBadge, RiskCountBadge } from './badges';
 import { SensitiveText } from './SensitiveText';
 import { UploadSheet } from './UploadSheet';
 
@@ -25,8 +26,8 @@ export function DocsListView({
     <div className="pt-1">
       <header className="flex flex-wrap items-center justify-between gap-3 py-3">
         <div>
-          <h1 className="text-[20px] font-semibold text-ink">文件解读</h1>
-          <p className="mt-0.5 text-[15px] leading-7 text-ink-2">
+          <h1 className="fs-xl font-semibold text-ink">文件解读</h1>
+          <p className="fs-s mt-0.5 text-ink-2">
             公司让你签的东西，先传上来看清楚再决定。
           </p>
         </div>
@@ -46,24 +47,30 @@ export function DocsListView({
               <Link href={`/case/${caseId}/docs/${doc.id}`} className="group block">
                 <Card
                   data-veil=""
-                  className="p-4 transition-colors duration-150 ease-out group-hover:bg-muted"
+                  className="overflow-hidden p-0 transition-colors duration-150 ease-out group-hover:bg-muted"
                 >
-                <div className="flex flex-wrap items-center gap-2">
-                  <DocTypeBadge docType={doc.docType} />
-                  <AdviceBadge advice={doc.advice} />
-                  <RiskCountBadge count={doc.riskFlags.length} />
-                </div>
+                  {/* 标题栏：**结论是整张卡里最大的字**。
+                      此前它是三个同权重徽标之一（类型 / 结论 / N 处标红），
+                      而「签不签」才是用户翻这一页要找的东西。 */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-2 px-4 py-2.5">
+                    <span className={cn('fs-l font-semibold', ADVICE_INK[doc.advice])}>
+                      {doc.advice}
+                    </span>
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <DocTypeBadge docType={doc.docType} />
+                      <RiskCountBadge count={doc.riskFlags.length} />
+                    </span>
+                  </div>
 
-                <h2 className="mt-2 text-[17px] leading-7 font-semibold text-ink">
-                  {doc.title}
-                </h2>
-                <p className="mt-1 line-clamp-2 text-[15px] leading-7 text-ink-2">
-                  <SensitiveText text={doc.adviceDetail} />
-                </p>
-
-                <p className="num mt-2 text-[13px] text-ink-2">
-                  {formatDate(doc.createdAt)} · {doc.fileName}
-                </p>
+                  <div className="px-4 py-3">
+                    <h2 className="fs-m font-semibold text-ink">{doc.title}</h2>
+                    <p className="fs-s mt-1 line-clamp-2 text-ink-2">
+                      <SensitiveText text={doc.adviceDetail} />
+                    </p>
+                    <p className="num fs-xs mt-2 text-ink-2">
+                      {formatDate(doc.createdAt)} · {doc.fileName}
+                    </p>
+                  </div>
                 </Card>
               </Link>
             </li>
