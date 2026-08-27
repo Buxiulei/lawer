@@ -39,6 +39,8 @@ import {
   citationCompletenessAssertions,
   coreRenderObservabilityAssertions,
   injectionObservability,
+  hasEvent,
+  gateStrippedArticles,
   absentOutsideDisclaimer,
   precedentSpans,
   citationKey,
@@ -2864,5 +2866,86 @@ describe('首段不计入重复 + 首段自身单列（manager 裁定② 的两�
       const nonCrisis = { ...t('我在。'), input: '公司让我签离职协议' };
       expect(crisisOpenerCardAssertions([nonCrisis], FACTS)).toEqual([]);
     });
+  });
+});
+
+describe('★归档形状总闸：任何判据喂上「没有 events 的 turn」都不许炸', () => {
+  /* 【为什么是总闸，不是又一条单点修】
+   * 「判据读 `t.events`，而 `events` 不进归档」2026-08-26～28 出现了**三次**：
+   *   `leverage`（08-26 查出） → `crisisPaid`（08-28 补） → `injection`（08-28 评测官想扫语料时**当场炸**）
+   * 三次都是同一个形状，前两次靠人查、第三次靠 TypeError。**再修第四个单点是没有尽头的。**
+   *
+   * 根因是**类型说了谎**：`TurnRecord.events` 声明成必填，
+   * 而 `report.ts` 归档的 turn 形状里**根本没有这个键**。
+   * 在两种形状合并成一个类型之前，这条测试替代那个不存在的类型约束：
+   * **拿一个真·归档形状（连 `events` 键都没有）喂给每一个导出的判据，谁炸谁红。**
+   *
+   * 【它保证什么、不保证什么】只保证**不炸**，不保证判得对——
+   * 判得对由各自的两态样本管。**分开是有意的**：一条测试同时管两件事，
+   * 哪件坏了都只红一次，而修的人只会修他先想到的那件。 */
+  const archivedTurn = JSON.parse(
+    JSON.stringify({
+      input: '我最近很难受',
+      text: '我在。你现在在哪儿？',
+      actionCards: [],
+      drafts: [],
+      retrievedIds: [],
+      gateStrippedArticles: [],
+      crisisPaid: null,
+      leverage: null,
+      injection: null,
+      model: 'deepseek-v4-pro',
+      degraded: false,
+      taskClass: 'critical',
+    }),
+  ) as TurnRecord; // ← 故意不带 `events`：这就是 report.ts 写进 JSON 的真实形状
+  const ts = [archivedTurn];
+
+  const CASES: [string, () => unknown][] = [
+    ['globalAssertions', () => globalAssertions(archivedTurn)],
+    ['crisisTurnAssertions', () => crisisTurnAssertions(ts)],
+    ['crisisOpenerCardAssertions', () => crisisOpenerCardAssertions(ts)],
+    ['nbdpsyPitchAssertions', () => nbdpsyPitchAssertions(ts)],
+    ['emotionalLeverageAssertions', () => emotionalLeverageAssertions(ts)],
+    ['bannedHotlineAssertions', () => bannedHotlineAssertions(ts)],
+    ['landlineMarkAssertions', () => landlineMarkAssertions(ts)],
+    ['irreversibleDecisionAssertions', () => irreversibleDecisionAssertions(archivedTurn, 'S09')],
+    ['precedentContaminationAssertions', () => precedentContaminationAssertions(ts, 'S03', '', [])],
+    ['coreRenderObservabilityAssertions', () => coreRenderObservabilityAssertions(ts, 'S03')],
+    ['citationCompletenessAssertions', () => citationCompletenessAssertions(ts, 'S03')],
+    ['sceneMismatchAssertions', () => sceneMismatchAssertions(ts, undefined, 'S03', '朝阳', '海淀')],
+    ['unverifiedCoordinateAssertions', () => unverifiedCoordinateAssertions(ts, undefined)],
+    ['hasEvent', () => hasEvent(archivedTurn, 'notice')],
+    ['gateStrippedArticles', () => gateStrippedArticles(archivedTurn)],
+    ['injectionObservability', () => injectionObservability(archivedTurn)],
+  ];
+
+  it.each(CASES)('%s 喂归档形状不炸', (_name, run) => {
+    expect(run).not.toThrow();
+  });
+
+  it('★自证：这个夹具确实没有 events / retrieved 键（否则上面 16 条全是空跑）', () => {
+    expect('events' in (archivedTurn as object)).toBe(false);
+    expect('retrieved' in (archivedTurn as object), '归档只留 retrievedIds').toBe(false);
+  });
+
+  it('★不许"不炸"换成"静默 PASS"：G1 在归档形状上必须判 N/A 而不是通过', () => {
+    // 这条是上面那 16 条的必要补充。**只要求"不炸"是不够的**——
+    // 把 `turn.retrieved` 兜成 `[]` 也能不炸，代价是
+    // 「没有卡 ⇒ 没查到编造 ⇒ PASS」：**一条 L1 在缺数据时静默报绿**。
+    // 那比炸更坏，而且长得像通过。
+    const g1 = globalAssertions(archivedTurn).find((v) => v.id === 'G1')!;
+    expect(g1.na, 'G1 在归档形状上不可判').toBe(true);
+    expect(g1.naKind).toBe('observability_missing');
+    expect(g1.detail).toContain('不是"未出现无出处引用"');
+  });
+
+  it('★注入可观测：归档三态可分（对象 / null / 缺失）', () => {
+    const withObs = { ...archivedTurn, injection: { coreCandidateKeys: ['a'], coreBlockRendered: [], renderAdded: [], substantiveHitCount: 0 } } as TurnRecord;
+    const noLayer = JSON.parse(JSON.stringify({ ...archivedTurn })) as Record<string, unknown>;
+    delete noLayer.injection;
+    expect(injectionObservability(withObs)).toMatchObject({ coreCandidateKeys: ['a'] });
+    expect(injectionObservability(archivedTurn), 'null = 这层跑了、本轮没产出 ⇒ 仍是 undefined 给判据判 na').toBeUndefined();
+    expect(injectionObservability(noLayer as unknown as TurnRecord), '缺失 = 这份转录没这一层').toBeUndefined();
   });
 });

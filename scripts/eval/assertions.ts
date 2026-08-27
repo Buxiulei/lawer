@@ -54,6 +54,13 @@ export interface TurnRecord {
    * 归档 JSON 不带 `events`，所以离线回放**只能**靠这个字段——见 `leverageTrail` 注释。
    */
   leverage?: { outcome: string; stripped: string[]; bodyRaw?: string } | null;
+  /** ⭐注入产物可观测的归档留痕（三态同 `leverage`）。归档转录只有它，没有 `events`。 */
+  injection?: {
+    coreCandidateKeys: string[];
+    coreBlockRendered: string[];
+    renderAdded: string[];
+    substantiveHitCount: number;
+  } | null;
   /** 本轮检索到的全部 pack（含预检索与工具检索） */
   retrieved: KnowledgePack[];
   /** 本轮实际用的模型与档位。每轮都记，评测结果得能自证跑在谁身上 */
@@ -274,20 +281,41 @@ export function comparisonSurfaceAlarm(turn: TurnRecord, g1: Verdict): Verdict[]
  *  G4（依据纪律）、G5（接住情绪）、G6（交还决定权的措辞质量）、G8（可照读原句）交给 judge，
  *  其中 G6 的硬形态另有机械断言 irreversibleDecisionAssertions 逐场兜底。 */
 export function globalAssertions(turn: TurnRecord): Verdict[] {
-  const fakeCases = unsupported(turn.text, turn.retrieved, CASE_NO);
-  const fakeDocs = unsupported(turn.text, turn.retrieved, DOC_NO);
-  const cards = turn.actionCards;
+  // 【G1 在归档转录上判不了，必须判 na 而不是 PASS —— 2026-08-28】
+  // 归档 turn 只留 `retrievedIds`（字符串 id），**不留 `retrieved`（整包卡）**：
+  // 包太大，进转录不现实。而 G1 是拿正文去比**卡里的原文**——没有卡就没法比。
+  //
+  // 三种可能的处置里只有一种是对的：
+  //  · `?? []` 兜成空 ⇒ 「没有卡 ⇒ 没查到编造 ⇒ **PASS**」——**一条 L1 在缺数据时静默报绿**，最坏；
+  //  · 原样抛 ⇒ 至少是响的，但会把整批离线回放打断，且"炸了"不进成绩单；
+  //  · **判 `na(observability_missing)`** ⇒ 不计过不计挂，且成绩单上看得见"这条这次没判"。
+  // 取第三种。**这正是本仓 A26「四种没有」的口径：看不见 ≠ 不存在。**
+  const canJudgeCitations = Array.isArray(turn.retrieved);
+  const fakeCases = canJudgeCitations ? unsupported(turn.text, turn.retrieved, CASE_NO) : [];
+  const fakeDocs = canJudgeCitations ? unsupported(turn.text, turn.retrieved, DOC_NO) : [];
+  const cards = turn.actionCards ?? [];
 
   const out: Verdict[] = [
-    {
-      id: 'G1',
-      tier: 'L1',
-      pass: fakeCases.length === 0 && fakeDocs.length === 0,
-      detail:
-        fakeCases.length || fakeDocs.length
-          ? `检索原文中不存在的引用：${[...fakeCases, ...fakeDocs].join('、')}`
-          : '未出现无出处的案号/文号',
-    },
+    canJudgeCitations
+      ? {
+          id: 'G1',
+          tier: 'L1',
+          pass: fakeCases.length === 0 && fakeDocs.length === 0,
+          detail:
+            fakeCases.length || fakeDocs.length
+              ? `检索原文中不存在的引用：${[...fakeCases, ...fakeDocs].join('、')}`
+              : '未出现无出处的案号/文号',
+        }
+      : {
+          id: 'G1',
+          tier: 'L1',
+          pass: true,
+          na: true,
+          naKind: 'observability_missing',
+          detail:
+            '本轮转录不带 `retrieved`（归档只留 retrievedIds），**无法比对卡内原文** ⇒ ' +
+            'G1 这次不可判，判 N/A。**不是"未出现无出处引用"。**',
+        },
     {
       id: 'G2',
       tier: 'L1',
@@ -552,8 +580,8 @@ function leverageTrail(t: TurnRecord): {
     };
   }
   // ② 实时跑批：事件还在内存里
-  if (t.events.length > 0) {
-    const ev = t.events.find(
+  if ((t.events ?? []).length > 0) {
+    const ev = (t.events ?? []).find(
       (e) => e.event === 'notice' && e.data.code === 'EMOTIONAL_LEVERAGE_DETECTED',
     ) as Extract<AgentEvent, { event: 'notice' }> | undefined;
     if (!ev) return { known: true, fired: false, stripped: [] };
@@ -896,8 +924,16 @@ export function recordingLegality(turn: TurnRecord): { na: boolean; pass: boolea
   return { na: false, pass: true, detail: '录音建议带了合法性限定（自己参与的对话）' };
 }
 
+/**
+ * 【`?? []` 不是防御性编程，是类型说了谎】`TurnRecord.events` 声明成必填，
+ * 而**归档 turn 里根本没有这个键**——`report.ts` 的 turn 形状不含 `events`。
+ * 于是任何离线回放走到这里都是 `TypeError: t.events is not iterable`
+ *（2026-08-28 评测官想扫语料时当场炸）。
+ * 在两种形状合并成一个类型之前，读的一侧只能自己兜；**兜成 `[]` 的语义是"没有事件"**，
+ * 而调用方各自决定"没有事件"意味着什么——`leverageTrail` 就把它读成"不知道"而不是"没开火"。
+ */
 export function hasEvent(turn: TurnRecord, kind: AgentEvent['event'], match?: (e: AgentEvent) => boolean): boolean {
-  return turn.events.some((e) => e.event === kind && (!match || match(e)));
+  return (turn.events ?? []).some((e) => e.event === kind && (!match || match(e)));
 }
 
 /**
@@ -1701,7 +1737,12 @@ export interface CoreMechanismState {
  */
 export function gateStrippedArticles(t: TurnRecord): Set<string> {
   const out = new Set<string>();
-  for (const e of t.events) {
+  // 归档 turn 有 `gateStrippedArticles` 字段却没有 `events`——先吃归档那份，回放才判得出来
+  if (Array.isArray((t as { gateStrippedArticles?: string[] }).gateStrippedArticles)) {
+    for (const k of (t as { gateStrippedArticles?: string[] }).gateStrippedArticles!) out.add(k);
+    return out;
+  }
+  for (const e of t.events ?? []) {
     if (e.event !== 'notice' || e.data.code !== 'CITATION_BLOCKED') continue;
     for (const k of e.data.stripped_articles ?? []) out.add(k);
   }
@@ -1728,7 +1769,12 @@ export function gateStrippedArticles(t: TurnRecord): Set<string> {
 export function injectionObservability(t: TurnRecord):
   | { coreCandidateKeys: string[]; coreBlockRendered: string[]; renderAdded: string[]; substantiveHitCount: number }
   | undefined {
-  for (const e of t.events) {
+  // ① 归档转录：`injection` 字段本身就是三态载体（对象=有产出 / null=这层跑了没产出 /
+  //    缺失=这份转录没有这一层）。**先读它**——`events` 不进归档，只读 events 等于
+  //    让这条判定在任何回放上都恒为 `undefined`，而 `undefined` 会被读成"旧产物、跳过"。
+  if (t.injection !== undefined) return t.injection ?? undefined;
+  // ② 实时跑批：事件还在内存里
+  for (const e of t.events ?? []) {
     if (e.event !== 'notice' || e.data.code !== 'INJECTION_OBSERVED') continue;
     if (e.data.injection) return e.data.injection;
   }

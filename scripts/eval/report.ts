@@ -55,6 +55,28 @@ export function archiveLeverage(events: AgentEvent[]): ScenarioEvidence['turns']
   };
 }
 
+/**
+ * 注入产物可观测（⭐机制）的留痕。**2026-08-28 补，这是同形态的第三次。**
+ *
+ * 【怎么被发现的】评测官想拿归档语料扫"哪个剧本 ⭐候选 > 0"，脚本当场炸：
+ * `TypeError: t.events is not iterable` —— 因为**归档 turn 里根本没有 `events` 这个键**。
+ * ⇒ ⭐断言实跑时读得到（events 在内存里），**它的判定从归档里永远重放不出来**：
+ * 任何离线回放都会走 `!obs` 分支 → `na(observability_missing)`。
+ *
+ * **这是"留痕不进归档"的第三处**（08-26 `leverage` / 08-28 `crisisPaid` / 本条）。
+ * 三次都是同一个形状：**判据读 `t.events`，而 `events` 不进归档**。
+ * 前两次是查出来的，这次是**想拿数据做别的事时炸出来的**——
+ * **想用一份数据做点别的，是发现它缺什么最便宜的方式。**（评测官语）
+ *
+ * 【三态照旧】对象=机制跑了且有产出；`null`=这一层跑了、本轮没有 INJECTION_OBSERVED；
+ * 字段缺失=这份转录没有这一层。**注意与 `injection` 内部字段的三态是两层**：
+ * 外层管"有没有这条 notice"，内层的 `[]`/`0` 管"机制跑了但产出为空"——**两层都不许塌。**
+ */
+export function archiveInjection(events: AgentEvent[]): ScenarioEvidence['turns'][number]['injection'] {
+  const ev = findNotice(events, 'INJECTION_OBSERVED');
+  return ev?.data.injection ?? null;
+}
+
 /** D15 危机轮付费禁令那道闸的留痕。 */
 export function archiveCrisisPaid(events: AgentEvent[]): ScenarioEvidence['turns'][number]['crisisPaid'] {
   const ev = findNotice(events, 'CRISIS_PAID_CONTENT_BLOCKED');
@@ -99,6 +121,16 @@ export interface ScenarioEvidence {
      * 而后者当天刚被评测官在 `nbdpsyPitchAssertions` 上实证发生过一次（登记+单测+import 齐全，唯独没接线）。
      */
     crisisPaid?: { message: string } | null;
+    /**
+     * ⭐注入产物可观测的留痕（2026-08-28 补）。没有它，`injectionObservability` 的判定
+     * **在任何归档转录上都重放不出来**——它读 `t.events`，而 `events` 不进归档。
+     */
+    injection?: {
+      coreCandidateKeys: string[];
+      coreBlockRendered: string[];
+      renderAdded: string[];
+      substantiveHitCount: number;
+    } | null;
     leverage?: { outcome: string; stripped: string[]; bodyRaw?: string } | null;
     /** 这一轮实际跑在哪个模型上——证据必须自证，不能靠「我记得是 deepseek」 */
     model: string;

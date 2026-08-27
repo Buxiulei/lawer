@@ -53,7 +53,7 @@ import {
 import { judgeAvailable, judgeItem, type JudgeResult } from './eval/judge';
 import { collectPending, PENDING_ESCALATE_BATCHES, writePendingCardList } from './eval/pending-cards';
 import { lawsInLibrary } from './eval/assertions';
-import { archiveCrisisPaid, archiveLeverage, newRunId, writeEvidence, type ScenarioEvidence } from './eval/report';
+import { archiveCrisisPaid, archiveInjection, archiveLeverage, newRunId, writeEvidence, type ScenarioEvidence } from './eval/report';
 import { listPacks } from '../app/src/lib/knowledge';
 import { findScenarios, type Scenario } from './eval/scenarios';
 
@@ -529,6 +529,7 @@ async function main() {
         // 两处映射抽成了 report.ts 的纯函数（原来是内联 IIFE，**测不到**）——
         // 三态语义与"必须无条件写 null"的理由都在那边的注释里，配了两态样本。
         crisisPaid: archiveCrisisPaid(t.events),
+        injection: archiveInjection(t.events),
         leverage: archiveLeverage(t.events),
         model: t.model,
         degraded: t.degraded,
