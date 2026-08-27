@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { ApiError, apiFetch, humanError } from '@/app/_ui/api';
 import { cn } from '@/app/_ui/cn';
 import { formatDateTime } from '@/app/_ui/format';
-import { Badge } from '@/components/ui/Badge';
+import { Badge } from '@/components/shadcn/badge';
 import { AppSheet } from '@/components/shadcn/app-sheet';
 import { Button } from '@/components/shadcn/button';
 import {
@@ -17,7 +17,7 @@ import {
 import { Checkbox } from '@/components/shadcn/checkbox';
 import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
 import { InputField } from '@/components/shadcn/field';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { Skeleton } from '@/components/shadcn/skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { CodeBlock } from './CodeBlock';
 import { SetupPrompt } from './SetupPrompt';

@@ -11,8 +11,8 @@ import {
 } from '@/app/_mock/demo';
 import { mockLawRefs } from '@/app/_mock/workbench';
 import { formatDate } from '@/app/_ui/format';
-import { Badge } from '@/components/ui/Badge';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { Badge } from '@/components/shadcn/badge';
+import { EmptyState } from '@/components/shadcn/empty-state';
 import { AppSheet } from '@/components/shadcn/app-sheet';
 import { Button } from '@/components/shadcn/button';
 import { DeadlineChip } from '@/components/case/DeadlineChip';

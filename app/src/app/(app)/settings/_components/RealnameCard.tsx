@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiError, apiFetch, humanError } from '@/app/_ui/api';
 import { REALNAME_ANCHOR } from '@/app/_ui/realname';
 import { Sensitive } from '@/components/Sensitive';
-import { Badge } from '@/components/ui/Badge';
+import { Badge } from '@/components/shadcn/badge';
 import { Button } from '@/components/shadcn/button';
 import {
   Card,
@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from '@/components/shadcn/card';
 import { InputField } from '@/components/shadcn/field';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { Skeleton } from '@/components/shadcn/skeleton';
 import { CodeBlock } from './CodeBlock';
 import { SignInHint } from './SignInHint';
 

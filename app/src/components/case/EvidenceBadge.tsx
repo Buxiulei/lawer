@@ -1,4 +1,4 @@
-import { Badge, type BadgeTone } from '@/components/ui/Badge';
+import { Badge, type BadgeTone } from '@/components/shadcn/badge';
 import type { EvidenceStatus } from '@/app/_mock/types';
 
 const TONE: Record<EvidenceStatus, BadgeTone> = {
