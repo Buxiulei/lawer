@@ -42,7 +42,9 @@ function SheetContent({
         data-slot="sheet-content"
         className={cn(
           'fixed inset-x-0 bottom-0 z-50 flex max-h-[85vh] flex-col rounded-t-[16px] bg-card outline-none',
-          'lg:inset-y-0 lg:right-0 lg:left-auto lg:max-h-none lg:w-[420px] lg:rounded-none lg:rounded-l-[16px] lg:border-l lg:border-border',
+          // 批 1：换边断点从 lg 提前到 md——规格把 768–1279 定成独立的平板档，
+          // 手机是底部升起的抽屉，平板起是侧边推入。全站抽屉共用这条规则。
+          'md:inset-y-0 md:right-0 md:left-auto md:max-h-none md:w-[420px] md:rounded-none md:rounded-l-[16px] md:border-l md:border-border',
           'data-[state=open]:animate-[sheet-up_250ms_ease-out] lg:data-[state=open]:animate-[sheet-right_250ms_ease-out]',
           'data-[state=closed]:animate-[fade-out_150ms_ease-out]',
           className,

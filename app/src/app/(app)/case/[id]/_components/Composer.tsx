@@ -35,8 +35,10 @@ export function Composer({
     setValue('');
   };
 
+  // 背景与页面底同色、无顶部分割线（规格）：输入区不该在对话流上划一道横杠。
+  // 底部偏移保留 56px——手机上那条是底部 Tab 导航，贴到 bottom-0 会被它盖住。
   return (
-    <div className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 -mx-4 border-t border-line bg-bg px-4 pt-2 pb-3 lg:bottom-0 lg:mx-0 lg:rounded-t-[12px] lg:border-x lg:px-3">
+    <div className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 -mx-4 bg-bg px-4 pt-2 pb-3 lg:bottom-0 lg:mx-0 lg:px-3">
       <div className="flex items-end gap-2">
         <textarea
           ref={ref}

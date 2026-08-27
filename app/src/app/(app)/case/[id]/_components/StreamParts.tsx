@@ -145,17 +145,29 @@ export function DegradedBadge() {
   );
 }
 
-/** record 帧：低调 chip，说明这句话在档案里落到哪儿了 */
-export function RecordChip({ frame }: { frame: RecordFrame }) {
+/**
+ * record 帧组：**分量 1**，借 GOV.UK Summary List。
+ *
+ * 「这句话落到档案哪儿了」是回执不是内容，**不给外框**——
+ * 键（落点）加粗、值（摘要）常规，行间一条 1px 底线，仅此而已。
+ * 此前是一排 primary-wash 的圆角 chip，色重、又和行动卡撞同一个色相。
+ */
+export function RecordList({ frames }: { frames: RecordFrame[] }) {
+  if (frames.length === 0) return null;
   return (
-    <span
-      data-veil=""
-      title={recordLabel(frame.tool)}
-      className="inline-flex items-start gap-1.5 rounded-[10px] bg-primary-wash px-2.5 py-1 text-[13px] leading-6 text-primary-ink"
-    >
-      <span aria-hidden>✓</span>
-      已记入档案：{frame.summary}
-    </span>
+    <dl data-veil="" className="prose-measure mt-3 text-[14px] leading-6">
+      {frames.map((frame) => (
+        <div
+          key={frame.id}
+          className="flex gap-3 border-b border-line py-1.5 last:border-b-0"
+        >
+          <dt className="w-[4.5em] shrink-0 font-semibold text-ink">
+            {recordLabel(frame.tool)}
+          </dt>
+          <dd className="min-w-0 flex-1 text-ink-2">{frame.summary}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -192,30 +204,32 @@ export function DraftCard({
   return (
     <article
       data-veil=""
-      className="prose-measure rounded-[12px] border border-line bg-surface p-3.5 shadow-soft"
+      className="prose-measure overflow-hidden rounded-[12px] border border-line bg-surface"
     >
-      <div className="flex flex-wrap items-center gap-2">
+      {/* 分量 3：细外框 + 灰底标题栏（GOV.UK Summary Card）。
+          比行动卡轻两档：没有实边框、没有填色顶栏，标题栏只是灰底。 */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface-2 px-3.5 py-2">
         <Badge tone="primary">{frame.kind}</Badge>
         <span className="num text-[13px] text-ink-2">v{frame.version}</span>
         {confirmed && <Badge tone="success">口径已确认</Badge>}
-      </div>
-
-      <h3 className="mt-2 text-[16px] leading-7 font-semibold text-ink">{frame.title}</h3>
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button asChild size="sm" variant="secondary">
-          <Link href={`/case/${caseId}/drafts/${frame.id}`}>查看草稿</Link>
-        </Button>
-        {!confirmed && (
-          <Button size="sm" variant="ghost" onClick={() => onRequestConfirm(frame)}>
-            确认口径无误
+        <span className="ml-auto flex items-center gap-1">
+          <Button asChild size="sm" variant="ghost">
+            <Link href={`/case/${caseId}/drafts/${frame.id}`}>查看</Link>
           </Button>
-        )}
+          {!confirmed && (
+            <Button size="sm" variant="ghost" onClick={() => onRequestConfirm(frame)}>
+              确认口径
+            </Button>
+          )}
+        </span>
       </div>
 
-      <p className="mt-2 text-[13px] leading-6 text-ink-2">
-        确认只是记下你认可这份措辞，发送要你自己在文书页做。
-      </p>
+      <div className="px-3.5 py-3">
+        <h3 className="text-[16px] leading-7 font-semibold text-ink">{frame.title}</h3>
+        <p className="mt-1 text-[13px] leading-6 text-ink-2">
+          确认只是记下你认可这份措辞，发送要你自己在文书页做。
+        </p>
+      </div>
     </article>
   );
 }

@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { estimateClaims, previewActions } from '@/app/_mock/intake-evidence';
 import { formatDate } from '@/app/_ui/format';
 import { AmountText } from '@/components/case/AmountText';
-import { ActionCard } from '@/components/case/ActionCard';
+import { ActionGroup } from '@/components/case/ActionCard';
 import { Badge } from '@/components/shadcn/badge';
 import {
   Card,
@@ -139,17 +139,12 @@ export function StepPreview({ draft }: { draft: IntakeDraft }) {
       </Card>
 
       <section>
-        <h3 className="mb-2.5 text-[16px] font-semibold text-ink">现在做这三件事</h3>
         {actions.length > 0 ? (
-          <div className="flex flex-col gap-2.5">
-            {actions.map((a) => (
-              <ActionCard
-                key={a.id}
-                item={withStatus(a, done[a.id])}
-                onToggle={(id, checked) => setDone((prev) => ({ ...prev, [id]: checked }))}
-              />
-            ))}
-          </div>
+          <ActionGroup
+            title="现在做这三件事"
+            items={actions.map((a) => withStatus(a, done[a.id]))}
+            onToggle={(id, checked) => setDone((prev) => ({ ...prev, [id]: checked }))}
+          />
         ) : (
           <p className="rounded-[10px] bg-surface-2 px-3.5 py-3 text-[15px] leading-7 text-ink-2">
             回到第 1 步选一下你现在所处的阶段，这里会给出对应的三件事。
