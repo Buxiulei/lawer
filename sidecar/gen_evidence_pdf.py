@@ -145,7 +145,7 @@ def build_header(p, styles):
         Spacer(1, 10),
         rule(),
         kv(styles["meta"], "存证订单号", p.get("order_no", "")),
-        kv(styles["meta"], "出证平台", p.get("issuer", "lawer 裁员应对专员")),
+        kv(styles["meta"], "出证平台", p["issuer"]),
         kv(styles["meta"], "出证时间", p.get("generated_at", "")),
         kv(styles["meta"], "验证入口", p.get("verify_url", "")),
         rule(),
@@ -306,8 +306,35 @@ def build_story(p, styles):
     return story
 
 
+# 必填字段：缺任何一个都**拒绝生成**，不兜底、不留空。
+#
+# 【为什么 issuer 不许有默认值（2026-08-27）】原实现是
+# `p.get("issuer", "lawer 裁员应对专员")` —— **一个写死的兜底品牌名**。
+# 三条理由，每条单独都够：
+#  ① **它回答的是"这张证是谁出的"**，而这份 PDF 用户可能拿去仲裁庭。
+#     兜底不是"少显示一点信息"，是**替调用方编了一个答案**，而且编得像真的。
+#  ② 本模块**早就有必填契约**（order_no / evidence.sha256 缺则 400，且有测试），
+#     issuer 静默兜底与模块自己的设计不一致。
+#  ③ 唯一的调用方 `app/src/lib/evidence/attest.ts` **无条件**传这个字段。
+#     ⇒ 它缺失只可能意味着调用方坏了或来了个我们不知道的调用路径——
+#     **那正是最需要报出来的时刻，而不是最需要糊过去的时刻。**
+#
+# 【为什么守在这里而不只守在 main.py】`build_evidence_pdf` 是可被直接 import 的公开入口
+#（模块 docstring 里就写着 CLI 用法）。**只守在 HTTP 层，等于让这条保证依赖"调用方走了哪条路"。**
+REQUIRED_TOP_LEVEL = ("order_no", "issuer")
+
+
 def build_evidence_pdf(payload: dict, output_path: str) -> str:
-    """按 payload 渲染《存证证明》PDF 到 output_path，返回该路径。"""
+    """按 payload 渲染《存证证明》PDF 到 output_path，返回该路径。
+
+    缺必填字段直接抛 ValueError —— 宁可不出证，也不出一份把出证方写错的证。
+    """
+    missing = [k for k in REQUIRED_TOP_LEVEL if not (payload.get(k) or "").strip()]
+    if not ((payload.get("evidence") or {}).get("sha256") or "").strip():
+        missing.append("evidence.sha256")
+    if missing:
+        raise ValueError(f"缺少必填字段：{'、'.join(missing)}")
+
     font = register_font()
     styles = build_styles(font)
     story = build_story(payload, styles)

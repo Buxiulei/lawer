@@ -102,6 +102,10 @@ def evidence_pdf(payload: dict):
     """按存证元数据渲染《存证证明》PDF（未签名）。payload 结构见 gen_evidence_pdf.py。"""
     if not payload.get("order_no"):
         raise HTTPException(status_code=400, detail="缺少 order_no")
+    # issuer = 出证方名称。**不兜底**：这份 PDF 用户可能拿去仲裁庭，
+    # 兜一个写死的品牌名等于替调用方编一个"谁出的证"。理由详见 gen_evidence_pdf.REQUIRED_TOP_LEVEL。
+    if not payload.get("issuer"):
+        raise HTTPException(status_code=400, detail="缺少 issuer")
     if not (payload.get("evidence") or {}).get("sha256"):
         raise HTTPException(status_code=400, detail="缺少 evidence.sha256")
 

@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import gen_evidence_pdf  # noqa: E402
 import main  # noqa: E402
 
 client = TestClient(main.app)
@@ -111,11 +112,27 @@ def test_evidence_pdf_generates_parseable_pdf():
     assert len(r.content) > 2000  # 不是空壳
 
 
-@pytest.mark.parametrize("missing", ["order_no", "evidence"])
+@pytest.mark.parametrize("missing", ["order_no", "evidence", "issuer"])
 def test_evidence_pdf_rejects_incomplete_payload(missing):
     p = _payload()
     del p[missing]
     assert client.post("/evidence-pdf", json=p).status_code == 400
+
+
+@pytest.mark.parametrize("missing", ["order_no", "issuer", "evidence"])
+def test_build_evidence_pdf_itself_refuses_incomplete(missing, tmp_path):
+    """**直接 import 的那条路也要守住**，不能只守 HTTP 层。
+
+    【为什么单独有这一条 —— 变异实测出来的】把生成器内部那道守撤掉、
+    把 `p.get("issuer", "<写死的品牌名>")` 兜底放回去，**上面那条 HTTP 测试照样全绿**：
+    它只走 `/evidence-pdf`，而 `build_evidence_pdf` 是模块 docstring 里就写明的公开入口
+    （还有 CLI 用法）。
+    ⇒ **只测 HTTP 层，等于让这条保证依赖"调用方走了哪条路"，而测试完全看不出来。**
+    """
+    p = _payload()
+    del p[missing]
+    with pytest.raises(ValueError, match="缺少必填字段"):
+        gen_evidence_pdf.build_evidence_pdf(p, str(tmp_path / "x.pdf"))
 
 
 def test_gen_then_verify_refuses_unsigned_pdf():
