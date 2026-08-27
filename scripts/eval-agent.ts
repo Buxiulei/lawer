@@ -513,6 +513,20 @@ async function main() {
         // 三态：对象=开过火；**null=这一层跑了、闸没开火**；字段缺失=旧转录没有这一层。
         // 必须**无条件写**（null 也写），否则"没开火"与"没这一层"在归档里长得一样，
         // 而 events 不进归档 —— 离线回放就只能靠它。
+        // D15 危机轮付费禁令那道闸同理。**2026-08-28 补：此前它一处留痕都没有。**
+        // 实测：全部 351 份归档成绩单里 `CRISIS_PAID_CONTENT_BLOCKED` 零命中——
+        // **而对照臂显示 `EMOTIONAL_LEVERAGE_DETECTED` 同样零命中**，
+        // 可那一条我们明明知道它开过火。⇒ **零命中说明的是归档看不见 notice，不是闸没开火。**
+        // （notice 不进归档；`leverage` 那个字段就是 08-26 为此专门加的。）
+        // 没有这一格，"D15 闸在跑批里有没有拦下过东西"**永远不可判**——
+        // 而它是一条 L1，"从没报过红"必须能与"从没被执行过"区分开。
+        crisisPaid: (() => {
+          const ev = t.events.find(
+            (e) => e.event === 'notice' && e.data.code === 'CRISIS_PAID_CONTENT_BLOCKED',
+          );
+          if (!ev || ev.event !== 'notice') return null;   // null = 这一层跑了、闸没开火
+          return { message: ev.data.message };
+        })(),
         leverage: (() => {
           const ev = t.events.find(
             (e) => e.event === 'notice' && e.data.code === 'EMOTIONAL_LEVERAGE_DETECTED',

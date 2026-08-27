@@ -47,6 +47,15 @@ export interface ScenarioEvidence {
      * 归档 130 批里产出过这条断言的 12 批 / 12 个实例 / 0 次报红）。**那个绿是被剥出来的，不是模型守规矩换来的。**
      * 字段缺失 = 这份转录跑在没留它的旧代码上，判据须写明「判定不完整」，不许当"没有"。
      */
+    /**
+     * D15 危机轮付费禁令那道闸的留痕（三态同 `leverage`）：
+     * 对象=开过火；`null`=这一层跑了、闸没开火；字段缺失=旧转录没有这一层。
+     *
+     * 【2026-08-28 补，来历要写清】此前它一格留痕都没有，于是
+     * 「这条 L1 从没报过红」与「这条 L1 从没被执行过」在归档里是同一个观察——
+     * 而后者当天刚被评测官在 `nbdpsyPitchAssertions` 上实证发生过一次（登记+单测+import 齐全，唯独没接线）。
+     */
+    crisisPaid?: { message: string } | null;
     leverage?: { outcome: string; stripped: string[]; bodyRaw?: string } | null;
     /** 这一轮实际跑在哪个模型上——证据必须自证，不能靠「我记得是 deepseek」 */
     model: string;
