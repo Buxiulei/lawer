@@ -52,7 +52,7 @@ export default async function VerifyPage({
       <header className="border-b border-line pb-5">
         <div className="flex items-center gap-2.5">
           <LampMark className="size-6 text-primary" />
-          <span className="text-[15px] font-semibold text-ink">裁员应对专员</span>
+          <span className="text-[15px] font-semibold text-ink">土拨鼠劳动仲裁</span>
         </div>
         <h1 className="mt-4 text-[20px] font-semibold text-ink sm:text-[22px]">
           存证查询

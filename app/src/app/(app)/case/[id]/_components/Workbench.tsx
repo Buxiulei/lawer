@@ -11,8 +11,8 @@ import {
 } from '@/app/_mock/demo';
 import { mockLawRefs } from '@/app/_mock/workbench';
 import { formatDate } from '@/app/_ui/format';
-import { Badge } from '@/components/ui/Badge';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { Badge } from '@/components/shadcn/badge';
+import { EmptyState } from '@/components/shadcn/empty-state';
 import { AppSheet } from '@/components/shadcn/app-sheet';
 import { Button } from '@/components/shadcn/button';
 import { DeadlineChip } from '@/components/case/DeadlineChip';
@@ -206,10 +206,12 @@ export function Workbench({ caseId }: { caseId: string }) {
         {seeded && <CaseStatusBar />}
 
         <div className="xl:flex xl:items-start xl:gap-6">
-          <div className="min-w-0 xl:flex-1">
+          {/* 断点：<md 满宽单列；md–lg 居中限宽（**这是 768 与 393 版式不同的可量证据**：
+              同一段文字的左边界 x 会从 16px 变成 (视口-672)/2）；xl 起是双栏左列。 */}
+          <div className="min-w-0 md:mx-auto md:max-w-2xl xl:mx-0 xl:max-w-4xl xl:flex-1">
             {stream.demoFallback && <DemoDataBanner />}
 
-            <div className="flex flex-col">
+            <div className="flex flex-col gap-5 md:gap-7">
               {messages.map((m, i) => {
                 const prev = messages[i - 1];
                 const newDay =
@@ -300,13 +302,28 @@ function CaseStatusBar() {
   )[0];
 
   return (
-    <div className="sticky top-14 z-30 -mx-4 mb-1 flex items-center gap-2 border-b border-line bg-bg/95 px-4 py-2 backdrop-blur-sm xl:hidden">
-      {/* data-veil 不能挂在上面那层 sticky 上（filter 会拽走 fixed 子孙），
-          Badge 又不透传 props，只好在它外面包一层 inline-flex */}
-      <span data-veil="" className="inline-flex">
-        <Badge tone="primary">{demoCase.stage}</Badge>
-      </span>
-      {nearest && <DeadlineChip dueAt={nearest.dueAt} />}
-    </div>
+    <section className="mb-4 overflow-hidden rounded-[12px] xl:hidden">
+      {/* 分量 4：金色填色顶栏 + 白底内容、**无外框**。
+          没有外框是刻意的——行动卡才是「实边框 + 填色顶栏」那一档，
+          期限只有顶栏，两者在灰度下也分得开（验收第 2、3 条）。
+          金色不用红：红只留给风险条款与不可逆操作。
+
+          **顶栏用淡金 --gold-wash 而不是规格写的深金 --gold**：实测 --ink(#2b1f1a)
+          压在深金(#8a7340)上只有 **3.68:1**，14px 正文过不了 4.5；换淡金(#f5e6c8)是
+          **13.59:1**。深色模式下同理（淡金档 #2e2717 配浅色 ink 是 12.4:1，
+          而深金 #c9a75b 配浅 ink 只有 1.6:1，更糟）。
+          顺带的好处：淡金底比行动卡的勃艮第实底轻，**分量 4 在 5 之下这件事因此更明显**。 */}
+      <h2 className="bg-gold-wash px-3.5 py-1.5 text-[14px] font-semibold text-ink">
+        当前阶段与最近期限
+      </h2>
+      <div className="flex flex-wrap items-center gap-2 bg-surface px-3.5 py-2.5">
+        {/* data-veil 不挂在外层：filter 会拽走 fixed 子孙。
+            Badge 又不透传 props，只好在它外面包一层 inline-flex */}
+        <span data-veil="" className="inline-flex">
+          <Badge tone="primary">{demoCase.stage}</Badge>
+        </span>
+        {nearest && <DeadlineChip dueAt={nearest.dueAt} showDate />}
+      </div>
+    </section>
   );
 }

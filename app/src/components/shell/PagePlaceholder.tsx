@@ -1,4 +1,4 @@
-import { EmptyState } from '@/components/ui/EmptyState';
+import { EmptyState } from '@/components/shadcn/empty-state';
 
 /**
  * 骨架期占位：页面本体由各自负责的窗口实现。

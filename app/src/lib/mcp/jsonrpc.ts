@@ -27,7 +27,7 @@ export const FALLBACK_PROTOCOL_VERSION = '2025-03-26';
 
 export const SERVER_INFO = {
   name: 'lawer-caiyuan',
-  title: '裁员应对专员',
+  title: '土拨鼠劳动仲裁',
   version: '0.1.0',
 };
 

@@ -243,12 +243,12 @@ describe('手机验证通过后的建号与双验证', () => {
 
     const neutral = makeDeps(at(20));
     await sendEmailCode(db, { userId: uid, email: 'a@b.com', ip: IP }, neutral.deps);
-    expect(neutral.email.mock.calls[0][1].subject).not.toContain('裁员应对专员');
+    expect(neutral.email.mock.calls[0][1].subject).not.toContain('土拨鼠');
 
     db.prepare('UPDATE users SET notify_verbose = 1 WHERE id = ?').run(uid);
     const verbose = makeDeps(at(200));
     await sendEmailCode(db, { userId: uid, email: 'a@b.com', ip: IP }, verbose.deps);
-    expect(verbose.email.mock.calls[0][1].subject).toContain('裁员应对专员');
+    expect(verbose.email.mock.calls[0][1].subject).toContain('土拨鼠');
   });
 
   test('邮箱已被别的账号绑定 → EMAIL_TAKEN，发码和验码两处都拦', async () => {

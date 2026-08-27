@@ -4,7 +4,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from './utils';
 
 /**
- * 徽标。tone 取值与手写版 @/components/ui/Badge 逐字一致，转体系的页面换 import 即可。
+ * 徽标。全站唯一一套（2026-08-27 批 0 起，手写版 ui/Badge 已删）。
  *
  * 色彩纪律照 DESIGN.md：danger 只给风险与不可逆结论，gold 只做品牌点缀
  * （会员/成就），不拿来做警示或倒计时。
@@ -17,7 +17,7 @@ const badgeVariants = cva(
         neutral: 'bg-muted text-muted-foreground',
         primary: 'bg-primary-wash text-primary-ink',
         gold: 'bg-gold-wash text-gold',
-        success: 'bg-success-wash text-success',
+        success: 'bg-success-wash text-success-ink',
         amber: 'bg-amber-wash text-amber-ink',
         danger: 'bg-danger-wash text-danger-ink',
       },

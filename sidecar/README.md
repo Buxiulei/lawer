@@ -86,7 +86,7 @@ set -a && . ./.env && set +a  # 加载环境变量
 {
   "order_no": "LAWER-ATT-20260819-000042",
   "generated_at": "2026-08-19T11:45:00+08:00",
-  "issuer": "lawer 裁员应对专员",
+  "issuer": "lawer 土拨鼠劳动仲裁",
   "verify_url": "https://<域名>/verify/LAWER-ATT-20260819-000042",
   "status": "stamped",
   "signer_entity": "（可选）出证主体机构名，用于证书信任说明段",

@@ -51,7 +51,7 @@ describe('GET /api/v1/agent-setup', () => {
     expect(body.manifest_url).toBe('http://localhost/api/manifest');
     expect(body.tools).toEqual(TOOLS.map((t) => ({ name: t.name, description: t.description })));
     // 接入说明读的是仓库根 skill/ 的真文件，不是硬编码进 TS 的字符串
-    expect(body.setup_markdown).toContain('# 裁员应对专员 · 接入说明');
+    expect(body.setup_markdown).toContain('# 土拨鼠劳动仲裁 · 接入说明');
     expect(body.setup_markdown).toContain('case_get');
   });
 

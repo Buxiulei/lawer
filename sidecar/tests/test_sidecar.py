@@ -24,7 +24,7 @@ def _payload():
     return {
         "order_no": "LAWER-ATT-20260819-000001",
         "generated_at": "2026-08-19T12:00:00+08:00",
-        "issuer": "lawer 裁员应对专员",
+        "issuer": "lawer 土拨鼠劳动仲裁",
         "verify_url": "https://example.com/verify/LAWER-ATT-20260819-000001",
         "status": "stamped",
         "holder": {

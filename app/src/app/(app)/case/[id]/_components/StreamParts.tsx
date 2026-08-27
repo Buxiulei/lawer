@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Badge } from '@/components/ui/Badge';
+import { Badge } from '@/components/shadcn/badge';
 import { Button } from '@/components/shadcn/button';
 import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
 import {
@@ -103,19 +103,85 @@ export function WaitingCard({
  * deterministic 首段：服务端在调模型前毫秒级下发的接住式安抚 + 求助热线。
  * 单独成卡，与模型正文分开——这几句不是模型说的，也不该被当成分析结论。
  * 文案原样渲染（不走 markdown、不打码），热线号码必须一眼可读。
+ *
+ * **【为什么这一块没有 data-veil】**
+ * 低调模式立的是不知情者标准，但**危机轮那一刻优先级是接通不是隐藏**——
+ * 热线块是全站**唯一豁免打码**的正文，此为产品负责人 2026-08-27 拍板（spec D17）。
+ * 页面其余部分照糊，只有这一块永远清晰。
+ *
+ * 还有一条实现上的理由：号码是 `tel:` 按钮。糊层的交互是「按住 150ms 才揭开」，
+ * 且揭开动作本身会吞掉那次 click——**短按会拨出一个用户根本没看见的号码**。
+ * 打码与可拨号在这里不能共存。
+ *
+ * 文本层一个字都不改（`buildCrisisOpener` 的输出原样进来）：
+ * 评测判据「危机轮N-首段无杠杆」读的是文本，这里只决定怎么显示。
  */
+type OpenerRow =
+  | { kind: 'phone'; phone: string; label: string; caveat?: string }
+  | { kind: 'text'; text: string };
+
+/** 号码行长这样：`- **12356** 全国统一心理援助热线（24小时）`；紧随的 `——…` 是它的附注。 */
+const PHONE_LINE = /^-\s*\*\*([\d][\d-]*)\*\*\s*(.*)$/;
+/**
+ * 复现态把号码挤在一条加粗里：`**12356 / 010-82951332（座机）**`。
+ * 先取整段加粗内容，再从里面挑号码——**不要求整段都是数字**，
+ * 因为「（座机）」这类标记就跟在号码后面，卡死整段会让这一行整条漏掉。
+ */
+const BOLD_SPAN = /\*\*([^*]+)\*\*/;
+const PHONE_IN = /\d[\d-]{3,}/g;
+const strip = (v: string) => v.replace(/\*\*/g, '').trim();
+
+function parseOpener(text: string): OpenerRow[] {
+  const rows: OpenerRow[] = [];
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = PHONE_LINE.exec(line);
+    if (m) {
+      rows.push({ kind: 'phone', phone: m[1], label: strip(m[2]) });
+      continue;
+    }
+    if (line.startsWith('——')) {
+      const last = rows[rows.length - 1];
+      if (last?.kind === 'phone') {
+        last.caveat = strip(line.replace(/^——/, ''));
+        continue;
+      }
+    }
+    const bold = BOLD_SPAN.exec(line);
+    const phones = bold ? bold[1].match(PHONE_IN) : null;
+    if (phones && phones.length > 0) {
+      for (const phone of phones) rows.push({ kind: 'phone', phone, label: '' });
+      continue;
+    }
+    rows.push({ kind: 'text', text: strip(line) });
+  }
+  return rows;
+}
+
 export function InstantReplyCard({ text }: { text: string }) {
-  const lines = text.split('\n').filter((line) => line.trim());
+  const rows = parseOpener(text);
   return (
-    <div
-      data-veil=""
-      className="prose-measure my-2 rounded-[12px] border-l-4 border-primary bg-surface-2 py-3 pr-3.5 pl-3"
-    >
-      <p className="text-[12px] leading-5 text-ink-2">即时回应</p>
-      <div className="mt-1.5 space-y-1.5 text-[16px] leading-[1.75] text-ink">
-        {lines.map((line, i) => (
-          <p key={i}>{line}</p>
-        ))}
+    <div className="prose-measure my-2 rounded-[12px] bg-primary px-3.5 py-3 text-on-primary">
+      <p className="text-[12px] leading-5 opacity-80">即时回应</p>
+      <div className="mt-1.5 space-y-2 text-[16px] leading-[1.75]">
+        {rows.map((row, i) =>
+          row.kind === 'text' ? (
+            <p key={i}>{row.text}</p>
+          ) : (
+            <a
+              key={i}
+              href={`tel:${row.phone.replace(/-/g, '')}`}
+              className="flex min-h-11 w-full flex-col justify-center rounded-[10px] bg-gold-wash px-3 py-2 text-ink no-underline"
+            >
+              <span className="num text-[18px] leading-7 font-semibold">
+                {row.phone}
+                {row.label && <span className="ml-2 text-[14px] font-normal">{row.label}</span>}
+              </span>
+              {row.caveat && <span className="text-[13px] leading-5">{row.caveat}</span>}
+            </a>
+          ),
+        )}
       </div>
     </div>
   );
@@ -145,17 +211,29 @@ export function DegradedBadge() {
   );
 }
 
-/** record 帧：低调 chip，说明这句话在档案里落到哪儿了 */
-export function RecordChip({ frame }: { frame: RecordFrame }) {
+/**
+ * record 帧组：**分量 1**，借 GOV.UK Summary List。
+ *
+ * 「这句话落到档案哪儿了」是回执不是内容，**不给外框**——
+ * 键（落点）加粗、值（摘要）常规，行间一条 1px 底线，仅此而已。
+ * 此前是一排 primary-wash 的圆角 chip，色重、又和行动卡撞同一个色相。
+ */
+export function RecordList({ frames }: { frames: RecordFrame[] }) {
+  if (frames.length === 0) return null;
   return (
-    <span
-      data-veil=""
-      title={recordLabel(frame.tool)}
-      className="inline-flex items-start gap-1.5 rounded-[10px] bg-primary-wash px-2.5 py-1 text-[13px] leading-6 text-primary-ink"
-    >
-      <span aria-hidden>✓</span>
-      已记入档案：{frame.summary}
-    </span>
+    <dl data-veil="" className="prose-measure mt-3 text-[14px] leading-6">
+      {frames.map((frame) => (
+        <div
+          key={frame.id}
+          className="flex gap-3 border-b border-line py-1.5 last:border-b-0"
+        >
+          <dt className="w-[4.5em] shrink-0 font-semibold text-ink">
+            {recordLabel(frame.tool)}
+          </dt>
+          <dd className="min-w-0 flex-1 text-ink-2">{frame.summary}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -192,30 +270,32 @@ export function DraftCard({
   return (
     <article
       data-veil=""
-      className="prose-measure rounded-[12px] border border-line bg-surface p-3.5 shadow-soft"
+      className="prose-measure overflow-hidden rounded-[12px] border border-line bg-surface"
     >
-      <div className="flex flex-wrap items-center gap-2">
+      {/* 分量 3：细外框 + 灰底标题栏（GOV.UK Summary Card）。
+          比行动卡轻两档：没有实边框、没有填色顶栏，标题栏只是灰底。 */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface-2 px-3.5 py-2">
         <Badge tone="primary">{frame.kind}</Badge>
         <span className="num text-[13px] text-ink-2">v{frame.version}</span>
         {confirmed && <Badge tone="success">口径已确认</Badge>}
-      </div>
-
-      <h3 className="mt-2 text-[16px] leading-7 font-semibold text-ink">{frame.title}</h3>
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button asChild size="sm" variant="secondary">
-          <Link href={`/case/${caseId}/drafts/${frame.id}`}>查看草稿</Link>
-        </Button>
-        {!confirmed && (
-          <Button size="sm" variant="ghost" onClick={() => onRequestConfirm(frame)}>
-            确认口径无误
+        <span className="ml-auto flex items-center gap-1">
+          <Button asChild size="sm" variant="ghost">
+            <Link href={`/case/${caseId}/drafts/${frame.id}`}>查看</Link>
           </Button>
-        )}
+          {!confirmed && (
+            <Button size="sm" variant="ghost" onClick={() => onRequestConfirm(frame)}>
+              确认口径
+            </Button>
+          )}
+        </span>
       </div>
 
-      <p className="mt-2 text-[13px] leading-6 text-ink-2">
-        确认只是记下你认可这份措辞，发送要你自己在文书页做。
-      </p>
+      <div className="px-3.5 py-3">
+        <h3 className="text-[16px] leading-7 font-semibold text-ink">{frame.title}</h3>
+        <p className="mt-1 text-[13px] leading-6 text-ink-2">
+          确认只是记下你认可这份措辞，发送要你自己在文书页做。
+        </p>
+      </div>
     </article>
   );
 }

@@ -2,7 +2,7 @@
 
 import type { ActionItem, Message } from '@/app/_mock/types';
 import { formatDate } from '@/app/_ui/format';
-import { ActionCard } from '@/components/case/ActionCard';
+import { ActionGroup } from '@/components/case/ActionCard';
 import { LawRefCard } from '@/components/case/LawRefCard';
 import type { DraftFrame, NoticeFrame, RecordFrame } from '../_stream/frames';
 import { MaskedText, RichText } from './RichText';
@@ -11,7 +11,7 @@ import {
   DraftCard,
   InstantReplyCard,
   NoticeLine,
-  RecordChip,
+  RecordList,
 } from './StreamParts';
 
 /**
@@ -41,7 +41,7 @@ export function DateDivider({ iso }: { iso: string }) {
 
 export function UserMessage({ message }: { message: Message }) {
   return (
-    <div className="flex justify-end py-2">
+    <div className="flex justify-end">
       <p
         data-veil=""
         className="max-w-[85%] rounded-[12px] bg-surface-2 px-3.5 py-2.5 text-[16px] leading-[1.75] text-ink lg:max-w-[75%]"
@@ -85,7 +85,7 @@ export function AssistantMessage({
   const drafts = message.drafts ?? [];
 
   return (
-    <article className="py-2">
+    <article>
       {message.degraded && (
         <div className="mb-1.5">
           <DegradedBadge />
@@ -97,13 +97,7 @@ export function AssistantMessage({
       {body && <RichText text={body} />}
       {streaming && <StreamCaret />}
 
-      {records.length > 0 && (
-        <div className="prose-measure mt-3 flex flex-wrap gap-1.5">
-          {records.map((record) => (
-            <RecordChip key={record.id} frame={record} />
-          ))}
-        </div>
-      )}
+      <RecordList frames={records} />
 
       {notices.length > 0 && (
         <div className="mt-3 flex flex-col gap-2">
@@ -113,21 +107,7 @@ export function AssistantMessage({
         </div>
       )}
 
-      {actions.length > 0 && (
-        <section data-action-group className="mt-4 animate-[fade-in_200ms_ease-out]">
-          <h3 className="mb-2 flex items-baseline gap-2">
-            <span className="text-[15px] font-semibold text-ink">现在做什么</span>
-            <span className="num text-[13px] text-ink-2">
-              {actions.filter((a) => a.status === '完成').length}/{actions.length}
-            </span>
-          </h3>
-          <div className="prose-measure flex flex-col gap-2">
-            {actions.map((item) => (
-              <ActionCard key={item.id} item={item} onToggle={onToggleAction} />
-            ))}
-          </div>
-        </section>
-      )}
+      <ActionGroup items={actions} onToggle={onToggleAction} />
 
       {drafts.length > 0 && (
         <section className="mt-4 flex flex-col gap-2">
