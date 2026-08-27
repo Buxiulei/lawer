@@ -84,6 +84,17 @@ echo "archived_to=$ARCH/$(basename "$OUT")" >>"$OUT/META"
 
 # 接回开批前的分支（游离头上提交会被 push 静默忽略，见文件上方）
 if [ -n "$START_REF" ]; then
+  # 【接回之前先看游离头上有没有新提交 · 2026-08-28 踩过第二次】
+  # 上一版只管"接回分支"，但**批跑着的时候我在游离头上提交并直推了远端**，
+  # 于是本地分支 ref 落后于远端，接回它 ⇒ **把工作区静默倒回**，
+  # 而我拿倒回后的旧脚本跑了读数器、差点把一个硬编码的旧基线当成自算结果报出去。
+  # ⇒ **「接回分支」不等于「接回到最新」。** 本地 ref 可能比你刚做的事旧。
+  DETACHED_HEAD=$(git rev-parse HEAD)
+  if ! git merge-base --is-ancestor "$DETACHED_HEAD" "$START_REF" 2>/dev/null; then
+    echo "⚠️ 游离头 $(git rev-parse --short "$DETACHED_HEAD") 上有提交不在 $START_REF 上——" >&2
+    echo "   接回会把它们从工作区拿掉。先 git fetch && git merge --ff-only origin/$START_REF 再干活。" >&2
+    echo "detached_had_extra_commits=1" >>"$OUT/META"
+  fi
   git checkout -q "$START_REF" 2>/dev/null || echo "⚠️ 接回 $START_REF 失败，HEAD 仍游离——提交前先 git checkout $START_REF" >&2
   # 【接回也要自证】checkout 失败与成功在下游长得一样：都是"没有报错的终端"。
   NOW=$(git symbolic-ref --quiet --short HEAD || echo "游离")

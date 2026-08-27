@@ -262,6 +262,13 @@ async function runScenario(scenario: Scenario, plan: Plan): Promise<ScenarioRepo
     // 首段自身（manager 2026-08-26 裁定②的另一半）：把首段从「重复」计数里摘出去之后，
     // 必须有人看着首段本身，否则它从此无人管——而它是 L1「号码必须在场」的唯一保证来源。
     ...crisisOpenerCardAssertions(turns, crisisFacts),
+    // 【D15 危机轮零付费内容 · 2026-08-28 补接线】
+    // **这条 L1 自 2026-08-25 登记进 L1_CHECKLIST 起就从未被调用过**：
+    // 本文件 import 了它、清单登记了它、单测覆盖了它，**唯独这里没有调用点**
+    //（`git log -S "...nbdpsyPitchAssertions("` 全历史零命中；归档 174 份成绩单零出现）。
+    // **「干净即无声」把这件事藏了三天**——没产出既可能是合规、也可能是没接线，
+    // 两者在成绩单上完全一样。**配置好了不等于接上了。**
+    ...nbdpsyPitchAssertions(turns),
     // G4 依据纪律的机械那一半：引了条号就必须带逐字原文。全剧本逐轮，
     // 判据与产线出口侧的留痕检测同源（bareArticleCitations）。
     // 库内已有逐字原文的条号全集：本轮检索到的卡现取（补卡到位即自动升级判定标准）

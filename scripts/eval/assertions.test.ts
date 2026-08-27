@@ -557,6 +557,44 @@ describe('L1 全集守卫：每条红线都必须真实存在且判为 L1', () =
     'globalAssertions:G2': () => globalAssertions(turn('随便', '建议你找律师咨询一下')).filter((v) => v.id === 'G2'),
   };
 
+  /**
+   * 【接线元测试 · 2026-08-28 补，因为上面那组测试没能挡住一次真事故】
+   *
+   * 上面那组按 `L1_CHECKLIST` 逐条探测：它**直接调函数**，验的是"这个函数存在、
+   * 产出的 verdict 是 L1"。**它一直是绿的**——而 `nbdpsyPitchAssertions`
+   * **从 2026-08-25 登记起就没有被 runner 调用过**（`git log -S "...nbdpsyPitchAssertions("`
+   * 全历史零命中；归档 174 份成绩单里它一次都没出现）。
+   *
+   * ⇒ **登记 + 单测 + import 三样齐全，唯独没接线，而三样都是绿的。**
+   * **配置好了不等于接上了。**
+   *
+   * 所以这条不查函数，**查 runner 的源码里有没有它的调用点**——
+   * 静态检查很粗糙，但它守的正是上面那组结构上看不见的那一格。
+   */
+  it('★L1 清单里的每个机械判据，runner 里都必须有调用点（不是只有 import）', () => {
+    const raw = readFileSync(new URL('../eval-agent.ts', import.meta.url), 'utf8');
+    // 【必须先剥注释 · 这条守卫第一版就栽在这里】
+    // 我在调用点上方写了段解释，里面引用了 `...nbdpsyPitchAssertions(` 这个形状本身——
+    // **于是把调用点删掉之后，正则仍然匹到了那句注释，守卫照样绿。**
+    // **注释里对 bug 的描述，长得和修复一模一样。**（变异测试当场抓住，否则这条守卫等于没写）
+    const runner = raw
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('//'))
+      .join('\n');
+    const missing: string[] = [];
+    for (const { name, probe } of L1_CHECKLIST) {
+      if (probe.kind !== 'mechanical') continue;
+      const fn = probe.fn.split(':')[0]; // globalAssertions:G1 → globalAssertions
+      // 调用点的形状：`...fn(` —— 与 import 行（`  fn,`）区分开
+      if (!new RegExp(`\\.\\.\\.${fn}\\(`).test(runner)) missing.push(`${name}（${fn}）`);
+    }
+    expect(
+      missing,
+      `这些 L1 登记了但 runner 里没有调用点——**它们在跑批里根本不执行，而清单与单测都是绿的**：\n  ${missing.join('\n  ')}`,
+    ).toEqual([]);
+  });
+
   it.each(L1_CHECKLIST)('「$name」', ({ name, probe }) => {
     if (probe.kind === 'mechanical') {
       const produce = mechanicalProbes[probe.fn];
