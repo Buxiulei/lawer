@@ -52,7 +52,7 @@ import {
 import { judgeAvailable, judgeItem, type JudgeResult } from './eval/judge';
 import { collectPending, PENDING_ESCALATE_BATCHES, writePendingCardList } from './eval/pending-cards';
 import { lawsInLibrary } from './eval/assertions';
-import { newRunId, writeEvidence, type ScenarioEvidence } from './eval/report';
+import { archiveCrisisPaid, archiveLeverage, newRunId, writeEvidence, type ScenarioEvidence } from './eval/report';
 import { listPacks } from '../app/src/lib/knowledge';
 import { findScenarios, type Scenario } from './eval/scenarios';
 
@@ -520,24 +520,10 @@ async function main() {
         // （notice 不进归档；`leverage` 那个字段就是 08-26 为此专门加的。）
         // 没有这一格，"D15 闸在跑批里有没有拦下过东西"**永远不可判**——
         // 而它是一条 L1，"从没报过红"必须能与"从没被执行过"区分开。
-        crisisPaid: (() => {
-          const ev = t.events.find(
-            (e) => e.event === 'notice' && e.data.code === 'CRISIS_PAID_CONTENT_BLOCKED',
-          );
-          if (!ev || ev.event !== 'notice') return null;   // null = 这一层跑了、闸没开火
-          return { message: ev.data.message };
-        })(),
-        leverage: (() => {
-          const ev = t.events.find(
-            (e) => e.event === 'notice' && e.data.code === 'EMOTIONAL_LEVERAGE_DETECTED',
-          );
-          if (!ev || ev.event !== 'notice') return null;
-          return {
-            outcome: ev.data.leverage_outcome ?? '未记',
-            stripped: ev.data.stripped_sentences ?? [],
-            bodyRaw: ev.data.model_body_raw,
-          };
-        })(),
+        // 两处映射抽成了 report.ts 的纯函数（原来是内联 IIFE，**测不到**）——
+        // 三态语义与"必须无条件写 null"的理由都在那边的注释里，配了两态样本。
+        crisisPaid: archiveCrisisPaid(t.events),
+        leverage: archiveLeverage(t.events),
         model: t.model,
         degraded: t.degraded,
         taskClass: t.taskClass,

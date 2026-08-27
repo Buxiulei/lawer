@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import type { AgentEvent } from '../../app/src/lib/agent';
+
 import type { Verdict } from './assertions';
-import { renderMarkdown, type RunEvidence } from './report';
+import { archiveCrisisPaid, archiveLeverage, renderMarkdown, type RunEvidence } from './report';
 
 /**
  * 看门测试：**markdown 成绩单不许把第三态渲染成绿勾。**
@@ -76,5 +78,50 @@ describe('成绩单渲染：N/A 不得显示成 PASS', () => {
     );
     expect(row(md, 'OK-1')).toContain('PASS');
     expect(row(md, 'NG-1')).toContain('FAIL');
+  });
+});
+
+describe('闸留痕 → 转录的映射（三态；抽成纯函数才测得到）', () => {
+  /* 【为什么这组测试是补上来的，来历要留下】
+   * 2026-08-28 我加 `crisisPaid` 那一格时，这段映射是**内联 IIFE**，没有任何测试覆盖。
+   * 我当时主动打了折：「代码在树上 ≠ 它会写下来，零批次产出过这个字段」。
+   * **但打折不是处置**——正确的处置是把它变成不跑批也能测的，而不是等下一批替我验。
+   * （评测官的批已钉在 ff0fa12 上验这一格；这组测试与那次验证是**两条独立的路**，
+   *   一条静态一条实跑，都过才算数。） */
+  const notice = (code: string, data: Record<string, unknown> = {}) =>
+    ({ event: 'notice' as const, data: { code, message: 'm', ...data } }) as unknown as AgentEvent;
+
+  it('★闸没开火 ⇒ 必须是 null，不是 undefined（否则与"旧转录没这一层"分不开）', () => {
+    expect(archiveCrisisPaid([])).toBeNull();
+    expect(archiveLeverage([])).toBeNull();
+    // 有别的 notice 但不是这一条，同样是 null
+    expect(archiveCrisisPaid([notice('ACTION_CARD_MISSING')])).toBeNull();
+    expect(archiveLeverage([notice('CITATION_BLOCKED')])).toBeNull();
+  });
+
+  it('★D15 闸开火 ⇒ 带出 message', () => {
+    const got = archiveCrisisPaid([notice('CRISIS_PAID_CONTENT_BLOCKED', { message: '危机轮出现付费/预约内容「一次 600 元」，已整句剥除。' })]);
+    expect(got).not.toBeNull();
+    expect(got!.message).toContain('一次 600 元');
+  });
+
+  it('★杠杆闸开火 ⇒ 带出处置、被剥原句、**闸前正文**', () => {
+    const got = archiveLeverage([
+      notice('EMOTIONAL_LEVERAGE_DETECTED', {
+        leverage_outcome: 'stripped',
+        stripped_sentences: ['想想你爸妈，他们该多伤心。'],
+        model_body_raw: '想想你爸妈，他们该多伤心。我在。',
+      }),
+    ]);
+    expect(got).toMatchObject({ outcome: 'stripped', stripped: ['想想你爸妈，他们该多伤心。'] });
+    expect(got!.bodyRaw).toContain('我在。');
+  });
+
+  it('★旧代码跑出来的 notice 缺字段时不许塌成假值', () => {
+    // outcome 缺 → 记「未记」而不是 undefined；stripped 缺 → 空数组而不是 undefined；
+    // 但 bodyRaw 缺 **必须留 undefined**——它是三态里的"不知道"，判据据此写「本条判定不完整」。
+    const got = archiveLeverage([notice('EMOTIONAL_LEVERAGE_DETECTED')]);
+    expect(got).toMatchObject({ outcome: '未记', stripped: [] });
+    expect(got!.bodyRaw, 'bodyRaw 缺失是"不知道"，不能被兜成空串').toBeUndefined();
   });
 });

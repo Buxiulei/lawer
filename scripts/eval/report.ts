@@ -12,11 +12,54 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+import type { AgentEvent } from '../../app/src/lib/agent';
 import type { Verdict } from './assertions';
 import type { JudgeResult } from './judge';
 import { findRuling } from './human-review';
 
 export const RESULTS_DIR = path.resolve(import.meta.dirname, 'results');
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 闸留痕 → 转录的映射：**抽成纯函数，因为原来它是内联 IIFE，测不到**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 【为什么抽】2026-08-28 我补 `crisisPaid` 那一格时，自己给自己打了折：
+ * 「tsc 干净、1743 绿——**但没有一条测试跑过这段归档映射**（它是内联的），
+ *  零批次产出过这个字段。⇒ 我能说的只有『代码在树上』，不能说『它会写下来』。」
+ * 那句打折是对的，**但打折不是处置**：正确的处置是把它变成可测的，而不是等下一批替我验。
+ *
+ * 这与今天同一族的三条是同一个动作：判据同源要共用**原语**、
+ * 整卡计数要抽 `cardOccurrences`、危机首段切分要抽 `splitCrisisOpener`——
+ * **凡是"只有跑一遍才知道对不对"的逻辑，先想办法把它变成"不跑也能测"。**
+ *
+ * 【三态，两个函数都一样】
+ *   对象      = 闸开过火
+ *   `null`    = 这一层跑了、闸没开火
+ *   字段缺失  = 这份转录**根本没有这一层**（旧产物）
+ * 调用方必须**无条件写**（`null` 也写）——否则后两者在归档里长得一模一样，
+ * 而 `events` 不进归档，离线回放就只剩这一格可依。
+ */
+type NoticeEvent = Extract<AgentEvent, { event: 'notice' }>;
+
+function findNotice(events: AgentEvent[], code: string): NoticeEvent | undefined {
+  return events.find((e) => e.event === 'notice' && e.data.code === code) as NoticeEvent | undefined;
+}
+
+/** 杠杆闸留痕（含**闸前模型段原文**——没有它，那条 L1 结构上只能报绿）。 */
+export function archiveLeverage(events: AgentEvent[]): ScenarioEvidence['turns'][number]['leverage'] {
+  const ev = findNotice(events, 'EMOTIONAL_LEVERAGE_DETECTED');
+  if (!ev) return null;
+  return {
+    outcome: ev.data.leverage_outcome ?? '未记',
+    stripped: ev.data.stripped_sentences ?? [],
+    bodyRaw: ev.data.model_body_raw,
+  };
+}
+
+/** D15 危机轮付费禁令那道闸的留痕。 */
+export function archiveCrisisPaid(events: AgentEvent[]): ScenarioEvidence['turns'][number]['crisisPaid'] {
+  const ev = findNotice(events, 'CRISIS_PAID_CONTENT_BLOCKED');
+  return ev ? { message: ev.data.message } : null;
+}
 
 export interface ScenarioEvidence {
   id: string;
