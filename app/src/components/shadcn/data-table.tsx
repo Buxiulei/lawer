@@ -51,6 +51,7 @@ export function DataTable<T>({
   rowLabel,
   caption,
   faces = 'both',
+  cardStyle = 'card',
   className,
 }: {
   columns: DataTableColumn<T>[];
@@ -72,6 +73,13 @@ export function DataTable<T>({
    * 断点该藏该显不受影响，两个取值各自还带着自己那条 sm 断点。
    */
   faces?: 'both' | 'table' | 'cards';
+  /**
+   * 窄屏那一面的形状。
+   * - `card`（默认）：每行一张 12px 圆角描边卡，保持账本页等既有页面不变
+   * - `row`：**无外框**，行间一条 1px 底线（GOV.UK Summary List）。
+   *   证据页用它——每个分类只有一两件时，六张卡会让同一张表看起来像六个独立区块。
+   */
+  cardStyle?: 'card' | 'row';
   className?: string;
 }) {
   const { discreet } = useDiscreet();
@@ -147,9 +155,19 @@ export function DataTable<T>({
 
       {/* <sm：卡片列表 */}
       {faces !== 'table' && (
-      <ul className={cn('flex flex-col gap-2 sm:hidden', className)}>
+      <ul
+        className={cn(
+          'flex flex-col sm:hidden',
+          cardStyle === 'row' ? 'gap-0' : 'gap-2',
+          className,
+        )}
+      >
         {rows.map((row) => {
           const inner = <CardFace columns={columns} row={row} cellContent={cellContent} />;
+          const shape =
+            cardStyle === 'row'
+              ? 'w-full border-b border-border py-2.5 text-left transition-colors duration-150 ease-out last:border-b-0 hover:bg-muted'
+              : 'w-full rounded-[12px] border border-border bg-card p-3.5 text-left transition-colors duration-150 ease-out hover:bg-muted';
           return (
             <li key={rowKey(row)}>
               {onRowClick ? (
@@ -158,12 +176,12 @@ export function DataTable<T>({
                   data-veil=""
                   onClick={() => onRowClick(row)}
                   aria-label={rowLabel?.(row)}
-                  className="w-full rounded-[12px] border border-border bg-card p-3.5 text-left transition-colors duration-150 ease-out hover:bg-muted"
+                  className={shape}
                 >
                   {inner}
                 </button>
               ) : (
-                <div data-veil="" className="rounded-[12px] border border-border bg-card p-3.5">
+                <div data-veil="" className={shape}>
                   {inner}
                 </div>
               )}

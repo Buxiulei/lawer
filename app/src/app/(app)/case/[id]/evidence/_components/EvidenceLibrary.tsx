@@ -83,7 +83,7 @@ const COLUMNS: DataTableColumn<EvidenceView>[] = [
     // 表格里夹到两行，全文在详情 Sheet 里；卡片那边不夹，窄屏本来就是竖着读
     cell: (item) =>
       item.provePurpose ? (
-        <span className="block max-w-[22rem] text-[14px] leading-6 sm:line-clamp-2">
+        <span className="block max-w-[22rem] fs-s sm:line-clamp-2">
           {item.provePurpose}
         </span>
       ) : (
@@ -276,12 +276,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
 
   return (
     <div className="flex flex-col gap-4 pt-1">
-      <div className="flex flex-col gap-1.5">
-        <OriginalMediumNotice />
-        <p data-veil="" className="px-3.5 text-[13px] leading-6 text-ink-2">
-          公司要求交回原件时，先自己拍照或复印留一份再交。
-        </p>
-      </div>
+      <OriginalMediumNotice />
 
       {!needSignIn && <UploadBar onPick={handlePick} />}
 
@@ -331,7 +326,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
         </div>
       ) : (
         <>
-          <p data-veil="" className="num text-[14px] text-ink-2">
+          <p data-veil="" className="num fs-s text-ink-2">
             共 {items.length} 份 · 已固化 {frozen} 份 · 已出证 {issued} 份
           </p>
 
@@ -351,15 +346,16 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
               <section key={g.category}>
                 <h3
                   data-veil=""
-                  className="mb-2 flex items-baseline gap-2 text-[15px] font-semibold text-ink"
+                  className="mb-2 flex items-baseline gap-2 fs-m font-semibold text-ink"
                 >
                   {g.category}
-                  <span className="num text-[13px] font-normal text-ink-2">
+                  <span className="num fs-xs font-normal text-ink-2">
                     {g.list.length}
                   </span>
                 </h3>
                 <DataTable
                   faces="cards"
+                  cardStyle="row"
                   columns={COLUMNS}
                   rows={g.list}
                   rowKey={(item) => item.id}
@@ -444,18 +440,18 @@ function UploadProgress({
       <div className="flex items-start justify-between gap-3">
         <span
           data-veil=""
-          className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink"
+          className="min-w-0 flex-1 truncate fs-m font-medium text-ink"
         >
           {job.input.name}
         </span>
-        <span className="num shrink-0 text-[13px] text-ink-2">
+        <span className="num shrink-0 fs-xs text-ink-2">
           {formatBytes(job.sizeBytes)}
         </span>
       </div>
 
       {job.error ? (
         <>
-          <p className="mt-1.5 text-[14px] leading-6 text-danger-ink">{job.error}</p>
+          <p className="mt-1.5 fs-s text-danger-ink">{job.error}</p>
           <div className="mt-2.5 flex gap-2">
             <Button size="sm" onClick={onRetry}>
               重试上传
@@ -468,7 +464,7 @@ function UploadProgress({
       ) : (
         <>
           <Progress className="mt-2" value={percent} label="上传进度" />
-          <p className="num mt-1.5 text-[13px] text-ink-2">正在上传 {percent}%</p>
+          <p className="num mt-1.5 fs-xs text-ink-2">正在上传 {percent}%</p>
         </>
       )}
     </Card>

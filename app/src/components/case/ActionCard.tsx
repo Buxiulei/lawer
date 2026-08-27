@@ -28,26 +28,24 @@ export function ActionCard({
   const done = item.status === '完成';
 
   return (
-    <article
-      data-veil=""
-      className="flex items-start gap-3 px-3 py-2.5"
-    >
-      {/* 外层撑满 44px 触区，勾选框本体仍是 20px */}
-      <div className="flex min-h-11 min-w-11 items-center justify-center">
-        <Checkbox
-          checked={done}
-          onCheckedChange={(next) => onToggle?.(item.id, next === true)}
-          aria-label={`标记完成：${item.title}`}
-        />
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-          className="block w-full text-left"
-        >
+    <article data-veil="" className="px-3 py-2.5">
+      <div className="flex items-start gap-3">
+        {/* **标题与勾选框同属一个 label**：热区从 28px 的标题本身扩到整行，
+          高度不变（批 3）。批 1 报过标题按钮只有 28px 高，
+          当时的算法是"把按钮做高"，每行要多 16px、与密度目标冲突；
+          改成扩热区就没有这个代价。
+          **代价是标题点击的语义变了**：以前点标题是展开，现在是勾选完成——
+          展开仍有正下方那个「为什么要做这件事」，而"点标题=勾掉这件事"
+          和旁边的勾选框是同一个动作，比"点标题展开、点框勾选"更好猜。 */}
+        <label className="flex min-h-11 flex-1 cursor-pointer items-start gap-3">
+        <span className="flex min-h-11 min-w-11 items-center justify-center">
+          <Checkbox
+            checked={done}
+            onCheckedChange={(next) => onToggle?.(item.id, next === true)}
+            aria-label={`标记完成：${item.title}`}
+          />
+        </span>
+        <span className="flex min-h-11 min-w-0 flex-1 items-center">
           <h4
             className={cn(
               'text-[16px] leading-7 font-semibold',
@@ -56,8 +54,11 @@ export function ActionCard({
           >
             {item.title}
           </h4>
-        </button>
+        </span>
+        </label>
+      </div>
 
+      <div className="ml-14">
         <div className="mt-1 flex flex-wrap items-center gap-2">
           {item.dueAt && <DeadlineChip dueAt={item.dueAt} showDate />}
           <button

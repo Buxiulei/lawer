@@ -102,12 +102,12 @@ export function EvidenceDetailSheet({
               {discreet ? `下载${NEUTRAL_WORD.cert}` : '下载《存证证明》'}
             </Button>
             {item.status !== '已出证' ? (
-              <p data-veil="" className="text-[13px] leading-5 text-ink-2">
+              <p data-veil="" className="fs-xs text-ink-2">
                 《存证证明》要先固化、再出证才能下载。
               </p>
             ) : (
               !certDownloadable && (
-                <p data-veil="" className="text-[13px] leading-5 text-ink-2">
+                <p data-veil="" className="fs-xs text-ink-2">
                   证明文件已经生成好了，下载入口还在接。现在先把下面的验证链接给对方，
                   编号和时间戳一样可以当场核。
                 </p>
@@ -124,14 +124,14 @@ export function EvidenceDetailSheet({
               <EvidenceBadge status={item.status} />
               <Badge>{item.category}</Badge>
             </div>
-            <Sensitive as="div" className="mt-2 text-[16px] leading-7 font-semibold text-ink">
+            <Sensitive as="div" className="mt-2 fs-m font-semibold text-ink">
               {item.name}
             </Sensitive>
           </div>
 
           <p
             data-veil=""
-            className="rounded-[10px] bg-surface-2 px-3.5 py-3 text-[14px] leading-6 text-ink-2"
+            className="rounded-[10px] bg-surface-2 px-3.5 py-3 fs-s text-ink-2"
           >
             {STATUS_EXPLAIN[item.status]}
           </p>
@@ -167,7 +167,7 @@ export function EvidenceDetailSheet({
             )}
           </div>
 
-          <dl data-veil="" className="flex flex-col divide-y divide-line text-[15px]">
+          <dl data-veil="" className="flex flex-col divide-y divide-line fs-m">
             <Row label="原始载体" value={item.originalMedium || '未填写'} />
             <Row
               label="大小"
@@ -179,8 +179,8 @@ export function EvidenceDetailSheet({
 
           {att && (
             <Card data-veil="" className="bg-secondary p-3.5">
-              <h3 className="text-[15px] font-semibold text-ink">存证订单</h3>
-              <dl className="mt-2 flex flex-col divide-y divide-line text-[15px]">
+              <h3 className="fs-m font-semibold text-ink">存证订单</h3>
+              <dl className="mt-2 flex flex-col divide-y divide-line fs-m">
                 <Row label="存证编号" value={att.orderNo} numeric />
                 <Row
                   label="时间戳时间"
@@ -193,7 +193,7 @@ export function EvidenceDetailSheet({
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Link
                   href={`/verify/${encodeURIComponent(att.orderNo)}`}
-                  className="inline-flex min-h-11 items-center text-[15px] text-primary-ink underline underline-offset-4"
+                  className="inline-flex min-h-11 items-center fs-m text-primary-ink underline underline-offset-4"
                 >
                   打开验证链接
                 </Link>
@@ -213,7 +213,7 @@ export function EvidenceDetailSheet({
                   复制验证链接
                 </Button>
               </div>
-              <p className="mt-2 text-[13px] leading-6 text-ink-2">
+              <p className="mt-2 fs-xs text-ink-2">
                 {att.tsaGenTime
                   ? '任何人打开这个链接都能核一遍哈希和时间戳，不用注册。'
                   : '时间戳还没盖上，这个链接现在只显示「存证处理中」，还不能给对方当凭据。'}
@@ -223,8 +223,8 @@ export function EvidenceDetailSheet({
 
           {item.sha256 && (
             <div data-veil="">
-              <p className="text-[13px] text-ink-2">SHA-256 哈希值</p>
-              <p className="num mt-1 break-all rounded-[10px] bg-surface-2 px-3 py-2 text-[13px] leading-6 text-ink-2">
+              <p className="fs-xs text-ink-2">SHA-256 哈希值</p>
+              <p className="num mt-1 break-all rounded-[10px] bg-surface-2 px-3 py-2 fs-xs text-ink-2">
                 {item.sha256}
               </p>
             </div>
@@ -246,7 +246,7 @@ function Row({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0">
-      <dt className="shrink-0 text-[14px] text-ink-2">{label}</dt>
+      <dt className="shrink-0 fs-s text-ink-2">{label}</dt>
       <dd className={`min-w-0 text-right text-ink ${numeric ? 'num' : ''}`}>{value}</dd>
     </div>
   );
