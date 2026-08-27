@@ -68,7 +68,7 @@ export async function POST(req: Request) {
           capabilities: { tools: {} },
           serverInfo: SERVER_INFO,
           instructions:
-            '这是「土拨鼠劳动仲裁」的案件档案接口。所有工具都只能操作当前 api key 所属用户自己的案件。' +
+            '这是「土八鼠」的案件档案接口。所有工具都只能操作当前 api key 所属用户自己的案件。' +
             '时间线只追加不修改，记错了补一条更正事件。',
         }),
       );

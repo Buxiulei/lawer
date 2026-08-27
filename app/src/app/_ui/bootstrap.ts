@@ -14,7 +14,7 @@ export const TOKEN_STORAGE_KEY = 'lawer.token';
 export const NEUTRAL_TITLE = '工作台';
 
 /** 非低调模式下路由切换瞬间的兜底标题（避免上一页的案件标题残留）。 */
-export const APP_TITLE = '土拨鼠劳动仲裁';
+export const APP_TITLE = '土八鼠';
 
 /**
  * 低调模式下任何可能被旁人瞥见的文案的兜底措辞。
