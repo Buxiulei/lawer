@@ -29,12 +29,6 @@ import {
   OriginalMediumNotice,
 } from "@/components/case/EvidenceBadge";
 import { Badge } from "@/components/shadcn/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/shadcn/card";
 import { Sensitive } from "@/components/Sensitive";
 import { MaskedText } from "./RichText";
 
@@ -79,12 +73,12 @@ function TimelineBlock({ events }: { events: TimelineEvent[] }) {
   const shown = all ? ordered : ordered.slice(0, VISIBLE_EVENTS);
 
   return (
-    <Card>
-      <CardHeader className={HEADER_COMPAT}>
-        <CardTitle className={TITLE_COMPAT}>时间线</CardTitle>
+    <section className="border-b border-line pb-4 last:border-b-0">
+      <header className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="text-[15px] font-semibold text-ink">时间线</h3>
         <span className="num text-[13px] text-ink-2">{events.length} 条</span>
-      </CardHeader>
-      <CardContent>
+      </header>
+      <div>
         <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-ink-2">
           {(["公司动作", "我方动作", "系统动作"] as const).map((kind) => (
             <span key={kind} className="inline-flex items-center gap-1.5">
@@ -133,8 +127,8 @@ function TimelineBlock({ events }: { events: TimelineEvent[] }) {
             {all ? "只看最近 4 条" : `展开全部 ${ordered.length} 条`}
           </button>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
 
@@ -142,14 +136,14 @@ function TimelineBlock({ events }: { events: TimelineEvent[] }) {
 
 function CompanyGraphBlock({ caseId }: { caseId: string }) {
   return (
-    <Card>
-      <CardHeader className={HEADER_COMPAT}>
-        <CardTitle className={TITLE_COMPAT}>公司图谱</CardTitle>
+    <section className="border-b border-line pb-4 last:border-b-0">
+      <header className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="text-[15px] font-semibold text-ink">公司图谱</h3>
         <span className="num text-[13px] text-ink-2">
           {mockCompanyGraph.nodes.length} 个主体
         </span>
-      </CardHeader>
-      <CardContent>
+      </header>
+      <div>
         <p data-veil="" className="text-[14px] leading-6 text-ink-2">
           跟你签合同的、给你发工资的、背后控股的，常常不是同一家。
         </p>
@@ -159,26 +153,12 @@ function CompanyGraphBlock({ caseId }: { caseId: string }) {
         >
           看它们的关系 →
         </Link>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
 
 /* ── 诉求金额 ─────────────────────────────────────────────── */
-
-/**
- * 批 0 临时补丁：把 shadcn Card 拉回手写版 Card 的像素。
- * - header 原本 items-center（15px 标题与 13px 计数视觉居中），shadcn 默认 items-start
- * - 标题原本没写行高、继承 body 的 1.7（15px→25.5px），CardTitle 自带 leading-7（28px）
- * 两处都只影响间距不影响语义。**批 1 按 GOV.UK Summary List 重做 CasePanel 时，
- * 连同这两个常量和旧结构一起删。**
- *
- * 右侧计数**不套 CardAction**：那个包裹 <div> 只加 shrink-0（justify-between 本来就够），
- * 但它自己的 strut 用的是 body 的 16px×1.7=27.2px，比里面 13px span 的 22.1px 高，
- * 每个 header 因此涨 1.69px。**页面总高看不出来（侧栏自己滚），只有逐像素比对抓得到。**
- */
-const HEADER_COMPAT = "items-center";
-const TITLE_COMPAT = "leading-[1.7]";
 
 const CLAIM_TONE = {
   已确认: "success",
@@ -190,13 +170,13 @@ function ClaimsBlock({ claims }: { claims: Claim[] }) {
   const total = claims.reduce((sum, c) => sum + c.amountFen, 0);
 
   return (
-    <Card>
-      <CardHeader className={HEADER_COMPAT}>
-        <CardTitle className={TITLE_COMPAT}>
+    <section className="border-b border-line pb-4 last:border-b-0">
+      <header className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="text-[15px] font-semibold text-ink">
           <span data-veil="">诉求金额</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+        </h3>
+      </header>
+      <div>
         <table className="w-full border-collapse">
           <caption className="sr-only">诉求种类、金额与依据</caption>
           <tbody>
@@ -244,8 +224,8 @@ function ClaimsBlock({ claims }: { claims: Claim[] }) {
         <p data-veil="" className="mt-1 text-[13px] leading-6 text-ink-2">
           初算值，随证据补充调整；北京口径，月工资未触及三倍社平封顶。
         </p>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
 
@@ -267,14 +247,14 @@ function EvidenceBlock({
   })).filter((c) => c.n > 0);
 
   return (
-    <Card>
-      <CardHeader className={HEADER_COMPAT}>
-        <CardTitle className={TITLE_COMPAT}>
+    <section className="border-b border-line pb-4 last:border-b-0">
+      <header className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="text-[15px] font-semibold text-ink">
           <span data-veil="">证据清单</span>
-        </CardTitle>
+        </h3>
         <span className="num text-[13px] text-ink-2">{items.length} 件</span>
-      </CardHeader>
-      <CardContent>
+      </header>
+      <div>
         <div data-veil="" className="flex flex-wrap items-center gap-2">
           {counts.map(({ status, n }) => (
             <span key={status} className="inline-flex items-center gap-1">
@@ -316,8 +296,8 @@ function EvidenceBlock({
         <div className="mt-1">
           <OriginalMediumNotice />
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
 
@@ -342,14 +322,14 @@ function TodoBlock({
   );
 
   return (
-    <Card>
-      <CardHeader className={HEADER_COMPAT}>
-        <CardTitle className={TITLE_COMPAT}>待办与截止日</CardTitle>
+    <section className="border-b border-line pb-4 last:border-b-0">
+      <header className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="text-[15px] font-semibold text-ink">待办与截止日</h3>
         <span className="num text-[13px] text-ink-2">
           {done.length}/{actions.length}
         </span>
-      </CardHeader>
-      <CardContent>
+      </header>
+      <div>
         <ul className="flex flex-col gap-3">
           {open.map((a) => (
             <li key={a.id} data-veil="">
@@ -388,7 +368,7 @@ function TodoBlock({
             ))}
           </ul>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
