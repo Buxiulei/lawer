@@ -1,4 +1,4 @@
-import { Badge } from '@/components/ui/Badge';
+import { Badge } from '@/components/shadcn/badge';
 import { formatCountdown, formatDate, daysUntil } from '@/app/_ui/format';
 
 /**

@@ -28,7 +28,7 @@ import {
   EvidenceBadge,
   OriginalMediumNotice,
 } from '@/components/case/EvidenceBadge';
-import { Badge } from '@/components/ui/Badge';
+import { Badge } from '@/components/shadcn/badge';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Sensitive } from '@/components/Sensitive';
 import { MaskedText } from './RichText';
