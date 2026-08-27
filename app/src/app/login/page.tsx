@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { LampMark } from '@/components/shell/LampMark';
+import { TubashuMark } from '@/components/shell/TubashuMark';
 import { LoginFlow } from './_components/LoginFlow';
 
 export const metadata: Metadata = { title: '登录' };
@@ -13,7 +13,7 @@ export default function LoginPage() {
       <div className="w-full max-w-[420px]">
         <header className="mb-7">
           <div className="flex items-center gap-2.5">
-            <LampMark className="size-7 text-primary" />
+            <TubashuMark size={28} className="size-7" />
             <span className="text-[18px] font-semibold text-ink">土八鼠</span>
           </div>
           <p className="mt-3 text-[15px] leading-7 text-ink-2">
