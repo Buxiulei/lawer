@@ -75,11 +75,11 @@ function TimelineBlock({ events }: { events: TimelineEvent[] }) {
   return (
     <section className="border-b border-line pb-4 last:border-b-0">
       <header className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-[15px] font-semibold text-ink">时间线</h3>
-        <span className="num text-[13px] text-ink-2">{events.length} 条</span>
+        <h3 className="fs-m font-semibold text-ink">时间线</h3>
+        <span className="num fs-xs text-ink-2">{events.length} 条</span>
       </header>
       <div>
-        <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-ink-2">
+        <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 fs-xs text-ink-2">
           {(["公司动作", "我方动作", "系统动作"] as const).map((kind) => (
             <span key={kind} className="inline-flex items-center gap-1.5">
               <span
@@ -105,13 +105,13 @@ function TimelineBlock({ events }: { events: TimelineEvent[] }) {
                   KIND_DOT[e.kind],
                 )}
               />
-              <p className="num text-[13px] leading-6 text-ink-2">
+              <p className="num fs-xs text-ink-2">
                 {formatDate(e.happenedAt)}
               </p>
-              <p className="text-[15px] leading-6 font-medium text-ink">
+              <p className="fs-m font-medium text-ink">
                 {e.title}
               </p>
-              <p className="mt-0.5 line-clamp-2 text-[14px] leading-6 text-ink-2">
+              <p className="mt-0.5 line-clamp-2 fs-s text-ink-2">
                 <MaskedText text={e.detail} />
               </p>
             </li>
@@ -122,7 +122,7 @@ function TimelineBlock({ events }: { events: TimelineEvent[] }) {
           <button
             type="button"
             onClick={() => setAll((v) => !v)}
-            className="mt-2 min-h-11 text-[14px] text-primary-ink"
+            className="mt-2 min-h-11 fs-s text-primary-ink"
           >
             {all ? "只看最近 4 条" : `展开全部 ${ordered.length} 条`}
           </button>
@@ -138,18 +138,18 @@ function CompanyGraphBlock({ caseId }: { caseId: string }) {
   return (
     <section className="border-b border-line pb-4 last:border-b-0">
       <header className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-[15px] font-semibold text-ink">公司图谱</h3>
-        <span className="num text-[13px] text-ink-2">
+        <h3 className="fs-m font-semibold text-ink">公司图谱</h3>
+        <span className="num fs-xs text-ink-2">
           {mockCompanyGraph.nodes.length} 个主体
         </span>
       </header>
       <div>
-        <p data-veil="" className="text-[14px] leading-6 text-ink-2">
+        <p data-veil="" className="fs-s text-ink-2">
           跟你签合同的、给你发工资的、背后控股的，常常不是同一家。
         </p>
         <Link
           href={`/case/${caseId}/graph`}
-          className="mt-1 inline-flex min-h-11 items-center text-[14px] text-primary-ink"
+          className="mt-1 inline-flex min-h-11 items-center fs-s text-primary-ink"
         >
           看它们的关系 →
         </Link>
@@ -172,7 +172,7 @@ function ClaimsBlock({ claims }: { claims: Claim[] }) {
   return (
     <section className="border-b border-line pb-4 last:border-b-0">
       <header className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-[15px] font-semibold text-ink">
+        <h3 className="fs-m font-semibold text-ink">
           <span data-veil="">诉求金额</span>
         </h3>
       </header>
@@ -187,13 +187,13 @@ function ClaimsBlock({ claims }: { claims: Claim[] }) {
                 className="border-t border-line align-top first:border-t-0"
               >
                 <th scope="row" className="py-2.5 pr-2 text-left font-normal">
-                  <span className="block text-[15px] leading-6 font-medium text-ink">
+                  <span className="block fs-m font-medium text-ink">
                     {c.label}
                   </span>
                   <span className="mt-1 flex flex-wrap items-center gap-2">
                     <Badge tone={CLAIM_TONE[c.status]}>{c.status}</Badge>
                   </span>
-                  <span className="mt-1 line-clamp-2 text-[13px] leading-6 text-ink-2">
+                  <span className="mt-1 line-clamp-2 fs-xs text-ink-2">
                     {c.basis}
                   </span>
                 </th>
@@ -209,7 +209,7 @@ function ClaimsBlock({ claims }: { claims: Claim[] }) {
             <tr data-veil="" className="border-t-2 border-line">
               <th
                 scope="row"
-                className="py-3 text-left text-[15px] font-semibold text-ink"
+                className="py-3 text-left fs-m font-semibold text-ink"
               >
                 合计
               </th>
@@ -221,7 +221,7 @@ function ClaimsBlock({ claims }: { claims: Claim[] }) {
             </tr>
           </tfoot>
         </table>
-        <p data-veil="" className="mt-1 text-[13px] leading-6 text-ink-2">
+        <p data-veil="" className="mt-1 fs-xs text-ink-2">
           初算值，随证据补充调整；北京口径，月工资未触及三倍社平封顶。
         </p>
       </div>
@@ -249,17 +249,17 @@ function EvidenceBlock({
   return (
     <section className="border-b border-line pb-4 last:border-b-0">
       <header className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-[15px] font-semibold text-ink">
+        <h3 className="fs-m font-semibold text-ink">
           <span data-veil="">证据清单</span>
         </h3>
-        <span className="num text-[13px] text-ink-2">{items.length} 件</span>
+        <span className="num fs-xs text-ink-2">{items.length} 件</span>
       </header>
       <div>
         <div data-veil="" className="flex flex-wrap items-center gap-2">
           {counts.map(({ status, n }) => (
             <span key={status} className="inline-flex items-center gap-1">
               <EvidenceBadge status={status} />
-              <span className="num text-[13px] text-ink-2">{n}</span>
+              <span className="num fs-xs text-ink-2">{n}</span>
             </span>
           ))}
         </div>
@@ -272,10 +272,10 @@ function EvidenceBlock({
                 aria-hidden
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14px] leading-6 text-ink">
+                <span className="block truncate fs-s text-ink">
                   {item.name}
                 </span>
-                <span className="text-[13px] leading-5 text-ink-2">
+                <span className="fs-xs text-ink-2">
                   {item.category}
                 </span>
               </span>
@@ -287,7 +287,7 @@ function EvidenceBlock({
             低调下「证据」一律读作「资料」，与底部 Tab 同一套 */}
         <Link
           href={`/case/${caseId}/evidence`}
-          className="mt-2 inline-flex min-h-11 items-center text-[14px] text-primary-ink"
+          className="mt-2 inline-flex min-h-11 items-center fs-s text-primary-ink"
         >
           查看全部 {items.length} 件{discreet ? NEUTRAL_WORD.evidence : "证据"}{" "}
           →
@@ -324,8 +324,8 @@ function TodoBlock({
   return (
     <section className="border-b border-line pb-4 last:border-b-0">
       <header className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-[15px] font-semibold text-ink">待办与截止日</h3>
-        <span className="num text-[13px] text-ink-2">
+        <h3 className="fs-m font-semibold text-ink">待办与截止日</h3>
+        <span className="num fs-xs text-ink-2">
           {done.length}/{actions.length}
         </span>
       </header>
@@ -333,7 +333,7 @@ function TodoBlock({
         <ul className="flex flex-col gap-3">
           {open.map((a) => (
             <li key={a.id} data-veil="">
-              <p className="text-[15px] leading-6 text-ink">{a.title}</p>
+              <p className="fs-m text-ink">{a.title}</p>
               {a.dueAt && (
                 <span className="mt-1 inline-block">
                   <DeadlineChip dueAt={a.dueAt} />
@@ -345,7 +345,7 @@ function TodoBlock({
             <li
               key={a.id}
               data-veil=""
-              className="text-[15px] leading-6 text-ink-2 line-through"
+              className="fs-m text-ink-2 line-through"
             >
               {a.title}
             </li>
@@ -353,15 +353,15 @@ function TodoBlock({
         </ul>
 
         <div className="mt-4 border-t border-line pt-3">
-          <h3 className="mb-2 text-[14px] font-semibold text-ink">截止日</h3>
+          <h3 className="mb-2 fs-s font-semibold text-ink">截止日</h3>
           <ul className="flex flex-col gap-3">
             {sortedDeadlines.map((d) => (
               <li key={d.id} data-veil="">
-                <p className="text-[15px] leading-6 text-ink">{d.title}</p>
+                <p className="fs-m text-ink">{d.title}</p>
                 <span className="mt-1 inline-block">
                   <DeadlineChip dueAt={d.dueAt} showDate />
                 </span>
-                <p className="mt-1 text-[13px] leading-6 text-ink-2">
+                <p className="mt-1 fs-xs text-ink-2">
                   {d.derivedFrom}
                 </p>
               </li>

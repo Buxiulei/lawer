@@ -7,7 +7,7 @@
 :root {
   --bg: #fffcf5;
   --surface: #ffffff;
-  --surface-2: #f5efe3;
+  --surface-2: #e9e0ca;
   --ink: #2b1f1a;
   --ink-2: #6e5c50;
   --line: #e8e4dc;
@@ -32,6 +32,24 @@
   --success-wash: #e8f3ee;
   --success-ink: #215c44;
 
+  /* ── 字号与间距阶梯（批 3）────────────────────────────────
+     借 GOV.UK 的取舍：**正文不随屏幕缩放，只有标题和间距缩**。
+     正文在小屏缩小会直接伤可读性，而标题缩小只是少占点地方。
+     数值按中文取：Ant 的 14/22 在手机上偏小，GOV.UK 的 19 对中文偏大，取 16/24。
+     用法是 globals.css 底部的 .fs-* 工具类，页面不再手写 text-[NNpx]。 */
+  --fs-xl: 24px;  --lh-xl: 32px;   /* 页标题 h1 */
+  --fs-l: 19px;   --lh-l: 28px;    /* 区块标题 h2 / 文书页结论 */
+  --fs-m: 16px;   --lh-m: 24px;    /* 正文默认 */
+  --fs-s: 14px;   --lh-s: 22px;    /* 辅助：说明行、大小·日期 */
+  --fs-xs: 13px;  --lh-xs: 20px;   /* 标签、计数，最小档不再往下 */
+
+  /* 间距阶梯：GOV.UK 静态档，5 的倍数 */
+  --sp-1: 5px;
+  --sp-2: 10px;
+  --sp-3: 15px;
+  --sp-4: 20px;
+  --sp-6: 30px;
+
   --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.06);
   color-scheme: light;
 }
@@ -41,7 +59,7 @@
   :root:not(.light) {
     --bg: #171310;
     --surface: #201a17;
-    --surface-2: #2a2320;
+    --surface-2: #372e29;
     --ink: #eae3d9;
     --ink-2: #a3988b;
     --line: #3a322d;
@@ -57,7 +75,7 @@
     --danger-wash: #3b1f1a;
     /* 深色下主色对深底已够亮，伴生色等于本值 */
     --amber-ink: var(--amber);
-    --danger-ink: var(--danger);
+    --danger-ink: #ea8271;
     --success: #5caf8a;
     --success-wash: #1c2f26;
     --success-ink: var(--success);
@@ -70,7 +88,7 @@
 .dark {
   --bg: #171310;
   --surface: #201a17;
-  --surface-2: #2a2320;
+  --surface-2: #372e29;
   --ink: #eae3d9;
   --ink-2: #a3988b;
   --line: #3a322d;
@@ -86,7 +104,7 @@
   --danger-wash: #3b1f1a;
   /* 深色下主色对深底已够亮，伴生色等于本值 */
   --amber-ink: var(--amber);
-  --danger-ink: var(--danger);
+  --danger-ink: #ea8271;
   --success: #5caf8a;
   --success-wash: #1c2f26;
   --success-ink: var(--success);
@@ -202,6 +220,15 @@
 }
 
 /* ── 基础排版 ───────────────────────────────────────────────── */
+/* 桌面档：**只有标题和段距变大，正文三档原样**（见上方取舍说明）。 */
+@media (min-width: 768px) {
+  :root {
+    --fs-xl: 28px;  --lh-xl: 36px;
+    --fs-l: 21px;   --lh-l: 30px;
+    --sp-para: var(--sp-4);
+  }
+}
+
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
@@ -233,6 +260,14 @@
 }
 
 @layer utilities {
+  /* 字号只走这五个类，页面里不再出现 text-[NNpx]。
+     行高与字号成对给，避免"改了字号忘了行高"。 */
+  .fs-xl { font-size: var(--fs-xl); line-height: var(--lh-xl); }
+  .fs-l { font-size: var(--fs-l); line-height: var(--lh-l); }
+  .fs-m { font-size: var(--fs-m); line-height: var(--lh-m); }
+  .fs-s { font-size: var(--fs-s); line-height: var(--lh-s); }
+  .fs-xs { font-size: var(--fs-xs); line-height: var(--lh-xs); }
+
   /* 正文段落最大宽度 38em（DESIGN.md 中文排版） */
   .prose-measure {
     max-width: 38em;

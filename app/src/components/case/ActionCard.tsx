@@ -26,15 +26,14 @@ export function ActionCard({
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const done = item.status === '完成';
+  const checkboxId = `action-${item.id}`;
 
   return (
-    <article
-      data-veil=""
-      className="flex items-start gap-3 px-3 py-2.5"
-    >
+    <article data-veil="" className="flex items-start gap-3 px-3 py-2.5">
       {/* 外层撑满 44px 触区，勾选框本体仍是 20px */}
       <div className="flex min-h-11 min-w-11 items-center justify-center">
         <Checkbox
+          id={checkboxId}
           checked={done}
           onCheckedChange={(next) => onToggle?.(item.id, next === true)}
           aria-label={`标记完成：${item.title}`}
@@ -42,11 +41,21 @@ export function ActionCard({
       </div>
 
       <div className="min-w-0 flex-1">
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-          className="block w-full text-left"
+        {/* **热区做大，不是把行做高。**（批 1 报的 28px 遗留）
+            批 1 当时的算法是把按钮撑到 44，那样每行要多 16px、与密度目标冲突。
+            这里用 `py-2` 把可点高度撑到 44，再用等量的 `-my-2` 把它从版式里减掉——
+            **占位仍是 28px，命中区是 44px。**
+            标题绑到勾选框：点标题＝勾掉这件事，和旁边那个框同一个动作；
+            展开另有正下方的「为什么要做这件事」。
+
+            **只用 htmlFor，不要再加 onClick**：button 是 labelable 元素，
+            浏览器会把 label 的点击转发给它。再挂一个 onClick 就会**点一次翻两次**——
+            自己翻一次、转发再翻回来，净效果是纹丝不动。
+            （我确实先加了 onClick 才发现这点：当时的"点了没反应"其实是测试点在了
+            视口外面，元素根本没被碰到。） */}
+        <label
+          htmlFor={checkboxId}
+          className="-my-2 flex min-h-11 cursor-pointer items-center py-2"
         >
           <h4
             className={cn(
@@ -56,7 +65,7 @@ export function ActionCard({
           >
             {item.title}
           </h4>
-        </button>
+        </label>
 
         <div className="mt-1 flex flex-wrap items-center gap-2">
           {item.dueAt && <DeadlineChip dueAt={item.dueAt} showDate />}

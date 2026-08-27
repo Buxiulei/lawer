@@ -24,19 +24,19 @@ export default async function DocDetailPage({
       <header className="pt-2">
         <Link
           href={`/case/${id}/docs`}
-          className="inline-flex min-h-11 items-center text-[15px] text-primary-ink"
+          className="inline-flex min-h-11 items-center fs-m text-primary-ink"
         >
           ← 全部文件
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <DocTypeBadge docType={doc.docType} />
-          <span className="num text-[13px] text-ink-2">
+          <span className="num fs-xs text-ink-2">
             解读于 {formatDateTime(doc.createdAt)}
           </span>
         </div>
         <div data-veil="">
-          <h1 className="mt-1.5 text-[22px] leading-8 font-semibold text-ink">{doc.title}</h1>
-          <p className="mt-1 text-[14px] text-ink-2">{doc.fileName}</p>
+          <h1 className="mt-1.5 fs-l font-semibold text-ink">{doc.title}</h1>
+          <p className="mt-1 fs-s text-ink-2">{doc.fileName}</p>
         </div>
       </header>
 
