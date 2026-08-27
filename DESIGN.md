@@ -232,7 +232,7 @@ const COLUMNS: DataTableColumn<Ledger>[] = [
 
 **批 2 改名的 4 处非 UI 串，不能 sed**：
 - `lib/agent/charter.ts:19` — 模型 system prompt 的自我指称，改了评测 judge 可能引用
-- `lib/evidence/attest.ts:184` — **`issuer` 字段**，已签发的时间戳带旧值；改前必须确认验证端不比对该字段，否则要兼容旧值
+- `lib/evidence/attest.ts:184` — `issuer` 字段。**已核（08-27）：它是每次请求现生成的报告对象里的显示标签，不落库、验证端不读不比（`src/app/verify` / `api/v1/verify` / `lib/evidence` 三处递归 grep 只此一处）。改名安全；已签发的 PDF 保留旧名属历史事实，无需兼容。**
 - `lib/notify/copy.ts` + 其测试 — 邮件主题含品牌名且测试断言排除敏感词，改名要同步改测试
 - `api/mcp/route.ts` / `lib/mcp/jsonrpc.ts` / `agentSetup.ts` — 对外 MCP 自述，外部 agent 可能按字面匹配
 
