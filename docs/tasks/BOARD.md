@@ -281,6 +281,15 @@ sh scripts/eval/archive-batch.sh <产物路径> [更多路径...]
 测试红了，人的第一反应是去改被测代码，而不是去问两个环境的默认值是不是一样的。
 解法不是选一边迁就，是消掉差异（用 `find -exec ... {} +` 让文件名走真正的 argv）。
 
+## ✅ 收口（单独记，别埋在长信里——后台技术建议，08-27）
+
+| 事项 | 状态 | 证据 |
+|---|---|---|
+| **ISSUE-04 整卡不重复** | **两侧收口**（08-27） | 原语 `cardOccurrences(text,phones): CardSpan[]`（`63004fc`）；判据逐次累加、判 `splitCrisisOpener(t.text).body`（裁定②首段不计入）；出口闸吃 `.slice(1)` 保留第一处；`cardShapeAgrees` 改钉原语；第三态 `hotlineStripDeclined`（检出重复但明示放弃）。评测官七条 **7/7**，(a) 守卫 7 条复活 0 条，变异 A/B/C 各自报红。**命中率口径 1/46**（"从未"已撤） |
+| **ISSUE-07 判据同源** | 收口（08-27） | 底层三函数不导出、`userSaid` 去默认值、唯一入口 `leverageSubject`；`leverage` 三态载体落归档；R3 绊线 |
+| **sidecar issuer** | 收口（08-27 `24d2f85`） | 改必填、缺则 400、两层守；变异 B 补样本 |
+| **`ws/backend` behind-main** | **0**（`63ce33e`，**15:51:16 读**） | 1742 绿 / tsc 干净 / sidecar 26 passed。**带时刻：保质期到下一个人 push 为止** |
+
 ## 🔀 ws/backend 现状（2026-08-27 15:3x，后台技术）
 
 `ws/backend 93d932f`：**已合入 origin/main（55 提交，含今日批 0/1/2a），behind=0**。app 79 文件 1742 绿、tsc 干净；sidecar 26 passed。
