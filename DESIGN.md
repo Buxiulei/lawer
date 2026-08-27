@@ -228,7 +228,7 @@ const COLUMNS: DataTableColumn<Ledger>[] = [
 | 0 清债 | 删 4 手写基元换 shadcn；修 DeadlineChip/EvidenceBadge 传染源；性能工装收进 `scripts/perf/` 依赖自带（原借六爻 node_modules） | 混用页 0（扣 Toast 口径）；tsc+vitest 绿；干净 clone 能跑工装；视觉与改前一致 |
 | 1 手机工作台 | 加 sm/md/lg 断点；五种卡片改**结构区分**不再只靠底色；「现在做什么」一眼跳出。**规格见 `docs/design-notes/2026-08-27-批1-手机工作台重制.md`**（六级分量表、断点表、灰度验收） | 393 截图对照 + 灰度测试；性能工装（含灵敏度对照臂） |
 | 2 品牌+首页 | logo 落位；全站改名；首页按 GOV.UK 语气重写首屏 | Lighthouse 桌面+移动**分别**审 |
-| 3 内容区重制 | 档案面板/证据页/期限卡按 GOV.UK 排版 | 同上 |
+| 3 内容区排版 | 证据页（Summary List 替六张单卡、Inset text 替公告块）/ 文书页（结论升为标题栏）/ 字号与间距 token / 批 1 遗留 28px 热区。**规格见 `docs/design-notes/2026-08-27-批3-内容区排版.md`** | 结论是卡内最大的字（给数）；`text-[NNpx]` 硬编码归零；灰度可分 |
 
 **批 2 改名的 4 处非 UI 串，不能 sed**：
 - `lib/agent/charter.ts:19` — 模型 system prompt 的自我指称，改了评测 judge 可能引用
