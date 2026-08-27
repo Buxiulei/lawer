@@ -11,7 +11,7 @@ const SENSITIVE = ['裁员', '仲裁', '开庭', '劳动', '律师', '赔偿', '
 describe('emailVerifyCode', () => {
   test('默认（中性）模式：主题与正文不含敏感词，也不含平台名', () => {
     const { subject, text } = emailVerifyCode('123456', 5);
-    for (const word of [...SENSITIVE, '裁员应对专员']) {
+    for (const word of [...SENSITIVE, '土拨鼠', '土拨鼠劳动仲裁']) {
       expect(subject).not.toContain(word);
       expect(text).not.toContain(word);
     }
@@ -21,11 +21,14 @@ describe('emailVerifyCode', () => {
 
   test('detailed 模式才带平台名，且仍不出现业务敏感词', () => {
     const { subject, text } = emailVerifyCode('123456', 10, { detailed: true });
-    expect(subject).toContain('裁员应对专员');
+    expect(subject).toContain('土拨鼠');
+    // **不再需要「先摘掉平台名再查」**：出站文案里的品牌用短名「土拨鼠」，
+    // 本身不含任何敏感词，所以断言可以直接查全文——比旧写法更严。
+    // 全称「土拨鼠劳动仲裁」含「劳动」「仲裁」两个敏感词，绝不能进出站文案。
+    expect(subject).not.toContain('土拨鼠劳动仲裁');
     for (const word of SENSITIVE) {
-      // 平台名里含"裁员"二字，先摘掉平台名再查
-      expect(subject.replaceAll('裁员应对专员', '')).not.toContain(word);
-      expect(text.replaceAll('裁员应对专员', '')).not.toContain(word);
+      expect(subject).not.toContain(word);
+      expect(text).not.toContain(word);
     }
     expect(text).toContain('10 分钟内有效');
   });
