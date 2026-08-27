@@ -17,7 +17,7 @@ export default function WelcomePage() {
         <header className="mb-7">
           <div className="flex items-center gap-2.5">
             <LampMark className="size-7 text-primary" />
-            <span className="text-[18px] font-semibold text-ink">土拨鼠劳动仲裁</span>
+            <span className="text-[18px] font-semibold text-ink">土八鼠</span>
           </div>
           <h1 className="mt-6 text-[22px] font-semibold text-ink">档案已创建</h1>
           <p className="prose-measure mt-3 text-[15px] leading-7 text-ink-2">

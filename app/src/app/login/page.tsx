@@ -14,7 +14,7 @@ export default function LoginPage() {
         <header className="mb-7">
           <div className="flex items-center gap-2.5">
             <LampMark className="size-7 text-primary" />
-            <span className="text-[18px] font-semibold text-ink">土拨鼠劳动仲裁</span>
+            <span className="text-[18px] font-semibold text-ink">土八鼠</span>
           </div>
           <p className="mt-3 text-[15px] leading-7 text-ink-2">
             手机号和邮箱都验证一遍，你上传的材料才能绑定到实名、出得了存证。两步，大约一分钟。

@@ -13,11 +13,11 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: '土拨鼠劳动仲裁',
-    template: '%s · 土拨鼠劳动仲裁',
+    default: '土八鼠',
+    template: '%s · 土八鼠',
   },
   description: '劳动仲裁全程陪跑：问诊建档、行动建议、文书起草、证据固化。',
-  applicationName: '土拨鼠劳动仲裁',
+  applicationName: '土八鼠',
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
