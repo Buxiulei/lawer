@@ -8,7 +8,13 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 OUT=$ROOT/scripts/eval/results/评测官/batch-$(date +%Y%m%dT%H%M%S)-$SHA
 mkdir -p "$OUT"; echo $$ > "$OUT/run.pid"   # 停批: kill -- -$(cat run.pid)（只停本支，绝不 pkill 按名）
 cd "$ROOT" || exit 2
-# 开批前锁定版本：工作树必须干净且 HEAD==SHA，否则拒跑（批内一致性）
+# 【记住开批前在哪个 ref 上，跑完接回去 · 2026-08-27 踩过】
+# 下面会 `git checkout <SHA>` 把 HEAD 钉在固定版本（这是对的，批内一致性要靠它），
+# **但跑完不接回去，之后的提交就落在游离头上**——而 `git push origin <分支>` 这时会回一句
+# **「Everything up-to-date」**：它推的是分支 ref，而你的提交不在分支上。
+# **动作没发生，输出却像成功。** 这一族今天已经数到第七次。
+START_REF=$(git symbolic-ref --quiet --short HEAD || echo "")
+：工作树必须干净且 HEAD==SHA，否则拒跑（批内一致性）
 git fetch -q origin
 git checkout -q "$SHA" || { echo "checkout $SHA 失败" >"$OUT/FAILED"; exit 2; }
 [ -z "$(git status --porcelain -- app/src scripts knowledge)" ] || { echo "工作树不干净，拒跑" >"$OUT/FAILED"; exit 2; }
@@ -75,5 +81,14 @@ find "$ROOT/scripts/eval/results" -maxdepth 1 -newer "$OUT/.batch-start" \
   \( -name '*.json' -o -name '*.md' \) -exec sh "$ARCHIVE" {} + \
   || { echo "转录归档失败" >"$OUT/FAILED"; exit 4; }
 echo "archived_to=$ARCH/$(basename "$OUT")" >>"$OUT/META"
+
+# 接回开批前的分支（游离头上提交会被 push 静默忽略，见文件上方）
+if [ -n "$START_REF" ]; then
+  git checkout -q "$START_REF" 2>/dev/null || echo "⚠️ 接回 $START_REF 失败，HEAD 仍游离——提交前先 git checkout $START_REF" >&2
+  # 【接回也要自证】checkout 失败与成功在下游长得一样：都是"没有报错的终端"。
+  NOW=$(git symbolic-ref --quiet --short HEAD || echo "游离")
+  [ "$NOW" = "$START_REF" ] || echo "⚠️ HEAD 现在是「$NOW」而不是「$START_REF」" >&2
+  echo "head_restored_to=$NOW" >>"$OUT/META"
+fi
 
 echo done >"$OUT/DONE"
