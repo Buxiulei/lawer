@@ -45,7 +45,7 @@ export function AppShell({
     <TooltipProvider delayDuration={300}>
       <CasePanelProvider>
         <SidebarProvider>
-          <DocumentTitle title={`${caseTitle} · 裁员应对专员`} />
+          <DocumentTitle title={`${caseTitle} · 土拨鼠劳动仲裁`} />
           <DiscreetVeil />
           <AppSidebar caseId={caseId} caseTitle={caseTitle} pathname={pathname} />
           <SidebarInset>
