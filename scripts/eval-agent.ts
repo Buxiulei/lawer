@@ -326,7 +326,7 @@ async function runScenario(scenario: Scenario, plan: Plan): Promise<ScenarioRepo
         ],
         JUDGE_CONCURRENCY,
         // judge 项默认 L2；剧本可在 tiers 里显式点名升 L1 或降 L3
-        ({ item, kind }) => judgeItem(userSide, transcript, item, kind, scenario.tiers?.[item] ?? 'L2'),
+        ({ item, kind }) => judgeItem(userSide, transcript, item.text, item.id, kind, scenario.tiers?.[item.id] ?? 'L2'),
       ).catch((e) => {
         console.log(C.warn(`  语义断言整体失败（机械断言不受影响）：${e instanceof Error ? e.message : String(e)}`));
         return [] as JudgeResult[];

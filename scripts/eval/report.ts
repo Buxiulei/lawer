@@ -222,7 +222,7 @@ export function renderMarkdown(run: RunEvidence): string {
   } else {
     lines.push(`共 ${splits.length} 条 SPLIT（两票不一致，或判官本身失败）。SPLIT 不计通过也不计失败。`, '');
     for (const { scenario, judge } of splits) {
-      const ruling = findRuling(scenario, judge.item);
+      const ruling = findRuling(scenario, judge.itemId);
       lines.push(`- **${scenario}**｜${judge.item.replace(/\|/g, '\\|')}`);
       lines.push(`  - 两票：${judge.votes.join(' + ')}；理由：${judge.reasons.filter(Boolean).join(' / ') || '（无）'}`);
       lines.push(
@@ -264,7 +264,7 @@ export function renderMarkdown(run: RunEvidence): string {
       lines.push('### 语义断言（judge 两票详情）', '');
       lines.push('| 层 | 结论 | 两票 | 条目 | 理由 |', '|---|---|---|---|---|');
       for (const j of s.semantic) {
-        const ruled = j.verdict === 'SPLIT' ? findRuling(s.id, j.item) : undefined;
+        const ruled = j.verdict === 'SPLIT' ? findRuling(s.id, j.itemId) : undefined;
         const mark =
           j.verdict === 'PASS'
             ? '✅ PASS'
