@@ -14,6 +14,17 @@ cd "$ROOT" || exit 2
 # **「Everything up-to-date」**：它推的是分支 ref，而你的提交不在分支上。
 # **动作没发生，输出却像成功。** 这一族今天已经数到第七次。
 START_REF=$(git symbolic-ref --quiet --short HEAD || echo "")
+# 【开批时就游离 ⇒ 不接回，但必须说出来 · 2026-08-28 踩过】
+# 「不猜用户想回哪儿」是对的，**但一声不吭不对**：本批开跑时 HEAD 已游离（上一批之后
+# 我在游离头上提交并直推远端），于是接回段被静默跳过、META 里没有 head_restored_to，
+# **而"没有这一行"与"接回失败"、"脚本是旧版"在产物上长得一样**。
+# 后果：本地分支停在四个提交之前，而我一直以为自己在分支上。
+STARTED_DETACHED=0
+if [ -z "$START_REF" ]; then
+  STARTED_DETACHED=1
+  echo "⚠️ 开批时 HEAD 已是游离态（$(git rev-parse --short HEAD)）——跑完**不会**接回任何分支。" >&2
+  echo "   这时候提交会落在游离头上，而 \`git push origin <分支>\` 会回 Everything up-to-date。" >&2
+fi
 ：工作树必须干净且 HEAD==SHA，否则拒跑（批内一致性）
 git fetch -q origin
 git checkout -q "$SHA" || { echo "checkout $SHA 失败" >"$OUT/FAILED"; exit 2; }
@@ -83,6 +94,7 @@ find "$ROOT/scripts/eval/results" -maxdepth 1 -newer "$OUT/.batch-start" \
 echo "archived_to=$ARCH/$(basename "$OUT")" >>"$OUT/META"
 
 # 接回开批前的分支（游离头上提交会被 push 静默忽略，见文件上方）
+[ "$STARTED_DETACHED" = 1 ] && echo "head_restored_to=（开批时即游离，未接回）" >>"$OUT/META"
 if [ -n "$START_REF" ]; then
   # 【接回之前先看游离头上有没有新提交 · 2026-08-28 踩过第二次】
   # 上一版只管"接回分支"，但**批跑着的时候我在游离头上提交并直推了远端**，
