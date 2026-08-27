@@ -24,7 +24,7 @@ export default function LandingPage() {
         <header>
           <div className="flex items-center gap-2.5">
             <LampMark className="size-7 text-primary" />
-            <span className="text-[18px] font-semibold text-ink">土拨鼠劳动仲裁</span>
+            <span className="text-[18px] font-semibold text-ink">土八鼠</span>
           </div>
 
           <h1 className="prose-measure mt-7 text-[26px] leading-10 font-semibold text-ink">
