@@ -103,19 +103,85 @@ export function WaitingCard({
  * deterministic 首段：服务端在调模型前毫秒级下发的接住式安抚 + 求助热线。
  * 单独成卡，与模型正文分开——这几句不是模型说的，也不该被当成分析结论。
  * 文案原样渲染（不走 markdown、不打码），热线号码必须一眼可读。
+ *
+ * **【为什么这一块没有 data-veil】**
+ * 低调模式立的是不知情者标准，但**危机轮那一刻优先级是接通不是隐藏**——
+ * 热线块是全站**唯一豁免打码**的正文，此为产品负责人 2026-08-27 拍板（spec D17）。
+ * 页面其余部分照糊，只有这一块永远清晰。
+ *
+ * 还有一条实现上的理由：号码是 `tel:` 按钮。糊层的交互是「按住 150ms 才揭开」，
+ * 且揭开动作本身会吞掉那次 click——**短按会拨出一个用户根本没看见的号码**。
+ * 打码与可拨号在这里不能共存。
+ *
+ * 文本层一个字都不改（`buildCrisisOpener` 的输出原样进来）：
+ * 评测判据「危机轮N-首段无杠杆」读的是文本，这里只决定怎么显示。
  */
+type OpenerRow =
+  | { kind: 'phone'; phone: string; label: string; caveat?: string }
+  | { kind: 'text'; text: string };
+
+/** 号码行长这样：`- **12356** 全国统一心理援助热线（24小时）`；紧随的 `——…` 是它的附注。 */
+const PHONE_LINE = /^-\s*\*\*([\d][\d-]*)\*\*\s*(.*)$/;
+/**
+ * 复现态把号码挤在一条加粗里：`**12356 / 010-82951332（座机）**`。
+ * 先取整段加粗内容，再从里面挑号码——**不要求整段都是数字**，
+ * 因为「（座机）」这类标记就跟在号码后面，卡死整段会让这一行整条漏掉。
+ */
+const BOLD_SPAN = /\*\*([^*]+)\*\*/;
+const PHONE_IN = /\d[\d-]{3,}/g;
+const strip = (v: string) => v.replace(/\*\*/g, '').trim();
+
+function parseOpener(text: string): OpenerRow[] {
+  const rows: OpenerRow[] = [];
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = PHONE_LINE.exec(line);
+    if (m) {
+      rows.push({ kind: 'phone', phone: m[1], label: strip(m[2]) });
+      continue;
+    }
+    if (line.startsWith('——')) {
+      const last = rows[rows.length - 1];
+      if (last?.kind === 'phone') {
+        last.caveat = strip(line.replace(/^——/, ''));
+        continue;
+      }
+    }
+    const bold = BOLD_SPAN.exec(line);
+    const phones = bold ? bold[1].match(PHONE_IN) : null;
+    if (phones && phones.length > 0) {
+      for (const phone of phones) rows.push({ kind: 'phone', phone, label: '' });
+      continue;
+    }
+    rows.push({ kind: 'text', text: strip(line) });
+  }
+  return rows;
+}
+
 export function InstantReplyCard({ text }: { text: string }) {
-  const lines = text.split('\n').filter((line) => line.trim());
+  const rows = parseOpener(text);
   return (
-    <div
-      data-veil=""
-      className="prose-measure my-2 rounded-[12px] bg-primary px-3.5 py-3 text-on-primary"
-    >
+    <div className="prose-measure my-2 rounded-[12px] bg-primary px-3.5 py-3 text-on-primary">
       <p className="text-[12px] leading-5 opacity-80">即时回应</p>
-      <div className="mt-1.5 space-y-1.5 text-[16px] leading-[1.75]">
-        {lines.map((line, i) => (
-          <p key={i}>{line}</p>
-        ))}
+      <div className="mt-1.5 space-y-2 text-[16px] leading-[1.75]">
+        {rows.map((row, i) =>
+          row.kind === 'text' ? (
+            <p key={i}>{row.text}</p>
+          ) : (
+            <a
+              key={i}
+              href={`tel:${row.phone.replace(/-/g, '')}`}
+              className="flex min-h-11 w-full flex-col justify-center rounded-[10px] bg-gold-wash px-3 py-2 text-ink no-underline"
+            >
+              <span className="num text-[18px] leading-7 font-semibold">
+                {row.phone}
+                {row.label && <span className="ml-2 text-[14px] font-normal">{row.label}</span>}
+              </span>
+              {row.caveat && <span className="text-[13px] leading-5">{row.caveat}</span>}
+            </a>
+          ),
+        )}
       </div>
     </div>
   );
