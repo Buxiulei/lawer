@@ -14,7 +14,7 @@ const TONES: Record<BadgeTone, string> = {
   primary: 'bg-primary-wash text-primary-ink',
   // gold 仅品牌点缀（会员/成就徽标），不用于警示与倒计时
   gold: 'bg-gold-wash text-gold',
-  success: 'bg-success-wash text-success',
+  success: 'bg-success-wash text-success-ink',
   amber: 'bg-amber-wash text-amber-ink',
   danger: 'bg-danger-wash text-danger-ink',
 };

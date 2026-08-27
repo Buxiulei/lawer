@@ -30,6 +30,7 @@
   --danger-ink: #b5361f;
   --success: #2f7d5d;
   --success-wash: #e8f3ee;
+  --success-ink: #215c44;
 
   --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.06);
   color-scheme: light;
@@ -59,6 +60,7 @@
     --danger-ink: var(--danger);
     --success: #5caf8a;
     --success-wash: #1c2f26;
+    --success-ink: var(--success);
 
     --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.4);
     color-scheme: dark;
@@ -87,6 +89,7 @@
   --danger-ink: var(--danger);
   --success: #5caf8a;
   --success-wash: #1c2f26;
+  --success-ink: var(--success);
 
   --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.4);
   color-scheme: dark;
@@ -154,6 +157,7 @@
   --color-danger-ink: var(--danger-ink);
   --color-success: var(--success);
   --color-success-wash: var(--success-wash);
+  --color-success-ink: var(--success-ink);
 
   /* shadcn 语义色的 Tailwind 工具类（bg-background / text-muted-foreground …） */
   --color-background: var(--background);
