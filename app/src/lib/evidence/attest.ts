@@ -181,7 +181,7 @@ function buildPdfPayload(
   return {
     order_no: att.order_no,
     generated_at: new Date().toISOString(),
-    issuer: 'lawer 裁员应对专员',
+    issuer: 'lawer 土拨鼠劳动仲裁',
     verify_url: base ? `${base.replace(/\/+$/, '')}/verify/${att.order_no}` : '',
     status: att.tsa_gen_time ? 'stamped' : 'pending',
     holder: {

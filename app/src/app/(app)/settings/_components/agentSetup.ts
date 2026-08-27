@@ -67,7 +67,7 @@ const ABILITIES =
 const BOUNDARY =
   '【边界】发给公司的文书必须经我本人确认；档案数据仅用于本案维权；此密钥是我的私人凭据，不要写进共享配置或转发他人。';
 
-const OPENING = '请帮我接入「裁员应对专员」法律陪跑平台（我的劳动仲裁案件档案库）。';
+const OPENING = '请帮我接入「土拨鼠劳动仲裁」法律陪跑平台（我的劳动仲裁案件档案库）。';
 
 /** 通用话术：主文案，三个客户端变体都在它后面追加自己那段 */
 function general(vars: PromptVars): string {
