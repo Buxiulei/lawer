@@ -81,8 +81,46 @@ if missing:
     print(f'  ⚠️ 预设读法点名的 L1 里，本批没产出的: {missing}（非危机轮不产出属正常，但要写出来）')
 
 print('\n【对照臂·自称是否进入用户面正文】')
-print(f'  改后（本批 {turns} 轮）: 旧名 {name_old} 次 / 新名合计 {name_new} 次  [在数: {SELF_NAMES}]')
-print('  改前（归档 155 轮，全部早于 126cbe4）: 两者均 0 次')
+print(f'  本批（{turns} 轮）逐名计数  [在数: {SELF_NAMES}]')
+for n in SELF_NAMES:
+    c = sum(t['text'].count(n) for f in files for s2 in json.loads(f.read_text()).get('scenarios', []) for t in s2.get('turns', []))
+    print(f'    「{n}」 {c} 次')
+
+# 【历史基线自己算，不写死】上一版这里硬编码「改前 155 轮、两者均 0 次」——
+# **那个数写下的那一刻就开始过期**：本批之后，语料里又多了上一批的转录。
+# 基线 = 语料清单减去本批自己的转录。范围随数字一起打出来。
+import subprocess
+own = {f.name for f in files}
+try:
+    listing = subprocess.run(['sh', 'scripts/eval/corpus-list.sh', '--scenarios', '--include-local'],
+                             capture_output=True, text=True, cwd='/home/roots/caiyuan-ws/eval')
+    print('  历史基线的扫描根（stderr 原样转印，范围要跟着数字走）:')
+    for ln in listing.stderr.strip().splitlines():
+        print('    ' + ln)
+    seen_files, base_turns = set(), 0
+    base_counts = {n: 0 for n in SELF_NAMES}
+    for ln in listing.stdout.splitlines():
+        if not ln.strip():
+            continue
+        fp, idx = ln.split('\t')
+        if Path(fp).name in own:
+            continue
+        if fp not in seen_files:
+            seen_files.add(fp)
+        d2 = json.loads(Path(fp).read_text())
+        sc2 = d2.get('scenarios', [])
+        if int(idx) >= len(sc2):
+            continue
+        for t2 in sc2[int(idx)].get('turns', []):
+            base_turns += 1
+            for n in SELF_NAMES:
+                base_counts[n] += t2['text'].count(n)
+    assert base_turns > 0, 'FATAL 基线自检失败：历史语料 0 轮，不许把这个空当基线'
+    print(f'  历史基线（{base_turns} 轮，已剔除本批自己的 {len(own)} 份转录）:')
+    for n in SELF_NAMES:
+        print(f'    「{n}」 {base_counts[n]} 次')
+except Exception as e:
+    print(f'  ⚠️ 历史基线算不出来（{e}）——**本批的对照臂只有一半，如实写明**')
 if name_old == 0 and name_new == 0:
     print('  ⇒ 两侧都是 0，符合预期：自称没有进入用户面正文')
 else:
