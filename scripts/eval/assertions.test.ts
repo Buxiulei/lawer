@@ -1993,9 +1993,11 @@ describe('乙态「有原文未结构化」与⭐机制不可用（2026-08-24 �
     });
 
     it('★旧产物零改动可回放：拿真实历史 JSON 验，全部走"缺失=跳过"', () => {
-      const F = '/home/roots/caiyuan-ws/eval/scripts/eval/results/2026-08-24T19-45-04Z.json';
+      // 【夹具进仓 2026-08-28】原本读 `results/` —— 那目录被 gitignore 且随检出而变，
+      // 换个检出这条测试会因"文件不在"而失效，**而失效与通过在报告上长得一样**。
+      const F = '/home/roots/caiyuan-ws/eval/docs/eval-evidence/fixtures/旧产物无留痕-2026-08-24T19-45-04Z.json';
       const j = JSON.parse(readFileSync(F, 'utf8'));
-      const turns = (j.scenarios[0].turns as { text: string }[]).map((t) => ({
+      const turns = (j.turns as { text: string }[]).map((t) => ({
         input: '', text: t.text, events: [], retrieved: [], actionCards: [], drafts: [], model: '', degraded: false, taskClass: '',
       })) as TurnRecord[];
       const v = coreRenderObservabilityAssertions(turns, 'S14');
