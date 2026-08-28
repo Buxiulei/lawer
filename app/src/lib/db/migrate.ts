@@ -6,7 +6,12 @@
 // 现在之所以能安全滚更，是因为迁移**全是纯加法**、靠 IF NOT EXISTS 与 addColumnIfMissing
 // 能重跑自愈：**安全是「改动足够简单」给的，不是框架给的。**
 //
-//   ✅ 新增表 / 新增列：照下面的现有写法直接加，不用问谁。
+//   ✅ 新增表：照下面的现有写法 `CREATE TABLE IF NOT EXISTS` 直接加，不用问谁。
+//   ✅ 新增列：**走 `addColumnIfMissing(db, 表, 列, DDL)`**，不用问谁；但**不要裸 `db.exec`
+//      写 `ALTER TABLE ... ADD COLUMN`**——SQLite 的 ADD COLUMN **没有 IF NOT EXISTS**
+//      （写了报 `near "EXISTS": syntax error`），裸写的那条第二次跑就报
+//      `duplicate column name`，runMigrations 抛错 ⇒ **应用直接起不来**。
+//      addColumnIfMissing 先 PRAGMA table_info 判断列在不在、不在才加，所以可重跑。
 //   ⛔ 改列类型、数据回填、拆表、加 NOT NULL 无默认值，以及任何不能靠 IF NOT EXISTS
 //      幂等的改动：**先找数据表管理（WS1）**，等事务化改造（外层 db.transaction() +
 //      PRAGMA user_version + 每步版本守卫）落地再动手。在那之前，这类迁移一旦中断，
