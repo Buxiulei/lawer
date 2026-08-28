@@ -1,6 +1,22 @@
 @import 'tailwindcss';
 
 /* 深浅色由 html 上的 .dark / .light class 控制；两者都没有时跟随系统。 */
+/* 自托管衬线子集（批 5）。只含落地页静态文案用到的约 300 字，单档约 54KB。
+   来源 Noto Serif CJK **SC**（SIL OFL 1.1），生成脚本 scripts/fonts/subset-serif.sh。
+   **font-display: swap**：字体没到之前先用系统栈显示，绝不留空白——
+   这页是焦虑的人第一眼看到的东西，宁可字形先将就，不能让它白屏等字体。
+   700 档声明成 `700 900`，让 900 直接用 Bold 档，不走浏览器合成加粗（会糊）。 */
+@font-face {
+  font-family: 'Tubashu Serif';
+  src: url('/fonts/tubashu-serif-700.woff2') format('woff2');
+  /* 声明成 `700 900`：900 直接用这一档，不走浏览器合成加粗（会糊）。
+     **只做这一档**——子集里的常规字重原本只服务草稿纸那一段示例文字，
+     为它多背 52KB 不划算，那段改用系统衬线栈。 */
+  font-weight: 700 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ── Light（默认）──────────────────────────────────────────── */
@@ -31,6 +47,32 @@
   --success: #2f7d5d;
   --success-wash: #e8f3ee;
   --success-ink: #215c44;
+
+  /* ── 案卷材质（批 5）──────────────────────────────────
+     设计稿的 --paper/--seal/--gold-ink 与现有 --bg/--primary/--gold **逐值相同**，
+     直接复用，不另造第二套；--ink/--ink-2/--seal-deep/--card 只差几个色阶，
+     也复用现有——**两套差一点点的近似色比一套统一色更难维护**。
+     真正新增的只有牛皮纸这一族（现有调色板里没有对应物）。 */
+  --kraft: #e9dfc8;
+  --kraft-deep: #d9c9a3;
+  --kraft-line: #c4b28b;
+  /* 牛皮纸底上的金色小字专用档。设计稿写的是 --gold(#8a7340)，
+     实测压在 kraft 上只有 **3.44:1**，13px 正文过不了 4.5——设计稿这一处本身不达标。
+     浅色改 #6f5c2f = 4.88；深色下 kraft 本就是暗的，--gold(#c9a75b) 压上去 6.59，回落即可。 */
+  --gold-on-kraft: #6f5c2f;
+
+  /* ── 字体（批 5）──────────────────────────────────────
+     **两个衬线栈，不是一个**（manager 2026-08-28 裁定）：
+     - `--font-serif-static`：**只给静态已知文案**用。首位是自托管子集，
+       只含落地页文案实际用到的字。
+     - `--font-serif-dynamic`：**动态文本一律用它**（案件名、用户输入、驾驶舱数据）。
+       纯系统栈、不碰子集——子集里必然缺这些字，混用会在安卓上出
+       「覆盖到的字是衬线、缺的字掉回无衬线」的**缺字混排**，比整体无衬线更丑。
+     08-19「不加载 CJK webfont」那条决策据此修订：禁的是整包 CJK webfont 与
+     第三方字体主机（Google Fonts 对国内用户是死链），自托管子集不在禁列。 */
+  --font-serif-static: 'Tubashu Serif', 'Songti SC', 'SimSun', 'Noto Serif CJK SC', serif;
+  --font-serif-dynamic: 'Songti SC', 'SimSun', 'Noto Serif CJK SC', serif;
+  --font-mono-num: 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
 
   /* ── 字号与间距阶梯（批 3）────────────────────────────────
      借 GOV.UK 的取舍：**正文不随屏幕缩放，只有标题和间距缩**。
@@ -69,6 +111,10 @@
     --on-primary: #ffffff;
     --gold: #c9a75b;
     --gold-wash: #2e2717;
+    --kraft: #2b2521;
+    --kraft-deep: #3a322b;
+    --kraft-line: #4a4038;
+    --gold-on-kraft: var(--gold);
     --amber: #e09a46;
     --amber-wash: #33270f;
     --danger: #e5705c;
@@ -98,6 +144,10 @@
   --on-primary: #ffffff;
   --gold: #c9a75b;
   --gold-wash: #2e2717;
+  --kraft: #2b2521;
+  --kraft-deep: #3a322b;
+  --kraft-line: #4a4038;
+  --gold-on-kraft: var(--gold);
   --amber: #e09a46;
   --amber-wash: #33270f;
   --danger: #e5705c;
@@ -176,6 +226,13 @@
   --color-success: var(--success);
   --color-success-wash: var(--success-wash);
   --color-success-ink: var(--success-ink);
+  --color-kraft: var(--kraft);
+  --color-kraft-deep: var(--kraft-deep);
+  --color-kraft-line: var(--kraft-line);
+  --color-gold-on-kraft: var(--gold-on-kraft);
+  --font-serif-static: var(--font-serif-static);
+  --font-serif-dynamic: var(--font-serif-dynamic);
+  --font-mono-num: var(--font-mono-num);
 
   /* shadcn 语义色的 Tailwind 工具类（bg-background / text-muted-foreground …） */
   --color-background: var(--background);
@@ -289,6 +346,74 @@
     transform-box: fill-box;
     transform-origin: center;
     animation: graph-pulse 2s ease-in-out infinite;
+  }
+}
+
+/* ── 案卷落地页（批 5）──────────────────────────────
+   只服务落地页；这些形状用工具类拼会变成一长串 arbitrary value，
+   放这里可读得多，也方便与设计稿逐条对照。 */
+
+/* 卷宗标签：牛皮纸吊牌，底边与正文分隔线接上 */
+.anjuan-tab {
+  display: inline-flex; align-items: baseline; gap: 14px;
+  background: var(--kraft); border: 1px solid var(--kraft-line);
+  border-bottom: none; border-radius: 8px 8px 0 0; padding: 8px 22px 6px;
+}
+
+/* 文书卡：三张纸微微散开，hover 归位 */
+.anjuan-doc { transition: transform 0.25s ease; }
+.anjuan-doc:nth-child(1) { transform: rotate(-1.4deg); }
+.anjuan-doc:nth-child(3) { transform: rotate(1.2deg); }
+.anjuan-doc:hover { transform: rotate(0) translateY(-4px); }
+@media (max-width: 820px) {
+  .anjuan-doc:nth-child(1), .anjuan-doc:nth-child(3) { transform: none; }
+}
+
+/* 表格行的骑缝虚线，最后一行不画 */
+.anjuan-row { border-bottom: 1px dashed var(--kraft-deep); }
+.anjuan-row:last-of-type { border-bottom: none; }
+
+/* 草稿纸：等距横格 */
+.anjuan-draftline {
+  background: repeating-linear-gradient(
+    transparent, transparent 28px,
+    var(--kraft-deep) 28px, var(--kraft-deep) 29px);
+}
+
+/* 时间线：序号方章 + 竖直连线，最后一条不连 */
+.anjuan-steps li::before {
+  content: attr(data-no); position: absolute; left: 0; top: 0;
+  width: 36px; height: 36px; border-radius: 6px;
+  background: var(--primary); color: var(--on-primary);
+  font-family: var(--font-serif-static); font-weight: 900; font-size: 17px;
+  display: grid; place-items: center; transform: rotate(-4deg);
+}
+.anjuan-steps li::after {
+  content: ""; position: absolute; left: 17px; top: 44px; bottom: 6px;
+  width: 1.5px; background: var(--kraft-deep);
+}
+.anjuan-steps li:last-child::after { display: none; }
+
+/* hero 地面投影：椭圆径向渐变，压在形象脚下 */
+.anjuan-figure::after {
+  content: ""; position: absolute; left: 50%; bottom: 6px;
+  transform: translateX(-50%);
+  width: 62%; height: 26px; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(43, 35, 32, 0.18), transparent);
+}
+
+/* 「土八鼠印」红章。**动效只在用户没要求减弱动效时才播**——
+   这是装饰，不是状态反馈，减弱动效时直接呈现落定态。 */
+.anjuan-stamp {
+  box-shadow: inset 0 0 0 3px var(--bg), inset 0 0 0 5px var(--primary);
+  transform: rotate(9deg);
+  mix-blend-mode: multiply;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .anjuan-stamp { animation: stamp-in 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) 0.55s backwards; }
+  @keyframes stamp-in {
+    from { transform: rotate(14deg) scale(1.9); opacity: 0; }
+    to { transform: rotate(9deg) scale(1); opacity: 0.92; }
   }
 }
 
