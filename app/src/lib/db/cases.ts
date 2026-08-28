@@ -25,6 +25,8 @@ export interface TimelineEventRow {
   kind: string;
   title: string;
   detail: string | null;
+  /** 达成的里程碑（批 6 驾驶舱）。null = 这条事件不构成任何里程碑，绝大多数事件都是 null。 */
+  milestone: string | null;
   created_at: string;
 }
 
@@ -135,9 +137,32 @@ export function insertTimelineEvent(
 export function listTimelineEvents(db: Database, caseId: number, limit: number): TimelineEventRow[] {
   return db
     .prepare(
-      'SELECT id, case_id, happened_at, kind, title, detail, created_at FROM timeline_events WHERE case_id = ? ORDER BY happened_at DESC, id DESC LIMIT ?',
+      'SELECT id, case_id, happened_at, kind, title, detail, milestone, created_at FROM timeline_events WHERE case_id = ? ORDER BY happened_at DESC, id DESC LIMIT ?',
     )
     .all(caseId, limit) as TimelineEventRow[];
+}
+
+/**
+ * 给一条已存在的事件盖上里程碑。**全仓写 milestone 列的 SQL 只有这一条。**
+ *
+ * 【为什么不做成 insertTimelineEvent 的一个参数】契约 §六·二：通用写路径**在类型上就不该
+ * 设得了这个字段**，否则"无确认不写"只是一条纪律——纪律要靠人记得，入口不存在则不需要记。
+ * 现在 `insertTimelineEvent` 的 params 里没有 milestone，任何走通用路径落的行该列恒为 NULL，
+ * 这一点由守卫测试在运行时验，不是靠读类型推。
+ *
+ * 【为什么带 caseId 而不只按 eventId】跨案件盖章要挡住：调用方即使拿到别人案子的
+ * event_id，WHERE 里的 case_id 也会让它落空（归属校验仍在 lib/cases 那层先做一遍）。
+ *
+ * @returns 是否真的更新到一行（false = 事件不存在或不属于该案）
+ */
+export function setEventMilestone(
+  db: Database,
+  params: { caseId: number; eventId: number; milestone: string },
+): boolean {
+  const info = db
+    .prepare('UPDATE timeline_events SET milestone = ? WHERE id = ? AND case_id = ?')
+    .run(params.milestone, params.eventId, params.caseId);
+  return info.changes > 0;
 }
 
 // ========== action_items ==========

@@ -720,6 +720,18 @@ export function runMigrations(db: Database.Database): void {
   // WS2 此前借 timeline_events.kind='系统动作' 落痕记录进度，本列落地后切换到本列。
   addColumnIfMissing(db, 'threads', 'intake_stage', 'TEXT');
 
+  // timeline_events.milestone：这条事件构成「达成哪个里程碑」（批 6 驾驶舱，
+  // 契约见 docs/contracts/case-milestone.md）。取值域是 CASE_MILESTONES，
+  // **不是** cases.stage 的词表——里程碑是只追加的既成事实，stage 是可变可回退的当前态，
+  // 两者是不同的东西（契约 §二）；早先按「milestone ⊆ stage」写过一稿，第一格「协商」
+  // 在 stage 里没有对应值，只能让键说谎，故拆开（契约 §三·附）。
+  //
+  // 【为什么可空 TEXT，不是 NOT NULL】SQLite 拒绝给已有表加无默认的 NOT NULL 列，
+  // 在这个无事务的迁移框架里就是半途炸；而契约上 `milestone?` 本就是可选字段，
+  // **可空是语义正确，不是将就**。同 intake_stage，不加 DB 级 CHECK（改 CHECK 要重建表），
+  // 值域由 lib/cases 的 confirmMilestone 把关 + 测试钉死；CHECK 并进 WS1 那笔递延。
+  addColumnIfMissing(db, 'timeline_events', 'milestone', 'TEXT');
+
   // company_watches.tier：三圈监控档位（spec v3）。daily=圈1 直接责任链、weekly=圈2 责任扩展候选、
   // archive=圈3 存档不监控。同 intake_stage，**不加 DB 级 CHECK**（SQLite 改 CHECK 要重建表）。
   // 升级与衰减规则（圈1 出事件→相邻圈2 升每日、30 天无新 urgent 回落、手动钉住）**全在 watcher

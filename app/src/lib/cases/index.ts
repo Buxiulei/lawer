@@ -31,6 +31,50 @@ export const CASE_STAGES = [
 /** 与 migrate.ts timeline_events.kind 注释逐字对齐 */
 export const TIMELINE_KINDS = ['公司动作', '我方动作', '系统动作', '期限'] as const;
 
+/**
+ * 案件里程碑（批 6 驾驶舱，契约 docs/contracts/case-milestone.md §三）。
+ *
+ * 【为什么不是 CASE_STAGES 的子集】里程碑是**只追加的既成事实**，stage 是**可变可回退的
+ * 当前态**，是两种东西（契约 §二）。早先按子集写过一稿，撞上死结：第一格「协商」在
+ * CASE_STAGES 里没有对应值（那段被拆成 风声/约谈中/已收通知/已解除 四个更细的值），
+ * 只能拿 `约谈中` 当键——于是「公司不谈直接解除」的案子库里会留下一条从没发生过的约谈。
+ * 而且 `Extract<CaseStage, …>` **fails open**：把 CASE_STAGES 里某个值改名，
+ * 里程碑联合会**静默少一员，tsc 退出码 0 一句话不报**（2026-08-28 本仓实测）——
+ * 一个防词表漂移的机制，自己的失效方式就是静默漂移。改成独立联合 + 下面那张全量表，
+ * 漏键报 TS2741、错值报 TS2322，**两个方向都红**。
+ */
+export const CASE_MILESTONES = [
+  '协商',
+  '仲裁申请',
+  '立案',
+  '开庭',
+  '裁决',
+  '一审',
+  '二审',
+  '执行',
+] as const;
+
+export type CaseMilestone = (typeof CASE_MILESTONES)[number];
+
+/**
+ * stage → 它属于哪个里程碑。**全量**：键覆盖 CASE_STAGES 每一个值。
+ * 新增或改名任一 stage，此处不补即编译失败——这正是 Extract 给不了的那一格。
+ */
+export const MILESTONE_OF_STAGE: Record<(typeof CASE_STAGES)[number], CaseMilestone | null> = {
+  风声: null, // 还没进入任何里程碑
+  约谈中: '协商',
+  已收通知: '协商',
+  已解除: '协商',
+  仲裁准备: '仲裁申请',
+  已立案: '立案',
+  开庭: '开庭',
+  裁决: '裁决',
+  一审: '一审',
+  二审: '二审',
+  执行: '执行',
+  结案: null, // 轨道末格已达成，不再是「当前里程碑」
+};
+
 /** 与 migrate.ts action_items.status 注释逐字对齐 */
 export const ACTION_STATUSES = ['待办', '完成', '放弃'] as const;
 
@@ -251,6 +295,60 @@ export function addTimelineEvent(
     detail: trimmedOrNull(input.detail),
   });
   const event = store.listTimelineEvents(db, input.caseId, TIMELINE_MAX_LIMIT).find((e) => e.id === id)!;
+  return { ok: true, event };
+}
+
+/**
+ * 给一条已存在的时间线事件盖上里程碑。**这是全仓唯一能写 milestone 的入口。**
+ *
+ * 【为什么要 userConfirmed 这个参数】契约 §四 定的是「零自动写入」——八格全部
+ * 「agent 提议 + 用户一键确认」，没有任何一格由规则自动写。产品理由是
+ * **milestone 是只追加、不可撤销的事实断言，不可撤销的写入不许由启发式产生**：
+ * 抽错一次就永久多一格，而按定义没有撤销语义（有撤销就回到"能被抹掉"，
+ * 整套「回退不算倒退、时间轴如实记」的设计白做）。
+ *
+ * 这个参数是那条规矩的**签名级落法**：调用方不显式声明"用户确认过"就调不动它。
+ * 它挡不住存心造假的调用方（那不是它的目标），挡的是**顺手**——agent 侧想自动盖章，
+ * 必须先写下一句显然是假的 `userConfirmed: true`，而不是漏个参数就悄悄写成了。
+ */
+export function confirmMilestone(
+  db: Database,
+  input: {
+    caseId: number;
+    userId: number;
+    eventId: number;
+    milestone?: unknown;
+    /** 用户确认凭据，必须显式为 true */
+    userConfirmed?: unknown;
+  },
+): Result<{ event: store.TimelineEventRow }> {
+  const found = assertOwned(db, input.caseId, input.userId);
+  if (isFailure(found)) return found;
+
+  if (input.userConfirmed !== true) {
+    return fail(
+      400,
+      'MILESTONE_NOT_CONFIRMED',
+      '里程碑必须由用户确认后才能写入：agent 只递笔，案件史归用户执笔',
+    );
+  }
+  if (
+    typeof input.milestone !== 'string' ||
+    !(CASE_MILESTONES as readonly string[]).includes(input.milestone)
+  ) {
+    return fail(400, 'INVALID_MILESTONE', `milestone 只能是 ${CASE_MILESTONES.join(' / ')}`);
+  }
+
+  const updated = store.setEventMilestone(db, {
+    caseId: input.caseId,
+    eventId: input.eventId,
+    milestone: input.milestone,
+  });
+  if (!updated) return fail(404, 'EVENT_NOT_FOUND', '时间线事件不存在');
+
+  const event = store
+    .listTimelineEvents(db, input.caseId, TIMELINE_MAX_LIMIT)
+    .find((e) => e.id === input.eventId)!;
   return { ok: true, event };
 }
 

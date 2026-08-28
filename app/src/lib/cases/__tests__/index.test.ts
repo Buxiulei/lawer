@@ -24,6 +24,18 @@ describe('跨用户访问（红线）', () => {
         title: '偷看',
       }),
       setActionStatus: cases.setActionStatus(db, { caseId: caseA, userId: userB, actionId: actionA }),
+      // 【为什么这条也在】confirmMilestone 是 2026-08-28 新加的对外函数，同样吃 caseId+userId。
+      // 本文件开头那句"每个对外函数都必须撞一遍这条红线，一个都不能漏"如果不跟着长，
+      // **红线的覆盖面就会随每个新函数悄悄缩小，而这张表本身永远是绿的**。
+      // 注意参数给足（userConfirmed + 合法 milestone）：若靠缺参数拿 400，
+      // 这条断言会变成在测参数校验，而不是在测归属校验——**归属必须先于一切校验**。
+      confirmMilestone: cases.confirmMilestone(db, {
+        caseId: caseA,
+        userId: userB,
+        eventId: 1,
+        milestone: '协商',
+        userConfirmed: true,
+      }),
     };
 
     for (const [name, result] of Object.entries(attempts)) {
