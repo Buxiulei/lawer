@@ -1,0 +1,67 @@
+# .github/workflows/ci.yml
+#
+# 【这就是守卫的提交级形态】仓里那些守卫测试（迁移幂等、判据接线名册、里程碑唯一写点…）
+# 在此之前只在**有人想起来跑 `npm test`** 时开火。本文件是它们唯一的自动执行面。
+#
+# 【为什么主检查挂 pull_request 而不是只挂 push】
+# 这条是本文件的灵魂，选错的表现是「CI 全绿」而不是「CI 报错」：
+#   · pull_request 事件下 GitHub 默认检出 refs/pull/N/merge，即**合并结果**
+#     ⇒ 老分支的 PR 照样会跑到 main 上后加的新守卫。
+#   · push 事件跑的是**分支头** ⇒ 一个落后的分支永远跑不到它自己没有的那个守卫文件。
+# 2026-08-28 的真实教训：ws/backend 落后 main 22 个提交时报出「全量 1821 绿」，
+# 那 1821 里**跑不到**当天才进 main 的迁移幂等守卫——
+# **「分支自测全绿」不构成「守卫过了」**，而两者在报告上长得一模一样。
+# push 那条仍然留着，作用是守住 main 本身（合并后、直推时）。
+#
+# 【离线口径】首次运行之前**不预先声称测试全部离线干净**。
+#   已知：src/lib/llm/__tests__/smoke.live.test.ts 由环境变量门控，CI 无凭据 ⇒ 自动跳过。
+#   其余未经实测（本机无 unshare 权限，做不成断网实验）。
+#   **首跑本身就是那个实验**：跑出来的失败清单就是要记账的名单，届时在此处补记。
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# 同一分支的新推送取消旧的在跑任务，省额度；main 上不取消（要留完整历史）
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  app:
+    name: app · tsc + vitest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      # npm ci 而不是 npm install：锁文件是唯一真源，CI 不该有解析出别的版本的余地
+      - run: npm ci
+        working-directory: app
+      - run: npx tsc --noEmit -p tsconfig.json
+        working-directory: app
+      # vitest 的 include 覆盖 app/src、app/scripts 与仓根 ../scripts
+      # （判据自己的测试必须跟主套件一起跑，否则「判据放松了」没人会发现）
+      - run: npx vitest run
+        working-directory: app
+
+  sidecar:
+    name: sidecar · pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: sidecar/requirements.txt
+      - run: pip install -r requirements.txt
+        working-directory: sidecar
+      - run: python -m pytest tests -q
+        working-directory: sidecar
