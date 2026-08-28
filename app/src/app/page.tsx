@@ -4,7 +4,6 @@
 import Link from 'next/link';
 import { DISCLAIMER_TEXT } from '@/app/_mock/authpay';
 import { signedInRedirectScript } from '@/app/_ui/bootstrap';
-import { TubashuMark } from '@/components/shell/TubashuMark';
 
 /** 卷一的三张文书卡。**全部是示例**，卡上带「示例」角标，不留可被误读成真实数据的余地。 */
 const DOCS = [
@@ -19,7 +18,7 @@ const DOCS = [
   },
 ] as const;
 
-/** 卷二：四步时间线。法条依据单独一行，与建议分开排。 */
+/** 卷二：五步时间线，覆盖到强制执行。法条依据单独一行，与建议分开排。 */
 const STEPS = [
   {
     no: '一',
@@ -46,6 +45,13 @@ const STEPS = [
     title: '每个节点，提前告诉你',
     body: '仲裁庭应自受理起四十五日内审结。开庭前准备什么、庭上说什么，到点都排在你档案上面。',
     law: '依据：《劳动争议调解仲裁法》第四十三条。',
+  },
+  {
+    no: '五',
+    when: '裁决之后',
+    title: '起诉或应诉，都接着排',
+    body: '对裁决不服的一方——你，或者公司——都可以在收到裁决书起十五日内向法院起诉。公司起诉的，你就是被告：答辩、举证、开庭，每一步照样排进你的档案。一审、二审，直到生效。生效之后对方不给钱，申请法院强制执行，陪到钱到账。',
+    law: '依据：《劳动争议调解仲裁法》第五十条。',
   },
 ] as const;
 
@@ -116,12 +122,23 @@ export default function LandingPage() {
       <script dangerouslySetInnerHTML={{ __html: signedInRedirectScript }} />
 
       <header className="border-b border-kraft-deep">
-        <div className="mx-auto flex max-w-[1120px] items-baseline justify-between px-6 py-5">
-          <Link href="/" className="flex items-center gap-2.5 no-underline">
-            <TubashuMark size={32} className="size-8 self-center" />
-            <span className="font-serif-static text-[22px] font-black tracking-[0.08em]">
-              土八鼠
-            </span>
+        <div className="mx-auto flex max-w-[1120px] items-center justify-between px-6 py-5">
+          {/*
+            徽章自带「土八鼠」中文字标，旁边不再另写一遍（2026-08-28 用户令）。
+            源 `素材/品牌/土八鼠logo.png` 整枚徽章（alpha 裁边 70 0 1253 1167），压 WebP 192px。
+            **尺寸 56/64 而不是 48**：实测 4× 放大逐档看，40px 的「鼠」是一团墨、
+            48px 勉强认形，**56px 才看得出内部笔画**。字标是这里唯一的名字来源，
+            读不出就等于没写——同「传不到就只是噪点」那条判据。
+            名字由 alt 承担，不靠像素。
+          */}
+          <Link href="/" className="no-underline">
+            <img
+              src="/brand/badge-192.webp"
+              alt="土八鼠"
+              width={57}
+              height={56}
+              className="h-14 w-auto md:h-16"
+            />
           </Link>
           <Link
             href="/case/demo"
@@ -148,9 +165,6 @@ export default function LandingPage() {
                 className="relative z-[1] mx-auto block h-auto w-[min(62vw,300px)] md:w-[400px]"
               />
             </picture>
-            <figcaption className="mt-2.5 text-[13px] tracking-[0.1em] text-ink-2">
-              它替你着急，你就可以不慌。
-            </figcaption>
           </figure>
 
           <div className="relative order-last pb-11 md:order-first md:pb-16">
