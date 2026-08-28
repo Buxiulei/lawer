@@ -142,19 +142,27 @@ function trae(vars: PromptVars): string {
 /**
  * WorkBuddy（腾讯）。
  *
- * ⚠️ **命名有一处对不上，写在这里免得下一个人重查**：官方文档站
- * `workbuddy.ai/docs/cli/mcp` 打开后，页面里的产品名是 **CodeBuddy**——
- * 两个名字共用同一份文档。所以下面的**配置格式**照文档给（它与通用那套逐字相同），
- * 但**不给命令行写法**：文档里的命令是 `codebuddy mcp add`，
- * 用户手里那个二进制叫什么，文档没说清，替他猜一个只会让他敲出 command not found。
+ * 【为什么这一档只给 UI 步骤，不给配置文件里的 JSON】
+ * 官方文档（`workbuddy.ai/docs/.../MCP-Guide`，中英两版内容不同、不是互译）：
+ * - 中文版给了配置文件路径 `~/.workbuddy/mcp.json`，但**唯一的 JSON 示例是 stdio**
+ *   （`command`/`args`/`env`），全文没有 remote server 的字段。
+ * - 英文版证实支持远程（原文 "Enter the server configuration (URL, authentication details)"，
+ *   且 "supports MCP standard OAuth authorization"），但**只描述 UI 表单，没给 JSON schema**。
+ *
+ * ⇒ 远程 server 的 JSON 字段名在官方文档里**查不到**。所以主路给它文档写明的 UI 步骤，
+ * JSON 只作「你那个版本要是能贴原始配置」的备选，并写明字段名未经其官方确认。
+ * **拿 Trae 的 `url`/`headers` 去套它，是拿一个产品的证据替另一个产品作保。**
  */
 function workbuddy(vars: PromptVars): string {
   return [
     general(vars),
     '',
-    '【如果你是 WorkBuddy】把这段写进 `~/.codebuddy/.mcp.json`（用户级）或项目根的 `.mcp.json`：',
+    '【如果你是 WorkBuddy】按它文档写的走界面加：Settings → MCP → 「Add MCP Server」，',
+    `服务地址填 ${vars.mcp_url}，鉴权填 Bearer ${key(vars)}。`,
+    '（配置文件在 `~/.workbuddy/mcp.json`；但它官方文档只给了本地 stdio 的 JSON 例子，',
+    '没公布远程 server 的字段名——所以先走界面。你那个版本若支持粘原始配置，可以试这段：',
     clientJson(vars),
-    '（它的文档与 CodeBuddy 共用，配置格式就是上面这套通用 JSON，支持 headers 带 Bearer。）',
+    '字段名以你客户端实际接受的为准，上面这套是通用写法，未经 WorkBuddy 官方文档确认。）',
   ].join('\n');
 }
 
