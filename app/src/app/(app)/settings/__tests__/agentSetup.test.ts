@@ -49,8 +49,8 @@ describe('接入话术', () => {
       codex: ['~/.codex/config.toml'],
       // Trae 官方文档：全局 ~/.trae/mcp.json，项目级 .trae/mcp.json
       trae: ['~/.trae/mcp.json'],
-      // WorkBuddy 与 CodeBuddy 共用同一份文档，配置路径是 codebuddy 那个
-      workbuddy: ['~/.codebuddy/.mcp.json'],
+      // WorkBuddy 官方文档：配置文件 ~/.workbuddy/mcp.json，远程 server 走 UI 添加
+      workbuddy: ['~/.workbuddy/mcp.json', 'Add MCP Server'],
     };
 
     it.each(Object.entries(EXPECT))('%s', (k, needles) => {
@@ -74,7 +74,18 @@ describe('接入话术', () => {
     },
   );
 
-  it('WorkBuddy 那版不给命令行——文档里的命令叫 codebuddy，替用户猜二进制名只会让他敲出 command not found', () => {
-    expect(setupPrompt('workbuddy', { ...VARS, apiKey: KEY })).not.toContain('codebuddy mcp add');
+  it('WorkBuddy 那版不给命令行——替用户猜二进制名只会让他敲出 command not found', () => {
+    expect(setupPrompt('workbuddy', { ...VARS, apiKey: KEY })).not.toContain('mcp add');
+  });
+
+  /*
+   * 这条守的是我自己犯过的错：第一版把 CodeBuddy CLI 文档（同域名不同路径）当成
+   * WorkBuddy 的文档，抄了 `~/.codebuddy/.mcp.json` 这个**错的路径**，还把通用 JSON
+   * 当作它官方文档认可的 schema 写了进去。**域名对上了不等于来源对上了。**
+   */
+  it('WorkBuddy 那版不许出现 codebuddy 的路径，也不许把通用 JSON 说成它官方确认过的', () => {
+    const out = setupPrompt('workbuddy', { ...VARS, apiKey: KEY });
+    expect(out).not.toContain('codebuddy');
+    expect(out).toContain('未经 WorkBuddy 官方文档确认');
   });
 });
