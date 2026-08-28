@@ -1388,7 +1388,13 @@ export function irreversibleDecisionAssertions(turn: TurnRecord, scenarioId: str
       // N/A 时 pass 置 true 只是为了让旧的布尔消费者不炸；真正的判定看 na，
       // runner 按 na 单列统计，既不计过也不计挂（见 Verdict.na）
       pass: advocates ? handedBack : true,
-      ...(advocates ? {} : { na: true }),
+      // 【2026-08-28 补 naKind（manager 批）】此前只写 `{ na: true }`，**一条 L1 的 N/A 没有机器可读的理由**。
+      // 联合类型里 `'no_decision_point'` 早就声明了、runner 也备好了标签（`判据不适用（正常）`）、
+      // 夹具还正好用在这个 id 上——**唯独产线断言从不发射它**，全历史零出现（正对照：
+      // 归档里含「决定权交还」170 份、含「N/A」224 份、含该 kind **0** 份）。
+      // 显示侧不算错（report 对缺 kind 做了降级、detail 也写了原因），
+      // **但归档之后这条 N/A 的类别不可恢复**，而 naKind 正是三态设计里承重的那一格。
+      ...(advocates ? {} : { na: true, naKind: 'no_decision_point' as const }),
       detail: advocates
         ? handedBack
           ? `劝进不可逆动作（${hits.slice(0, 2).join('、')}）且已交还决定权`
