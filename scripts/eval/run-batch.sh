@@ -93,7 +93,15 @@ KB_BLOB=$(git rev-parse HEAD:knowledge/index.json 2>/dev/null | cut -c1-8)
 # 【前置校验】打印实际解析到的知识库绝对路径与卡数——cwd 决定解析结果（2026-08-25 cwd 事件），
 # 跑批必须自证"我加载的是哪一个库"，对不上就别开批。
 KB_DIR=$(cd app 2>/dev/null && node -e "console.log(require('path').resolve(process.cwd(),'..','knowledge'))" 2>/dev/null)
-KB_CARDS=$(find "${KB_DIR:-/nonexistent}" -name '*.md' 2>/dev/null | wc -l)
+# 【2026-08-28 统一到 git 口径（manager 裁）】此前 `kb_cards` 数的是**文件系统**（find），
+# 而同一行的 `kb_index_blob` 走 git——**两个字段并排印在"三轴戳"里，却不是同一个口径**。
+# 实测差 1：`knowledge/TODO核实清单.md` 被 gitignore，于是 `kb_cards=220` 里
+# **有一张不受任何 SHA 约束**，而戳的用途恰恰是"事后可与声明 SHA 字节比对"。
+KB_CARDS=$(git ls-tree -r --name-only "$SHA" knowledge/ 2>/dev/null | grep -c '\.md$')
+# 【文件系统那个数不删，降为对照】产线**实际加载的是磁盘、不是 git**，
+# 所以"磁盘上有多少张"仍是要自证的（2025-08-25 cwd 事件就是靠它抓到的）。
+# 两者不一致不拒跑——那不是错误，是"有未进版控的卡在参与检索"这一事实，**要说出来而不是抹平**。
+KB_CARDS_FS=$(find "${KB_DIR:-/nonexistent}" -name '*.md' 2>/dev/null | wc -l)
 case "$KB_DIR" in
   "$ROOT/knowledge") ;;
   *) echo "知识库解析异常：期望 $ROOT/knowledge，实得 ${KB_DIR:-空}" >"$OUT/FAILED"; exit 2 ;;
@@ -102,7 +110,9 @@ esac
 # 归档用的时间基准：**开批那一刻**。不能用 META——它每跑都被追加，mtime 永远比转录新，
 # 拿它当 `-newer` 基准会一条转录都找不到，而"找不到"与"本来就没有"长得一模一样。
 touch "$OUT/.batch-start"
-echo "kb_dir=$KB_DIR kb_cards=$KB_CARDS kb_index_blob=$KB_BLOB" >>"$OUT/META"
+[ "$KB_CARDS" -eq "$KB_CARDS_FS" ] \
+  || echo "kb_untracked_cards=$((KB_CARDS_FS - KB_CARDS))（磁盘上有未进版控的卡在参与检索，不受 SHA 约束）" >>"$OUT/META"
+echo "kb_dir=$KB_DIR kb_cards=$KB_CARDS kb_cards_fs=$KB_CARDS_FS kb_index_blob=$KB_BLOB" >>"$OUT/META"
 echo "sha=$(git rev-parse HEAD) n=$N scenarios=$SCN start=$(date -Is)" >>"$OUT/META"
 # 【自证·2026-08-25 修】上一版这里是 `>` 截断写，把上一行的 kb_index_blob 冲掉了——
 # **15 个历史批次无一记到第三轴**，而我对外一直说"批次带三轴戳"。
