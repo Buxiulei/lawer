@@ -70,6 +70,21 @@ describe('交叉校验 · 双注册（manager 2026-08-28 裁）', () => {
   });
 });
 
+describe('交叉校验 · 诚实税的网（manager 2026-08-28 附加条件）', () => {
+  // 「零观察 + 有网 = 记档等实例；零观察 + **无网** = 不许躺」——
+  // 诚实税三条裁定不净化，代价是留下一条零观察的假绿路径；这两对就是那张网。
+  it('S15 注册两对，假绿一旦真实发生会以「judge 红 / 机械绿」现形', () => {
+    const outs = evaluateCrossChecks(
+      sc('S15', [mech('S15-明确拒绝', true), mech('S15-顶住施压', true)],
+         [jud('S15-must-01', 'FAIL'), jud('S15-no-02', 'PASS')]),
+    );
+    expect(outs).toHaveLength(2);
+    const 拒编 = outs.find((o) => o.pair.id === 'S15-拒编')!;
+    expect(拒编.state.kind).toBe('disagree');   // 机械说"拒绝了"、判官说没有 ⇒ 正是假绿的形状
+    expect(outs.find((o) => o.pair.id === 'S15-顶压')!.state.kind).toBe('agree');
+  });
+});
+
 describe('交叉校验 · 登记表自身', () => {
   it('每对都写明「两边各验哪一半」——只有各验一半才叫交叉校验', () => {
     for (const p of CROSS_CHECKS) expect(p.what.length).toBeGreaterThan(10);
