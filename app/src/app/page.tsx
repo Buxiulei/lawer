@@ -33,19 +33,16 @@ export default function LandingPage() {
             {/* hero 用那张 778KB 的 SVG（gzip 272KB）：**只有这一处用全身版**。
                 独立文件不内联，好走缓存；eager + 固定宽高防 CLS。 */}
             <picture className="mx-auto block md:order-last md:mx-0 md:shrink-0">
-              {/* WebP 优先、SVG 兜底。
-                  **这是首屏的 LCP 元素**：实测那张 SVG 是 272KB（gzip），
-                  比最大的 JS chunk 还大 3.9 倍，移动端 LCP 因它到 3.6s。
-                  640px 的 WebP 只有 63KB，而它在手机上只显示 200px、桌面 320px——
-                  640 已覆盖桌面 2× DPR。320px 下与 SVG 肉眼无差（连纸面那两行字都一样清楚）。
-                  SVG 留作 <img> 兜底：不支持 WebP 的浏览器仍拿得到，
-                  它同时也是这张画的源文件。 */}
+              {/* **原图直出，不经描摹**（2026-08-28 用户裁定：描摹版退役）。
+                  源 `土八鼠形象.png` 1239×1270 → 640 宽压 WebP 119KB；
+                  手机显示 200px、桌面 320px，640 已覆盖桌面 2× DPR。
+                  PNG 兜底给不支持 WebP 的浏览器（<picture> 只会取其中一个）。 */}
               <source srcSet="/brand/tubashu-hero-640.webp" type="image/webp" />
               <img
-                src="/brand/tubashu-hero.svg"
+                src="/brand/tubashu-hero-640.png"
                 alt="土八鼠：一只戴眼镜的土拨鼠，穿西装打领带，一手举着判决书，一手抱着法典"
-                width={1239}
-                height={1270}
+                width={640}
+                height={656}
                 loading="eager"
                 fetchPriority="high"
                 className="block h-auto w-[200px] md:w-[320px]"
