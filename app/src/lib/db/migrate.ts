@@ -752,6 +752,8 @@ export function runMigrations(db: Database.Database): void {
   // **可空是语义正确，不是将就**。同 intake_stage，不加 DB 级 CHECK（改 CHECK 要重建表），
   // 值域由 lib/cases 的 confirmMilestone 把关 + 测试钉死；CHECK 并进 WS1 那笔递延。
   addColumnIfMissing(db, 'timeline_events', 'milestone', 'TEXT');
+  // 【临时·CI 在场验证】故意的非幂等语句，用完即撤。见 PR 描述。
+  db.exec('ALTER TABLE timeline_events ADD COLUMN ci_red_probe TEXT');
 
   // company_watches.tier：三圈监控档位（spec v3）。daily=圈1 直接责任链、weekly=圈2 责任扩展候选、
   // archive=圈3 存档不监控。同 intake_stage，**不加 DB 级 CHECK**（SQLite 改 CHECK 要重建表）。
