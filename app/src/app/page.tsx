@@ -68,18 +68,27 @@ const PROMISES = [
   },
 ] as const;
 
+/**
+ * 两颗 CTA。**窄屏拉满整列**（2026-08-28 用户红框：393 下靠左要居中）——
+ * 拉满而不是让两颗不等宽的按钮居中：等宽居中在 <sm 会左右各留一小段空白、
+ * 两颗宽度还不一样，看着像没对齐；拉满则边界与上方正文同一条竖线，是"排过版"的样子。
+ * 顺带把热区从内容宽扩到整列宽，高度不变（仍是 py-[15px] + 17px 行高 ≥44）。
+ * ≥sm 回到并排、按内容宽——桌面上拉满会变成两条横杠。
+ */
 function CtaRow({ center = false }: { center?: boolean }) {
   return (
-    <div className={`flex flex-wrap gap-3.5 ${center ? 'justify-center' : ''}`}>
+    <div
+      className={`flex flex-col gap-3.5 sm:flex-row sm:flex-wrap ${center ? 'sm:justify-center' : ''}`}
+    >
       <Link
         href="/login"
-        className="rounded-[6px] bg-primary px-8 py-[15px] text-[17px] font-semibold text-on-primary shadow-[0_3px_0_var(--primary-ink)] transition-colors hover:bg-primary-ink"
+        className="block w-full rounded-[6px] bg-primary px-8 py-[15px] text-center text-[17px] font-semibold text-on-primary shadow-[0_3px_0_var(--primary-ink)] transition-colors hover:bg-primary-ink sm:w-auto"
       >
         开始我的案件
       </Link>
       <Link
         href="/case/demo"
-        className="rounded-[6px] border-[1.5px] border-ink px-8 py-[15px] text-[17px] font-semibold text-ink transition-colors hover:bg-kraft"
+        className="block w-full rounded-[6px] border-[1.5px] border-ink px-8 py-[15px] text-center text-[17px] font-semibold text-ink transition-colors hover:bg-kraft sm:w-auto"
       >
         先看看演示案件
       </Link>
