@@ -25,8 +25,60 @@ if [ -z "$START_REF" ]; then
   echo "⚠️ 开批时 HEAD 已是游离态（$(git rev-parse --short HEAD)）——跑完**不会**接回任何分支。" >&2
   echo "   这时候提交会落在游离头上，而 \`git push origin <分支>\` 会回 Everything up-to-date。" >&2
 fi
+# ═══ 接回段：改成 trap EXIT · 2026-08-28 第四次同型 ═══
+# 【为什么必须是 trap】接回这段我前后加固过三次（没接回／接回到旧地方／开批即游离），
+# **三次加固全都假设脚本能走到那一行**。而 S03 对照批（被测 SHA 早于本工具引入）
+# 在归档段 `exit 4`，**接回段根本没被执行**，HEAD 被留在游离态。
+# **一个只在正常路径上执行的清理动作，不是清理动作。**（manager 2026-08-28 入册）
+# ⇒ 挂 EXIT：无论正常结束、`exit N` 还是被信号打断，接回都跑。
+# 【顺序】DONE 必须在接回与 META 落款**之后**才出现——等 DONE 的人读 META 时
+# `head_restored_to` 必须已经在纸上，否则又是"看起来正常"的一格。
+restore_head() {
+  rc=$?
+  [ "$STARTED_DETACHED" = 1 ] && echo "head_restored_to=（开批时即游离，未接回）" >>"$OUT/META"
+  if [ -n "$START_REF" ]; then
+  # 【接回之前先看游离头上有没有新提交 · 2026-08-28 踩过第二次】
+  # 上一版只管"接回分支"，但**批跑着的时候我在游离头上提交并直推了远端**，
+  # 于是本地分支 ref 落后于远端，接回它 ⇒ **把工作区静默倒回**，
+  # 而我拿倒回后的旧脚本跑了读数器、差点把一个硬编码的旧基线当成自算结果报出去。
+  # ⇒ **「接回分支」不等于「接回到最新」。** 本地 ref 可能比你刚做的事旧。
+  DETACHED_HEAD=$(git rev-parse HEAD)
+  if ! git merge-base --is-ancestor "$DETACHED_HEAD" "$START_REF" 2>/dev/null; then
+    echo "⚠️ 游离头 $(git rev-parse --short "$DETACHED_HEAD") 上有提交不在 $START_REF 上——" >&2
+    echo "   接回会把它们从工作区拿掉。先 git fetch && git merge --ff-only origin/$START_REF 再干活。" >&2
+    echo "detached_had_extra_commits=1" >>"$OUT/META"
+  fi
+  git checkout -q "$START_REF" 2>/dev/null || echo "⚠️ 接回 $START_REF 失败，HEAD 仍游离——提交前先 git checkout $START_REF" >&2
+  # 【接回也要自证】checkout 失败与成功在下游长得一样：都是"没有报错的终端"。
+  NOW=$(git symbolic-ref --quiet --short HEAD || echo "游离")
+  [ "$NOW" = "$START_REF" ] || echo "⚠️ HEAD 现在是「$NOW」而不是「$START_REF」" >&2
+  echo "head_restored_to=$NOW" >>"$OUT/META"
+  fi
+  [ -f "$OUT/.finished" ] && echo done >"$OUT/DONE"
+  return $rc
+}
+trap restore_head EXIT
+# 【EXIT 不够 · 停批走的正是信号】POSIX sh 的 EXIT trap **不接管 SIGTERM/SIGINT**。
+# 而本文件头部写明的停批方式是 `kill -- -$(cat run.pid)`——发的就是 TERM。
+# 不接这两个信号，**"手工停批"这条路径依然会把 HEAD 留在游离态**，
+# 等于只修了我这次撞见的那一种退出方式。显式 `exit` 会触发 EXIT trap，接回照跑。
+trap 'exit 143' TERM
+trap 'exit 130' INT
 ：工作树必须干净且 HEAD==SHA，否则拒跑（批内一致性）
 git fetch -q origin
+# ═══ 开批前置：被测对象与工具链分离 · 2026-08-28 S03 对照批踩出 ═══
+# 【病因】本脚本第一件事是 `git checkout <被测SHA>` **整棵树**——于是**它自己的工具链
+# 也被钉到被测 SHA**。测 `06c6a3d` 时，`run-batch.sh` 与 `archive-batch.sh` 都还没被引入，
+# **脚本在运行途中把自己删掉了**：`sh` 靠已打开的 fd 把三跑跑完（inode 未释放），
+# 但归档段是**按路径**调 `archive-batch.sh` ⇒ 文件不在 ⇒ 失败 ⇒ 在接回段之前退出。
+# 【修法】**被测对象该钉，工具不该钉。** 归档器开批前快照到 $OUT（results/ 已 gitignore，
+# 挺得过 checkout），全程调副本。这样测任何历史 SHA 都不会把工具测没了。
+git cat-file -e "$SHA:scripts/eval-agent.ts" 2>/dev/null \
+  || { echo "被测 SHA $SHA 上没有 scripts/eval-agent.ts——被测对象不存在，拒跑" >"$OUT/FAILED"; exit 2; }
+cp "$ROOT/scripts/eval/archive-batch.sh" "$OUT/.archive-batch.sh" \
+  || { echo "归档器快照失败，拒跑（宁可不开批，也不要跑完发现归不了档）" >"$OUT/FAILED"; exit 2; }
+git cat-file -e "$SHA:scripts/eval/archive-batch.sh" 2>/dev/null \
+  || echo "toolchain_snapshotted=1（被测 SHA 早于归档器引入，全程用开批时的副本）" >>"$OUT/META"
 git checkout -q "$SHA" || { echo "checkout $SHA 失败" >"$OUT/FAILED"; exit 2; }
 [ -z "$(git status --porcelain -- app/src scripts knowledge)" ] || { echo "工作树不干净，拒跑" >"$OUT/FAILED"; exit 2; }
 # 开批前余额/连通性冒烟：1 次最小调用，失败不起批
@@ -79,7 +131,7 @@ done
 # 基准用开批时 touch 的 `.batch-start`，**不能用 META**——META 每跑都被追加，
 # mtime 永远比转录新，拿它当 `-newer` 基准会一条转录都找不到，
 # 而"找不到"与"本来就没有"长得一模一样。（第一版就是这么错的，被自证当场抓住。）
-ARCHIVE=$ROOT/scripts/eval/archive-batch.sh
+ARCHIVE=$OUT/.archive-batch.sh   # 开批前的快照，不随被测 SHA 走（见上方前置段）
 # 【为什么分两次调、而不是把文件名塞进一个变量】上一版写的是 `ARCH=$(... $TRANS)`，
 # 依赖 shell 对未加引号变量做词分割——**而 zsh 默认不分割、sh 分割**。
 # 同一行代码在两个 shell 下行为不同，我自己的仿真（跑在 zsh 里）就把两个路径当成了一个参数。
@@ -93,25 +145,5 @@ find "$ROOT/scripts/eval/results" -maxdepth 1 -newer "$OUT/.batch-start" \
   || { echo "转录归档失败" >"$OUT/FAILED"; exit 4; }
 echo "archived_to=$ARCH/$(basename "$OUT")" >>"$OUT/META"
 
-# 接回开批前的分支（游离头上提交会被 push 静默忽略，见文件上方）
-[ "$STARTED_DETACHED" = 1 ] && echo "head_restored_to=（开批时即游离，未接回）" >>"$OUT/META"
-if [ -n "$START_REF" ]; then
-  # 【接回之前先看游离头上有没有新提交 · 2026-08-28 踩过第二次】
-  # 上一版只管"接回分支"，但**批跑着的时候我在游离头上提交并直推了远端**，
-  # 于是本地分支 ref 落后于远端，接回它 ⇒ **把工作区静默倒回**，
-  # 而我拿倒回后的旧脚本跑了读数器、差点把一个硬编码的旧基线当成自算结果报出去。
-  # ⇒ **「接回分支」不等于「接回到最新」。** 本地 ref 可能比你刚做的事旧。
-  DETACHED_HEAD=$(git rev-parse HEAD)
-  if ! git merge-base --is-ancestor "$DETACHED_HEAD" "$START_REF" 2>/dev/null; then
-    echo "⚠️ 游离头 $(git rev-parse --short "$DETACHED_HEAD") 上有提交不在 $START_REF 上——" >&2
-    echo "   接回会把它们从工作区拿掉。先 git fetch && git merge --ff-only origin/$START_REF 再干活。" >&2
-    echo "detached_had_extra_commits=1" >>"$OUT/META"
-  fi
-  git checkout -q "$START_REF" 2>/dev/null || echo "⚠️ 接回 $START_REF 失败，HEAD 仍游离——提交前先 git checkout $START_REF" >&2
-  # 【接回也要自证】checkout 失败与成功在下游长得一样：都是"没有报错的终端"。
-  NOW=$(git symbolic-ref --quiet --short HEAD || echo "游离")
-  [ "$NOW" = "$START_REF" ] || echo "⚠️ HEAD 现在是「$NOW」而不是「$START_REF」" >&2
-  echo "head_restored_to=$NOW" >>"$OUT/META"
-fi
+echo done >"$OUT/.finished"
 
-echo done >"$OUT/DONE"
