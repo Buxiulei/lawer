@@ -22,7 +22,13 @@
 //      （或届时的等价包装）里的语句一律放行，写在包装之外的照旧拦；
 //   2. 保留 stripComments + 对照臂两块不动——它们防的是「检查函数本身失效」，
 //      与事务化无关，任何时候都还需要；
-//   3. 把本段注释改写成新规则的说明，别让下一个人以为这个文件只能整个删掉。
+//   3. 把本段注释改写成新规则的说明，别让下一个人以为这个文件只能整个删掉；
+//   4. 「ALTER TABLE 只许出现在 addColumnIfMissing 函数体内」这条（连同「唯一写点」那条
+//      计数测试）改成「只许出现在 addColumnIfMissing 或 migrationStep(n, ...) 体内」——
+//      有了版本守卫，每步只跑一次，包装里的裸 ADD COLUMN 不会再撞 duplicate column name。
+//      但**放行仍按函数体区间给、不按语句文本给**（按文本豁免的话改个变量名就绕过去了），
+//      且计数断言仍写 toBe(N) 不写 <= N：「零处 ALTER TABLE」意味着封装被整段删了、
+//      此后所有加列静默失效，那是必须报红的事，不是「更干净了」。
 // 在第 1 步真正落地之前，任何「先豁免一下这条迁移」的诉求都应该被拒绝：
 // 单条豁免等于把整个守卫变成装饰。
 
@@ -80,9 +86,45 @@ export function stripComments(src: string): string {
   return out.join('');
 }
 
+// ──────────────── 定位 addColumnIfMissing 函数体 ────────────────
+
+/**
+ * 在剥完注释的源码里定位 `function addColumnIfMissing` 的函数体字符区间。
+ *
+ * 加列的**唯一合法写点**就是这个封装：它先 `PRAGMA table_info` 判断列在不在、不在才 ALTER，
+ * 所以可重跑。SQLite 的 `ALTER TABLE ... ADD COLUMN` **没有 `IF NOT EXISTS`**
+ * （2026-08-28 实测：写了报 `near "EXISTS": syntax error`），裸写的那条第二次执行
+ * 报 `duplicate column name`，runMigrations 当场抛错 ⇒ **应用起不来**。
+ * 比「半途炸掉留个残库」更直接一档：残库还能读，起不来的应用连读都没有。
+ *
+ * 放行按**位置**给，不按语句文本给。按文本豁免（比如放过长得像
+ * `ALTER TABLE ${table} ADD COLUMN` 的那一串）等于把变量名改一改就能绕过去。
+ *
+ * 找不到函数、或花括号不配对，一律返回 null——此时全文任何 ALTER TABLE 都算违规。
+ * **定位失效时的方向是「全拦」不是「全放」**：放行的失败是静默的，拦截的失败会红给人看。
+ */
+export function addColumnIfMissingBody(scrubbed: string): { start: number; end: number } | null {
+  const sig = /\bfunction\s+addColumnIfMissing\b/.exec(scrubbed);
+  if (!sig) return null;
+  const open = scrubbed.indexOf('{', sig.index + sig[0].length);
+  if (open === -1) return null;
+  let depth = 0;
+  for (let i = open; i < scrubbed.length; i++) {
+    if (scrubbed[i] === '{') depth++;
+    else if (scrubbed[i] === '}' && --depth === 0) return { start: open, end: i + 1 };
+  }
+  return null;
+}
+
 // ───────────────────────── 扫描规则 ─────────────────────────
 
 export type Violation = { rule: string; line: number; text: string; matched: string };
+
+/** 二次判定要用到的、正则自己看不见的整份源码上下文。 */
+type ScanCtx = {
+  /** 该字符偏移是否落在 addColumnIfMissing 的函数体里 */
+  inAddColumnHelper: (index: number) => boolean;
+};
 
 type Rule = {
   /** 规则名，出现在报错里 */
@@ -90,7 +132,7 @@ type Rule = {
   /** 在剥完注释的源码上跑的正则 */
   re: RegExp;
   /** 二次判定：返回 true 才算违规。缺省即「匹配到就算违规」 */
-  violates?: (m: RegExpExecArray) => boolean;
+  violates?: (m: RegExpExecArray, ctx: ScanCtx) => boolean;
   /** 为什么拦它 */
   why: string;
 };
@@ -109,6 +151,17 @@ const RULES: Rule[] = [
     re: /\bALTER\s+TABLE\s+(\S+)\s+([A-Za-z_]+)/gi,
     violates: (m) => m[2].toUpperCase() !== 'ADD',
     why: 'ALTER TABLE 除 ADD COLUMN 外都会改变既有列/表，重跑不自愈',
+  },
+  {
+    // 上一条按**语法**开白名单（放行 ADD），2026-08-27 那版就漏在这儿：
+    // 「绕开封装、裸 db.exec 一条 ALTER TABLE t ADD COLUMN c」四条规则一条都不命中。
+    // 白名单粒度改成按**唯一写点**开：放行的不是 ADD COLUMN 这个语法，
+    // 是 addColumnIfMissing 这个封装（区间判定，见 addColumnIfMissingBody 的注释）。
+    // 上一条保留：它管的是 RENAME / DROP / MODIFY 那一类，与本条各拦各的。
+    name: 'ALTER-TABLE-绕开-addColumnIfMissing',
+    re: /\bALTER\s+TABLE\b/gi,
+    violates: (m, ctx) => !ctx.inAddColumnHelper(m.index),
+    why: '加列一律走 addColumnIfMissing（它用 PRAGMA table_info 守卫，可重跑）；裸 ALTER TABLE ADD COLUMN 第二次执行必报 duplicate column name（SQLite 没有 ADD COLUMN IF NOT EXISTS），runMigrations 抛错、应用起不来',
   },
   {
     // 注意与 `ON DELETE CASCADE` / `ON DELETE SET NULL` 区分：那是外键引用动作，
@@ -156,12 +209,17 @@ export function scanForNonIdempotent(src: string): Violation[] {
   const originalLines = src.split('\n');
   const found: Violation[] = [];
 
+  const body = addColumnIfMissingBody(scrubbed);
+  const ctx: ScanCtx = {
+    inAddColumnHelper: (i) => body !== null && i >= body.start && i < body.end,
+  };
+
   for (const rule of RULES) {
     const re = new RegExp(rule.re.source, rule.re.flags);
     let m: RegExpExecArray | null;
     while ((m = re.exec(scrubbed)) !== null) {
       if (m[0].length === 0) { re.lastIndex++; continue; }   // 防零宽匹配死循环
-      if (rule.violates && !rule.violates(m)) continue;
+      if (rule.violates && !rule.violates(m, ctx)) continue;
       const line = scrubbed.slice(0, m.index).split('\n').length;
       found.push({
         rule: rule.name,
@@ -242,6 +300,7 @@ export function badMigration(db: Database.Database): void {
   db.exec(\`CREATE UNIQUE INDEX idx_bar ON bar (id);\`);
   db.exec(\`ALTER TABLE bar RENAME COLUMN id TO bar_id;\`);
   db.exec(\`ALTER TABLE bar DROP COLUMN legacy;\`);
+  db.exec(\`ALTER TABLE bar ADD COLUMN tier TEXT NOT NULL DEFAULT 'daily'\`);
   db.exec(\`DELETE FROM bar WHERE id > 0;\`);
   db.exec(\`UPDATE bar SET status = 'x' WHERE status IS NULL;\`);
   db.exec(\`INSERT INTO bar (id) VALUES (1);\`);
@@ -264,9 +323,15 @@ export function goodMigration(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_bar_case ON bar (case_id, id);
     CREATE UNIQUE INDEX IF NOT EXISTS uq_bar ON bar (case_id) WHERE status = 'sent';
   \`);
-  db.exec(\`ALTER TABLE bar ADD COLUMN tier TEXT NOT NULL DEFAULT 'daily'\`);
   addColumnIfMissing(db, 'bar', 'intake_stage', 'TEXT');
   addColumnIfMissing(db, 'bar', 'tier', "TEXT NOT NULL DEFAULT 'daily'");
+}
+
+// 封装本体。**同类正对照**：函数体区间内的这一处 ALTER TABLE 必须放行——
+// 否则「加列只许走 addColumnIfMissing」那条规则会把唯一那个写点也拦掉，等于禁止加列。
+function addColumnIfMissing(db: Database.Database, table: string, col: string, ddl: string): void {
+  const exists = (db.prepare(\`PRAGMA table_info(\${table})\`).all() as { name: string }[]).some((r) => r.name === col);
+  if (!exists) db.exec(\`ALTER TABLE \${table} ADD COLUMN \${col} \${ddl}\`);
 }
 `;
 
@@ -283,6 +348,7 @@ describe('scanForNonIdempotent 对照臂', () => {
     ['CREATE-缺IF-NOT-EXISTS', 'CREATE UNIQUE INDEX idx_bar'],
     ['ALTER-TABLE-非ADD', 'ALTER TABLE bar RENAME'],
     ['ALTER-TABLE-非ADD', 'ALTER TABLE bar DROP'],
+    ['ALTER-TABLE-绕开-addColumnIfMissing', 'ALTER TABLE bar ADD COLUMN tier'],
     ['DELETE-FROM', 'DELETE FROM bar'],
     ['UPDATE-SET', 'UPDATE bar SET'],
     ['INSERT-INTO', 'INSERT INTO bar'],
@@ -302,9 +368,35 @@ describe('scanForNonIdempotent 对照臂', () => {
     expect(msg).toContain('拦它的理由');
   });
 
-  test('合法写法一条都不许误杀（外键 ON DELETE/ON UPDATE、ADD COLUMN、部分索引）', () => {
+  test('合法写法一条都不许误杀（外键 ON DELETE/ON UPDATE、封装内的 ADD COLUMN、部分索引）', () => {
     const v = scanForNonIdempotent(IDEMPOTENT_SAMPLE);
     expect(formatViolations(v)).toBe('');
+  });
+
+  // 放行按**位置**给，不按**语句文本**给。这条钉的就是这个差别：
+  // 下面这句和 addColumnIfMissing 体内那句**一模一样**（连变量名都一样），
+  // 只因为它写在封装外面就必须被拦。按文本豁免的实现会在这里放行。
+  test('同一条 ALTER 写在封装外照样拦（豁免按区间给、不按语句文本给）', () => {
+    const sneaky =
+      IDEMPOTENT_SAMPLE +
+      '\nfunction sneakyMigration(db, table, col, ddl) {\n' +
+      '  db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${ddl}`);\n' +
+      '}\n';
+    const v = scanForNonIdempotent(sneaky);
+    expect(
+      v.filter((x) => x.rule === 'ALTER-TABLE-绕开-addColumnIfMissing'),
+      `封装外的那条 ALTER 没被拦住：\n${formatViolations(v)}`,
+    ).toHaveLength(1);
+  });
+
+  // 定位失效时的方向：封装找不到（改名/删掉/花括号不配对）⇒ 全文 ALTER TABLE 一律拦。
+  // 这条钉的是「失败要红，不要静默放行」——放行的失败没人看得见。
+  test('找不到 addColumnIfMissing 时，连封装内那条也拦（fail closed）', () => {
+    const renamed = IDEMPOTENT_SAMPLE.replace(/addColumnIfMissing/g, 'addCol2');
+    expect(addColumnIfMissingBody(renamed)).toBeNull();
+    expect(
+      scanForNonIdempotent(renamed).some((x) => x.rule === 'ALTER-TABLE-绕开-addColumnIfMissing'),
+    ).toBe(true);
   });
 });
 
@@ -336,6 +428,30 @@ describe('migrate.ts 不含非幂等迁移', () => {
     expect(src).toContain(SELF_BASENAME);
     expect(src).toContain('本迁移框架没有事务');
     expect(src).toContain('先找数据表管理（WS1）');
+  });
+
+  // 「唯一写点」：全文 ALTER TABLE 必须**恰好一处**，且落在 addColumnIfMissing 体内。
+  //
+  // 为什么是 toBe(1) 而不是 <= 1：`<= 1` 会放过「零处」，而零处意味着 addColumnIfMissing
+  // 的 ALTER 那句（甚至整个封装）被删了——此后每一次 addColumnIfMissing 调用都是空转，
+  // 加列**静默失效**：迁移不报错、列却没加上，读侧拿到的是 no such column。
+  // 「应为 0 的期望必须配一条同类应 >0」的另一种写法：这里两个方向各自会红。
+  test('全文只有一处 ALTER TABLE，且落在 addColumnIfMissing 函数体内', () => {
+    const hits = [...scrubbed.matchAll(/\bALTER\s+TABLE\b/gi)];
+    expect(
+      hits.length,
+      `ALTER TABLE 出现了 ${hits.length} 处（应为 1）：\n` +
+        hits
+          .map((h) => `  migrate.ts:${scrubbed.slice(0, h.index).split('\n').length}`)
+          .join('\n') +
+        '\n多出来的那处 = 绕开了 addColumnIfMissing 的裸 ALTER，第二次执行报 duplicate column name；\n' +
+        '一处都没有 = 封装里那句被删了，此后所有 addColumnIfMissing 调用空转、加列静默失效。\n',
+    ).toBe(1);
+
+    const body = addColumnIfMissingBody(scrubbed);
+    expect(body, '没定位到 function addColumnIfMissing（被改名或挪走了？）').not.toBeNull();
+    expect(hits[0].index).toBeGreaterThanOrEqual(body!.start);
+    expect(hits[0].index).toBeLessThan(body!.end);
   });
 
   test('全文没有非幂等语句', () => {
