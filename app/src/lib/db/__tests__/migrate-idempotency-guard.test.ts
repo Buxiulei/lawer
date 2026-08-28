@@ -31,6 +31,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, test, expect } from 'vitest';
 
+const SELF_BASENAME = path.basename(fileURLToPath(import.meta.url));
 const MIGRATE_PATH = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
@@ -324,6 +325,17 @@ describe('migrate.ts 不含非幂等迁移', () => {
     // 当前存量迁移区有 2 处调用（threads.intake_stage、company_watches.tier）。
     expect(scrubbed).toContain('ALTER TABLE ${table} ADD COLUMN');
     expect((scrubbed.match(/addColumnIfMissing\(db,/g) ?? []).length).toBeGreaterThanOrEqual(2);
+  });
+
+  // 两层防线的第二层：migrate.ts 顶部那段警示注释，在人**动手之前**就告诉他这里没有事务、
+  // 该找谁。机检拦的是「写的人不知道有这条规矩」，注释省的是「写完被打回来」的那趟往返——
+  // 覆盖时点不同，缺一个都留口子。
+  // 这里锁的是注释里那句「本约束由 xxx 机检」的指针：文件一旦被改名/挪走，指针就成了假话，
+  // 「这是机检的」也就变回一句劝告。用本文件的真实文件名比对，改名当场红，逼着把注释一起改。
+  test('migrate.ts 顶部警示注释在，且指名了本测试文件', () => {
+    expect(src).toContain(SELF_BASENAME);
+    expect(src).toContain('本迁移框架没有事务');
+    expect(src).toContain('先找数据表管理（WS1）');
   });
 
   test('全文没有非幂等语句', () => {
