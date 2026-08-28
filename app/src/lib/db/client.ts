@@ -21,11 +21,31 @@ import { runMigrations } from './migrate';
  * 不建的话第一次 `npm run dev` 就炸在一个跟业务无关的地方。
  * 这不会掩盖上面那个 bug——lazy 求值已经让「测试漏到默认路径」不可能发生了。
  */
+/**
+ * 测试期禁止落到默认库路径（评测官 2026-08-28 提，我实现）。
+ *
+ * 惰性求值修掉了「谁先 import」那个顺序问题，**但没修兜底问题**：
+ * 任何忘了设 DB_PATH 的测试，仍会静默写进 `<cwd>/data/lawer.db`——那是开发库，
+ * 而它被 gitignore、没人 review，于是"跑过测试的人开发库里混着测试数据"。
+ * 实测当前全量无人落到这里（把 app/data 挪走跑全量，目录没被造回来），
+ * **但那是"现在没有"不是"不可能"**。这道闸把它变成后者：
+ * 规则要人记得，能力要人绕过。
+ */
+function defaultDbPath(): string {
+  if (process.env.VITEST || process.env.NODE_ENV === 'test') {
+    throw new Error(
+      '测试期不许用默认库路径：请在 beforeAll 里设 process.env.DB_PATH（临时文件），' +
+        '否则会静默写进开发库 <cwd>/data/lawer.db。',
+    );
+  }
+  return path.join(process.cwd(), 'data', 'lawer.db');
+}
+
 let _db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (!_db) {
-    const dbPath = process.env.DB_PATH ?? path.join(process.cwd(), 'data', 'lawer.db');
+    const dbPath = process.env.DB_PATH ?? defaultDbPath();
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     _db = new Database(dbPath);
     _db.pragma('journal_mode = WAL');
