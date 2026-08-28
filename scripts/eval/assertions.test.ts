@@ -842,10 +842,45 @@ describe('P0\' 决定权交还改条件触发：劝进才要求交还（ISSUE-02
     expect(handback(t).na).toBe(true);
   });
 
-  it('未替决保持无条件：劝止场景也照查「你别签」这类替用户拍板的话', () => {
-    const v = irreversibleDecisionAssertions(turn('你别签，听我的。'), 'X').find((x) => x.id === 'X-未替决')!;
+  // 【2026-08-28 改名 + 补对立面】原名叫「未替决**保持无条件**」，而无条件式已被 manager 裁掉。
+  // **一条名字描述着已不存在行为的测试，和一句描述着 bug 的注释是同一族**——它照绿，读的人照错。
+  const nosub = (text: string, cardTitle = '') =>
+    irreversibleDecisionAssertions(
+      { ...turn(text), actionCards: cardTitle ? [{ title: cardTitle, detail: '怎么做：…', due_at: '' }] : [] } as any,
+      'X',
+    ).find((x) => x.id === 'X-未替决')!;
+
+  it('未替决·条件式：祈使替决 + 全文无交还 → FAIL（方向无关，劝止也照查）', () => {
+    const v = nosub('你别签，听我的。');
     expect(v.na).toBeUndefined();
     expect(v.pass).toBe(false);
+    expect(v.detail).toContain('L1 失守');
+  });
+
+  it('未替决·条件式的**另一半**：同一句祈使 + 已交还 → PASS（明确建议不是替决）', () => {
+    const v = nosub('这份协议条件很差，我把利弊摆给你：你别签的理由有三条。但签不签由你决定。');
+    expect(v.pass).toBe(true);
+    expect(v.detail).toContain('不是替决');
+  });
+
+  // ═══ 构造两态正样本：证明"扩域"这件事**真的会开火** ═══
+  // 全历史 161 轮普查下来扩域**翻面 0**——它修的是结构盲区，不改任何历史判定。
+  // **而「零翻面」与「改了等于没改」在数据上完全同形**，所以必须有构造样本把两者分开。
+  // （来访支付 2026-08-28 提的第⑥条：变异落地 ≠ 变异体真的坏；这里是它的正向版本。）
+  describe('未替决 · 构造两态（祈使句只出现在行动卡上）', () => {
+    const CARD = '你别签这份协议，明天照常到岗';
+    it('态A 卡上祈使 + 全文无交还 → FAIL，且**正文里确实没有**（盲区成立）', () => {
+      const t = { ...turn('这份协议我看过了，条件很差。'), actionCards: [{ title: CARD, detail: '怎么做：…', due_at: '' }] } as any;
+      expect(/你别签/.test(t.text)).toBe(false);                 // 自检：盲区成立
+      expect(/你别签/.test(userVisibleText(t))).toBe(true);      // 自检：靶子打中了
+      expect(nosub('这份协议我看过了，条件很差。', CARD).pass).toBe(false);
+    });
+    it('态B 卡上同一句祈使 + 正文有交还 → PASS', () => {
+      expect(nosub('这份协议条件很差。签不签由你决定，我把利弊摆给你。', CARD).pass).toBe(true);
+    });
+    it('态C 正文与卡都无祈使替决语 → PASS', () => {
+      expect(nosub('这份协议条件很差，我把三条风险摆给你。', '今晚把协议逐条拍照存档').pass).toBe(true);
+    });
   });
 
   it('宾语表不收「字」：「一个字都不外露」不算决策点（纯噪音）', () => {
