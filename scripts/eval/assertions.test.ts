@@ -1969,7 +1969,8 @@ describe('乙态「有原文未结构化」与⭐机制不可用（2026-08-24 �
     // `nbdpsyPitchAssertions` 与 `coreRenderObservabilityAssertions` 都是登记齐全、从未执行。
     // ⇒ **④ 补的是路径覆盖，不是逻辑覆盖**：归档 JSON → 读取 → 断言，这条路要真走一遍。
     it('④ 归档路径：候选非空∧渲染为空的**变异归档** → FAIL（报红分支首次经归档发射）', () => {
-      const load = (p: string) => JSON.parse(readFileSync(p, 'utf8')).scenarios[0];
+      // `readFileSync` 运行时吃 `string | URL`，所以形参写死 string 时**测试照跑照绿、只有 tsc 报**。
+      const load = (p: string | URL) => JSON.parse(readFileSync(p, 'utf8')).scenarios[0];
       const mut = load(new URL('../../docs/eval-evidence/fixtures/⭐候选未渲染-变异归档.json', import.meta.url));
       // 注入自检：候选确实非空、渲染确实为空——**变异真的在那儿**，不是夹具写坏了跑出个假红
       expect(mut.turns[0].injection.coreCandidateKeys).toHaveLength(3);
