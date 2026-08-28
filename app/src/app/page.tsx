@@ -183,7 +183,7 @@ export default function LandingPage() {
               <CtaRow />
             </div>
             <p className="mt-3.5 text-[13.5px] text-ink-2">
-              演示案件是虚构示例，不用注册就能翻完整个驾驶舱。
+              演示案件是虚构示例，不用注册就能翻完整个案件。
             </p>
 
             <div
