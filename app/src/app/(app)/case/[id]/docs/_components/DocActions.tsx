@@ -23,11 +23,11 @@ export function DocActions({ caseId, docTitle }: { caseId: string; docTitle: str
     <Card className="p-4">
       <h2 className="fs-m font-semibold text-ink">接下来</h2>
       <p data-veil="" className="prose-measure mt-1 fs-m text-ink-2">
-        对某一条还有疑问，或者想让人帮你把回复的原话写出来，去工作台接着说。这份文件本身建议收进证据库，仲裁时要用。
+        对某一条还有疑问，或者想让人帮你把回复的原话写出来，去「问它」接着说。这份文件本身建议收进证据库，仲裁时要用。
       </p>
       <div className="mt-3.5 flex flex-col gap-2 sm:flex-row">
         <Button asChild>
-          <Link href={`/case/${caseId}`}>去工作台细聊</Link>
+          <Link href={`/case/${caseId}/ask`}>去问它细聊</Link>
         </Button>
         <Button
           variant="secondary"

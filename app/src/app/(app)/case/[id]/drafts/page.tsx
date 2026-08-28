@@ -27,8 +27,8 @@ export default async function DraftsPage({
         {/* 标题换了中性词，这句导语里还有「仲裁委」，得进糊层 */}
         <p data-veil="" className="mt-0.5 text-[15px] leading-7 text-ink-2">
           写给公司和仲裁委的东西都在这儿。需要新的一份，去
-          <Link href={`/case/${id}`} className="mx-1 text-primary-ink underline underline-offset-4">
-            工作台
+          <Link href={`/case/${id}/ask`} className="mx-1 text-primary-ink underline underline-offset-4">
+            问它
           </Link>
           说一句就行。
         </p>
