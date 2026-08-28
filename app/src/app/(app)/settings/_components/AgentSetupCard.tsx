@@ -48,6 +48,24 @@ export function AgentSetupCard() {
               支持 MCP 的走 MCP，不支持的走 REST，两条路能力一样。网页端功能一样齐全，不接也不影响。
             </p>
 
+            {/*
+              省钱引导。**措辞的边界**：只说「MCP 这几个工具不扣公道值」，
+              这是可核对的事实——`lib/mcp/tools.ts` 里七个工具全是读写案件数据，
+              没有一个在我们这边调模型。**不写「接了就免费」**：网页对话照旧扣费，
+              把话说满会在用户第一次看见扣费时变成谎话。
+            */}
+            <div className="mt-3 rounded-[8px] border-l-4 border-success bg-success-wash px-3 py-2.5">
+              <p className="text-[14px] leading-6 font-semibold text-success-ink">
+                用你自己的助手干活，能省下公道值
+              </p>
+              <p className="mt-0.5 text-[13.5px] leading-6 text-success-ink">
+                接上之后，读档案、记时间线、管待办和期限、列证据这些，都是
+                <span className="font-semibold">你的助手在想</span>
+                ——烧的是它那边的额度，不扣公道值。
+                公道值只在我们这边真的替你调模型时才扣（比如网页里的这个对话）。
+              </p>
+            </div>
+
             {loading && <Skeleton className="mt-3 h-40 w-full" />}
 
             {unauthorized && !loading && <LoggedOutTabs />}
