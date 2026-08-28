@@ -35,6 +35,60 @@ export function getGongdao(userId: number, db: Database.Database = getDb()): num
   return row?.balance ?? 0;
 }
 
+export interface GongdaoLedgerEntry {
+  id: number;
+  delta: number;
+  type: string;
+  ref_id: string | null;
+  feature: string | null;
+  created_at: string;
+  /** 这一笔之后的余额，由当前余额沿时间倒推 */
+  balance_after: number;
+}
+
+export interface GongdaoLedgerView {
+  /** 物化余额（gongdao.balance），就是计费门槛实际读的那个数 */
+  balance: number;
+  /**
+   * 账本流水求和。**与 balance 一起返回，不是冗余。**
+   * 二者不等意味着物化余额与账本不符（对账器判错的那种情形）。
+   * 如果这里只返回一个数，页面上会渲染出一个**看起来完全正常的错数**——
+   * 而本产品页面写着「每一笔都记着只增不改」，那句承诺的兑现方式就是让不符可见。
+   */
+  ledger_sum: number;
+  entries: GongdaoLedgerEntry[];
+}
+
+/**
+ * 读某人的公道值余额与流水（倒序，最新在前）。
+ *
+ * 【balance_after 为什么由余额倒推而不是正向累加】正向累加要求拿到**全部**流水，
+ * 一分页就会错；倒推只需要当前余额和本页这些笔，任何 limit 下都是对的。
+ */
+export function listGongdaoLedger(
+  userId: number,
+  limit = 50,
+  db: Database.Database = getDb(),
+): GongdaoLedgerView {
+  const balance = getGongdao(userId, db);
+  const sumRow = db.prepare('SELECT COALESCE(SUM(delta),0) AS s FROM gongdao_ledger WHERE user_id=?').get(userId) as {
+    s: number;
+  };
+  const rows = db
+    .prepare(
+      'SELECT id, delta, type, ref_id, feature, created_at FROM gongdao_ledger WHERE user_id=? ORDER BY id DESC LIMIT ?',
+    )
+    .all(userId, Math.max(1, Math.min(200, Math.trunc(limit)))) as Omit<GongdaoLedgerEntry, 'balance_after'>[];
+
+  let running = balance;
+  const entries: GongdaoLedgerEntry[] = [];
+  for (const r of rows) {
+    entries.push({ ...r, balance_after: running });
+    running -= r.delta;
+  }
+  return { balance, ledger_sum: sumRow.s, entries };
+}
+
 /** 计费门槛：余额 ≥ GONGDAO_GATE_MIN（=1）即可发起计费行为；负余额自然为 false。 */
 export function gongdaoGate(userId: number, db: Database.Database = getDb()): boolean {
   return getGongdao(userId, db) >= GONGDAO_GATE_MIN;
