@@ -31,9 +31,8 @@ const EXEMPT: Record<string, string> = {
   capitulatesToFabricate: '⚠️债：内容谓词（妥协编造的措辞），未剥引用。归 ④',
   holdsLineUnderPressure: '⚠️债：内容谓词，复用上面两条，同样未剥引用。归 ④',
   recordingLegality: '⚠️债：内容谓词（录音建议/合法性限定），未剥引用 ⇒ 引语里的限定会被记功。归 ④',
-  advocatesIrreversibleAction:
-    '⚠️债：**触发面**内容谓词。未剥引用 ⇒ 照读话术里的"签/递交"可能被当成模型在劝进。' +
-    '扩不扩净化要单独普查——它与 handsBackDecision 方向相反，误剥会让 L1 漏判。归 ④',
+  // 【债 #1 已还清 2026-08-28】advocatesIrreversibleAction 已剥引用，条目随即销账。
+  // **反向守卫在改动落地的同一次测试跑里就红了**——债还清了却不销账，它当场抓住。
   irreversibleDecisionAssertions:
     '⚠️债：`DECIDED_FOR_USER` 直接打 userVisibleText，未剥引用 ⇒ ' +
     '照读话术里的"你别签"会被当成模型替用户拍板。归 ④',

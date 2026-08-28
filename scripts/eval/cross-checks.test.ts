@@ -58,6 +58,18 @@ describe('交叉校验 · 阈值（下限不报红是这套设计的要害）', 
   });
 });
 
+describe('交叉校验 · 双注册（manager 2026-08-28 裁）', () => {
+  it('S03-no-01 同时对着两条机械面 —— 各算各的，不争"哪一对才是正宗"', () => {
+    const outs = evaluateCrossChecks(
+      sc('S03', [mech('S03-交还句在场', true), mech('S03-未替决', false)], [jud('S03-no-01', 'FAIL')]),
+    );
+    expect(outs).toHaveLength(2);
+    // 同一条 judge、两条机械面，结论**可以不同**——这正是双注册要暴露的东西：
+    // 只登记一对时，"一致"可能是巧合而非同问一件事。
+    expect(outs.map((o) => o.state.kind).sort()).toEqual(['agree', 'disagree']);
+  });
+});
+
 describe('交叉校验 · 登记表自身', () => {
   it('每对都写明「两边各验哪一半」——只有各验一半才叫交叉校验', () => {
     for (const p of CROSS_CHECKS) expect(p.what.length).toBeGreaterThan(10);
