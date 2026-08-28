@@ -50,6 +50,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="zh-Hans" suppressHydrationWarning>
       <head>
+        {/* 衬线子集预加载：@font-face 里的字体要等 CSS 解析完才被发现，
+            preload 让它与文档并行下载。**这一条是试出来的不是抄来的**——
+            LCP 里 82% 是 Render Delay，preload 能不能收回要看实测。 */}
+        <link
+          rel="preload"
+          as="font"
+          type="font/woff2"
+          href="/fonts/tubashu-serif-700.woff2"
+          crossOrigin="anonymous"
+        />
         {/* 首屏前落定主题与低调模式，避免闪白和金额一闪而过 */}
         <script
           dangerouslySetInnerHTML={{
