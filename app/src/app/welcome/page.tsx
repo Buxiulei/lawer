@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Button } from '@/components/shadcn/button';
-import { LampMark } from '@/components/shell/LampMark';
+import { TubashuMark } from '@/components/shell/TubashuMark';
 
 export const metadata: Metadata = { title: '档案已创建' };
 
@@ -16,7 +16,7 @@ export default function WelcomePage() {
       <div className="w-full max-w-[420px]">
         <header className="mb-7">
           <div className="flex items-center gap-2.5">
-            <LampMark className="size-7 text-primary" />
+            <TubashuMark size={28} className="size-7" />
             <span className="text-[18px] font-semibold text-ink">土八鼠</span>
           </div>
           <h1 className="mt-6 text-[22px] font-semibold text-ink">档案已创建</h1>

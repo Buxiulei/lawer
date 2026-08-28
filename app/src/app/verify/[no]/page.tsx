@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
-import { LampMark } from '@/components/shell/LampMark';
+import { TubashuMark } from '@/components/shell/TubashuMark';
 import { VerifyResult } from './_components/VerifyResult';
 import { readVerification } from './_verification';
 
@@ -51,7 +51,7 @@ export default async function VerifyPage({
     <div className="mx-auto flex min-h-dvh w-full max-w-[760px] flex-col px-4 py-8 sm:px-6 sm:py-12">
       <header className="border-b border-line pb-5">
         <div className="flex items-center gap-2.5">
-          <LampMark className="size-6 text-primary" />
+          <TubashuMark size={24} className="size-6" />
           <span className="text-[15px] font-semibold text-ink">土八鼠</span>
         </div>
         <h1 className="mt-4 text-[20px] font-semibold text-ink sm:text-[22px]">
