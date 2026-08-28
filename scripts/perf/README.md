@@ -89,3 +89,31 @@ node scripts/perf/g1-sanity.mjs                    # 灵敏度对照臂，见下
 4. **只按移动版式审 a11y 会拿到虚假满分**：证据表格是 `≥sm` 才渲染的两面式布局，
    412px 下那半棵树根本不存在。**桌面版式审出的 2 项，移动版式一项都测不到。**
    ⇒ a11y 按版式分别审。
+
+## 查横向溢出：只认「能横向滚动的距离」，禁用 scrollWidth
+
+```js
+const se = document.scrollingElement;
+const before = se.scrollLeft;
+se.scrollLeft = 9999;
+const 可滚距离 = se.scrollLeft;   // 0 ＝ 没有横向溢出
+se.scrollLeft = before;
+```
+
+**为什么把 `documentElement.scrollWidth` 拉黑**（2026-08-28 实测立规）：
+
+落地页在 Chrome 移动模拟下，`scrollWidth` 恒比视口宽 **36px**，而同一时刻
+**可滚距离是 0、没有任何元素被裁、`html`/`body` 的 `overflow` 都是 `visible`**
+——手指推不动，用户什么也感觉不到。
+
+罪魁是 `ui/Toast.tsx` 那个 `fixed inset-x-0` 的 aria-live 容器，它**自己喂自己**：
+容器以布局视口为包含块，又把布局视口撑大；429 与 393 都是稳定不动点，
+落在哪个取决于布局历史（运行时注入 `max-width:100%` 会掉到 393，
+同一条 CSS 打进构建、冷启动则照旧 429）。
+
+代价不在那 36px 本身，在于**它把这把尺子废了**：全站基线永远 +36，
+以后真出现一个 20px 的溢出，会淹在这个常数里、和正常状态分不出来。
+
+⇒ 判据换成症状本身（推得动推不动），不用代理指标。
+**fullPage 截图的画布宽同理不可信**，它跟着 `scrollWidth` 走。
+
