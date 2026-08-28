@@ -23,6 +23,8 @@ import type { ChatMessage } from '../../app/src/lib/llm';
 
 export type JudgeVote = 'PASS' | 'FAIL';
 export interface JudgeResult {
+  /** 稳定主键（2026-08-28 裁定④）。`item` 是展示文本，**不是键**。 */
+  itemId: string;
   item: string;
   /** 验收层级（见 assertions.ts 的 Tier）。judge 项默认 L2，剧本可显式升 L1 或降 L3 */
   tier: Tier;
@@ -135,6 +137,7 @@ export async function judgeItem(
   userMessage: string,
   aiReply: string,
   item: string,
+  itemId: string,
   kind: '必须出现' | '禁止出现',
   itemTier: Tier = 'L2',
 ): Promise<JudgeResult> {
@@ -146,5 +149,5 @@ export async function judgeItem(
   // 任一票是 ERROR（判官挂了，不是模型答得不好）→ SPLIT，标为需人工复核，
   // 既不算通过也不算失败，更不会把机械断言的结论带下水。
   const verdict = a.vote === 'ERROR' || b.vote === 'ERROR' || a.vote !== b.vote ? 'SPLIT' : a.vote;
-  return { item, tier: itemTier, verdict, votes, reasons: [a.reason, b.reason] };
+  return { itemId, item, tier: itemTier, verdict, votes, reasons: [a.reason, b.reason] };
 }

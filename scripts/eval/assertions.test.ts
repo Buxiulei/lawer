@@ -60,7 +60,8 @@ import {
 // 原语与出口闸从**产线**取（判据同源：两侧共用的是原语，不是任何一侧的副本）
 import { cardOccurrences, hotlineStripDeclined, stripDuplicateHotlineList } from '../../app/src/lib/agent/crisis';
 import { bareArticleCitations, coreArticleKeys } from '../../app/src/lib/agent';
-import { findScenarios, SCENARIOS } from './scenarios';
+import { SCENARIOS, findScenarios } from './scenarios';
+import { ITEM_ALIASES, assertAliasesSingleHop, resolveItemId } from './human-review';
 import { voteFrom } from './judge';
 import { createKnowledgeSearcher, type KnowledgePack } from '../../app/src/lib/agent';
 
@@ -598,6 +599,52 @@ describe('L1 全集守卫：每条红线都必须真实存在且判为 L1', () =
     // 要豁免某一条，在这里写 fn → 理由，让豁免这件事被看见、被复核。
   };
 
+  /**
+   * 【条目 id 完整性 · manager 2026-08-28 裁定④补充】
+   * 「泛化后的守卫把 id 存在性也一起验——**新增判据族没配 id 时红**」。
+   *
+   * 三条不变量：**每条都有 id / id 全局唯一 / id 形状可辨**。
+   * 唯一性尤其要紧：**两条判据共用一个 id，`tiers` 与 `findRuling` 会张冠李戴，
+   * 而两边都不会报错**——那正是这次 id 化要终结的那类沉默。
+   */
+  /**
+   * 【别名表单跳 · 显式断言】`human-review.ts` 在模块加载时就 throw 链式别名——
+   * **但那种失败的样子是"这个测试文件加载不了、几个测试凭空消失"（实测 438 → 431），
+   * 而不是"某一条报红"。测试数变少没人盯着看。**
+   *
+   * ⇒ 同一个不变量再写一条显式断言：**失败要有名字**。
+   * 加载即 throw 保的是"链一旦成立，后面每次解析都是错的"；这条保的是"有人看得见它错了"。
+   */
+  it('★别名单跳校验器本身有牙（拿构造的表去撞它）', () => {
+    // 【为什么用构造的表】校验器在模块加载时就 throw 现役表——**测现役表的那条断言
+    // 在链存在时根本加载不到**（实测：整个测试文件从 439 条塌成 19 条）。
+    // 所以这里撞的是**校验器**，不是现役表：现役表由加载即自检守，校验器由这条守。
+    expect(() => assertAliasesSingleHop({ A: 'B', B: 'C' })).toThrow(/链式解析/);
+    expect(() => assertAliasesSingleHop({ A: 'A' })).toThrow(/自环/);
+    expect(() => assertAliasesSingleHop({ A: 'X', B: 'Y' })).not.toThrow();
+    expect(() => assertAliasesSingleHop({})).not.toThrow();
+    // 现役表能被加载，本身就说明它过了加载即自检；再钉一次解析的幂等性
+    for (const from of Object.keys(ITEM_ALIASES)) {
+      expect(resolveItemId(resolveItemId(from))).toBe(resolveItemId(from));
+    }
+  });
+
+  it('★每个 judge 条目都必须有唯一、非空、形状可辨的 id', () => {
+    const all = SCENARIOS.flatMap((s) => [...s.must, ...s.mustNot].map((it) => ({ sc: s.id, ...it })));
+    expect(all.length, '一条 judge 条目都没扫到——不许把这个空当通过').toBeGreaterThan(100);
+    const noId = all.filter((x) => !x.id || !x.id.trim());
+    expect(noId.map((x) => `${x.sc}: ${x.text.slice(0, 30)}`), '这些条目没有 id').toEqual([]);
+    const seen = new Map<string, string>();
+    const dup: string[] = [];
+    for (const x of all) {
+      if (seen.has(x.id)) dup.push(`${x.id}（${seen.get(x.id)} 与 ${x.sc}）`);
+      seen.set(x.id, x.sc);
+    }
+    expect(dup, 'id 重复——tiers 与 findRuling 会张冠李戴，而两边都不会报错').toEqual([]);
+    const badShape = all.filter((x) => !/^[A-Z0-9]+-(must|no)-\w+$/.test(x.id));
+    expect(badShape.map((x) => x.id), 'id 形状不符 `<剧本>-must|no-<序号>`').toEqual([]);
+  });
+
   it('★每个导出的 *Assertions 都必须在 runner 或 scenarios 里有调用点（双向）', () => {
     const stripComments = (src: string) =>
       src
@@ -648,9 +695,11 @@ describe('L1 全集守卫：每条红线都必须真实存在且判为 L1', () =
     } else if (probe.kind === 'scenarioJudge') {
       const sc = findScenarios([probe.scenario])[0];
       expect(sc, `${name}: 找不到剧本 ${probe.scenario}`).toBeDefined();
-      // 条目原文必须仍在 must/mustNot 里——改了措辞而没同步 tiers，映射就成了死键
-      expect([...sc.must, ...sc.mustNot], `${name}: 条目原文已不在剧本里，tiers 映射会失效`).toContain(probe.item);
-      expect(sc.tiers?.[probe.item], `${name}: 剧本 ${probe.scenario} 未把该条点名为 L1`).toBe('L1');
+      // 【2026-08-28 起按 id 查】原来这里比的是**条目原文**：改一句措辞，映射就成死键。
+      // 而那不是假设——唯一一条历史人工裁定就是这么静默失效的（片段在 132 条里命中 0）。
+      const ids = [...sc.must, ...sc.mustNot].map((it) => it.id);
+      expect(ids, `${name}: 条目 id 已不在剧本里，tiers 映射会失效`).toContain(probe.itemId);
+      expect(sc.tiers?.[probe.itemId], `${name}: 剧本 ${probe.scenario} 未把该条点名为 L1`).toBe('L1');
     } else {
       const sc = findScenarios([probe.scenario])[0];
       expect(sc.mechanical, `${name}: 剧本 ${probe.scenario} 没有机械断言`).toBeDefined();
