@@ -10,6 +10,8 @@
 import crypto from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 
+import { gongdaoGrant } from '@/lib/billing';
+import { GONGDAO_LEDGER_TYPE, REGISTER_GRANT_GONGDAO } from '@/lib/billing/pricing';
 import { ensureDefaultCase } from '@/lib/cases';
 import { encryptField, hashLookup } from '@/lib/crypto';
 import { emailVerifyCode, isValidEmail, sendMail, sendOtp } from '@/lib/notify';
@@ -190,12 +192,25 @@ export function verifyPhoneCode(
 
   let user = store.findUserByPhoneHash(db, phoneHash);
   if (!user) {
-    const id = store.insertUser(db, {
-      phoneEnc: encryptField(phone),
-      phoneHash,
-      verifiedAt: toSql(now),
+    /**
+     * 【建号与注册赠送必须同生同死】没有赠送的新账号余额为 0，而 `gongdaoGate` 的门槛是
+     * 余额 ≥ 1 —— 它第一个计费动作就会被拦死。**一个建成了却用不了的账号，比建号失败更坏**：
+     * 建号失败用户会重试，而这种账号看起来一切正常，人会以为是产品坏了。
+     * （这不是假设：2026-08-28 产线上两个真实账号就都卡在这里，其中一个是负责人本人。）
+     *
+     * 所以包在同一个事务里：要么两件都成，要么一件都不成。
+     * refId 用 `reg-<uid>`，天然一人一次；重试注册不会重复发放（唯一索引兜底）。
+     */
+    const createAccount = db.transaction(() => {
+      const id = store.insertUser(db, {
+        phoneEnc: encryptField(phone),
+        phoneHash,
+        verifiedAt: toSql(now),
+      });
+      gongdaoGrant(id, REGISTER_GRANT_GONGDAO, GONGDAO_LEDGER_TYPE.register, `reg-${id}`, null, db);
+      return id;
     });
-    user = store.findUserById(db, id)!;
+    user = store.findUserById(db, createAccount())!;
   }
 
   return { ok: true, token: signToken(user.id, now), needEmail: !user.email_verified_at };
