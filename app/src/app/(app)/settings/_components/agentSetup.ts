@@ -24,12 +24,14 @@ export interface AgentSetupInfo extends SetupUrls {
   tools: { name: string; description: string }[];
 }
 
-export type SetupTabKey = 'general' | 'claude' | 'codex' | 'rest';
+export type SetupTabKey = 'general' | 'claude' | 'codex' | 'trae' | 'workbuddy' | 'rest';
 
 export const SETUP_TABS: { key: SetupTabKey; label: string }[] = [
   { key: 'general', label: '通用' },
   { key: 'claude', label: 'Claude' },
   { key: 'codex', label: 'Codex' },
+  { key: 'trae', label: 'Trae' },
+  { key: 'workbuddy', label: 'WorkBuddy' },
   { key: 'rest', label: '仅 REST' },
 ];
 
@@ -117,6 +119,45 @@ function codex(vars: PromptVars): string {
   ].join('\n');
 }
 
+/**
+ * Trae（字节 AI IDE）。官方文档 docs.trae.ai/ide/add-mcp-servers：
+ * 支持远程 HTTP MCP，配置写在 `~/.trae/mcp.json`（全局）或项目根 `.trae/mcp.json`，
+ * 远程 server 可带 `headers`，文档里就有 `Authorization: Bearer` 的例子。
+ * 文档示例不写 `type` 字段，所以这里也不写——照它的样子给，少一个字段少一处出错。
+ */
+function trae(vars: PromptVars): string {
+  return [
+    general(vars),
+    '',
+    '【如果你是 Trae】把这段写进 `~/.trae/mcp.json`（全局）或项目根的 `.trae/mcp.json`：',
+    JSON.stringify({
+      mcpServers: {
+        lawer: { url: vars.mcp_url, headers: { Authorization: `Bearer ${key(vars)}` } },
+      },
+    }),
+    '也可以在 MCP 面板点「Raw Config (JSON)」直接粘。',
+  ].join('\n');
+}
+
+/**
+ * WorkBuddy（腾讯）。
+ *
+ * ⚠️ **命名有一处对不上，写在这里免得下一个人重查**：官方文档站
+ * `workbuddy.ai/docs/cli/mcp` 打开后，页面里的产品名是 **CodeBuddy**——
+ * 两个名字共用同一份文档。所以下面的**配置格式**照文档给（它与通用那套逐字相同），
+ * 但**不给命令行写法**：文档里的命令是 `codebuddy mcp add`，
+ * 用户手里那个二进制叫什么，文档没说清，替他猜一个只会让他敲出 command not found。
+ */
+function workbuddy(vars: PromptVars): string {
+  return [
+    general(vars),
+    '',
+    '【如果你是 WorkBuddy】把这段写进 `~/.codebuddy/.mcp.json`（用户级）或项目根的 `.mcp.json`：',
+    clientJson(vars),
+    '（它的文档与 CodeBuddy 共用，配置格式就是上面这套通用 JSON，支持 headers 带 Bearer。）',
+  ].join('\n');
+}
+
 function claude(vars: PromptVars): string {
   return [
     general(vars),
@@ -148,6 +189,8 @@ const BUILDERS: Record<SetupTabKey, (vars: PromptVars) => string> = {
   general,
   claude,
   codex,
+  trae,
+  workbuddy,
   rest,
 };
 
