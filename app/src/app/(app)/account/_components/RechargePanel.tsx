@@ -8,7 +8,6 @@ import {
   TOPUP_MAX_YUAN,
   TOPUP_MIN_YUAN,
   TOPUP_PRESETS_YUAN,
-  type PlanSku,
 } from '@/app/_mock/authpay';
 import { cn } from '@/app/_ui/cn';
 import { useDiscreet } from '@/app/_ui/discreet';
@@ -17,21 +16,11 @@ import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Badge } from '@/components/shadcn/badge';
 import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
-import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
 import { Input } from '@/components/shadcn/input';
 import { RadioGroup, RadioGroupItem } from '@/components/shadcn/radio-group';
-import { useToast } from '@/components/ui/Toast';
-
-interface PendingPay {
-  title: string;
-  description: string;
-  confirmLabel: string;
-}
 
 /** membership=null 表示还没登录：没有"当前档"，每一档都是可以挑的 */
 export function RechargePanel({ membership }: { membership: string | null }) {
-  const toast = useToast();
-  const [pending, setPending] = useState<PendingPay | null>(null);
   const [amount, setAmount] = useState('30');
   const { discreet } = useDiscreet();
   // 价目要买东西的人看得懂，不能进糊层，低调模式下只换词
@@ -43,23 +32,6 @@ export function RechargePanel({ membership }: { membership: string | null }) {
     Number.isInteger(yuan) &&
     yuan >= TOPUP_MIN_YUAN &&
     yuan <= TOPUP_MAX_YUAN;
-
-  const payPlan = (plan: PlanSku) => {
-    setPending({
-      title: `${plan.key}套餐 · 按月`,
-      description: `到账 ${plan.gongdao.toLocaleString('zh-CN')} ${creditWord}，本月内${plan.routing}。到期不自动续费。`,
-      confirmLabel: `确认支付 ¥${formatFen(plan.priceFen)}`,
-    });
-  };
-
-  const payTopup = () => {
-    if (!amountOk) return;
-    setPending({
-      title: `散充${creditWord}`,
-      description: `到账 ${(yuan * GONGDAO_PER_YUAN).toLocaleString('zh-CN')} ${creditWord}，不限使用期限，模型路由仍按当前套餐走。`,
-      confirmLabel: `确认支付 ¥${yuan}`,
-    });
-  };
 
   return (
     <>
@@ -106,14 +78,10 @@ export function RechargePanel({ membership }: { membership: string | null }) {
                   </p>
 
                   <div className="mt-auto pt-4">
-                    <Button
-                      size="sm"
-                      className="w-full"
-                      variant={current ? 'secondary' : 'primary'}
-                      disabled={!plan.available}
-                      onClick={() => payPlan(plan)}
-                    >
-                      {!plan.available ? '敬请期待' : current ? '续一个月' : '选这档'}
+                    {/* 支付通道未接，全档禁用。**不留「选这档 → 确认支付 ¥N → 其实没接」
+                        那条路**：走到「确认支付」才说没开通，是拿用户的信任换一次点击。 */}
+                    <Button size="sm" className="w-full" variant="secondary" disabled>
+                      {plan.available ? '支付暂未开通' : '敬请期待'}
                     </Button>
                   </div>
                 </Card>
@@ -163,25 +131,13 @@ export function RechargePanel({ membership }: { membership: string | null }) {
           </span>
         </div>
 
-        <div className="mt-4">
-          <Button className="w-full" disabled={!amountOk} onClick={payTopup}>
-            去支付
-          </Button>
-        </div>
+        {/* 上面的档位与换算留着——它回答「¥30 能买多少」，这个信息本身有用；
+            但按钮不留：没接通的支付入口点下去只会让人白填一遍。 */}
+        <p className="mt-4 rounded-[8px] border-l-4 border-line bg-surface-2 px-3 py-2 text-[14px] leading-6 text-ink-2">
+          支付通道还没开通，现在充不了值。开通后这里直接就能用，不用你再找入口。
+        </p>
       </Card>
 
-      <ConfirmDialog
-        open={pending !== null}
-        title={pending?.title ?? ''}
-        description={pending?.description ?? ''}
-        confirmLabel={pending?.confirmLabel ?? ''}
-        tone="primary"
-        onConfirm={() => {
-          setPending(null);
-          toast('支付对接开发中', 'neutral', '有一条新的更新');
-        }}
-        onCancel={() => setPending(null)}
-      />
     </>
   );
 }
