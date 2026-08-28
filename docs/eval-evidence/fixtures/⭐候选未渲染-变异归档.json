@@ -1,0 +1,37 @@
+{
+ "scenarios": [
+  {
+   "id": "S03",
+   "title": "被塞《协商解除协议》催签",
+   "redline": false,
+   "pass": false,
+   "turns": [
+    {
+     "input": "HR 给我协议让我今天下班前签，说今天不签明天名额就没了，最多只能给N，走仲裁也…",
+     "text": "（正文已裁剪，本夹具只用于 ⭐ 留痕判定）",
+     "actionCards": [],
+     "retrievedIds": [],
+     "gateStrippedArticles": [],
+     "injection": {
+      "coreCandidateKeys": [
+       "劳动合同法|第46条",
+       "劳动合同法|第47条",
+       "劳动合同法|第87条"
+      ],
+      "coreBlockRendered": [],
+      "renderAdded": [],
+      "substantiveHitCount": 1
+     },
+     "model": "deepseek-v4-pro",
+     "degraded": false,
+     "taskClass": "critical"
+    }
+   ],
+   "mechanical": [],
+   "semantic": []
+  }
+ ],
+ "runNotes": [
+  "【合成变异夹具·非真实跑批】由归档 2026-08-28T01-27-45Z 改 coreBlockRendered=[] 而来；用于让 ⭐ 报红分支走归档路径发射一次"
+ ]
+}

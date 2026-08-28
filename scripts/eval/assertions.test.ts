@@ -1837,6 +1837,23 @@ describe('乙态「有原文未结构化」与⭐机制不可用（2026-08-24 �
       expect(v[0].naKind).toBe('observability_missing');
     });
 
+    // ═══ ④ 同一分支，走**归档路径**再发射一次（manager 2026-08-28 登记的后续项）═══
+    // 【为什么下面那条单测不够】它**直接调函数**、喂手搭的 TurnRecord。
+    // 而今天实证过两次的失败形状恰恰是「单测绿、没有调用点／归档里没有那个字段」——
+    // `nbdpsyPitchAssertions` 与 `coreRenderObservabilityAssertions` 都是登记齐全、从未执行。
+    // ⇒ **④ 补的是路径覆盖，不是逻辑覆盖**：归档 JSON → 读取 → 断言，这条路要真走一遍。
+    it('④ 归档路径：候选非空∧渲染为空的**变异归档** → FAIL（报红分支首次经归档发射）', () => {
+      const load = (p: string) => JSON.parse(readFileSync(p, 'utf8')).scenarios[0];
+      const mut = load('/home/roots/caiyuan-ws/eval/docs/eval-evidence/fixtures/⭐候选未渲染-变异归档.json');
+      // 注入自检：候选确实非空、渲染确实为空——**变异真的在那儿**，不是夹具写坏了跑出个假红
+      expect(mut.turns[0].injection.coreCandidateKeys).toHaveLength(3);
+      expect(mut.turns[0].injection.coreBlockRendered).toEqual([]);
+      const v = coreRenderObservabilityAssertions(mut.turns, mut.id)[0];
+      expect(v.na).toBeUndefined();
+      expect(v.pass).toBe(false);
+      expect(v.detail).toContain('一条也没渲染进 prompt');
+    });
+
     it('态二·候选非空但渲染为空 → FAIL（这正是 S03 那次没能被发现的形态）', () => {
       const v = coreRenderObservabilityAssertions(
         [turn([obsEvent({ coreCandidateKeys: ['劳动合同法|第46条'], coreBlockRendered: [], renderAdded: [], substantiveHitCount: 3 })])],
