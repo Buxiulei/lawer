@@ -850,6 +850,30 @@ describe('P0\' 决定权交还改条件触发：劝进才要求交还（ISSUE-02
       'X',
     ).find((x) => x.id === 'X-未替决')!;
 
+  // ═══ handsBackDecision 甲案（manager 2026-08-28 裁）═══
+  describe('交还语识别：「判断」除名 + 剥引用，且**不许**剥否定', () => {
+    it('「判断」不再算交还——它是评估动词（18 轮实测全是错记的功）', () => {
+      expect(handsBackDecision('我帮你判断公司是走协商还是准备硬来，下一步再定。')).toBe(false);
+      expect(handsBackDecision('这里有个关键定性要你帮我判断：是只停你一个人吗？')).toBe(false);
+    });
+    it('真交还仍算：决定／拿主意／说了算', () => {
+      expect(handsBackDecision('看完这几条你再决定。')).toBe(true);
+      expect(handsBackDecision('签不签由你决定，我把利弊摆给你。')).toBe(true);
+      expect(handsBackDecision('这事你自己拿主意。')).toBe(true);
+    });
+    it('**引语里的交还不算**——那是给用户照读的话术，不是对用户交还', () => {
+      // 实例抄真实转录 2026-08-24T19-17：这句话让 L1 判了 PASS
+      expect(handsBackDecision('这句照读： > "仲裁要多久，我会自己核实，这个不需要你替我判断。"')).toBe(false);
+      expect(handsBackDecision('你可以对 HR 说：「签不签由你决定」——但那是你对他说的。')).toBe(false);
+    });
+    it('🔒 **防回归：不许剥否定**。「签不签由你决定」含「不」，剥否定会把交还语自己剥没', () => {
+      // 若有人后来给 handsBackDecision 套上 stripQuotedAndNegated，这条立刻红。
+      // 剥完的样子是「签　你。」——全语料会多 26 轮被误判成"无交还"。
+      expect(handsBackDecision('签不签由你决定。')).toBe(true);
+      expect(handsBackDecision('要不要签由你。')).toBe(true);
+    });
+  });
+
   it('未替决·条件式：祈使替决 + 全文无交还 → FAIL（方向无关，劝止也照查）', () => {
     const v = nosub('你别签，听我的。');
     expect(v.na).toBeUndefined();
