@@ -25,8 +25,13 @@ export const metadata: Metadata = {
     statusBarStyle: 'default',
   },
   icons: {
-    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
-    apple: [{ url: '/icon-maskable.svg', type: 'image/svg+xml' }],
+    // 全部由用户提供的原图裁切而来，不用手绘简化版（2026-08-28 用户拍板）。
+    // apple-touch 只给 PNG：Safari 不吃 WebP 的 apple-touch-icon。
+    icon: [
+      { url: '/icon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon-192.webp', sizes: '192x192', type: 'image/webp' },
+    ],
+    apple: [{ url: '/icon-180.png', sizes: '180x180', type: 'image/png' }],
   },
   formatDetection: { telephone: false },
 };
@@ -45,6 +50,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="zh-Hans" suppressHydrationWarning>
       <head>
+        {/* 衬线子集预加载：@font-face 里的字体要等 CSS 解析完才被发现，
+            preload 让它与文档并行下载。**这一条是试出来的不是抄来的**——
+            LCP 里 82% 是 Render Delay，preload 能不能收回要看实测。 */}
+        <link
+          rel="preload"
+          as="font"
+          type="font/woff2"
+          href="/fonts/tubashu-serif-700.woff2"
+          crossOrigin="anonymous"
+        />
         {/* 首屏前落定主题与低调模式，避免闪白和金额一闪而过 */}
         <script
           dangerouslySetInnerHTML={{
