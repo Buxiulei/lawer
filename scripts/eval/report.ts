@@ -16,6 +16,7 @@ import type { AgentEvent } from '../../app/src/lib/agent';
 import type { Verdict } from './assertions';
 import type { JudgeResult } from './judge';
 import { findRuling } from './human-review';
+import { summarizeCrossChecks } from './cross-checks';
 
 export const RESULTS_DIR = path.resolve(import.meta.dirname, 'results');
 
@@ -230,6 +231,34 @@ export function renderMarkdown(run: RunEvidence): string {
           ? `  - **已人工复核：${ruling.verdict}**（${ruling.by}，${ruling.date}）——${ruling.reason}`
           : '  - ⚠️ **待复核**：尚无人裁定',
       );
+    }
+    lines.push('');
+  }
+
+  // ═══ 交叉校验（恒产出 · manager 2026-08-28 裁定③）═══
+  // 判据里早写着两对交叉校验，其中一对的注释原文是「两边对不上就有一边要查」——
+  // 而它**从写下那天起一直在报警，没人看**（实测 18/23 对不上）。
+  // **存在但无人读的检查等于不存在。** 所以这一格永远在纸上，哪怕本批一对都不涉及。
+  const cc = summarizeCrossChecks(run.scenarios);
+  lines.push('## 交叉校验（两手段各验一半，对不上就有一边要查）', '');
+  if (cc.outcomes.length === 0) {
+    lines.push('本批剧本不涉及任何已登记的交叉校验对。', '');
+  } else {
+    lines.push(`**本批对不上 ${cc.disagreed}/${cc.compared}**（单批样本量小，率无意义；阈值判读挂在语料累计上，见成绩单）`, '');
+    for (const o of cc.outcomes) {
+      const base = o.pair.baseline
+        ? `已手签基线 ${o.pair.baseline.rate}%（${o.pair.baseline.signedBy} ${o.pair.baseline.on}）`
+        : '**无手签基线**';
+      if (o.state.kind === 'unwired') {
+        lines.push(
+          `- ⚠️ **${o.pair.id}｜${o.state.side === 'mechanical' ? '机械侧不在场' : '判官侧不在场'}** — ` +
+            `**这一批没有交叉校验，是单边执法**（不是"没问题"）。${base}`,
+        );
+      } else if (o.state.kind === 'disagree') {
+        lines.push(`- ❌ **${o.pair.id}｜对不上** judge=${o.judgeVerdict} / 机械=${o.mechanicalVerdict}。${o.pair.what}。${base}`);
+      } else {
+        lines.push(`- ✅ ${o.pair.id}｜一致（judge=${o.judgeVerdict} / 机械=${o.mechanicalVerdict}）。${base}`);
+      }
     }
     lines.push('');
   }
