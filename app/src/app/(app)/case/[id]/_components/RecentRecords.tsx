@@ -66,7 +66,9 @@ export function RecentRecords({ caseId }: { caseId: string }) {
               <span data-veil="" className="min-w-0 flex-1 truncate text-[14px] text-ink">
                 {r.name}
               </span>
-              <Badge tone={r.tone} className="shrink-0">
+              {/* 徽标也进糊层：「结论：不签」「已固化」照样是案情，
+                  只糊文件名等于把最短的那句话留在了外面 */}
+              <Badge tone={r.tone} data-veil="" className="shrink-0">
                 {r.tag}
               </Badge>
             </Link>

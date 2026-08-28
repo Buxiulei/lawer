@@ -54,7 +54,13 @@ function Cell({ cell, first, prev }: { cell: TrackCell; first: boolean; prev?: T
         />
       )}
       <Dot state={cell.state} />
+      {/*
+        **点不打糊、字打糊**。低调模式下这几个词是全页最要命的：
+        「仲裁申请 / 立案 / 开庭 / 裁决」连起来，不知情的人一眼就知道这台手机在办什么事——
+        比金额还准。圆点本身不含信息，留着清晰是为了轨道还看得出形状，不至于糊成一团。
+      */}
       <span
+        data-veil=""
         className={cn(
           'mt-1.5 text-[12px] leading-4 whitespace-nowrap',
           cell.state === '进行中' ? 'font-bold text-primary' : 'text-ink',
@@ -64,7 +70,10 @@ function Cell({ cell, first, prev }: { cell: TrackCell; first: boolean; prev?: T
         {cell.milestone}
       </span>
       {/* 这一行是四态的真正判据，不是装饰 */}
-      <span className="num mt-0.5 h-4 text-[11px] leading-4 whitespace-nowrap text-ink-2">
+      <span
+        data-veil=""
+        className="num mt-0.5 h-4 text-[11px] leading-4 whitespace-nowrap text-ink-2"
+      >
         {cell.state === '完成' && cell.at ? formatDate(cell.at) : ''}
         {cell.state === '进行中' ? '进行中' : ''}
         {cell.state === '跳过' ? '未经此步' : ''}

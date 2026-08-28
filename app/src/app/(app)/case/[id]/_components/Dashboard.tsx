@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { demoActions, demoCase, demoDeadlines } from '@/app/_mock/demo';
 import type { ActionItem } from '@/app/_mock/types';
 import { useDiscreet } from '@/app/_ui/discreet';
+import { NeutralLabel } from '@/app/_ui/NeutralLabel';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Mascot } from '@/components/brand/Mascot';
 import { ActionGroup } from '@/components/case/ActionCard';
 import { EmptyState } from '@/components/shadcn/empty-state';
@@ -42,10 +44,10 @@ export function Dashboard({ caseId }: { caseId: string }) {
       {/* 只推一件事（产品方案叁）；计数仍是全量，不然「1/5」会缩成「0/1」 */}
       <ActionGroup items={actions} onToggle={toggle} limit={1} />
       {rest > 0 && (
-        <p className="mt-1.5 text-[12.5px] text-ink-2">
+        <p data-veil="" className="mt-1.5 text-[12.5px] text-ink-2">
           其余 <span className="num">{rest}</span> 件排在后面，在
           <Link href={`/case/${caseId}/ask`} className="mx-1 text-primary-ink underline underline-offset-4">
-            问它
+            <NeutralLabel plain="问它" neutral={NEUTRAL_WORD.ask} />
           </Link>
           里能看全。
         </p>
