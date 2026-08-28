@@ -13,10 +13,11 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 
-const REPO = '/home/roots/caiyuan-ws/eval';
-const TEST_DIR = `${REPO}/scripts/eval`;
+// 【相对本文件解析 —— 这条守卫自己曾写死绝对路径】
+// **一条强制夹具受版控的守卫，自己指向一个不受版控的位置**（后台技术 2026-08-28 CI 首跑抓到）。
+const TEST_DIR = new URL('./', import.meta.url);
 /** 受版控的对照物只该放这里；`results/` 被 gitignore 且随检出而变 */
-const FIXTURE_DIR = `${REPO}/docs/eval-evidence/fixtures`;
+const FIXTURE_DIR = new URL('../../docs/eval-evidence/fixtures/', import.meta.url);
 
 describe('夹具守卫：对照物必须受版控', () => {
   const files = readdirSync(TEST_DIR).filter((f) => f.endsWith('.test.ts'));
@@ -32,7 +33,7 @@ describe('夹具守卫：对照物必须受版控', () => {
     // 自排除是唯一诚实的解法（把路径拆成片段拼起来只是把问题藏进混淆）；
     // 代价是**这条守卫守不了它自己**，所以上面那条"地板"断言必须在。
     for (const f of files.filter((x) => x !== 'fixture-guard.test.ts')) {
-      const src = readFileSync(`${TEST_DIR}/${f}`, 'utf8')
+      const src = readFileSync(new URL(f, TEST_DIR), 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/^\s*\/\/.*$/gm, '');   // 剥注释：注释里提到路径不算违规
       if (/scripts\/eval\/results\//.test(src)) bad.push(f);
@@ -43,10 +44,25 @@ describe('夹具守卫：对照物必须受版控', () => {
     ).toEqual([]);
   });
 
+  it('测试文件里不许出现本机绝对路径（**受控的那份必须就是被读的那份**）', () => {
+    // 【为什么这条比"夹具受版控"更根本】夹具进了版控、守卫也绿，
+    // 但消费端用绝对路径读的是**本机另一个检出的同名副本** ⇒
+    // **守卫绿 + 测试绿，而被验证的是一份没人 review 的副本。** 两份一致时什么都不暴露。
+    const HOME_ABS = ['/home', 'roots'].join('/');   // 不写成字面量：否则本文件自己命中（同"守卫必然写出所守形状"）
+    const bad: string[] = [];
+    for (const f of files.filter((x) => x !== 'fixture-guard.test.ts')) {
+      const src = readFileSync(new URL(f, TEST_DIR), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+      if (src.includes(HOME_ABS)) bad.push(f);
+    }
+    expect(bad, `这些测试用本机绝对路径读文件 —— CI 干净检出会 ENOENT，而本机全绿：${bad.join('、')}`).toEqual([]);
+  });
+
   it('仓内夹具目录存在且非空（**它自己就是那条"文件不在"的哨**）', () => {
     expect(existsSync(FIXTURE_DIR), '夹具目录不在').toBe(true);
     const fx = readdirSync(FIXTURE_DIR).filter((f) => f.endsWith('.json'));
     expect(fx.length).toBeGreaterThanOrEqual(4);
-    for (const f of fx) expect(statSync(`${FIXTURE_DIR}/${f}`).size).toBeGreaterThan(100);
+    for (const f of fx) expect(statSync(new URL(f, FIXTURE_DIR)).size).toBeGreaterThan(100);
   });
 });

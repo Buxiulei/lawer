@@ -913,8 +913,12 @@ describe('P0\' 决定权交还改条件触发：劝进才要求交还（ISSUE-02
   // （同一条今天已在语料根上栽过一次：`corpus-list.sh` 的 results 根让语料量随克隆变动）。
   // 第一版这三条哨读的就是 results/ —— **换个检出它们会因"文件不在"而失效**，
   // 而"哨失效"与"哨没响"在成绩单上长得一模一样。
-  const FX = (k: string) =>
-    JSON.parse(readFileSync(`/home/roots/caiyuan-ws/eval/docs/eval-evidence/fixtures/交还判据-${k}.json`, 'utf8'));
+  // 【必须相对本文件解析，且必须传 URL **对象**】
+  //  · 绝对路径 = 读的是本机某个检出的同名副本，**不是本仓那一份**——CI 干净检出当场 ENOENT，
+  //    而本机两份都在所以全绿；哪天分叉，测试会对着没人 review 的那份继续报绿。
+  //  · `.pathname` 会把中文百分号编码（夹具名含中文）⇒ ENOENT。实测：URL 对象 ✅ / .pathname ❌。
+  const FIXTURES = new URL('../../docs/eval-evidence/fixtures/', import.meta.url);
+  const FX = (k: string) => JSON.parse(readFileSync(new URL(`交还判据-${k}.json`, FIXTURES), 'utf8'));
   const fxTurn = (k: string) => { const f = FX(k); return { ...turn(f.turn.text), actionCards: f.turn.actionCards } as any; };
 
   describe('债#1 正对照：三条历史 L1 真红，剥引用后必须仍红', () => {
@@ -1966,7 +1970,7 @@ describe('乙态「有原文未结构化」与⭐机制不可用（2026-08-24 �
     // ⇒ **④ 补的是路径覆盖，不是逻辑覆盖**：归档 JSON → 读取 → 断言，这条路要真走一遍。
     it('④ 归档路径：候选非空∧渲染为空的**变异归档** → FAIL（报红分支首次经归档发射）', () => {
       const load = (p: string) => JSON.parse(readFileSync(p, 'utf8')).scenarios[0];
-      const mut = load('/home/roots/caiyuan-ws/eval/docs/eval-evidence/fixtures/⭐候选未渲染-变异归档.json');
+      const mut = load(new URL('../../docs/eval-evidence/fixtures/⭐候选未渲染-变异归档.json', import.meta.url));
       // 注入自检：候选确实非空、渲染确实为空——**变异真的在那儿**，不是夹具写坏了跑出个假红
       expect(mut.turns[0].injection.coreCandidateKeys).toHaveLength(3);
       expect(mut.turns[0].injection.coreBlockRendered).toEqual([]);
@@ -2014,7 +2018,7 @@ describe('乙态「有原文未结构化」与⭐机制不可用（2026-08-24 �
     it('★旧产物零改动可回放：拿真实历史 JSON 验，全部走"缺失=跳过"', () => {
       // 【夹具进仓 2026-08-28】原本读 `results/` —— 那目录被 gitignore 且随检出而变，
       // 换个检出这条测试会因"文件不在"而失效，**而失效与通过在报告上长得一样**。
-      const F = '/home/roots/caiyuan-ws/eval/docs/eval-evidence/fixtures/旧产物无留痕-2026-08-24T19-45-04Z.json';
+      const F = new URL('../../docs/eval-evidence/fixtures/旧产物无留痕-2026-08-24T19-45-04Z.json', import.meta.url);
       const j = JSON.parse(readFileSync(F, 'utf8'));
       const turns = (j.turns as { text: string }[]).map((t) => ({
         input: '', text: t.text, events: [], retrieved: [], actionCards: [], drafts: [], model: '', degraded: false, taskClass: '',
