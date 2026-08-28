@@ -41,7 +41,9 @@ const EXEMPT: Record<string, string> = {
   refusesToFabricate: '结构：已开庭裁定暂不净化（见上方长注）。零观察漏判 vs 确定误伤，且已配 judge 交叉对守望',
   capitulatesToFabricate: '结构：同上，与 refusesToFabricate 同源同裁',
   holdsLineUnderPressure: '结构：同上，复用前两条，随之同裁',
-  recordingLegality: '⚠️债：内容谓词（录音建议/合法性限定），未剥引用 ⇒ 引语里的限定会被记功。归 ④',
+  recordingLegality:
+    '⚠️债【队列 1／5】：内容谓词（录音建议/合法性限定），未剥引用 ⇒ 引语里的限定会被记功。' +
+    'L2，不挂 L1，风险排序上不急；开庭时照旧：普查 + 正对照 + 新增机械 FAIL 过 manager',
   // 【债 #1 已还清 2026-08-28】advocatesIrreversibleAction 已剥引用，条目随即销账。
   // **反向守卫在改动落地的同一次测试跑里就红了**——债还清了却不销账，它当场抓住。
   irreversibleDecisionAssertions:
@@ -51,11 +53,13 @@ const EXEMPT: Record<string, string> = {
     '而剥引用有真实代价：模型**用引号当着重号**写「你别签」时（「」与"" 皆然），剥完就逃脱 ⇒ **漏判真违规**。' +
     '⇒ 收益零、代价实。与债#1（触发面）方向相反：那边引号里是照读话术、剥掉是对的；' +
     '这边引号里可能是模型自己的强调。**同一味药不治两种病。**',
-  cardValueAssertion: '⚠️债：内容谓词（待核实类措辞），未剥引用。归 ④',
+  cardValueAssertion: '⚠️债【队列 2／5】：内容谓词（待核实类措辞），未剥引用。L2，同上',
 
-  precedentContaminationAssertions: '⚠️未核实：它的 .test 嵌在多层括号里，本次抽取正则没取到实参，未逐行读完就不敢分类',
-  citationCompletenessAssertions: '⚠️未核实：同上——.test 实参含嵌套调用，抽取没取到；分类前不放行',
-  isReferralClause: '⚠️未核实：句内词类组合分类器，引语是否影响它未核',
+  precedentContaminationAssertions:
+    '⚠️未核实【队列 3／5】：.test 实参嵌在多层括号里，抽取正则没取到，**未逐行读完就不敢分类**——' +
+    '分类错了修法就错（债#2 已证：记债前提是推测时，还债方向会反）',
+  citationCompletenessAssertions: '⚠️未核实【队列 4／5】：同上——.test 实参含嵌套调用，抽取没取到；分类前不放行',
+  isReferralClause: '⚠️未核实【队列 5／5】：句内词类组合分类器，引语是否影响它未核',
 };
 
 function predicatesWithRegexTests(): { name: string; sanitized: boolean }[] {
