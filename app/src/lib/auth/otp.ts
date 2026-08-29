@@ -3,7 +3,7 @@
 // 语义整块照搬 NBDpsy auth_sms.rs / auth_email.rs：
 //   - 同一手机号/邮箱 60s 内只能再发一次（retry_after: 60）
 //   - 同一手机号/邮箱 24h 内最多 10 次
-//   - 同一 IP 24h 内最多 30 次（内存兜底，见 ip-quota.ts）
+//   - 同一 IP 24h 内最多 300 次（走库，且存量用户登录豁免，见 ip-quota.ts）
 //   - 单条验证码最多错 5 次，第 5 次错直接锁定，必须重新获取
 //   - 验证码 6 位数字，有效期 SMS_CODE_EXPIRY_MINUTES（默认 5 分钟）
 // 路由只做「校验参数 → 调这里 → 把结果转成 JSON」，不许有第二处业务判断（spec §3.2）。
@@ -18,7 +18,7 @@ import { emailVerifyCode, isValidEmail, sendMail, sendOtp } from '@/lib/notify';
 import type { MailCopy } from '@/lib/notify';
 import * as store from '@/lib/db/otp';
 import { fromSql, toSql } from '@/lib/db/time';
-import { checkAndRecordIp } from './ip-quota';
+import { IP_QUOTA_MESSAGE, checkAndRecordIp } from './ip-quota';
 import { signToken } from './jwt';
 import { normalizePhone } from './phone';
 import { classifySmsError } from './sms-errors';
@@ -82,14 +82,21 @@ function normalizeEmail(raw: string): string {
 /**
  * 三条发码限流的公共部分：IP → 60s 冷却 → 24h 上限。
  * 顺序照抄 NBDpsy：IP 计数在最前，所以 60s 内重复点也会消耗 IP 额度。
+ *
+ * knownUser=true 即「目标手机号/邮箱已经是验证过的存量用户」＝登录场景，此时**跳过 IP 这条**：
+ * 一家公司几百人从同一个 NAT 出口上来，老用户回来登录不该被同事的注册量挤掉。
+ * 这不开口子——按号码/邮箱的 60s 冷却与 10 次/日对每一次发码照旧全额生效，
+ * 而豁免的前提本身就是「这个号码已经属于某个真实账号」，拿它灌不出新账号来。
  */
 function checkSendQuota(
+  db: Database,
   ip: string,
   now: Date,
+  knownUser: boolean,
   countSince: (sinceIso: string) => number,
 ): AuthFailure | null {
-  if (!checkAndRecordIp(ip, now)) {
-    return fail(429, 'RATE_LIMITED', '请求过于频繁，请稍后再试', RESEND_COOLDOWN_SECONDS);
+  if (!knownUser && !checkAndRecordIp(db, ip, now)) {
+    return fail(429, 'RATE_LIMITED', IP_QUOTA_MESSAGE, RESEND_COOLDOWN_SECONDS);
   }
   const cooldownFrom = toSql(new Date(now.getTime() - RESEND_COOLDOWN_SECONDS * 1000));
   if (countSince(cooldownFrom) > 0) {
@@ -135,7 +142,9 @@ export async function sendPhoneCode(
   if (!phone) return fail(400, 'INVALID_PHONE', '手机号格式不正确');
 
   const phoneHash = hashLookup(phone);
-  const quotaFailure = checkSendQuota(input.ip, now, (since) =>
+  // 已验证过手机号的存量用户 = 登录，不吃 IP 配额（见 checkSendQuota 的 knownUser）
+  const knownUser = Boolean(store.findUserByPhoneHash(db, phoneHash)?.phone_verified_at);
+  const quotaFailure = checkSendQuota(db, input.ip, now, knownUser, (since) =>
     store.countSmsCodesSince(db, phoneHash, since),
   );
   if (quotaFailure) return quotaFailure;
@@ -239,7 +248,10 @@ export async function sendEmailCode(
     return fail(409, 'EMAIL_TAKEN', '该邮箱已被其他账号绑定');
   }
 
-  const quotaFailure = checkSendQuota(input.ip, now, (since) =>
+  // 这个邮箱已经是本人验证过的邮箱 = 回来重验，不吃 IP 配额（换绑新邮箱照旧计数）。
+  // 上面的 EMAIL_TAKEN 已经挡掉 owner 是别人的情形，走到这里 owner 必是 input.userId。
+  const knownUser = Boolean(owner?.email_verified_at);
+  const quotaFailure = checkSendQuota(db, input.ip, now, knownUser, (since) =>
     store.countEmailCodesSince(db, email, since),
   );
   if (quotaFailure) return quotaFailure;

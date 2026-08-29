@@ -1,7 +1,7 @@
 // app/src/lib/db/migrate.ts
 //
 // ───────────────── ⚠️ 改本文件之前先读这一段 ⚠️ ─────────────────
-// **本迁移框架没有事务。** runMigrations() 的 37 个 db.exec() 是一串裸调用，
+// **本迁移框架没有事务。** runMigrations() 的 38 个 db.exec() 是一串裸调用，
 // 中途失败不回滚——2026-08-26 实测：人为中断，库里留下 22/38 张表，重跑既不前进也不后退。
 // 现在之所以能安全滚更，是因为迁移**全是纯加法**、靠 IF NOT EXISTS 与 addColumnIfMissing
 // 能重跑自愈：**安全是「改动足够简单」给的，不是框架给的。**
@@ -92,6 +92,25 @@ export function runMigrations(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_email_codes_email ON email_codes (email, id DESC);
+  `);
+
+  // 发码的 IP 维度限流流水（OTP 三条限流里的第三条，判定与常量见 lib/auth/ip-quota.ts）。
+  // 一次发码一行，判定 = COUNT(该 ip 24h 内的行)。**必须落库，不能是进程内 Map**：
+  // 进程内计数重启即清零、多实例之间互不可见，那等于限流在最需要它的时候（被刷爆、
+  // 服务频繁重启）恰好失效；而这张表还要在未来多副本部署下继续是同一份真值。
+  //
+  // 不存 user_id / phone_hash：本表只回答「这个出口 IP 最近发了多少次」，
+  // 多存一列就是把手机号与 IP 关联落盘，限流不需要，隐私上也不该留。
+  // 无 id 列（本表不遵循「id 一律 AUTOINCREMENT」的通用约定）：没有任何行会被单独引用、
+  // 更新或删除，删只按 (ip, created_at) 批量删，rowid 已经够用。
+  // 旧行靠写入侧的机会式 GC 清（见 lib/db/ip-quota.ts），不设定时任务——
+  // 加一个必须有人盯着才不腐坏的 cron，代价高于顺手多跑一条 DELETE。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ip_quota_events (
+      ip         TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_ip_quota_events_ip ON ip_quota_events (ip, created_at);
   `);
 
   // 实名核验流水：一次核验一行，只追加（用户改名/换证 = 新一行），users.auth_status 为其物化结论。
