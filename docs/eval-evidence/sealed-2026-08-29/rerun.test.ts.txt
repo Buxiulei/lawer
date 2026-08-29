@@ -1,0 +1,39 @@
+import { describe, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { search, isSubstantiveHit } from '../../app/src/lib/knowledge/index';
+import { RETRIEVAL_CASES } from './retrieval-cases';
+const SEAL = '/tmp/claude-1000/-home-roots------/ccca2536-3d34-446c-83c4-628e5d95240a/scratchpad/sealed/holdout-B.json';
+const B: { id: string; q: string; expect: string[] }[] = JSON.parse(readFileSync(SEAL, 'utf8'));
+const XING = ['S12-t1','rw-qianzi-1','rw-misc-1','rw-misc-2','rw-misc-4'];
+const HO_A0 = ['ho-zhixing-2','ho-qianzi-1','ho-qianzi-2','ho-cuiqian-1'];   // A 里补词前为 0 的四条
+describe('v3 复跑', () => { it('x', () => {
+  const m = (q: string, expect: string[], L = 8) => {
+    const h = search(q, { limit: L });
+    const ids = new Set(h.filter((x) => isSubstantiveHit(x, q)).map((x) => x.id));
+    return { sub: h.filter((x) => isSubstantiveHit(x, q)).length, got: expect.filter((e) => ids.has(e)).length };
+  };
+  const usr = RETRIEVAL_CASES.filter((c) => c.kind === 'user-real' || c.kind === 'user-rewrite');
+  const wide = usr.map((c) => m(c.q, [...c.expect], 218).sub).sort((a, b) => a - b);
+  console.log('【硬闸①绊线】' + RETRIEVAL_CASES.filter((c) => c.kind === 'sentinel' || c.kind === 'dust')
+    .map((c) => `${c.id}=${m(c.q, [], 8).sub}`).join(' ') + '（须全 0）');
+  console.log(`【硬闸②真实广度】中位 ${wide[Math.floor(wide.length / 2)]}（线 ≤8｜真基线 1）  均值 ${(wide.reduce((a,b)=>a+b,0)/wide.length).toFixed(1)}`);
+  const g = (c: any) => m(c.q, [...c.expect], 8);
+  console.log(`【三数】应召回 ${usr.reduce((a,c)=>a+g(c).got,0)}/${usr.reduce((a,c)=>a+c.expect.length,0)}（真基线 13/77）` +
+    `｜捞满捞错 ${usr.filter((c) => { const r = g(c); return r.sub > 0 && r.got === 0; }).length}（基线 7）`);
+  let x = 0;
+  console.log('【形变层 线≥4/5】');
+  for (const id of XING) { const c = RETRIEVAL_CASES.find((y) => y.id === id)!; const r = g(c); if (r.got > 0) x++;
+    console.log(`   ${r.got > 0 ? '✅' : '🔴'} ${id.padEnd(14)} 应召回${r.got}/${c.expect.length}`); }
+  console.log(`   ⇒ ${x}/5`);
+  let a = 0, b = 0;
+  console.log('【留出集 A（补词前为 0 的四条）】');
+  for (const id of HO_A0) { const c = RETRIEVAL_CASES.find((y) => y.id === id)!; const r = g(c); if (r.got > 0) a++;
+    console.log(`   ${r.got > 0 ? '✅' : '🔴'} ${id.padEnd(14)} 应召回${r.got}/${c.expect.length}`); }
+  console.log('【留出集 B（封存，本次首度运行）】');
+  for (const c of B) { const r = m(c.q, c.expect, 8); if (r.got > 0) b++;
+    console.log(`   ${r.got > 0 ? '✅' : '🔴'} ${c.id.padEnd(8)} 应召回${r.got}/${c.expect.length}  「${c.q}」`); }
+  console.log(`   ⇒ A(4条中) ${a} ＋ B ${b} = **${a + b}**（通过线 ≥3；≤1 且形变层全翻 ⇒ 判对着用例补词）`);
+  const tw = RETRIEVAL_CASES.filter((c) => c.kind === 'twin-answer');
+  const real = RETRIEVAL_CASES.filter((c) => c.kind === 'user-real');
+  console.log(`【不退化·锚真基线】孪生臂 ${tw.reduce((s,c)=>s+g(c).got,0)}/9（须9）｜真实台词 ${real.reduce((s,c)=>s+g(c).got,0)}/42（须≥9）`);
+}); });

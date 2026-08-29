@@ -1,0 +1,14 @@
+[
+ {"id":"hb-1","q":"公司说岗位没了让我回家","expect":["sop-koutou-jiechu-yingdui","sop-fangjia-dengtongzhi"],
+  "why":"口头解除+回家等通知的另一种说法，不含解除/裁员/通知任何一个规范词"},
+ {"id":"hb-2","q":"仲裁委判了公司还是不给钱","expect":["sop-zhixing-sop"],
+  "why":"与 ho-zhixing 同概念第三种说法，用'判了'不用'裁决/生效'"},
+ {"id":"hb-3","q":"要我在一张纸上摁手印","expect":["sop-yaoqiu-qianzi-wenjian"],
+  "why":"签字的极端口语形态：连'签'字都没有，只有'摁手印'"},
+ {"id":"hb-4","q":"怀着孕被换到很远的地方上班","expect":["sop-sanqi-nvzhigong","sop-tiaogang-yingdui"],
+  "why":"与 rw-misc-2 同概念，但'调岗''外地'两个词都不出现"},
+ {"id":"hb-5","q":"干了八年不干了能拿几个月工资","expect":["calc-jingji-buchang-n"],
+  "why":"补偿概念，但用'几个月工资'而非'补偿/赔偿/N'"},
+ {"id":"hb-6","q":"老板一直不发工资我想走","expect":["statute-lhtf-38-beipo-jiechu","sop-tuoqian-kekou-gongzi"],
+  "why":"与 rw-misc-1 同概念，'被迫解除''拖欠'都不出现"}
+]
