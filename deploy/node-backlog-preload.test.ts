@@ -160,6 +160,11 @@ describe('取值', () => {
     expect(preload.targetPort()).toBe(3000);
     process.env.PORT = '8080';
     expect(preload.targetPort()).toBe(8080);
+    // 唯一能区分 parseInt 与 Number 的输入：parseInt('8080x')===8080、Number('8080x')===NaN。
+    // 不验这条，"跟 Next 一致"就只是注释里的话——把 toPort 改成 Number 上面两条照样绿，
+    // 而线上会变成 Next 听 8080、我们瞄 3000，注入静默落空。
+    process.env.PORT = '8080x';
+    expect(preload.targetPort(), 'toPort 必须与 Next 的 parseInt 同答，不能换 Number').toBe(8080);
   });
 
   it('LISTEN_BACKLOG 缺省 4096、可被合法值覆盖', () => {
