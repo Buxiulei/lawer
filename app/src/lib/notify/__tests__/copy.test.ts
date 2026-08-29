@@ -3,7 +3,7 @@
 // 默认模式下敏感词一个都不许出现。将来谁往文案里加一句"仲裁"，这里会红。
 import { describe, expect, test } from 'vitest';
 
-import { emailVerifyCode, smsVerifyTemplateParam } from '../copy';
+import { deadlineReminder, emailVerifyCode, smsVerifyTemplateParam } from '../copy';
 
 /** 被旁人瞟一眼就会暴露用户在维权的词 */
 const SENSITIVE = ['裁员', '仲裁', '开庭', '劳动', '律师', '赔偿', '解除', '离职', '维权'];
@@ -41,5 +41,40 @@ describe('emailVerifyCode', () => {
 describe('smsVerifyTemplateParam', () => {
   test('只传 code 变量，正文措辞留给阿里云模板', () => {
     expect(smsVerifyTemplateParam('654321')).toBe('{"code":"654321"}');
+  });
+});
+
+describe('deadlineReminder（期限提醒，2026-08-29 新增）', () => {
+  // 【为什么这道闸要覆盖到新模板】manager 派单时点名：出站敏感词禁令照旧生效。
+  // 而这封邮件比验证码更危险——验证码泄露的是"他在注册什么"，
+  // 期限提醒泄露的是**他正在维权，且时间紧迫**。
+  test('默认（中性）模式：主题与正文均不含敏感词，也不含平台名', () => {
+    for (const kind of ['仲裁时效', '起诉15日', '申请执行2年', '开庭', '答辩期']) {
+      for (const d of [30, 7, 3, 1, 0]) {
+        const c = deadlineReminder(d, kind);
+        for (const w of SENSITIVE) {
+          expect(c.subject, `${kind}/${d}天/主题/${w}`).not.toContain(w);
+          expect(c.text, `${kind}/${d}天/正文/${w}`).not.toContain(w);
+        }
+      }
+    }
+  });
+
+  test('🔴 中性模式连事项类型都不给 —— 连"开庭"两个字都不许出现', () => {
+    // 【为什么比敏感词表更严】"开庭"不在 SENSITIVE 表里，但它一样会暴露。
+    // 中性模式的判据不是"避开某张词表"，是**除了紧急度什么都不说**。
+    const c = deadlineReminder(3, '开庭');
+    expect(c.subject).not.toContain('开庭');
+    expect(c.text).not.toContain('开庭');
+  });
+
+  test('中性模式仍要给出剩余天数 —— 那是他判断紧急度的最小必要信息', () => {
+    expect(deadlineReminder(3, '仲裁时效').subject).toContain('3');
+    expect(deadlineReminder(0, '仲裁时效').subject).toContain('今天');
+  });
+
+  test('detailed 模式（用户自己开的 notify_verbose）才允许出现事项类型', () => {
+    const c = deadlineReminder(3, '开庭', { detailed: true });
+    expect(c.subject).toContain('开庭');
   });
 });

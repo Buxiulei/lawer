@@ -1,0 +1,200 @@
+// app/src/lib/notify/deadline-reminder.ts
+// 期限提醒：扫 deadlines，按 30/7/3/1 天档发中性邮件（manager 2026-08-29 派）。
+//
+// 【为什么这件事是 P0】此前**这一层代码根本不存在**——migrate.ts 里那句
+// 「notified_stages_json 记已发过哪几档提醒（30/7/3/1 天…），防重复轰炸也防漏提醒」
+// 描述的是一个不存在的机制。而驾驶舱倒计时是**拉式**的：用户不打开就看不见。
+// deadlines 表当时是 0 行，看起来不急——但 agent 的 deadline_set 是接好的，
+// **从 0 行到 1 行不需要任何人做决定**，而错过仲裁时效即权利灭失。
+import type { Database } from 'better-sqlite3';
+
+import { deadlineReminder as deadlineReminderCopy } from './copy';
+
+/** 提醒档位（天）。降序，先到大的档。 */
+export const STAGES = [30, 7, 3, 1] as const;
+
+/**
+ * 错过即不可回复的期限类型。
+ * 这几类没有救济途径：时效一过，实体权利灭失，不是"晚点再办"。
+ * 与 migrate.ts deadlines.kind 的注释同一词表。
+ */
+export const IRRECOVERABLE_KINDS = new Set(['仲裁时效', '起诉15日', '上诉15日', '申请执行2年']);
+
+export interface DueRow {
+  id: number;
+  case_id: number;
+  kind: string;
+  due_at: string;
+  notified_stages_json: string | null;
+  email: string | null;
+  notify_verbose: number;
+}
+
+export interface Plan {
+  deadlineId: number;
+  email: string;
+  kind: string;
+  daysLeft: number;
+  /** 写进 notified_stages_json 的键；日更档带日期，故同一天只发一次 */
+  stageKey: string;
+  detailed: boolean;
+}
+
+/** 整天数差：按日历日算，不按 24 小时——用户感知的是"还剩几天"不是"还剩几小时" */
+export function daysUntil(dueAt: string, now: Date): number {
+  const due = new Date(`${dueAt.slice(0, 10)}T00:00:00Z`).getTime();
+  const today = new Date(`${now.toISOString().slice(0, 10)}T00:00:00Z`).getTime();
+  return Math.round((due - today) / 86400000);
+}
+
+/**
+ * 这一行此刻该发哪一档（不该发则 null）。
+ *
+ * 【③ 末档加码：宁可轰炸不可漏】不可回复类期限在剩 ≤1 天后**逐日重发**，
+ * 直到了结或过期。stageKey 带上日期 ⇒ 同一天不会重复，跨天必然重发。
+ * 这与 notified_stages_json 天然偏向"少发"的设计是相反方向——
+ * 而**这一类的失败代价不对称**：多发一封是打扰，漏发一封是权利灭失。
+ */
+export function stageFor(row: DueRow, now: Date): { stageKey: string; daysLeft: number } | null {
+  const daysLeft = daysUntil(row.due_at, now);
+  if (daysLeft < 0) return null; // 已过期，发了也没用
+  const sent = new Set<string>(safeParse(row.notified_stages_json));
+
+  if (daysLeft <= 1 && IRRECOVERABLE_KINDS.has(row.kind)) {
+    const key = `daily-${now.toISOString().slice(0, 10)}`;
+    return sent.has(key) ? null : { stageKey: key, daysLeft };
+  }
+  // 【取**最紧**的那档，不是最松的】第一版写成"命中的第一个大档"，测试当场撞出问题：
+  // 剩 2 天且从未提醒过时，它会先发「30 档」，次日发「7 档」，再次日「3 档」——
+  // **一条晚发现的期限会在最后几天连发四封**。取最紧档 + 一次把已覆盖的档全记上，
+  // 才是"补一封现在该发的，然后按剩下的档走"。
+  const tightest = [...STAGES].reverse().find((s) => daysLeft <= s && !sent.has(String(s)));
+  return tightest === undefined ? null : { stageKey: String(tightest), daysLeft };
+}
+
+/**
+ * 发这一档时，**所有比它更松的档也算覆盖过了**。
+ * 剩 2 天补发时记 30/7/3 三档 ⇒ 明天只会因为「1 档」再发一次，不会把历史档补发一遍。
+ */
+export function stagesCoveredBy(stageKey: string): string[] {
+  const n = Number(stageKey);
+  if (!Number.isFinite(n)) return [stageKey]; // daily-YYYY-MM-DD 只记自己
+  return STAGES.filter((s) => s >= n).map(String);
+}
+
+function safeParse(json: string | null): string[] {
+  if (!json) return [];
+  try {
+    const v: unknown = JSON.parse(json);
+    return Array.isArray(v) ? v.map(String) : [];
+  } catch {
+    // 【解不开就当没发过】宁可重发，不可因为一个坏字段静默漏发。
+    return [];
+  }
+}
+
+/** 扫出所有生效中的期限（含收件人）。resolved_at 非空 = 已了结，停止提醒。 */
+export function scanDue(db: Database): DueRow[] {
+  return db
+    .prepare(
+      `SELECT d.id, d.case_id, d.kind, d.due_at, d.notified_stages_json,
+              u.email, u.notify_verbose
+         FROM deadlines d
+         JOIN cases c ON c.id = d.case_id
+         JOIN users u ON u.id = c.user_id
+        WHERE d.resolved_at IS NULL
+        ORDER BY d.due_at`,
+    )
+    .all() as DueRow[];
+}
+
+export function planReminders(db: Database, now: Date): Plan[] {
+  const out: Plan[] = [];
+  for (const row of scanDue(db)) {
+    if (!row.email) continue; // 没邮箱发不了；不是错误，是这个用户还没绑
+    const s = stageFor(row, now);
+    if (!s) continue;
+    out.push({
+      deadlineId: row.id,
+      email: row.email,
+      kind: row.kind,
+      daysLeft: s.daysLeft,
+      stageKey: s.stageKey,
+      detailed: row.notify_verbose === 1,
+    });
+  }
+  return out;
+}
+
+/**
+ * 落档：**只在发送确认成功之后才写**（manager ② 定）。
+ * 发送失败不记档 ⇒ 下一轮自然重试。
+ * 反过来做（先记后发）会在发送失败时留下"已通知"的假象，而那一档再也不会重来。
+ */
+export function markSent(db: Database, deadlineId: number, stageKey: string): void {
+  const row = db.prepare('SELECT notified_stages_json FROM deadlines WHERE id=?').get(deadlineId) as
+    | { notified_stages_json: string | null }
+    | undefined;
+  const next = [...new Set([...safeParse(row?.notified_stages_json ?? null), ...stagesCoveredBy(stageKey)])];
+  db.prepare('UPDATE deadlines SET notified_stages_json=? WHERE id=?').run(
+    JSON.stringify(next),
+    deadlineId,
+  );
+}
+
+
+export interface RunDeps {
+  /** 发信。注入以便测试与干跑；默认走 lib/notify 的 sendMail */
+  sendMail: (to: string, copy: { subject: string; text: string }) => Promise<void>;
+  now?: Date;
+  /** true = 只算不发不记档 */
+  dryRun?: boolean;
+}
+
+export interface RunResult {
+  examined: number;
+  ok: number;
+  failed: number;
+  note: string;
+}
+
+/**
+ * 跑一轮。
+ *
+ * 【② 先发后记，绝不反过来】记档在**发送 resolve 之后**。
+ * 反过来（先记后发）会在发送失败时留下"已通知"的假象，**而那一档再也不会重来**——
+ * 对仲裁时效这类期限，那一次静默漏发就是权利灭失。
+ *
+ * 【一封失败不拖累其余】逐条 try：失败的不记档（下轮自然重试），其余照发。
+ * 整轮抛错与"其中 N 封失败"是两回事，返回值把两者分开
+ * （job_runs 的 items_failed 与 error_text 也是这么分的——数据表管理 2026-08-29）。
+ */
+export async function runReminders(db: Database, deps: RunDeps): Promise<RunResult> {
+  const now = deps.now ?? new Date();
+  const plans = planReminders(db, now);
+  let ok = 0;
+  let failed = 0;
+  const errs: string[] = [];
+
+  for (const p of plans) {
+    const copy = deadlineReminderCopy(p.daysLeft, p.kind, { detailed: p.detailed });
+    if (deps.dryRun) {
+      ok += 1;
+      continue;
+    }
+    try {
+      await deps.sendMail(p.email, copy);
+      markSent(db, p.deadlineId, p.stageKey); // ← 只有走到这里才记
+      ok += 1;
+    } catch (e) {
+      failed += 1;
+      errs.push(`#${p.deadlineId}:${(e as Error).message}`);
+    }
+  }
+
+  const note =
+    plans.length === 0
+      ? '本轮无到档期限'
+      : `${plans.length} 条到档，成功 ${ok}${failed ? `，失败 ${failed}（${errs.slice(0, 3).join('; ')}）` : ''}${deps.dryRun ? '（干跑，未发未记档）' : ''}`;
+  return { examined: plans.length, ok, failed, note };
+}

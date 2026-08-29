@@ -47,6 +47,42 @@ export interface MailCopy {
 }
 
 /**
+ * 期限提醒邮件（manager 2026-08-29 派）。
+ *
+ * 【为什么连"什么期限"都不说】本文件顶部那条产品约束在这里最吃紧：
+ * 收件人可能在工位上、在家人旁边看手机横幅。一封主题写着「仲裁时效还剩 3 天」的邮件
+ * 被旁人瞟见，泄露的不是一个日期，是**他正在维权这件事本身**。
+ * 所以中性模式下**连事项类型都不给**——只说"有一项重要事项"，
+ * 具体是什么，让他登录进来看。
+ *
+ * 【为什么不带链接以外的任何细节】剩余天数是给他判断紧急度的最小必要信息；
+ * 案件标题、条款、金额一律不进邮件。
+ *
+ * detailed 模式留给用户显式开了 notify_verbose 的情形（users.notify_verbose），
+ * 那是他自己选的——此时才允许出现事项类型。
+ */
+export function deadlineReminder(
+  daysLeft: number,
+  kind: string,
+  options: CopyOptions = {},
+): MailCopy {
+  // 【主题与正文用不同措辞】主题是「今天到期」（独立成句要通顺），
+  // 正文里嵌在「…事项{when}到期」中间，故用「今天」不重复"到期"。
+  const subjectWhen = daysLeft <= 0 ? '今天到期' : `还剩 ${daysLeft} 天`;
+  const when = daysLeft <= 0 ? '今天' : `还剩 ${daysLeft} 天`;
+  if (options.detailed) {
+    return {
+      subject: `${NOTIFY_BRAND}：${kind} ${subjectWhen}`,
+      text: `您在${NOTIFY_BRAND}登记的「${kind}」${when}到期。\n登录后可查看详情与下一步建议。\n若已处理完毕，可在应用内标记为已了结，不再收到本提醒。`,
+    };
+  }
+  return {
+    subject: `您有一项重要事项${subjectWhen}`,
+    text: `您登记的一项重要事项${when}到期。\n请登录查看详情。\n若已处理完毕，可在应用内标记后不再收到提醒。`,
+  };
+}
+
+/**
  * 验证码短信的 TemplateParam。
  * 正文措辞取决于阿里云模板本身，本函数只填变量；模板必须是通用「验证码」模板，
  * 不得申请带业务描述（如「仲裁提醒」）的签名或模板。
