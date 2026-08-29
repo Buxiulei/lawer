@@ -2,7 +2,7 @@
 id: data-beijing-zuidi-gongzi
 type: 数据卡
 title: 北京市最低工资标准（现行 2,540 元/月）
-keywords: [最低工资, 北京, 2540, 小时最低工资, 非全日制]
+keywords: [最低工资, 北京, "2540", 小时最低工资, 非全日制]
 applies_to: [欠薪, 待岗停工, 调岗降薪]
 law_refs: [京人社劳发〔2025〕7号]
 related: [calc-jingji-buchang-n]

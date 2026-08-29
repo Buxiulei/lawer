@@ -2,7 +2,7 @@
 id: sop-jiancha-vs-zhongcai
 type: 流程SOP
 title: 仲裁前分流：劳动监察 / 工会法援 / 政府法援 怎么选（北京朝阳）
-keywords: [劳动监察, 投诉举报, 12333, 12351, 工会法律援助, 法律援助, 监察还是仲裁, 加付赔偿金, 行政前置, 时效中断]
+keywords: [劳动监察, 投诉举报, "12333", "12351", 工会法律援助, 法律援助, 监察还是仲裁, 加付赔偿金, 行政前置, 时效中断]
 applies_to: [欠薪, 社保断缴, 裁员, 仲裁申请, 情绪支持]
 law_refs: [劳动保障监察条例§11, 劳动保障监察条例§17, 劳动保障监察条例§20, 劳动保障监察条例§21, 劳动保障监察条例§26, 劳动争议调解仲裁法§27, 劳动争议调解仲裁法§53, 劳动人事争议仲裁办案规则§27, 工会法律援助办法§10, 工会法律援助办法§11, 法律援助法§31, 京高法发〔2024〕534号§6]
 related: [data-beijing-qiuzhu-ziyuan, statute-jgf-2024-534-jieda-1, calc-tuoqian-jiafu-peichang, sop-zhongcai-guanxia-shixiao, sop-chaoyang-lian-sop]

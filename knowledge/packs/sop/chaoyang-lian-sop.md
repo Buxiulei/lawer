@@ -2,7 +2,7 @@
 id: sop-chaoyang-lian-sop
 type: 流程SOP
 title: 朝阳区仲裁立案 SOP：材料清单 + 现场三步走 + 网上/邮寄立案
-keywords: [朝阳仲裁, 立案, 将台路5号院, 87983310, 申请仲裁提示, 材料清单, 一式四份, 网上立案, fuwu.rsj.beijing.gov.cn, 存根回执, 不予受理通知书, 一裁终局]
+keywords: [朝阳仲裁, 立案, 将台路5号院, "87983310", 申请仲裁提示, 材料清单, 一式四份, 网上立案, fuwu.rsj.beijing.gov.cn, 存根回执, 不予受理通知书, 一裁终局]
 applies_to: [仲裁申请, 裁员, 欠薪, 证据固定, 裁决与终局]
 law_refs: [劳动争议调解仲裁法§28, 劳动争议调解仲裁法§29, 劳动争议调解仲裁法§47, 劳动争议调解仲裁法§48, 劳动争议调解仲裁法§49, 劳动争议调解仲裁法§53]
 related: [sop-zhongcai-guanxia-shixiao, template-songda-dizhi-querenshu, template-shouquan-weituoshu, data-beijing-zuidi-gongzi, data-beijing-qiuzhu-ziyuan, sop-jiancha-vs-zhongcai]

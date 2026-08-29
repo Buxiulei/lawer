@@ -2,8 +2,8 @@
 id: calc-daitongzhijin-n1
 type: 计算规则
 title: 代通知金「+1」的计算（N+1：基数为上一个月工资，仅第40条三情形）
-keywords: [代通知金, N+1, 加一个月, 上一个月工资, 第40条, 提前三十日, 实施条例第20条]
-applies_to: [裁员, 协商解除, 逼迫离职, 调岗降薪, PIP]
+keywords: [代通知金, N+1, 加一个月, 上一个月工资, 第40条, 提前三十日, 实施条例第20条, 被裁, 赔多少, 拿多少, 多一个月, 月薪]
+applies_to: [裁员, 协商解除, 逼迫离职, 调岗降薪, PIP, 被裁]
 law_refs: [劳动合同法§40, 劳动合同法§41, 劳动合同法§36, 劳动合同法实施条例§20, 劳动合同法实施条例§25]
 related: [calc-jingji-buchang-n, data-beijing-shepin-fengding, statute-jgf-2024-534-jieda-1]
 region: 北京

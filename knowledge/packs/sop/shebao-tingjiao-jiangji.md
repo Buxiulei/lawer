@@ -2,7 +2,7 @@
 id: sop-shebao-tingjiao-jiangji
 type: 流程SOP
 title: 停缴社保/公积金或降低缴费基数的应对（北京第71条口径）
-keywords: [社保停缴, 未缴社保, 缴费基数, 险种不全, 未建账户, 补缴, 自愿放弃社保, 司法解释二第19条, 12333]
+keywords: [社保停缴, 未缴社保, 缴费基数, 险种不全, 未建账户, 补缴, 自愿放弃社保, 司法解释二第19条, "12333"]
 applies_to: [社保断缴, 逼迫离职, 证据固定]
 law_refs: [劳动合同法§38, 劳动合同法§46, 法释〔2025〕12号§19, 京高法发〔2024〕534号§4, 京高法发〔2024〕534号§71, 京高法发〔2024〕534号§72, 劳动争议调解仲裁法§9, 劳动争议调解仲裁法§27]
 related: [statute-jgf-2024-534-jieda-1, statute-lhtf-38-beipo-jiechu, calc-jingji-buchang-n, data-beijing-shepin-fengding, sop-tuoqian-kekou-gongzi, sop-weiji-jiechu-yingdui]

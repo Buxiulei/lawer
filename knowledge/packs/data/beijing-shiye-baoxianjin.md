@@ -2,7 +2,7 @@
 id: data-beijing-shiye-baoxianjin
 type: 数据卡
 title: 北京市失业保险金月发放标准（2025-09-01 起，2,129—2,286 元按缴费年限分档）
-keywords: [失业保险金, 失业金, 北京, 2129, 2286, 缴费年限分档, 第13个月]
+keywords: [失业保险金, 失业金, 北京, "2129", "2286", 缴费年限分档, 第13个月]
 applies_to: [裁员, 协商解除, 离职证明]
 law_refs: [失业保险条例§17, 失业保险条例§18]
 related: [calc-shiye-baoxianjin, data-beijing-zuidi-gongzi]

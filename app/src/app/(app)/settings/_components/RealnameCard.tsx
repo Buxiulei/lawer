@@ -16,6 +16,7 @@ import {
 import { InputField } from '@/components/shadcn/field';
 import { Skeleton } from '@/components/shadcn/skeleton';
 import { CodeBlock } from './CodeBlock';
+import { PassportForm } from './PassportForm';
 import { SignInHint } from './SignInHint';
 
 /**
@@ -39,6 +40,8 @@ interface RealnameStatus {
   auth_status: string;
   verification_status: string | null;
   message: string;
+  /** 这次走的是哪条通道。护照是人工审核，待审文案与刷脸完全不同 */
+  method?: 'cloudauth' | 'passport' | null;
 }
 
 interface RealnameInit {
@@ -125,6 +128,18 @@ export function RealnameCard() {
    * 所以重来一遍是安全的。
    */
   const [restarting, setRestarting] = useState(false);
+  /**
+   * 走哪条通道。用户手动选过就听他的，否则**跟着服务端记的 method 走**。
+   *
+   * 【为什么不能简单地默认刷脸】护照审核没通过时，`auth_status` 回到未认证、
+   * 页面落回表单——若此时默认刷脸，**一个拿护照的人会被送回他根本用不了的那条通道**，
+   * 还会读到「身份证号要与本人证件完全一致、光线足一点再刷一次」这种他无法执行的建议。
+   * 最需要正确指引的恰恰是刚被打回来的人。
+   */
+  const [channelChoice, setChannelChoice] = useState<'cloudauth' | 'passport' | null>(null);
+  const channel: 'cloudauth' | 'passport' =
+    channelChoice ?? (status?.method === 'passport' ? 'passport' : 'cloudauth');
+  const setChannel = setChannelChoice;
 
   const refresh = useCallback(async () => {
     try {
@@ -222,6 +237,7 @@ export function RealnameCard() {
             ) : pending && !restarting ? (
               <Pending
                 message={status.message}
+                method={status.method ?? null}
                 certifyUrl={certifyUrl}
                 exhausted={pollsLeft <= 0}
                 onRefresh={() => {
@@ -229,6 +245,18 @@ export function RealnameCard() {
                   void refresh();
                 }}
                 onRestart={() => setRestarting(true)}
+              />
+            ) : channel === 'passport' ? (
+              <PassportForm
+                rejectedMessage={
+                  status.verification_status === '未通过' ? status.message : undefined
+                }
+                onSubmitted={() => {
+                  setRestarting(false);
+                  setPollsLeft(POLL_LIMIT);
+                  void refresh();
+                }}
+                onCancel={() => setChannel('cloudauth')}
               />
             ) : (
               <form
@@ -243,6 +271,8 @@ export function RealnameCard() {
                     上一次没通过：{status.message}。姓名和身份证号要与本人证件完全一致，光线足一点再刷一次。
                   </p>
                 )}
+                {/* 护照被打回的人不会走到这个分支（channel 跟着 method 走），
+                    这里留的是"他手动切回身份证通道"那种情形，不该再提护照 */}
 
                 <InputField
                   label="姓名"
@@ -273,6 +303,22 @@ export function RealnameCard() {
                   </Button>
                   <p className="mt-2 text-[13px] leading-5 text-ink-2">
                     下一步会跳到人脸核验页，需要用手机的摄像头完成。
+                  </p>
+                </div>
+
+                {/* 这条通道只认大陆二代证。没有身份证的人必须能在这里找到出路，
+                    否则他会以为是自己填错了，反复试同一个走不通的入口 */}
+                <div className="border-t border-line pt-3">
+                  <p className="text-[14px] leading-6 text-ink-2">
+                    没有中国大陆身份证？
+                    <button
+                      type="button"
+                      onClick={() => setChannel('passport')}
+                      className="mx-1 min-h-11 text-primary-ink underline underline-offset-4"
+                    >
+                      用护照认证
+                    </button>
+                    （人工审核，一到两个工作日）
                   </p>
                 </div>
               </form>
@@ -312,19 +358,43 @@ function Verified({ maskedName }: { maskedName: string | null }) {
   );
 }
 
-function Pending({
+/** 导出仅为可测：待审文案按通道分支，是这次改动里最容易回归的一处 */
+export function Pending({
   message,
+  method,
   certifyUrl,
   exhausted,
   onRefresh,
   onRestart,
 }: {
   message: string;
+  method: 'cloudauth' | 'passport' | null;
   certifyUrl: string | null;
   exhausted: boolean;
   onRefresh: () => void;
   onRestart: () => void;
 }) {
+  /**
+   * 护照是**人工审核**，没有刷脸链接、也不该显示「手机上做完之后…」那套话。
+   * 沿用刷脸文案会让刚交完材料的人以为自己还漏了一步没做。
+   */
+  if (method === 'passport') {
+    return (
+      <div>
+        <p className="text-[15px] leading-7 text-ink">材料已收到，正在人工审核。</p>
+        <p className="mt-1.5 text-[14px] leading-6 text-ink-2">
+          一般一到两个工作日出结果。这期间不影响你用其他功能，只有证据固化出证那一步会拦一下。
+          审核完这里会更新，不用一直守着。
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" onClick={onRefresh}>
+            刷新审核结果
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <p className="text-[15px] leading-7 text-ink">{message}</p>

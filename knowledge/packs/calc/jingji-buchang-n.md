@@ -2,8 +2,8 @@
 id: calc-jingji-buchang-n
 type: 计算规则
 title: 经济补偿金 N 的计算（北京口径：分段、三倍封顶、12年上限）
-keywords: [经济补偿, N, 补偿金, 月工资, 三倍封顶, 12年上限, 分段计算, 47条]
-applies_to: [裁员, 协商解除, 逼迫离职, 欠薪, 社保断缴]
+keywords: [经济补偿, N, 补偿金, 月工资, 三倍封顶, 12年上限, 分段计算, 47条, 被裁, 赔多少, 拿多少, 赔偿, 月薪, 能赔, 补偿多少]
+applies_to: [裁员, 协商解除, 逼迫离职, 欠薪, 社保断缴, 被裁]
 law_refs: [劳动合同法§46, 劳动合同法§47, 劳动合同法§97, 劳动合同法实施条例§27, 京高法发〔2024〕534号§55, 京高法发〔2024〕534号§66]
 related: [statute-lhtf-38-beipo-jiechu, statute-jgf-2024-534-jieda-1, data-beijing-shepin-fengding, data-beijing-zuidi-gongzi]
 region: 北京
