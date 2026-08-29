@@ -13,7 +13,6 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { getGongdao, gongdaoGate } from '@/lib/billing';
 import { GONGDAO_LEDGER_TYPE, REGISTER_GRANT_GONGDAO } from '@/lib/billing/pricing';
 import { hashLookup } from '@/lib/crypto';
-import { resetIpQuota } from '../ip-quota';
 import { sendPhoneCode, verifyPhoneCode } from '../otp';
 import { lastSmsCode, makeTestDb } from './helpers';
 
@@ -23,7 +22,6 @@ const IP = '203.0.113.9';
 beforeEach(() => {
   process.env.LAWER_DATA_KEY = crypto.randomBytes(32).toString('base64');
   process.env.JWT_SECRET = 'test-secret-do-not-use-in-prod';
-  resetIpQuota();
   vi.restoreAllMocks();
 });
 
@@ -76,7 +74,6 @@ describe('注册赠送', () => {
   test('同一个人再走一遍登录流程，不会二次发放', async () => {
     const db = makeTestDb();
     const uid = await register(db);
-    resetIpQuota();
     // 推过 60 秒重发窗——否则第二次发码被限流，拿到的是上一条已用过的码
     await register(db, PHONE, new Date('2026-08-28T00:05:00.000Z'));
     expect(getGongdao(uid, db)).toBe(REGISTER_GRANT_GONGDAO);
@@ -89,7 +86,6 @@ describe('注册赠送', () => {
   test('两个不同的人各拿各的，refId 不串号', async () => {
     const db = makeTestDb();
     const a = await register(db, '13800138000');
-    resetIpQuota();
     const b = await register(db, '13900139000', new Date('2026-08-28T00:05:00.000Z'));
     expect(a).not.toBe(b);
     expect(getGongdao(a, db)).toBe(REGISTER_GRANT_GONGDAO);

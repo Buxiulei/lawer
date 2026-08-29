@@ -5,8 +5,12 @@ import BetterSqlite3, { type Database } from 'better-sqlite3';
 
 import { runMigrations } from '@/lib/db/migrate';
 
-export function makeTestDb(): Database {
-  const db = new BetterSqlite3(':memory:');
+/**
+ * @param file 落盘路径。默认 :memory:；给具体路径是为了能**关掉句柄再开一个新的**——
+ *   「进程重启后限流还算不算数」这种判据，:memory: 库天然测不出来（新句柄=新空库）。
+ */
+export function makeTestDb(file: string = ':memory:'): Database {
+  const db = new BetterSqlite3(file);
   db.pragma('foreign_keys = ON');
   runMigrations(db);
   return db;
