@@ -24,6 +24,20 @@ USAGE
 fi
 
 pr="$1"; title="$2"
+
+# 【先查自己是不是最新版】这个脚本住在它所操作的仓库里，于是**跑的是工作树里那一份**，
+# 而工作树可能停在某个旧提交上——比如你正待在一个从旧 main 切出来的分支上。
+# 本轮四次标题问题里有三次都是这么来的：修好的版本已经在 origin/main 上，
+# 我人在别的分支，跑的却是旧副本，然后对着「怎么又没生效」发愣。
+# 不致命（你可能正在有意测试新版），但必须出声——同「检查工具要在被检查范围内」。
+self_path="${BASH_SOURCE[0]}"
+rel="scripts/git/$(basename "$self_path")"
+if git cat-file -e "origin/main:$rel" 2>/dev/null; then
+  if ! git show "origin/main:$rel" 2>/dev/null | diff -q - "$self_path" >/dev/null 2>&1; then
+    echo "⚠ 你正在跑的这份 merge-pr.sh 与 origin/main 上的不一致。" >&2
+    echo "  若不是有意在测新版，先 git fetch && 切到最新再合——旧副本会静默地少做事。" >&2
+  fi
+fi
 old="$(gh pr view "$pr" --json title --jq .title)"
 state="$(gh pr view "$pr" --json state --jq .state)"
 
