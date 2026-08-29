@@ -32,7 +32,7 @@
  */
 export interface RetrievalCase {
   readonly id: string;
-  readonly kind: 'user-real' | 'user-rewrite' | 'twin-answer' | 'dust' | 'sentinel';
+  readonly kind: 'user-real' | 'user-rewrite' | 'twin-answer' | 'dust' | 'sentinel' | 'held-out';
   /** 真实台词的出处剧本 */
   readonly src?: string;
   readonly q: string;
@@ -141,4 +141,23 @@ export const RETRIEVAL_CASES: readonly RetrievalCase[] = [
     why: '**必须零实质命中**。②改造后它若开始命中 ⇒ 放宽过头。这一行是事前写进表的绊线（哨兵「预写对照行」）' },
   { id: 'sentinel-2', kind: 'sentinel', q: '推荐一部好看的电影', expect: [],
     why: '同上，第二条绊线' },
+
+  // ═══ 留出集（2026-08-29 加，v3 用）═══
+  // 【为什么要有】外勤即将按"形变层三条未翻中"补别名词——**那三条正是我这张表里的用例**。
+  // 若只按用例补，表会变绿而**泛化性完全未被检验**：这是词表版的「对着验收线调参」。
+  // ⇒ 留出集覆盖**同样的概念、不同的说法**。判据：补词后留出集必须跟着翻中；
+  //   **只有点名的那三条翻中、留出集不动 ⇒ 判定为对着用例补词，不予通过。**
+  // 【它们为什么不算"事后加题"】原 48 条一字未动、指标可比；留出集单独计分，不混入原口径。
+  { id: 'ho-zhixing-1', kind: 'held-out', q: '仲裁赢了公司拖着不执行', expect: ['sop-zhixing-sop'],
+    why: '与 S12-t1／rw-misc-4 同概念（生效后不履行→强制执行），但换成"拖着不执行"的说法' },
+  { id: 'ho-zhixing-2', kind: 'held-out', q: '裁决生效了对方不履行怎么办', expect: ['sop-zhixing-sop'],
+    why: '同上，换成"生效/不履行"的书面说法' },
+  { id: 'ho-qianzi-1', kind: 'held-out', q: '公司拿了份解除的东西让我签', expect: ['sop-yaoqiu-qianzi-wenjian', 'review-xieshang-jiechu-xieyi'],
+    why: '与 rw-qianzi-1 同概念（被要求签解除类文件），但用户连"协议"两个字都没说' },
+  { id: 'ho-qianzi-2', kind: 'held-out', q: '他们给我一份文件要我今天签掉', expect: ['sop-yaoqiu-qianzi-wenjian'],
+    why: '同上，最口语的形态：只有"文件""签"两个词' },
+  { id: 'ho-peichang-1', kind: 'held-out', q: '公司优化我能补偿多少', expect: ['calc-jingji-buchang-n'],
+    why: '与旗舰句同概念（被裁→补多少），换成"优化"这个公司用语' },
+  { id: 'ho-cuiqian-1', kind: 'held-out', q: '让我下班前必须签完', expect: ['sop-yaoqiu-qianzi-wenjian', 'script-tanpan-xinli-gongju'],
+    why: '与 rw-cuiqian-1 同概念（限时催签），但不出现"HR""签字"字样' },
 ];
