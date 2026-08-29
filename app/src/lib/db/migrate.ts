@@ -753,6 +753,15 @@ export function runMigrations(db: Database.Database): void {
   // 值域由 lib/cases 的 confirmMilestone 把关 + 测试钉死；CHECK 并进 WS1 那笔递延。
   addColumnIfMissing(db, 'timeline_events', 'milestone', 'TEXT');
 
+  // users.cert_type：id_card_enc 里那个证件号是什么证（身份证 | 护照）。
+  //
+  // 【为什么必须显式存，不能靠长度猜】掩码规则依赖证件类型：18 位身份证留头 4 尾 4
+  // 只露 8/18；9 位护照按同一规则会露 8/9——**而那个值印在《存证证明》PDF 上，
+  // 是一份对外出示的文件**。靠长度猜就是把一个会静默出错的判据放进隐私路径：
+  // 猜错不报错，只是发出去的证上多露几位，没有任何人会发现。
+  // NULL = 老数据（护照通道之前只有身份证一种），掩码时按最保守规则处理。
+  addColumnIfMissing(db, 'users', 'cert_type', 'TEXT');
+
   // company_watches.tier：三圈监控档位（spec v3）。daily=圈1 直接责任链、weekly=圈2 责任扩展候选、
   // archive=圈3 存档不监控。同 intake_stage，**不加 DB 级 CHECK**（SQLite 改 CHECK 要重建表）。
   // 升级与衰减规则（圈1 出事件→相邻圈2 升每日、30 天无新 urgent 回落、手动钉住）**全在 watcher

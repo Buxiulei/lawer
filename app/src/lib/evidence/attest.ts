@@ -87,12 +87,34 @@ export function generateOrderNo(now: Date = new Date()): string {
   return `LAWER-ATT-${d}-${crypto.randomBytes(8).toString('hex')}`;
 }
 
-/** 身份证/证件号掩码：留头 4 尾 4，中间一律 * */
-function maskIdCard(raw: string | null): string | null {
+/** 证件类型。与 users.cert_type 同一词表（见 migrate.ts）。 */
+export const CERT_TYPE = { idCard: '身份证', passport: '护照' } as const;
+
+/**
+ * 证件号掩码。**按证件类型分规则，不按长度猜。**
+ *
+ * 【为什么不能一套规则通吃】原来只有一条「留头 4 尾 4」：
+ *   18 位身份证 → 1101**********1234   露 8/18，合理
+ *    9 位护照   → E123*5678             **露 8/9，等于没打码**
+ * 而这个值印在《存证证明》PDF 上，是一份**对外出示的文件**。
+ *
+ * 【cert_type 缺失时按最保守规则】老数据（护照通道之前）没有这一列。
+ * 此时**不猜**——猜错不报错，只是发出去的证上多露几位，没有任何人会发现。
+ * 一律走护照那条更严的规则：露得少不会造成伤害，露得多会。
+ * 误差方向必须偏向"少露"。
+ */
+export function maskCertNo(raw: string | null, certType?: string | null): string | null {
   if (!raw) return null;
   const s = raw.trim();
-  if (s.length <= 8) return '*'.repeat(s.length);
-  return `${s.slice(0, 4)}${'*'.repeat(s.length - 8)}${s.slice(-4)}`;
+  if (!s) return null;
+  // 身份证：留头 4 尾 4（保持既有行为，已发出的证不改格式）
+  if (certType === CERT_TYPE.idCard) {
+    if (s.length <= 8) return '*'.repeat(s.length);
+    return `${s.slice(0, 4)}${'*'.repeat(s.length - 8)}${s.slice(-4)}`;
+  }
+  // 护照 与 未知：留头 1 尾 2，其余打星
+  if (s.length <= 3) return '*'.repeat(s.length);
+  return `${s.slice(0, 1)}${'*'.repeat(s.length - 3)}${s.slice(-2)}`;
 }
 
 interface HolderSnapshot {
@@ -107,14 +129,14 @@ interface HolderSnapshot {
  */
 function buildHolderSnapshot(db: Database, userId: number): HolderSnapshot {
   const row = db
-    .prepare('SELECT real_name_enc, id_card_enc, auth_status FROM users WHERE id = ?')
+    .prepare('SELECT real_name_enc, id_card_enc, auth_status, cert_type FROM users WHERE id = ?')
     .get(userId) as
-    | { real_name_enc: string | null; id_card_enc: string | null; auth_status: string }
+    | { real_name_enc: string | null; id_card_enc: string | null; auth_status: string; cert_type: string | null }
     | undefined;
   if (!row) return { real_name: null, id_card_masked: null, auth_status: '未认证' };
   return {
     real_name: row.real_name_enc ? decryptField(row.real_name_enc) : null,
-    id_card_masked: row.id_card_enc ? maskIdCard(decryptField(row.id_card_enc)) : null,
+    id_card_masked: row.id_card_enc ? maskCertNo(decryptField(row.id_card_enc), row.cert_type) : null,
     auth_status: row.auth_status,
   };
 }

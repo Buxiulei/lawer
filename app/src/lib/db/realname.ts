@@ -55,6 +55,13 @@ export function latestByUser(db: Database, userId: number): RealnameVerification
     .get(userId) as RealnameVerificationRow | undefined;
 }
 
+/** 按 id 取一行。护照通道的人工审核要先读出材料哈希与信封，再决定落不落定。 */
+export function findById(db: Database, id: number): RealnameVerificationRow | undefined {
+  return db.prepare('SELECT * FROM realname_verifications WHERE id = ?').get(id) as
+    | RealnameVerificationRow
+    | undefined;
+}
+
 /**
  * 三方回调落定结论时推进本行状态。合法迁移由 lib/realname 判，本层不拦。
  * rawMetaEnc 传了就一并覆盖（落定时通常要把三方原始报文并进信封），不传则不动该列。

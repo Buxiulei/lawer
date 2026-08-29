@@ -19,6 +19,7 @@ import type { Database } from 'better-sqlite3';
 
 import { decryptField, encryptField } from '@/lib/crypto';
 import { buildSignedRpcUrl, type FetchImpl } from '@/lib/notify';
+import { CERT_TYPE } from '@/lib/evidence/attest';
 import * as store from '@/lib/db/realname';
 import * as users from '@/lib/db/otp';
 import type { AuthFailure } from './otp';
@@ -38,6 +39,9 @@ export const AUTH_STATUS = {
  * 用「未通过」而不是把用户打回「未认证」：流水是只追加的核验史，
  * 失败这件事本身要留得下（users.auth_status 才是当前结论的物化缓存）。
  */
+/** 护照通道的 provider 值。放这里而不是 passport-realname.ts：那边 import 本文件，反过来会成环。 */
+export const PASSPORT_PROVIDER = 'passport';
+
 export const VERIFICATION_STATUS = {
   pending: '待审',
   passed: '已实名',
@@ -218,6 +222,9 @@ export type RealnameStatusResult =
       authStatus: string;
       /** realname_verifications 最新一行的 status；从未发起过认证时为 null */
       verificationStatus: string | null;
+      /** 走的哪条通道（provider）：cloudauth | passport；从未发起过为 null。
+       *  前端与 lawer 按同一形状读两条路，判据不分叉。 */
+      method: string | null;
       message: string;
     }
   | AuthFailure;
@@ -323,6 +330,7 @@ export async function refreshRealnameStatus(
       ok: true,
       authStatus: user.auth_status,
       verificationStatus: null,
+      method: null,
       message: '尚未发起实名认证',
     };
   }
@@ -331,9 +339,29 @@ export async function refreshRealnameStatus(
       ok: true,
       authStatus: user.auth_status,
       verificationStatus: row.status,
+      method: row.provider,
       message: row.status === VERIFICATION_STATUS.passed ? '认证通过' : '认证未通过',
     };
   }
+
+  /**
+   * 【护照通道必须在这里岔开】下面两步都是 cloudauth 专属：
+   *  · `!row.cert_no → 500 REALNAME_BROKEN`：护照流水的 cert_no **按设计恒为 null**
+   *    （护照号是 PII，只进 raw_meta_enc，不进那列）⇒ 不岔开的话，
+   *    **每一个待审的护照用户查一次状态就拿一个 500**。
+   *  · `describeFaceVerify(row.cert_no)`：拿 null 去问阿里云的人脸结果，本就没有那回事。
+   * 护照的「待审」要靠人工审核推进，不靠轮询三方。
+   */
+  if (row.provider === PASSPORT_PROVIDER) {
+    return {
+      ok: true,
+      authStatus: user.auth_status,
+      verificationStatus: row.status,
+      method: row.provider,
+      message: '材料已提交，等待人工核验',
+    };
+  }
+
   if (!row.cert_no) return fail(500, 'REALNAME_BROKEN', '认证流水缺少认证号，请重新发起认证');
 
   let result: DescribeFaceVerifyResult;
@@ -353,6 +381,7 @@ export async function refreshRealnameStatus(
       ok: true,
       authStatus: user.auth_status,
       verificationStatus: row.status,
+      method: row.provider,
       message: '认证进行中，请在手机上完成人脸核验',
     };
   }
@@ -374,6 +403,9 @@ export async function refreshRealnameStatus(
       realNameEnc: encryptField(envelope.cert_name),
       idCardEnc: encryptField(envelope.cert_no),
       authStatus: AUTH_STATUS.verified,
+      // 走这条路的必然是大陆身份证（阿里云实人认证只认它）。
+      // 显式写下来，掩码才不必靠长度猜——见 attest.ts maskCertNo 的说明。
+      certType: CERT_TYPE.idCard,
     });
   } else {
     users.setUserAuthStatus(db, input.userId, AUTH_STATUS.none);
@@ -383,6 +415,7 @@ export async function refreshRealnameStatus(
     ok: true,
     authStatus: result.passed ? AUTH_STATUS.verified : AUTH_STATUS.none,
     verificationStatus: status,
+    method: PROVIDER,
     message: result.message,
   };
 }

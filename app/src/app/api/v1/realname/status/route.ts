@@ -20,6 +20,7 @@ export async function GET(req: Request) {
     ok: true,
     auth_status: result.authStatus,
     verification_status: result.verificationStatus,
+    method: result.method,
     message: result.message,
   });
 }

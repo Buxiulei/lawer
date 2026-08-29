@@ -165,12 +165,18 @@ export function setUserAuthStatus(db: Database, id: number, authStatus: string):
 export function setUserRealname(
   db: Database,
   id: number,
-  params: { realNameEnc: string; idCardEnc: string; authStatus: string },
+  params: { realNameEnc: string; idCardEnc: string; authStatus: string; certType?: string },
 ): void {
-  db.prepare('UPDATE users SET real_name_enc = ?, id_card_enc = ?, auth_status = ? WHERE id = ?').run(
+  // certType 与 idCardEnc 必须同一条 UPDATE 写：掩码规则依赖它，
+  // 「证件号已经换成护照、cert_type 还是空」这种中间态会让存证书按最保守规则遮
+  // ——那不至于泄露，但也不该存在。
+  db.prepare(
+    'UPDATE users SET real_name_enc = ?, id_card_enc = ?, auth_status = ?, cert_type = COALESCE(?, cert_type) WHERE id = ?',
+  ).run(
     params.realNameEnc,
     params.idCardEnc,
     params.authStatus,
+    params.certType ?? null,
     id,
   );
 }
