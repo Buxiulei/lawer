@@ -7,6 +7,7 @@ export { fromSql, nowSql, toSql } from './time';
 
 // 各表封装按域分组，以命名空间导出——跨表撞名的函数很多（setStatus / listByCase / create），
 // 平铺导出必然打架，调用方也看不出这个 setStatus 改的是哪张表的状态。
+export * as jobRuns from './job-runs';
 export * as notifyLog from './notify-log';
 export * as realname from './realname';
 export * as referralOffers from './referral-offers';

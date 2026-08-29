@@ -3,7 +3,7 @@
 // 守卫测试：禁止往 migrate.ts 里写非幂等迁移。
 //
 // ── 为什么要有这条测试 ──
-// runMigrations() 里是 37 个连续的 db.exec()，**没有包在事务里**。
+// runMigrations() 里是一串连续的 db.exec()，**没有包在事务里**。
 // 2026-08-26 实测：在中途人为抛错，库里留下 22/38 张表，**不回滚**。
 // 现在之所以没出事，只因所有迁移都是纯加法、靠 IF NOT EXISTS 能重跑自愈——
 // **安全是「改动足够简单」给的，不是框架给的**。
@@ -104,7 +104,19 @@ export function stripComments(src: string): string {
  * **定位失效时的方向是「全拦」不是「全放」**：放行的失败是静默的，拦截的失败会红给人看。
  */
 export function addColumnIfMissingBody(scrubbed: string): { start: number; end: number } | null {
-  const sig = /\bfunction\s+addColumnIfMissing\b/.exec(scrubbed);
+  return functionBody(scrubbed, 'addColumnIfMissing');
+}
+
+/**
+ * 在剥完注释的源码里按名字定位一个 `function X` 的函数体字符区间（花括号配对）。
+ * 上面那条按位置放行、下面那条 db.exec 计数都靠它划范围。
+ * 找不到函数、或花括号不配对一律返回 null——两个调用方各自 fail closed（一个全拦、一个记 0）。
+ */
+export function functionBody(
+  scrubbed: string,
+  name: string,
+): { start: number; end: number } | null {
+  const sig = new RegExp(`\\bfunction\\s+${name}\\b`).exec(scrubbed);
   if (!sig) return null;
   const open = scrubbed.indexOf('{', sig.index + sig[0].length);
   if (open === -1) return null;
@@ -114,6 +126,55 @@ export function addColumnIfMissingBody(scrubbed: string): { start: number; end: 
     else if (scrubbed[i] === '}' && --depth === 0) return { start: open, end: i + 1 };
   }
   return null;
+}
+
+// ──────────── 头部注释里那个「N 个 db.exec()」的计数 ────────────
+
+/**
+ * migrate.ts 顶部写着「runMigrations() 的 N 个 db.exec() 是一串裸调用」。**这个 N 一直是错的**：
+ * 2026-08-29 实测 main 上写 37、实际 36。根因是**一个 db.exec 块里可以含多条 CREATE TABLE，
+ * 所以「表数」≠「exec 数」**——当初照表数填了 exec 数，此后每个加表的人只能照着这个错数往上加。
+ *
+ * 为什么值得为一个数字加测试：**数字有守卫看着就是资产，没守卫看着才是负债。**
+ * 这句话就在「改本文件之前先读这一段」的正上方——读它的人正处在最愿意相信它的位置上。
+ * 它错了不会报错，只会让人对这个文件的规模与风险产生一个错误的判断。
+ *
+ * 三处口径，错一处结论就反了：
+ *   · 声称的数从**原始源码**里读——注释本身就是被检对象，剥掉就没得读了；
+ *   · 实际的数在**剥完注释的源码**上数——否则上面那句注释里的 `db.exec()` 自己会被算进去；
+ *   · 只数 **runMigrations 函数体内**的——addColumnIfMissing 里那句在函数外，
+ *     它是封装、不是迁移步骤。
+ *
+ * 两种「读不出来」都按 fail closed 处理：那句话缺失或出现不止一句 ⇒ claimed 记 null；
+ * 定位不到 runMigrations ⇒ actual 记 0（**不退回全文计数**）。数不出来要红给人看，
+ * 不能临时换一个更宽的口径把测试凑绿。
+ */
+export function execCountClaim(src: string): { claimed: number | null; actual: number } {
+  const claims = [...src.matchAll(/的 (\d+) 个 db\.exec\(\)/g)];
+  const scrubbed = stripComments(src);
+  const body = functionBody(scrubbed, 'runMigrations');
+  const actual = body
+    ? [...scrubbed.matchAll(/\bdb\.exec\s*\(/g)].filter(
+        (m) => m.index >= body.start && m.index < body.end,
+      ).length
+    : 0;
+  return { claimed: claims.length === 1 ? Number(claims[0][1]) : null, actual };
+}
+
+/** 报错要能直接照着改：说清哪个数错了、该去改哪儿，而不是让人来猜这条测试想干嘛。 */
+export function formatExecCountMismatch(c: { claimed: number | null; actual: number }): string {
+  if (c.claimed === null) {
+    return (
+      'migrate.ts 顶部读不到「runMigrations() 的 N 个 db.exec()」那句（被改写了，或写了不止一句）——\n' +
+      '这条守卫失去了检查对象，请把那句话恢复成唯一的一句。'
+    );
+  }
+  if (c.claimed === c.actual) return '';
+  return (
+    `migrate.ts 顶部注释说 ${c.claimed} 个 db.exec()，实际 ${c.actual} 个——\n` +
+    '加/删迁移步骤时请同步改文件顶部那句。\n' +
+    '（注意：一个 db.exec 块里可以含多条 CREATE TABLE，所以「表数」≠「exec 数」，别照表数填。）'
+  );
 }
 
 // ───────────────────────── 扫描规则 ─────────────────────────
@@ -430,6 +491,21 @@ describe('migrate.ts 不含非幂等迁移', () => {
     expect(src).toContain('先找数据表管理（WS1）');
   });
 
+  // 同一段警示注释里的那个数：**数字有守卫看着就是资产，没守卫看着才是负债。**
+  // 它错了不会报错，只会让读的人对这个文件的规模与风险产生一个错误的判断——
+  // 而读它的人正处在最愿意相信它的位置上（就在「改本文件之前先读这一段」的正上方）。
+  test('顶部注释里的 db.exec 计数与实际相符', () => {
+    const c = execCountClaim(src);
+    // 两条 sanity：先证明这两个数都是真数出来的，再比它们相不相等。
+    // 少了这一步，「读不到那句话」与「一个 exec 都没数到」都会以 0 == 0 蒙混过关。
+    expect(c.claimed, '顶部那句「runMigrations() 的 N 个 db.exec()」读不到了').not.toBeNull();
+    expect(
+      c.actual,
+      'runMigrations 体内一个 db.exec 都没数到——函数定位或计数正则坏了',
+    ).toBeGreaterThan(30);
+    expect(formatExecCountMismatch(c)).toBe('');
+  });
+
   // 「唯一写点」：全文 ALTER TABLE 必须**恰好一处**，且落在 addColumnIfMissing 体内。
   //
   // 为什么是 toBe(1) 而不是 <= 1：`<= 1` 会放过「零处」，而零处意味着 addColumnIfMissing
@@ -459,9 +535,62 @@ describe('migrate.ts 不含非幂等迁移', () => {
     expect(
       formatViolations(v),
       '\nmigrate.ts 里出现了非幂等迁移语句。\n' +
-        'runMigrations() 的 37 个 db.exec() 不在事务里，中途报错不回滚——\n' +
+        'runMigrations() 的那一串 db.exec() 不在事务里，中途报错不回滚——\n' +
         '非幂等的那一条会留下一个重跑也修不好的生产库。\n' +
         '先做事务化（见本文件顶部注释的解除姿势），再来加这种迁移。\n',
     ).toBe('');
+  });
+});
+
+// ───────── 对照臂：db.exec 计数被改错必须报出来 ─────────
+//
+// 没有这一节，「注释与实际相符」和「正则没匹配到 / 计数函数返回 0，0 == 0」输出完全一样。
+// 坏样本一律从**真文件**改出来（而不是手搓一小段），这样样本的形状永远跟真身同步。
+
+describe('execCountClaim 对照臂', () => {
+  const src = fs.readFileSync(MIGRATE_PATH, 'utf8');
+  const CLAIM_RE = /的 \d+ 个 db\.exec\(\)/;
+
+  test('数字被改错必须报错（把 N 换成 99）', () => {
+    const c = execCountClaim(src.replace(CLAIM_RE, '的 99 个 db.exec()'));
+    expect(c.claimed).toBe(99);
+    expect(c.actual).toBeGreaterThan(30);
+    expect(formatExecCountMismatch(c)).toContain('说 99 个 db.exec()');
+  });
+
+  test('那句话被改写掉时报「读不到」，不是默默通过', () => {
+    const c = execCountClaim(src.replace(CLAIM_RE, '的若干个 db.exec()'));
+    expect(c.claimed).toBeNull();
+    expect(formatExecCountMismatch(c)).toContain('读不到');
+  });
+
+  test('同一句写了两遍也按读不到处理（不知道该信哪一句）', () => {
+    const dup = src.replace(CLAIM_RE, (m) => `${m} ${m}`);
+    expect(execCountClaim(dup).claimed).toBeNull();
+  });
+
+  test('定位不到 runMigrations 时 actual 记 0 并报错（fail closed，不退回全文计数）', () => {
+    const renamed = src.replace(/\brunMigrations\b/g, 'runMigrations2');
+    const c = execCountClaim(renamed);
+    expect(c.actual).toBe(0);
+    expect(formatExecCountMismatch(c)).toContain('实际 0 个');
+  });
+
+  // 三处口径各钉一根：注释里的 db.exec() 不算、封装里的不算、只数 runMigrations 体内的。
+  test('只数 runMigrations 体内的：注释里那句与封装里那句都不算', () => {
+    const sample = [
+      '// 本迁移框架没有事务。runMigrations() 的 2 个 db.exec() 是一串裸调用，',
+      'function addColumnIfMissing(db, t, c, d) {',
+      '  db.exec(`ALTER TABLE ${t} ADD COLUMN ${c} ${d}`);',
+      '}',
+      'export function runMigrations(db) {',
+      '  db.exec(`CREATE TABLE IF NOT EXISTS a (id INTEGER); CREATE TABLE IF NOT EXISTS b (id INTEGER);`);',
+      '  db.exec(`CREATE TABLE IF NOT EXISTS c (id INTEGER);`);',
+      '}',
+    ].join('\n');
+    // 全文有 4 处 db.exec 字样：注释里 1 处、封装里 1 处、函数体内 2 处；只有后两处算数。
+    // 顺带钉住「表数 ≠ exec 数」：这个样本建了 3 张表，却只有 2 个 exec。
+    expect(execCountClaim(sample)).toEqual({ claimed: 2, actual: 2 });
+    expect(formatExecCountMismatch(execCountClaim(sample))).toBe('');
   });
 });
