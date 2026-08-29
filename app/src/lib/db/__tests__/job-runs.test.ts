@@ -136,6 +136,102 @@ describe('error_text 原文', () => {
   });
 });
 
+describe('整轮失败 vs 逐项失败（本表自己最容易犯的那个错）', () => {
+  // 「发了 100 封失败 3 封」与「一封没发成、整个任务崩了」——两者 items_failed 都 > 0，
+  // 全靠 ok / error_text 分开。混成一格就等于本表在自己身上犯它要解决的那个错。
+  const SENT_97 = { ok: true, itemsExamined: 100, itemsOk: 97, itemsFailed: 3 } as const;
+  const CRASHED = {
+    ok: false,
+    itemsExamined: 100,
+    itemsOk: 0,
+    itemsFailed: 100,
+    errorText: '短信网关 502 Bad Gateway：整批请求未送达，appKey=*** 连接被重置',
+  } as const;
+
+  it('items_failed>0 且 ok=1 与 ok=0 且 error_text 非空，取回来是两种状态', () => {
+    store.finishRun(db, store.startRun(db, '期限提醒'), {
+      ...SENT_97,
+      note: '扫 100 条期限，发出 97 封，3 封网关超时',
+    });
+    store.finishRun(db, store.startRun(db, '公道值对账'), {
+      ...CRASHED,
+      note: '网关整体不可用，一封都没发出去',
+    });
+    const partial = store.lastRun(db, '期限提醒')!;
+    const fatal = store.lastRun(db, '公道值对账')!;
+
+    // 这轮跑通了，只是其中 3 项各自失败：ok=1，没有整轮错误原文（那 3 条的原因在 notify_log）
+    expect(partial.ok).toBe(1);
+    expect(partial.items_failed).toBe(3);
+    expect(partial.error_text).toBeNull();
+
+    // 整轮炸了：ok=0 且有整轮错误原文
+    expect(fatal.ok).toBe(0);
+    expect(fatal.error_text).toContain('502 Bad Gateway');
+
+    // 两者 items_failed 都 > 0，所以「有没有逐项失败」区分不了它们——ok 才是判据
+    expect(partial.items_failed! > 0 && fatal.items_failed! > 0).toBe(true);
+    expect(partial.ok).not.toBe(fatal.ok);
+    expect(partial.error_text === null).not.toBe(fatal.error_text === null);
+  });
+
+  it('两者 staleJobs 都不报——它只管跑没跑，失败与否由读表的人自己判', () => {
+    store.finishRun(db, store.startRun(db, '期限提醒'), SENT_97);
+    store.finishRun(db, store.startRun(db, '公道值对账'), CRASHED);
+    expect(
+      store.staleJobs(db, [
+        { name: '期限提醒', maxAgeHours: 24 },
+        { name: '公道值对账', maxAgeHours: 24 },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('note 原样存回，且不替代 error_text（人话摘要 ≠ 致命错误原文）', () => {
+    store.finishRun(db, store.startRun(db, '期限提醒'), {
+      ...SENT_97,
+      note: '扫 100 条期限，发出 97 封，3 封网关超时',
+    });
+    const row = store.lastRun(db, '期限提醒')!;
+    expect(row.note).toBe('扫 100 条期限，发出 97 封，3 封网关超时');
+    expect(row.error_text).toBeNull();
+  });
+});
+
+describe('items_* 的零值都有信息', () => {
+  it('「本轮没有到期的期限」与「五条全发失败」分得开，且都不是「没跑」', () => {
+    store.finishRun(db, store.startRun(db, '本轮无事'), {
+      ok: true,
+      itemsExamined: 0,
+      itemsOk: 0,
+      itemsFailed: 0,
+      note: '没有到期的期限',
+    });
+    store.finishRun(db, store.startRun(db, '全军覆没'), {
+      ok: true,
+      itemsExamined: 5,
+      itemsOk: 0,
+      itemsFailed: 5,
+      note: '五条全发失败，逐条原因见 notify_log',
+    });
+
+    const idle = store.lastRun(db, '本轮无事')!;
+    const allFailed = store.lastRun(db, '全军覆没')!;
+    expect([idle.items_examined, idle.items_ok, idle.items_failed]).toEqual([0, 0, 0]);
+    expect([allFailed.items_examined, allFailed.items_ok, allFailed.items_failed]).toEqual([5, 0, 5]);
+    // items_ok 都是 0，光看它区分不了；examined/failed 才把两者分开
+    expect(idle.items_examined).not.toBe(allFailed.items_examined);
+    expect(idle.items_failed).not.toBe(allFailed.items_failed);
+
+    // 两者都跑了，staleJobs 一个都不报
+    expect(
+      store.staleJobs(db, [
+        { name: '本轮无事', maxAgeHours: 24 },
+        { name: '全军覆没', maxAgeHours: 24 },
+      ]),
+    ).toEqual([]);
+  });
+});
+
 describe('对照臂：健康任务一个都不许报', () => {
   it('刚跑完、ok=1 的任务不在清单里（不然「全都报」和「判据坏了」输出一样）', () => {
     for (const name of ['期限提醒', '公道值对账', '公司监控巡检']) {

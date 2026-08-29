@@ -9,9 +9,16 @@
 // 倒过来只在跑完时插一行，等于把崩掉的那次抹掉——而「崩了」和「根本没跑」正是本表存在的
 // 全部理由。所以 startRun 不收任何结果参数、finishRun 只认 runId：先插后回填是这里最省事的写法。
 //
+// **整轮失败（ok=0 + error_text）与逐项失败（items_failed）是两回事，本层不许把它们揉一起：**
+// items_failed=3 且 ok=1 是「这轮跑通了，其中 3 项各自失败」，那 3 条的原因去 notify_log 逐条查；
+// ok=0 是「整轮炸了」（库连不上、配置缺失），此时 items_* 可能只是半截数。混成一格的话，
+// 「发了 100 封失败 3 封」与「一封没发成、整个任务崩了」读起来一模一样——那正是本表要解决的
+// 那类问题，别在它自己身上再犯一次。
+//
 // 读者接口是 staleJobs。它只管**跑没跑**、不管**跑得对不对**：一个每小时准点跑、每次都 ok=0
-// 的任务，staleJobs 一声不吭。那种失败请读 lastRun() 的 ok 与 error_text——两件事要采取的
-// 行动不同（没跑 = 去看调度器；跑了但失败 = 去看 error_text 里的三方原文），合成一句报不清。
+// 的任务，staleJobs 一声不吭；每轮 items_failed 全红的任务同样一声不吭。那两种失败请读
+// lastRun() 的 ok / error_text / items_failed——要采取的行动不同（没跑 = 去看调度器；
+// 整轮失败 = 去看 error_text；逐项失败 = 去 notify_log 翻那几条），合成一句报不清。
 import type { Database } from 'better-sqlite3';
 
 /** 任务名值集（与 migrate.ts 的列注释同步）。TEXT 列不加 CHECK，值集由本层把关。 */
@@ -23,12 +30,20 @@ export interface JobRun {
   started_at: string;
   /** NULL = 没跑完（进程被杀 / 崩了 / 还在跑），三态全靠它区分 */
   finished_at: string | null;
+  /** NULL=未跑完；1=整轮跑通；0=整轮失败。与 items_failed 不是一回事 */
   ok: number | null;
   items_examined: number | null;
+  items_ok: number | null;
+  /** 逐项失败数。>0 且 ok=1 = 这轮跑通了、其中几项各自失败，原因去 notify_log 逐条查 */
+  items_failed: number | null;
+  /** **整轮**致命错误原文（ok=0 时才有），不是逐项失败的原因 */
   error_text: string | null;
+  /** 人话摘要，给读表的人看 */
+  note: string | null;
 }
 
-const COLS = 'id, job_name, started_at, finished_at, ok, items_examined, error_text';
+const COLS =
+  'id, job_name, started_at, finished_at, ok, items_examined, items_ok, items_failed, error_text, note';
 
 /** 开跑：先插行占位，返回 runId。started_at 交给列 DEFAULT (datetime('now'))，不从 JS 落串（ADR-002）。 */
 export function startRun(db: Database, jobName: JobName | string): number {
@@ -48,11 +63,18 @@ export function finishRun(
   db: Database,
   runId: number,
   result: {
+    /** **整轮**跑通没有。逐项失败几条不影响它——那是 itemsFailed 的事 */
     ok: boolean;
-    /** 本轮检查了多少项；0 是合法值（跑了，没有可做的），别用它表示「没跑」 */
+    /** 本轮检查了几项；0 是合法值（跑了，没有可做的），别用它表示「没跑」 */
     itemsExamined?: number;
-    /** ok=false 时为失败原因原文，不得为空 */
+    /** 其中成功几项；0 同样合法（examined=5, ok=0, failed=5 = 跑了，五条全失败） */
+    itemsOk?: number;
+    /** 其中失败几项。**逐项的失败原因不写这儿**，写 notify_log；本表只记这一轮的总账 */
+    itemsFailed?: number;
+    /** ok=false 时为整轮致命错误原文，不得为空 */
     errorText?: string;
+    /** 人话摘要，给读表的人看（「扫 12 条期限，发出 9 封，3 封网关超时」） */
+    note?: string;
   },
 ): void {
   if (!result.ok && !result.errorText?.trim()) {
@@ -61,10 +83,19 @@ export function finishRun(
   const info = db
     .prepare(
       `UPDATE job_runs
-          SET finished_at = datetime('now'), ok = ?, items_examined = ?, error_text = ?
+          SET finished_at = datetime('now'), ok = ?, items_examined = ?, items_ok = ?,
+              items_failed = ?, error_text = ?, note = ?
         WHERE id = ?`,
     )
-    .run(result.ok ? 1 : 0, result.itemsExamined ?? null, result.errorText ?? null, runId);
+    .run(
+      result.ok ? 1 : 0,
+      result.itemsExamined ?? null,
+      result.itemsOk ?? null,
+      result.itemsFailed ?? null,
+      result.errorText ?? null,
+      result.note ?? null,
+      runId,
+    );
   if (info.changes !== 1) {
     throw new Error(`job_runs: 回填失败，run_id=${runId} 查无此行`);
   }

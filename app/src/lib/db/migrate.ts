@@ -749,18 +749,32 @@ export function runMigrations(db: Database.Database): void {
   //   有行、finished_at 非空    → 跑完了，ok 与 error_text 说明结果
   // ok / finished_at 因此可空：它们是「跑完」才有的结论，插行那一刻还不知道，不许拿默认值先占着。
   // 写入口在 lib/db/job-runs.ts（startRun / finishRun），跑批侧不要自己拼 INSERT。
-  // error_text 必须写失败原因原文（三方错误码与文案），禁止只写「失败」——同 notify_log.detail 那条规矩。
-  // items_examined=0 是合法且有信息的值：「跑了，没有可做的」与「没跑」必须分得开。
+  //
+  // **items_failed 与 error_text 是两回事，不许混成一格：**
+  //   items_failed=3, ok=1    → 这轮跑通了，其中 3 项各自失败（那 3 条的原因去 notify_log 逐条查）
+  //   ok=0, error_text 非空   → 整轮炸了（库连不上、配置缺失），items_* 可能是半截数
+  // 混成一格，「发了 100 封失败 3 封」与「一封没发成、整个任务崩了」就读起来一样——
+  // 那正是本表要解决的那类问题，别在它自己身上再犯一次。分工同理：**逐项的失败原因在 notify_log
+  //（逐项粒度），本表只记这一轮的总账与整轮致命错误（运行粒度）**，两张表不重复。
+  // error_text 必须写原文，禁止只写「失败」——同 notify_log.detail 那条规矩。
+  //
+  // items_* 的零值都有信息，别当缺省读：
+  //   examined=0, ok=0, failed=0 → 跑了，本轮没有到期的期限（正常）
+  //   examined=5, ok=0, failed=5 → 跑了，五条全发失败（异常）
+  // 两者都不是「没跑」，超期未跑的判据一个都不该报——但读表的人必须一眼分得开，note 就是干这个的。
   // job_name 只在注释里锁枚举、不加 CHECK（沿 intake_stage 裁决：SQLite 改 CHECK 要重建表）。
   db.exec(`
     CREATE TABLE IF NOT EXISTS job_runs (
       id             INTEGER PRIMARY KEY AUTOINCREMENT,
       job_name       TEXT NOT NULL,                         -- 期限提醒 | 公道值对账 | 公司监控巡检
       started_at     TEXT NOT NULL DEFAULT (datetime('now')),
-      finished_at    TEXT,                                  -- NULL=未跑完（进行中，或进程死了）
-      ok             INTEGER,                               -- NULL=未跑完；1=成功；0=失败
-      items_examined INTEGER,                               -- 本轮检查了多少项；0 合法（跑了，没有可做的）
-      error_text     TEXT                                   -- 失败原因原文，禁止只写「失败」
+      finished_at    TEXT,                                  -- NULL=未跑完（崩了 / 被杀 / 还在跑）
+      ok             INTEGER,                               -- NULL=未跑完；1=整轮跑通；0=整轮失败
+      items_examined INTEGER,                               -- 本轮检查了几项（期限提醒＝扫了几条期限）
+      items_ok       INTEGER,                               -- 其中成功几项（＝真发出去几封）
+      items_failed   INTEGER,                               -- 其中失败几项（＝发失败几封），与 ok=0 不是一回事
+      error_text     TEXT,                                  -- **整轮**致命错误原文，禁止只写「失败」
+      note           TEXT                                   -- 人话摘要，给读表的人看
     );
     CREATE INDEX IF NOT EXISTS idx_job_runs_name ON job_runs (job_name, id DESC);
   `);
