@@ -30,7 +30,7 @@ export {
   type Result,
 } from './attest';
 export { readBytes, storeBytes, type StoredFile } from './files';
-export { SidecarError, verifyPdf, type VerifyVerdict } from './sidecar-client';
+export { SidecarError, SidecarTimeoutError, verifyPdf, type VerifyVerdict } from './sidecar-client';
 export {
   recheckVerification,
   resetRecheckQuota,
