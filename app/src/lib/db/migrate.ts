@@ -334,6 +334,13 @@ export function runMigrations(db: Database.Database): void {
   // notified_stages_json 记已发过哪几档提醒（30/7/3/1 天…），防重复轰炸也防漏提醒。
   // resolved_at = 退出态：期限被履行/作废（如 15 日内已起诉）即置时间戳停止提醒，NULL=生效中。
   // idx_deadlines_due 只盖生效中的期限——提醒 cron 的热路径按到期时间全表扫，已处理行不进索引。
+  //
+  // **惰性语义：due_at 过期不翻任何字段**——库侧不设触发器、不设定时任务。「已到期」是**读时判定**
+  //（due_at <= datetime('now') AND resolved_at IS NULL），不是某个字段会变成某个值。
+  // 所以「due_at 已过 且 resolved_at IS NULL」是**用户还没行动时的正常状态**，不是提醒系统故障；
+  // 把它当故障会造出一整族假告警，而这张表的假告警成本特别高——用户要么被假警吓到，
+  // 要么对真警脱敏，而这里的真警是「错过即权利灭失」。
+  // 提醒**是否真的发出去了**看 notify_log（逐条），**提醒任务这一轮有没有跑起来**看 job_runs（运行粒度）。
   db.exec(`
     CREATE TABLE IF NOT EXISTS deadlines (
       id                   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -728,6 +735,48 @@ export function runMigrations(db: Database.Database): void {
     CREATE UNIQUE INDEX IF NOT EXISTS uq_notify_sent
       ON notify_log (scene, biz_key, channel)
       WHERE status = 'sent';
+  `);
+
+  // ───────────────── 任务运行 ─────────────────
+  // 运行粒度的留痕：本表答「这一轮有没有发生」，notify_log / company_watch_checks 那类逐项表
+  // 答「这一项怎么样」——两个粒度互补，谁也顶不了谁。定时任务的进程压根没起来时，逐项表一行都不落，
+  // 而「今天零行」与「今天没有配置任何监控」在逐项表里长得一模一样。
+  //
+  // **开跑时就插行，跑完再 UPDATE 回填；不许只在跑完时插。** 只在结束时插行的话，崩掉的那次
+  // 不留任何痕迹——而「崩了」和「根本没跑」正是这张表存在的全部理由。三态就是靠这个顺序分出来的：
+  //   没有行                    → 这个任务从来没跑起来过
+  //   有行、finished_at IS NULL → 跑起来了但没跑完（进程被杀 / 崩了 / 还在跑）
+  //   有行、finished_at 非空    → 跑完了，ok 与 error_text 说明结果
+  // ok / finished_at 因此可空：它们是「跑完」才有的结论，插行那一刻还不知道，不许拿默认值先占着。
+  // 写入口在 lib/db/job-runs.ts（startRun / finishRun），跑批侧不要自己拼 INSERT。
+  //
+  // **items_failed 与 error_text 是两回事，不许混成一格：**
+  //   items_failed=3, ok=1    → 这轮跑通了，其中 3 项各自失败（那 3 条的原因去 notify_log 逐条查）
+  //   ok=0, error_text 非空   → 整轮炸了（库连不上、配置缺失），items_* 可能是半截数
+  // 混成一格，「发了 100 封失败 3 封」与「一封没发成、整个任务崩了」就读起来一样——
+  // 那正是本表要解决的那类问题，别在它自己身上再犯一次。分工同理：**逐项的失败原因在 notify_log
+  //（逐项粒度），本表只记这一轮的总账与整轮致命错误（运行粒度）**，两张表不重复。
+  // error_text 必须写原文，禁止只写「失败」——同 notify_log.detail 那条规矩。
+  //
+  // items_* 的零值都有信息，别当缺省读：
+  //   examined=0, ok=0, failed=0 → 跑了，本轮没有到期的期限（正常）
+  //   examined=5, ok=0, failed=5 → 跑了，五条全发失败（异常）
+  // 两者都不是「没跑」，超期未跑的判据一个都不该报——但读表的人必须一眼分得开，note 就是干这个的。
+  // job_name 只在注释里锁枚举、不加 CHECK（沿 intake_stage 裁决：SQLite 改 CHECK 要重建表）。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS job_runs (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_name       TEXT NOT NULL,                         -- 期限提醒 | 公道值对账 | 公司监控巡检
+      started_at     TEXT NOT NULL DEFAULT (datetime('now')),
+      finished_at    TEXT,                                  -- NULL=未跑完（崩了 / 被杀 / 还在跑）
+      ok             INTEGER,                               -- NULL=未跑完；1=整轮跑通；0=整轮失败
+      items_examined INTEGER,                               -- 本轮检查了几项（期限提醒＝扫了几条期限）
+      items_ok       INTEGER,                               -- 其中成功几项（＝真发出去几封）
+      items_failed   INTEGER,                               -- 其中失败几项（＝发失败几封），与 ok=0 不是一回事
+      error_text     TEXT,                                  -- **整轮**致命错误原文，禁止只写「失败」
+      note           TEXT                                   -- 人话摘要，给读表的人看
+    );
+    CREATE INDEX IF NOT EXISTS idx_job_runs_name ON job_runs (job_name, id DESC);
   `);
 
   // ───────────────── 存量迁移区 ─────────────────
