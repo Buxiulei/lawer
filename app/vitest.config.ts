@@ -7,7 +7,14 @@ export default defineConfig({
     // 评测判据自己也有测试，必须跟主套件一起跑，否则「判据放松了」没人会发现。
     // 注：那些文件在 app 包之外，Node 解析走不到 app/node_modules，所以 tsconfig.json
     // 里给 'vitest' 加了一条 paths 映射，好让它们同样受 tsc 覆盖（vitest 运行时不受影响）。
-    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.{ts,tsx}', '../scripts/**/*.test.{ts,tsx}'],
+    // ../deploy 同理：那里的 node-backlog-preload.js 是**直接上生产**的可执行代码
+    // （systemd 用 --require 预载），它的失败形态是静默的，必须跟主套件一起跑。
+    include: [
+      'src/**/*.test.{ts,tsx}',
+      'scripts/**/*.test.{ts,tsx}',
+      '../scripts/**/*.test.{ts,tsx}',
+      '../deploy/**/*.test.{ts,tsx}',
+    ],
     environment: 'node',
   },
   resolve: {
