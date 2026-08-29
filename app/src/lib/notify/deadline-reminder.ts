@@ -198,3 +198,44 @@ export async function runReminders(db: Database, deps: RunDeps): Promise<RunResu
       : `${plans.length} 条到档，成功 ${ok}${failed ? `，失败 ${failed}（${errs.slice(0, 3).join('; ')}）` : ''}${deps.dryRun ? '（干跑，未发未记档）' : ''}`;
   return { examined: plans.length, ok, failed, note };
 }
+
+
+/**
+ * CLI 本体。脚本只解析参数与退出码，开库在这里
+ * （scripts/ 解析不到 app/node_modules 的 better-sqlite3——与 reconcile/backfill 同一分工）。
+ *
+ * @returns 0 正常；1 有发送失败；2 用法错
+ */
+export async function reminderCli(
+  dbPath: string,
+  opts: { apply: boolean; smokeTo?: string },
+): Promise<number> {
+  const { default: BetterSqlite3 } = await import('better-sqlite3');
+  const { sendMail } = await import('./index');
+
+  // 【冒烟投递为什么不走真实扫描】manager 要的是"验证真的能发出去、文案对"。
+  // 若让它走真实扫描再把收件人改掉，就会出现**邮件发给测试信箱、而真实期限被标记成已通知**——
+  // 那条期限从此再也不会提醒，用户永远不知道。
+  // 所以冒烟只发一封合成样例，**一行库都不碰**。
+  if (opts.smokeTo) {
+    const copy = deadlineReminderCopy(3, '仲裁时效');
+    console.log(`【冒烟投递】收件人 ${opts.smokeTo}（合成样例，不读库、不写库）`);
+    console.log(`  主题：${copy.subject}`);
+    console.log(`  正文：${copy.text.replace(/\n/g, '\n        ')}`);
+    await sendMail(opts.smokeTo, copy);
+    console.log('✅ 已投递。请到该信箱确认收到，并核对上面的主题正文逐字一致。');
+    return 0;
+  }
+
+  const db = new BetterSqlite3(dbPath);
+  db.pragma('foreign_keys = ON');
+  try {
+    const r = await runReminders(db, { sendMail, dryRun: !opts.apply });
+    console.log(`库：${dbPath}`);
+    console.log(`  ${r.note}`);
+    if (!opts.apply) console.log('  【干跑】没有发信、没有记档。真发请加 --apply。');
+    return r.failed > 0 ? 1 : 0;
+  } finally {
+    db.close();
+  }
+}
