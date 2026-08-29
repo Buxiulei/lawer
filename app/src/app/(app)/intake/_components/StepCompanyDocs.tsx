@@ -31,7 +31,7 @@ export function StepCompanyDocs({
 
       {hasAny && (
         <p className="rounded-[10px] border border-primary/30 bg-primary-wash px-3.5 py-3 text-[15px] leading-7 text-primary-ink">
-          有文件就先留着，不用现在上传。建完档进工作台后，到「文件解读」把原件拍照传上去，
+          有文件就先留着，不用现在上传。建完档进驾驶舱后，到「文件解读」把原件拍照传上去，
           会逐条标出对你不利的表述，并给出签、不签还是要求改的结论。
         </p>
       )}

@@ -26,7 +26,10 @@ interface Crumb {
  */
 export function crumbsFor(pathname: string, caseId: string): Crumb[] {
   if (pathname === '/intake') {
-    return [{ label: '工作台', href: `/case/${caseId}` }, { label: '首诊' }];
+    return [
+      { label: '驾驶舱', discreetLabel: NEUTRAL_WORD.dashboard, href: `/case/${caseId}` },
+      { label: '首诊' },
+    ];
   }
   if (pathname === '/account') return [{ label: '我的' }];
   if (pathname.startsWith('/settings')) {
@@ -34,17 +37,23 @@ export function crumbsFor(pathname: string, caseId: string): Crumb[] {
   }
 
   const rest = pathname.replace(`/case/${caseId}`, '');
-  const workbench = { label: '工作台', href: `/case/${caseId}` };
+  const home = {
+    label: '驾驶舱',
+    discreetLabel: NEUTRAL_WORD.dashboard,
+    href: `/case/${caseId}`,
+  };
 
   // 只做两级：详情页停在所属栏目，不把文书名/文件名放进顶栏——那里面有公司名。
+  if (rest.startsWith('/ask'))
+    return [home, { label: '问它', discreetLabel: NEUTRAL_WORD.ask }];
   if (rest.startsWith('/evidence'))
-    return [workbench, { label: '证据', discreetLabel: NEUTRAL_WORD.evidence }];
+    return [home, { label: '证据', discreetLabel: NEUTRAL_WORD.evidence }];
   if (rest.startsWith('/graph'))
-    return [workbench, { label: '公司图谱', discreetLabel: NEUTRAL_WORD.graph }];
-  if (rest.startsWith('/docs')) return [workbench, { label: '文件解读' }];
+    return [home, { label: '公司图谱', discreetLabel: NEUTRAL_WORD.graph }];
+  if (rest.startsWith('/docs')) return [home, { label: '文件解读' }];
   if (rest.startsWith('/drafts'))
-    return [workbench, { label: '文书', discreetLabel: NEUTRAL_WORD.drafts }];
-  return [{ label: '工作台' }];
+    return [home, { label: '文书', discreetLabel: NEUTRAL_WORD.drafts }];
+  return [{ label: '驾驶舱', discreetLabel: NEUTRAL_WORD.dashboard }];
 }
 
 export function Breadcrumbs({

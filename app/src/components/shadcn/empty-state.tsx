@@ -11,12 +11,15 @@ import { cn } from './utils';
  * 见同目录 __tests__/empty-state.test.tsx。
  */
 function EmptyState({
+  icon,
   title,
   description,
   action,
   className,
   ...props
 }: Omit<React.ComponentProps<'div'>, 'title'> & {
+  /** 标题上方的图。装饰性——信息一律由 title/description 承担，图没了也读得通 */
+  icon?: React.ReactNode;
   title: string;
   description?: string;
   action?: React.ReactNode;
@@ -30,6 +33,7 @@ function EmptyState({
       )}
       {...props}
     >
+      {icon && <div className="mb-3">{icon}</div>}
       <p className="text-[16px] font-semibold text-foreground">{title}</p>
       {description && (
         <p

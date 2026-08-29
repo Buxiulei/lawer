@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { cn } from '@/app/_ui/cn';
 import { useDiscreet } from '@/app/_ui/discreet';
 import { useTheme } from '@/app/_ui/theme';
@@ -8,6 +9,7 @@ import { SidebarTrigger } from '@/components/shadcn/sidebar';
 import { Breadcrumbs } from './breadcrumbs';
 import { useCasePanelOpener } from './casePanel';
 import { THEME_LABEL } from './AppSidebar';
+import { ACCOUNT_NAV_ITEM } from './navItems';
 import {
   AutoIcon,
   EyeIcon,
@@ -20,6 +22,7 @@ import {
 /**
  * 顶栏：左边折叠键 + 面包屑，右边案件档案入口。
  * 低调模式与主题在 PC 上已经下沉到侧栏底部，这里只在移动端（无侧栏）保留。
+ * 「我的」同理：底部四格被案件四栏占满后它落在这里，PC 上仍在侧栏里。
  */
 export function ShellHeader({
   pathname,
@@ -49,10 +52,30 @@ export function ShellHeader({
             案件档案
           </button>
         )}
+        <AccountButton pathname={pathname} />
         <DiscreetButton />
         <ThemeButton />
       </div>
     </header>
+  );
+}
+
+/** 移动端才出现：PC 上同一条入口在侧栏导航里 */
+function AccountButton({ pathname }: { pathname: string }) {
+  const active = ACCOUNT_NAV_ITEM.match(pathname, '');
+  return (
+    <Link
+      href={ACCOUNT_NAV_ITEM.href('')}
+      aria-label={ACCOUNT_NAV_ITEM.label}
+      aria-current={active ? 'page' : undefined}
+      title={ACCOUNT_NAV_ITEM.label}
+      className={cn(
+        'flex size-11 items-center justify-center rounded-[10px] transition-colors duration-150 ease-out lg:hidden',
+        active ? 'text-primary' : 'text-ink-2 hover:bg-surface-2',
+      )}
+    >
+      {ACCOUNT_NAV_ITEM.icon}
+    </Link>
   );
 }
 
