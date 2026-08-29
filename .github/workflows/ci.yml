@@ -21,8 +21,14 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    # 【为什么不只是 main】外勤 2026-08-29 实证：base 不是 main 的 PR **完全不跑 CI**——
+    # #92 的检查列表里只有一条 SKIPPED 的 Sourcery，
+    # 而**「没有检查」和「检查全绿」快速扫一眼长得很像**。又一个沉默失效形态。
+    # ws/** 是本仓的工作分支族（ws/backend、ws/frontend-* …），互相开 PR 是常态。
+    branches: [main, 'ws/**']
   push:
+    # push 只守 main：分支头的 push 跑不到它自己没有的守卫（见上），
+    # 合并态的检查由 pull_request 那条负责。
     branches: [main]
 
 # 同一分支的新推送取消旧的在跑任务，省额度；main 上不取消（要留完整历史）

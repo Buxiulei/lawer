@@ -107,6 +107,79 @@ describe('🔴 负对照：坏 index 必须拒绝启动，且报错指名文件'
   });
 });
 
+describe('🔴 manager 2026-08-29 裁定新加的四道（此前全部放行）', () => {
+  test('⑤ 零张卡 → 默认拒绝启动', () => {
+    // 【为什么这是产品决策不是实现细节】manager 裁：一个没有任何知识、
+    // 却照常回答法律问题的 agent，是本产品最不可接受的静默故障形态——**比宕机糟**：
+    // 宕机用户知道坏了。一次把 packs/ 弄丢的部署，此前会静默上线这样一个 agent。
+    delete process.env.KNOWLEDGE_ALLOW_EMPTY;
+    brokenDir((d) => fs.writeFileSync(path.join(d, 'index.json'), '[]'));
+    expect(() => listPacks()).toThrow(/索引是空的/);
+    expect(() => listPacks()).toThrow(/KNOWLEDGE_ALLOW_EMPTY/);
+  });
+
+  test('⑤ 豁免开着时放行 —— 本地空跑是正当需求，但要明说', () => {
+    process.env.KNOWLEDGE_ALLOW_EMPTY = '1';
+    brokenDir((d) => fs.writeFileSync(path.join(d, 'index.json'), '[]'));
+    expect(listPacks()).toEqual([]);
+    delete process.env.KNOWLEDGE_ALLOW_EMPTY;
+  });
+
+  test('⑤ 豁免只认字面 1，别的真值不算 —— 免得 "0"/"false" 被当成开', () => {
+    process.env.KNOWLEDGE_ALLOW_EMPTY = 'false';
+    brokenDir((d) => fs.writeFileSync(path.join(d, 'index.json'), '[]'));
+    expect(() => listPacks()).toThrow(/索引是空的/);
+    delete process.env.KNOWLEDGE_ALLOW_EMPTY;
+  });
+
+  test('⑥ 重复 id → 拒绝，并指名是哪个 id', () => {
+    // id 是索引／卡内 frontmatter／检索三处共用的主键；重复时 get(id) 返回先到的那张，
+    // **不报错、只是从此拿错卡**。
+    let dup = '';
+    brokenDir((d) => {
+      const p2 = path.join(d, 'index.json');
+      const idx = JSON.parse(fs.readFileSync(p2, 'utf8')) as { id: string }[];
+      dup = idx[0].id;
+      idx.push({ ...idx[0] });
+      fs.writeFileSync(p2, JSON.stringify(idx));
+    });
+    expect(() => listPacks()).toThrow(/id 重复/);
+    expect(() => listPacks()).toThrow(new RegExp(dup));
+  });
+
+  test('⑦ 卡内 id 与索引不一致 → 拒绝，两个 id 都印出来', () => {
+    // 【为什么启动闸要管这条】此前只有 CI 里的全量测试查它——
+    // 而测试跑在 CI，数据在部署环节被换掉的话那条测试管不着。
+    let victim = '';
+    brokenDir((d) => {
+      const p2 = path.join(d, 'index.json');
+      const idx = JSON.parse(fs.readFileSync(p2, 'utf8')) as { id: string; path: string }[];
+      victim = idx[0].id;
+      const f = path.join(d, idx[0].path);
+      fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/^id: .*/m, 'id: 完全不同的-id'));
+    });
+    expect(() => get(victim)).toThrow(/卡内 id 与索引不一致/);
+    expect(() => get(victim)).toThrow(/完全不同的-id/);
+  });
+
+  test('⑧ path 越界 → 因**越界**被拒，而不是碰巧撞上别的墙', () => {
+    // 【为什么理由必须对】改之前它也"被拒"了，但理由是「缺少 frontmatter」——
+    // 那个库外文件**真的被读进来了**，只是内容不像卡。哪天它恰好有 frontmatter 形状的头，
+    // 同一段代码就放行，**而在此之前日志里一直显示"拒绝了"**。
+    // 一个从未因自己的理由生效过的闸，和一个不存在的闸，在日志里长得一样。（哨兵语）
+    let victim = '';
+    brokenDir((d) => {
+      const p2 = path.join(d, 'index.json');
+      const idx = JSON.parse(fs.readFileSync(p2, 'utf8')) as { id: string; path: string }[];
+      victim = idx[0].id;
+      idx[0].path = '../../../etc/hostname';
+      fs.writeFileSync(p2, JSON.stringify(idx));
+    });
+    expect(() => get(victim)).toThrow(/指向知识库目录之外/);
+    expect(() => get(victim)).not.toThrow(/缺少 frontmatter/);
+  });
+});
+
 describe('自证：夹具真的坏了，不是测试在空转', () => {
   test('破坏动作确实改变了磁盘上的内容', () => {
     const dir = brokenDir((d) => fs.rmSync(path.join(d, 'index.json')));

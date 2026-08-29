@@ -120,6 +120,28 @@ function loadIndex(): PackMeta[] {
       throw new Error(`knowledge 索引条目缺少 id 或 path：${JSON.stringify(entry)}（${indexPath}）`);
     }
   }
+  // ⑤【零张卡默认拒绝启动】manager 2026-08-29 产品裁定：
+  // **一个没有任何知识、却照常回答法律问题的 agent，是本产品最不可接受的静默故障形态**——
+  // 比宕机糟：宕机用户知道坏了。一次把 packs/ 弄丢的部署，此前会静默上线这样一个 agent。
+  // 本地想空跑是正当需求，但必须**明说**：KNOWLEDGE_ALLOW_EMPTY=1。默认关。
+  if (parsed.length === 0 && process.env.KNOWLEDGE_ALLOW_EMPTY !== '1') {
+    throw new Error(
+      `knowledge 索引是空的：${indexPath}（0 张卡）。` +
+        '一个没有知识却照常作答的 agent 比宕机更坏，故默认拒绝启动；' +
+        '本地确需空库请显式设 KNOWLEDGE_ALLOW_EMPTY=1',
+    );
+  }
+
+  // ⑥【id 重复即拒】id 是索引、卡内 frontmatter、检索三处共用的主键；
+  // 重复时 get(id) 返回先到的那张，**不报错、只是从此拿错卡**。
+  const seen = new Set<string>();
+  for (const entry of parsed as PackMeta[]) {
+    if (seen.has(entry.id)) {
+      throw new Error(`knowledge 索引里 id 重复：${entry.id}（${indexPath}）；id 是主键，重复即歧义`);
+    }
+    seen.add(entry.id);
+  }
+
   packIndex = parsed as PackMeta[];
   return packIndex;
 }
@@ -131,7 +153,15 @@ function loadIndex(): PackMeta[] {
 function loadContent(meta: PackMeta): string {
   const cached = contentCache.get(meta.id);
   if (cached !== undefined) return cached;
-  const abs = path.join(resolveKnowledgeDir(), meta.path);
+  const root = resolveKnowledgeDir();
+  const abs = path.resolve(root, meta.path);
+  // ⑧【路径必须落在知识库目录内】此前 `../../../etc/hostname` 会被**真的读进来**，
+  // 只是内容不像卡才失败——若那个文件恰好有 frontmatter 形状的开头，就会被当成知识卡喂给模型。
+  // 【为什么理由要对】拒绝的理由错了，重构时会静默变成放行：
+  // 有人把 frontmatter 检查改宽一点，这条路径就通了，而没人知道曾经有过一道路径闸。
+  if (path.relative(root, abs).startsWith('..') || path.isAbsolute(path.relative(root, abs))) {
+    throw new Error(`knowledge 索引的 path 指向知识库目录之外：${meta.id} → ${meta.path}；不允许越界读取`);
+  }
   if (!fs.existsSync(abs)) {
     throw new Error(`knowledge 索引指向的文件不存在：${meta.id} → ${abs}；index.json 与 packs/ 不一致，需修数据`);
   }
@@ -139,6 +169,15 @@ function loadContent(meta: PackMeta): string {
   const match = /^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(raw);
   if (!match) {
     throw new Error(`knowledge pack 缺少 frontmatter：${meta.id} → ${abs}`);
+  }
+  // ⑦【卡内 id 必须与索引一致】此前只有 CI 里的全量测试查这个——
+  // 而**测试跑在 CI，数据在部署环节被换掉的话那条测试管不着**（manager 采为裁定依据）。
+  // 启动闸是数据真正到达之处的最后一道，恰好该管 CI 够不着的这段。
+  const idInCard = /^id:\s*(.+?)\s*$/m.exec(match[0]);
+  if (idInCard && idInCard[1] !== meta.id) {
+    throw new Error(
+      `knowledge 卡内 id 与索引不一致：索引说 ${meta.id}，卡里写的是 ${idInCard[1]}（${abs}）`,
+    );
   }
   const content = raw.slice(match[0].length);
   contentCache.set(meta.id, content);
@@ -315,6 +354,20 @@ export function get(id: string): PackHit {
 }
 
 /** 全量元数据（不含正文），供管理端与调试。返回副本，调用方改不到进程级缓存。 */
+/**
+ * 本进程**检索真正在用的**那份索引里有多少张卡。
+ *
+ * 【为什么必须同源，且"同值"不算】manager 2026-08-29 钉的规格：
+ * 不许为这个数另读一次 index.json——`packs/` 丢了而 index.json 还在时，
+ * 另读的那份会报 218，而 agent 手里是空的。
+ * **两个真源在故障时各说各话，报出来的是好看的那个。**
+ * 这里返回的就是 `loadIndex()`（与 search/get 同一个缓存数组）的长度，
+ * 不是重新解析、也不是复制品的计数。
+ */
+export function loadedPackCount(): number {
+  return loadIndex().length;
+}
+
 export function listPacks(): PackMeta[] {
   return loadIndex().map((meta) => ({ ...meta }));
 }
