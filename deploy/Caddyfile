@@ -27,9 +27,26 @@
 		}
 	}
 
-	# 证据文件与录音上传：放宽请求体上限（默认 Caddy 不限，此处显式声明意图）
-	request_body {
-		max_size 100MB
+	# ── 内存放大墙的第一道闸 ──
+	# 上传路径在应用侧会把文件复制 4~6 份（formData 缓冲 → arrayBuffer → Buffer →
+	# 密文 → 写缓冲），进程跑在 cgroup MemoryMax=1280M 里，原先站点级 100MB 对全路由
+	# 生效，两个并发的大上传就能把进程顶到 OOM kill，挂的是整站所有人的会话。
+	# 所以按路由分开卡：
+	#   · 证据上传 30MB —— 比应用侧 25MiB 上限略宽，留给 multipart 边界与字段头，
+	#     好让「超限」由应用回一条说得清原因的 413，而不是 Caddy 直接掐断连接
+	#     （那样用户只看到「上传失败」，不知道为什么、也不知道该怎么办）。
+	#   · 其余路由 2MB —— 聊天与 REST 都是 JSON，最大的请求体也就几十 KB。
+	# 两个匹配器写成互斥的，不靠 request_body 的先后覆盖关系（同名指令叠加时以更严的为准，
+	# 靠顺序会把证据路由也收成 2MB）。
+	@evidence path /api/v1/evidence*
+	@non_evidence {
+		not path /api/v1/evidence*
+	}
+	request_body @evidence {
+		max_size 30MB
+	}
+	request_body @non_evidence {
+		max_size 2MB
 	}
 
 	header {
