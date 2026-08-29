@@ -148,11 +148,6 @@ export function createAnthropic(o: ProviderOptions): Provider {
       // 消息转换（可能抛：缺 tool_call_id / 畸形 arguments）挪到取闸位之前，
       // 否则那条抛错路径会把闸位和计时器一起漏掉。
       const { system, messages: anthMessages } = toAnthropicRequest(messages);
-      // 与 openai-compat 同一道闸（见 providers/gate.ts）：闸位按 provider 分桶，
-      // 只闸三家不闸 anthropic 等于给最贵的那条路留了个不设防的口子。
-      // 闸位先拿再起计时器：排队时长不该算进空闲/总时长超时。
-      const release = await acquireSlot('anthropic');
-      const timers = createStreamTimers(opts);
       const body: Record<string, unknown> = {
         model: o.model,
         messages: anthMessages,
@@ -169,6 +164,20 @@ export function createAnthropic(o: ProviderOptions): Provider {
       // 注意：Claude 5 系（含 claude-sonnet-5）已移除采样参数，传 temperature 会 400。
       // 这里只在调用方显式指定时才下发，默认不传。
       if (opts.temperature !== undefined) body.temperature = opts.temperature;
+      // 序列化在取闸位之前、在 attempt 闭包之外（同 openai-compat）：请求体每次重试都一样，
+      // 且序列化异常不是「上游不给力」，不该被当成连接失败重试三次，也不该碰到闸位。
+      const payload = JSON.stringify(body);
+
+      // 与 openai-compat 同一道闸（见 providers/gate.ts）：闸位按 provider 分桶，
+      // 只闸三家不闸 anthropic 等于给最贵的那条路留了个不设防的口子。
+      // 闸位先拿再起计时器：排队时长不该算进空闲/总时长超时。
+      const release = await acquireSlot('anthropic');
+      const timers = createStreamTimers(opts);
+      // 兜底归还：generator 被**抛弃**（客户端断流后消费方 emit 抛错，既不再 next() 也不 return()）时，
+      // sseData 的 finally 永远等不到，下面的 done 就永不执行——攒够 MAX_CONCURRENT_PER_PROVIDER 次
+      // 该 provider 全局死锁。计时器只在正常收尾时被 clear，被抛弃的那路一定会走到超时 abort，
+      // 让它承重一次 release（幂等，见 gate.ts）。
+      timers.signal.addEventListener('abort', release, { once: true });
 
       const res = await connectWithRetry(
         () =>
@@ -176,7 +185,7 @@ export function createAnthropic(o: ProviderOptions): Provider {
             method: 'POST',
             headers,
             signal: timers.signal,
-            body: JSON.stringify(body),
+            body: payload,
           }),
         timers.signal,
       ).catch((e) => {

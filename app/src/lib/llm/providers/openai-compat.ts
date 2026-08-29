@@ -65,9 +65,6 @@ export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
     billingModel,
 
     async chatStream(messages, opts = {}) {
-      // 闸位先拿再起计时器：排队时长不该算进空闲/总时长超时（那两个量的是上游的响应速度）。
-      const release = await acquireSlot(o.name);
-      const timers = createStreamTimers(opts);
       const body: Record<string, unknown> = {
         model: o.model,
         messages,
@@ -81,6 +78,19 @@ export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
       // 输出长度默认不在模型侧设限（沿用六爻做法）。
       if (opts.temperature !== undefined) body.temperature = opts.temperature;
       if (opts.maxTokens !== undefined) body.max_tokens = opts.maxTokens;
+      // 序列化在取闸位之前、在 attempt 闭包之外：请求体每次重试都一样，重复序列化是白烧 CPU；
+      // 更要紧的是序列化异常（extraBody 里塞进循环引用一类）不是「上游不给力」，
+      // 落在闭包里会被当成连接失败重试三次，落在取闸位之前则连闸位都不会碰。
+      const payload = JSON.stringify(body);
+
+      // 闸位先拿再起计时器：排队时长不该算进空闲/总时长超时（那两个量的是上游的响应速度）。
+      const release = await acquireSlot(o.name);
+      const timers = createStreamTimers(opts);
+      // 兜底归还：generator 被**抛弃**（客户端断流后消费方 emit 抛错，既不再 next() 也不 return()）时，
+      // sseData 的 finally 永远等不到，下面的 done 就永不执行——每漏一路少一个闸位，
+      // 攒够 MAX_CONCURRENT_PER_PROVIDER 次该 provider 全局死锁。计时器只在正常收尾时被 clear，
+      // 所以被抛弃的那路一定会走到空闲/总时长超时的 abort，让它承重一次 release（幂等，见 gate.ts）。
+      timers.signal.addEventListener('abort', release, { once: true });
 
       const res = await connectWithRetry(
         () =>
@@ -88,7 +98,7 @@ export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
             method: 'POST',
             headers,
             signal: timers.signal,
-            body: JSON.stringify(body),
+            body: payload,
           }),
         timers.signal,
       ).catch((e) => {

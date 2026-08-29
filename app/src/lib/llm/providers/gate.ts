@@ -129,11 +129,14 @@ export function acquireSlot(provider: ProviderName): Promise<() => void> {
   return gate.acquire();
 }
 
-/** Retry-After 头 → 毫秒。两种合法形态：秒数（`120`）与 HTTP-date。解析不出就返回 null，退回固定退避。 */
+/** Retry-After 头 → 毫秒。两种合法形态：秒数（`120`）与 HTTP-date。解析不出就返回 null，退回固定退避。
+ *  先 trim 再判空：HTTP 空白（空格/制表）会被 Headers 规范化掉，但非 HTTP 空白（NBSP、VT）原样留下，
+ *  而 `Number('\u00a0'.trim())` 是 0——那会把「上游没说等多久」读成「上游说不用等」，
+ *  零退避立刻重发，正好在被限流时给上游加压。 */
 function parseRetryAfter(res: Response): number | null {
-  const raw = res.headers.get('retry-after');
+  const raw = res.headers.get('retry-after')?.trim();
   if (!raw) return null;
-  const secs = Number(raw.trim());
+  const secs = Number(raw);
   if (Number.isFinite(secs)) return secs >= 0 ? secs * 1000 : null;
   const at = Date.parse(raw);
   if (Number.isNaN(at)) return null;
@@ -160,7 +163,8 @@ const sleep = (ms: number, signal: AbortSignal) =>
  * **非 2xx 也照样返回 Response**（重试用尽或状态不可重试时），交给调用方原有的 httpError 分支处理，
  * 免得在这里复制一份错误格式化。
  *
- * happy path（首次即 2xx）不产生任何额外 await：直接返回首个 Response，时序与无闸时一致。
+ * happy path（首次即 2xx）不产生额外的 I/O 等待：首个 Response 直接返回，既不排队也不退避
+ * （多出来的只有 await 本身那一跳微任务）。
  */
 export async function connectWithRetry(attempt: () => Promise<Response>, signal: AbortSignal): Promise<Response> {
   for (let failed = 0; ; failed++) {
