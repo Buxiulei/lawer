@@ -51,12 +51,19 @@ describe('错误码文案', () => {
     ['MISSING_MATERIAL', '两张照片'],
     ['INVALID_NAME', '姓名'],
     ['ALREADY_VERIFIED', '已经实名过了'],
+    ['MATERIAL_TOO_LARGE', '8MB'],
   ])('%s 说清楚该改哪儿', (code, needle) => {
     expect(submitFailureCopy(err(code))).toContain(needle);
   });
 
-  it('四个码各说各的，不共用一句万能话', () => {
-    const codes = ['INVALID_PASSPORT_NO', 'MISSING_MATERIAL', 'INVALID_NAME', 'ALREADY_VERIFIED'];
+  it('每个码各说各的，不共用一句万能话', () => {
+    const codes = [
+      'INVALID_PASSPORT_NO',
+      'MISSING_MATERIAL',
+      'INVALID_NAME',
+      'ALREADY_VERIFIED',
+      'MATERIAL_TOO_LARGE',
+    ];
     const copies = codes.map((c) => submitFailureCopy(err(c)));
     expect(new Set(copies).size).toBe(codes.length);
   });
@@ -147,5 +154,48 @@ describe('待审文案按通道分支', () => {
 
   it('method 缺失时按刷脸渲染——老数据没有这个字段，不能因此白屏', () => {
     expect(render(null)).toContain('手机上做完');
+  });
+});
+
+/**
+ * 被人工审核打回之后。**这是最需要正确指引的时刻**——
+ * 拿护照的人若被送回身份证通道，会读到「身份证号要与本人证件完全一致、
+ * 光线足一点再刷一次」这种他根本无法执行的建议。
+ */
+describe('审核未通过', () => {
+  const html = renderToStaticMarkup(
+    <PassportForm onSubmitted={() => {}} onCancel={() => {}} rejectedMessage="资料页反光看不清" />,
+  );
+  const t = text(html);
+
+  it('把后端给的原因原样带出来', () => {
+    expect(t).toContain('资料页反光看不清');
+  });
+
+  it('给的是能执行的重拍指引，不是「请重新提交」', () => {
+    expect(t).toContain('把护照放平');
+    expect(t).toContain('避开顶灯');
+  });
+
+  /*
+   * 断言要挑**身份证通道那套建议**，不是「身份证」三个字——
+   * 表单底下那个「用身份证认证」是**回到另一条通道的出路**，是正当的。
+   * 第一版写成 not.toContain('身份证') 当场误伤了它：
+   * 守卫拦的必须是有害的那句话，不是碰巧同字的那个词。
+   */
+  it('不出现身份证通道那套建议——他没有身份证，那些他做不到', () => {
+    expect(t).not.toContain('身份证号要与本人证件完全一致');
+    expect(t).not.toContain('光线足一点再刷一次');
+  });
+
+  it('但回到身份证通道的出路要留着（万一他其实两样都有）', () => {
+    expect(t).toContain('用身份证认证');
+  });
+
+  it('没被打回时不显示这块，不制造无谓的警报', () => {
+    const clean = text(
+      renderToStaticMarkup(<PassportForm onSubmitted={() => {}} onCancel={() => {}} />),
+    );
+    expect(clean).not.toContain('上一次没通过');
   });
 });

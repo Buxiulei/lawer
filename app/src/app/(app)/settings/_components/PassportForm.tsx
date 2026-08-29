@@ -36,6 +36,8 @@ export function submitFailureCopy(err: unknown): string {
         return '姓名要和护照上的拼写一致（护照上是拼音就填拼音）。';
       case 'ALREADY_VERIFIED':
         return '这个账号已经实名过了，不用再交一次。';
+      case 'MATERIAL_TOO_LARGE':
+        return '照片太大了，单张不能超过 8MB。用手机相册里的「编辑」压一下，或者拍的时候把分辨率调低一档。';
     }
     /*
      * 上面四个是**用户能自己改**的问题。剩下的服务端故障（端点没上、5xx）要明说是我们的问题——
@@ -49,6 +51,14 @@ export function submitFailureCopy(err: unknown): string {
   }
   return humanError(err);
 }
+
+/**
+ * 单张上限，与服务端 `passport-realname.ts` 的 `MAX_MATERIAL_BYTES` 同值（8 MiB）。
+ * **前端预检不是替服务端把关**（它照样强校验并回 MATERIAL_TOO_LARGE），
+ * 而是**别让人用移动数据把几 MB 传完了再被拒**——那是实打实的流量损失。
+ * 数值抄自服务端源码，不是照转述；改了那边这里要跟。
+ */
+const MAX_MATERIAL_BYTES = 8 * 1024 * 1024;
 
 interface Shot {
   key: 'id_page' | 'selfie';
@@ -89,10 +99,13 @@ export function passportReady({
 export function PassportForm({
   onSubmitted,
   onCancel,
+  rejectedMessage,
 }: {
   /** 提交成功：外层去刷 status，卡片会切到「审核中」 */
   onSubmitted: () => void;
   onCancel: () => void;
+  /** 上一次人工审核没通过时的原因。**打回的人最需要能执行的指引** */
+  rejectedMessage?: string;
 }) {
   const [realName, setRealName] = useState('');
   const [passportNo, setPassportNo] = useState('');
@@ -113,6 +126,13 @@ export function PassportForm({
 
   const pick = (key: Shot['key'], file: File | undefined) => {
     if (!file) return;
+    // 传之前就拦：8MB 的图在移动数据上传完再被服务端退，那几 MB 是白花的
+    if (file.size > MAX_MATERIAL_BYTES) {
+      setError(
+        `这张 ${formatBytes(file.size)}，超过单张 8MB 的上限。用手机相册里的「编辑」压一下，或者把拍摄分辨率调低一档再选一次。`,
+      );
+      return;
+    }
     const url = URL.createObjectURL(file);
     urls.current.push(url);
     setFiles((prev) => ({ ...prev, [key]: file }));
@@ -162,6 +182,13 @@ export function PassportForm({
         if (ready && !submitting) void submit();
       }}
     >
+      {rejectedMessage && (
+        <p className="rounded-[10px] bg-amber-wash px-3 py-2.5 text-[14px] leading-6 text-amber-ink">
+          上一次没通过：{rejectedMessage}。常见原因是照片糊、有反光、四角没拍全，
+          或姓名拼写与护照不一致。重拍时把护照放平、避开顶灯，字能看清就够了。
+        </p>
+      )}
+
       <p className="text-[14px] leading-6 text-ink-2">
         护照通道是<span className="font-semibold text-ink">人工审核</span>
         ，提交后一般一到两个工作日出结果，期间不影响你用其他功能。

@@ -129,11 +129,17 @@ export function RealnameCard() {
    */
   const [restarting, setRestarting] = useState(false);
   /**
-   * 走哪条通道。默认刷脸（大陆二代证，绝大多数人）；
-   * **没有身份证的人在原来的卡片上是走不下去的，连"为什么走不了"都看不到**——
-   * 产品负责人本人就是这种情况，他是这个入口的第一个用户。
+   * 走哪条通道。用户手动选过就听他的，否则**跟着服务端记的 method 走**。
+   *
+   * 【为什么不能简单地默认刷脸】护照审核没通过时，`auth_status` 回到未认证、
+   * 页面落回表单——若此时默认刷脸，**一个拿护照的人会被送回他根本用不了的那条通道**，
+   * 还会读到「身份证号要与本人证件完全一致、光线足一点再刷一次」这种他无法执行的建议。
+   * 最需要正确指引的恰恰是刚被打回来的人。
    */
-  const [channel, setChannel] = useState<'cloudauth' | 'passport'>('cloudauth');
+  const [channelChoice, setChannelChoice] = useState<'cloudauth' | 'passport' | null>(null);
+  const channel: 'cloudauth' | 'passport' =
+    channelChoice ?? (status?.method === 'passport' ? 'passport' : 'cloudauth');
+  const setChannel = setChannelChoice;
 
   const refresh = useCallback(async () => {
     try {
@@ -242,6 +248,9 @@ export function RealnameCard() {
               />
             ) : channel === 'passport' ? (
               <PassportForm
+                rejectedMessage={
+                  status.verification_status === '未通过' ? status.message : undefined
+                }
                 onSubmitted={() => {
                   setRestarting(false);
                   setPollsLeft(POLL_LIMIT);
@@ -262,6 +271,8 @@ export function RealnameCard() {
                     上一次没通过：{status.message}。姓名和身份证号要与本人证件完全一致，光线足一点再刷一次。
                   </p>
                 )}
+                {/* 护照被打回的人不会走到这个分支（channel 跟着 method 走），
+                    这里留的是"他手动切回身份证通道"那种情形，不该再提护照 */}
 
                 <InputField
                   label="姓名"
