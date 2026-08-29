@@ -146,104 +146,15 @@ function loadContent(meta: PackMeta): string {
 }
 
 /** 字符二元组集合：中文没有空格分词，二元组是不引依赖又能反映词序的最简近似 */
-/**
- * 领域词的 df 门槛：片段出现在 ≥ 8 张卡（218 张里约 3.7%）的词表里才算领域核心词。
- * 2026-08-29 扫描（48 条评测集）：
- * ```
- *   minDF=5  应召回 26/36  均实质 6.22  ← 召回更高，但逼近 limit=8，触发评测官的人工复核线
- *   minDF=8  应召回 24/36  均实质 5.78  ← 取这个：少 2 条召回，换更稳的精度
- * ```
- * ⚠️ **我选 8 有一半原因是为了留在评测官那条 6.0 线以下——这是对着尺子调参**，
- * 已如实报给他，由他决定要不要换 5 并做人工复核。写在这里免得后人以为 8 是推导出来的。
- */
-const DOMAIN_MIN_DF = 8;
-
-/** 词缀命中的折价：低于精确命中，保证放宽不把原本匹对的挤出 limit */
-const AFFIX_DISCOUNT = 0.5;
-
 function bigrams(text: string): Set<string> {
   const out = new Set<string>();
   for (let i = 0; i + 1 < text.length; i += 1) out.add(text.slice(i, i + 2));
   return out;
 }
 
-/**
- * 领域词表：某个词缀片段出现在 ≥ `DOMAIN_MIN_DF` 张卡的词表里，就算这个领域的核心词。
- * **从索引自己算出来，不手维护停用词表**——卡增删时它自动跟着变，没有会腐烂的名单。
- *
- * 【为什么是「高 df = 领域词」而不是反过来】2026-08-29 改造时我先按直觉试了反的
- * （低 df = 有区分力），实测数据当场证伪：
- * ```
- * 今天 df=1   推荐 df=1   财产 df=2      ← 我以为的"通用词"，在卡词表里其实罕见
- * 协议 df=18  裁决 df=11  仲裁 df=84     ← 领域核心词反而 df 高
- * ```
- * **在这个语料里「日常常用」与「卡词表常见」是反的**——`今天` 罕见正因为它不是法律术语。
- * 于是低 df 门槛会滤掉领域词、留下噪声，每个阈值不是踩绊线就是杀召回。
- * 同一个统计量反过来用才对。
- */
-let domainTermsCache: Set<string> | null = null;
-
-function domainTerms(): Set<string> {
-  if (domainTermsCache) return domainTermsCache;
-  const df = new Map<string, number>();
-  for (const meta of loadIndex()) {
-    const seen = new Set<string>();
-    for (const raw of [...meta.keywords, ...meta.applies_to]) {
-      const t = String(raw); // YAML 会把 `12351` 这类词条解析成 number，见 index 校验那条
-      for (let L = MIN_KEYWORD_LEN; L <= t.length; L += 1) {
-        seen.add(t.slice(0, L));
-        seen.add(t.slice(-L));
-      }
-    }
-    for (const f of seen) df.set(f, (df.get(f) ?? 0) + 1);
-  }
-  domainTermsCache = new Set([...df].filter(([, n]) => n >= DOMAIN_MIN_DF).map(([f]) => f));
-  return domainTermsCache;
-}
-
-/**
- * 这个**匹配上的片段**够不够"领域"？——`df` 高＝它是本领域的核心词。
- *
- * 【为什么卡片段而不是卡 query】2026-08-29 我先做成了 query 级领域闸（query 不含领域词就空手），
- * 实测当场自毁：**它挡掉 10/36 条合法用例，包括旗舰句「我干了5年月薪2万被裁该赔多少」**——
- * 因为那道闸用的正是答案侧那套词表，**用户说口语过不了闸，和原问题一模一样**。
- * 一道用来救"用户不会说卡的话"的闸，自己要求用户会说卡的话。
- *
- * 卡片段才对：绊线的失败形态是共享片段本身是通用词——
- * `今天`(df=1) / `财产`(df=2) 授权了「今天天气」「离婚财产」；
- * 而合法匹配的片段是 `协议`(df=18) / `裁决`(df=11)。**分界在片段，不在整句。**
- */
-function fragmentIsDomainBearing(fragment: string): boolean {
-  return domainTerms().has(fragment);
-}
-
-/**
- * 词级双向包含。
- *
- * 【原来为什么不够】原实现只有整句互为子串：keyword 必须**逐字出现在用户那句话里**。
- * 于是用户说「公司让我签协议」而卡的词是「解除协议」——差两个字，全不命中。
- * 2026-08-29 实测：用户口语侧应召回 17%，而把同一批问题改用卡的词表说法（孪生臂）是 100%。
- * **索引是按答案的词表建的，用户说人话就捞不到。**
- *
- * 【放宽到词缀，不放宽到任意子串】只认 term 的**词头或词尾**与 query 共享 ≥2 字。
- * 中文复合词多是头核或尾核（解除**协议** / **签字**前审查 / 撤销**裁决**），
- * 用户说的通常正是那个核心词；而任意位置的内部片段更多是巧合。
- */
-type MatchKind = 'exact' | 'affix' | null;
-
-function matchKind(term: string, query: string): MatchKind {
-  if (term.length < MIN_KEYWORD_LEN) return null;
-  if (query.includes(term) || term.includes(query)) return 'exact';
-  for (let L = term.length; L >= MIN_KEYWORD_LEN; L -= 1) {
-    for (const frag of [term.slice(0, L), term.slice(-L)]) {
-      if (query.includes(frag) && fragmentIsDomainBearing(frag)) return 'affix';
-    }
-  }
-  return null;
-}
-
+/** 互为子串即算命中：既让「调岗」命中 keyword「调岗降薪」，也让「经济补偿金个税」命中 keyword「经济补偿」 */
 function matches(term: string, query: string): boolean {
-  return matchKind(term, query) !== null;
+  return term.length >= MIN_KEYWORD_LEN && (query.includes(term) || term.includes(query));
 }
 
 /**
@@ -266,8 +177,8 @@ function matches(term: string, query: string): boolean {
  */
 export function isSubstantiveHit(pack: Pick<PackMeta, 'keywords' | 'applies_to'>, query: string): boolean {
   return (
-    (pack.keywords ?? []).some((kw) => matches(String(kw), query)) ||
-    (pack.applies_to ?? []).some((scene) => matches(String(scene), query))
+    (pack.keywords ?? []).some((kw) => matches(kw, query)) ||
+    (pack.applies_to ?? []).some((scene) => matches(scene, query))
   );
 }
 
@@ -278,20 +189,8 @@ export function countSubstantiveHits(packs: Pick<PackMeta, 'keywords' | 'applies
 
 function scoreOf(meta: PackMeta, query: string, queryBigrams: Set<string>): number {
   let score = 0;
-  // 【词缀命中必须比精确命中低分】否则放宽之后大量卡拿到同样的 +3，
-  // limit=8 被挤爆，**原本精确命中的卡反而被挤出去**——2026-08-29 实测踩过：
-  // 放宽后 S04-t1 / S07-t1 这两条原本双中的用例退化成不中。
-  // 放宽的代价不该由已经匹对的那些付。
-  for (const kw of meta.keywords) {
-    const k = matchKind(String(kw), query);
-    if (k === 'exact') score += SCORE_KEYWORD;
-    else if (k === 'affix') score += SCORE_KEYWORD * AFFIX_DISCOUNT;
-  }
-  for (const scene of meta.applies_to) {
-    const k = matchKind(String(scene), query);
-    if (k === 'exact') score += SCORE_APPLIES_TO;
-    else if (k === 'affix') score += SCORE_APPLIES_TO * AFFIX_DISCOUNT;
-  }
+  for (const kw of meta.keywords) if (matches(kw, query)) score += SCORE_KEYWORD;
+  for (const scene of meta.applies_to) if (matches(scene, query)) score += SCORE_APPLIES_TO;
   if (queryBigrams.size > 0) {
     const title = bigrams(meta.title);
     let overlap = 0;
