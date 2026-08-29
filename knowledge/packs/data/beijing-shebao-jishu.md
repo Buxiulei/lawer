@@ -2,7 +2,7 @@
 id: data-beijing-shebao-jishu
 type: 数据卡
 title: 北京市社保缴费工资基数上下限（2025 年度：上限 35,811 / 下限 7,162）
-keywords: [社保基数, 缴费基数, 上下限, 35811, 7162, 全口径, 城镇单位就业人员平均工资, 三倍, 60%]
+keywords: [社保基数, 缴费基数, 上下限, "35811", "7162", 全口径, 城镇单位就业人员平均工资, 三倍, 60%]
 applies_to: [社保断缴, 欠薪, 裁员, 证据固定]
 law_refs: []
 related: [data-beijing-shepin-fengding, statute-jgf-2024-534-jieda-1, calc-jingji-buchang-n, data-beijing-zuidi-gongzi, calc-jiabanfei, calc-nianjia-300]

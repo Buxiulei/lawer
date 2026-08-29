@@ -2,7 +2,7 @@
 id: calc-daigang-gongzi
 type: 计算规则
 title: 待岗/停工停产期间工资的计算（北京：首个支付周期全额，之后生活费≥最低工资70%）
-keywords: [待岗, 停工停产, 基本生活费, 一个工资支付周期, 70%, 1778, 北京市工资支付规定第27条]
+keywords: [待岗, 停工停产, 基本生活费, 一个工资支付周期, 70%, "1778", 北京市工资支付规定第27条]
 applies_to: [待岗停工, 调岗降薪, 逼迫离职, 欠薪]
 law_refs: [北京市工资支付规定§27, 北京市工资支付规定§26, 劳动合同法§38, 京高法发〔2024〕534号§57, 京高法发〔2024〕534号§80]
 related: [data-beijing-zuidi-gongzi, calc-jingji-buchang-n, statute-lhtf-38-beipo-jiechu, statute-jgf-2024-534-jieda-1, calc-bingjia-gongzi]

@@ -2,7 +2,7 @@
 id: sop-caijue-yicaizhongju
 type: 流程SOP
 title: 收到仲裁裁决书：送达、生效、一裁终局判断与 15 日起诉期限
-keywords: [仲裁裁决书, 送达回证, 签收日期, 一裁终局, 30480, 15日起诉, 撤销裁决, 生效证明, 补正决定书]
+keywords: [仲裁裁决书, 送达回证, 签收日期, 一裁终局, "30480", 15日起诉, 撤销裁决, 生效证明, 补正决定书]
 applies_to: [裁决与终局, 一审二审, 执行, 仲裁申请]
 law_refs: [劳动争议调解仲裁法§46, 劳动争议调解仲裁法§47, 劳动争议调解仲裁法§48, 劳动争议调解仲裁法§49, 劳动争议调解仲裁法§50, 劳动人事争议仲裁办案规则§20, 劳动人事争议仲裁办案规则§50, 劳动人事争议仲裁办案规则§53, 劳动人事争议仲裁办案规则§54, 京高法发〔2024〕534号§9, 京高法发〔2024〕534号§12]
 related: [data-beijing-zuidi-gongzi, statute-jgf-2024-534-jieda-1, sop-yishen-ersheng-sop, sop-zhixing-sop, template-minshi-qisuzhuang]

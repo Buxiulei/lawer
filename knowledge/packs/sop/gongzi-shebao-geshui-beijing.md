@@ -2,7 +2,7 @@
 id: sop-gongzi-shebao-geshui-beijing
 type: 流程SOP
 title: 工资流水/社保记录/个税明细的北京获取路径
-keywords: [银行流水, 个人所得税APP, 收入纳税明细, 社保个人权益记录, 参保证明, 公积金, 考勤记录, 12333]
+keywords: [银行流水, 个人所得税APP, 收入纳税明细, 社保个人权益记录, 参保证明, 公积金, 考勤记录, "12333"]
 applies_to: [证据固定, 社保断缴, 欠薪, 加班费, 逼迫离职, 仲裁申请]
 law_refs: [劳动争议调解仲裁法§6, 民事诉讼证据规定§95, 京高法发〔2024〕534号§55, 京高法发〔2024〕534号§71]
 related: [statute-jgf-2024-534-jieda-1, statute-lhtf-38-beipo-jiechu, calc-jingji-buchang-n, sop-dianzi-shuju-guzheng, sop-zhengren-yu-zhengju-qingdan]

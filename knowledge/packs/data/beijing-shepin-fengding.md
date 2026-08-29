@@ -2,7 +2,7 @@
 id: data-beijing-shepin-fengding
 type: 数据卡
 title: 北京经济补偿三倍封顶基数与个税免征上限（含两套社平口径区分）
-keywords: [社平工资, 三倍封顶, 47103, 法人单位从业人员, 全口径, 社保基数, 个税免征]
+keywords: [社平工资, 三倍封顶, "47103", 法人单位从业人员, 全口径, 社保基数, 个税免征]
 applies_to: [裁员, 协商解除, 逼迫离职]
 related: [calc-jingji-buchang-n]
 region: 北京
