@@ -42,7 +42,9 @@ fi
 # 于是它在单提交 PR 上**完全不起作用**——而它自己的引入提交（8d11122）就是单提交 PR，
 # 落地标题取的是提交 subject，我传进去的标题一个字都没用上。
 # 一个"看起来结构化"的机制，在它自己的第一次使用上就是空的。
-gh pr merge "$pr" --squash --delete-branch --subject "$title"
+# **`(#PR号)` 要自己带上**：gh 只在不给 --subject 时才追加它；一给 --subject 就原样照用。
+# 少了这个后缀，这条提交就没法从 git log 追回它的 PR——main 上其余每条都有。
+gh pr merge "$pr" --squash --delete-branch --subject "$title (#$pr)"
 
 # 自证：合完回读 main 的首行，标题对不上就喊。
 # 守卫不验自己的效果，就只是一段和问题并存的代码。
