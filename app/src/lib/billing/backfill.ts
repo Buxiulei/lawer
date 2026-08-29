@@ -11,7 +11,9 @@
 //  2) **不许拿 0 冒充**：tokens_json 里四桶全 null 的轮（当时就没回报计量）**不补**，单列计数——
 //     补一行 0 成本等于宣称那几轮免费，而真相是花了多少无从得知（llm/types.ts 铁律）。
 //  3) **默认只算不写**：apply=false 时一行不落，只出报告。钱的操作不给「顺手就执行」的机会。
-import BetterSqlite3, { type Database } from 'better-sqlite3';
+import { type Database } from 'better-sqlite3';
+
+import { openCliDb, rethrowIfSchemaStale } from '../db/cli-open';
 
 import { getRatesForModel } from '../db/modelRates';
 import { gongdaoSettle, recordTokenUsage, turnRefId } from './index';
@@ -146,11 +148,15 @@ export function backfillTokenUsage(db: Database, apply = false): BackfillReport 
 export function backfillCli(dbPath: string, apply: boolean): number {
   console.log(`[回填] 库：${dbPath}｜模式：${apply ? '写入' : '试算（不写库）'}`);
   // 试算一律只读打开：钱的脚本要让「不写」这件事由文件句柄兜底，而不是靠代码里记得别写。
-  const db = new BetterSqlite3(dbPath, { readonly: !apply, fileMustExist: true });
+  const db = openCliDb(dbPath, { readonly: !apply, fileMustExist: true });
   db.pragma('foreign_keys = ON');
   let r: BackfillReport;
   try {
     r = backfillTokenUsage(db, apply);
+  } catch (e) {
+    // 试算是只读句柄，跑不了迁移；缺表时把「为什么」和「怎么办」说清楚，别只丢一句 no such table。
+    if (!apply) rethrowIfSchemaStale(e, dbPath);
+    throw e;
   } finally {
     db.close();
   }

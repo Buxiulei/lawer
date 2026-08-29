@@ -210,7 +210,6 @@ export async function reminderCli(
   dbPath: string,
   opts: { apply: boolean; smokeTo?: string },
 ): Promise<number> {
-  const { default: BetterSqlite3 } = await import('better-sqlite3');
   const { sendMail } = await import('./index');
 
   // 【冒烟投递为什么不走真实扫描】manager 要的是"验证真的能发出去、文案对"。
@@ -228,7 +227,10 @@ export async function reminderCli(
   }
 
   const { startRun, finishRun } = await import('../db/job-runs');
-  const db = new BetterSqlite3(dbPath);
+  // 【为什么在这里跑迁移】cron 可能先于任何 HTTP 请求碰到滚更后的库，
+  // 而迁移是 app 侧惰性的 ⇒ 不显式跑，就会崩在 `no such table` 上，且是**静默崩在日志里**。
+  const { openCliDb } = await import('../db/cli-open');
+  const db = openCliDb(dbPath);
   db.pragma('foreign_keys = ON');
 
   // 【干跑不留痕】job_runs 记的是"这轮真的做了什么"。干跑什么都没做，

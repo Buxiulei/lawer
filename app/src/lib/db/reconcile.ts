@@ -3,6 +3,8 @@
 // CLI 入口在仓库根 scripts/reconcile.ts（那里只做「定位库 + 退出码」，逻辑全在这里，可单测）。
 import Database from 'better-sqlite3';
 
+import { openCliDb, rethrowIfSchemaStale } from './cli-open';
+
 /** 余额行与流水按 user_id 全外连（SQLite 无 FULL JOIN，用 UNION 取并集再左连两侧）。 */
 const SQL_BALANCES = `
   SELECT u.user_id AS user_id,
@@ -182,10 +184,12 @@ export function reconcile(db: Database.Database): ReconcileReport {
  */
 export function reconcileCli(dbPath: string): number {
   console.log(`[对账] 库：${dbPath}`);
-  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  const db = openCliDb(dbPath, { readonly: true, fileMustExist: true });
   let report: ReconcileReport;
   try {
     report = reconcile(db);
+  } catch (e) {
+    rethrowIfSchemaStale(e, dbPath); // 恒只读，跑不了迁移
   } finally {
     db.close();
   }
