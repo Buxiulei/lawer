@@ -212,9 +212,15 @@ function freePort(): Promise<number> {
   });
 }
 
-/** 起一个只管 listen 的子进程，READY 后把控制权交回来；回调结束即杀掉。 */
+/**
+ * 起一个只管 listen 的子进程，READY 后把控制权交回来；回调结束即杀掉。
+ *
+ * `env` 是**要额外叠加的几个变量**，不是一整份环境，所以类型只能是
+ * `Record<string, string>`：本仓 `NodeJS.ProcessEnv` 被 Next 的 env 类型收窄成
+ * 带必填键（NODE_ENV），传 `{ LISTEN_BACKLOG }` / `{}` 会直接 TS2345 编译不过。
+ */
 async function withListeningChild(
-  env: NodeJS.ProcessEnv,
+  env: Record<string, string>,
   args: string[],
   fn: (port: number) => void
 ): Promise<void> {

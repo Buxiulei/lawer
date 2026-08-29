@@ -65,6 +65,16 @@ const net = require('node:net');
  * 端口解析。刻意用 `parseInt` 而非 `Number`：**照抄 Next standalone server.js
  * 的 `parseInt(process.env.PORT, 10) || 3000`**。两边解析规则必须字面一致，
  * 否则形如 `PORT=8080x` 时 Next 听 8080、我们瞄 3000，注入静默落空。
+ *
+ * ⚠️ **这与下面 `callerSuppliedBacklog` 里的 `Number` 不对称，是有意的，别去"统一"**：
+ * 那边判的是「这个位置参数是不是 backlog」，宽松的 parseInt 会把 host 字符串
+ * `'127.0.0.1'` 读成 127（详见该函数注释，实测踩过）；这边判的是「主端口是谁」，
+ * 必须跟 Next 一样宽松。两个问题不同，答案本就该不同。
+ *
+ * 宽松在这边不会误伤 pipe/unix socket：`listen(path)` 的 path 走到这里也会被
+ * parseInt，但要误判成主端口得让 path **以 PORT 的数字开头**（如 `'3000.sock'`），
+ * 而 unix socket 路径实际都是绝对路径（`/run/…`、`/tmp/…`）⇒ NaN ⇒ 返回 null 原样放行；
+ * 且本服务只听 TCP，进程内根本没有 pipe 形态的 listen。
  */
 function toPort(value) {
   if (typeof value !== 'number' && typeof value !== 'string') return null;
