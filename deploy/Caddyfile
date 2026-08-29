@@ -1,4 +1,11 @@
 # lawer 反向代理配置（Caddy 2）
+#
+# ⚠️ 本文件是**模板，不是生产生效文件**。
+#   生产真源 = 服务器上的 /etc/caddy/conf.d/lawer.caddy（裸 systemd 跑的 caddy，不是 docker，
+#   基建勘查实证）。改了这里，线上一个字节都不会变。
+#   上产流程：滚版窗把本模板的 request_body 段同步进那个文件，再 `caddy reload`。
+#   ⇒ 只改本文件就宣称"上传体积闸已生效"是假的；没同步过去之前，线上仍是旧上限。
+#
 # 域名与邮箱由 compose 以环境变量注入（deploy/.env）：LAWER_DOMAIN / LAWER_ACME_EMAIL
 # 自动 HTTPS（Let's Encrypt）。容器内以服务名访问 web，不用 localhost。
 
@@ -31,21 +38,28 @@
 	# 上传路径在应用侧会把文件复制 4~6 份（formData 缓冲 → arrayBuffer → Buffer →
 	# 密文 → 写缓冲），进程跑在 cgroup MemoryMax=1280M 里，原先站点级 100MB 对全路由
 	# 生效，两个并发的大上传就能把进程顶到 OOM kill，挂的是整站所有人的会话。
-	# 所以按路由分开卡：
-	#   · 证据上传 30MB —— 比应用侧 25MiB 上限略宽，留给 multipart 边界与字段头，
-	#     好让「超限」由应用回一条说得清原因的 413，而不是 Caddy 直接掐断连接
-	#     （那样用户只看到「上传失败」，不知道为什么、也不知道该怎么办）。
-	#   · 其余路由 2MB —— 聊天与 REST 都是 JSON，最大的请求体也就几十 KB。
+	# 所以按路由分开卡。**上传路径是一个集合，不是一条**：
+	#   · /api/v1/evidence*                 证据上传（应用侧单次 25MiB）
+	#   · /api/v1/realname/passport*        护照实名：两份必填材料各上限 8MiB，
+	#     一次提交合起来能到 16MiB+。漏掉它、让它落进默认 2MB，等于**每一次护照实名提交都被掐死**
+	#     ——而护照通道存在的全部理由就是"只有护照的人根本没有阿里云那扇门"，
+	#     掐死它 = 境外证件者的整条固化链路归零。
+	# 这两条一律 30MB —— 比应用侧 25MiB 上限略宽，留给 multipart 边界与字段头，
+	# 好让「超限」由应用回一条说得清原因的 413，而不是 Caddy 直接掐断连接
+	# （那样用户只看到「上传失败」，不知道为什么、也不知道该怎么办）。
+	# 其余路由 2MB —— 聊天与 REST 都是 JSON，最大的请求体也就几十 KB。
+	#
 	# 两个匹配器写成互斥的，不靠 request_body 的先后覆盖关系（同名指令叠加时以更严的为准，
-	# 靠顺序会把证据路由也收成 2MB）。
-	@evidence path /api/v1/evidence*
-	@non_evidence {
-		not path /api/v1/evidence*
+	# 靠顺序会把上传路由也收成 2MB）。
+	# ⇒ 以后新增上传路由，两处 path 列表必须同时加，少加一处就是"默认 2MB 静默掐断"。
+	@uploads path /api/v1/evidence* /api/v1/realname/passport*
+	@non_uploads {
+		not path /api/v1/evidence* /api/v1/realname/passport*
 	}
-	request_body @evidence {
+	request_body @uploads {
 		max_size 30MB
 	}
-	request_body @non_evidence {
+	request_body @non_uploads {
 		max_size 2MB
 	}
 
