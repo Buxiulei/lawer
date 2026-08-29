@@ -136,6 +136,19 @@ def main() -> None:
             die(f"{path} type 非法：{fm['type']}")
         if fm["confidence"] not in CONFIDENCES:
             die(f"{path} confidence 非法：{fm['confidence']}")
+        # 【类型闸】keywords / applies_to 的每一项必须是**字符串**。
+        #   检索端 matches() 首条是 `term.length >= MIN_KEYWORD_LEN`，
+        #   而 JS 里 `(2032).length` 是 undefined、`undefined >= 2` 恒为 false
+        #   ⇒ 数字词**从不参与匹配，且全程不报错**：卡片里有、index.json 里有、
+        #   本脚本也曾放行——唯一的发现处是"拿它去搜搜不到"，而没人会去搜 87983310。
+        #   2026-08-29 一次性修了 21 张卡 31 个词（YAML 把 `21.75` 解析成 float）。
+        #   **修卡治已病，这道闸治未病**：写 `keywords: [2032]` 当场拒绝生成，
+        #   而不是安静地生成一个少了一个词的索引。
+        for _f in ("keywords", "applies_to"):
+            for _v in fm.get(_f) or []:
+                if not isinstance(_v, str):
+                    die(f"{path} {_f} 含非字符串项 {_v!r}（{type(_v).__name__}）："
+                        f"检索按子串匹配，非字符串项永远不会命中。请加引号写成 \"{_v}\"")
         if fm["id"] in seen_ids:
             die(f"id 重复 {fm['id']}：{seen_ids[fm['id']]} 与 {path}")
         seen_ids[fm["id"]] = path
