@@ -40,10 +40,24 @@ export interface Plan {
   detailed: boolean;
 }
 
-/** 整天数差：按日历日算，不按 24 小时——用户感知的是"还剩几天"不是"还剩几小时" */
+/**
+ * 整天数差：按日历日算，不按 24 小时——用户感知的是"还剩几天"不是"还剩几小时"。
+ *
+ * 【"今天"取**本地**日历日，不取 UTC 日】due_at 是一个本地日历日（'2026-09-04'，
+ * 北京口径），所以"今天"也必须是本地日历日，两边才在同一把尺子上。
+ * 第一版用 now.toISOString().slice(0,10) 取 UTC 日：在 CST 的 00:00–08:00 之间，
+ * UTC 还停在昨天 ⇒ 今天被算小一天 ⇒ daysLeft **整体多 1**。
+ * 后果不是显示难看，是**档位错位**：真剩 1 天会被算成 2 天，逐日加码档（≤1 天才进）
+ * 那一天不触发——而那正是不可回复类期限最不能漏的一天。
+ * 当前 cron 挂在 09:30（UTC 01:30，同日）故未爆；改时间、补跑、临时手动跑都会踩上。
+ *
+ * 做法：用 getFullYear/getMonth/getDate 取本地年月日，再用 Date.UTC 搬到 UTC 零点，
+ * 与同样按 UTC 零点解析的 due 对齐 ⇒ 差值恒为整天，且不受夏令时影响。
+ * 前提：进程时区 = Asia/Shanghai（生产服务器如此；测试里显式 pin）。
+ */
 export function daysUntil(dueAt: string, now: Date): number {
   const due = new Date(`${dueAt.slice(0, 10)}T00:00:00Z`).getTime();
-  const today = new Date(`${now.toISOString().slice(0, 10)}T00:00:00Z`).getTime();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
   return Math.round((due - today) / 86400000);
 }
 
