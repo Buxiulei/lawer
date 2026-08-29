@@ -5,7 +5,7 @@
 // 多发一封 = 打扰；漏发一封 = 用户错过仲裁时效，**权利灭失，没有救济**。
 // 所以每一条"不发"的分支都要单独钉住，而"多发"只需要不至于每分钟轰炸。
 import Database from 'better-sqlite3';
-import { beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import { runMigrations } from '../../db/migrate';
 import {
@@ -58,6 +58,65 @@ describe('天数按日历日算', () => {
   test('带时分秒也只看日期部分 —— 用户感知的是"还剩几天"不是"还剩几小时"', () => {
     expect(daysUntil('2026-09-02T23:59:59Z', NOW)).toBe(1);
     expect(daysUntil('2026-09-02T00:00:01Z', NOW)).toBe(1);
+  });
+});
+
+describe('🔴 "今天"取本地日历日 —— CST 00:00–08:00 那一段不能多算一天', () => {
+  // 时区必须 pin：这个函数的契约就是"按本地日历日"，跑在 UTC runner 上结论会不同。
+  // 生产进程时区 = Asia/Shanghai。写法照抄 calc/__tests__ 既有模式。
+  const originalTz = process.env.TZ;
+  beforeEach(() => { process.env.TZ = 'Asia/Shanghai'; });
+  afterEach(() => {
+    if (originalTz === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTz;
+  });
+
+  /**
+   * 修复前的实现，逐字保留当**对照臂**。
+   * 没有它，"新实现给 3"只是一句和判据并存的文字——看不出修的是哪一段、修没修着。
+   */
+  function daysUntilUtcLegacy(dueAt: string, now: Date): number {
+    const due = new Date(`${dueAt.slice(0, 10)}T00:00:00Z`).getTime();
+    const today = new Date(`${now.toISOString().slice(0, 10)}T00:00:00Z`).getTime();
+    return Math.round((due - today) / 86400000);
+  }
+
+  // 本地 2026-09-01 00:30 CST。UTC 此刻还停在 08-31 16:30 —— 正是出问题的那一段。
+  const AT_0030 = new Date('2026-08-31T16:30:00Z');
+  // 本地 2026-09-01 09:30 CST（当前 cron 时刻）。UTC 已跨到 09-01，本地/UTC 同日。
+  const AT_0930 = new Date('2026-09-01T01:30:00Z');
+  const DUE = '2026-09-04'; // 本地今天 + 3 天
+
+  test('先验量具：TZ 真的 pin 住了，两个时刻的本地日历日都是 09-01', () => {
+    // 【先审量具再信读数】TZ 若没生效，下面两条会变成互相抵消的假绿。
+    for (const t of [AT_0030, AT_0930]) {
+      expect(t.getFullYear()).toBe(2026);
+      expect(t.getMonth()).toBe(8); // 9 月
+      expect(t.getDate()).toBe(1);
+    }
+    // 而 UTC 日在这两个时刻是分裂的 —— 这才是 bug 存在的前提
+    expect(AT_0030.toISOString().slice(0, 10)).toBe('2026-08-31');
+    expect(AT_0930.toISOString().slice(0, 10)).toBe('2026-09-01');
+  });
+
+  test('🔑 本地 00:30：旧实现给 4（多算一天），新实现必须给 3', () => {
+    expect(daysUntilUtcLegacy(DUE, AT_0030)).toBe(4);
+    expect(daysUntil(DUE, AT_0030)).toBe(3);
+  });
+
+  test('本地 09:30：新旧一致（都是 3）—— 修的是那一段，不是全域', () => {
+    expect(daysUntilUtcLegacy(DUE, AT_0930)).toBe(3);
+    expect(daysUntil(DUE, AT_0930)).toBe(3);
+  });
+
+  test('🔑 00:30 时 daysLeft=1 才会进逐日加码档 —— 多算一天等于那天不发', () => {
+    // 这条把"算错一天"翻译成它真正的后果：不可回复类期限在最后一天静默不提醒。
+    const r = row({ kind: '仲裁时效', due_at: '2026-09-02' }); // 本地今天 + 1
+    expect(daysUntilUtcLegacy(r.due_at, AT_0030)).toBe(2);     // 旧：2 天 ⇒ 走不到 ≤1 的加码档
+    expect(stageFor(r, AT_0030)).toMatchObject({ daysLeft: 1 });
+    // 这里**故意不断言 stageKey**：逐日键仍取 UTC 日（stageFor 里的
+    // now.toISOString()），00:30 时会写成 'daily-2026-08-31'。那是同源的另一处，
+    // 本单只改 daysUntil，留给后续单据；在此点名，免得下一个人以为已经修过。
   });
 });
 
