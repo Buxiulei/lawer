@@ -30,13 +30,30 @@ state="$(gh pr view "$pr" --json state --jq .state)"
 [ "$state" = "OPEN" ] || { echo "PR #$pr 状态是 $state，不是 OPEN，不合。" >&2; exit 1; }
 
 if [ "$old" != "$title" ]; then
-  echo "标题将改写："
+  echo "PR 标题将改写："
   echo "  旧：$old"
   echo "  新：$title"
   gh pr edit "$pr" --title "$title"
-else
-  echo "标题未变：$title"
 fi
 
-gh pr merge "$pr" --squash --delete-branch
-echo "已合。main = $(git -C "$(git rev-parse --show-toplevel)" rev-parse --short HEAD 2>/dev/null || echo '(需 git pull)')"
+# **落地标题由 --subject 直接指定**，不靠 PR 标题。
+# 【为什么不能只改 PR 标题】squash 的落地标题来源不止一处：**PR 多个提交时用 PR 标题，
+# 只有一个提交时用那个提交的 subject**。本脚本第一版只做了 `gh pr edit --title`，
+# 于是它在单提交 PR 上**完全不起作用**——而它自己的引入提交（8d11122）就是单提交 PR，
+# 落地标题取的是提交 subject，我传进去的标题一个字都没用上。
+# 一个"看起来结构化"的机制，在它自己的第一次使用上就是空的。
+gh pr merge "$pr" --squash --delete-branch --subject "$title"
+
+# 自证：合完回读 main 的首行，标题对不上就喊。
+# 守卫不验自己的效果，就只是一段和问题并存的代码。
+root="$(git rev-parse --show-toplevel)"
+git -C "$root" fetch -q origin
+landed="$(git -C "$root" log -1 --format=%s origin/main)"
+expected="$title (#$pr)"
+if [ "$landed" != "$expected" ]; then
+  echo "⚠ 落地标题与预期不符——请人工核对后决定是否补勘误：" >&2
+  echo "  预期：$expected" >&2
+  echo "  实际：$landed" >&2
+  exit 1
+fi
+echo "已合并且标题核对通过：$landed"
