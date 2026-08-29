@@ -1,0 +1,27 @@
+{
+  "_doc": [
+    "用户口语 → 卡词表规范词的定点映射（检索 P0 ③，manager 2026-08-29 批）。",
+    "",
+    "【为什么要有它】索引按答案的词表建，用户说人话就捞不到：",
+    "  「我干了5年月薪2万被裁该赔多少」实质命中 0，「经济补偿金 N 的计算」8/8。",
+    "先试过②词级双向包含（无差别放宽），扫遍参数证明死路——",
+    "2 字中文片段既带来全部召回也带来全部广度爆炸（中位 1→25），两个轴都分不开。",
+    "别名是**定点**的：只加意图内的匹配，广度不动。",
+    "",
+    "【进表规矩（manager 定）】每条必须带 source——由哪对孪生/哪条真实 query 驱动。",
+    "**没有出处的别名不许进表**，否则它会变成新的无差别放宽倾倒场。",
+    "",
+    "【canonical 必须是卡里真实存在的词】加载时校验，不存在即拒绝启动——",
+    "一条指向不存在规范词的别名是死重，而它不报错、只是静默不生效。"
+  ],
+  "entries": [
+    { "alias": "被裁", "canonical": "裁员", "source": "孪生对 rw-caiyuan-1 / rw-peichang-1 / rw-peichang-2" },
+    { "alias": "优化", "canonical": "裁员", "source": "rw-caiyuan-3（公司用语，用户照搬）" },
+    { "alias": "月薪", "canonical": "月工资", "source": "rw-peichang-2 旗舰句（manager 点名：产品存在的理由）" },
+    { "alias": "赔多少", "canonical": "经济补偿", "source": "rw-peichang-1 / rw-peichang-2" },
+    { "alias": "怀孕", "canonical": "孕期", "source": "rw-misc-2（manager 必修项）" },
+    { "alias": "调到外地", "canonical": "异地调动", "source": "rw-misc-2" },
+    { "alias": "直接不干", "canonical": "被迫解除", "source": "rw-misc-1（用户打算辞职，需拦住走38条）" },
+    { "alias": "催我签", "canonical": "签字前审查", "source": "rw-cuiqian-1" }
+  ]
+}

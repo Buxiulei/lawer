@@ -145,6 +145,66 @@ function loadContent(meta: PackMeta): string {
   return content;
 }
 
+/**
+ * 用户口语 → 卡词表规范词的**定点**映射（检索 P0 ③）。
+ *
+ * 【为什么不是无差别放宽】② 词级双向包含扫遍参数被证死路：
+ * 2 字中文片段既带来全部召回（应召回 11→20）也带来全部广度爆炸（真实广度中位 1→25），
+ * 长度轴与占比轴都分不开二者。别名只加**意图内**的匹配，广度不动。
+ *
+ * 【实现方式：扩 query，不改匹配语义】命中别名就把规范词追加到 query 上，
+ * 之后仍走原来的整句子串匹配。匹配规则一个字没变 ⇒ 广度的增量**上界就是别名表本身**，
+ * 不会随语料或 query 长度膨胀。
+ */
+interface AliasEntry {
+  readonly alias: string;
+  readonly canonical: string;
+  readonly source: string;
+}
+
+let aliasCache: AliasEntry[] | null = null;
+
+function loadAliases(): AliasEntry[] {
+  if (aliasCache) return aliasCache;
+  const file = path.join(resolveKnowledgeDir(), 'aliases.json');
+  if (!fs.existsSync(file)) {
+    aliasCache = [];
+    return aliasCache;
+  }
+  const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as { entries?: AliasEntry[] };
+  const entries = raw.entries ?? [];
+  const vocabulary = new Set<string>();
+  for (const meta of loadIndex()) {
+    for (const t of [...meta.keywords, ...meta.applies_to]) vocabulary.add(String(t));
+  }
+  for (const e of entries) {
+    if (!e.alias || !e.canonical) {
+      throw new Error(`aliases.json 有条目缺 alias/canonical：${JSON.stringify(e)}`);
+    }
+    // 【出处是硬约束，不是文档】没有出处的别名会让这张表变成无差别放宽的倾倒场，
+    // 而那正是 ② 被撤的原因。拒绝启动，不静默跳过。
+    if (!e.source?.trim()) {
+      throw new Error(`aliases.json 的「${e.alias}→${e.canonical}」缺 source：每条别名必须写明由哪对孪生／哪条真实 query 驱动`);
+    }
+    // 【规范词必须真实存在】指向不存在的词是死重，而它**不报错、只是静默不生效**——
+    // 有人会以为这条别名在起作用。宁可拒绝启动。
+    if (!vocabulary.has(e.canonical)) {
+      throw new Error(`aliases.json 的「${e.alias}→${e.canonical}」：规范词不在任何卡的词表里，这条别名不会生效`);
+    }
+  }
+  aliasCache = entries;
+  return aliasCache;
+}
+
+/** 命中别名就把规范词接到 query 尾部；没命中则原样返回 */
+function expandQuery(query: string): string {
+  let out = query;
+  for (const e of loadAliases()) {
+    if (query.includes(e.alias) && !query.includes(e.canonical)) out += ` ${e.canonical}`;
+  }
+  return out;
+}
+
 /** 字符二元组集合：中文没有空格分词，二元组是不引依赖又能反映词序的最简近似 */
 function bigrams(text: string): Set<string> {
   const out = new Set<string>();
@@ -175,7 +235,8 @@ function matches(term: string, query: string): boolean {
  * 判据与产线各自独立判"模型做得对不对"，那是监督，要两把尺；
  * 而"这张卡算不算实质命中"是**同一件事**，只能有一把尺。
  */
-export function isSubstantiveHit(pack: Pick<PackMeta, 'keywords' | 'applies_to'>, query: string): boolean {
+export function isSubstantiveHit(pack: Pick<PackMeta, 'keywords' | 'applies_to'>, rawQuery: string): boolean {
+  const query = expandQuery(rawQuery);
   return (
     (pack.keywords ?? []).some((kw) => matches(kw, query)) ||
     (pack.applies_to ?? []).some((scene) => matches(scene, query))
@@ -224,8 +285,8 @@ function typeRank(type: string): number {
  * 同分先按类型优先序（依据优先）再按 id 字典序，保证同一 query 每次输出一致。
  */
 export function search(query: string, opts: SearchOptions = {}): PackHit[] {
-  const q = query.trim();
-  if (!q) {
+  const q = expandQuery(query.trim());
+  if (!query.trim()) {
     throw new Error('knowledge.search 的 query 不能为空：调用方需先确认用户诉求关键词');
   }
   const queryBigrams = bigrams(q);
@@ -263,4 +324,5 @@ export function __resetForTest(): void {
   knowledgeDir = null;
   packIndex = null;
   contentCache.clear();
+  aliasCache = null; // 别名缓存也要清——不清的话测试里换表根本不生效，而它不报错
 }
