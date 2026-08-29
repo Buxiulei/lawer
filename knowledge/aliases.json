@@ -15,13 +15,65 @@
     "一条指向不存在规范词的别名是死重，而它不报错、只是静默不生效。"
   ],
   "entries": [
-    { "alias": "被裁", "canonical": "裁员", "source": "孪生对 rw-caiyuan-1 / rw-peichang-1 / rw-peichang-2" },
-    { "alias": "优化", "canonical": "裁员", "source": "rw-caiyuan-3（公司用语，用户照搬）" },
-    { "alias": "月薪", "canonical": "月工资", "source": "rw-peichang-2 旗舰句（manager 点名：产品存在的理由）" },
-    { "alias": "赔多少", "canonical": "经济补偿", "source": "rw-peichang-1 / rw-peichang-2" },
-    { "alias": "怀孕", "canonical": "孕期", "source": "rw-misc-2（manager 必修项）" },
-    { "alias": "调到外地", "canonical": "异地调动", "source": "rw-misc-2" },
-    { "alias": "直接不干", "canonical": "被迫解除", "source": "rw-misc-1（用户打算辞职，需拦住走38条）" },
-    { "alias": "催我签", "canonical": "签字前审查", "source": "rw-cuiqian-1" }
+    {
+      "alias": "被裁",
+      "canonical": "裁员",
+      "source": "孪生对 rw-caiyuan-1 / rw-peichang-1 / rw-peichang-2"
+    },
+    {
+      "alias": "优化",
+      "canonical": "裁员",
+      "source": "rw-caiyuan-3（公司用语，用户照搬）"
+    },
+    {
+      "alias": "月薪",
+      "canonical": "月工资",
+      "source": "rw-peichang-2 旗舰句（manager 点名：产品存在的理由）"
+    },
+    {
+      "alias": "赔多少",
+      "canonical": "经济补偿",
+      "source": "rw-peichang-1 / rw-peichang-2"
+    },
+    {
+      "alias": "怀孕",
+      "canonical": "孕期",
+      "source": "rw-misc-2（manager 必修项）"
+    },
+    {
+      "alias": "调到外地",
+      "canonical": "异地调动",
+      "source": "rw-misc-2"
+    },
+    {
+      "alias": "直接不干",
+      "canonical": "被迫解除",
+      "source": "rw-misc-1（用户打算辞职，需拦住走38条）"
+    },
+    {
+      "alias": "催我签",
+      "canonical": "签字前审查",
+      "source": "rw-cuiqian-1"
+    },
+    {
+      "alias": "裁决书",
+      "canonical": "申请执行",
+      "source": "常识口语·文书法定名称——「裁决书」是《调解仲裁法》§51 的用语，也是用户手上那张纸上印的字；卡 sop-zhixing-sop 自身实务段即以此词描述用户处境（「拿到裁决书想着『先跟公司谈谈』，一拖两年」）。凡走到执行阶段的人都用这个词，不是为某道题造的。"
+    },
+    {
+      "alias": "裁决书",
+      "canonical": "仲裁裁决书",
+      "source": "同上。卡 sop-caijue-yicaizhongju 的规范词是「仲裁裁决书」，而用户省略「仲裁」二字是常态；双向子串都不含（『裁决书』⊄『仲裁裁决书』的反向也不成立）⇒ 只差两个字就够不着，必须靠别名接。"
+    },
+    {
+      "alias": "裁决下来",
+      "canonical": "申请执行",
+      "source": "常识口语·文书送达的说法——中文里对法律文书送达普遍说「下来了」（判决下来了/通知下来了）；用户此时往往还没意识到自己已进入执行阶段，所以只会描述文书到达，不会说「申请执行」。"
+    },
+    {
+      "alias": "一分钱没给",
+      "canonical": "强制执行",
+      "source": "常识口语·完全不履行的通用说法。词表规格 docs/design-notes/alias-lexicon-spec.md §4.1 已独立把这句列为「程序阶段被口语化」的样例词条（该文件是方法规格，非评测集）。"
+    }
   ]
 }
