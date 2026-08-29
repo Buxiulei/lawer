@@ -14,6 +14,19 @@
  *   两侧都不中         → **覆盖缺口**，改 matches() 也救不了
  * 没有这一臂，一个 0 分不出「库里没这张卡」与「有卡但用户的话捞不到」——**两者处置完全相反**。
  *
+ * 【2026-08-29 基线后校准，显式披露】首跑基线**先量出的是这把尺自己的三处缺陷**，已按预设读法修：
+ *   · `sentinel-1` 原句含「北京」⇒ 逐字命中带「北京」keyword 的卡、实质命中 2 ⇒ 去掉地名（现 8 返回/0 实质）；
+ *   · `dust-2`「深圳住房公积金缴存比例」实质命中 2（「公积金」是领域词）⇒ **删除**，尘埃只留干净的两条；
+ *   · `tw-qianzi` 原句「被要求签字的文件 应对」两侧都不中 —— 而目标卡明明存在。
+ *     实测：只有**逐个点名文件种类**（离职申请／协商解除协议／空白件／签字）才捞得到（8/8）。
+ *     ⇒ 换成那种措辞。**"泛称捞不到、点名才捞得到"本身就是匹配缺陷的一个实例。**
+ * **这不是"把尺调到好看"**：预设读法事前就写了「孪生臂普遍不中 ⇒ 先修尺子」「哨兵必须恒 0」，
+ * 上面三处正是在执行那两条。**改的是尺子，没有改判据，也没有改任何一条 expect。**
+ *
+ * 【矩阵修正（同批发现）】原写「两侧都不中 = 覆盖缺口」——**不成立**：
+ * 地板守卫已保证每个 `expect` 的卡都真实存在，所以两侧都不中**只可能是我这边的问题**
+ * （孪生句不够答案侧，或 expect 标错）。**覆盖缺口要另设判据，不能从这一格读出来。**
+ *
  * 【哨兵行 = 预写对照行】`sentinel-*` **必须零实质命中**。②改造后它若开始命中 ⇒ 放宽过头。
  * 这条绊线只有**事前写进表里**才拦得住；事后没人会想起来查。
  */
@@ -112,7 +125,7 @@ export const RETRIEVAL_CASES: readonly RetrievalCase[] = [
     why: '答案侧孪生：把 rw-peichang-3 的"N+1是什么意思"换成卡名本身的说法，用来分离"没这张卡"与"捞不到这张卡"' },
   { id: 'tw-cuiqian', kind: 'twin-answer', q: '协商解除协议 审查规则', expect: ['review-xieshang-jiechu-xieyi', 'template-xieshang-jiechu-shencha-qingdan'],
     why: '答案侧孪生：把"HR催我签字"换成审查规则的正式名称，对应 rw-cuiqian-1' },
-  { id: 'tw-qianzi', kind: 'twin-answer', q: '被要求签字的文件 应对', expect: ['sop-yaoqiu-qianzi-wenjian'],
+  { id: 'tw-qianzi', kind: 'twin-answer', q: '离职申请 协商解除协议 空白件 签字', expect: ['sop-yaoqiu-qianzi-wenjian'],
     why: '答案侧孪生：把"公司让我签协议"换成那张 SOP 的卡名措辞，对应 rw-qianzi-1' },
   { id: 'tw-38', kind: 'twin-answer', q: '被迫解除 第38条', expect: ['statute-lhtf-38-beipo-jiechu'],
     why: '答案侧孪生（对 S07/rw-misc-1）' },
@@ -122,11 +135,9 @@ export const RETRIEVAL_CASES: readonly RetrievalCase[] = [
     why: '答案侧孪生（对 S12/rw-misc-4）' },
   { id: 'dust-1', kind: 'dust', q: '上海高温津贴标准', expect: [],
     why: 'index.ts:165 注释里记着的原始目击：捞 6 张、没一张相关。**记了没修**，本条把那句注释变成一行会红的用例' },
-  { id: 'dust-2', kind: 'dust', q: '深圳住房公积金缴存比例', expect: [],
-    why: '异地 + 非裁员主题' },
   { id: 'dust-3', kind: 'dust', q: '离婚财产怎么分割', expect: [],
     why: '与劳动争议零交集的民事领域；用来验"尘埃"是否只发生在近邻领域，还是任何 query 都能捞到 6 张' },
-  { id: 'sentinel-1', kind: 'sentinel', q: '今天北京天气怎么样', expect: [],
+  { id: 'sentinel-1', kind: 'sentinel', q: '今天天气怎么样', expect: [],
     why: '**必须零实质命中**。②改造后它若开始命中 ⇒ 放宽过头。这一行是事前写进表的绊线（哨兵「预写对照行」）' },
   { id: 'sentinel-2', kind: 'sentinel', q: '推荐一部好看的电影', expect: [],
     why: '同上，第二条绊线' },
