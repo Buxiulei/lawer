@@ -500,6 +500,14 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_gongdao_ledger_feature
       ON gongdao_ledger (feature, id DESC)
       WHERE type = '消耗';
+    -- 「我的」页热路径：listGongdaoLedger 每次访问打两条 WHERE user_id=? —— 流水分页
+    -- （ORDER BY id DESC LIMIT）与账本合计 SUM(delta)。本表只追加不删，是全库增长最快的一张；
+    -- 无索引时这两条都是全表 SCAN，代价随**全站**流水总量线性涨，人越多越慢直至拖垮。
+    -- 建成 (user_id, id DESC) 后二者都降为 SEARCH，代价只随**该用户自己**的行数走。
+    -- 排序键写进索引（而不是只索引 user_id）是为了让分页那条直接沿索引倒序取前 N 行，
+    -- 免掉 ORDER BY 的临时 B 树。**不是**部分索引：合计要覆盖全部 type，漏一行余额就对不上。
+    CREATE INDEX IF NOT EXISTS idx_gongdao_ledger_user
+      ON gongdao_ledger (user_id, id DESC);
   `);
 
   // 会员：expires_at 为准判在期与否。order_no 部分唯一索引保证同一支付订单不重复开通
