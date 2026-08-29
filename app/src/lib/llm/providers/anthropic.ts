@@ -4,7 +4,8 @@
 // 与另外三家结构性不同，兼容层套不上。对外仍是统一的 Provider 形态，转换全在本文件内闭合。
 //
 // 不实现 chatJSON：小型 JSON 调用属 bulk 档，按 routing.config.ts 三套餐 bulk 恒不走 Claude。
-// 不做重试/熔断：断流重试语义归 billing 侧后续做（本模块只负责如实抛错与如实计量）。
+// 并发闸与连接期重试走 providers/gate.ts（四家共用）。**流开始后不重试**：
+// 断流一律原样抛出，重复跑一遍会重复计费也会给用户重复正文。
 
 import type {
   ChatMessage,
@@ -19,6 +20,7 @@ import type {
   UsageReport,
 } from '../types';
 import { emptyUsage } from '../types';
+import { acquireSlot, connectWithRetry } from './gate';
 import { createStreamTimers, httpError, sseData } from './sse';
 
 export const ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
@@ -143,8 +145,14 @@ export function createAnthropic(o: ProviderOptions): Provider {
     billingModel,
 
     async chatStream(messages, opts = {}) {
-      const timers = createStreamTimers(opts);
+      // 消息转换（可能抛：缺 tool_call_id / 畸形 arguments）挪到取闸位之前，
+      // 否则那条抛错路径会把闸位和计时器一起漏掉。
       const { system, messages: anthMessages } = toAnthropicRequest(messages);
+      // 与 openai-compat 同一道闸（见 providers/gate.ts）：闸位按 provider 分桶，
+      // 只闸三家不闸 anthropic 等于给最贵的那条路留了个不设防的口子。
+      // 闸位先拿再起计时器：排队时长不该算进空闲/总时长超时。
+      const release = await acquireSlot('anthropic');
+      const timers = createStreamTimers(opts);
       const body: Record<string, unknown> = {
         model: o.model,
         messages: anthMessages,
@@ -162,20 +170,31 @@ export function createAnthropic(o: ProviderOptions): Provider {
       // 这里只在调用方显式指定时才下发，默认不传。
       if (opts.temperature !== undefined) body.temperature = opts.temperature;
 
-      const res = await doFetch(`${base}/messages`, {
-        method: 'POST',
-        headers,
-        signal: timers.signal,
-        body: JSON.stringify(body),
-      }).catch((e) => {
+      const res = await connectWithRetry(
+        () =>
+          doFetch(`${base}/messages`, {
+            method: 'POST',
+            headers,
+            signal: timers.signal,
+            body: JSON.stringify(body),
+          }),
+        timers.signal,
+      ).catch((e) => {
         timers.clear();
+        release();
         throw e;
       });
       if (!res.ok || !res.body) {
         timers.clear();
+        release();
         throw await httpError(`${tag} chatStream`, res);
       }
-      return parseAnthropicStream(res.body, timers.resetIdle, timers.clear, report, opts.onUsage, opts.onReasoning);
+      // 闸位一直持到流读完（含异常终止）：占住上游连接的是流，不是那次 fetch
+      const done = () => {
+        timers.clear();
+        release();
+      };
+      return parseAnthropicStream(res.body, timers.resetIdle, done, report, opts.onUsage, opts.onReasoning);
     },
   };
 }

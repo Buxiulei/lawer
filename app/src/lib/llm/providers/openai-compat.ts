@@ -18,6 +18,7 @@ import type {
   UsageReport,
 } from '../types';
 import { emptyUsage } from '../types';
+import { acquireSlot, connectWithRetry } from './gate';
 import { createStreamTimers, httpError, sseData } from './sse';
 
 /** OpenAI 兼容响应里的 usage 形状（各家都是这套字段名，缓存项各有各的加法）。 */
@@ -64,6 +65,8 @@ export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
     billingModel,
 
     async chatStream(messages, opts = {}) {
+      // 闸位先拿再起计时器：排队时长不该算进空闲/总时长超时（那两个量的是上游的响应速度）。
+      const release = await acquireSlot(o.name);
       const timers = createStreamTimers(opts);
       const body: Record<string, unknown> = {
         model: o.model,
@@ -79,23 +82,40 @@ export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
       if (opts.temperature !== undefined) body.temperature = opts.temperature;
       if (opts.maxTokens !== undefined) body.max_tokens = opts.maxTokens;
 
-      const res = await doFetch(`${base}/chat/completions`, {
-        method: 'POST',
-        headers,
-        signal: timers.signal,
-        body: JSON.stringify(body),
-      }).catch((e) => {
+      const res = await connectWithRetry(
+        () =>
+          doFetch(`${base}/chat/completions`, {
+            method: 'POST',
+            headers,
+            signal: timers.signal,
+            body: JSON.stringify(body),
+          }),
+        timers.signal,
+      ).catch((e) => {
         timers.clear();
+        release();
         throw e;
       });
       if (!res.ok || !res.body) {
         timers.clear();
+        release();
         throw await httpError(`${tag} chatStream`, res);
       }
-      return parseCompatStream(res.body, timers.resetIdle, timers.clear, report, opts.onUsage, opts.onReasoning);
+      // 闸位一直持到流读完（含异常终止）：占住上游连接的是流，不是那次 fetch
+      const done = () => {
+        timers.clear();
+        release();
+      };
+      return parseCompatStream(res.body, timers.resetIdle, done, report, opts.onUsage, opts.onReasoning);
     },
 
     async chatJSON(messages, opts = {}) {
+      // 同一个闸：这条也是一次真实的上游调用，不算进在途数就等于闸漏了一半。
+      // 不加重试——重试语义是按「首字节前」定义的（见 gate.ts），非流式调用没有那个分界点，
+      // 且分类调用失败由调用方降级处理，不值得占着闸位退避。
+      // ⚠️ 别在 chatStream 的 tool 执行过程里同 provider 调 chatJSON：闸位是不可重入的，
+      // 闸满时内层会排队 30s 后 503（外层正握着闸位不放）。
+      const release = await acquireSlot(o.name);
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? 8000);
       try {
@@ -126,6 +146,7 @@ export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
         return content;
       } finally {
         clearTimeout(timer);
+        release();
       }
     },
   };
