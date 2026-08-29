@@ -2,7 +2,7 @@
 id: data-beijing-lian-zuobiao
 type: 数据卡
 title: 北京劳动仲裁/法院立案坐标（朝阳·仲裁与法院两套，绝不混淆）
-keywords: [立案地址, 朝阳仲裁委, 将台路, 朝阳法院, 广顺北大街, 立案一庭, 87983310, 85998486, 12368, 坐标]
+keywords: [立案地址, 朝阳仲裁委, 将台路, 朝阳法院, 广顺北大街, 立案一庭, "87983310", "85998486", "12368", 坐标]
 applies_to: [仲裁申请, 一审二审]
 related: [sop-chaoyang-lian-sop, sop-yishen-ersheng-sop, data-beijing-qiuzhu-ziyuan]
 region: 北京

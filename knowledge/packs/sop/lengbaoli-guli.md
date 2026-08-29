@@ -2,7 +2,7 @@
 id: sop-lengbaoli-guli
 type: 流程SOP
 title: 遭遇孤立/冷暴力/公开羞辱/职场霸凌的应对与取证
-keywords: [职场霸凌, 冷暴力, 孤立, 公开羞辱, 通报批评, 事件日志, 12351, 工会投诉, 仲裁时效]
+keywords: [职场霸凌, 冷暴力, 孤立, 公开羞辱, 通报批评, 事件日志, "12351", 工会投诉, 仲裁时效]
 applies_to: [逼迫离职, 证据固定, 情绪支持]
 law_refs: [劳动合同法§38, 劳动合同法§88, 劳动合同法实施条例§18, 劳动争议调解仲裁法§27]
 related: [sop-jiakong-shouquan-quanxian, statute-lhtf-38-beipo-jiechu, statute-jgf-2024-534-jieda-1, calc-jingji-buchang-n]

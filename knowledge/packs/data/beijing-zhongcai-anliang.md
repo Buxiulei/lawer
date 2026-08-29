@@ -2,7 +2,7 @@
 id: data-beijing-zhongcai-anliang
 type: 数据卡
 title: 北京劳动人事争议案件量与仲裁结案率（2024 年度：14.1 万件 / 98.6%）
-keywords: [案件量, 14.1万件, 结案率, 98.6%, 劳动保障监察, 6521件, 12333, 城镇调查失业率, 新增就业, 你不是一个人]
+keywords: [案件量, 14.1万件, 结案率, 98.6%, 劳动保障监察, 6521件, "12333", 城镇调查失业率, 新增就业, 你不是一个人]
 applies_to: [情绪支持, 仲裁申请, 裁员, 欠薪]
 law_refs: []
 related: [data-beijing-qiuzhu-ziyuan, sop-jiancha-vs-zhongcai, sop-chaoyang-lian-sop, sop-zhongcai-guanxia-shixiao]

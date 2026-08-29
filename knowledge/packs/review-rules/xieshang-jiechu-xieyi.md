@@ -2,8 +2,8 @@
 id: review-xieshang-jiechu-xieyi
 type: 审查规则
 title: 《协商解除协议》审查规则（签字前逐条比对，20 条）
-keywords: [协商解除, 解除协议, 离职协议, 补偿协议, 审查规则, 一揽子放弃, 陷阱条款, 失业金, 税前税后, 签字前]
-applies_to: [协商解除, 裁员, 逼迫离职, 离职证明, 竞业限制, 调解]
+keywords: [协商解除, 解除协议, 离职协议, 补偿协议, 审查规则, 一揽子放弃, 陷阱条款, 失业金, 税前税后, 签字前, 被裁, 让我签, 该签吗, 别签, 催签, 赔多少, 签不签]
+applies_to: [协商解除, 裁员, 逼迫离职, 离职证明, 竞业限制, 调解, 被裁]
 law_refs: [劳动合同法§16, 劳动合同法§25, 劳动合同法§26, 劳动合同法§46, 劳动合同法§47, 劳动合同法§50, 劳动合同法实施条例§24, 京高法发〔2024〕534号§55, 京高法发〔2024〕534号§62, 京高法发〔2024〕534号§68, 京高法发〔2024〕534号§70, 京高法发〔2024〕534号§73, 京高法发〔2024〕534号§83, 京人社评发〔2024〕17号§5, 法释〔2025〕12号§13, 法释〔2025〕12号§15, 法释〔2025〕12号§19, 北京市工资支付规定§12, 北京市工资支付规定§13, 财税〔2001〕157号§1]
 related: [template-xieshang-jiechu-shencha-qingdan, statute-jgf-2024-534-jieda-1, statute-fashi-2025-12-jieshi-2, statute-beijing-gongzi-zhifu-guiding, case-xianjing-tiaokuan-bjzc25-3, case-xieyi-yilanzi-fangqi-16272, case-xianshi-gongping-chexiao-49641, case-tanpan-poulie-shiwei-xieshang-15407, case-lizhi-zhengming-pingjia-neirong-bjzc23-9, calc-buchangjin-geshui, calc-jingji-buchang-n, calc-shiye-baoxianjin, sop-tiaojie-sop, script-hongxian-qingdan]
 region: 北京

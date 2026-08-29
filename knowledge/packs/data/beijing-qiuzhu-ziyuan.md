@@ -2,7 +2,7 @@
 id: data-beijing-qiuzhu-ziyuan
 type: 数据卡
 title: 北京免费求助资源卡（心理热线/朝阳法援/工会/劳动监察）
-keywords: [心理热线, 12356, 回龙观, 危机干预, 法律援助, 朝阳法援, 12348, 12351, 工会, 劳动监察, 12333, 求助电话]
+keywords: [心理热线, "12356", 回龙观, 危机干预, 法律援助, 朝阳法援, "12348", "12351", 工会, 劳动监察, "12333", 求助电话]
 applies_to: [情绪支持, 欠薪, 仲裁申请]
 related: [statute-jgf-2024-534-jieda-1, calc-tuoqian-jiafu-peichang]
 region: 北京

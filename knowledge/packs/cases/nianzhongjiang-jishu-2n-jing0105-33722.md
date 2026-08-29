@@ -2,7 +2,7 @@
 id: case-nianzhongjiang-jishu-2n-jing0105-33722
 type: 判例卡
 title: 年终奖分摊入月平均工资基数，2N判776,028.51元（（2022）京0105民初33722号）
-keywords: [年终奖分摊, 应得工资, 赔偿金基数, 33740.37, 776028.51, 邮件通知解除, 举证不足, 钟奇燕]
+keywords: [年终奖分摊, 应得工资, 赔偿金基数, "33740.37", "776028.51", 邮件通知解除, 举证不足, 钟奇燕]
 applies_to: [裁员, 年终奖, 逼迫离职, 证据固定]
 law_refs: [劳动合同法§47, 劳动合同法§87]
 related: [calc-jingji-buchang-n, sop-quxiao-jixiao-jiangjin, statute-jgf-2024-534-jieda-1, data-beijing-shepin-fengding, sop-weixie-beidiao-lizhengming]

@@ -2,7 +2,7 @@
 id: sop-mowei-taotai
 type: 流程SOP
 title: 末位淘汰（强制分布、排名末位）应对
-keywords: [末位淘汰, 强制分布, 271, 指导案例18号, 中兴通讯, 王鹏, 不能胜任工作, C类考核]
+keywords: [末位淘汰, 强制分布, "271", 指导案例18号, 中兴通讯, 王鹏, 不能胜任工作, C类考核]
 applies_to: [末位淘汰, PIP, 逼迫离职, 证据固定]
 law_refs: [劳动合同法§40, 劳动合同法§4, 京高法发〔2024〕534号§73, 京高法发〔2024〕534号§80]
 related: [sop-pip-yingdui, sop-tiaogang-yingdui, sop-yaoqiu-qianzi-wenjian, calc-jingji-buchang-n, statute-jgf-2024-534-jieda-1]

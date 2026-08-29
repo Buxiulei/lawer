@@ -2,7 +2,7 @@
 id: calc-bingjia-gongzi
 type: 计算规则
 title: 病假工资 / 医疗期工资的计算（北京：不得低于最低工资 80%）
-keywords: [病假工资, 医疗期, 80%, 2032, 非因工负伤, 北京市工资支付规定第21条, 劳动合同法第42条]
+keywords: [病假工资, 医疗期, 80%, "2032", 非因工负伤, 北京市工资支付规定第21条, 劳动合同法第42条]
 applies_to: [欠薪, 逼迫离职, 裁员]
 law_refs: [北京市工资支付规定§21, 北京市工资支付规定§19, 北京市工资支付规定§22, 劳动合同法§42, 劳动合同法§40, 劳部发〔1994〕479号]
 related: [data-beijing-zuidi-gongzi, calc-jingji-buchang-n, calc-daigang-gongzi, statute-jgf-2024-534-jieda-1, statute-lhtf-38-beipo-jiechu]
