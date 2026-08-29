@@ -13,7 +13,7 @@ import { EmptyState } from '@/components/shadcn/empty-state';
 import { DeadlineTiles } from './DeadlineTiles';
 import { MilestoneTrack } from './MilestoneTrack';
 import { RecentRecords } from './RecentRecords';
-import { DEMO_TRACK, demoAttainments } from './milestones';
+import { FULL_JOURNEY, demoAttainments } from './milestones';
 
 /**
  * 驾驶舱：打开应用先回答「我现在该做什么」，不是先给一个空输入框。
@@ -40,7 +40,7 @@ export function Dashboard({ caseId }: { caseId: string }) {
   return (
     <div className="pt-1">
       <WatchBar />
-      <MilestoneTrack track={DEMO_TRACK} attainments={demoAttainments()} />
+      <MilestoneTrack track={FULL_JOURNEY} attainments={demoAttainments()} />
       {/* 只推一件事（产品方案叁）；计数仍是全量，不然「1/5」会缩成「0/1」 */}
       <ActionGroup items={actions} onToggle={toggle} limit={1} />
       {rest > 0 && (
@@ -67,9 +67,10 @@ function WatchBar() {
   const { discreet } = useDiscreet();
   if (discreet) return null;
   return (
-    <div className="flex items-center gap-1.5 pb-1">
-      <Mascot pose="watch" size={28} />
-      <span className="rounded-full border border-kraft-line bg-kraft px-2.5 py-0.5 text-[11.5px] text-gold-on-kraft">
+    <div className="flex items-center gap-2 pb-1">
+      {/* 56px：实测 52 是「看得清表情」的阈值，取 56 留余量。28px 那档连眼镜都只是一道暗带 */}
+      <Mascot pose="watch" size={56} />
+      <span className="rounded-full border border-kraft-line bg-kraft px-2.5 py-0.5 text-[12.5px] text-gold-on-kraft">
         土八鼠守望中
       </span>
     </div>

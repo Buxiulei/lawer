@@ -23,6 +23,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { demoTimeline } from '@/app/_mock/demo';
 import {
   DEMO_TRACK,
+  FULL_JOURNEY,
   demoAttainments,
   deriveTrack,
   type Attainment,
@@ -142,6 +143,56 @@ describe('deriveTrack', () => {
     expect(warn).toHaveBeenCalledOnce();
     expect(states(cells)).toEqual(['完成', '进行中', '未到', '未到', '未到']);
     warn.mockRestore();
+  });
+});
+
+describe('全程八段（驾驶舱恒显的那条）', () => {
+  /*
+   * `Record<Milestone, true>` 逼 tsc 列全联合的每一个成员：
+   * 将来给 CaseMilestone 加一档而忘了加进 FULL_JOURNEY，**这里编译就红**，
+   * 不用等有人打开页面发现少一格。
+   */
+  const ALL: Record<Milestone, true> = {
+    协商: true,
+    仲裁申请: true,
+    立案: true,
+    开庭: true,
+    裁决: true,
+    一审: true,
+    二审: true,
+    执行: true,
+  };
+
+  it('八段一个不少，顺序就是案件真实走法', () => {
+    expect(FULL_JOURNEY).toEqual([
+      '协商',
+      '仲裁申请',
+      '立案',
+      '开庭',
+      '裁决',
+      '一审',
+      '二审',
+      '执行',
+    ]);
+  });
+
+  it('覆盖 Milestone 联合的全部成员，不多不少', () => {
+    expect([...FULL_JOURNEY].sort()).toEqual(Object.keys(ALL).sort());
+  });
+
+  it('demo 只达成协商时，后面七段全是「未到」——摆在那但不谎报进度', () => {
+    const cells = deriveTrack(FULL_JOURNEY, demoAttainments());
+    expect(cells).toHaveLength(8);
+    expect(states(cells)).toEqual([
+      '完成',
+      '进行中',
+      '未到',
+      '未到',
+      '未到',
+      '未到',
+      '未到',
+      '未到',
+    ]);
   });
 });
 

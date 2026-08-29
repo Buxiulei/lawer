@@ -24,7 +24,7 @@ import { demoDeadlines } from '@/app/_mock/demo';
 import { MilestoneTrack } from '../MilestoneTrack';
 import { DeadlineTiles } from '../DeadlineTiles';
 import { RecentRecords } from '../RecentRecords';
-import { DEMO_TRACK, demoAttainments } from '../milestones';
+import { FULL_JOURNEY, demoAttainments } from '../milestones';
 
 /**
  * 断言的是**标记**（谁挂了 data-veil），不是运行时糊没糊，所以按低调**关**的状态渲染。
@@ -70,13 +70,18 @@ function unveiledText(html: string): string {
 }
 
 describe('里程碑轨道', () => {
-  const html = ssr(<MilestoneTrack track={DEMO_TRACK} attainments={demoAttainments()} />);
+  const html = ssr(<MilestoneTrack track={FULL_JOURNEY} attainments={demoAttainments()} />);
 
-  it('每一个里程碑名字都在糊层里', () => {
-    for (const word of DEMO_TRACK) expect(html).toContain(word); // 正对照：这一屏真的画了这几个格
+  /*
+   * 八段常显之后，新增的「一审 / 二审 / 执行」同样是案情词——**「执行」摆在那，
+   * 等于告诉旁人这案子可能要打到强制执行**。糊层是按格渲染、天然覆盖到新三段，
+   * 但「天然」不是判据：这里逐段点名，将来谁改了渲染结构会立刻红。
+   */
+  it('八段的名字**逐段**都在糊层里，新增的一审/二审/执行也不例外', () => {
+    expect(FULL_JOURNEY).toHaveLength(8); // 正对照：确实是八段，不是悄悄少了几段
+    for (const word of FULL_JOURNEY) expect(html).toContain(word);
     const clear = unveiledText(html);
-    // 这五个词连起来，不知情的人一眼就知道这台手机在办什么事
-    for (const word of DEMO_TRACK) expect(clear).not.toContain(word);
+    for (const word of FULL_JOURNEY) expect(clear).not.toContain(word);
   });
 
   it('达成日期也在糊层里', () => {

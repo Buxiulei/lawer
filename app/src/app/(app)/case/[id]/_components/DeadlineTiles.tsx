@@ -56,7 +56,7 @@ function Tile({
       {urgent && badge && (
         /* 挂**左**上角而不是右上角：右上角正对着栅格间隙，两张卡挨着时
            读者分不清这只土八鼠在替哪一张着急。左上角贴着最急那张的外沿，没有歧义。 */
-        <Mascot pose="nag" size={32} className="absolute -top-3.5 -left-2" />
+        <Mascot pose="nag" size={48} className="absolute -top-5 -left-3" />
       )}
       <div
         className={cn(

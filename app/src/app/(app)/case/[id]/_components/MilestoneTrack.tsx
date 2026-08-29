@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/app/_ui/cn';
-import { formatDate } from '@/app/_ui/format';
+import { formatDate, formatMonthDay } from '@/app/_ui/format';
 import { deriveTrack, type Milestone, type TrackCell, type Attainment } from './milestones';
 
 /**
@@ -12,8 +12,11 @@ import { deriveTrack, type Milestone, type TrackCell, type Attainment } from './
  * 四态**不靠颜色区分**：每格底下那行字才是判据（日期 / 进行中 / 未经此步 / 空），
  * 色盲、深色模式、截图压缩都不影响它。点的样式只是加速识别。
  *
- * 轨道**可变长**：进了法院就是八格。横向可滚，不折行——折行会让「先后」这个
- * 唯一的语义变得要靠读才知道。
+ * **八段常显、压缩节距，不横滚**（2026-08-29 用户令 + manager 裁定）：
+ * 一审/二审/执行没走到也摆在那，因为用户要的是「全程陪跑」的视觉承诺。
+ * **滚动能到达 ≠ 一眼看见**——把后三段推到屏外，等于承诺没露出来。
+ * 代价：393 下每格约 45px，日期缩成 `07/24`（≥sm 恢复完整），「仲裁申请」折两行。
+ * 完整日期挂在 `title` 上不丢。
  */
 export function MilestoneTrack({
   track,
@@ -24,8 +27,9 @@ export function MilestoneTrack({
 }) {
   const cells = deriveTrack(track, attainments);
   return (
-    <section aria-label="案件进度" className="-mx-4 overflow-x-auto px-4 lg:mx-0 lg:px-0">
-      <ol className="flex min-w-max gap-0 pt-1">
+    <section aria-label="案件进度" className="pt-1">
+      {/* 不用 min-w-max：八格要在 393 里排满，靠 flex-1 均分而不是靠溢出滚动 */}
+      <ol className="flex gap-0">
         {cells.map((cell, i) => (
           <Cell key={cell.milestone} cell={cell} first={i === 0} prev={cells[i - 1]} />
         ))}
@@ -40,8 +44,9 @@ function Cell({ cell, first, prev }: { cell: TrackCell; first: boolean; prev?: T
   // 否则轨道会显得比实际进度多走一格
   const walked = prev?.state === '完成' || prev?.state === '跳过';
   return (
-    // 4.35rem×5 = 348px，压得进 393 减去两侧 16px 内边距；八格轨道再横向滚
-    <li className="relative flex min-w-[4.35rem] flex-col items-center px-0.5 pt-4">
+    // flex-1 均分：393 下八格每格约 45px。min-w-0 是必须的——
+    // 没有它，子元素的最小内容宽度（「仲裁申请」四个字）会把 flex-1 顶开、整行溢出
+    <li className="relative flex min-w-0 flex-1 flex-col items-center px-0.5 pt-4">
       {!first && (
         <span
           aria-hidden
@@ -62,21 +67,40 @@ function Cell({ cell, first, prev }: { cell: TrackCell; first: boolean; prev?: T
       <span
         data-veil=""
         className={cn(
-          'mt-1.5 text-[12px] leading-4 whitespace-nowrap',
+          /* 允许折行：45px 装不下「仲裁申请」四个字。
+             **不能加 `break-keep`**——它阻止中文词内换行，于是那格不折行而是**溢出格子**
+             压到邻格上；实测 360/393 下正是这一格 scrollWidth > clientWidth。
+             高度固定两行：只有一格会折，不锁高的话它下面那行日期会比别人低一截，
+             而那行是四态判据，错位会让整条轨道读起来像坏了。 */
+          'mt-1.5 flex h-[2.5em] items-start justify-center px-px text-center',
+          'text-[11.5px] leading-[1.25] sm:text-[12px]',
           cell.state === '进行中' ? 'font-bold text-primary' : 'text-ink',
           cell.state === '未到' && 'text-ink-2',
         )}
       >
         {cell.milestone}
       </span>
-      {/* 这一行是四态的真正判据，不是装饰 */}
+      {/* 这一行是四态的真正判据，不是装饰——四种状态各有一句不同的字，不靠颜色分 */}
       <span
         data-veil=""
-        className="num mt-0.5 h-4 text-[11px] leading-4 whitespace-nowrap text-ink-2"
+        title={cell.state === '完成' && cell.at ? formatDate(cell.at) : undefined}
+        className="num mt-0.5 h-4 text-[10.5px] leading-4 whitespace-nowrap text-ink-2 sm:text-[11px]"
       >
-        {cell.state === '完成' && cell.at ? formatDate(cell.at) : ''}
+        {cell.state === '完成' && cell.at && (
+          <>
+            <span className="sm:hidden">{formatMonthDay(cell.at)}</span>
+            <span className="hidden sm:inline">{formatDate(cell.at)}</span>
+          </>
+        )}
         {cell.state === '进行中' ? '进行中' : ''}
-        {cell.state === '跳过' ? '未经此步' : ''}
+        {cell.state === '跳过' ? (
+          <>
+            <span className="sm:hidden">未经</span>
+            <span className="hidden sm:inline">未经此步</span>
+          </>
+        ) : (
+          ''
+        )}
       </span>
     </li>
   );
