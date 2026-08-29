@@ -129,7 +129,7 @@ export function IntakeFlow() {
       router.push('/login');
       return;
     }
-    toast('档案已建好，正在打开工作台', 'success', '已经准备好了');
+    toast('档案已建好，正在打开驾驶舱', 'success', '已经准备好了');
     router.push(`/case/${DEMO_CASE_ID}`);
   };
 
@@ -171,7 +171,7 @@ export function IntakeFlow() {
           )}
           {isLast ? (
             <Button onClick={finish} className="w-full">
-              {signedIn ? '进入工作台' : '保存草稿并注册'}
+              {signedIn ? '进入驾驶舱' : '保存草稿并注册'}
             </Button>
           ) : (
             <Button onClick={() => go(step + 1)} disabled={!canAdvance} className="w-full">

@@ -13,7 +13,7 @@ import { CasePanelProvider } from './casePanel';
 import { DemoBanner } from './DemoBanner';
 import { PanicButton } from './PanicButton';
 import { ShellHeader } from './ShellHeader';
-import { NAV_ITEMS } from './navItems';
+import { CASE_NAV_ITEMS } from './navItems';
 
 const DEFAULT_CASE_ID = 'demo';
 
@@ -37,9 +37,10 @@ export function AppShell({
   const caseId = caseIdFrom(pathname);
   // caseIdFrom 对非案件页也回 demo，所以横幅要另外确认这确实是 demo 案件的页面
   const onDemoCase = /^\/case\/demo(\/|$)/.test(pathname);
-  // 这两页底部压着一条 sticky 操作条（工作台的输入区、首诊的下一步条），
-  // 悬浮钮得抬到它上面，否则正好盖住发送键 / 主按钮的右端
-  const hasBottomBar = /^\/case\/[^/]+$/.test(pathname) || pathname === '/intake';
+  // 这两页底部压着一条 sticky 操作条（「问它」的输入区、首诊的下一步条），
+  // 悬浮钮得抬到它上面，否则正好盖住发送键 / 主按钮的右端。
+  // 驾驶舱（/case/[id] 本身）没有这条，别把它算进来
+  const hasBottomBar = /^\/case\/[^/]+\/ask$/.test(pathname) || pathname === '/intake';
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -72,7 +73,7 @@ function BottomTabs({ pathname, caseId }: { pathname: string; caseId: string }) 
       className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
       <ul className="mx-auto flex h-14 max-w-[860px]">
-        {NAV_ITEMS.map((item) => {
+        {CASE_NAV_ITEMS.map((item) => {
           const active = item.match(pathname, caseId);
           // 低调下换中性词，图标和位置不动：肌肉记忆按的是那个位置，不是那两个字
           const label = (discreet && item.discreetLabel) || item.label;

@@ -27,6 +27,21 @@ export function formatDate(iso: string): string {
   }).format(d);
 }
 
+/**
+ * 只要月/日（`07/24`）。**给横向排得下八格的里程碑轨道用**——
+ * 393 下每格约 45px，完整的 `2026/07/24` 放不下。
+ * 年份不是丢了：宽屏渲染完整日期、`title` 里挂完整日期、档案里是原始记录。
+ * **不做「同年省略年份」那种变格式**——那类规则出错时是静默的，宁要一致的短格式。
+ */
+export function formatMonthDay(iso: string): string {
+  const d = new Date(iso);
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: DATE_TZ,
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
 export function formatDateTime(iso: string): string {
   const d = new Date(iso);
   return new Intl.DateTimeFormat('zh-CN', {

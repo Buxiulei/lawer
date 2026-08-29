@@ -100,14 +100,21 @@ export function ActionGroup({
   items,
   onToggle,
   title = '现在做什么',
+  limit,
 }: {
   items: ActionItem[];
   onToggle?: (id: string, done: boolean) => void;
   /** 首诊预览用「现在做这三件事」，工作台用默认值 */
   title?: string;
+  /**
+   * 只渲染前几行。驾驶舱传 1——产品方案要「任何时刻首页只推一件事」。
+   * **计数照旧按 `items` 全量算**：只传一条进来会显示 0/1，那是谎报。
+   */
+  limit?: number;
 }) {
   if (items.length === 0) return null;
   const done = items.filter((a) => a.status === '完成').length;
+  const shown = limit === undefined ? items : items.slice(0, limit);
 
   return (
     <section
@@ -122,7 +129,7 @@ export function ActionGroup({
       </h3>
       {/* divide-y 而不是每行自己画底线：行数不定，分隔线是容器的事 */}
       <div className="flex flex-col divide-y divide-line">
-        {items.map((item) => (
+        {shown.map((item) => (
           <ActionCard key={item.id} item={item} onToggle={onToggle} />
         ))}
       </div>

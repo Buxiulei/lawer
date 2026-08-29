@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
-import { Workbench } from './_components/Workbench';
+import { Dashboard } from './_components/Dashboard';
 
-export const metadata: Metadata = { title: '工作台' };
+export const metadata: Metadata = { title: '驾驶舱' };
 
-export default async function WorkbenchPage({
+export default async function DashboardPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <Workbench caseId={id} />;
+  return <Dashboard caseId={id} />;
 }

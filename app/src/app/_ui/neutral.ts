@@ -12,6 +12,10 @@
  * 改一次要记得改四处，漏一处就是一次泄漏。
  */
 export const NEUTRAL_WORD = {
+  /** 「驾驶舱」：一个记事应用的首页就叫首页 */
+  dashboard: '首页',
+  /** 「问它」：对话入口，中性说法就是消息 */
+  ask: '消息',
   evidence: '资料',
   evidenceLib: '资料库',
   drafts: '文档',
