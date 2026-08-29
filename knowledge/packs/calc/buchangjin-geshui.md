@@ -2,8 +2,8 @@
 id: calc-buchangjin-geshui
 type: 计算规则
 title: 经济补偿金的个人所得税（免征线 = 上年社平年值×3，超出部分单独计税）
-keywords: [经济补偿个税, 免征, 3倍, 565239, 财税2001-157号, 财税2018-164号, 单独计税, 综合所得税率表]
-applies_to: [裁员, 协商解除, 逼迫离职]
+keywords: [经济补偿个税, 免征, 3倍, 565239, 财税2001-157号, 财税2018-164号, 单独计税, 综合所得税率表, 被裁, 到手多少, 扣税, 交税, 赔偿金要交税]
+applies_to: [裁员, 协商解除, 逼迫离职, 被裁]
 law_refs: [财税〔2001〕157号, 财税〔2018〕164号, 个人所得税法附表一]
 related: [calc-jingji-buchang-n, data-beijing-shepin-fengding]
 region: 北京
