@@ -1,0 +1,14 @@
+[
+ {"id":"c-1","scope":"执行","kind":"expect","q":"赢了官司钱要不到","expect":["sop-zhixing-sop"],"forbid":[],
+  "why":"执行概念第四种说法：口语用「赢了官司」而非「裁决/判了」，且不含任何本轮别名键"},
+ {"id":"c-2","scope":"执行","kind":"expect","q":"劳动局判我赢了公司装死","expect":["sop-zhixing-sop"],"forbid":[],
+  "why":"执行概念第五种说法：用户常把仲裁委叫「劳动局」，「装死」是完全不履行的口语"},
+ {"id":"c-3","scope":"执行","kind":"expect","q":"胜诉了但对方不给","expect":["sop-zhixing-sop"],"forbid":[],
+  "why":"执行概念第六种说法：书面语「胜诉」，同样不含本轮任何别名键"},
+ {"id":"c-4","scope":"执行","kind":"forbid","q":"裁决书什么时候能下来","expect":["sop-caijue-yicaizhongju"],"forbid":["sop-zhixing-sop"],
+  "why":"⚠️过宽探针：含「裁决书」且含「下来」——两个现有别名键都命中，但用户问的是**送达时限**不是执行。若强制执行卡被判实质命中，说明别名把不相干的需求也带进来了"},
+ {"id":"c-5","scope":"调岗·范围外","kind":"unchanged","q":"公司让我搬到别的城市上班","expect":["sop-tiaogang-yingdui"],"forbid":[],
+  "why":"范围外对照：本轮只动执行概念，这条不该因此改变——用来验概念范围切分是否成立"},
+ {"id":"c-6","scope":"签字·范围外","kind":"unchanged","q":"他们让我写个东西说自愿走的","expect":["sop-yaoqiu-qianzi-wenjian"],"forbid":[],
+  "why":"范围外对照：同上，签字概念本轮不补词"}
+]

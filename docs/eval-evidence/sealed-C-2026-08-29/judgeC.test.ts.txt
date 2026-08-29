@@ -1,0 +1,20 @@
+import { describe, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { search, isSubstantiveHit } from '../../app/src/lib/knowledge/index';
+const C = JSON.parse(readFileSync('/tmp/claude-1000/-home-roots------/ccca2536-3d34-446c-83c4-628e5d95240a/scratchpad/sealedC/holdout-C.json','utf8'));
+describe('留出集 C', () => { it('x', () => {
+  let ok = 0, bad = 0;
+  for (const c of C) {
+    const h = search(c.q, { limit: 8 });
+    const ids = new Set(h.filter((x: any) => isSubstantiveHit(x, c.q)).map((x: any) => x.id));
+    const got = c.expect.filter((e: string) => ids.has(e)).length;
+    const hitForbid = c.forbid.filter((e: string) => ids.has(e));
+    const wide = search(c.q, { limit: 218 }).filter((x: any) => isSubstantiveHit(x, c.q)).length;
+    let mark = '';
+    if (c.kind === 'expect') { if (got > 0) ok++; mark = got > 0 ? '✅翻中' : '🔴未翻'; }
+    if (c.kind === 'forbid') { if (hitForbid.length) bad++; mark = hitForbid.length ? `🔴过宽(命中${hitForbid.join(',')})` : '✅未被带进来'; }
+    if (c.kind === 'unchanged') mark = `范围外·应召回${got}`;
+    console.log(`  ${mark.padEnd(22)} ${c.id} [${c.scope}] 应召回${got}/${c.expect.length} 广度${wide}  「${c.q}」`);
+  }
+  console.log(`  ⇒ 执行概念内翻中 ${ok}/3（线 ≥2）｜过宽探针命中 ${bad}（须 0）`);
+}); });
