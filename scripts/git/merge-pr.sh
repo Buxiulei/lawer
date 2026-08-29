@@ -29,11 +29,13 @@ state="$(gh pr view "$pr" --json state --jq .state)"
 
 [ "$state" = "OPEN" ] || { echo "PR #$pr 状态是 $state，不是 OPEN，不合。" >&2; exit 1; }
 
+# 同步 PR 标题只是**给评审看的**，落地标题由下面的 --subject 说了算。
+# 所以这一步失败不许中断合并：`gh pr edit` 会连带查 projectCards，
+# 而 GitHub 正在下线 Projects(classic)，这个查询会报 GraphQL 错——
+# 一个纯装饰性的步骤把合并卡住，本末倒置。（实测 #88 就是这么卡住的。）
 if [ "$old" != "$title" ]; then
-  echo "PR 标题将改写："
-  echo "  旧：$old"
-  echo "  新：$title"
-  gh pr edit "$pr" --title "$title"
+  echo "PR 标题将改写：$old → $title"
+  gh pr edit "$pr" --title "$title" 2>/dev/null || echo "  （PR 标题没改成，不影响落地标题）"
 fi
 
 # **落地标题由 --subject 直接指定**，不靠 PR 标题。
