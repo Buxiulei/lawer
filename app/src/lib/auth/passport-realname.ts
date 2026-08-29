@@ -8,7 +8,9 @@
 // 同一个 requireRealname 闸。差别只在 provider 与"谁来判过没过"：
 // cloudauth 问阿里云，本通道由人工核材料后经脚本落定（见 approvePassportRealname）。
 // ⇒ status 端点两条路返回同一形状，前端与 lawer 的判据不分叉。
-import BetterSqlite3, { type Database } from 'better-sqlite3';
+import { type Database } from 'better-sqlite3';
+
+import { openCliDb } from '../db/cli-open';
 
 import { encryptField, decryptField } from '@/lib/crypto';
 import * as users from '@/lib/db/otp';
@@ -203,7 +205,7 @@ export function approvePassportCli(
   dbPath: string,
   opts: { verificationId: number; operator?: string; note?: string; apply: boolean },
 ): number {
-  const db = new BetterSqlite3(dbPath);
+  const db = openCliDb(dbPath);
   db.pragma('foreign_keys = ON');
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports

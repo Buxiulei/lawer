@@ -13,6 +13,8 @@
 // 加表时请再跑一次 `grep -n 'REFERENCES files' app/src/lib/db/migrate.ts` 核对。
 import Database from 'better-sqlite3';
 
+import { openCliDb, rethrowIfSchemaStale } from './cli-open';
+
 /** 引用者：(表名, 指向 files.id 的列名)。顺序不影响结果，仅决定 SQL 里 NOT EXISTS 的书写顺序。 */
 const REFERENCERS: readonly [table: string, column: string][] = [
   ['evidence', 'file_id'],
@@ -98,7 +100,7 @@ export function gcFilesCli(
   opts: { dryRun: boolean; deleteFromDisk: (encPath: string) => void },
 ): number {
   console.log(`[GC] 库：${dbPath}`);
-  const db = new Database(dbPath, { readonly: opts.dryRun, fileMustExist: true });
+  const db = openCliDb(dbPath, { readonly: opts.dryRun, fileMustExist: true });
   try {
     if (opts.dryRun) {
       const orphans = findOrphanFiles(db);
@@ -114,6 +116,9 @@ export function gcFilesCli(
       const { removed, freedBytes } = gcOrphanFiles(db, { deleteFromDisk: opts.deleteFromDisk });
       console.log(`[GC] 已删 ${removed} 个孤儿文件，释放 ${freedBytes} 字节。`);
     }
+  } catch (e) {
+    if (opts.dryRun) rethrowIfSchemaStale(e, dbPath); // dry-run 是只读句柄，跑不了迁移
+    throw e;
   } finally {
     db.close();
   }
