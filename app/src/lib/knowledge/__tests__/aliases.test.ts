@@ -39,7 +39,7 @@ afterEach(() => {
 describe('进表规矩：两条都拒绝启动，不静默跳过', () => {
   test('🔴 缺 source 的别名 → 抛错并指名是哪一条', () => {
     withAliases([{ alias: '被裁', canonical: '裁员' }]);
-    expect(() => search('我被裁了')).toThrow(/被裁→裁员.*source/s);
+    expect(() => search('我被裁了')).toThrow(/被裁→裁员[\s\S]*source/);
   });
 
   test('🔴 source 是空白也不算有出处', () => {
@@ -72,7 +72,7 @@ describe('机制：扩 query，不改匹配语义', () => {
     // 靠标题二元组捞上来，排在 96 名开外。那正是 index.ts 注释里记了很久的"尘埃"：
     // 检索永不空手，所以"在不在结果里"分不出有料与没料。评测集用的也是 isSubstantiveHit。
     const sub = (id: string) =>
-      search(q, { limit: 218 }).some((h: { id: string }) => h.id === id && isSubstantiveHit(h, q));
+      search(q, { limit: 218 }).some((h) => h.id === id && isSubstantiveHit(h, q));
     const withAlias = sub(target);
     withAliases([]);
     const without = sub(target);
