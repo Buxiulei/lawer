@@ -18,6 +18,7 @@ import type {
   UsageReport,
 } from '../types';
 import { emptyUsage } from '../types';
+import { acquireSlot, connectWithRetry } from './gate';
 import { createStreamTimers, httpError, sseData } from './sse';
 
 /** OpenAI 兼容响应里的 usage 形状（各家都是这套字段名，缓存项各有各的加法）。 */
@@ -64,7 +65,6 @@ export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
     billingModel,
 
     async chatStream(messages, opts = {}) {
-      const timers = createStreamTimers(opts);
       const body: Record<string, unknown> = {
         model: o.model,
         messages,
@@ -78,24 +78,54 @@ export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
       // 输出长度默认不在模型侧设限（沿用六爻做法）。
       if (opts.temperature !== undefined) body.temperature = opts.temperature;
       if (opts.maxTokens !== undefined) body.max_tokens = opts.maxTokens;
+      // 序列化在取闸位之前、在 attempt 闭包之外：请求体每次重试都一样，重复序列化是白烧 CPU；
+      // 更要紧的是序列化异常（extraBody 里塞进循环引用一类）不是「上游不给力」，
+      // 落在闭包里会被当成连接失败重试三次，落在取闸位之前则连闸位都不会碰。
+      const payload = JSON.stringify(body);
 
-      const res = await doFetch(`${base}/chat/completions`, {
-        method: 'POST',
-        headers,
-        signal: timers.signal,
-        body: JSON.stringify(body),
-      }).catch((e) => {
+      // 闸位先拿再起计时器：排队时长不该算进空闲/总时长超时（那两个量的是上游的响应速度）。
+      const release = await acquireSlot(o.name);
+      const timers = createStreamTimers(opts);
+      // 兜底归还：generator 被**抛弃**（客户端断流后消费方 emit 抛错，既不再 next() 也不 return()）时，
+      // sseData 的 finally 永远等不到，下面的 done 就永不执行——每漏一路少一个闸位，
+      // 攒够 MAX_CONCURRENT_PER_PROVIDER 次该 provider 全局死锁。计时器只在正常收尾时被 clear，
+      // 所以被抛弃的那路一定会走到空闲/总时长超时的 abort，让它承重一次 release（幂等，见 gate.ts）。
+      timers.signal.addEventListener('abort', release, { once: true });
+
+      const res = await connectWithRetry(
+        () =>
+          doFetch(`${base}/chat/completions`, {
+            method: 'POST',
+            headers,
+            signal: timers.signal,
+            body: payload,
+          }),
+        timers.signal,
+      ).catch((e) => {
         timers.clear();
+        release();
         throw e;
       });
       if (!res.ok || !res.body) {
         timers.clear();
+        release();
         throw await httpError(`${tag} chatStream`, res);
       }
-      return parseCompatStream(res.body, timers.resetIdle, timers.clear, report, opts.onUsage, opts.onReasoning);
+      // 闸位一直持到流读完（含异常终止）：占住上游连接的是流，不是那次 fetch
+      const done = () => {
+        timers.clear();
+        release();
+      };
+      return parseCompatStream(res.body, timers.resetIdle, done, report, opts.onUsage, opts.onReasoning);
     },
 
     async chatJSON(messages, opts = {}) {
+      // 同一个闸：这条也是一次真实的上游调用，不算进在途数就等于闸漏了一半。
+      // 不加重试——重试语义是按「首字节前」定义的（见 gate.ts），非流式调用没有那个分界点，
+      // 且分类调用失败由调用方降级处理，不值得占着闸位退避。
+      // ⚠️ 别在 chatStream 的 tool 执行过程里同 provider 调 chatJSON：闸位是不可重入的，
+      // 闸满时内层会排队 30s 后 503（外层正握着闸位不放）。
+      const release = await acquireSlot(o.name);
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? 8000);
       try {
@@ -126,6 +156,7 @@ export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
         return content;
       } finally {
         clearTimeout(timer);
+        release();
       }
     },
   };

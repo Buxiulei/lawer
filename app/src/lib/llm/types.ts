@@ -123,8 +123,9 @@ export interface Provider {
   readonly model: string;
   /** 计量上报用的计费键（dated 锁定串 [:variant]），与 UsageReport.model 一致 */
   readonly billingModel: string;
-  /** 流式对话。连接期失败（fetch 异常 / 非 2xx）在 await 时抛错——重试语义归 billing 侧后续做，
-   *  本模块不做重试/熔断/缓存。
+  /** 流式对话。连接期失败（fetch 异常 / 非 2xx）在 await 时抛错；429/502/503/网络错在**连接期**
+   *  由 providers/gate.ts 重试≤2 次，流一旦开始就绝不重试（会重复计费与重复正文）。
+   *  await 还会因为并发闸排队超时抛 LlmGateBusyError（503）。不做熔断/缓存。
    *  generator：yield 正文增量；return {finishReason, toolCalls, usage}。 */
   chatStream(messages: ChatMessage[], opts?: ChatStreamOptions): Promise<AsyncGenerator<string, ChatStreamResult, void>>;
   /** 小型 JSON 调用（问句分类、意图抽取一类），非流式，返回剥好围栏的 JSON 字符串。
