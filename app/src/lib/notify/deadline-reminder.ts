@@ -227,14 +227,57 @@ export async function reminderCli(
     return 0;
   }
 
+  const { startRun, finishRun } = await import('../db/job-runs');
   const db = new BetterSqlite3(dbPath);
   db.pragma('foreign_keys = ON');
+
+  // 【干跑不留痕】job_runs 记的是"这轮真的做了什么"。干跑什么都没做，
+  // 给它记一行会让 staleJobs 以为任务在正常跑——**一个只跑干跑的 cron 会看起来很健康**。
+  if (!opts.apply) {
+    try {
+      const r = await runReminders(db, { sendMail, dryRun: true });
+      console.log(`库：${dbPath}`);
+      console.log(`  ${r.note}`);
+      console.log('  【干跑】没有发信、没有记档、不写 job_runs。真发请加 --apply。');
+      return 0;
+    } finally {
+      db.close();
+    }
+  }
+
+  // 【① startRun 在开跑那一刻调，不是跑完一起写】这是三态的全部来源：
+  //   没有行           = 从没跑起来过
+  //   有行 finished_at NULL = 跑起来了没跑完（被 OOM 杀 / 崩了 / 还在跑）
+  //   有行 finished_at 非空 = 跑完了
+  // 跑完才写的话，**被杀掉的那次和从没跑过的那次在表里一模一样**。
+  const runId = startRun(db, '期限提醒');
+  let examined = 0;
   try {
-    const r = await runReminders(db, { sendMail, dryRun: !opts.apply });
+    const r = await runReminders(db, { sendMail, dryRun: false });
+    examined = r.examined;
+    // 【② items_failed 与 error_text 不混】这里 ok=true 表示**整轮跑通**；
+    // 其中几封发失败是 itemsFailed 的事。混了的话「发了 100 封失败 3 封」
+    // 与「一封没发成、整个任务崩了」会读起来一样。
+    finishRun(db, runId, {
+      ok: true,
+      itemsExamined: r.examined,
+      itemsOk: r.ok,
+      itemsFailed: r.failed,
+      note: r.note,
+    });
     console.log(`库：${dbPath}`);
     console.log(`  ${r.note}`);
-    if (!opts.apply) console.log('  【干跑】没有发信、没有记档。真发请加 --apply。');
     return r.failed > 0 ? 1 : 0;
+  } catch (e) {
+    // 整轮炸了：ok=false + 错误原文；items_* 可能是半截数，如实记。
+    finishRun(db, runId, {
+      ok: false,
+      errorText: e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e),
+      itemsExamined: examined,
+      note: '整轮失败，items_* 可能是半截数',
+    });
+    console.error(`❌ 整轮失败：${e instanceof Error ? e.message : String(e)}`);
+    return 1;
   } finally {
     db.close();
   }

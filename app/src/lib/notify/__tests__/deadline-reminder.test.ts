@@ -240,3 +240,68 @@ describe('🔴 ② 先发后记 —— 这是这活的要害', () => {
     }
   });
 });
+
+describe('🔴 job_runs 接入：三态与"整轮 vs 逐项"', () => {
+  const fs2 = require('node:fs') as typeof import('node:fs');
+  const os2 = require('node:os') as typeof import('node:os');
+  const path2 = require('node:path') as typeof import('node:path');
+
+  function tmpDb(): string {
+    const f = path2.join(os2.tmpdir(), `lawer-jr-${Math.random().toString(36).slice(2)}.db`);
+    const d = new Database(f);
+    runMigrations(d);
+    const u = Number(d.prepare("INSERT INTO users (email) VALUES ('x@example.com')").run().lastInsertRowid);
+    const c = Number(d.prepare("INSERT INTO cases (user_id,title) VALUES (?, '案')").run(u).lastInsertRowid);
+    d.prepare("INSERT INTO deadlines (case_id,kind,due_at) VALUES (?, '仲裁时效', ?)").run(
+      c, new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10));
+    d.close();
+    return f;
+  }
+
+  test('干跑不写 job_runs —— 一个只跑干跑的 cron 不该看起来很健康', async () => {
+    // 【为什么这条重要】job_runs 记的是"这轮真的做了什么"。给干跑记一行，
+    // staleJobs 会以为任务在正常跑 —— **而它一封都没发过**。
+    const { reminderCli } = await import('../deadline-reminder');
+    const f = tmpDb();
+    await reminderCli(f, { apply: false });
+    const d = new Database(f, { readonly: true });
+    expect((d.prepare('SELECT COUNT(*) c FROM job_runs').get() as { c: number }).c).toBe(0);
+    d.close();
+    fs2.rmSync(f, { force: true });
+  });
+
+  test('🔑 逐项失败 ≠ 整轮失败：SMTP 没配时 ok=1 而 items_failed=1', async () => {
+    // 数据表管理定的语义：混了的话「发了 100 封失败 3 封」
+    // 与「一封没发成、整个任务崩了」会读起来一样。
+    const saved = { h: process.env.SMTP_HOST, u: process.env.SMTP_USERNAME, p: process.env.SMTP_PASSWORD };
+    delete process.env.SMTP_HOST; delete process.env.SMTP_USERNAME; delete process.env.SMTP_PASSWORD;
+    const { reminderCli } = await import('../deadline-reminder');
+    const f = tmpDb();
+    const rc = await reminderCli(f, { apply: true });
+    expect(rc).toBe(1); // 有发送失败 → 退出码 1
+    const d = new Database(f, { readonly: true });
+    const row = d.prepare('SELECT * FROM job_runs').get() as Record<string, unknown>;
+    expect(row.job_name).toBe('期限提醒');
+    expect(row.ok).toBe(1);            // 整轮跑通了
+    expect(row.items_failed).toBe(1);  // 其中一封失败
+    expect(row.finished_at).toBeTruthy();
+    expect(row.error_text).toBeNull(); // 整轮没炸 ⇒ 不写整轮错误
+    d.close();
+    fs2.rmSync(f, { force: true });
+    if (saved.h) process.env.SMTP_HOST = saved.h;
+    if (saved.u) process.env.SMTP_USERNAME = saved.u;
+    if (saved.p) process.env.SMTP_PASSWORD = saved.p;
+  });
+
+  test('发送失败时那条期限没被记档 —— 下轮还会重试', async () => {
+    const saved = process.env.SMTP_HOST; delete process.env.SMTP_HOST;
+    const { reminderCli } = await import('../deadline-reminder');
+    const f = tmpDb();
+    await reminderCli(f, { apply: true });
+    const d = new Database(f, { readonly: true });
+    expect((d.prepare('SELECT notified_stages_json j FROM deadlines').get() as { j: string | null }).j).toBeNull();
+    d.close();
+    fs2.rmSync(f, { force: true });
+    if (saved) process.env.SMTP_HOST = saved;
+  });
+});
