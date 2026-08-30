@@ -8,12 +8,18 @@
 //   「验了但不通过」→ 本模块返回 ok:true + 该项 passed:false，这是对证据的裁决；
 //   「没验成」（sidecar 挂了/网络不通）→ 返回 DomainFailure（502/503），**不是** passed:false。
 // 把后者说成 passed:false 等于在公开验证页上诬告用户的证据无效——比漏判更害人。
+//
+// ⚠ report.checks[].detail 与 DomainFailure.message 会**原样渲染给匿名访客**
+// （本端点公开无鉴权）。所以异常原文一律经 lib/errors/user-facing 的 toUserFacingError
+// 转换：原文进服务端日志，出去的只有稳定错误码 + 三段式中文。结论（passed / 502 / 503）
+// 一个都不变，换掉的只是那句话怎么说。
 import crypto from 'node:crypto';
 
 import type { Database } from 'better-sqlite3';
 
 import { createIpQuota } from '@/lib/auth/ip-quota';
 import * as store from '@/lib/db/evidence';
+import { toUserFacingError } from '@/lib/errors/user-facing';
 
 import { fail, type DomainFailure, type Result } from './attest';
 import { readBytes } from './files';
@@ -58,9 +64,11 @@ function item(name: string, passed: boolean, detail: string): RecheckItem {
 /** sidecar 报错分级：503 是我方没配好（证书/信任锚），502 是别的没验成 */
 function sidecarFailure(err: unknown): DomainFailure {
   if (err instanceof SidecarError && err.status === 503) {
-    return fail(503, 'RECHECK_UNAVAILABLE', `复核服务未就绪：${err.message}`);
+    const u = toUserFacingError(err, { code: 'RECHECK_UNAVAILABLE', where: 'recheck.verifyPdf' });
+    return fail(503, u.code, u.message);
   }
-  return fail(502, 'RECHECK_UPSTREAM_FAILED', `复核服务调用失败：${String(err)}`);
+  const u = toUserFacingError(err, { code: 'RECHECK_UPSTREAM_FAILED', where: 'recheck.verifyPdf' });
+  return fail(502, u.code, u.message);
 }
 
 /**
@@ -83,7 +91,8 @@ function checkHash(db: Database, att: store.AttestationRow): RecheckItem {
     actual = crypto.createHash('sha256').update(readBytes(db, ev.file_id)).digest('hex');
   } catch (err) {
     // 文件缺失、密文被改、与 files.sha256 不符都走这里——都是「原件不可信」，不是服务故障
-    return item(CHECK_HASH, false, `原件读取失败：${err instanceof Error ? err.message : String(err)}`);
+    const u = toUserFacingError(err, { code: 'EVIDENCE_READ_FAILED', where: 'recheck.checkHash' });
+    return item(CHECK_HASH, false, u.message);
   }
   return actual === att.sha256
     ? item(CHECK_HASH, true, `原件 SHA-256 与存证记录一致：${att.sha256}`)
@@ -162,7 +171,10 @@ export async function recheckVerification(
   try {
     pdf = readBytes(db, att.cert_pdf_file_id);
   } catch (err) {
-    const detail = `《存证证明》文件读取失败：${err instanceof Error ? err.message : String(err)}`;
+    const detail = toUserFacingError(err, {
+      code: 'CERT_PDF_READ_FAILED',
+      where: 'recheck.readCertPdf',
+    }).message;
     return {
       ok: true,
       report: {

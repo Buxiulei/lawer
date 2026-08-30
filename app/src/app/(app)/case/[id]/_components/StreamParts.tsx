@@ -349,7 +349,10 @@ export function StreamErrorCard({
     >
       <p className="text-[14px] font-medium text-amber-ink">这一轮没说完</p>
       <p className="mt-1 text-[15px] leading-7 text-ink">{error.message}</p>
-      <p className="num mt-1 text-[13px] text-ink-2">{error.code}</p>
+      {/* 裸码对当事人没有意义，但联系我们时报得出它才定位得到这一轮，所以留着并标注它是什么 */}
+      <p className="mt-1 text-[13px] text-ink-2">
+        错误码 <span className="num">{error.code}</span>
+      </p>
       <div className="mt-3">
         <Button size="sm" variant="secondary" disabled={left > 0} onClick={onRetry}>
           {left > 0 ? `${left} 秒后可重试` : '重试'}
