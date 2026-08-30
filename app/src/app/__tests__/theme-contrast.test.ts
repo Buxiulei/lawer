@@ -245,6 +245,12 @@ describe('token 用法结构守卫', () => {
    *
    * 两个方向都要咬：**不许退回 `focus:border-primary`**，且**关掉 outline 的地方必须有边框**
    * （只删掉焦点边框、留着 `focus:outline-none`，负向那条照样全绿，而屏幕上一点焦点指示都没有）。
+   *
+   * ⚠ `focus:` 与 `focus-visible:` 两个前缀都得数进来。Tailwind 里它们是两个变体，
+   * 关 outline 的效果**一模一样**，而这条守卫原来只认 `focus:`——
+   * 把 `focus:outline-none` 换成 `focus-visible:outline-none` 再把边框删掉，
+   * 屏幕上焦点指示全没了，这条却一声不吭地全绿（复审官 R7b 实测于 select.tsx）。
+   * 判据认的必须是**行为**（有没有关掉默认焦点环），不是某一个前缀的拼写。
    */
   it('焦点指示走 --focus-ring，且关掉 outline 的控件都留着它', () => {
     const back: string[] = [];
@@ -255,7 +261,10 @@ describe('token 用法结构守卫', () => {
         .forEach((line, i) => {
           const at = `${path.relative(SRC, f)}:${i + 1}`;
           if (/\bfocus:border-primary\b(?!-)/.test(line)) back.push(at);
-          if (/\bfocus:outline-none\b/.test(line) && !/\bfocus:border-focus-ring\b/.test(line)) {
+          if (
+            /\bfocus(-visible)?:outline-none\b/.test(line) &&
+            !/\bfocus(-visible)?:border-focus-ring\b/.test(line)
+          ) {
             naked.push(at);
           }
         });
@@ -270,7 +279,7 @@ describe('token 用法结构守卫', () => {
     expect(
       naked.length === 0
         ? ''
-        : `这些地方写了 focus:outline-none 却没有 focus:border-focus-ring：${naked.join('、')}。` +
+        : `这些地方写了 focus(-visible):outline-none 却没有 focus(-visible):border-focus-ring：${naked.join('、')}。` +
           `关掉浏览器默认焦点环之后，边框是这个控件仅剩的焦点指示，删了就等于没有焦点可见（2.4.7）。` +
           `要么把 focus:border-focus-ring 加回同一行，要么别关 outline。`,
     ).toBe('');
