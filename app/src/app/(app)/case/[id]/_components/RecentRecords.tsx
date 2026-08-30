@@ -3,53 +3,21 @@
 import Link from 'next/link';
 import { NeutralLabel } from '@/app/_ui/NeutralLabel';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
-import { demoCompanyDocs, demoEvidence } from '@/app/_mock/demo';
-import { Badge, type BadgeTone } from '@/components/shadcn/badge';
-
-/** 证据状态 → 徽标色。与证据库那张表同一套，别在两处各调各的 */
-const EVIDENCE_TONE: Record<string, BadgeTone> = {
-  已上传: 'neutral',
-  已固化: 'success',
-  已出证: 'primary',
-};
-
-interface Row {
-  key: string;
-  name: string;
-  tag: string;
-  tone: BadgeTone;
-  href: string;
-  at: string;
-}
+import { Badge } from '@/components/shadcn/badge';
+import type { RecordRow } from './dashboardData';
 
 /**
  * 最近的证据与文书，只露最新三条。
  *
  * 这里是**入口不是清单**——完整的在证据/文书两个 tab 里。
  * 驾驶舱多摆一行，用户就少一眼看见「现在做什么」。
+ *
+ * 行由 dashboardData 备好（真接口或 demo），这一层不自己取数：
+ * 它此前直接 import `_mock/demo`，于是真实案件的「最近的材料」里
+ * 摆的是演示案件那几份编出来的文件。
  */
-export function RecentRecords({ caseId }: { caseId: string }) {
-  const rows: Row[] = [
-    ...demoEvidence.map((e) => ({
-      key: `ev-${e.id}`,
-      name: e.name,
-      tag: e.status,
-      tone: EVIDENCE_TONE[e.status] ?? ('neutral' as BadgeTone),
-      href: `/case/${caseId}/evidence`,
-      at: e.createdAt,
-    })),
-    ...demoCompanyDocs.map((d) => ({
-      key: `doc-${d.id}`,
-      name: d.title,
-      // 「签不签」是这类文件上最重的一个字，列表里也不降级成「已解读」
-      tag: `结论：${d.advice}`,
-      tone: (d.advice === '不签' ? 'danger' : 'neutral') as BadgeTone,
-      href: `/case/${caseId}/docs/${d.id}`,
-      at: d.createdAt,
-    })),
-  ]
-    .sort((a, b) => b.at.localeCompare(a.at))
-    .slice(0, 3);
+export function RecentRecords({ caseId, records }: { caseId: string; records: RecordRow[] }) {
+  const rows = records;
 
   if (rows.length === 0) return null;
 

@@ -25,6 +25,7 @@ import { MilestoneTrack } from '../MilestoneTrack';
 import { DeadlineTiles } from '../DeadlineTiles';
 import { RecentRecords } from '../RecentRecords';
 import { FULL_JOURNEY, demoAttainments } from '../milestones';
+import { demoRecords } from '../dashboardData';
 
 /**
  * 断言的是**标记**（谁挂了 data-veil），不是运行时糊没糊，所以按低调**关**的状态渲染。
@@ -106,7 +107,8 @@ describe('期限卡', () => {
 });
 
 describe('最近的材料', () => {
-  const html = ssr(<RecentRecords caseId="demo" />);
+  // 行改由 dashboardData 备好后传入；这里仍喂 demo 的那几行，本组守的是打码不是取数
+  const html = ssr(<RecentRecords caseId="demo" records={demoRecords('demo')} />);
 
   /*
    * 这两条最初写成「不含『解除通知书』/『不签』」，**跑变异时才发现它们没牙**：
