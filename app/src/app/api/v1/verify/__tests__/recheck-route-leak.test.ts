@@ -402,3 +402,71 @@ describe('sidecar 裁决体里的裸 Python 异常', () => {
     expect(body.overall_ok).toBe(true);
   });
 });
+
+/* ── 白名单投影里的两个 type guard：字段名对了，值也得是那个类型 ───────────
+   上面三条钉的是**哪些字段**能出境。但白名单只管名字：字段名点了名，
+   上游往里塞什么类型它一概不问。而 sidecar 的五处投毒点恰好是往**任意字段**里
+   拼 `f"...: {e}"`——哈希位上塞一句中文报错、布尔位上塞字符串 'false'，
+   两样都能顺着白名单走出去。所以 hex64 / flag 这两道各自要有牙。 */
+describe('白名单投影的类型闸：哈希位与布尔位', () => {
+  /**
+   * 哈希位塞自由文本（复审官 X1）。
+   * sidecar 算不出哈希时会把失败原因写回 file_sha256/expect_hash 本身，
+   * 那句话里带服务器绝对路径——白名单点了这两个字段的名，它就跟着出境了。
+   * `hex64` 放宽成「是字符串就放行」时，这里连 assertNoPythonLeak 一起红。
+   */
+  test('file_sha256 / expect_hash 被写成一句报错：该位出境为 null，路径不出门', async () => {
+    const { orderNo } = seedOrder();
+    const DIRTY = '/opt/lawer/sidecar/verify_evidence_pdf.py 计算失败';
+    stubSidecar(200, { ...goodVerdict(), file_sha256: DIRTY, expect_hash: DIRTY });
+
+    const res = await post(...request(orderNo));
+    const raw = await res.text();
+
+    assertNoPythonLeak(raw);
+    expect(raw).not.toContain('计算失败');
+
+    const body = JSON.parse(raw) as {
+      verdict: { file_sha256: unknown; expect_hash: unknown; num_signatures: number };
+    };
+    // 「不是 64 位十六进制」= 这一位没有结论，不是「有一个叫这个的结论」
+    expect(body.verdict.file_sha256).toBeNull();
+    expect(body.verdict.expect_hash).toBeNull();
+    // 闸只关这一位：别的字段照旧出境，否则分不清「拦住了」和「整体没出来」
+    expect(body.verdict.num_signatures).toBe(1);
+  });
+
+  /**
+   * 布尔位塞字符串（复审官 X2）。
+   * `'false'` 是个**非空字符串**，`Boolean('false') === true`——
+   * 强转一下，公开验证页上就会显示"签名有效"，而 sidecar 说的恰恰是无效。
+   * 这不是漏判，是**编造结论**，比不显示更害人。上游给的不是布尔就当没结论。
+   */
+  test("signature_ok 被写成字符串 'false'：出境是 null，不是 true", async () => {
+    const { orderNo } = seedOrder();
+    const base = goodVerdict();
+    stubSidecar(200, {
+      ...base,
+      file_sha256: SHA,
+      signatures: [{ ...(base.signatures[0] as Record<string, unknown>), signature_ok: 'false' }],
+    });
+
+    const res = await post(...request(orderNo));
+    const body = (await res.json()) as {
+      checks: { name: string; passed: boolean }[];
+      overall_ok: boolean;
+      verdict: { signatures: Record<string, unknown>[] };
+    };
+
+    const sig = body.verdict.signatures[0];
+    expect(sig.signature_ok).toBeNull();
+    expect(sig.signature_ok).not.toBe(true);
+    expect(typeof sig.signature_ok).not.toBe('string');
+    // 真的是布尔的那些位照旧出境——否则这条断言"全变 null"也能糊过去
+    expect(sig.intact).toBe(true);
+    expect(sig.timestamp_trusted).toBe(true);
+    // 分项结论同样不许被字符串糊弄：`'false'` 不是 true，签名这项就是没过
+    expect(body.checks.find((c) => c.name === '签名有效')!.passed).toBe(false);
+    expect(body.overall_ok).toBe(false);
+  });
+});
