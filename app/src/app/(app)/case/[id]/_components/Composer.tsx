@@ -5,6 +5,29 @@ import { Button } from '@/components/shadcn/button';
 
 const MAX_HEIGHT_PX = 168;
 
+export const PLACEHOLDER = '说说现在的情况，或者问下一步该怎么做';
+
+/** 量高只需要这三样；抽成结构类型是为了测试能塞一个假 textarea 进来。 */
+interface Measurable {
+  placeholder: string;
+  readonly scrollHeight: number;
+  style: { height: string };
+}
+
+/**
+ * 按内容量高。**读 scrollHeight 之前先摘掉占位符**——
+ * 占位符在 393px 下要折两行，算进去空态就是 76px（单行应有 ~50px），
+ * 用户打第一个字时会看见一次莫名其妙的回缩跳动。
+ * 有内容时占位符本来就不渲染，不用动。
+ */
+export function fitHeight(el: Measurable, value: string): void {
+  const placeholder = el.placeholder;
+  if (!value) el.placeholder = '';
+  el.style.height = 'auto';
+  el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT_PX)}px`;
+  if (!value) el.placeholder = placeholder;
+}
+
 /**
  * 输入区：多行自适应 textarea + 发送。流式中发送键变停止。
  * 回车换行、Ctrl/⌘+Enter 发送——中文输入法下回车是选词，不能抢。
@@ -23,9 +46,7 @@ export function Composer({
 
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT_PX)}px`;
+    if (el) fitHeight(el, value);
   }, [value]);
 
   const send = () => {
@@ -51,7 +72,7 @@ export function Composer({
               send();
             }
           }}
-          placeholder="说说现在的情况，或者问下一步该怎么做"
+          placeholder={PLACEHOLDER}
           aria-label="输入消息"
           className="min-h-11 flex-1 resize-none rounded-[10px] border border-line bg-surface-2 px-3 py-2.5 text-[16px] leading-7 text-ink placeholder:text-ink-2 focus:border-primary focus:outline-none"
         />

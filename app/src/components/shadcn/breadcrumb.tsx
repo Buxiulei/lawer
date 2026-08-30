@@ -12,7 +12,15 @@ function BreadcrumbList({ className, ...props }: React.ComponentProps<'ol'>) {
     <ol
       data-slot="breadcrumb-list"
       className={cn(
-        'flex flex-wrap items-center gap-1.5 text-[14px] text-muted-foreground',
+        // 移动端不许换行：顶栏 h-14 固定 56px，面包屑一换到第二行，离下边界只剩 1.7px，
+        // 看着像顶穿（360×740 复现，393 正常）。宁可末项出省略号，也不换行。
+        // sm 往上放回 flex-wrap：那边宽度够，本来也换不了行。
+        'flex flex-nowrap items-center gap-1.5 text-[14px] text-muted-foreground sm:flex-wrap',
+        // 挤压全部落在末项。前几级 shrink-0：它们是"回哪儿去"的路，被压窄就点不准；
+        // whitespace-nowrap 也不能少——中文没有单词边界，不写它「驾驶舱」会被逐字折成三行。
+        // 末项反过来要能缩到 0：truncate 自带 overflow:hidden，min-width:auto 才会解成 0。
+        '[&>li]:shrink-0 [&>li]:whitespace-nowrap',
+        '[&>li:last-child]:min-w-0 [&>li:last-child]:shrink [&>li:last-child>*]:truncate',
         className,
       )}
       {...props}
