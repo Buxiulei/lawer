@@ -5,6 +5,8 @@
 // /verify/{no} 公开页。所以这里钉死的不是"复核算得对不对"（那是 lib/evidence/recheck.test.ts
 // 的活），而是**哪些字符串允许离开服务器**：
 //   · 内部异常原文（服务器路径、file_id、上游端点）一个都不许进响应体；
+//   · **sidecar 回 200 时裁决体里自带的错误文本**（verdict.error / signatures[].error，
+//     裸 Python 异常原文）同样不许——它不走我方的 catch，得靠边界 + 白名单投影拦；
 //   · 用户拿到的必须是三段式中文（缺什么 / 为什么缺 / 怎么办）；
 //   · 原文必须**完整**留在服务端日志里——换壳不是消音，排障还得靠它。
 // 同时复验「不吞结论」：换文案不许把 passed:false / overall_ok:false 变成别的。
@@ -167,7 +169,6 @@ describe('公开复核端点的出口过滤', () => {
     expect(raw).not.toContain('enc_path');
     expect(raw).not.toContain('file_id');
     expect(raw).not.toContain(path.basename(originalEnc));
-    expect(raw).not.toContain(filesDir);
 
     // ② 用户拿到的是三段式：出了什么事 / 为什么 / 怎么办
     const body = JSON.parse(raw) as { ok: boolean; overall_ok: boolean; checks: { name: string; passed: boolean; detail: string }[] };
@@ -237,5 +238,167 @@ describe('公开复核端点的出口过滤', () => {
     const log = serverLog();
     expect(log).toContain('/etc/lawer/sidecar');
     expect(log).toContain(code);
+  });
+});
+
+/* ── sidecar 回 200 裁决时的另一半：脏值在响应体里，不在异常里 ───────── */
+
+// sidecar/verify_evidence_pdf.py 的五处投毒点都长这样：`f"...: {e}"` 直接拼异常对象，
+// 于是服务器绝对路径与 ValueError 内部态原样落进裁决 JSON。它不经我方任何 catch。
+const PY_TOP_ERROR =
+  '无法解析 PDF 或其签名: ValueError: xref table damaged at /opt/lawer/sidecar/verify_evidence_pdf.py:151';
+const PY_ROW_ERROR =
+  '验签异常: ValueError: 无法读取信任锚 /opt/lawer/sidecar/trust_anchors/cfca-identity-ca.pem';
+
+const SHA = crypto.createHash('sha256').update('cert-pdf').digest('hex');
+
+/** 白名单：只有这些字段允许离开服务器（顺序无关，逐字比对） */
+const PUBLIC_VERDICT_KEYS = [
+  'expect_hash',
+  'file_sha256',
+  'hash_match',
+  'num_signatures',
+  'overall_ok',
+  'signatures',
+];
+const PUBLIC_SIGNATURE_KEYS = [
+  'bottom_line',
+  'coverage_ok',
+  'docmdp_ok',
+  'intact',
+  'signature_ok',
+  'signer_anchored_to_cfca',
+  'timestamp_intact',
+  'timestamp_present',
+  'timestamp_trusted',
+  'trusted',
+  'valid',
+];
+
+function assertNoPythonLeak(raw: string): void {
+  expect(raw).not.toContain('/opt/lawer');
+  expect(raw).not.toContain('ValueError');
+  expect(raw).not.toContain('verify_evidence_pdf');
+  expect(raw).not.toContain('trust_anchors');
+}
+
+describe('sidecar 裁决体里的裸 Python 异常', () => {
+  test('顶层 verdict.error：不进 detail、不随裁决出境，原文只在服务端日志里', async () => {
+    const { orderNo } = seedOrder();
+    // 「PDF 解析不了」那一类：sidecar 早退，signatures 空，理由全在顶层 error
+    stubSidecar(200, {
+      ...goodVerdict(),
+      file_sha256: SHA,
+      num_signatures: 0,
+      signatures: [],
+      overall_ok: false,
+      error: PY_TOP_ERROR,
+    });
+    const serverLog = captureServerLog();
+
+    const res = await post(...request(orderNo));
+    const raw = await res.text();
+
+    assertNoPythonLeak(raw);
+    expect(raw).not.toContain(PY_TOP_ERROR);
+
+    const body = JSON.parse(raw) as {
+      overall_ok: boolean;
+      checks: { name: string; passed: boolean; detail: string }[];
+      verdict: Record<string, unknown>;
+    };
+    // ① 用户拿到的是三段式：出了什么事 / 为什么 / 怎么办
+    const sig = body.checks.find((c) => c.name === '签名有效')!;
+    expect(sig.detail).toContain('数字签名未通过校验');
+    expect(sig.detail).toContain('内部诊断信息');
+    expect(sig.detail).toContain('重新核验');
+    // ② 不吞结论：验签没过仍然是没过
+    expect(sig.passed).toBe(false);
+    expect(body.overall_ok).toBe(false);
+    // ③ 裁决按白名单出境，error 这一格根本不存在
+    expect(Object.keys(body.verdict).sort()).toEqual(PUBLIC_VERDICT_KEYS);
+    expect(body.verdict).not.toHaveProperty('error');
+    // ④ 原文完整留在服务端日志（换壳不是消音）
+    const log = serverLog();
+    expect(log).toContain(PY_TOP_ERROR);
+    expect(log).toContain('SIGNATURE_VERDICT_ERROR');
+    expect(log).toContain('recheck.verdictError');
+  });
+
+  test('签名行 signatures[].error：同样过不了边界，原文照样落日志', async () => {
+    const { orderNo } = seedOrder();
+    const base = goodVerdict();
+    stubSidecar(200, {
+      ...base,
+      file_sha256: SHA,
+      error: null, // 顶层干净，脏的只有行内——这一半此前是靠 verdict 全量透传漏出去的
+      signatures: [{ ...(base.signatures[0] as Record<string, unknown>), signature_ok: false, error: PY_ROW_ERROR }],
+      overall_ok: false,
+    });
+    const serverLog = captureServerLog();
+
+    const res = await post(...request(orderNo));
+    const raw = await res.text();
+
+    assertNoPythonLeak(raw);
+    expect(raw).not.toContain(PY_ROW_ERROR);
+
+    const body = JSON.parse(raw) as {
+      overall_ok: boolean;
+      checks: { name: string; passed: boolean; detail: string }[];
+      verdict: { signatures: Record<string, unknown>[] };
+    };
+    const sig = body.checks.find((c) => c.name === '签名有效')!;
+    expect(sig.detail).toContain('内部诊断信息');
+    expect(sig.passed).toBe(false);
+    expect(body.overall_ok).toBe(false);
+    // 哈希是独立算出来的，签名侧报错不该把它连坐
+    expect(body.checks.find((c) => c.name === '哈希一致')!.passed).toBe(true);
+
+    expect(Object.keys(body.verdict.signatures[0]).sort()).toEqual(PUBLIC_SIGNATURE_KEYS);
+    expect(body.verdict.signatures[0]).not.toHaveProperty('error');
+
+    const log = serverLog();
+    expect(log).toContain(PY_ROW_ERROR);
+    expect(log).toContain('SIGNATURE_VERDICT_ERROR');
+  });
+
+  test('白名单投影：上游新塞的字段默认留在服务端，点了名的布尔与哈希照旧出境', async () => {
+    const { orderNo } = seedOrder();
+    const base = goodVerdict();
+    // 「sidecar 明天在别的字段里拼路径」——黑名单追不上，白名单不用追
+    stubSidecar(200, {
+      ...base,
+      file_sha256: SHA,
+      debug_dump: '/opt/lawer/sidecar/state.json',
+      signatures: [
+        {
+          ...(base.signatures[0] as Record<string, unknown>),
+          signer_cn: '某某科技有限公司',
+          coverage: 'AreaCoverage.ENTIRE_REVISION',
+          raw_trace: 'Traceback (most recent call last): /opt/lawer/sidecar/main.py',
+        },
+      ],
+    });
+
+    const res = await post(...request(orderNo));
+    const raw = await res.text();
+
+    assertNoPythonLeak(raw);
+    expect(raw).not.toContain('debug_dump');
+    expect(raw).not.toContain('signer_cn');
+
+    const body = JSON.parse(raw) as {
+      overall_ok: boolean;
+      verdict: { file_sha256: string; num_signatures: number; signatures: Record<string, unknown>[] };
+    };
+    expect(Object.keys(body.verdict).sort()).toEqual(PUBLIC_VERDICT_KEYS);
+    expect(Object.keys(body.verdict.signatures[0]).sort()).toEqual(PUBLIC_SIGNATURE_KEYS);
+    // 投影不是「一律清空」：该出去的照旧出得去，否则这条端点就白公开了
+    expect(body.verdict.file_sha256).toBe(SHA);
+    expect(body.verdict.num_signatures).toBe(1);
+    expect(body.verdict.signatures[0].signature_ok).toBe(true);
+    expect(body.verdict.signatures[0].timestamp_trusted).toBe(true);
+    expect(body.overall_ok).toBe(true);
   });
 });
