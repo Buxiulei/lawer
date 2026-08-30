@@ -170,11 +170,11 @@ export function IntakeFlow() {
             </Button>
           )}
           {isLast ? (
-            <Button onClick={finish} className="w-full">
+            <Button onClick={finish} className="flex-1">
               {signedIn ? '进入驾驶舱' : '保存草稿并注册'}
             </Button>
           ) : (
-            <Button onClick={() => go(step + 1)} disabled={!canAdvance} className="w-full">
+            <Button onClick={() => go(step + 1)} disabled={!canAdvance} className="flex-1">
               下一步
             </Button>
           )}
