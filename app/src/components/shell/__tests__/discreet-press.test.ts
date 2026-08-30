@@ -23,6 +23,13 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 describe('低调模式开关的方向不对称', () => {
+  // 600 是隐私安全阀的承重数字——它定的是「在别人眼皮底下把打码撤掉有多难」。
+  // 所以下面推进时间一律写字面量 599/600，不写 HOLD_MS±n：拿被测的那个数当量尺，
+  // 把 600 改成 1 也照样全绿，等于没测。HOLD_MS 只在这一条里作为被测对象核一次。
+  it('HOLD_MS 就是 600ms——改这个数等于改安全阀，须过审', () => {
+    expect(HOLD_MS).toBe(600);
+  });
+
   it('关着的时候单击立刻开——慌的时候没有第二次机会', () => {
     const state: HoldState = { timer: null, closed: false };
     const { props, setDiscreet } = press(state, false);
@@ -40,11 +47,11 @@ describe('低调模式开关的方向不对称', () => {
     expect(hint).toHaveBeenCalledTimes(1);
   });
 
-  it('按住满 600ms 才关得掉', () => {
+  it('按住 599ms 还关不掉，满 600ms 才关——两向都要断言', () => {
     const state: HoldState = { timer: null, closed: false };
     const { props, setDiscreet } = press(state, true);
     props.onPointerDown();
-    vi.advanceTimersByTime(HOLD_MS - 1);
+    vi.advanceTimersByTime(599);
     expect(setDiscreet).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
     expect(setDiscreet.mock.calls).toEqual([[false]]);
@@ -54,7 +61,7 @@ describe('低调模式开关的方向不对称', () => {
     const state: HoldState = { timer: null, closed: false };
     const { props, setDiscreet } = press(state, true);
     props.onPointerDown();
-    vi.advanceTimersByTime(HOLD_MS - 1);
+    vi.advanceTimersByTime(599);
     props.onPointerUp();
     vi.advanceTimersByTime(5000);
     expect(setDiscreet).not.toHaveBeenCalled();
@@ -65,6 +72,18 @@ describe('低调模式开关的方向不对称', () => {
     const { props, setDiscreet } = press(state, true);
     props.onPointerDown();
     props.onPointerLeave();
+    vi.advanceTimersByTime(5000);
+    expect(setDiscreet).not.toHaveBeenCalled();
+  });
+
+  // onPointerLeave 的对称件：系统抢走这次按压（来电、下拉刷新等手势接管、指针被
+  // 浏览器判为无效）只发 pointercancel，不发 pointerup/pointerleave。漏接它，计时
+  // 就在没人按着的情况下继续跑，几百毫秒后自己把打码撤了——手已经离开屏幕了。
+  it('按压被系统取消同样中止，不许在没人按着的时候自己关掉', () => {
+    const state: HoldState = { timer: null, closed: false };
+    const { props, setDiscreet } = press(state, true);
+    props.onPointerDown();
+    props.onPointerCancel();
     vi.advanceTimersByTime(5000);
     expect(setDiscreet).not.toHaveBeenCalled();
   });
