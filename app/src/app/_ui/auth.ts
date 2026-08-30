@@ -11,7 +11,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import { TOKEN_STORAGE_KEY } from './bootstrap';
+import { CASE_ID_STORAGE_KEY, TOKEN_STORAGE_KEY } from './bootstrap';
 
 export { TOKEN_STORAGE_KEY };
 
@@ -55,6 +55,9 @@ export function writeToken(token: string): void {
 export function clearToken(): void {
   try {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
+    // 「我的案件」缓存跟着 token 走：上一个人的案件 id 不该留给下一个人。
+    // 从 bootstrap 拿键名而不是 import currentCase——那边要 import 本模块，会成环。
+    localStorage.removeItem(CASE_ID_STORAGE_KEY);
   } catch {
     // 同上
   }

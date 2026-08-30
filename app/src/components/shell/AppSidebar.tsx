@@ -24,7 +24,7 @@ import {
 } from '@/components/shadcn/sidebar';
 import { AutoIcon, EyeIcon, EyeOffIcon, MoonIcon, SunIcon } from './shellIcons';
 import { TubashuMark } from './TubashuMark';
-import { NAV_ITEMS } from './navItems';
+import { NAV_ITEMS, caseHref } from './navItems';
 
 export const THEME_LABEL: Record<ThemeMode, string> = {
   system: '跟随系统',
@@ -44,7 +44,7 @@ export function AppSidebar({
   caseTitle,
   pathname,
 }: {
-  caseId: string;
+  caseId: string | null;
   caseTitle: string;
   pathname: string;
 }) {
@@ -61,7 +61,7 @@ export function AppSidebar({
               tooltip={discreet ? NEUTRAL_TITLE : caseTitle}
               className="gap-2.5"
             >
-              <Link href={`/case/${caseId}`}>
+              <Link href={caseHref(caseId)}>
                 <TubashuMark size={24} className="size-6" />
                 <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-sidebar-foreground">
                   {discreet ? NEUTRAL_TITLE : caseTitle}

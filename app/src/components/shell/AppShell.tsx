@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { cn } from '@/app/_ui/cn';
+import { useCurrentCaseId } from '@/app/_ui/currentCase';
 import { DocumentTitle, useDiscreet } from '@/app/_ui/discreet';
 import { DiscreetVeil } from '@/app/_ui/veil';
 import { SidebarInset, SidebarProvider } from '@/components/shadcn/sidebar';
@@ -14,13 +15,6 @@ import { DemoBanner } from './DemoBanner';
 import { PanicButton } from './PanicButton';
 import { ShellHeader } from './ShellHeader';
 import { CASE_NAV_ITEMS } from './navItems';
-
-const DEFAULT_CASE_ID = 'demo';
-
-function caseIdFrom(pathname: string): string {
-  const m = pathname.match(/^\/case\/([^/]+)/);
-  return m ? m[1] : DEFAULT_CASE_ID;
-}
 
 /**
  * 壳层：PC 是可折叠侧栏 + 顶栏，移动端是顶栏 + 底部 Tab。
@@ -34,8 +28,8 @@ export function AppShell({
   caseTitle: string;
 }) {
   const pathname = usePathname() ?? '/';
-  const caseId = caseIdFrom(pathname);
-  // caseIdFrom 对非案件页也回 demo，所以横幅要另外确认这确实是 demo 案件的页面
+  // 案件页取路径里的 id；非案件页取本人名下那个（取不到就是 null＝还不知道，绝不兜底成 demo）
+  const caseId = useCurrentCaseId(pathname);
   const onDemoCase = /^\/case\/demo(\/|$)/.test(pathname);
   // 这两页底部压着一条 sticky 操作条（「问它」的输入区、首诊的下一步条），
   // 悬浮钮得抬到它上面，否则正好盖住发送键 / 主按钮的右端。
@@ -65,7 +59,7 @@ export function AppShell({
   );
 }
 
-function BottomTabs({ pathname, caseId }: { pathname: string; caseId: string }) {
+function BottomTabs({ pathname, caseId }: { pathname: string; caseId: string | null }) {
   const { discreet } = useDiscreet();
   return (
     <nav
