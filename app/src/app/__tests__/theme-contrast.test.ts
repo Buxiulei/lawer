@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { createRequire } from 'node:module';
+import { compile } from 'tailwindcss';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 /**
  * **主题对比度守卫。**
@@ -18,7 +20,8 @@ import { describe, expect, it } from 'vitest';
  */
 const APP_ROOT = path.resolve(__dirname, '../../..');
 const SRC = path.resolve(APP_ROOT, 'src');
-const CSS = fs.readFileSync(path.resolve(SRC, 'app/globals.css'), 'utf8');
+const CSS_PATH = path.resolve(SRC, 'app/globals.css');
+const CSS = fs.readFileSync(CSS_PATH, 'utf8');
 
 /** 从 `{` 开始按花括号配平取出一段块体 */
 function blockAt(css: string, openBraceIdx: number): string {
@@ -97,6 +100,12 @@ const TEXT_PAIRS: Pair[] = [
   { name: '主色字压牛皮纸', fg: '--primary-ink-on-surface', bg: '--kraft', min: 4.5 },
   { name: '强调字压主色淡底', fg: '--primary-ink', bg: '--primary-wash', min: 4.5 },
   { name: '强调字压卡片底', fg: '--primary-ink', bg: '--surface', min: 4.5 },
+  /* `--surface-2` 是输入框、引用块、次级面板的底（Composer/NodeSheet/StepPreview
+     以及 input/textarea/select 的 bg-muted 都落在它上面），此前一条配对都没有——
+     仪器整块看不见这个底，改主色时它上面的字与边框会静默变坏。 */
+  { name: '正文压次级底', fg: '--ink', bg: '--surface-2', min: 4.5 },
+  { name: '辅助字压次级底', fg: '--ink-2', bg: '--surface-2', min: 4.5 },
+  { name: '主色字压次级底', fg: '--primary-ink-on-surface', bg: '--surface-2', min: 4.5 },
 ];
 
 /** 非文字与禁用件：3 就够 */
@@ -104,6 +113,13 @@ const UI_PAIRS: Pair[] = [
   { name: '禁用控件的字压自己的底', fg: '--disabled-ink', bg: '--disabled-surface', min: 3 },
   { name: '实心主色底相对卡片底', fg: '--primary', bg: '--surface', min: 3 },
   { name: '实心主色底相对页面底', fg: '--primary', bg: '--bg', min: 3 },
+  /* 焦点框。**压 --surface-2 这条是主判据**：input/textarea/select/Composer 都是
+     `focus:outline-none` + `focus:border-focus-ring`，那圈边框是它们唯一的焦点指示，
+     而它们的底正是 --surface-2（bg-muted → --surface-2）。另两条给 `:focus-visible`
+     描边——outline-offset 让线落在父元素底上，父底是 surface 或 bg。 */
+  { name: '焦点框压输入框底', fg: '--focus-ring', bg: '--surface-2', min: 3 },
+  { name: '焦点框压卡片底', fg: '--focus-ring', bg: '--surface', min: 3 },
+  { name: '焦点框压页面底', fg: '--focus-ring', bg: '--bg', min: 3 },
 ];
 
 const THEMES: Array<[string, Map<string, string>]> = [
@@ -143,6 +159,28 @@ describe('主题 token 对比度', () => {
     const media = [...declsOf(DARK_MEDIA_BLOCKS[0])].sort();
     const cls = [...declsOf(DARK_CLASS_BLOCKS[0])].sort();
     expect(cls).toEqual(media);
+  });
+
+  /**
+   * 「浅色一字不变」是从 `--primary` 拆出这两个 token 的**全部前提**——
+   * 拆分的正当性就建立在"浅色渲染结果与拆之前逐像素相同"上，这句话在 globals.css 里
+   * 写了三处注释，却一条断言都没有。有人日后把浅色的 `--primary-ink-on-surface` 或
+   * `--focus-ring` 调成"更好看的"另一个值，浅色就悄悄换了观感，
+   * 而上面那组对比度断言照样全绿（新值多半也 ≥4.5）。这里把等式本身钉住。
+   */
+  it('浅色下拆出来的 token 逐值等于 --primary', () => {
+    const light = merge(...LIGHT_BLOCKS);
+    const primary = resolve(light, '--primary');
+    for (const token of ['--primary-ink-on-surface', '--focus-ring']) {
+      const got = resolve(light, token);
+      expect(
+        got,
+        `浅色 ${token} 解出来是 ${got}，不等于 --primary(${primary})。` +
+          `这两个 token 是为了解开**暗色**的矛盾才从 --primary 拆出来的，` +
+          `拆分的前提是「浅色渲染结果一字不变」——浅色要改就三个一起改，` +
+          `只动其中一个等于偷偷改了浅色观感。`,
+      ).toBe(primary);
+    }
   });
 });
 
@@ -197,4 +235,128 @@ describe('token 用法结构守卫', () => {
     expect(btn).toContain('disabled:bg-disabled-surface');
     expect(btn).toContain('disabled:text-disabled-ink');
   });
+
+  /**
+   * 焦点框是另一条"token 值全对、屏幕上仍然坏"的路：input/textarea/select/Composer
+   * 都写了 `focus:outline-none`，把浏览器默认焦点环关掉了，那圈边框于是成为它们**唯一**的
+   * 焦点指示（2.4.7 焦点可见）。它压的底是输入框自己的 `--surface-2`，
+   * 而 `--primary` 为了在暗色下托住白字被压到 #be4b67，压 --surface-2 只有 **2.77**，
+   * 过不了 1.4.11 的 3:1——键盘用户看不出焦点落在哪个框里。焦点色一律走 `--focus-ring`。
+   *
+   * 两个方向都要咬：**不许退回 `focus:border-primary`**，且**关掉 outline 的地方必须有边框**
+   * （只删掉焦点边框、留着 `focus:outline-none`，负向那条照样全绿，而屏幕上一点焦点指示都没有）。
+   */
+  it('焦点指示走 --focus-ring，且关掉 outline 的控件都留着它', () => {
+    const back: string[] = [];
+    const naked: string[] = [];
+    for (const f of sourceFiles(SRC)) {
+      fs.readFileSync(f, 'utf8')
+        .split('\n')
+        .forEach((line, i) => {
+          const at = `${path.relative(SRC, f)}:${i + 1}`;
+          if (/\bfocus:border-primary\b(?!-)/.test(line)) back.push(at);
+          if (/\bfocus:outline-none\b/.test(line) && !/\bfocus:border-focus-ring\b/.test(line)) {
+            naked.push(at);
+          }
+        });
+    }
+    expect(
+      back.length === 0
+        ? ''
+        : `这些地方把 focus:border-primary 当焦点框用：${back.join('、')}。` +
+          `--primary 是实心底色，暗色下压输入框底 --surface-2 只有 2.77:1，过不了 1.4.11 的 3:1。` +
+          `改成 focus:border-focus-ring——浅色下两者逐值相同，改完浅色渲染结果不变。`,
+    ).toBe('');
+    expect(
+      naked.length === 0
+        ? ''
+        : `这些地方写了 focus:outline-none 却没有 focus:border-focus-ring：${naked.join('、')}。` +
+          `关掉浏览器默认焦点环之后，边框是这个控件仅剩的焦点指示，删了就等于没有焦点可见（2.4.7）。` +
+          `要么把 focus:border-focus-ring 加回同一行，要么别关 outline。`,
+    ).toBe('');
+  });
+});
+
+/**
+ * **类名 → utility 真编译**这一跳。
+ *
+ * 上面所有断言读的都是 globals.css 的**源文本**和组件里的**类名**，中间那一跳没人看：
+ * `@theme inline` 把 `--x` 注册成 `--color-x`，Tailwind 才据此生成 `.bg-x` / `.text-x` /
+ * `.border-x`。把 `@theme inline` 里 `--color-disabled-surface: var(--disabled-surface);`
+ * 删掉一行，token 断言 31 条全绿，而 `.bg-disabled-surface` 整条不生成、禁用按钮
+ * 掉回上一层底色（复审官实测 1.46:1）。所以这里真的跑一遍 Tailwind 编译器。
+ *
+ * 注：`@theme inline` 的语义就是**把值内联掉**，产物里不会留下 `--color-disabled-surface`
+ * 这个名字。映射在不在，只能从"它该生成的 utility 在不在、指的是不是那个 token"上观察，
+ * 而这恰好就是删掉映射行时唯一变化的东西。
+ */
+describe('Tailwind 编译产物', () => {
+  /**
+   * 每条都是组件里**真实写着**的类名，连变体前缀一起编译——
+   * 判据必须钉在产线用的那个字符串上，否则测的是一个只有测试自己用的类名。
+   */
+  const UTILITIES = [
+    {
+      cls: 'disabled:bg-disabled-surface',
+      token: '--disabled-surface',
+      where: 'components/shadcn/button.tsx',
+    },
+    {
+      cls: 'disabled:text-disabled-ink',
+      token: '--disabled-ink',
+      where: 'components/shadcn/button.tsx',
+    },
+    { cls: 'focus:border-focus-ring', token: '--focus-ring', where: 'components/shadcn/input.tsx' },
+    {
+      cls: 'text-primary-ink-on-surface',
+      token: '--primary-ink-on-surface',
+      where: 'app/page.tsx',
+    },
+  ];
+
+  /** 把编译产物切成最内层的 `选择器 { 声明 }`，选择器里的 CSS 转义反斜杠去掉好比对 */
+  function innermostRules(css: string): Array<{ sel: string; body: string }> {
+    return [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({
+      sel: m[1].replace(/\\/g, ''),
+      body: m[2],
+    }));
+  }
+
+  let built = '';
+
+  beforeAll(async () => {
+    const req = createRequire(path.join(APP_ROOT, 'package.json'));
+    const TW_DIR = path.dirname(req.resolve('tailwindcss/package.json'));
+    // globals.css 只 `@import 'tailwindcss'`，它自己再相对 import theme/preflight/utilities
+    const loadStylesheet = async (id: string, base: string) => {
+      const file = id.startsWith('tailwindcss')
+        ? path.resolve(TW_DIR, id.slice('tailwindcss'.length).replace(/^\//, '') || 'index.css')
+        : path.resolve(base, id);
+      return { path: file, base: path.dirname(file), content: fs.readFileSync(file, 'utf8') };
+    };
+    const compiler = await compile(CSS, { base: path.dirname(CSS_PATH), loadStylesheet });
+    built = compiler.build(UTILITIES.map((u) => u.cls));
+  });
+
+  for (const u of UTILITIES) {
+    it(`${u.cls} 编译成真规则并指向 ${u.token}`, () => {
+      expect(
+        fs.readFileSync(path.resolve(SRC, u.where), 'utf8'),
+        `${u.where} 里已经不写 ${u.cls} 了——这条判据钉的类名得跟着产线走，` +
+          `要么把判据改到新类名上，要么这次改动本身就漏了一处。`,
+      ).toContain(u.cls);
+
+      const hit = innermostRules(built).find((r) => r.sel.includes(`.${u.cls}`));
+      expect(
+        hit,
+        `Tailwind 没有为 ${u.cls} 生成任何规则。多半是 globals.css 的 @theme inline 里少了` +
+          ` --color-${u.token.slice(2)}: var(${u.token}); 这一行——` +
+          `没有这条映射，类名就只是一串没人认识的字符串，页面照常渲染、颜色掉回上一层。`,
+      ).toBeDefined();
+      expect(
+        hit!.body,
+        `${u.cls} 生成出来了，但声明是「${hit!.body.trim()}」，没有指向 ${u.token}。`,
+      ).toContain(`var(${u.token})`);
+    });
+  }
 });

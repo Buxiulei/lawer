@@ -37,6 +37,14 @@
      浅色下 #8b2942 两个方向都够（对白 8.42、压 surface 8.42），
      这里逐值等于浅色 `--primary` 只是为了让浅色渲染结果一字不变。 */
   --primary-ink-on-surface: #8b2942;
+  /* 焦点框专用：输入控件的 `focus:border-focus-ring` 与全站 `:focus-visible` 描边。
+     **不要指 `--primary`**，理由和上面那条同源、方向却更硬：
+     input/textarea/select/Composer 全是 `focus:outline-none`，那圈边框是它们**唯一**的
+     焦点指示（2.4.7 焦点可见 + 1.4.11 非文字对比 3:1），而它压的底是输入框自己的
+     `--surface-2`——不是 surface 也不是 bg。深色下 `--primary` 为了托白字被压到 #be4b67，
+     压 --surface-2(#372e29) 只有 **2.77**，键盘用户会看不出焦点落在哪个框里。
+     浅色下逐值等于 `--primary`(#8b2942，压 --surface-2 是 6.41)，浅色渲染结果一字不变。 */
+  --focus-ring: var(--primary);
   /* 实心主色/朱红底上的文字。深浅两套都是白，但仍然给个名字：
      shadcn 的 --primary-foreground/--destructive-foreground 指到这儿，
      免得白色在桥接层再写一遍、将来改的时候漏掉一处。 */
@@ -130,6 +138,10 @@
     /* 深色下"压 wash 的强调字"和"压页面底的主色字"要的亮度区间重合，
        一个值就够；再造一个只差几个色阶的近似色反而更难维护。 */
     --primary-ink-on-surface: var(--primary-ink);
+    /* 焦点框同样落到 ink 系：`--primary`(#be4b67) 压输入框底 --surface-2(#372e29)
+       只有 2.77，`--primary-ink`(#d98ba0) 压 --surface-2 是 5.14、压 surface 6.67、
+       压 bg 7.17，三种底都过 1.4.11 的 3:1。 */
+    --focus-ring: var(--primary-ink);
     --primary-wash: #332026;
     --on-primary: #ffffff;
     --gold: #c9a75b;
@@ -174,6 +186,10 @@
   /* 深色下"压 wash 的强调字"和"压页面底的主色字"要的亮度区间重合，
      一个值就够；再造一个只差几个色阶的近似色反而更难维护。 */
   --primary-ink-on-surface: var(--primary-ink);
+  /* 焦点框同样落到 ink 系：`--primary`(#be4b67) 压输入框底 --surface-2(#372e29)
+     只有 2.77，`--primary-ink`(#d98ba0) 压 --surface-2 是 5.14、压 surface 6.67、
+     压 bg 7.17，三种底都过 1.4.11 的 3:1。 */
+  --focus-ring: var(--primary-ink);
   --primary-wash: #332026;
   --on-primary: #ffffff;
   --gold: #c9a75b;
@@ -252,6 +268,7 @@
   --color-primary: var(--primary);
   --color-primary-ink: var(--primary-ink);
   --color-primary-ink-on-surface: var(--primary-ink-on-surface);
+  --color-focus-ring: var(--focus-ring);
   --color-primary-wash: var(--primary-wash);
   --color-on-primary: var(--on-primary);
   --color-disabled-surface: var(--disabled-surface);
@@ -351,8 +368,11 @@
     color: var(--primary-ink);
   }
 
+  /* 描边走 --focus-ring 而不是 --primary：outline-offset 让这圈线落在**父元素的底**上，
+     那可能是 surface、bg，也可能是 surface-2（表单块、引用块都是 surface-2 底），
+     深色下 --primary 压 surface-2 只有 2.77。浅色下 --focus-ring 逐值等于 --primary，观感不变。 */
   :focus-visible {
-    outline: 2px solid var(--primary);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 }
