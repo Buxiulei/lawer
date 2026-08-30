@@ -46,9 +46,24 @@ import { UploadSheet, type PendingUpload } from './UploadSheet';
  * 「这个案件不存在」和「这次没读出来」对用户是两件事，能做的也不一样，
  * 只留一句翻译好的话就分不开了。
  */
-interface LoadFailure {
+export interface LoadFailure {
   code: string;
   message: string;
+}
+
+/**
+ * catch 到的东西 → LoadFailure。**抽出来是为了让 error_code 那根线可测**：
+ * 写在 catch 里的时候，把 `err.errorCode` 换成常量 `''` 整套测试照旧全绿——
+ * 断的全是 loadFailureAdvice(code)，没有一条真的喂过一个 ApiError。
+ * 那样 CASE_NOT_FOUND 会在这里被抹平成 ''，卡上照样说「已上传的材料还在」。
+ *
+ * 非 ApiError（网络断了、解析炸了）没有 error_code，落回 '' 走通用那一支。
+ */
+export function toLoadFailure(err: unknown): LoadFailure {
+  return {
+    code: err instanceof ApiError ? err.errorCode : '',
+    message: humanError(err),
+  };
 }
 
 /**
@@ -176,10 +191,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
     try {
       setItems(await fetchEvidenceList(caseId));
     } catch (err) {
-      setLoadError({
-        code: err instanceof ApiError ? err.errorCode : '',
-        message: humanError(err),
-      });
+      setLoadError(toLoadFailure(err));
     } finally {
       setLoading(false);
     }

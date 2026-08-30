@@ -15,7 +15,8 @@ import {
   EVIDENCE_CHECKLIST,
   UPLOAD_DEFAULT_CATEGORY,
 } from '@/app/_mock/intake-evidence';
-import { loadFailureAdvice } from '../EvidenceLibrary';
+import { ApiError, NetworkError } from '@/app/_ui/api';
+import { loadFailureAdvice, toLoadFailure } from '../EvidenceLibrary';
 
 const SRC = readFileSync(
   join(process.cwd(), 'src/app/(app)/case/[id]/evidence/_components/EvidenceLibrary.tsx'),
@@ -55,6 +56,43 @@ describe('加载失败那张卡的第二句', () => {
   it('真的是读取失败时，那句安抚照旧', () => {
     expect(loadFailureAdvice('INTERNAL_ERROR')).toContain('已经上传的材料还在');
     expect(loadFailureAdvice('')).toContain('已经上传的材料还在');
+  });
+});
+
+/**
+ * 上面那组只喂"已经算好的 code"，**证明不了 code 是从异常里取出来的**：
+ * 把 catch 里的 `err.errorCode` 换成常量 `''`，上面每一条照旧全绿，
+ * 页面上却会退回到「已上传的材料还在」——分支写对了，线没接上。
+ *
+ * 这一组走的是真正的入口：喂一个后端会抛的 ApiError，一路走到卡上那句话。
+ */
+describe('catch 到的异常 → 卡上那句话（整条线）', () => {
+  it('后端回 CASE_NOT_FOUND 时，code 得真的取出来，那句担保不许出现', () => {
+    const failure = toLoadFailure(
+      new ApiError('CASE_NOT_FOUND', '找不到这个案件', 404),
+    );
+    expect(failure.code).toBe('CASE_NOT_FOUND');
+    expect(failure.message).toBe('找不到这个案件');
+
+    // 接着往下走一步：卡上真正显示的第二句
+    const advice = loadFailureAdvice(failure.code);
+    expect(advice).not.toContain('还在');
+    expect(advice).not.toContain('材料');
+    expect(advice).toMatch(/案件号/);
+  });
+
+  it('别的 error_code 原样带下来，仍走通用那一支', () => {
+    const failure = toLoadFailure(new ApiError('INTERNAL_ERROR', '服务器开小差了', 500));
+    expect(failure.code).toBe('INTERNAL_ERROR');
+    expect(loadFailureAdvice(failure.code)).toContain('已经上传的材料还在');
+  });
+
+  /** 网络断了没有 error_code：落回 ''，走通用那一支，文案取 NetworkError 自己的话。 */
+  it('不是 ApiError 的异常落回空码', () => {
+    const failure = toLoadFailure(new NetworkError());
+    expect(failure.code).toBe('');
+    expect(failure.message).toContain('网络');
+    expect(loadFailureAdvice(failure.code)).toContain('已经上传的材料还在');
   });
 });
 

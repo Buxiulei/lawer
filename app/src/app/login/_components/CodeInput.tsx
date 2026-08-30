@@ -26,6 +26,15 @@ export interface CodeEdit {
  * 格子里已有字符时再打一位，DOM 值瞬时变两位，一次普通键入就被当成粘贴，
  * 整串从这一格起前移、本该输入的末位被静默丢掉，界面零提示。
  * **位数不是粘贴的证据，inputType 才是。**
+ *
+ * **第 1 格是唯一的例外，而且是有意的**：iOS 从短信里自动填充验证码走的是
+ * `autocomplete="one-time-code"`，六位一次塞进第 1 格，事件的 inputType 不是
+ * insertFromPaste（各版本给的是 insertReplacementText 或干脆没有）。只认 inputType
+ * 就等于把自动填充判死——用户得自己回短信抄六位数。所以第 1 格 maxLength=6，
+ * 且这里放行"多位一次进来 ⇒ 整串铺开"。
+ * 第 2–6 格仍然 maxLength=1，浏览器根本递不出多位，上面那个 bug 的门还是关着的。
+ * 第 1 格自己靠"进格全选"防重打错位（见组件里的 onFocus）；万一全选没生效，
+ * 这里会把 `旧字符+新字符` 当整串铺开——看得见的错，好过静默吞字。
  */
 export function applyInput(
   value: string,
@@ -35,7 +44,7 @@ export function applyInput(
 ): CodeEdit | null {
   const digits = raw.replace(/\D/g, '');
   if (!digits) return null;
-  if (pasted) {
+  if (pasted || (index === 0 && digits.length > 1)) {
     return {
       value: (value.slice(0, index) + digits).slice(0, OTP_LENGTH),
       focus: index + digits.length,
@@ -130,9 +139,11 @@ export function CodeInput({
           onPaste={handlePaste}
           // 进到一格就把里面的旧字符选上：重打时新字符是替换，不是追加到旧字符后面。
           onFocus={(e) => e.currentTarget.select()}
-          // 全选没生效时的兜底——浏览器直接拒收第二个字符，宁可这一下不响应，
-          // 也好过悄悄把整串前移。
-          maxLength={1}
+          // 第 2–6 格 maxLength=1：全选没生效时的兜底——浏览器直接拒收第二个字符，
+          // 宁可这一下不响应，也好过悄悄把整串前移。
+          // 第 1 格必须放到 6：iOS 短信自动填充是把六位一次塞进这一格，
+          // maxLength=1 会让浏览器只留下第一位，自动填充等于废掉（见 applyInput 的说明）。
+          maxLength={i === 0 ? OTP_LENGTH : 1}
           disabled={disabled}
           inputMode="numeric"
           autoComplete={i === 0 ? 'one-time-code' : 'off'}

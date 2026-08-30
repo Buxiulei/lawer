@@ -5,9 +5,15 @@
  * 实测第二行 bottom=54.3px vs header 56px——净空 1.7px，看着像顶穿。
  * 根子是 shadcn 默认的 `flex-wrap`。
  *
- * **这里断的是类，不是像素**：node 环境没有排版引擎，量不了行高。
- * 所以每条断言都要说清它挡的是哪一步，别看成"证明了不换行"。
- * 真实布局回归靠截图那一路。
+ * **判据不在这个文件里。** node 环境没有排版引擎，clientWidth/scrollWidth 恒为 0，
+ * 断类串证明不了收缩链通没通——上一版就是这么放过去的：
+ * 类全在（truncate/min-w-0/shrink 一个不少），最外层 <nav> 却是 min-width:auto，
+ * 顶死在内容宽上，下游一次都没触发，360 上实测压住「案件档案」按钮 12px，而这些断言全绿。
+ *
+ * C-08 的判据是 `scripts/perf/g5-breadcrumb.mjs`：真浏览器 360×740 量
+ * 末项 clientWidth < scrollWidth（省略号是真的）。**这里只做一件事**——
+ * 挡住"收缩链上某一环被人删掉"，让改动在跑浏览器判据之前就先红一次。
+ * 每条断言下面写清它挡的是哪一环。
  */
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -19,8 +25,11 @@ import {
   BreadcrumbSeparator,
 } from '../breadcrumb';
 
-const listClass = () => {
-  const html = renderToStaticMarkup(
+const unescape = (s: string) =>
+  s.replaceAll('&amp;', '&').replaceAll('&gt;', '>').replaceAll('&lt;', '<');
+
+const markup = () =>
+  renderToStaticMarkup(
     <Breadcrumb>
       <BreadcrumbList>
         <BreadcrumbItem>
@@ -33,10 +42,30 @@ const listClass = () => {
       </BreadcrumbList>
     </Breadcrumb>,
   );
-  const raw = html.match(/data-slot="breadcrumb-list" class="([^"]*)"/)?.[1] ?? '';
-  // 任意变体里的 & > * 在 HTML 属性里是转义过的，比回原样再断言
-  return raw.replaceAll('&amp;', '&').replaceAll('&gt;', '>').replaceAll('&lt;', '<');
-};
+
+/** 任意变体里的 `&>*` 在 HTML 属性里是转义过的，比回原样再断言 */
+const classOf = (slot: string) =>
+  unescape(markup().match(new RegExp(`data-slot="${slot}" class="([^"]*)"`))?.[1] ?? '');
+
+const listClass = () => classOf('breadcrumb-list');
+
+/**
+ * 收缩链的**第一环**：顶栏拿 <nav> 当 flex item，flex item 的 min-width 默认解成 auto。
+ * 这一环缺了，下面 BreadcrumbList 里的 shrink/truncate 全部作废——
+ * 而且是"类都在、效果一个没有"的那种作废，只看类串看不出来。
+ * 删掉 nav 的 min-w-0，这条转红，g5-breadcrumb.mjs 也跟着转红。
+ */
+describe('Breadcrumb 外层 nav', () => {
+  it('nav 自己要能缩：min-w-0', () => {
+    expect(classOf('breadcrumb')).toContain('min-w-0');
+  });
+
+  it('调用方的 className 拼得进来，且不吃掉 min-w-0', () => {
+    const html = renderToStaticMarkup(<Breadcrumb className="grow" />);
+    expect(html).toContain('grow');
+    expect(html).toContain('min-w-0');
+  });
+});
 
 describe('BreadcrumbList 的窄屏收缩规则', () => {
   it('默认不换行，sm 往上才放回 flex-wrap', () => {

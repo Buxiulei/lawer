@@ -3,8 +3,29 @@ import { Slot } from '@radix-ui/react-slot';
 import { cn } from './utils';
 import { ChevronRightIcon } from './icons';
 
-function Breadcrumb(props: React.ComponentProps<'nav'>) {
-  return <nav aria-label="面包屑" data-slot="breadcrumb" {...props} />;
+/**
+ * `min-w-0` 是这套收缩里**最外面那一环，少了它下游全部作废**：
+ * 顶栏把 <nav> 当 flex item，flex item 的 min-width 默认解成 auto（= 内容宽），
+ * 于是 nav 顶死在内容宽上，里面 BreadcrumbList 那套 shrink + truncate 一次都轮不到——
+ * 类都在、效果一个没有。360×740 实测：修前 nav 右边缘越过「案件档案」按钮 12px。
+ *
+ * 收缩链一共三环，缺一不可：nav.min-w-0 → li:last-child.min-w-0+shrink → 子元素.truncate。
+ * 判据在 scripts/perf/g5-breadcrumb.mjs（真浏览器量 clientWidth<scrollWidth），
+ * 不是类串断言——类串证明不了这条链通没通，这个 bug 就是这么漏过去的。
+ *
+ * 修后 360 上不再压住按钮（净空 8px），但末项只剩 8px 可视宽——「问它」两个字全被省略号吃掉。
+ * 那是右侧控件（案件档案 108 + 三个 44px 图标 = 252px）在 336px 的顶栏里占掉太多，
+ * 不是收缩链的问题，归台账 **C-08b**，不在本组件范围内。
+ */
+function Breadcrumb({ className, ...props }: React.ComponentProps<'nav'>) {
+  return (
+    <nav
+      aria-label="面包屑"
+      data-slot="breadcrumb"
+      className={cn('min-w-0', className)}
+      {...props}
+    />
+  );
 }
 
 function BreadcrumbList({ className, ...props }: React.ComponentProps<'ol'>) {
