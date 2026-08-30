@@ -71,7 +71,7 @@ function AccountButton({ pathname }: { pathname: string }) {
       title={ACCOUNT_NAV_ITEM.label}
       className={cn(
         'flex size-11 items-center justify-center rounded-[10px] transition-colors duration-150 ease-out lg:hidden',
-        active ? 'text-primary' : 'text-ink-2 hover:bg-surface-2',
+        active ? 'text-primary-ink-on-surface' : 'text-ink-2 hover:bg-surface-2',
       )}
     >
       {ACCOUNT_NAV_ITEM.icon}

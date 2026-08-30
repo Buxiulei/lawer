@@ -84,7 +84,7 @@ function BottomTabs({ pathname, caseId }: { pathname: string; caseId: string }) 
                 aria-current={active ? 'page' : undefined}
                 className={cn(
                   'flex h-14 flex-col items-center justify-center gap-0.5',
-                  active ? 'text-primary' : 'text-ink-2',
+                  active ? 'text-primary-ink-on-surface' : 'text-ink-2',
                 )}
               >
                 {item.icon}
