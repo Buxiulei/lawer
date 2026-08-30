@@ -227,7 +227,8 @@ export function ApiKeysCard() {
                   <button
                     type="button"
                     onClick={() => setRevoking(row)}
-                    className="flex min-h-11 shrink-0 items-center text-[14px] text-ink-2 hover:text-danger-ink"
+                    // min-h-11 只管高；两个字宽 28px，要 px-3 才够 44 宽（审查台账 P-03）
+                    className="-mr-3 flex min-h-11 shrink-0 items-center px-3 text-[14px] text-ink-2 hover:text-danger-ink"
                   >
                     吊销
                   </button>

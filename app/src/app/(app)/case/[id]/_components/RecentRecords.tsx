@@ -77,6 +77,9 @@ export function RecentRecords({ caseId }: { caseId: string }) {
       </ul>
       <p className="mt-1.5 text-[12.5px] text-ink-2">
         全部在
+        {/* 这两条行内链接实测 25×14，**有意不补到 44**：它们是句子里的词，
+            撑成 44px 会把这行说明拆成阶梯状；误点的代价只是跳到证据/文书页、退回来即可。
+            决策见审查台账 P-03。 */}
         <Link href={`/case/${caseId}/evidence`} className="mx-1 text-primary-ink underline underline-offset-4">
           <NeutralLabel plain="证据" neutral={NEUTRAL_WORD.evidence} />
         </Link>

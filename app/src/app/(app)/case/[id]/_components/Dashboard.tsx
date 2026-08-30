@@ -46,6 +46,9 @@ export function Dashboard({ caseId }: { caseId: string }) {
       {rest > 0 && (
         <p data-veil="" className="mt-1.5 text-[12.5px] text-ink-2">
           其余 <span className="num">{rest}</span> 件排在后面，在
+          {/* 这条行内链接实测 25×14，**有意不补到 44**：它是句子里的一个词，
+              撑成 44px 会把这行说明拆成阶梯状；误点的代价只是跳到问它页、退回来即可。
+              决策见审查台账 P-03。同页的底部 Tab 与行动卡都已达标，这不是漏网。 */}
           <Link href={`/case/${caseId}/ask`} className="mx-1 text-primary-ink underline underline-offset-4">
             <NeutralLabel plain="问它" neutral={NEUTRAL_WORD.ask} />
           </Link>

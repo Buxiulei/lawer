@@ -30,7 +30,10 @@ export function ActionCard({
 
   return (
     <article data-veil="" className="flex items-start gap-3 px-3 py-2.5">
-      {/* 外层撑满 44px 触区，勾选框本体仍是 20px */}
+      {/* 这层只做一件事：让 20px 的框在 44px 高的标题行里居中对齐。
+          **触区不在这层**——它在 Checkbox 自己身上（伪元素扩区，见 shadcn/checkbox.tsx）。
+          这里原先的注释把触区算在这层头上，而纯 CSS 居中不转发点击，
+          实测可点范围一直是 20×20（审查台账 SYS-03）。 */}
       <div className="flex min-h-11 min-w-11 items-center justify-center">
         <Checkbox
           id={checkboxId}
