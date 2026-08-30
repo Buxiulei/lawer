@@ -260,7 +260,7 @@ describe('token 用法结构守卫', () => {
         .split('\n')
         .forEach((line, i) => {
           const at = `${path.relative(SRC, f)}:${i + 1}`;
-          if (/\bfocus:border-primary\b(?!-)/.test(line)) back.push(at);
+          if (/\bfocus(-visible)?:border-primary\b(?!-)/.test(line)) back.push(at);
           if (
             /\bfocus(-visible)?:outline-none\b/.test(line) &&
             !/\bfocus(-visible)?:border-focus-ring\b/.test(line)
