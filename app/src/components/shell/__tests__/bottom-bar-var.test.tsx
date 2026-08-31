@@ -204,4 +204,25 @@ describe('回退与入口', () => {
     );
     expect(src).toContain('trackBottomBar(el, document.documentElement)');
   });
+
+  /**
+   * 同上，也是**源码断言**：缝的另一头是「量的是哪个元素」。ref 只在真实 DOM 里
+   * 才会被填上，本套件没有 DOM，`ref.current` 恒为 null，所以「ref 有没有挂到那个
+   * div 上」在这里没有任何可执行判据盖得住。
+   */
+  it('StickyBottomBar 量的是自己那个 div（ref 必须挂上）', () => {
+    const src = fs.readFileSync(
+      path.join(SRC_ROOT, 'components/shell/StickyBottomBar.tsx'),
+      'utf8',
+    );
+    expect(
+      src,
+      'StickyBottomBar 的根 div 上找不到 ref={ref}。\n' +
+        '为什么不行：ref 掉了，layout effect 里 ref.current 恒为 null，' +
+        '那句 `if (!el) return;` 会静默走掉——**变量永不写入**，' +
+        '低调钮回落到只躲 Tab 那条的默认值，静默压回「下一步」上（SYS-06 原样复发），' +
+        '而这套件跑在 node 环境、拿不到真实 DOM，2217 条会全绿。\n' +
+        '怎么办：把 ref 挂回根 div（`<div ref={ref} …>`）——要量的就是这条 bar 自己的高。',
+    ).toMatch(/<div\s+ref=\{ref\}/);
+  });
 });
