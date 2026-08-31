@@ -120,6 +120,14 @@ export function DashboardBody({
   return (
     <div ref={root} className="pt-1">
       <WatchBar />
+      {/* 【批6-B 桌面案由条 CaseHeaderBar 暂不挂回，待接真数据】
+          ws-panels 的 CaseHeaderBar 现在取的是 demo 数据（demoCase.title/stage/demoDeadlines），
+          挂在真实案件页会让 PC 用户在自己案件顶栏读到「星曜网络」——正是 mycase 红线
+          (dashboard-real-data.test「没有任何演示痕迹」) 守的那个用户亲报痛点。故此处**不挂**，
+          轨道对全断点仍是这一份 MilestoneTrack。待 CaseHeaderBar 接真数据
+          （同 layout.tsx 恒传 demoCase.title 那条遗留的同族纯接线小单，manager 已排）后：
+          把这份 MilestoneTrack 收成 `lg:hidden`、桌面切到 `<CaseHeaderBar caseId={caseId} />`。
+          CaseHeaderBar 组件与它的测试已合入本仓，只差挂回这一步。 */}
       <div data-mo-enter>
         <MilestoneTrack track={FULL_JOURNEY} attainments={data.attainments} />
       </div>

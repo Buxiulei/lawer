@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { useDiscreet } from '@/app/_ui/discreet';
 import { Sensitive } from '@/components/Sensitive';
+import { Checkbox } from './checkbox';
 import { cn } from './utils';
 import {
   Table,
@@ -52,6 +53,8 @@ export function DataTable<T>({
   caption,
   faces = 'both',
   cardStyle = 'card',
+  selected,
+  onSelectedChange,
   className,
 }: {
   columns: DataTableColumn<T>[];
@@ -80,9 +83,31 @@ export function DataTable<T>({
    *   证据页用它——每个分类只有一两件时，六张卡会让同一张表看起来像六个独立区块。
    */
   cardStyle?: 'card' | 'row';
+  /**
+   * 多选（批B，桌面）。给了 `selected` **且**给了 `onSelectedChange` 才长出勾选列。
+   *
+   * **只长在表格那副面孔上，卡片面孔一字不变**（设计 §八冲突面②）：
+   * 窄屏一行就是一张整卡按钮，再往里塞一个勾选框，不是「多了个功能」，
+   * 是把那张卡的点击热区戳出一个洞。批量操作在手机上本来也不是真需求——
+   * 那是坐在桌前才会做的事。
+   */
+  selected?: ReadonlySet<string>;
+  onSelectedChange?: (next: Set<string>) => void;
   className?: string;
 }) {
   const { discreet } = useDiscreet();
+  const selectable = Boolean(selected && onSelectedChange);
+  const allKeys = rows.map(rowKey);
+  const allChecked = selectable && allKeys.length > 0 && allKeys.every((k) => selected!.has(k));
+  const someChecked = selectable && allKeys.some((k) => selected!.has(k));
+
+  const toggle = (key: string) => {
+    if (!selected || !onSelectedChange) return;
+    const next = new Set(selected);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    onSelectedChange(next);
+  };
 
   const cellContent = (col: DataTableColumn<T>, row: T): ReactNode => {
     const content = col.cell(row);
@@ -102,6 +127,17 @@ export function DataTable<T>({
             {caption && <caption className="sr-only">{caption}</caption>}
             <TableHeader className="bg-muted/60">
               <TableRow>
+                {selectable && (
+                  <TableHead className="w-10">
+                    <Checkbox
+                      aria-label={allChecked ? '取消全选' : '全选本页'}
+                      checked={allChecked ? true : someChecked ? 'indeterminate' : false}
+                      onCheckedChange={() =>
+                        onSelectedChange!(allChecked ? new Set() : new Set(allKeys))
+                      }
+                    />
+                  </TableHead>
+                )}
                 {columns.map((col) => (
                   <TableHead
                     key={col.key}
@@ -120,8 +156,21 @@ export function DataTable<T>({
                   // 表头留在层外——列名是"名称/类别/时间"这种壳层字样，说不出用途。
                   data-veil=""
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={cn(onRowClick && 'cursor-pointer hover:bg-muted')}
+                  className={cn(
+                    onRowClick && 'cursor-pointer hover:bg-muted',
+                    selectable && selected!.has(rowKey(row)) && 'bg-primary-wash',
+                  )}
                 >
+                  {selectable && (
+                    // 勾选格自己吞掉点击：这一行本来点开详情，勾选不该顺手把详情也打开
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        aria-label={rowLabel ? `选择 ${rowLabel(row)}` : '选择这一行'}
+                        checked={selected!.has(rowKey(row))}
+                        onCheckedChange={() => toggle(rowKey(row))}
+                      />
+                    </TableCell>
+                  )}
                   {columns.map((col, i) => (
                     <TableCell
                       key={col.key}

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ActionItem } from '@/app/_mock/types';
+import type { ActionItem, LawRef } from '@/app/_mock/types';
 import {
   demoActions,
   demoCase,
@@ -18,7 +18,16 @@ import { AppSheet } from '@/components/shadcn/app-sheet';
 import { Button } from '@/components/shadcn/button';
 import { DeadlineChip } from '@/components/case/DeadlineChip';
 import { useRegisterCasePanel } from '@/components/shell/casePanel';
-import { useDossierPortal } from '../_workspace/CaseWorkspaceProvider';
+import {
+  useCaseWorkspace,
+  useDossierPortal,
+  useViewerPortal,
+} from '../_workspace/CaseWorkspaceProvider';
+import {
+  lawCiteId,
+  prefersReducedMotion,
+  useCitationBridge,
+} from './citations';
 import { toActionItem, type DraftFrame } from '../_stream/frames';
 import { readToken } from '../_stream/httpTransport';
 import { useChatStream, type SettledTurn } from '../_stream/useChatStream';
@@ -187,6 +196,46 @@ export function Workbench({ caseId }: { caseId: string }) {
     ) : null,
   );
 
+  // ── 引用桥的查看器端（批B，设计 §四「签名件」）─────────────────
+  // 对话里引过的法条按 id 建索引；点一条依据，第三栏开出它的逐字原件 + scrollIntoView。
+  // 反向 hover / 高亮由文档级委托（citations.ts）无 state 地完成，不在这里。
+  const lawSources = useMemo(() => {
+    const map = new Map<string, LawRef>();
+    for (const m of messages) {
+      for (const law of m.lawRefs ?? []) {
+        const id = lawCiteId(law.cite);
+        if (!map.has(id)) map.set(id, law);
+      }
+    }
+    return map;
+  }, [messages]);
+
+  const { openViewer, viewer } = useCaseWorkspace();
+  const [viewed, setViewed] = useState<LawRef | null>(null);
+
+  const onActivateCitation = useCallback(
+    (ids: string[]) => {
+      for (const id of ids) {
+        const law = lawSources.get(id);
+        if (!law) continue; // 证据行等没有原件可开的 id：略过，不误开一个空查看器
+        openViewer({ title: law.cite });
+        setViewed(law);
+        return;
+      }
+    },
+    [lawSources, openViewer],
+  );
+  useCitationBridge({ onActivate: onActivateCitation });
+
+  // 查看器被关掉（Esc / 右上角 ✕，都在 shell 里）时把正文一并撤走，不留孤儿 portal
+  useEffect(() => {
+    if (!viewer) setViewed(null);
+  }, [viewer]);
+
+  const original = useViewerPortal(
+    viewer && viewed ? <LawOriginal law={viewed} /> : null,
+  );
+
   if (!seeded && !signedIn) {
     return (
       <div className="pt-8">
@@ -294,6 +343,9 @@ export function Workbench({ caseId }: { caseId: string }) {
       {/* 档案投送到卷宗栏。用 portal 而不是把节点交给上层：这段内容留在
           Workbench 自己的 React 树里，actions 变了照常更新，SSE 一点都不知情。 */}
       {dossier}
+      {/* 逐字原件投送到查看器（第三栏）。同理走 portal：正文留在本树里，
+          开合只由 shell 的 data-viewer 决定，宽度不够那一档 CSS 自己收起。 */}
+      {original}
 
       <AppSheet open={panelOpen} onClose={() => setPanelOpen(false)} title="案件档案">
         <CasePanel caseId={caseId} actions={actions} />
@@ -343,5 +395,31 @@ function CaseStatusBar() {
         {nearest && <DeadlineChip dueAt={nearest.dueAt} showDate />}
       </div>
     </section>
+  );
+}
+
+/**
+ * 查看器里的逐字原件（引用桥的第三栏）。标题（条号）由 shell 的 ViewerPane 渲染，
+ * 这里只出结论 + 逐字原文。挂载/切换时 scrollIntoView，把刚开的原件带进视野
+ * （窄桌面档查看器可能在折叠边缘）。
+ *
+ * 结论一句里带着案情（「你在朝阳上班，递朝阳」），所以整块进糊层；
+ * 逐字法条是公开法律、本可不糊，但和结论同处一块，一并糊了更省心。
+ */
+function LawOriginal({ law }: { law: LawRef }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.scrollIntoView({
+      block: 'nearest',
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    });
+  }, []);
+  return (
+    <div ref={ref} data-veil="" className="prose-measure">
+      <p className="text-[15px] leading-7 text-ink">{law.conclusion}</p>
+      <blockquote className="mt-3 border-l-2 border-line pl-3 text-[15px] leading-7 text-ink-2">
+        {law.fullText}
+      </blockquote>
+    </div>
   );
 }
