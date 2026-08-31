@@ -23,10 +23,24 @@ export function DeadlineTiles({ deadlines, now }: { deadlines: Deadline[]; now?:
   // 角标只挂**最急的那一张**：两只一模一样的土八鼠并排举闹钟，读起来是贴纸不是提示，
   // 而且「哪件最急」这个唯一有用的信息反而被抹平了
   const mostUrgent = deadlines.reduce((a, b) => (a.dueAt <= b.dueAt ? a : b));
+  // 「有没有角标」在这里判一次就够，Tile 不再各判各的——两处各写一遍迟早会岔开
+  const badged = daysUntil(mostUrgent.dueAt, now) <= URGENT_DAYS;
   return (
-    <section aria-label="期限倒计时" className="mt-4 grid grid-cols-2 gap-3">
+    <section
+      aria-label="期限倒计时"
+      className={cn(
+        'grid grid-cols-2 gap-3',
+        /* 【为角标留位】角标是绝对定位、脱离文档流：`-top-5` 让它探出瓦片上沿 20px。
+           不给这 20px 留位置，它就压在上一个区块的尾巴上——今天上面恰好是一行说明文字、
+           压到的又不是可点元素，但**那是运气不是设计**（同 Mascot 里那句自注）。
+           所以有角标时把整段下推：36 − 20 = 16，角标上沿到上一区块仍是无角标时的 16px。
+           这个减法由 `__tests__/deadline-badge-reserve.test.tsx` 从渲染结果里现算着守，
+           改 `-top-5` 而忘了改这里会当场红。 */
+        badged ? 'mt-9' : 'mt-4',
+      )}
+    >
       {deadlines.map((d) => (
-        <Tile key={d.id} deadline={d} now={now} badge={d.id === mostUrgent.id} />
+        <Tile key={d.id} deadline={d} now={now} badge={badged && d.id === mostUrgent.id} />
       ))}
     </section>
   );
@@ -53,9 +67,10 @@ function Tile({
         urgent ? 'border-amber bg-amber-wash' : 'border-line bg-surface',
       )}
     >
-      {urgent && badge && (
+      {badge && (
         /* 挂**左**上角而不是右上角：右上角正对着栅格间隙，两张卡挨着时
-           读者分不清这只土八鼠在替哪一张着急。左上角贴着最急那张的外沿，没有歧义。 */
+           读者分不清这只土八鼠在替哪一张着急。左上角贴着最急那张的外沿，没有歧义。
+           `-top-5` 探出上沿 20px，这 20px 由 section 的 mt 留出来，见上面那段。 */
         <Mascot pose="nag" size={48} className="absolute -top-5 -left-3" />
       )}
       <div

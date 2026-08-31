@@ -361,6 +361,22 @@
   html {
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
+
+    /* 横向溢出兜底。
+       【依据】docs/tasks/BOARD.md 审查递延队列 P-04：「落地页 fixed 容器虚高 36px 休眠项
+       （修完溢出复测，仍在则 html overflow-x:clip 兜底）」。落这条时按的就是那句处方。
+       **具体是哪个元素顶出的 36px，本轮没有复测、也没有定位到**——这里只写下它被记成什么，
+       不替它编一个成因。要定位得在真机窄屏读 documentElement.scrollWidth 与 clientWidth 的差。
+       所以：兜底不是替代，**溢出源该查还是要查**；这一条只保证在查清之前，
+       越界的装饰件不会让整页横着晃。
+
+       【为什么是 clip 不是 hidden】两者都止住横向滚动，但 `overflow-x: hidden` 会
+       把根元素变成滚动容器，**其中所有 position: sticky 立刻失效**——本站 sticky 有
+       ShellHeader（`sticky top-0`）、「问它」输入区 Composer、首诊下一步条三处，
+       全站顶栏会当场不再吸顶。`overflow: clip` 按 CSS Overflow 3 不建立滚动容器，
+       sticky 保留。另：clip 与另一轴的 visible 可以共存（规范只在另一轴为
+       scroll/auto/hidden 时才把 visible 改算成 auto），所以纵向滚动不受影响。 */
+    overflow-x: clip;
   }
 
   body {

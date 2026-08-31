@@ -26,21 +26,42 @@ const CADDYFILE = path.join(REPO_ROOT, 'deploy/Caddyfile');
 /** Caddyfile 里的通配形态：清单存前缀，配置里带 `*` */
 const WANTED = UPLOAD_ROUTE_PREFIXES.map((p) => `${p}*`);
 
+/** 夹具找不到时的说明。**只写这一份**：自检断言与惰性读文件共用它，不许两处各写各的。 */
+const MISSING_FIXTURE =
+  `缺什么：读不到 ${CADDYFILE}。\n` +
+  `为什么缺：本测试按 __dirname 上溯五级取仓库根（app/src/lib/evidence/__tests__ → 根），` +
+  `Caddyfile 被挪走、或本测试文件被挪到别的深度，这个相对路径就会指空。\n` +
+  `怎么办：确认 deploy/Caddyfile 还在，或按本文件的新位置修正 REPO_ROOT 的上溯级数。` +
+  `不要因为这条红去动 Caddyfile —— 这条红说的是测试自己找错了地方。`;
+
 test('夹具自检：deploy/Caddyfile 必须真的在这个路径上', () => {
   // 【为什么先要这一条】路径写错时下面每条断言都会以"读不到/没匹配到"的形态红，
   // 那种红和"Caddyfile 真的漏了一条路由"长得一样，会把人引去改配置而不是改测试路径。
-  expect(
-    fs.existsSync(CADDYFILE),
-    `缺什么：读不到 ${CADDYFILE}。\n` +
-      `为什么缺：本测试按 __dirname 上溯五级取仓库根（app/src/lib/evidence/__tests__ → 根），` +
-      `Caddyfile 被挪走、或本测试文件被挪到别的深度，这个相对路径就会指空。\n` +
-      `怎么办：确认 deploy/Caddyfile 还在，或按本文件的新位置修正 REPO_ROOT 的上溯级数。` +
-      `不要因为这条红去动 Caddyfile —— 这条红说的是测试自己找错了地方。`,
-  ).toBe(true);
+  expect(fs.existsSync(CADDYFILE), MISSING_FIXTURE).toBe(true);
 });
 
-const src = fs.readFileSync(CADDYFILE, 'utf8');
-const lines = src.split('\n');
+/**
+ * 【为什么读文件必须在 test 体里，不能在模块顶层】
+ * 这里原先是一句模块顶层的 `fs.readFileSync(CADDYFILE)`。路径一旦指空，
+ * 它在**收集阶段**就抛 ENOENT，整个文件 0 条测试跑不起来——
+ * 上面那条夹具自检连同它那段三段式文案**一次也没执行过**，等于不存在。
+ * 实测（把 CADDYFILE 指向不存在的路径）：`0 test` + 一条裸 ENOENT 堆栈，
+ * 读的人得自己从堆栈倒推「是测试找错地方还是配置真没了」——正是那条自检要替他答的问题。
+ * 所以读文件改成惰性 + 记忆化，只在 test 体内触发；夹具自检因此真能红成它写好的样子，
+ * 且**别的测试也不会退回裸 ENOENT**：这里先自己判存在，抛的是同一段三段式。
+ */
+let cachedLines: string[] | null = null;
+function caddyLines(): string[] {
+  if (cachedLines === null) {
+    if (!fs.existsSync(CADDYFILE)) throw new Error(MISSING_FIXTURE);
+    cachedLines = fs.readFileSync(CADDYFILE, 'utf8').split('\n');
+  }
+  return cachedLines;
+}
+
+/** 两行的名字提到常量：test 名在收集阶段就要定下来，而那时还不许读文件 */
+const LABEL = { uploads: '@uploads path', nonUploads: '@non_uploads 的 not path' } as const;
+type LineKey = keyof typeof LABEL;
 
 type PathLine = { lineNo: number; label: string; tokens: string[] };
 
@@ -51,30 +72,36 @@ function parsePathList(lineNo: number, label: string, text: string): PathLine {
 
 /** `@uploads path ...` 那一行 */
 function findUploadsLine(): PathLine | null {
+  const lines = caddyLines();
   const i = lines.findIndex((l) => /^\s*@uploads\s+path\s+/.test(l));
-  return i < 0 ? null : parsePathList(i + 1, '@uploads path', lines[i]);
+  return i < 0 ? null : parsePathList(i + 1, LABEL.uploads, lines[i]);
 }
 
 /** `@non_uploads { ... }` 块里的 `not path ...` 那一行（只认块内的，不认别处同名指令） */
 function findNonUploadsLine(): PathLine | null {
+  const lines = caddyLines();
   const start = lines.findIndex((l) => /^\s*@non_uploads\s*\{/.test(l));
   if (start < 0) return null;
   for (let i = start + 1; i < lines.length; i += 1) {
     if (/^\s*\}/.test(lines[i])) return null; // 块读完了也没见到 not path
     if (/^\s*not\s+path\s+/.test(lines[i])) {
-      return parsePathList(i + 1, '@non_uploads 的 not path', lines[i]);
+      return parsePathList(i + 1, LABEL.nonUploads, lines[i]);
     }
   }
   return null;
 }
 
-const uploads = findUploadsLine();
-const nonUploads = findNonUploadsLine();
+const findLine: Record<LineKey, () => PathLine | null> = {
+  uploads: findUploadsLine,
+  nonUploads: findNonUploadsLine,
+};
+const LINE_KEYS = ['uploads', 'nonUploads'] as const;
 
 describe('deploy/Caddyfile 的两行 path 列表必须被解析到', () => {
   // 解析不到时，下面"某条路由不在列表里"的断言会以空列表全红，
   // 那种红指向的是配置而不是这里的正则 —— 所以先把"读没读懂"单独判掉。
   test('@uploads path 行存在且能解析出路径列表', () => {
+    const uploads = findUploadsLine();
     expect(
       uploads !== null && uploads.tokens.length > 0,
       `缺什么：deploy/Caddyfile 里找不到可解析的 \`@uploads path ...\` 行。\n` +
@@ -86,6 +113,7 @@ describe('deploy/Caddyfile 的两行 path 列表必须被解析到', () => {
   });
 
   test('@non_uploads 块里的 not path 行存在且能解析出路径列表', () => {
+    const nonUploads = findNonUploadsLine();
     expect(
       nonUploads !== null && nonUploads.tokens.length > 0,
       `缺什么：deploy/Caddyfile 的 \`@non_uploads { ... }\` 块里找不到可解析的 \`not path ...\` 行。\n` +
@@ -100,8 +128,11 @@ describe('deploy/Caddyfile 的两行 path 列表必须被解析到', () => {
 describe('🔴 正向：清单里的每条上传路由都必须同时出现在两行里', () => {
   for (const prefix of UPLOAD_ROUTE_PREFIXES) {
     const want = `${prefix}*`;
-    for (const line of [uploads, nonUploads]) {
-      test(`${want} 出现在 ${line?.label ?? '(未解析到的行)'}`, () => {
+    for (const key of LINE_KEYS) {
+      test(`${want} 出现在 ${LABEL[key]}`, () => {
+        const line = findLine[key]();
+        const uploads = findUploadsLine();
+        const nonUploads = findNonUploadsLine();
         expect(
           line !== null && line.tokens.includes(want),
           `缺什么：deploy/Caddyfile 第 ${line?.lineNo ?? '?'} 行 \`${line?.label ?? '?'}\` 里没有 ${want}` +
@@ -121,8 +152,9 @@ describe('🔴 正向：清单里的每条上传路由都必须同时出现在�
 });
 
 describe('🔴 反向：两行的 path 集合必须与清单精确相等（不许只往 Caddyfile 加）', () => {
-  for (const line of [uploads, nonUploads]) {
-    test(`${line?.label ?? '(未解析到的行)'} 的集合与 UPLOAD_ROUTE_PREFIXES 一一对应`, () => {
+  for (const key of LINE_KEYS) {
+    test(`${LABEL[key]} 的集合与 UPLOAD_ROUTE_PREFIXES 一一对应`, () => {
+      const line = findLine[key]();
       const got = line?.tokens ?? [];
       const onlyInCaddy = got.filter((t) => !WANTED.includes(t));
       const onlyInList = WANTED.filter((t) => !got.includes(t));
