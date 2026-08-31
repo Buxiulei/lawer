@@ -5,21 +5,25 @@
 是**匿名可访问**的。基线上有五处把裸 `{e}` / `{type(e).__name__}: {e}` 写进去，
 其中信任锚那处直接把服务器绝对路径 `_TRUST_ANCHOR_DIR` 送出门。
 
-判据分三层，缺一层就有变异能全绿穿过（见文件末尾的变异核记录）：
+判据分五层，缺一层就有变异能全绿穿过：
   1) 出口无路径 —— 断言的是**整份裁决 JSON 序列化后**不含标记串，
      不是只看 `error` 一个键（否则「换个字段继续漏」照样绿）；
   2) 日志有原文 —— 断言原始异常/明细进了 logger，
      否则「删干净就完事」会让线上彻底失去排障依据，测试却全绿；
   3) 静态安全原因原文保留 + 稳定码 —— 否则「一律换成一句通用兜底」也全绿，
-     而那会把「这份文件根本没签名」这种用户必须知道的事实一起抹掉。
+     而那会把「这份文件根本没签名」这种用户必须知道的事实一起抹掉；
+  4) 错误码**字面值**冻结 —— 只拿符号比（`== vep.E_NO_SIGNATURE`）时，改码值两边一起变，
+     测试全绿而 app 侧按码做的白名单投影当场对不上；
+  5) 结构守卫走**白名单** —— 只点名已知的插值语法挡不住「变量中转」和第六处新写法，
+     反过来限定 `error` 的合法右值，不认识的形状一律点名。
 """
 
+import ast
 import builtins
 import io
 import json
 import logging
 import os
-import re
 import sys
 
 import pytest
@@ -193,6 +197,32 @@ def test_missing_timestamp_anchor_reason_survives_verbatim(monkeypatch):
     assert v["error"].startswith("缺失时间戳信任锚")
 
 
+# 错误码是**跨进程契约**：app 侧按码做白名单投影（回填另单），码的字面值就是协议本身。
+# 其余测试一律拿符号比（`== vep.E_NO_SIGNATURE`），符号两边一起变 → 改值全绿穿过：
+# 把 E_NO_SIGNATURE 改成 "no_sig"、把 E_PDF_UNPARSABLE 改成 "E_PDF_BROKEN_V2"，
+# 线上 app 的白名单当场对不上（原因栏变空白或掉进兜底），测试却一片绿。
+# 所以这里钉死字面值——改码必须同时改这张表，改表时才会想起「app 侧白名单要同步」。
+_FROZEN_ERROR_CODES = {
+    "E_VERIFIER_UNAVAILABLE": "E_VERIFIER_UNAVAILABLE",
+    "E_TRUST_ANCHOR_UNAVAILABLE": "E_TRUST_ANCHOR_UNAVAILABLE",
+    "E_MISSING_CFCA_ANCHOR": "E_MISSING_CFCA_ANCHOR",
+    "E_MISSING_TSA_ANCHOR": "E_MISSING_TSA_ANCHOR",
+    "E_PDF_UNPARSABLE": "E_PDF_UNPARSABLE",
+    "E_NO_SIGNATURE": "E_NO_SIGNATURE",
+    "E_SIGNATURE_VERIFY_FAILED": "E_SIGNATURE_VERIFY_FAILED",
+    "E_PDF_READ_FAILED": "E_PDF_READ_FAILED",
+}
+
+
+def test_error_code_literals_are_frozen_contract():
+    """码表的字面值是冻结契约——静态三码与兜底五码一并钉死，改值即红。"""
+    assert {name: getattr(vep, name) for name in _FROZEN_ERROR_CODES} == _FROZEN_ERROR_CODES
+    # 名单也是封闭的：新增/删除一个码必须同步这张表（以及 app 侧的白名单投影）
+    assert {n for n in vars(vep) if n.startswith("E_")} == set(_FROZEN_ERROR_CODES), (
+        "码表增减了成员却没同步冻结表；app 侧按码投影，未登记的码到了前端就是「未知原因」"
+    )
+
+
 def test_every_fallback_code_has_a_registered_summary():
     """码表齐整性：异常兜底类的每个码都必须登记安全概述（app 侧按码做白名单要用）。"""
     fallback = {
@@ -222,31 +252,142 @@ def test_http_verify_response_body_has_no_server_path(monkeypatch, caught):
     assert r.json()["error_code"] == vep.E_PDF_UNPARSABLE
 
 
-# ---------------- 结构守卫：第六处写成同样的形状要被点名 ----------------
+# ---------------- 结构守卫：error 的右值走白名单 ----------------
+#
+# 【为什么不是黑名单】上一版守卫枚举「插值语法」（f"" / .format / % / +）来点名。
+# 枚举挡不住换个形状写的同一件事——**变量中转**只要绕一手就静默穿过：
+#     detail = f"{type(e).__name__}: {e}"
+#     result["error"] = detail          # 右值只是个名字，黑名单看不见
+# 而且黑名单是「列举已知的坏」，第六种坏写法天然在名单外。
+#
+# 所以反过来：**白名单**。能落进对外 error 字段的值只有两种形状——
+#   1) _safe_error(...) 的返回（异常兜底类的唯一出口，原文另进日志）；
+#   2) 模块级、纯字符串字面量的常量名（静态安全原因，文案里不可能夹带运行期数据）；
+#   （None 是初始化占位，不携带任何数据，一并放行。）
+# 其余一概点名，不管它长什么样——这才是「不认识的东西默认不放行」。
+#
+# 覆盖两种写法：下标赋值 `X["error"] = V`（含元组解包与原地追加）与字典字面量
+# `{"error": V}`（CLI 那条 stdout 裁决走的就是字典字面量，黑名单版从没看过它）。
 
-_ERROR_ASSIGN = re.compile(r'\["error"\]\s*=\s*(?P<rhs>.+?)\s*$')
+_VEP_SRC_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                             "verify_evidence_pdf.py")
 
 
-def test_no_interpolated_string_is_ever_assigned_to_error():
-    """出口只有一个（_safe_error）——以后有人再手写一处 `error = f"...{e}"` 必须被点名。
+def _module_str_constants(tree: ast.Module) -> set:
+    """模块级、值为纯字符串字面量的常量名（f-string / 拼接 / 函数返回都不算）。"""
+    names = set()
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not (isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                names.add(target.id)
+    return names
 
-    只测「这五处现在干净」挡不住第六处：独立写 N 次忘 N 次是默认形态，不是疏忽。
-    """
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        "verify_evidence_pdf.py")
-    with open(path, encoding="utf-8") as f:
+
+def _is_error_key(node) -> bool:
+    return (isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant)
+            and node.slice.value == "error")
+
+
+def _error_field_writes(tree: ast.Module):
+    """产出 (行号, 右值节点)：每一处会落进对外 error 字段的值。"""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            flat = []
+            for target in node.targets:
+                flat.extend(target.elts if isinstance(target, (ast.Tuple, ast.List))
+                            else [target])
+            if any(_is_error_key(t) for t in flat):
+                yield node.lineno, node.value
+        elif isinstance(node, ast.AugAssign):
+            if _is_error_key(node.target):
+                yield node.lineno, node.value
+        elif isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values):
+                if isinstance(key, ast.Constant) and key.value == "error":
+                    yield value.lineno, value
+
+
+def _rhs_allowed(value, const_names: set) -> bool:
+    if (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+            and value.func.id == "_safe_error"):
+        return True
+    if isinstance(value, ast.Name) and value.id in const_names:
+        return True
+    return isinstance(value, ast.Constant) and value.value is None
+
+
+def error_rhs_offenders(src: str, path: str = "<src>") -> list:
+    """返回所有「右值不在白名单里」的 error 写入点（行号 + 原文）。"""
+    tree = ast.parse(src)
+    const_names = _module_str_constants(tree)
+    lines = src.splitlines()
+    return [
+        f"{path}:{lineno}: {lines[lineno - 1].strip()}"
+        for lineno, value in _error_field_writes(tree)
+        if not _rhs_allowed(value, const_names)
+    ]
+
+
+def test_error_field_only_takes_whitelisted_right_hand_sides():
+    """对外 error 字段只收 _safe_error(...) 或模块级无插值常量，第六处怎么绕都要被点名。"""
+    with open(_VEP_SRC_PATH, encoding="utf-8") as f:
         src = f.read()
 
-    offenders = []
-    for lineno, line in enumerate(src.splitlines(), 1):
-        m = _ERROR_ASSIGN.search(line)
-        if not m:
-            continue
-        rhs = m.group("rhs")
-        if rhs.startswith(('f"', "f'")) or ".format(" in rhs or "%" in rhs or " + " in rhs:
-            offenders.append(f"{path}:{lineno}: {line.strip()}")
+    # 先验量具：扫不到写入点说明守卫已经瞎了（源文件结构变了 / 路径拼错），
+    # 那时「零违规」是假绿。当前源文件 11 处（5 处 _safe_error + 3 处静态常量 + 3 处 None 初始化）。
+    writes = list(_error_field_writes(ast.parse(src)))
+    assert len(writes) >= 8, f"守卫只扫到 {len(writes)} 处 error 写入点，先确认守卫本身还有效"
 
+    offenders = error_rhs_offenders(src, _VEP_SRC_PATH)
     assert not offenders, (
-        "对外 error 字段被插值字符串赋值（会把异常原文/服务器路径送出门）；"
-        "改用 _safe_error(code, e) 并在 _SAFE_SUMMARY 登记概述：\n" + "\n".join(offenders)
+        "对外 error 字段收了白名单外的右值（会把异常原文/服务器路径送出门）；"
+        "兜底类改用 `x['error_code'], x['error'] = _safe_error(code, e)` 并在 _SAFE_SUMMARY "
+        "登记概述，静态安全原因写成模块级常量再引用：\n" + "\n".join(offenders)
     )
+
+
+# 守卫自检（正例）：白名单内的三种形状不许被误判为违规。
+_GUARD_ACCEPTS = '''
+_REASON_X = "静态安全原因，无插值"
+
+
+def f(e):
+    result = {"overall_ok": False, "error": None, "error_code": None}
+    result["error_code"], result["error"] = _safe_error(E_X, e)
+    result["error"] = _REASON_X
+    return result
+'''
+
+# 守卫自检（反例）：这些形状全是「把运行期数据送进对外字段」的同一件事，
+# 少抓一种，第六处就从那种形状溜出去。
+_GUARD_MUST_CATCH = {
+    "变量中转": 'def f(e):\n    detail = f"炸了: {e}"\n    result["error"] = detail\n',
+    "元组中转": 'def f(e):\n    code, msg = _safe_error(E_X, e)\n'
+                '    result["error_code"], result["error"] = code, msg\n',
+    "新增第六处间接赋值": 'def f(e):\n    if bad:\n        detail = describe(e)\n'
+                          '        result["error"] = detail\n',
+    "就地 f-string": 'def f(e):\n    result["error"] = f"炸了: {e}"\n',
+    "字符串拼接": 'def f(e):\n    result["error"] = "炸了: " + str(e)\n',
+    "百分号格式化": 'def f(e):\n    result["error"] = "炸了: %s" % e\n',
+    "format 方法": 'def f(e):\n    result["error"] = "炸了: {}".format(e)\n',
+    "别的函数中转": 'def f(e):\n    result["error"] = _describe(e)\n',
+    "原地追加": 'def f(e):\n    result["error"] += str(e)\n',
+    "字典字面量夹带": 'def f(e):\n    return {"overall_ok": False, "error": f"{e}"}\n',
+    "非模块级常量中转": 'def f(e):\n    reason = "看着像常量，其实是局部名"\n'
+                        '    reason = f"{reason}: {e}"\n    result["error"] = reason\n',
+}
+
+
+@pytest.mark.parametrize("shape", sorted(_GUARD_MUST_CATCH))
+def test_guard_catches_every_known_leak_shape(shape):
+    """守卫自身的判据：它必须真的抓得住这些形状，否则「全绿」只是没看见。"""
+    assert error_rhs_offenders(_GUARD_MUST_CATCH[shape]), f"守卫漏掉了「{shape}」这种写法"
+
+
+def test_guard_does_not_flag_the_whitelisted_shapes():
+    """反向自检：白名单内的写法不许误伤，否则守卫会被人「修」成永远不响。"""
+    assert error_rhs_offenders(_GUARD_ACCEPTS) == []

@@ -76,6 +76,8 @@ set -a && . ./.env && set +a  # 加载环境变量
 **不含服务器路径与异常原文**——那些只进 sidecar 日志
 （logger `sidecar.verify_evidence_pdf`，`ERROR` 级，带 traceback）。
 app 侧要给用户看具体原因，按 `error_code` 做白名单投影，不要正则匹配 `error` 文案。
+码的**字面值**是跨进程契约（`tests/test_verify_error_sanitize.py` 里冻结成表逐个钉死）：
+改文案不改码；真要增删码，改冻结表的那一下就是提醒——app 侧白名单得同步，否则前端只剩「未知原因」。
 
 ### `/evidence-pdf` payload 形状
 

@@ -77,6 +77,20 @@ E_NO_SIGNATURE = "E_NO_SIGNATURE"                          # 静态：PDF 无嵌
 E_SIGNATURE_VERIFY_FAILED = "E_SIGNATURE_VERIFY_FAILED"    # 异常兜底：单个签名验签过程抛异常
 E_PDF_READ_FAILED = "E_PDF_READ_FAILED"                    # 异常兜底：CLI 读盘失败
 
+# 静态安全原因的对外原文。文案里没有任何运行期插值，故可原样出门——用户必须看到
+# 「这份文件根本没签名」这类事实，不能被一句通用兜底吞掉。
+# 集中在模块级是**结构要求**而非风格偏好：error 字段的合法右值只有两种形状——
+# _safe_error(...) 的返回，或这里的常量名；结构守卫
+# （tests/test_verify_error_sanitize.py::test_error_field_only_takes_whitelisted_right_hand_sides）
+# 按这条白名单点名，就地手搓一句 f"...{e}"、或经变量中转绕一圈，都会被点到。
+_REASON_MISSING_CFCA_ANCHOR = (
+    "缺失 CFCA 签名信任锚（sidecar/trust_anchors/ 无 CFCA Identity CA 根）——签名链无法锚定，拒绝判通过"
+)
+_REASON_MISSING_TSA_ANCHOR = (
+    "缺失时间戳信任锚（GlobalSign AATL 时间戳 CA）——时间戳链无法锚定，拒绝判通过"
+)
+_REASON_NO_SIGNATURE = "PDF 无嵌入数字签名（未签名文件，拒绝判通过）"
+
 # 异常兜底类的对外概述。**唯一出口**：新增兜底分支必须在此登记一条，
 # 否则 _safe_error 直接 KeyError（宁可炸也不要静默回一段裸异常）。
 _SAFE_SUMMARY = {
@@ -177,11 +191,11 @@ def verify_pdf(pdf_bytes: bytes, expect_hash: str = None) -> dict:
         return result
     if not signer_roots:
         result["error_code"] = E_MISSING_CFCA_ANCHOR
-        result["error"] = "缺失 CFCA 签名信任锚（sidecar/trust_anchors/ 无 CFCA Identity CA 根）——签名链无法锚定，拒绝判通过"
+        result["error"] = _REASON_MISSING_CFCA_ANCHOR
         return result
     if not ts_roots:
         result["error_code"] = E_MISSING_TSA_ANCHOR
-        result["error"] = "缺失时间戳信任锚（GlobalSign AATL 时间戳 CA）——时间戳链无法锚定，拒绝判通过"
+        result["error"] = _REASON_MISSING_TSA_ANCHOR
         return result
 
     # 真 CFCA 根的 SHA-256 指纹集合（PIN 判据的地面真值）——只认这些字节，不认「叫 CFCA 的名字」。
@@ -206,7 +220,7 @@ def verify_pdf(pdf_bytes: bytes, expect_hash: str = None) -> dict:
     result["num_signatures"] = len(embedded)
     if not embedded:
         result["error_code"] = E_NO_SIGNATURE
-        result["error"] = "PDF 无嵌入数字签名（未签名文件，拒绝判通过）"
+        result["error"] = _REASON_NO_SIGNATURE
         return result
 
     all_sig_ok = True
@@ -307,9 +321,11 @@ def main():
     try:
         pdf_bytes = open(args.pdf, "rb").read()
     except Exception as e:  # noqa
-        code, msg = _safe_error(E_PDF_READ_FAILED, e)
-        print(json.dumps({"overall_ok": False, "error": msg, "error_code": code},
-                         ensure_ascii=False, indent=2))
+        # 与 verify_pdf 内四处同一形状：error 只由 _safe_error 落地，不经中转名——
+        # 中转名是守卫看不穿的形状，这里不给它开第一个口子。
+        verdict = {"overall_ok": False, "error": None, "error_code": None}
+        verdict["error_code"], verdict["error"] = _safe_error(E_PDF_READ_FAILED, e)
+        print(json.dumps(verdict, ensure_ascii=False, indent=2))
         sys.exit(1)
 
     verdict = verify_pdf(pdf_bytes, args.expect_hash)
