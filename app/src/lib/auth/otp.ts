@@ -1,5 +1,10 @@
 // app/src/lib/auth/otp.ts
-// 手机 OTP + 邮箱验证码的全部业务逻辑（spec §8 auth：手机 OTP + 邮箱验证双必须）。
+// 手机 OTP + 邮箱验证码的全部业务逻辑。
+//
+// 【登录是单因素，注册才是双因素】老用户回来登录，手机与邮箱**任选一条**收码即可进站；
+// 只有「验手机时发现这个号还没账号」＝新用户注册，才追加一步邮箱验证把账号补全。
+// 所以邮箱那两个函数收的 userId 是可空的：带 token = 注册补全（给刚建的号绑邮箱），
+// 不带 token = 邮箱通道登录（只认已经验证过、且确实属于某账号的邮箱，见 resolveEmailTarget）。
 // 语义整块照搬 NBDpsy auth_sms.rs / auth_email.rs：
 //   - 同一手机号/邮箱 60s 内只能再发一次（retry_after: 60）
 //   - 同一手机号/邮箱 24h 内最多 10 次
@@ -170,7 +175,12 @@ export async function sendPhoneCode(
 
 /**
  * 校验手机验证码，通过即登录（查无此号则建号）。
- * 返回 needEmail 表示这个账号还没验过邮箱——spec §8 要求手机 + 邮箱双验证才算注册完成。
+ *
+ * needEmail=true 表示这个账号的注册还没走完（邮箱没验过），前端应接着走邮箱那一步；
+ * 已经走完的账号回来登录恒为 false——**登录只验这一条通道，不再要第二个因子**。
+ * 注册仍要手机 + 邮箱两样齐（spec §8）：邮箱是换号找回与文书送达的唯一落点，
+ * 建号时不收，用户丢了手机号就再也回不来。这里不按「是不是这次刚建的号」判，
+ * 而按「邮箱验过没有」判：否则中途放弃邮箱那一步的人，下次登录就永久绕过了它。
  */
 export function verifyPhoneCode(
   db: Database,
@@ -227,31 +237,65 @@ export function verifyPhoneCode(
 
 // ========== 邮箱验证码 ==========
 
+/** 邮箱不属于任何账号时的拒绝话术。三段式：撞到的是什么、为什么会撞到、现在能怎么办。 */
+const EMAIL_NOT_REGISTERED_MESSAGE =
+  '这个邮箱名下还没有账号，所以验证码不会发出。' +
+  '邮箱是在手机号注册完成后那一步绑定的，没绑过就不能单独拿它登录。' +
+  '请先用手机号登录一次并绑定这个邮箱，之后就能直接用邮箱收码了。';
+
+/** resolveEmailTarget 的产物：这次邮箱操作落在哪个账号上，以及要不要吃 IP 配额 */
+type EmailTarget = { ok: true; user: store.UserRow; knownUser: boolean } | AuthFailure;
+
 /**
- * 发送邮箱验证码。调用前路由必须已经校验过 JWT——邮箱验证是「已通过手机验证的用户补第二因子」，
- * 不是独立的注册入口，所以这里收的是 userId 而不是匿名请求。
+ * 邮箱通道的身份归属，发码与验码**共用这一处**判定——分开写两遍，日后只改一处就是个洞。
+ *
+ * - userId 非空（带 token）＝**注册补全**：手机验证刚建的号来绑邮箱。邮箱若属别人 → EMAIL_TAKEN。
+ * - userId 为空（不带 token）＝**邮箱通道登录**：只认「已经验证过、且确实属于某个账号」的邮箱。
+ *
+ * 匿名这条不是放宽鉴权：落在哪个账号完全由邮箱本身决定，调用方指定不了；
+ * 通行凭据仍是「一条发到该邮箱的六位码」，60s 冷却 / 10 次每日 / 五次锁定 / 一次性全额生效；
+ * 且匿名路径一个字都不往 users 写（见 verifyEmailCode），拿不走也改不动别人的账号。
+ * 强度与手机通道等价——那边同样是「拿到发往该号码的码即可换 token」。
+ */
+function resolveEmailTarget(
+  db: Database,
+  userId: number | null,
+  owner: store.UserRow | undefined,
+): EmailTarget {
+  if (userId === null) {
+    if (!owner?.email_verified_at) {
+      return fail(404, 'EMAIL_NOT_REGISTERED', EMAIL_NOT_REGISTERED_MESSAGE);
+    }
+    return { ok: true, user: owner, knownUser: true };
+  }
+  const user = store.findUserById(db, userId);
+  if (!user) return fail(401, 'UNAUTHORIZED', '登录状态已失效，请重新验证手机号');
+  if (owner && owner.id !== userId) {
+    return fail(409, 'EMAIL_TAKEN', '该邮箱已被其他账号绑定');
+  }
+  // 已经是本人验证过的邮箱 = 回来重验，不吃 IP 配额（换绑新邮箱照旧计数）。
+  // 上面的 EMAIL_TAKEN 已挡掉 owner 是别人的情形，走到这里 owner 必是 userId 本人。
+  return { ok: true, user, knownUser: Boolean(owner?.email_verified_at) };
+}
+
+/**
+ * 发送邮箱验证码。userId 由路由从 Authorization 头解析：
+ * 有效 token → 注册补全；根本没带头 → 邮箱通道登录；带了坏 token → 路由已回 401，走不到这里。
  */
 export async function sendEmailCode(
   db: Database,
-  input: { userId: number; email: string; ip: string },
+  input: { userId: number | null; email: string; ip: string },
   deps: OtpDeps = {},
 ): Promise<SendResult> {
   const now = deps.now ?? new Date();
   const email = normalizeEmail(input.email);
   if (!isValidEmail(email)) return fail(400, 'INVALID_EMAIL', '邮箱格式不正确');
 
-  const user = store.findUserById(db, input.userId);
-  if (!user) return fail(401, 'UNAUTHORIZED', '登录状态已失效，请重新验证手机号');
+  const target = resolveEmailTarget(db, input.userId, store.findUserByEmail(db, email));
+  if (!target.ok) return target;
+  const user = target.user;
 
-  const owner = store.findUserByEmail(db, email);
-  if (owner && owner.id !== input.userId) {
-    return fail(409, 'EMAIL_TAKEN', '该邮箱已被其他账号绑定');
-  }
-
-  // 这个邮箱已经是本人验证过的邮箱 = 回来重验，不吃 IP 配额（换绑新邮箱照旧计数）。
-  // 上面的 EMAIL_TAKEN 已经挡掉 owner 是别人的情形，走到这里 owner 必是 input.userId。
-  const knownUser = Boolean(owner?.email_verified_at);
-  const quotaFailure = checkSendQuota(db, input.ip, now, knownUser, (since) =>
+  const quotaFailure = checkSendQuota(db, input.ip, now, target.knownUser, (since) =>
     store.countEmailCodesSince(db, email, since),
   );
   if (quotaFailure) return quotaFailure;
@@ -294,10 +338,14 @@ function provisionOnRegistered(db: Database, userId: number): Onboarding | undef
   }
 }
 
-/** 校验邮箱验证码，通过则把邮箱写进 users 并标记已验证，换发一个新 token */
+/**
+ * 校验邮箱验证码，换发一个新 token。
+ * 注册补全（带 token）时把邮箱写进 users 并标记已验证；邮箱通道登录（不带）时只发 token，
+ * 一个字都不写库——那个邮箱本来就已经验证过、也已经属于这个账号，没有任何东西要改。
+ */
 export function verifyEmailCode(
   db: Database,
-  input: { userId: number; email: string; code: string },
+  input: { userId: number | null; email: string; code: string },
   deps: OtpDeps = {},
 ): EmailVerifyResult {
   const now = deps.now ?? new Date();
@@ -305,10 +353,9 @@ export function verifyEmailCode(
   if (!isValidEmail(email)) return fail(400, 'INVALID_EMAIL', '邮箱格式不正确');
   if (!isSixDigits(input.code)) return fail(400, 'OTP_INVALID', '验证码格式不正确');
 
-  const owner = store.findUserByEmail(db, email);
-  if (owner && owner.id !== input.userId) {
-    return fail(409, 'EMAIL_TAKEN', '该邮箱已被其他账号绑定');
-  }
+  const target = resolveEmailTarget(db, input.userId, store.findUserByEmail(db, email));
+  if (!target.ok) return target;
+  const userId = target.user.id;
 
   const row = store.latestEmailCode(db, email);
   const stateFailure = checkCodeState(row, now);
@@ -324,12 +371,12 @@ export function verifyEmailCode(
   }
 
   store.markEmailCodeUsed(db, row!.id);
-  store.setUserEmailVerified(db, input.userId, email, toSql(now));
+  if (input.userId !== null) store.setUserEmailVerified(db, userId, email, toSql(now));
 
-  const onboarding = provisionOnRegistered(db, input.userId);
+  const onboarding = provisionOnRegistered(db, userId);
   return {
     ok: true,
-    token: signToken(input.userId, now),
+    token: signToken(userId, now),
     ...(onboarding ? { onboarding } : {}),
   };
 }

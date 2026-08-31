@@ -68,19 +68,32 @@ describe('错误响应形状', () => {
 });
 
 describe('邮箱两条路由的 Bearer 校验', () => {
-  test('缺 Authorization 头 → 401 UNAUTHORIZED', async () => {
+  // 单因素登录后 Authorization 变成可选：没带 = 匿名走邮箱通道登录。
+  // 这个库里没有任何用户，所以匿名进来的邮箱一律不认识 → 404（且没走到发邮件）。
+  test('缺 Authorization 头 = 匿名，陌生邮箱 → 404 EMAIL_NOT_REGISTERED', async () => {
     for (const handler of [emailSend, emailVerify]) {
       const res = await handler(post({ email: 'a@b.com', code: '123456' }));
-      expect(res.status).toBe(401);
-      expect((await res.json()).error_code).toBe('UNAUTHORIZED');
+      expect(res.status).toBe(404);
+      expect((await res.json()).error_code).toBe('EMAIL_NOT_REGISTERED');
     }
   });
 
-  test('token 伪造或过期 → 401', async () => {
+  /**
+   * 【这条是鉴权强度本身】"可选"只对**根本没带**成立。
+   * 若把「带了个过期 token」也当匿名放过去，权限判定就从「通过 / 不通过」
+   * 变成了「不通过就换一条路」——凭据失效反而解锁了另一套语义。
+   * 判据不看 401 而看 error_code：降级成匿名时这里会变成 404，一眼可辨。
+   */
+  test('token 伪造或过期 → 401，绝不降级成匿名', async () => {
     const expired = signToken(1, new Date('2020-01-01T00:00:00Z'));
-    for (const bad of [`Bearer ${expired}`, 'Bearer nonsense', 'Basic abc']) {
-      const res = await emailSend(post({ email: 'a@b.com' }, { authorization: bad }));
-      expect(res.status).toBe(401);
+    for (const bad of [`Bearer ${expired}`, 'Bearer nonsense', 'Basic abc', '']) {
+      for (const handler of [emailSend, emailVerify]) {
+        const res = await handler(
+          post({ email: 'a@b.com', code: '123456' }, { authorization: bad }),
+        );
+        expect(res.status, `坏 token「${bad}」被放过了`).toBe(401);
+        expect((await res.json()).error_code).toBe('UNAUTHORIZED');
+      }
     }
   });
 
