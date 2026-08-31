@@ -6,10 +6,25 @@
 // 也让 lib/db/client.ts 的实现方式与本文件解耦。
 import type { Database } from 'better-sqlite3';
 
-/** 两张 OTP 表都带 purpose 列，各自只有一种用途；写入与统计都显式带上，
- *  免得将来多出一种 purpose 时限流把两种码混在一起算。 */
+/** sms_codes 目前只有一种用途；写入与查码都显式带上。 */
 const SMS_PURPOSE = 'login';
-const EMAIL_PURPOSE = 'verify';
+
+/**
+ * email_codes 有两种用途，**取码时必须按 purpose 隔离**：
+ *   'verify'   已登录账号补绑/换绑邮箱（/auth/email/send|verify，要 Bearer）
+ *   'register' 匿名的邮箱注册与登录（/auth/email/register/*，无凭据）
+ *
+ * 【为什么隔离】'register' 那条链路验完就发 token，等于凭这串码开户；
+ * 'verify' 那条只是给已登录的人绑地址。两者若共用一个桶，一条为绑定发出的码
+ * 就能拿去开户（反之亦然）——**同一串数字在两个语义完全不同的闸门上都好使**。
+ * 隔离的代价是同一邮箱可能同时存在两条未过期的码，各自单次可用、5 分钟过期、
+ * 错 5 次锁死，这个代价可以接受。
+ */
+export const EMAIL_PURPOSE = {
+  verify: 'verify',
+  register: 'register',
+} as const;
+export type EmailPurpose = (typeof EMAIL_PURPOSE)[keyof typeof EMAIL_PURPOSE];
 
 /** OTP 一行的读取形态（sms_codes 与 email_codes 结构一致） */
 export interface OtpRow {
@@ -86,31 +101,51 @@ export function markSmsCodeUsed(db: Database, id: number): void {
 
 // ========== email_codes ==========
 
-/** 时间比较为何套 datetime()：见 countSmsCodesSince */
+/**
+ * 某邮箱在 sinceIso 之后收到的验证码条数（60s 冷却与 24h 上限都用它）。
+ * 时间比较为何套 datetime()：见 countSmsCodesSince。
+ *
+ * 【**故意不按 purpose 过滤**】限流保护的是收件人的信箱，而信箱只有一个：
+ * 按 purpose 分桶就等于同一个地址每天可以收 10+10 封、并且在两条路由之间交替点
+ * 还能绕开 60 秒冷却。取码按 purpose 严格隔离，计数按邮箱聚合，两者不矛盾——
+ * 一个防的是「码被挪用」，一个防的是「信箱被灌爆」。
+ * 索引 idx_email_codes_email 建在 (email, id DESC) 上，不带 purpose，去掉这个条件不影响选择性。
+ */
 export function countEmailCodesSince(db: Database, email: string, sinceIso: string): number {
   const row = db
     .prepare(
-      'SELECT COUNT(*) AS n FROM email_codes WHERE email = ? AND purpose = ? AND datetime(created_at) > datetime(?)',
+      'SELECT COUNT(*) AS n FROM email_codes WHERE email = ? AND datetime(created_at) > datetime(?)',
     )
-    .get(email, EMAIL_PURPOSE, sinceIso) as { n: number };
+    .get(email, sinceIso) as { n: number };
   return row.n;
 }
 
+/** purpose 必填、不给默认值：漏传会被类型系统当场拦下，而不是静默落进 'verify' 桶 */
 export function insertEmailCode(
   db: Database,
-  params: { email: string; code: string; expiresAt: string; createdAt: string },
+  params: {
+    email: string;
+    code: string;
+    purpose: EmailPurpose;
+    expiresAt: string;
+    createdAt: string;
+  },
 ): void {
   db.prepare(
     'INSERT INTO email_codes (email, code, purpose, expires_at, used, attempts, created_at) VALUES (?, ?, ?, ?, 0, 0, ?)',
-  ).run(params.email, params.code, EMAIL_PURPOSE, params.expiresAt, params.createdAt);
+  ).run(params.email, params.code, params.purpose, params.expiresAt, params.createdAt);
 }
 
-export function latestEmailCode(db: Database, email: string): OtpRow | undefined {
+export function latestEmailCode(
+  db: Database,
+  email: string,
+  purpose: EmailPurpose,
+): OtpRow | undefined {
   return db
     .prepare(
       'SELECT id, code, attempts, expires_at, used FROM email_codes WHERE email = ? AND purpose = ? ORDER BY id DESC LIMIT 1',
     )
-    .get(email, EMAIL_PURPOSE) as OtpRow | undefined;
+    .get(email, purpose) as OtpRow | undefined;
 }
 
 export function bumpEmailCodeAttempts(db: Database, id: number): void {
@@ -150,6 +185,24 @@ export function insertUser(
       'INSERT INTO users (phone_enc, phone_hash, phone_verified_at, created_at) VALUES (?, ?, ?, ?)',
     )
     .run(params.phoneEnc, params.phoneHash, params.verifiedAt, params.verifiedAt);
+  return Number(info.lastInsertRowid);
+}
+
+/**
+ * 邮箱注册建号：只有邮箱，phone_enc / phone_hash 留 NULL。
+ * users.phone_hash 的唯一索引是部分索引（WHERE phone_hash IS NOT NULL），
+ * 所以多个「没手机号的账号」并存不会互相撞车；email 那条唯一索引照旧管住重复注册。
+ *
+ * 【留口不实现】这类账号后补手机号的路径（bindPhoneToAccount）本单不做，
+ * 契约与待定项写在 lib/auth/otp.ts 文件末尾那段注释里，实现时照那里补。
+ */
+export function insertUserByEmail(
+  db: Database,
+  params: { email: string; verifiedAt: string },
+): number {
+  const info = db
+    .prepare('INSERT INTO users (email, email_verified_at, created_at) VALUES (?, ?, ?)')
+    .run(params.email, params.verifiedAt, params.verifiedAt);
   return Number(info.lastInsertRowid);
 }
 

@@ -1,11 +1,19 @@
 // app/src/lib/auth/index.ts
 // 认证模块对外出口（spec §3.2 跨模块只经导出接口）。
-export { sendPhoneCode, verifyPhoneCode, sendEmailCode, verifyEmailCode } from './otp';
+export {
+  sendPhoneCode,
+  verifyPhoneCode,
+  sendEmailCode,
+  verifyEmailCode,
+  sendEmailRegisterCode,
+  verifyEmailRegisterCode,
+} from './otp';
 export type {
   AuthFailure,
   SendResult,
   PhoneVerifyResult,
   EmailVerifyResult,
+  EmailRegisterResult,
   OtpDeps,
   Onboarding,
 } from './otp';

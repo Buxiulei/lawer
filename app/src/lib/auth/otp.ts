@@ -47,6 +47,10 @@ export interface Onboarding {
 export type SendResult = { ok: true; ttlSeconds: number; retryAfter: number } | AuthFailure;
 export type PhoneVerifyResult = { ok: true; token: string; needEmail: boolean } | AuthFailure;
 export type EmailVerifyResult = { ok: true; token: string; onboarding?: Onboarding } | AuthFailure;
+/** 邮箱注册/登录的结果。isNewUser=true 表示这次调用现建的号（前端可据此决定要不要展示新手引导） */
+export type EmailRegisterResult =
+  | { ok: true; token: string; isNewUser: boolean; onboarding?: Onboarding }
+  | AuthFailure;
 
 /** 外部副作用注入点：单测把短信/邮件换成假实现，绝不真发（真发既费钱又打扰真号） */
 export interface OtpDeps {
@@ -261,6 +265,7 @@ export async function sendEmailCode(
   store.insertEmailCode(db, {
     email,
     code,
+    purpose: store.EMAIL_PURPOSE.verify,
     expiresAt: toSql(new Date(now.getTime() + minutes * 60 * 1000)),
     createdAt: toSql(now),
   });
@@ -286,6 +291,11 @@ export async function sendEmailCode(
 function provisionOnRegistered(db: Database, userId: number): Onboarding | undefined {
   const user = store.findUserById(db, userId);
   if (!user?.phone_verified_at || !user.email_verified_at) return undefined;
+  return provisionDefaultCase(db, userId);
+}
+
+/** 上面那段「建案失败不许阻断登录」的实现体；邮箱注册那条路径也用它，判据不同、兜底相同。 */
+function provisionDefaultCase(db: Database, userId: number): Onboarding | undefined {
   try {
     return ensureDefaultCase(db, userId);
   } catch (err) {
@@ -310,7 +320,7 @@ export function verifyEmailCode(
     return fail(409, 'EMAIL_TAKEN', '该邮箱已被其他账号绑定');
   }
 
-  const row = store.latestEmailCode(db, email);
+  const row = store.latestEmailCode(db, email, store.EMAIL_PURPOSE.verify);
   const stateFailure = checkCodeState(row, now);
   if (stateFailure) return stateFailure;
 
@@ -333,3 +343,137 @@ export function verifyEmailCode(
     ...(onboarding ? { onboarding } : {}),
   };
 }
+
+// ========== 邮箱注册（无手机号） ==========
+//
+// 与上面「邮箱验证码」那一节的区别不是实现细节，是**闸门语义**：
+//   sendEmailCode / verifyEmailCode  —— 已登录的人给账号补绑邮箱，路由要 Bearer，
+//                                       用 purpose='verify' 的码。
+//   sendEmailRegisterCode / verifyEmailRegisterCode —— 匿名开户/登录，路由不要凭据，
+//                                       用 purpose='register' 的码。
+// 两桶的码互不通用（见 lib/db/otp.ts 的 EMAIL_PURPOSE），但**限流按邮箱聚合**，
+// 所以多开一条路由不会给同一个信箱多一倍的额度。
+//
+// 【这条路径的鉴权强度】与手机那条完全对称，一项不减：CSPRNG 6 位码、5 分钟过期、
+// 单次可用、错 5 次锁死、60 秒冷却、10 次/24h、新地址吃 IP 配额。
+// 变的是「凭哪种占有证明开户」（信箱 vs 手机），不是「证明得多严」。
+
+/**
+ * 发邮箱注册验证码。**匿名调用**，不需要任何凭据。
+ *
+ * 存量已验证邮箱免 IP 配额（= 老用户回来登录），理由同 sendPhoneCode 的 knownUser：
+ * 一家公司几百人共用一个 NAT 出口，老用户不该被同事的注册量挤掉。
+ * 这不开口子——按邮箱的 60s 冷却与 10 次/日对每一次发码照旧全额生效。
+ *
+ * 响应形状与「该邮箱是否已注册」无关（都是 {ok, ttlSeconds, retryAfter}），
+ * 不给攻击者一个查「这个地址在不在库里」的接口。
+ */
+export async function sendEmailRegisterCode(
+  db: Database,
+  input: { email: string; ip: string },
+  deps: OtpDeps = {},
+): Promise<SendResult> {
+  const now = deps.now ?? new Date();
+  const email = normalizeEmail(input.email);
+  if (!isValidEmail(email)) return fail(400, 'INVALID_EMAIL', '邮箱格式不正确');
+
+  const owner = store.findUserByEmail(db, email);
+  const knownUser = Boolean(owner?.email_verified_at);
+  const quotaFailure = checkSendQuota(db, input.ip, now, knownUser, (since) =>
+    store.countEmailCodesSince(db, email, since),
+  );
+  if (quotaFailure) return quotaFailure;
+
+  const minutes = codeExpiryMinutes();
+  const code = generateCode();
+  store.insertEmailCode(db, {
+    email,
+    code,
+    purpose: store.EMAIL_PURPOSE.register,
+    expiresAt: toSql(new Date(now.getTime() + minutes * 60 * 1000)),
+    createdAt: toSql(now),
+  });
+
+  // 匿名请求没有「用户偏好」可读，一律用中性文案（notify_verbose 的默认值也是它）：
+  // 收件人可能还不是我们的用户，这封信里不该出现任何案情线索。
+  const copy = emailVerifyCode(code, minutes);
+  try {
+    await (deps.sendEmail ?? ((to, c) => sendMail(to, c)))(email, copy);
+  } catch {
+    return fail(502, 'EMAIL_SEND_FAILED', '邮件发送失败，请稍后重试');
+  }
+
+  return { ok: true, ttlSeconds: minutes * 60, retryAfter: RESEND_COOLDOWN_SECONDS };
+}
+
+/**
+ * 校验邮箱注册验证码：查无此邮箱则建号（无手机号），有则直接登录。
+ *
+ * 【建号与注册赠送必须同生同死】理由与代价见 verifyPhoneCode 里那段长注释——
+ * 没有赠送的新账号余额为 0，第一个计费动作就被 gongdaoGate 拦死，而账号看起来一切正常。
+ * 所以这里用的是**同一套机制**：同一个事务 + 同一个 refId 形态 `reg-<uid>`（一人一次，
+ * 唯一索引兜底），不是另写一份看起来差不多的逻辑。
+ */
+export function verifyEmailRegisterCode(
+  db: Database,
+  input: { email: string; code: string },
+  deps: OtpDeps = {},
+): EmailRegisterResult {
+  const now = deps.now ?? new Date();
+  const email = normalizeEmail(input.email);
+  if (!isValidEmail(email)) return fail(400, 'INVALID_EMAIL', '邮箱格式不正确');
+  if (!isSixDigits(input.code)) return fail(400, 'OTP_INVALID', '验证码格式不正确');
+
+  const row = store.latestEmailCode(db, email, store.EMAIL_PURPOSE.register);
+  const stateFailure = checkCodeState(row, now);
+  if (stateFailure) return stateFailure;
+
+  const code = input.code.trim();
+  if (row!.code !== code) {
+    store.bumpEmailCodeAttempts(db, row!.id);
+    // 第 5 次错直接锁定，不再放行下一次比对
+    if (row!.attempts + 1 >= MAX_VERIFY_ATTEMPTS) {
+      return fail(429, 'OTP_LOCKED', '尝试次数过多，请重新获取验证码');
+    }
+    return fail(400, 'OTP_INVALID', '验证码错误，请检查');
+  }
+
+  store.markEmailCodeUsed(db, row!.id);
+
+  let user = store.findUserByEmail(db, email);
+  const isNewUser = !user;
+  if (!user) {
+    const createAccount = db.transaction(() => {
+      const id = store.insertUserByEmail(db, { email, verifiedAt: toSql(now) });
+      gongdaoGrant(id, REGISTER_GRANT_GONGDAO, GONGDAO_LEDGER_TYPE.register, `reg-${id}`, null, db);
+      return id;
+    });
+    user = store.findUserById(db, createAccount())!;
+  }
+
+  const onboarding = provisionDefaultCase(db, user.id);
+  return {
+    ok: true,
+    token: signToken(user.id, now),
+    isNewUser,
+    ...(onboarding ? { onboarding } : {}),
+  };
+}
+
+// ───────────────── 留口不实现：邮箱账号后补手机号 ─────────────────
+// 本单只做「邮箱+验证码即可开户」。这类账号 phone_enc / phone_hash 恒为 NULL，
+// 于是短信期限提醒发不出去（lib/notify 的短信通道无收件人）、maskPhone 在 /api/v1/me
+// 回 null——**这是已知且可接受的现状，不是 bug**。补手机号的路径按下面这份契约实现：
+//
+//   bindPhoneToAccount(db, { userId, phone, code }, deps): PhoneVerifyResult
+//
+// 实现时必须先定的四件事（本单不替它决定）：
+//   1. 用哪一桶码：sms_codes 现在只有 purpose='login'，绑定要不要单开一桶
+//      （同 EMAIL_PURPOSE 的理由：一条为登录发的码不该能拿去改别人账号的手机号）。
+//   2. 号已被占时怎么办：目标手机号已属于另一个账号 → 409 还是走账号合并？
+//      合并涉及案件、账本、api key 的归属，是产品决策不是技术决策。
+//   3. 换绑还是只准补：已有手机号的账号能不能改，改了旧号还能不能登录。
+//   4. 赠送不再发：refId `reg-<uid>` 已占，gongdaoGrant 的唯一索引天然挡住二次发放，
+//      但要有测试把这条钉死，别让人以为「补了手机号 = 又完成一次注册」。
+
+

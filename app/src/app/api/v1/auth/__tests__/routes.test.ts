@@ -14,6 +14,8 @@ let smsSend: Handler;
 let smsVerify: Handler;
 let emailSend: Handler;
 let emailVerify: Handler;
+let emailRegisterSend: Handler;
+let emailRegisterVerify: Handler;
 
 function post(body: unknown, headers: Record<string, string> = {}): Request {
   return new Request('http://localhost/api/v1/auth/x', {
@@ -35,6 +37,8 @@ beforeAll(async () => {
   smsVerify = (await import('../sms/verify/route')).POST;
   emailSend = (await import('../email/send/route')).POST;
   emailVerify = (await import('../email/verify/route')).POST;
+  emailRegisterSend = (await import('../email/register/send/route')).POST;
+  emailRegisterVerify = (await import('../email/register/verify/route')).POST;
 });
 
 describe('错误响应形状', () => {
@@ -91,5 +95,34 @@ describe('邮箱两条路由的 Bearer 校验', () => {
     );
     expect(res.status).toBe(400);
     expect((await res.json()).error_code).toBe('INVALID_EMAIL');
+  });
+});
+
+describe('邮箱注册两条路由：匿名可达', () => {
+  // 这两条是开户入口，调用它的人本来就还没有账号——**要求 Bearer 等于把注册关掉**。
+  // 判据取「不带任何凭据时越过了鉴权、落在业务校验上」，而不是「返回 200」：
+  // 用非法邮箱正好能在不发出任何邮件的前提下证明这一点。
+  test('不带 Authorization 也不回 401，直接走到业务校验（400 INVALID_EMAIL）', async () => {
+    for (const handler of [emailRegisterSend, emailRegisterVerify]) {
+      const res = await handler(post({ email: 'not-an-email', code: '123456' }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error_code).toBe('INVALID_EMAIL');
+    }
+  });
+
+  test('body 不是合法 JSON → 400 INVALID_BODY', async () => {
+    for (const handler of [emailRegisterSend, emailRegisterVerify]) {
+      const res = await handler(post('{not json'));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error_code).toBe('INVALID_BODY');
+    }
+  });
+
+  test('没发过注册码就验 → OTP_NOT_FOUND（不会误命中绑定桶）', async () => {
+    const res = await emailRegisterVerify(
+      post({ email: 'nobody@example.com', code: '123456' }),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error_code).toBe('OTP_NOT_FOUND');
   });
 });

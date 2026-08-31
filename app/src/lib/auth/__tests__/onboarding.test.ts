@@ -24,6 +24,7 @@ function seedPendingEmail(db: Database): number {
   store.insertEmailCode(db, {
     email: EMAIL,
     code: CODE,
+    purpose: store.EMAIL_PURPOSE.verify,
     expiresAt: toSql(new Date(NOW.getTime() + 5 * 60 * 1000)),
     createdAt: toSql(NOW),
   });
@@ -75,6 +76,7 @@ describe('注册完成自动开通', () => {
     store.insertEmailCode(db, {
       email: EMAIL,
       code: CODE,
+      purpose: store.EMAIL_PURPOSE.verify,
       expiresAt: toSql(new Date(NOW.getTime() + 5 * 60 * 1000)),
       createdAt: toSql(NOW),
     });
