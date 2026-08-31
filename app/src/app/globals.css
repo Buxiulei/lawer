@@ -30,6 +30,21 @@
   --primary: #8b2942;
   --primary-ink: #6d1f33;
   --primary-wash: #f5e7eb;
+  /* 主色文字压在 surface/bg/kraft 这些**页面底**上时用它，**不要用 `--primary`**。
+     `--primary` 是实心底色，它同时还要托住白字；两个方向的对比度互相拉扯，
+     深色下解不出一个同时满足的值（白字要它暗到相对亮度 ≤0.183，
+     压 surface 要它亮到 ≥0.229，区间为空），所以按语义拆成两个 token。
+     浅色下 #8b2942 两个方向都够（对白 8.42、压 surface 8.42），
+     这里逐值等于浅色 `--primary` 只是为了让浅色渲染结果一字不变。 */
+  --primary-ink-on-surface: #8b2942;
+  /* 焦点框专用：输入控件的 `focus:border-focus-ring` 与全站 `:focus-visible` 描边。
+     **不要指 `--primary`**，理由和上面那条同源、方向却更硬：
+     input/textarea/select/Composer 全是 `focus:outline-none`，那圈边框是它们**唯一**的
+     焦点指示（2.4.7 焦点可见 + 1.4.11 非文字对比 3:1），而它压的底是输入框自己的
+     `--surface-2`——不是 surface 也不是 bg。深色下 `--primary` 为了托白字被压到 #be4b67，
+     压 --surface-2(#372e29) 只有 **2.77**，键盘用户会看不出焦点落在哪个框里。
+     浅色下逐值等于 `--primary`(#8b2942，压 --surface-2 是 6.41)，浅色渲染结果一字不变。 */
+  --focus-ring: var(--primary);
   /* 实心主色/朱红底上的文字。深浅两套都是白，但仍然给个名字：
      shadcn 的 --primary-foreground/--destructive-foreground 指到这儿，
      免得白色在桥接层再写一遍、将来改的时候漏掉一处。 */
@@ -47,6 +62,15 @@
   --success: #2f7d5d;
   --success-wash: #e8f3ee;
   --success-ink: #215c44;
+
+  /* 禁用控件的底与字。**成对使用，不要只取一个**——
+     整体 opacity 会把底和字一起冲淡（红底白字降到 45% 是 2.35:1，看不清是哪个字），
+     显式给一对低饱和色则两边各自可控。色相取自主色那一族的玫瑰调、饱和压到 ~11%
+     （这个饱和度下 8 位量化会把色相甩出好几度，别按精确色相读这两个值），
+     让它读作"这原本是个按钮"而不是一块中性灰。
+     WCAG 1.4.3 豁免禁用控件，这一对按 3:1 配（实测 4.32），目标是可辨不是达 AA。 */
+  --disabled-surface: #e4ddde;
+  --disabled-ink: #766066;
 
   /* ── 案卷材质（批 5）──────────────────────────────────
      设计稿的 --paper/--seal/--gold-ink 与现有 --bg/--primary/--gold **逐值相同**，
@@ -105,8 +129,19 @@
     --ink: #eae3d9;
     --ink-2: #a3988b;
     --line: #3a322d;
-    --primary: #c55d76;
+    /* 只压明度：HSL 由 345.6/47.3%/56.9% 变到 345.4/46.9%/52.0%——
+       色相与饱和那点零头是 8 位取整带来的，没有主动调。
+       #c55d76 托白字只有 4.04，压到这里是 4.78。作为非文字 UI 它对 surface 3.60、
+       对 bg 3.86，仍过 1.4.11 的 3:1。**主色文字不要再指它**，见 --primary-ink-on-surface。 */
+    --primary: #be4b67;
     --primary-ink: #d98ba0;
+    /* 深色下"压 wash 的强调字"和"压页面底的主色字"要的亮度区间重合，
+       一个值就够；再造一个只差几个色阶的近似色反而更难维护。 */
+    --primary-ink-on-surface: var(--primary-ink);
+    /* 焦点框同样落到 ink 系：`--primary`(#be4b67) 压输入框底 --surface-2(#372e29)
+       只有 2.77，`--primary-ink`(#d98ba0) 压 --surface-2 是 5.14、压 surface 6.67、
+       压 bg 7.17，三种底都过 1.4.11 的 3:1。 */
+    --focus-ring: var(--primary-ink);
     --primary-wash: #332026;
     --on-primary: #ffffff;
     --gold: #c9a75b;
@@ -126,6 +161,10 @@
     --success-wash: #1c2f26;
     --success-ink: var(--success);
 
+    /* 同浅色那一对的取舍，深色下反过来取暗底浅字（实测 4.09） */
+    --disabled-surface: #3e3235;
+    --disabled-ink: #a19195;
+
     --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.4);
     color-scheme: dark;
   }
@@ -138,8 +177,19 @@
   --ink: #eae3d9;
   --ink-2: #a3988b;
   --line: #3a322d;
-  --primary: #c55d76;
+  /* 只压明度：HSL 由 345.6/47.3%/56.9% 变到 345.4/46.9%/52.0%——
+     色相与饱和那点零头是 8 位取整带来的，没有主动调。
+     #c55d76 托白字只有 4.04，压到这里是 4.78。作为非文字 UI 它对 surface 3.60、
+     对 bg 3.86，仍过 1.4.11 的 3:1。**主色文字不要再指它**，见 --primary-ink-on-surface。 */
+  --primary: #be4b67;
   --primary-ink: #d98ba0;
+  /* 深色下"压 wash 的强调字"和"压页面底的主色字"要的亮度区间重合，
+     一个值就够；再造一个只差几个色阶的近似色反而更难维护。 */
+  --primary-ink-on-surface: var(--primary-ink);
+  /* 焦点框同样落到 ink 系：`--primary`(#be4b67) 压输入框底 --surface-2(#372e29)
+     只有 2.77，`--primary-ink`(#d98ba0) 压 --surface-2 是 5.14、压 surface 6.67、
+     压 bg 7.17，三种底都过 1.4.11 的 3:1。 */
+  --focus-ring: var(--primary-ink);
   --primary-wash: #332026;
   --on-primary: #ffffff;
   --gold: #c9a75b;
@@ -158,6 +208,10 @@
   --success: #5caf8a;
   --success-wash: #1c2f26;
   --success-ink: var(--success);
+
+  /* 同浅色那一对的取舍，深色下反过来取暗底浅字（实测 4.09） */
+  --disabled-surface: #3e3235;
+  --disabled-ink: #a19195;
 
   --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.4);
   color-scheme: dark;
@@ -213,8 +267,12 @@
   --color-line: var(--line);
   --color-primary: var(--primary);
   --color-primary-ink: var(--primary-ink);
+  --color-primary-ink-on-surface: var(--primary-ink-on-surface);
+  --color-focus-ring: var(--focus-ring);
   --color-primary-wash: var(--primary-wash);
   --color-on-primary: var(--on-primary);
+  --color-disabled-surface: var(--disabled-surface);
+  --color-disabled-ink: var(--disabled-ink);
   --color-gold: var(--gold);
   --color-gold-wash: var(--gold-wash);
   --color-amber: var(--amber);
@@ -310,8 +368,11 @@
     color: var(--primary-ink);
   }
 
+  /* 描边走 --focus-ring 而不是 --primary：outline-offset 让这圈线落在**父元素的底**上，
+     那可能是 surface、bg，也可能是 surface-2（表单块、引用块都是 surface-2 底），
+     深色下 --primary 压 surface-2 只有 2.77。浅色下 --focus-ring 逐值等于 --primary，观感不变。 */
   :focus-visible {
-    outline: 2px solid var(--primary);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 }

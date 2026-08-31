@@ -74,7 +74,7 @@ export function Composer({
           }}
           placeholder={PLACEHOLDER}
           aria-label="输入消息"
-          className="min-h-11 flex-1 resize-none rounded-[10px] border border-line bg-surface-2 px-3 py-2.5 text-[16px] leading-7 text-ink placeholder:text-ink-2 focus:border-primary focus:outline-none"
+          className="min-h-11 flex-1 resize-none rounded-[10px] border border-line bg-surface-2 px-3 py-2.5 text-[16px] leading-7 text-ink placeholder:text-ink-2 focus:border-focus-ring focus:outline-none"
         />
 
         {streaming ? (

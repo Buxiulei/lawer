@@ -9,7 +9,7 @@ function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
       className={cn(
         'h-12 w-full rounded-[10px] border border-input bg-muted px-3 text-[16px] text-foreground',
         'placeholder:text-muted-foreground/70 transition-colors duration-150 ease-out',
-        'focus:border-primary focus:outline-none',
+        'focus:border-focus-ring focus:outline-none',
         'aria-invalid:border-destructive',
         'disabled:cursor-not-allowed disabled:opacity-50',
         className,

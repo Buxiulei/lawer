@@ -16,6 +16,7 @@ Xvfb :95 -screen 0 400x900x24 &                    # 有头模式要先起虚拟
 HEADED=1 node scripts/perf/g1-scroll.mjs /case/demo 3
 node scripts/perf/g2-input.mjs                     # 真实触摸：点住即显/恐慌钮/图谱拖拽
 node scripts/perf/g1-sanity.mjs                    # 灵敏度对照臂，见下
+node scripts/perf/contrast-scan.mjs /login dark    # 渲染后对比度扫描（文字 + 控件边框/焦点框）
 
 # C-08 的判据（退出码 0/1，可直接当门禁）：面包屑末项在 360 宽真出省略号
 cd app && npx next dev -p 3129 &
@@ -30,7 +31,8 @@ Next dev 的 `allowedDevOrigins` 默认只放行 localhost，从 127.0.0.1 进�
 脚本等不到那个按钮会直接报错，不会静默量一个不犯病的版式。
 
 环境变量：`PERF_BASE`（被测站点，默认 3127）、`PERF_PROFILE`（Chrome 用户目录，
-默认临时目录）、`PERF_CHROME`（默认 `/usr/bin/google-chrome`）、`PERF_DISPLAY`（默认 `:95`）。
+默认临时目录）、`PERF_CHROME`（默认 `/usr/bin/google-chrome`）、`PERF_DISPLAY`（默认 `:95`）、
+`PERF_TOKEN`（只有 `contrast-scan.mjs` 用，写进 localStorage 的登录态）。
 
 ## 两个外部依赖不在 npm 里
 

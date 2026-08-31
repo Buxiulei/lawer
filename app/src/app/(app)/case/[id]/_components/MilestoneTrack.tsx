@@ -74,7 +74,7 @@ function Cell({ cell, first, prev }: { cell: TrackCell; first: boolean; prev?: T
              而那行是四态判据，错位会让整条轨道读起来像坏了。 */
           'mt-1.5 flex h-[2.5em] items-start justify-center px-px text-center',
           'text-[11.5px] leading-[1.25] sm:text-[12px]',
-          cell.state === '进行中' ? 'font-bold text-primary' : 'text-ink',
+          cell.state === '进行中' ? 'font-bold text-primary-ink-on-surface' : 'text-ink',
           cell.state === '未到' && 'text-ink-2',
         )}
       >
