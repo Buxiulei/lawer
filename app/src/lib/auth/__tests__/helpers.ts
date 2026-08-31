@@ -24,9 +24,18 @@ export function lastSmsCode(db: Database, phoneHash: string): string {
   return row.code;
 }
 
-export function lastEmailCode(db: Database, email: string): string {
+/**
+ * 读某邮箱最新一条验证码的明文。
+ * @param purpose 不给就不按用途过滤（等价于「收件箱里最新的那封」）。
+ *   两桶码互不通用，所以要测「拿错桶的码去验」时必须显式指定。
+ */
+export function lastEmailCode(db: Database, email: string, purpose?: string): string {
   const row = db
-    .prepare('SELECT code FROM email_codes WHERE email = ? ORDER BY id DESC LIMIT 1')
-    .get(email) as { code: string };
+    .prepare(
+      purpose === undefined
+        ? 'SELECT code FROM email_codes WHERE email = ? ORDER BY id DESC LIMIT 1'
+        : 'SELECT code FROM email_codes WHERE email = ? AND purpose = ? ORDER BY id DESC LIMIT 1',
+    )
+    .get(...(purpose === undefined ? [email] : [email, purpose])) as { code: string };
   return row.code;
 }
