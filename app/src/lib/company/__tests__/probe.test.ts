@@ -62,13 +62,24 @@ describe('缓存命中：0 成本、不占配额、不限次', () => {
     db.close();
   });
 
-  it('繁体/后缀等价名命中简体缓存（归一化单一入口，探测复用同一份）', async () => {
+  it('全角/空白变体命中同一份缓存（归一化单一入口，探测复用同一把键）', async () => {
     const db = seed();
-    // 用简体半角写缓存（键 = name:北京甲科技有限公司）
+    // 用半角无空格写缓存（键 = name:北京甲科技有限公司）
     upsertProbeCache(db, companyKey({ name: '北京甲科技有限公司' }), payload(), { fetchedAt: T0 });
-    // 用「繁体責任 + 有限责任公司」变体查：normalize 后应归到同一把键
-    const r = await probeCompany(db, { name: '北京甲科技有限責任公司', userId: 1 }, { now: T0 });
+    // 用「全角空格 + 前后空白」变体查：NFKC + 去空白后应归到同一把键
+    const r = await probeCompany(db, { name: ' 北京　甲科技有限公司 ', userId: 1 }, { now: T0 });
     expect(r.status).toBe('hit');
+    db.close();
+  });
+
+  it('繁体/后缀变体**不**命中简体缓存（合并裁决：归一化不做繁简与后缀等价）', async () => {
+    // 反向臂。归一化按误差方向取保守（见 ../normalize.ts 文件头）：认不出来就当成另一家，
+    // 代价是白跑一次采集；反过来误合的代价是把 B 家的数字摆给查 A 家的人看，且不报错。
+    // 这条转绿成 'hit' 就意味着有人把归一化放宽了——放宽会让存量 company_key 集体改值。
+    const db = seed();
+    upsertProbeCache(db, companyKey({ name: '北京甲科技有限公司' }), payload(), { fetchedAt: T0 });
+    const r = await probeCompany(db, { name: '北京甲科技有限責任公司', userId: 1 }, { now: T0 });
+    expect(r.status).not.toBe('hit');
     db.close();
   });
 });

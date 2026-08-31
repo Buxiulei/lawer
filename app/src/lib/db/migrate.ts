@@ -1,7 +1,7 @@
 // app/src/lib/db/migrate.ts
 //
 // ───────────────── ⚠️ 改本文件之前先读这一段 ⚠️ ─────────────────
-// **本迁移框架没有事务。** runMigrations() 的 47 个 db.exec() 是一串裸调用，
+// **本迁移框架没有事务。** runMigrations() 的 45 个 db.exec() 是一串裸调用，
 // 中途失败不回滚——2026-08-26 实测：人为中断，库里留下 22/38 张表，重跑既不前进也不后退。
 // 现在之所以能安全滚更，是因为迁移**全是纯加法**、靠 IF NOT EXISTS 与 addColumnIfMissing
 // 能重跑自愈：**安全是「改动足够简单」给的，不是框架给的。**
@@ -642,6 +642,98 @@ export function runMigrations(db: Database.Database): void {
       ON model_rates (model, token_kind, effective_at DESC);
   `);
 
+  // ───────────────── 公司档案（报价计费 + 采集管线共用的三张表）─────────────────
+  //
+  // 【合并说明】pricing_config / entitlements / company_dossiers 三张表由计费侧（工单 B）与
+  // 采集管线侧（工单 A）**各自独立写过一稿 DDL**，本处是合并后的**唯一**定义，两侧的列与索引取并集。
+  // 之所以必须合成一处：建表走 `CREATE TABLE IF NOT EXISTS`，同名表写两遍时**后一遍整条静默跳过**
+  // ——先执行的那份 DDL 赢，另一份要的列（如采集侧的 graph_refreshed_at）根本不存在，
+  // 而迁移本身不报错，只在运行期以 `no such column` 现形。这是本次合并里最危险的一处，
+  // 由 __tests__/migrate.test.ts 的列存在性断言与两侧各自的行为测试共同钉住。
+  //
+  // pricing_config：**服务定额与阈值的事实源**（读入口只有 lib/billing/pricing-config.ts 的 readPrice）。
+  // 为什么另起一张表、不塞进 skus：fulfillment.resolveSkuKind 按 name 判定 SKU 语义，未知 name 一律
+  // 兜底为「散充」按 amount_fen×100 入账。往 skus 里塞一行「档案·主体体检」，用户经下单路径碰到它
+  // 就会被当成充值订单履约——**收了钱当充值入账，服务不交付**。
+  // value_int **不加 CHECK(value_int >= 0)**：非法值的报错要发生在**读**的时候（readPrice 抛出
+  // 三段式错误，指名哪个键、实际值多少、怎么改），而不是在写的时候被库拒掉。库侧拒写只会让运维
+  // 拿到一句 SQLite 约束错误，看不出是哪个键、也不知道删行即回落兜底值。两处都拦反而更糟：
+  // 已经写进去的历史坏行永远读不出错误原因。
+  //
+  // entitlements：会员赠送的一次性服务额度券（当前唯一一种 kind='dossier_core'＝买会员送核心四项一次）。
+  // 为什么另起一张表、不给 memberships 加一列 credit：memberships 是每单一行、续期叠加，
+  // 在其上加 credit 列，「续期两次送几次」就成了隐式规则，且那一列没有自己的幂等键——
+  // 支付回调重放会不会多送一次，取决于谁先写的那条 UPDATE。
+  // **uq_entitlements_source 是发券的幂等键**（source_ref = order_no）：grantEntitlement 走
+  // INSERT OR IGNORE，全靠它把重放挡成 changes=0。索引是部分的（WHERE source_ref IS NOT NULL），
+  // 因为 SQLite 的 NULL 互不相等：无来源的手工券（source_ref 为空）不该被这条唯一性约束绑在一起。
+  // 核销与作废都不删行：券的一生（发/用/废）留在同一行上，「这单为什么没扣钱」才查得到。
+  //
+  // company_dossiers：**公司维度的平台资产**，company_key 唯一、跨案件跨账号共享——
+  // 与 company_profiles（案件私有的背调档）是两回事，别合表：
+  //   company_profiles.case_id     = 「这家公司在本案里扮演什么」（签约/用工/关联），各案可不同；
+  //   company_dossiers.company_key = 「这家公司客观是什么」，跨案共享、按 TTL 复用。
+  // 两者的连接靠 company_profiles.dossier_id（多对一，见文件末尾补列区）。
+  // company_key 由 lib/company/normalize.ts **唯一产出**（uscc 优先，缺则归一化名称），
+  // uq_company_dossiers_key 即缓存命中的判据；归一化只有一个入口这条由
+  // lib/company/__tests__/normalize.test.ts 的结构守卫机检——写第二处归一化会当场红。
+  // paid_by / paid_ref / charge_ref 只盖第一位付款人（lib/company/dossier-billing.stampPayment 的
+  // `WHERE paid_by IS NULL` 守卫）：同一条档案会被多人先后付费，而这三列只有一份；
+  // 后来者的凭据在各自的 gongdao_ledger 流水与 entitlements.consumed_ref 里，不会丢。
+  // 这三列必须留痕：paid_by='membership_credit' + paid_ref=entitlement.id 是「这单为什么没扣钱」
+  // 的**唯一**可查凭据——没有它，一笔没进账本的交付在事后无从解释。
+  // graph_refreshed_at / litigation_refreshed_at 是采集侧的 TTL 判据（lib/company/dossier.ts），
+  // 计费侧不读不写；两侧共用一张表，列取并集。
+  // status 值集：queued（已扣费待跑）| graph_done（谱系块已交付）| awaiting_relay（等外勤开窗取证）
+  //           | stats_ready（统计已出）| done（全档完成）| litigation_expired（超 SLA，文书块已退款）。
+  // 只在注释里锁枚举、不加 CHECK（沿 intake_stage 裁决：SQLite 改 CHECK 要重建表），
+  // 且**值域归采集管线（工单 A）**：计费侧只读不写它，建档时取 DDL 默认 'queued'。
+  // ordered_by_user_id 走 ON DELETE SET NULL：用户注销要能删干净，而档案是平台资产不该跟着消失。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pricing_config (
+      key        TEXT PRIMARY KEY,                        -- 见 lib/billing/pricing-config.ts 的 PRICE_FALLBACK
+      value_int  INTEGER NOT NULL,                        -- 公道值 / 天数 / 篇数，均为非负整数（合法性由 readPrice 判，见上）
+      note       TEXT,                                    -- 这次改价的出处与理由，给对账的人看
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS entitlements (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind         TEXT NOT NULL,                         -- dossier_core（值域见 lib/billing/entitlements.ts）
+      source_ref   TEXT,                                  -- 发券来源，会员单即 orders.order_no；NULL=手工发放，不参与幂等
+      granted_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      consumed_at  TEXT,                                  -- NULL=未核销
+      consumed_ref TEXT,                                  -- 核销去向，如 dossier-12
+      revoked_at   TEXT                                   -- NULL=未作废（订单退款只作废未核销的）
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_entitlements_source
+      ON entitlements (kind, source_ref) WHERE source_ref IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_entitlements_unconsumed
+      ON entitlements (user_id, kind, id) WHERE consumed_at IS NULL AND revoked_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_entitlements_user
+      ON entitlements (user_id, kind, consumed_at);
+
+    CREATE TABLE IF NOT EXISTS company_dossiers (
+      id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_key             TEXT NOT NULL,                   -- 唯一键，生成入口只有 lib/company/normalize
+      name                    TEXT NOT NULL,
+      uscc                    TEXT,
+      status                  TEXT NOT NULL DEFAULT 'queued',
+      paid_by                 TEXT,                            -- gongdao | membership_credit，只盖第一位付款人
+      paid_ref                TEXT,                            -- 券付=entitlements.id；钱付=扣费幂等键前缀
+      charge_ref              TEXT,                            -- 扣费幂等键前缀 dossier-<id>-u<uid>，退款按它原路退
+      graph_refreshed_at      TEXT,                            -- 采集侧 TTL 判据（lib/company/dossier.ts）
+      litigation_refreshed_at TEXT,                            -- 同上
+      ordered_by_user_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at              TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_company_dossiers_key
+      ON company_dossiers (company_key);
+    CREATE INDEX IF NOT EXISTS idx_company_dossiers_status
+      ON company_dossiers (status, id);
+  `);
+
   // ───────────────── 公司动态监控 ─────────────────
   // 盯梢被监控主体：一案可盯多个主体（签约/用工/关联各自可能先跑路），风声阶段就该开盯——
   // 简易注销、减资公告是公司跑路前兆，等到裁决生效再发现主体没了，赢了官司也拿不到钱。
@@ -743,40 +835,10 @@ export function runMigrations(db: Database.Database): void {
       ON company_litigation (company_profile_id, is_labor, judged_at DESC);
   `);
 
-  // ───────────────── 公司档案（背调产品化）─────────────────
-  // 档案是**公司维度的平台资产**，与 company_profiles 的**案件维度**是两件事，别合并：
-  //   company_profiles.case_id  = 「这家公司在本案里扮演什么」（签约/用工/关联），各案可不同；
-  //   company_dossiers.company_key = 「这家公司客观是什么」，跨案共享、按 TTL 复用。
-  // 连接靠 company_profiles.dossier_id（多对一，见文件末尾补列区）。
-  //
-  // company_key 由 lib/company/normalize.ts 的 companyKey() **唯一产出**（uscc 优先，
-  // 缺则归一化名称），本列 UNIQUE 即缓存命中的判据。归一化只有一个入口这条由
-  // lib/company/__tests__/normalize.test.ts 的结构守卫机检——写第二处归一化会当场红。
-  //
-  // status 值集：queued（已扣费待跑）| graph_done（谱系块已交付）| awaiting_relay（等外勤开窗取证）
-  //           | stats_ready（统计已出）| done（全档完成）| litigation_expired（超 SLA，文书块已退款）。
-  // 同 intake_stage 裁决：**不加 DB 级 CHECK**（SQLite 改 CHECK 要重建表），值集由 lib/company 把关。
-  //
-  // paid_by/paid_ref 必须留痕：paid_by='membership_credit' + paid_ref=entitlement.id 是
-  // 「这单为什么没扣钱」的**唯一**可查凭据——没有它，一笔没进账本的交付在事后无从解释。
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS company_dossiers (
-      id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-      company_key             TEXT NOT NULL UNIQUE,
-      name                    TEXT NOT NULL,
-      uscc                    TEXT,
-      status                  TEXT NOT NULL DEFAULT 'queued',
-      paid_by                 TEXT,                                -- gongdao | membership_credit
-      paid_ref                TEXT,                                -- membership_credit 时为 entitlements.id
-      charge_ref              TEXT,                                -- 账本幂等键，退款按它原路退
-      graph_refreshed_at      TEXT,
-      litigation_refreshed_at TEXT,
-      ordered_by_user_id      INTEGER REFERENCES users(id),
-      created_at              TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_company_dossiers_status
-      ON company_dossiers (status, id);
-  `);
+  // ───────────────── 公司档案下挂表（背调产品化）─────────────────
+  // company_dossiers 本体建在上面「报价计费 + 采集管线共用的三张表」那一段（合并后的唯一定义，
+  // 列取两侧并集）；本段只建挂在它下面的三张表：分块进度、统计快照、套路归纳。
+  // 连接到案件维度靠 company_profiles.dossier_id（多对一，见文件末尾补列区）。
 
   // 分块交付的**逐项**留痕：job_runs 答「这一轮有没有发生」，本表答「你的档案到哪一步了」。
   // 两个粒度互补不替代——进度态 API 只读本表，读 job_runs 答不出单个档案的进度。
@@ -861,49 +923,6 @@ export function runMigrations(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_company_patterns_dossier
       ON company_patterns (dossier_id, id);
-  `);
-
-  // 权益券（会员赠品）：买会员送一次公司档案。
-  //
-  // **为什么不在 memberships 上加 credit 列**：grantMembership 是「每个订单一行、续期叠加」，
-  // 在其上挂次数会让「续期两次送几次」变成一条隐式规则，且没有独立幂等键。
-  // 本表的 uq_entitlements_source（kind, source_ref）就是那个幂等键，source_ref = order_no：
-  // 同一订单重复履约只落一行，不必靠调用方记得自己发过没有。
-  // source_ref 可空（人工补发无订单号），故唯一索引用部分索引只约束非空值。
-  // consumed_at/consumed_ref 记核销去向；已核销的不随退款追回——货已交付。
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS entitlements (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id      INTEGER NOT NULL REFERENCES users(id),
-      kind         TEXT NOT NULL,                          -- dossier
-      source_ref   TEXT,                                   -- order_no；人工补发时为空
-      granted_at   TEXT NOT NULL DEFAULT (datetime('now')),
-      consumed_at  TEXT,
-      consumed_ref TEXT,                                   -- 核销去向（company_dossiers.id）
-      revoked_at   TEXT                                    -- 订单反转作废；已核销的不追回
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_entitlements_source
-      ON entitlements (kind, source_ref) WHERE source_ref IS NOT NULL;
-    CREATE INDEX IF NOT EXISTS idx_entitlements_user
-      ON entitlements (user_id, kind, consumed_at);
-  `);
-
-  // 可调参数表：定额报价、样本门槛、SLA 天数、缓存 TTL 一律读这里，代码常量退为兜底而非事实源。
-  //
-  // **为什么不塞进 skus**：fulfillment.resolveSkuKind 按 name 判定，**未知 name 一律兜底为
-  // 「散充」按金额×100 入账**。往 skus 插一行「档案·公司背调」，用户一旦从下单路径碰到它，
-  // 就会被当成充值订单履约——**收了钱当充值入账，服务不交付**。这条事故路径由
-  // lib/billing 的结构守卫测试盯着（遍历 skus 全部 name，出现档案/守望/背调即红）。
-  //
-  // 只存整数：金额单位是公道值、门槛是篇数、SLA 是天数，全是整数；不设 value_text 列——
-  // 一个「什么都能存」的配置表会长成第二个业务逻辑层。
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS pricing_config (
-      key        TEXT PRIMARY KEY,
-      value_int  INTEGER NOT NULL,
-      note       TEXT,
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
   `);
 
   // 免费前置探测（§2.3）的两张表。

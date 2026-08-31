@@ -17,6 +17,17 @@ export const FEATURE_LABELS: Record<string, string> = {
   knowledge: '知识检索',
   companywatch: '公司动态监控', // MVP 记量不扣费，扣费口径待 M3
   contract_review: '合同审查',  // critical 档计费，费率待 M3 核定
+  // 公司档案六模块（拆包按模块计价；价目在 pricing_config，报价流按探测篇数展开 M5/M6）：
+  dossier_venue: '仲裁地实操',       // M1 定额 0（信任锚）
+  dossier_entity: '主体体检',        // M2 定额
+  dossier_graph: '关联谱系',         // M3 定额（高置信边不足自动退款）
+  dossier_docs_list: '涉诉清单',     // M4 定额
+  dossier_docs_stats: '涉诉深度统计', // M5 每篇（样本不足/超期自动退款）
+  // M6 规格里叫「HR 套路归纳」，标签取纯中文写法：本表的每个标签都会直接印在用户的用量明细上，
+  // features.test 因此断言「全部标签不含拉丁字母」——那条守卫拦的是「内部英文键漏成标签」，
+  // 为一个产品叫法把它放宽，等于把这类漏出的唯一机检口子拆了。改叫法只需改这一行与
+  // company/dossier-billing.ts 的 DOSSIER_MODULE_LABEL（两处同名同物，别只改一处）。
+  dossier_patterns: '人事套路归纳',  // M6 起价+每篇（保留条目不足自动退款）
 };
 
 /**

@@ -12,11 +12,26 @@ describe('建档与状态机', () => {
   it('同 company_key 重复建档返回同一行（档案按公司唯一，不是按案件）', () => {
     const db = newDb();
     const uid = mkUser(db);
-    const a = createDossier(db, { name: '某某科技有限责任公司', orderedByUserId: uid });
-    const b = createDossier(db, { name: '某某科技有限公司', orderedByUserId: uid });
+    // 归一化确实覆盖的等价写法：全角括号、内部空白、大小写。
+    const a = createDossier(db, { name: '某某科技（北京）有限公司', orderedByUserId: uid });
+    const b = createDossier(db, { name: '某某科技(北京) 有限公司 ', orderedByUserId: uid });
     expect(b.id).toBe(a.id);
     const { n } = db.prepare('SELECT COUNT(*) AS n FROM company_dossiers').get() as { n: number };
     expect(n).toBe(1);
+    db.close();
+  });
+
+  it('「有限责任公司」不并进「有限公司」⇒ 两条档案（合并裁决：宁可多建，不可误合）', () => {
+    // 归一化按误差方向取保守（见 ../normalize.ts 文件头）：后缀等价与繁简都**不做**。
+    // 多建一条的代价是用户多付一次、可退可合并；误合的代价是付了 A 家的钱拿到 B 家的档案，
+    // 而且没有任何一处会报错。这条转绿成 toBe 就意味着有人把归一化放宽了。
+    const db = newDb();
+    const uid = mkUser(db);
+    const a = createDossier(db, { name: '某某科技有限责任公司', orderedByUserId: uid });
+    const b = createDossier(db, { name: '某某科技有限公司', orderedByUserId: uid });
+    expect(b.id).not.toBe(a.id);
+    const { n } = db.prepare('SELECT COUNT(*) AS n FROM company_dossiers').get() as { n: number };
+    expect(n).toBe(2);
     db.close();
   });
 

@@ -11,6 +11,7 @@ import {
   type MembershipPlan,
 } from './pricing';
 import { gongdaoGrant } from './index';
+import { ENTITLEMENT_KIND, grantEntitlement, revokeUnconsumedBySource } from './entitlements';
 
 /** 三档月卡 SKU 的规范名（SKU 语义靠此判定；由 ensureBillingSkus 种入，勿改名）。 */
 export const MEMBERSHIP_SKU_NAME = {
@@ -83,8 +84,8 @@ export function grantMembership(
 
 /**
  * 支付成功履约（应在调用方「订单 pending→credited」事务内调用，保证原子）。
- * 套餐：入套餐公道值（会员额度）+ 记会员期；散充：按实付金额×RECHARGE_GONGDAO_PER_YUAN 入公道值（充值）。
- * 全部以 orderNo 幂等，重复调用绝不双记/双扣。
+ * 套餐：入套餐公道值（会员额度）+ 记会员期 + 发一张核心四项券；散充：按实付金额×RECHARGE_GONGDAO_PER_YUAN 入公道值（充值）。
+ * 全部以 orderNo 幂等，重复调用绝不双记/双扣/双发。
  */
 export function fulfillOrder(db: Database.Database, order: FulfillableOrder): void {
   const kind = resolveSkuKind(db, order.sku_id);
@@ -99,6 +100,11 @@ export function fulfillOrder(db: Database.Database, order: FulfillableOrder): vo
       db,
     );
     grantMembership(db, order.user_id, plan, order.order_no);
+    // 买会员立刻送一张核心四项券（dossier_core，覆盖 venue+entity+graph+docs_list 一次）。
+    // source_ref 取订单号：(kind, source_ref) 部分唯一索引就是发券的幂等键，支付回调重放
+    // 落到同一个 order_no 上，INSERT OR IGNORE 直接 changes=0，不会多送一张。
+    // 与上面的公道值、会员期同在调用方履约事务内：三样一起成、一起不成。
+    grantEntitlement(db, order.user_id, ENTITLEMENT_KIND.dossierCore, order.order_no);
   } else {
     gongdaoGrant(
       order.user_id,
@@ -112,7 +118,7 @@ export function fulfillOrder(db: Database.Database, order: FulfillableOrder): vo
 }
 
 /**
- * 退款核销（应在退款事务内调用）：回收该订单所授（会员期删除 + 公道值负记「失败核销」）。
+ * 退款核销（应在退款事务内调用）：回收该订单所授（会员期删除 + 赠券作废 + 公道值负记「失败核销」）。
  * 核销额取账本实际入账（会员额度/充值，ref_id=orderNo）——ledger 是唯一事实源，不重算 SKU，
  * 故 SKU 改名/删除、乃至兜底以散充语义入账的订单亦能精确回收。
  * 幂等：writeoff-<orderNo> 唯一索引兜底，重复退款不重复核销。
@@ -121,6 +127,11 @@ export function fulfillOrder(db: Database.Database, order: FulfillableOrder): vo
 export function reverseOrder(db: Database.Database, order: FulfillableOrder): void {
   // 会员回收：删除本订单赋予的会员期（续期叠加时仅回收本订单行；散充订单无行，无副作用）
   db.prepare('DELETE FROM memberships WHERE order_no=?').run(order.order_no);
+
+  // 赠券回收：只作废本单发出、**尚未核销**的券。已核销的不追回——档案已经交付了，
+  // 把那张券收回来只会让「这条档案为什么没扣钱」再也答不上来（见 revokeUnconsumedBySource）。
+  // 放在下面那条「无正向入账即 return」之前：未履约就退的单本来也没券，多跑一次影响 0 行。
+  revokeUnconsumedBySource(db, ENTITLEMENT_KIND.dossierCore, order.order_no);
 
   // 核销额 = 本订单实际入账公道值（正向 会员额度/充值 之和）
   const granted = db.prepare(
