@@ -4,6 +4,8 @@
  * 从客户端模块取字符串会拿到 client reference 存根而不是脚本本体。
  */
 
+import { faviconBootstrapSnippet } from './favicon';
+
 export const THEME_STORAGE_KEY = 'lawer.theme';
 export const DISCREET_STORAGE_KEY = 'lawer.discreet';
 
@@ -26,8 +28,8 @@ export const NEUTRAL_NOTICE = '有一条新的更新';
 /** 在 body 渲染前把主题 class 写到 <html>，逻辑须与 theme.tsx 的 applyMode 一致。 */
 export const themeBootstrapScript = `(function(){try{var m=localStorage.getItem('${THEME_STORAGE_KEY}');if(m==='light'||m==='dark'){document.documentElement.classList.add(m)}}catch(e){}})();`;
 
-/** 在 body 渲染前落定低调模式，避免金额与真实标题一闪而过。 */
-export const discreetBootstrapScript = `(function(){try{if(localStorage.getItem('${DISCREET_STORAGE_KEY}')==='1'){document.documentElement.dataset.discreet='1';document.title='${NEUTRAL_TITLE}'}}catch(e){}})();`;
+/** 在 body 渲染前落定低调模式，避免金额、真实标题与徽章图标一闪而过。 */
+export const discreetBootstrapScript = `(function(){try{if(localStorage.getItem('${DISCREET_STORAGE_KEY}')==='1'){document.documentElement.dataset.discreet='1';document.title='${NEUTRAL_TITLE}';${faviconBootstrapSnippet}}}catch(e){}})();`;
 
 /**
  * 落地页专用：已登录的人不该看见 landing。放在落地页正文之前同步执行，

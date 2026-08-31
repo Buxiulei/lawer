@@ -17,6 +17,7 @@ import { AppSheet } from '@/components/shadcn/app-sheet';
 import { Button } from '@/components/shadcn/button';
 import { DeadlineChip } from '@/components/case/DeadlineChip';
 import { useRegisterCasePanel } from '@/components/shell/casePanel';
+import { useDossierPortal } from '../_workspace/CaseWorkspaceProvider';
 import { toActionItem, type DraftFrame } from '../_stream/frames';
 import { readToken } from '../_stream/httpTransport';
 import { useChatStream, type SettledTurn } from '../_stream/useChatStream';
@@ -168,6 +169,15 @@ export function Workbench({ caseId }: { caseId: string }) {
     [actions],
   );
 
+  const dossier = useDossierPortal(
+    seeded ? (
+      <>
+        <h2 className="mb-2 px-1 text-[15px] font-semibold text-ink">案件档案</h2>
+        <CasePanel caseId={caseId} actions={actions} />
+      </>
+    ) : null,
+  );
+
   if (!seeded && !signedIn) {
     return (
       <div className="pt-8">
@@ -200,87 +210,85 @@ export function Workbench({ caseId }: { caseId: string }) {
 
   return (
     <>
-      {/* data-wide 让 AppShell 的 main 把限宽抬到 1280；双栏在 xl 起排开，
-          再窄就只剩对话流，档案走顶栏按钮的抽屉。 */}
-      <div data-wide>
-        {seeded && <CaseStatusBar />}
+      {/* 排开侧栏这件事已经归工作区（case/[id]/layout.tsx 的 WorkspaceGrid）：
+          这里只交出「卷宗栏里放什么」，宽度到哪一档排开由容器查询决定。
+          原来的 data-wide 与手写 xl 双栏一并退役。 */}
+      {seeded && <CaseStatusBar />}
 
-        <div className="xl:flex xl:items-start xl:gap-6">
-          {/* 断点：<md 满宽单列；md–lg 居中限宽（**这是 768 与 393 版式不同的可量证据**：
-              同一段文字的左边界 x 会从 16px 变成 (视口-672)/2）；xl 起是双栏左列。 */}
-          <div className="min-w-0 md:mx-auto md:max-w-2xl xl:mx-0 xl:max-w-4xl xl:flex-1">
-            {stream.demoFallback && <DemoDataBanner />}
+      {/* 正文收窄阈值 736：量的是**工作区可用宽度**不是视口（红线②）。
+          768 视口下可用宽是 753（减掉 15px 滚动条），落在 736 之上 →
+          与改造前 `md:max-w-2xl` 生效的那一档逐像素相同；720 视口下是 705，
+          两边都不收窄，也一致。393 恒在阈值之下。
+          **这仍是 768 与 393 版式不同的可量证据**：同一段文字的左边界 x
+          会从 16px 变成 (可用宽-672)/2。 */}
+      <div className="min-w-0 @min-[736px]/work:mx-auto @min-[736px]/work:max-w-2xl">
+        {stream.demoFallback && <DemoDataBanner />}
 
-            <div className="flex flex-col gap-5 md:gap-7">
-              {messages.map((m, i) => {
-                const prev = messages[i - 1];
-                const newDay =
-                  !prev || formatDate(prev.createdAt) !== formatDate(m.createdAt);
-                return (
-                  <div key={m.id}>
-                    {newDay && <DateDivider iso={m.createdAt} />}
-                    {m.role === 'user' ? (
-                      <UserMessage message={m} />
-                    ) : (
-                      <AssistantMessage
-                        message={m}
-                        caseId={caseId}
-                        confirmedDrafts={confirmedDrafts}
-                        onRequestConfirmDraft={setAskingDraft}
-                        actions={(m.actionItemIds ?? [])
-                          .map((id) => actionsById.get(id))
-                          .filter((a): a is ActionItem => Boolean(a))}
-                        onToggleAction={toggleAction}
-                      />
-                    )}
-                  </div>
-                );
-              })}
+        <div className="flex flex-col gap-5 md:gap-7">
+          {messages.map((m, i) => {
+            const prev = messages[i - 1];
+            const newDay =
+              !prev || formatDate(prev.createdAt) !== formatDate(m.createdAt);
+            return (
+              <div key={m.id}>
+                {newDay && <DateDivider iso={m.createdAt} />}
+                {m.role === 'user' ? (
+                  <UserMessage message={m} />
+                ) : (
+                  <AssistantMessage
+                    message={m}
+                    caseId={caseId}
+                    confirmedDrafts={confirmedDrafts}
+                    onRequestConfirmDraft={setAskingDraft}
+                    actions={(m.actionItemIds ?? [])
+                      .map((id) => actionsById.get(id))
+                      .filter((a): a is ActionItem => Boolean(a))}
+                    onToggleAction={toggleAction}
+                  />
+                )}
+              </div>
+            );
+          })}
 
-              {stream.phase === 'connecting' && <AcceptedLine />}
+          {stream.phase === 'connecting' && <AcceptedLine />}
 
-              {/* 等待态也可能已有文本（deterministic 首段），这时消息排在等待卡上方 */}
-              {(stream.text || stream.phase === 'streaming') && (
-                <AssistantMessage
-                  streaming={stream.phase === 'streaming'}
-                  message={live}
-                  caseId={caseId}
-                  confirmedDrafts={confirmedDrafts}
-                  onRequestConfirmDraft={setAskingDraft}
-                  actions={[]}
-                  onToggleAction={toggleAction}
-                />
-              )}
-
-              {stream.phase === 'waiting' && stream.waitBaseAt !== null && (
-                <WaitingCard
-                  baseAt={stream.waitBaseAt}
-                  model={stream.meta?.model ?? null}
-                  onJumpToActions={actions.length > 0 ? jumpToActions : undefined}
-                  onLongWait={keepAtBottom}
-                />
-              )}
-
-              {stream.error && <StreamErrorCard error={stream.error} onRetry={retry} />}
-            </div>
-
-            <Composer streaming={stream.busy} onSend={send} onStop={stream.stop} />
-            {/* 锚点放在输入区之后：滚到底时最新一段正好落在输入区上方 */}
-            <div ref={bottom} className="h-px" />
-          </div>
-
-          {seeded && (
-            <aside className="hidden xl:sticky xl:top-[68px] xl:block xl:max-h-[calc(100dvh-88px)] xl:w-[360px] xl:shrink-0 xl:overflow-y-auto xl:pb-4">
-              <h2 className="mb-2 px-1 text-[15px] font-semibold text-ink">案件档案</h2>
-              <CasePanel caseId={caseId} actions={actions} />
-            </aside>
+          {/* 等待态也可能已有文本（deterministic 首段），这时消息排在等待卡上方 */}
+          {(stream.text || stream.phase === 'streaming') && (
+            <AssistantMessage
+              streaming={stream.phase === 'streaming'}
+              message={live}
+              caseId={caseId}
+              confirmedDrafts={confirmedDrafts}
+              onRequestConfirmDraft={setAskingDraft}
+              actions={[]}
+              onToggleAction={toggleAction}
+            />
           )}
+
+          {stream.phase === 'waiting' && stream.waitBaseAt !== null && (
+            <WaitingCard
+              baseAt={stream.waitBaseAt}
+              model={stream.meta?.model ?? null}
+              onJumpToActions={actions.length > 0 ? jumpToActions : undefined}
+              onLongWait={keepAtBottom}
+            />
+          )}
+
+          {stream.error && <StreamErrorCard error={stream.error} onRetry={retry} />}
         </div>
 
-        <AppSheet open={panelOpen} onClose={() => setPanelOpen(false)} title="案件档案">
-          <CasePanel caseId={caseId} actions={actions} />
-        </AppSheet>
+        <Composer streaming={stream.busy} onSend={send} onStop={stream.stop} />
+        {/* 锚点放在输入区之后：滚到底时最新一段正好落在输入区上方 */}
+        <div ref={bottom} className="h-px" />
       </div>
+
+      {/* 档案投送到卷宗栏。用 portal 而不是把节点交给上层：这段内容留在
+          Workbench 自己的 React 树里，actions 变了照常更新，SSE 一点都不知情。 */}
+      {dossier}
+
+      <AppSheet open={panelOpen} onClose={() => setPanelOpen(false)} title="案件档案">
+        <CasePanel caseId={caseId} actions={actions} />
+      </AppSheet>
 
       {/* 变换容器会成为 fixed 的参照系，确认弹窗必须挂在它外面 */}
       <DraftConfirmDialog
@@ -293,8 +301,9 @@ export function Workbench({ caseId }: { caseId: string }) {
 }
 
 /**
- * 阶段 + 最近截止日。双栏排开（xl）之后这两条在右栏档案里都有，就不再重复。
- * 档案入口本身已经上移到壳层顶栏。
+ * 阶段 + 最近截止日。**卷宗栏排开之后**这两条在那一栏的档案里都有，就不再重复。
+ * 判据跟着卷宗栏走（容器 ≥920）而不是视口 xl——否则会出现「1279 收起侧栏，
+ * 卷宗栏已经排开、这条却还在」的重复。档案入口本身已经上移到壳层顶栏。
  */
 function CaseStatusBar() {
   const nearest = [...demoDeadlines].sort((a, b) =>
@@ -302,7 +311,7 @@ function CaseStatusBar() {
   )[0];
 
   return (
-    <section className="mb-4 overflow-hidden rounded-[12px] xl:hidden">
+    <section className="mb-4 overflow-hidden rounded-[12px] @min-[990px]/work:hidden">
       {/* 分量 4：金色填色顶栏 + 白底内容、**无外框**。
           没有外框是刻意的——行动卡才是「实边框 + 填色顶栏」那一档，
           期限只有顶栏，两者在灰度下也分得开（验收第 2、3 条）。
