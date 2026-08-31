@@ -8,6 +8,7 @@
 // **从 0 行到 1 行不需要任何人做决定**，而错过仲裁时效即权利灭失。
 import type { Database } from 'better-sqlite3';
 
+import { caseDayOf, daysUntil } from '../deadline/case-day';
 import { deadlineReminder as deadlineReminderCopy } from './copy';
 
 /** 提醒档位（天）。降序，先到大的档。 */
@@ -43,23 +44,17 @@ export interface Plan {
 /**
  * 整天数差：按日历日算，不按 24 小时——用户感知的是"还剩几天"不是"还剩几小时"。
  *
- * 【"今天"取**本地**日历日，不取 UTC 日】due_at 是一个本地日历日（'2026-09-04'，
- * 北京口径），所以"今天"也必须是本地日历日，两边才在同一把尺子上。
- * 第一版用 now.toISOString().slice(0,10) 取 UTC 日：在 CST 的 00:00–08:00 之间，
- * UTC 还停在昨天 ⇒ 今天被算小一天 ⇒ daysLeft **整体多 1**。
- * 后果不是显示难看，是**档位错位**：真剩 1 天会被算成 2 天，逐日加码档（≤1 天才进）
- * 那一天不触发——而那正是不可回复类期限最不能漏的一天。
- * 当前 cron 挂在 09:30（UTC 01:30，同日）故未爆；改时间、补跑、临时手动跑都会踩上。
+ * 【实现搬到 lib/deadline/case-day，驾驶舱读的是同一个函数】此前驾驶舱那把尺是
+ * `Math.ceil(毫秒差/86400000)`，与这里的日历日算法不同：期限当天早 7 点，
+ * 驾驶舱写「还剩 1 天」而这里发的邮件写「今天到期」（27 个时刻×形态组合里 13 个分歧）。
+ * 方向是**让用户以为还有余量**，所以两处收成一个函数，谁都不许再各写一个。
  *
- * 做法：用 getFullYear/getMonth/getDate 取本地年月日，再用 Date.UTC 搬到 UTC 零点，
- * 与同样按 UTC 零点解析的 due 对齐 ⇒ 差值恒为整天，且不受夏令时影响。
- * 前提：进程时区 = Asia/Shanghai（生产服务器如此；测试里显式 pin）。
+ * 【"今天"从进程本地日历日改为案件时区（Asia/Shanghai）日历日】生产进程 TZ 就是
+ * Asia/Shanghai，故**行为不变**；改的是它不再依赖一个没人守着的环境变量——
+ * 容器忘了设 TZ 就退化成 UTC，等于把上一单刚修好的「CST 00:00–08:00 多算一天」
+ * 静默改回去。而且这个函数现在也跑在浏览器里，浏览器时区更不是我们能约束的。
  */
-export function daysUntil(dueAt: string, now: Date): number {
-  const due = new Date(`${dueAt.slice(0, 10)}T00:00:00Z`).getTime();
-  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.round((due - today) / 86400000);
-}
+export { daysUntil };
 
 /**
  * 这一行此刻该发哪一档（不该发则 null）。
@@ -75,7 +70,12 @@ export function stageFor(row: DueRow, now: Date): { stageKey: string; daysLeft: 
   const sent = new Set<string>(safeParse(row.notified_stages_json));
 
   if (daysLeft <= 1 && IRRECOVERABLE_KINDS.has(row.kind)) {
-    const key = `daily-${now.toISOString().slice(0, 10)}`;
+    // 【逐日键取案件时区日历日，不取 UTC 日】原为 now.toISOString().slice(0,10)：
+    // UTC 日在北京 08:00 换日，于是**同一个北京日历日被切成两个键**——
+    // 一轮跑在 07:xx、另一轮跑在 09:30，用户当天会收到两封一模一样的提醒。
+    // 方向是多发（打扰）不是漏发，但"同一天只发一次"本来就是这个键的全部意义。
+    // 与 daysUntil 同源，这样"剩 0 天"和"今天"指的必然是同一天。
+    const key = `daily-${caseDayOf(now)}`;
     return sent.has(key) ? null : { stageKey: key, daysLeft };
   }
   // 【取**最紧**的那档，不是最松的】第一版写成"命中的第一个大档"，测试当场撞出问题：
