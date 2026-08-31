@@ -3,7 +3,7 @@
 // 默认模式下敏感词一个都不许出现。将来谁往文案里加一句"仲裁"，这里会红。
 import { describe, expect, test } from 'vitest';
 
-import { deadlineReminder, emailVerifyCode, smsVerifyTemplateParam } from '../copy';
+import { deadlineReminder, emailVerifyCode, smsVerifyTemplateParam, watchBillingNotice } from '../copy';
 
 /** 被旁人瞟一眼就会暴露用户在维权的词 */
 const SENSITIVE = ['裁员', '仲裁', '开庭', '劳动', '律师', '赔偿', '解除', '离职', '维权'];
@@ -76,5 +76,46 @@ describe('deadlineReminder（期限提醒，2026-08-29 新增）', () => {
   test('detailed 模式（用户自己开的 notify_verbose）才允许出现事项类型', () => {
     const c = deadlineReminder(3, '开庭', { detailed: true });
     expect(c.subject).toContain('开庭');
+  });
+});
+
+describe('watchBillingNotice（守望计费通知，spec v3 §2.2）', () => {
+  // 【为什么这封也要过中性闸】收件人多半还在原公司上班。一封写着「某某公司守望监控欠费暂停」
+  // 被工位旁人瞟见，暴露的是**他在背地里盯着这家公司**——和暴露"他在维权"一样不可逆。
+  test('默认（中性）模式：欠费/暂停两态，主题与正文均不含敏感词、不含平台名', () => {
+    for (const paused of [false, true]) {
+      const c = watchBillingNotice(paused);
+      for (const word of [...SENSITIVE, '土八鼠', '土拨鼠', '裁员应对专员']) {
+        expect(c.subject, `paused=${paused}/主题/${word}`).not.toContain(word);
+        expect(c.text, `paused=${paused}/正文/${word}`).not.toContain(word);
+      }
+    }
+  });
+
+  test('🔴 中性模式连"监控/守望/公司"都不给 —— 只说"一项服务"', () => {
+    // 判据不是避开某张词表，是**除了"有项服务要处理"什么都不说**：连它盯的是不是公司都不暴露。
+    for (const paused of [false, true]) {
+      const c = watchBillingNotice(paused);
+      for (const w of ['监控', '守望', '公司', '盯']) {
+        expect(c.subject).not.toContain(w);
+        expect(c.text).not.toContain(w);
+      }
+    }
+  });
+
+  test('暂停态与欠费态措辞可区分（暂停必须明说"已暂停"，绝不静默停盯）', () => {
+    expect(watchBillingNotice(true).subject).toContain('暂停');
+    expect(watchBillingNotice(false).subject).not.toContain('暂停');
+  });
+
+  test('detailed 模式才带平台名，且仍不出现业务敏感词', () => {
+    for (const paused of [false, true]) {
+      const c = watchBillingNotice(paused, { detailed: true });
+      expect(c.subject).toContain('土八鼠');
+      for (const word of SENSITIVE) {
+        expect(c.subject, `paused=${paused}/主题/${word}`).not.toContain(word);
+        expect(c.text, `paused=${paused}/正文/${word}`).not.toContain(word);
+      }
+    }
   });
 });

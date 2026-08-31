@@ -15,7 +15,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   attest: '证据固化',
   export: '材料导出',
   knowledge: '知识检索',
-  companywatch: '公司动态监控', // MVP 记量不扣费，扣费口径待 M3
+  companywatch: '公司动态监控', // 守望订阅：按 tier 月度扣费（daily 199 / weekly 60 / archive 0），见 lib/company/watch-billing
   contract_review: '合同审查',  // critical 档计费，费率待 M3 核定
 };
 

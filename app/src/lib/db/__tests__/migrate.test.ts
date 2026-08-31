@@ -489,6 +489,64 @@ describe('存量迁移区', () => {
     ]);
   });
 
+  it('company_watches 守望计费四列：存在、默认对、可写读（spec v3 §2.2）', () => {
+    const db = newDb();
+    const cols = db.prepare('PRAGMA table_info(company_watches)').all() as {
+      name: string;
+      dflt_value: string | null;
+    }[];
+    const byName = new Map(cols.map((c) => [c.name, c]));
+    // 四列必须都在（计数断言：漏加一列即缺，读侧拿到 no such column）
+    for (const c of ['billing_status', 'paid_through', 'arrears_rounds', 'billed_month']) {
+      expect(byName.has(c), `缺列 ${c}`).toBe(true);
+    }
+
+    const caseId = mkCase(db, mkUser(db));
+    const watchId = Number(
+      db.prepare('INSERT INTO company_watches (case_id, name) VALUES (?,?)')
+        .run(caseId, '某某科技有限公司').lastInsertRowid,
+    );
+    // 新盯梢默认：尚未计费（free）、未缴期（NULL）、欠费轮数 0、未处理过任何月（NULL）
+    expect(
+      db.prepare(
+        'SELECT billing_status, paid_through, arrears_rounds, billed_month FROM company_watches WHERE id=?',
+      ).get(watchId),
+    ).toEqual({ billing_status: 'free', paid_through: null, arrears_rounds: 0, billed_month: null });
+
+    // 哑存储：应用层写什么就是什么，库侧不设 CHECK / 触发器
+    db.prepare(
+      "UPDATE company_watches SET billing_status='arrears', arrears_rounds=2, billed_month='202608' WHERE id=?",
+    ).run(watchId);
+    expect(
+      (db.prepare('SELECT arrears_rounds a FROM company_watches WHERE id=?').get(watchId) as { a: number }).a,
+    ).toBe(2);
+  });
+
+  it('老库补守望计费列幂等：跑两遍只补一次，存量盯梢取默认（free/0/NULL）', () => {
+    const db = newDb();
+    for (const c of ['billing_status', 'paid_through', 'arrears_rounds', 'billed_month']) {
+      db.exec(`ALTER TABLE company_watches DROP COLUMN ${c}`);
+    }
+    const caseId = mkCase(db, mkUser(db));
+    db.prepare('INSERT INTO company_watches (case_id, name) VALUES (?,?)').run(caseId, '某某科技');
+
+    const count = () =>
+      (db.prepare('PRAGMA table_info(company_watches)').all() as { name: string }[]).filter((c) =>
+        ['billing_status', 'paid_through', 'arrears_rounds', 'billed_month'].includes(c.name),
+      ).length;
+    expect(count()).toBe(0);
+    runMigrations(db);
+    expect(count()).toBe(4);
+    runMigrations(db); // 二次幂等
+    expect(count()).toBe(4);
+
+    expect(
+      db.prepare(
+        'SELECT billing_status, paid_through, arrears_rounds, billed_month FROM company_watches',
+      ).all(),
+    ).toEqual([{ billing_status: 'free', paid_through: null, arrears_rounds: 0, billed_month: null }]);
+  });
+
   it('老库补列幂等：跑两遍只补一次，原有行数据不丢', () => {
     // 模拟一个 intake_stage 落地之前的老库：建全量表后把该列摘掉，再灌一条存量线程
     const db = newDb();

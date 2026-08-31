@@ -22,6 +22,26 @@ export const MEMBERSHIP_SKU_NAME = {
 /** 自定义金额散充的挂靠 SKU 名（任意面额统一挂靠此行；履约按订单 amount_fen 计）。 */
 export const CUSTOM_RECHARGE_SKU_NAME = '散充·自定义';
 
+/**
+ * 中/高档会员解封开关的环境变量名（暗启 · spec v3 §7.1/A2）。
+ * 默认关（未配置 = false）：standard/pro 的购买入口关闭（SKU enabled=0），entry 始终可售。
+ * 【为什么是 env 而不是代码常量】解封是一次运维放行动作，不该要求改代码重新发版——
+ * 与凭据同类：代码里只有变量名，值只进 env 文件。
+ * 【开启前置】用户可见开放前置 = claude 路由评测批绿（评测绿即自动放行，不再等 manager 人工拍板）。
+ * 本文件只实现「读 flag 决定可售与否」，谁在评测绿后翻这个 env 是运维/CI 的事，不在代码里。
+ */
+export const MEMBERSHIP_TIERS_UNLOCKED_ENV = 'LAWER_MEMBERSHIP_TIERS_UNLOCKED';
+
+/**
+ * 中/高档会员是否已解封。未配置或非真值一律 false（暗启默认关）。
+ * 真值判据取显式白名单（1/true/yes/on），避免把 '0'/'false' 这类"配了但想关"的值当成开——
+ * 半配置比没配置更容易误判，此处宁可严：只有明确写开才算开。
+ */
+export function membershipTiersUnlocked(): boolean {
+  const v = process.env[MEMBERSHIP_TIERS_UNLOCKED_ENV]?.trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+}
+
 /** 固定散充面额（元）——与前端展示、orders 路由校验同源；履约仍按实付金额×100 计。 */
 export const RECHARGE_SKU_YUAN = [10, 30, 50] as const;
 
@@ -163,8 +183,11 @@ export function getMembership(db: Database.Database, userId: number): Membership
 /**
  * 幂等种入计费 SKU（三档月卡 + 固定散充面额 + 自定义散充挂靠行）。
  * migrate.ts 不含 SKU 种子，改价改额只此一处；按 name upsert，重复调用安全。
- * 中配/高配待开发（D3 修订 2026-08-20），entry 为唯一可售档：两档仍保留行与定价草案
- * （历史订单要按 sku_id 溯源，改回可售也只是把 enabled 翻回 1），但 enabled=0 关掉购买入口。
+ *
+ * 中/高档解封（spec v3 §7.1/A2）：standard/pro 的 enabled 由 flag
+ * `LAWER_MEMBERSHIP_TIERS_UNLOCKED`（默认关）决定——关时 enabled=0 关掉购买入口、开时翻 1。
+ * entry 始终可售。两档的行与定价草案无论开关都保留（历史订单按 sku_id 溯源，解封只是把 enabled 翻 1）。
+ * enabled 是随 flag 每次开库都重算的（种子挂在启动路径上），故翻 env + 重启即生效、无需数据迁移。
  */
 export function ensureBillingSkus(db: Database.Database): void {
   const upsert = (name: string, priceFen: number, gongdao: number, enabled: 0 | 1) => {
@@ -172,6 +195,7 @@ export function ensureBillingSkus(db: Database.Database): void {
     if (row) db.prepare('UPDATE skus SET gongdao=?, price_fen=?, enabled=? WHERE id=?').run(gongdao, priceFen, enabled, row.id);
     else db.prepare('INSERT INTO skus (name, gongdao, price_fen, enabled) VALUES (?,?,?,?)').run(name, gongdao, priceFen, enabled);
   };
+  const tiersUnlocked = membershipTiersUnlocked();
   db.transaction(() => {
     for (const plan of ['entry', 'standard', 'pro'] as const) {
       // 入门档 19.9 元 → 1990 分：priceYuan 可含小数，一律 round 到分
@@ -179,7 +203,7 @@ export function ensureBillingSkus(db: Database.Database): void {
         MEMBERSHIP_SKU_NAME[plan],
         Math.round(MEMBERSHIP[plan].priceYuan * 100),
         MEMBERSHIP[plan].gongdao,
-        plan === 'entry' ? 1 : 0,
+        plan === 'entry' || tiersUnlocked ? 1 : 0,
       );
     }
     for (const yuan of RECHARGE_SKU_YUAN) upsert(`散充·${yuan}元`, yuan * 100, rechargeGongdao(yuan), 1);

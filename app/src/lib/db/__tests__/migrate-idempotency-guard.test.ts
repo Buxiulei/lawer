@@ -475,7 +475,8 @@ describe('migrate.ts 不含非幂等迁移', () => {
     expect((scrubbed.match(/CREATE TABLE IF NOT EXISTS/gi) ?? []).length).toBeGreaterThanOrEqual(30);
     // 合法的 ALTER TABLE ADD COLUMN 必须还在——它是「不许误杀」那条的活靶子：
     // 它由 addColumnIfMissing 的 PRAGMA table_info 守卫，是幂等的、合法的。
-    // 当前存量迁移区有 2 处调用（threads.intake_stage、company_watches.tier）。
+    // 当前存量迁移区的调用（threads.intake_stage、timeline_events.milestone、users.cert_type、
+    // company_watches.tier + 守望计费四列 billing_status/paid_through/arrears_rounds/billed_month）。
     expect(scrubbed).toContain('ALTER TABLE ${table} ADD COLUMN');
     expect((scrubbed.match(/addColumnIfMissing\(db,/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });

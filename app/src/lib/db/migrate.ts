@@ -845,6 +845,24 @@ export function runMigrations(db: Database.Database): void {
   // 存量行取 DDL 默认 'daily'：老库的盯梢都是按每日跑的，默认值即其现状，不需回填。
   addColumnIfMissing(db, 'company_watches', 'tier', "TEXT NOT NULL DEFAULT 'daily'");
 
+  // company_watches 守望计费四列（spec v3 §2.2 · 守望按 tier 月度扣费）。扣费逻辑全在
+  // lib/company/watch-billing，库侧只做哑存储（同 tier，不设 CHECK / 触发器 / 定时任务）。
+  //   billing_status：free（尚未计过费）| paid（本月已扣）| arrears（本月余额不足未扣）。
+  //     存量行默认 'free' —— 老库的盯梢在 MVP 期免费，'free' 即其现状，不回填、不追缴。
+  //   paid_through：最近一次成功扣费覆盖到的月份（YYYYMM）。NULL=从未成功扣过。
+  //   arrears_rounds：连续欠费轮数计数器。达上限（3）即 status→paused 且再发一次通知
+  //     （绝不静默停盯）。成功扣费即清零。用显式计数列而非从账本推——推导要靠"这月扣没扣"
+  //     的历史比对，一旦重跑巡检就会把同一个月重复计进去，把"3 个月"数成"3 次跑"。
+  //   billed_month：最近一次**处理过**的月份（YYYYMM，扣费成功或判欠费都算处理）。
+  //     它是整轮的幂等闸：同月重复跑巡检时 billed_month===本月即整条跳过，
+  //     保证「每个 watch 每月只扣一笔、arrears_rounds 每月只加一次」（gongdaoSettle 的 refId
+  //     只挡重复扣款，挡不住 arrears_rounds 重复自增，故另设此列）。
+  // 四列均可空 / 带默认，存量行取默认即语义正确，不需要回填（同迁移框架无事务的约束）。
+  addColumnIfMissing(db, 'company_watches', 'billing_status', "TEXT NOT NULL DEFAULT 'free'");
+  addColumnIfMissing(db, 'company_watches', 'paid_through', 'TEXT');
+  addColumnIfMissing(db, 'company_watches', 'arrears_rounds', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(db, 'company_watches', 'billed_month', 'TEXT');
+
   // ───────────────── 费率种子 ─────────────────
   // C01 核定的模型费率必须**在建表之后立刻播下去**：缺行时 getRatesForModel 会回落
   // DEFAULT_RATES（最便宜的 Flash 档），于是每一笔账都按兜底价少收——而账面看起来完全正常。
