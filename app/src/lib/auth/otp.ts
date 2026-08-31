@@ -282,8 +282,12 @@ export async function sendEmailCode(
  * 建案失败不许阻断登录：账号已经建好、验证码也用掉了，这时候回一个错误只会把用户
  * 卡在登录页反复重试。记日志、返回 undefined，前端照常进站，用户自己建案也走得通。
  * api key 不在这里发——那是用户主动去 /api/v1/keys 领的东西，不该替他决定（spec D4）。
+ *
+ * 【这里是"注册完成"这条判据的唯一住址】Google 线（lib/auth/google.ts）登录成功后调的
+ * 也是本函数，不自己再写一遍条件。将来放宽成"任一验证通道齐备即算注册完成"时，
+ * 改这一个函数，两条线同时生效——各写各的话，改完一处另一处会静默地停在旧规则上。
  */
-function provisionOnRegistered(db: Database, userId: number): Onboarding | undefined {
+export function provisionOnRegistered(db: Database, userId: number): Onboarding | undefined {
   const user = store.findUserById(db, userId);
   if (!user?.phone_verified_at || !user.email_verified_at) return undefined;
   try {

@@ -32,10 +32,12 @@ export interface UserRow {
   notify_verbose: number;
   /** 未认证 | 待审 | 已实名。固化出证等强身份动作的闸门（见 lib/auth/guard.ts requireRealname） */
   auth_status: string;
+  /** 绑定的 Google 账号标识（ID Token 的 sub）；NULL = 没绑过（见 lib/auth/google.ts） */
+  google_sub: string | null;
 }
 
 const USER_COLUMNS =
-  'id, phone_hash, email, email_verified_at, phone_verified_at, notify_verbose, auth_status';
+  'id, phone_hash, email, email_verified_at, phone_verified_at, notify_verbose, auth_status, google_sub';
 
 // ========== sms_codes ==========
 
@@ -179,6 +181,53 @@ export function setUserRealname(
     params.certType ?? null,
     id,
   );
+}
+
+// ========== users：Google 线（lib/auth/google.ts 的 SQL 面）==========
+
+/** 按 google_sub 查账号。归并第一顺位——sub 命中就是同一个人，别的线索都不用看。 */
+export function findUserByGoogleSub(db: Database, googleSub: string): UserRow | undefined {
+  return db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE google_sub = ?`).get(googleSub) as
+    | UserRow
+    | undefined;
+}
+
+/**
+ * 把 google_sub 绑到既有账号上，**仅当该行还没绑过**（WHERE google_sub IS NULL 守卫）。
+ * 返回是否真的绑上了：false = 这一瞬间被别人抢先绑了，调用方必须回查再判，
+ * 不能当成"绑成功"往下走——那会把 A 的 Google 账号记在 B 的档案上。
+ *
+ * 只写 google_sub 一列。**不回填 email**：调用方是按这个邮箱查到这一行的，
+ * 而 email 与 email_verified_at 由 setUserEmailVerified 同时写入（邮箱非空 ⟺ 已验证），
+ * 所以"这一行邮箱是空的"在这条路径上不存在，写了也是永不生效的一句。
+ */
+export function bindGoogleSub(
+  db: Database,
+  params: { userId: number; googleSub: string },
+): boolean {
+  const info = db
+    .prepare('UPDATE users SET google_sub = ? WHERE id = ? AND google_sub IS NULL')
+    .run(params.googleSub, params.userId);
+  return info.changes === 1;
+}
+
+/**
+ * Google 线首次登录即建号。没有手机号——phone_enc / phone_hash 留 NULL，
+ * uq_users_phone_hash 是部分索引（WHERE phone_hash IS NOT NULL），多行 NULL 不冲突。
+ *
+ * email_verified_at 直接写上：Google 的 ID Token 里 email_verified=true 就是「已验证」，
+ * 不该再让用户收一遍验证码去证明一件 Google 已经证明过的事。
+ */
+export function insertGoogleUser(
+  db: Database,
+  params: { email: string; googleSub: string; verifiedAt: string },
+): number {
+  const info = db
+    .prepare(
+      'INSERT INTO users (email, email_verified_at, google_sub, created_at) VALUES (?, ?, ?, ?)',
+    )
+    .run(params.email, params.verifiedAt, params.googleSub, params.verifiedAt);
+  return Number(info.lastInsertRowid);
 }
 
 /** 邮箱在验证通过的那一刻才写进 users，避免未验证的邮箱先占住 uq_users_email */
