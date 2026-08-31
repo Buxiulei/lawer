@@ -29,7 +29,7 @@ export function ShellHeader({
   caseId,
 }: {
   pathname: string;
-  caseId: string;
+  caseId: string | null;
 }) {
   const openCasePanel = useCasePanelOpener();
 

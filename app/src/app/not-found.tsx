@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { caseIdFrom } from '@/components/shell/AppShell';
+import { caseIdFromPath } from '@/app/_ui/currentCase';
 import { Alert, AlertDescription, AlertTitle } from '@/components/shadcn/alert';
 import { Button } from '@/components/shadcn/button';
 
@@ -18,7 +18,8 @@ import { Button } from '@/components/shadcn/button';
  */
 export default function NotFound() {
   const pathname = usePathname() ?? '/';
-  const caseId = caseIdFrom(pathname);
+  // 404 页没有案件上下文，取路径里的 id；非案件页兜底到 demo（回驾驶舱总得有个去处）
+  const caseId = caseIdFromPath(pathname) ?? 'demo';
 
   return (
     <div className="pt-6">
