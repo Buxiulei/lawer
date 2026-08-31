@@ -119,7 +119,7 @@ const REDONE_ATTEST_NO = `AT-${demoAttestDate(RETRY_ATTEST_DAY)}-000602`;
 const LEDGER_SEED: Omit<LedgerEntry, 'balanceAfter'>[] = [
   ...demoGongdao.ledger,
   {
-    id: 'gl_7',
+    id: 'gl_9',
     delta: -220,
     type: '消耗',
     feature: 'agent.陪跑',
@@ -127,7 +127,7 @@ const LEDGER_SEED: Omit<LedgerEntry, 'balanceAfter'>[] = [
     createdAt: demoDay(RETRY_ATTEST_DAY, '21:04'),
   },
   {
-    id: 'gl_8',
+    id: 'gl_10',
     delta: -1200,
     type: '固化出证',
     feature: 'evidence.attest',
@@ -135,7 +135,7 @@ const LEDGER_SEED: Omit<LedgerEntry, 'balanceAfter'>[] = [
     createdAt: demoDay(RETRY_ATTEST_DAY, '21:30'),
   },
   {
-    id: 'gl_9',
+    id: 'gl_11',
     delta: 1200,
     type: '退款',
     feature: 'evidence.attest',
@@ -143,7 +143,7 @@ const LEDGER_SEED: Omit<LedgerEntry, 'balanceAfter'>[] = [
     createdAt: demoDay(RETRY_ATTEST_DAY, '21:41'),
   },
   {
-    id: 'gl_10',
+    id: 'gl_12',
     delta: -1200,
     type: '固化出证',
     feature: 'evidence.attest',
@@ -151,7 +151,7 @@ const LEDGER_SEED: Omit<LedgerEntry, 'balanceAfter'>[] = [
     createdAt: demoDay(RETRY_ATTEST_DAY, '22:03'),
   },
   {
-    id: 'gl_11',
+    id: 'gl_13',
     delta: -318,
     type: '消耗',
     feature: 'knowledge.search',
@@ -159,7 +159,7 @@ const LEDGER_SEED: Omit<LedgerEntry, 'balanceAfter'>[] = [
     createdAt: demoDay(-5, '12:40'),
   },
   {
-    id: 'gl_12',
+    id: 'gl_14',
     delta: 3000,
     type: '兑换码',
     feature: `redeem.CY-${demoYear(0)}-3F7K`,
@@ -167,7 +167,7 @@ const LEDGER_SEED: Omit<LedgerEntry, 'balanceAfter'>[] = [
     createdAt: demoDay(-4, '09:02'),
   },
   {
-    id: 'gl_13',
+    id: 'gl_15',
     delta: -742,
     type: '消耗',
     feature: 'draft.仲裁申请书',
@@ -175,7 +175,7 @@ const LEDGER_SEED: Omit<LedgerEntry, 'balanceAfter'>[] = [
     createdAt: demoDay(-2, '22:15'),
   },
   {
-    id: 'gl_14',
+    id: 'gl_16',
     delta: 1000,
     type: '充值',
     feature: 'order.散充',
@@ -183,7 +183,7 @@ const LEDGER_SEED: Omit<LedgerEntry, 'balanceAfter'>[] = [
     createdAt: demoDay(-1, '08:31'),
   },
   {
-    id: 'gl_15',
+    id: 'gl_17',
     delta: -286,
     type: '消耗',
     feature: 'agent.陪跑',
