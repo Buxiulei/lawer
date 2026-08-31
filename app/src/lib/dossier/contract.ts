@@ -172,29 +172,13 @@ export interface DossierView {
   graphReady: boolean;
 }
 
-/* ── 报价：B 的 quote 接口响应 ─────────────────────────── */
-
-export interface QuoteLine {
-  /** 与 lib/billing/features 的 feature 键对齐 */
-  feature: 'dossier_graph' | 'dossier_litigation';
-  label: string;
-  gongdao: number;
-  /** 这一块交付什么、什么时候到、可能拿不到什么 */
-  delivers: string;
-  /** null = 无时延承诺（同步出）；否则是工作日上限 */
-  slaWorkdays: number | null;
-  /** 拿不到货时退不退、退多少 */
-  refundPromise: string | null;
-  /** 可否单买 */
-  optional: boolean;
-}
-
-export interface DossierQuote {
-  lines: QuoteLine[];
-  totalGongdao: number;
-  /** 缓存命中：如实告知第二个用户"本公司已有 X 天前的存档" */
-  cache: { hit: boolean; ageDays: number | null; cachedGongdao: number | null };
-  /** 有未核销的会员赠送次数时，确认页显示"本次不扣公道值" */
-  entitlementAvailable: boolean;
-  balanceGongdao: number;
-}
+/* ── 报价 ──────────────────────────────────────────────
+ *
+ * 报价的形状**不在本文件**。它的事实源是计费侧的 `lib/company/dossier-billing.ts`
+ * （`DossierQuote` / `DossierQuoteItem`），文字版见 docs/contracts/dossier-billing-api.md。
+ *
+ * 本文件早先有一份 v2 的 `QuoteLine` / `DossierQuote`（谱系块 + 判例块两块打包），
+ * 已随 v3「拆包按模块计价」作废并删除。**没有留一份"兼容形状"**：两份报价契约并存的那天，
+ * 页面按其中一份渲染、服务端按另一份收钱，两边各自看着都对，而用户看到的价与实扣的价不是一个数。
+ * 报价页要的呈现逻辑（可售性、口径措辞、合计）在 `lib/dossier/order.ts`。
+ */

@@ -103,5 +103,5 @@ export function CompanyGraphLoader({ caseId }: { caseId: string }) {
     );
   }
 
-  return <CompanyGraphView graph={graph} />;
+  return <CompanyGraphView caseId={caseId} graph={graph} />;
 }

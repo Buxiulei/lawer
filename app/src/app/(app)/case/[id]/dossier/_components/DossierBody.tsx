@@ -6,6 +6,7 @@ import { TENURE_DISCLAIMER } from '@/lib/dossier/present';
 import { NeutralLabel } from '@/app/_ui/NeutralLabel';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Sensitive } from '@/components/Sensitive';
+import { WatchEntry } from '@/components/case/WatchEntry';
 import { Badge } from '@/components/shadcn/badge';
 import { Button } from '@/components/shadcn/button';
 import { BlockProgress } from './BlockProgress';
@@ -37,6 +38,11 @@ export function DossierBody({ caseId, dossier }: { caseId: string; dossier: Doss
         <Sensitive as="div" className="mt-2 block">
           <p className="text-[15px] leading-7 font-medium text-ink">{dossier.companyName}</p>
         </Sensitive>
+        {/* 一键加守望：档案页与图谱节点抽屉共用同一个入口组件（三档与月费在点之前摊开，
+            连点去重在后端）。放在这里而不是页尾——用户看完档案正是决定要不要继续盯的时刻。 */}
+        <div className="mt-3">
+          <WatchEntry caseId={caseId} name={dossier.companyName} />
+        </div>
       </header>
 
       <Section title="进展">

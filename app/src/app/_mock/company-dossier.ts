@@ -10,7 +10,9 @@
  * 一份全都出数的演示会让人以为样本不足是罕见情况，而它是常态。
  */
 
-import type { DossierQuote, DossierView } from '@/lib/dossier/contract';
+import type { DossierQuote } from '@/lib/company/dossier-billing';
+import type { ProbeResult } from '@/lib/company/probe';
+import type { DossierView } from '@/lib/dossier/contract';
 import { demoDate } from './clock';
 
 export const DEMO_DOSSIER_ID = 'dsr_demo';
@@ -127,30 +129,76 @@ export const mockDossier: DossierView = {
   graphReady: true,
 };
 
-/** 报价演示：拆价可见，文书块带时延与退款承诺。 */
+/**
+ * 免费探测演示（§2.3）：四个数字 + 一行工商状态 + 采集时点。
+ * 数字编成**层层子集**（有链接 9 ⊆ 劳动争议 14 ⊆ 全部涉诉 23），与 probe.ts 的
+ * assertPayload 同一条包含关系——演示件也走真载荷的形状，不然演示会教出错的直觉。
+ */
+export const mockProbe: ProbeResult = {
+  company_key: 'name:星曜网络科技（北京）有限公司',
+  status: 'hit',
+  cache_state: 'fresh',
+  quota_left: 2,
+  payload: {
+    entity_matched: true,
+    entity_name: '星曜网络科技（北京）有限公司',
+    uscc: null,
+    gs_status: '存续',
+    relation_count: 6,
+    litigation_count: 23,
+    labor_count: 14,
+    doc_url_count: 9,
+    as_of: AS_OF,
+  },
+};
+
+/**
+ * 报价演示（v3 拆包按模块）：六块各自计价、各自摊开口径。
+ *
+ * 数值照 pricing_config 的兜底价手算，与服务端 quoteDossier 对同一份入参算出来的一致：
+ *   venue 0 / entity 60 / graph 200 / docs_list 80（核心小计 340）
+ *   docs_stats = 9 篇 × 70 = 630
+ *   patterns   = 240 起（含前 20 篇，本次 9 篇）= 240   ← 未超基线篇数就不印那个负的增量项
+ *   合计 1210
+ * 演示里就该看得见深度两块比核心贵得多这个真实形状。
+ */
 export const mockQuote: DossierQuote = {
-  lines: [
+  companyKey: 'name:星曜网络科技（北京）有限公司',
+  name: '星曜网络科技（北京）有限公司',
+  uscc: null,
+  dossierId: null,
+  billableDocs: 9,
+  items: [
+    { module: 'venue', label: '仲裁地实操', isCore: true, priceBasis: 'free', gongdao: 0, alreadyPaid: false },
+    { module: 'entity', label: '主体体检', isCore: true, priceBasis: 'fixed', gongdao: 60, alreadyPaid: false },
+    { module: 'graph', label: '关联谱系', isCore: true, priceBasis: 'fixed', gongdao: 200, alreadyPaid: false },
+    { module: 'docs_list', label: '涉诉清单', isCore: true, priceBasis: 'fixed', gongdao: 80, alreadyPaid: false },
     {
-      feature: 'dossier_graph',
-      label: '公司谱系',
-      gongdao: 480,
-      delivers: '签约主体、发薪主体、控股股东与同体系用工主体的关系图，以及各自的工商登记。',
-      slaWorkdays: null,
-      refundPromise: null,
-      optional: true,
+      module: 'docs_stats',
+      label: '涉诉深度统计',
+      isCore: false,
+      priceBasis: 'per_doc',
+      gongdao: 630,
+      formula: '9 篇 × 70 = 630',
+      alreadyPaid: false,
     },
     {
-      feature: 'dossier_litigation',
-      label: '公司判例档案',
-      gongdao: 1200,
-      delivers: '这家公司的劳动争议判例清单、结果统计与套路归纳。',
-      slaWorkdays: 7,
-      refundPromise: '可判定结果的文书不足 5 篇时，这一块全额退还，已采到的判例清单仍然保留。',
-      optional: true,
+      module: 'patterns',
+      label: '人事套路归纳',
+      isCore: false,
+      priceBasis: 'base_plus_per_doc',
+      gongdao: 240,
+      formula: '240 起（含前 20 篇，本次 9 篇）= 240',
+      alreadyPaid: false,
     },
   ],
-  totalGongdao: 1680,
-  cache: { hit: false, ageDays: null, cachedGongdao: 480 },
-  entitlementAvailable: false,
-  balanceGongdao: 3000,
+  total: 1210,
+  coreSubtotal: 340,
+  membershipCreditAvailable: false,
+  payableGongdao: 1210,
+  balance: 3000,
+  shortfall: 0,
+  intakeReserve: 300,
+  litigationSlaDays: 7,
+  minDocurlToSell: 5,
 };

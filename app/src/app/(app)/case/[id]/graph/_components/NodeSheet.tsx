@@ -6,6 +6,7 @@ import { formatDate } from '@/app/_ui/format';
 import { AppSheet } from '@/components/shadcn/app-sheet';
 import { Badge } from '@/components/shadcn/badge';
 import { Sensitive } from '@/components/Sensitive';
+import { WatchEntry } from '@/components/case/WatchEntry';
 import { TIER_RING } from './graphStyle';
 
 const CONFIDENCE_TONE = { 高: 'success', 中: 'neutral', 低: 'amber' } as const;
@@ -15,11 +16,13 @@ const CONFIDENCE_TONE = { 高: 'success', 中: 'neutral', 低: 'amber' } as cons
  * 公司名放进正文里，低调模式下点一下才显示。
  */
 export function NodeSheet({
+  caseId,
   graph,
   node,
   onClose,
   onSelect,
 }: {
+  caseId: string;
   graph: CompanyGraph;
   node: GraphNode | null;
   onClose: () => void;
@@ -91,6 +94,12 @@ export function NodeSheet({
                 <span className="ml-1 text-[13px] text-ink-2">已入档的劳动争议</span>
               </Field>
             </dl>
+
+            {/* 一键加守望：从这个节点直接把这家挂进定期查看的名单（spec v3 §2.1 M3）。
+                三档与月费在点之前就摊开，见 WatchEntry 文件头。连点去重在后端。 */}
+            <div className="mt-3">
+              <WatchEntry caseId={caseId} name={node.name} uscc={node.creditCode ?? null} />
+            </div>
           </section>
 
           <section>

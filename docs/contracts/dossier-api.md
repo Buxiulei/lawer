@@ -107,20 +107,57 @@
 
 ---
 
-## 三、`POST /api/v1/company/dossiers/quote` — **待 B 落地**
+## 三、报价与确认 — **已落地，形状归计费侧**
 
-请求 `{ case_id, company_name, tenure_years }` → 响应 `DossierQuote`（见 contract.ts）。
+`POST /api/v1/company/dossiers/quote` / `confirm` 的请求与响应形状见
+**`docs/contracts/dossier-billing-api.md`**（v3 拆包按模块计价），类型源在
+`app/src/lib/company/dossier-billing.ts`。
 
-- **这一步不扣任何公道值**（B1 判据同款）。页面上没有一处在报价阶段调用扣费。
-- `lines` 拆价必须可见，`optional: true` 的行可以单独取消勾选。
-  合计由前端把选中行**相加**得出，前端不参与定价。
-- **不打包折扣**：打折会诱导用户连带买下那个他可能拿不到的文书块（样本不足是常态）。
-- `slaWorkdays !== null` 的行，界面会显示「最长 N 个工作日」+「要真人登录取证，
-  快慢不由服务器决定」+ `refundPromise` 原文。**这三样在扣费前就摆出来**。
-- `cache.hit` 时如实告知「本公司已有 X 天前的存档，本次按增量刷新价算」。
-- `entitlementAvailable` 为真时显示「这一单不扣公道值」；否则余额不足会挡住确认按钮。
+> 本篇原先在这里写过一份 v2 的形状（`{ case_id, company_name, tenure_years }` →
+> `lines: QuoteLine[]`，谱系块 + 判例块两块打包）。v3 改成六模块各自计价后它已作废，
+> **连同 `lib/dossier/contract.ts` 里那份 `QuoteLine` / `DossierQuote` 一起删掉了**，
+> 没有留"兼容形状"：两份报价契约并存的那天，页面按其中一份渲染、服务端按另一份收钱，
+> 两边各自看着都对，而用户看到的价与实扣的价不是一个数。
 
-## 四、`POST /api/v1/company/dossiers/confirm` — **待 B 落地**
+呈现侧在这条链路上要守的，写在 `app/src/lib/dossier/order.ts`（判据在
+`lib/dossier/__tests__/order.test.ts` 与报价页组件测试里）：
 
-请求 `{ case_id, company_name, tenure_years, features: ('dossier_graph'|'dossier_litigation')[] }`。
-成功后页面跳去看进展。扣费/核销/幂等一律在 B 侧，前端不重试、不补偿。
+- **报价页零扣费**。页面上唯一动钱的调用是用户点「确认并扣费」之后的 confirm。
+- **先免费探测再谈钱**（`POST /api/v1/company/probe`，见下）。四个计数既是扣费前
+  可验证的事实，也是每块卖不卖的判据：关联 0 → 关联谱系置灰；涉诉 0 → 涉诉清单置灰；
+  有公开文书链接篇数 < 门槛 → 深度两块置灰（这一条的判据在服务端，前端用它 409 的原话）。
+- **置灰必须带原因句，且句里带着观测到的那个数**，并且**不显示价**——
+  一个买不到的东西标着价，是在卖一个我们不打算给的承诺。
+- **合计只是把服务端给的行相加**，前端不参与定价。`total / coreSubtotal /
+  payableGongdao / shortfall` 四个数与服务端 `quoteDossier` 对同一子集算出来的
+  逐字相等，有对账测试（同一份真库、真迁移、真函数跑）。
+- **契约 §二 的四句诚实红线在扣费前就在屏幕上**，不折叠、不小字化。
+- **赠送额守护出黄条但不阻断**：扣完撑不起一次首诊（`intakeReserve`）时提醒顺序，
+  真正拦下单的只有余额不够。
+
+## 四、`POST /api/v1/company/probe` — **已落地**（本工单）
+
+请求 `{ name, uscc? }`（`case:read`）→ `{ ok: true, probe: ProbeResult }`，
+类型源 `app/src/lib/company/probe.ts`。**不扣费、不建档**。
+
+- 命中缓存 0 成本、不占配额、不限次；`collected` 才占配额。
+- 降级（`no_collector` / `quota_exhausted`）**不返回空载荷**，只带 `reason`。
+  界面**逐字渲染那句话**：它专门写来区分「这一刻没去查」与「查无此公司」，
+  改写或补一份全 0 的载荷就把这个区分抹掉了。
+- `payload.as_of` 是硬门槛：没有采集时点的四个数就是四个悬浮的数，界面必须同屏显示它。
+
+## 五、`POST /api/v1/cases/:id/watch` — **已落地**（本工单）
+
+一键加守望（spec v3 §2.1 M3）。请求 `{ name, uscc?, company_profile_id?, tier? }`
+（**`case:write`** —— 它让这个账号下个月产生一笔月费），
+→ `{ ok: true, watch: { id, created, tier, monthly_gongdao } }`。
+
+- **这条不扣钱**：只落一行 `company_watches`，扣费在 `lib/company/watch-billing` 的月度巡检。
+  界面照这个说，不写成「已扣 199」。
+- 连点去重在 `lib/company/watch.addWatch`（同案同主体一条活跃盯梢），
+  命中已有的**不改它的 tier**；因此响应里的 `tier` 读的是**库里那一行**，不是请求里那个——
+  回显请求档位会让页面显示「已按每周档盯着」而库里其实是每日档。
+- 未知 tier 一律 400，不静默回落 daily（回落会让用户以为自己挑了 0 公道值那档）。
+- 入口 UI 的中性文案约束：低调模式下整块不出现「监控 / 守望 / 公司」，
+  口径同 `lib/notify/copy` 的守望计费通知。三档说明两种模式**同一句**——
+  一句话两个版本，漂了没有任何一处会报错。

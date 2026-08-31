@@ -181,6 +181,9 @@ describe('结构守卫一：company_key 只有一个产地', () => {
     'lib/company/dossier-billing.ts', // 计费侧消费方（报价/确认走同一把键，见文件头 import 别名）
     // 只把已经算好的 company_key 原样透出给前端，不参与计算——出现在这里是因为它提到了列名。
     'app/api/v1/company/dossiers/[id]/route.ts',
+    // 演示件：探测/报价 mock 里各有一个**写死的**键值，不参与任何查或写（demo 案件不落库）。
+    // 出现在这里同样是因为它提到了字段名，不是因为它自己算了一把键。
+    'app/_mock/company-dossier.ts',
   ];
 
   it('先证明扫描真的扫到了东西（否则「零违规」只是没检查）', () => {
