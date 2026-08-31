@@ -27,9 +27,9 @@
 //   也不是孤儿（filesGc 不会回收它，它确实被 attestations 引用着），
 //   计为 unattributed_bytes——不并进任何人头上，也不从总数里消失。
 //
-// 两条恒等式，由测试机检（storageAudit.test.ts）：
-//   物理 = 有主(去重) + 无主 + 孤儿
-//   Σ各用户 = 有主(去重) + 重复计数
+// 两条判据，落成 CLI 退出码、并由测试机检（storageAudit.test.ts）：
+//   ① 物理 = 有主(去重) + 无主 + 孤儿（报告内部的算术）
+//   ② 主查询产出的每一个数，与一条**独立重算**的对照管线逐项相等（见 checkStorageIdentities）
 //
 // ───────────────── 一个假设（未做校验） ─────────────────
 // 文件归属走 evidence.user_id（冗余列），未核对它与 cases.user_id 是否一致。
@@ -236,14 +236,160 @@ export function auditStorage(db: Database.Database): StorageAuditReport {
   return { users, totals: { ...t, double_counted_bytes: summed - t.attributed_bytes } };
 }
 
+/** 对照管线重算出来的同一批数（键为 user_id）。 */
+interface ControlCounts {
+  fileBytesByUser: Map<number, number>;
+  messageBytesByUser: Map<number, number>;
+  summedFileBytes: number;
+  physicalBytes: number;
+  attributedBytes: number;
+  unattributedBytes: number;
+  orphanBytes: number;
+}
+
 /**
- * 两条恒等式的机检。返回违反的说明（空数组=对得上）。
+ * 对照管线：**不复用主查询的任何一条 SQL**，改从基表原样取行、在 TS 里把同一批数重算一遍。
+ *
+ * 刻意在每个易错处换一种实现，好让两条管线不会一起错：
+ *   · 去重用 JS Set，不用 SQL 的 UNION；
+ *   · 字节用 Buffer.byteLength，不用 SQLite 的 LENGTH（字符/字节之分正是本模块踩过的坑）；
+ *   · 归属靠逐表取 (id, user_id) 后在内存里接图，不用 JOIN 拼出 user_id；
+ *   · 「有无引用」直接遍历 REFERENCERS 各列，不用 EXISTS 条件式。
+ * 分桶口径与主查询保持一致（有主 / 非有主但有引用 / 无引用），故「有主却无人引用」这种
+ * 归属与引用判据打架的情形两边会一致地多计——那一路由恒等式 ① 单独兜。
+ *
+ * 【日后加第四条 files 外键】OWNER_PATHS 与本函数都要加。只加 OWNER_PATHS 的表现是本自检
+ * **误报**（主查询说有主、对照说无主），错在偏报警那一侧，不会把错数静默放过。
+ */
+function recomputeFromBaseTables(db: Database.Database): ControlCounts {
+  const sizeOf = new Map<number, number>();
+  for (const f of db.prepare('SELECT id, size FROM files').iterate() as Iterable<{
+    id: number;
+    size: number;
+  }>) {
+    sizeOf.set(f.id, f.size);
+  }
+
+  const ownersOf = new Map<number, Set<number>>();
+  const own = (fileId: number | null, userId: number | null | undefined) => {
+    if (fileId == null || userId == null || !sizeOf.has(fileId)) return;
+    let s = ownersOf.get(fileId);
+    if (!s) {
+      s = new Set();
+      ownersOf.set(fileId, s);
+    }
+    s.add(userId);
+  };
+
+  const userOfCase = new Map<number, number>();
+  for (const c of db.prepare('SELECT id, user_id FROM cases').iterate() as Iterable<{
+    id: number;
+    user_id: number;
+  }>) {
+    userOfCase.set(c.id, c.user_id);
+  }
+
+  const userOfEvidence = new Map<number, number>();
+  for (const e of db.prepare('SELECT id, user_id, file_id FROM evidence').iterate() as Iterable<{
+    id: number;
+    user_id: number;
+    file_id: number | null;
+  }>) {
+    userOfEvidence.set(e.id, e.user_id);
+    own(e.file_id, e.user_id);
+  }
+  for (const d of db.prepare('SELECT case_id, file_id FROM company_docs').iterate() as Iterable<{
+    case_id: number;
+    file_id: number | null;
+  }>) {
+    own(d.file_id, userOfCase.get(d.case_id));
+  }
+  for (const a of db
+    .prepare('SELECT evidence_id, cert_pdf_file_id FROM attestations')
+    .iterate() as Iterable<{ evidence_id: number | null; cert_pdf_file_id: number | null }>) {
+    own(a.cert_pdf_file_id, a.evidence_id == null ? null : userOfEvidence.get(a.evidence_id));
+  }
+
+  const referenced = new Set<number>();
+  for (const [t, c] of REFERENCERS) {
+    for (const r of db.prepare(`SELECT DISTINCT ${c} AS fid FROM ${t}`).iterate() as Iterable<{
+      fid: number | null;
+    }>) {
+      if (r.fid != null) referenced.add(r.fid);
+    }
+  }
+
+  const fileBytesByUser = new Map<number, number>();
+  let physicalBytes = 0;
+  let attributedBytes = 0;
+  let unattributedBytes = 0;
+  let orphanBytes = 0;
+  for (const [id, size] of sizeOf) {
+    physicalBytes += size;
+    const owners = ownersOf.get(id);
+    if (owners && owners.size > 0) {
+      attributedBytes += size;
+      for (const uid of owners) fileBytesByUser.set(uid, (fileBytesByUser.get(uid) ?? 0) + size);
+    } else if (referenced.has(id)) {
+      unattributedBytes += size;
+    }
+    if (!referenced.has(id)) orphanBytes += size;
+  }
+
+  const caseOfThread = new Map<number, number>();
+  for (const t of db.prepare('SELECT id, case_id FROM threads').iterate() as Iterable<{
+    id: number;
+    case_id: number;
+  }>) {
+    caseOfThread.set(t.id, t.case_id);
+  }
+  const messageBytesByUser = new Map<number, number>();
+  for (const m of db.prepare('SELECT thread_id, content FROM messages').iterate() as Iterable<{
+    thread_id: number;
+    content: string | Buffer | null;
+  }>) {
+    const caseId = caseOfThread.get(m.thread_id);
+    const uid = caseId == null ? undefined : userOfCase.get(caseId);
+    if (uid === undefined) continue;
+    const bytes = m.content == null ? 0 : Buffer.byteLength(m.content, 'utf8');
+    messageBytesByUser.set(uid, (messageBytesByUser.get(uid) ?? 0) + bytes);
+  }
+
+  let summedFileBytes = 0;
+  for (const b of fileBytesByUser.values()) summedFileBytes += b;
+
+  return {
+    fileBytesByUser,
+    messageBytesByUser,
+    summedFileBytes,
+    physicalBytes,
+    attributedBytes,
+    unattributedBytes,
+    orphanBytes,
+  };
+}
+
+/**
+ * 自检：一条恒等式 + 一条**独立重算**的对照。返回违反的说明（空数组=对得上）。
  *
  * 【为什么审计要自检】一张按用户列字节的表，谁都不会去核对它加起来对不对——
- * 错了也只是「某个数看着有点大」。把「加得上」变成 CLI 的退出码，
- * 口径一旦被改坏（漏一条归属路径、去重写成 UNION ALL）当场就是红的。
+ * 错了也只是「某个数看着有点大」。所以把核对变成 CLI 的退出码。
+ *
+ * 【为什么必须是两条管线】自检若只拿主查询产出的数互相验算，写出来的会是恒真式。
+ * 本函数上一版正是如此：double_counted 由「Σ各用户 − 有主」算出，自检又拿同样的
+ * Σ各用户与有主相减去比它，无论 SQL 被改成什么都恒等——那行断言从来没有过牙。
+ * 现在对照值改由 recomputeFromBaseTables 从基表原样取行、换一套实现重算，
+ * 两条管线出错的方式不一样，才有资格互证。
+ *
+ * 【实测能点名的改坏】（storageAudit.test.ts「产线变异」把改动施在源码上再跑真 CLI，
+ * 逐条断言退出码变 1）：去重写成 UNION ALL；三条归属路径中任一条的 SQL 被改哑；
+ * 对话字节从 LENGTH(CAST(…AS BLOB)) 退回按字符数计。
+ *
+ * 【它管不到的】两条管线都建立在 OWNER_PATHS 那套「谁是属主」的语义上：若这套语义
+ * 本身是错的（例如 evidence.user_id 与 cases.user_id 漂移），两边会一致地错，本自检不会响。
+ * 那是对账（reconcile.ts）的活，见本文件抬头「一个假设」。
  */
-export function checkStorageIdentities(r: StorageAuditReport): string[] {
+export function checkStorageIdentities(db: Database.Database, r: StorageAuditReport): string[] {
   const t = r.totals;
   const out: string[] = [];
 
@@ -256,13 +402,30 @@ export function checkStorageIdentities(r: StorageAuditReport): string[] {
     );
   }
 
-  const summed = r.users.reduce((s, u) => s + u.file_bytes, 0);
-  if (summed - t.attributed_bytes !== t.double_counted_bytes) {
-    out.push(
-      `重复计数对不上：Σ各用户 file_bytes=${summed} − 有主(去重)=${t.attributed_bytes}` +
-        ` ≠ double_counted_bytes=${t.double_counted_bytes}。`,
-    );
+  const ctl = recomputeFromBaseTables(db);
+  const cmp = (what: string, main: number, control: number) => {
+    if (main !== control) {
+      out.push(`与对照重算不符 · ${what}：主查询=${main}，逐表重算=${control}（差 ${main - control}）。`);
+    }
+  };
+  cmp('物理字节', t.physical_bytes, ctl.physicalBytes);
+  cmp('有主字节', t.attributed_bytes, ctl.attributedBytes);
+  cmp('无主字节', t.unattributed_bytes, ctl.unattributedBytes);
+  cmp('孤儿字节', t.orphan_bytes, ctl.orphanBytes);
+  cmp('重复计数', t.double_counted_bytes, ctl.summedFileBytes - ctl.attributedBytes);
+
+  const mainFiles = new Map(r.users.map((u) => [u.user_id, u.file_bytes]));
+  const mainMsgs = new Map(r.users.map((u) => [u.user_id, u.message_bytes]));
+  const uids = new Set<number>([
+    ...mainFiles.keys(),
+    ...ctl.fileBytesByUser.keys(),
+    ...ctl.messageBytesByUser.keys(),
+  ]);
+  for (const uid of [...uids].sort((a, b) => a - b)) {
+    cmp(`user_id=${uid} 文件字节`, mainFiles.get(uid) ?? 0, ctl.fileBytesByUser.get(uid) ?? 0);
+    cmp(`user_id=${uid} 对话字节`, mainMsgs.get(uid) ?? 0, ctl.messageBytesByUser.get(uid) ?? 0);
   }
+
   if (t.double_counted_bytes < 0) {
     out.push(
       `重复计数为负（${t.double_counted_bytes}）：说明存在「有主但没算进任何用户行」的文件，` +
@@ -293,8 +456,11 @@ export function storageAuditCli(dbPath: string): number {
   console.log(`[存储审计] 库：${dbPath}`);
   const db = openCliDb(dbPath, { readonly: true, fileMustExist: true });
   let report: StorageAuditReport;
+  let violations: string[];
   try {
     report = auditStorage(db);
+    // 自检要另取一遍基表跑对照重算，所以必须在关库之前做完
+    violations = checkStorageIdentities(db, report);
   } catch (e) {
     rethrowIfSchemaStale(e, dbPath); // 恒只读，跑不了迁移
   } finally {
@@ -334,10 +500,9 @@ export function storageAuditCli(dbPath: string): number {
     console.log(`[提示] ${t.orphan_count} 个文件无任何引用，可用 npm run gc:files 回收。`);
   }
 
-  const violations = checkStorageIdentities(report);
   for (const v of violations) console.error(`[口径错] ${v}`);
   if (violations.length > 0) {
-    console.error(`[存储审计] 失败：${violations.length} 项恒等式不成立，本次数字不可信。`);
+    console.error(`[存储审计] 失败：${violations.length} 项自检不通过，本次数字不可信。`);
     return 1;
   }
   return 0;
