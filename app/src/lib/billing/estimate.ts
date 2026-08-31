@@ -111,7 +111,19 @@ export function ensureGongdaoFor(
   userId: number,
   feature: string,
 ): GongdaoGateResult {
-  const { gongdao: estimate } = estimateGongdao(db, feature);
+  return ensureGongdaoAmount(db, userId, estimateGongdao(db, feature).gongdao);
+}
+
+/**
+ * 同一道 gate，但预计消耗**由调用方给定**——用于「一单含多个定额项」的场景
+ * （公司档案一次可选购多个模块），逐项各判一次会放行「每项都够、合起来不够」的订单，
+ * 扣到第二项时余额已经透支。ensureGongdaoFor 委托到本函数，两条路径共用同一个判据与返回形状。
+ */
+export function ensureGongdaoAmount(
+  db: Database.Database,
+  userId: number,
+  estimate: number,
+): GongdaoGateResult {
   const balance = getGongdao(userId, db);
   if (balance >= estimate) return { ok: true, estimate, balance };
   return { ok: false, estimate, balance, shortfall: estimate - balance };

@@ -1,7 +1,7 @@
 // app/src/lib/db/migrate.ts
 //
 // ───────────────── ⚠️ 改本文件之前先读这一段 ⚠️ ─────────────────
-// **本迁移框架没有事务。** runMigrations() 的 38 个 db.exec() 是一串裸调用，
+// **本迁移框架没有事务。** runMigrations() 的 39 个 db.exec() 是一串裸调用，
 // 中途失败不回滚——2026-08-26 实测：人为中断，库里留下 22/38 张表，重跑既不前进也不后退。
 // 现在之所以能安全滚更，是因为迁移**全是纯加法**、靠 IF NOT EXISTS 与 addColumnIfMissing
 // 能重跑自愈：**安全是「改动足够简单」给的，不是框架给的。**
@@ -640,6 +640,73 @@ export function runMigrations(db: Database.Database): void {
       ON model_rates (model, token_kind, effective_at);
     CREATE INDEX IF NOT EXISTS idx_model_rates_lookup
       ON model_rates (model, token_kind, effective_at DESC);
+  `);
+
+  // ───────────────── 公司档案（模块化报价与计费） ─────────────────
+  //
+  // pricing_config：**服务定额与阈值的事实源**（读入口只有 lib/billing/pricing-config.ts 的 readPrice）。
+  // 为什么另起一张表、不塞进 skus：fulfillment.resolveSkuKind 按 name 判定 SKU 语义，未知 name 一律
+  // 兜底为「散充」按 amount_fen×100 入账。往 skus 里塞一行「档案·主体体检」，用户经下单路径碰到它
+  // 就会被当成充值订单履约——**收了钱当充值入账，服务不交付**。
+  // value_int **不加 CHECK(value_int >= 0)**：非法值的报错要发生在**读**的时候（readPrice 抛出
+  // 三段式错误，指名哪个键、实际值多少、怎么改），而不是在写的时候被库拒掉。库侧拒写只会让运维
+  // 拿到一句 SQLite 约束错误，看不出是哪个键、也不知道删行即回落兜底值。两处都拦反而更糟：
+  // 已经写进去的历史坏行永远读不出错误原因。
+  //
+  // entitlements：会员赠送的一次性服务额度券（当前唯一一种 kind='dossier_core'＝买会员送核心四项一次）。
+  // 为什么另起一张表、不给 memberships 加一列 credit：memberships 是每单一行、续期叠加，
+  // 在其上加 credit 列，「续期两次送几次」就成了隐式规则，且那一列没有自己的幂等键——
+  // 支付回调重放会不会多送一次，取决于谁先写的那条 UPDATE。
+  // **uq_entitlements_source 是发券的幂等键**（source_ref = order_no）：grantEntitlement 走
+  // INSERT OR IGNORE，全靠它把重放挡成 changes=0。索引是部分的（WHERE source_ref IS NOT NULL），
+  // 因为 SQLite 的 NULL 互不相等：无来源的手工券（source_ref 为空）不该被这条唯一性约束绑在一起。
+  // 核销与作废都不删行：券的一生（发/用/废）留在同一行上，「这单为什么没扣钱」才查得到。
+  //
+  // company_dossiers：**公司维度的平台资产**，company_key 唯一、跨案件跨账号共享——
+  // 与 company_profiles（案件私有的背调档）是两回事，别合表。
+  // paid_by / paid_ref / charge_ref 只盖第一位付款人（lib/company/dossier-billing.stampPayment 的
+  // `WHERE paid_by IS NULL` 守卫）：同一条档案会被多人先后付费，而这三列只有一份；
+  // 后来者的凭据在各自的 gongdao_ledger 流水与 entitlements.consumed_ref 里，不会丢。
+  // status 只在注释里锁枚举、不加 CHECK（沿 intake_stage 裁决：SQLite 改 CHECK 要重建表），
+  // 且**值域归采集管线（工单 A）**：本分支只读不写它，建档时取 DDL 默认 'queued'。
+  // ordered_by_user_id 走 ON DELETE SET NULL：用户注销要能删干净，而档案是平台资产不该跟着消失。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pricing_config (
+      key        TEXT PRIMARY KEY,                        -- 见 lib/billing/pricing-config.ts 的 PRICE_FALLBACK
+      value_int  INTEGER NOT NULL,                        -- 公道值 / 天数 / 篇数，均为非负整数（合法性由 readPrice 判，见上）
+      note       TEXT,                                    -- 这次改价的出处与理由，给对账的人看
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS entitlements (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind         TEXT NOT NULL,                         -- dossier_core（值域见 lib/billing/entitlements.ts）
+      source_ref   TEXT,                                  -- 发券来源，会员单即 orders.order_no；NULL=手工发放，不参与幂等
+      granted_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      consumed_at  TEXT,                                  -- NULL=未核销
+      consumed_ref TEXT,                                  -- 核销去向，如 dossier-12
+      revoked_at   TEXT                                   -- NULL=未作废（订单退款只作废未核销的）
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_entitlements_source
+      ON entitlements (kind, source_ref) WHERE source_ref IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_entitlements_unconsumed
+      ON entitlements (user_id, kind, id) WHERE consumed_at IS NULL AND revoked_at IS NULL;
+
+    CREATE TABLE IF NOT EXISTS company_dossiers (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_key        TEXT NOT NULL,                   -- 唯一键，生成入口只有 lib/company/normalize.companyKeyOf
+      name               TEXT NOT NULL,
+      uscc               TEXT,
+      status             TEXT NOT NULL DEFAULT 'queued',  -- queued | awaiting_relay | done（值域归采集管线）
+      paid_by            TEXT,                            -- gongdao | membership_credit，只盖第一位付款人
+      paid_ref           TEXT,                            -- 券付=券 id；钱付=扣费幂等键前缀
+      charge_ref         TEXT,                            -- 扣费幂等键前缀 dossier-<id>-u<uid>
+      ordered_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at         TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_company_dossiers_key
+      ON company_dossiers (company_key);
   `);
 
   // ───────────────── 公司动态监控 ─────────────────

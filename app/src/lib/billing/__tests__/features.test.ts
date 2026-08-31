@@ -2,12 +2,18 @@
 // 用量功能键 → 中文标签单一事实源：全部已登记键须为纯中文标签、未知键回退「其他」。
 import { describe, expect, test } from 'vitest';
 import { FEATURE_LABELS, KNOWN_FEATURE_KEYS, featureLabel, UNKNOWN_FEATURE_LABEL } from '../features';
+import { DOSSIER_MODULE_FEATURE, DOSSIER_MODULES } from '@/lib/company/dossier-billing';
 
 /** 生产在用的 feature 键全集（新增计费功能须同步补此表与 FEATURE_LABELS）。
- *  companywatch 目前只记量不扣费（扣费口径待 M3），但用量明细同样要出中文标签，故一并登记。 */
+ *  companywatch 目前只记量不扣费（扣费口径待 M3），但用量明细同样要出中文标签，故一并登记。
+ *
+ *  公司档案六模块**不照抄字符串、直接取生产映射表**：gongdaoSettle 实际写进账本的 feature
+ *  就是 DOSSIER_MODULE_FEATURE 的值，在这里再手抄一份，改了模块键名两边各说各话、
+ *  测试照绿，而用量明细里悄悄多出六个「其他」。取生产源即让改名当场变红。 */
 const PRODUCTION_FEATURE_KEYS = [
   'intake', 'companion', 'draft', 'ocr', 'asr', 'attest', 'export', 'knowledge', 'companywatch',
   'contract_review',
+  ...DOSSIER_MODULES.map((m) => DOSSIER_MODULE_FEATURE[m]),
 ];
 
 describe('用量功能标签单一事实源', () => {
