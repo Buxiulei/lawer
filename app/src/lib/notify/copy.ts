@@ -32,7 +32,7 @@
  * **改名不该悄悄放大一个已经给过的同意。**
  * 下面的测试会替你查（新名带敏感词就会红）。
  */
-const NOTIFY_BRAND = '土八鼠';
+export const NOTIFY_BRAND = '土八鼠';
 
 /** 出站文案的详略模式。detailed 需用户在设置里显式打开，默认中性。 */
 export interface CopyOptions {
@@ -40,10 +40,30 @@ export interface CopyOptions {
   detailed?: boolean;
 }
 
-/** 邮件文案：主题 + 纯文本正文。HTML 版留给真正需要排版的场景，验证码不需要。 */
+/**
+ * HTML 版正文的一段。
+ *
+ * 存在的理由只有一个：**验证码那一行要单独成行、放大、加粗、勃艮第红**（用户 2026-08-31 定）。
+ * 纯文本里它嵌在句子中间（「您的验证码是 123456，5 分钟内有效」），HTML 里要拎出来独占一行；
+ * 靠正则从 text 里抠数字是**在传输层猜文案的结构**——文案一改就静默抠错，
+ * 所以由 copy 自己声明哪一段是码。
+ */
+export type MailBlock =
+  | { kind: 'text'; text: string }
+  | { kind: 'code'; code: string };
+
+/**
+ * 邮件文案：主题 + 纯文本正文（+ 可选的 HTML 分块）。
+ *
+ * `text` 永远是权威的那一份：它既是 text/plain 部件，也是 HTML 版的兜底
+ * （没给 blocks 时 mail-template 按 \n 拆段渲染）。**新增 blocks 不改变任何现有文案**——
+ * 期限提醒就没给 blocks，走兜底路径，一个字都不用动。
+ */
 export interface MailCopy {
   subject: string;
   text: string;
+  /** HTML 版分块；不给则由 text 按 \n 拆段。只有验证码信需要它。 */
+  blocks?: MailBlock[];
 }
 
 /**
@@ -101,15 +121,27 @@ export function emailVerifyCode(
   expiryMinutes: number,
   options: CopyOptions = {},
 ): MailCopy {
+  // 【尾段两种模式共用】有效期与"不是你就忽略"的措辞与详略无关，抽出来避免两处各写一遍走偏。
+  const tail = `${expiryMinutes} 分钟内有效，请勿转发他人。\n若非本人操作，忽略本邮件即可。`;
   if (options.detailed) {
     return {
       subject: `${NOTIFY_BRAND} 邮箱验证码：${code}`,
-      text: `您正在验证${NOTIFY_BRAND}账号的邮箱地址。\n验证码：${code}\n${expiryMinutes} 分钟内有效，请勿转发他人。\n若非本人操作，忽略本邮件即可。`,
+      text: `您正在验证${NOTIFY_BRAND}账号的邮箱地址。\n验证码：${code}\n${tail}`,
+      blocks: [
+        { kind: 'text', text: `您正在验证${NOTIFY_BRAND}账号的邮箱地址。` },
+        { kind: 'code', code },
+        { kind: 'text', text: tail },
+      ],
     };
   }
   return {
     subject: `验证码：${code}`,
-    text: `您的验证码是 ${code}，${expiryMinutes} 分钟内有效，请勿转发他人。\n若非本人操作，忽略本邮件即可。`,
+    text: `您的验证码是 ${code}，${tail}`,
+    blocks: [
+      { kind: 'text', text: '您的验证码是' },
+      { kind: 'code', code },
+      { kind: 'text', text: tail },
+    ],
   };
 }
 
