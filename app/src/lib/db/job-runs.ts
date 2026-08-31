@@ -22,7 +22,12 @@
 import type { Database } from 'better-sqlite3';
 
 /** 任务名值集（与 migrate.ts 的列注释同步）。TEXT 列不加 CHECK，值集由本层把关。 */
-export type JobName = '期限提醒' | '公道值对账' | '公司监控巡检' | '公司档案采集';
+export type JobName =
+  | '期限提醒'
+  | '公道值对账'
+  | '公司监控巡检'
+  | '公司档案采集'
+  | '守望计费';
 
 export interface JobRun {
   id: number;

@@ -45,6 +45,26 @@ export const MEMBERSHIP = {
 } as const;
 export type MembershipPlan = keyof typeof MEMBERSHIP; // 'entry' | 'standard' | 'pro'
 
+// ───────────────────────────── 守望监控订阅（三档 · spec v3 §2.2） ─────────────────────────────
+// 守望按 tier 分档、按主体按月计费（不按次）：
+//   daily=圈1 每日巡检   199 公道值/月/主体
+//   weekly=圈2 每周巡检   60 公道值/月/主体
+//   archive=圈3 存档      0（本就不监控，收费即欺诈）——archive 一律不扣、不落 ledger 行。
+// 不分档会出量级冲突：圈1+圈2 典型 5~8 主体全按 199 = 995~1592 公道值/月，入门月卡只给 3000，
+// 盯 8 个主体只够 1.9 个月。分档后典型分布（2 圈1 + 4 圈2 + 2 圈3）= 638 公道值/月，与月卡量级相称。
+// 全部草案值（manager 已批档位结构），待 M3 核定；改价只改此处。
+export const WATCH_TIER_GONGDAO = {
+  daily: 199,
+  weekly: 60,
+  archive: 0,
+} as const;
+export type WatchTier = keyof typeof WATCH_TIER_GONGDAO; // 'daily' | 'weekly' | 'archive'
+
+/** 某 tier 的月度公道值定价；未知 tier 回落 0（宁可不扣，不凭空扣一个猜的价）。 */
+export function watchTierGongdao(tier: string): number {
+  return (WATCH_TIER_GONGDAO as Record<string, number>)[tier] ?? 0;
+}
+
 // ───────────────────────────── 注册赠送 / 门槛 ─────────────────────────────
 /**
  * 注册赠送（定额）：1000 公道值。草案值。

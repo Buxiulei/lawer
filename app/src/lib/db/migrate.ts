@@ -1006,7 +1006,7 @@ export function runMigrations(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS job_runs (
       id             INTEGER PRIMARY KEY AUTOINCREMENT,
-      job_name       TEXT NOT NULL,                         -- 期限提醒 | 公道值对账 | 公司监控巡检 | 公司档案采集
+      job_name       TEXT NOT NULL,                         -- 值域见 lib/db/job-runs.ts 的 JobName
       started_at     TEXT NOT NULL DEFAULT (datetime('now')),
       finished_at    TEXT,                                  -- NULL=未跑完（崩了 / 被杀 / 还在跑）
       ok             INTEGER,                               -- NULL=未跑完；1=整轮跑通；0=整轮失败
@@ -1058,13 +1058,23 @@ export function runMigrations(db: Database.Database): void {
   // 存量行取 DDL 默认 'daily'：老库的盯梢都是按每日跑的，默认值即其现状，不需回填。
   addColumnIfMissing(db, 'company_watches', 'tier', "TEXT NOT NULL DEFAULT 'daily'");
 
-  // company_watches.billing_status / paid_through：守望计费（D 工单）。
-  // free=未收费的存量与 tier=archive；paid=本期已扣；arrears=余额不足欠费中。
-  // **欠费绝不静默停盯**：arrears 期间 status 仍为 active 且要通知，连续三轮才 paused 并再通知一次
-  // ——同 company_watch_checks.ok=0 必须留行那条规矩，静默失效是本产品最危险的失败模式。
-  // 存量行取 DDL 默认 'free'：老库的盯梢本来就没收过钱，默认值即其现状，不需回填。
+  // company_watches 守望计费四列（spec v3 §2.2 · 守望按 tier 月度扣费）。扣费逻辑全在
+  // lib/company/watch-billing，库侧只做哑存储（同 tier，不设 CHECK / 触发器 / 定时任务）。
+  //   billing_status：free（尚未计过费）| paid（本月已扣）| arrears（本月余额不足未扣）。
+  //     存量行默认 'free' —— 老库的盯梢在 MVP 期免费，'free' 即其现状，不回填、不追缴。
+  //   paid_through：最近一次成功扣费覆盖到的月份（YYYYMM）。NULL=从未成功扣过。
+  //   arrears_rounds：连续欠费轮数计数器。达上限（3）即 status→paused 且再发一次通知
+  //     （绝不静默停盯）。成功扣费即清零。用显式计数列而非从账本推——推导要靠"这月扣没扣"
+  //     的历史比对，一旦重跑巡检就会把同一个月重复计进去，把"3 个月"数成"3 次跑"。
+  //   billed_month：最近一次**处理过**的月份（YYYYMM，扣费成功或判欠费都算处理）。
+  //     它是整轮的幂等闸：同月重复跑巡检时 billed_month===本月即整条跳过，
+  //     保证「每个 watch 每月只扣一笔、arrears_rounds 每月只加一次」（gongdaoSettle 的 refId
+  //     只挡重复扣款，挡不住 arrears_rounds 重复自增，故另设此列）。
+  // 四列均可空 / 带默认，存量行取默认即语义正确，不需要回填（同迁移框架无事务的约束）。
   addColumnIfMissing(db, 'company_watches', 'billing_status', "TEXT NOT NULL DEFAULT 'free'");
   addColumnIfMissing(db, 'company_watches', 'paid_through', 'TEXT');
+  addColumnIfMissing(db, 'company_watches', 'arrears_rounds', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(db, 'company_watches', 'billed_month', 'TEXT');
 
   // company_profiles.dossier_id：案件维度的主体 → 公司维度的档案（多对一）。
   // 可空：手建的背调档不一定买过档案，且档案是后来才有的东西，老行一律 NULL。
