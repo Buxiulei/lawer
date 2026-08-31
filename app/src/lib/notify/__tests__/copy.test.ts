@@ -3,7 +3,12 @@
 // 默认模式下敏感词一个都不许出现。将来谁往文案里加一句"仲裁"，这里会红。
 import { describe, expect, test } from 'vitest';
 
-import { deadlineReminder, emailVerifyCode, smsVerifyTemplateParam } from '../copy';
+import {
+  deadlineReminder,
+  emailNotRegistered,
+  emailVerifyCode,
+  smsVerifyTemplateParam,
+} from '../copy';
 
 /** 被旁人瞟一眼就会暴露用户在维权的词 */
 const SENSITIVE = ['裁员', '仲裁', '开庭', '劳动', '律师', '赔偿', '解除', '离职', '维权'];
@@ -35,6 +40,35 @@ describe('emailVerifyCode', () => {
       expect(text).not.toContain(word);
     }
     expect(text).toContain('10 分钟内有效');
+  });
+});
+
+describe('emailNotRegistered（陌生邮箱引导信）', () => {
+  test('不含敏感词，也不含平台名——收件人可能根本不是我们的用户', () => {
+    const { subject, text } = emailNotRegistered();
+    for (const word of [...SENSITIVE, '土八鼠', '土拨鼠', '裁员应对专员']) {
+      expect(subject).not.toContain(word);
+      expect(text).not.toContain(word);
+    }
+  });
+
+  /**
+   * 【这封信是那条 404 的替身，替的是它「有用」的那一半】
+   * 接口对注册状态一个字都不说（同形响应，见 lib/auth 的 single-factor 判据），
+   * 于是打错字的用户失去了唯一的解释来源——补回来的地方只能是收件箱：
+   * 只有邮箱的主人看得到它，拿别人邮箱去探的人什么也拿不到。
+   */
+  test('🔴 三段式仍在：撞到的是什么、为什么会撞到、现在能怎么办', () => {
+    const { text } = emailNotRegistered();
+    expect(text).toContain('还没有账号'); // 撞到的是什么
+    expect(text).toContain('绑定'); // 为什么会撞到
+    expect(text).toContain('手机号'); // 现在能怎么办
+  });
+
+  test('🔴 信里没有六位码——它不是验证码信，收到它的人登不进去', () => {
+    const { subject, text } = emailNotRegistered();
+    expect(subject).not.toMatch(/\d{6}/);
+    expect(text).not.toMatch(/\d{6}/);
   });
 });
 

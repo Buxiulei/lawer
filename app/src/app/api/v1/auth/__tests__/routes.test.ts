@@ -68,19 +68,45 @@ describe('错误响应形状', () => {
 });
 
 describe('邮箱两条路由的 Bearer 校验', () => {
-  test('缺 Authorization 头 → 401 UNAUTHORIZED', async () => {
+  // 单因素登录后 Authorization 变成可选：没带 = 匿名走邮箱通道登录。
+  // 判据挑「格式非法」而不是「陌生邮箱」，是因为后者现在要走完整条路（会真的去发邮件）——
+  // 那条路的判据在 lib/auth 的 single-factor 里，那边能注入假邮件通道。这里只问一件事：
+  // **缺 Authorization 头不再是 401**，请求确实进到了业务层。
+  test('缺 Authorization 头不再被拒：请求照常进业务层（这里被邮箱格式拦下）', async () => {
     for (const handler of [emailSend, emailVerify]) {
-      const res = await handler(post({ email: 'a@b.com', code: '123456' }));
-      expect(res.status).toBe(401);
-      expect((await res.json()).error_code).toBe('UNAUTHORIZED');
+      const res = await handler(post({ email: 'not-an-email', code: '123456' }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error_code).toBe('INVALID_EMAIL');
     }
   });
 
-  test('token 伪造或过期 → 401', async () => {
+  /**
+   * 匿名验码撞上一个陌生邮箱，回的是 OTP_NOT_FOUND（「请先获取验证码」）——
+   * 与「已注册但还没发过码」**同一个回答**。库里一个用户都没有，这条走的正是陌生那一支。
+   * 早先它回 404 EMAIL_NOT_REGISTERED，一次请求就能问出注册状态。
+   */
+  test('🔴 匿名验陌生邮箱 → OTP_NOT_FOUND，不再有专属于「没注册」的错误码', async () => {
+    const res = await emailVerify(post({ email: 'a@b.com', code: '123456' }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error_code).toBe('OTP_NOT_FOUND');
+  });
+
+  /**
+   * 【这条是鉴权强度本身】"可选"只对**根本没带**成立。
+   * 若把「带了个过期 token」也当匿名放过去，权限判定就从「通过 / 不通过」
+   * 变成了「不通过就换一条路」——凭据失效反而解锁了另一套语义。
+   * 判据不看 401 而看 error_code：降级成匿名时这里会变成 404，一眼可辨。
+   */
+  test('token 伪造或过期 → 401，绝不降级成匿名', async () => {
     const expired = signToken(1, new Date('2020-01-01T00:00:00Z'));
-    for (const bad of [`Bearer ${expired}`, 'Bearer nonsense', 'Basic abc']) {
-      const res = await emailSend(post({ email: 'a@b.com' }, { authorization: bad }));
-      expect(res.status).toBe(401);
+    for (const bad of [`Bearer ${expired}`, 'Bearer nonsense', 'Basic abc', '']) {
+      for (const handler of [emailSend, emailVerify]) {
+        const res = await handler(
+          post({ email: 'a@b.com', code: '123456' }, { authorization: bad }),
+        );
+        expect(res.status, `坏 token「${bad}」被放过了`).toBe(401);
+        expect((await res.json()).error_code).toBe('UNAUTHORIZED');
+      }
     }
   });
 

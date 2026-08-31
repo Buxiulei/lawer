@@ -4,6 +4,7 @@
 // 前端按 error_code 分支，不按 HTTP status 分支（NBDpsy 的既定约定）。
 import { NextResponse } from 'next/server';
 
+import { verifyAuthHeader } from './jwt';
 import type { AuthFailure } from './otp';
 
 export function failureResponse(failure: AuthFailure): NextResponse {
@@ -29,6 +30,27 @@ export function unauthorized(): NextResponse {
     errorCode: 'UNAUTHORIZED',
     message: '登录状态已失效，请重新验证手机号',
   });
+}
+
+/**
+ * optionalUserId 的三种结局：
+ *   number    —— 带了有效 token
+ *   null      —— 根本没带 Authorization 头，按匿名处理
+ *   'invalid' —— 带了但不作数（伪造 / 过期 / 不是 Bearer），调用方**必须回 401**
+ */
+export type OptionalUserId = number | null | 'invalid';
+
+/**
+ * 邮箱那两条路由的可选身份：既要能匿名登录，又不能让一个失效凭据自动降级成匿名。
+ *
+ * 这条区分本身就是鉴权强度：若把「带了个过期 token」也当匿名放过去，权限判定就从
+ * 「通过 / 不通过」变成了「不通过就换一条路」——凭据过期反而解锁了另一套语义。
+ * 所以只有 header **根本不存在**才算匿名；存在但解不出有效 payload 一律 'invalid'。
+ */
+export function optionalUserId(header: string | null): OptionalUserId {
+  if (header === null) return null;
+  const payload = verifyAuthHeader(header);
+  return payload ? payload.uid : 'invalid';
 }
 
 /** 读请求体；不是合法 JSON 对象时返回 null，由调用方回 400 */

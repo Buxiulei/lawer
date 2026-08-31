@@ -8,7 +8,7 @@ import type { GongdaoLedgerEntry } from './types';
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/* ── 登录：手机号 + 邮箱双验证（spec D1）────────────────────────── */
+/* ── 登录：手机号或邮箱任选一条验（注册那一次才要两样齐）──────────── */
 
 export const OTP_LENGTH = 6;
 export const OTP_RESEND_SECONDS = 60;

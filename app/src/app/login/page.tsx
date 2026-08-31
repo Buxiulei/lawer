@@ -5,7 +5,7 @@ import { LoginFlow } from './_components/LoginFlow';
 export const metadata: Metadata = { title: '登录' };
 
 /**
- * 登录：手机号 + 邮箱双验证（spec D1）。裸布局，不套 AppShell。
+ * 登录：手机号或邮箱，验一个就进；只有新号注册那一次要接着补绑邮箱。裸布局，不套 AppShell。
  */
 export default function LoginPage() {
   return (
@@ -17,7 +17,8 @@ export default function LoginPage() {
             <span className="text-[18px] font-semibold text-ink">土八鼠</span>
           </div>
           <p className="mt-3 text-[15px] leading-7 text-ink-2">
-            手机号和邮箱都验证一遍，你上传的材料才能绑定到实名、出得了存证。两步，大约一分钟。
+            手机号或邮箱，验一个就能进，大约半分钟。第一次用手机号注册时会多一步绑邮箱——
+            换手机号时靠它找回账号，文书和存证证明也发到那里。
           </p>
         </header>
 
