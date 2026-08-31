@@ -1,6 +1,7 @@
 /**
- * 公司关系图谱 mock：结构即 GET /api/v1/cases/:id/company-graph 的响应形状，
- * 接后端时换数据源、页面组件签名不变。
+ * 公司关系图谱 mock：**演示件**，形状由 @/lib/graph/contract 定义（那里是唯一事实源，
+ * 也是 GET /api/v1/cases/:id/company-graph 的响应形状）。
+ * 真数据走 lib/graph/build.ts；这份只在 demo 案件里出现。
  *
  * 数据是脱敏演示件：公司名/人名/案号都是化名，不是任何真实主体。
  *
@@ -8,62 +9,16 @@
  * 所以 meta 两个日期不能落到未来；历史涉诉月份按与更新日的间隔往前推。
  */
 
+import type { CompanyGraph } from '@/lib/graph/contract';
 import { demoDate, demoMonth, demoYear } from './clock';
 
-export type GraphTier = 1 | 2 | 3;
-
-export interface GraphNode {
-  id: string;
-  name: string;
-  /** 这家在本案里扮演什么，如「现用人单位/目标主体」 */
-  role: string;
-  /** 监控圈层，文案见 meta.tiers */
-  tier: GraphTier;
-  /** 近期事件条数 */
-  eventCount: number;
-  /** 涉诉计数：近 5 年劳动争议相关 */
-  litigationCount: number;
-  creditCode?: string;
-  legalRep?: string;
-  regCapital?: string;
-  /** 为什么这样标——调查员的自解释判断原文，展示时不改写 */
-  note: string;
-}
-
-export interface GraphEdge {
-  from: string;
-  to: string;
-  /** 关系原文，如「持股100%(法人独资)」 */
-  relation: string;
-  confidence: '高' | '中' | '低';
-  evidenceUrl?: string;
-  note?: string;
-}
-
-export interface GraphEvent {
-  id: string;
-  nodeId: string;
-  happenedAt: string;
-  kind: string;
-  urgent: boolean;
-  title: string;
-  detail: string;
-}
-
-export interface CompanyGraph {
-  meta: {
-    generated: string;
-    updated: string;
-    source: string;
-    confidenceNote: string;
-    updateNote: string;
-    /** 圈层文案，键是 tier */
-    tiers: Record<GraphTier, string>;
-  };
-  nodes: GraphNode[];
-  edges: GraphEdge[];
-  events: GraphEvent[];
-}
+export type {
+  CompanyGraph,
+  GraphEdge,
+  GraphEvent,
+  GraphNode,
+  GraphTier,
+} from '@/lib/graph/contract';
 
 export const mockCompanyGraph: CompanyGraph = {
   meta: {

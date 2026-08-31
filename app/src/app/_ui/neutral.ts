@@ -20,6 +20,8 @@ export const NEUTRAL_WORD = {
   evidenceLib: '资料库',
   drafts: '文档',
   graph: '关系',
+  /** 「公司档案」：一份查来的资料，中性说法就是档案 */
+  dossier: '档案',
   credits: '额度',
   /** 「固化」：实质就是算哈希盖时间戳把内容锁死，说「锁定」不丢信息 */
   freeze: '锁定',
