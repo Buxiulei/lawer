@@ -133,12 +133,23 @@ export type AgentEvent =
       };
     }
   /**
-   * 心跳。**只在 meta 之后、首个 delta 之前**按固定间隔发。
+   * 心跳。**meta 之后、正文没在流的每一段静默期**都按固定间隔发：首字前的思考期，
+   * 以及此后每一轮 tool 往返造成的正文暂停。正文一在流就停发——那时候连接自己会
+   * 保持活跃，再发就是噪音。
    *
    * 推理模型首字前可能思考三四分钟，这段时间流上一个字节都没有，后果有两个：
    * 前端分不清「还在想」和「后端挂了」；中间代理按空闲超时把连接掐断。
    * 心跳同时解决这两件事，并给前端一个「已等待 N 秒」可显示。
-   * 正文一开始流就停发——那时候连接自己会保持活跃，再发就是噪音。
+   *
+   * 【为什么不能只发到首字 — 2026-08-29 实测】首字之后模型还要跑 tool 往返，
+   * 每一轮的下一次 time-to-first-token 同样是几十秒纯静默：实测一路 **88.6 秒零帧**、
+   * 之后一次性涌出。首字一到就永久停跳，那段静默里前端连「已等待」都没有，
+   * 客户端看到的是一条状态 200 的死连接（反代照样按空闲超时掐断）。
+   * 所以开关判据是**正文有没有在流**，不是「首字来过没有」：
+   * 正文停流即恢复，正文续上即再停，done 终止。
+   *
+   * `waited_seconds` 恒为本轮开跑至今的总秒数，单调递增，不因中途停跳而复位——
+   * 前端拿它显示「已等待 N 秒」，跨 tool 轮倒回去会显示成时间在往回走。
    */
   | { event: 'ping'; data: { waited_seconds: number } }
   | {
@@ -259,9 +270,12 @@ export type AgentEventSink = (event: AgentEvent) => void;
 export const HEARTBEAT_INTERVAL_MS = 15_000;
 
 export interface Heartbeat {
-  /** 观察下行事件：见到首个 delta 即自动停发 */
+  /**
+   * 观察下行事件：正文出字即停发，正文停流（tool 轮）满一个间隔即自动接上，done 终止。
+   * 停发是**可恢复**的临时态，与 stop() 的终态区别开——正是这个区别让心跳能贯穿 tool 轮。
+   */
   observe(event: AgentEvent): void;
-  /** 流结束时调用，确保定时器不泄漏 */
+  /** 流结束时调用，确保定时器不泄漏。调用后不再恢复。 */
   stop(): void;
 }
 
@@ -277,21 +291,44 @@ export function startHeartbeat(
   opts: { intervalMs?: number; now?: () => number } = {},
 ): Heartbeat {
   const now = opts.now ?? Date.now;
+  const intervalMs = opts.intervalMs ?? HEARTBEAT_INTERVAL_MS;
   const startedAt = now();
-  let timer: ReturnType<typeof setInterval> | null = setInterval(() => {
-    emit({ event: 'ping', data: { waited_seconds: Math.floor((now() - startedAt) / 1000) } });
-  }, opts.intervalMs ?? HEARTBEAT_INTERVAL_MS);
+  let timer: ReturnType<typeof setInterval> | null = null;
+  /** 终态：stop() / done 之后不再恢复（区别于正文在流时那种可恢复的停发） */
+  let finished = false;
 
-  const stop = () => {
+  const arm = () => {
+    if (finished || timer) return;
+    timer = setInterval(() => {
+      emit({ event: 'ping', data: { waited_seconds: Math.floor((now() - startedAt) / 1000) } });
+    }, intervalMs);
+  };
+  const disarm = () => {
     if (timer) {
       clearInterval(timer);
       timer = null;
     }
   };
+  const stop = () => {
+    finished = true;
+    disarm();
+  };
+
+  arm();
+
   return {
     observe: (event) => {
+      // done 是终态：收尾之后一帧都不该再发（route 的 finally 还会兜一次 stop）
+      if (event.event === 'done') {
+        stop();
+        return;
+      }
       // 确定性首段不算「模型开始出字」——它由代码毫秒级下发，模型还在跑
-      if (event.event === 'delta' && !event.data.deterministic) stop();
+      if (event.event !== 'delta' || event.data.deterministic) return;
+      // 正文在流：把表重新起一遍。下一帧正文若在一个间隔内到达，表再次复位，
+      // 心跳始终不响；正文一停流（转去跑 tool 轮、等下一次首字），表就走到点自动接上。
+      disarm();
+      arm();
     },
     stop,
   };

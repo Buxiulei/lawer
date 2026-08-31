@@ -61,8 +61,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const emit = (e: AgentEvent) => controller.enqueue(encoder.encode(encodeSse(e)));
-      // 首字前的静默期发心跳：推理模型可能想三四分钟，期间连接必须保持活跃、
-      // 前端也需要一个「还在跑」的信号。见到首个 delta 自动停。
+      // 正文没在流的每一段静默期都发心跳：首字前推理模型可能想三四分钟，首字之后
+      // 每一轮 tool 往返又是几十秒零帧（实测 88.6s）。期间连接必须保持活跃、
+      // 前端也需要一个「还在跑」的信号。正文一续上自动停，done 终止。
       const heartbeat = startHeartbeat(emit);
       const emitAndWatch = (e: AgentEvent) => {
         emit(e);

@@ -2,7 +2,8 @@
 
 /**
  * 演示传输：把剧本按九帧契约吐出来，节奏与真链路一致
- * （受理即 meta → 思考期每 15s 一 ping → delta 逐 chunk → 流末 usage/done）。
+ * （受理即 meta → 思考期每 15s 一 ping → delta 逐 chunk → 正文中途跑 tool 轮时
+ * 停流再出 ping → 流末 usage/done）。
  *
  * 默认在 workbenchReplies 里轮转；`?mock=rs_long` 这类参数可点名跑演示剧本
  * （长考等待态 / 降级 / 草稿确认 / 提示 / 断流 / 危机确定性首段），供人工验收用。
@@ -17,8 +18,11 @@ import {
 import type { StreamFrame } from './frames';
 import type { ChatRequest, ChatTransport } from './transport';
 
-/** 契约规定 meta 后每 15s 一帧，mock 照搬，不为演示提速 */
+/** 契约规定正文没在流的每一段静默期每 15s 一帧，mock 照搬，不为演示提速 */
 const PING_INTERVAL_MS = 15_000;
+/** 正文中途停流去跑一轮 tool：下一次首字同样是几十秒零帧（产线实测 88.6 秒）。
+ *  演示不必等满，跨过一个 ping 间隔就够看见「正文停了、心跳还在」这个新形态。 */
+const TOOL_ROUND_MS = 20_000;
 /** 受理到 meta 的耗时 */
 const ACCEPT_DELAY_MS = 150;
 /** meta 到确定性首段的耗时：这一段不过模型，是毫秒级 */
@@ -39,6 +43,28 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
     }
     signal.addEventListener('abort', done, { once: true });
   });
+}
+
+/**
+ * 一段静默期：正文没在流，每 15s 一 ping 撑到 `deadline`。
+ * 首字前的思考期与此后每一轮 tool 往返共用这一段——产线两处都出 ping。
+ * `waited_seconds` 恒为本轮开跑至今的总秒数，跨 tool 轮不复位（复位会让等待时长往回走）。
+ */
+async function* silenceUntil(
+  deadline: number,
+  startedAt: number,
+  signal: AbortSignal,
+): AsyncGenerator<StreamFrame> {
+  while (Date.now() < deadline) {
+    await sleep(Math.min(PING_INTERVAL_MS, deadline - Date.now()), signal);
+    if (signal.aborted) return;
+    if (Date.now() < deadline) {
+      yield {
+        type: 'ping',
+        waited_seconds: Math.round((Date.now() - startedAt) / 1000),
+      };
+    }
+  }
 }
 
 function scenarioFromUrl(): ReplyScript | undefined {
@@ -80,19 +106,10 @@ export function createMockTransport(): ChatTransport {
         yield { type: 'delta', text: script.deterministic, deterministic: true };
       }
 
-      // 思考期：每 15s 一 ping，首个非 deterministic delta 到即停
+      // 思考期：首字前的第一段静默，每 15s 一 ping，首个非 deterministic delta 到即停
       const think = script.thinkMs ?? DEFAULT_THINK_MS;
-      while (Date.now() - startedAt < think) {
-        const remaining = think - (Date.now() - startedAt);
-        await sleep(Math.min(PING_INTERVAL_MS, remaining), signal);
-        if (signal.aborted) return;
-        if (Date.now() - startedAt < think) {
-          yield {
-            type: 'ping',
-            waited_seconds: Math.round((Date.now() - startedAt) / 1000),
-          };
-        }
-      }
+      yield* silenceUntil(startedAt + think, startedAt, signal);
+      if (signal.aborted) return;
 
       for (const record of script.records ?? []) {
         yield { type: 'record', ...record };
@@ -108,6 +125,11 @@ export function createMockTransport(): ChatTransport {
         const failAtChars = script.failAt
           ? Math.floor(full.length * script.failAt.ratio)
           : Infinity;
+        // 本来就在演长等待的剧本，正文过半时顺带演一轮 tool：正文停流、心跳接上。
+        // 快剧本继续秒回，不拖慢日常演示。
+        const toolRoundAt =
+          think >= PING_INTERVAL_MS ? Math.floor(full.length / 2) : Infinity;
+        let toolRoundDone = false;
         let sent = 0;
         while (sent < full.length) {
           const size =
@@ -124,6 +146,11 @@ export function createMockTransport(): ChatTransport {
               retry_after: script.failAt.retryAfter,
             };
             return;
+          }
+          if (!toolRoundDone && sent >= toolRoundAt) {
+            toolRoundDone = true;
+            yield* silenceUntil(Date.now() + TOOL_ROUND_MS, startedAt, signal);
+            if (signal.aborted) return;
           }
           await sleep(
             CHUNK_MIN_MS + Math.random() * (CHUNK_MAX_MS - CHUNK_MIN_MS),
