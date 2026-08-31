@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { clearToken, useSignedIn } from '@/app/_ui/auth';
 import { cn } from '@/app/_ui/cn';
 import { useDiscreet } from '@/app/_ui/discreet';
+import { hapticEnabled, setHapticEnabled } from '@/app/_ui/motion';
 import { useTheme, type ThemeMode } from '@/app/_ui/theme';
 import { Button } from '@/components/shadcn/button';
 import {
@@ -29,6 +30,10 @@ export function PreferencesCard() {
   const { discreet, setDiscreet } = useDiscreet();
   const signedIn = useSignedIn();
   const [signOutOpen, setSignOutOpen] = useState(false);
+  // 默认开；localStorage 只能在客户端读，服务端那一帧一律按开渲染再校正，
+  // 直接在 render 里读会造成 hydration 不一致
+  const [haptics, setHaptics] = useState(true);
+  useEffect(() => setHaptics(hapticEnabled()), []);
 
   return (
     <>
@@ -77,6 +82,32 @@ export function PreferencesCard() {
                 checked={discreet}
                 onCheckedChange={setDiscreet}
                 aria-label="低调模式"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 border-t border-line py-3">
+            <div className="min-w-0 flex-1">
+              <Label htmlFor="haptics-switch" className="text-[15px]">
+                震动反馈
+              </Label>
+              {/* 说清楚它只是「另一份」确认，不是唯一那份——
+                  iOS Safari 没有 navigator.vibrate，这个开关在那儿本来就不起作用，
+                  文案不能让人以为关掉它会漏掉什么。 */}
+              <p className="mt-0.5 text-[14px] leading-6 text-ink-2">
+                开关低调模式、勾掉一件待办时轻震一下。屏幕上该有的提示照旧，
+                震动只是多一份确认。部分手机和浏览器不支持。
+              </p>
+            </div>
+            <div className="flex size-11 shrink-0 items-center justify-center">
+              <Switch
+                id="haptics-switch"
+                checked={haptics}
+                onCheckedChange={(next) => {
+                  setHaptics(next);
+                  setHapticEnabled(next);
+                }}
+                aria-label="震动反馈"
               />
             </div>
           </div>

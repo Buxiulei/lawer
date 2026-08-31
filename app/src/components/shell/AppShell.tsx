@@ -12,6 +12,7 @@ import { AppSidebar } from './AppSidebar';
 import { CasePanelProvider } from './casePanel';
 import { DemoBanner } from './DemoBanner';
 import { PanicButton } from './PanicButton';
+import { RouteTransition } from './RouteTransition';
 import { ShellHeader } from './ShellHeader';
 import { CASE_NAV_ITEMS } from './navItems';
 
@@ -54,7 +55,7 @@ export function AppShell({
             {onDemoCase && <DemoBanner />}
             {/* 正文默认限宽在可读区间；工作台那种双栏页面自己挂 data-wide 把上限抬上去 */}
             <main className="mx-auto w-full max-w-[900px] flex-1 px-4 pt-3 pb-[calc(56px+env(safe-area-inset-bottom)+16px)] has-[[data-wide]]:max-w-[1280px] lg:px-6 lg:pb-10">
-              {children}
+              <RouteTransition>{children}</RouteTransition>
             </main>
             <BottomTabs pathname={pathname} caseId={caseId} />
             <PanicButton raised={hasBottomBar} />

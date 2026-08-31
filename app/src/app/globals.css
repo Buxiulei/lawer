@@ -503,19 +503,41 @@
    用 filter 不用 color:transparent + text-shadow：后者是继承属性，
    子元素只要自己写了 color（本仓库几乎每个 span 都带 Tailwind 文字色）
    就把糊打穿、原样可读；filter 对子孙一视同仁。实测见任务记录。 */
+/* 【工单 B5：糊层过渡两个方向不对称，这是刻意的】
+   **开启方向（清→糊）不做过渡**：开启的全部价值就是「有人走过来了」，
+   那 120ms 里屏幕上是**可读的半糊明文**——正是要防的那一帧。
+   动画 blur 半径又是全站最贵的一帧（每帧重新光栅化 + 高斯整棵子树），
+   而工装已经证明这台仪器看不见 blur 的代价（g1-sanity 四档 0/5/40/120px 全 0% 掉帧，
+   按已入册规矩那叫「无法真实模拟」，不叫「没代价」）——**没人能证明它便宜，
+   就不要每次开关都付一遍**。
+   代替「糊的过渡」给出确认的是按钮自身：底色切换 + 一次 scale + haptic(20)。
+
+   关闭方向（糊→清）保留 120ms：此时没有安全窗口，柔和一点更舒服。
+   过渡声明落在**基础规则**上而不是 discreet 规则上，因为 CSS 过渡取的是
+   **新状态**那一侧的 transition——退出低调时元素只剩这条规则，于是它说了算。 */
+[data-veil] {
+  transition: filter var(--mo-exit) var(--ease-out);
+}
+
 html[data-discreet='1'] [data-veil] {
   filter: blur(5px);
-  transition: filter 120ms ease-out;
+  /* 开启瞬间到位，见上方长注释。**别顺手改回有时长的过渡。** */
+  transition: none;
   /* 长按不弹系统选择菜单，划选复制也拿不到内容 */
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
 
-/* 按住的那一块；块里的输入框拿到焦点时也清晰，否则没法填 */
+/* 按住的那一块；块里的输入框拿到焦点时也清晰，否则没法填。
+   【工单 G-3】**点住看清 / 松手回糊两个方向都不加过渡，这是刻意的**：
+   揭开是为了「现在就要读这一行」，中间任何一帧半糊都是纯损失；
+   而回糊那一下正是把内容重新藏起来，同样不该有可读的中间帧。
+   下一个人别来加 200ms，那会把最贵的那帧请回来、还开一道泄密窗。 */
 html[data-discreet='1'] [data-veil][data-veil-open],
 html[data-discreet='1'] [data-veil][data-veil-focus] {
   filter: none;
+  transition: none;
 }
 
 /* 正在打字的输入框要能挪光标、能选词 */
@@ -538,4 +560,135 @@ html[data-discreet='1'] [data-veil][data-veil-focus] [data-veil],
 html[data-discreet='1'] [data-veil]:has([data-veil][data-veil-open]),
 html[data-discreet='1'] [data-veil]:has([data-veil][data-veil-focus]) {
   filter: none;
+  /* 同 G-3：套着的两层一起亮，也一起瞬时 */
+  transition: none;
+}
+
+/* ── 动效 v1 ──────────────────────────────────────────────────
+   这一段**只追加、不改上面任何一条现存规则**（唯一的例外是 [data-veil] 那几行，
+   见工单 B5 的长注释）。两路工单共用这一段，keyframes 全用新名字。
+
+   原则（DESIGN 动效篇）：
+   1. 只回答两个问题——「刚才那一下生效了吗」「现在该看哪儿」。都答不了的删。
+   2. 稳：不弹、不飘、不视差。全站唯一允许过冲的是落章（--ease-seal）。
+   3. 短：单次 ≤300ms；退场 = 入场 × 0.67。
+   4. 可预期：同语义同曲线同时长，**一律走 token**，页面里不许出现写死毫秒的 arbitrary class
+      （`duration-` 后面直接跟方括号数字那一种；这里刻意不把它原样写出来，
+      因为 Tailwind 的扫描器会连注释一起读，把示例本身编译成一条真工具类）。
+   5. 动效不制造新信息：每一处动效传达的东西，静止时也必须能读出来
+      ——这条同时就是 prefers-reduced-motion 的降级保证。
+
+   JS 侧的镜像在 app/src/app/_ui/motion.ts 的 MOTION / EASE，**改一处要改两处**；
+   `__tests__/motion-tokens.test.ts` 钉住两边一致，也钉住这里定义的每个 token
+   都被引用、被引用的每个 token 都在这里定义。 */
+:root {
+  --mo-tap: 120ms;     /* 按压、勾选描边、tab 高亮 */
+  --mo-base: 180ms;    /* 默认：入场、状态色、边框 */
+  --mo-exit: 120ms;    /* 一切退场（= base × 0.67） */
+  --mo-route: 160ms;   /* 同级切换：四个 Tab 交叉淡入、流内三态 crossfade */
+  --mo-layer: 200ms;   /* 进出一层：下钻入场 / 抽屉落下 / 拖拽弹回 */
+  --mo-sheet: 250ms;   /* 抽屉升起（沿用现值，不改） */
+  /* 【还没有的两档，故意不先占位】--mo-seal(420ms，落章) 与 --mo-track(900ms，
+     里程碑推进编排) 连同 --ease-seal（唯一带过冲的那条）由 A 路 A3/A4 工单
+     **和它们的第一个使用者一起**加进来。**没人用的档位是在骗后来人「这里有个规范」**，
+     所以 __tests__/motion-tokens.test.ts 会点名没人用的 token。 */
+  --mo-stagger: 60ms;  /* 多张卡入场的错开间隔 */
+  --mo-caret: 900ms;       /* 流式光标：正在吐字 */
+  --mo-caret-stall: 2400ms; /* 流式光标：卡住了，换成更慢的呼吸 */
+
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);      /* 入场/常规 */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);       /* 退场 */
+  --ease-lin: linear;                          /* 只给进度：进度用 ease 会撒谎 */
+}
+
+/* 抽屉退场：**落下，不是淡出**。
+   升起来的东西淡出会读成「它消失了」，而不是「它收回去了」——
+   收回去才对，因为再点一下它还会从同一个地方升起来。 */
+@keyframes sheet-down {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+
+@keyframes sheet-right-out {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+/* 路由过渡：同级四 Tab 交叉淡入。**不做方向滑动**——
+   驾驶舱/问它/证据/文书之间没有前后关系，方向滑动会编造一个不存在的层级。
+   起点不从 0 而从 .55：全黑一帧再亮起来比直接换更慢、更像加载失败。 */
+@keyframes route-in {
+  from { opacity: 0.55; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 下钻（列表 → 详情）：从下方升起。方向在这里编码层级——往深处走是从下面来。
+   返回不做动效（用户已经决定离开了）。 */
+@keyframes route-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 结构化帧卡（record / notice / draft）落地 */
+@keyframes frame-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 流式光标两态。**这是 SSE 场景唯一真正新增的信息**：
+   在这之前「正在吐字」和「卡住了」长得一模一样。
+   卡住时换成更慢的呼吸，同时把颜色降到 ink-2（见 Messages.tsx 的 CaretMark）——
+   **颜色那一半是静止也读得出的判据**，减弱动效时信息不丢。 */
+@keyframes caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+
+@keyframes caret-breath {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* ── 上面这些 keyframes 怎么用 ─────────────────────────────── */
+
+/* 路由过渡。壳层的 RouteTransition 按 pathname 打这个属性。 */
+[data-route-anim='cross'] {
+  animation: route-in var(--mo-route) var(--ease-out) both;
+}
+[data-route-anim='rise'] {
+  animation: route-rise var(--mo-layer) var(--ease-out) both;
+}
+
+/* 流内三态（受理行 → 等待卡 → 正文）的交叉淡入。**不做高度动画**：
+   等待卡消失时正文已经占好位，再动高度就是白付一次重排。 */
+.mo-crossfade {
+  animation: fade-in var(--mo-route) var(--ease-out) both;
+}
+
+/* 结构化帧卡入场。同组多张用 --frame-i 错开，60ms 一档。 */
+[data-frame-in] {
+  animation: frame-in var(--mo-base) var(--ease-out) both;
+  animation-delay: calc(var(--mo-stagger) * var(--frame-i, 0));
+}
+
+/* 抽屉拖拽期间：把跟手写入的 transform 从任何过渡里摘出来，
+   否则每一帧都在追一个 250ms 的过渡，手感是黏的。 */
+[data-sheet-dragging] {
+  transition: none !important;
+}
+
+/* 按压反馈：只动 transform，**不许改变布局边界**（按一下把周围推开是最难受的一类反馈）。
+   减弱动效时全局规则压掉过渡时长，只剩静止的按下态——「按住了」这条信息
+   由 scale 的终态承载，不由过程承载。 */
+.mo-press {
+  transition: transform var(--mo-tap) var(--ease-out);
+}
+
+/* 流式光标两态。**颜色那一半由 CaretMark 用 class 给**，减弱动效时动画被压掉、
+   颜色还在——「正在吐字」与「卡住了」静止时仍然分得出来。 */
+[data-caret='live'] {
+  animation: caret-blink var(--mo-caret) ease-in-out infinite;
+}
+[data-caret='stalled'] {
+  animation: caret-breath var(--mo-caret-stall) ease-in-out infinite;
 }

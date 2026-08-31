@@ -112,5 +112,92 @@ try {
     }
     await ctx.close();
   }
+
+  /* ── 2d 抽屉下拉关闭（工单 B2）─────────────────────────────
+     入口取 /case/demo/ask 顶栏那个「案件档案」——它在未登录的 demo 上就能开，
+     不依赖任何账号数据。**每一步都同时量「那个动作到底发生了没有」**（见 README 坑 1）：
+     开没开、跟没跟手、松手之后到底关没关。 */
+  {
+    const { ctx, page, cdp } = await lowEndPage(browser);
+    await seedDiscreet(ctx, false);
+    await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+    await page.goto(BASE + '/case/demo/ask', { waitUntil: 'load', timeout: 90000 });
+    await sleep(1800);
+
+    const tap = async (x, y) => {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, radiusX: 8, radiusY: 8, force: 1 }] });
+      await sleep(50);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await sleep(700);
+    };
+    const openSheet = async () => {
+      const b = await page.evaluate(() => {
+        const e = [...document.querySelectorAll('button')].find((x) => /案件档案/.test(x.textContent || ''));
+        if (!e) return null;
+        const r = e.getBoundingClientRect();
+        return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+      });
+      if (!b) return null;
+      await tap(b.x, b.y);
+      return page.evaluate(() => {
+        const el = document.querySelector('[data-slot="sheet-content"]');
+        const h = document.querySelector('[data-slot="sheet-header"]');
+        if (!el || !h) return null;
+        const r = el.getBoundingClientRect(), hr = h.getBoundingClientRect();
+        const bar = h.querySelector('span[aria-hidden]');
+        const br = bar?.getBoundingClientRect();
+        return {
+          高: Math.round(r.height), top: Math.round(r.top),
+          抓手: br ? Math.round(br.width) + 'x' + Math.round(br.height) : '无',
+          header触区高: Math.round(hr.height), headerTouchAction: getComputedStyle(h).touchAction,
+          抓点: { x: Math.round(hr.x + 60), y: Math.round(hr.y + hr.height / 2) },
+        };
+      });
+    };
+    const sheetNow = () => page.evaluate(() => {
+      const el = document.querySelector('[data-slot="sheet-content"]');
+      return el ? { top: Math.round(el.getBoundingClientRect().top), inline: el.style.transform || '', 拖拽中: 'sheetDragging' in el.dataset } : null;
+    });
+    const drag = async (from, steps, step) => {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: from.x, y: from.y, radiusX: 10, radiusY: 10, force: 1 }] });
+      const 跟手 = [];
+      for (let i = 1; i <= steps; i++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: from.x, y: from.y + i * step, radiusX: 10, radiusY: 10, force: 1 }] });
+        await sleep(24);
+        跟手.push(await sheetNow());
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await sleep(700);
+      return 跟手;
+    };
+
+    const opened = await openSheet();
+    if (!opened) {
+      rec('抽屉下拉关闭', null, '/case/demo/ask 上没找到「案件档案」入口或抽屉没开，未能测');
+    } else {
+      rec('抓手条 36x4 在，且整条 header 都是热区', opened.抓手 === '36x4' && opened.header触区高 >= 44,
+        `抓手 ${opened.抓手}，header 高 ${opened.header触区高}px，touch-action=${opened.headerTouchAction}`);
+
+      const 跟手 = await drag(opened.抓点, 8, 32);
+      const 跟到了 = 跟手.filter((f) => f && /translateY\((\d+)px\)/.test(f.inline)).length;
+      const 最后位移 = 跟手[跟手.length - 1];
+      rec('拖拽跟手：inline transform 逐帧跟着手指走', 跟到了 >= 6,
+        `8 帧里有 ${跟到了} 帧写了 translateY，最后一帧 ${最后位移 ? 最后位移.inline : '(抽屉已不在)'}`);
+      const 关掉了 = (await sheetNow()) === null;
+      rec('拖过 25% 松手就关（**动作确实发生了**）', 关掉了,
+        `拖 256px（抽屉高 ${opened.高}px，阈值 ${Math.round(opened.高 * 0.25)}px），松手后抽屉${关掉了 ? '已卸载' : '还在'}`);
+
+      // 反向对照：拖不够不许关。没有这一条，「一拖就关」也能让上面那条通过。
+      const again = await openSheet();
+      if (!again) rec('拖不够会弹回不关掉', null, '第二次没能把抽屉打开，未能测');
+      else {
+        await drag(again.抓点, 3, 14);
+        const 还在 = await sheetNow();
+        rec('拖不够（<25%）会弹回，不关掉', Boolean(还在) && 还在.inline === '',
+          `拖 42px（阈值 ${Math.round(again.高 * 0.25)}px），抽屉${还在 ? '还在' : '被关掉了'}，inline transform=${还在 ? (还在.inline || '(已清空)') : 'n/a'}`);
+      }
+    }
+    await ctx.close();
+  }
 } finally { await shutdown({ browser, proc }); }
 console.log(JSON.stringify(R, null, 1));

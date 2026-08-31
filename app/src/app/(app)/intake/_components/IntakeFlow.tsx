@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSignedIn } from '@/app/_ui/auth';
+import { scrollBehavior } from '@/app/_ui/motion';
 import { Button } from '@/components/shadcn/button';
 import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
 import { useToast } from '@/components/ui/Toast';
@@ -104,7 +105,9 @@ export function IntakeFlow() {
   const go = (next: number) => {
     setDraft((prev) => ({ ...prev, step: next }));
     setRestored(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // 程序化平滑滚动是前庭敏感者最难受的一类运动，而 globals.css 那条全局
+    // reduced-motion 规则只管 CSS、管不到这里——必须过 scrollBehavior()
+    window.scrollTo({ top: 0, behavior: scrollBehavior() });
   };
 
   const reset = () => {

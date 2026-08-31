@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { Badge } from '@/components/shadcn/badge';
 import { Button } from '@/components/shadcn/button';
 import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
@@ -19,10 +19,28 @@ import type { StreamError } from '../_stream/useChatStream';
 /** 超过这个秒数，等待卡多给一句安抚和一个去处 */
 const LONG_WAIT_SECONDS = 60;
 
+/**
+ * 结构化帧卡的入场（工单 B7）。**只在这一轮刚长出来时才播**，
+ * 首屏加载历史消息一律 fresh=false、一帧不播。
+ * 同组多张用 `--frame-i` 错开 60ms，序号靠外面传，不在 CSS 里数。
+ */
+function frameIn(fresh: boolean, index = 0) {
+  if (!fresh) return {};
+  return {
+    'data-frame-in': '',
+    style: { '--frame-i': index } as CSSProperties,
+  };
+}
+
 /** meta 还没到：只说「已受理」，不猜时间 */
 export function AcceptedLine() {
   return (
-    <p aria-live="polite" className="flex items-center gap-2 py-3 text-[15px] text-ink-2">
+    <p
+      aria-live="polite"
+      // 工单 B6：受理行 → 等待卡 → 正文三段之间交叉淡入，**不做高度动画**
+      // （等待卡消失时正文已经占好位，再动高度是白付一次重排）
+      className="mo-crossfade flex items-center gap-2 py-3 text-[15px] text-ink-2"
+    >
       <span
         aria-hidden
         className="size-2 rounded-full bg-primary"
@@ -66,7 +84,7 @@ export function WaitingCard({
   return (
     <div
       aria-live="polite"
-      className="prose-measure my-2 rounded-[12px] border border-line bg-surface-2 p-3.5"
+      className="mo-crossfade prose-measure my-2 rounded-[12px] border border-line bg-surface-2 p-3.5"
     >
       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] text-ink">
         <span
@@ -218,13 +236,21 @@ export function DegradedBadge() {
  * 键（落点）加粗、值（摘要）常规，行间一条 1px 底线，仅此而已。
  * 此前是一排 primary-wash 的圆角 chip，色重、又和行动卡撞同一个色相。
  */
-export function RecordList({ frames }: { frames: RecordFrame[] }) {
+export function RecordList({
+  frames,
+  fresh = false,
+}: {
+  frames: RecordFrame[];
+  /** 这一轮刚落下来的才播入场；历史消息一律 false */
+  fresh?: boolean;
+}) {
   if (frames.length === 0) return null;
   return (
     <dl data-veil="" className="prose-measure mt-3 text-[14px] leading-6">
-      {frames.map((frame) => (
+      {frames.map((frame, i) => (
         <div
           key={frame.id}
+          {...frameIn(fresh, i)}
           className="flex gap-3 border-b border-line py-1.5 last:border-b-0"
         >
           <dt className="w-[4.5em] shrink-0 font-semibold text-ink">
@@ -238,12 +264,19 @@ export function RecordList({ frames }: { frames: RecordFrame[] }) {
 }
 
 /** notice 帧：冷静提示行。词表里标为静默的 code（多数是系统治理信号）不渲染。 */
-export function NoticeLine({ frame }: { frame: NoticeFrame }) {
+export function NoticeLine({
+  frame,
+  fresh = false,
+}: {
+  frame: NoticeFrame;
+  fresh?: boolean;
+}) {
   const copy = noticeCopy(frame);
   if (!copy) return null;
   return (
     <p
       data-veil=""
+      {...frameIn(fresh)}
       className="prose-measure flex gap-2 border-l-2 border-line pl-3 text-[14px] leading-6 text-ink-2"
     >
       {copy}
@@ -260,16 +293,19 @@ export function DraftCard({
   caseId,
   confirmed,
   onRequestConfirm,
+  fresh = false,
 }: {
   frame: DraftFrame;
   caseId: string;
   confirmed: boolean;
   /** 确认弹窗由工作台在变换容器之外渲染，卡片只负责发起 */
   onRequestConfirm: (frame: DraftFrame) => void;
+  fresh?: boolean;
 }) {
   return (
     <article
       data-veil=""
+      {...frameIn(fresh)}
       className="prose-measure overflow-hidden rounded-[12px] border border-line bg-surface"
     >
       {/* 分量 3：细外框 + 灰底标题栏（GOV.UK Summary Card）。
