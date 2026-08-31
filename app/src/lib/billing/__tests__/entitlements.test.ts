@@ -1,6 +1,6 @@
 // app/src/lib/billing/__tests__/entitlements.test.ts
 // 会员赠送券：一单一张（幂等）/ 核销一次 / 退款只作废未核销的 / 核销不写账本 /
-// 「发券还没接进履约」这条缺口有路标钉着（见文件末尾的 describe）。
+// 买会员自动发券的**履约接线**（见文件末尾的 describe）。
 import { describe, expect, test } from 'vitest';
 import Database from 'better-sqlite3';
 
@@ -12,7 +12,7 @@ import {
   listUnconsumed,
   revokeUnconsumedBySource,
 } from '../entitlements';
-import { fulfillOrder, ensureBillingSkus, MEMBERSHIP_SKU_NAME } from '../fulfillment';
+import { fulfillOrder, reverseOrder, ensureBillingSkus, MEMBERSHIP_SKU_NAME } from '../fulfillment';
 import { MEMBERSHIP } from '../pricing';
 import { getGongdao } from '../index';
 
@@ -168,20 +168,13 @@ describe('作废（订单退款）', () => {
   });
 });
 
-// ─────────────────────── 缺口路标：发券还没接进订单履约 ───────────────────────
-// 本分支交付的是「有券怎么用」（consumeEntitlement / confirmDossier），**没有接**
-// 「买了会员就发一张券」那一步：fulfillOrder 里没有 grantEntitlement，reverseOrder 里
-// 没有 revokeUnconsumedBySource。entitlements.ts 的注释写的是「应在调用方履约事务内调用」，
-// 那句话描述的是设计意图，不是现状。
-//
-// 【为什么把缺口写成测试，而不是记在待办里】「等某人接线」这种待办，在外部看来与
-// 「本来就没这条任务」完全同形——没接线不会有任何一处报错，只会让买了月卡的用户
-// 发现自己并没有那张券。写成断言，接线的人一改代码这条就红，红的同时读到这段话，
-// 知道该把它改成正向断言（buy → listUnconsumed 有一张；退款 → 被作废）。
-//
-// 配一条正向臂：证明「一张券确实能被发出来、能被用」，免得这个 describe 整体退化成
-// 「什么都没实现所以什么都对」。
-describe('⚠️ 已知缺口：买会员尚未自动发券（接线时把本组改成正向断言）', () => {
+// ─────────────────────── 买会员自动发券（履约接线） ───────────────────────
+// 「有券怎么用」（consumeEntitlement / confirmDossier）与「券从哪来」（fulfillOrder）
+// 是两段路。接上之前，**不接线不会有任何一处报错**——只会让买了月卡的用户发现自己
+// 手上并没有那张券，而这件事在系统内部与「本来就不送券」完全同形。
+// 所以这一组钉的就是接线本身：把 fulfillment.ts 里那行 grantEntitlement 拿掉，
+// 或把 reverseOrder 里那行 revokeUnconsumedBySource 拿掉，本组当场变红。
+describe('买会员自动发券', () => {
   const order = (uid: number, skuId: number, orderNo: string) => ({
     user_id: uid,
     order_no: orderNo,
@@ -189,21 +182,75 @@ describe('⚠️ 已知缺口：买会员尚未自动发券（接线时把本组
     sku_id: skuId,
   });
 
-  test('当前：买月卡不发券（原有的公道值与会员期履约照常，未被本分支破坏）', () => {
+  test('买月卡即到账一张核心四项券；公道值与会员期照常', () => {
     const { db, uid } = makeDb();
-    const sku = entrySkuId(db);
-    fulfillOrder(db, order(uid, sku, 'ORD-A'));
-    fulfillOrder(db, order(uid, sku, 'ORD-A')); // 重复履约仍幂等
+    fulfillOrder(db, order(uid, entrySkuId(db), 'ORD-A'));
 
-    expect(listUnconsumed(db, uid, CORE)).toHaveLength(0); // ← 接线后这里应为 1
+    const list = listUnconsumed(db, uid, CORE);
+    expect(list).toHaveLength(1);
+    expect(list[0].source_ref).toBe('ORD-A'); // 券认得出自己是哪一单送的（退款要按它作废）
     expect(getGongdao(uid, db)).toBe(MEMBERSHIP.entry.gongdao);
     expect(db.prepare('SELECT COUNT(*) AS n FROM memberships').get()).toEqual({ n: 1 });
   });
 
-  test('正向臂：券这条路本身是通的——手工发一张就能列出来、能核销', () => {
+  test('重复履约（支付回调重放）仍只有一张券', () => {
     const { db, uid } = makeDb();
-    expect(grantEntitlement(db, uid, CORE, 'ORD-MANUAL')).toBe(true);
+    const sku = entrySkuId(db);
+    fulfillOrder(db, order(uid, sku, 'ORD-A'));
+    fulfillOrder(db, order(uid, sku, 'ORD-A'));
+
     expect(listUnconsumed(db, uid, CORE)).toHaveLength(1);
-    expect(consumeEntitlement(db, uid, CORE, 'dossier-1')).not.toBeNull();
+    expect(db.prepare('SELECT COUNT(*) AS n FROM entitlements').get()).toEqual({ n: 1 });
+    expect(getGongdao(uid, db)).toBe(MEMBERSHIP.entry.gongdao);
+  });
+
+  test('续期是一单一张，不是一人一张', () => {
+    const { db, uid } = makeDb();
+    const sku = entrySkuId(db);
+    fulfillOrder(db, order(uid, sku, 'ORD-A'));
+    fulfillOrder(db, order(uid, sku, 'ORD-B'));
+    expect(listUnconsumed(db, uid, CORE).map((e) => e.source_ref)).toEqual(['ORD-A', 'ORD-B']);
+  });
+
+  test('散充不发券（券是会员权益，不是充值赠品）', () => {
+    const { db, uid } = makeDb();
+    const sku = (db.prepare('SELECT id FROM skus WHERE name=?').get('散充·10元') as { id: number }).id;
+    fulfillOrder(db, { user_id: uid, order_no: 'ORD-R', amount_fen: 1000, sku_id: sku });
+    expect(listUnconsumed(db, uid, CORE)).toHaveLength(0);
+  });
+
+  test('退单：本单未核销的券被作废，之后核销不到', () => {
+    const { db, uid } = makeDb();
+    const o = order(uid, entrySkuId(db), 'ORD-A');
+    fulfillOrder(db, o);
+    reverseOrder(db, o);
+
+    expect(listUnconsumed(db, uid, CORE)).toHaveLength(0);
+    expect(consumeEntitlement(db, uid, CORE, 'dossier-1')).toBeNull();
+  });
+
+  test('退单不追回已核销的券：档案已交付，它得留着解释自己为什么没扣钱', () => {
+    const { db, uid } = makeDb();
+    const o = order(uid, entrySkuId(db), 'ORD-A');
+    fulfillOrder(db, o);
+    const usedId = consumeEntitlement(db, uid, CORE, 'dossier-9');
+    reverseOrder(db, o);
+
+    const row = db.prepare('SELECT consumed_ref, revoked_at FROM entitlements WHERE id=?').get(usedId) as {
+      consumed_ref: string | null;
+      revoked_at: string | null;
+    };
+    expect(row.consumed_ref).toBe('dossier-9');
+    expect(row.revoked_at).toBeNull();
+  });
+
+  test('退完再重放履约不会补发一张（发券幂等键是订单号，退款不解锁它）', () => {
+    const { db, uid } = makeDb();
+    const o = order(uid, entrySkuId(db), 'ORD-A');
+    fulfillOrder(db, o);
+    reverseOrder(db, o);
+    fulfillOrder(db, o);
+    expect(listUnconsumed(db, uid, CORE)).toHaveLength(0);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM entitlements').get()).toEqual({ n: 1 });
   });
 });

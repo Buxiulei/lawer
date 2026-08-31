@@ -2,7 +2,7 @@
 // 用量功能键 → 中文标签单一事实源：全部已登记键须为纯中文标签、未知键回退「其他」。
 import { describe, expect, test } from 'vitest';
 import { FEATURE_LABELS, KNOWN_FEATURE_KEYS, featureLabel, UNKNOWN_FEATURE_LABEL } from '../features';
-import { DOSSIER_MODULE_FEATURE, DOSSIER_MODULES } from '@/lib/company/dossier-billing';
+import { DOSSIER_MODULE_FEATURE, DOSSIER_MODULE_LABEL, DOSSIER_MODULES } from '@/lib/company/dossier-billing';
 
 /** 生产在用的 feature 键全集（新增计费功能须同步补此表与 FEATURE_LABELS）。
  *  companywatch 目前只记量不扣费（扣费口径待 M3），但用量明细同样要出中文标签，故一并登记。
@@ -31,6 +31,20 @@ describe('用量功能标签单一事实源', () => {
     for (const key of PRODUCTION_FEATURE_KEYS) {
       expect(FEATURE_LABELS[key], `生产键「${key}」未登记`).toBeDefined();
       expect(featureLabel(key)).not.toBe(UNKNOWN_FEATURE_LABEL);
+    }
+  });
+
+  // 公司档案六模块的用户可见名有两份：用量明细读 FEATURE_LABELS，报价页与退款说明读
+  // company/dossier-billing 的 DOSSIER_MODULE_LABEL。此前只有一侧被机检盖住——
+  // 「全部标签不含拉丁字母」拦得住把这边改回「HR 套路归纳」，却拦不住只改那边：
+  // 两份各说各话，同一个模块在报价页叫一个名、在账单里叫另一个名，没有一处会报错。
+  test('六模块两处标签同名同物（只改其中一处必红）', () => {
+    for (const m of DOSSIER_MODULES) {
+      expect(
+        FEATURE_LABELS[DOSSIER_MODULE_FEATURE[m]],
+        `模块「${m}」：用量明细叫「${FEATURE_LABELS[DOSSIER_MODULE_FEATURE[m]]}」，` +
+          `报价页叫「${DOSSIER_MODULE_LABEL[m]}」——两处得一起改`,
+      ).toBe(DOSSIER_MODULE_LABEL[m]);
     }
   });
 

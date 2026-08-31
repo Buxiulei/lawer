@@ -109,6 +109,39 @@ function consumeRows(db: Database.Database) {
     .all(GONGDAO_LEDGER_TYPE.consume) as { feature: string; ref_id: string; amount: number }[];
 }
 
+/**
+ * 展开算式的**自洽**判据：把等号左边真算一遍，看它等不等于右边印出来的总价。
+ *
+ * 【为什么不能用 toContain 断子串】「240 起（含前 20 篇）+ (5−20)×4 = 240」里
+ * 240、20、5、4 每个子串都在，按子串断言一路全绿——而这条式子本身算不通（左边是 180）。
+ * formula 这个字段存在的全部意义就是让用户能自己验算一遍，算不通就是它唯一的失败模式，
+ * 也就必须是判据本身。
+ *
+ * 解析先把中文说明整段剥掉，剩下的每一项要么是裸数、要么是 `(a−b)×c` 或 `a × b`；
+ * 出现看不懂的项就当场报红，不静默按 0 放行（那会让「式子写坏了」和「式子没问题」同形）。
+ */
+function formulaSides(formula: string): { lhs: number; rhs: number } {
+  const parts = formula.split('=');
+  expect(parts, `展开算式没有唯一的等号：「${formula}」`).toHaveLength(2);
+  const expr = parts[0]
+    .replace(/（[^）]*）/g, '') // 剥掉「（含前 20 篇，本次 5 篇）」这类说明
+    .replace(/[起篇]/g, '')
+    .replace(/−/g, '-')
+    .replace(/×/g, '*');
+  const lhs = expr.split('+').reduce((sum, raw) => {
+    const term = raw.trim();
+    const bracket = /^\((\d+)-(\d+)\)\*(\d+)$/.exec(term); // (21−20)×4
+    if (bracket) return sum + (Number(bracket[1]) - Number(bracket[2])) * Number(bracket[3]);
+    const product = /^(\d+)\s*\*\s*(\d+)$/.exec(term); // 5 篇 × 70
+    if (product) return sum + Number(product[1]) * Number(product[2]);
+    expect(term, `展开算式「${formula}」里有解析不了的项：「${term}」`).toMatch(/^\d+$/);
+    return sum + Number(term);
+  }, 0);
+  const rhs = Number(parts[1].trim());
+  expect(rhs, `展开算式「${formula}」等号右边不是一个数`).not.toBeNaN();
+  return { lhs, rhs };
+}
+
 // ───────────────────────── 计价 ─────────────────────────
 
 describe('计价口径', () => {
@@ -278,6 +311,56 @@ describe('报价绝不动钱', () => {
     ]);
   });
 
+  // M6 的算式在基线篇数以内曾印成「240 起（含前 20 篇）+ (5−20)×4 = 240」：
+  // 式子里挂着一个 −60 的项，右边却还是 240。用户按它验算必然对不上，而这个字段
+  // 存在的意义就是让人验算。四个点各盖一种形态：远低于基线 / 贴着基线 / 恰好基线 / 越过基线。
+  test('M6 展开算式自洽：等号左边算一遍就等于右边（5 / 19 / 20 / 21 篇四点）', () => {
+    const { db, uid } = makeDb();
+    for (const docs of [SELL_FLOOR, PAT_BASE_DOCS - 1, PAT_BASE_DOCS, PAT_BASE_DOCS + 1]) {
+      const q = mustOk(quoteDossier(db, uid, order('甲', ['docs_stats', 'patterns'], docs))).quote;
+      const patterns = q.items.find((i) => i.module === 'patterns')!;
+      const { lhs, rhs } = formulaSides(patterns.formula!);
+      expect(lhs, `${docs} 篇：算式左边算出 ${lhs}，右边却印 ${rhs}——用户照着验算对不上`).toBe(rhs);
+      expect(rhs, `${docs} 篇：算式印的总价与实际单价不符`).toBe(modulePrice(db, 'patterns', docs));
+      expect(rhs).toBe(patterns.gongdao);
+    }
+  });
+
+  // priceBasis 是**出口到前端的口径标签**，而实际怎么算钱在 modulePrice、给不给算式在 priceFormula。
+  // 三处若各写各的，改了口径表只会让页面上的口径与真实算法各说各话——两边都不报错。
+  // 本条把三者钉在一起：口径表里任改一格（free/fixed/per_doc/base_plus_per_doc 互换）都必红。
+  test('计价口径单一真源：priceBasis、实际算法、展开算式三处对得上', () => {
+    const { db, uid } = makeDb();
+    const q = mustOk(quoteDossier(db, uid, order('甲', ALL, DOCS))).quote;
+    expect(q.items).toHaveLength(DOSSIER_MODULES.length);
+    for (const it of q.items) {
+      const variesWithDocs = modulePrice(db, it.module, 0) !== modulePrice(db, it.module, CAP);
+      const perDoc = it.priceBasis === 'per_doc' || it.priceBasis === 'base_plus_per_doc';
+      expect(
+        perDoc,
+        `「${it.label}」口径写的是 ${it.priceBasis}，价格却${variesWithDocs ? '' : '不'}随篇数变`,
+      ).toBe(variesWithDocs);
+
+      if (perDoc) {
+        // 按篇的必须给出算式，且算得通、印的总价就是实际单价
+        const { lhs, rhs } = formulaSides(it.formula!);
+        expect(lhs, `「${it.label}」的展开算式自己算不通`).toBe(rhs);
+        expect(rhs).toBe(it.gongdao);
+      } else {
+        expect(it.formula, `「${it.label}」是定额却给了展开算式`).toBeUndefined();
+      }
+
+      // free 与 fixed 的差别只在「是不是 0」——不钉这一条，两者互换全绿，
+      // 而 venue 恒 0 是本产品的信任锚，它被改标成定额得有人喊一声。
+      if (it.priceBasis === 'free') {
+        expect(modulePrice(db, it.module, 0), `「${it.label}」标着免费却要钱`).toBe(0);
+      }
+      if (it.priceBasis === 'fixed') {
+        expect(modulePrice(db, it.module, 0), `「${it.label}」标着定额却是 0（那口径叫 free）`).toBeGreaterThan(0);
+      }
+    }
+  });
+
   test('改价立刻反映到下一次报价（改表不改代码、不重启进程）', () => {
     const { db, uid } = makeDb();
     expect(mustOk(quoteDossier(db, uid, order('甲', CORE, 0))).quote.total).toBe(CORE_TOTAL);
@@ -411,8 +494,30 @@ describe('确认扣费幂等', () => {
     // 按金额判，这块会显示成未购买，然后被再卖一次。
     const q = mustOk(quoteDossier(db, uid, order('北京甲科技有限公司', ['venue'], 0))).quote;
     expect(q.items[0].alreadyPaid).toBe(true);
+    expect(q.items[0].gongdao).toBe(0);
+    expect(q.total).toBe(0);
     expect(isModuleCharged(db, first.dossierId, uid, 'venue')).toBe(true);
     expect(getDossierBillingView(db, first.dossierId, uid)!.modules[0].paid).toBe(true);
+  });
+
+  // 上一条钉的是 venue，而 venue 原价本来就是 0——它证不了「已付过的模块报价钉零」这件事。
+  // 这条用两块非零的模块钉：余额刚好只够剩下那一块，若已付的模块再按原价报出来，
+  // 合计、实付、缺口会一起虚高，用户会在明明够钱的单子上看到「还差 260」。
+  test('已付过的模块再报价钉零：合计、实付、缺口都不虚高', () => {
+    const { db, uid } = makeDb();
+    topUp(db, uid, ENTITY + GRAPH + DOCS_LIST);
+    mustOk(confirmDossier(db, uid, order('甲', ['entity', 'graph'], 0)));
+
+    const q = mustOk(quoteDossier(db, uid, order('甲', ['entity', 'graph', 'docs_list'], 0))).quote;
+    expect(q.items.map((i) => [i.module, i.alreadyPaid, i.gongdao])).toEqual([
+      ['entity', true, 0],
+      ['graph', true, 0],
+      ['docs_list', false, DOCS_LIST],
+    ]);
+    expect(q.total).toBe(DOCS_LIST);
+    expect(q.payableGongdao).toBe(DOCS_LIST);
+    expect(q.balance).toBe(DOCS_LIST);
+    expect(q.shortfall).toBe(0);
   });
 
   test('逐模块各一笔流水，feature 与幂等键都分得开（退一块不牵连另一块的前提）', () => {
@@ -522,6 +627,25 @@ describe('会员赠送券只覆盖核心四项一次', () => {
     expect(r.paidBy).toBe('membership_credit');
     expect(r.charged).toBe(DEEP_TOTAL);
     expect(getGongdao(uid, db)).toBe(10_000 - DEEP_TOTAL);
+  });
+
+  // 券只覆盖核心四项，所以一张**只买深度**的单不该碰它。少了这条断言，把 confirmDossier 里
+  // 那道 `payableCore.length > 0` 拿掉全绿：券会被静默核销掉，用户付了深度两项的全款，
+  // 手上那张核心券却凭空少了一张——账面上什么都不会发生。
+  test('只买深度两项不吃券：券原封不动，钱照常扣', () => {
+    const { db, uid } = makeDb();
+    topUp(db, uid, 10_000);
+    grantEntitlement(db, uid, ENTITLEMENT_KIND.dossierCore, 'ORD-1');
+
+    const r = mustOk(confirmDossier(db, uid, order('甲', ['docs_stats', 'patterns'])));
+    expect(r.entitlementId).toBeNull();
+    expect(r.paidBy).toBe('gongdao');
+    expect(r.charged).toBe(DEEP_TOTAL);
+    expect(listUnconsumed(db, uid, ENTITLEMENT_KIND.dossierCore)).toHaveLength(1);
+    // 券还在，随后买核心四项照样能用它
+    const core = mustOk(confirmDossier(db, uid, order('甲', CORE, DOCS)));
+    expect(core.paidBy).toBe('membership_credit');
+    expect(core.charged).toBe(0);
   });
 
   test('一张券只兑一次：第二家公司照常扣钱（不双花）', () => {

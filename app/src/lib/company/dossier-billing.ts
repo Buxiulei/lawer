@@ -65,7 +65,8 @@ export const DOSSIER_MODULE_LABEL: Record<DossierModule, string> = {
   docs_list: '涉诉清单',
   docs_stats: '涉诉深度统计',
   // 规格里的「HR 套路归纳」在用户可见处一律写作纯中文——与 billing/features.ts 的
-  // FEATURE_LABELS.dossier_patterns 同名同物，改叫法两处一起改（那边有机检守卫）。
+  // FEATURE_LABELS.dossier_patterns 同名同物，改叫法两处一起改
+  // （features.test.ts 有双向机检：只改其中任一处都会红）。
   patterns: '人事套路归纳',
 };
 
@@ -87,7 +88,13 @@ const MODULE_BASIS: Record<DossierModule, PriceBasis> = {
 };
 
 const isCoreModule = (m: DossierModule): boolean => CORE_MODULES.includes(m);
-const isPerDoc = (m: DossierModule): boolean => m === 'docs_stats' || m === 'patterns';
+/**
+ * 按篇计价（= MODULE_BASIS 里两档带 per_doc 的口径）。**口径只有 MODULE_BASIS 这一处**：
+ * 它同时出口到前端的 priceBasis，若这里再手抄一份模块名单，改了口径表就只会让页面上写的口径
+ * 与实际走的分支（可售门槛、展开算式）各说各话——两边都不报错，测试也一片绿。
+ */
+const isPerDoc = (m: DossierModule): boolean =>
+  MODULE_BASIS[m] === 'per_doc' || MODULE_BASIS[m] === 'base_plus_per_doc';
 
 /**
  * 扣费幂等键的**唯一生成入口**。格式 `dossier-<档案id>-u<用户id>-<模块>`：
@@ -143,16 +150,20 @@ export function billableDocs(db: Database.Database, docCount: number): number {
 /** 展开算式串（给 UI，不给黑盒总数）：per_doc 与 base_plus_per_doc 才有意义。 */
 function priceFormula(db: Database.Database, module: DossierModule, docCount: number): string | undefined {
   const billable = billableDocs(db, docCount);
-  if (module === 'docs_stats') {
+  if (MODULE_BASIS[module] === 'per_doc') {
     return `${billable} 篇 × ${readPrice(db, 'dossier.docs_stats_per_doc')} = ${modulePrice(db, module, docCount)}`;
   }
-  if (module === 'patterns') {
+  if (MODULE_BASIS[module] === 'base_plus_per_doc') {
     const base = readPrice(db, 'dossier.patterns_base');
     const baseDocs = readPrice(db, 'dossier.patterns_base_docs');
     const perExtra = readPrice(db, 'dossier.patterns_per_extra_doc');
     const extra = Math.max(0, billable - baseDocs);
-    return `${base} 起（含前 ${baseDocs} 篇）+ (${billable}−${baseDocs
-      })×${perExtra} = ${modulePrice(db, module, docCount)}`.replace(/\s+/g, ' ');
+    const price = modulePrice(db, module, docCount);
+    // 未超基线篇数时**不印那个增量项**：印成「240 起（含前 20 篇）+ (5−20)×4 = 240」的话，
+    // 式子里挂着一个 −60 的项、右边却还是 240，用户照着算一遍必然对不上。展开算式存在的
+    // 全部意义就是让人能自己验算，一条算不通的式子比干脆不给式子更坏。
+    if (extra === 0) return `${base} 起（含前 ${baseDocs} 篇，本次 ${billable} 篇）= ${price}`;
+    return `${base} 起（含前 ${baseDocs} 篇）+ (${billable}−${baseDocs})×${perExtra} = ${price}`;
   }
   return undefined;
 }
