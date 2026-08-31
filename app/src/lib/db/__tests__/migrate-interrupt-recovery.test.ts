@@ -80,8 +80,9 @@ describe('A8 迁移：幂等 + 中断复跑收敛', () => {
   });
 
   // 断点铺满整条迁移链：只挑几个点会漏掉「恰好那一步不幂等」。
-  // 45 个 exec 逐个试一遍，成本也就几十毫秒。
-  const BREAKPOINTS = Array.from({ length: 45 }, (_, i) => i + 1);
+  // 逐个 exec 断点试一遍，成本也就几十毫秒。原本 45 个建表 exec，
+  // §2.3 免费前置探测又加了 2 张表（company_probe_cache / company_probe_events），故 47。
+  const BREAKPOINTS = Array.from({ length: 47 }, (_, i) => i + 1);
 
   it.each(BREAKPOINTS)('第 %i 次 db.exec 处中断，复跑后表结构与一次跑通全等', (n) => {
     const db = newDb();

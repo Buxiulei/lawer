@@ -1,7 +1,7 @@
 // app/src/lib/db/migrate.ts
 //
 // ───────────────── ⚠️ 改本文件之前先读这一段 ⚠️ ─────────────────
-// **本迁移框架没有事务。** runMigrations() 的 45 个 db.exec() 是一串裸调用，
+// **本迁移框架没有事务。** runMigrations() 的 47 个 db.exec() 是一串裸调用，
 // 中途失败不回滚——2026-08-26 实测：人为中断，库里留下 22/38 张表，重跑既不前进也不后退。
 // 现在之所以能安全滚更，是因为迁移**全是纯加法**、靠 IF NOT EXISTS 与 addColumnIfMissing
 // 能重跑自愈：**安全是「改动足够简单」给的，不是框架给的。**
@@ -904,6 +904,37 @@ export function runMigrations(db: Database.Database): void {
       note       TEXT,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+  `);
+
+  // 免费前置探测（§2.3）的两张表。
+  //
+  // company_probe_cache：一家公司一行、全站共享的探测载荷（四个数字 + 工商状态 + 主体命中）。
+  // **fetched_at 是我们这份拷贝的入缓存时刻，不是数据的 as_of**（as_of 存在 payload_json 里）：
+  // TTL(24h) 管的是「多久不再去采集侧重拉」，命中即 0 成本复用。payload_json 是采集侧产出的
+  // 客观计数，**零 LLM**——写点唯一在 lib/company/probe.ts 的 upsertProbeCache，且先体检再落库
+  // （非负整数、层层子集、as_of 必填），脏载荷进不了这张全站共享的缓存。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_probe_cache (
+      company_key  TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      fetched_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // company_probe_events：探测限流的**逐次留痕**（登录后每用户每日 dossier.probe_free_per_day 次）。
+  // 一行 = 一次真采集（占 1 配额）；**缓存命中不落行**（命中 0 成本、不限次、不占配额）。
+  // 按 (user_id, 日历日) 计数，配额耗尽即降级为「仅缓存命中」并如实告知（不报错、不返回空）。
+  // 与 ip_quota_events 同构：只追加、按写入侧机会式 GC，不设定时任务（加个必须有人盯的 cron
+  // 代价高于顺手多跑一条 DELETE）。company_key 一并留痕，便于事后查「谁在白嫖哪家公司」。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_probe_events (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     INTEGER NOT NULL REFERENCES users(id),
+      company_key TEXT NOT NULL,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_company_probe_events_user
+      ON company_probe_events (user_id, created_at);
   `);
 
   // ───────────────── 通知 ─────────────────

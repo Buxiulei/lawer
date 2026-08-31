@@ -27,7 +27,9 @@ export type PricingConfigKey =
   | 'dossier.min_sample_duration'
   | 'dossier.litigation_sla_days'
   | 'dossier.ttl_graph_days'
-  | 'dossier.ttl_litigation_days';
+  | 'dossier.ttl_litigation_days'
+  | 'dossier.probe_free_per_day'
+  | 'dossier.probe_ttl_hours';
 
 /**
  * 读一个整数配置：表里有行取表，缺行取 fallback。**每次调用都查库**——

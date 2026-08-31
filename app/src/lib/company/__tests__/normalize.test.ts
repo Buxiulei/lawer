@@ -109,11 +109,12 @@ describe('结构守卫：company_key 只有一个产地', () => {
     })),
   ];
 
-  // 允许碰 company_key 的三处，各有各的理由；多一处少一处都要有人解释。
+  // 允许碰 company_key 的四处，各有各的理由；多一处少一处都要有人解释。
   const ALLOW = [
     'lib/db/migrate.ts', // 建表 DDL
     'lib/company/normalize.ts', // 唯一产地
     'lib/company/dossier.ts', // 唯一消费方（查/写 company_dossiers）
+    'lib/company/probe.ts', // 免费前置探测：按 companyKey 读/写 company_probe_cache（§2.3）
   ];
 
   it('先证明扫描真的扫到了东西（否则「零违规」只是没检查）', () => {

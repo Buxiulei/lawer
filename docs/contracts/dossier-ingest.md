@@ -126,9 +126,63 @@ npx tsx ../scripts/ingest-dossier.ts ... --apply            # 真写
    少了后者，同一份 JSONL 挂在同一档案的两个 profile 下导入会让 `docs_total` 翻倍——
    而那个数是比率的分母之一。
 
+## 七·补、关联谱系（`graph.json` → `company_profiles`/`company_relations`）本轮**不做**，交界给谁
+
+本契约只覆盖**涉诉 JSONL → `company_litigation`**。关联谱系的导入（外勤 `graph.json` 的
+`nodes[]`/`edges[]` → `company_profiles`/`company_relations`）**本轮刻意不实现**，不是漏了——
+它有四处得先定的边界，硬做会做错或串味：
+
+1. **`role` 会被覆盖**：唯一的主体 upsert 入口 `lib/db/agent.ts:upsertCompanyProfile`
+   对 `role` 是**无条件覆盖**（`role = ?`），而 `graph.json` 的 `node.role` 是描述串
+   （「现用人单位/目标主体」），落不进 `company_profiles.role` 的枚举（签约/用工/关联）。
+   复用它会把 agent 在问诊里定的 `role` 冲掉；另写一个 upsert 又违反「company_key/主体只有一个入口」。
+   ⇒ 要么把 `upsertCompanyProfile` 的 `role` 改成可选 + `COALESCE`（向后兼容，agent 一直传 role 故不变），
+   要么给谱系节点单独的落库口——这是**入口归属**决定，不该由采集导入面单方拍。
+2. **`tier` 没家**：`node.tier`（圈1/2/3）语义属 `company_watches.tier`（监控圈层），是**守望盯梢那条线**的地盘，
+   不是本导入面的列。谱系导入若顺手写 tier 就串进了监控计费/衰减规则。
+3. **`GraphNode` 是拼出来的视图，不是一张表**：`litigationCount` 由 `company_litigation` 计数、
+   `eventCount` 由 `company_watch_events` 计数、描述 `role`/`tier` 各有别处——
+   `_mock/company-graph.ts` 那个形状是 `GET /api/v1/cases/:id/company-graph` **读侧 JOIN** 出来的，
+   不是 `company_profiles`+`company_relations` 两张表能直存的。读侧端点尚不存在（现为 mock），
+   没有它无法验证导入的往返正确性，而端点属图谱 UI 那条线。
+4. **案件维度耦合债**（见 §七-1）：`company_profiles`/`company_relations` 都是 `case_id NOT NULL`、
+   随案件级联删。谱系是**公司维度**资产却只能挂在案件私有表上，与 `company_litigation` 同病。
+
+**边可以直存的部分**（留给接手的人，判据已想好）：`edges[]` 的 `relation` **逐字原样落库**
+（`_mock` 的 `GraphEdge.relation` 注释即「关系原文」，不要映射成枚举，映射就是推断）；
+`confidence` 只认 `高`/`中`/`低`，**其它取值报警告不静默兜底成「中」**（兜底即编造置信度）；
+`from`/`to` 指向 `nodes[]` 里不存在的 id 的**悬挂边**要报出来、不静默丢（丢一条边＝丢一条外勤断言的关系）；
+再导入幂等靠 `(case_id, from_profile_id, to_profile_id, relation)` 应用层去重（这两张表没有天然唯一键）。
+
 ## 八、外勤需要确认的三件
 
 1. §四映射表里的取值集合是否齐全（`程序` 还有别的取值吗）。
 2. §五的可选键名是否可接受；若外勤已有别的叫法，**以外勤的叫法为准**，改这份文档与映射表。
 3. `主体归属` 的「命中」前缀是否稳定——导入侧按 `startsWith('命中')` 判定，
    改成别的措辞会让整批数据被静默跳过（跳过数会报在 CLI 输出里，但没人看就等于静默）。
+
+## 九、免费前置探测载荷（`company_probe_cache.payload_json`）
+
+免费前置探测（§2.3）在**扣费之前**免费返回四个数字 + 一行工商状态，把「必定有货」从承诺变成
+扣费前可验证的事实。四个数字是**采集侧数出来的客观计数**——**零 LLM**，app 侧只读不算。
+
+- 实现：`app/src/lib/company/probe.ts`（读缓存 / 限流 / 降级）、写入口 `upsertProbeCache`（先体检再落库）。
+- 缓存键 = `companyKey`（uscc 优先，缺则归一化名称，与档案同一把键）；`fetched_at` 记的是
+  **我们这份拷贝的入缓存时刻**（TTL `dossier.probe_ttl_hours`，默认 24h），**不是数据的 as_of**。
+- 限流：登录后每用户每日 `dossier.probe_free_per_day`（默认 2）次；**只有一次真采集占配额**，
+  缓存命中免费不限次。配额耗尽即降级为「仅缓存命中」并如实告知——**不报错、不返回空**
+  （空会被读成「查无此公司」）。采集器未接入时同样如实降级（`no_collector`），不静默。
+
+外勤采集侧需产出的 `payload_json` 形状（`ProbePayload`）：
+
+| 字段 | 含义 | 体检规则（不过则拒收、不写缓存、不占配额） |
+|---|---|---|
+| `entity_matched` | 主体命中与否 | 为 `false` 时四个计数必须全 0（未命中就没有可归属的记录） |
+| `entity_name` / `uscc` | 命中的规范全名 / 统一社会信用代码 | 未命中为 `null` |
+| `gs_status` | 工商状态一行：存续/经营异常/已注销/简易注销公告中 | 明细在 M2 |
+| `relation_count` | 关联主体数（明细在 M3） | 非负整数 |
+| `relation_breakdown` | 如 `{股权:3, 同法代:1, 同址:1}` | 可选 |
+| `litigation_count` | 涉诉记录数（明细在 M4） | 非负整数 |
+| `labor_count` | 其中劳动争议数 | 非负整数、**≤ `litigation_count`**（是其子集） |
+| `doc_url_count` | 其中有公开文书链接的篇数（M5 可售性判据：<5 置灰不卖） | 非负整数、**≤ `labor_count`** |
+| `as_of` | 采集时点 | **必填**（缺了四个数字就是四个悬浮的数，同统计层 as_of 红线） |

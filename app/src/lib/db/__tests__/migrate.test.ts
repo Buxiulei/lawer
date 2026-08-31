@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../migrate';
 
-/** 全部表名单（45 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。 */
+/** 全部表名单（47 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。 */
 const ALL_TABLES = [
   // 用户与实名
   'users', 'sms_codes', 'email_codes', 'ip_quota_events', 'realname_verifications', 'api_keys',
@@ -19,6 +19,8 @@ const ALL_TABLES = [
   // 公司档案（背调产品化）
   'company_dossiers', 'company_dossier_blocks', 'company_dossier_stats', 'company_patterns',
   'entitlements', 'pricing_config',
+  // 免费前置探测（§2.3）
+  'company_probe_cache', 'company_probe_events',
   // 通知
   'notify_log',
   // 任务运行
@@ -89,10 +91,10 @@ describe('runMigrations', () => {
 
   it('幂等：连跑两遍不抛错', () => {
     expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(45);
+    expect(ALL_TABLES.length).toBe(47);
   });
 
-  it('39 张表全部建成', () => {
+  it('47 张表全部建成', () => {
     const rows = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[];
