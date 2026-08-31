@@ -36,6 +36,12 @@ import {
   type EvidenceView,
   type UploadInput,
 } from '../_data';
+import {
+  BatchCategorizeDialog,
+  DropVeil,
+  useFileDrop,
+  type BatchAssignment,
+} from '../../_components/DropPanel';
 import { EvidenceChecklist } from './EvidenceChecklist';
 import { EvidenceDetailSheet } from './EvidenceDetailSheet';
 import { UploadBar } from './UploadBar';
@@ -133,6 +139,10 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [freezeTarget, setFreezeTarget] = useState<EvidenceView | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // 批B（桌面）：拖进来的一批文件 / 表格里勾中的那几行 / 批量固化的确认
+  const [dropped, setDropped] = useState<File[]>([]);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const [batchFreeze, setBatchFreeze] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -231,6 +241,49 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
     void runUpload({ caseId, file, name, ...input }, sizeBytes);
   };
 
+  /**
+   * 拖进来的文件（批B，桌面）。
+   * **一份走原来那张 Sheet**——单份材料本来就该逐字写清证明目的；
+   * 多份才弹批量归类表，不弹 N 次 Sheet（设计 §四）。
+   */
+  const handleDropped = useCallback(
+    (files: File[]) => {
+      if (needSignIn) {
+        toast('登录后才能往这个案件里存材料', 'amber', '需要先登录');
+        return;
+      }
+      if (files.length === 1) {
+        const f = files[0];
+        setPending({ source: 'file', file: f, name: f.name, sizeBytes: f.size });
+        return;
+      }
+      setDropped(files);
+    },
+    [needSignIn, toast],
+  );
+
+  const { dragging, handlers } = useFileDrop(handleDropped);
+
+  /** 批量入库：逐个走与单份完全相同的那条路，不另开一个「批量接口」。 */
+  const runBatch = async (assignments: BatchAssignment[], provePurpose: string) => {
+    setDropped([]);
+    for (const { file, category } of assignments) {
+      const input = { category, provePurpose, originalMedium: '' };
+      if (isDemo) {
+        const item = mockUploadEvidence({
+          caseId,
+          name: file.name,
+          sizeBytes: file.size,
+          ...input,
+        });
+        setItems((prev) => [demoView(item), ...prev]);
+      } else {
+        await runUpload({ caseId, file, name: file.name, ...input }, file.size);
+      }
+    }
+    toast(`${assignments.length} 份已存进证据库，还没固化`, 'success', '已保存');
+  };
+
   /** 固化与出证是同一个幂等接口：中途失败再点一次从断的那一段续跑。 */
   const runAttest = async (target: EvidenceView) => {
     setFreezeTarget(null);
@@ -274,8 +327,19 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
     }
   };
 
+  /** 批量固化：逐件走同一个幂等接口，中途失败的那几件再点一次从断处续跑 */
+  const runBatchAttest = async () => {
+    setBatchFreeze(false);
+    const targets = items.filter((i) => selected.has(i.id) && i.status !== '已出证');
+    for (const t of targets) await runAttest(t);
+    setSelected(new Set());
+  };
+
   return (
-    <div className="flex flex-col gap-4 pt-1">
+    // relative 只为给拖拽遮罩当定位参照：flex 流里加 position 不改任何盒子的位置。
+    // 靶区就是这一块，遮罩画到哪儿、能松手的就到哪儿——不画整个视口去骗人。
+    <div className="relative flex flex-col gap-4 pt-1" {...handlers}>
+      <DropVeil show={dragging} />
       <OriginalMediumNotice />
 
       {!needSignIn && <UploadBar onPick={handlePick} />}
@@ -330,6 +394,19 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
             共 {items.length} 份 · 已固化 {frozen} 份 · 已出证 {issued} 份
           </p>
 
+          {/* 批量条（批B，桌面）：只跟表格那副面孔一起出现，卡片面孔没有多选 */}
+          {selected.size > 0 && (
+            <div className="hidden items-center gap-3 rounded-[10px] border border-primary bg-primary-wash px-3.5 py-2.5 sm:flex">
+              <span className="num fs-s font-medium text-ink">已选 {selected.size} 件</span>
+              <Button size="sm" onClick={() => setBatchFreeze(true)}>
+                批量固化
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                取消选择
+              </Button>
+            </div>
+          )}
+
           {/* ≥sm 一张平表，类别在表里是一列 */}
           <DataTable
             faces="table"
@@ -337,6 +414,9 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
             columns={COLUMNS}
             rows={items}
             rowKey={(item) => item.id}
+            rowLabel={(item) => item.name}
+            selected={selected}
+            onSelectedChange={setSelected}
             onRowClick={(item) => setOpenId(item.id)}
           />
 
@@ -416,6 +496,32 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
         cancelLabel="再检查一下"
         onConfirm={() => freezeTarget && void runAttest(freezeTarget)}
         onCancel={() => setFreezeTarget(null)}
+      />
+
+      <BatchCategorizeDialog
+        files={dropped}
+        onCancel={() => setDropped([])}
+        onConfirm={(assignments, provePurpose) => void runBatch(assignments, provePurpose)}
+      />
+
+      <ConfirmDialog
+        open={batchFreeze}
+        title={
+          discreet
+            ? `${NEUTRAL_WORD.freeze}这 ${selected.size} 份后不能再改`
+            : `固化这 ${selected.size} 份后不能再改`
+        }
+        description={
+          <div data-veil="">
+            会逐份算哈希、申请可信时间戳，
+            <strong className="font-semibold text-ink">删不掉也换不了</strong>
+            。已经出过证的那几份会跳过，不会重复扣费。
+          </div>
+        }
+        confirmLabel={discreet ? `确认${NEUTRAL_WORD.freeze}` : '确认固化，不再修改'}
+        cancelLabel="再检查一下"
+        onConfirm={() => void runBatchAttest()}
+        onCancel={() => setBatchFreeze(false)}
       />
 
       {realnameDialog}

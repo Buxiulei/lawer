@@ -15,6 +15,7 @@ import {
   demoClaims,
   demoDeadlines,
   demoEvidence,
+  demoMessages,
   demoTimeline,
 } from "@/app/_mock/demo";
 import { mockCompanyGraph } from "@/app/_mock/company-graph";
@@ -30,11 +31,17 @@ import {
 } from "@/components/case/EvidenceBadge";
 import { Badge } from "@/components/shadcn/badge";
 import { Sensitive } from "@/components/Sensitive";
+import { citedLaws, evidenceCiteId, lawCiteId } from "./citations";
 import { MaskedText } from "./RichText";
 
 /**
- * 案件档案面板：时间线 / 诉求金额 / 证据摘要 / 待办与截止日。
+ * 案件档案面板：时间线 / 诉求金额 / 证据摘要 / 本案依据 / 待办与截止日。
  * PC 右栏常驻，移动端在 Sheet 里复用同一组件。
+ *
+ * 本面板同时是**引用桥的卷宗侧**（批B，设计 §四）：时间线每条挂 data-cite
+ * （它靠哪几份材料记下的），证据行挂 data-cite-target，「本案依据」每行挂
+ * data-cite-target 指向对话里那几张法条卡。桥本身装在 Workbench 上、只在有 hover
+ * 的设备生效，触屏一行属性都不读。
  */
 export function CasePanel({
   caseId,
@@ -49,6 +56,10 @@ export function CasePanel({
       <CompanyGraphBlock caseId={caseId} />
       <ClaimsBlock claims={demoClaims} />
       <EvidenceBlock caseId={caseId} items={demoEvidence} />
+      {/* **不能排在最后**：本块窄屏 display:none，但 `:last-child` 照样命中它，
+          排最后会把 TodoBlock 的 last:border-b-0 顶掉、在手机上凭空多一条底线
+          （display:none 不改变结构伪类——这条坑值得写下来）。 */}
+      <LawBasisBlock />
       <TodoBlock actions={actions} deadlines={demoDeadlines} />
     </div>
   );
@@ -97,7 +108,18 @@ function TimelineBlock({ events }: { events: TimelineEvent[] }) {
             className="absolute top-2 bottom-2 left-[3.5px] w-px bg-line"
           />
           {shown.map((e) => (
-            <li key={e.id} data-veil="" className="relative">
+            // data-cite：这一条是靠哪几份材料记下来的。停在它上面，下面证据行里
+            // 对应那几条一起亮；反过来停在证据上，用过它的时间线条目也亮。
+            <li
+              key={e.id}
+              data-veil=""
+              data-cite={
+                e.evidenceIds.length > 0
+                  ? e.evidenceIds.map(evidenceCiteId).join(" ")
+                  : undefined
+              }
+              className="relative"
+            >
               <span
                 aria-hidden
                 className={cn(
@@ -266,7 +288,12 @@ function EvidenceBlock({
 
         <ul className="mt-3 flex flex-col gap-2">
           {items.slice(0, 3).map((item) => (
-            <li key={item.id} data-veil="" className="flex items-start gap-2">
+            <li
+              key={item.id}
+              data-veil=""
+              data-cite-target={evidenceCiteId(item.id)}
+              className="flex items-start gap-2"
+            >
               <span
                 className="mt-2 size-1.5 shrink-0 rounded-full bg-line"
                 aria-hidden
@@ -297,6 +324,50 @@ function EvidenceBlock({
           <OriginalMediumNotice />
         </div>
       </div>
+    </section>
+  );
+}
+
+/* ── 本案依据（引用桥的卷宗侧）────────────────────────────── */
+
+/**
+ * 对话里引过的法条速查。每一行挂 data-cite-target：停在它上面，对话里引过这条的
+ * 每一张法条卡都亮；点它，查看器开出逐字原件（点击由 Workbench 上的桥统一接管，
+ * 这里不各挂一个 onClick）。
+ *
+ * **门用容器查询而不是视口 xl**：卷宗栏本身在容器 ≥990 时才排开，本块的显隐必须
+ * 跟它同一个阈值——否则会出现「卷宗栏在、本案依据这半却不在」的窄桌面带，
+ * 停在法条卡上没有任何一行能亮。移动端 Sheet 里没有 work 容器，
+ * `@min-[990px]/work:block` 永不命中 → 一个像素不占（移动端零回归的落点）。
+ */
+function LawBasisBlock() {
+  const laws = citedLaws(demoMessages);
+  if (laws.length === 0) return null;
+
+  return (
+    <section className="hidden border-b border-line pb-4 last:border-b-0 @min-[990px]/work:block">
+      <header className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="fs-m font-semibold text-ink">本案依据</h3>
+        <span className="num fs-xs text-ink-2">{laws.length} 条</span>
+      </header>
+      <p className="mb-2 fs-xs text-ink-2">
+        指着一条看，对话里引过它的每一处都会亮起来；点开看逐字原文。
+      </p>
+      <ul className="flex flex-col gap-0.5">
+        {laws.map(({ cite, count }) => (
+          <li key={cite}>
+            <button
+              type="button"
+              data-cite-target={lawCiteId(cite)}
+              className="w-full rounded-[6px] px-1.5 py-1.5 text-left"
+            >
+              {/* 条号本身不含案情，不进糊层：低调模式下它仍是这一行的路标 */}
+              <span className="block fs-s text-primary-ink">{cite}</span>
+              <span className="num fs-xs text-ink-2">引用 {count} 处</span>
+            </button>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

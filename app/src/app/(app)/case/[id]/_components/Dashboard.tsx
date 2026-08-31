@@ -10,6 +10,7 @@ import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Mascot } from '@/components/brand/Mascot';
 import { ActionGroup } from '@/components/case/ActionCard';
 import { EmptyState } from '@/components/shadcn/empty-state';
+import { CaseHeaderBar } from './CaseHeaderBar';
 import { DeadlineTiles } from './DeadlineTiles';
 import { MilestoneTrack } from './MilestoneTrack';
 import { RecentRecords } from './RecentRecords';
@@ -40,7 +41,18 @@ export function Dashboard({ caseId }: { caseId: string }) {
   return (
     <div className="pt-1">
       <WatchBar />
-      <MilestoneTrack track={FULL_JOURNEY} attainments={demoAttainments()} />
+      {/* 桌面把轨道并进案由条：横向是桌面多出来的那一维，案由 + 阶段 + 最近期限 + 轨道
+          压成一条，省下的高度还给「现在做什么」。**手机一个像素不动**——下面那份轨道
+          原样保留，两份互斥显示。
+          门开在 `lg`（壳层从底部 Tab 换成侧栏的那一档）：「有没有侧栏」正是案由条要不要
+          横排的真变量；案由条**内部**再走容器查询细排（设计红线②：壳层跟设备、工作区内部
+          跟可用宽度）。 */}
+      <div className="hidden lg:block">
+        <CaseHeaderBar caseId={caseId} />
+      </div>
+      <div className="lg:hidden">
+        <MilestoneTrack track={FULL_JOURNEY} attainments={demoAttainments()} />
+      </div>
       {/* 只推一件事（产品方案叁）；计数仍是全量，不然「1/5」会缩成「0/1」 */}
       <ActionGroup items={actions} onToggle={toggle} limit={1} />
       {rest > 0 && (

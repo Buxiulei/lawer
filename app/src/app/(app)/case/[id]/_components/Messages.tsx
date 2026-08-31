@@ -5,6 +5,7 @@ import { formatDate } from '@/app/_ui/format';
 import { ActionGroup } from '@/components/case/ActionCard';
 import { LawRefCard } from '@/components/case/LawRefCard';
 import type { DraftFrame, NoticeFrame, RecordFrame } from '../_stream/frames';
+import { lawCiteId } from './citations';
 import { MaskedText, RichText } from './RichText';
 import {
   DegradedBadge,
@@ -128,7 +129,9 @@ export function AssistantMessage({
           <h3 className="mb-2 text-[13px] text-ink-2">依据</h3>
           <div className="prose-measure flex flex-col gap-2">
             {laws.map((law) => (
-              <LawRefCard key={law.cite} law={law} />
+              // citeId：引用桥的对话端。同一条法条在多条消息里各引一次，id 一样，
+              // 所以卷宗栏「本案依据」那一行一亮，这几处会一起亮——反向问题正是这么答的。
+              <LawRefCard key={law.cite} law={law} citeId={lawCiteId(law.cite)} />
             ))}
           </div>
         </section>

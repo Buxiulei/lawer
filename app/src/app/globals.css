@@ -636,3 +636,72 @@ html[data-discreet='1'] [data-veil]:has([data-veil][data-veil-open]),
 html[data-discreet='1'] [data-veil]:has([data-veil][data-veil-focus]) {
   filter: none;
 }
+
+/* ══ 批B：桌面工作区面板（引用桥 / 拖拽入库 / 命令面板）════════════════
+   本段只写这三样东西的外观，**不写任何在窄屏无条件生效的规则**：引用桥靠
+   (any-hover:hover) 设备查询自我门控，拖拽遮罩/命令面板由组件的容器查询与 lg
+   门控收在桌面，手机上一个像素不动（移动端零回归的落点）。
+   与批6-A 的布局层同样写在 @layer 外面：要盖过 utilities，也与那段风格一致。 */
+
+/* 引用桥（_components/citations.ts）。
+   **只改底色与外扩阴影，不改任何占位属性**——padding / border-width / font-size
+   一律不碰，hover 时布局高度必须原封不动（验收直接量 offsetHeight）。
+   box-shadow 的扩散不参与布局，那圈「外扩底色」是免费的。
+
+   门问的是 any-hover 而不是 hover：带触摸屏的笔记本主输入会被判成 coarse，
+   用 (hover:hover) 会把一台接着鼠标的真桌面挡在外面（详见 citations.ts 同段注释）。
+   纯触屏是 any-hover:none，整段不生效。 */
+@media (any-hover: hover) {
+  /* 常态只留过渡（不可见），**不加任何会改变形状的属性**——border-radius 一度写在
+     这里，而法条卡带 8px 左边框，圆角会把边框两端削圆，在一台拉到 393 宽的触屏
+     笔记本上就是一处肉眼可见的「移动端」改动。形状只在点亮那一刻出现。
+     减弱动效时这条过渡被本文件上方的全局 !important 规则清零 → 只剩底色、去过渡
+     （设计 §动效：引用桥 reduced-motion 保底色去过渡）。 */
+  [data-cite],
+  [data-cite-target] {
+    transition:
+      background-color 150ms ease-out,
+      box-shadow 150ms ease-out;
+  }
+
+  /* 引用点是可指的：给个手型，别的什么都不给——常态加下划线会在对话里凭空多出装饰线。 */
+  [data-cite]:hover,
+  [data-cite-target]:hover {
+    cursor: pointer;
+  }
+
+  /* 点亮：只有底色与外扩阴影参与，两者都不占位。
+     键盘走到卷宗栏那一行时同样亮——:focus-within 一并挂上（设计 §四）。 */
+  [data-cite-lit],
+  [data-cite-target]:focus-within {
+    border-radius: 6px;
+    background-color: var(--primary-wash);
+    box-shadow: 0 0 0 4px var(--primary-wash);
+  }
+}
+
+/* 拖拽入库的遮罩（_components/DropPanel.tsx）。**不糊内容**：只压一层半透明主色
+   + 一圈虚线，底下拖到哪儿仍然看得清。靠父级 .relative 定位，只覆到证据列表那块。 */
+.drop-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  border: 2px dashed var(--primary);
+  border-radius: 12px;
+  background-color: color-mix(in srgb, var(--primary-wash) 82%, transparent);
+  animation: fade-in 150ms ease-out;
+}
+
+/* 命令面板（_components/CommandSearch.tsx）：贴顶而不是居中——搜索框该落在眼睛
+   已经在的地方。放在 @layer 外面，稳稳盖过 DialogContent 上的 top-1/2 与
+   -translate-y-1/2 工具类（同本文件低调模式那段「盖过 utilities」的理由）。 */
+.cmdk-panel {
+  top: 12vh;
+  left: 50%;
+  max-width: 560px;
+  transform: translateX(-50%);
+  padding: 0;
+}

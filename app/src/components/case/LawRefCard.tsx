@@ -12,9 +12,11 @@ import type { LawRef } from '@/app/_mock/types';
  * 但把原文挪出 DOM 就等于改了归档内容。<details> 天然满足这一点——
  * 收起状态下子节点仍在文档里，只是不显示。
  */
-export function LawRefCard({ law }: { law: LawRef }) {
+export function LawRefCard({ law, citeId }: { law: LawRef; citeId?: string }) {
   return (
-    <details data-veil="" className="group border-l-8 border-line pl-3">
+    // citeId 是引用桥的对话端（_components/citations.ts）：**只挂一个属性，形状与类名一字不动**。
+    // 不给 citeId 就完全是原来那张卡——移动端与所有旧调用点因此逐像素不变。
+    <details data-veil="" data-cite={citeId} className="group border-l-8 border-line pl-3">
       <summary className="flex min-h-11 cursor-pointer list-none items-start gap-2 py-1.5 text-[15px] leading-7 text-primary-ink marker:hidden">
         {/* 条号与「看逐字原文」放在同一条文字流里，不做两个 flex 项——
             分成两项时长条号会在中间断开、把后缀甩到下一行的行首。 */}
