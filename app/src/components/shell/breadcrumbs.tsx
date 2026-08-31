@@ -52,6 +52,9 @@ export function crumbsFor(pathname: string, caseId: string | null): Crumb[] {
     return [home, { label: '证据', discreetLabel: NEUTRAL_WORD.evidence }];
   if (rest.startsWith('/graph'))
     return [home, { label: '公司图谱', discreetLabel: NEUTRAL_WORD.graph }];
+  // 报价页也停在「公司档案」这一级：顶栏不写公司名、不写金额，同本文件开头那条规矩
+  if (rest.startsWith('/dossier'))
+    return [home, { label: '公司档案', discreetLabel: NEUTRAL_WORD.dossier }];
   if (rest.startsWith('/docs')) return [home, { label: '文件解读' }];
   if (rest.startsWith('/drafts'))
     return [home, { label: '文书', discreetLabel: NEUTRAL_WORD.drafts }];

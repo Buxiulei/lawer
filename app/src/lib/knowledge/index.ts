@@ -46,6 +46,12 @@ export interface PackMeta {
   keywords: string[];
   applies_to: string[];
   region: string;
+  /**
+   * 出处（官方 URL / 本地存档副本路径）。frontmatter 里是必填项，
+   * 但早先没有随 index.json 导出，于是消费方（VenueCard.sources）拿到的恒是空数组——
+   * 一张说不出出处的「官方流程」卡与一段我们自己编的话，在用户那里长得一模一样。
+   */
+  sources: string[];
   confidence: string;
   updated: string;
   path: string;
@@ -118,6 +124,16 @@ function loadIndex(): PackMeta[] {
   for (const entry of parsed as PackMeta[]) {
     if (!entry?.id || !entry?.path) {
       throw new Error(`knowledge 索引条目缺少 id 或 path：${JSON.stringify(entry)}（${indexPath}）`);
+    }
+    // sources 是**后加**的导出字段：旧版生成器产出的 index.json 里没有它，
+    // 而类型上它是 string[]，消费方会直接 `.length` ⇒ 运行时 TypeError，
+    // 报错点离病因（索引是旧的）隔着好几层。在入口处一次说清缺什么/为什么缺/怎么办。
+    if (!Array.isArray(entry.sources)) {
+      throw new Error(
+        `knowledge 索引条目 ${entry.id} 缺 sources（${indexPath}）：` +
+          '这份 index.json 多半是旧版 scripts/gen-knowledge-index.py 生成的（那一版没导出 sources）。' +
+          '重跑 `python3 scripts/gen-knowledge-index.py` 再生成即可。',
+      );
     }
   }
   // ⑤【零张卡默认拒绝启动】manager 2026-08-29 产品裁定：

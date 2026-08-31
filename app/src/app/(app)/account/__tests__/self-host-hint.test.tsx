@@ -83,7 +83,10 @@ describe('省公道值引导：渲染', () => {
   it('说清「不扣的是什么、什么才扣」——只说一半会被读成「接了就全免费」', () => {
     const html = render(false);
     expect(html).toContain('不扣公道值');
-    expect(html).toContain('替你调模型时才扣');
+    // 得说清「什么才扣」：模型调用 + 主动下单（公司档案 / 盯守），不能只说「不扣」被读成全免费
+    expect(html).toContain('只在两种情况下扣');
+    expect(html).toContain('替你调模型时');
+    expect(html).toContain('主动下单');
   });
 });
 
@@ -161,7 +164,13 @@ describe('文案所依据的事实：扣费只发生在模型轮次里', () => {
     // 把「最像扣费的新代码会落在哪」的那个目录整个排除在外，等于不看最该看的地方。
     const EXEMPT = ['lib/billing/index.ts', 'lib/billing/backfill.ts'];
     const found = callers('gongdaoSettle').filter((p) => !EXEMPT.includes(p));
-    expect(found).toEqual(['lib/agent/orchestrator.ts']);
+    // 三处具名合法扣费点系 manager 2026-08-31 挂尾裁决：模型轮次(orchestrator) + 两处主动下单
+    // (公司档案购买 dossier-billing / 盯守订阅 watch-billing)。**扩到第四处须再裁，别无据自扩**。
+    expect([...found].sort()).toEqual([
+      'lib/agent/orchestrator.ts',
+      'lib/company/dossier-billing.ts',
+      'lib/company/watch-billing.ts',
+    ]);
   });
 
   it('MCP 端点与 v1 案件数据路由都不扣费', () => {

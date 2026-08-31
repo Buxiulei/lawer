@@ -15,6 +15,7 @@ import {
   KNOWN_ESTIMATE_FEATURES,
 } from '../estimate';
 import { KNOWN_FEATURE_KEYS } from '../features';
+import { DOSSIER_MODULE_FEATURE, DOSSIER_MODULES } from '@/lib/company/dossier-billing';
 
 function makeDb() {
   const db = new Database(':memory:');
@@ -152,12 +153,40 @@ describe('feature 键表一致性', () => {
   /** 已登记标签但只记量不扣费的键：不进估算白名单（无从估、也无须预检余额）。 */
   const METERED_ONLY_FEATURES = ['companywatch']; // 扣费口径待 M3，届时移出本表并补 SEED
 
-  test('KNOWN_ESTIMATE_FEATURES 恰为 features.ts 登记键去掉只记量不扣费的那些（同一词表，不许分叉）', () => {
-    const chargeable = KNOWN_FEATURE_KEYS.filter((k) => !METERED_ONLY_FEATURES.includes(k));
+  /**
+   * 扣费、但**定额在 pricing_config、不经估算器**的键：公司档案六模块。
+   *
+   * 它们既不属于「只记量不扣费」，也不该进 KNOWN_ESTIMATE_FEATURES——
+   * 估算器的口径是「按历史 token 消耗 P90 猜下一次要花多少」，而这六块是查表得来的确定价
+   * （lib/company/dossier-billing.modulePrice → readPrice），余额闸走 ensureGongdaoAmount
+   * 直接吃这个确定值。把它们塞进估算白名单，GET /estimate 就会对着一个定额项回一个 P90 猜测，
+   * 报出来的数与结算时真扣的数不是一回事——那正是「显示 340、实际扣 200」那类事故。
+   *
+   * **不手抄字符串**：取生产映射表，模块键名一改这里当场红（同 features.test 的理由）。
+   */
+  const PRICING_CONFIG_FEATURES = DOSSIER_MODULES.map((m) => DOSSIER_MODULE_FEATURE[m]);
+
+  test('KNOWN_ESTIMATE_FEATURES 恰为 features.ts 登记键去掉只记量与查表定额的那些（同一词表，不许分叉）', () => {
+    const chargeable = KNOWN_FEATURE_KEYS.filter(
+      (k) => !METERED_ONLY_FEATURES.includes(k) && !PRICING_CONFIG_FEATURES.includes(k),
+    );
     expect([...KNOWN_ESTIMATE_FEATURES].sort()).toEqual(chargeable.sort());
     expect(KNOWN_ESTIMATE_FEATURES.length).toBe(9);
-    // 只记量的键必须已登记标签——用量明细照样要出中文
-    for (const f of METERED_ONLY_FEATURES) expect(KNOWN_FEATURE_KEYS).toContain(f);
+    // 两类「不进估算白名单」的键都必须已登记标签——用量明细照样要出中文
+    for (const f of [...METERED_ONLY_FEATURES, ...PRICING_CONFIG_FEATURES]) {
+      expect(KNOWN_FEATURE_KEYS).toContain(f);
+    }
+  });
+
+  // 上一条断的是集合相等，会被「两边一起改错」蒙混过去（把 dossier_* 加进估算白名单、
+  // 同时从这里的排除表里划掉，集合照样相等）。这一条从另一头钉：档案模块**永远**不进估算白名单。
+  test('公司档案六模块一个都不在估算白名单里（它们的价来自 pricing_config，不是 P90 猜测）', () => {
+    for (const f of PRICING_CONFIG_FEATURES) {
+      expect(KNOWN_ESTIMATE_FEATURES, `「${f}」不该进估算白名单`).not.toContain(f);
+      expect(SEED[f], `「${f}」不该有估算种子`).toBeUndefined();
+      expect(FIXED_PRICING[f], `「${f}」的定额在 pricing_config，不该同时写进 FIXED_PRICING`).toBeUndefined();
+    }
+    expect(PRICING_CONFIG_FEATURES).toHaveLength(6);
   });
 
   test('每个可估算 feature 要么有 SEED 要么有 FIXED_PRICING（不靠兜底默认值蒙混）', () => {

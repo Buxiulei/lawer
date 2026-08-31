@@ -33,7 +33,15 @@ const PAYROLL_CHAIN_LABEL = '签约壳↔用工主体';
 const TIER_ORDER = [1, 2, 3] as const;
 const EDGE_KIND_ORDER: EdgeKind[] = ['equity', 'control', 'brand'];
 
-export function CompanyGraphView({ graph }: { graph: CompanyGraph | null }) {
+export function CompanyGraphView({
+  caseId,
+  graph,
+}: {
+  // caseId 只为把「一键加守望」的入口接到 /cases/{id}/watch 上——盯梢按（案件 + 主体）去重，
+  // 没有案件 id 就去不了重，同一家会被重复建、下个月重复收费。
+  caseId: string;
+  graph: CompanyGraph | null;
+}) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { layout, payrollChain } = useMemo(() => {
@@ -137,6 +145,7 @@ export function CompanyGraphView({ graph }: { graph: CompanyGraph | null }) {
       </p>
 
       <NodeSheet
+        caseId={caseId}
         graph={graph}
         node={selected}
         onClose={() => setSelectedId(null)}
