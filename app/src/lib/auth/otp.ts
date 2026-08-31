@@ -337,15 +337,28 @@ export async function sendEmailCode(
 }
 
 /**
- * 手机 + 邮箱双验证齐了（= 注册完成，spec §8）就自动开通默认案件。
+ * "注册完成"就自动开通默认案件。两条线各自的完成判据：
+ *
+ *  · 手机线 / 邮箱线：手机 + 邮箱双验证齐了（spec §8）。
+ *  · Google 线：已绑 google_sub + 邮箱已验证。**Google 那边替我们验过这个邮箱**
+ *    （id_token 的 email_verified 必须为布尔 true 才走得到这里，见 auth/google.ts），
+ *    再逼他补一个手机号才给档案，就是让 Google 用户当二等公民——登得进去，
+ *    却一进站就没有案件可用。故此处**不要求 phone_verified_at**。
  *
  * 建案失败不许阻断登录：账号已经建好、验证码也用掉了，这时候回一个错误只会把用户
  * 卡在登录页反复重试。记日志、返回 undefined，前端照常进站，用户自己建案也走得通。
  * api key 不在这里发——那是用户主动去 /api/v1/keys 领的东西，不该替他决定（spec D4）。
+ *
+ * 【这里是"注册完成"这条判据的唯一住址】Google 线（lib/auth/google.ts）登录成功后调的
+ * 也是本函数，不自己再写一遍条件——上面那条 Google 分支正是加在这里而不是加在 google.ts。
+ * 将来放宽成"任一验证通道齐备即算注册完成"时，改这一个函数，两条线同时生效——
+ * 各写各的话，改完一处另一处会静默地停在旧规则上。
  */
-function provisionOnRegistered(db: Database, userId: number): Onboarding | undefined {
+export function provisionOnRegistered(db: Database, userId: number): Onboarding | undefined {
   const user = store.findUserById(db, userId);
-  if (!user?.phone_verified_at || !user.email_verified_at) return undefined;
+  // 邮箱必须已验证是两条线的公共前提；第二个凭据手机或 Google 有一个就够
+  if (!user?.email_verified_at) return undefined;
+  if (!user.phone_verified_at && !user.google_sub) return undefined;
   return provisionDefaultCase(db, userId);
 }
 

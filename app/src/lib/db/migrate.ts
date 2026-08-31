@@ -1,7 +1,7 @@
 // app/src/lib/db/migrate.ts
 //
 // ───────────────── ⚠️ 改本文件之前先读这一段 ⚠️ ─────────────────
-// **本迁移框架没有事务。** runMigrations() 的 38 个 db.exec() 是一串裸调用，
+// **本迁移框架没有事务。** runMigrations() 的 39 个 db.exec() 是一串裸调用，
 // 中途失败不回滚——2026-08-26 实测：人为中断，库里留下 22/38 张表，重跑既不前进也不后退。
 // 现在之所以能安全滚更，是因为迁移**全是纯加法**、靠 IF NOT EXISTS 与 addColumnIfMissing
 // 能重跑自愈：**安全是「改动足够简单」给的，不是框架给的。**
@@ -837,6 +837,23 @@ export function runMigrations(db: Database.Database): void {
   // 猜错不报错，只是发出去的证上多露几位，没有任何人会发现。
   // NULL = 老数据（护照通道之前只有身份证一种），掩码时按最保守规则处理。
   addColumnIfMissing(db, 'users', 'cert_type', 'TEXT');
+
+  // users.google_sub：Google 账号的稳定标识（ID Token 的 `sub` claim）。
+  //
+  // 【为什么归并键是 sub 不是邮箱】Google 侧邮箱可改（企业版改域名、个人号换地址），
+  // sub 在一个 client_id 下对一个 Google 账号终身不变。拿邮箱当主键的话，用户在 Google
+  // 那边改了邮箱，回来就是一个陌生人——账号里的案件档案全部失联。邮箱只作**第二顺位**
+  // 的归并线索（把 Google 线接到已有的手机线/邮箱线账号上），接上之后就以 sub 为准。
+  //
+  // NULL = 没绑过 Google（手机线/邮箱线注册的存量账号全是这种），故唯一索引用部分索引，
+  // 与 uq_users_phone_hash / uq_users_email 同一形态：多行 NULL 不算冲突。
+  // 唯一性必须落在库上而不只靠应用层判断——绑定是「查完再写」两步，
+  // 只有唯一索引能保证中间那一瞬没人插队，把同一个 Google 账号绑到两个用户上。
+  addColumnIfMissing(db, 'users', 'google_sub', 'TEXT');
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_users_google_sub
+      ON users (google_sub) WHERE google_sub IS NOT NULL;
+  `);
 
   // company_watches.tier：三圈监控档位（spec v3）。daily=圈1 直接责任链、weekly=圈2 责任扩展候选、
   // archive=圈3 存档不监控。同 intake_stage，**不加 DB 级 CHECK**（SQLite 改 CHECK 要重建表）。
