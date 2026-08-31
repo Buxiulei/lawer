@@ -19,7 +19,13 @@
  * 覆盖由这份夹具承担；**路由上仍渲染不出跳过态这件事，是产品事实，不是缺口**。
  */
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// MilestoneTrack 现在渲染 <Seal/>（批A动效落章），它走 useDiscreet；孤立渲染里没有 DiscreetProvider。
+// 与 dashboard-real-data 同法把 useDiscreet mock 掉——本测只验里程碑四态，与低调态无关。
+vi.mock('@/app/_ui/discreet', () => ({
+  useDiscreet: () => ({ discreet: false, toggle: () => {} }),
+}));
 
 import { MilestoneTrack } from '../MilestoneTrack';
 import {

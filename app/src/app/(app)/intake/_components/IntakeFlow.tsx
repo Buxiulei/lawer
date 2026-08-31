@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSignedIn } from '@/app/_ui/auth';
+import { scrollBehavior, useReducedMotion } from '@/app/_ui/motion';
 import { Button } from '@/components/shadcn/button';
 import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
 import { StickyBottomBar } from '@/components/shell/StickyBottomBar';
@@ -97,6 +98,7 @@ export function IntakeFlow() {
     setRestored(false);
   }, []);
 
+  const reduce = useReducedMotion();
   const step = Math.min(draft.step, STEPS.length - 1);
   const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
@@ -105,7 +107,8 @@ export function IntakeFlow() {
   const go = (next: number) => {
     setDraft((prev) => ({ ...prev, step: next }));
     setRestored(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // 程序化滚动一律过 `scrollBehavior()`：全局那条 CSS 兜底管不到 JS
+    window.scrollTo({ top: 0, behavior: scrollBehavior(reduce) });
   };
 
   const reset = () => {

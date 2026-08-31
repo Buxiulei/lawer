@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { demoCase } from '@/app/_mock/demo';
 import type { ActionItem } from '@/app/_mock/types';
 import { humanError } from '@/app/_ui/api';
@@ -13,6 +13,7 @@ import { ActionGroup } from '@/components/case/ActionCard';
 import { Button } from '@/components/shadcn/button';
 import { EmptyState } from '@/components/shadcn/empty-state';
 import { SkeletonList } from '@/components/shadcn/skeleton';
+import { useEnterStagger } from '@/hooks/useEnterStagger';
 import { DeadlineTiles } from './DeadlineTiles';
 import { MilestoneTrack } from './MilestoneTrack';
 import { RecentRecords } from './RecentRecords';
@@ -110,13 +111,22 @@ export function DashboardBody({
   // 最急的排前面。仲裁时效虽然常驻，但它不该挡在两天后到期的事情前面
   const deadlines = [...data.deadlines].sort((a, b) => a.dueAt.localeCompare(b.dueAt));
   const rest = data.actions.filter((a) => a.status === '待办').length - 1;
+  /* 入场 stagger 只挂 `data-mo-enter` 点名的那几块（A7）。渲染层持有 root，取数层（Dashboard）不碰。
+     **行动卡那一组刻意不在里面**：它自己已经有 `mo-fade-in`（对话流里也要用那一条），
+     两层入场叠在同一个元素上会看见「淡进来又被按下去一次」。 */
+  const root = useRef<HTMLDivElement>(null);
+  useEnterStagger(root, { selector: '[data-mo-enter]' });
 
   return (
-    <div className="pt-1">
+    <div ref={root} className="pt-1">
       <WatchBar />
-      <MilestoneTrack track={FULL_JOURNEY} attainments={data.attainments} />
-      {/* 只推一件事（产品方案叁）；计数仍是全量，不然「1/5」会缩成「0/1」 */}
-      <ActionGroup items={data.actions} onToggle={onToggle} limit={1} />
+      <div data-mo-enter>
+        <MilestoneTrack track={FULL_JOURNEY} attainments={data.attainments} />
+      </div>
+      {/* 只推一件事（产品方案叁）；计数仍是全量，不然「1/5」会缩成「0/1」。
+          `collapseOnDone`：勾完这一件它让开，下一件才有地方站——
+          「完成庆祝」的正确形态是下一件事出现，不是彩带。 */}
+      <ActionGroup items={data.actions} onToggle={onToggle} limit={1} collapseOnDone />
       {rest > 0 && (
         <p data-veil="" className="mt-1.5 text-[12.5px] text-ink-2">
           其余 <span className="num">{rest}</span> 件排在后面，在
@@ -130,7 +140,9 @@ export function DashboardBody({
         </p>
       )}
       <DeadlineTiles deadlines={deadlines} />
-      <RecentRecords caseId={caseId} records={data.records} />
+      <div data-mo-enter>
+        <RecentRecords caseId={caseId} records={data.records} />
+      </div>
     </div>
   );
 }
@@ -144,7 +156,7 @@ function WatchBar() {
   const { discreet } = useDiscreet();
   if (discreet) return null;
   return (
-    <div className="flex items-center gap-2 pb-1">
+    <div data-mo-enter className="flex items-center gap-2 pb-1">
       {/* 56px：实测 52 是「看得清表情」的阈值，取 56 留余量。28px 那档连眼镜都只是一道暗带 */}
       <Mascot pose="watch" size={56} />
       <span className="rounded-full border border-kraft-line bg-kraft px-2.5 py-0.5 text-[12.5px] text-gold-on-kraft">

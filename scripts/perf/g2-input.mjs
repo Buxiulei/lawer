@@ -112,5 +112,68 @@ try {
     }
     await ctx.close();
   }
+  /* ── 2d 行动卡：勾选 → 撤销窗口 → 收起 → 下一件出现 ────────
+     照坑 1 的规矩：每一步都先断言「那个动作确实发生了」，
+     再断言结果。只测结果的话，勾没勾上都会得到一串漂亮的 PASS。 */
+  {
+    const { ctx, page, cdp } = await lowEndPage(browser);
+    await seedDiscreet(ctx, false);
+    await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+    await page.goto(BASE + '/case/demo', { waitUntil: 'load', timeout: 90000 });
+    await sleep(1800);
+
+    const state = () => page.evaluate(() => {
+      const g = document.querySelector('[data-action-group]');
+      if (!g) return null;
+      const rows = [...g.querySelectorAll('article')];
+      const h4 = g.querySelector('h4');
+      return {
+        行数: rows.length,
+        首行标题: h4 ? h4.textContent.trim() : null,
+        划线色: h4 ? getComputedStyle(h4).textDecorationColor : null,
+        计数: (g.querySelector('h3 .num')?.textContent || '').trim(),
+        撤销可点: [...g.querySelectorAll('button')].some((b) => b.textContent.trim() === '撤销'),
+        勾选态: g.querySelector('[role=checkbox]')?.getAttribute('aria-checked'),
+      };
+    });
+    const box = await page.evaluate(() => {
+      const cb = document.querySelector('[data-action-group] [role=checkbox]');
+      if (!cb) return null;
+      cb.scrollIntoView({ block: 'center' });
+      const r = cb.getBoundingClientRect();
+      return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+    });
+    if (!box) { rec('行动卡勾选', null, '/case/demo 上找不到行动卡勾选框，未能测'); }
+    else {
+      const before = await state();
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x, y: box.y, radiusX: 12, radiusY: 12, force: 1 }] });
+      await sleep(60);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await sleep(260);
+      const checked = await state();
+      // 先证明「勾这个动作确实发生了」，后面几条才有意义
+      rec('触摸真的勾上了（aria-checked 翻面）',
+        before.勾选态 === 'false' && checked.勾选态 === 'true',
+        `勾前 aria-checked=${before.勾选态} → 勾后 ${checked.勾选态}`);
+      rec('划线画上了（text-decoration-color 由透明转实色）',
+        /rgba\(.*0\)$/.test(before.划线色 || '') && !/rgba\(.*0\)$/.test(checked.划线色 || ''),
+        `勾前 ${before.划线色} → 勾后 ${checked.划线色}`);
+      rec('顶栏计数跟着涨了一格',
+        before.计数 !== checked.计数,
+        `${before.计数} → ${checked.计数}`);
+      rec('收起之前有撤销窗口（动效期间 UI 仍可点）',
+        checked.撤销可点 === true,
+        `勾后 260ms 撤销按钮在=${checked.撤销可点}`);
+      await sleep(1400);
+      const settled = await state();
+      rec('这一行让开了，下一件事顶上来',
+        settled.首行标题 !== null && settled.首行标题 !== before.首行标题,
+        `${JSON.stringify(before.首行标题)} → ${JSON.stringify(settled.首行标题)}`);
+      rec('让开之后行数没塌成 0（不是把整组弄没了）',
+        settled.行数 >= 1,
+        `收起后可见行数=${settled.行数}`);
+    }
+    await ctx.close();
+  }
 } finally { await shutdown({ browser, proc }); }
 console.log(JSON.stringify(R, null, 1));

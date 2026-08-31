@@ -726,3 +726,182 @@ html[data-discreet='1'] [data-veil]:has([data-veil][data-veil-open]),
 html[data-discreet='1'] [data-veil]:has([data-veil][data-veil-focus]) {
   filter: none;
 }
+
+/* ── 动效 v1 ──────────────────────────────────────────────────
+   这套动效服务于一个在会议室外偷看手机的人。它的全部工作是让人相信
+   「系统还在走，而且刚才那一下生效了」。只回答两个问题：确认、引导。
+   两个都回答不了的动效，删。
+
+   **本段只在文件末尾追加，不改上面任何一条现存规则**（B 路会在同一文件动
+   `[data-veil]` 那三行，两边不碰同一处，合并时不打架）。
+
+   数值的 JS 同名镜像在 `src/app/_ui/motion.ts`，
+   由 `src/app/__tests__/motion-tokens.test.ts` 逐值对齐——改一边不改另一边直接报红。 */
+:root {
+  --mo-tap: 120ms;   /* 按压、勾选描边、tab 高亮 */
+  --mo-base: 180ms;  /* 默认：入场、状态色、边框 */
+  --mo-exit: 120ms;  /* 一切退场（= base × 0.67） */
+  --mo-sheet: 250ms; /* 抽屉升起（沿用现值，不改） */
+  --mo-seal: 420ms;  /* 落章，全站唯一 >300ms 的单次动效 */
+  --mo-track: 900ms; /* 里程碑推进编排总长 */
+
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);      /* 入场/常规 */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);       /* 退场 */
+  --ease-seal: cubic-bezier(0.2, 1.6, 0.4, 1); /* 唯一带过冲，仅落章（复用 .anjuan-stamp） */
+  --ease-lin: linear;                          /* 只给进度：进度用 ease 会撒谎 */
+}
+
+/* 通用入场：把原先散在组件里的 `animate-[fade-in_200ms_ease-out]` 收到 token 上 */
+.mo-fade-in {
+  animation: fade-in var(--mo-base) var(--ease-out);
+}
+
+/* ── A2 里程碑「进行中」格的呼吸环（全站唯一的无限循环）────────
+   动的是 `::after` 外环，**不动圆点本体**——本体一动，轨道形状就在动。
+
+   为什么这一处可以无限循环：它不是警报，是心跳。
+   判据写死——**它不随任何用户可操作的状态改变**（不会因为你今天没做事而变快）。
+   警报要求你现在行动，会累积焦虑；心跳只说明系统活着，那正是「陪跑」的字面意思。 */
+.mo-breath::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 9999px;
+  border: 2px solid var(--primary);
+  opacity: 0.45;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  /* 1400ms alternate ＝ 一个完整来回 2800ms */
+  .mo-breath::after {
+    animation: mo-track-breath 1400ms ease-in-out infinite alternate;
+  }
+}
+@keyframes mo-track-breath {
+  from {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0.9;
+    transform: scale(1.15);
+  }
+}
+/* **减弱动效不是把它跑 0.01ms**（那会停在 from 的 0.45，比设计的静止态更淡、
+   在浅色底上几乎看不见）。整条不建，停在两端之间的 0.7 上。
+   上面那条全局 `*` 兜底钝刀管不到「停在哪一帧」，只有这里能。 */
+@media (prefers-reduced-motion: reduce) {
+  .mo-breath::after {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* ── A3 里程碑推进：色与线的静止判据 ──────────────────────────
+   四态判据是**那行字**（日期 / 进行中 / 未经此步 / 空），动效只是加速识别。
+   这里只给颜色一条过渡；字重**直接切不做动画**——字重是布局属性，动它会重排整行。 */
+.mo-track-tint {
+  transition:
+    color var(--mo-base) var(--ease-out),
+    background-color var(--mo-base) var(--ease-out),
+    border-color var(--mo-base) var(--ease-out);
+}
+
+/* ── A4 落章 ────────────────────────────────────────────────
+   **只抄 `.anjuan-stamp` 的形，不抄它的动画。**
+   那条 `.anjuan-stamp` 自带 `stamp-in 0.45s ... 0.55s` 是给落地页首屏用的，
+   直接套在这里会和编排的时序打架（章会先自己播一遍，再被 gsap 拽回起点）。
+   曲线仍是同一条 `--ease-seal`，由 `useMilestoneAdvance` 用 JS 同名实现驱动。
+
+   **本类不写 transform**：transform 归 gsap 独占，两边都写必然互相擦掉。 */
+.mo-seal-mark {
+  box-shadow:
+    inset 0 0 0 2px var(--bg),
+    inset 0 0 0 3px var(--primary);
+  mix-blend-mode: multiply;
+}
+
+/* ── A6 期限跨过 ≤3 天阈值那一刻 ────────────────────────────
+   底色与边框的过渡走 `.mo-track-tint`；这里只管催办角标的入场。
+   **只在本会话内跨过阈值时播一次**，挂载时就已经紧急的不播——
+   那不是刚发生的事。设计稿写 280ms，落到最近的 token `--mo-sheet`(250ms)。 */
+@media (prefers-reduced-motion: no-preference) {
+  .mo-nag-in {
+    animation: mo-nag-in var(--mo-sheet) var(--ease-out) backwards;
+  }
+}
+@keyframes mo-nag-in {
+  from {
+    transform: scale(0.8) rotate(-6deg);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) rotate(0);
+    opacity: 1;
+  }
+}
+
+/* ── A5 勾选描边 ────────────────────────────────────────────
+   勾的 `<path>` 描线。整行**不位移**——按压反馈不许改变布局边界。
+   路径 `M4.5 10.5l3.5 3.5 7.5-8` 实长约 15.9，取 17 留余量。
+   设计稿写 140ms，这里落到 `--mo-tap`(120ms)：差 20ms 肉眼不可分，
+   而现场数字会开一个「下次再写一个 380ms」的口子。 */
+.mo-check [data-slot='checkbox-indicator'] path {
+  stroke-dasharray: 17;
+  stroke-dashoffset: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mo-check [data-slot='checkbox-indicator'] path {
+    animation: mo-check-draw var(--mo-tap) var(--ease-out) backwards;
+  }
+}
+@keyframes mo-check-draw {
+  from {
+    stroke-dashoffset: 17;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* 标题划线。**不用绝对定位的划线条**——标题会折行，绝对定位只画得出一行。
+   静止判据仍在：`text-decoration-line` 常驻，减弱动效下颜色瞬间到位，划线照样在。 */
+.mo-strike {
+  text-decoration-line: line-through;
+  text-decoration-color: transparent;
+  transition:
+    text-decoration-color var(--mo-base) var(--ease-out),
+    color var(--mo-base) var(--ease-out);
+}
+.mo-strike[data-done='1'] {
+  text-decoration-color: currentColor;
+}
+
+/* 顶栏横扫高光：**仅在计数增加时**播一次。计数数字本身直接换，不做翻牌轮。 */
+.mo-sweep {
+  position: relative;
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mo-sweep[data-sweep]::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--on-primary) 28%, transparent),
+      transparent
+    );
+    pointer-events: none;
+    animation: mo-sweep var(--mo-base) var(--ease-out);
+  }
+}
+@keyframes mo-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}

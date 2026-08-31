@@ -11,6 +11,7 @@ import {
 } from '@/app/_mock/demo';
 import { mockLawRefs } from '@/app/_mock/workbench';
 import { formatDate } from '@/app/_ui/format';
+import { scrollBehavior, useReducedMotion } from '@/app/_ui/motion';
 import { Badge } from '@/components/shadcn/badge';
 import { EmptyState } from '@/components/shadcn/empty-state';
 import { AppSheet } from '@/components/shadcn/app-sheet';
@@ -64,13 +65,21 @@ export function Workbench({ caseId }: { caseId: string }) {
   const openPanel = useCallback(() => setPanelOpen(true), []);
   useRegisterCasePanel(seeded ? openPanel : null);
 
+  /* 程序化滚动一律过 `scrollBehavior()`。
+     `globals.css` 底部那条 `* { animation-duration: .01ms }` 兜底**管不到 JS**，
+     而整屏平滑滚动正是前庭敏感者最难受的一类运动——这一处此前在减弱动效下照跑。 */
+  const reduce = useReducedMotion();
+
   // 滚到文档末尾而不是锚点：末尾处输入区回到静态位置，最后一行不会被它压住
-  const scrollToBottom = useCallback((smooth = true) => {
-    window.scrollTo({
-      top: document.documentElement.scrollHeight,
-      behavior: smooth ? 'smooth' : 'auto',
-    });
-  }, []);
+  const scrollToBottom = useCallback(
+    (smooth = true) => {
+      window.scrollTo({
+        top: document.documentElement.scrollHeight,
+        behavior: scrollBehavior(reduce, smooth),
+      });
+    },
+    [reduce],
+  );
 
   /** 内容自己长高时（等待卡追加安抚文案）跟一下，前提是用户没往回翻 */
   const keepAtBottom = useCallback(() => {
@@ -83,8 +92,8 @@ export function Workbench({ caseId }: { caseId: string }) {
     const last = groups[groups.length - 1];
     if (!last) return;
     follow.current = false;
-    last.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, []);
+    last.scrollIntoView({ behavior: scrollBehavior(reduce), block: 'center' });
+  }, [reduce]);
 
   const settle = useCallback(
     (turn: SettledTurn) => {
