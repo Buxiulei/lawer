@@ -17,6 +17,7 @@ import { getGongdao, gongdaoGate } from '@/lib/billing';
 import { GONGDAO_LEDGER_TYPE, REGISTER_GRANT_GONGDAO } from '@/lib/billing/pricing';
 import { hashLookup } from '@/lib/crypto';
 import * as store from '@/lib/db/otp';
+import { emailVerifyCode } from '@/lib/notify';
 import type { MailCopy } from '@/lib/notify';
 import { verifyToken } from '../jwt';
 import {
@@ -34,6 +35,8 @@ const IP = '203.0.113.11';
 const T0 = new Date('2026-08-29T09:00:00.000Z');
 /** 与 lib/auth/ip-quota.ts 的 MAX_PER_WINDOW 对齐；改那边必须同步改这里 */
 const IP_MAX = 300;
+/** otp.ts 的 codeExpiryMinutes() 缺省值（beforeEach 已删掉 SMS_CODE_EXPIRY_MINUTES） */
+const DEFAULT_EXPIRY_MINUTES = 5;
 
 function at(offsetSeconds: number): Date {
   return new Date(T0.getTime() + offsetSeconds * 1000);
@@ -338,18 +341,44 @@ describe('两桶验证码互不通用（改流程不改强度）', () => {
       verifyEmailRegisterCode(db, { email: target, code: '123456' }, { now: at(130) }),
     ).toMatchObject({ ok: false, status: 400, errorCode: 'OTP_NOT_FOUND' });
   });
+});
 
-  test('手机注册的存量账号绑过邮箱后，用该邮箱开户流程登录的是同一个账号，不会克隆出第二个', async () => {
-    // 这是本单**有意为之**的登录拓扑变化（用户原话：只需要手机号或者邮箱一种验证），
-    // 写成判据是为了它将来被改动时会有人知道，而不是当成没人看见的副作用。
+/**
+ * ══════════════ 具名契约 · 存量已绑邮箱账号可凭该邮箱码登录 ══════════════
+ *
+ * 【裁决】manager 2026-08-31：**确认保留**。依据是用户原话「只需要手机号或者邮箱一种验证」——
+ * 一个手机注册、后来绑过邮箱的老用户，换了手机号/收不到短信时，凭那个邮箱收码就该进得来。
+ *
+ * 【为什么从「顺带」升成具名契约】上一版它只是「两桶验证码互不通用」那一节里的一条附带断言，
+ * 名字讲的是**克隆不克隆账号**，读起来像在防一个 bug，看不出它其实是一条被裁定过的产品行为。
+ * 一条没人认得出是契约的判据，合并/重构时会被当成实现细节顺手删掉——而它一旦没了，
+ * 现象是「老用户用邮箱登录突然变成开了个新号」，没有任何东西会报红。
+ *
+ * 【与 single-factor 那一支的口径对齐】那边（app/src/lib/auth/__tests__/single-factor.test.ts）
+ * 有一条同源判据：「🔴 邮箱通道：不带 token 就能用邮箱收码登录，短信那条通道一次都没被碰」。
+ * 两条讲的是同一件事在两条路由上的两个切面：
+ *   single-factor → /api/v1/auth/email/{send,verify} 匿名化后的老用户登录；
+ *   本支         → /api/v1/auth/email/register/{send,verify} 撞上存量邮箱时不建新号、直接登录。
+ * **合并轮不许其中任何一支把对方那条改没**：两支都在改 lib/auth/otp.ts，冲突解到哪一边都行，
+ * 但解完之后这两条测试必须都还在、都还绿。少了任何一条，「邮箱能不能当独立入口」就回到了
+ * 「谁也没测、看起来都对」的状态。
+ */
+describe('【契约】存量已绑邮箱账号可凭该邮箱码登录（manager 2026-08-31 确认保留）', () => {
+  test('🔴 手机注册 + 已绑邮箱的老用户走开户路由 = 登录同一个账号：不克隆、不二次赠送、手机号还在', async () => {
     const db = makeTestDb();
     const uid = await registerByPhoneThenEmail(db, '13800138000', EMAIL, T0);
+    const before = userRow(db, uid);
+
     const again = await registerByEmail(db, EMAIL, at(300));
-    expect(again.uid).toBe(uid);
-    expect(again.isNewUser).toBe(false);
+
+    expect(again.uid, '落到的不是同一个账号').toBe(uid);
+    expect(again.isNewUser, '老用户被当成了新人').toBe(false);
     expect((db.prepare('SELECT COUNT(*) c FROM users').get() as { c: number }).c).toBe(1);
     // 赠送只发过一次（手机那次），补登录不再发
     expect(ledgerRows(db, uid)).toHaveLength(1);
+    // **手机那一因子不许被这次邮箱登录抹掉**：抹了的话他下次用手机号就登不回来了，
+    // 而「换个通道也能进」正是这条契约存在的理由。
+    expect(userRow(db, uid)).toEqual(before);
   });
 });
 
@@ -553,14 +582,28 @@ describe('验码的边界与失败形态', () => {
     ).toBe(1);
   });
 
-  test('发出去的邮件用中性文案（匿名请求收件人可能还不是我们的用户，不带任何案情线索）', async () => {
+  test('🔴 发出去的邮件恒用中性文案：把这里改成 detailed 会红（匿名收件人可能还不是我们的用户）', async () => {
+    // 【为什么原来那句不算判据】上一版只断言 `subject 不含「账号」` + `text 含验证码`。
+    // 把调用处改成 `emailVerifyCode(code, minutes, { detailed: true })` 后，主题变成
+    // 「土八鼠 邮箱验证码：123456」——不含「账号」二字，正文照样含码，**两句全绿**。
+    // 也就是说 copy.ts 顶部那条产品红线（出站文案不许露出平台名）在这条新路径上没有闸。
+    //
+    // 【改成钉哪一句】不在这里重抄一遍敏感词清单——那份清单归 notify/__tests__/copy.test.ts，
+    // 抄第二份只会各自漂移。这里钉的是**调用处选了哪一种文案**：必须逐字等于中性版。
+    // 单这一句仍可能假绿（若 copy.ts 哪天把两种模式退化成同一份文案），所以先证两者确实不同。
     const db = makeTestDb();
     const { deps, email } = makeDeps(T0);
     await sendEmailRegisterCode(db, { email: EMAIL, ip: IP }, deps);
     expect(email).toHaveBeenCalledTimes(1);
     const [to, copy] = email.mock.calls[0] as unknown as [string, MailCopy];
     expect(to).toBe(EMAIL);
-    expect(copy.subject).not.toContain('账号');
-    expect(copy.text).toContain(lastEmailCode(db, EMAIL, store.EMAIL_PURPOSE.register));
+
+    const code = lastEmailCode(db, EMAIL, store.EMAIL_PURPOSE.register);
+    const neutral = emailVerifyCode(code, DEFAULT_EXPIRY_MINUTES);
+    const detailed = emailVerifyCode(code, DEFAULT_EXPIRY_MINUTES, { detailed: true });
+    expect(detailed, '两种模式退化成同一份文案，下面那句就不再有鉴别力').not.toEqual(neutral);
+    expect(copy).toEqual(neutral);
+    // 验证码本身照旧必须在信里，否则「中性」可以靠什么都不写来达成
+    expect(copy.text).toContain(code);
   });
 });
