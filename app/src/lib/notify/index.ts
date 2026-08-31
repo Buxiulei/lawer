@@ -6,7 +6,7 @@ export { sendOtp, isMainlandPhone } from './sms';
 export { buildSignedRpcUrl } from './aliyun-rpc';
 export type { FetchImpl, SignatureMethod } from './aliyun-rpc';
 export { sendMail, isValidEmail } from './email';
-export { emailVerifyCode, smsVerifyTemplateParam } from './copy';
+export { emailNotRegistered, emailVerifyCode, smsVerifyTemplateParam } from './copy';
 export { shouldDryRun } from './dry-run';
 export type { CopyOptions, MailCopy } from './copy';
 export type { MailTransport } from './email';

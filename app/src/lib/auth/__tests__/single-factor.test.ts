@@ -164,13 +164,22 @@ describe('老用户单因素登录', () => {
     // （setUserEmailVerified 两列同写），但守卫不该依赖那个巧合——
     // 哪天有人先写 email 再补时间戳，这条就是唯一挡住冒领的东西。
     db.prepare('UPDATE users SET email_verified_at = NULL WHERE id = ?').run(uid);
+    const before = db.prepare('SELECT * FROM users WHERE id = ?').get(uid);
 
+    // 发码这一步与「已注册」同形（问不出注册状态），但发出去的是引导信、库里那条码没人收得到
+    expect((await sendEmailCode(db, { userId: null, email: EMAIL, ip: IP }, deps(at(300)))).ok).toBe(
+      true,
+    );
+    // 判据故意**把库里那条码直接喂回去**：连知道码的人都换不到 token，
+    // 才叫「冒领不了」——只要有一处把 user 认成了这个账号，这里立刻变成 ok:true。
     expect(
-      await sendEmailCode(db, { userId: null, email: EMAIL, ip: IP }, deps(at(300))),
-    ).toMatchObject({ ok: false, status: 404, errorCode: 'EMAIL_NOT_REGISTERED' });
-    expect(
-      verifyEmailCode(db, { userId: null, email: EMAIL, code: '123456' }, { now: at(300) }),
-    ).toMatchObject({ ok: false, status: 404, errorCode: 'EMAIL_NOT_REGISTERED' });
+      verifyEmailCode(
+        db,
+        { userId: null, email: EMAIL, code: lastEmailCode(db, EMAIL) },
+        { now: at(310) },
+      ),
+    ).toMatchObject({ ok: false, status: 400, errorCode: 'OTP_INVALID' });
+    expect(db.prepare('SELECT * FROM users WHERE id = ?').get(uid)).toEqual(before);
   });
 });
 
@@ -200,10 +209,18 @@ describe('新用户注册：手机 → 邮箱补全', () => {
     expect(await phoneRound(db, PHONE, T0)).toMatchObject({ ok: true, needEmail: true });
     expect(await phoneRound(db, PHONE, at(300))).toMatchObject({ ok: true, needEmail: true });
 
-    // 而且这个号还不能用邮箱通道登录：它根本没绑过邮箱
+    // 而且这个号还不能用邮箱通道登录：它根本没绑过邮箱。
+    // 发码那一步照样回 ok（不泄露注册状态），但库里那条码换不到 token。
+    expect((await sendEmailCode(db, { userId: null, email: EMAIL, ip: IP }, deps(at(400)))).ok).toBe(
+      true,
+    );
     expect(
-      await sendEmailCode(db, { userId: null, email: EMAIL, ip: IP }, deps(at(400))),
-    ).toMatchObject({ ok: false, status: 404, errorCode: 'EMAIL_NOT_REGISTERED' });
+      verifyEmailCode(
+        db,
+        { userId: null, email: EMAIL, code: lastEmailCode(db, EMAIL) },
+        { now: at(410) },
+      ),
+    ).toMatchObject({ ok: false, errorCode: 'OTP_INVALID' });
   });
 });
 
@@ -232,9 +249,12 @@ describe('注册赠送幂等', () => {
 
   test('邮箱通道登录不会凭空发一笔：没走过手机注册的邮箱根本进不来，账本恒空', async () => {
     const db = makeTestDb();
+    const mail = 'nobody@example.com';
+    // 发码回 ok（与已注册同形），但走完全程也建不出账号、发不出赠送
+    expect((await sendEmailCode(db, { userId: null, email: mail, ip: IP }, deps(T0))).ok).toBe(true);
     expect(
-      await sendEmailCode(db, { userId: null, email: 'nobody@example.com', ip: IP }, deps(T0)),
-    ).toMatchObject({ ok: false, status: 404, errorCode: 'EMAIL_NOT_REGISTERED' });
+      verifyEmailCode(db, { userId: null, email: mail, code: lastEmailCode(db, mail) }, { now: at(10) }),
+    ).toMatchObject({ ok: false, errorCode: 'OTP_INVALID' });
     expect(count(db, 'SELECT COUNT(*) AS n FROM users')).toBe(0);
     expect(count(db, 'SELECT COUNT(*) AS n FROM gongdao_ledger')).toBe(0);
   });
@@ -251,32 +271,43 @@ describe('注册赠送幂等', () => {
 });
 
 describe('邮箱通道不放宽鉴权', () => {
-  test('🔴 陌生邮箱匿名发码 → 404 EMAIL_NOT_REGISTERED，一条码都没发出去', async () => {
-    const db = makeTestDb();
-    await seedExistingUser(db);
-    const before = codeCounts(db);
-    const mail = 'stranger@example.com';
-
-    const result = await sendEmailCode(db, { userId: null, email: mail, ip: IP }, deps(at(300)));
-    expect(result).toMatchObject({ ok: false, status: 404, errorCode: 'EMAIL_NOT_REGISTERED' });
-    // 三段式：撞到的是什么、为什么会撞到、现在能怎么办
-    const message = (result as { message: string }).message;
-    expect(message).toContain('还没有账号');
-    expect(message).toContain('绑定');
-    expect(message).toContain('手机号');
-    expect(codeCounts(db).email, '被拒时不该已经把码发出去').toBe(before.email);
-  });
-
-  test('🔴 陌生邮箱匿名验码 → 404，不建号也不发 token', async () => {
+  test('🔴 陌生邮箱匿名验码：不建号也不发 token', async () => {
     const db = makeTestDb();
     const result = verifyEmailCode(
       db,
       { userId: null, email: 'stranger@example.com', code: '123456' },
       { now: T0 },
     );
-    expect(result).toMatchObject({ ok: false, status: 404, errorCode: 'EMAIL_NOT_REGISTERED' });
+    expect(result).toMatchObject({ ok: false, errorCode: 'OTP_NOT_FOUND' });
     expect(result).not.toHaveProperty('token');
     expect(count(db, 'SELECT COUNT(*) AS n FROM users')).toBe(0);
+  });
+
+  test('🔴 带 token 但这个 uid 在库里不存在 → 401，不落到邮箱主人头上', async () => {
+    const db = makeTestDb();
+    const uid = await seedExistingUser(db);
+    const ghost = uid + 999; // 注销 / 清库之后 token 还在手里，就是这个形状
+    const before = codeCounts(db);
+    const owner = db.prepare('SELECT * FROM users WHERE id = ?').get(uid);
+
+    // 邮箱有主：**这一条把「401 缺失」和「EMAIL_TAKEN 顶上」分了开**——
+    // 去掉 !user 那道守卫，下一句 owner.id !== userId 会把它变成 409，判据立刻红。
+    for (const result of [
+      await sendEmailCode(db, { userId: ghost, email: EMAIL, ip: IP }, deps(at(300))),
+      verifyEmailCode(db, { userId: ghost, email: EMAIL, code: '123456' }, { now: at(300) }),
+    ]) {
+      expect(result).toMatchObject({ ok: false, status: 401, errorCode: 'UNAUTHORIZED' });
+    }
+    // 邮箱没主：不许静默降级成匿名那条路（那样陌生邮箱会回 ok），也不许崩
+    for (const result of [
+      await sendEmailCode(db, { userId: ghost, email: 'wuzhu@example.com', ip: IP }, deps(at(300))),
+      verifyEmailCode(db, { userId: ghost, email: 'wuzhu@example.com', code: '123456' }, { now: at(300) }),
+    ]) {
+      expect(result).toMatchObject({ ok: false, status: 401, errorCode: 'UNAUTHORIZED' });
+    }
+
+    expect(codeCounts(db).email, '401 时一条码都不该发').toBe(before.email);
+    expect(db.prepare('SELECT * FROM users WHERE id = ?').get(uid)).toEqual(owner);
   });
 
   test('🔴 拿别人已绑的邮箱来验：带自己的 token 一律 EMAIL_TAKEN，人家账号一列没动', async () => {
@@ -335,6 +366,83 @@ describe('邮箱通道不放宽鉴权', () => {
     expect(
       verifyEmailCode(db, { userId: null, email: EMAIL, code }, { now: at(320) }),
     ).toMatchObject({ ok: false, errorCode: 'OTP_EXPIRED' });
+  });
+});
+
+/**
+ * 【邮箱通道不能是注册状态探针】manager 2026-08-31 裁定：对齐手机通道。
+ *
+ * 改造第一版里，陌生邮箱在**任何限流之前**就回 404 EMAIL_NOT_REGISTERED——
+ * 拿任意邮箱打一次接口就能问出「这个人是不是我们的用户」，零成本、可批量。
+ * 对本站来说这不是一般的隐私泄漏：这份名单本身就说明这些人正在维权。
+ * 手机通道从来不泄露这件事（陌生号码照发照收），邮箱通道不该自己开这个口。
+ *
+ * 所以判据钉的是**同形**：已注册与未注册邮箱走匿名登录，响应逐字段相等。
+ * 打错字的真人不靠错误码得到解释——引导信 + 登录页常驻提示（见 LoginFlow 判据）。
+ */
+describe('邮箱通道不是注册状态探针', () => {
+  test('🔴 已注册与未注册邮箱的登录响应逐字段同形，发码与验码两处都是', async () => {
+    const db = makeTestDb();
+    await seedExistingUser(db); // EMAIL 已注册
+    const before = codeCounts(db);
+    const stranger = 'stranger@example.com';
+
+    const known = await sendEmailCode(db, { userId: null, email: EMAIL, ip: IP }, deps(at(300)));
+    const unknown = await sendEmailCode(db, { userId: null, email: stranger, ip: IP }, deps(at(300)));
+    expect(unknown, '发码响应只要有一处不一样，就够拿来枚举了').toEqual(known);
+    expect(codeCounts(db).email - before.email, '两边都得落一行，否则验码那边会分叉').toBe(2);
+
+    // 验码这一处同样要同形：同一条错码打过去，回答一模一样。
+    // '000000' 不可能撞上真码——generateCode 取 100000..999999。
+    const kv = verifyEmailCode(db, { userId: null, email: EMAIL, code: '000000' }, { now: at(310) });
+    const uv = verifyEmailCode(db, { userId: null, email: stranger, code: '000000' }, { now: at(310) });
+    expect(uv, '验码响应分叉一样能枚举').toEqual(kv);
+    expect(uv).toMatchObject({ ok: false, errorCode: 'OTP_INVALID' });
+  });
+
+  test('🔴 差别只落在信里：陌生邮箱收到的是引导信而不是码', async () => {
+    const db = makeTestDb();
+    await seedExistingUser(db);
+
+    const cold = deps(at(300));
+    expect(
+      (await sendEmailCode(db, { userId: null, email: 'stranger@example.com', ip: IP }, cold)).ok,
+    ).toBe(true);
+    expect(cold.sendEmail).toHaveBeenCalledTimes(1);
+    const strangerCopy = cold.sendEmail.mock.calls[0][1];
+    expect(strangerCopy.text, '引导信里不许带码，否则谁都能拿别人的邮箱试').not.toMatch(/\d{6}/);
+    expect(strangerCopy.text, '打错字的真人要在收件箱里拿到解释').toContain('还没有账号');
+
+    // 已注册的那封是带码的验证码信——两封不是同一封，只是接口分不出来
+    const warm = deps(at(300));
+    expect((await sendEmailCode(db, { userId: null, email: EMAIL, ip: IP }, warm)).ok).toBe(true);
+    expect(warm.sendEmail.mock.calls[0][1].text).toMatch(/\d{6}/);
+  });
+
+  /**
+   * 探测要有成本，成本就是既有的 IP 配额那条——**一行都没改**，只是陌生邮箱不再提前 return，
+   * 于是自然落到 knownUser=false 那一支，与陌生手机号完全一样。
+   *
+   * 【留一句实话】IP 额度打满之后，陌生邮箱会 429 而老用户仍豁免，两者在那一刻可分辨。
+   * 这是配额本身的可见性，手机通道有一模一样的性质（老号豁免、陌生号被拦），
+   * 不是邮箱通道额外开的口子；要消掉它得改配额语义，那是另一件事。
+   */
+  test('🔴 探测有成本：陌生邮箱照吃 IP 配额，已注册邮箱登录仍豁免', async () => {
+    const db = makeTestDb();
+    await seedExistingUser(db);
+    const ipRows = () => count(db, 'SELECT COUNT(*) AS n FROM ip_quota_events WHERE ip = ?', IP);
+    const before = ipRows();
+
+    expect(
+      (await sendEmailCode(db, { userId: null, email: 'stranger@example.com', ip: IP }, deps(at(300))))
+        .ok,
+    ).toBe(true);
+    expect(ipRows(), '陌生邮箱与陌生手机号一样占额度').toBe(before + 1);
+
+    expect((await sendEmailCode(db, { userId: null, email: EMAIL, ip: IP }, deps(at(300)))).ok).toBe(
+      true,
+    );
+    expect(ipRows(), '老用户回来登录仍不占额度').toBe(before + 1);
   });
 });
 

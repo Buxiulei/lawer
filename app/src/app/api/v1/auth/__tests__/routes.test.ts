@@ -69,13 +69,26 @@ describe('错误响应形状', () => {
 
 describe('邮箱两条路由的 Bearer 校验', () => {
   // 单因素登录后 Authorization 变成可选：没带 = 匿名走邮箱通道登录。
-  // 这个库里没有任何用户，所以匿名进来的邮箱一律不认识 → 404（且没走到发邮件）。
-  test('缺 Authorization 头 = 匿名，陌生邮箱 → 404 EMAIL_NOT_REGISTERED', async () => {
+  // 判据挑「格式非法」而不是「陌生邮箱」，是因为后者现在要走完整条路（会真的去发邮件）——
+  // 那条路的判据在 lib/auth 的 single-factor 里，那边能注入假邮件通道。这里只问一件事：
+  // **缺 Authorization 头不再是 401**，请求确实进到了业务层。
+  test('缺 Authorization 头不再被拒：请求照常进业务层（这里被邮箱格式拦下）', async () => {
     for (const handler of [emailSend, emailVerify]) {
-      const res = await handler(post({ email: 'a@b.com', code: '123456' }));
-      expect(res.status).toBe(404);
-      expect((await res.json()).error_code).toBe('EMAIL_NOT_REGISTERED');
+      const res = await handler(post({ email: 'not-an-email', code: '123456' }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error_code).toBe('INVALID_EMAIL');
     }
+  });
+
+  /**
+   * 匿名验码撞上一个陌生邮箱，回的是 OTP_NOT_FOUND（「请先获取验证码」）——
+   * 与「已注册但还没发过码」**同一个回答**。库里一个用户都没有，这条走的正是陌生那一支。
+   * 早先它回 404 EMAIL_NOT_REGISTERED，一次请求就能问出注册状态。
+   */
+  test('🔴 匿名验陌生邮箱 → OTP_NOT_FOUND，不再有专属于「没注册」的错误码', async () => {
+    const res = await emailVerify(post({ email: 'a@b.com', code: '123456' }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error_code).toBe('OTP_NOT_FOUND');
   });
 
   /**

@@ -59,49 +59,8 @@ export function LoginFlow() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
 
-  /** 邮箱那一格：登录与补绑共用同一个组件，差别只在带不带 token 与两句文案 */
   const emailStep = (
-    <ChannelStep
-      key={completing ? 'email-completion' : 'email-login'}
-      fieldLabel="邮箱"
-      fieldHint={
-        completing
-          ? '换手机号时用它找回账号，文书和存证证明也会发到这里。'
-          : '注册时绑定过的那个邮箱，验证码发到这里。'
-      }
-      placeholder="you@example.com"
-      inputType="email"
-      inputMode="email"
-      autoComplete="email"
-      value={email}
-      onValueChange={setEmail}
-      valid={isEmail(email)}
-      invalidHint="邮箱格式不太对，再核对一下"
-      maskedTarget={maskEmail(email)}
-      codeHint="邮件可能进垃圾箱，找一下带「验证码」字样的那封。"
-      gateOk={completing || agreed}
-      gateHint="先勾选下方的说明，再发送验证码。"
-      ctaLabel={completing ? '完成，开始' : '验证并登录'}
-      onSend={async () => {
-        const res = await apiFetch<SendResponse>('/auth/email/send', {
-          method: 'POST',
-          body: { email: email.trim() },
-          // 补绑要带 token（说明是"给哪个号绑"）；登录不带，落在哪个账号由邮箱本身决定
-          auth: completing,
-        });
-        return res.retry_after;
-      }}
-      onVerify={async (code) => {
-        const res = await apiFetch<{ token: string }>('/auth/email/verify', {
-          method: 'POST',
-          body: { email: email.trim(), code },
-          auth: completing,
-        });
-        // 后端换发了新 token（补绑那一路此时双验证已齐），要覆盖旧的
-        writeToken(res.token);
-        router.push(AFTER_LOGIN);
-      }}
-    />
+    <EmailChannel completing={completing} email={email} onEmailChange={setEmail} agreed={agreed} />
   );
 
   if (completing) {
@@ -192,6 +151,73 @@ export function LoginFlow() {
         </span>
       </label>
     </div>
+  );
+}
+
+/**
+ * 邮箱那一格。登录与新号补绑共用同一个通道组件，差别只有两处：文案，
+ * 以及**请求带不带 token**——补绑要带（说明「给哪个号绑」），
+ * 登录不带（落在哪个账号完全由邮箱本身决定，调用方指定不了）。
+ * 那个 auth 标志就是「邮箱能不能单独当入口」在前端的全部落点，所以单独成组件：
+ * 它的两种形态能各自渲染，判据才盯得住（LoginFlow 自身的 state 在 SSR 判据里驱动不了）。
+ */
+export function EmailChannel({
+  completing,
+  email,
+  onEmailChange,
+  agreed,
+}: {
+  /** true = 新号补绑那一步（带 token）；false = 邮箱通道登录（匿名） */
+  completing: boolean;
+  email: string;
+  onEmailChange: (next: string) => void;
+  agreed: boolean;
+}) {
+  const router = useRouter();
+  return (
+    <ChannelStep
+      key={completing ? 'email-completion' : 'email-login'}
+      fieldLabel="邮箱"
+      fieldHint={
+        completing
+          ? '换手机号时用它找回账号，文书和存证证明也会发到这里。'
+          : // 后端对「这个邮箱注册过没有」一个字都不说（否则接口就成了注册状态探针），
+            // 所以打错字的人得不到错误码——这句常驻提示就是替他准备的那份解释。
+            '注册时绑定过的那个邮箱，验证码发到这里。没绑过的邮箱收不到码：邮箱是手机号注册完成后那一步绑的，先用手机号登录一次绑上它，之后就能直接用邮箱进。'
+      }
+      placeholder="you@example.com"
+      inputType="email"
+      inputMode="email"
+      autoComplete="email"
+      value={email}
+      onValueChange={onEmailChange}
+      valid={isEmail(email)}
+      invalidHint="邮箱格式不太对，再核对一下"
+      maskedTarget={maskEmail(email)}
+      codeHint="邮件可能进垃圾箱，找一下带「验证码」字样的那封。"
+      gateOk={completing || agreed}
+      gateHint="先勾选下方的说明，再发送验证码。"
+      ctaLabel={completing ? '完成，开始' : '验证并登录'}
+      onSend={async () => {
+        const res = await apiFetch<SendResponse>('/auth/email/send', {
+          method: 'POST',
+          body: { email: email.trim() },
+          // 补绑要带 token（说明是"给哪个号绑"）；登录不带，落在哪个账号由邮箱本身决定
+          auth: completing,
+        });
+        return res.retry_after;
+      }}
+      onVerify={async (code) => {
+        const res = await apiFetch<{ token: string }>('/auth/email/verify', {
+          method: 'POST',
+          body: { email: email.trim(), code },
+          auth: completing,
+        });
+        // 后端换发了新 token（补绑那一路此时双验证已齐），要覆盖旧的
+        writeToken(res.token);
+        router.push(AFTER_LOGIN);
+      }}
+    />
   );
 }
 

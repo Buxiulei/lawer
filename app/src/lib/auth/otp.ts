@@ -4,7 +4,8 @@
 // 【登录是单因素，注册才是双因素】老用户回来登录，手机与邮箱**任选一条**收码即可进站；
 // 只有「验手机时发现这个号还没账号」＝新用户注册，才追加一步邮箱验证把账号补全。
 // 所以邮箱那两个函数收的 userId 是可空的：带 token = 注册补全（给刚建的号绑邮箱），
-// 不带 token = 邮箱通道登录（只认已经验证过、且确实属于某账号的邮箱，见 resolveEmailTarget）。
+// 不带 token = 邮箱通道登录（只认已经验证过、且确实属于某账号的邮箱，见 resolveEmailTarget；
+// 不认识的邮箱不当场拒绝，而是走完与已注册同形的一整条路，接口不泄露注册状态）。
 // 语义整块照搬 NBDpsy auth_sms.rs / auth_email.rs：
 //   - 同一手机号/邮箱 60s 内只能再发一次（retry_after: 60）
 //   - 同一手机号/邮箱 24h 内最多 10 次
@@ -19,7 +20,7 @@ import { gongdaoGrant } from '@/lib/billing';
 import { GONGDAO_LEDGER_TYPE, REGISTER_GRANT_GONGDAO } from '@/lib/billing/pricing';
 import { ensureDefaultCase } from '@/lib/cases';
 import { encryptField, hashLookup } from '@/lib/crypto';
-import { emailVerifyCode, isValidEmail, sendMail, sendOtp } from '@/lib/notify';
+import { emailNotRegistered, emailVerifyCode, isValidEmail, sendMail, sendOtp } from '@/lib/notify';
 import type { MailCopy } from '@/lib/notify';
 import * as store from '@/lib/db/otp';
 import { fromSql, toSql } from '@/lib/db/time';
@@ -237,25 +238,31 @@ export function verifyPhoneCode(
 
 // ========== 邮箱验证码 ==========
 
-/** 邮箱不属于任何账号时的拒绝话术。三段式：撞到的是什么、为什么会撞到、现在能怎么办。 */
-const EMAIL_NOT_REGISTERED_MESSAGE =
-  '这个邮箱名下还没有账号，所以验证码不会发出。' +
-  '邮箱是在手机号注册完成后那一步绑定的，没绑过就不能单独拿它登录。' +
-  '请先用手机号登录一次并绑定这个邮箱，之后就能直接用邮箱收码了。';
-
-/** resolveEmailTarget 的产物：这次邮箱操作落在哪个账号上，以及要不要吃 IP 配额 */
-type EmailTarget = { ok: true; user: store.UserRow; knownUser: boolean } | AuthFailure;
+/**
+ * resolveEmailTarget 的产物：这次邮箱操作落在哪个账号上，以及要不要吃 IP 配额。
+ * user 为 null ＝ 匿名撞上一个名下没有账号的邮箱——**不在这里拒绝**，理由见 resolveEmailTarget。
+ */
+type EmailTarget = { ok: true; user: store.UserRow | null; knownUser: boolean } | AuthFailure;
 
 /**
  * 邮箱通道的身份归属，发码与验码**共用这一处**判定——分开写两遍，日后只改一处就是个洞。
  *
  * - userId 非空（带 token）＝**注册补全**：手机验证刚建的号来绑邮箱。邮箱若属别人 → EMAIL_TAKEN。
- * - userId 为空（不带 token）＝**邮箱通道登录**：只认「已经验证过、且确实属于某个账号」的邮箱。
+ * - userId 为空（不带 token）＝**邮箱通道登录**：只认「已经验证过、且确实属于某个账号」的邮箱；
+ *   不认识的邮箱返回 user=null，由调用方走完与已注册**同形**的那条路（见下）。
  *
  * 匿名这条不是放宽鉴权：落在哪个账号完全由邮箱本身决定，调用方指定不了；
  * 通行凭据仍是「一条发到该邮箱的六位码」，60s 冷却 / 10 次每日 / 五次锁定 / 一次性全额生效；
  * 且匿名路径一个字都不往 users 写（见 verifyEmailCode），拿不走也改不动别人的账号。
  * 强度与手机通道等价——那边同样是「拿到发往该号码的码即可换 token」。
+ *
+ * 【为什么不认识的邮箱也不当场拒绝】这里原本回 404 EMAIL_NOT_REGISTERED，
+ * 而且是在任何限流之前回的——那就是一个零成本的**注册状态探针**：拿任意邮箱打一次接口，
+ * 就能问出「这个人是不是我们的用户」。对本站用户来说这不是一般的隐私：
+ * 名单本身就说明这些人正在维权。手机通道刻意不泄露这件事（陌生号码照发照收），
+ * 邮箱通道不该自己开这个口，所以**对齐手机通道**：配额照吃、码照落库、响应与已注册的逐字段同形，
+ * 只有真正收信的那个人（也只有他）会在信里看到「这个邮箱名下还没有账号」。
+ * 打错字的用户在登录页上也有一句常驻提示，不必靠错误码去问。
  */
 function resolveEmailTarget(
   db: Database,
@@ -263,9 +270,7 @@ function resolveEmailTarget(
   owner: store.UserRow | undefined,
 ): EmailTarget {
   if (userId === null) {
-    if (!owner?.email_verified_at) {
-      return fail(404, 'EMAIL_NOT_REGISTERED', EMAIL_NOT_REGISTERED_MESSAGE);
-    }
+    if (!owner?.email_verified_at) return { ok: true, user: null, knownUser: false };
     return { ok: true, user: owner, knownUser: true };
   }
   const user = store.findUserById(db, userId);
@@ -302,6 +307,8 @@ export async function sendEmailCode(
 
   const minutes = codeExpiryMinutes();
   const code = generateCode();
+  // 陌生邮箱（user === null）也照样落这一行：不落的话 /verify 那边就会分叉成
+  // 「没有码可比」与「码错了」两种回答，注册状态探针换个接口又回来了。
   store.insertEmailCode(db, {
     email,
     code,
@@ -310,7 +317,11 @@ export async function sendEmailCode(
   });
 
   // 详细文案只在用户自己开了 notify_verbose 时才用（默认 0 = 中性），见 lib/notify/copy.ts
-  const copy = emailVerifyCode(code, minutes, { detailed: user.notify_verbose === 1 });
+  // 陌生邮箱收到的是引导信而不是码：接口对谁都不说注册状态，只有邮箱的主人在信里看得到。
+  const copy =
+    user === null
+      ? emailNotRegistered()
+      : emailVerifyCode(code, minutes, { detailed: user.notify_verbose === 1 });
   try {
     await (deps.sendEmail ?? ((to, c) => sendMail(to, c)))(email, copy);
   } catch {
@@ -355,14 +366,16 @@ export function verifyEmailCode(
 
   const target = resolveEmailTarget(db, input.userId, store.findUserByEmail(db, email));
   if (!target.ok) return target;
-  const userId = target.user.id;
+  const user = target.user;
 
   const row = store.latestEmailCode(db, email);
   const stateFailure = checkCodeState(row, now);
   if (stateFailure) return stateFailure;
 
   const code = input.code.trim();
-  if (row!.code !== code) {
+  // user === null ＝ 匿名撞上一个名下没有账号的邮箱：那封信里根本没有码，所以**任何码都是错的**，
+  // 且走的是与「码错了」完全相同的一条路（记一次尝试、错五次锁定），响应形状分不出两者。
+  if (user === null || row!.code !== code) {
     store.bumpEmailCodeAttempts(db, row!.id);
     if (row!.attempts + 1 >= MAX_VERIFY_ATTEMPTS) {
       return fail(429, 'OTP_LOCKED', '尝试次数过多，请重新获取验证码');
@@ -370,6 +383,7 @@ export function verifyEmailCode(
     return fail(400, 'OTP_INVALID', '验证码错误，请检查');
   }
 
+  const userId = user.id;
   store.markEmailCodeUsed(db, row!.id);
   if (input.userId !== null) store.setUserEmailVerified(db, userId, email, toSql(now));
 
