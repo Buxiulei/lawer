@@ -6,21 +6,13 @@
  * - 文书要能切版本、能分享 → 版本表与分享链接表
  */
 
-import {
-  demoCnDate,
-  demoDate,
-  demoDay,
-  demoMonthCn,
-  demoMonthRangeCn,
-  demoShortCnDate,
-  demoYearOfDay,
-} from './clock';
+import { demoCnDate, demoDate, demoDay } from './clock';
 import {
   DEMO_CONTRACT_END_DAY,
   DEMO_DISMISSAL_DAY,
-  DEMO_DISMISSAL_MONTH,
   DEMO_EMPLOYEE_NO,
   DEMO_HIRE_DAY,
+  DEMO_RUMOR_DAY,
   demoCompanyDocs,
   demoDrafts,
 } from './demo';
@@ -140,8 +132,8 @@ const settlementDoc: AnnotatedDoc = {
   fileName: '协商解除协议_HR版.pdf',
   advice: '改签',
   adviceDetail:
-    '这份协议本身可以成为你想要的结果，但现在这一版不能签：它把解除原因改成"个人原因离职"，把 175,000 元包装成"包含一切款项"，还塞了弃权、保密违约金和无补偿竞业三条。逐条改掉后再签，谈判空间仍然在你这边。',
-  createdAt: demoDay(DEMO_DISMISSAL_DAY, '10:26'),
+    '这份协议本身可以成为你想要的结果，但现在这一版不能签：它把解除原因改成"个人原因离职"，把 110,000 元包装成"包含一切款项"，还塞了弃权、保密违约金和无补偿竞业三条。逐条改掉后再签，谈判空间仍然在你这边。',
+  createdAt: demoDay(-24, '15:10'),
   ocrText: `协商解除劳动合同协议书
 
 甲方：星曜网络科技（北京）有限公司
@@ -149,9 +141,9 @@ const settlementDoc: AnnotatedDoc = {
 
 甲乙双方经友好协商，就解除劳动合同事宜达成如下协议：
 
-一、双方一致同意，劳动合同于 ${demoCnDate(DEMO_DISMISSAL_DAY)}解除。解除原因为乙方个人原因申请离职，双方协商一致，甲方无需出具解除劳动合同证明中的用人单位提出字样。
+一、双方一致同意，劳动合同于 ${demoCnDate(-24)}解除。解除原因为乙方个人原因申请离职，双方协商一致，甲方无需出具解除劳动合同证明中的用人单位提出字样。
 
-二、甲方于本协议签署后 30 个工作日内，向乙方一次性支付经济补偿金人民币 175,000 元（税前），该款项已包含乙方在职期间的全部工资、奖金、加班费、未休年休假工资及其他一切款项。
+二、甲方于本协议签署后 30 个工作日内，向乙方一次性支付经济补偿金人民币 110,000 元（税前），该款项已包含乙方在职期间的全部工资、奖金、加班费、未休年休假工资及其他一切款项。
 
 三、乙方确认，除本协议第二条约定的款项外，乙方自愿放弃全部劳动报酬及经济补偿请求，并放弃就劳动关系存续期间及解除过程中的一切事项向甲方主张任何权利。
 
@@ -162,7 +154,7 @@ const settlementDoc: AnnotatedDoc = {
 六、本协议经双方签字盖章后生效。乙方确认已充分理解本协议全部条款，签署后不得以任何理由撤销或要求变更。
 
 甲方（盖章）：                乙方（签字）：
-${demoCnDate(DEMO_DISMISSAL_DAY)}`,
+${demoCnDate(-24)}`,
   riskFlags: [
     {
       quote: '解除原因为乙方个人原因申请离职',
@@ -173,7 +165,7 @@ ${demoCnDate(DEMO_DISMISSAL_DAY)}`,
     {
       quote: '该款项已包含乙方在职期间的全部工资、奖金、加班费、未休年休假工资及其他一切款项',
       level: '高',
-      note: '打包吸收条款。175,000 元看起来接近 N+1，但这句话把 7 月欠薪、96 小时加班费、未休年假一并塞了进去，等于你用赔偿金替公司垫付了本来就该付的钱。正确写法是分项列明：赔偿金多少、欠薪多少、年假折算多少、加班费多少，各自写清。',
+      note: '打包吸收条款。110,000 元连公司自己声称的 N+1 标准（按 5 个月加代通知金应为 132,000 元）都不到，这句话还把未休年休假折算等本来就该付的钱一并塞了进去，等于你用赔偿金替公司垫付。正确写法是分项列明：赔偿金多少、未休年休假折算多少，各自写清。',
       laws: [LAW_LAW_50, LAW_ANNUAL_5],
     },
     {
@@ -206,7 +198,7 @@ ${demoCnDate(DEMO_DISMISSAL_DAY)}`,
 // 修改要点单独挂，避免和 spec 的 company_docs 字段混在一起
 const settlementRevisePoints = [
   '第一条：解除原因改为"甲方提出解除，双方协商一致"，删除关于解除证明表述的约定。',
-  `第二条：金额分项列明——违法解除赔偿金、${demoMonthCn(DEMO_DISMISSAL_MONTH)}工资、未休年休假工资、加班费各自单列；支付期限改为解除之日起 15 日内，写明逾期违约责任与收款账户。`,
+  '第二条：金额分项列明——违法解除赔偿金、未休年休假工资各自单列；支付期限改为解除之日起 15 日内，写明逾期违约责任与收款账户。',
   '第三条：整条删除。确需概括性表述的，改为"除本协议列明款项外，双方就已列明事项无其他争议"。',
   '第四条：违约金删除；保密义务改为双向，范围限定为商业秘密。',
   '第五条：整条删除；公司坚持保留的，写明竞业限制期限、按月补偿金额与支付方式。',
@@ -228,7 +220,7 @@ const transferDoc: AnnotatedDoc = {
 
 陈某：
 
-因公司业务结构调整，经研究决定，自 ${demoCnDate(-60)}起将您的工作岗位由技术二部高级工程师调整为客户成功部实施支持岗，工作地点由北京市朝阳区望京变更为北京市大兴区亦庄经济技术开发区，薪酬结构按新岗位标准执行。
+因公司业务结构调整，经研究决定，自 ${demoCnDate(-60)}起将您的工作岗位由技术二部后端工程师调整为客户成功部实施支持岗，工作地点由北京市朝阳区望京变更为北京市大兴区亦庄经济技术开发区，薪酬结构按新岗位标准执行。
 
 请您于 ${demoCnDate(-61)} 18:00 前确认并到岗报到，逾期未报到的，公司将按旷工处理。
 
@@ -336,16 +328,13 @@ const arbitrationDraft: Draft = {
 法定代表人：王某某    统一社会信用代码：91110105MA0**X**7B
 
 仲裁请求：
-一、请求裁决被申请人支付违法解除劳动合同赔偿金 400,000 元；
-二、请求裁决被申请人支付 ${demoMonthCn(DEMO_DISMISSAL_MONTH)} 1 日至 ${demoShortCnDate(DEMO_DISMISSAL_DAY)}工资 12,500 元；
-三、请求裁决被申请人支付 ${demoYearOfDay(DEMO_DISMISSAL_DAY) - 2} 年至 ${demoYearOfDay(DEMO_DISMISSAL_DAY)} 年未休年休假工资报酬 18,965 元；
-四、请求裁决被申请人支付 ${demoMonthRangeCn(DEMO_DISMISSAL_MONTH - 4, DEMO_DISMISSAL_MONTH - 1)}休息日加班工资 33,103 元；
-五、请求裁决被申请人为申请人补缴 ${demoMonthCn(DEMO_DISMISSAL_MONTH)}社会保险费。
+一、请求裁决被申请人支付违法解除劳动合同赔偿金 220,000 元；
+二、请求裁决被申请人支付未休年休假工资报酬 10,114.90 元。
 
 事实与理由：
-申请人自 ${demoCnDate(DEMO_HIRE_DAY)}入职被申请人处，双方签订三份书面劳动合同，最后一份期限至 ${demoCnDate(DEMO_CONTRACT_END_DAY)}，岗位为技术二部高级工程师，工作地点北京市朝阳区，解除前十二个月平均工资 25,000 元。
+申请人自 ${demoCnDate(DEMO_HIRE_DAY)}入职被申请人处，双方签订两份书面劳动合同，最后一份期限至 ${demoCnDate(DEMO_CONTRACT_END_DAY)}，岗位为技术二部后端工程师，工作地点北京市朝阳区，解除前十二个月平均工资 22,000 元，在本单位工作年限 4 年 8 个月。
 
-${demoCnDate(DEMO_DISMISSAL_DAY)}，被申请人向申请人出具《解除劳动合同通知书》，以"订立劳动合同时所依据的客观情况发生重大变化"为由单方解除劳动合同。但被申请人所称的客观情况变化实为内部部门合并，属于经营自主决策范畴，不构成法定的客观情况重大变化；且被申请人从未就变更劳动合同内容与申请人协商，直接作出解除决定，程序亦不合法。
+${demoCnDate(DEMO_DISMISSAL_DAY)}，被申请人向申请人出具《解除劳动合同通知书》，以《劳动合同法》第四十条第三项"订立劳动合同时所依据的客观情况发生重大变化"为由单方解除劳动合同。但被申请人所称的客观情况变化实为内部部门合并，属于经营自主决策范畴，不构成该项规定的客观情况重大变化；且申请人已于 ${demoCnDate(-30)}书面提出愿意协商变更劳动合同，并请求被申请人提供可供选择的岗位及相应的工作地点、薪酬待遇、汇报关系和生效日期，被申请人至今未予回应，该项规定的协商变更环节并未实际发生，程序亦不合法。
 
 综上，被申请人的解除行为构成违法解除，依法应支付赔偿金。为此，申请人依据《劳动争议调解仲裁法》相关规定提起仲裁，请依法裁决。
 
@@ -356,27 +345,35 @@ ${demoCnDate(DEMO_DISMISSAL_DAY)}，被申请人向申请人出具《解除劳�
 ${demoCnDate(-5)}`,
 };
 
-const wageDemandDraft: Draft = {
+/**
+ * 解除前一个月发出、公司没有回的那封函。
+ * 它是这个案子最值钱的一页纸：把第四十条第三项的「协商变更」这一步递到了对方手上。
+ */
+const negotiationRequestDraft: Draft = {
   id: 'dr_4',
   caseId: 'demo',
   kind: '其他',
-  title: `${demoMonthCn(DEMO_DISMISSAL_MONTH)}工资催告函`,
+  title: '要求书面说明解除依据与补偿计算函',
   version: 1,
   status: '已发出',
-  updatedAt: demoDay(-7, '10:20'),
+  updatedAt: demoDay(-30, '10:00'),
   content: `星曜网络科技（北京）有限公司：
 
-本人陈某，工号 ${DEMO_EMPLOYEE_NO}，与贵司的劳动关系已于 ${demoCnDate(DEMO_DISMISSAL_DAY)}解除。截至本函发出之日，贵司尚未支付本人 ${demoMonthCn(DEMO_DISMISSAL_MONTH)} 1 日至 ${demoShortCnDate(DEMO_DISMISSAL_DAY)}的工资 12,500 元。
+本人陈某，工号 ${DEMO_EMPLOYEE_NO}，现任技术二部后端工程师。自 ${demoCnDate(DEMO_RUMOR_DAY)}部门全员会以来，贵司先后与本人进行两次约谈、下发《绩效改进计划》、收回本人代码仓写权限并停止安排工作。就上述情况，本人提出如下要求：
 
-工资应当以货币形式按月足额支付，不得克扣或者无故拖欠。现要求贵司于收到本函之日起三个工作日内，将上述款项支付至本人工资卡（尾号 4471）。
+一、请贵司书面说明拟对本人作出何种处理、所依据的具体法律条款与事实依据，以及经济补偿的计算基数、工作年限与各项明细。
 
-逾期未付的，本人将就该笔工资一并提起劳动仲裁，并主张相应经济补偿。
+二、本人愿意与公司协商变更劳动合同，请公司提供可供选择的岗位及相应的工作地点、薪酬待遇、汇报关系和生效日期，本人将在收到后三个工作日内书面答复。
+
+三、本人自被收回权限之日起未再收到任何工作安排，并已连续书面要求安排与本人岗位职责相符的工作而未获回应。请贵司恢复本人的正常工作条件。
+
+请贵司于收到本函之日起五个工作日内书面答复。
 
 陈某
-${demoCnDate(-7)}`,
+${demoCnDate(-30)}`,
 };
 
-export const mockDrafts: Draft[] = [...demoDrafts, arbitrationDraft, wageDemandDraft];
+export const mockDrafts: Draft[] = [...demoDrafts, arbitrationDraft, negotiationRequestDraft];
 
 export function getDraft(draftId: string): Draft | undefined {
   return mockDrafts.find((d) => d.id === draftId);
@@ -395,21 +392,21 @@ const VERSION_HISTORY: Record<string, DraftVersion[]> = {
   dr_1: [
     {
       version: 1,
-      updatedAt: demoDay(-11, '22:40'),
+      updatedAt: demoDay(DEMO_DISMISSAL_DAY, '22:40'),
       note: '首版：只写了对解除理由的异议',
       content: `星曜网络科技（北京）有限公司：
 
 本人陈某，自 ${demoCnDate(DEMO_HIRE_DAY)}起与贵司建立劳动关系。${demoCnDate(DEMO_DISMISSAL_DAY)}，本人收到贵司《解除劳动合同通知书》，现提出异议如下：
 
-贵司以"客观情况发生重大变化"为由解除劳动合同，但 ${demoCnDate(-99)}全员会上宣布的是部门合并，属于内部组织架构调整，不构成客观情况重大变化。本人不认可该解除行为的合法性。
+贵司以"客观情况发生重大变化"为由解除劳动合同，但 ${demoCnDate(DEMO_RUMOR_DAY)}全员会上宣布的是部门合并，属于内部组织架构调整，不构成客观情况重大变化。本人不认可该解除行为的合法性。
 
 异议人：陈某
-${demoCnDate(-11)}`,
+${demoCnDate(DEMO_DISMISSAL_DAY)}`,
     },
     {
       version: 2,
-      updatedAt: demoDay(-9, '20:10'),
-      note: '补充未协商变更、7 月欠薪两项，并写明签收不等于认可',
+      updatedAt: demoDay(DEMO_DISMISSAL_DAY + 1, '20:10'),
+      note: '补充未回应协商变更请求、补偿年限算少一个月两项，并写明签收不等于认可',
       content: demoDrafts[0].content,
     },
   ],

@@ -126,9 +126,9 @@ export const DEMO_TRACK: readonly Milestone[] = [
 
 /**
  * demo 事件里哪一条构成达成，按契约 §四 写入授权表手判。
- * `te_4`＝「收到《解除劳动合同通知书》」＝协商终局（公司单方解除，谈判到此结束）。
+ * `te_18`＝「收到《解除劳动合同通知书》」＝协商终局（公司单方解除，谈判到此结束）。
  */
-const DEMO_ATTAINED_BY_EVENT: Record<string, Milestone> = { te_4: '协商' };
+const DEMO_ATTAINED_BY_EVENT: Record<string, Milestone> = { te_18: '协商' };
 
 export function demoAttainments(): Attainment[] {
   return demoTimeline
