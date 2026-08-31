@@ -17,7 +17,8 @@ import { CASE_NAV_ITEMS } from './navItems';
 
 const DEFAULT_CASE_ID = 'demo';
 
-function caseIdFrom(pathname: string): string {
+/** 导出给 app/not-found.tsx 用：404 卡上的「回驾驶舱」要落到同一个案件，正则只许有一份。 */
+export function caseIdFrom(pathname: string): string {
   const m = pathname.match(/^\/case\/([^/]+)/);
   return m ? m[1] : DEFAULT_CASE_ID;
 }

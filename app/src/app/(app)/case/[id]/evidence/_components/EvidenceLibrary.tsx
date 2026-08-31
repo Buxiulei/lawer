@@ -11,7 +11,7 @@ import {
 import { useDiscreet } from '@/app/_ui/discreet';
 import { formatBytes, formatDate } from '@/app/_ui/format';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
-import { humanError } from '@/app/_ui/api';
+import { ApiError, humanError } from '@/app/_ui/api';
 import { readToken, useSignedIn } from '@/app/_ui/auth';
 import { useRealnameGate } from '@/app/_ui/realname';
 import { Alert, AlertDescription, AlertTitle } from '@/components/shadcn/alert';
@@ -40,6 +40,44 @@ import { EvidenceChecklist } from './EvidenceChecklist';
 import { EvidenceDetailSheet } from './EvidenceDetailSheet';
 import { UploadBar } from './UploadBar';
 import { UploadSheet, type PendingUpload } from './UploadSheet';
+
+/**
+ * 列表没读出来。**要连 error_code 一起留着**：
+ * 「这个案件不存在」和「这次没读出来」对用户是两件事，能做的也不一样，
+ * 只留一句翻译好的话就分不开了。
+ */
+export interface LoadFailure {
+  code: string;
+  message: string;
+}
+
+/**
+ * catch 到的东西 → LoadFailure。**抽出来是为了让 error_code 那根线可测**：
+ * 写在 catch 里的时候，把 `err.errorCode` 换成常量 `''` 整套测试照旧全绿——
+ * 断的全是 loadFailureAdvice(code)，没有一条真的喂过一个 ApiError。
+ * 那样 CASE_NOT_FOUND 会在这里被抹平成 ''，卡上照样说「已上传的材料还在」。
+ *
+ * 非 ApiError（网络断了、解析炸了）没有 error_code，落回 '' 走通用那一支。
+ */
+export function toLoadFailure(err: unknown): LoadFailure {
+  return {
+    code: err instanceof ApiError ? err.errorCode : '',
+    message: humanError(err),
+  };
+}
+
+/**
+ * 加载失败那张卡的第二句：为什么会这样 + 现在能做什么。
+ * CASE_NOT_FOUND 下**不许**出现「已上传的材料还在」——后端对"不是你的案件"也回这个码
+ * （lib/cases/index.ts：不回 403，免得反过来确认案件号有效），
+ * 那句话等于替一个用户根本没有的案件担保有材料。
+ */
+export function loadFailureAdvice(code: string): string {
+  if (code === 'CASE_NOT_FOUND') {
+    return '地址里的案件号可能抄漏了一位；如果这是别人转给你的链接，得用他那个账号登录才看得到。';
+  }
+  return '已经上传的材料还在，只是这次没读出来。';
+}
 
 /** 上传中/失败的那一条。失败后原样留着，点重试直接重发同一个 File。 */
 interface UploadJob {
@@ -126,7 +164,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
 
   const [items, setItems] = useState<EvidenceView[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null);
   const [needSignIn, setNeedSignIn] = useState(false);
   const [pending, setPending] = useState<PendingUpload | null>(null);
   const [job, setJob] = useState<UploadJob | null>(null);
@@ -153,7 +191,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
     try {
       setItems(await fetchEvidenceList(caseId));
     } catch (err) {
-      setLoadError(humanError(err));
+      setLoadError(toLoadFailure(err));
     } finally {
       setLoading(false);
     }
@@ -278,7 +316,9 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
     <div className="flex flex-col gap-4 pt-1">
       <OriginalMediumNotice />
 
-      {!needSignIn && <UploadBar onPick={handlePick} />}
+      {/* 列表没读出来时也把上传入口收起来：案件根本不存在的话，上传必然失败；
+          就算只是这次没读出来，传进去的东西也会落在一个用户看不见的列表里。 */}
+      {!needSignIn && !loadError && <UploadBar onPick={handlePick} />}
 
       {job && (
         <UploadProgress
@@ -301,13 +341,17 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
         </Alert>
       ) : loadError ? (
         <Alert>
-          <AlertTitle data-veil="">{loadError}</AlertTitle>
+          <AlertTitle data-veil="">{loadError.message}</AlertTitle>
           <AlertDescription data-veil="" className="mt-1">
-            已经上传的材料还在，只是这次没读出来。
+            {loadFailureAdvice(loadError.code)}
           </AlertDescription>
-          <Button size="sm" className="mt-3" onClick={() => void load()}>
-            重新加载
-          </Button>
+          {/* 案件不存在时不给「重新加载」：同一个案件号再读一次还是不存在，
+              按钮只会让人反复点。那一支的出路写在上面那句话里。 */}
+          {loadError.code !== 'CASE_NOT_FOUND' && (
+            <Button size="sm" className="mt-3" onClick={() => void load()}>
+              重新加载
+            </Button>
+          )}
         </Alert>
       ) : items.length === 0 ? (
         <div className="flex flex-col gap-5">
