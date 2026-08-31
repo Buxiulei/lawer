@@ -93,7 +93,8 @@ function outcome(over: Partial<OutcomeStats> = {}): OutcomeStats {
     docsOutcomeDecided: 12,
     workerFavorableN: 7,
     minSample: 5,
-    byApplicant: { worker: 8, employer: 4, unknown: 0 },
+    // 三档的分母是入档全集（docsTotal 41），不是可判定的 12：8 + 4 + 29 = 41
+    byApplicant: { worker: 8, employer: 4, unknown: 29 },
     sampleN: 12,
     asOf: AS_OF,
     source: SOURCE,
@@ -180,6 +181,39 @@ describe('C2 样本不足时出完整的那一句（四个数都在）', () => {
     const text = visibleText(ssr(<OutcomeCard stats={outcome()} />));
     expect(text).toContain('劳动者提起 8 件');
     expect(text).toContain('单位提起 4 件');
+  });
+
+  /**
+   * 申请人三档是在**全部入档行**上数的（lib/company/stats），所以那句话的分母
+   * 必须是入档数，且屏幕上三个数要加得起来。
+   *
+   * 变异臂：把 StatsSection 那句的分母改回 `stats.docsOutcomeDecided`（「这 12 篇里」），
+   * 这条会红——8 + 4 + 29 = 41，摆在 12 后面就是一道谁都算不平的算术题，
+   * 而它照常渲染、照常好看。
+   */
+  it('申请人三档的分母是入档数，且三个数加得起来', () => {
+    const stats = outcome();
+    const text = visibleText(ssr(<OutcomeCard stats={stats} />));
+    expect(text).toContain('已入档的 41 篇里');
+    expect(text).toContain('看不出是谁提起的 29 件');
+    const { worker, employer, unknown } = stats.byApplicant;
+    expect(worker + employer + unknown).toBe(stats.docsTotal);
+    // 借上面那个可判定分母的写法一律不许再出现
+    expect(text).not.toContain('这 12 篇里');
+  });
+
+  /**
+   * 两块统计**同屏、各标各的样本量口径**：胜率那段说「可判定结果的 12 篇里」，
+   * 三件套页脚也跟着可判定数走；申请人那段说「已入档的 41 篇里」。
+   * 变异臂：把胜率块的分母也换成入档数（`workerFavorableN / docsTotal`），这条会红——
+   * 58% 会变成 17%，一个"劳动者赢面很小"的数，而它照常渲染、照常带着三件套。
+   */
+  it('胜率块仍按可判定子集，两个分母各自写在自己那句话里', () => {
+    const text = visibleText(ssr(<OutcomeCard stats={outcome()} />));
+    expect(text).toContain('58%'); // 7/12，不是 7/41
+    expect(text).toContain('可判定结果的 12 篇里');
+    expect(text).toContain('已入档的 41 篇里');
+    expect(text).toContain('样本 12 篇');
   });
 });
 

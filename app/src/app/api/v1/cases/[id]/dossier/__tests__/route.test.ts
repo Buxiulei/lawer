@@ -261,11 +261,11 @@ describe('已建档：按呈现契约给档案，数字都带着它的三件套'
     expect(outcome.asOf).toBe('2026-08-28');
     expect(outcome.source).toBe('裁判文书网·人机接力取证');
     expect(outcome.minSample).toBe(8);
-    // 三档相对**同一个分母**（可判定 12 篇）：卡上那句话是「这 12 篇里……」，
-    // 拿全部入档条目 41 去减会摆出一道加不起来的算术题。
-    expect(outcome.byApplicant).toEqual({ worker: 8, employer: 3, unknown: 1 });
+    // 三档相对**入档全集**（41 条）：库里的 applicant_* 就是在全部入档行上数的，
+    // 卡上那句话也照这个口径写「已入档的 41 篇里……」。
+    expect(outcome.byApplicant).toEqual({ worker: 8, employer: 3, unknown: 30 });
     const { worker, employer, unknown } = outcome.byApplicant as Record<string, number>;
-    expect(worker + employer + unknown).toBe(outcome.docsOutcomeDecided);
+    expect(worker + employer + unknown).toBe(outcome.docsTotal);
 
     const duration = d.duration as { minSample: number; segments: Array<Record<string, unknown>> };
     expect(duration.segments.map((s) => s.key)).toEqual([
@@ -282,6 +282,42 @@ describe('已建档：按呈现契约给档案，数字都带着它的三件套'
     expect(d.droppedPatterns).toBe(3);
     // 契约里没有、也不许有「平均时长」这类合成字段
     expect(JSON.stringify(duration)).not.toMatch(/avg|average|平均/);
+  });
+
+  /**
+   * 同一条不变量换一组**偏斜**的数再验一次：劳动者提起 30 件 > 可判定 12 篇。
+   * 这在真数据里很常见——大量案子入了档却读不出结果，程序位置却是从案号首部就认得出的。
+   *
+   * 上一条那组（劳动者 8 / 单位 3）恰好 8+3 < 12，clamp 与否都自洽，
+   * **抓不到这个形态**：判据和它要判的东西在那组数上并存。这条专门把两者分开。
+   *
+   * 变异臂（两个方向都红）：
+   *   · clamp 回潮 `Math.max(0, docs_outcome_decided − X − Y)` ⇒ unknown 被压成 0，
+   *     30+4+0 = 34 ≠ 41；
+   *   · 只把分母换回可判定篇数、不 clamp ⇒ unknown = −22，30+4−22 = 12 ≠ 41
+   *     （且屏幕上会出现一个负数件数）。
+   */
+  test('申请人三档在偏斜数据上仍然加得起来（X+Y+Z = 入档数）', async () => {
+    addProfile();
+    const dossierId = await addDossier(userA);
+    db.prepare(
+      `INSERT INTO company_dossier_stats
+         (dossier_id, docs_total, docs_fulltext, docs_outcome_decided, worker_favorable_n,
+          applicant_labor_n, applicant_employer_n, as_of)
+       VALUES (?, 41, 17, 12, 7, 30, 4, '2026-08-28')`,
+    ).run(dossierId);
+
+    const d = (await body(signToken(userA))).json.dossier as Record<string, unknown>;
+    const outcome = d.outcome as Record<string, unknown>;
+    expect(outcome.docsTotal).toBe(41);
+    expect(outcome.docsOutcomeDecided).toBe(12);
+    expect(outcome.byApplicant).toEqual({ worker: 30, employer: 4, unknown: 7 });
+    const { worker, employer, unknown } = outcome.byApplicant as Record<string, number>;
+    expect(worker + employer + unknown).toBe(outcome.docsTotal);
+    // 三档都不许是负数——负的件数是"分母挑错了"最直白的那个症状
+    for (const n of [worker, employer, unknown]) expect(n).toBeGreaterThanOrEqual(0);
+    // 胜率块**不跟着换分母**：它的样本量仍是可判定子集
+    expect(outcome.sampleN).toBe(12);
   });
 
   /**

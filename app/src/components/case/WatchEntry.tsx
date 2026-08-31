@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { apiFetch, humanError } from '@/app/_ui/api';
 import { readToken } from '@/app/_ui/auth';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
-import { useDiscreet } from '@/app/_ui/discreet';
 import { WATCH_TIER_GONGDAO, type WatchTier } from '@/lib/billing/pricing';
 import { Button } from '@/components/shadcn/button';
 
@@ -21,8 +20,10 @@ import { Button } from '@/components/shadcn/button';
  * 【中性文案约束】低调模式下这一块的**任何**文字都不出现「监控 / 守望 / 公司」，
  * 口径同 lib/notify/copy 的守望计费通知（那边的理由写得很清楚：收件人多半还在原公司上班，
  * 一封写着「某某公司的守望监控」的信被工位旁人瞟见，暴露的是他正在准备什么）。
- * 三档说明本身就写成中性的（两种模式同一句），只有入口按钮走 plain/neutral 换词——
+ * 这一块的每一句——三档说明与入口按钮——**两种模式逐字相同**：
  * 一句话两个版本，漂了没人看得出来；一句话一个版本，漂不了。
+ * 入口按钮原先是这里唯一的例外（明文「加入守望」/ 低调「加入关注」），
+ * 与本条注释自己的口径就对不上；而它恰恰是整块里最容易被旁人瞟见的一处。
  *
  * 【连点去重在后端】addWatch 按（案件 + 主体）去重，命中已有的原样返回、不改它的档。
  * 所以 created=false 时这里说的是「已经在盯了，档位没被改动」，**不是**「又加了一条」，
@@ -39,7 +40,6 @@ export function WatchEntry({
   uscc?: string | null;
   companyProfileId?: number | null;
 }) {
-  const { discreet } = useDiscreet();
   const [open, setOpen] = useState(false);
   const [tier, setTier] = useState<WatchTier>('daily');
   const [busy, setBusy] = useState(false);
@@ -91,9 +91,9 @@ export function WatchEntry({
           size="sm"
           variant="secondary"
           onClick={() => setOpen(true)}
-          aria-label={discreet ? `加入${NEUTRAL_WORD.watch}` : '加入守望'}
+          aria-label={`加入${NEUTRAL_WORD.watch}`}
         >
-          {discreet ? `加入${NEUTRAL_WORD.watch}` : '加入守望'}
+          {`加入${NEUTRAL_WORD.watch}`}
         </Button>
       </div>
     );

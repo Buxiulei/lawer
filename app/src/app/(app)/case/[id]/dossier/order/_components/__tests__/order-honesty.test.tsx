@@ -25,6 +25,7 @@ vi.mock('next/link', () => ({
 import type { DossierModule, DossierQuote, DossierQuoteItem } from '@/lib/company/dossier-billing';
 import type { ProbeResult } from '@/lib/company/probe';
 import { mockProbe, mockQuote, mockDossier } from '@/app/_mock/company-dossier';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import {
   MODULE_CATALOG,
   moduleAvailability,
@@ -339,6 +340,28 @@ describe('一键加守望：三档在点之前摊开，低调模式不露那三�
   it('三档说明里不出现「圈1/圈2/圈3」那套图例词（那套里带着「监控」）', () => {
     const text = visibleText(ssr(<WatchTierPicker tier="daily" onPick={() => {}} />));
     for (const legend of ['圈1', '圈2', '圈3']) expect(text).not.toContain(legend);
+  });
+
+  /**
+   * 入口按钮**两种模式逐字相同**，口径同三档说明（见 WatchEntry 文件头）。
+   * 它原先是这一块唯一的例外：明文「加入守望」/ 低调「加入关注」——
+   * 一句话两个版本，漂了没有任何一处会报错，而这一处恰恰是整块里最容易被旁人瞟见的。
+   *
+   * 变异臂：把按钮改回 `discreet ? '加入关注' : '加入守望'`，这条会红。
+   */
+  it('入口按钮两种模式逐字相同（连 aria-label 一起）', () => {
+    const render = () => ssr(<WatchEntry caseId="demo" name="星曜网络科技（北京）有限公司" />);
+    state.discreet = true;
+    let masked: string;
+    try {
+      masked = render();
+    } finally {
+      state.discreet = false;
+    }
+    const plain = render();
+    expect(plain).toBe(masked);
+    expect(visibleText(plain)).toContain(`加入${NEUTRAL_WORD.watch}`);
+    for (const word of NEVER) expect(plain).not.toContain(word);
   });
 
   it('主体名字不进入口的可见文字（它在抽屉/档案页各自的打码块里已经出现过一次）', () => {

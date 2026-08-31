@@ -37,8 +37,10 @@ export const mockDossier: DossierView = {
     docsOutcomeDecided: 12,
     workerFavorableN: 7,
     minSample: 5,
-    // 单位提起 4 件——这正是"不区分程序位置的胜诉率是错的数"的现场
-    byApplicant: { worker: 8, employer: 4, unknown: 0 },
+    // 单位提起 4 件——这正是"不区分程序位置的胜诉率是错的数"的现场。
+    // 三档的分母是**入档全集**（docsTotal 41），与 buildDossierView 的减法同一口径：
+    // 8 + 4 + 29 = 41。演示数据自己先要加得起来，不然 demo 页摆的就是那道错算术。
+    byApplicant: { worker: 8, employer: 4, unknown: 29 },
     sampleN: 12,
     asOf: AS_OF,
     source: SOURCE,

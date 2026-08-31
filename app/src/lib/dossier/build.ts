@@ -118,21 +118,19 @@ function outcomeOf(snap: StatsSnapshotRow, minSample: number): OutcomeStats {
       /*
        * 第三档是减出来的，不另存一列：存两处迟早对不上，而对不上时没有任何一处会报错。
        *
-       * 【减的是可判定篇数，不是全部入档条目】卡上那句话是
-       * 「这 {docsOutcomeDecided} 篇里，劳动者提起 X 件、单位提起 Y 件、看不出的 Z 件」——
-       * 三个数必须相对同一个分母，否则屏幕上就是一道加不起来的算术题。
+       * 【减的是入档全集，不是可判定那一批】库里的 `applicant_labor_n /
+       * applicant_employer_n` 是 computeStats 在**全部入档行**上数的（lib/company/stats
+       * 的 `rows.filter(r => r.applicant_side === …)`），所以第三档只能相对 `docs_total`
+       * 才对得上；卡上那句话也照这个口径写「已入档的 {docsTotal} 篇里……」。
+       * 三个数相对同一个分母，屏幕上才不是一道加不起来的算术题。
        *
-       * ⚠️ 已知缺口（跨工单，见 docs/contracts/dossier-api.md）：库里的
-       * `applicant_labor_n / applicant_employer_n` 是 computeStats 在**全部入档行**上数的，
-       * 而卡上那句话把它读成可判定那一批的构成。两边分母不同，
-       * 极端数据下 X+Y 会超过分母（这里 clamp 成 0，不给负数）。
-       * 修法要么让统计侧按可判定子集数、要么改卡上那句话的措辞——两条都不在本工单里，
-       * **本层不替它们挑一条**，只保证不放大：不另造一个凭空的 Z。
+       * 【为什么不再 clamp】两个 applicant_side 取值互斥、又都在同一批行上各数一次，
+       * 所以 X + Y ≤ docs_total 是数法本身保证的，这个减法天然非负。
+       * 原先那个 `Math.max(0, docs_outcome_decided − X − Y)` 兜的是"拿可判定篇数当分母"
+       * 留下的负数——它兜住了数字的样子，兜不住那句话的错，反而把
+       * 「X+Y+Z ≠ 分母」这件唯一看得见的症状抹平了。
        */
-      unknown: Math.max(
-        0,
-        snap.docs_outcome_decided - snap.applicant_labor_n - snap.applicant_employer_n,
-      ),
+      unknown: snap.docs_total - snap.applicant_labor_n - snap.applicant_employer_n,
     },
     // 比率卡的样本量**是它自己的分母**，不是全档案条目数
     sampleN: snap.docs_outcome_decided,

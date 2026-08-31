@@ -94,9 +94,14 @@ export function OutcomeCard({ stats }: { stats: OutcomeStats }) {
         取到全文 <span className="num">{stats.docsFulltext}</span> 篇。
       </p>
       {/* 申请人方分布与比例同屏并列：不区分谁把谁告了的比率会把方向读反——
-          存在用人单位批量起诉员工的案子，那时"公司赢了"和"劳动者输了"不是同一件事。 */}
+          存在用人单位批量起诉员工的案子，那时"公司赢了"和"劳动者输了"不是同一件事。
+
+          【这一段的分母是入档全集，不是上面那个可判定子集】三个数是在**全部入档行**上
+          数出来的（lib/company/stats 的 computeStats），所以这句话自己标自己的样本量口径：
+          上一段说「可判定结果的 N 篇里」，这一段说「已入档的 M 篇里」。
+          借用上面那个分母，屏幕上就会是一道加不起来的算术题——而它看起来完全正常。 */}
       <p className="prose-measure mt-2 text-[14px] leading-7 text-ink-2">
-        这 <span className="num">{stats.docsOutcomeDecided}</span> 篇里，
+        已入档的 <span className="num">{stats.docsTotal}</span> 篇里，
         劳动者提起 <span className="num">{stats.byApplicant.worker}</span> 件、
         单位提起 <span className="num">{stats.byApplicant.employer}</span> 件
         {stats.byApplicant.unknown > 0 && (

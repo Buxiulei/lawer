@@ -91,6 +91,15 @@
 4. **申请人方分布 `byApplicant` 必填**，与比例同屏并列。
    不区分程序位置的比率会把方向读反——存在用人单位批量起诉员工的案子，
    那时"公司赢了"和"劳动者输了"不是同一件事。
+   **它的分母是入档全集 `docsTotal`，不是比率那个可判定子集**：库里的
+   `applicant_labor_n / applicant_employer_n` 就是 `computeStats` 在全部入档行上数的。
+   所以 `unknown = docsTotal − worker − employer`（两个取值互斥，天然非负，不 clamp），
+   界面那句话也照这个口径写「已入档的 {docsTotal} 篇里……」。
+   两块统计同屏时**各标各的样本量口径**：比率那段说「可判定结果的 N 篇里」，
+   这段说「已入档的 M 篇里」。借用对方的分母，屏幕上就是一道加不起来的算术题。
+   判据：`cases/[id]/dossier/__tests__/route.test.ts` 的
+   `X+Y+Z === docsTotal`（两组夹具，其中一组是劳动者 30 > 可判定 12 的偏斜数据）
+   + 档案页组件测试里那条渲染断言。
 
 5. **时长四段各自独立**：各段自带 `n` / `medianDays` / 三件套，各判各的门槛，
    一段不足**不牵连**其它段。
@@ -134,13 +143,11 @@
 - `DossierPattern.evidence[].docUrl` 恒为 `null`：落库的证据只有案号与逐字引文
   （`company_patterns.evidence_json`）。按案号回查 `company_litigation` 拼链接是另一件事——
   同案号可能有多行，拼错的链接会指向另一篇判决，而它看起来完全正常。
-- **`byApplicant` 的分母两边对不上**（需要 A 侧裁一条）：库里的
-  `applicant_labor_n / applicant_employer_n` 是 `computeStats` 在**全部入档行**上数的，
-  而统计卡上那句话是「这 {docsOutcomeDecided} 篇里，劳动者提起 X 件、单位提起 Y 件、
-  看不出的 Z 件」——把它读成**可判定那一批**的构成。`lib/dossier/build.ts` 按卡上那句话的
-  分母减出 Z 并 clamp 到 0（三个数至少在屏幕上加得起来），但极端数据下 X+Y 仍可能超过分母。
-  修法二选一：让统计侧按可判定子集数 applicant_side，或改卡上那句话的措辞。
-  **适配层不替它们挑**，只保证不放大。
+- ~~**`byApplicant` 的分母两边对不上**~~ **已裁（取"改措辞"那条）**：统计侧的数法不动
+  （它在全部入档行上数 `applicant_side` 本来就对），改的是下游——卡上那句话换成
+  「已入档的 {docsTotal} 篇里……」，`build.ts` 的 Z 改为 `docsTotal − X − Y` 并去掉 clamp。
+  见上面第二节第 4 条。那个 `Math.max(0, …)` 兜的是"分母挑错"留下的负数，
+  它兜住了数字的样子、兜不住那句话的错，反而把唯一看得见的症状（X+Y+Z ≠ 分母）抹平了。
 - 退款事由没有落库（`lib/company/refund.ts` 只把 reason 回给巡检 job 去写通知），
   所以 `DossierView.refund.reason` 只说得出两种：超期（档案状态说得出来）与
   「有模块未达交付门槛」（其余三条退款路径的共同说法）。要更细，得先给事由一个事实源。
