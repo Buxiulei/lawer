@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { demoActions, demoCase, demoDeadlines } from '@/app/_mock/demo';
 import type { ActionItem } from '@/app/_mock/types';
 import { useDiscreet } from '@/app/_ui/discreet';
@@ -10,6 +10,7 @@ import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Mascot } from '@/components/brand/Mascot';
 import { ActionGroup } from '@/components/case/ActionCard';
 import { EmptyState } from '@/components/shadcn/empty-state';
+import { useEnterStagger } from '@/hooks/useEnterStagger';
 import { DeadlineTiles } from './DeadlineTiles';
 import { MilestoneTrack } from './MilestoneTrack';
 import { RecentRecords } from './RecentRecords';
@@ -25,6 +26,11 @@ import { FULL_JOURNEY, demoAttainments } from './milestones';
 export function Dashboard({ caseId }: { caseId: string }) {
   const seeded = caseId === demoCase.id;
   const [actions, setActions] = useState<ActionItem[]>(seeded ? demoActions : []);
+  const root = useRef<HTMLDivElement>(null);
+  /* 入场 stagger 只挂 `data-mo-enter` 点名的那几块。
+     **行动卡那一组刻意不在里面**：它自己已经有 `mo-fade-in`（对话流里也要用那一条），
+     两层入场叠在同一个元素上会看见「淡进来又被按下去一次」。 */
+  useEnterStagger(root, { selector: '[data-mo-enter]' });
 
   const toggle = (id: string, done: boolean) =>
     setActions((prev) =>
@@ -38,11 +44,15 @@ export function Dashboard({ caseId }: { caseId: string }) {
   const rest = actions.filter((a) => a.status === '待办').length - 1;
 
   return (
-    <div className="pt-1">
+    <div ref={root} className="pt-1">
       <WatchBar />
-      <MilestoneTrack track={FULL_JOURNEY} attainments={demoAttainments()} />
-      {/* 只推一件事（产品方案叁）；计数仍是全量，不然「1/5」会缩成「0/1」 */}
-      <ActionGroup items={actions} onToggle={toggle} limit={1} />
+      <div data-mo-enter>
+        <MilestoneTrack track={FULL_JOURNEY} attainments={demoAttainments()} />
+      </div>
+      {/* 只推一件事（产品方案叁）；计数仍是全量，不然「1/5」会缩成「0/1」。
+          `collapseOnDone`：勾完这一件它让开，下一件才有地方站——
+          「完成庆祝」的正确形态是下一件事出现，不是彩带。 */}
+      <ActionGroup items={actions} onToggle={toggle} limit={1} collapseOnDone />
       {rest > 0 && (
         <p data-veil="" className="mt-1.5 text-[12.5px] text-ink-2">
           其余 <span className="num">{rest}</span> 件排在后面，在
@@ -53,7 +63,9 @@ export function Dashboard({ caseId }: { caseId: string }) {
         </p>
       )}
       <DeadlineTiles deadlines={deadlines} />
-      <RecentRecords caseId={caseId} />
+      <div data-mo-enter>
+        <RecentRecords caseId={caseId} />
+      </div>
     </div>
   );
 }
@@ -67,7 +79,7 @@ function WatchBar() {
   const { discreet } = useDiscreet();
   if (discreet) return null;
   return (
-    <div className="flex items-center gap-2 pb-1">
+    <div data-mo-enter className="flex items-center gap-2 pb-1">
       {/* 56px：实测 52 是「看得清表情」的阈值，取 56 留余量。28px 那档连眼镜都只是一道暗带 */}
       <Mascot pose="watch" size={56} />
       <span className="rounded-full border border-kraft-line bg-kraft px-2.5 py-0.5 text-[12.5px] text-gold-on-kraft">
