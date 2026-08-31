@@ -107,7 +107,41 @@ function BalanceCard({ billing, me }: { billing: BillingState; me: MeState }) {
         {creditWord}是模型用量的计价单位，用多少扣多少：散充 1 元 = {GONGDAO_PER_YUAN}{' '}
         {creditWord}，套餐月卡另含当月额度。
       </p>
+
+      <SelfHostHint creditWord={creditWord} />
     </Card>
+  );
+}
+
+/**
+ * 省公道值的那条路：把这里接到用户自己的 AI 助手上。放在余额下面而不是只留在设置页——
+ * 想省钱的念头是在**看着余额**的时候起的，不是在翻设置的时候。
+ *
+ * 【这句话凭什么敢说——依据在代码里，不是营销话术】
+ * 扣费只有一个出口：`lib/billing` 的 `gongdaoSettle`。全仓非测试代码里调它的地方
+ * **只有一处**——`lib/agent/orchestrator.ts`，且在「结算一次模型轮次」那个位置；
+ * 而 orchestrator 只经 `runTurn` 导出，`runTurn` 的唯一调用方是
+ * `api/v1/cases/[id]/chat`（网页对话那条路）。
+ * MCP 的七个工具（case_get / case_update / timeline_add / action_list /
+ * action_complete / deadline_list / evidence_list）与 v1 案件数据路由**一行扣费都不碰**。
+ * ⇒「数据读写不扣、只有我们替你调模型才扣」是可核对的事实，不是估计。
+ *
+ * 【为什么不写数字】`lib/billing/pricing.ts` 开头写明：全部费率是**草案值，待 M3 核定**。
+ * 拿未核定的草案值算出「省百分之多少」印在页面上，是把一个随时会变的数说成承诺。
+ * 所以这里只讲**扣不扣**，不讲**省多少**——省多少取决于用户自己助手那边的价，我们无从得知。
+ *
+ * 【低调模式】整句跟着 `creditWord` 换成中性词，且不带任何案件字样，
+ * 与同卡其余文案一样进糊层（data-veil）。
+ */
+function SelfHostHint({ creditWord }: { creditWord: string }) {
+  return (
+    <p data-veil="" className="prose-measure mt-2 text-[14px] leading-6 text-ink-2">
+      想省着用：把这里接到你自己的 AI 助手上，读写数据这些活就由它那边干，不扣{creditWord}——
+      {creditWord}只在我们这边真的替你调模型时才扣（比如网页里的对话）。
+      <Link href="/settings" className="mx-1 text-primary-ink underline underline-offset-4">
+        去设置里接
+      </Link>
+    </p>
   );
 }
 

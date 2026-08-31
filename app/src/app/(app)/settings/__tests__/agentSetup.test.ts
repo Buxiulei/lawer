@@ -43,6 +43,17 @@ describe('接入话术', () => {
     expect(out).not.toContain(VARS.mcp_url);
   });
 
+  /*
+   * 上面那批 `it.each` 都是直接拿 tab key 调 `setupPrompt`，**绕过了 SETUP_TABS**——
+   * 把 trae / workbuddy 从 SETUP_TABS 里删掉，builder 还在、断言照样全绿，
+   * 而设置页的接入方式区块上那两个 Tab 已经没了（页面按 SETUP_TABS 渲染）。
+   * 用户点名要的就是这两个客户端，所以把「它们在清单里」单独钉一条。
+   */
+  it('SETUP_TABS 里必须留着 Trae 与 WorkBuddy——页面按这份清单渲染 Tab', () => {
+    expect(keys).toContain('trae');
+    expect(keys).toContain('workbuddy');
+  });
+
   describe('按客户端给的那几段，各自要落到自己的配置位置', () => {
     const EXPECT: Partial<Record<SetupTabKey, string[]>> = {
       claude: ['claude mcp add'],
