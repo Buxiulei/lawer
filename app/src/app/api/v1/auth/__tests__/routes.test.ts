@@ -125,4 +125,18 @@ describe('邮箱注册两条路由：匿名可达', () => {
     expect(res.status).toBe(400);
     expect((await res.json()).error_code).toBe('OTP_NOT_FOUND');
   });
+
+  test('/api/manifest 里这两条标 auth:none，与上面实测的行为对得上', async () => {
+    // 分开写会各自为真而互相说谎：manifest 标 'jwt' 的话，读它接入的 agent
+    // 永远不会尝试匿名调用——**一条能用但没人知道能用的开户接口，等于没有**。
+    const manifest = await (await (await import('@/app/api/manifest/route')).GET()).json();
+    const paths = ['/api/v1/auth/email/register/send', '/api/v1/auth/email/register/verify'];
+    for (const path of paths) {
+      const entry = (manifest.rest.endpoints as { path: string; auth: string }[]).find(
+        (e) => e.path === path,
+      );
+      expect(entry, `manifest 里没有 ${path}`).toBeDefined();
+      expect(entry!.auth).toBe('none');
+    }
+  });
 });
