@@ -21,12 +21,21 @@ import { emptyUsage } from '../types';
 import { acquireSlot, connectWithRetry } from './gate';
 import { createStreamTimers, httpError, sseData } from './sse';
 
+/** 缓存写入档的字段名。中转（new-api 系）两种写法都出现过，且既可能挂在
+ *  prompt_tokens_details 下、也可能是顶层裸字段——两处都认，代价是两个 ?? 项。 */
+interface CacheWriteFields {
+  /** 中转归一化后的缓存写入量 */
+  cache_write_tokens?: number;
+  /** 中转透传 Anthropic 的 5 分钟缓存创建量（与上一个实测同值） */
+  claude_cache_creation_5_m_tokens?: number;
+}
+
 /** OpenAI 兼容响应里的 usage 形状（各家都是这套字段名，缓存项各有各的加法）。 */
-interface CompatUsage {
+interface CompatUsage extends CacheWriteFields {
   prompt_tokens?: number;
   completion_tokens?: number;
-  /** OpenAI：缓存命中的输入 token */
-  prompt_tokens_details?: { cached_tokens?: number };
+  /** OpenAI：缓存命中的输入 token。中转还会在这里塞缓存写入档，见 CacheWriteFields */
+  prompt_tokens_details?: { cached_tokens?: number } & CacheWriteFields;
   /** DeepSeek：上下文硬盘缓存命中 */
   prompt_cache_hit_tokens?: number;
 }
@@ -37,17 +46,43 @@ export interface OpenAICompatOptions extends ProviderOptions {
 }
 
 /** usage → 四桶。拿不到的桶一律 null，绝不用 0 冒充（见 TokenUsage 注释）。
- *  归一化的关键一步：三家的 prompt_tokens **含**缓存命中量，而四桶要求互斥，
- *  所以 prompt 桶要减掉缓存命中，否则 billing 按桶相乘会把缓存 token 按全价算两遍。
- *  三家都没有「缓存写入」这个计价档（那是 Anthropic 特有），cachedWrite 恒 null。 */
+ *  归一化的关键一步：各家的 prompt_tokens **含**缓存命中/写入量，而四桶要求互斥，
+ *  所以 prompt 桶要把缓存两档都减掉，否则 billing 按桶相乘会把缓存 token 算两遍。
+ *
+ *  ── 为什么 cachedWrite 不再恒 null（2026-08-31 生产实测改）──
+ *  直连三家（DashScope/OpenAI/DeepSeek）确实没有缓存写入计价档，但**经中转的 Claude 有**，
+ *  两个独立样本算术自洽地证明 `prompt_tokens = cached_read + cache_write + 新鲜输入`：
+ *    opus   非流式 prompt=813 cached=757 cache_write=54 （757+54+2 = 813）
+ *    sonnet 非流式 prompt=75  cached=33  cache_write=30 （33+30+12 = 75）
+ *  旧写法把 cache_write 并进 prompt 桶按 1.0× 输入价记账，而它实际是 1.25× 档——
+ *  那是**低卖**（我们少收钱、用户不吃亏），方向上不伤用户但会在最贵的型号上持续渗漏：
+ *  实测流式 opus 一次就有 1202 个 cache_write token 被当普通输入记。所以要认这两个字段。
+ *
+ *  ── 缺字段时的方向：一律偏「用户不吃亏」，且不伪装成已知 ──
+ *  某档没回报就是 null，billing 侧按 0 计入（orchestrator 只在**四桶全 null** 时才跳过记账）。
+ *  于是缺 cachedWrite → 那些 token 落进 prompt 桶按 1.0× 记 → 我们少收；
+ *  缺 cachedRead     → 全部输入按 1.0× 记 → 用户多付。后者是唯一会让用户吃亏的方向，
+ *  实测中转对 claude/gpt/qwen 都稳定回报 cached_tokens，暂未出现；真出现时
+ *  该行的计费键带 relay/ 前缀（见 routing.config.billingKey），对账时可整批摘出来复算，
+ *  不会静默混进直连的账里。 */
 function toTokenUsage(u: CompatUsage): TokenUsage {
   const rawPrompt = u.prompt_tokens ?? null;
-  const cachedRead = u.prompt_tokens_details?.cached_tokens ?? u.prompt_cache_hit_tokens ?? null;
+  const d = u.prompt_tokens_details;
+  const cachedRead = d?.cached_tokens ?? u.prompt_cache_hit_tokens ?? null;
+  const cachedWrite =
+    d?.cache_write_tokens ??
+    d?.claude_cache_creation_5_m_tokens ??
+    u.cache_write_tokens ??
+    u.claude_cache_creation_5_m_tokens ??
+    null;
   return {
-    prompt: rawPrompt === null ? null : rawPrompt - (cachedRead ?? 0),
+    // 夹到 0：实测中转的 deepseek 会回报「命中量大于总输入量」（prompt_tokens=62 而
+    // prompt_cache_hit_tokens=128）这种自相矛盾的 usage。负数桶会让本轮成本算成负的，
+    // 等于倒贴公道值给用户——宁可记 0 也不能让账本出现负成本。
+    prompt: rawPrompt === null ? null : Math.max(0, rawPrompt - (cachedRead ?? 0) - (cachedWrite ?? 0)),
     completion: u.completion_tokens ?? null,
     cachedRead,
-    cachedWrite: null,
+    cachedWrite,
   };
 }
 

@@ -67,9 +67,23 @@ export async function* sseData(
   }
 }
 
-/** 非 2xx / 无响应体时用的错误对象，带状态码与响应体片段（截断，避免把长报文灌进日志）。
+/** 错误报文保留的头部/尾部字符数。
+ *  为什么必须**保头保尾**而不是只保头：2026-08-31 实测中转的 503 报文长这样——
+ *    {"error":{"message":"分组 default、限时体验、纯AZ、官转、…〔三十余个分组名〕…
+ *      下模型 claude-opus-9-nonexistent 无可用渠道（distributor） (request id: …)"}}
+ *  是哪个模型没了、以及「无可用渠道」这个判据，全都在报文**末尾**；开头几百字节是
+ *  一份对所有 503 都一模一样的分组名清单。只保头的话每条 503 日志长得完全相同，
+ *  既认不出是哪个模型掉了，也分不清该换腿还是该重试——等于没记。 */
+const BODY_HEAD_CHARS = 200;
+const BODY_TAIL_CHARS = 300;
+
+/** 非 2xx / 无响应体时用的错误对象，带状态码与响应体片段（保头保尾，避免把长报文灌进日志）。
  *  返回 Error 而不是直接抛：调用点写成 `throw await httpError(...)`，TS 才认得那行之后不可达。 */
 export async function httpError(tag: string, res: Response): Promise<Error> {
   const body = await res.text().catch(() => '');
-  return new Error(`${tag} HTTP ${res.status}: ${body.slice(0, 200)}`);
+  const brief =
+    body.length <= BODY_HEAD_CHARS + BODY_TAIL_CHARS
+      ? body
+      : `${body.slice(0, BODY_HEAD_CHARS)}…〔略 ${body.length - BODY_HEAD_CHARS - BODY_TAIL_CHARS} 字〕…${body.slice(-BODY_TAIL_CHARS)}`;
+  return new Error(`${tag} HTTP ${res.status}: ${brief}`);
 }
