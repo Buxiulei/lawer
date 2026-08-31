@@ -2,8 +2,10 @@
  * 对话 SSE 的九帧契约（WS2 定稿 2026-08-19，manager 已批）。
  * 字段一律照抄后端的 snake_case，**不在这一层改形状**——改名会让前后端对不上账。
  *
- * 帧序：meta → (ping)* → (delta|record|action|draft|notice)* → usage → done
+ * 帧序：meta → (ping|delta|record|action|draft|notice)* → usage → done
  *       任何一步都可能被 error 顶替。
+ *       ping 不只在首字前：正文一停流（模型转去跑 tool 轮）满一个间隔就再现，
+ *       所以它和正文帧是交替出现的，不是流开头一段独占的前缀。
  *
  * 危机场景多一段：meta 之后毫秒级先到 deterministic=true 的 delta（接住式安抚+求助热线），
  * 模型正文可能还要 2-4 分钟，这期间 ping 照常。
@@ -23,8 +25,11 @@ export interface MetaFrame {
   degraded: boolean;
 }
 
-/** meta 之后每 15s 一帧，首个**非 deterministic** delta 到即停。
- *  推理模型首字前可思考 3-4 分钟，这不是错误。 */
+/** meta 之后**正文没在流的每一段静默期**每 15s 一帧：**非 deterministic** delta 一到即停，
+ *  正文再停流（tool 轮）满一个间隔又接上，done 终止。
+ *  推理模型首字前可思考 3-4 分钟，首字之后每一轮 tool 往返又是几十秒零帧（产线实测 88.6 秒），
+ *  这都不是错误。
+ *  `waited_seconds` 恒为本轮开跑至今的总秒数，跨 tool 轮不复位——别拿它当「本段静默多久」。 */
 export interface PingFrame {
   type: 'ping';
   waited_seconds: number;

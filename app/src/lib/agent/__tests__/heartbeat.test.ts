@@ -137,7 +137,7 @@ describe('贯穿 tool 轮', () => {
     expect(s.waited()).toEqual([15, 43, 58]);
   });
 
-  it('全程零帧窗口不超过一个心跳间隔——反代的空闲超时永远等不到（88.6 秒实测形态）', () => {
+  it('全程零帧窗口不超过一个心跳间隔——反代的空闲超时永远等不到（88.6 秒实测形态，连着三轮 tool）', () => {
     const arrivals: number[] = []; // 下行帧到达时刻：心跳与正文都算，反代只看有没有字节
     const hb = startHeartbeat(() => arrivals.push(Date.now()));
     const startedAt = Date.now();
@@ -154,6 +154,13 @@ describe('贯穿 tool 轮', () => {
     prose('按你给的工资基数，'); // ③ 吐字恢复
     vi.advanceTimersByTime(2_000);
     prose('N+1 是 3.2 万。');
+    vi.advanceTimersByTime(62_000); // ④ 第二轮 tool：MAX_TOOL_ROUNDS=8，静默段不止一段
+    prose('加班费那 96 小时，');
+    vi.advanceTimersByTime(2_000);
+    prose('按 1.5 倍另算 1.1 万。');
+    vi.advanceTimersByTime(47_000); // ⑤ 第三轮 tool：一轮扛住不等于轮轮扛住
+    prose('两笔合计 4.3 万，');
+    prose('明细在下面。');
     hb.observe({ event: 'done', data: { message_id: 7, finish_reason: 'stop' } });
 
     const marks = [startedAt, ...arrivals];
