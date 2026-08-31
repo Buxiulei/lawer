@@ -1,3 +1,5 @@
+import { daysUntil } from '@/lib/deadline/case-day';
+
 /** 分 → 元，千分位 + 两位小数。展示时配 tabular-nums（.num）。 */
 export function formatFen(fen: number): string {
   const negative = fen < 0;
@@ -56,13 +58,14 @@ export function formatDateTime(iso: string): string {
 }
 
 /**
- * 距离 due 还有几天（向上取整，今天到期算 0）。
+ * 距离 due 还有几天（按案件时区日历日，今天到期算 0）。
  * 传入 now 以便服务端渲染与测试可控。
+ *
+ * 【实现不在这里】倒计时只许有一把尺：邮件提醒读的是同一个函数。
+ * 此前这里是 `Math.ceil(毫秒差/86400000)`、邮件侧是日历日算法，
+ * 同一条期限在两处能差出一整天，用户只会信听起来宽松的那个。见 lib/deadline/case-day。
  */
-export function daysUntil(dueIso: string, now: Date = new Date()): number {
-  const due = new Date(dueIso).getTime();
-  return Math.ceil((due - now.getTime()) / 86_400_000);
-}
+export { daysUntil };
 
 /** 倒计时文案：不用感叹号，给确定的数字。 */
 export function formatCountdown(dueIso: string, now: Date = new Date()): string {
