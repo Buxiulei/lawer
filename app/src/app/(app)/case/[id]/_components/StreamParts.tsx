@@ -198,7 +198,9 @@ export function DegradedBadge() {
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
         aria-expanded={open}
-        className="inline-flex items-center rounded-full bg-surface-2 px-2.5 py-0.5 text-[13px] leading-6 text-ink-2"
+        // py-2.5 是为触区不是为观感：13px/24px 的文字加上下各 10px 才够 44px 高（原来 py-0.5 只有 28）。
+        // 这里不用伪元素扩区——它是这条消息里唯一的可点物，把药丸做实反而更容易被看见有得点。
+        className="inline-flex min-h-11 items-center rounded-full bg-surface-2 px-3 py-2.5 text-[13px] leading-6 text-ink-2"
       >
         已切换备用模型
       </button>

@@ -70,7 +70,9 @@ export function PreferencesCard() {
                 顶栏那个眼睛图标是同一个开关。
               </p>
             </div>
-            {/* 开关本体 28px 高，外层撑到 44px 触区 */}
+            {/* 这层只做一件事：把开关在这行右侧居中并占住固定宽度。
+                **触区不在这层**——它在 Switch 自己身上（伪元素扩区，见 shadcn/switch.tsx）。
+                这里原先的注释把触区算在这层头上，而纯 CSS 居中不转发点击（审查台账 SYS-03）。 */}
             <div className="flex size-11 shrink-0 items-center justify-center">
               <Switch
                 id="discreet-switch"

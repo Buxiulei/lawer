@@ -39,7 +39,19 @@ function BreadcrumbLink({
   return (
     <Comp
       data-slot="breadcrumb-link"
-      className={cn('transition-colors duration-150 ease-out hover:text-foreground', className)}
+      className={cn(
+        // 面包屑是全站子页唯一的返回入口，文字本身只有 24px 高、最短的一条（「我的」）只有 28px 宽，
+        // 达不到 DESIGN.md 的 ≥44×44。min-h-11 把命中区撑到 44，
+        // 再用等量的负边距把多出来的部分从版式里减掉：
+        // **横向** px-2 各扩 8px / -mx-2 减掉——顶栏被右侧四个 shrink-0 控件压到最窄时
+        //   只剩约 40px，扩区不能占宽度；
+        // **纵向** -my-2.5 减掉那 20px——`BreadcrumbList` 是 flex-wrap 的，
+        //   顶栏挤到极限时会折成两行；若让这 44px 真的占版式，两行叠起来是 73.8px，
+        //   要顶穿 56px 的顶栏 8.4px（实测；不减负边距时的对照值 53.6px 刚好塞得下）。
+        'inline-flex min-h-11 items-center -mx-2 -my-2.5 px-2',
+        'transition-colors duration-150 ease-out hover:text-foreground',
+        className,
+      )}
       {...props}
     />
   );

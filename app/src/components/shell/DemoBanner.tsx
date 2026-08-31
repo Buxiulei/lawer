@@ -27,9 +27,11 @@ export function DemoBanner() {
         <span>{discreet ? '演示内容' : '这是演示案件，内容为虚构示例'}</span>
         <span aria-hidden>·</span>
         {/* 接 cases 列表接口前，已登录的人也只能去 /login——全站还没有"我自己的案件"这个地址 */}
+        {/* min-h-11 把命中区撑到 44（原来只有 24px 高），-my-2.5 把多出来的 20px 从版式里减掉——
+            横幅高度不变，只是变得点得中。不走 BreadcrumbLink：那是面包屑的语义槽，这里是横幅正文里的一句。 */}
         <Link
           href="/login"
-          className="font-medium text-primary-ink underline-offset-4 hover:underline"
+          className="-my-2.5 inline-flex min-h-11 items-center font-medium text-primary-ink underline-offset-4 hover:underline"
         >
           {label} →
         </Link>
