@@ -155,7 +155,12 @@ describe('文案所依据的事实：扣费只发生在模型轮次里', () => {
   };
 
   it('gongdaoSettle 的非测试调用点仍然只有 orchestrator 一处', () => {
-    const found = callers('gongdaoSettle').filter((p) => !p.startsWith('lib/billing/'));
+    // 豁免只给这两个具名文件（index.ts 是定义处，backfill.ts 是补记账的既有调用点）。
+    // 这里原来豁免整个 `lib/billing/` 目录，跑变异时存活了：在该目录下新建一个
+    // `mcpCharge.ts` 包一层 gongdaoSettle 给 MCP 侧调用，扣费就真的发生了，而断言照样绿——
+    // 把「最像扣费的新代码会落在哪」的那个目录整个排除在外，等于不看最该看的地方。
+    const EXEMPT = ['lib/billing/index.ts', 'lib/billing/backfill.ts'];
+    const found = callers('gongdaoSettle').filter((p) => !EXEMPT.includes(p));
     expect(found).toEqual(['lib/agent/orchestrator.ts']);
   });
 
