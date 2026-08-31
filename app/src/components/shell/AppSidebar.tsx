@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { NEUTRAL_TITLE } from '@/app/_ui/bootstrap';
+import { cn } from '@/app/_ui/cn';
 import { useDiscreet } from '@/app/_ui/discreet';
 import { useTheme, type ThemeMode } from '@/app/_ui/theme';
 import {
@@ -25,6 +26,7 @@ import {
 import { AutoIcon, EyeIcon, EyeOffIcon, MoonIcon, SunIcon } from './shellIcons';
 import { TubashuMark } from './TubashuMark';
 import { NAV_ITEMS } from './navItems';
+import { useDiscreetToggle } from './useDiscreetToggle';
 
 export const THEME_LABEL: Record<ThemeMode, string> = {
   system: '跟随系统',
@@ -110,16 +112,38 @@ export function AppSidebar({
   );
 }
 
-function DiscreetMenuItem() {
-  const { discreet, toggle } = useDiscreet();
+/**
+ * 侧栏底部的低调模式开关。判定走 useDiscreetToggle，与顶栏眼睛钮、拇指区 PanicButton
+ * 共用同一份：**单击开、按住 600ms 才关**。桌面鼠标按住同样算数——长按防的是误触，
+ * 而误触在 PC 上照样发生（划过侧栏蹭一下就把金额亮出来）。
+ *
+ * 这里从前是 onClick={toggle} 双向直切：顶栏那条路堵上了，这条还开着，
+ * 安全阀就等于没装。三个入口现在只准有这一份判定。
+ * 导出是给 __tests__/sidebar-discreet-guard 直接调用，AppSidebar 内部照旧自己用。
+ */
+export function DiscreetMenuItem() {
+  const { discreet, holding, pressProps } = useDiscreetToggle();
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
-        onClick={toggle}
-        aria-pressed={discreet}
-        tooltip={discreet ? '低调模式已开启' : '低调模式'}
+        {...pressProps}
+        /* pressProps 里的 aria-label 是给顶栏那种纯图标钮写的，套到这个**有可见文字**的
+           菜单项上会踩 WCAG 2.5.3（Label in Name）：可见文字是「低调模式」和「开 / 关」
+           两个 span 直接相邻，无障碍名必须逐字包含它，否则语音控制的人念着屏幕上的字
+           点不动它。所以这里覆盖掉，顺带把「按住才关」写进名字里——不然读屏用户只知道
+           这是个开关，不知道单击关不掉。理由同 ThemeMenuItem 那条。 */
+        aria-label={discreet ? '低调模式开，按住不放可关闭' : '低调模式关，单击开启'}
+        tooltip={discreet ? '低调模式已开启（按住关闭）' : '低调模式'}
         isActive={discreet}
-        className="[&>svg]:size-5"
+        className={cn(
+          '[&>svg]:size-5 touch-none select-none',
+          // 按住期间缩一下当进度反馈，与顶栏、拇指区同一形态。
+          // 属性得一条条列全：tailwind-merge 把 transition-* 当同一组，只写
+          // transition-transform 会把 SidebarMenuButton 基类那串顶掉，
+          // 顺手就把 hover / 选中的配色过渡弄没了。
+          'transition-[width,height,padding,background-color,color,transform] ease-out',
+          holding ? 'scale-90 duration-[600ms]' : 'scale-100 duration-150',
+        )}
       >
         {discreet ? <EyeOffIcon /> : <EyeIcon />}
         <span className="flex-1 truncate text-left">低调模式</span>
