@@ -32,7 +32,7 @@
  * **改名不该悄悄放大一个已经给过的同意。**
  * 下面的测试会替你查（新名带敏感词就会红）。
  */
-const NOTIFY_BRAND = '土八鼠';
+export const NOTIFY_BRAND = '土八鼠';
 
 /** 出站文案的详略模式。detailed 需用户在设置里显式打开，默认中性。 */
 export interface CopyOptions {
@@ -40,10 +40,30 @@ export interface CopyOptions {
   detailed?: boolean;
 }
 
-/** 邮件文案：主题 + 纯文本正文。HTML 版留给真正需要排版的场景，验证码不需要。 */
+/**
+ * HTML 版正文的一段。
+ *
+ * 存在的理由只有一个：**验证码那一行要单独成行、放大、加粗、勃艮第红**（用户 2026-08-31 定）。
+ * 纯文本里它嵌在句子中间（「您的验证码是 123456，5 分钟内有效」），HTML 里要拎出来独占一行；
+ * 靠正则从 text 里抠数字是**在传输层猜文案的结构**——文案一改就静默抠错，
+ * 所以由 copy 自己声明哪一段是码。
+ */
+export type MailBlock =
+  | { kind: 'text'; text: string }
+  | { kind: 'code'; code: string };
+
+/**
+ * 邮件文案：主题 + 纯文本正文（+ 可选的 HTML 分块）。
+ *
+ * `text` 永远是权威的那一份：它既是 text/plain 部件，也是 HTML 版的兜底
+ * （没给 blocks 时 mail-template 按 \n 拆段渲染）。**新增 blocks 不改变任何现有文案**——
+ * 期限提醒就没给 blocks，走兜底路径，一个字都不用动。
+ */
 export interface MailCopy {
   subject: string;
   text: string;
+  /** HTML 版分块；不给则由 text 按 \n 拆段。只有验证码信需要它。 */
+  blocks?: MailBlock[];
 }
 
 /**
@@ -83,6 +103,44 @@ export function deadlineReminder(
 }
 
 /**
+ * 守望订阅计费通知（余额不足 / 已暂停，spec v3 §2.2「绝不静默停盯」）。
+ *
+ * 【为什么走中性层、连"监控/守望/公司"都不提】收件人多半还在原公司上班。
+ * 一封写着「某某公司的守望监控因欠费暂停」的邮件被工位旁人瞟见，暴露的是
+ * **他在背地里盯着这家公司**——那和暴露"他在维权"一样不可逆。
+ * 所以中性模式只说"一项服务"与"余额不足"这一点点判断紧急度的必要信息，
+ * 具体是什么，让他登录进来看。
+ *
+ * 【为什么欠费也必须发、且暂停要再发一封】静默停盯是本产品最危险的失败模式：
+ * 用户以为还在被守着，实际早已停了——等他发现，对方可能已经简易注销跑路。
+ * 所以余额不足要通知、连续欠费到暂停时**再通知一次**，让"停了"这件事永远不静默发生。
+ *
+ * @param paused false=仍在盯但余额不足（催一下）；true=已连续欠费达上限、已暂停盯梢。
+ */
+export function watchBillingNotice(paused: boolean, options: CopyOptions = {}): MailCopy {
+  if (options.detailed) {
+    return paused
+      ? {
+          subject: `${NOTIFY_BRAND}：一项守望服务已暂停`,
+          text: `您在${NOTIFY_BRAND}开启的一项守望服务因账户余额持续不足已暂停。\n登录充值后可随时重新开启，历史记录仍为您保留。`,
+        }
+      : {
+          subject: `${NOTIFY_BRAND}：一项守望服务余额不足`,
+          text: `您在${NOTIFY_BRAND}开启的一项守望服务账户余额不足，暂未能续期。\n请登录充值以免服务中断。`,
+        };
+  }
+  return paused
+    ? {
+        subject: '您有一项服务已暂停',
+        text: '您开启的一项服务因账户余额持续不足已暂停。\n请登录充值后重新开启，记录仍为您保留。',
+      }
+    : {
+        subject: '您有一项服务余额不足',
+        text: '您开启的一项服务账户余额不足，暂未能续期。\n请登录充值以免服务中断。',
+      };
+}
+
+/**
  * 验证码短信的 TemplateParam。
  * 正文措辞取决于阿里云模板本身，本函数只填变量；模板必须是通用「验证码」模板，
  * 不得申请带业务描述（如「仲裁提醒」）的签名或模板。
@@ -101,14 +159,49 @@ export function emailVerifyCode(
   expiryMinutes: number,
   options: CopyOptions = {},
 ): MailCopy {
+  // 【尾段两种模式共用】有效期与"不是你就忽略"的措辞与详略无关，抽出来避免两处各写一遍走偏。
+  const tail = `${expiryMinutes} 分钟内有效，请勿转发他人。\n若非本人操作，忽略本邮件即可。`;
   if (options.detailed) {
     return {
       subject: `${NOTIFY_BRAND} 邮箱验证码：${code}`,
-      text: `您正在验证${NOTIFY_BRAND}账号的邮箱地址。\n验证码：${code}\n${expiryMinutes} 分钟内有效，请勿转发他人。\n若非本人操作，忽略本邮件即可。`,
+      text: `您正在验证${NOTIFY_BRAND}账号的邮箱地址。\n验证码：${code}\n${tail}`,
+      blocks: [
+        { kind: 'text', text: `您正在验证${NOTIFY_BRAND}账号的邮箱地址。` },
+        { kind: 'code', code },
+        { kind: 'text', text: tail },
+      ],
     };
   }
   return {
     subject: `验证码：${code}`,
-    text: `您的验证码是 ${code}，${expiryMinutes} 分钟内有效，请勿转发他人。\n若非本人操作，忽略本邮件即可。`,
+    text: `您的验证码是 ${code}，${tail}`,
+    blocks: [
+      { kind: 'text', text: '您的验证码是' },
+      { kind: 'code', code },
+      { kind: 'text', text: tail },
+    ],
+  };
+}
+
+/**
+ * 有人拿一个**名下还没有账号**的邮箱来收登录验证码时，发给这个邮箱的引导信。
+ *
+ * 【为什么是一封信，而不是一个错误码】接口对「这个邮箱注册过没有」必须一个字都不说：
+ * 早先那条 404 EMAIL_NOT_REGISTERED 是在限流之前返回的，等于给了任何人一个零成本的
+ * 注册状态探针——而本站的用户名单本身就说明这些人正在维权。
+ * 可真正打错字的用户又确实需要知道「为什么没收到码」。这两件事唯一能同时成立的地方是**收件箱**：
+ * 只有邮箱的主人看得到这封信，拿别人邮箱去探的人什么也拿不到。
+ *
+ * 三段式：撞到的是什么、为什么会撞到、现在能怎么办。
+ * 中性措辞，无平台名、无业务词——收件人可能压根不是我们的用户，横幅只会在他工位上亮一下。
+ */
+export function emailNotRegistered(): MailCopy {
+  return {
+    subject: '没有可发送的验证码',
+    text:
+      '有人用这个邮箱地址请求了登录验证码，但它名下还没有账号，所以没有验证码可发。\n' +
+      '邮箱是在用手机号注册完成后那一步绑定的，没绑过就不能单独拿它收码。\n' +
+      '如果这是您本人：请先用手机号登录一次并在页面里绑定这个邮箱，之后就能直接用它收码了。\n' +
+      '如果不是您本人：忽略本邮件即可，您的邮箱没有被登记。',
   };
 }

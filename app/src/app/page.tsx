@@ -107,7 +107,7 @@ function SectionTab({ no, title }: { no: string; title: string }) {
     // 卷标题是 h2：页面层级必须 h1 → h2 → h3，缺一档 Lighthouse 判 heading-order 失败，
     // 屏幕阅读器按标题跳读时也会直接从 h1 掉进 h3
     <h2 className="anjuan-tab">
-      <span className="font-serif-static text-[15px] font-black tracking-[0.2em] text-primary">
+      <span className="font-serif-static text-[15px] font-black tracking-[0.2em] text-primary-ink-on-surface">
         {no}
       </span>
       <span className="font-serif-static text-[22px] font-black tracking-[0.05em]">{title}</span>
@@ -174,7 +174,7 @@ export default function LandingPage() {
             <h1 className="font-serif-static mt-0 border-t-[3px] border-ink pt-[26px] text-[clamp(34px,5.2vw,58px)] leading-[1.32] font-black tracking-[0.02em] text-balance">
               被裁员了，不知道下一步？
               <br />
-              <span className="text-primary">有人陪你，把每一步走完。</span>
+              <span className="text-primary-ink-on-surface">有人陪你，把每一步走完。</span>
             </h1>
             <p className="mt-[22px] max-w-[34em] text-[17px] text-ink-2">
               说清楚现在走到哪一步、公司给了什么说法，几分钟就能有一份属于你的档案。该拿的钱、在跑的期限、能直接改的文书草稿，都排在上面。
@@ -188,7 +188,7 @@ export default function LandingPage() {
 
             <div
               aria-label="印章：土八鼠印"
-              className="anjuan-stamp font-serif-static pointer-events-none absolute -top-[18px] right-0 grid size-[92px] place-items-center rounded-[8px] border-[3.5px] border-primary text-[23px] leading-[1.25] font-black tracking-[0.1em] text-primary opacity-[0.92] md:-top-[34px] md:right-[2%] md:size-[118px] md:text-[30px]"
+              className="anjuan-stamp font-serif-static pointer-events-none absolute -top-[18px] right-0 grid size-[92px] place-items-center rounded-[8px] border-[3.5px] border-primary text-[23px] leading-[1.25] font-black tracking-[0.1em] text-primary-ink-on-surface opacity-[0.92] md:-top-[34px] md:right-[2%] md:size-[118px] md:text-[30px]"
             >
               <span className="w-[2.4em] text-center">土八鼠印</span>
             </div>
@@ -223,7 +223,7 @@ export default function LandingPage() {
                       >
                         <span className="text-ink-2">{k}</span>
                         <span
-                          className={`font-mono-num font-semibold whitespace-nowrap tabular-nums ${hot ? 'text-primary' : ''}`}
+                          className={`font-mono-num font-semibold whitespace-nowrap tabular-nums ${hot ? 'text-primary-ink-on-surface' : ''}`}
                         >
                           {v}
                         </span>
@@ -243,7 +243,7 @@ export default function LandingPage() {
                     在跑的期限，盯住
                   </h3>
                   <div className="py-1.5 text-center">
-                    <div className="font-mono-num text-[44px] leading-[1.1] font-bold tabular-nums text-primary">
+                    <div className="font-mono-num text-[44px] leading-[1.1] font-bold tabular-nums text-primary-ink-on-surface">
                       347
                     </div>
                     <div className="text-[14px] text-ink-2">
@@ -252,7 +252,7 @@ export default function LandingPage() {
                   </div>
                   <div className="anjuan-row flex justify-between gap-3 py-[7px] text-[14px]">
                     <span className="text-ink-2">下一个到点</span>
-                    <span className="font-mono-num font-semibold whitespace-nowrap tabular-nums text-primary">
+                    <span className="font-mono-num font-semibold whitespace-nowrap tabular-nums text-primary-ink-on-surface">
                       3 天后
                     </span>
                   </div>
@@ -322,7 +322,7 @@ export default function LandingPage() {
                 >
                   <h3 className="font-serif-static mb-2 text-[18px] font-black">
                     {p.head}
-                    <em className="not-italic text-primary">{p.em}</em>
+                    <em className="not-italic text-primary-ink-on-surface">{p.em}</em>
                   </h3>
                   <p className="text-[14.5px] text-ink-2">{p.body}</p>
                 </div>

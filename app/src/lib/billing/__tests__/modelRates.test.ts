@@ -4,7 +4,7 @@
 import { describe, test, expect } from 'vitest';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../../db/migrate';
-import { getRatesForModel, setModelRate, seedModelRates, SEEDED_MODELS } from '../../db/modelRates';
+import { getRatesForModel, setModelRate, seedModelRates, SEEDED_MODELS, PENDING_PRICE_MODELS } from '../../db/modelRates';
 import {
   DEFAULT_RATES,
   USD_CNY_RATE,
@@ -283,7 +283,12 @@ describe('seedModelRates · C01 费率种子', () => {
     for (const r of rows) {
       expect(r.meta_json, `${r.model} 缺 meta_json`).toBeTruthy();
       const m = JSON.parse(r.meta_json!);
-      expect(new Set(Object.keys(m))).toEqual(new Set(['源URL', '官方原价', '币种', '汇率', '核定日']));
+      // 「待定价」是占位行**独有**的键，两个方向都钉死：占位行必须有它（否则查账时
+      // 看不出这行的数字不是定价），已定价行必须没有它（否则标记会贬值成噪音）。
+      const pending = PENDING_PRICE_MODELS.has(r.model);
+      const base = ['源URL', '官方原价', '币种', '汇率', '核定日'];
+      expect(new Set(Object.keys(m))).toEqual(new Set(pending ? [...base, '待定价'] : base));
+      if (pending) expect(m.待定价, `${r.model} 的待定价说明要写清凭什么占这个位`).toMatch(/上线前必须过 manager$/);
       expect(m.源URL).toMatch(/^https:\/\//);
       expect(m.核定日).toBe('2026-08-19');
       expect(typeof m.官方原价).toBe('number');

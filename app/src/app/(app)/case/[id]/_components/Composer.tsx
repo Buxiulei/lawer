@@ -2,8 +2,32 @@
 
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/shadcn/button';
+import { StickyBottomBar } from '@/components/shell/StickyBottomBar';
 
 const MAX_HEIGHT_PX = 168;
+
+export const PLACEHOLDER = '说说现在的情况，或者问下一步该怎么做';
+
+/** 量高只需要这三样；抽成结构类型是为了测试能塞一个假 textarea 进来。 */
+interface Measurable {
+  placeholder: string;
+  readonly scrollHeight: number;
+  style: { height: string };
+}
+
+/**
+ * 按内容量高。**读 scrollHeight 之前先摘掉占位符**——
+ * 占位符在 393px 下要折两行，算进去空态就是 76px（单行应有 ~50px），
+ * 用户打第一个字时会看见一次莫名其妙的回缩跳动。
+ * 有内容时占位符本来就不渲染，不用动。
+ */
+export function fitHeight(el: Measurable, value: string): void {
+  const placeholder = el.placeholder;
+  if (!value) el.placeholder = '';
+  el.style.height = 'auto';
+  el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT_PX)}px`;
+  if (!value) el.placeholder = placeholder;
+}
 
 /**
  * 输入区：多行自适应 textarea + 发送。流式中发送键变停止。
@@ -23,9 +47,7 @@ export function Composer({
 
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT_PX)}px`;
+    if (el) fitHeight(el, value);
   }, [value]);
 
   const send = () => {
@@ -36,9 +58,10 @@ export function Composer({
   };
 
   // 背景与页面底同色、无顶部分割线（规格）：输入区不该在对话流上划一道横杠。
-  // 底部偏移保留 56px——手机上那条是底部 Tab 导航，贴到 bottom-0 会被它盖住。
+  // 位置与「我有多高」交给 StickyBottomBar：手机上要让开底部 Tab，
+  // 而悬浮的低调钮/提示条要让开这条，两边都读同一个 --bottom-bar-h。
   return (
-    <div className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 -mx-4 bg-bg px-4 pt-2 pb-3 lg:bottom-0 lg:mx-0 lg:px-3">
+    <StickyBottomBar className="-mx-4 bg-bg px-4 pt-2 pb-3 lg:mx-0 lg:px-3">
       <div className="flex items-end gap-2">
         <textarea
           ref={ref}
@@ -51,9 +74,9 @@ export function Composer({
               send();
             }
           }}
-          placeholder="说说现在的情况，或者问下一步该怎么做"
+          placeholder={PLACEHOLDER}
           aria-label="输入消息"
-          className="min-h-11 flex-1 resize-none rounded-[10px] border border-line bg-surface-2 px-3 py-2.5 text-[16px] leading-7 text-ink placeholder:text-ink-2 focus:border-primary focus:outline-none"
+          className="min-h-11 flex-1 resize-none rounded-[10px] border border-line bg-surface-2 px-3 py-2.5 text-[16px] leading-7 text-ink placeholder:text-ink-2 focus:border-focus-ring focus:outline-none"
         />
 
         {streaming ? (
@@ -94,6 +117,6 @@ export function Composer({
       <p className="mt-1.5 hidden text-[13px] text-ink-2 lg:block">
         回车换行，⌘/Ctrl + 回车发送
       </p>
-    </div>
+    </StickyBottomBar>
   );
 }

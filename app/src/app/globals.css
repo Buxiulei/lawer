@@ -30,6 +30,21 @@
   --primary: #8b2942;
   --primary-ink: #6d1f33;
   --primary-wash: #f5e7eb;
+  /* 主色文字压在 surface/bg/kraft 这些**页面底**上时用它，**不要用 `--primary`**。
+     `--primary` 是实心底色，它同时还要托住白字；两个方向的对比度互相拉扯，
+     深色下解不出一个同时满足的值（白字要它暗到相对亮度 ≤0.183，
+     压 surface 要它亮到 ≥0.229，区间为空），所以按语义拆成两个 token。
+     浅色下 #8b2942 两个方向都够（对白 8.42、压 surface 8.42），
+     这里逐值等于浅色 `--primary` 只是为了让浅色渲染结果一字不变。 */
+  --primary-ink-on-surface: #8b2942;
+  /* 焦点框专用：输入控件的 `focus:border-focus-ring` 与全站 `:focus-visible` 描边。
+     **不要指 `--primary`**，理由和上面那条同源、方向却更硬：
+     input/textarea/select/Composer 全是 `focus:outline-none`，那圈边框是它们**唯一**的
+     焦点指示（2.4.7 焦点可见 + 1.4.11 非文字对比 3:1），而它压的底是输入框自己的
+     `--surface-2`——不是 surface 也不是 bg。深色下 `--primary` 为了托白字被压到 #be4b67，
+     压 --surface-2(#372e29) 只有 **2.77**，键盘用户会看不出焦点落在哪个框里。
+     浅色下逐值等于 `--primary`(#8b2942，压 --surface-2 是 6.41)，浅色渲染结果一字不变。 */
+  --focus-ring: var(--primary);
   /* 实心主色/朱红底上的文字。深浅两套都是白，但仍然给个名字：
      shadcn 的 --primary-foreground/--destructive-foreground 指到这儿，
      免得白色在桥接层再写一遍、将来改的时候漏掉一处。 */
@@ -47,6 +62,15 @@
   --success: #2f7d5d;
   --success-wash: #e8f3ee;
   --success-ink: #215c44;
+
+  /* 禁用控件的底与字。**成对使用，不要只取一个**——
+     整体 opacity 会把底和字一起冲淡（红底白字降到 45% 是 2.35:1，看不清是哪个字），
+     显式给一对低饱和色则两边各自可控。色相取自主色那一族的玫瑰调、饱和压到 ~11%
+     （这个饱和度下 8 位量化会把色相甩出好几度，别按精确色相读这两个值），
+     让它读作"这原本是个按钮"而不是一块中性灰。
+     WCAG 1.4.3 豁免禁用控件，这一对按 3:1 配（实测 4.32），目标是可辨不是达 AA。 */
+  --disabled-surface: #e4ddde;
+  --disabled-ink: #766066;
 
   /* ── 案卷材质（批 5）──────────────────────────────────
      设计稿的 --paper/--seal/--gold-ink 与现有 --bg/--primary/--gold **逐值相同**，
@@ -105,8 +129,19 @@
     --ink: #eae3d9;
     --ink-2: #a3988b;
     --line: #3a322d;
-    --primary: #c55d76;
+    /* 只压明度：HSL 由 345.6/47.3%/56.9% 变到 345.4/46.9%/52.0%——
+       色相与饱和那点零头是 8 位取整带来的，没有主动调。
+       #c55d76 托白字只有 4.04，压到这里是 4.78。作为非文字 UI 它对 surface 3.60、
+       对 bg 3.86，仍过 1.4.11 的 3:1。**主色文字不要再指它**，见 --primary-ink-on-surface。 */
+    --primary: #be4b67;
     --primary-ink: #d98ba0;
+    /* 深色下"压 wash 的强调字"和"压页面底的主色字"要的亮度区间重合，
+       一个值就够；再造一个只差几个色阶的近似色反而更难维护。 */
+    --primary-ink-on-surface: var(--primary-ink);
+    /* 焦点框同样落到 ink 系：`--primary`(#be4b67) 压输入框底 --surface-2(#372e29)
+       只有 2.77，`--primary-ink`(#d98ba0) 压 --surface-2 是 5.14、压 surface 6.67、
+       压 bg 7.17，三种底都过 1.4.11 的 3:1。 */
+    --focus-ring: var(--primary-ink);
     --primary-wash: #332026;
     --on-primary: #ffffff;
     --gold: #c9a75b;
@@ -126,6 +161,10 @@
     --success-wash: #1c2f26;
     --success-ink: var(--success);
 
+    /* 同浅色那一对的取舍，深色下反过来取暗底浅字（实测 4.09） */
+    --disabled-surface: #3e3235;
+    --disabled-ink: #a19195;
+
     --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.4);
     color-scheme: dark;
   }
@@ -138,8 +177,19 @@
   --ink: #eae3d9;
   --ink-2: #a3988b;
   --line: #3a322d;
-  --primary: #c55d76;
+  /* 只压明度：HSL 由 345.6/47.3%/56.9% 变到 345.4/46.9%/52.0%——
+     色相与饱和那点零头是 8 位取整带来的，没有主动调。
+     #c55d76 托白字只有 4.04，压到这里是 4.78。作为非文字 UI 它对 surface 3.60、
+     对 bg 3.86，仍过 1.4.11 的 3:1。**主色文字不要再指它**，见 --primary-ink-on-surface。 */
+  --primary: #be4b67;
   --primary-ink: #d98ba0;
+  /* 深色下"压 wash 的强调字"和"压页面底的主色字"要的亮度区间重合，
+     一个值就够；再造一个只差几个色阶的近似色反而更难维护。 */
+  --primary-ink-on-surface: var(--primary-ink);
+  /* 焦点框同样落到 ink 系：`--primary`(#be4b67) 压输入框底 --surface-2(#372e29)
+     只有 2.77，`--primary-ink`(#d98ba0) 压 --surface-2 是 5.14、压 surface 6.67、
+     压 bg 7.17，三种底都过 1.4.11 的 3:1。 */
+  --focus-ring: var(--primary-ink);
   --primary-wash: #332026;
   --on-primary: #ffffff;
   --gold: #c9a75b;
@@ -158,6 +208,10 @@
   --success: #5caf8a;
   --success-wash: #1c2f26;
   --success-ink: var(--success);
+
+  /* 同浅色那一对的取舍，深色下反过来取暗底浅字（实测 4.09） */
+  --disabled-surface: #3e3235;
+  --disabled-ink: #a19195;
 
   --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.4);
   color-scheme: dark;
@@ -203,6 +257,19 @@
   --radius: 12px;
 }
 
+/* ── 底部固定层的高度真源（SYS-06）────────────────────────────
+   底部同时压着两层：常驻的 Tab 条，和只有部分页面才有的 sticky 操作条。
+   谁想躲开底部，只能读这两个变量，**不许再自己写一个 56/76 出来**——
+   各写各的常量互不感知，正是低调钮压住「下一步」的由头。
+   两个都只在移动端有意义：Tab 条 lg 起隐藏，读它的低调钮也是 lg:hidden。 */
+:root {
+  /* 底部 Tab 那一条：h-14(56px) + 安全区。与 AppShell 里 BottomTabs 的 h-14 对齐。 */
+  --tab-bar-h: calc(56px + env(safe-area-inset-bottom));
+  /* 视口底部被固定层占掉的总高。默认只有 Tab 那条；
+     页面上有 sticky 操作条时，由 StickyBottomBar 用 ResizeObserver 把实测高写进来。 */
+  --bottom-bar-h: var(--tab-bar-h);
+}
+
 /* ── Tailwind theme 映射 ────────────────────────────────────── */
 @theme inline {
   --color-bg: var(--bg);
@@ -213,8 +280,12 @@
   --color-line: var(--line);
   --color-primary: var(--primary);
   --color-primary-ink: var(--primary-ink);
+  --color-primary-ink-on-surface: var(--primary-ink-on-surface);
+  --color-focus-ring: var(--focus-ring);
   --color-primary-wash: var(--primary-wash);
   --color-on-primary: var(--on-primary);
+  --color-disabled-surface: var(--disabled-surface);
+  --color-disabled-ink: var(--disabled-ink);
   --color-gold: var(--gold);
   --color-gold-wash: var(--gold-wash);
   --color-amber: var(--amber);
@@ -290,6 +361,22 @@
   html {
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
+
+    /* 横向溢出兜底。
+       【依据】docs/tasks/BOARD.md 审查递延队列 P-04：「落地页 fixed 容器虚高 36px 休眠项
+       （修完溢出复测，仍在则 html overflow-x:clip 兜底）」。落这条时按的就是那句处方。
+       **具体是哪个元素顶出的 36px，本轮没有复测、也没有定位到**——这里只写下它被记成什么，
+       不替它编一个成因。要定位得在真机窄屏读 documentElement.scrollWidth 与 clientWidth 的差。
+       所以：兜底不是替代，**溢出源该查还是要查**；这一条只保证在查清之前，
+       越界的装饰件不会让整页横着晃。
+
+       【为什么是 clip 不是 hidden】两者都止住横向滚动，但 `overflow-x: hidden` 会
+       把根元素变成滚动容器，**其中所有 position: sticky 立刻失效**——本站 sticky 有
+       ShellHeader（`sticky top-0`）、「问它」输入区 Composer、首诊下一步条三处，
+       全站顶栏会当场不再吸顶。`overflow: clip` 按 CSS Overflow 3 不建立滚动容器，
+       sticky 保留。另：clip 与另一轴的 visible 可以共存（规范只在另一轴为
+       scroll/auto/hidden 时才把 visible 改算成 auto），所以纵向滚动不受影响。 */
+    overflow-x: clip;
   }
 
   body {
@@ -310,8 +397,11 @@
     color: var(--primary-ink);
   }
 
+  /* 描边走 --focus-ring 而不是 --primary：outline-offset 让这圈线落在**父元素的底**上，
+     那可能是 surface、bg，也可能是 surface-2（表单块、引用块都是 surface-2 底），
+     深色下 --primary 压 surface-2 只有 2.77。浅色下 --focus-ring 逐值等于 --primary，观感不变。 */
   :focus-visible {
-    outline: 2px solid var(--primary);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 }
@@ -346,6 +436,103 @@
     transform-box: fill-box;
     transform-origin: center;
     animation: graph-pulse 2s ease-in-out infinite;
+  }
+}
+
+/* ══ 批6-A：桌面工作台 · 布局分发层 ════════════════════════════
+   （本段只写布局：栅格轨道、容器阈值、栏的显隐与焦点引导。
+     组件外观归 @layer components 那一段，两段不交叉。）
+
+   断点量的是**内容区宽度 w**，不是视口——侧栏展开/收起会改变 w：
+     1536 视口 · 侧栏展开 → w=1281 → 双栏
+     1536 视口 · 侧栏收起 → w=1465 → 三栏
+   所以 ⌘B 在这里不是「收起菜单」，是「腾出第三栏」。媒体查询看不见这件事。
+
+   ── 阈值是**量出来的**，与设计稿的算数有两处出入，都记在这里 ──
+   稿子给的是 920 / 1320，按「内容区宽」推，但没把两样东西算进去：
+   页面左右留白 48px，和滚动条 15px。实测（scripts/perf/ws-grid.mjs）：
+     1440 视口 · 收起侧栏 → w=1369，稿子说的 1384 少了 15（滚动条）
+   于是按主区下限 600px 回推：
+     双栏 = 600 + 340(卷宗栏轨道) + 48(留白) = 988  → 取 990
+     三栏 = 600 + 340 + 380(查看器轨道) + 48     = 1368 → 取 1400
+   三栏为什么不取 1368 而取 1400：1440 收起正好是 1369，只差 1px 就翻档，
+   换台 Windows（滚动条 17px）就翻不过去了——那是「在我机器上是对的」。
+   1400 是设计稿自己留的那条退路（「挤就往上调到 1400」），代价是翻档的视口
+   从 1440 挪到 1471 起（1536 那档笔记本很舒服）。**主区绝不压到 560 以下**：
+   1400 那一档主区是 632。
+
+   三个阈值只写在这一处。要调就改这里，别去组件里找——组件里一个宽度判断都没有。 */
+:root {
+  /* 栏宽含 20px 内侧留白。**不用 grid gap**：收起的栏是 display:none，
+     gap 却照样在轨道之间占位，三条轨道会白白吃掉两个 gap。 */
+  --ws-w-dossier: 340px; /* 卷宗栏 320 + 20 */
+  --ws-w-viewer: 380px; /* 查看器 360 + 20 */
+}
+
+[data-workspace] {
+  container: work / inline-size;
+}
+
+.ws-grid {
+  display: grid;
+  /* 三条轨道恒在。少一条就不可插值——grid-template-columns 在轨道数不同的
+     两个值之间只会硬跳，200ms 那条过渡等于没写。 */
+  grid-template-columns: minmax(0, 1fr) 0px 0px;
+  align-items: start;
+  transition: grid-template-columns 200ms ease-out;
+}
+
+.ws-pane {
+  display: none;
+  padding-left: var(--sp-4);
+  /* 开合时只重排这一栏，别把整条对话流也拖进去算 */
+  contain: layout paint;
+  position: sticky;
+  top: 68px;
+  max-height: calc(100dvh - 88px);
+  overflow-y: auto;
+}
+
+@container work (min-width: 990px) {
+  .ws-grid[data-dossier='1'] {
+    grid-template-columns: minmax(0, 1fr) var(--ws-w-dossier) 0px;
+  }
+  .ws-grid[data-dossier='1'] > .ws-dossier {
+    display: block;
+  }
+}
+
+@container work (min-width: 1400px) {
+  .ws-grid[data-dossier='1'][data-viewer='1'] {
+    grid-template-columns: minmax(0, 1fr) var(--ws-w-dossier) var(--ws-w-viewer);
+  }
+  /* 查看器只在卷宗栏也在时才出：显隐条件必须与上面那条轨道规则一字对应，
+     否则会出现「栏显示了、轨道还是 0」——0 宽的栏里文字一个字一行，页面拉到几万像素高。 */
+  .ws-grid[data-dossier='1'][data-viewer='1'] > .ws-viewer {
+    display: block;
+  }
+}
+
+/* F6 走到哪一栏：2px 内描边。**描边常驻不淡出**——它是焦点指示器，
+   淡掉就等于键盘用户不知道自己在哪。淡出的是那层引导底色。 */
+[data-pane]:focus-visible {
+  outline: none;
+  border-radius: var(--radius-card);
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ws-pane:focus-visible {
+    animation: ws-pane-guide 600ms ease-out;
+  }
+}
+
+@keyframes ws-pane-guide {
+  from {
+    background-color: var(--primary-wash);
+  }
+  to {
+    background-color: transparent;
   }
 }
 
@@ -503,19 +690,41 @@
    用 filter 不用 color:transparent + text-shadow：后者是继承属性，
    子元素只要自己写了 color（本仓库几乎每个 span 都带 Tailwind 文字色）
    就把糊打穿、原样可读；filter 对子孙一视同仁。实测见任务记录。 */
+/* 【工单 B5：糊层过渡两个方向不对称，这是刻意的】
+   **开启方向（清→糊）不做过渡**：开启的全部价值就是「有人走过来了」，
+   那 120ms 里屏幕上是**可读的半糊明文**——正是要防的那一帧。
+   动画 blur 半径又是全站最贵的一帧（每帧重新光栅化 + 高斯整棵子树），
+   而工装已经证明这台仪器看不见 blur 的代价（g1-sanity 四档 0/5/40/120px 全 0% 掉帧，
+   按已入册规矩那叫「无法真实模拟」，不叫「没代价」）——**没人能证明它便宜，
+   就不要每次开关都付一遍**。
+   代替「糊的过渡」给出确认的是按钮自身：底色切换 + 一次 scale + haptic(20)。
+
+   关闭方向（糊→清）保留 120ms：此时没有安全窗口，柔和一点更舒服。
+   过渡声明落在**基础规则**上而不是 discreet 规则上，因为 CSS 过渡取的是
+   **新状态**那一侧的 transition——退出低调时元素只剩这条规则，于是它说了算。 */
+[data-veil] {
+  transition: filter var(--mo-exit) var(--ease-out);
+}
+
 html[data-discreet='1'] [data-veil] {
   filter: blur(5px);
-  transition: filter 120ms ease-out;
+  /* 开启瞬间到位，见上方长注释。**别顺手改回有时长的过渡。** */
+  transition: none;
   /* 长按不弹系统选择菜单，划选复制也拿不到内容 */
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
 
-/* 按住的那一块；块里的输入框拿到焦点时也清晰，否则没法填 */
+/* 按住的那一块；块里的输入框拿到焦点时也清晰，否则没法填。
+   【工单 G-3】**点住看清 / 松手回糊两个方向都不加过渡，这是刻意的**：
+   揭开是为了「现在就要读这一行」，中间任何一帧半糊都是纯损失；
+   而回糊那一下正是把内容重新藏起来，同样不该有可读的中间帧。
+   下一个人别来加 200ms，那会把最贵的那帧请回来、还开一道泄密窗。 */
 html[data-discreet='1'] [data-veil][data-veil-open],
 html[data-discreet='1'] [data-veil][data-veil-focus] {
   filter: none;
+  transition: none;
 }
 
 /* 正在打字的输入框要能挪光标、能选词 */
@@ -538,4 +747,384 @@ html[data-discreet='1'] [data-veil][data-veil-focus] [data-veil],
 html[data-discreet='1'] [data-veil]:has([data-veil][data-veil-open]),
 html[data-discreet='1'] [data-veil]:has([data-veil][data-veil-focus]) {
   filter: none;
+  /* 同 G-3：套着的两层一起亮，也一起瞬时 */
+  transition: none;
+}
+
+/* ── 动效 v1 ──────────────────────────────────────────────────
+   这一段**只追加、不改上面任何一条现存规则**（唯一的例外是 [data-veil] 那几行，
+   见工单 B5 的长注释）。两路工单共用这一段，keyframes 全用新名字。
+
+   原则（DESIGN 动效篇）：
+   1. 只回答两个问题——「刚才那一下生效了吗」「现在该看哪儿」。都答不了的删。
+   2. 稳：不弹、不飘、不视差。全站唯一允许过冲的是落章（--ease-seal）。
+   3. 短：单次 ≤300ms；退场 = 入场 × 0.67。
+   4. 可预期：同语义同曲线同时长，**一律走 token**，页面里不许出现写死毫秒的 arbitrary class
+      （`duration-` 后面直接跟方括号数字那一种；这里刻意不把它原样写出来，
+      因为 Tailwind 的扫描器会连注释一起读，把示例本身编译成一条真工具类）。
+   5. 动效不制造新信息：每一处动效传达的东西，静止时也必须能读出来
+      ——这条同时就是 prefers-reduced-motion 的降级保证。
+
+   JS 侧的镜像在 app/src/app/_ui/motion.ts 的 MOTION / EASE，**改一处要改两处**；
+   `__tests__/motion-tokens.test.ts` 钉住两边一致，也钉住这里定义的每个 token
+   都被引用、被引用的每个 token 都在这里定义。 */
+:root {
+  --mo-tap: 120ms;     /* 按压、勾选描边、tab 高亮 */
+  --mo-base: 180ms;    /* 默认：入场、状态色、边框 */
+  --mo-exit: 120ms;    /* 一切退场（= base × 0.67） */
+  --mo-route: 160ms;   /* 同级切换：四个 Tab 交叉淡入、流内三态 crossfade */
+  --mo-layer: 200ms;   /* 进出一层：下钻入场 / 抽屉落下 / 拖拽弹回 */
+  --mo-sheet: 250ms;   /* 抽屉升起（沿用现值，不改） */
+  --mo-stagger: 60ms;  /* 多张卡入场的错开间隔 */
+  --mo-caret: 900ms;       /* 流式光标：正在吐字 */
+  --mo-caret-stall: 2400ms; /* 流式光标：卡住了，换成更慢的呼吸 */
+  /* 落章与里程碑编排（A 路 A3/A4）：随其使用者一起并入这一份唯一的 --mo-* 定义。
+     JS 侧 A 路走 MO.seal / MO.track（秒制喂 gsap），B 路走 MOTION.*（毫秒喂 WAAPI）——
+     两个常量各取所需的档位，共用这一套 CSS token。 */
+  --mo-seal: 420ms;    /* 落章，全站唯一 >300ms 的单次动效 */
+  --mo-track: 900ms;   /* 里程碑推进编排总长 */
+
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);      /* 入场/常规 */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);       /* 退场 */
+  --ease-seal: cubic-bezier(0.2, 1.6, 0.4, 1); /* 唯一带过冲，仅落章（复用 .anjuan-stamp） */
+  --ease-lin: linear;                          /* 只给进度：进度用 ease 会撒谎 */
+}
+
+/* 抽屉退场：**落下，不是淡出**。
+   升起来的东西淡出会读成「它消失了」，而不是「它收回去了」——
+   收回去才对，因为再点一下它还会从同一个地方升起来。 */
+@keyframes sheet-down {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+
+@keyframes sheet-right-out {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+/* 路由过渡：同级四 Tab 交叉淡入。**不做方向滑动**——
+   驾驶舱/问它/证据/文书之间没有前后关系，方向滑动会编造一个不存在的层级。
+   起点不从 0 而从 .55：全黑一帧再亮起来比直接换更慢、更像加载失败。 */
+@keyframes route-in {
+  from { opacity: 0.55; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 下钻（列表 → 详情）：从下方升起。方向在这里编码层级——往深处走是从下面来。
+   返回不做动效（用户已经决定离开了）。 */
+@keyframes route-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 结构化帧卡（record / notice / draft）落地 */
+@keyframes frame-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 流式光标两态。**这是 SSE 场景唯一真正新增的信息**：
+   在这之前「正在吐字」和「卡住了」长得一模一样。
+   卡住时换成更慢的呼吸，同时把颜色降到 ink-2（见 Messages.tsx 的 CaretMark）——
+   **颜色那一半是静止也读得出的判据**，减弱动效时信息不丢。 */
+@keyframes caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+
+@keyframes caret-breath {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* ── 上面这些 keyframes 怎么用 ─────────────────────────────── */
+
+/* 路由过渡。壳层的 RouteTransition 按 pathname 打这个属性。 */
+[data-route-anim='cross'] {
+  animation: route-in var(--mo-route) var(--ease-out) both;
+}
+[data-route-anim='rise'] {
+  animation: route-rise var(--mo-layer) var(--ease-out) both;
+}
+
+/* 流内三态（受理行 → 等待卡 → 正文）的交叉淡入。**不做高度动画**：
+   等待卡消失时正文已经占好位，再动高度就是白付一次重排。 */
+.mo-crossfade {
+  animation: fade-in var(--mo-route) var(--ease-out) both;
+}
+
+/* 结构化帧卡入场。同组多张用 --frame-i 错开，60ms 一档。 */
+[data-frame-in] {
+  animation: frame-in var(--mo-base) var(--ease-out) both;
+  animation-delay: calc(var(--mo-stagger) * var(--frame-i, 0));
+}
+
+/* 这三条入场都带 translateY 位移。上面那把全局钝刀只把时长压成 0.01ms——
+   它保证「很快结束」，不保证「结束在对的那一帧」：位移动画中途那一下照样甩出去。
+   减弱动效下整条不建，直接落到终态（opacity 1 / transform none），无位移。 */
+@media (prefers-reduced-motion: reduce) {
+  [data-route-anim='cross'],
+  [data-route-anim='rise'],
+  [data-frame-in] {
+    animation: none;
+  }
+}
+
+/* 抽屉拖拽期间：把跟手写入的 transform 从任何过渡里摘出来，
+   否则每一帧都在追一个 250ms 的过渡，手感是黏的。 */
+[data-sheet-dragging] {
+  transition: none !important;
+}
+
+/* 按压反馈：只动 transform，**不许改变布局边界**（按一下把周围推开是最难受的一类反馈）。
+   减弱动效时全局规则压掉过渡时长，只剩静止的按下态——「按住了」这条信息
+   由 scale 的终态承载，不由过程承载。 */
+.mo-press {
+  transition: transform var(--mo-tap) var(--ease-out);
+}
+
+/* 流式光标两态。**颜色那一半由 CaretMark 用 class 给**，减弱动效时动画被压掉、
+   颜色还在——「正在吐字」与「卡住了」静止时仍然分得出来。 */
+[data-caret='live'] {
+  animation: caret-blink var(--mo-caret) ease-in-out infinite;
+}
+[data-caret='stalled'] {
+  animation: caret-breath var(--mo-caret-stall) ease-in-out infinite;
+}
+
+/* ── 动效 v1 ──────────────────────────────────────────────────
+   这套动效服务于一个在会议室外偷看手机的人。它的全部工作是让人相信
+   「系统还在走，而且刚才那一下生效了」。只回答两个问题：确认、引导。
+   两个都回答不了的动效，删。
+
+   **本段只在文件末尾追加，不改上面任何一条现存规则**（B 路会在同一文件动
+   `[data-veil]` 那三行，两边不碰同一处，合并时不打架）。
+
+   本段的 --mo-* / --ease-* token 已并入文件上方那一份唯一定义（A 路 MO 与 B 路 MOTION
+   共用同一套 CSS token），这里只留 keyframes 与工具类；两边逐值一致由
+   `motion-tokens.test.ts` 钉住。 */
+
+/* 通用入场：把原先散在组件里的 `animate-[fade-in_200ms_ease-out]` 收到 token 上 */
+.mo-fade-in {
+  animation: fade-in var(--mo-base) var(--ease-out);
+}
+
+/* ── A2 里程碑「进行中」格的呼吸环（全站唯一的无限循环）────────
+   动的是 `::after` 外环，**不动圆点本体**——本体一动，轨道形状就在动。
+
+   为什么这一处可以无限循环：它不是警报，是心跳。
+   判据写死——**它不随任何用户可操作的状态改变**（不会因为你今天没做事而变快）。
+   警报要求你现在行动，会累积焦虑；心跳只说明系统活着，那正是「陪跑」的字面意思。 */
+.mo-breath::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 9999px;
+  border: 2px solid var(--primary);
+  opacity: 0.45;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  /* 1400ms alternate ＝ 一个完整来回 2800ms */
+  .mo-breath::after {
+    animation: mo-track-breath 1400ms ease-in-out infinite alternate;
+  }
+}
+@keyframes mo-track-breath {
+  from {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0.9;
+    transform: scale(1.15);
+  }
+}
+/* **减弱动效不是把它跑 0.01ms**（那会停在 from 的 0.45，比设计的静止态更淡、
+   在浅色底上几乎看不见）。整条不建，停在两端之间的 0.7 上。
+   上面那条全局 `*` 兜底钝刀管不到「停在哪一帧」，只有这里能。 */
+@media (prefers-reduced-motion: reduce) {
+  .mo-breath::after {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* ── A3 里程碑推进：色与线的静止判据 ──────────────────────────
+   四态判据是**那行字**（日期 / 进行中 / 未经此步 / 空），动效只是加速识别。
+   这里只给颜色一条过渡；字重**直接切不做动画**——字重是布局属性，动它会重排整行。 */
+.mo-track-tint {
+  transition:
+    color var(--mo-base) var(--ease-out),
+    background-color var(--mo-base) var(--ease-out),
+    border-color var(--mo-base) var(--ease-out);
+}
+
+/* ── A4 落章 ────────────────────────────────────────────────
+   **只抄 `.anjuan-stamp` 的形，不抄它的动画。**
+   那条 `.anjuan-stamp` 自带 `stamp-in 0.45s ... 0.55s` 是给落地页首屏用的，
+   直接套在这里会和编排的时序打架（章会先自己播一遍，再被 gsap 拽回起点）。
+   曲线仍是同一条 `--ease-seal`，由 `useMilestoneAdvance` 用 JS 同名实现驱动。
+
+   **本类不写 transform**：transform 归 gsap 独占，两边都写必然互相擦掉。 */
+.mo-seal-mark {
+  box-shadow:
+    inset 0 0 0 2px var(--bg),
+    inset 0 0 0 3px var(--primary);
+  mix-blend-mode: multiply;
+}
+
+/* ── A6 期限跨过 ≤3 天阈值那一刻 ────────────────────────────
+   底色与边框的过渡走 `.mo-track-tint`；这里只管催办角标的入场。
+   **只在本会话内跨过阈值时播一次**，挂载时就已经紧急的不播——
+   那不是刚发生的事。设计稿写 280ms，落到最近的 token `--mo-sheet`(250ms)。 */
+@media (prefers-reduced-motion: no-preference) {
+  .mo-nag-in {
+    animation: mo-nag-in var(--mo-sheet) var(--ease-out) backwards;
+  }
+}
+@keyframes mo-nag-in {
+  from {
+    transform: scale(0.8) rotate(-6deg);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) rotate(0);
+    opacity: 1;
+  }
+}
+
+/* ── A5 勾选描边 ────────────────────────────────────────────
+   勾的 `<path>` 描线。整行**不位移**——按压反馈不许改变布局边界。
+   路径 `M4.5 10.5l3.5 3.5 7.5-8` 实长约 15.9，取 17 留余量。
+   设计稿写 140ms，这里落到 `--mo-tap`(120ms)：差 20ms 肉眼不可分，
+   而现场数字会开一个「下次再写一个 380ms」的口子。 */
+.mo-check [data-slot='checkbox-indicator'] path {
+  stroke-dasharray: 17;
+  stroke-dashoffset: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mo-check [data-slot='checkbox-indicator'] path {
+    animation: mo-check-draw var(--mo-tap) var(--ease-out) backwards;
+  }
+}
+@keyframes mo-check-draw {
+  from {
+    stroke-dashoffset: 17;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* 标题划线。**不用绝对定位的划线条**——标题会折行，绝对定位只画得出一行。
+   静止判据仍在：`text-decoration-line` 常驻，减弱动效下颜色瞬间到位，划线照样在。 */
+.mo-strike {
+  text-decoration-line: line-through;
+  text-decoration-color: transparent;
+  transition:
+    text-decoration-color var(--mo-base) var(--ease-out),
+    color var(--mo-base) var(--ease-out);
+}
+.mo-strike[data-done='1'] {
+  text-decoration-color: currentColor;
+}
+
+/* 顶栏横扫高光：**仅在计数增加时**播一次。计数数字本身直接换，不做翻牌轮。 */
+.mo-sweep {
+  position: relative;
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mo-sweep[data-sweep]::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--on-primary) 28%, transparent),
+      transparent
+    );
+    pointer-events: none;
+    animation: mo-sweep var(--mo-base) var(--ease-out);
+  }
+}
+@keyframes mo-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ══ 批B：桌面工作区面板（引用桥 / 拖拽入库 / 命令面板）════════════════
+   本段只写这三样东西的外观，**不写任何在窄屏无条件生效的规则**：引用桥靠
+   (any-hover:hover) 设备查询自我门控，拖拽遮罩/命令面板由组件的容器查询与 lg
+   门控收在桌面，手机上一个像素不动（移动端零回归的落点）。
+   与批6-A 的布局层同样写在 @layer 外面：要盖过 utilities，也与那段风格一致。 */
+
+/* 引用桥（_components/citations.ts）。
+   **只改底色与外扩阴影，不改任何占位属性**——padding / border-width / font-size
+   一律不碰，hover 时布局高度必须原封不动（验收直接量 offsetHeight）。
+   box-shadow 的扩散不参与布局，那圈「外扩底色」是免费的。
+
+   门问的是 any-hover 而不是 hover：带触摸屏的笔记本主输入会被判成 coarse，
+   用 (hover:hover) 会把一台接着鼠标的真桌面挡在外面（详见 citations.ts 同段注释）。
+   纯触屏是 any-hover:none，整段不生效。 */
+@media (any-hover: hover) {
+  /* 常态只留过渡（不可见），**不加任何会改变形状的属性**——border-radius 一度写在
+     这里，而法条卡带 8px 左边框，圆角会把边框两端削圆，在一台拉到 393 宽的触屏
+     笔记本上就是一处肉眼可见的「移动端」改动。形状只在点亮那一刻出现。
+     减弱动效时这条过渡被本文件上方的全局 !important 规则清零 → 只剩底色、去过渡
+     （设计 §动效：引用桥 reduced-motion 保底色去过渡）。 */
+  [data-cite],
+  [data-cite-target] {
+    transition:
+      background-color 150ms ease-out,
+      box-shadow 150ms ease-out;
+  }
+
+  /* 引用点是可指的：给个手型，别的什么都不给——常态加下划线会在对话里凭空多出装饰线。 */
+  [data-cite]:hover,
+  [data-cite-target]:hover {
+    cursor: pointer;
+  }
+
+  /* 点亮：只有底色与外扩阴影参与，两者都不占位。
+     键盘走到卷宗栏那一行时同样亮——:focus-within 一并挂上（设计 §四）。 */
+  [data-cite-lit],
+  [data-cite-target]:focus-within {
+    border-radius: 6px;
+    background-color: var(--primary-wash);
+    box-shadow: 0 0 0 4px var(--primary-wash);
+  }
+}
+
+/* 拖拽入库的遮罩（_components/DropPanel.tsx）。**不糊内容**：只压一层半透明主色
+   + 一圈虚线，底下拖到哪儿仍然看得清。靠父级 .relative 定位，只覆到证据列表那块。 */
+.drop-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  border: 2px dashed var(--primary);
+  border-radius: 12px;
+  background-color: color-mix(in srgb, var(--primary-wash) 82%, transparent);
+  animation: fade-in 150ms ease-out;
+}
+
+/* 命令面板（_components/CommandSearch.tsx）：贴顶而不是居中——搜索框该落在眼睛
+   已经在的地方。放在 @layer 外面，稳稳盖过 DialogContent 上的 top-1/2 与
+   -translate-y-1/2 工具类（同本文件低调模式那段「盖过 utilities」的理由）。 */
+.cmdk-panel {
+  top: 12vh;
+  left: 50%;
+  max-width: 560px;
+  transform: translateX(-50%);
+  padding: 0;
 }

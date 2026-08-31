@@ -18,6 +18,10 @@
       "裁员"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf",
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM="
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/calc/bingjia-gongzi.md",
@@ -56,6 +60,9 @@
       "被裁"
     ],
     "region": "北京",
+    "sources": [
+      "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5202764/content.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/calc/buchangjin-geshui.md",
@@ -85,6 +92,9 @@
       "欠薪"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/calc/daigang-gongzi.md",
@@ -123,6 +133,10 @@
       "被裁"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.gov.cn/zwgk/2008-09/19/content_1099470.htm"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/calc/daitongzhijin-n1.md",
@@ -158,6 +172,11 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf",
+      "https://zh.wikisource.org/wiki/中华人民共和国劳动法_(2018年)",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/calc/jiabanfei.md",
@@ -203,6 +222,10 @@
       "被裁"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.gov.cn/zwgk/2008-09/19/content_1099470.htm"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/calc/jingji-buchang-n.md",
@@ -237,6 +260,10 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.gov.cn/zhengce/zhengceku/202509/content_7040571.htm",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/calc/jingye-buchang-weiyuejin.md",
@@ -277,6 +304,10 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/职工带薪年休假条例",
+      "https://www.mohrss.gov.cn/xxgk2020/gzk/gz/202112/t20211228_431596.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/calc/nianjia-300.md",
@@ -314,6 +345,10 @@
       "逼迫离职"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/失业保险条例",
+      "https://www.beijing.gov.cn/fuwu/bmfw/sy/jrts/202507/t20250724_4157680.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/calc/shiye-baoxianjin.md",
@@ -345,6 +380,11 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/calc/tuoqian-jiafu-peichang.md",
@@ -380,6 +420,11 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://zh.wikisource.org/wiki/最高人民法院关于审理劳动争议案件适用法律问题的解释（二）",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/calc/weiqian-hetong-shuangbei.md",
@@ -420,6 +465,9 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/ai-tidai-gangwei-2025-zhongcai.md",
@@ -457,6 +505,9 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/biyezheng-hou-shixi-xieyi-bjzc25-2.md",
@@ -498,6 +549,9 @@
       "年假"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市朝阳区人民法院（2023）京0105民初8452号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/buqian-tongzhi-shuangbei-8452.md",
@@ -537,6 +591,9 @@
       "一审二审"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/某传媒公司分公司等与边某劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/caiyuan-daitongzhijin-jing03-14407.md",
@@ -575,6 +632,9 @@
       "一审二审"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终18835号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/caiyuan-kuisun-buzhengju-jing03-18835.md",
@@ -610,6 +670,9 @@
       "逼迫离职"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/某科技公司与王某劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/dache-fei-guofa-xiangdang-17970.md",
@@ -645,6 +708,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://bj3zy.bjcourt.gov.cn/article/detail/2026/07/id/9399749.shtml"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/daidaka-budingshi-gongshi-2026.md",
@@ -682,6 +748,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/某某冶金技术（北京）有限公司与隋某某劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/daocha-kaoqin-kuanggong-2002.md",
@@ -719,6 +788,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/马某与某息技术公司劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/di-er-zhiye-zhidu-hefa-13839.md",
@@ -756,6 +828,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2024）京03民终4718号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/erci-daoqi-zhongzhi-weifa-4718.md",
@@ -794,6 +869,9 @@
       "裁员"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/895348496_121123853"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/fuli-nianjia-anyue-sz25-4.md",
@@ -829,6 +907,9 @@
       "竞业限制"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/gaoguan-yinman-liyi-chongtu-2024.md",
@@ -864,6 +945,9 @@
       "逼迫离职"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/gongshang-fuzhen-guodu-diaocha-2024.md",
@@ -901,6 +985,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/gongzi-yiyiqi-wuxiao-bjzc24-3.md",
@@ -938,6 +1025,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终16940号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/guandian-tiaogang-kuanggong-16940.md",
@@ -980,6 +1070,9 @@
       "仲裁申请"
     ],
     "region": "全国",
+    "sources": [
+      "https://www.court.gov.cn/zixun/xiangqing/472681.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/guanlian-hundong-zeyi-zgf25-2.md",
@@ -1015,6 +1108,9 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/guyi-buqian-hetong-bjzc24-2.md",
@@ -1051,6 +1147,9 @@
       "仲裁申请"
     ],
     "region": "全国",
+    "sources": [
+      "https://www.court.gov.cn/zixun/xiangqing/472681.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/guyi-buqian-hetong-zgf25-3.md",
@@ -1088,6 +1187,9 @@
       "年终奖"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终19249号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/hegui-wenze-neibu-xitong-19249.md",
@@ -1123,6 +1225,9 @@
       "逼迫离职"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/huanqian-gongling-lianxu-bjzc25-1.md",
@@ -1162,6 +1267,9 @@
       "双倍工资"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/某1公司等与翟某劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/huanqian-jiangxin-gongling-11711.md",
@@ -1200,6 +1308,10 @@
       "逼迫离职"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/792253141_121123798",
+      "https://www.bj148.org/zf1/jcdt/202407/t20240712_1666219.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/huanqian-zhuti-wugu-cy24-4.md",
@@ -1241,6 +1353,9 @@
       "执行"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京世纪互联宽带数据中心有限公司等与刘旭劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/hundong-yonggong-liandai-jing01-197.md",
@@ -1277,6 +1392,9 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/高某与某咨询公司等劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/hunton-buchengli-lvsuo-3024.md",
@@ -1313,6 +1431,10 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/792253141_121123798",
+      "https://www.bj148.org/zf1/jcdt/202407/t20240712_1666219.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/hunton-liandai-cy24-1.md",
@@ -1350,6 +1472,9 @@
       "裁员"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市朝阳区人民法院（2022）京0105民初43551号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/hunton-wugu-shuangbei-43551.md",
@@ -1391,6 +1516,9 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市朝阳区人民法院（2024）京0105民初13483号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/hunton-yiren-gongsi-liandai-13483.md",
@@ -1428,6 +1556,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终16816号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/hunton-zhuxiao-gudong-16816.md",
@@ -1463,6 +1594,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/某公司与迟某劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jiangxin-30-geshui-zhengju-7478.md",
@@ -1499,6 +1633,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市朝阳区人民法院（2023）京0105民初6093号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jiechu-buzhengju-jing0105-6093.md",
@@ -1537,6 +1674,9 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/毕某某与某某建筑设计顾问有限公司劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jinghu-fuwuqi-sunshi-107.md",
@@ -1572,6 +1712,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-baogao-zuixiao-biyao-bjzc25-8.md",
@@ -1608,6 +1751,9 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-fanhua-jianshen-jiaolian-bjzc24-9.md",
@@ -1643,6 +1789,9 @@
       "仲裁申请"
     ],
     "region": "全国",
+    "sources": [
+      "https://www.court.gov.cn/zixun/xiangqing/472681.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-fanwei-shiying-zgf25-4.md",
@@ -1681,6 +1830,9 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/1014564022_121123853"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-feifa-quzheng-sz26-6.md",
@@ -1720,6 +1872,9 @@
       "协商解除"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/1014564022_121123853"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-gongzi-han-buchang-wuxiao-sz26-4.md",
@@ -1758,6 +1913,9 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/1014564022_121123853"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-jingzheng-guanxi-shizhi-sz26-2.md",
@@ -1796,6 +1954,9 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/zh-hans/北京市第一中级人民法院（2023）京01民终11222号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-jingzheng-zhengju-buzu-11222.md",
@@ -1832,6 +1993,9 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/1014564022_121123853"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-lanyong-jujue-buchang-sz26-1.md",
@@ -1870,6 +2034,9 @@
       "违纪解除"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/1014564022_121123853"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-peiou-daichi-sz26-3.md",
@@ -1908,6 +2075,9 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/1014564022_121123853"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-weiyuejin-tiaozheng-sz26-5.md",
@@ -1944,6 +2114,9 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/贾某与某美术出版公司劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jingye-yewu-chonghe-weiyue-12630.md",
@@ -1984,6 +2157,9 @@
       "一审二审"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终16660号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jixiao-gaijin-chengxu-jing03-16660.md",
@@ -2023,6 +2199,10 @@
       "一审二审"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.thepaper.cn/newsDetail_forward_31848834",
+      "https://news.bjd.com.cn/2025/10/28/11374859.shtml"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/jujie-xinhuo-jing03-5083.md",
@@ -2062,6 +2242,10 @@
       "一审二审"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终15429号民事判决书",
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终15421号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/keguan-yiqing-yewuliang-jing03-15429.md",
@@ -2101,6 +2285,9 @@
       "一审二审"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/某网络技术公司与吴某劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/keguan-zhanlue-tiaozheng-jing03-20183.md",
@@ -2136,6 +2323,9 @@
       "调岗降薪"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/某1公司与苏某劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/lirun-20-jixiao-weiyuejin-11114.md",
@@ -2171,6 +2361,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市朝阳区人民法院（2022）京0105民初72152号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/lizhi-zhengming-jianli-riqi-72152.md",
@@ -2207,6 +2400,9 @@
       "调解"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202312/t20231229_3518105.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/lizhi-zhengming-pingjia-neirong-bjzc23-9.md",
@@ -2243,6 +2439,9 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/姚某与某律所劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/luyin-lihai-guanxi-bucaina-14444.md",
@@ -2280,6 +2479,9 @@
       "仲裁申请"
     ],
     "region": "全国",
+    "sources": [
+      "https://www.gov.cn/xinwen/2016-11/30/content_5140730.htm"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/cases/mowei-taotai-shangwei-guize-2016.md",
@@ -2307,6 +2509,9 @@
       "违纪解除"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/895348496_121123853"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/nianjia-guoqi-zuofei-wuxiao-sz25-2.md",
@@ -2346,6 +2551,9 @@
       "欠薪"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/895348496_121123853"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/nianjia-yuerjia-gongzi-sz25-8.md",
@@ -2386,6 +2594,15 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/某物业管理有限公司与张某劳动争议一审民事判决书",
+      "https://zh.wikisource.org/wiki/北京市朝阳区人民法院（2023）京0105民初8452号民事判决书",
+      "https://zh.wikisource.org/wiki/某1公司与苏某劳动争议二审民事判决书",
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终19249号民事判决书",
+      "https://zh.wikisource.org/wiki/孟某与某公司劳动争议二审民事判决书",
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终16940号民事判决书",
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终15421号民事判决书"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/cases/nianzhongjiang-beijing-koujing.md",
@@ -2415,6 +2632,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/楷亚锐衡设计规划咨询（上海）有限公司北京分公司与钟奇燕劳动争议一审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/nianzhongjiang-jishu-2n-jing0105-33722.md",
@@ -2450,6 +2670,10 @@
       "执行"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/792253141_121123798",
+      "https://www.bj148.org/zf1/jcdt/202407/t20240712_1666219.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/nongmingong-zongbao-qingchang-cy24-5.md",
@@ -2485,6 +2709,10 @@
       "调解"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/792253141_121123798",
+      "https://www.bj148.org/zf1/jcdt/202407/t20240712_1666219.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/paiqian-gongjijin-guocuo-cy24-6.md",
@@ -2522,6 +2750,9 @@
       "年假"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/895348496_121123853"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/peichanjia-shijia-koufa-sz25-7.md",
@@ -2558,6 +2789,10 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://news.qq.com/rain/a/20251216A01HHY00",
+      "https://www.thepaper.cn/newsDetail_forward_32185378"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/peiou-jingye-jing03-683.md",
@@ -2595,6 +2830,10 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/792253141_121123798",
+      "https://www.bj148.org/zf1/jcdt/202407/t20240712_1666219.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/pingtai-yonggong-qunti-tiaojie-cy24-7.md",
@@ -2632,6 +2871,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终16097号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/qianfu-yongjin-38-jiechu-16097.md",
@@ -2669,6 +2911,9 @@
       "一审二审"
     ],
     "region": "北京",
+    "sources": [
+      "https://xinwen.bjd.com.cn/content/s6a714350d5de3eb735138a08.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/qingjia-benshang-jing03-9422.md",
@@ -2704,6 +2949,10 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/895348496_121123853",
+      "https://www.court.gov.cn/zixun/xiangqing/465001.html"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/qingjia-shouxu-maodun-kuanggong-2025.md",
@@ -2740,6 +2989,9 @@
       "情绪支持"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/qunti-zhengyi-duoyuan-tiaochu-bjzc25-9.md",
@@ -2776,6 +3028,9 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市朝阳区人民法院（2023）京0105民初23429号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/rsu-guquan-jili-bushouli-23429.md",
@@ -2813,6 +3068,9 @@
       "仲裁申请"
     ],
     "region": "全国",
+    "sources": [
+      "https://www.court.gov.cn/zixun/xiangqing/472681.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/shebao-yueding-wuxiao-buchang-zgf25-6.md",
@@ -2854,6 +3112,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/施耐德电气（中国）有限公司与袁培劳动争议一审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/shengyu-jintie-buji-jishu-jing0105-2357.md",
@@ -2891,6 +3152,9 @@
       "协商解除"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/shengyu-jintie-tuoqian-bjzc25-4.md",
@@ -2926,6 +3190,9 @@
       "调解"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202312/t20231229_3518105.html"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/shengyu-shenqing-tiaokuan-bjzc23-7.md",
@@ -2966,6 +3233,9 @@
       "逼迫离职"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/shiye-danwei-daigang-jiepin-bjzc25-10.md",
@@ -3000,6 +3270,9 @@
       "逼迫离职"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/shiye-danwei-peixun-weiyuejin-bjzc24-10.md",
@@ -3037,6 +3310,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/某公司与于某劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/shiyongqi-jiechu-minzhu-chengxu-101.md",
@@ -3070,6 +3346,9 @@
       "年假"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/895348496_121123853"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/shiyongqi-xiangshou-nianjia-sz25-3.md",
@@ -3106,6 +3385,9 @@
       "违纪解除"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/sizi-tigang-rengge-congshuxing-2025.md",
@@ -3142,6 +3424,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/曹某等劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/tanpan-poulie-shiwei-xieshang-15407.md",
@@ -3179,6 +3464,9 @@
       "欠薪"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终19866号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/tiaogang-jiangxin-19866.md",
@@ -3219,6 +3507,10 @@
       "执行"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终20285号民事判决书",
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终20284号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/tiqian-jiesan-buchang-qisuan-20285.md",
@@ -3258,6 +3550,9 @@
       "一审二审"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市第一中级人民法院（2023）京01民终11801号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/toujianli-mianshi-fei-xieshang-jing01-11801.md",
@@ -3295,6 +3590,10 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/792253141_121123798",
+      "https://www.bj148.org/zf1/jcdt/202407/t20240712_1666219.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/waibao-qixin-juzheng-cy24-3.md",
@@ -3332,6 +3631,10 @@
       "逼迫离职"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/792253141_121123798",
+      "https://www.bj148.org/zf1/jcdt/202407/t20240712_1666219.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/weifa-tuihui-paiqian-cy24-2.md",
@@ -3372,6 +3675,9 @@
       "离职证明"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/某物业管理有限公司与张某劳动争议一审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/weiji-zhengju-buzu-jixiao-87802.md",
@@ -3412,6 +3718,9 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2024）京03民终99号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/weixin-jilu-jiechu-jueding-99.md",
@@ -3449,6 +3758,9 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/895348496_121123853"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/weixin-youxing-jiaban-sz25-1.md",
@@ -3487,6 +3799,9 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/xianjing-tiaokuan-bjzc25-3.md",
@@ -3523,6 +3838,9 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市朝阳区人民法院（2023）京0105民初49641号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/xianshi-gongping-chexiao-49641.md",
@@ -3558,6 +3876,10 @@
       "逼迫离职"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/895348496_121123853",
+      "https://www.court.gov.cn/zixun/xiangqing/465001.html"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/xianzhao-liuchan-bingjia-kuanggong-2025.md",
@@ -3596,6 +3918,9 @@
       "一审二审"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2024）京03民终94号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/xiaoji-daigong-minzhuchengxu-jing03-94.md",
@@ -3632,6 +3957,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2024）京03民终9548号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/xiaoshou-shouce-baifang-jilu-9548.md",
@@ -3668,6 +3996,9 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/张某与某人才服务公司劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/xieyi-yilanzi-fangqi-16272.md",
@@ -3705,6 +4036,10 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.sohu.com/a/895348496_121123853",
+      "https://www.court.gov.cn/zixun/xiangqing/465001.html"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/xiujia-qingqiu-youdao-lizhi-2025.md",
@@ -3741,6 +4076,9 @@
       "违纪解除"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202312/t20231229_3518105.html"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/xujia-tijian-daijian-2023.md",
@@ -3776,6 +4114,9 @@
       "协商解除"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/yanchi-tuixiu-weifa-zhongzhi-bjzc25-7.md",
@@ -3814,6 +4155,9 @@
       "一审二审"
     ],
     "region": "北京",
+    "sources": [
+      "https://m.thepaper.cn/newsDetail_forward_27217152"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/yinxing-jiaban-jing03-9602.md",
@@ -3852,6 +4196,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市朝阳区人民法院（2023）京0105民初67387号民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/yiqing-zhaoren-jiechu-jing0105-67387.md",
@@ -3890,6 +4237,9 @@
       "违纪解除"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/yunqi-tiaogang-baoding-2024.md",
@@ -3932,6 +4282,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://bj3zy.bjcourt.gov.cn/article/detail/2025/12/id/9134689.shtml"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/cases/yunqi-tiqian-jiesan-hunton-sz2512.md",
@@ -3972,6 +4325,9 @@
       "竞业限制"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/孟某与某公司劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/zaizhi-jingshang-chigu-18348.md",
@@ -4006,6 +4362,9 @@
       "违纪解除"
     ],
     "region": "全国",
+    "sources": [
+      "https://www.court.gov.cn/zixun/xiangqing/472681.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/zaizhi-jingye-weiyue-zgf25-5.md",
@@ -4046,6 +4405,13 @@
       "年终奖"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2024）京03民终99号民事判决书",
+      "https://zh.wikisource.org/wiki/姚某与某律所劳动争议二审民事判决书",
+      "https://zh.wikisource.org/wiki/曹某等劳动争议二审民事判决书",
+      "https://www.sohu.com/a/895348496_121123853",
+      "https://www.sohu.com/a/1014564022_121123853"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/cases/zhengju-caixin-guize-huibian.md",
@@ -4075,6 +4441,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/zhichang-baling-38tiao-bjzc24-7.md",
@@ -4111,6 +4480,9 @@
       "一审二审"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.court.gov.cn/shenpan/xiangqing/450741.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/zhidao-239-zhubo-laodongguanxi.md",
@@ -4147,6 +4519,9 @@
       "执行"
     ],
     "region": "全国",
+    "sources": [
+      "https://www.court.gov.cn/zixun/xiangqing/472681.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/zhuanbao-gongshang-daiyu-zgf25-1.md",
@@ -4182,6 +4557,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/宗某与某公司劳动争议二审民事判决书"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/cases/zhuanjiao-baoguo-zhiye-daode-12028.md",
@@ -4219,6 +4597,10 @@
       "一审二审"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.bjchy.gov.cn/dynamic/notice/8a24fe976758fe19016759868dce005c.html",
+      "http://www.bjchy.gov.cn/"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-21",
     "path": "packs/data/beijing-lian-zuobiao.md",
@@ -4280,6 +4662,13 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.beijing.gov.cn/fuwu/bmfw/jhsyfwzdzx/2025gjjtr/xgxx/202505/t20250508_4084704.html",
+      "https://www.crisis.org.cn/",
+      "http://www.bjchy.gov.cn/dynamic/notice/8a24fe976758fe19016759868dce005c.html",
+      "http://www.bjchy.gov.cn/slh/gsgg/4028805a8a64745f018a6d526a0e04ee.html",
+      "https://sfj.beijing.gov.cn/sfj/sfdt/ywdt82/flfw93/743831535/index.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/data/beijing-qiuzhu-ziyuan.md",
@@ -4393,6 +4782,12 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.beijing.gov.cn/zhengce/zhengcefagui/202509/t20250918_4205116.html",
+      "https://rsj.beijing.gov.cn/xxgk/2024zcwj/202509/t20250918_4204880.html",
+      "https://rsj.beijing.gov.cn/bm/ywml/202007/t20200717_1950961.html",
+      "https://www.beijing.gov.cn/zhengce/zhengcefagui/202606/t20260615_4701113.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/data/beijing-shebao-jishu.md"
@@ -4416,6 +4811,13 @@
       "逼迫离职"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/xxgk/tzgg/201912/t20191207_951033.html",
+      "https://www.helsen.com.cn/news/info/article/696",
+      "https://news.qq.com/rain/a/20240625A03N9G00",
+      "https://rsj.beijing.gov.cn/bm/ywml/202007/t20200717_1950961.html",
+      "https://www.beijing.gov.cn/zhengce/zhengcefagui/202509/t20250918_4205116.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/data/beijing-shepin-fengding.md",
@@ -4467,6 +4869,10 @@
       "离职证明"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/xxgk/2024zcwj/202507/t20250729_4161229.html",
+      "https://www.beijing.gov.cn/fuwu/bmfw/sy/jrts/202507/t20250724_4157680.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/data/beijing-shiye-baoxianjin.md",
@@ -4550,6 +4956,10 @@
       "欠薪"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/xxgk/zfxxgk/zdlygk/zdrwxxgk/202511/t20251128_4309608.html",
+      "https://tjj.beijing.gov.cn/zxfbu/202603/t20260324_4564401.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/data/beijing-zhongcai-anliang.md"
@@ -4571,6 +4981,10 @@
       "调岗降薪"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/xxgk/2024zcwj/202507/t20250725_4158456.html",
+      "https://www.beijing.gov.cn/zhengce/zhengcefagui/202507/t20250728_4159830.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/data/beijing-zuidi-gongzi.md",
@@ -4657,6 +5071,14 @@
       "一审二审"
     ],
     "region": "北京",
+    "sources": [
+      "心理疏导黄金60秒呼吸法：https://www.163.com/dy/article/KC0V2MOF05422986.html",
+      "呼吸方法缓解焦虑（知乎科普）：https://zhuanlan.zhihu.com/p/584184584",
+      "呼吸放松法科普 - 北京大学第六医院：https://www.pkuh6.cn/Html/News/Articles/4049.html",
+      "认知行为疗法：改变\"灾难化思维\"的5步练习：https://news.qq.com/rain/a/20250914A05R0900",
+      "心理危机干预六步法（知乎，正文受限）：https://zhuanlan.zhihu.com/p/514645775",
+      "孙薇错失\"胜裁权\" - 工人日报：https://www.workercn.cn/papers/grrb/2022/11/24/6/grrb202211246.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/emotion/bengkui-jiedian-jijiu.md"
@@ -4685,6 +5107,12 @@
       "逼迫离职"
     ],
     "region": "北京",
+    "sources": [
+      "库伯勒-罗丝模型（悲伤五阶段）：https://zh.wikipedia.org/zh-hans/%E5%BA%93%E4%BC%AF%E5%8B%92-%E7%BD%97%E4%B8%9D%E6%A8%A1%E5%9E%8B",
+      "被裁后如何「心理重建」：https://www.woshipm.com/zhichang/5645727.html",
+      "咨询案例｜35岁突然被裁员：https://c.m.163.com/news/a/KPJ2GCU705422986.html",
+      "被裁员的心路历程（三茅）：https://www.hrloo.com/news/103844.html"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/emotion/caiyuan-xinli-jieduan.md"
@@ -4714,6 +5142,12 @@
       "裁员"
     ],
     "region": "北京",
+    "sources": [
+      "劳动仲裁开庭全程揭秘（搜狐）：https://m.sohu.com/a/879549988_122149330",
+      "如何应对劳动仲裁开庭（华律网）：https://m.66law.cn/laws/3334018.aspx",
+      "和AI模拟\"被裁\"，心态恢复后再回职场 - 新京报：https://m.bjnews.com.cn/detail/1782090718168836.html",
+      "民事诉讼案件庭前准备清单（知乎，搜索摘要）：https://zhuanlan.zhihu.com/p/671822209"
+    ],
     "confidence": "二手转述",
     "updated": "2026-08-19",
     "path": "packs/emotion/kaiting-xinli-jianshe.md"
@@ -4739,6 +5173,13 @@
       "执行"
     ],
     "region": "全国",
+    "sources": [
+      "knowledge/packs/statutes/lhtf-jiechu-buchang-core.md",
+      "knowledge/packs/statutes/lhtf-38-beipo-jiechu.md",
+      "knowledge/packs/statutes/beijing-gongzi-zhifu-guiding.md",
+      "knowledge/packs/statutes/minsu-zhengju-guiding.md",
+      "knowledge/packs/statutes/qijian-jisuan-tongze.md"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-25",
     "path": "packs/method/core-article-map.md",
@@ -4832,6 +5273,9 @@
       "一审二审"
     ],
     "region": "全国",
+    "sources": [
+      "https://user-case/litigation/朝阳判决精读.md"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-21",
     "path": "packs/method/panli-heyan-sibufa.md"
@@ -4864,6 +5308,13 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm",
+      "https://www.gov.cn/zhengce/zhengceku/202509/content_7040571.htm",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202312/t20231229_3518105.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-20",
     "path": "packs/review-rules/baomi-xieyi.md",
@@ -5045,6 +5496,14 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_0abfdd261c03417b949df19d869add8d.html",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://www.court.gov.cn/fabu/xiangqing/282121.html",
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2024）京03民终94号民事判决书",
+      "https://zh.wikisource.org/wiki/某科技公司与王某劳动争议二审民事判决书",
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2023）京03民终19249号民事判决书"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-20",
     "path": "packs/review-rules/guizhang-querenshu.md",
@@ -5208,6 +5667,13 @@
       "离职证明"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.gov.cn/zhengce/zhengceku/202509/content_7040571.htm",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://www.sohu.com/a/1014564022_121123853",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-20",
     "path": "packs/review-rules/jingye-xianzhi.md",
@@ -5431,6 +5897,15 @@
       "逼迫离职"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_0abfdd261c03417b949df19d869add8d.html",
+      "http://www.gov.cn/zhengce/zhengceku/2008-09/19/content_6630.htm",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://rsj.beijing.gov.cn/xxgk/2024zcwj/202507/t20250725_4158456.html",
+      "https://www.beijing.gov.cn/zhengce/zhengcefagui/201905/t20190522_56550.html",
+      "https://www.gov.cn/zhengce/zhengceku/202509/content_7040571.htm"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-20",
     "path": "packs/review-rules/laodong-hetong.md",
@@ -5720,6 +6195,14 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_0abfdd261c03417b949df19d869add8d.html",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://www.court.gov.cn/fabu/xiangqing/282121.html",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://zh.wikisource.org/wiki/北京市第三中级人民法院（2024）京03民终99号民事判决书",
+      "https://zh.wikisource.org/wiki/某公司与于某劳动争议二审民事判决书"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-20",
     "path": "packs/review-rules/offer-ruzhi-wenjian.md",
@@ -5899,6 +6382,13 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm",
+      "https://www.gov.cn/zhengce/zhengceku/2008-09/19/content_6630.htm",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-20",
     "path": "packs/review-rules/peixun-fuwuqi.md",
@@ -6101,6 +6591,15 @@
       "被裁"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html",
+      "https://rsj.beijing.gov.cn/xxgk/2024zcwj/202412/t20241227_3974931.html",
+      "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5202764/content.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-20",
     "path": "packs/review-rules/xieshang-jiechu-xieyi.md",
@@ -6351,6 +6850,10 @@
       "背调威胁"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM="
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/scripts/goutong-huashu-ku.md",
@@ -6388,6 +6891,11 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/scripts/hongxian-qingdan.md",
@@ -6430,6 +6938,12 @@
       "情绪支持"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://www.hrloo.com/rz/14690849.html",
+      "https://www.ihr360.com/hrnews/202502283241.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/scripts/hr-huashu-chaijie.md",
@@ -6473,6 +6987,13 @@
       "情绪支持"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.hrloo.com/rz/14690849.html",
+      "https://www.hrloo.com/rz/14731452.html",
+      "https://www.haorcw.com/article/2194.html",
+      "https://www.7-dimension.com/index.php?id=1182",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/scripts/hr-taolu-fangyu.md",
@@ -6507,6 +7028,11 @@
       "调解"
     ],
     "region": "北京",
+    "sources": [
+      "北京市朝阳区劳动人事争议仲裁委员会办事指南官方附件包（本地副本 research/raw/朝阳仲裁官方附件/相关附件/）",
+      "同上·3.办理材料/证据交换、出庭下载使用材料/1.证据交换下载-举证须知.docx",
+      "同上·1.设定依据/中华人民共和国劳动争议调解仲裁法.doc、劳动人事争议仲裁办案规则.docx、中华人民共和国劳动合同法.doc"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/scripts/kaiting-huashu.md",
@@ -6550,6 +7076,12 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikipedia.org/wiki/%E8%AB%87%E5%88%A4%E5%8D%94%E8%AD%B0%E6%9C%80%E4%BD%B3%E6%9B%BF%E4%BB%A3%E6%96%B9%E6%A1%88",
+      "https://wiki.mbalib.com/wiki/%E8%B0%88%E5%88%A4%E5%8D%8F%E8%AE%AE%E6%9C%80%E4%BD%B3%E6%9B%BF%E4%BB%A3%E6%96%B9%E6%A1%88",
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/scripts/tanpan-xinli-gongju.md",
@@ -6586,6 +7118,11 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "北京市朝阳区劳动人事争议仲裁委员会办事指南官方附件包（本地副本 research/raw/朝阳仲裁官方附件/相关附件/）",
+      "同上·3.办理材料/证据交换、出庭下载使用材料/1.证据交换下载-举证须知.docx",
+      "同上·1.设定依据/中华人民共和国劳动合同法.doc、中华人民共和国劳动争议调解仲裁法.doc"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/scripts/zhizheng-yaodian.md",
@@ -6621,6 +7158,11 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.npc.gov.cn/npc//c2/c183/c198/201905/t20190522_28233.html",
+      "https://rsj.beijing.gov.cn/xxgk/2024zcwj/202507/t20250725_4158456.html",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/caijue-yicaizhongju.md",
@@ -6664,6 +7206,11 @@
       "裁决与终局"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.bjchy.gov.cn/affair/ldwq/tjzc/8a24fe9767393e2d01673f3dbdc70a21.html",
+      "http://www.bjchy.gov.cn/UserFiles/File/2bb0130a4e614ecdbb06bf2b7933ab77.zip",
+      "https://fuwu.rsj.beijing.gov.cn/zhrs/api4/arbitration/html/home/index"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/chaoyang-lian-sop.md",
@@ -6697,6 +7244,11 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf",
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202011/t20201120_2141627.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/daigang-tinggong.md",
@@ -6730,6 +7282,12 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_0abfdd261c03417b949df19d869add8d.html",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202302/t20230227_2924693.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/daoqi-buxuqian.md",
@@ -6767,6 +7325,9 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "http://gongbao.court.gov.cn/Details/0c15319f2bdbabb8e398035f775385.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/dianzi-shuju-guzheng.md",
@@ -6797,6 +7358,12 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.beijing.gov.cn/zhengce/zhengcefagui/201905/t20190522_56550.html",
+      "https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf",
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/fangjia-dengtongzhi.md",
@@ -6833,6 +7400,14 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm",
+      "https://www.gov.cn/zhengce/zhengceku/2008-09/19/content_6630.htm",
+      "https://www.ssf.gov.cn/portal/rootfiles/2025/09/01/1758444945387751-1758444945395746.pdf",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202312/t20231229_3518105.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/fuwuqi-baomi-xieyi.md",
@@ -6878,6 +7453,13 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm",
+      "https://www.gov.cn/zhengce/zhengceku/2008-09/19/content_6630.htm",
+      "http://www.gov.cn/gongbao/content/2006/content_413952.htm",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/gaoguan-hehuoren-rending.md",
@@ -6919,6 +7501,12 @@
       "情绪支持"
     ],
     "region": "北京",
+    "sources": [
+      "北京市朝阳区劳动人事争议仲裁委员会办事指南官方附件包（本地副本 research/raw/朝阳仲裁官方附件/相关附件/）",
+      "同上·3.办理材料/立案下载使用材料/3-2.委托代理人告知书及提交材料清单.docx",
+      "同上·1.设定依据/劳动人事争议仲裁办案规则.docx、中华人民共和国劳动争议调解仲裁法.doc",
+      "https://zh.wikisource.org/zh-hans/最高人民法院关于适用《中华人民共和国民事诉讼法》的解释_(2022年)"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/gongmin-daili-peiting.md",
@@ -6964,6 +7552,12 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202312/t20231229_3518105.html",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/gongshang-jiechu-xianzhi.md",
@@ -7006,6 +7600,12 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm",
+      "http://www.gov.cn/gongbao/content/2006/content_413952.htm",
+      "https://www.chinacourt.cn/law/detail/2021/01/id/150222.shtml",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/gongsi-zhuxiao-pochan.md",
@@ -7050,6 +7650,11 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://fgw.beijing.gov.cn/gzdt/fgzs/gzdt/202004/t20200417_1815267.htm",
+      "http://www.bcnpo.cn/bjjcgzw/web/bzzn/sfbz/8307.html",
+      "https://www.bj148.org/sa1/yasf1/202108/t20210805_1613460.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/gongzheng-baoquan.md",
@@ -7082,6 +7687,14 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "http://si.12333.gov.cn/",
+      "http://si.12333.gov.cn/184777.jhtml",
+      "https://fuwu.rsj.beijing.gov.cn/",
+      "https://map.beijing.gov.cn/category?categoryId=qjsbjg",
+      "http://gongbao.court.gov.cn/Details/997e66171cf55d219c613ec18dc370.html",
+      "http://gongbao.court.gov.cn/Details/0c15319f2bdbabb8e398035f775385.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/gongzi-shebao-geshui-beijing.md",
@@ -7113,6 +7726,10 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/jiakong-shouquan-quanxian.md",
@@ -7147,6 +7764,11 @@
       "情绪支持"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.gov.cn/zhengce/content/2008-03/28/content_7383.htm",
+      "http://www.bjchy.gov.cn/affair/ldwq/ldjc/8a24fe9767393e2d01673f37e8cc0a0b.html",
+      "http://www.npc.gov.cn/npc//c2/c183/c198/201905/t20190522_28233.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/jiancha-vs-zhongcai.md",
@@ -7186,6 +7808,10 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/jiangxin-yingdui.md",
@@ -7225,6 +7851,11 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://zh.wikisource.org/wiki/市场主体登记管理条例",
+      "https://zh.wikisource.org/wiki/最高人民法院关于适用《中华人民共和国公司法》若干问题的规定（二）",
+      "https://www.gsxt.gov.cn/"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-20",
     "path": "packs/sop/jianyi-zhuxiao-yiyi.md",
@@ -7255,6 +7886,9 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_0abfdd261c03417b949df19d869add8d.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/jiaojie-fanyao.md",
@@ -7290,6 +7924,12 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm",
+      "https://www.gov.cn/zhengce/zhengceku/2008-09/19/content_6630.htm",
+      "https://www.chinacourt.cn/law/detail/2021/01/id/150222.shtml",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/jingjixing-caiyuan-chengxu.md",
@@ -7327,6 +7967,10 @@
       "裁决与终局"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/jixu-lvxing-vs-2n.md",
@@ -7367,6 +8011,10 @@
       "欠薪"
     ],
     "region": "北京",
+    "sources": [
+      "朝阳区仲裁办事指南附件《1.证据交换下载-举证须知.docx》《5.注意事项/3.举证须知.doc》《劳动人事争议仲裁办案规则.docx》（官方原版附件包）",
+      "https://www.court.gov.cn/fabu/xiangqing/212721.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/juzheng-xuzhi-sop.md",
@@ -7413,6 +8061,11 @@
       "裁员"
     ],
     "region": "北京",
+    "sources": [
+      "北京市朝阳区劳动人事争议仲裁委员会办事指南官方附件包（本地副本 research/raw/朝阳仲裁官方附件/相关附件/）",
+      "同上·3.办理材料/证据交换、出庭下载使用材料/1.证据交换下载-举证须知.docx（首页即《仲裁庭纪律》）",
+      "同上·1.设定依据/劳动人事争议仲裁办案规则.docx、中华人民共和国劳动争议调解仲裁法.doc"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/kaiting-liucheng-sop.md",
@@ -7447,6 +8100,11 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241231_3977632.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/kaoqin-diaonan.md",
@@ -7477,6 +8135,11 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_0abfdd261c03417b949df19d869add8d.html",
+      "http://gongbao.court.gov.cn/Details/5b891a5874eace31382c38e3bbc317.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/keguan-qingkuang-jiechu.md",
@@ -7507,6 +8170,10 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_0abfdd261c03417b949df19d869add8d.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/koutou-chengnuo-xianzou.md",
@@ -7537,6 +8204,10 @@
       "违纪解除"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_0abfdd261c03417b949df19d869add8d.html",
+      "https://www.beijing.gov.cn/zhengce/zhengcefagui/201905/t20190522_56550.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/koutou-jiechu-yingdui.md",
@@ -7570,6 +8241,10 @@
       "加班费"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "http://gongbao.court.gov.cn/Details/5b891a5874eace31382c38e3bbc317.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/kpi-bukeneng-renwu.md",
@@ -7607,6 +8282,12 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm",
+      "http://www.gov.cn/gongbao/content/2014/content_2667613.htm",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://www.ssf.gov.cn/portal/rootfiles/2025/09/01/1758444945387751-1758444945395746.pdf"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/laowu-paiqian-waibao.md",
@@ -7655,6 +8336,12 @@
       "情绪支持"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html",
+      "http://www.bjzgh12351.org/",
+      "https://www.bjzgh.org/"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/lengbaoli-guli.md",
@@ -7688,6 +8375,11 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "http://gongbao.court.gov.cn/Details/63ff48da6a9792f8ad1cb65a8b99d1.html",
+      "http://gongbao.court.gov.cn/Details/0c15319f2bdbabb8e398035f775385.html",
+      "http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/luyin-quzheng.md",
@@ -7719,6 +8411,10 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.court.gov.cn/shenpan/xiangqing/6002.html",
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM="
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/mowei-taotai.md",
@@ -7758,6 +8454,13 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm",
+      "http://www.npc.gov.cn/npc//c2/c183/c198/201905/t20190522_28233.html",
+      "https://www.chinacourt.cn/law/detail/2021/01/id/150222.shtml",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://www.ssf.gov.cn/portal/rootfiles/2025/09/01/1758444945387751-1758444945395746.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/nianzhongjiang-guquan-ticheng.md",
@@ -7793,6 +8496,10 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.court.gov.cn/shenpan/xiangqing/6002.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/pip-yingdui.md",
@@ -7824,6 +8531,11 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241231_3977502.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/quxiao-jixiao-jiangjin.md",
@@ -7862,6 +8574,12 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/sanqi-nvzhigong.md",
@@ -7901,6 +8619,12 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "http://si.12333.gov.cn/"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/shebao-tingjiao-jiangji.md",
@@ -7939,6 +8663,13 @@
       "欠薪"
     ],
     "region": "北京",
+    "sources": [
+      "http://gongbao.court.gov.cn/Details/ac5f36e345967c22e0a2ac4fbeb0a6.html",
+      "https://www.court.gov.cn/zixun/xiangqing/360281.html",
+      "https://www.cac.gov.cn/2019-01/02/c_1123935296.htm",
+      "https://www.bj148.org/ztk/2019zt/bjhlwfyclyzn/jdt/201909/t20190925_1532671.html",
+      "http://jjglaw.com.cn/case/242.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/shijianchuo-cunzheng.md",
@@ -7975,6 +8706,12 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/shiwunian-laoyuangong.md",
@@ -8011,6 +8748,11 @@
       "协商解除"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/shiyongqi-quanli.md",
@@ -8051,6 +8793,11 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "http://gongbao.court.gov.cn/Details/997e66171cf55d219c613ec18dc370.html",
+      "http://gongbao.court.gov.cn/Details/0c15319f2bdbabb8e398035f775385.html",
+      "https://www.gsxt.gov.cn/"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/shumian-songda-liucun.md",
@@ -8080,6 +8827,11 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241231_3977650.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202302/t20230227_2924693.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202308/t20230830_3237417.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/tiaogang-yingdui.md",
@@ -8114,6 +8866,12 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/xxgk/2024zcwj/202412/t20241227_3974931.html",
+      "北京市朝阳区劳动人事争议仲裁委员会办事指南官方附件包（本地副本 research/raw/朝阳仲裁官方附件/相关附件/）",
+      "同上·5.注意事项/2.调解建议书.jpg（官方《调解建议（告知）书》）",
+      "同上·1.设定依据/中华人民共和国劳动争议调解仲裁法.doc、劳动人事争议仲裁办案规则.docx"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/tiaojie-sop.md",
@@ -8150,6 +8908,12 @@
       "裁员"
     ],
     "region": "北京",
+    "sources": [
+      "北京市朝阳区劳动人事争议仲裁委员会办事指南官方附件包（本地副本 research/raw/朝阳仲裁官方附件/相关附件/）",
+      "同上·3.办理材料/证据交换、出庭下载使用材料/5.案件审理要素表.pdf",
+      "同上·5.注意事项/1.当事人参与仲裁活动须知.doc",
+      "同上·1.设定依据/劳动人事争议仲裁办案规则.docx、中华人民共和国劳动争议调解仲裁法.doc"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/tingqian-zhunbei-sop.md",
@@ -8183,6 +8947,12 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.beijing.gov.cn/zhengce/zhengcefagui/201905/t20190522_56550.html",
+      "https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/tuoqian-kekou-gongzi.md",
@@ -8225,6 +8995,12 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm",
+      "https://www.ssf.gov.cn/portal/rootfiles/2025/09/01/1758444945387751-1758444945395746.pdf",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/waiqi-cheli-yingdui.md",
@@ -8265,6 +9041,12 @@
       "仲裁申请"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/weiji-jiechu-yingdui.md",
@@ -8302,6 +9084,12 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_0abfdd261c03417b949df19d869add8d.html",
+      "http://gongbao.court.gov.cn/Details/5b891a5874eace31382c38e3bbc317.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202312/t20231229_3518105.html",
+      "https://www.beijing.gov.cn/zhengce/zhengcefagui/201905/t20190522_56550.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/weixie-beidiao-lizhengming.md",
@@ -8337,6 +9125,12 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/wuguding-qixian-hetong.md",
@@ -8373,6 +9167,12 @@
       "离职证明"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/yaoqiu-qianzi-wenjian.md",
@@ -8411,6 +9211,11 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/yiliaoqi-baohu.md",
@@ -8450,6 +9255,12 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "https://bj2zy.bjcourt.gov.cn/article/detail/2025/10/id/9014520.shtml",
+      "https://zxfw.court.gov.cn",
+      "https://cyqfy.bjcourt.gov.cn",
+      "https://bj3zy.bjcourt.gov.cn"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/yishen-ersheng-sop.md",
@@ -8508,6 +9319,10 @@
       "欠薪"
     ],
     "region": "北京",
+    "sources": [
+      "https://ipc.court.gov.cn/zh-cn/news/view-393.html",
+      "朝阳区仲裁办事指南附件《1-1.证据交换下载-证据材料清单.doc》《1.证据交换下载-举证须知.docx》（官方原版附件包）"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/zhengju-mulu-xiezuo.md",
@@ -8546,6 +9361,11 @@
       "逼迫离职"
     ],
     "region": "北京",
+    "sources": [
+      "http://gongbao.court.gov.cn/Details/0c15319f2bdbabb8e398035f775385.html",
+      "http://gongbao.court.gov.cn/Details/997e66171cf55d219c613ec18dc370.html",
+      "https://www.gsxt.gov.cn/"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/zhengren-yu-zhengju-qingdan.md",
@@ -8586,6 +9406,11 @@
       "欠薪"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.npc.gov.cn/npc//c2/c183/c198/201905/t20190522_28233.html",
+      "https://zxfw.court.gov.cn",
+      "https://cyqfy.bjcourt.gov.cn"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/zhixing-sop.md",
@@ -8635,6 +9460,10 @@
       "年假"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.npc.gov.cn/npc//c2/c183/c198/201905/t20190522_28233.html",
+      "http://www.bjchy.gov.cn/affair/ldwq/tjzc/8a24fe9767393e2d01673f3dbdc70a21.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/zhongcai-guanxia-shixiao.md",
@@ -8674,6 +9503,10 @@
       "离职证明"
     ],
     "region": "北京",
+    "sources": [
+      "https://rsj.beijing.gov.cn/xxgk/2024zcwj/202412/t20241227_3974931.html",
+      "https://www.beijing.gov.cn/fwcj/jiage/jiuyefuwu1/65c1ecab11a82834a8639652.html"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/sop/zhongcai-qijian-zijiu.md",
@@ -8715,6 +9548,11 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "http://gongbao.court.gov.cn/Details/5b891a5874eace31382c38e3bbc317.html",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/sop/zhuan-guanlian-gongsi.md",
@@ -8750,6 +9588,10 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf",
+      "https://www.beijing.gov.cn/zhengce/zhengcefagui/201905/t20190522_56550.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/beijing-gongzi-zhifu-guiding.md",
@@ -8820,6 +9662,12 @@
       "一审二审"
     ],
     "region": "全国",
+    "sources": [
+      "http://www.npc.gov.cn/zgrdw/npc/xinwen/2019-05/07/content_2086835.htm",
+      "http://gongbao.court.gov.cn/Details/7e594961f195254a863d6cc90be5cd.html",
+      "http://gongbao.court.gov.cn/Details/ac5f36e345967c22e0a2ac4fbeb0a6.html",
+      "https://www.cac.gov.cn/2019-01/10/c_1123971164.htm"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/dianzi-qianming-fa.md",
@@ -9018,6 +9866,10 @@
       "开庭质证"
     ],
     "region": "全国",
+    "sources": [
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://www.ssf.gov.cn/portal/rootfiles/2025/09/01/1758444945387751-1758444945395746.pdf"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/fashi-2025-12-jieshi-2.md",
@@ -9137,6 +9989,11 @@
       "开庭质证"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://rsj.beijing.gov.cn/xxgk/tzgg/202404/t20240430_3648905.html",
+      "https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020240530575736715599.pdf"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/jgf-2024-534-jieda-1.md",
@@ -9390,6 +10247,11 @@
       "协商解除"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_0abfdd261c03417b949df19d869add8d.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/lhtf-38-beipo-jiechu.md",
@@ -9434,6 +10296,9 @@
       "协商解除"
     ],
     "region": "全国",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM="
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-21",
     "path": "packs/statutes/lhtf-jiechu-buchang-core.md",
@@ -9520,6 +10385,12 @@
       "一审二审"
     ],
     "region": "全国",
+    "sources": [
+      "https://ipc.court.gov.cn/zh-cn/news/view-393.html",
+      "https://www.bj148.org/ztk/gyflfw/zcfg/sfjs/202005/t20200514_1571533.html",
+      "https://cicc.court.gov.cn/html/1/218/62/84/12829.html",
+      "http://gongbao.court.gov.cn/Details/886331ece0f6611a370642e89f08c6.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/minsu-zhengju-guiding.md",
@@ -9727,6 +10598,11 @@
       "执行"
     ],
     "region": "全国",
+    "sources": [
+      "https://zh.wikisource.org/wiki/中华人民共和国民事诉讼法",
+      "http://www.bjchy.gov.cn/UserFiles/File/2bb0130a4e614ecdbb06bf2b7933ab77.zip",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/qijian-jisuan-tongze.md",
@@ -9775,6 +10651,9 @@
       "仲裁申请"
     ],
     "region": "全国",
+    "sources": [
+      "https://www.gov.cn/zhengce/zhengceku/202509/content_7040571.htm"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/statutes/rsty-2025-40-jingye-zhiyin.md",
@@ -9945,6 +10824,11 @@
       "欠薪"
     ],
     "region": "全国",
+    "sources": [
+      "http://www.npc.gov.cn/c2986/c4488/201905/t20190523_48437.html",
+      "https://rsj.ankang.gov.cn/Content-2150407.html",
+      "https://www.gjxfj.gov.cn/gjxfj/xxgk/fgwj/flfg/webinfo/2016/03/1460585589964384.htm"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-25",
     "path": "packs/statutes/tjzcf-core.md",
@@ -10013,6 +10897,10 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/templates/beipo-jiechu-tongzhishu.md",
@@ -10044,6 +10932,10 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM="
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/templates/jujue-tiaogang-huifuhan.md",
@@ -10075,6 +10967,11 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.npc.gov.cn/npc//c2/c183/c198/201905/t20190522_28233.html",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://cyqfy.bjcourt.gov.cn"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/templates/minshi-qisuzhuang.md",
@@ -10113,6 +11010,11 @@
       "裁决与终局"
     ],
     "region": "北京",
+    "sources": [
+      "https://bj3zy.bjcourt.gov.cn",
+      "https://cyqfy.bjcourt.gov.cn",
+      "https://zxfw.court.gov.cn"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/templates/minshi-shangsuzhuang.md",
@@ -10161,6 +11063,11 @@
       "竞业限制"
     ],
     "region": "北京",
+    "sources": [
+      "朝阳区仲裁办事指南附件《1-1.申请书模板.jpg》《劳动人事争议仲裁办案规则.docx》（官方原版附件包）",
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/templates/qingqiu-shixiang-ku.md",
@@ -10210,6 +11117,10 @@
       "欠薪"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.bjchy.gov.cn/UserFiles/File/2bb0130a4e614ecdbb06bf2b7933ab77.zip",
+      "http://www.bjchy.gov.cn/affair/ldwq/tjzc/8a24fe9767393e2d01673f3dbdc70a21.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/templates/shouquan-weituoshu.md",
@@ -10240,6 +11151,10 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "http://www.bjchy.gov.cn/UserFiles/File/2bb0130a4e614ecdbb06bf2b7933ab77.zip",
+      "http://www.bjchy.gov.cn/affair/ldwq/tjzc/8a24fe9767393e2d01673f3dbdc70a21.html"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/templates/songda-dizhi-querenshu.md",
@@ -10269,6 +11184,12 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf",
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+      "https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf"
+    ],
     "confidence": "待核实",
     "updated": "2026-08-19",
     "path": "packs/templates/xieshang-jiechu-shencha-qingdan.md",
@@ -10310,6 +11231,10 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=",
+      "https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/templates/yiyihan-tongyong.md",
@@ -10348,6 +11273,9 @@
       "年假"
     ],
     "region": "北京",
+    "sources": [
+      "朝阳区仲裁办事指南附件《1-1.证据交换下载-证据材料清单.doc》《1-2.证据交换下载-证据材料清单模板.jpg》（官方原版附件包）"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/templates/zhengju-cailiao-qingdan.md",
@@ -10382,6 +11310,11 @@
       "证据固定"
     ],
     "region": "北京",
+    "sources": [
+      "朝阳区仲裁办事指南附件《1.申请书.doc》《1-1.申请书模板.jpg》《1-2.申请书模板.jpg》《1-3.申请书诉两被申请人.doc》（官方原版附件包）",
+      "朝阳区仲裁办事指南附件《劳动人事争议仲裁办案规则.docx》",
+      "朝阳区仲裁办事指南附件《中华人民共和国劳动争议调解仲裁法.doc》"
+    ],
     "confidence": "原文核实",
     "updated": "2026-08-19",
     "path": "packs/templates/zhongcai-shenqingshu.md",

@@ -65,7 +65,7 @@ export function VerifyResult({ no, view }: { no: string; view: VerifyView }) {
     <>
       <Banner
         tone="primary"
-        icon={<RecordIcon className="size-8 text-primary" />}
+        icon={<RecordIcon className="size-8 text-primary-ink-on-surface" />}
         title="存证记录"
         summary="下面是这个编号在平台留存的存证记录。记录一致性由 RFC 3161 可信时间戳令牌保证：时间戳证明该摘要在下述时刻已经存在。本页只如实列出记录本身，不代替你自己的复核——按页尾的指引可以离线核一遍。"
       />

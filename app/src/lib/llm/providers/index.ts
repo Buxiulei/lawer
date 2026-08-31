@@ -10,12 +10,14 @@ import { createAnthropic } from './anthropic';
 import { createDashScope } from './dashscope';
 import { createDeepSeek } from './deepseek';
 import { createOpenAI } from './openai';
+import { createRelay } from './relay';
 
 const FACTORIES: Record<ProviderName, (o: ProviderOptions) => Provider> = {
   anthropic: createAnthropic,
   openai: createOpenAI,
   deepseek: createDeepSeek,
   dashscope: createDashScope,
+  relay: createRelay,
 };
 
 export interface CreateProviderOptions {
@@ -61,4 +63,4 @@ export function createProvider(target: RouteTarget, o: CreateProviderOptions = {
   );
 }
 
-export { createAnthropic, createDashScope, createDeepSeek, createOpenAI };
+export { createAnthropic, createDashScope, createDeepSeek, createOpenAI, createRelay };

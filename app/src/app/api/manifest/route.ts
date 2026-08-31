@@ -33,8 +33,10 @@ export async function GET() {
       endpoints: [
         { method: 'POST', path: '/api/v1/auth/sms/send', auth: 'none', description: '发送手机验证码' },
         { method: 'POST', path: '/api/v1/auth/sms/verify', auth: 'none', description: '校验手机验证码，签发 token' },
-        { method: 'POST', path: '/api/v1/auth/email/send', auth: 'jwt', description: '发送邮箱验证码' },
-        { method: 'POST', path: '/api/v1/auth/email/verify', auth: 'jwt', description: '校验邮箱验证码' },
+        { method: 'POST', path: '/api/v1/auth/email/send', auth: 'jwt', description: '发送邮箱验证码（已登录账号补绑邮箱）' },
+        { method: 'POST', path: '/api/v1/auth/email/verify', auth: 'jwt', description: '校验邮箱验证码（已登录账号补绑邮箱）' },
+        { method: 'POST', path: '/api/v1/auth/email/register/send', auth: 'none', description: '发送邮箱注册验证码（无手机号开户）' },
+        { method: 'POST', path: '/api/v1/auth/email/register/verify', auth: 'none', description: '校验邮箱注册验证码，建号并签发 token' },
         { method: 'POST', path: '/api/v1/realname/init', auth: 'jwt', description: '发起实人认证，返回 H5 认证页 URL' },
         { method: 'GET', path: '/api/v1/realname/status', auth: 'jwt', description: '查实人认证结果' },
         { method: 'GET', path: '/api/v1/agent-setup', auth: 'jwt|api_key', description: '一键接入信息：mcp_url / api_base、工具清单、接入说明全文' },

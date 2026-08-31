@@ -1,7 +1,10 @@
 'use client';
 
+import { useRef } from 'react';
 import { cn } from '@/app/_ui/cn';
 import { formatDate, formatMonthDay } from '@/app/_ui/format';
+import { Seal } from '@/components/brand/Seal';
+import { useMilestoneAdvance } from '@/hooks/useMilestoneAdvance';
 import { deriveTrack, type Milestone, type TrackCell, type Attainment } from './milestones';
 
 /**
@@ -26,12 +29,17 @@ export function MilestoneTrack({
   attainments: readonly Attainment[];
 }) {
   const cells = deriveTrack(track, attainments);
+  const root = useRef<HTMLElement>(null);
+  // 「进行中」落在第几格。全程走完时没有进行中，用 -1（推进编排只认前进，不会误播）
+  const stageIndex = cells.findIndex((c) => c.state === '进行中');
+  useMilestoneAdvance(root, stageIndex);
+
   return (
-    <section aria-label="案件进度" className="pt-1">
+    <section ref={root} aria-label="案件进度" className="pt-1">
       {/* 不用 min-w-max：八格要在 393 里排满，靠 flex-1 均分而不是靠溢出滚动 */}
       <ol className="flex gap-0">
         {cells.map((cell, i) => (
-          <Cell key={cell.milestone} cell={cell} first={i === 0} prev={cells[i - 1]} />
+          <Cell key={cell.milestone} cell={cell} index={i} prev={cells[i - 1]} />
         ))}
       </ol>
     </section>
@@ -39,7 +47,7 @@ export function MilestoneTrack({
 }
 
 /** 连接线的颜色跟**前一格**走：走过的路是实的，没走的是虚的 */
-function Cell({ cell, first, prev }: { cell: TrackCell; first: boolean; prev?: TrackCell }) {
+function Cell({ cell, index, prev }: { cell: TrackCell; index: number; prev?: TrackCell }) {
   // 「进行中」那一格是**站在上面**，不是走过去了——它后面那截线还得是灰的，
   // 否则轨道会显得比实际进度多走一格
   const walked = prev?.state === '完成' || prev?.state === '跳过';
@@ -47,18 +55,28 @@ function Cell({ cell, first, prev }: { cell: TrackCell; first: boolean; prev?: T
     // flex-1 均分：393 下八格每格约 45px。min-w-0 是必须的——
     // 没有它，子元素的最小内容宽度（「仲裁申请」四个字）会把 flex-1 顶开、整行溢出
     <li className="relative flex min-w-0 flex-1 flex-col items-center px-0.5 pt-4">
-      {!first && (
+      {index > 0 && (
         <span
           aria-hidden
+          data-mo-line={index}
           /* top 必须落在圆点竖直中心：li 有 pt-4(16px)，点高 12px ⇒ 中心 22px，线高 2px ⇒ 21px。
              照原型稿抄 top:5px 会把线画到点的上方 16px 处——那份稿子的点是 top:0 定位的。 */
           className={cn(
-            'absolute top-[21px] right-1/2 left-[-50%] h-0.5',
+            'mo-track-tint absolute top-[21px] right-1/2 left-[-50%] h-0.5',
             walked ? 'bg-success' : 'bg-line',
           )}
         />
       )}
-      <Dot state={cell.state} />
+      {/* 落章浮在这一格上方。低调模式与减弱动效下 `Seal` 返回 null，
+          编排必须容忍它不存在——后续步骤没有一步挂在它身上。
+          **定位的 transform 挂在外层这个 span 上**：章自己的 transform 归 gsap 独占，
+          两边都写必然互相擦掉（居中会在动画第一帧被抹掉，章跳到格子左边）。 */}
+      {cell.state === '进行中' && (
+        <span aria-hidden className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2">
+          <Seal />
+        </span>
+      )}
+      <Dot state={cell.state} index={index} />
       {/*
         **点不打糊、字打糊**。低调模式下这几个词是全页最要命的：
         「仲裁申请 / 立案 / 开庭 / 裁决」连起来，不知情的人一眼就知道这台手机在办什么事——
@@ -67,6 +85,7 @@ function Cell({ cell, first, prev }: { cell: TrackCell; first: boolean; prev?: T
       <span
         data-veil=""
         className={cn(
+          'mo-track-tint',
           /* 允许折行：45px 装不下「仲裁申请」四个字。
              **不能加 `break-keep`**——它阻止中文词内换行，于是那格不折行而是**溢出格子**
              压到邻格上；实测 360/393 下正是这一格 scrollWidth > clientWidth。
@@ -74,7 +93,7 @@ function Cell({ cell, first, prev }: { cell: TrackCell; first: boolean; prev?: T
              而那行是四态判据，错位会让整条轨道读起来像坏了。 */
           'mt-1.5 flex h-[2.5em] items-start justify-center px-px text-center',
           'text-[11.5px] leading-[1.25] sm:text-[12px]',
-          cell.state === '进行中' ? 'font-bold text-primary' : 'text-ink',
+          cell.state === '进行中' ? 'font-bold text-primary-ink-on-surface' : 'text-ink',
           cell.state === '未到' && 'text-ink-2',
         )}
       >
@@ -106,14 +125,23 @@ function Cell({ cell, first, prev }: { cell: TrackCell; first: boolean; prev?: T
   );
 }
 
-function Dot({ state }: { state: TrackCell['state'] }) {
+/**
+ * 「进行中」那一格挂 `mo-breath`：呼吸的是 `::after` 外环，**圆点本体不动**——
+ * 本体一动，轨道形状就在动，八格的竖直中心线会跟着抖。
+ *
+ * 这是全站唯一的无限循环。它不是警报是心跳：**不随任何用户可操作的状态改变**
+ * （不会因为你今天没做事而变快）。警报要求你现在行动，会累积焦虑；
+ * 心跳只说明系统还在走，那正是「陪跑」的字面意思。
+ */
+function Dot({ state, index }: { state: TrackCell['state']; index: number }) {
   return (
     <span
       aria-hidden
+      data-mo-dot={index}
       className={cn(
-        'relative z-[1] block size-3 rounded-full border-2',
+        'mo-track-tint relative z-[1] block size-3 rounded-full border-2',
         state === '完成' && 'border-success bg-success',
-        state === '进行中' && 'border-primary bg-primary ring-3 ring-primary-wash',
+        state === '进行中' && 'mo-breath border-primary bg-primary ring-3 ring-primary-wash',
         state === '跳过' && 'border-line bg-line',
         state === '未到' && 'border-line bg-bg',
       )}

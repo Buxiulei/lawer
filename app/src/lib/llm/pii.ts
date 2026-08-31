@@ -19,8 +19,21 @@
 
 import type { ChatMessage, ChatStreamResult, Provider, ProviderName, ToolCall } from './types';
 
-/** 出境供应商：其请求要经过脱敏。境内两家（deepseek/dashscope）不在此列。 */
-export const OUTBOUND_PROVIDERS: ReadonlySet<ProviderName> = new Set<ProviderName>(['anthropic', 'openai']);
+/** 出境供应商：其请求要经过脱敏。境内两家（deepseek/dashscope）直连时不在此列。
+ *
+ *  relay（第三方中转）必须在列，两条独立理由，任一条成立就够：
+ *   ① 它代理的是境外模型（Claude 走 Anthropic/AWS Bedrock 渠道、GPT 走 Azure East US——
+ *      2026-08-31 实测响应头 x-ms-region / tool_call id 前缀 toolu_bdrk_ 逐条可证），
+ *      中间商自称国内节点不改变数据实际到达境外的事实；
+ *   ② 中转出口 IP 2026-08-31 实测在境外（该 IP 会随线路变，别当常量用）——**哪怕开关把 deepseek/qwen
+ *      改挂到中转**，那条路上的原文也是出了境的。所以是按 provider 判而不是按型号判，
+ *      境内型号走中转一样脱敏。
+ *  这一处不会被类型系统或任何现有测试逼着想起来：漏加就是 PII 原文不经脱敏直接发给中转。 */
+export const OUTBOUND_PROVIDERS: ReadonlySet<ProviderName> = new Set<ProviderName>([
+  'anthropic',
+  'openai',
+  'relay',
+]);
 
 export type PiiKind = '身份证' | '手机号' | '银行卡';
 

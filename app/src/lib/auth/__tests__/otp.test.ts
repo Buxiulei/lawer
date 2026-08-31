@@ -4,10 +4,13 @@
 import { toSql } from '@/lib/db/time';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import type { Database } from 'better-sqlite3';
 
 import { hashLookup } from '@/lib/crypto';
 import type { MailCopy } from '@/lib/notify';
-import { resetIpQuota } from '../ip-quota';
 import { sendEmailCode, sendPhoneCode, verifyEmailCode, verifyPhoneCode } from '../otp';
 import { verifyToken } from '../jwt';
 import { lastEmailCode, lastSmsCode, makeTestDb } from './helpers';
@@ -15,9 +18,42 @@ import { lastEmailCode, lastSmsCode, makeTestDb } from './helpers';
 const PHONE = '13800138000';
 const IP = '203.0.113.7';
 const T0 = new Date('2026-08-19T10:00:00.000Z');
+/** 与 lib/auth/ip-quota.ts 的 MAX_PER_WINDOW 对齐；改那边必须同步改这里 */
+const IP_MAX = 300;
 
 function at(offsetSeconds: number): Date {
   return new Date(T0.getTime() + offsetSeconds * 1000);
+}
+
+/** 第 i 个测试手机号（够 300 个不重样，且都是合法号段） */
+function nthPhone(i: number): string {
+  return `13${800000000 + i}`;
+}
+
+/** 往限流流水里灌 n 条历史（模拟同一出口 IP 上别人已经发过的量） */
+function seedIpEvents(db: Database, ip: string, n: number, when: Date): void {
+  const ins = db.prepare('INSERT INTO ip_quota_events (ip, created_at) VALUES (?, ?)');
+  db.transaction(() => {
+    for (let i = 0; i < n; i++) ins.run(ip, toSql(when));
+  })();
+}
+
+function ipEventCount(db: Database, ip: string): number {
+  return (
+    db.prepare('SELECT COUNT(*) AS n FROM ip_quota_events WHERE ip = ?').get(ip) as { n: number }
+  ).n;
+}
+
+/** 走完「发码 → 验码」把某个号码做成验证过的存量用户 */
+async function makeExistingUser(db: Database, phone: string, now: Date): Promise<void> {
+  const sent = await sendPhoneCode(db, { phone, ip: IP }, makeDeps(now).deps);
+  expect(sent.ok, '前置失败：发码没走通').toBe(true);
+  const verified = verifyPhoneCode(
+    db,
+    { phone, code: lastSmsCode(db, hashLookup(phone)) },
+    { now },
+  );
+  expect(verified.ok, '前置失败：建号没走通').toBe(true);
 }
 
 /** 假短信/邮件通道，记录每次发出的验证码 */
@@ -31,7 +67,6 @@ beforeEach(() => {
   process.env.LAWER_DATA_KEY = crypto.randomBytes(32).toString('base64');
   process.env.JWT_SECRET = 'test-secret-do-not-use-in-prod';
   delete process.env.SMS_CODE_EXPIRY_MINUTES;
-  resetIpQuota();
 });
 
 describe('发码限流', () => {
@@ -60,19 +95,127 @@ describe('发码限流', () => {
     expect((eleventh as { retryAfter?: number }).retryAfter).toBeUndefined();
   });
 
-  test('同一 IP 24h 内最多 30 次（换手机号也挡）', async () => {
+  test('同一 IP 24h 内最多 300 次（换手机号也挡），第 301 次被拒', async () => {
     const db = makeTestDb();
-    for (let i = 0; i < 30; i++) {
-      const phone = `1380013${String(8000 + i).padStart(4, '0')}`;
-      const result = await sendPhoneCode(db, { phone, ip: IP }, makeDeps(T0).deps);
-      expect(result.ok).toBe(true);
+    for (let i = 0; i < IP_MAX; i++) {
+      const result = await sendPhoneCode(db, { phone: nthPhone(i), ip: IP }, makeDeps(T0).deps);
+      expect(result.ok, `第 ${i + 1} 次不该被拒`).toBe(true);
     }
     const blocked = await sendPhoneCode(db, { phone: '13900139000', ip: IP }, makeDeps(T0).deps);
     expect(blocked).toMatchObject({ ok: false, status: 429, errorCode: 'RATE_LIMITED', retryAfter: 60 });
+    // 报错要说清撞的是哪堵墙、怎么绕开，否则用户只会以为产品坏了
+    expect((blocked as { message: string }).message).toContain('出口 IP');
+    expect((blocked as { message: string }).message).toContain('手机流量');
 
     // 换 IP 不受影响，说明确实是按 IP 分桶而不是全局桶
     const other = await sendPhoneCode(db, { phone: '13900139000', ip: '198.51.100.2' }, makeDeps(T0).deps);
     expect(other.ok).toBe(true);
+  });
+
+  test('配额状态在库里：换一个 db 句柄照样算数（进程重启不再清零）', async () => {
+    const file = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'lawer-ipq-')),
+      'lawer-test.sqlite',
+    );
+    try {
+      const first = makeTestDb(file);
+      // 真走两次发码路径，证明计数确实是发码时写进这张表的（不是测试自己造的数）
+      await sendPhoneCode(first, { phone: nthPhone(0), ip: IP }, makeDeps(T0).deps);
+      await sendPhoneCode(first, { phone: nthPhone(1), ip: IP }, makeDeps(T0).deps);
+      expect(ipEventCount(first, IP)).toBe(2);
+      seedIpEvents(first, IP, IP_MAX - 2, T0); // 同事们把剩下的额度用光
+      first.close();
+
+      // ← 这里等价于「进程重启」：句柄全新，进程内 Map 若还在就是空的
+      const restarted = makeTestDb(file);
+      expect(ipEventCount(restarted, IP)).toBe(IP_MAX);
+      const blocked = await sendPhoneCode(
+        restarted,
+        { phone: nthPhone(2), ip: IP },
+        makeDeps(T0).deps,
+      );
+      expect(blocked).toMatchObject({ ok: false, status: 429, errorCode: 'RATE_LIMITED' });
+      // 不是全盘拒绝：换个 IP 照样放行，说明拒的是配额而不是库坏了
+      const other = await sendPhoneCode(
+        restarted,
+        { phone: nthPhone(3), ip: '198.51.100.5' },
+        makeDeps(T0).deps,
+      );
+      expect(other.ok).toBe(true);
+      restarted.close();
+    } finally {
+      fs.rmSync(path.dirname(file), { recursive: true, force: true });
+    }
+  });
+
+  test('判定窗是 24h：25 小时前的旧行不再算数', async () => {
+    const db = makeTestDb();
+    seedIpEvents(db, IP, IP_MAX, new Date(T0.getTime() - 25 * 3600 * 1000));
+    const result = await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(T0).deps);
+    expect(result.ok).toBe(true);
+  });
+
+  test('写入时顺手清掉本 IP 超过 48h 的旧行，别的 IP 不受影响', async () => {
+    const db = makeTestDb();
+    const stale = new Date(T0.getTime() - 49 * 3600 * 1000);
+    const kept = new Date(T0.getTime() - 47 * 3600 * 1000);
+    seedIpEvents(db, IP, 1, stale);
+    seedIpEvents(db, IP, 1, kept);
+    seedIpEvents(db, '198.51.100.6', 1, stale);
+
+    await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(T0).deps);
+
+    // 本 IP：49h 前那行被清掉，47h 前那行还在保留窗内，外加刚记的这一次
+    const rows = db
+      .prepare('SELECT created_at FROM ip_quota_events WHERE ip = ? ORDER BY created_at')
+      .all(IP) as { created_at: string }[];
+    expect(rows.map((r) => r.created_at)).toEqual([toSql(kept), toSql(T0)]);
+    // GC 只扫本 IP：别人的旧行不归这次写入管（全表清理是定时任务的活，这里没有定时任务）
+    expect(ipEventCount(db, '198.51.100.6')).toBe(1);
+  });
+
+  test('存量用户登录不吃 IP 配额：额度满了老用户照样能登录，同 IP 的新号码仍被拒', async () => {
+    const db = makeTestDb();
+    await makeExistingUser(db, PHONE, T0);
+    seedIpEvents(db, IP, IP_MAX, T0); // 同事们把这个出口 IP 的额度用光
+    const before = ipEventCount(db, IP);
+
+    const relogin = await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(120)).deps);
+    expect(relogin.ok).toBe(true);
+    // 豁免＝既不判也不记：老用户登录不该反过来把额度吃掉
+    expect(ipEventCount(db, IP)).toBe(before);
+
+    // 豁免没有把墙拆了：同一 IP 上没见过的号码照旧被拒
+    const stranger = await sendPhoneCode(
+      db,
+      { phone: '13900139000', ip: IP },
+      makeDeps(at(120)).deps,
+    );
+    expect(stranger).toMatchObject({ ok: false, status: 429, errorCode: 'RATE_LIMITED' });
+  });
+
+  test('豁免不空窗：存量用户仍受 60s 冷却与 10 次/日约束', async () => {
+    const db = makeTestDb();
+    await makeExistingUser(db, PHONE, T0); // 这一次已经算进该号码的日额度
+    seedIpEvents(db, IP, IP_MAX, T0); // IP 这条从此不起作用，只剩号码维度挡着
+
+    // 60s 冷却照旧
+    expect(await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(30)).deps)).toMatchObject({
+      ok: false,
+      errorCode: 'RATE_LIMITED',
+      retryAfter: 60,
+    });
+
+    // 日上限 10 次照旧：注册那次算 1，再放行 9 次，第 11 次被拒
+    for (let i = 1; i < 10; i++) {
+      expect(
+        (await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(i * 120)).deps)).ok,
+        `第 ${i + 1} 次不该被拒`,
+      ).toBe(true);
+    }
+    expect(
+      await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(10 * 120)).deps),
+    ).toMatchObject({ ok: false, status: 429, errorCode: 'RATE_LIMITED' });
   });
 
   test('限流对 created_at 的两种写法都算数（建表默认 datetime(\'now\') 是空格分隔，本模块写 ISO8601）', async () => {
@@ -85,6 +228,32 @@ describe('发码限流', () => {
 
     const blocked = await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(30)).deps);
     expect(blocked).toMatchObject({ ok: false, errorCode: 'RATE_LIMITED', retryAfter: 60 });
+  });
+
+  test('邮箱侧豁免：已验证过的邮箱重发不吃 IP 配额，绑新邮箱照旧计数', async () => {
+    const db = makeTestDb();
+    await makeExistingUser(db, PHONE, T0);
+    const uid = (db.prepare('SELECT id FROM users ORDER BY id DESC LIMIT 1').get() as { id: number })
+      .id;
+    const mail = 'a@b.com';
+
+    // 注册阶段第一次绑邮箱：这时它还不是「验证过的存量邮箱」，照旧计入 IP 配额
+    expect((await sendEmailCode(db, { userId: uid, email: mail, ip: IP }, makeDeps(at(20)).deps)).ok).toBe(true);
+    expect(
+      verifyEmailCode(db, { userId: uid, email: mail, code: lastEmailCode(db, mail) }, { now: at(30) }).ok,
+    ).toBe(true);
+
+    seedIpEvents(db, IP, IP_MAX, T0); // 出口 IP 额度用光
+    const before = ipEventCount(db, IP);
+
+    // 验过的邮箱重发：放行且不记账
+    expect((await sendEmailCode(db, { userId: uid, email: mail, ip: IP }, makeDeps(at(200)).deps)).ok).toBe(true);
+    expect(ipEventCount(db, IP)).toBe(before);
+
+    // 换绑一个没验过的新邮箱：仍按新账号那条路算，配额满了就该拒
+    expect(
+      await sendEmailCode(db, { userId: uid, email: 'new@b.com', ip: IP }, makeDeps(at(260)).deps),
+    ).toMatchObject({ ok: false, status: 429, errorCode: 'RATE_LIMITED' });
   });
 
   test('短信上游报流控时映射成 SMS_RATE_LIMITED 而不是 500', async () => {

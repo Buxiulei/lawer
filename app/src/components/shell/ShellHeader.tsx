@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { cn } from '@/app/_ui/cn';
-import { useDiscreet } from '@/app/_ui/discreet';
 import { useTheme } from '@/app/_ui/theme';
 import { Separator } from '@/components/shadcn/separator';
 import { SidebarTrigger } from '@/components/shadcn/sidebar';
@@ -18,6 +17,7 @@ import {
   MoonIcon,
   SunIcon,
 } from './shellIcons';
+import { useDiscreetToggle } from './useDiscreetToggle';
 
 /**
  * 顶栏：左边折叠键 + 面包屑，右边案件档案入口。
@@ -29,7 +29,7 @@ export function ShellHeader({
   caseId,
 }: {
   pathname: string;
-  caseId: string;
+  caseId: string | null;
 }) {
   const openCasePanel = useCasePanelOpener();
 
@@ -71,7 +71,7 @@ function AccountButton({ pathname }: { pathname: string }) {
       title={ACCOUNT_NAV_ITEM.label}
       className={cn(
         'flex size-11 items-center justify-center rounded-[10px] transition-colors duration-150 ease-out lg:hidden',
-        active ? 'text-primary' : 'text-ink-2 hover:bg-surface-2',
+        active ? 'text-primary-ink-on-surface' : 'text-ink-2 hover:bg-surface-2',
       )}
     >
       {ACCOUNT_NAV_ITEM.icon}
@@ -79,18 +79,26 @@ function AccountButton({ pathname }: { pathname: string }) {
   );
 }
 
-/** 移动端才出现：PC 上同一个开关在侧栏底部 */
-function DiscreetButton() {
-  const { discreet, toggle } = useDiscreet();
+/**
+ * 移动端才出现：PC 上同一个开关在侧栏底部。
+ *
+ * 判定与拇指区的 PanicButton 共用 useDiscreetToggle：单击开、按住 0.6 秒才关。
+ * 顶栏这个从前是 onClick 双向直切，于是任意页面单击一下就能把打码撤掉——
+ * 安全阀写在一处、绕过在另一处，所以两处现在只准有这一份判定。
+ * 导出是给 __tests__/shell-discreet-guard 直接调用，AppShell 仍从 ShellHeader 进来。
+ */
+export function DiscreetButton() {
+  const { discreet, holding, pressProps } = useDiscreetToggle();
   return (
     <button
       type="button"
-      onClick={toggle}
-      aria-pressed={discreet}
-      aria-label={discreet ? '关闭低调模式' : '开启低调模式'}
-      title={discreet ? '低调模式已开启' : '低调模式'}
+      {...pressProps}
+      title={discreet ? '低调模式已开启（按住关闭）' : '低调模式'}
       className={cn(
-        'flex size-11 items-center justify-center rounded-[10px] transition-colors duration-150 ease-out lg:hidden',
+        'flex size-11 touch-none select-none items-center justify-center rounded-[10px] lg:hidden',
+        // 按住期间缩一下当进度反馈，与 PanicButton 同一形态
+        'transition-[color,background-color,transform] ease-out',
+        holding ? 'scale-90 duration-[600ms]' : 'scale-100 duration-150',
         discreet ? 'bg-primary-wash text-primary-ink' : 'text-ink-2 hover:bg-surface-2',
       )}
     >

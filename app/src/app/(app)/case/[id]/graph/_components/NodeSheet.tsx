@@ -1,11 +1,12 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import type { CompanyGraph, GraphNode } from '@/app/_mock/company-graph';
+import type { CompanyGraph, GraphNode, GraphTier } from '@/app/_mock/company-graph';
 import { formatDate } from '@/app/_ui/format';
 import { AppSheet } from '@/components/shadcn/app-sheet';
 import { Badge } from '@/components/shadcn/badge';
 import { Sensitive } from '@/components/Sensitive';
+import { WatchEntry } from '@/components/case/WatchEntry';
 import { TIER_RING } from './graphStyle';
 
 const CONFIDENCE_TONE = { 高: 'success', 中: 'neutral', 低: 'amber' } as const;
@@ -15,11 +16,13 @@ const CONFIDENCE_TONE = { 高: 'success', 中: 'neutral', 低: 'amber' } as cons
  * 公司名放进正文里，低调模式下点一下才显示。
  */
 export function NodeSheet({
+  caseId,
   graph,
   node,
   onClose,
   onSelect,
 }: {
+  caseId: string;
   graph: CompanyGraph;
   node: GraphNode | null;
   onClose: () => void;
@@ -54,11 +57,7 @@ export function NodeSheet({
               {node.role}
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
-              {/* 圈层是监控节奏不是风险结论，红只留给那圈 2px 的环 */}
-              <Badge tone="neutral" className="gap-1.5">
-                <span aria-hidden className={`size-2.5 rounded-full border-2 ${TIER_RING[node.tier]}`} />
-                {graph.meta.tiers[node.tier]}
-              </Badge>
+              <TierBadge tier={node.tier} labels={graph.meta.tiers} />
               {events.some((e) => e.urgent) && <Badge tone="danger">有紧急动态</Badge>}
             </div>
 
@@ -82,11 +81,21 @@ export function NodeSheet({
                   <span className="num">{node.regCapital}</span>
                 </Field>
               )}
+              {/* 口径写「已入档」而不是「近 5 年」：真数据里判决日期大量为空
+                  （只有案号没有全文的条目照样入档），按 5 年截断会整批筛掉它们，
+                  把涉诉多的公司显示得比实际干净。数字不截断，措辞就得跟着改。
+                  取数口径见 lib/db/company-graph.ts 的 laborLitigationCounts。 */}
               <Field label="涉诉">
                 <span className="num">{node.litigationCount} 件</span>
-                <span className="ml-1 text-[13px] text-ink-2">近 5 年劳动争议相关</span>
+                <span className="ml-1 text-[13px] text-ink-2">已入档的劳动争议</span>
               </Field>
             </dl>
+
+            {/* 一键加守望：从这个节点直接把这家挂进定期查看的名单（spec v3 §2.1 M3）。
+                三档与月费在点之前就摊开，见 WatchEntry 文件头。连点去重在后端。 */}
+            <div className="mt-3">
+              <WatchEntry caseId={caseId} name={node.name} uscc={node.creditCode ?? null} />
+            </div>
           </section>
 
           <section>
@@ -179,6 +188,30 @@ export function NodeSheet({
         </div>
       )}
     </AppSheet>
+  );
+}
+
+/**
+ * 圈层徽标。圈层是**看的节奏**不是风险结论，红只留给那圈 2px 的环。
+ *
+ * 【为什么单独导出】抽屉整棵树在 Radix 的 Portal 后面，SSR 渲染出空串——
+ * 判据够不着它，写多少断言都是零（同 WatchEntry 把三档选择器单独导出的理由）。
+ * 这一块又恰恰是低调模式下**唯一**明文可读的那行字：徽标不在 data-veil/Sensitive 里，
+ * 整页正文糊着的时候它照常清楚。文案的唯一事实源与"两种模式同一句"的口径见
+ * lib/graph/contract 的 GRAPH_TIER_LABELS，本组件一个字都不改写、也不另挑一套。
+ */
+export function TierBadge({
+  tier,
+  labels,
+}: {
+  tier: GraphTier;
+  labels: Record<GraphTier, string>;
+}) {
+  return (
+    <Badge tone="neutral" className="gap-1.5">
+      <span aria-hidden className={`size-2.5 rounded-full border-2 ${TIER_RING[tier]}`} />
+      {labels[tier]}
+    </Badge>
   );
 }
 

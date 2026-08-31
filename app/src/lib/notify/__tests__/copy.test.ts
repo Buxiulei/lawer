@@ -3,7 +3,13 @@
 // 默认模式下敏感词一个都不许出现。将来谁往文案里加一句"仲裁"，这里会红。
 import { describe, expect, test } from 'vitest';
 
-import { deadlineReminder, emailVerifyCode, smsVerifyTemplateParam } from '../copy';
+import {
+  deadlineReminder,
+  emailNotRegistered,
+  emailVerifyCode,
+  smsVerifyTemplateParam,
+  watchBillingNotice,
+} from '../copy';
 
 /** 被旁人瞟一眼就会暴露用户在维权的词 */
 const SENSITIVE = ['裁员', '仲裁', '开庭', '劳动', '律师', '赔偿', '解除', '离职', '维权'];
@@ -35,6 +41,35 @@ describe('emailVerifyCode', () => {
       expect(text).not.toContain(word);
     }
     expect(text).toContain('10 分钟内有效');
+  });
+});
+
+describe('emailNotRegistered（陌生邮箱引导信）', () => {
+  test('不含敏感词，也不含平台名——收件人可能根本不是我们的用户', () => {
+    const { subject, text } = emailNotRegistered();
+    for (const word of [...SENSITIVE, '土八鼠', '土拨鼠', '裁员应对专员']) {
+      expect(subject).not.toContain(word);
+      expect(text).not.toContain(word);
+    }
+  });
+
+  /**
+   * 【这封信是那条 404 的替身，替的是它「有用」的那一半】
+   * 接口对注册状态一个字都不说（同形响应，见 lib/auth 的 single-factor 判据），
+   * 于是打错字的用户失去了唯一的解释来源——补回来的地方只能是收件箱：
+   * 只有邮箱的主人看得到它，拿别人邮箱去探的人什么也拿不到。
+   */
+  test('🔴 三段式仍在：撞到的是什么、为什么会撞到、现在能怎么办', () => {
+    const { text } = emailNotRegistered();
+    expect(text).toContain('还没有账号'); // 撞到的是什么
+    expect(text).toContain('绑定'); // 为什么会撞到
+    expect(text).toContain('手机号'); // 现在能怎么办
+  });
+
+  test('🔴 信里没有六位码——它不是验证码信，收到它的人登不进去', () => {
+    const { subject, text } = emailNotRegistered();
+    expect(subject).not.toMatch(/\d{6}/);
+    expect(text).not.toMatch(/\d{6}/);
   });
 });
 
@@ -76,5 +111,46 @@ describe('deadlineReminder（期限提醒，2026-08-29 新增）', () => {
   test('detailed 模式（用户自己开的 notify_verbose）才允许出现事项类型', () => {
     const c = deadlineReminder(3, '开庭', { detailed: true });
     expect(c.subject).toContain('开庭');
+  });
+});
+
+describe('watchBillingNotice（守望计费通知，spec v3 §2.2）', () => {
+  // 【为什么这封也要过中性闸】收件人多半还在原公司上班。一封写着「某某公司守望监控欠费暂停」
+  // 被工位旁人瞟见，暴露的是**他在背地里盯着这家公司**——和暴露"他在维权"一样不可逆。
+  test('默认（中性）模式：欠费/暂停两态，主题与正文均不含敏感词、不含平台名', () => {
+    for (const paused of [false, true]) {
+      const c = watchBillingNotice(paused);
+      for (const word of [...SENSITIVE, '土八鼠', '土拨鼠', '裁员应对专员']) {
+        expect(c.subject, `paused=${paused}/主题/${word}`).not.toContain(word);
+        expect(c.text, `paused=${paused}/正文/${word}`).not.toContain(word);
+      }
+    }
+  });
+
+  test('🔴 中性模式连"监控/守望/公司"都不给 —— 只说"一项服务"', () => {
+    // 判据不是避开某张词表，是**除了"有项服务要处理"什么都不说**：连它盯的是不是公司都不暴露。
+    for (const paused of [false, true]) {
+      const c = watchBillingNotice(paused);
+      for (const w of ['监控', '守望', '公司', '盯']) {
+        expect(c.subject).not.toContain(w);
+        expect(c.text).not.toContain(w);
+      }
+    }
+  });
+
+  test('暂停态与欠费态措辞可区分（暂停必须明说"已暂停"，绝不静默停盯）', () => {
+    expect(watchBillingNotice(true).subject).toContain('暂停');
+    expect(watchBillingNotice(false).subject).not.toContain('暂停');
+  });
+
+  test('detailed 模式才带平台名，且仍不出现业务敏感词', () => {
+    for (const paused of [false, true]) {
+      const c = watchBillingNotice(paused, { detailed: true });
+      expect(c.subject).toContain('土八鼠');
+      for (const word of SENSITIVE) {
+        expect(c.subject, `paused=${paused}/主题/${word}`).not.toContain(word);
+        expect(c.text, `paused=${paused}/正文/${word}`).not.toContain(word);
+      }
+    }
   });
 });

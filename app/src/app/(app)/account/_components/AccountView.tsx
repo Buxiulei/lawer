@@ -107,7 +107,49 @@ function BalanceCard({ billing, me }: { billing: BillingState; me: MeState }) {
         {creditWord}是模型用量的计价单位，用多少扣多少：散充 1 元 = {GONGDAO_PER_YUAN}{' '}
         {creditWord}，套餐月卡另含当月额度。
       </p>
+
+      <SelfHostHint creditWord={creditWord} discreet={discreet} />
     </Card>
+  );
+}
+
+/**
+ * 省公道值的那条路：把这里接到用户自己的 AI 助手上。放在余额下面而不是只留在设置页——
+ * 想省钱的念头是在**看着余额**的时候起的，不是在翻设置的时候。
+ *
+ * 【这句话凭什么敢说——依据在代码里，不是营销话术】
+ * 扣费只有一个出口：`lib/billing` 的 `gongdaoSettle`。全仓非测试代码里调它的地方
+ * **只有三处具名点**（self-host-hint.test 逐一钉死，manager 2026-08-31 挂尾裁决，扩第四处须再裁）：
+ *   ① `lib/agent/orchestrator.ts`——结算一次模型轮次（经 `runTurn` 导出，唯一调用方是
+ *      `api/v1/cases/[id]/chat` 网页对话那条路）；
+ *   ② `lib/company/dossier-billing.ts`——公司档案购买，一次性，先报价、你确认才扣；
+ *   ③ `lib/company/watch-billing.ts`——盯守订阅，按月，先报价、你确认才扣，余额不足不透支。
+ * MCP 的七个工具（case_get / case_update / timeline_add / action_list /
+ * action_complete / deadline_list / evidence_list）与 v1 案件数据路由**一行扣费都不碰**。
+ * ⇒「数据读写不扣；只有替你调模型、或你主动下单的档案/盯守才扣，且主动下单都先报价」是可核对的事实。
+ *
+ * 【为什么不写数字】`lib/billing/pricing.ts` 开头写明：全部费率是**草案值，待 M3 核定**。
+ * 拿未核定的草案值算出「省百分之多少」印在页面上，是把一个随时会变的数说成承诺。
+ * 所以这里只讲**扣不扣**，不讲**省多少**——省多少取决于用户自己助手那边的价，我们无从得知。
+ *
+ * 【低调模式】整句跟着 `creditWord` 换成中性词，且不带任何案件字样，
+ * 与同卡其余文案一样进糊层（data-veil）。
+ */
+function SelfHostHint({ creditWord, discreet }: { creditWord: string; discreet: boolean }) {
+  // 低调模式下这两类主动下单的服务名照 NEUTRAL_WORD 换中性词——「公司档案 / 盯守」一露就
+  // 泄露这台手机在查谁、盯谁（见 neutral.ts 的 watch 注释）。整句照旧进糊层（data-veil）。
+  const dossierWord = discreet ? NEUTRAL_WORD.dossier : '公司档案';
+  const watchWord = discreet ? NEUTRAL_WORD.watch : '盯守';
+  return (
+    <p data-veil="" className="prose-measure mt-2 text-[14px] leading-6 text-ink-2">
+      想省着用：把这里接到你自己的 AI 助手上，读写数据这些活就由它那边干，不扣{creditWord}——
+      {creditWord}只在两种情况下扣：一是真的替你调模型时（比如网页里的对话，按轮计）；
+      二是你主动下单的服务——{dossierWord}购买、{watchWord}订阅（都会先报价，你确认才扣；订阅按月）。
+      除此之外，任何操作都不扣。
+      <Link href="/settings" className="mx-1 text-primary-ink underline underline-offset-4">
+        去设置里接
+      </Link>
+    </p>
   );
 }
 

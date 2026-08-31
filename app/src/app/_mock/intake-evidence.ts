@@ -405,9 +405,14 @@ const UPLOAD_SOURCE_LABEL = {
 
 export type UploadSource = keyof typeof UPLOAD_SOURCE_LABEL;
 
-/** 上传入口默认落在哪个类别，用户可以改。 */
+/**
+ * 上传入口默认落在哪个类别，用户可以改。
+ * photo 走「公司文件」而不是「沟通记录」：全站三处文案都把拍照绑在纸质原件上
+ * （原始载体提示的「纸质件」、空态的「手边有纸质文件就拍照」、首诊的「把原件拍照传上去」），
+ * 而聊天记录是截图、走「选文件」。归错类不是观感问题——它进的是仲裁证据目录。
+ */
 export const UPLOAD_DEFAULT_CATEGORY: Record<UploadSource, EvidenceCategory> = {
-  photo: '沟通记录',
+  photo: '公司文件',
   file: '公司文件',
   audio: '录音',
 };

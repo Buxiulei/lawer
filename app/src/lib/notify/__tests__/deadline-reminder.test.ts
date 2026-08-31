@@ -5,7 +5,9 @@
 // 多发一封 = 打扰；漏发一封 = 用户错过仲裁时效，**权利灭失，没有救济**。
 // 所以每一条"不发"的分支都要单独钉住，而"多发"只需要不至于每分钟轰炸。
 import Database from 'better-sqlite3';
-import { beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
+import { formatCountdown } from '@/app/_ui/format';
 
 import { runMigrations } from '../../db/migrate';
 import {
@@ -58,6 +60,92 @@ describe('天数按日历日算', () => {
   test('带时分秒也只看日期部分 —— 用户感知的是"还剩几天"不是"还剩几小时"', () => {
     expect(daysUntil('2026-09-02T23:59:59Z', NOW)).toBe(1);
     expect(daysUntil('2026-09-02T00:00:01Z', NOW)).toBe(1);
+  });
+});
+
+describe('🔴 "今天"取北京日历日 —— CST 00:00–08:00 那一段不能多算一天', () => {
+  // 【这里 pin TZ 现在只为量具，不为被测函数】原注释写的是"这个函数的契约就是按
+  // **本地**日历日，跑在 UTC runner 上结论会不同"——那已经不成立了：daysUntil 现在
+  // 锚死在案件时区（lib/deadline/case-day），换任何进程时区结论都一样
+  // （case-day.test.ts「不受进程时区摆布」那组专钉这件事）。
+  // 仍然 pin，是因为下面"先验量具"那条用 getFullYear/getDate 读本地日历日。
+  const originalTz = process.env.TZ;
+  beforeEach(() => { process.env.TZ = 'Asia/Shanghai'; });
+  afterEach(() => {
+    if (originalTz === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTz;
+  });
+
+  /**
+   * 修复前的实现，逐字保留当**对照臂**。
+   * 没有它，"新实现给 3"只是一句和判据并存的文字——看不出修的是哪一段、修没修着。
+   */
+  function daysUntilUtcLegacy(dueAt: string, now: Date): number {
+    const due = new Date(`${dueAt.slice(0, 10)}T00:00:00Z`).getTime();
+    const today = new Date(`${now.toISOString().slice(0, 10)}T00:00:00Z`).getTime();
+    return Math.round((due - today) / 86400000);
+  }
+
+  // 本地 2026-09-01 00:30 CST。UTC 此刻还停在 08-31 16:30 —— 正是出问题的那一段。
+  const AT_0030 = new Date('2026-08-31T16:30:00Z');
+  // 本地 2026-09-01 09:30 CST（当前 cron 时刻）。UTC 已跨到 09-01，本地/UTC 同日。
+  const AT_0930 = new Date('2026-09-01T01:30:00Z');
+  const DUE = '2026-09-04'; // 本地今天 + 3 天
+
+  test('先验量具：TZ 真的 pin 住了，两个时刻的本地日历日都是 09-01', () => {
+    // 【先审量具再信读数】TZ 若没生效，下面两条会变成互相抵消的假绿。
+    for (const t of [AT_0030, AT_0930]) {
+      expect(t.getFullYear()).toBe(2026);
+      expect(t.getMonth()).toBe(8); // 9 月
+      expect(t.getDate()).toBe(1);
+    }
+    // 而 UTC 日在这两个时刻是分裂的 —— 这才是 bug 存在的前提
+    expect(AT_0030.toISOString().slice(0, 10)).toBe('2026-08-31');
+    expect(AT_0930.toISOString().slice(0, 10)).toBe('2026-09-01');
+  });
+
+  test('🔑 本地 00:30：旧实现给 4（多算一天），新实现必须给 3', () => {
+    expect(daysUntilUtcLegacy(DUE, AT_0030)).toBe(4);
+    expect(daysUntil(DUE, AT_0030)).toBe(3);
+  });
+
+  test('本地 09:30：新旧一致（都是 3）—— 修的是那一段，不是全域', () => {
+    expect(daysUntilUtcLegacy(DUE, AT_0930)).toBe(3);
+    expect(daysUntil(DUE, AT_0930)).toBe(3);
+  });
+
+  test('🔑 00:30 时 daysLeft=1 才会进逐日加码档 —— 多算一天等于那天不发', () => {
+    // 这条把"算错一天"翻译成它真正的后果：不可回复类期限在最后一天静默不提醒。
+    const r = row({ kind: '仲裁时效', due_at: '2026-09-02' }); // 本地今天 + 1
+    expect(daysUntilUtcLegacy(r.due_at, AT_0030)).toBe(2);     // 旧：2 天 ⇒ 走不到 ≤1 的加码档
+    // 逐日键此前取 UTC 日（stageFor 里的 now.toISOString()），00:30 会写成
+    // 'daily-2026-08-31' —— 上一单点名留给后续单据，现已一并修掉，故这里补上断言：
+    // 键必须跟 daysLeft 落在同一个北京日历日，否则"同一天只发一次"就不成立。
+    expect(stageFor(r, AT_0030)).toMatchObject({ stageKey: 'daily-2026-09-01', daysLeft: 1 });
+  });
+
+  test('🔑 逐日键按北京日历日 —— 同一天跑两轮只发一封', () => {
+    // 【这条钉的是"多发"】逐日键此前用 UTC 日，而 UTC 日在北京 08:00 换日：
+    // 07:30 那轮写 'daily-2026-08-31'、09:30 那轮写 'daily-2026-09-01' ——
+    // 同一个北京 9 月 1 日被切成两个键，用户当天收到两封一模一样的提醒。
+    const AT_0730 = new Date('2026-08-31T23:30:00Z'); // 北京 09-01 07:30
+    const AT_0930 = new Date('2026-09-01T01:30:00Z'); // 北京 09-01 09:30（cron 时刻）
+
+    // 对照臂：旧的 UTC 键在这两个时刻确实是分裂的 —— 这才是"当天发两封"的成因
+    const utcKey = (d: Date) => `daily-${d.toISOString().slice(0, 10)}`;
+    expect(utcKey(AT_0730)).not.toBe(utcKey(AT_0930));
+
+    const first = stageFor(row({ kind: '仲裁时效', due_at: '2026-09-02' }), AT_0730);
+    expect(first).toMatchObject({ stageKey: 'daily-2026-09-01' });
+
+    // 第一轮记档后再跑第二轮：同一个北京日历日，必须一封都不再发。
+    // 旧实现在这里会给出一个"新"键 ⇒ 第二封。
+    const afterFirst = row({
+      kind: '仲裁时效',
+      due_at: '2026-09-02',
+      notified_stages_json: JSON.stringify([first!.stageKey]),
+    });
+    expect(stageFor(afterFirst, AT_0930)).toBeNull();
   });
 });
 
@@ -170,6 +258,38 @@ describe('markSent 只追加不覆盖', () => {
     markSent(db, did, 'daily-2026-09-01');
     const r = db.prepare('SELECT notified_stages_json j FROM deadlines WHERE id=?').get(did) as { j: string };
     expect(JSON.parse(r.j)).toEqual(['daily-2026-09-01']);
+  });
+});
+
+describe('🔴 端到端：真发出去的那封信与驾驶舱说同一句话', () => {
+  /**
+   * 【为什么要端到端钉一遍】上游 daysUntil 相等只是个数字相等；
+   * 用户实际看到的是**邮件主题**和**驾驶舱徽标**这两句中文。
+   * 中间还隔着 stageFor 的档位选择与 copy.ts 的措辞（daysLeft <= 0 才写「今天到期」），
+   * 任何一处偏一格，两句话就又不一样了。这条从库里的一行走到那两句话。
+   */
+  test('🔑 期限当天北京早 7 点：邮件写「今天到期」，驾驶舱也写「今天到期」', async () => {
+    const DUE = '2026-09-10';
+    const AT_0700 = new Date('2026-09-09T23:00:00Z'); // 北京 09-10 07:00，UTC 还停在 09-09
+    // 先验量具：这确实是 UTC/北京分裂的那一段，不是随手挑的一个时刻
+    expect(AT_0700.toISOString().slice(0, 10)).toBe('2026-09-09');
+
+    seed({ kind: '仲裁时效', dueAt: DUE });
+    const got: { subject: string; text: string }[] = [];
+    const r = await runReminders(db, {
+      sendMail: async (_to, c) => { got.push(c); },
+      now: AT_0700,
+    });
+
+    expect(r).toMatchObject({ examined: 1, ok: 1, failed: 0 });
+    expect(got).toHaveLength(1);
+    expect(got[0].subject).toContain('今天到期');
+    expect(got[0].subject).not.toContain('还剩');
+    expect(got[0].text).toContain('今天到期');
+
+    // 同一时刻的驾驶舱徽标（DeadlineChip / DeadlineTiles 读的就是这个函数）
+    expect(formatCountdown(DUE, AT_0700)).toBe('今天到期');
+    expect(formatCountdown(`${DUE} 00:00:00`, AT_0700)).toBe('今天到期'); // 库里的实况形态
   });
 });
 

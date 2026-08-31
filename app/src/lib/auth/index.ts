@@ -1,11 +1,19 @@
 // app/src/lib/auth/index.ts
 // 认证模块对外出口（spec §3.2 跨模块只经导出接口）。
-export { sendPhoneCode, verifyPhoneCode, sendEmailCode, verifyEmailCode } from './otp';
+export {
+  sendPhoneCode,
+  verifyPhoneCode,
+  sendEmailCode,
+  verifyEmailCode,
+  sendEmailRegisterCode,
+  verifyEmailRegisterCode,
+} from './otp';
 export type {
   AuthFailure,
   SendResult,
   PhoneVerifyResult,
   EmailVerifyResult,
+  EmailRegisterResult,
   OtpDeps,
   Onboarding,
 } from './otp';
@@ -28,6 +36,32 @@ export { resolveIdentity, extractBearer, hasScope } from './identity';
 export type { Identity } from './identity';
 export { requireIdentity, requireWebSession, requireRealname, domainFailure, parseId } from './guard';
 export type { GuardResult, GateResult } from './guard';
+// Google 一键登录（OAuth 授权码流，GOOGLE_OAUTH_ENABLED 默认关）
+export {
+  GOOGLE_CALLBACK_PATH,
+  GOOGLE_STATE_COOKIE,
+  buildAuthorizeUrl,
+  clearStateCookieHeader,
+  completeGoogleCallback,
+  createOauthState,
+  failureLandingUrl,
+  isGoogleOauthEnabled,
+  parseIdTokenFromTokenEndpoint,
+  readCookie,
+  readGoogleConfig,
+  resolveGoogleUser,
+  stateCookieHeader,
+  statesMatch,
+  successLandingUrl,
+} from './google';
+export type {
+  GoogleCallbackInput,
+  GoogleCallbackResult,
+  GoogleConfig,
+  GoogleDeps,
+  GoogleIdentity,
+  ResolvedGoogleUser,
+} from './google';
 // 实人认证（阿里云 CloudAuth H5 活体）
 export { startRealname, refreshRealnameStatus, AUTH_STATUS, VERIFICATION_STATUS } from './realname';
 export type { StartRealnameResult, RealnameStatusResult, RealnameDeps } from './realname';

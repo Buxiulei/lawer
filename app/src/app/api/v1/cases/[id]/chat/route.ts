@@ -13,6 +13,7 @@ import { readJsonBody } from '@/lib/auth/http';
 import { getMembership } from '@/lib/billing/fulfillment';
 import * as cases from '@/lib/cases';
 import { getDb } from '@/lib/db/client';
+import { toUserFacingError } from '@/lib/errors/user-facing';
 
 const NOT_FOUND = { ok: false, error_code: 'CASE_NOT_FOUND', message: '案件不存在' };
 
@@ -60,8 +61,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const emit = (e: AgentEvent) => controller.enqueue(encoder.encode(encodeSse(e)));
-      // 首字前的静默期发心跳：推理模型可能想三四分钟，期间连接必须保持活跃、
-      // 前端也需要一个「还在跑」的信号。见到首个 delta 自动停。
+      // 正文没在流的每一段静默期都发心跳：首字前推理模型可能想三四分钟，首字之后
+      // 每一轮 tool 往返又是几十秒零帧（实测 88.6s）。期间连接必须保持活跃、
+      // 前端也需要一个「还在跑」的信号。正文一续上自动停，done 终止。
       const heartbeat = startHeartbeat(emit);
       const emitAndWatch = (e: AgentEvent) => {
         emit(e);
@@ -81,12 +83,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         // 流已经开了，此时的失败只能以 error 帧告知（前置校验已经拦掉了绝大多数）
         if (!result.ok) emit({ event: 'error', data: { code: result.errorCode, message: result.message } });
       } catch (e) {
-        // 模型侧异常（连接失败、非 2xx、流内错误）如实透出：
+        // 模型侧异常（连接失败、非 2xx、流内错误）必须告知：
         // 用户宁可看见「模型这会儿连不上」，也不该看着一个永远转圈的光标。
-        emit({
-          event: 'error',
-          data: { code: 'AGENT_FAILED', message: e instanceof Error ? e.message : String(e) },
-        });
+        // 但这里的 e.message 是工程向的——llm/router 缺 key 时会把环境变量名写进去，
+        // 那是当事人看不懂也做不了的东西。原文进服务端日志，出去的是三段式文案。
+        const u = toUserFacingError(e, { code: 'AGENT_FAILED', where: 'chat.runTurn' });
+        emit({ event: 'error', data: { code: u.code, message: u.message } });
       } finally {
         heartbeat.stop();
         controller.close();

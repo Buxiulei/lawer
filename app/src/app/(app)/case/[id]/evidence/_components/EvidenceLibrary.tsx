@@ -11,7 +11,7 @@ import {
 import { useDiscreet } from '@/app/_ui/discreet';
 import { formatBytes, formatDate } from '@/app/_ui/format';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
-import { humanError } from '@/app/_ui/api';
+import { ApiError, humanError } from '@/app/_ui/api';
 import { readToken, useSignedIn } from '@/app/_ui/auth';
 import { useRealnameGate } from '@/app/_ui/realname';
 import { Alert, AlertDescription, AlertTitle } from '@/components/shadcn/alert';
@@ -36,10 +36,54 @@ import {
   type EvidenceView,
   type UploadInput,
 } from '../_data';
+import {
+  BatchCategorizeDialog,
+  DropVeil,
+  useFileDrop,
+  type BatchAssignment,
+} from '../../_components/DropPanel';
 import { EvidenceChecklist } from './EvidenceChecklist';
 import { EvidenceDetailSheet } from './EvidenceDetailSheet';
 import { UploadBar } from './UploadBar';
 import { UploadSheet, type PendingUpload } from './UploadSheet';
+
+/**
+ * 列表没读出来。**要连 error_code 一起留着**：
+ * 「这个案件不存在」和「这次没读出来」对用户是两件事，能做的也不一样，
+ * 只留一句翻译好的话就分不开了。
+ */
+export interface LoadFailure {
+  code: string;
+  message: string;
+}
+
+/**
+ * catch 到的东西 → LoadFailure。**抽出来是为了让 error_code 那根线可测**：
+ * 写在 catch 里的时候，把 `err.errorCode` 换成常量 `''` 整套测试照旧全绿——
+ * 断的全是 loadFailureAdvice(code)，没有一条真的喂过一个 ApiError。
+ * 那样 CASE_NOT_FOUND 会在这里被抹平成 ''，卡上照样说「已上传的材料还在」。
+ *
+ * 非 ApiError（网络断了、解析炸了）没有 error_code，落回 '' 走通用那一支。
+ */
+export function toLoadFailure(err: unknown): LoadFailure {
+  return {
+    code: err instanceof ApiError ? err.errorCode : '',
+    message: humanError(err),
+  };
+}
+
+/**
+ * 加载失败那张卡的第二句：为什么会这样 + 现在能做什么。
+ * CASE_NOT_FOUND 下**不许**出现「已上传的材料还在」——后端对"不是你的案件"也回这个码
+ * （lib/cases/index.ts：不回 403，免得反过来确认案件号有效），
+ * 那句话等于替一个用户根本没有的案件担保有材料。
+ */
+export function loadFailureAdvice(code: string): string {
+  if (code === 'CASE_NOT_FOUND') {
+    return '地址里的案件号可能抄漏了一位；如果这是别人转给你的链接，得用他那个账号登录才看得到。';
+  }
+  return '已经上传的材料还在，只是这次没读出来。';
+}
 
 /** 上传中/失败的那一条。失败后原样留着，点重试直接重发同一个 File。 */
 interface UploadJob {
@@ -126,13 +170,17 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
 
   const [items, setItems] = useState<EvidenceView[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null);
   const [needSignIn, setNeedSignIn] = useState(false);
   const [pending, setPending] = useState<PendingUpload | null>(null);
   const [job, setJob] = useState<UploadJob | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [freezeTarget, setFreezeTarget] = useState<EvidenceView | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // 批B（桌面）：拖进来的一批文件 / 表格里勾中的那几行 / 批量固化的确认
+  const [dropped, setDropped] = useState<File[]>([]);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const [batchFreeze, setBatchFreeze] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -153,7 +201,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
     try {
       setItems(await fetchEvidenceList(caseId));
     } catch (err) {
-      setLoadError(humanError(err));
+      setLoadError(toLoadFailure(err));
     } finally {
       setLoading(false);
     }
@@ -231,6 +279,49 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
     void runUpload({ caseId, file, name, ...input }, sizeBytes);
   };
 
+  /**
+   * 拖进来的文件（批B，桌面）。
+   * **一份走原来那张 Sheet**——单份材料本来就该逐字写清证明目的；
+   * 多份才弹批量归类表，不弹 N 次 Sheet（设计 §四）。
+   */
+  const handleDropped = useCallback(
+    (files: File[]) => {
+      if (needSignIn) {
+        toast('登录后才能往这个案件里存材料', 'amber', '需要先登录');
+        return;
+      }
+      if (files.length === 1) {
+        const f = files[0];
+        setPending({ source: 'file', file: f, name: f.name, sizeBytes: f.size });
+        return;
+      }
+      setDropped(files);
+    },
+    [needSignIn, toast],
+  );
+
+  const { dragging, handlers } = useFileDrop(handleDropped);
+
+  /** 批量入库：逐个走与单份完全相同的那条路，不另开一个「批量接口」。 */
+  const runBatch = async (assignments: BatchAssignment[], provePurpose: string) => {
+    setDropped([]);
+    for (const { file, category } of assignments) {
+      const input = { category, provePurpose, originalMedium: '' };
+      if (isDemo) {
+        const item = mockUploadEvidence({
+          caseId,
+          name: file.name,
+          sizeBytes: file.size,
+          ...input,
+        });
+        setItems((prev) => [demoView(item), ...prev]);
+      } else {
+        await runUpload({ caseId, file, name: file.name, ...input }, file.size);
+      }
+    }
+    toast(`${assignments.length} 份已存进证据库，还没固化`, 'success', '已保存');
+  };
+
   /** 固化与出证是同一个幂等接口：中途失败再点一次从断的那一段续跑。 */
   const runAttest = async (target: EvidenceView) => {
     setFreezeTarget(null);
@@ -274,11 +365,24 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
     }
   };
 
+  /** 批量固化：逐件走同一个幂等接口，中途失败的那几件再点一次从断处续跑 */
+  const runBatchAttest = async () => {
+    setBatchFreeze(false);
+    const targets = items.filter((i) => selected.has(i.id) && i.status !== '已出证');
+    for (const t of targets) await runAttest(t);
+    setSelected(new Set());
+  };
+
   return (
-    <div className="flex flex-col gap-4 pt-1">
+    // relative 只为给拖拽遮罩当定位参照：flex 流里加 position 不改任何盒子的位置。
+    // 靶区就是这一块，遮罩画到哪儿、能松手的就到哪儿——不画整个视口去骗人。
+    <div className="relative flex flex-col gap-4 pt-1" {...handlers}>
+      <DropVeil show={dragging} />
       <OriginalMediumNotice />
 
-      {!needSignIn && <UploadBar onPick={handlePick} />}
+      {/* 列表没读出来时也把上传入口收起来：案件根本不存在的话，上传必然失败；
+          就算只是这次没读出来，传进去的东西也会落在一个用户看不见的列表里。 */}
+      {!needSignIn && !loadError && <UploadBar onPick={handlePick} />}
 
       {job && (
         <UploadProgress
@@ -301,13 +405,17 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
         </Alert>
       ) : loadError ? (
         <Alert>
-          <AlertTitle data-veil="">{loadError}</AlertTitle>
+          <AlertTitle data-veil="">{loadError.message}</AlertTitle>
           <AlertDescription data-veil="" className="mt-1">
-            已经上传的材料还在，只是这次没读出来。
+            {loadFailureAdvice(loadError.code)}
           </AlertDescription>
-          <Button size="sm" className="mt-3" onClick={() => void load()}>
-            重新加载
-          </Button>
+          {/* 案件不存在时不给「重新加载」：同一个案件号再读一次还是不存在，
+              按钮只会让人反复点。那一支的出路写在上面那句话里。 */}
+          {loadError.code !== 'CASE_NOT_FOUND' && (
+            <Button size="sm" className="mt-3" onClick={() => void load()}>
+              重新加载
+            </Button>
+          )}
         </Alert>
       ) : items.length === 0 ? (
         <div className="flex flex-col gap-5">
@@ -330,6 +438,19 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
             共 {items.length} 份 · 已固化 {frozen} 份 · 已出证 {issued} 份
           </p>
 
+          {/* 批量条（批B，桌面）：只跟表格那副面孔一起出现，卡片面孔没有多选 */}
+          {selected.size > 0 && (
+            <div className="hidden items-center gap-3 rounded-[10px] border border-primary bg-primary-wash px-3.5 py-2.5 sm:flex">
+              <span className="num fs-s font-medium text-ink">已选 {selected.size} 件</span>
+              <Button size="sm" onClick={() => setBatchFreeze(true)}>
+                批量固化
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                取消选择
+              </Button>
+            </div>
+          )}
+
           {/* ≥sm 一张平表，类别在表里是一列 */}
           <DataTable
             faces="table"
@@ -337,6 +458,9 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
             columns={COLUMNS}
             rows={items}
             rowKey={(item) => item.id}
+            rowLabel={(item) => item.name}
+            selected={selected}
+            onSelectedChange={setSelected}
             onRowClick={(item) => setOpenId(item.id)}
           />
 
@@ -416,6 +540,32 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
         cancelLabel="再检查一下"
         onConfirm={() => freezeTarget && void runAttest(freezeTarget)}
         onCancel={() => setFreezeTarget(null)}
+      />
+
+      <BatchCategorizeDialog
+        files={dropped}
+        onCancel={() => setDropped([])}
+        onConfirm={(assignments, provePurpose) => void runBatch(assignments, provePurpose)}
+      />
+
+      <ConfirmDialog
+        open={batchFreeze}
+        title={
+          discreet
+            ? `${NEUTRAL_WORD.freeze}这 ${selected.size} 份后不能再改`
+            : `固化这 ${selected.size} 份后不能再改`
+        }
+        description={
+          <div data-veil="">
+            会逐份算哈希、申请可信时间戳，
+            <strong className="font-semibold text-ink">删不掉也换不了</strong>
+            。已经出过证的那几份会跳过，不会重复扣费。
+          </div>
+        }
+        confirmLabel={discreet ? `确认${NEUTRAL_WORD.freeze}` : '确认固化，不再修改'}
+        cancelLabel="再检查一下"
+        onConfirm={() => void runBatchAttest()}
+        onCancel={() => setBatchFreeze(false)}
       />
 
       {realnameDialog}

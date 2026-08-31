@@ -14,7 +14,7 @@ function Select({ className, children, ...props }: React.ComponentProps<'select'
       <select
         className={cn(
           'h-12 w-full appearance-none rounded-[10px] border border-input bg-muted pr-10 pl-3 text-[16px] text-foreground',
-          'transition-colors duration-150 ease-out focus:border-primary focus:outline-none',
+          'transition-colors duration-150 ease-out focus:border-focus-ring focus:outline-none',
           'aria-invalid:border-destructive',
           'disabled:cursor-not-allowed disabled:opacity-50',
           className,

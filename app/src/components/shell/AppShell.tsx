@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { cn } from '@/app/_ui/cn';
+import { useCurrentCaseId } from '@/app/_ui/currentCase';
 import { DocumentTitle, useDiscreet } from '@/app/_ui/discreet';
 import { DiscreetVeil } from '@/app/_ui/veil';
 import { SidebarInset, SidebarProvider } from '@/components/shadcn/sidebar';
@@ -12,15 +13,9 @@ import { AppSidebar } from './AppSidebar';
 import { CasePanelProvider } from './casePanel';
 import { DemoBanner } from './DemoBanner';
 import { PanicButton } from './PanicButton';
+import { RouteTransition } from './RouteTransition';
 import { ShellHeader } from './ShellHeader';
 import { CASE_NAV_ITEMS } from './navItems';
-
-const DEFAULT_CASE_ID = 'demo';
-
-function caseIdFrom(pathname: string): string {
-  const m = pathname.match(/^\/case\/([^/]+)/);
-  return m ? m[1] : DEFAULT_CASE_ID;
-}
 
 /**
  * 壳层：PC 是可折叠侧栏 + 顶栏，移动端是顶栏 + 底部 Tab。
@@ -34,13 +29,9 @@ export function AppShell({
   caseTitle: string;
 }) {
   const pathname = usePathname() ?? '/';
-  const caseId = caseIdFrom(pathname);
-  // caseIdFrom 对非案件页也回 demo，所以横幅要另外确认这确实是 demo 案件的页面
+  // 案件页取路径里的 id；非案件页取本人名下那个（取不到就是 null＝还不知道，绝不兜底成 demo）
+  const caseId = useCurrentCaseId(pathname);
   const onDemoCase = /^\/case\/demo(\/|$)/.test(pathname);
-  // 这两页底部压着一条 sticky 操作条（「问它」的输入区、首诊的下一步条），
-  // 悬浮钮得抬到它上面，否则正好盖住发送键 / 主按钮的右端。
-  // 驾驶舱（/case/[id] 本身）没有这条，别把它算进来
-  const hasBottomBar = /^\/case\/[^/]+\/ask$/.test(pathname) || pathname === '/intake';
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -52,12 +43,18 @@ export function AppShell({
           <SidebarInset>
             <ShellHeader pathname={pathname} caseId={caseId} />
             {onDemoCase && <DemoBanner />}
-            {/* 正文默认限宽在可读区间；工作台那种双栏页面自己挂 data-wide 把上限抬上去 */}
-            <main className="mx-auto w-full max-w-[900px] flex-1 px-4 pt-3 pb-[calc(56px+env(safe-area-inset-bottom)+16px)] has-[[data-wide]]:max-w-[1280px] lg:px-6 lg:pb-10">
-              {children}
+            {/* 正文默认限宽在可读区间。工作区**排开了侧栏**（data-panes）才解限宽——
+                解了之后宽度归容器查询管（globals.css 批6-A）。
+                原来的 data-wide 是「页面自称我要宽」，退役：它只有一个开关，
+                答不了「宽到多少」「宽了给谁」，而这两问正是三栏要回答的。 */}
+            {/* 有工作区时把左右留白让给它（`px-0`）：容器查询量的是容器**内容盒**，
+                留白留在外面就等于每一档都少 48px——那正好是三栏差的那一口气。
+                同样的 16/24 留白由 WorkspaceGrid 在容器**里面**补回来，观感不变。 */}
+            <main className="mx-auto w-full max-w-[900px] flex-1 px-4 pt-3 pb-[calc(var(--tab-bar-h)+16px)] has-[[data-panes]]:max-w-none has-[[data-workspace]]:px-0 lg:px-6 lg:pb-10">
+              <RouteTransition>{children}</RouteTransition>
             </main>
             <BottomTabs pathname={pathname} caseId={caseId} />
-            <PanicButton raised={hasBottomBar} />
+            <PanicButton />
           </SidebarInset>
         </SidebarProvider>
       </CasePanelProvider>
@@ -65,7 +62,7 @@ export function AppShell({
   );
 }
 
-function BottomTabs({ pathname, caseId }: { pathname: string; caseId: string }) {
+function BottomTabs({ pathname, caseId }: { pathname: string; caseId: string | null }) {
   const { discreet } = useDiscreet();
   return (
     <nav
@@ -84,7 +81,7 @@ function BottomTabs({ pathname, caseId }: { pathname: string; caseId: string }) 
                 aria-current={active ? 'page' : undefined}
                 className={cn(
                   'flex h-14 flex-col items-center justify-center gap-0.5',
-                  active ? 'text-primary' : 'text-ink-2',
+                  active ? 'text-primary-ink-on-surface' : 'text-ink-2',
                 )}
               >
                 {item.icon}

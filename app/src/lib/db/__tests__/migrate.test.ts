@@ -2,10 +2,16 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../migrate';
 
-/** 全部表名单（38 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。 */
+/**
+ * 全部表名单（47 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。
+ *
+ * 【张数怎么来的】不照抄任何一支的自报数：47 = 实跑 runMigrations 之后数 sqlite_master 里的用户表。
+ * 合并时两支分别报过 47 与 42，两个数在各自基线上都对，加起来却不是并集——
+ * 三张表（pricing_config / entitlements / company_dossiers）两支都建，去重后才是真值。
+ */
 const ALL_TABLES = [
   // 用户与实名
-  'users', 'sms_codes', 'email_codes', 'realname_verifications', 'api_keys',
+  'users', 'sms_codes', 'email_codes', 'ip_quota_events', 'realname_verifications', 'api_keys',
   // 案件档案
   'cases', 'company_profiles', 'timeline_events', 'files', 'evidence', 'attestations',
   'company_docs', 'contract_reviews', 'review_findings', 'claims', 'action_items',
@@ -13,9 +19,16 @@ const ALL_TABLES = [
   // 公道值
   'gongdao', 'gongdao_ledger', 'memberships', 'skus', 'orders', 'redemption_codes',
   'token_usage', 'model_rates',
+  // 公司档案（模块化报价与计费）
+  'pricing_config', 'entitlements', 'company_dossiers',
   // 公司动态监控
   'company_watches', 'company_watch_events', 'company_watch_checks',
   'company_relations', 'company_litigation',
+  // 公司档案（背调产品化）—— pricing_config / entitlements / company_dossiers 已在上面
+  // 「模块化报价与计费」那一组里列过（两支都建同名表，migrate.ts 里已合成唯一定义），此处不重复。
+  'company_dossier_blocks', 'company_dossier_stats', 'company_patterns',
+  // 免费前置探测（§2.3）
+  'company_probe_cache', 'company_probe_events',
   // 通知
   'notify_log',
   // 任务运行
@@ -86,14 +99,18 @@ describe('runMigrations', () => {
 
   it('幂等：连跑两遍不抛错', () => {
     expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(38);
+    expect(ALL_TABLES.length).toBe(47);
   });
 
-  it('38 张表全部建成', () => {
+  it('47 张表全部建成', () => {
     const rows = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[];
     const got = new Set(rows.map((r) => r.name));
+    // 先查名单自身没有重名：两支各自往名单尾巴上追加同一张表时，下面那条数量断言只会报
+    // 「47 不等于 50」，不会说是哪张表重了——这条把重复的表名直接点出来。
+    const dup = ALL_TABLES.filter((t, i) => ALL_TABLES.indexOf(t) !== i);
+    expect(dup, `ALL_TABLES 里有重复表名：${dup.join(', ')}`).toEqual([]);
     for (const t of ALL_TABLES) expect(got.has(t), `缺表 ${t}`).toBe(true);
     expect(got.size).toBe(ALL_TABLES.length);
   });
@@ -125,6 +142,39 @@ describe('唯一约束（用实际写入冲突验证）', () => {
     // ref_id 为 NULL 的行不参与去重
     expect(ins.run(uid, -1, '消耗', null).changes).toBe(1);
     expect(ins.run(uid, -1, '消耗', null).changes).toBe(1);
+  });
+
+  // 这条索引就是「买会员送核心四项」的**幂等键**：grantEntitlement 走 INSERT OR IGNORE，
+  // 全靠它把支付回调重放挡成 changes=0。索引没建 / 建成非部分索引，两种错法都不会报错，
+  // 只会让重放多送一张券——白送一次查不出来，所以在这里用真实写入冲突验一遍。
+  it('entitlements：同 (kind, source_ref) 二次发券被挡下；source_ref 为 NULL 时允许多行', () => {
+    const uid = mkUser(db);
+    const ins = db.prepare(
+      'INSERT OR IGNORE INTO entitlements (user_id, kind, source_ref) VALUES (?,?,?)',
+    );
+    expect(ins.run(uid, 'dossier_core', 'ORD-1').changes).toBe(1);
+    expect(ins.run(uid, 'dossier_core', 'ORD-1').changes).toBe(0);
+    // 换个 kind 不算重复（将来多一种券时，两种券各自独立发放）
+    expect(ins.run(uid, 'other_kind', 'ORD-1').changes).toBe(1);
+    // 手工发放（无来源）不参与幂等：NULL 互不相等，部分索引也不盖它们
+    expect(ins.run(uid, 'dossier_core', null).changes).toBe(1);
+    expect(ins.run(uid, 'dossier_core', null).changes).toBe(1);
+  });
+
+  it('company_dossiers.company_key：重复被拒（同一家公司全站一条，不是每人一条）', () => {
+    const ins = db.prepare('INSERT INTO company_dossiers (company_key, name) VALUES (?,?)');
+    ins.run('北京甲科技有限公司', '北京甲科技有限公司');
+    expect(() => ins.run('北京甲科技有限公司', '北京甲科技有限公司')).toThrow(/UNIQUE/);
+  });
+
+  it('pricing_config.key：主键去重，INSERT OR REPLACE 改价只留一行', () => {
+    const ins = db.prepare('INSERT OR REPLACE INTO pricing_config (key, value_int) VALUES (?,?)');
+    ins.run('dossier.graph', 200);
+    ins.run('dossier.graph', 180);
+    expect(db.prepare('SELECT value_int FROM pricing_config WHERE key=?').get('dossier.graph')).toEqual({
+      value_int: 180,
+    });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM pricing_config').get()).toEqual({ n: 1 });
   });
 
   it('users.phone_hash：重复被拒，多个 NULL 允许', () => {
@@ -487,6 +537,64 @@ describe('存量迁移区', () => {
     expect(db.prepare('SELECT name, tier FROM company_watches').all()).toEqual([
       { name: '某某科技有限公司', tier: 'daily' },
     ]);
+  });
+
+  it('company_watches 守望计费四列：存在、默认对、可写读（spec v3 §2.2）', () => {
+    const db = newDb();
+    const cols = db.prepare('PRAGMA table_info(company_watches)').all() as {
+      name: string;
+      dflt_value: string | null;
+    }[];
+    const byName = new Map(cols.map((c) => [c.name, c]));
+    // 四列必须都在（计数断言：漏加一列即缺，读侧拿到 no such column）
+    for (const c of ['billing_status', 'paid_through', 'arrears_rounds', 'billed_month']) {
+      expect(byName.has(c), `缺列 ${c}`).toBe(true);
+    }
+
+    const caseId = mkCase(db, mkUser(db));
+    const watchId = Number(
+      db.prepare('INSERT INTO company_watches (case_id, name) VALUES (?,?)')
+        .run(caseId, '某某科技有限公司').lastInsertRowid,
+    );
+    // 新盯梢默认：尚未计费（free）、未缴期（NULL）、欠费轮数 0、未处理过任何月（NULL）
+    expect(
+      db.prepare(
+        'SELECT billing_status, paid_through, arrears_rounds, billed_month FROM company_watches WHERE id=?',
+      ).get(watchId),
+    ).toEqual({ billing_status: 'free', paid_through: null, arrears_rounds: 0, billed_month: null });
+
+    // 哑存储：应用层写什么就是什么，库侧不设 CHECK / 触发器
+    db.prepare(
+      "UPDATE company_watches SET billing_status='arrears', arrears_rounds=2, billed_month='202608' WHERE id=?",
+    ).run(watchId);
+    expect(
+      (db.prepare('SELECT arrears_rounds a FROM company_watches WHERE id=?').get(watchId) as { a: number }).a,
+    ).toBe(2);
+  });
+
+  it('老库补守望计费列幂等：跑两遍只补一次，存量盯梢取默认（free/0/NULL）', () => {
+    const db = newDb();
+    for (const c of ['billing_status', 'paid_through', 'arrears_rounds', 'billed_month']) {
+      db.exec(`ALTER TABLE company_watches DROP COLUMN ${c}`);
+    }
+    const caseId = mkCase(db, mkUser(db));
+    db.prepare('INSERT INTO company_watches (case_id, name) VALUES (?,?)').run(caseId, '某某科技');
+
+    const count = () =>
+      (db.prepare('PRAGMA table_info(company_watches)').all() as { name: string }[]).filter((c) =>
+        ['billing_status', 'paid_through', 'arrears_rounds', 'billed_month'].includes(c.name),
+      ).length;
+    expect(count()).toBe(0);
+    runMigrations(db);
+    expect(count()).toBe(4);
+    runMigrations(db); // 二次幂等
+    expect(count()).toBe(4);
+
+    expect(
+      db.prepare(
+        'SELECT billing_status, paid_through, arrears_rounds, billed_month FROM company_watches',
+      ).all(),
+    ).toEqual([{ billing_status: 'free', paid_through: null, arrears_rounds: 0, billed_month: null }]);
   });
 
   it('老库补列幂等：跑两遍只补一次，原有行数据不丢', () => {

@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSignedIn } from '@/app/_ui/auth';
+import { scrollBehavior, useReducedMotion } from '@/app/_ui/motion';
 import { Button } from '@/components/shadcn/button';
 import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
+import { StickyBottomBar } from '@/components/shell/StickyBottomBar';
 import { useToast } from '@/components/ui/Toast';
 import { StepBar } from './StepBar';
 import { StepStage } from './StepStage';
@@ -96,6 +98,7 @@ export function IntakeFlow() {
     setRestored(false);
   }, []);
 
+  const reduce = useReducedMotion();
   const step = Math.min(draft.step, STEPS.length - 1);
   const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
@@ -104,7 +107,9 @@ export function IntakeFlow() {
   const go = (next: number) => {
     setDraft((prev) => ({ ...prev, step: next }));
     setRestored(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // 程序化平滑滚动是前庭敏感者最难受的一类运动，而 globals.css 那条全局
+    // reduced-motion 规则只管 CSS、管不到这里——必须过 scrollBehavior()
+    window.scrollTo({ top: 0, behavior: scrollBehavior(reduce) });
   };
 
   const reset = () => {
@@ -162,7 +167,7 @@ export function IntakeFlow() {
         {isLast && !signedIn ? DRAFT_REASSURANCE : current.reassurance}
       </p>
 
-      <div className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 -mx-4 mt-4 border-t border-line bg-bg/95 px-4 py-3 backdrop-blur-sm lg:bottom-0 lg:-mx-6 lg:px-6">
+      <StickyBottomBar className="-mx-4 mt-4 border-t border-line bg-bg/95 px-4 py-3 backdrop-blur-sm lg:-mx-6 lg:px-6">
         <div className="flex gap-2.5">
           {step > 0 && (
             <Button variant="secondary" onClick={() => go(step - 1)} className="min-w-24">
@@ -170,11 +175,11 @@ export function IntakeFlow() {
             </Button>
           )}
           {isLast ? (
-            <Button onClick={finish} className="w-full">
+            <Button onClick={finish} className="flex-1">
               {signedIn ? '进入驾驶舱' : '保存草稿并注册'}
             </Button>
           ) : (
-            <Button onClick={() => go(step + 1)} disabled={!canAdvance} className="w-full">
+            <Button onClick={() => go(step + 1)} disabled={!canAdvance} className="flex-1">
               下一步
             </Button>
           )}
@@ -189,7 +194,7 @@ export function IntakeFlow() {
             填的内容只存在这台设备的浏览器里，随时可以关掉页面，回来接着填。
           </p>
         )}
-      </div>
+      </StickyBottomBar>
 
       <ConfirmDialog
         open={confirmReset}

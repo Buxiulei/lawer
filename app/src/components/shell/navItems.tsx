@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { CASE_RESOLVER_PATH } from '@/app/_ui/bootstrap';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 
 export interface NavItem {
@@ -9,11 +10,22 @@ export interface NavItem {
    * （「我的」），两种模式下写法一致。
    */
   discreetLabel?: string;
-  /** 相对当前案件的路径构造 */
-  href: (caseId: string) => string;
+  /** 相对当前案件的路径构造。caseId 为 null = 还不知道是哪个案件 */
+  href: (caseId: string | null) => string;
   /** 命中判定：pathname 是否属于该 tab */
-  match: (pathname: string, caseId: string) => boolean;
+  match: (pathname: string, caseId: string | null) => boolean;
   icon: ReactNode;
+}
+
+/**
+ * 案件四栏共用的路径构造。**不知道是哪个案件时去解析页，不兜底成某个具体案件。**
+ *
+ * 这里曾经的兜底值是 'demo'（写在 AppShell 的 caseIdFrom 里），于是登录用户
+ * 站在「我的」「设置」「首诊」任何一页上，点四栏中的任何一栏都进演示案件。
+ * caseId 的类型带上 null 就是为了让下一个人没法再"随手给个默认值"糊过去。
+ */
+export function caseHref(caseId: string | null, suffix = ''): string {
+  return caseId === null ? CASE_RESOLVER_PATH : `/case/${caseId}${suffix}`;
 }
 
 const stroke = {
@@ -33,8 +45,9 @@ export const CASE_NAV_ITEMS: NavItem[] = [
     key: 'dashboard',
     label: '驾驶舱',
     discreetLabel: NEUTRAL_WORD.dashboard,
-    href: (id) => `/case/${id}`,
-    match: (p, id) => p === `/case/${id}` || p === '/intake',
+    href: (id) => caseHref(id),
+    // 首诊页归驾驶舱这一栏，与是哪个案件无关，所以 id 为 null 时它照样命中
+    match: (p, id) => (id !== null && p === `/case/${id}`) || p === '/intake',
     icon: (
       // 仪表盘：一道弧 + 一根指针。列表三横线让给了「问它」那边的语义
       <svg viewBox="0 0 24 24" className="size-6" {...stroke}>
@@ -47,8 +60,8 @@ export const CASE_NAV_ITEMS: NavItem[] = [
     key: 'ask',
     label: '问它',
     discreetLabel: NEUTRAL_WORD.ask,
-    href: (id) => `/case/${id}/ask`,
-    match: (p, id) => p.startsWith(`/case/${id}/ask`),
+    href: (id) => caseHref(id, '/ask'),
+    match: (p, id) => id !== null && p.startsWith(`/case/${id}/ask`),
     icon: (
       <svg viewBox="0 0 24 24" className="size-6" {...stroke}>
         <path d="M20 12.2c0 3.7-3.6 6.7-8 6.7-.9 0-1.8-.1-2.6-.4L5 20l1.1-3A6.3 6.3 0 0 1 4 12.2c0-3.7 3.6-6.7 8-6.7s8 3 8 6.7z" />
@@ -60,8 +73,8 @@ export const CASE_NAV_ITEMS: NavItem[] = [
     key: 'evidence',
     label: '证据',
     discreetLabel: NEUTRAL_WORD.evidence,
-    href: (id) => `/case/${id}/evidence`,
-    match: (p, id) => p.startsWith(`/case/${id}/evidence`),
+    href: (id) => caseHref(id, '/evidence'),
+    match: (p, id) => id !== null && p.startsWith(`/case/${id}/evidence`),
     icon: (
       <svg viewBox="0 0 24 24" className="size-6" {...stroke}>
         <path d="M12 3.5l7 3v5.2c0 4-2.9 7.5-7 8.8-4.1-1.3-7-4.8-7-8.8V6.5z" />
@@ -73,8 +86,9 @@ export const CASE_NAV_ITEMS: NavItem[] = [
     key: 'drafts',
     label: '文书',
     discreetLabel: NEUTRAL_WORD.drafts,
-    href: (id) => `/case/${id}/drafts`,
-    match: (p, id) => p.startsWith(`/case/${id}/drafts`) || p.startsWith(`/case/${id}/docs`),
+    href: (id) => caseHref(id, '/drafts'),
+    match: (p, id) =>
+      id !== null && (p.startsWith(`/case/${id}/drafts`) || p.startsWith(`/case/${id}/docs`)),
     icon: (
       <svg viewBox="0 0 24 24" className="size-6" {...stroke}>
         <path d="M6 3.5h7.5L18 8v12.5H6z" />

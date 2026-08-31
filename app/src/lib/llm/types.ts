@@ -113,7 +113,11 @@ export interface ChatStreamOptions {
   onReasoning?: (totalChars: number) => void;
 }
 
-export type ProviderName = 'anthropic' | 'openai' | 'deepseek' | 'dashscope';
+/** 'relay' = 第三方中转（OpenAI 兼容协议，端点与 key 全走 env，见 providers/relay.ts）。
+ *  它是**独立的一家**而不是「anthropic 换个 baseUrl」：闸位桶、限流特征、计费口径
+ *  （中转单价 = 上游官方价 × model_ratio × group_ratio）与直连都不是一回事，
+ *  借用别人的身份会让三者搅在一起，观测和限流都分不开。 */
+export type ProviderName = 'anthropic' | 'openai' | 'deepseek' | 'dashscope' | 'relay';
 
 /** 统一供应商接口。路由拿到目标后经 createProvider 换成本接口的实例，
  *  上层（lib/agent）只认这个接口，不认具体厂商。 */
@@ -123,8 +127,9 @@ export interface Provider {
   readonly model: string;
   /** 计量上报用的计费键（dated 锁定串 [:variant]），与 UsageReport.model 一致 */
   readonly billingModel: string;
-  /** 流式对话。连接期失败（fetch 异常 / 非 2xx）在 await 时抛错——重试语义归 billing 侧后续做，
-   *  本模块不做重试/熔断/缓存。
+  /** 流式对话。连接期失败（fetch 异常 / 非 2xx）在 await 时抛错；429/502/503/网络错在**连接期**
+   *  由 providers/gate.ts 重试≤2 次，流一旦开始就绝不重试（会重复计费与重复正文）。
+   *  await 还会因为并发闸排队超时抛 LlmGateBusyError（503）。不做熔断/缓存。
    *  generator：yield 正文增量；return {finishReason, toolCalls, usage}。 */
   chatStream(messages: ChatMessage[], opts?: ChatStreamOptions): Promise<AsyncGenerator<string, ChatStreamResult, void>>;
   /** 小型 JSON 调用（问句分类、意图抽取一类），非流式，返回剥好围栏的 JSON 字符串。

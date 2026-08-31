@@ -18,14 +18,24 @@ import type {
   UsageReport,
 } from '../types';
 import { emptyUsage } from '../types';
+import { acquireSlot, connectWithRetry } from './gate';
 import { createStreamTimers, httpError, sseData } from './sse';
 
+/** 缓存写入档的字段名。中转（new-api 系）两种写法都出现过，且既可能挂在
+ *  prompt_tokens_details 下、也可能是顶层裸字段——两处都认，代价是两个 ?? 项。 */
+interface CacheWriteFields {
+  /** 中转归一化后的缓存写入量 */
+  cache_write_tokens?: number;
+  /** 中转透传 Anthropic 的 5 分钟缓存创建量（与上一个实测同值） */
+  claude_cache_creation_5_m_tokens?: number;
+}
+
 /** OpenAI 兼容响应里的 usage 形状（各家都是这套字段名，缓存项各有各的加法）。 */
-interface CompatUsage {
+interface CompatUsage extends CacheWriteFields {
   prompt_tokens?: number;
   completion_tokens?: number;
-  /** OpenAI：缓存命中的输入 token */
-  prompt_tokens_details?: { cached_tokens?: number };
+  /** OpenAI：缓存命中的输入 token。中转还会在这里塞缓存写入档，见 CacheWriteFields */
+  prompt_tokens_details?: { cached_tokens?: number } & CacheWriteFields;
   /** DeepSeek：上下文硬盘缓存命中 */
   prompt_cache_hit_tokens?: number;
 }
@@ -36,17 +46,43 @@ export interface OpenAICompatOptions extends ProviderOptions {
 }
 
 /** usage → 四桶。拿不到的桶一律 null，绝不用 0 冒充（见 TokenUsage 注释）。
- *  归一化的关键一步：三家的 prompt_tokens **含**缓存命中量，而四桶要求互斥，
- *  所以 prompt 桶要减掉缓存命中，否则 billing 按桶相乘会把缓存 token 按全价算两遍。
- *  三家都没有「缓存写入」这个计价档（那是 Anthropic 特有），cachedWrite 恒 null。 */
+ *  归一化的关键一步：各家的 prompt_tokens **含**缓存命中/写入量，而四桶要求互斥，
+ *  所以 prompt 桶要把缓存两档都减掉，否则 billing 按桶相乘会把缓存 token 算两遍。
+ *
+ *  ── 为什么 cachedWrite 不再恒 null（2026-08-31 生产实测改）──
+ *  直连三家（DashScope/OpenAI/DeepSeek）确实没有缓存写入计价档，但**经中转的 Claude 有**，
+ *  两个独立样本算术自洽地证明 `prompt_tokens = cached_read + cache_write + 新鲜输入`：
+ *    opus   非流式 prompt=813 cached=757 cache_write=54 （757+54+2 = 813）
+ *    sonnet 非流式 prompt=75  cached=33  cache_write=30 （33+30+12 = 75）
+ *  旧写法把 cache_write 并进 prompt 桶按 1.0× 输入价记账，而它实际是 1.25× 档——
+ *  那是**低卖**（我们少收钱、用户不吃亏），方向上不伤用户但会在最贵的型号上持续渗漏：
+ *  实测流式 opus 一次就有 1202 个 cache_write token 被当普通输入记。所以要认这两个字段。
+ *
+ *  ── 缺字段时的方向：一律偏「用户不吃亏」，且不伪装成已知 ──
+ *  某档没回报就是 null，billing 侧按 0 计入（orchestrator 只在**四桶全 null** 时才跳过记账）。
+ *  于是缺 cachedWrite → 那些 token 落进 prompt 桶按 1.0× 记 → 我们少收；
+ *  缺 cachedRead     → 全部输入按 1.0× 记 → 用户多付。后者是唯一会让用户吃亏的方向，
+ *  实测中转对 claude/gpt/qwen 都稳定回报 cached_tokens，暂未出现；真出现时
+ *  该行的计费键带 relay/ 前缀（见 routing.config.billingKey），对账时可整批摘出来复算，
+ *  不会静默混进直连的账里。 */
 function toTokenUsage(u: CompatUsage): TokenUsage {
   const rawPrompt = u.prompt_tokens ?? null;
-  const cachedRead = u.prompt_tokens_details?.cached_tokens ?? u.prompt_cache_hit_tokens ?? null;
+  const d = u.prompt_tokens_details;
+  const cachedRead = d?.cached_tokens ?? u.prompt_cache_hit_tokens ?? null;
+  const cachedWrite =
+    d?.cache_write_tokens ??
+    d?.claude_cache_creation_5_m_tokens ??
+    u.cache_write_tokens ??
+    u.claude_cache_creation_5_m_tokens ??
+    null;
   return {
-    prompt: rawPrompt === null ? null : rawPrompt - (cachedRead ?? 0),
+    // 夹到 0：实测中转的 deepseek 会回报「命中量大于总输入量」（prompt_tokens=62 而
+    // prompt_cache_hit_tokens=128）这种自相矛盾的 usage。负数桶会让本轮成本算成负的，
+    // 等于倒贴公道值给用户——宁可记 0 也不能让账本出现负成本。
+    prompt: rawPrompt === null ? null : Math.max(0, rawPrompt - (cachedRead ?? 0) - (cachedWrite ?? 0)),
     completion: u.completion_tokens ?? null,
     cachedRead,
-    cachedWrite: null,
+    cachedWrite,
   };
 }
 
@@ -64,7 +100,6 @@ export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
     billingModel,
 
     async chatStream(messages, opts = {}) {
-      const timers = createStreamTimers(opts);
       const body: Record<string, unknown> = {
         model: o.model,
         messages,
@@ -78,24 +113,54 @@ export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
       // 输出长度默认不在模型侧设限（沿用六爻做法）。
       if (opts.temperature !== undefined) body.temperature = opts.temperature;
       if (opts.maxTokens !== undefined) body.max_tokens = opts.maxTokens;
+      // 序列化在取闸位之前、在 attempt 闭包之外：请求体每次重试都一样，重复序列化是白烧 CPU；
+      // 更要紧的是序列化异常（extraBody 里塞进循环引用一类）不是「上游不给力」，
+      // 落在闭包里会被当成连接失败重试三次，落在取闸位之前则连闸位都不会碰。
+      const payload = JSON.stringify(body);
 
-      const res = await doFetch(`${base}/chat/completions`, {
-        method: 'POST',
-        headers,
-        signal: timers.signal,
-        body: JSON.stringify(body),
-      }).catch((e) => {
+      // 闸位先拿再起计时器：排队时长不该算进空闲/总时长超时（那两个量的是上游的响应速度）。
+      const release = await acquireSlot(o.name);
+      const timers = createStreamTimers(opts);
+      // 兜底归还：generator 被**抛弃**（客户端断流后消费方 emit 抛错，既不再 next() 也不 return()）时，
+      // sseData 的 finally 永远等不到，下面的 done 就永不执行——每漏一路少一个闸位，
+      // 攒够 MAX_CONCURRENT_PER_PROVIDER 次该 provider 全局死锁。计时器只在正常收尾时被 clear，
+      // 所以被抛弃的那路一定会走到空闲/总时长超时的 abort，让它承重一次 release（幂等，见 gate.ts）。
+      timers.signal.addEventListener('abort', release, { once: true });
+
+      const res = await connectWithRetry(
+        () =>
+          doFetch(`${base}/chat/completions`, {
+            method: 'POST',
+            headers,
+            signal: timers.signal,
+            body: payload,
+          }),
+        timers.signal,
+      ).catch((e) => {
         timers.clear();
+        release();
         throw e;
       });
       if (!res.ok || !res.body) {
         timers.clear();
+        release();
         throw await httpError(`${tag} chatStream`, res);
       }
-      return parseCompatStream(res.body, timers.resetIdle, timers.clear, report, opts.onUsage, opts.onReasoning);
+      // 闸位一直持到流读完（含异常终止）：占住上游连接的是流，不是那次 fetch
+      const done = () => {
+        timers.clear();
+        release();
+      };
+      return parseCompatStream(res.body, timers.resetIdle, done, report, opts.onUsage, opts.onReasoning);
     },
 
     async chatJSON(messages, opts = {}) {
+      // 同一个闸：这条也是一次真实的上游调用，不算进在途数就等于闸漏了一半。
+      // 不加重试——重试语义是按「首字节前」定义的（见 gate.ts），非流式调用没有那个分界点，
+      // 且分类调用失败由调用方降级处理，不值得占着闸位退避。
+      // ⚠️ 别在 chatStream 的 tool 执行过程里同 provider 调 chatJSON：闸位是不可重入的，
+      // 闸满时内层会排队 30s 后 503（外层正握着闸位不放）。
+      const release = await acquireSlot(o.name);
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? 8000);
       try {
@@ -126,6 +191,7 @@ export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
         return content;
       } finally {
         clearTimeout(timer);
+        release();
       }
     },
   };

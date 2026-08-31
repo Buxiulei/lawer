@@ -18,6 +18,23 @@ web 与 sidecar 都不映射宿主端口；sidecar 只在 compose 内网经 `htt
 | `Caddyfile` | 反代与 HTTPS，域名走 `{$LAWER_DOMAIN}` 占位 |
 | `backup.sh` | SQLite 在线备份 + 证据文件增量 + openssl 加密 + 日期滚动 |
 | `.env.example` | 编排层变量样例（域名、ACME 邮箱） |
+| `node-backlog-preload.js` | `node --require` 预载，给主监听端口补 listen backlog（见下） |
+| `systemd/lawer-app-backlog.conf` | 上一条的 systemd drop-in **样例**（不自动生效） |
+
+## listen backlog
+
+Next standalone 的 `server.js` 最终执行 `server.listen(port, hostname)`——**不传 backlog**，
+Node 因此固定用 511。内核取 `min(应用值, net.core.somaxconn)`，所以**只把 somaxconn 调到
+4096 是没用的**，accept 队列仍是 511 深；千人级突发一次涌入超过它，内核直接丢 SYN，
+客户端转圈而**服务端日志一行都不会有**。Next 16.2.9 没有对应的 env 或参数（已 grep 核实）。
+
+`node-backlog-preload.js` 包一层 `net.Server.prototype.listen`，**仅当**监听端口等于 `PORT`
+时补上 `backlog`（默认 4096，`LISTEN_BACKLOG` 可覆盖），其余 listen 原样放行。
+用法与验证命令写在 `systemd/lawer-app-backlog.conf` 头部注释里；一句话验证：
+
+```bash
+ss -lnt '( sport = :3000 )'   # LISTEN 行的 Send-Q 列 = 生效的 backlog；511 就是没生效
+```
 
 ## 首次部署
 

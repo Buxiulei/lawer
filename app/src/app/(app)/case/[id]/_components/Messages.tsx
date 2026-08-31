@@ -1,10 +1,13 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import type { ActionItem, Message } from '@/app/_mock/types';
+import { cn } from '@/app/_ui/cn';
 import { formatDate } from '@/app/_ui/format';
 import { ActionGroup } from '@/components/case/ActionCard';
 import { LawRefCard } from '@/components/case/LawRefCard';
 import type { DraftFrame, NoticeFrame, RecordFrame } from '../_stream/frames';
+import { lawCiteId } from './citations';
 import { MaskedText, RichText } from './RichText';
 import {
   DegradedBadge,
@@ -95,14 +98,16 @@ export function AssistantMessage({
       {head && <InstantReplyCard text={head} />}
 
       {body && <RichText text={body} />}
-      {streaming && <StreamCaret />}
+      {streaming && <StreamCaret text={message.content} />}
 
-      <RecordList frames={records} />
+      {/* fresh 只在流式中为真：**首屏加载历史消息时不补播入场**。
+          用户什么都没做却看见一片卡片飞进来，会以为刚才那一下点出了什么。 */}
+      <RecordList frames={records} fresh={streaming} />
 
       {notices.length > 0 && (
         <div className="mt-3 flex flex-col gap-2">
           {notices.map((notice, i) => (
-            <NoticeLine key={`${notice.code}-${i}`} frame={notice} />
+            <NoticeLine key={`${notice.code}-${i}`} frame={notice} fresh={streaming} />
           ))}
         </div>
       )}
@@ -118,6 +123,7 @@ export function AssistantMessage({
               caseId={caseId}
               confirmed={confirmedDrafts.has(draft.id)}
               onRequestConfirm={onRequestConfirmDraft}
+              fresh={streaming}
             />
           ))}
         </section>
@@ -128,7 +134,9 @@ export function AssistantMessage({
           <h3 className="mb-2 text-[13px] text-ink-2">依据</h3>
           <div className="prose-measure flex flex-col gap-2">
             {laws.map((law) => (
-              <LawRefCard key={law.cite} law={law} />
+              // citeId：引用桥的对话端。同一条法条在多条消息里各引一次，id 一样，
+              // 所以卷宗栏「本案依据」那一行一亮，这几处会一起亮——反向问题正是这么答的。
+              <LawRefCard key={law.cite} law={law} citeId={lawCiteId(law.cite)} />
             ))}
           </div>
         </section>
@@ -137,13 +145,49 @@ export function AssistantMessage({
   );
 }
 
-/** 流式光标：唯一允许的打字动效（DESIGN.md 动效） */
-function StreamCaret() {
+/** 超过这么久没有新字，就认为这一轮卡在思考里了 */
+const STALL_MS = 1200;
+
+/**
+ * 流式光标：唯一允许的打字动效（DESIGN.md 动效）。
+ *
+ * 【工单 B6：光标两态，这是这一场景唯一真正新增的信息】
+ * 在这之前「正在吐字」和「卡住了」长得一模一样——同一个 1.1s 的脉冲，
+ * 用户只能靠盯着字数猜。现在超过 1.2 秒没有新字就换成更慢的呼吸。
+ *
+ * **不动 `useChatStream`**：只在这里观察 `text` 变化，插入点为零。
+ *
+ * 逐字/逐 token 淡入仍然否决：它把每个 token 变成一个带自身动画的 DOM 节点
+ * （正是 remeasure-sse-mem 在查的那个面），而且中文一个 delta 常是整句，
+ * 逐 delta 淡入会变成一段段「跳出来」，比直接追加更乱。
+ */
+function StreamCaret({ text }: { text: string }) {
+  const [stalled, setStalled] = useState(false);
+
+  useEffect(() => {
+    setStalled(false);
+    const timer = window.setTimeout(() => setStalled(true), STALL_MS);
+    return () => clearTimeout(timer);
+  }, [text]);
+
+  return <CaretMark stalled={stalled} />;
+}
+
+/**
+ * 光标本体。**两态的差别不只在动画上，也在颜色上**——
+ * 减弱动效时全局规则会把两条 keyframes 都压掉，那时候
+ * 「正在吐字（主色实心）」与「卡住了（ink-2 淡色）」**静止时仍然分得出来**。
+ * 动效不制造新信息：这条是它的落地形态。
+ */
+export function CaretMark({ stalled }: { stalled: boolean }) {
   return (
     <span
       aria-hidden
-      className="ml-0.5 inline-block h-[1.1em] w-[2px] translate-y-[3px] bg-primary"
-      style={{ animation: 'skeleton-pulse 1.1s ease-in-out infinite' }}
+      data-caret={stalled ? 'stalled' : 'live'}
+      className={cn(
+        'ml-0.5 inline-block h-[1.1em] w-[2px] translate-y-[3px]',
+        stalled ? 'bg-ink-2' : 'bg-primary',
+      )}
     />
   );
 }

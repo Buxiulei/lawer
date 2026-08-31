@@ -64,7 +64,7 @@ export function UploadSheet({
             取消
           </Button>
           <Button
-            className="w-full"
+            className="flex-1"
             onClick={() => onConfirm({ category, provePurpose, originalMedium })}
           >
             存进{discreet ? NEUTRAL_WORD.evidenceLib : '证据库'}

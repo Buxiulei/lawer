@@ -12,6 +12,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/shadcn/breadcrumb';
+import { caseHref } from './navItems';
 
 interface Crumb {
   label: string;
@@ -24,10 +25,10 @@ interface Crumb {
  * 面包屑只用固定的栏目名，不带案件标题、公司名和金额——
  * 顶栏是最容易被旁人瞥见的一条，低调模式下这里不能有额外信息可泄。
  */
-export function crumbsFor(pathname: string, caseId: string): Crumb[] {
+export function crumbsFor(pathname: string, caseId: string | null): Crumb[] {
   if (pathname === '/intake') {
     return [
-      { label: '驾驶舱', discreetLabel: NEUTRAL_WORD.dashboard, href: `/case/${caseId}` },
+      { label: '驾驶舱', discreetLabel: NEUTRAL_WORD.dashboard, href: caseHref(caseId) },
       { label: '首诊' },
     ];
   }
@@ -36,11 +37,12 @@ export function crumbsFor(pathname: string, caseId: string): Crumb[] {
     return [{ label: '我的', href: '/account' }, { label: '设置' }];
   }
 
-  const rest = pathname.replace(`/case/${caseId}`, '');
+  // caseId 为 null 时这里没有"当前案件"可剥，rest 留空走到最后那条兜底面包屑
+  const rest = caseId === null ? '' : pathname.replace(`/case/${caseId}`, '');
   const home = {
     label: '驾驶舱',
     discreetLabel: NEUTRAL_WORD.dashboard,
-    href: `/case/${caseId}`,
+    href: caseHref(caseId),
   };
 
   // 只做两级：详情页停在所属栏目，不把文书名/文件名放进顶栏——那里面有公司名。
@@ -50,6 +52,9 @@ export function crumbsFor(pathname: string, caseId: string): Crumb[] {
     return [home, { label: '证据', discreetLabel: NEUTRAL_WORD.evidence }];
   if (rest.startsWith('/graph'))
     return [home, { label: '公司图谱', discreetLabel: NEUTRAL_WORD.graph }];
+  // 报价页也停在「公司档案」这一级：顶栏不写公司名、不写金额，同本文件开头那条规矩
+  if (rest.startsWith('/dossier'))
+    return [home, { label: '公司档案', discreetLabel: NEUTRAL_WORD.dossier }];
   if (rest.startsWith('/docs')) return [home, { label: '文件解读' }];
   if (rest.startsWith('/drafts'))
     return [home, { label: '文书', discreetLabel: NEUTRAL_WORD.drafts }];
@@ -61,7 +66,7 @@ export function Breadcrumbs({
   caseId,
 }: {
   pathname: string;
-  caseId: string;
+  caseId: string | null;
 }) {
   const crumbs = crumbsFor(pathname, caseId);
   const { discreet } = useDiscreet();

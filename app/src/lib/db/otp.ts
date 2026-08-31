@@ -6,10 +6,25 @@
 // 也让 lib/db/client.ts 的实现方式与本文件解耦。
 import type { Database } from 'better-sqlite3';
 
-/** 两张 OTP 表都带 purpose 列，各自只有一种用途；写入与统计都显式带上，
- *  免得将来多出一种 purpose 时限流把两种码混在一起算。 */
+/** sms_codes 目前只有一种用途；写入与查码都显式带上。 */
 const SMS_PURPOSE = 'login';
-const EMAIL_PURPOSE = 'verify';
+
+/**
+ * email_codes 有两种用途，**取码时必须按 purpose 隔离**：
+ *   'verify'   已登录账号补绑/换绑邮箱（/auth/email/send|verify，要 Bearer）
+ *   'register' 匿名的邮箱注册与登录（/auth/email/register/*，无凭据）
+ *
+ * 【为什么隔离】'register' 那条链路验完就发 token，等于凭这串码开户；
+ * 'verify' 那条只是给已登录的人绑地址。两者若共用一个桶，一条为绑定发出的码
+ * 就能拿去开户（反之亦然）——**同一串数字在两个语义完全不同的闸门上都好使**。
+ * 隔离的代价是同一邮箱可能同时存在两条未过期的码，各自单次可用、5 分钟过期、
+ * 错 5 次锁死，这个代价可以接受。
+ */
+export const EMAIL_PURPOSE = {
+  verify: 'verify',
+  register: 'register',
+} as const;
+export type EmailPurpose = (typeof EMAIL_PURPOSE)[keyof typeof EMAIL_PURPOSE];
 
 /** OTP 一行的读取形态（sms_codes 与 email_codes 结构一致） */
 export interface OtpRow {
@@ -32,10 +47,12 @@ export interface UserRow {
   notify_verbose: number;
   /** 未认证 | 待审 | 已实名。固化出证等强身份动作的闸门（见 lib/auth/guard.ts requireRealname） */
   auth_status: string;
+  /** 绑定的 Google 账号标识（ID Token 的 sub）；NULL = 没绑过（见 lib/auth/google.ts） */
+  google_sub: string | null;
 }
 
 const USER_COLUMNS =
-  'id, phone_hash, email, email_verified_at, phone_verified_at, notify_verbose, auth_status';
+  'id, phone_hash, email, email_verified_at, phone_verified_at, notify_verbose, auth_status, google_sub';
 
 // ========== sms_codes ==========
 
@@ -86,31 +103,51 @@ export function markSmsCodeUsed(db: Database, id: number): void {
 
 // ========== email_codes ==========
 
-/** 时间比较为何套 datetime()：见 countSmsCodesSince */
+/**
+ * 某邮箱在 sinceIso 之后收到的验证码条数（60s 冷却与 24h 上限都用它）。
+ * 时间比较为何套 datetime()：见 countSmsCodesSince。
+ *
+ * 【**故意不按 purpose 过滤**】限流保护的是收件人的信箱，而信箱只有一个：
+ * 按 purpose 分桶就等于同一个地址每天可以收 10+10 封、并且在两条路由之间交替点
+ * 还能绕开 60 秒冷却。取码按 purpose 严格隔离，计数按邮箱聚合，两者不矛盾——
+ * 一个防的是「码被挪用」，一个防的是「信箱被灌爆」。
+ * 索引 idx_email_codes_email 建在 (email, id DESC) 上，不带 purpose，去掉这个条件不影响选择性。
+ */
 export function countEmailCodesSince(db: Database, email: string, sinceIso: string): number {
   const row = db
     .prepare(
-      'SELECT COUNT(*) AS n FROM email_codes WHERE email = ? AND purpose = ? AND datetime(created_at) > datetime(?)',
+      'SELECT COUNT(*) AS n FROM email_codes WHERE email = ? AND datetime(created_at) > datetime(?)',
     )
-    .get(email, EMAIL_PURPOSE, sinceIso) as { n: number };
+    .get(email, sinceIso) as { n: number };
   return row.n;
 }
 
+/** purpose 必填、不给默认值：漏传会被类型系统当场拦下，而不是静默落进 'verify' 桶 */
 export function insertEmailCode(
   db: Database,
-  params: { email: string; code: string; expiresAt: string; createdAt: string },
+  params: {
+    email: string;
+    code: string;
+    purpose: EmailPurpose;
+    expiresAt: string;
+    createdAt: string;
+  },
 ): void {
   db.prepare(
     'INSERT INTO email_codes (email, code, purpose, expires_at, used, attempts, created_at) VALUES (?, ?, ?, ?, 0, 0, ?)',
-  ).run(params.email, params.code, EMAIL_PURPOSE, params.expiresAt, params.createdAt);
+  ).run(params.email, params.code, params.purpose, params.expiresAt, params.createdAt);
 }
 
-export function latestEmailCode(db: Database, email: string): OtpRow | undefined {
+export function latestEmailCode(
+  db: Database,
+  email: string,
+  purpose: EmailPurpose,
+): OtpRow | undefined {
   return db
     .prepare(
       'SELECT id, code, attempts, expires_at, used FROM email_codes WHERE email = ? AND purpose = ? ORDER BY id DESC LIMIT 1',
     )
-    .get(email, EMAIL_PURPOSE) as OtpRow | undefined;
+    .get(email, purpose) as OtpRow | undefined;
 }
 
 export function bumpEmailCodeAttempts(db: Database, id: number): void {
@@ -153,6 +190,24 @@ export function insertUser(
   return Number(info.lastInsertRowid);
 }
 
+/**
+ * 邮箱注册建号：只有邮箱，phone_enc / phone_hash 留 NULL。
+ * users.phone_hash 的唯一索引是部分索引（WHERE phone_hash IS NOT NULL），
+ * 所以多个「没手机号的账号」并存不会互相撞车；email 那条唯一索引照旧管住重复注册。
+ *
+ * 【留口不实现】这类账号后补手机号的路径（bindPhoneToAccount）本单不做，
+ * 契约与待定项写在 lib/auth/otp.ts 文件末尾那段注释里，实现时照那里补。
+ */
+export function insertUserByEmail(
+  db: Database,
+  params: { email: string; verifiedAt: string },
+): number {
+  const info = db
+    .prepare('INSERT INTO users (email, email_verified_at, created_at) VALUES (?, ?, ?)')
+    .run(params.email, params.verifiedAt, params.verifiedAt);
+  return Number(info.lastInsertRowid);
+}
+
 /** 实名闸门状态。取值归 lib/auth/realname（AUTH_STATUS），本层只当字符串存。 */
 export function setUserAuthStatus(db: Database, id: number, authStatus: string): void {
   db.prepare('UPDATE users SET auth_status = ? WHERE id = ?').run(authStatus, id);
@@ -179,6 +234,53 @@ export function setUserRealname(
     params.certType ?? null,
     id,
   );
+}
+
+// ========== users：Google 线（lib/auth/google.ts 的 SQL 面）==========
+
+/** 按 google_sub 查账号。归并第一顺位——sub 命中就是同一个人，别的线索都不用看。 */
+export function findUserByGoogleSub(db: Database, googleSub: string): UserRow | undefined {
+  return db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE google_sub = ?`).get(googleSub) as
+    | UserRow
+    | undefined;
+}
+
+/**
+ * 把 google_sub 绑到既有账号上，**仅当该行还没绑过**（WHERE google_sub IS NULL 守卫）。
+ * 返回是否真的绑上了：false = 这一瞬间被别人抢先绑了，调用方必须回查再判，
+ * 不能当成"绑成功"往下走——那会把 A 的 Google 账号记在 B 的档案上。
+ *
+ * 只写 google_sub 一列。**不回填 email**：调用方是按这个邮箱查到这一行的，
+ * 而 email 与 email_verified_at 由 setUserEmailVerified 同时写入（邮箱非空 ⟺ 已验证），
+ * 所以"这一行邮箱是空的"在这条路径上不存在，写了也是永不生效的一句。
+ */
+export function bindGoogleSub(
+  db: Database,
+  params: { userId: number; googleSub: string },
+): boolean {
+  const info = db
+    .prepare('UPDATE users SET google_sub = ? WHERE id = ? AND google_sub IS NULL')
+    .run(params.googleSub, params.userId);
+  return info.changes === 1;
+}
+
+/**
+ * Google 线首次登录即建号。没有手机号——phone_enc / phone_hash 留 NULL，
+ * uq_users_phone_hash 是部分索引（WHERE phone_hash IS NOT NULL），多行 NULL 不冲突。
+ *
+ * email_verified_at 直接写上：Google 的 ID Token 里 email_verified=true 就是「已验证」，
+ * 不该再让用户收一遍验证码去证明一件 Google 已经证明过的事。
+ */
+export function insertGoogleUser(
+  db: Database,
+  params: { email: string; googleSub: string; verifiedAt: string },
+): number {
+  const info = db
+    .prepare(
+      'INSERT INTO users (email, email_verified_at, google_sub, created_at) VALUES (?, ?, ?, ?)',
+    )
+    .run(params.email, params.verifiedAt, params.googleSub, params.verifiedAt);
+  return Number(info.lastInsertRowid);
 }
 
 /** 邮箱在验证通过的那一刻才写进 users，避免未验证的邮箱先占住 uq_users_email */
