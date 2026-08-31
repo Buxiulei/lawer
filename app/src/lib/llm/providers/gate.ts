@@ -1,5 +1,6 @@
 // app/src/lib/llm/providers/gate.ts
-// 上游调用闸：按 provider 分桶的并发信号量 + 连接期重试。四家共用（openai-compat 三家 + anthropic）。
+// 上游调用闸：按 provider 分桶的并发信号量 + 连接期重试。五家共用（openai-compat 四家 + anthropic）。
+// 分桶按 ProviderName 泛化，新 provider 第一次调用时自动建桶，本文件不需要为它改任何一行。
 //
 // 【为什么要有】千人级同时在线时，lib/llm 原本是「来多少路就往上游打多少路」。
 // 撞上游账户限流后返回的是成批 429，用户侧直接看到 error 帧——而限流是可以排队等过去的，

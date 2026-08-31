@@ -113,7 +113,11 @@ export interface ChatStreamOptions {
   onReasoning?: (totalChars: number) => void;
 }
 
-export type ProviderName = 'anthropic' | 'openai' | 'deepseek' | 'dashscope';
+/** 'relay' = 第三方中转（OpenAI 兼容协议，端点与 key 全走 env，见 providers/relay.ts）。
+ *  它是**独立的一家**而不是「anthropic 换个 baseUrl」：闸位桶、限流特征、计费口径
+ *  （中转单价 = 上游官方价 × model_ratio × group_ratio）与直连都不是一回事，
+ *  借用别人的身份会让三者搅在一起，观测和限流都分不开。 */
+export type ProviderName = 'anthropic' | 'openai' | 'deepseek' | 'dashscope' | 'relay';
 
 /** 统一供应商接口。路由拿到目标后经 createProvider 换成本接口的实例，
  *  上层（lib/agent）只认这个接口，不认具体厂商。 */

@@ -4,7 +4,7 @@
 // 那是 manager 审批的契约文件，不许把型号或档位判断写死在函数里。
 
 import { createProvider, type CreateProviderOptions } from './providers';
-import { API_KEY_ENV, DEGRADE_CHAIN, ROUTING_TABLE, type Plan, type RouteTarget, type TaskClass } from './routing.config';
+import { REQUIRED_ENV, degradeChain, routingTable, type Plan, type RouteTarget, type TaskClass } from './routing.config';
 import type { Provider, ProviderName } from './types';
 
 export interface RouteResult extends RouteTarget {
@@ -19,9 +19,12 @@ export interface RouteOptions {
   isAvailable?: (provider: ProviderName) => boolean;
 }
 
-/** 默认可用性判据：对应环境变量存在且非空串。空串当没配——半配置比没配置更容易让人误判。 */
-function envHasKey(provider: ProviderName): boolean {
-  return !!process.env[API_KEY_ENV[provider]];
+/** 默认可用性判据：该 provider 所需的环境变量**全部**存在且非空串。
+ *  空串当没配——半配置比没配置更容易让人误判。
+ *  中转需要 key + 端点两个（见 routing.config.REQUIRED_ENV）：只判 key 会让它在
+ *  「选中了才发现建不出来」的地方炸，那时降级链已经没机会接手了。 */
+function envHasCredentials(provider: ProviderName): boolean {
+  return REQUIRED_ENV[provider].every((name) => !!process.env[name]);
 }
 
 /** 查路由表并在首选缺 key 时沿 DEGRADE_CHAIN 向后降级。
@@ -31,16 +34,18 @@ function envHasKey(provider: ProviderName): boolean {
  *  同理，降级必须是**显式**的：返回值带 degraded/degradedFrom，调用方有责任透传到
  *  响应头与日志，绝不能让用户以为自己拿到的是首选模型。 */
 export function route(taskClass: TaskClass, plan: Plan, o: RouteOptions = {}): RouteResult {
-  const byClass = ROUTING_TABLE[plan];
-  if (!byClass) throw new Error(`未知套餐档 plan=${plan}，可选：${Object.keys(ROUTING_TABLE).join('/')}`);
+  // 走访问器而不是常量：RELAY_ROUTE_DOMESTIC 开着时境内两家会被改挂到中转（见 routing.config）。
+  const table = routingTable();
+  const byClass = table[plan];
+  if (!byClass) throw new Error(`未知套餐档 plan=${plan}，可选：${Object.keys(table).join('/')}`);
   const preferred = byClass[taskClass];
   if (!preferred) throw new Error(`未知任务档 task_class=${taskClass}，可选：${Object.keys(byClass).join('/')}`);
 
-  const isAvailable = o.isAvailable ?? envHasKey;
+  const isAvailable = o.isAvailable ?? envHasCredentials;
   if (isAvailable(preferred.provider)) return { ...preferred, degraded: false };
 
   // 只向后走：链上排在首选之前的都比它贵，降级绝不能把用户升档（白送钱）
-  const chain = DEGRADE_CHAIN[taskClass];
+  const chain = degradeChain()[taskClass];
   const from = chain.findIndex((t) => t.provider === preferred.provider && t.model === preferred.model);
   if (from < 0) {
     throw new Error(
@@ -51,9 +56,10 @@ export function route(taskClass: TaskClass, plan: Plan, o: RouteOptions = {}): R
     if (isAvailable(target.provider)) return { ...target, degraded: true, degradedFrom: preferred };
   }
 
+  // 列出每条腿**全部**缺的变量名（中转是 key+端点两个）：只点名一半会让人补完还是不通。
   const tried = chain
     .slice(from)
-    .map((t) => `${API_KEY_ENV[t.provider]}(${t.model.api})`)
+    .map((t) => `${REQUIRED_ENV[t.provider].join('+')}(${t.model.api})`)
     .join(' → ');
   throw new Error(`${plan}/${taskClass} 无可用模型：降级链上的 key 全部缺失（${tried}），请补齐 app/.env.local`);
 }
