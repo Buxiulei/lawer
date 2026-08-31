@@ -70,6 +70,15 @@ set -a && . ./.env && set +a  # 加载环境变量
 **`/verify` 例外**：验签不通过不算 HTTP 错误，一律 `200` 返回裁决，
 调用方读 `overall_ok`。这是刻意设计——「没验成功」与「验了但不通过」必须可区分。
 
+裁决里失败原因给两个字段：`error_code`（稳定错误码，机器读；码表见
+`verify_evidence_pdf.py` 的「对外错误分级」）与 `error`（人读文案）。
+`/verify/:no` 是匿名公开页，故 `error` 里只有静态安全原因原文或安全概述，
+**不含服务器路径与异常原文**——那些只进 sidecar 日志
+（logger `sidecar.verify_evidence_pdf`，`ERROR` 级，带 traceback）。
+app 侧要给用户看具体原因，按 `error_code` 做白名单投影，不要正则匹配 `error` 文案。
+码的**字面值**是跨进程契约（`tests/test_verify_error_sanitize.py` 里冻结成表逐个钉死）：
+改文案不改码；真要增删码，改冻结表的那一下就是提醒——app 侧白名单得同步，否则前端只剩「未知原因」。
+
 ### `/evidence-pdf` payload 形状
 
 字段对齐 spec §7 的 `attestations` / `evidence` / `files` 三张表：
