@@ -29,6 +29,10 @@
 任一关键项不过 → overall_ok=False，退出码非零。缺少校验依赖（pyHanko/asn1crypto）或
 缺失对应信任锚时，相关项一律判「未通过」，绝不静默放行（法庭工具的核心安全属性）。
 
+出错时裁决里给两个字段：error_code（稳定错误码，见「对外错误分级」码表，机器读）与
+error（人读文案）。error 只会是静态安全原因原文或安全概述，不含服务器路径/异常原文——
+后者只进 sidecar 日志（logger "sidecar.verify_evidence_pdf"，ERROR 级，带 traceback）。
+
 供 sidecar 内 import 调用：verify_pdf(pdf_bytes, expect_hash) -> dict
 亦保留 CLI（便于人工/第三方离线复核）:
   python3 verify_evidence_pdf.py <signed.pdf>
@@ -39,6 +43,7 @@
 import argparse
 import hashlib
 import json
+import logging
 import os
 import sys
 
@@ -48,6 +53,49 @@ _TRUST_ANCHOR_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tr
 
 # CFCA 机构（签名链锚的判据）——按证书 subject 的 Organization 识别，稳健于文件名
 _CFCA_ORG = "China Financial Certification Authority"
+
+_LOG = logging.getLogger("sidecar.verify_evidence_pdf")
+
+
+# ---------------- 对外错误分级 ----------------
+#
+# 裁决 dict 的 error 字段会被 app 侧一路带到公开复核页（app/src/lib/evidence/recheck.ts），
+# 即「对外出口」。裸 {e} / {type(e).__name__}: {e} 写进去，会把服务器绝对路径、
+# site-packages 布局、内部异常类型一并送到匿名访客眼前。
+#
+# 分两级：
+#   静态安全原因（文案里没有任何运行期插值，如「PDF 无嵌入数字签名」）——原文保留，另附稳定码；
+#   异常兜底（文案含 {e} / 含内部路径）——出口只出「稳定码 + 安全概述」，原始异常完整进日志。
+#
+# 码是稳定契约：app 侧按码做白名单投影，改文案不改码。
+E_VERIFIER_UNAVAILABLE = "E_VERIFIER_UNAVAILABLE"          # 异常兜底：pyHanko 等验签依赖不可用
+E_TRUST_ANCHOR_UNAVAILABLE = "E_TRUST_ANCHOR_UNAVAILABLE"  # 异常兜底：信任锚目录/PEM 读取解析失败
+E_MISSING_CFCA_ANCHOR = "E_MISSING_CFCA_ANCHOR"            # 静态：无 CFCA 签名信任锚
+E_MISSING_TSA_ANCHOR = "E_MISSING_TSA_ANCHOR"              # 静态：无时间戳信任锚
+E_PDF_UNPARSABLE = "E_PDF_UNPARSABLE"                      # 异常兜底：PDF/签名结构解析失败
+E_NO_SIGNATURE = "E_NO_SIGNATURE"                          # 静态：PDF 无嵌入数字签名
+E_SIGNATURE_VERIFY_FAILED = "E_SIGNATURE_VERIFY_FAILED"    # 异常兜底：单个签名验签过程抛异常
+E_PDF_READ_FAILED = "E_PDF_READ_FAILED"                    # 异常兜底：CLI 读盘失败
+
+# 异常兜底类的对外概述。**唯一出口**：新增兜底分支必须在此登记一条，
+# 否则 _safe_error 直接 KeyError（宁可炸也不要静默回一段裸异常）。
+_SAFE_SUMMARY = {
+    E_VERIFIER_UNAVAILABLE: "验签组件不可用，PDF 未做密码学验签（不得据此认定有效）",
+    E_TRUST_ANCHOR_UNAVAILABLE: "内置信任锚不可用，签名链无法锚定，拒绝判通过",
+    E_PDF_UNPARSABLE: "无法解析该 PDF 或其数字签名结构（文件损坏、非 PDF，或格式不受支持）",
+    E_SIGNATURE_VERIFY_FAILED: "验签过程异常，未能完成该签名的校验（不得据此认定有效）",
+    E_PDF_READ_FAILED: "读取 PDF 失败",
+}
+
+
+def _safe_error(code: str, detail) -> tuple:
+    """异常兜底的**唯一**出口：原始明细进 sidecar 日志，只把 (稳定码, 安全概述) 交给调用方。
+
+    detail 是异常对象时连带 traceback 一起记；是字符串时（如内部路径明细）原样记。
+    """
+    _LOG.error("verify_evidence_pdf %s: %s", code, detail,
+               exc_info=isinstance(detail, BaseException))
+    return code, _SAFE_SUMMARY[code]
 
 
 def sha256_hex(b: bytes) -> str:
@@ -106,6 +154,7 @@ def verify_pdf(pdf_bytes: bytes, expect_hash: str = None) -> dict:
         "signatures": [],
         "overall_ok": False,
         "error": None,
+        "error_code": None,          # 稳定错误码（见上方码表）；无错误时为 None
     }
 
     # 1) 哈希对账（防换文件）
@@ -118,17 +167,20 @@ def verify_pdf(pdf_bytes: bytes, expect_hash: str = None) -> dict:
         from pyhanko.sign.validation import validate_pdf_signature
         from pyhanko_certvalidator import ValidationContext
     except Exception as e:  # noqa
-        result["error"] = f"pyHanko 不可用，PDF 未做密码学验签（不得据此认定有效）: {e}"
+        result["error_code"], result["error"] = _safe_error(E_VERIFIER_UNAVAILABLE, e)
         return result
 
     signer_roots, ts_roots, aerr = _load_and_classify_anchors()
     if aerr:
-        result["error"] = f"信任锚不可用: {aerr}"
+        # aerr 含服务器绝对路径 / 底层异常原文 —— 只进日志
+        result["error_code"], result["error"] = _safe_error(E_TRUST_ANCHOR_UNAVAILABLE, aerr)
         return result
     if not signer_roots:
+        result["error_code"] = E_MISSING_CFCA_ANCHOR
         result["error"] = "缺失 CFCA 签名信任锚（sidecar/trust_anchors/ 无 CFCA Identity CA 根）——签名链无法锚定，拒绝判通过"
         return result
     if not ts_roots:
+        result["error_code"] = E_MISSING_TSA_ANCHOR
         result["error"] = "缺失时间戳信任锚（GlobalSign AATL 时间戳 CA）——时间戳链无法锚定，拒绝判通过"
         return result
 
@@ -148,11 +200,12 @@ def verify_pdf(pdf_bytes: bytes, expect_hash: str = None) -> dict:
         reader = PdfFileReader(io.BytesIO(pdf_bytes))
         embedded = list(reader.embedded_signatures)
     except Exception as e:  # noqa
-        result["error"] = f"无法解析 PDF 或其签名: {e}"
+        result["error_code"], result["error"] = _safe_error(E_PDF_UNPARSABLE, e)
         return result
 
     result["num_signatures"] = len(embedded)
     if not embedded:
+        result["error_code"] = E_NO_SIGNATURE
         result["error"] = "PDF 无嵌入数字签名（未签名文件，拒绝判通过）"
         return result
 
@@ -170,7 +223,7 @@ def verify_pdf(pdf_bytes: bytes, expect_hash: str = None) -> dict:
             # LTV(DSS)，coverage 恒为 ENTIRE_REVISION，无法凭 coverage 区分「合法 LTV 增量」与
             # 「攻击者追加批注/改金额的恶意增量」；pyHanko 的 docmdp/差异分析才能区分。
             "docmdp_ok": None, "mod_level": None, "bottom_line": None,
-            "signature_ok": False, "error": None,
+            "signature_ok": False, "error": None, "error_code": None,
         }
         try:
             status = validate_pdf_signature(
@@ -229,7 +282,7 @@ def verify_pdf(pdf_bytes: bytes, expect_hash: str = None) -> dict:
                 and row["bottom_line"]      # ← 关键：pyHanko 判「非法修改」则整体拒绝
             )
         except Exception as e:  # noqa
-            row["error"] = f"验签异常: {type(e).__name__}: {e}"
+            row["error_code"], row["error"] = _safe_error(E_SIGNATURE_VERIFY_FAILED, e)
             row["signature_ok"] = False
 
         if not row["signature_ok"]:
@@ -248,10 +301,14 @@ def main():
                     help="期望的整份 PDF SHA-256（库存 attestations 哈希）；不符 → 换文件/篡改")
     args = ap.parse_args()
 
+    # CLI 用：stdout 只留可解析的裁决 JSON，异常原文走 logging → stderr
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
     try:
         pdf_bytes = open(args.pdf, "rb").read()
     except Exception as e:  # noqa
-        print(json.dumps({"overall_ok": False, "error": f"读取 PDF 失败: {e}"},
+        code, msg = _safe_error(E_PDF_READ_FAILED, e)
+        print(json.dumps({"overall_ok": False, "error": msg, "error_code": code},
                          ensure_ascii=False, indent=2))
         sys.exit(1)
 
