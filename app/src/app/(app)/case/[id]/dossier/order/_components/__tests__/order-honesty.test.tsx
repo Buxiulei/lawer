@@ -35,7 +35,14 @@ import { describeWideElements, findWideElements } from '@/lib/ui/viewport393';
 import { WATCH_TIER_GONGDAO } from '@/lib/billing/pricing';
 import { TIER_ORDER, WatchEntry, WatchTierPicker } from '@/components/case/WatchEntry';
 import { DossierBody } from '../../../_components/DossierBody';
-import { DisclosureList, ModuleCard, OrderQuote, OrderSummary, ProbeCard } from '../OrderQuote';
+import {
+  ConfirmButton,
+  DisclosureList,
+  ModuleCard,
+  OrderQuote,
+  OrderSummary,
+  ProbeCard,
+} from '../OrderQuote';
 
 const ssr = (node: React.ReactNode) => renderToStaticMarkup(<>{node}</>);
 const visibleText = (html: string) => html.replace(/<[^>]+>/g, '');
@@ -252,6 +259,35 @@ describe('合计与余额对照', () => {
     expect(visibleText(html)).toContain(String(summary.intakeReserve));
   });
 
+  /**
+   * 确认按钮的四个失效条件里，只有 `stale`（报价是上一家的）在界面上看不出异样：
+   * 那条黄色提示照常显示，按钮只是从灰变成可点。**本仓 2026-08-31 实测**：
+   * 把 `stale` 从 disabled 里删掉，2656 条测试全绿。这条与 lib 侧 isQuoteStale 的
+   * 直接断言是补上的那颗牙——一条量"判定算得对不对"，一条量"判定有没有接到按钮上"。
+   *
+   * 变异臂：ConfirmButton 的 disabled 里去掉 `stale`，本条会红。
+   */
+  it('报价是上一家的 ⇒ 确认按钮点不动；不过期且钱够 ⇒ 点得动', () => {
+    const summary = summarizeSelection(mockQuote, core);
+    expect(summary.shortfall).toBe(0);
+    expect(summary.modules.length).toBeGreaterThan(0);
+
+    // 断言的是 **disabled 属性**，不是字符串「disabled」——那三个字母也出现在
+    // `disabled:opacity-45` 这类 class 里，按子串判会两边都绿（判据看着在、其实恒真）。
+    const isDisabled = (html: string) => /<button[^>]*\sdisabled(?:=""|[\s>])/.test(html);
+
+    const staleHtml = ssr(
+      <ConfirmButton busy={false} stale summary={summary} onConfirm={() => {}} />,
+    );
+    expect(staleHtml).toContain('data-testid="confirm-charge"');
+    expect(isDisabled(staleHtml)).toBe(true);
+
+    const freshHtml = ssr(
+      <ConfirmButton busy={false} stale={false} summary={summary} onConfirm={() => {}} />,
+    );
+    expect(isDisabled(freshHtml)).toBe(false);
+  });
+
   it('核心小计与深度小计分开摆，不合成一个说不清构成的总数', () => {
     const summary = summarizeSelection(mockQuote, MODULE_CATALOG.map((c) => c.module));
     const text = visibleText(ssr(<OrderSummary summary={summary} quote={mockQuote} />));
@@ -267,7 +303,8 @@ describe('一键加守望：三档在点之前摊开，低调模式不露那三�
   const NEVER = ['监控', '守望', '公司'];
 
   /**
-   * 变异臂：把 WatchEntry 的档位说明改成图例那套「圈1·每日监控」，这条会红。
+   * 变异臂：把任一档说明写成早先图例那套含「监控」的说法（「圈1·每日监控」），这条会红。
+   * （图例那套本身也已经不含这三个词了，判据见 graph/_components/__tests__/tier-labels。）
    * 一封写着「某某公司的守望监控」的东西被工位旁人瞟见，暴露的是他正在准备什么——
    * 口径同 lib/notify/copy 的守望计费通知。
    */

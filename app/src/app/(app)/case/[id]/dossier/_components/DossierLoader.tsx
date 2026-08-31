@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { mockDossier } from '@/app/_mock/company-dossier';
-import { ApiError, apiFetch, humanError } from '@/app/_ui/api';
+import { apiFetch, humanError } from '@/app/_ui/api';
 import { readToken, useSignedIn } from '@/app/_ui/auth';
 import type { DossierView, VenueSection } from '@/lib/dossier/contract';
 import { Alert, AlertDescription, AlertTitle } from '@/components/shadcn/alert';
@@ -17,10 +17,17 @@ import { DossierBody, DossierNotOrdered } from './DossierBody';
  * 【只有 demo 走演示档案】跟证据库、图谱同一条规矩：真实案件登录失效给「重新登录」，
  * **绝不回落到演示数据**——在真案件下摆一份别人公司的统计，比空白危险得多。
  *
- * 【查不到 ≠ 出错】接口给 null、或者档案还没建（404），都走"还没建档"那一屏，
- * 那是一个正常状态，不是故障。只有真读失败才出错误条。
+ * 【查不到 ≠ 出错，但它是一个 200】端点对「还没建档」返回
+ * `{ status: 'none', dossier: null, orderPath }`，页面据此走招呼屏。
+ *
+ * 【为什么不再把 404 当成"还没建档"】这里原先把 `HTTP_404` 也算进"还没建档"，
+ * 于是**端点根本不存在**的那段时间里，档案页对每一个真实案件都打着一个不存在的地址、
+ * 显示着一屏体面的「还没建档」，而组件测试 mock 掉了网络层，全绿。
+ * 现在 404 一律当故障出错误条——一个打不通的端点必须看得见。
  */
-const NOT_ORDERED_CODES = new Set(['HTTP_404', 'DOSSIER_NOT_FOUND']);
+type DossierResponse =
+  | { status: 'none'; dossier: null; orderPath: string }
+  | { status: 'ready'; dossier: DossierView };
 
 export function DossierLoader({
   caseId,
@@ -34,6 +41,8 @@ export function DossierLoader({
   const isDemo = caseId === 'demo';
 
   const [dossier, setDossier] = useState<DossierView | null>(null);
+  /** 「还没建档」时去哪儿下单，由端点给；请求没打通之前先用本案的默认入口。 */
+  const [orderPath, setOrderPath] = useState(`/case/${encodeURIComponent(caseId)}/dossier/order`);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [needSignIn, setNeedSignIn] = useState(false);
@@ -55,16 +64,15 @@ export function DossierLoader({
       return;
     }
     try {
-      const res = await apiFetch<{ dossier: DossierView | null }>(
-        `/cases/${encodeURIComponent(caseId)}/dossier`,
-      );
-      setDossier(res.dossier);
-    } catch (err) {
-      if (err instanceof ApiError && NOT_ORDERED_CODES.has(err.errorCode)) {
+      const res = await apiFetch<DossierResponse>(`/cases/${encodeURIComponent(caseId)}/dossier`);
+      if (res.status === 'none') {
         setDossier(null); // 还没建档，不是故障
+        setOrderPath(res.orderPath);
       } else {
-        setLoadError(humanError(err));
+        setDossier(res.dossier);
       }
+    } catch (err) {
+      setLoadError(humanError(err));
     } finally {
       setLoading(false);
     }
@@ -113,7 +121,7 @@ export function DossierLoader({
     );
   }
 
-  if (!dossier) return <DossierNotOrdered caseId={caseId} />;
+  if (!dossier) return <DossierNotOrdered orderPath={orderPath} />;
 
   return <DossierBody caseId={caseId} dossier={dossier} />;
 }

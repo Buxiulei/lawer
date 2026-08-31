@@ -231,3 +231,27 @@ export async function generatePatterns(
   });
   return { kept: kept.length, dropped, droppedEvidence, skipped: false, fedDocs: docs.length };
 }
+
+/** 已落库的一条套路（evidence_json 尚未解析，解析在呈现层做一次即可）。 */
+export interface PatternRow {
+  id: number;
+  pattern: string;
+  evidence_json: string;
+  model: string | null;
+  generated_at: string;
+}
+
+/**
+ * 读某份档案已落库的全部套路。
+ *
+ * 【读侧不再判空 evidence】证据被清空的候选在落库前就整条丢掉了（见文件头第 3 条），
+ * 所以这张表里没有「无证据的套路」这种行。呈现层仍有一道双保险，防的是别处写进来的脏行。
+ */
+export function listPatterns(db: Database, dossierId: number): PatternRow[] {
+  return db
+    .prepare(
+      `SELECT id, pattern, evidence_json, model, generated_at
+         FROM company_patterns WHERE dossier_id = ? ORDER BY id`,
+    )
+    .all(dossierId) as PatternRow[];
+}

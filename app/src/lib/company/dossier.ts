@@ -64,6 +64,21 @@ export function findDossierByKey(db: Database, key: string): DossierRow | undefi
     | undefined;
 }
 
+/**
+ * 按**主体**取档案（名称 + 可选统一社会信用代码）。
+ *
+ * 给「手上只有一个公司主体、不知道 dossier_id」的调用方用（如案件 → 档案适配端点）。
+ * 存在的意义是让键的计算留在本文件里：调用方各自 `companyKey(...)` 一遍不算错，
+ * 但每多一处，company_key 的口径就多一处会漂的地方——
+ * 而两处算出不同键时系统一句话都不报，只是缓存不命中、或者命中了别人家的档案。
+ */
+export function findDossierBySubject(
+  db: Database,
+  subject: { uscc?: string | null; name?: string | null },
+): DossierRow | undefined {
+  return findDossierByKey(db, companyKey(subject));
+}
+
 export function getDossier(db: Database, id: number): DossierRow | undefined {
   return db.prepare(`SELECT ${COLS} FROM company_dossiers WHERE id = ?`).get(id) as
     | DossierRow

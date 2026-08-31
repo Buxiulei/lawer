@@ -148,8 +148,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-/** 未建档时的招呼。**不摆任何演示数字**——真实案件下摆别人的统计比空白危险得多。 */
-export function DossierNotOrdered({ caseId }: { caseId: string }) {
+/**
+ * 未建档时的招呼。**不摆任何演示数字**——真实案件下摆别人的统计比空白危险得多。
+ *
+ * `orderPath` 由端点随「还没建档」那个状态一起给（见 api/v1/cases/[id]/dossier）：
+ * 「该去哪儿下单」只有一个说法，页面不自己拼第二份。
+ */
+export function DossierNotOrdered({ orderPath }: { orderPath: string }) {
   return (
     <div className="pt-1">
       <header className="py-3">
@@ -167,7 +172,7 @@ export function DossierNotOrdered({ caseId }: { caseId: string }) {
           <Badge tone="neutral">先看报价，确认了才扣</Badge>
         </div>
         <Button size="sm" className="mt-4" asChild>
-          <Link href={`/case/${caseId}/dossier/order`}>看报价</Link>
+          <Link href={orderPath}>看报价</Link>
         </Button>
       </div>
     </div>

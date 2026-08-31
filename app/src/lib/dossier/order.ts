@@ -360,3 +360,60 @@ export function preChargeDisclosures(quote: DossierQuote, probedDocs: number): s
   }
   return lines;
 }
+
+/* ── 默认勾选 ─────────────────────────────────────────── */
+
+/**
+ * 默认只勾**可售且没买过的核心四块**。
+ * 深度两块按篇计价、单价高、且可能样本不足，默认替用户勾上等于诱导消费——
+ * 它们要用户自己伸手勾。
+ *
+ * 两层过滤各自防一件事，缺任一层都不会有人报错：
+ *   · 可售（`sellable`）：探测到 0 关联的公司，默认把「关联谱系」勾上，用户一路点下去
+ *     就为一个页面上明写着「暂不可售」的块付了钱（billableSelection 是第二道，
+ *     但那道只拦扣费，屏幕上仍会显示成"已选"）；
+ *   · 没买过（`!alreadyPaid`）：已付过的块默认再勾一次，合计里它是 0 元、看着无害，
+ *     可它会跟着进 confirm 的 modules——把「买过了」显示成「这次也要买」。
+ */
+export function defaultSelection(
+  quote: DossierQuote,
+  probe: ProbePayload | null,
+  deepBlocked: string | null,
+): DossierModule[] {
+  return MODULE_CATALOG.filter((c) => c.isCore)
+    .filter((c) => moduleAvailability(c.module, probe, deepBlocked).sellable)
+    .filter((c) => quote.items.some((it) => it.module === c.module && !it.alreadyPaid))
+    .map((c) => c.module);
+}
+
+/* ── 报价与输入框对不对得上 ───────────────────────────── */
+
+/** 报价是替谁报的：公司名 + 代码。用来认出"输入框改过了，屏幕上的价不是这一家的"。 */
+export function subjectKey(name: string, uscc: string): string {
+  return `${name.trim()}|${uscc.trim()}`;
+}
+
+/**
+ * 屏幕上那份价是不是**上一家**的。
+ *
+ * 【为什么它必须是一个能被直接断言的函数】这个判定的唯一去处是确认按钮的 disabled，
+ * 而按钮的失效形态是静默的：把 `stale` 从 disabled 里删掉，页面照常渲染、
+ * 那条黄色提示照常显示，只是按钮变成可点——用户拿着 A 家的报价下单，
+ * 服务端按 B 家重新算钱，两边各自看着都对，而他看到的数与实扣的数不是一个数。
+ * 判定写在组件里的一行表达式上时，整套测试删掉它也全绿（本仓 2026-08-31 实测）。
+ *
+ * 【为什么把 quote 也收进来】"还没报过价"与"报的是别家的价"是两件事，
+ * 前者不该让按钮失效。把这一半留在调用方写成 `quote !== null && …`，
+ * 判定就又被劈成两处，而只有其中一处受判。
+ *
+ * @param quotedFor 拿到这份报价时的 subjectKey
+ */
+export function isQuoteStale(
+  quote: DossierQuote | null,
+  quotedFor: string,
+  name: string,
+  uscc: string,
+): boolean {
+  if (quote === null) return false;
+  return quotedFor !== subjectKey(name, uscc);
+}

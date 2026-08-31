@@ -30,6 +30,7 @@ import type {
   VenueSection,
 } from '@/lib/dossier/contract';
 import { VENUE_NOT_COVERED } from '@/lib/dossier/present';
+import { venueSection } from '@/lib/dossier/venue';
 import { mockDossier } from '@/app/_mock/company-dossier';
 import { DossierBody } from '../DossierBody';
 import { OutcomeCard, DurationCards } from '../StatsSection';
@@ -321,6 +322,22 @@ describe('C4 非北京朝阳只出「暂不覆盖」，不出任何风格描述'
     expect(html).toContain('待核实');
     expect(html).toContain('2026-08-19');
     expect(html).toContain('http://www.bjchy.gov.cn/x');
+  });
+
+  /**
+   * 上面那条喂的是**手写的**卡，出处是测试自己编的一串；它证明的只是
+   * 「给了 sources 就会渲染」。真链路上 sources 恒空了很久，这条测试全程绿着——
+   * 这正是「判据与被判的东西并存」的形态。
+   *
+   * 所以这条从**真索引**走一遍：knowledge/index.json → lib/knowledge → venueSection →
+   * VenueCards，断言屏幕上真的出现了一条官方来源。
+   * 变异臂：把 venue.cardOf 的 `sources: hit.sources` 改回 `sources: []`，这条会红。
+   */
+  it('真索引走一遍：朝阳这一节在屏幕上摆得出官方来源', () => {
+    const html = ssr(<VenueCards section={venueSection('北京朝阳')} />);
+    expect(html).toContain('http://www.bjchy.gov.cn/');
+    const text = visibleText(html);
+    expect(text).toContain('bjchy.gov.cn');
   });
 });
 

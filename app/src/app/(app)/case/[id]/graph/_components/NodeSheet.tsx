@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import type { CompanyGraph, GraphNode } from '@/app/_mock/company-graph';
+import type { CompanyGraph, GraphNode, GraphTier } from '@/app/_mock/company-graph';
 import { formatDate } from '@/app/_ui/format';
 import { AppSheet } from '@/components/shadcn/app-sheet';
 import { Badge } from '@/components/shadcn/badge';
@@ -57,11 +57,7 @@ export function NodeSheet({
               {node.role}
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
-              {/* 圈层是监控节奏不是风险结论，红只留给那圈 2px 的环 */}
-              <Badge tone="neutral" className="gap-1.5">
-                <span aria-hidden className={`size-2.5 rounded-full border-2 ${TIER_RING[node.tier]}`} />
-                {graph.meta.tiers[node.tier]}
-              </Badge>
+              <TierBadge tier={node.tier} labels={graph.meta.tiers} />
               {events.some((e) => e.urgent) && <Badge tone="danger">有紧急动态</Badge>}
             </div>
 
@@ -192,6 +188,30 @@ export function NodeSheet({
         </div>
       )}
     </AppSheet>
+  );
+}
+
+/**
+ * 圈层徽标。圈层是**看的节奏**不是风险结论，红只留给那圈 2px 的环。
+ *
+ * 【为什么单独导出】抽屉整棵树在 Radix 的 Portal 后面，SSR 渲染出空串——
+ * 判据够不着它，写多少断言都是零（同 WatchEntry 把三档选择器单独导出的理由）。
+ * 这一块又恰恰是低调模式下**唯一**明文可读的那行字：徽标不在 data-veil/Sensitive 里，
+ * 整页正文糊着的时候它照常清楚。文案的唯一事实源与"两种模式同一句"的口径见
+ * lib/graph/contract 的 GRAPH_TIER_LABELS，本组件一个字都不改写、也不另挑一套。
+ */
+export function TierBadge({
+  tier,
+  labels,
+}: {
+  tier: GraphTier;
+  labels: Record<GraphTier, string>;
+}) {
+  return (
+    <Badge tone="neutral" className="gap-1.5">
+      <span aria-hidden className={`size-2.5 rounded-full border-2 ${TIER_RING[tier]}`} />
+      {labels[tier]}
+    </Badge>
   );
 }
 

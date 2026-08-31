@@ -246,3 +246,47 @@ export function saveStats(db: Database, stats: DossierStats): void {
     stats.dropped_patterns,
   );
 }
+
+/** company_dossier_stats 的一行原样。列名与库一致，不在读侧改名。 */
+export interface StatsSnapshotRow {
+  dossier_id: number;
+  docs_total: number;
+  docs_fulltext: number;
+  docs_outcome_decided: number;
+  worker_favorable_n: number;
+  applicant_labor_n: number;
+  applicant_employer_n: number;
+  arb_n: number;
+  arb_median_days: number | null;
+  trial1_n: number;
+  trial1_median_days: number | null;
+  trial2_n: number;
+  trial2_median_days: number | null;
+  exec_n: number;
+  exec_median_days: number | null;
+  as_of: string | null;
+  coverage_note: string | null;
+  dropped_patterns: number;
+  computed_at: string;
+}
+
+/**
+ * 读快照。**无行返回 undefined**，别在这里兜一个全 0 的行回去——
+ * 「统计还没算过」与「算过了，每一格都是 0」在界面上是两屏：前者出「等它跑完」，
+ * 后者出「我们查了，一条都没有」。兜底的那一行会让前者穿上后者的衣服。
+ *
+ * 与 saveStats 成对放在这里，而不是另开一个读模块：写点与读点分居两处的那天，
+ * 加一列的人只会改自己手边那一处。
+ */
+export function readStats(db: Database, dossierId: number): StatsSnapshotRow | undefined {
+  return db
+    .prepare(
+      `SELECT dossier_id, docs_total, docs_fulltext, docs_outcome_decided, worker_favorable_n,
+              applicant_labor_n, applicant_employer_n,
+              arb_n, arb_median_days, trial1_n, trial1_median_days,
+              trial2_n, trial2_median_days, exec_n, exec_median_days,
+              as_of, coverage_note, dropped_patterns, computed_at
+         FROM company_dossier_stats WHERE dossier_id = ?`,
+    )
+    .get(dossierId) as StatsSnapshotRow | undefined;
+}

@@ -25,7 +25,7 @@ const TIER_OF_WATCH: Record<string, GraphTier> = {
 
 /**
  * 没有盯梢行的主体落到圈3。
- * 圈3 的文案是「仅快照存档不监控」——这正是"查了但没在盯"的准确描述，
+ * 圈3 的文案是「只存快照，不定期看」——这正是"查了但没在盯"的准确描述，
  * 不是兜底占位。若哪天圈3 改成别的含义，这个默认值要跟着重判。
  */
 const TIER_WITHOUT_WATCH: GraphTier = 3;

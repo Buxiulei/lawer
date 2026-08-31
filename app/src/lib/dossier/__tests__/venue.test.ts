@@ -31,6 +31,30 @@ describe('首发只做北京朝阳', () => {
   });
 
   /**
+   * 出处不是可选的。
+   *
+   * 【它此前是怎么静默坏掉的】frontmatter 里 sources 一直是必填，但索引生成器
+   * 的 INDEX_FIELDS 没导出它 ⇒ loader 的 PackMeta 没这个字段 ⇒ venue.cardOf 只能填 `[]`
+   * ⇒ 界面那一块「sources 非空才渲染」，于是**整块从来没渲染过**。
+   * 全链路没有一处报错：卡里有出处、页面上没有出处，两边各自看着都对。
+   *
+   * 变异臂：把 gen-knowledge-index.py 的 INDEX_FIELDS 里的 "sources" 去掉重跑生成器，
+   * 这条会红（loader 的入口守卫先炸，退一步说也是 sources 为空）。
+   */
+  it('每张卡都带得出出处，且朝阳立案 SOP 带的是官方源', () => {
+    const section = venueSection('北京朝阳');
+    for (const card of section.cards) {
+      expect(`${card.id}:${card.sources.length > 0}`).toBe(`${card.id}:true`);
+    }
+    const lian = section.cards.find((c) => c.id === 'sop-chaoyang-lian-sop')!;
+    // 朝阳区人社局办事指南页 + 官方附件包（模板 zip），逐字取自卡的 frontmatter
+    expect(lian.sources).toContain(
+      'http://www.bjchy.gov.cn/affair/ldwq/tjzc/8a24fe9767393e2d01673f3dbdc70a21.html',
+    );
+    expect(lian.sources.some((s) => s.includes('bjchy.gov.cn') && s.endsWith('.zip'))).toBe(true);
+  });
+
+  /**
    * 变异臂：把 cardOf 的 try/catch 去掉换成直接 knowledge.get，这条会红（抛错而不是丢弃）；
    * 把 catch 里改成返回一张占位卡，这条也会红（长度不对）。
    *

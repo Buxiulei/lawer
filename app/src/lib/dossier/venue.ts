@@ -46,10 +46,10 @@ function cardOf(id: string): VenueCard | null {
       id: hit.id,
       title: hit.title,
       body: hit.content,
-      // frontmatter 里的 sources 没有随 index.json 导出（loader 的 PackMeta 不含该字段），
-      // 所以这里恒为空数组，界面对应的那一块整块不渲染。
-      // 补齐要动 knowledge 索引生成器，跨工单，见 docs/contracts/dossier-api.md。
-      sources: [],
+      // 出处直接透传存档卡 frontmatter 里的 sources（官方 URL 或本地存档副本路径），
+      // 一个字不改写、不补充：这一块的全部价值就是"这句话是从哪儿抄来的"，
+      // 我们替它润色一个来源，等于替官方签了字。
+      sources: hit.sources,
       confidence: hit.confidence,
       updated: hit.updated,
     };

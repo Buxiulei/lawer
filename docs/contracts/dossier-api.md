@@ -35,17 +35,38 @@
 
 ---
 
-## 二、`GET /api/v1/cases/:id/dossier` — **待 A/B 落地**
+## 二、`GET /api/v1/cases/:id/dossier` — **已落地**（ws/dossier-integration）
 
 页面取档案走这条。响应：
 
 ```
-200 { ok: true, dossier: DossierView | null }   // null = 还没建档
-404 error_code 'DOSSIER_NOT_FOUND' 亦按"还没建档"处理（界面同样走招呼页，不当故障）
+200 { ok: true, status: 'ready', dossier: DossierView }
+200 { ok: true, status: 'none', dossier: null, orderPath: '/case/{id}/dossier/order' }
+404 { ok: false, error_code: 'CASE_NOT_FOUND', message: '案件不存在' }
 ```
 
-`DossierView` 见 `lib/dossier/contract.ts`。B 若已实现按 dossier id 取的 `GET /api/v1/company/dossiers/{id}`，
-这条可以是它的薄包装（案件 → 该案 dossier）；**页面只认这一条**，因为页面手上只有 caseId。
+`DossierView` 见 `lib/dossier/contract.ts`，组装在 `lib/dossier/build.ts`。
+它是 `GET /api/v1/company/dossiers/{id}` 的薄包装：入口的钥匙从 dossier_id 换成 case_id
+（案件 → 被申请人主体 → `companyKey()` → `company_dossiers`），**归属判据同一条**
+（`getDossierBillingView`，没下过单也没为它付过费的账号一律看不到）。
+**页面只认这一条**，因为页面手上只有 caseId。
+
+### 「还没建档」是一个 200，不是 404
+
+三种来路——① 案里还没落被申请人主体；② 这家公司全站没人建过档；③ 建过、但这个账号
+没买过——**返回逐字相同的载荷**。分开说等于把「这家公司有没有人建过档」做成一个人人可查的
+探针（同 §三 那条把「无权限」与「不存在」合并成一个 404 的理由）。
+
+`status: 'none'` 必须是个**明确的 200 载荷**，理由是这条端点自己的病史：它此前不存在，
+而前端把 `HTTP_404` 也算进「还没建档」，于是档案页对每一个真实案件都在打一个不存在的地址、
+显示着一屏体面的招呼页；组件测试 mock 掉了网络层，全绿。
+**mock 了网络层的全绿，证不了端点存在。** 现在 404 只留给「案件不存在或不属于你」，
+判据从 handler 本体起跑（`api/v1/cases/[id]/dossier/__tests__/route.test.ts`：真库、真迁移、
+真 handler，删掉路由文件当场红）。
+
+演示案件（`caseId === 'demo'`）**不走这条**：它的 id 不是数字、且必须在未登录时也能看，
+档案形状由前端 mock 直接给（`DossierLoader` 的 isDemo 分支）。为演示在鉴权上开的口子，
+真实案件会一起用上。
 
 ### 呈现层会**拒绝渲染**的情况——后端据此决定字段怎么填
 
@@ -99,11 +120,30 @@
 
 ### 已知缺口（需要跨工单补）
 
-- `VenueCard.sources` **当前恒为空数组**。知识库 pack 的 frontmatter 里有 `sources`，
-  但 `knowledge/index.json` 没有导出它，`lib/knowledge` 的 `PackMeta` 也就没有这个字段。
-  补齐要改索引生成器 `gen-knowledge-index.py` + 重新生成 `index.json` —— 跨工单、
-  且会与任何重新生成索引的人冲突，故本工单不动。界面在 `sources` 非空时会渲染，
-  空时整块不渲染（不显示空标题）。卡正文里本身带着官方 URL，用户不至于没有出处。
+- ~~`VenueCard.sources` 当前恒为空数组~~ —— **已补**（ws/dossier-integration）。
+  `gen-knowledge-index.py` 的 `INDEX_FIELDS` 加了 `sources`、重新生成了 `index.json`，
+  `PackMeta.sources` 与 `venue.cardOf` 跟着接上。loader 入口加了一道守卫：
+  旧版生成器产出的索引（没有 sources）当场报错并说清怎么办，而不是让消费方
+  在 `.length` 上炸一个跟病因隔着好几层的 TypeError。
+  判据：`lib/dossier/__tests__/venue.test.ts`（每张卡都带得出出处）+
+  档案页组件测试里那条走**真索引**的渲染断言（此前那条喂的是手写卡，
+  所以 sources 恒空的那段时间里它一直是绿的）。
+- `DossierView.tenureYears` 恒为 `null`：在职年限是用户在别处填的输入，
+  档案侧没有它的事实源。给 null ⇒ 界面连那句免责声明都不出（出一句
+  「你填的年限不参与计算」而用户根本没在这条路径上填过，只会让他去找一个不存在的输入框）。
+- `DossierPattern.evidence[].docUrl` 恒为 `null`：落库的证据只有案号与逐字引文
+  （`company_patterns.evidence_json`）。按案号回查 `company_litigation` 拼链接是另一件事——
+  同案号可能有多行，拼错的链接会指向另一篇判决，而它看起来完全正常。
+- **`byApplicant` 的分母两边对不上**（需要 A 侧裁一条）：库里的
+  `applicant_labor_n / applicant_employer_n` 是 `computeStats` 在**全部入档行**上数的，
+  而统计卡上那句话是「这 {docsOutcomeDecided} 篇里，劳动者提起 X 件、单位提起 Y 件、
+  看不出的 Z 件」——把它读成**可判定那一批**的构成。`lib/dossier/build.ts` 按卡上那句话的
+  分母减出 Z 并 clamp 到 0（三个数至少在屏幕上加得起来），但极端数据下 X+Y 仍可能超过分母。
+  修法二选一：让统计侧按可判定子集数 applicant_side，或改卡上那句话的措辞。
+  **适配层不替它们挑**，只保证不放大。
+- 退款事由没有落库（`lib/company/refund.ts` 只把 reason 回给巡检 job 去写通知），
+  所以 `DossierView.refund.reason` 只说得出两种：超期（档案状态说得出来）与
+  「有模块未达交付门槛」（其余三条退款路径的共同说法）。要更细，得先给事由一个事实源。
 
 ---
 

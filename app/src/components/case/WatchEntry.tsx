@@ -181,8 +181,10 @@ export const TIER_ORDER: readonly WatchTier[] = ['daily', 'weekly', 'archive'];
  *
  * 【逐字都不含「监控 / 守望 / 公司」】所以低调模式与明文模式用的是同一句——
  * 两种模式各写一版的那种做法，漂了没有任何一处会报错。
- * 注意这与 lib/graph/contract 的 GRAPH_TIER_LABELS（「圈1·每日监控」）是两套文案：
+ * 注意这与 lib/graph/contract 的 GRAPH_TIER_LABELS（「圈1·每天看一次」）是两套文案：
  * 那套是图例上的圈层名，本套是下单前的档位说明，谁也别去改成另一套。
+ * 两套现在都不含那三个词了——那套原先含（「圈1·每日监控」），而它印在图例与节点抽屉的
+ * 徽标上、**不在糊层里**，低调模式下照常明文可读，见 GRAPH_TIER_LABELS 的文件注释。
  */
 const TIER_COPY: Record<WatchTier, { label: string; detail: string }> = {
   daily: {

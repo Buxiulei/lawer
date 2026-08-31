@@ -9,17 +9,20 @@ import { formatDate } from '@/app/_ui/format';
 import { NeutralLabel } from '@/app/_ui/NeutralLabel';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import type { DossierModule, DossierQuote, DossierQuoteItem } from '@/lib/company/dossier-billing';
-import type { ProbePayload, ProbeResult } from '@/lib/company/probe';
+import type { ProbeResult } from '@/lib/company/probe';
 import {
   MODULE_CATALOG,
   type Availability,
   type ModuleCard as ModuleCardMeta,
   type SelectionSummary,
   billableSelection,
+  defaultSelection,
   dependencyUnmet,
+  isQuoteStale,
   moduleAvailability,
   moduleDisclosure,
   preChargeDisclosures,
+  subjectKey,
   summarizeSelection,
 } from '@/lib/dossier/order';
 import { Sensitive } from '@/components/Sensitive';
@@ -76,7 +79,7 @@ export function OrderQuote({ caseId }: { caseId: string }) {
    * 直接下单会拿着 A 家的报价买 B 家的档案，服务端按 B 家重新算钱，
    * 用户看到的数与实扣的数不是一个数，两边各自看着都对。
    */
-  const stale = quote !== null && quotedFor !== subjectKey(companyName, uscc);
+  const stale = isQuoteStale(quote, quotedFor, companyName, uscc);
 
   const orderBody = () => ({
     name: companyName.trim(),
@@ -257,13 +260,12 @@ export function OrderQuote({ caseId }: { caseId: string }) {
             </p>
           )}
 
-          <Button
-            className="w-full"
-            disabled={busy || stale || summary.modules.length === 0 || summary.shortfall > 0}
-            onClick={() => void confirm()}
-          >
-            确认并扣费
-          </Button>
+          <ConfirmButton
+            busy={busy}
+            stale={stale}
+            summary={summary}
+            onConfirm={() => void confirm()}
+          />
         </>
       )}
     </div>
@@ -594,25 +596,33 @@ export function ConfirmedPanel({ caseId, result }: { caseId: string; result: Con
   );
 }
 
-/* ── 默认勾选 ─────────────────────────────────────────── */
+/* ── 确认按钮 ─────────────────────────────────────────── */
 
 /**
- * 默认只勾**可售且没买过的核心四块**。
- * 深度两块按篇计价、单价高、且可能样本不足，默认替用户勾上等于诱导消费——
- * 它们要用户自己伸手勾。
+ * 「确认并扣费」。**单独导出**是为了让判据够得着那个 `stale`：
+ * 四个失效条件里只有它是"屏幕上的东西没错、只是过期了"，删掉之后页面看不出任何异样
+ * （那条黄色提示还在，按钮只是变成可点），整套组件测试照样全绿。
+ * 判据在 __tests__/order-honesty 里直接断言这颗按钮的 disabled 属性。
  */
-function defaultSelection(
-  quote: DossierQuote,
-  probe: ProbePayload | null,
-  deepBlocked: string | null,
-): DossierModule[] {
-  return MODULE_CATALOG.filter((c) => c.isCore)
-    .filter((c) => moduleAvailability(c.module, probe, deepBlocked).sellable)
-    .filter((c) => quote.items.some((it) => it.module === c.module && !it.alreadyPaid))
-    .map((c) => c.module);
-}
-
-/** 报价是替谁报的：公司名 + 代码。用来认出"输入框改过了，屏幕上的价不是这一家的"。 */
-function subjectKey(name: string, uscc: string): string {
-  return `${name.trim()}|${uscc.trim()}`;
+export function ConfirmButton({
+  busy,
+  stale,
+  summary,
+  onConfirm,
+}: {
+  busy: boolean;
+  stale: boolean;
+  summary: SelectionSummary;
+  onConfirm: () => void;
+}) {
+  return (
+    <Button
+      data-testid="confirm-charge"
+      className="w-full"
+      disabled={busy || stale || summary.modules.length === 0 || summary.shortfall > 0}
+      onClick={onConfirm}
+    >
+      确认并扣费
+    </Button>
+  );
 }

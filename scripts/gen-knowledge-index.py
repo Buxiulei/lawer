@@ -18,7 +18,10 @@ ROOT = Path(__file__).resolve().parent.parent / "knowledge"
 TYPES = {"法条卡", "判例卡", "计算规则", "流程SOP", "文书模板", "话术卡", "情绪指南", "数据卡", "审查规则", "方法卡"}
 CONFIDENCES = {"原文核实", "二手转述", "待核实"}
 REQUIRED = ["id", "type", "title", "keywords", "applies_to", "sources", "confidence", "updated"]
-INDEX_FIELDS = ["id", "type", "title", "keywords", "applies_to", "region", "confidence", "updated"]
+# sources 必须导出：卡片正文里虽然常常也带着官方 URL，但那是散文，代码读不到。
+# 呈现层（VenueCard.sources）要把出处**结构化**地摆在卡片下方——一张说不出出处的
+# 「官方流程」卡与一段我们自己编的话，在用户那里长得一模一样。
+INDEX_FIELDS = ["id", "type", "title", "keywords", "applies_to", "region", "sources", "confidence", "updated"]
 
 
 def die(msg: str) -> None:

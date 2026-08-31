@@ -29,10 +29,12 @@ export const mockCompanyGraph: CompanyGraph = {
       'edges 的 confidence 标注一手/多源/单一摘要；A科技—B信用无直接股权链一手证据，仅同实控人（张某）平行主体',
     updateNote:
       '裁判文书检索补强：新增 F/G 用工主体节点、案件计数入节点、签约壳-用工主体边升置信',
+    // 与 lib/graph/contract 的 GRAPH_TIER_LABELS **逐字相等**（build.test 双向咬着）。
+    // 演示里也不出现「监控」二字：这三句印在徽标上，不在糊层里，理由见那份唯一事实源。
     tiers: {
-      1: '圈1·每日监控',
-      2: '圈2·每周监控',
-      3: '圈3·仅快照存档不监控',
+      1: '圈1·每天看一次',
+      2: '圈2·每周看一次',
+      3: '圈3·只存快照，不定期看',
     },
   },
   nodes: [

@@ -30,10 +30,13 @@ import {
   MODULE_REFUND_PROMISE,
   REFUND_REASON_MODULE,
   billableSelection,
+  defaultSelection,
   dependencyUnmet,
+  isQuoteStale,
   moduleAvailability,
   moduleDisclosure,
   preChargeDisclosures,
+  subjectKey,
   summarizeSelection,
 } from '../order';
 
@@ -364,5 +367,76 @@ describe('扣费前必须说的那几句（契约 §二）', () => {
     expect(over[3]).toContain('不入档、不处理、也不收费');
     expect(over[3]).toContain(String(quote.billableDocs));
     db.close();
+  });
+});
+
+/* ── 默认勾选：两层过滤各自防一件事 ───────────────────── */
+
+describe('默认勾选只勾「可售且没买过」的核心四块', () => {
+  it('六块全可售、全没买过 ⇒ 默认恰好是核心四块，深度两块要用户自己伸手勾', () => {
+    const { db, uid } = makeDb(3000);
+    const quote = quoteOf(db, uid, ALL);
+    expect(defaultSelection(quote, payload(), null)).toEqual([...CORE_MODULES]);
+    db.close();
+  });
+
+  /**
+   * 变异臂：把 defaultSelection 里 `.filter(… sellable)` 那一层删掉，这条会红。
+   * 没有它，探测到 0 关联的公司照样默认勾上「关联谱系」，用户一路点下去，
+   * 就为一个页面上明写着「暂不可售」的块付了钱——billableSelection 是第二道，
+   * 但那道只拦扣费，屏幕上这一块仍然显示成"已选"。
+   */
+  it('探测说关联主体 0 个 ⇒ 关联谱系不进默认勾选', () => {
+    const { db, uid } = makeDb(3000);
+    const quote = quoteOf(db, uid, ALL);
+    expect(defaultSelection(quote, payload({ relation_count: 0 }), null)).not.toContain('graph');
+    db.close();
+  });
+
+  /**
+   * 变异臂：把 `.filter(… !alreadyPaid)` 那一层删掉，这条会红。
+   * 已付过的块默认再勾一次，合计里它是 0 元、看着无害，可它跟着进 confirm 的 modules——
+   * 把「买过了」显示成「这次也要买」。
+   */
+  it('已经买过的块不进默认勾选（哪怕它 0 元、看着无害）', () => {
+    const { db, uid } = makeDb(3000);
+    const quote = quoteOf(db, uid, ALL);
+    const paid: DossierQuote = {
+      ...quote,
+      items: quote.items.map((it) =>
+        it.module === 'entity' ? { ...it, alreadyPaid: true, gongdao: 0 } : it,
+      ),
+    };
+    expect(defaultSelection(paid, payload(), null)).not.toContain('entity');
+    db.close();
+  });
+});
+
+/* ── 报价过期：确认按钮唯一的静默失效点 ───────────────── */
+
+describe('输入框改过而没重新查 ⇒ 屏幕上那份价是上一家的', () => {
+  const KEY = subjectKey('甲公司', '');
+
+  it('还没报过价时不算过期（按钮不该因为"没查"而失效）', () => {
+    expect(isQuoteStale(null, '', '甲公司', '')).toBe(false);
+    expect(isQuoteStale(null, KEY, '乙公司', '')).toBe(false);
+  });
+
+  /**
+   * 变异臂：把 OrderQuote 的 disabled 里 `stale` 那一项删掉，本仓 2026-08-31 实测
+   * 2656 条测试照样全绿——这条与它的渲染孪生（order-honesty 的 disabled 断言）就是补上的那颗牙。
+   */
+  it('公司名或代码改过 ⇒ 过期；改回去 ⇒ 又不过期', () => {
+    const quote = { items: [] } as unknown as DossierQuote;
+    expect(isQuoteStale(quote, KEY, '甲公司', '')).toBe(false);
+    expect(isQuoteStale(quote, KEY, '乙公司', '')).toBe(true);
+    // 名字没动、只补了统一社会信用代码：认的主体变了（uscc 优先），同样算过期
+    expect(isQuoteStale(quote, KEY, '甲公司', '91110000X')).toBe(true);
+    expect(isQuoteStale(quote, KEY, '甲公司', '')).toBe(false);
+  });
+
+  it('只差首尾空白不算改（粘贴带进来的空格不该逼用户重查一次）', () => {
+    const quote = { items: [] } as unknown as DossierQuote;
+    expect(isQuoteStale(quote, KEY, '  甲公司 ', '  ')).toBe(false);
   });
 });
