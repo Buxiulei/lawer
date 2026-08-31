@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
+import { useHotkeys } from '@/app/_ui/hotkeys';
 import { cn } from './utils';
 import { Button } from './button';
 import { PanelLeftIcon } from './icons';
@@ -20,7 +21,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 
 const SIDEBAR_WIDTH = '15rem';
 const SIDEBAR_WIDTH_ICON = '3.5rem';
-const SIDEBAR_KEYBOARD_SHORTCUT = 'b';
+const SIDEBAR_KEYBOARD_SHORTCUT = 'mod+b' as const;
 
 interface SidebarContextValue {
   state: 'expanded' | 'collapsed';
@@ -48,16 +49,20 @@ function SidebarProvider({
 
   const toggleSidebar = React.useCallback(() => setOpen((v) => !v), []);
 
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === SIDEBAR_KEYBOARD_SHORTCUT && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        toggleSidebar();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [toggleSidebar]);
+  // ⌘B 原来在这里自己挂 window keydown。收编进 _ui/hotkeys 的唯一入口：
+  // 它在桌面工作台上已经不只是「收起菜单」，而是「腾出第三栏」——
+  // 跟 F6 / Esc 是同一套次序里的事，各挂各的就没人能回答「谁先吃这一下」。
+  useHotkeys(
+    React.useMemo(
+      () => ({
+        [SIDEBAR_KEYBOARD_SHORTCUT]: () => {
+          toggleSidebar();
+          return true;
+        },
+      }),
+      [toggleSidebar],
+    ),
+  );
 
   const value = React.useMemo<SidebarContextValue>(
     () => ({ state: open ? 'expanded' : 'collapsed', open, setOpen, toggleSidebar }),

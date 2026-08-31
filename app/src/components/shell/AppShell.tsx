@@ -49,9 +49,14 @@ export function AppShell({
           <SidebarInset>
             <ShellHeader pathname={pathname} caseId={caseId} />
             {onDemoCase && <DemoBanner />}
-            {/* 正文默认限宽在可读区间；工作台那种双栏页面自己挂 data-wide 把上限抬上去。
-                底部只用让开 Tab 那条——sticky 操作条在正文流里，自己占着位置 */}
-            <main className="mx-auto w-full max-w-[900px] flex-1 px-4 pt-3 pb-[calc(var(--tab-bar-h)+16px)] has-[[data-wide]]:max-w-[1280px] lg:px-6 lg:pb-10">
+            {/* 正文默认限宽在可读区间。工作区**排开了侧栏**（data-panes）才解限宽——
+                解了之后宽度归容器查询管（globals.css 批6-A）。
+                原来的 data-wide 是「页面自称我要宽」，退役：它只有一个开关，
+                答不了「宽到多少」「宽了给谁」，而这两问正是三栏要回答的。 */}
+            {/* 有工作区时把左右留白让给它（`px-0`）：容器查询量的是容器**内容盒**，
+                留白留在外面就等于每一档都少 48px——那正好是三栏差的那一口气。
+                同样的 16/24 留白由 WorkspaceGrid 在容器**里面**补回来，观感不变。 */}
+            <main className="mx-auto w-full max-w-[900px] flex-1 px-4 pt-3 pb-[calc(var(--tab-bar-h)+16px)] has-[[data-panes]]:max-w-none has-[[data-workspace]]:px-0 lg:px-6 lg:pb-10">
               {children}
             </main>
             <BottomTabs pathname={pathname} caseId={caseId} />

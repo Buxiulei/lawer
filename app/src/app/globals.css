@@ -439,6 +439,103 @@
   }
 }
 
+/* ══ 批6-A：桌面工作台 · 布局分发层 ════════════════════════════
+   （本段只写布局：栅格轨道、容器阈值、栏的显隐与焦点引导。
+     组件外观归 @layer components 那一段，两段不交叉。）
+
+   断点量的是**内容区宽度 w**，不是视口——侧栏展开/收起会改变 w：
+     1536 视口 · 侧栏展开 → w=1281 → 双栏
+     1536 视口 · 侧栏收起 → w=1465 → 三栏
+   所以 ⌘B 在这里不是「收起菜单」，是「腾出第三栏」。媒体查询看不见这件事。
+
+   ── 阈值是**量出来的**，与设计稿的算数有两处出入，都记在这里 ──
+   稿子给的是 920 / 1320，按「内容区宽」推，但没把两样东西算进去：
+   页面左右留白 48px，和滚动条 15px。实测（scripts/perf/ws-grid.mjs）：
+     1440 视口 · 收起侧栏 → w=1369，稿子说的 1384 少了 15（滚动条）
+   于是按主区下限 600px 回推：
+     双栏 = 600 + 340(卷宗栏轨道) + 48(留白) = 988  → 取 990
+     三栏 = 600 + 340 + 380(查看器轨道) + 48     = 1368 → 取 1400
+   三栏为什么不取 1368 而取 1400：1440 收起正好是 1369，只差 1px 就翻档，
+   换台 Windows（滚动条 17px）就翻不过去了——那是「在我机器上是对的」。
+   1400 是设计稿自己留的那条退路（「挤就往上调到 1400」），代价是翻档的视口
+   从 1440 挪到 1471 起（1536 那档笔记本很舒服）。**主区绝不压到 560 以下**：
+   1400 那一档主区是 632。
+
+   三个阈值只写在这一处。要调就改这里，别去组件里找——组件里一个宽度判断都没有。 */
+:root {
+  /* 栏宽含 20px 内侧留白。**不用 grid gap**：收起的栏是 display:none，
+     gap 却照样在轨道之间占位，三条轨道会白白吃掉两个 gap。 */
+  --ws-w-dossier: 340px; /* 卷宗栏 320 + 20 */
+  --ws-w-viewer: 380px; /* 查看器 360 + 20 */
+}
+
+[data-workspace] {
+  container: work / inline-size;
+}
+
+.ws-grid {
+  display: grid;
+  /* 三条轨道恒在。少一条就不可插值——grid-template-columns 在轨道数不同的
+     两个值之间只会硬跳，200ms 那条过渡等于没写。 */
+  grid-template-columns: minmax(0, 1fr) 0px 0px;
+  align-items: start;
+  transition: grid-template-columns 200ms ease-out;
+}
+
+.ws-pane {
+  display: none;
+  padding-left: var(--sp-4);
+  /* 开合时只重排这一栏，别把整条对话流也拖进去算 */
+  contain: layout paint;
+  position: sticky;
+  top: 68px;
+  max-height: calc(100dvh - 88px);
+  overflow-y: auto;
+}
+
+@container work (min-width: 990px) {
+  .ws-grid[data-dossier='1'] {
+    grid-template-columns: minmax(0, 1fr) var(--ws-w-dossier) 0px;
+  }
+  .ws-grid[data-dossier='1'] > .ws-dossier {
+    display: block;
+  }
+}
+
+@container work (min-width: 1400px) {
+  .ws-grid[data-dossier='1'][data-viewer='1'] {
+    grid-template-columns: minmax(0, 1fr) var(--ws-w-dossier) var(--ws-w-viewer);
+  }
+  /* 查看器只在卷宗栏也在时才出：显隐条件必须与上面那条轨道规则一字对应，
+     否则会出现「栏显示了、轨道还是 0」——0 宽的栏里文字一个字一行，页面拉到几万像素高。 */
+  .ws-grid[data-dossier='1'][data-viewer='1'] > .ws-viewer {
+    display: block;
+  }
+}
+
+/* F6 走到哪一栏：2px 内描边。**描边常驻不淡出**——它是焦点指示器，
+   淡掉就等于键盘用户不知道自己在哪。淡出的是那层引导底色。 */
+[data-pane]:focus-visible {
+  outline: none;
+  border-radius: var(--radius-card);
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ws-pane:focus-visible {
+    animation: ws-pane-guide 600ms ease-out;
+  }
+}
+
+@keyframes ws-pane-guide {
+  from {
+    background-color: var(--primary-wash);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
 /* ── 案卷落地页（批 5）──────────────────────────────
    只服务落地页；这些形状用工具类拼会变成一长串 arbitrary value，
    放这里可读得多，也方便与设计稿逐条对照。 */
