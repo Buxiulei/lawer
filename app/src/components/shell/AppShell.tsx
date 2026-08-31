@@ -13,6 +13,7 @@ import { AppSidebar } from './AppSidebar';
 import { CasePanelProvider } from './casePanel';
 import { DemoBanner } from './DemoBanner';
 import { PanicButton } from './PanicButton';
+import { RouteTransition } from './RouteTransition';
 import { ShellHeader } from './ShellHeader';
 import { CASE_NAV_ITEMS } from './navItems';
 
@@ -50,7 +51,7 @@ export function AppShell({
                 留白留在外面就等于每一档都少 48px——那正好是三栏差的那一口气。
                 同样的 16/24 留白由 WorkspaceGrid 在容器**里面**补回来，观感不变。 */}
             <main className="mx-auto w-full max-w-[900px] flex-1 px-4 pt-3 pb-[calc(var(--tab-bar-h)+16px)] has-[[data-panes]]:max-w-none has-[[data-workspace]]:px-0 lg:px-6 lg:pb-10">
-              {children}
+              <RouteTransition>{children}</RouteTransition>
             </main>
             <BottomTabs pathname={pathname} caseId={caseId} />
             <PanicButton />

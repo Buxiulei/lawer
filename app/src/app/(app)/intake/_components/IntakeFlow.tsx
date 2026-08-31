@@ -107,7 +107,8 @@ export function IntakeFlow() {
   const go = (next: number) => {
     setDraft((prev) => ({ ...prev, step: next }));
     setRestored(false);
-    // 程序化滚动一律过 `scrollBehavior()`：全局那条 CSS 兜底管不到 JS
+    // 程序化平滑滚动是前庭敏感者最难受的一类运动，而 globals.css 那条全局
+    // reduced-motion 规则只管 CSS、管不到这里——必须过 scrollBehavior()
     window.scrollTo({ top: 0, behavior: scrollBehavior(reduce) });
   };
 

@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { EASE_BEZIER, MO } from '../_ui/motion';
+import { EASE_BEZIER, MO, MOTION } from '../_ui/motion';
 
 const APP_SRC = path.resolve(__dirname, '..', '..');
 const CSS = fs.readFileSync(path.join(APP_SRC, 'app', 'globals.css'), 'utf8');
@@ -25,8 +25,8 @@ const CSS = fs.readFileSync(path.join(APP_SRC, 'app', 'globals.css'), 'utf8');
 const CSS_CLEAN = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
 
 describe('token 双写对齐', () => {
-  it('每个 --mo-* 都能在 CSS 里找到，且逐值相同', () => {
-    for (const [name, ms] of Object.entries(MO)) {
+  it('每个 --mo-* 都能在 CSS 里找到，且逐值相同（A 路 MO 与 B 路 MOTION 都逐值对齐）', () => {
+    for (const [name, ms] of [...Object.entries(MO), ...Object.entries(MOTION)]) {
       const m = CSS_CLEAN.match(new RegExp(`--mo-${name}:\\s*([0-9]+)ms`));
       expect(m, `--mo-${name} 没在 globals.css 里`).not.toBeNull();
       expect(Number(m![1]), `--mo-${name}`).toBe(ms);
@@ -35,7 +35,14 @@ describe('token 双写对齐', () => {
 
   it('CSS 里没有 motion.ts 不认识的 --mo-*（防止只加一边）', () => {
     const declared = [...CSS_CLEAN.matchAll(/--mo-([a-z-]+):/g)].map((m) => m[1]);
-    expect([...new Set(declared)].sort()).toEqual(Object.keys(MO).sort());
+    // 合并后 CSS 的 --mo-* = A 路 MO ∪ B 路 MOTION ∪ 两个只在 CSS 用的光标 token（无 JS 常量）
+    const known = new Set([
+      ...Object.keys(MO),
+      ...Object.keys(MOTION),
+      'caret',
+      'caret-stall',
+    ]);
+    expect([...new Set(declared)].sort()).toEqual([...known].sort());
   });
 
   it('每条 --ease-* 的控制点与 JS 同名实现逐值相同', () => {
@@ -187,13 +194,21 @@ describe('减弱动效：带位移的动画必须真的降级', () => {
     expect(Number(op![1])).toBeGreaterThan(0.45);
   });
 
-  it('全站无限循环只有这一条（首屏常驻的注意力税只付一次）', () => {
+  it('全站无限循环只有这几条（首屏常驻的注意力税只付一次；光标那对是流式期间的瞬态例外）', () => {
     const infinite = uses.filter((u) => {
       const i = CSS_CLEAN.indexOf(`animation: ${u.name}`);
       return i >= 0 && /infinite/.test(CSS_CLEAN.slice(i, CSS_CLEAN.indexOf(';', i)));
     });
-    // graph-pulse 是案情关系图里的，只在那一页且不常驻首屏
-    expect(infinite.map((u) => u.selector).sort()).toEqual(['.graph-pulse', '.mo-breath::after']);
+    // graph-pulse 是案情关系图里的，只在那一页且不常驻首屏；
+    // [data-caret='live'/'stalled'] 是流式光标（caret-blink / caret-breath）——
+    // **只在 LLM 吐字期间出现**，不是首屏常驻的注意力税，且都是纯 opacity 无位移，故列为瞬态例外。
+    // 仍用「有序数组全等」：名单外冒出一条新的无限循环照样红。
+    expect(infinite.map((u) => u.selector).sort()).toEqual([
+      '.graph-pulse',
+      '.mo-breath::after',
+      "[data-caret='live']",
+      "[data-caret='stalled']",
+    ]);
   });
 });
 

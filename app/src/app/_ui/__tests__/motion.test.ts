@@ -1,23 +1,32 @@
 /**
- * 动效基座的守卫。
+ * 动效基座的守卫（A 路 gsap 原语 + B 路 WAAPI 原语，合并后一处测）。
  *
  * 这一组盯的全是**失败时画面看起来完全正常**的东西：
- * 减弱动效没降级、CSS 与 JS 的 token 各走各的、`vibrate` 在 iOS 上抛异常。
- * 没有一条会报错，全靠肉眼在真机上撞见——所以由测试钉着。
+ * 减弱动效没降级、CSS 与 JS 的 token 各走各的、`vibrate` 在 iOS 上抛异常、
+ * WAAPI 的「点名例外」被顺手也降级掉。没有一条会报错，全靠肉眼在真机上撞见——所以由测试钉着。
+ *
+ * 【减弱动效的方向】SSR / 取不到 matchMedia 时默认 **true（偏向不动）**：
+ * 前庭敏感者被首屏甩一下是真实生理伤害，取不准时偏向不伤人（manager 2026-08-31 裁定）。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   EASE,
   EASE_BEZIER,
+  EASE_CSS,
   HAPTIC,
   MO,
+  MOTION,
   REDUCE_QUERY,
+  animate,
+  animateAlways,
   cubicBezier,
   haptic,
+  hapticEnabled,
   prefersReducedMotion,
   scrollBehavior,
   sec,
+  setHapticEnabled,
 } from '../motion';
 
 /** 造一个只认 `(prefers-reduced-motion: reduce)` 的 window，记下被问到的查询串 */
@@ -38,9 +47,33 @@ function fakeWindow(matches: boolean) {
   return { asked, listeners };
 }
 
+/** 装一个只认 `(prefers-reduced-motion: reduce)` 的假 matchMedia（B 路用）。 */
+function stubWindow(reduce: boolean) {
+  (globalThis as Record<string, unknown>).window = {
+    matchMedia: (query: string) => ({
+      matches: query.includes('prefers-reduced-motion: reduce') && reduce,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }),
+  };
+}
+
+/** 记下每次 `el.animate()` 拿到的 options。 */
+function fakeElement() {
+  const calls: KeyframeAnimationOptions[] = [];
+  const el = {
+    animate: (_: Keyframe[], options: KeyframeAnimationOptions) => {
+      calls.push(options);
+      return { cancel: () => {} } as unknown as Animation;
+    },
+  };
+  return { el: el as unknown as Element, calls };
+}
+
 afterEach(() => {
   delete (globalThis as { window?: unknown }).window;
   delete (globalThis as { navigator?: unknown }).navigator;
+  delete (globalThis as { localStorage?: unknown }).localStorage;
   vi.restoreAllMocks();
 });
 
@@ -76,7 +109,7 @@ describe('减弱动效：读数', () => {
   });
 });
 
-describe('程序化滚动的降级', () => {
+describe('程序化滚动的降级（A 路：调用方传入 reduce）', () => {
   it('减弱动效下一律 auto——CSS 那条全局兜底管不到 JS 滚动', () => {
     expect(scrollBehavior(true)).toBe('auto');
     expect(scrollBehavior(true, true)).toBe('auto');
@@ -89,6 +122,18 @@ describe('程序化滚动的降级', () => {
 
   it('调用方自己说不要平滑时照办', () => {
     expect(scrollBehavior(false, false)).toBe('auto');
+  });
+});
+
+describe('程序化滚动的降级（B 路：无参，自读 prefersReducedMotion）', () => {
+  it('常态是 smooth（正对照，否则下面那条恒真、等于没守）', () => {
+    stubWindow(false);
+    expect(scrollBehavior()).toBe('smooth');
+  });
+
+  it('减弱动效时换成 auto（瞬移），不是「滚得快一点」', () => {
+    stubWindow(true);
+    expect(scrollBehavior()).toBe('auto');
   });
 });
 
@@ -144,9 +189,76 @@ describe('时长与曲线 token', () => {
   it('进度专用曲线是线性——进度用 ease 会撒谎', () => {
     expect(EASE.lin(0.37)).toBe(0.37);
   });
+
+  it('EASE（gsap 函数）与 EASE_CSS（WAAPI 字符串）是两套，别混用', () => {
+    // A 路喂 gsap 的是函数，B 路喂 WAAPI easing 的是 cubic-bezier 字符串——类型不相容，双名分离
+    expect(typeof EASE.out).toBe('function');
+    expect(EASE_CSS.out).toBe('cubic-bezier(0.2, 0, 0, 1)');
+    expect(EASE_CSS.lin).toBe('linear');
+  });
 });
 
-describe('触觉出口', () => {
+describe('animate（B 路）—— 降级是「跳到终态」，不是「缩短」', () => {
+  it('常态原样把时长与缓动交给 WAAPI（正对照）', () => {
+    stubWindow(false);
+    const { el, calls } = fakeElement();
+    animate(el, [{ opacity: 0 }, { opacity: 1 }], {
+      duration: MOTION.base,
+      easing: EASE_CSS.out,
+      delay: 40,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].duration).toBe(MOTION.base);
+    expect(calls[0].delay).toBe(40);
+    expect(calls[0].easing).toBe(EASE_CSS.out);
+  });
+
+  it('减弱动效时时长与延迟一律压成 0——**不是 0.01ms，是 0**', () => {
+    stubWindow(true);
+    const { el, calls } = fakeElement();
+    animate(el, [{ opacity: 0 }, { opacity: 1 }], {
+      duration: MOTION.base,
+      easing: EASE_CSS.out,
+      delay: 40,
+    });
+    expect(calls[0].duration).toBe(0);
+    expect(calls[0].delay).toBe(0);
+  });
+
+  it('目标不存在 / 环境没有 WAAPI 时安静地什么也不做，不抛', () => {
+    stubWindow(false);
+    expect(animate(null, [], { duration: 1 })).toBeNull();
+    expect(animate({} as unknown as Element, [], { duration: 1 })).toBeNull();
+  });
+});
+
+describe('animateAlways（B 路）—— 点名例外，不随减弱动效降级', () => {
+  /*
+   * 【为什么必须有这一支】降级 ≠ 全关。长按关低调那道 600ms 的进度环
+   * 是**进度反馈不是装饰**：没有位移、没有前庭刺激，去掉它用户就不知道
+   * 还要按多久。而 CSS 写不出这个例外——globals.css 那条全局 !important
+   * 会把任何 CSS 动画的时长压掉，所以它只能是 WAAPI 的这一支。
+   */
+  it('减弱动效下时长原样保留', () => {
+    stubWindow(true);
+    const { el, calls } = fakeElement();
+    animateAlways(el, [{ strokeDashoffset: '125' }, { strokeDashoffset: '0' }], {
+      duration: 600,
+      easing: EASE_CSS.lin,
+    });
+    expect(calls[0].duration).toBe(600);
+    expect(calls[0].easing).toBe(EASE_CSS.lin);
+  });
+
+  it('常态也一样（正对照：这一支两种情况下行为相同）', () => {
+    stubWindow(false);
+    const { el, calls } = fakeElement();
+    animateAlways(el, [], { duration: 600 });
+    expect(calls[0].duration).toBe(600);
+  });
+});
+
+describe('触觉出口：能力判断，不「先调用再接异常」', () => {
   it('没有 vibrate 的环境（iOS Safari）直接返回 false，不抛', () => {
     (globalThis as { navigator?: unknown }).navigator = {};
     expect(haptic(HAPTIC.actionDone)).toBe(false);
@@ -192,5 +304,59 @@ describe('触觉出口', () => {
       },
     };
     expect(haptic(HAPTIC.seal)).toBe(false);
+  });
+});
+
+describe('触觉是另一个通道，但认用户自己的触觉开关', () => {
+  function stubNavigator(vibrate: ((p: number | number[]) => boolean) | null) {
+    (globalThis as Record<string, unknown>).navigator = vibrate ? { vibrate } : {};
+  }
+
+  function stubStorage() {
+    const store = new Map<string, string>();
+    (globalThis as Record<string, unknown>).localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+    };
+  }
+
+  it('**不随 prefers-reduced-motion 关闭**——慌乱时用户不看屏，指尖确认更可靠', () => {
+    stubWindow(true);
+    stubStorage();
+    const vibrate = vi.fn(() => true);
+    stubNavigator(vibrate);
+    expect(haptic(20)).toBe(true);
+    expect(vibrate).toHaveBeenCalledWith(20);
+  });
+
+  it('用户自己的开关能关掉它（关的是触觉开关，不是动效开关）', () => {
+    stubWindow(false);
+    stubStorage();
+    const vibrate = vi.fn(() => true);
+    stubNavigator(vibrate);
+    expect(hapticEnabled()).toBe(true); // 正对照：默认开
+    setHapticEnabled(false);
+    expect(hapticEnabled()).toBe(false);
+    expect(haptic(20)).toBe(false);
+    expect(vibrate).not.toHaveBeenCalled();
+  });
+
+  it('iOS Safari 没有 navigator.vibrate：安静地回 false，不抛', () => {
+    stubStorage();
+    stubNavigator(null);
+    expect(haptic([10, 40, 10])).toBe(false);
+  });
+
+  it('读不到 localStorage（隐私模式）时按「开」算，不是按「关」算', () => {
+    (globalThis as Record<string, unknown>).localStorage = {
+      getItem: () => {
+        throw new Error('SecurityError');
+      },
+      setItem: () => {
+        throw new Error('SecurityError');
+      },
+    };
+    expect(hapticEnabled()).toBe(true);
+    expect(() => setHapticEnabled(false)).not.toThrow();
   });
 });
