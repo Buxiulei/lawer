@@ -82,9 +82,13 @@ export function NodeSheet({
                   <span className="num">{node.regCapital}</span>
                 </Field>
               )}
+              {/* 口径写「已入档」而不是「近 5 年」：真数据里判决日期大量为空
+                  （只有案号没有全文的条目照样入档），按 5 年截断会整批筛掉它们，
+                  把涉诉多的公司显示得比实际干净。数字不截断，措辞就得跟着改。
+                  取数口径见 lib/db/company-graph.ts 的 laborLitigationCounts。 */}
               <Field label="涉诉">
                 <span className="num">{node.litigationCount} 件</span>
-                <span className="ml-1 text-[13px] text-ink-2">近 5 年劳动争议相关</span>
+                <span className="ml-1 text-[13px] text-ink-2">已入档的劳动争议</span>
               </Field>
             </dl>
           </section>
