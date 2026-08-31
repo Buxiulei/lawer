@@ -59,7 +59,7 @@ interface PressProps {
 
 const BUTTONS: Record<string, () => PressProps> = {
   '顶栏眼睛钮': () => DiscreetButton().props as PressProps,
-  '拇指区悬浮钮': () => PanicButton({ raised: false }).props as PressProps,
+  '拇指区悬浮钮': () => PanicButton().props as PressProps,
 };
 
 beforeEach(() => {

@@ -13,7 +13,7 @@ import { useDiscreetToggle } from './useDiscreetToggle';
  * PC 上侧栏左下角本来就常驻一个「低调模式」开关，再浮一个会压住右侧的案件档案面板。
  * 顶栏那个开关照旧留着，这里只是把它挪进够得着的地方。
  */
-export function PanicButton({ raised }: { raised: boolean }) {
+export function PanicButton() {
   const { discreet, holding, pressProps } = useDiscreetToggle();
 
   return (
@@ -27,10 +27,9 @@ export function PanicButton({ raised }: { raised: boolean }) {
         'transition-transform ease-out',
         holding ? 'scale-90 duration-[600ms]' : 'scale-100 duration-150',
         discreet ? 'bg-primary-wash text-primary-ink' : 'bg-surface text-ink-2',
-        // 底部有 sticky 操作条的页面（输入区 / 下一步条）把钮抬到它上面，别叠在主按钮上
-        raised
-          ? 'bottom-[calc(56px+env(safe-area-inset-bottom)+76px)]'
-          : 'bottom-[calc(56px+env(safe-area-inset-bottom)+8px)]',
+        // 抬到底部固定层之上。--bottom-bar-h 由 StickyBottomBar 按实测高写入，
+        // 没有操作条的页面它就是 Tab 那条的高——所以这里只有一档，不再猜页面有没有条
+        'bottom-[calc(var(--bottom-bar-h)+8px)]',
       )}
     >
       {discreet ? <EyeOffIcon /> : <EyeIcon />}

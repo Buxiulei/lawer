@@ -58,7 +58,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div
         aria-live="polite"
-        className="pointer-events-none fixed inset-x-0 bottom-[calc(56px+env(safe-area-inset-bottom)+12px)] z-70 flex flex-col items-center gap-2 px-4 lg:bottom-6"
+        // 抬到底部固定层之上：--bottom-bar-h 有 sticky 操作条时是实测总高，
+        // 没有时就是 Tab 那条——从前只躲 Tab 条，在首诊页整条正落在「下一步」上
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--bottom-bar-h)+12px)] z-70 flex flex-col items-center gap-2 px-4 lg:bottom-6"
       >
         {items.map((t) => (
           <div
