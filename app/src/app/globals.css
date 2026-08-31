@@ -203,6 +203,19 @@
   --radius: 12px;
 }
 
+/* ── 底部固定层的高度真源（SYS-06）────────────────────────────
+   底部同时压着两层：常驻的 Tab 条，和只有部分页面才有的 sticky 操作条。
+   谁想躲开底部，只能读这两个变量，**不许再自己写一个 56/76 出来**——
+   各写各的常量互不感知，正是低调钮压住「下一步」的由头。
+   两个都只在移动端有意义：Tab 条 lg 起隐藏，读它的低调钮也是 lg:hidden。 */
+:root {
+  /* 底部 Tab 那一条：h-14(56px) + 安全区。与 AppShell 里 BottomTabs 的 h-14 对齐。 */
+  --tab-bar-h: calc(56px + env(safe-area-inset-bottom));
+  /* 视口底部被固定层占掉的总高。默认只有 Tab 那条；
+     页面上有 sticky 操作条时，由 StickyBottomBar 用 ResizeObserver 把实测高写进来。 */
+  --bottom-bar-h: var(--tab-bar-h);
+}
+
 /* ── Tailwind theme 映射 ────────────────────────────────────── */
 @theme inline {
   --color-bg: var(--bg);

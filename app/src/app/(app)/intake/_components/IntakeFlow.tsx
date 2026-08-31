@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useSignedIn } from '@/app/_ui/auth';
 import { Button } from '@/components/shadcn/button';
 import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
+import { StickyBottomBar } from '@/components/shell/StickyBottomBar';
 import { useToast } from '@/components/ui/Toast';
 import { StepBar } from './StepBar';
 import { StepStage } from './StepStage';
@@ -162,7 +163,7 @@ export function IntakeFlow() {
         {isLast && !signedIn ? DRAFT_REASSURANCE : current.reassurance}
       </p>
 
-      <div className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 -mx-4 mt-4 border-t border-line bg-bg/95 px-4 py-3 backdrop-blur-sm lg:bottom-0 lg:-mx-6 lg:px-6">
+      <StickyBottomBar className="-mx-4 mt-4 border-t border-line bg-bg/95 px-4 py-3 backdrop-blur-sm lg:-mx-6 lg:px-6">
         <div className="flex gap-2.5">
           {step > 0 && (
             <Button variant="secondary" onClick={() => go(step - 1)} className="min-w-24">
@@ -189,7 +190,7 @@ export function IntakeFlow() {
             填的内容只存在这台设备的浏览器里，随时可以关掉页面，回来接着填。
           </p>
         )}
-      </div>
+      </StickyBottomBar>
 
       <ConfirmDialog
         open={confirmReset}

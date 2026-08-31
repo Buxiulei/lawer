@@ -37,10 +37,6 @@ export function AppShell({
   const caseId = caseIdFrom(pathname);
   // caseIdFrom 对非案件页也回 demo，所以横幅要另外确认这确实是 demo 案件的页面
   const onDemoCase = /^\/case\/demo(\/|$)/.test(pathname);
-  // 这两页底部压着一条 sticky 操作条（「问它」的输入区、首诊的下一步条），
-  // 悬浮钮得抬到它上面，否则正好盖住发送键 / 主按钮的右端。
-  // 驾驶舱（/case/[id] 本身）没有这条，别把它算进来
-  const hasBottomBar = /^\/case\/[^/]+\/ask$/.test(pathname) || pathname === '/intake';
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -52,12 +48,13 @@ export function AppShell({
           <SidebarInset>
             <ShellHeader pathname={pathname} caseId={caseId} />
             {onDemoCase && <DemoBanner />}
-            {/* 正文默认限宽在可读区间；工作台那种双栏页面自己挂 data-wide 把上限抬上去 */}
-            <main className="mx-auto w-full max-w-[900px] flex-1 px-4 pt-3 pb-[calc(56px+env(safe-area-inset-bottom)+16px)] has-[[data-wide]]:max-w-[1280px] lg:px-6 lg:pb-10">
+            {/* 正文默认限宽在可读区间；工作台那种双栏页面自己挂 data-wide 把上限抬上去。
+                底部只用让开 Tab 那条——sticky 操作条在正文流里，自己占着位置 */}
+            <main className="mx-auto w-full max-w-[900px] flex-1 px-4 pt-3 pb-[calc(var(--tab-bar-h)+16px)] has-[[data-wide]]:max-w-[1280px] lg:px-6 lg:pb-10">
               {children}
             </main>
             <BottomTabs pathname={pathname} caseId={caseId} />
-            <PanicButton raised={hasBottomBar} />
+            <PanicButton />
           </SidebarInset>
         </SidebarProvider>
       </CasePanelProvider>

@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/shadcn/button';
+import { StickyBottomBar } from '@/components/shell/StickyBottomBar';
 
 const MAX_HEIGHT_PX = 168;
 
@@ -36,9 +37,10 @@ export function Composer({
   };
 
   // 背景与页面底同色、无顶部分割线（规格）：输入区不该在对话流上划一道横杠。
-  // 底部偏移保留 56px——手机上那条是底部 Tab 导航，贴到 bottom-0 会被它盖住。
+  // 位置与「我有多高」交给 StickyBottomBar：手机上要让开底部 Tab，
+  // 而悬浮的低调钮/提示条要让开这条，两边都读同一个 --bottom-bar-h。
   return (
-    <div className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 -mx-4 bg-bg px-4 pt-2 pb-3 lg:bottom-0 lg:mx-0 lg:px-3">
+    <StickyBottomBar className="-mx-4 bg-bg px-4 pt-2 pb-3 lg:mx-0 lg:px-3">
       <div className="flex items-end gap-2">
         <textarea
           ref={ref}
@@ -94,6 +96,6 @@ export function Composer({
       <p className="mt-1.5 hidden text-[13px] text-ink-2 lg:block">
         回车换行，⌘/Ctrl + 回车发送
       </p>
-    </div>
+    </StickyBottomBar>
   );
 }
