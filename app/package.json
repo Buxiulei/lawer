@@ -8,7 +8,8 @@
     "start": "next start",
     "test": "vitest run --passWithNoTests",
     "reconcile": "tsx ../scripts/reconcile.ts",
-    "gc:files": "tsx ../scripts/gc-files.ts"
+    "gc:files": "tsx ../scripts/gc-files.ts",
+    "audit:storage": "tsx ../scripts/storage-audit.ts"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.23",

@@ -15,8 +15,13 @@ import Database from 'better-sqlite3';
 
 import { openCliDb, rethrowIfSchemaStale } from './cli-open';
 
-/** 引用者：(表名, 指向 files.id 的列名)。顺序不影响结果，仅决定 SQL 里 NOT EXISTS 的书写顺序。 */
-const REFERENCERS: readonly [table: string, column: string][] = [
+/**
+ * 引用者：(表名, 指向 files.id 的列名)。顺序不影响结果，仅决定 SQL 里 NOT EXISTS 的书写顺序。
+ *
+ * 导出供 storageAudit 派生「有无引用」的判据——那边不另抄一份表名清单，
+ * 免得日后新增 files 外键时要在两处各记一遍（漏一处即误删证据或漏算用量）。
+ */
+export const REFERENCERS: readonly [table: string, column: string][] = [
   ['evidence', 'file_id'],
   ['attestations', 'cert_pdf_file_id'],
   ['company_docs', 'file_id'],
