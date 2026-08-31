@@ -147,7 +147,13 @@ export function statesMatch(a: string, b: string): boolean {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-/** 从 Cookie 请求头里取一个 cookie 的值，取不到返回空串 */
+/**
+ * 从 Cookie 请求头里取一个 cookie 的值，取不到返回空串。
+ *
+ * **同名多条时取第一条**（return，不是继续覆盖）：RFC 6265 §5.4 要求浏览器把
+ * Path 更长的排在前面，我们这条是 `Path=/api/v1/auth/google`，会排在被植入的
+ * `Path=/` 同名 cookie 之前。改成取最后一条，等于把优先权让给攻击者种下的那条。
+ */
 export function readCookie(cookieHeader: string | null, name: string): string {
   for (const part of (cookieHeader ?? '').split(';')) {
     const eq = part.indexOf('=');
@@ -205,7 +211,21 @@ export function successLandingUrl(config: GoogleConfig, token: string, isNew: bo
   return `${config.publicUrl}${LANDING_PATH}#${frag.toString()}`;
 }
 
-/** 失败也送回登录页，三段式原文一起带过去，前端直接显示，不用自己再维护一份文案表 */
+/**
+ * 失败也送回登录页，三段式原文一起带过去，前端直接显示，不用自己再维护一份文案表。
+ *
+ * 【编码】两个值都经 URLSearchParams 序列化后才拼进 fragment，故一律 percent-encode：
+ * `<` → `%3C`、`&` → `%26`、CR/LF → `%0D%0A`。少了这一步，一个带 `&` 或换行的文案就能
+ * 在 fragment 里多造出一个键（比如伪造 `google_token=`），换行还能撑破 Location 响应头。
+ * 别改成手工拼串。
+ *
+ * 【⚠️ 给前端接线单的死规矩，不许打折】`google_message` **只能按纯文本渲染**——
+ * React 的 `{msg}`、DOM 的 `textContent`；**一律不得** `innerHTML` /
+ * `dangerouslySetInnerHTML` / `v-html`。上面那道 percent-encode 只保证「URL 本身不被撑破」，
+ * 保证不了「取出来之后被谁当 HTML 塞进 DOM」——按 HTML 渲染即是 XSS，
+ * 而本站 localStorage 里正躺着一枚 7 天有效的 JWT。
+ * 判据见 __tests__/google.test.ts「落地 URL」一节的编码两条。
+ */
 export function failureLandingUrl(config: GoogleConfig, failure: AuthFailure): string {
   const frag = new URLSearchParams({
     google_error: failure.errorCode,
@@ -464,10 +484,29 @@ const USER_CANCELLED_MESSAGE =
   '想继续的话回登录页再点一次；不想用 Google 也可以直接用手机号或邮箱验证码登录。';
 
 /**
- * 回调全流程：校 state → 换 token → 解 id_token → 归并/建号 → 签发本站 JWT。
+ * Google 回调 `error` 参数的形状白名单。RFC 6749 §4.1.2.1 的错误码是小写字母加下划线
+ * （access_denied / invalid_request / admin_policy_enforced …），形状之外的一律不带进文案。
  *
- * **state 校验放在最前**，先于任何一次外呼与任何一次落库：
- * state 不过就说明这次回调的来路不明，此时去 Google 换 token 等于替一条伪造链接干活。
+ * 这是 state 闸门之后的第二道：过了 state 也不代表这个人不是被一条钓鱼链接引着
+ * 自己走了一遍授权流程，把他给的原文回显到本站页面上没有任何好处。
+ */
+const OAUTH_ERROR_CODE_RE = /^[a-z_]{1,64}$/;
+
+/**
+ * 回调全流程：校 state → 认 error → 校 code → 换 token → 解 id_token → 归并/建号 → 签发 JWT。
+ *
+ * **state 校验放在最前，先于 error 分支**，也先于任何一次外呼与任何一次落库：
+ *
+ *  · 对外呼/落库：state 不过就说明这次回调的来路不明，此时去 Google 换 token
+ *    等于替一条伪造链接干活。
+ *  · **对 error 分支**：RFC 6749 §4.1.2.1 规定 Google 连报错回调也必须带回 state，
+ *    所以这道闸放在 error 之前不会误伤任何一次真实的取消/失败；放在之后则是一条
+ *    **免鉴权的反射面**——`GET /callback?error=<任意文本>` 不带 cookie、不带 state、
+ *    不带 code 就能命中 302，把攻击者自造的文本（「账号冻结，加客服微信解冻」那类）
+ *    挂到本站真实域名的 /login 上，长度还不设上限。
+ *
+ * **这三条的先后次序本身就是判据**，不是可以顺手调的行序；见 __tests__/google.test.ts
+ * 「error 分支必须在 state 闸门之内」。
  */
 export async function completeGoogleCallback(
   db: Database,
@@ -477,19 +516,22 @@ export async function completeGoogleCallback(
 ): Promise<GoogleCallbackResult> {
   const now = deps.now ?? new Date();
 
+  if (!statesMatch(input.state, input.cookieState)) {
+    return fail(400, 'GOOGLE_STATE_MISMATCH', STATE_MISMATCH_MESSAGE);
+  }
+
   if (input.error) {
     const code = input.error === 'access_denied' ? 'GOOGLE_CANCELLED' : 'GOOGLE_AUTH_FAILED';
+    // 形状不合的原因代码只留一个占位符：文案是给运维定位用的，
+    // 为此收下一段任意长度的攻击者文本不划算。
+    const reason = OAUTH_ERROR_CODE_RE.test(input.error) ? input.error : '(形状不合，已略去)';
     const message =
       input.error === 'access_denied'
         ? USER_CANCELLED_MESSAGE
         : 'Google 没有完成这次授权，登录中止。' +
-          `Google 给出的原因代码是 ${input.error}，一般来自站点在 Google 控制台的配置问题，不是你的操作错误。` +
+          `Google 给出的原因代码是 ${reason}，一般来自站点在 Google 控制台的配置问题，不是你的操作错误。` +
           '请改用手机号或邮箱验证码登录（进的是同一个账号），并把这个代码告诉运维。';
     return fail(400, code, message);
-  }
-
-  if (!statesMatch(input.state, input.cookieState)) {
-    return fail(400, 'GOOGLE_STATE_MISMATCH', STATE_MISMATCH_MESSAGE);
   }
 
   if (!input.code) {

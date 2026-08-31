@@ -162,6 +162,31 @@ describe('GET /callback', () => {
     expect(frag.get('google_error')).toBe('GOOGLE_STATE_MISMATCH');
   });
 
+  test('🔴 复审官 PoC：无 cookie/state/code 的 ?error=<任意文本> 不回显一个字', async () => {
+    // 修复前：这条请求直接命中 error 分支，302 的 Location 里带着攻击者原文，
+    // 于是本站真实域名上多了一块任意文案投放位（「加客服微信解冻」+ XSS 载荷）。
+    const phishing = '您的账号存在异常已被冻结，请添加客服微信 wx-9527 解冻<img src=x onerror=alert(1)>';
+    const res = await callback(
+      get(
+        `http://localhost/api/v1/auth/google/callback?error=${encodeURIComponent(phishing)}`,
+      ),
+    );
+
+    expect(res.status).toBe(302);
+    const location = res.headers.get('location') ?? '';
+    // 逐词核：编码后整串对不上，逐词才是真的在找回显
+    for (const word of ['冻结', '客服微信', 'wx-9527', 'img', 'onerror', 'alert']) {
+      expect(location).not.toContain(word);
+      expect(location).not.toContain(encodeURIComponent(word));
+    }
+    const frag = new URLSearchParams(location.split('#')[1]);
+    expect(frag.get('google_error')).toBe('GOOGLE_STATE_MISMATCH');
+    expect(frag.get('google_token')).toBeNull();
+    // 生的 CR/LF 撑不破 Location 头
+    expect(location).not.toContain('\r');
+    expect(location).not.toContain('\n');
+  });
+
   test('用户在 Google 点了取消 → 送回登录页并说明，不留在白屏上', async () => {
     const res = await callback(
       get('http://localhost/api/v1/auth/google/callback?error=access_denied&state=x', {

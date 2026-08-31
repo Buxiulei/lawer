@@ -197,6 +197,35 @@ describe('落地 URL', () => {
     expect(frag.get('google_error')).toBe('GOOGLE_STATE_MISMATCH');
     expect(frag.get('google_message')).toBe('甲。乙。丙。');
   });
+
+  test('🔴 google_message / google_error 进 fragment 前必须 percent-encode（改手工拼串即红）', () => {
+    const nasty = '<img src=x onerror=alert(1)>&google_token=forged\r\nX-Injected: 1';
+    const url = failureLandingUrl(config(), {
+      ok: false,
+      status: 400,
+      errorCode: 'GOOGLE_AUTH_FAILED',
+      message: nasty,
+    });
+
+    // 【判据本身】不是"值取得回来"，是**整条 URL 里不许出现这些生字符**：
+    // 生的 `<` 会随文案原样落到页面 URL 上，生的 CR/LF 能撑破 Location 响应头，
+    // 生的 `&` 能在 fragment 里另造一个键（下面那条断言正是冲 google_token 去的）。
+    for (const raw of ['<', '>', '\r', '\n']) expect(url).not.toContain(raw);
+    expect(url).toContain('%3Cimg');
+    expect(url).toContain('%0D%0A');
+
+    const frag = new URLSearchParams(url.split('#')[1]);
+    expect(frag.get('google_message')).toBe(nasty); // 编码可逆，文案本身没被改写
+    expect(frag.get('google_token')).toBeNull(); // 伪造不出第二个键
+    expect([...frag.keys()].sort()).toEqual(['google_error', 'google_message']);
+  });
+
+  test('🔴 成功路径的 fragment 同样只允许两个键（token 不许被文案挤出第三个键）', () => {
+    const url = successLandingUrl(config(), 'a.b.c&is_new=9', true);
+    const frag = new URLSearchParams(url.split('#')[1]);
+    expect([...frag.keys()].sort()).toEqual(['google_token', 'is_new']);
+    expect(frag.get('is_new')).toBe('1');
+  });
 });
 
 // ───────────────────────── state 防 CSRF ─────────────────────────
@@ -277,6 +306,90 @@ describe('state 校验（防登录 CSRF）', () => {
   });
 });
 
+// ──────────────── error 分支必须在 state 闸门之内（顺序即判据）────────────────
+
+/**
+ * 这一节钉的是**三条判断的先后次序**，不是它们各自的返回值。
+ *
+ * 顺序一旦变回 `error → state`，`error` 分支就完全落在 state 闸门之外：
+ * `GET /callback?error=<任意文本>` 不带 cookie、不带 state、不带 code 也能命中 302，
+ * 把攻击者自造的文本挂到本站真实域名的 /login 上（RFC 6749 §4.1.2.1 规定 Google
+ * 连报错回调都必带 state，所以这个顺序没有任何正当理由）。
+ * 只断言"取消时回 GOOGLE_CANCELLED"是拦不住这条的——那条断言在两种顺序下都绿。
+ */
+describe('error 分支必须在 state 闸门之内', () => {
+  /** 复审官 PoC 的原文：钓鱼话术 + XSS 载荷 */
+  const PHISHING = '您的账号存在异常已被冻结，请添加客服微信 wx-9527 解冻<img src=x onerror=alert(1)>';
+
+  test('🔴 无 cookie / 无 state / 无 code 时 ?error=<任意文本> → 只能回 STATE_MISMATCH', async () => {
+    const db = makeTestDb();
+    const log: FetchLog = { calls: [] };
+    const res = await callback(
+      db,
+      { error: PHISHING, state: '', cookieState: '', code: '' },
+      log,
+    );
+
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    // 【判据本身】不是"回了个错误"——是回的**必须是 state 那条**：
+    // 回 GOOGLE_AUTH_FAILED 就说明 error 分支又抢在 state 前面了
+    expect(res.errorCode).toBe('GOOGLE_STATE_MISMATCH');
+    expect(res.message).toBe(
+      '这次 Google 登录的来路没能验证通过（防跨站伪造的一次性凭据对不上），已经中止。' +
+        '通常是登录页开着超过 10 分钟才点完、中途换了浏览器或标签页、或者浏览器拦了本站 cookie；' +
+        '也可能是有人把一条伪造的登录链接发给了你。' +
+        '请回到本站登录页重新点一次「使用 Google 登录」，不要从别处收到的链接进入。',
+    );
+    expect(log.calls).toHaveLength(0);
+  });
+
+  test('🔴 复审官 PoC：落地 URL 里一个字的攻击者文本都不许出现', async () => {
+    const db = makeTestDb();
+    const res = await callback(db, { error: PHISHING, state: '', cookieState: '', code: '' });
+    if (res.ok) throw new Error('前置失败：本该被 state 拦下');
+
+    const url = failureLandingUrl(config(), res);
+    // 逐词核，而不是核整串——编码后整串本来就对不上，逐词才是真的在找回显
+    for (const word of ['冻结', '客服微信', 'wx-9527', 'img', 'onerror', 'alert']) {
+      expect(url).not.toContain(word);
+      expect(url).not.toContain(encodeURIComponent(word));
+    }
+    expect(new URLSearchParams(url.split('#')[1]).get('google_error')).toBe(
+      'GOOGLE_STATE_MISMATCH',
+    );
+  });
+
+  test('🔴 10KB 的 error 也照样在闸门外被截住（长度不设限的反射面归零）', async () => {
+    const db = makeTestDb();
+    const res = await callback(db, { error: 'A'.repeat(10240), state: '', cookieState: '' });
+    if (res.ok) throw new Error('前置失败：本该被 state 拦下');
+    expect(res.errorCode).toBe('GOOGLE_STATE_MISMATCH');
+    expect(res.message.length).toBeLessThan(400);
+  });
+
+  test('🔴 state 对上之后，形状不合的原因代码仍不回显（白名单是第二道）', async () => {
+    const db = makeTestDb();
+    const res = await callback(db, { error: PHISHING, state: STATE, cookieState: STATE });
+    if (res.ok) throw new Error('前置失败：本该失败');
+    expect(res.errorCode).toBe('GOOGLE_AUTH_FAILED');
+    expect(res.message).not.toContain('客服微信');
+    expect(res.message).not.toContain('<img');
+    expect(res.message).toContain('形状不合');
+  });
+
+  test('形状合规的 Google 错误码照常回显，运维才定位得了', async () => {
+    const db = makeTestDb();
+    const res = await callback(db, {
+      error: 'admin_policy_enforced',
+      state: STATE,
+      cookieState: STATE,
+    });
+    if (res.ok) throw new Error('前置失败：本该失败');
+    expect(res.message).toContain('admin_policy_enforced');
+  });
+});
+
 describe('readCookie', () => {
   test('从一堆 cookie 里挑出目标那条，不被前缀相同的名字骗到', () => {
     const header = 'other=1; lawer_google_state_x=wrong; lawer_google_state=right; z=2';
@@ -286,6 +399,18 @@ describe('readCookie', () => {
   test('没有这条 / 头为空 → 空串（调用方按 state 不匹配处理）', () => {
     expect(readCookie('a=1', 'lawer_google_state')).toBe('');
     expect(readCookie(null, 'lawer_google_state')).toBe('');
+  });
+
+  test('🔴 同名多条时取**第一条**（改成取最后一条即红）', () => {
+    // RFC 6265 §5.4：Path 更长的排在前面。我们这条是 Path=/api/v1/auth/google，
+    // 会排在攻击者从同域某处植入的 Path=/ 同名 cookie 之前。取最后一条 =
+    // 把优先权让给被植入的那条，state 校验就成了攻击者说了算。（复审官 B9）
+    const header = 'lawer_google_state=ours; lawer_google_state=planted';
+    expect(readCookie(header, 'lawer_google_state')).toBe('ours');
+    // 三条也一样，且中间夹着别的 cookie 不影响
+    expect(
+      readCookie('lawer_google_state=ours; a=1; lawer_google_state=p2; lawer_google_state=p3', 'lawer_google_state'),
+    ).toBe('ours');
   });
 });
 
@@ -392,6 +517,23 @@ describe('id_token claim 校验（鉴权强度，逐条都不许放宽）', () =
   test('aud 是数组也拒（Google 发的是字符串，收窄不是漏判）', () => {
     const res = parse({ aud: [CLIENT_ID] });
     expect(res.ok).toBe(false);
+  });
+
+  test('🔴 aud 必须**恰好等于**，含有/前缀/后缀都不算（把 === 放宽成 includes 即红）', () => {
+    // 上面那条用的是一个完全无关的 aud，区分不出「等于 / 包含 / 前缀」三种实现——
+    // 注释写着"恰好等于"，判据得真的钉住它。（复审官 A3）
+    for (const near of [
+      `x${CLIENT_ID}`,
+      `${CLIENT_ID}x`,
+      `${CLIENT_ID} ${CLIENT_ID}`,
+      CLIENT_ID.slice(0, -1),
+      ` ${CLIENT_ID} `,
+    ]) {
+      const res = parse({ aud: near });
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.errorCode).toBe('GOOGLE_TOKEN_INVALID');
+    }
+    expect(parse({ aud: CLIENT_ID }).ok).toBe(true);
   });
 
   test('iss 不是 Google → 拒', () => {
@@ -706,6 +848,46 @@ describe('库层唯一索引', () => {
 });
 
 describe('登录后补建档案', () => {
+  test('🔴 Google 新用户当场就有档案可用（不因为没手机号而成二等公民）', async () => {
+    const db = makeTestDb();
+    const res = await callback(db);
+    if (!res.ok) throw new Error('前置失败');
+    expect(res.isNew).toBe(true);
+
+    // 【判据本身】不是"provisionOnRegistered 被调了"——是这个人**真的有案件**。
+    // 判据留在 lib/auth/otp.ts provisionOnRegistered 那一处（唯一住址），
+    // 这里验的是 Google 新用户确实落在它的收治范围里。
+    const cases = db.prepare('SELECT id FROM cases WHERE user_id=?').all(res.userId) as {
+      id: number;
+    }[];
+    expect(cases).toHaveLength(1);
+    // 建档不是空壳：欢迎事件在同一事务里，缺了就是半截档案
+    expect(
+      (
+        db.prepare('SELECT COUNT(*) c FROM timeline_events WHERE case_id=?').get(cases[0].id) as {
+          c: number;
+        }
+      ).c,
+    ).toBeGreaterThanOrEqual(1);
+    // 与手机/邮箱线同等待遇的另一半：注册赠送也拿到了
+    expect(getGongdao(res.userId, db)).toBe(REGISTER_GRANT_GONGDAO);
+  });
+
+  test('🔴 建档幂等：同一个 Google 账号再登一次不会多出第二个案件', async () => {
+    const db = makeTestDb();
+    const first = await callback(db);
+    await callback(db);
+    if (!first.ok) throw new Error('前置失败');
+    expect(
+      (
+        db.prepare('SELECT COUNT(*) c FROM cases WHERE user_id=?').get(first.userId) as {
+          c: number;
+        }
+      ).c,
+    ).toBe(1);
+  });
+
+
   test('🔴 注册时建案失败过的账号，这次 Google 登录把档案补上', async () => {
     const db = makeTestDb();
     const uid = await registerByPhoneAndEmail(db, '13800138000', EMAIL);
