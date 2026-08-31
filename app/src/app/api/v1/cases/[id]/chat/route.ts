@@ -13,6 +13,7 @@ import { readJsonBody } from '@/lib/auth/http';
 import { getMembership } from '@/lib/billing/fulfillment';
 import * as cases from '@/lib/cases';
 import { getDb } from '@/lib/db/client';
+import { toUserFacingError } from '@/lib/errors/user-facing';
 
 const NOT_FOUND = { ok: false, error_code: 'CASE_NOT_FOUND', message: '案件不存在' };
 
@@ -81,12 +82,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         // 流已经开了，此时的失败只能以 error 帧告知（前置校验已经拦掉了绝大多数）
         if (!result.ok) emit({ event: 'error', data: { code: result.errorCode, message: result.message } });
       } catch (e) {
-        // 模型侧异常（连接失败、非 2xx、流内错误）如实透出：
+        // 模型侧异常（连接失败、非 2xx、流内错误）必须告知：
         // 用户宁可看见「模型这会儿连不上」，也不该看着一个永远转圈的光标。
-        emit({
-          event: 'error',
-          data: { code: 'AGENT_FAILED', message: e instanceof Error ? e.message : String(e) },
-        });
+        // 但这里的 e.message 是工程向的——llm/router 缺 key 时会把环境变量名写进去，
+        // 那是当事人看不懂也做不了的东西。原文进服务端日志，出去的是三段式文案。
+        const u = toUserFacingError(e, { code: 'AGENT_FAILED', where: 'chat.runTurn' });
+        emit({ event: 'error', data: { code: u.code, message: u.message } });
       } finally {
         heartbeat.stop();
         controller.close();

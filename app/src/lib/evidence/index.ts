@@ -34,6 +34,9 @@ export { SidecarError, SidecarTimeoutError, verifyPdf, type VerifyVerdict } from
 export {
   recheckVerification,
   resetRecheckQuota,
+  toPublicVerdict,
+  type PublicSignature,
+  type PublicVerdict,
   type RecheckItem,
   type RecheckReport,
 } from './recheck';

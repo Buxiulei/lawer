@@ -42,9 +42,8 @@ function request(auth?: string, body?: unknown): Request {
   });
 }
 
-/** 把 SSE 响应体读成 [{event, data}] */
-async function readSse(res: Response): Promise<{ event: string; data: Record<string, unknown> }[]> {
-  const text = await res.text();
+/** 把 SSE 线格式解析成 [{event, data}] */
+function parseSse(text: string): { event: string; data: Record<string, unknown> }[] {
   return text
     .split('\n\n')
     .filter((block) => block.trim())
@@ -53,6 +52,11 @@ async function readSse(res: Response): Promise<{ event: string; data: Record<str
       const data = /^data: (.+)$/m.exec(block)![1];
       return { event, data: JSON.parse(data) };
     });
+}
+
+/** 把 SSE 响应体读成 [{event, data}] */
+async function readSse(res: Response): Promise<{ event: string; data: Record<string, unknown> }[]> {
+  return parseSse(await res.text());
 }
 
 const CARD = {
@@ -162,21 +166,66 @@ describe('SSE 通路', () => {
     expect(msgs[1].content).toBe('手抖是正常的。');
   });
 
-  test('模型侧异常以 error 帧如实透出，而不是让光标一直转', async () => {
-    const boom = {
-      name: 'deepseek' as const,
-      model: 'x',
-      billingModel: 'x',
-      chatStream: async () => {
-        throw new Error('anthropic(claude-sonnet-5) chatStream 502');
-      },
-    };
-    const llm = await import('@/lib/llm');
-    const spy = vi.spyOn(llm, 'getProvider').mockReturnValue({ client: boom, route: { degraded: false } } as never);
+  test('模型侧异常必有 error 帧收尾，而不是让光标一直转', async () => {
+    const spy = await stubProviderThrowing('anthropic(claude-sonnet-5) chatStream 502');
 
     const frames = await readSse(await post(request(signToken(userA), { message: '在吗' }), ctx(caseA)));
     expect(frames.at(-1)).toMatchObject({ event: 'error', data: { code: 'AGENT_FAILED' } });
-    expect(String(frames.at(-1)!.data.message)).toContain('502');
+    spy.mockRestore();
+  });
+
+  // 这一帧会渲染成当事人屏幕上的报错卡。llm/router 缺 key 时的 message 是写给运维看的
+  // （环境变量名 + 要改哪个文件），当事人既看不懂也做不了——原文进服务端日志，出去的是三段式。
+  test('内部异常原文不过边界：error 帧只带稳定错误码 + 三段式文案，原文只在服务端日志里', async () => {
+    const RAW =
+      'entry/standard 无可用模型：降级链上的 key 全部缺失（DEEPSEEK_API_KEY(deepseek-chat) → ' +
+      'DASHSCOPE_API_KEY(qwen-max)），请补齐 app/.env.local';
+    const spy = await stubProviderThrowing(RAW);
+    const logs: string[] = [];
+    const logSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      logs.push(args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' '));
+    });
+
+    const raw = await (await post(request(signToken(userA), { message: '在吗' }), ctx(caseA))).text();
+
+    // ① 敏感串一个都不许过边界
+    expect(raw).not.toContain('DEEPSEEK_API_KEY');
+    expect(raw).not.toContain('DASHSCOPE_API_KEY');
+    expect(raw).not.toContain('.env.local');
+    expect(raw).not.toContain(RAW);
+
+    // ② 用户拿到的是三段式：出了什么事 / 为什么 / 怎么办
+    const err = parseSse(raw).at(-1)!;
+    expect(err.event).toBe('error');
+    expect(err.data.code).toBe('AGENT_FAILED'); // 错误码保留给前端做分支
+    const message = String(err.data.message);
+    expect(message).toContain('没能生成回答');
+    expect(message).toContain('模型服务这会儿连不上');
+    expect(message).toContain('重试');
+
+    // ③ 原文完整留在服务端日志（换壳不是消音）
+    const log = logs.join('\n');
+    expect(log).toContain('DEEPSEEK_API_KEY');
+    expect(log).toContain('chat.runTurn');
+    expect(log).toContain('AGENT_FAILED');
+
+    logSpy.mockRestore();
     spy.mockRestore();
   });
 });
+
+/** 把 provider 换成"一调用就抛"的假货，抛出指定 message */
+async function stubProviderThrowing(message: string) {
+  const boom = {
+    name: 'deepseek' as const,
+    model: 'x',
+    billingModel: 'x',
+    chatStream: async () => {
+      throw new Error(message);
+    },
+  };
+  const llm = await import('@/lib/llm');
+  return vi
+    .spyOn(llm, 'getProvider')
+    .mockReturnValue({ client: boom, route: { degraded: false } } as never);
+}

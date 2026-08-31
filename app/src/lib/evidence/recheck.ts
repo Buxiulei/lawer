@@ -8,12 +8,24 @@
 //   「验了但不通过」→ 本模块返回 ok:true + 该项 passed:false，这是对证据的裁决；
 //   「没验成」（sidecar 挂了/网络不通）→ 返回 DomainFailure（502/503），**不是** passed:false。
 // 把后者说成 passed:false 等于在公开验证页上诬告用户的证据无效——比漏判更害人。
+//
+// ⚠ report.checks[].detail 与 DomainFailure.message 会**原样渲染给匿名访客**
+// （本端点公开无鉴权）。所以异常原文一律经 lib/errors/user-facing 的 toUserFacingError
+// 转换：原文进服务端日志，出去的只有稳定错误码 + 三段式中文。结论（passed / 502 / 503）
+// 一个都不变，换掉的只是那句话怎么说。
+//
+// ⚠ **我方抛的异常不是唯一脏源**：sidecar 回 200 的裁决体里，verdict.error 与
+// verdict.signatures[].error 是它自己拼的裸 Python 异常原文（含服务器绝对路径、异常类名）。
+// 按「上游永远可能给脏值」设防，故两道都要有：
+//   ① 进 detail 前经同一个 toUserFacingError（verdictErrorTexts → 一次性落日志换文案）；
+//   ② 出境前经 toPublicVerdict 白名单投影——上游将来新增什么字段都默认不出去。
 import crypto from 'node:crypto';
 
 import type { Database } from 'better-sqlite3';
 
 import { createIpQuota } from '@/lib/auth/ip-quota';
 import * as store from '@/lib/db/evidence';
+import { toUserFacingError } from '@/lib/errors/user-facing';
 
 import { fail, type DomainFailure, type Result } from './attest';
 import { readBytes } from './files';
@@ -58,9 +70,11 @@ function item(name: string, passed: boolean, detail: string): RecheckItem {
 /** sidecar 报错分级：503 是我方没配好（证书/信任锚），502 是别的没验成 */
 function sidecarFailure(err: unknown): DomainFailure {
   if (err instanceof SidecarError && err.status === 503) {
-    return fail(503, 'RECHECK_UNAVAILABLE', `复核服务未就绪：${err.message}`);
+    const u = toUserFacingError(err, { code: 'RECHECK_UNAVAILABLE', where: 'recheck.verifyPdf' });
+    return fail(503, u.code, u.message);
   }
-  return fail(502, 'RECHECK_UPSTREAM_FAILED', `复核服务调用失败：${String(err)}`);
+  const u = toUserFacingError(err, { code: 'RECHECK_UPSTREAM_FAILED', where: 'recheck.verifyPdf' });
+  return fail(502, u.code, u.message);
 }
 
 /**
@@ -83,7 +97,8 @@ function checkHash(db: Database, att: store.AttestationRow): RecheckItem {
     actual = crypto.createHash('sha256').update(readBytes(db, ev.file_id)).digest('hex');
   } catch (err) {
     // 文件缺失、密文被改、与 files.sha256 不符都走这里——都是「原件不可信」，不是服务故障
-    return item(CHECK_HASH, false, `原件读取失败：${err instanceof Error ? err.message : String(err)}`);
+    const u = toUserFacingError(err, { code: 'EVIDENCE_READ_FAILED', where: 'recheck.checkHash' });
+    return item(CHECK_HASH, false, u.message);
   }
   return actual === att.sha256
     ? item(CHECK_HASH, true, `原件 SHA-256 与存证记录一致：${att.sha256}`)
@@ -115,13 +130,102 @@ function checkTimestamp(verdict: VerifyVerdict, att: store.AttestationRow): Rech
     : item(CHECK_TST, false, '证明文件上的可信时间戳未通过校验（不存在、被改动或不可信任）');
 }
 
-function checkSignature(verdict: VerifyVerdict): RecheckItem {
+/**
+ * 裁决里**由 sidecar 自由书写**的文本：顶层 error 与每个签名行的 error。
+ * 两处都是 `f"...: {e}"` 拼出来的 Python 异常原文，一个字都不许进 detail。
+ * 这里只负责把它们收齐（可能不止一条），交给调用方一次性过边界。
+ */
+function verdictErrorTexts(verdict: VerifyVerdict): string[] {
+  const texts: string[] = [];
+  if (typeof verdict.error === 'string' && verdict.error !== '') texts.push(verdict.error);
+  for (const row of Array.isArray(verdict.signatures) ? verdict.signatures : []) {
+    if (row === null || typeof row !== 'object') continue;
+    const rowError = (row as Record<string, unknown>).error;
+    if (typeof rowError === 'string' && rowError !== '') texts.push(rowError);
+  }
+  return texts;
+}
+
+/**
+ * @param errorCopy sidecar 自陈失败原因的**净化后文案**（它没自陈则为 null）。
+ *   刻意只收文案不收原文：原文在 recheckVerification 就已经落日志、到不了这里。
+ */
+function checkSignature(verdict: VerifyVerdict, errorCopy: string | null): RecheckItem {
   const ok = everySignature(verdict, (row) => row.signature_ok === true);
   if (ok) {
     return item(CHECK_SIGNATURE, true, `《存证证明》上的 ${verdict.num_signatures} 个数字签名全部有效`);
   }
-  const reason = verdict.error ?? '签名无效、证书链不可信，或文件在签署后被改动';
-  return item(CHECK_SIGNATURE, false, `《存证证明》数字签名未通过校验：${reason}`);
+  return item(
+    CHECK_SIGNATURE,
+    false,
+    errorCopy ?? '《存证证明》数字签名未通过校验：签名无效、证书链不可信，或文件在签署后被改动',
+  );
+}
+
+/** 允许离开服务器的单个签名字段：**只有布尔**，没有一处能塞进上游写的自由文本 */
+const PUBLIC_SIGNATURE_FLAGS = [
+  'intact',
+  'valid',
+  'trusted',
+  'coverage_ok',
+  'signer_anchored_to_cfca',
+  'timestamp_present',
+  'timestamp_intact',
+  'timestamp_trusted',
+  'docmdp_ok',
+  'bottom_line',
+  'signature_ok',
+] as const;
+
+export type PublicSignature = Record<(typeof PUBLIC_SIGNATURE_FLAGS)[number], boolean | null>;
+
+/** 允许离开服务器的裁决字段。新增字段必须在这里显式点名，默认一律留在服务端。 */
+export interface PublicVerdict {
+  file_sha256: string | null;
+  expect_hash: string | null;
+  hash_match: boolean | null;
+  num_signatures: number;
+  overall_ok: boolean;
+  signatures: PublicSignature[];
+}
+
+/** 上游给的不是布尔就当「没结论」，绝不强转（'false' 转出来是 true，那是在编结论） */
+function flag(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null;
+}
+
+/** 只认 64 位十六进制；别的一律当没有——哈希位上塞的任何自由文本都到此为止 */
+function hex64(value: unknown): string | null {
+  return typeof value === 'string' && /^[0-9a-f]{64}$/i.test(value) ? value : null;
+}
+
+function publicSignature(row: unknown): PublicSignature {
+  const src = (row !== null && typeof row === 'object' ? row : {}) as Record<string, unknown>;
+  return Object.fromEntries(
+    PUBLIC_SIGNATURE_FLAGS.map((key) => [key, flag(src[key])]),
+  ) as PublicSignature;
+}
+
+/**
+ * 出境前的白名单投影：**列进来的才出得去**。
+ *
+ * 为什么不是「删掉 error 就行」：本端点公开无鉴权，而裁决体是 sidecar 写的——
+ * 它今天在 error 里拼路径，明天可能在别的字段里拼。黑名单要追着上游改，
+ * 白名单不用：新字段默认留在服务端，要出境得有人在这里写下它的名字。
+ * 排障要看的完整裁决在服务端日志与 report.verdict 里，那条路没被动过。
+ */
+export function toPublicVerdict(verdict: VerifyVerdict | null): PublicVerdict | null {
+  if (verdict === null) return null;
+  return {
+    file_sha256: hex64(verdict.file_sha256),
+    expect_hash: hex64(verdict.expect_hash),
+    hash_match: flag(verdict.hash_match),
+    num_signatures: typeof verdict.num_signatures === 'number' && Number.isFinite(verdict.num_signatures)
+      ? verdict.num_signatures
+      : 0,
+    overall_ok: verdict.overall_ok === true,
+    signatures: Array.isArray(verdict.signatures) ? verdict.signatures.map(publicSignature) : [],
+  };
 }
 
 /**
@@ -162,7 +266,10 @@ export async function recheckVerification(
   try {
     pdf = readBytes(db, att.cert_pdf_file_id);
   } catch (err) {
-    const detail = `《存证证明》文件读取失败：${err instanceof Error ? err.message : String(err)}`;
+    const detail = toUserFacingError(err, {
+      code: 'CERT_PDF_READ_FAILED',
+      where: 'recheck.readCertPdf',
+    }).message;
     return {
       ok: true,
       report: {
@@ -183,7 +290,19 @@ export async function recheckVerification(
     return sidecarFailure(err);
   }
 
-  const checks = [hashCheck, checkTimestamp(verdict, att), checkSignature(verdict)];
+  // sidecar 自陈的失败原因在这里一次性过边界：原文（含服务器路径、异常内部态）进日志，
+  // 往下传的只有文案。放在这里而不是 checkSignature 里，是为了「有原文就一定落日志」——
+  // 不依赖「分项恰好判否时才会被调用」这个巧合。
+  const errorTexts = verdictErrorTexts(verdict);
+  const errorCopy =
+    errorTexts.length === 0
+      ? null
+      : toUserFacingError(new Error(errorTexts.join(' ; ')), {
+          code: 'SIGNATURE_VERDICT_ERROR',
+          where: 'recheck.verdictError',
+        }).message;
+
+  const checks = [hashCheck, checkTimestamp(verdict, att), checkSignature(verdict, errorCopy)];
   return {
     ok: true,
     report: {

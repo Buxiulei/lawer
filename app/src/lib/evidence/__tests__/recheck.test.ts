@@ -194,7 +194,9 @@ describe('recheckVerification', () => {
     stubSidecar(
       goodVerdict({
         overall_ok: false,
-        error: '签名覆盖范围不足',
+        // sidecar 自陈的原因是它自己拼的裸 Python 异常原文（含服务器路径），
+        // 出去的只能是净化后的文案；结论仍旧是「这一项没过」
+        error: '验签异常: ValueError: 覆盖范围不足 /opt/lawer/sidecar/verify_evidence_pdf.py',
         signatures: [
           {
             field_name: 'Signature1',
@@ -215,7 +217,10 @@ describe('recheckVerification', () => {
     if (!result.ok) return;
     expect(result.report.overall_ok).toBe(false);
     expect(checkOf(result.report, '签名有效').passed).toBe(false);
-    expect(checkOf(result.report, '签名有效').detail).toContain('签名覆盖范围不足');
+    const detail = checkOf(result.report, '签名有效').detail;
+    expect(detail).toContain('数字签名未通过校验');
+    expect(detail).not.toContain('/opt/lawer');
+    expect(detail).not.toContain('ValueError');
   });
 
   test('sidecar 只把 overall_ok 判否、分项却全绿时，仍然不判通过', async () => {

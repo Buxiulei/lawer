@@ -6,6 +6,8 @@
 // 24h 30 次（计数器在 lib/evidence/recheck.ts，与登录发码的额度各记各的）。
 //
 // 响应体不含持证人姓名/证件号——与 GET 同口径，理由见 lib/evidence.getVerification。
+// sidecar 的裁决也不全量透传：出境前过 toPublicVerdict 白名单投影（它自己写的
+// error / signatures[].error 是裸 Python 异常原文，留在服务端日志里）。
 import { NextResponse } from 'next/server';
 
 import { extractClientIp } from '@/lib/auth/ip-quota';
@@ -23,5 +25,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ orderNo
   if (!result.ok) return domainFailure(result);
 
   const { order_no, overall_ok, checks, verdict } = result.report;
-  return NextResponse.json({ ok: true, order_no, overall_ok, checks, verdict });
+  return NextResponse.json({
+    ok: true,
+    order_no,
+    overall_ok,
+    checks,
+    verdict: evidence.toPublicVerdict(verdict),
+  });
 }
