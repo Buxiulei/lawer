@@ -262,12 +262,18 @@ def test_http_verify_response_body_has_no_server_path(monkeypatch, caught):
 #
 # 所以反过来：**白名单**。能落进对外 error 字段的值只有两种形状——
 #   1) _safe_error(...) 的返回（异常兜底类的唯一出口，原文另进日志）；
-#   2) 模块级、纯字符串字面量的常量名（静态安全原因，文案里不可能夹带运行期数据）；
+#   2) 模块级、纯字符串字面量的常量名（静态安全原因，不携带运行期数据——
+#      但**挡不住有人把服务器路径硬编码进字面量本身**，那一类只能靠 review，别把本守卫当它的判据）；
 #   （None 是初始化占位，不携带任何数据，一并放行。）
 # 其余一概点名，不管它长什么样——这才是「不认识的东西默认不放行」。
 #
-# 覆盖两种写法：下标赋值 `X["error"] = V`（含元组解包与原地追加）与字典字面量
-# `{"error": V}`（CLI 那条 stdout 裁决走的就是字典字面量，黑名单版从没看过它）。
+# 【射程如实声明】本守卫只识别两种**寻址形状**：下标赋值 `X["error"] = V`（含元组解包与
+# 原地追加）与字典字面量 `{"error": V}`（CLI 那条 stdout 裁决走的就是它，黑名单版从没看过）。
+# `X.update(error=...)`、`setdefault`、`_k = "error"; X[_k] = ...` 这类写法**穿得过去**——
+# 终审实测五条此类变异全部存活。不要据此认为它们安全；根治=把「error 的每个写入点」收唯一
+# 入口后反向点名（扫源码里 "error" 的每次出现，凡不落在已识别写入点上的报警），
+# 已结转 app 侧 error_code 回填单一并做。在那之前，动 verify_evidence_pdf.py 的人
+# 自觉只用已覆盖的两种形状写 error。
 
 _VEP_SRC_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                              "verify_evidence_pdf.py")
