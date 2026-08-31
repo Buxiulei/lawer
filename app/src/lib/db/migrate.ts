@@ -1,7 +1,7 @@
 // app/src/lib/db/migrate.ts
 //
 // ───────────────── ⚠️ 改本文件之前先读这一段 ⚠️ ─────────────────
-// **本迁移框架没有事务。** runMigrations() 的 38 个 db.exec() 是一串裸调用，
+// **本迁移框架没有事务。** runMigrations() 的 47 个 db.exec() 是一串裸调用，
 // 中途失败不回滚——2026-08-26 实测：人为中断，库里留下 22/38 张表，重跑既不前进也不后退。
 // 现在之所以能安全滚更，是因为迁移**全是纯加法**、靠 IF NOT EXISTS 与 addColumnIfMissing
 // 能重跑自愈：**安全是「改动足够简单」给的，不是框架给的。**
@@ -743,6 +743,200 @@ export function runMigrations(db: Database.Database): void {
       ON company_litigation (company_profile_id, is_labor, judged_at DESC);
   `);
 
+  // ───────────────── 公司档案（背调产品化）─────────────────
+  // 档案是**公司维度的平台资产**，与 company_profiles 的**案件维度**是两件事，别合并：
+  //   company_profiles.case_id  = 「这家公司在本案里扮演什么」（签约/用工/关联），各案可不同；
+  //   company_dossiers.company_key = 「这家公司客观是什么」，跨案共享、按 TTL 复用。
+  // 连接靠 company_profiles.dossier_id（多对一，见文件末尾补列区）。
+  //
+  // company_key 由 lib/company/normalize.ts 的 companyKey() **唯一产出**（uscc 优先，
+  // 缺则归一化名称），本列 UNIQUE 即缓存命中的判据。归一化只有一个入口这条由
+  // lib/company/__tests__/normalize.test.ts 的结构守卫机检——写第二处归一化会当场红。
+  //
+  // status 值集：queued（已扣费待跑）| graph_done（谱系块已交付）| awaiting_relay（等外勤开窗取证）
+  //           | stats_ready（统计已出）| done（全档完成）| litigation_expired（超 SLA，文书块已退款）。
+  // 同 intake_stage 裁决：**不加 DB 级 CHECK**（SQLite 改 CHECK 要重建表），值集由 lib/company 把关。
+  //
+  // paid_by/paid_ref 必须留痕：paid_by='membership_credit' + paid_ref=entitlement.id 是
+  // 「这单为什么没扣钱」的**唯一**可查凭据——没有它，一笔没进账本的交付在事后无从解释。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_dossiers (
+      id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_key             TEXT NOT NULL UNIQUE,
+      name                    TEXT NOT NULL,
+      uscc                    TEXT,
+      status                  TEXT NOT NULL DEFAULT 'queued',
+      paid_by                 TEXT,                                -- gongdao | membership_credit
+      paid_ref                TEXT,                                -- membership_credit 时为 entitlements.id
+      charge_ref              TEXT,                                -- 账本幂等键，退款按它原路退
+      graph_refreshed_at      TEXT,
+      litigation_refreshed_at TEXT,
+      ordered_by_user_id      INTEGER REFERENCES users(id),
+      created_at              TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_company_dossiers_status
+      ON company_dossiers (status, id);
+  `);
+
+  // 分块交付的**逐项**留痕：job_runs 答「这一轮有没有发生」，本表答「你的档案到哪一步了」。
+  // 两个粒度互补不替代——进度态 API 只读本表，读 job_runs 答不出单个档案的进度。
+  // 三态与 job_runs 同一套，靠 finished_at 分：
+  //   无行                      → 这一块从来没排过
+  //   有行、finished_at IS NULL → 在跑，或跑到一半崩了
+  //   有行、finished_at 非空    → 有结论，status 说明是哪种结论
+  // status 取 running | ok | failed | skipped：**skipped 必须与 ok 分开**——
+  // 「没有全文可喂、所以没调模型」和「归纳跑完了」在用户眼里是两件事，
+  // 合成一个 ok 就等于把「这块其实是空的」藏进一个绿灯里。
+  // 故本表用 status 而不是 job_runs 那个 ok 整数：三值容不下第四种结论。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_dossier_blocks (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      dossier_id  INTEGER NOT NULL REFERENCES company_dossiers(id) ON DELETE CASCADE,
+      block       TEXT NOT NULL,                        -- graph | litigation | stats | patterns
+      status      TEXT NOT NULL DEFAULT 'running',      -- running | ok | failed | skipped
+      started_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      finished_at TEXT,
+      error_text  TEXT,                                 -- 失败原因原文，禁止只写「失败」
+      note        TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_company_dossier_blocks
+      ON company_dossier_blocks (dossier_id, block);
+  `);
+
+  // 统计快照：一档一行，每次文书增量入库后重算覆盖。
+  //
+  // **三个分母各存各的，禁止只留一个 docs_total**：docs_total 含「仅列表项」（有案号没全文），
+  // 用它当比率分母会把一个未知偏差方向的幸存者样本包装成一个百分数。
+  // 比率的唯一合法分母是 docs_outcome_decided（结果可判定的篇数），门槛不足时**整块不出数字**
+  // ——这条在 lib/company/stats.ts 里执行，本表只负责把三个数都存下来供事后复核。
+  //
+  // **四段时长各存各的 n 与中位数，库里没有也不许有「平均时长」那一格**：
+  // 仲裁受理→裁决 / 一审立案→判决 / 二审立案→判决 / 判决生效→执行立案 是四种不同的等待，
+  // 合成一个数只会得到一个谁也没经历过的时长。一段样本不足不牵连其它段。
+  // 中位数用 REAL：偶数样本取中间两个的均值，取整会在小样本上系统性偏移。
+  //
+  // as_of = MAX(fetched_at)，即采集截止日；coverage_note 是**必渲染的结构化字段**，
+  // 不是可折叠脚注——把覆盖度声明降级成小字，等于让用户替我们承担诚实税。
+  // dropped_patterns 是模型编造率的唯一体温计：静默丢弃会把编造藏起来，必须计数可查。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_dossier_stats (
+      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+      dossier_id           INTEGER NOT NULL REFERENCES company_dossiers(id) ON DELETE CASCADE,
+      docs_total           INTEGER NOT NULL DEFAULT 0,   -- 全部入档行数（含仅列表项）
+      docs_fulltext        INTEGER NOT NULL DEFAULT 0,   -- has_fulltext=1 的行数
+      docs_outcome_decided INTEGER NOT NULL DEFAULT 0,   -- 结果可判定的行数（比率的唯一合法分母）
+      worker_favorable_n   INTEGER NOT NULL DEFAULT 0,   -- 其中劳动者全部或部分获支持的篇数
+      applicant_labor_n    INTEGER NOT NULL DEFAULT 0,   -- 劳动者提起的件数（程序位置，与胜负不是一回事）
+      applicant_employer_n INTEGER NOT NULL DEFAULT 0,   -- 单位提起的件数
+      arb_n                INTEGER NOT NULL DEFAULT 0,
+      arb_median_days      REAL,
+      trial1_n             INTEGER NOT NULL DEFAULT 0,
+      trial1_median_days   REAL,
+      trial2_n             INTEGER NOT NULL DEFAULT 0,
+      trial2_median_days   REAL,
+      exec_n               INTEGER NOT NULL DEFAULT 0,
+      exec_median_days     REAL,
+      as_of                TEXT,                          -- = MAX(fetched_at)，采集截止日
+      coverage_note        TEXT,
+      dropped_patterns     INTEGER NOT NULL DEFAULT 0,
+      computed_at          TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_company_dossier_stats
+      ON company_dossier_stats (dossier_id);
+  `);
+
+  // LLM 归纳出的「这家公司的套路」。**每条必须带逐条证据**（evidence_json 为
+  // [{case_no, quote}] 数组），且 quote 必须是该案号原文的逐字子串——
+  // 校验在 lib/company/patterns.ts 里用 SQL 存在性查询 + indexOf 做，**不是在 prompt 里求模型自觉**。
+  // 证据被清空的 pattern 整条丢弃、计入 company_dossier_stats.dropped_patterns，绝不落库。
+  // 故本表没有「无证据的套路」这种行：读侧不必再判空，UI 层的双保险防的是别处写进来的脏行。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_patterns (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      dossier_id    INTEGER NOT NULL REFERENCES company_dossiers(id) ON DELETE CASCADE,
+      pattern       TEXT NOT NULL,
+      evidence_json TEXT NOT NULL,                        -- [{case_no, quote}]，空数组不许落库
+      model         TEXT,                                 -- 归纳所用模型的计费键
+      generated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_company_patterns_dossier
+      ON company_patterns (dossier_id, id);
+  `);
+
+  // 权益券（会员赠品）：买会员送一次公司档案。
+  //
+  // **为什么不在 memberships 上加 credit 列**：grantMembership 是「每个订单一行、续期叠加」，
+  // 在其上挂次数会让「续期两次送几次」变成一条隐式规则，且没有独立幂等键。
+  // 本表的 uq_entitlements_source（kind, source_ref）就是那个幂等键，source_ref = order_no：
+  // 同一订单重复履约只落一行，不必靠调用方记得自己发过没有。
+  // source_ref 可空（人工补发无订单号），故唯一索引用部分索引只约束非空值。
+  // consumed_at/consumed_ref 记核销去向；已核销的不随退款追回——货已交付。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS entitlements (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id      INTEGER NOT NULL REFERENCES users(id),
+      kind         TEXT NOT NULL,                          -- dossier
+      source_ref   TEXT,                                   -- order_no；人工补发时为空
+      granted_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      consumed_at  TEXT,
+      consumed_ref TEXT,                                   -- 核销去向（company_dossiers.id）
+      revoked_at   TEXT                                    -- 订单反转作废；已核销的不追回
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_entitlements_source
+      ON entitlements (kind, source_ref) WHERE source_ref IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_entitlements_user
+      ON entitlements (user_id, kind, consumed_at);
+  `);
+
+  // 可调参数表：定额报价、样本门槛、SLA 天数、缓存 TTL 一律读这里，代码常量退为兜底而非事实源。
+  //
+  // **为什么不塞进 skus**：fulfillment.resolveSkuKind 按 name 判定，**未知 name 一律兜底为
+  // 「散充」按金额×100 入账**。往 skus 插一行「档案·公司背调」，用户一旦从下单路径碰到它，
+  // 就会被当成充值订单履约——**收了钱当充值入账，服务不交付**。这条事故路径由
+  // lib/billing 的结构守卫测试盯着（遍历 skus 全部 name，出现档案/守望/背调即红）。
+  //
+  // 只存整数：金额单位是公道值、门槛是篇数、SLA 是天数，全是整数；不设 value_text 列——
+  // 一个「什么都能存」的配置表会长成第二个业务逻辑层。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pricing_config (
+      key        TEXT PRIMARY KEY,
+      value_int  INTEGER NOT NULL,
+      note       TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // 免费前置探测（§2.3）的两张表。
+  //
+  // company_probe_cache：一家公司一行、全站共享的探测载荷（四个数字 + 工商状态 + 主体命中）。
+  // **fetched_at 是我们这份拷贝的入缓存时刻，不是数据的 as_of**（as_of 存在 payload_json 里）：
+  // TTL(24h) 管的是「多久不再去采集侧重拉」，命中即 0 成本复用。payload_json 是采集侧产出的
+  // 客观计数，**零 LLM**——写点唯一在 lib/company/probe.ts 的 upsertProbeCache，且先体检再落库
+  // （非负整数、层层子集、as_of 必填），脏载荷进不了这张全站共享的缓存。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_probe_cache (
+      company_key  TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      fetched_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // company_probe_events：探测限流的**逐次留痕**（登录后每用户每日 dossier.probe_free_per_day 次）。
+  // 一行 = 一次真采集（占 1 配额）；**缓存命中不落行**（命中 0 成本、不限次、不占配额）。
+  // 按 (user_id, 日历日) 计数，配额耗尽即降级为「仅缓存命中」并如实告知（不报错、不返回空）。
+  // 与 ip_quota_events 同构：只追加、按写入侧机会式 GC，不设定时任务（加个必须有人盯的 cron
+  // 代价高于顺手多跑一条 DELETE）。company_key 一并留痕，便于事后查「谁在白嫖哪家公司」。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_probe_events (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     INTEGER NOT NULL REFERENCES users(id),
+      company_key TEXT NOT NULL,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_company_probe_events_user
+      ON company_probe_events (user_id, created_at);
+  `);
+
   // ───────────────── 通知 ─────────────────
   // 发送台账 + 幂等闸门：uq_notify_sent 保证同一业务键（scene, biz_key）每通道最多一条 status='sent'，
   // 失败/跳过行不受约束可重复落行（重试留痕）。
@@ -793,7 +987,7 @@ export function runMigrations(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS job_runs (
       id             INTEGER PRIMARY KEY AUTOINCREMENT,
-      job_name       TEXT NOT NULL,                         -- 期限提醒 | 公道值对账 | 公司监控巡检
+      job_name       TEXT NOT NULL,                         -- 期限提醒 | 公道值对账 | 公司监控巡检 | 公司档案采集
       started_at     TEXT NOT NULL DEFAULT (datetime('now')),
       finished_at    TEXT,                                  -- NULL=未跑完（崩了 / 被杀 / 还在跑）
       ok             INTEGER,                               -- NULL=未跑完；1=整轮跑通；0=整轮失败
@@ -844,6 +1038,54 @@ export function runMigrations(db: Database.Database): void {
   // 应用层**，库侧不设触发器、不设定时任务、不设任何机制——本列只是哑存储，写什么就是什么。
   // 存量行取 DDL 默认 'daily'：老库的盯梢都是按每日跑的，默认值即其现状，不需回填。
   addColumnIfMissing(db, 'company_watches', 'tier', "TEXT NOT NULL DEFAULT 'daily'");
+
+  // company_watches.billing_status / paid_through：守望计费（D 工单）。
+  // free=未收费的存量与 tier=archive；paid=本期已扣；arrears=余额不足欠费中。
+  // **欠费绝不静默停盯**：arrears 期间 status 仍为 active 且要通知，连续三轮才 paused 并再通知一次
+  // ——同 company_watch_checks.ok=0 必须留行那条规矩，静默失效是本产品最危险的失败模式。
+  // 存量行取 DDL 默认 'free'：老库的盯梢本来就没收过钱，默认值即其现状，不需回填。
+  addColumnIfMissing(db, 'company_watches', 'billing_status', "TEXT NOT NULL DEFAULT 'free'");
+  addColumnIfMissing(db, 'company_watches', 'paid_through', 'TEXT');
+
+  // company_profiles.dossier_id：案件维度的主体 → 公司维度的档案（多对一）。
+  // 可空：手建的背调档不一定买过档案，且档案是后来才有的东西，老行一律 NULL。
+  addColumnIfMissing(db, 'company_profiles', 'dossier_id', 'INTEGER REFERENCES company_dossiers(id)');
+
+  // company_litigation 的九列：外勤取证产物的落库位。**全部可空、全部不回填**——
+  // 现有语料里绝大多数行是「仅列表项_未取全文」，这九列对它们本来就没有值，
+  // 拿默认值把空缺填成 0/'未知' 就是把「没取到」伪装成「取到了是这个」。
+  //
+  // has_fulltext 是 §1.3 输入白名单的开关：只有 =1 的行的全文才允许喂给归纳模型，
+  // 仅列表项的行**连标题都不喂**（标题足以让模型脑补案情）。默认 0 是保守方向：
+  // 取不准时宁可少喂，也不能把没核实的东西喂进去再由模型编出证据来。
+  //
+  // outcome 只取三值：劳动者全部获支持 | 劳动者部分获支持 | 劳动者未获支持。
+  // NULL ≠ 输了，NULL = 判不出来（没全文、或全文里没有可逐字引用的判据）。
+  // outcome_basis 存判据的**逐字原文**：没有它，outcome 就是一个没人能复核的断言。
+  // applicant_side（劳动者/单位）必须与 outcome 分开看——2022 年那批「用人单位起诉员工」
+  // 的案子里，「公司赢了」和「劳动者输了」不是同一件事，不分程序位置的胜诉率是错的数。
+  //
+  // filed_at/judged_at 只准写文书上**载明**的日期，推断的一律留空（推断出来的时长
+  // 会以一个精确的天数呈现，读的人无从分辨它其实是猜的）。
+  addColumnIfMissing(db, 'company_litigation', 'has_fulltext', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(db, 'company_litigation', 'fulltext_path', 'TEXT');
+  addColumnIfMissing(db, 'company_litigation', 'outcome', 'TEXT');
+  addColumnIfMissing(db, 'company_litigation', 'outcome_basis', 'TEXT');
+  addColumnIfMissing(db, 'company_litigation', 'filed_at', 'TEXT');
+  addColumnIfMissing(db, 'company_litigation', 'stage', 'TEXT');
+  addColumnIfMissing(db, 'company_litigation', 'applicant_side', 'TEXT');
+  addColumnIfMissing(db, 'company_litigation', 'amount_awarded_fen', 'INTEGER');
+  addColumnIfMissing(db, 'company_litigation', 'dossier_id', 'INTEGER REFERENCES company_dossiers(id)');
+
+  // 档案维度的去重键。**必须与 uq_company_litigation（案件维度）并存，不能替代它**：
+  // 一个档案可以被多个案件的 company_profiles 指向，同一份 JSONL 若先后挂在两个 profile 下导入，
+  // 只有案件维度那把唯一键的话两行都能进去，docs_total 当场翻倍——而那个数是比率的分母之一。
+  // 部分索引只盖 dossier_id 非空的行：存量行的 dossier_id 全是 NULL（本次新加的列），
+  // 建索引时不会撞已有数据，故这条与其它迁移一样可以反复重跑。
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_company_litigation_dossier
+      ON company_litigation (dossier_id, case_no) WHERE dossier_id IS NOT NULL;
+  `);
 
   // ───────────────── 费率种子 ─────────────────
   // C01 核定的模型费率必须**在建表之后立刻播下去**：缺行时 getRatesForModel 会回落
