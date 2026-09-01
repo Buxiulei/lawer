@@ -158,14 +158,15 @@ describe('未回报计量的轮：不许拿 0 冒充（types.ts 铁律「桶为 
 // 我们照 opus 的价（$5/$25）收钱而用户拿到 sonnet（$2/$10）：2.5 倍，方向朝着用户吃亏。
 // ─────────────────────────────────────────────────────────────────────────────
 const RELAY_OPUS = { name: 'relay' as const, model: 'claude-opus-5', billingModel: 'relay/claude-opus-5' };
+const RELAY_SONNET = { name: 'relay' as const, model: 'claude-sonnet-5', billingModel: 'relay/claude-sonnet-5' };
 
-/** 高配 critical 的真实形态：opus 经中转。servedModel 由剧本逐轮指定。 */
-async function relayTurn(served: string | null | undefined) {
+/** 高配 critical 的真实形态：型号经中转。servedModel 由剧本逐轮指定；relay 身份默认 opus。 */
+async function relayTurn(served: string | null | undefined, relay = RELAY_OPUS) {
   const script: ScriptedRound[] = [
     { text: '好的。', tools: [CARD], ...(served === undefined ? {} : { servedModel: served }) },
     { text: '这就是全部。', ...(served === undefined ? {} : { servedModel: served }) },
   ];
-  return turn(script, { provider: scriptedProvider(script, RELAY_OPUS), plan: 'pro' });
+  return turn(script, { provider: scriptedProvider(script, relay), plan: 'pro' });
 }
 
 const TURN_TOKENS = {
@@ -192,6 +193,39 @@ describe('served_model 与请求型号对账（不对账＝算错钱，命脉）
     expect(-l.delta).toBe(costOfUsage(TURN_TOKENS, sonnet));
     // 反向钉死：**绝不能**等于按 opus 算出来的那个数
     expect(-l.delta).not.toBe(costOfUsage(TURN_TOKENS, opus));
+  });
+
+  // ── 升档方向（manager 点名的主路判据）：请求 sonnet、上游回 opus ──
+  // billed = min(rate(sonnet), rate(opus)) = sonnet：用户不为中转擅自的升档买单。
+  // 【这条为什么不可省】降档方向即便摘掉记账点的 rateOf、退回「按 served 计价」，billed 仍是较低的 served，
+  // 上面几条照样绿——唯独升档方向 rateOf 缺席会滑成「按 served(=opus) 多扣」。所以只有本条能钉住
+  // 「orchestrator 真把 rateOf 接进了 reconcileServedModel」：摘掉 chargeTurn 里那个 rateOf 参数，本条即红。
+  it('中转把 sonnet 升档到 opus：仍按 **sonnet**（请求价，较低），用户不为擅自升档买单', async () => {
+    const { f, sink } = await relayTurn('claude-opus-5', RELAY_SONNET);
+
+    const [u] = rows<{ model: string; api_model: string | null; cost_li: number }>(f, 'SELECT * FROM token_usage');
+    expect(u.model).toBe('relay/claude-sonnet-5'); // 计费键维持请求的 sonnet（较低价）
+    expect(u.api_model).toBe('claude-opus-5'); // 回显串照实落列，供对账探针用
+
+    const sonnet = getRatesForModel(f.db, 'relay/claude-sonnet-5');
+    const opus = getRatesForModel(f.db, 'relay/claude-opus-5');
+    expect(opus.in).toBeGreaterThan(sonnet.in); // 前提：两档确有价差，否则本条测不出东西
+    const [l] = rows<{ delta: number }>(f, "SELECT delta FROM gongdao_ledger WHERE type='消耗'");
+    expect(u.cost_li).toBe(costLiOfUsage(TURN_TOKENS, sonnet));
+    expect(-l.delta).toBe(costOfUsage(TURN_TOKENS, sonnet));
+    // 反向钉死：摘掉 rateOf 会让这一行变成 opus 的价（多扣），必须不等于它
+    expect(-l.delta).not.toBe(costOfUsage(TURN_TOKENS, opus));
+
+    // 升档同样是 substituted：留痕 requested/served/billed 与 notice（对账脚本 + 盯流的人都要看得见）
+    const [lm] = rows<{ meta_json: string | null }>(f, "SELECT meta_json FROM gongdao_ledger WHERE type='消耗'");
+    expect(JSON.parse(lm.meta_json!)).toEqual({
+      requested: 'relay/claude-sonnet-5',
+      served: 'claude-opus-5',
+      billed: 'relay/claude-sonnet-5',
+      verdict: 'substituted',
+    });
+    const notices = sink.events.filter((e) => e.event === 'notice') as { data: { code: string } }[];
+    expect(notices.some((n) => n.data.code === 'SERVED_MODEL_MISMATCH')).toBe(true);
   });
 
   it('降档必须留下审计痕：ledger.meta_json 记 requested vs served', async () => {
