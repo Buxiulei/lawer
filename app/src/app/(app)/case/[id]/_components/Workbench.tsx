@@ -6,17 +6,14 @@ import type { ActionItem, LawRef } from '@/app/_mock/types';
 import {
   demoActions,
   demoCase,
-  demoDeadlines,
   demoMessages,
 } from '@/app/_mock/demo';
 import { mockLawRefs } from '@/app/_mock/workbench';
 import { formatDate } from '@/app/_ui/format';
 import { scrollBehavior, useReducedMotion } from '@/app/_ui/motion';
-import { Badge } from '@/components/shadcn/badge';
 import { EmptyState } from '@/components/shadcn/empty-state';
 import { AppSheet } from '@/components/shadcn/app-sheet';
 import { Button } from '@/components/shadcn/button';
-import { DeadlineChip } from '@/components/case/DeadlineChip';
 import { useRegisterCasePanel } from '@/components/shell/casePanel';
 import {
   useCaseWorkspace,
@@ -32,6 +29,7 @@ import { toActionItem, type DraftFrame } from '../_stream/frames';
 import { readToken } from '../_stream/httpTransport';
 import { useChatStream, type SettledTurn } from '../_stream/useChatStream';
 import { CasePanel } from './CasePanel';
+import { CaseStatusBar } from './CaseStatusBar';
 import { Composer } from './Composer';
 import {
   AssistantMessage,
@@ -271,7 +269,9 @@ export function Workbench({ caseId }: { caseId: string }) {
       {/* 排开侧栏这件事已经归工作区（case/[id]/layout.tsx 的 WorkspaceGrid）：
           这里只交出「卷宗栏里放什么」，宽度到哪一档排开由容器查询决定。
           原来的 data-wide 与手写 xl 双栏一并退役。 */}
-      {seeded && <CaseStatusBar />}
+      {/* 真实案件也出这一条，读的是自己的 stage 与最近期限；取不到就整条不出现。
+          此前是 `seeded &&`：藏起来的那一半，正是「我的案子走到哪一步」本身。 */}
+      <CaseStatusBar caseId={caseId} demo={seeded} />
 
       {/* 正文收窄阈值 736：量的是**工作区可用宽度**不是视口（红线②）。
           768 视口下可用宽是 753（减掉 15px 滚动条），落在 736 之上 →
@@ -358,43 +358,6 @@ export function Workbench({ caseId }: { caseId: string }) {
         onConfirm={confirmDraft}
       />
     </>
-  );
-}
-
-/**
- * 阶段 + 最近截止日。**卷宗栏排开之后**这两条在那一栏的档案里都有，就不再重复。
- * 判据跟着卷宗栏走（容器 ≥920）而不是视口 xl——否则会出现「1279 收起侧栏，
- * 卷宗栏已经排开、这条却还在」的重复。档案入口本身已经上移到壳层顶栏。
- */
-function CaseStatusBar() {
-  const nearest = [...demoDeadlines].sort((a, b) =>
-    a.dueAt.localeCompare(b.dueAt),
-  )[0];
-
-  return (
-    <section className="mb-4 overflow-hidden rounded-[12px] @min-[990px]/work:hidden">
-      {/* 分量 4：金色填色顶栏 + 白底内容、**无外框**。
-          没有外框是刻意的——行动卡才是「实边框 + 填色顶栏」那一档，
-          期限只有顶栏，两者在灰度下也分得开（验收第 2、3 条）。
-          金色不用红：红只留给风险条款与不可逆操作。
-
-          **顶栏用淡金 --gold-wash 而不是规格写的深金 --gold**：实测 --ink(#2b1f1a)
-          压在深金(#8a7340)上只有 **3.68:1**，14px 正文过不了 4.5；换淡金(#f5e6c8)是
-          **13.59:1**。深色模式下同理（淡金档 #2e2717 配浅色 ink 是 12.4:1，
-          而深金 #c9a75b 配浅 ink 只有 1.6:1，更糟）。
-          顺带的好处：淡金底比行动卡的勃艮第实底轻，**分量 4 在 5 之下这件事因此更明显**。 */}
-      <h2 className="bg-gold-wash px-3.5 py-1.5 text-[14px] font-semibold text-ink">
-        当前阶段与最近期限
-      </h2>
-      <div className="flex flex-wrap items-center gap-2 bg-surface px-3.5 py-2.5">
-        {/* data-veil 不挂在外层：filter 会拽走 fixed 子孙。
-            Badge 又不透传 props，只好在它外面包一层 inline-flex */}
-        <span data-veil="" className="inline-flex">
-          <Badge tone="primary">{demoCase.stage}</Badge>
-        </span>
-        {nearest && <DeadlineChip dueAt={nearest.dueAt} showDate />}
-      </div>
-    </section>
   );
 }
 

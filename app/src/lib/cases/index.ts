@@ -10,6 +10,9 @@
 import type { Database } from 'better-sqlite3';
 
 import * as store from '@/lib/db/cases';
+// drafts 的 SQL 早已在 lib/db/agent.ts 的 drafts 段（与 insertDraft 同处）。读侧不另起
+// 一份表访问：同一张表两处 SELECT，将来加一列就会漏一处。归属校验仍在本文件把关。
+import { listDrafts as listDraftRows, type DraftRow } from '@/lib/db/agent';
 import { nowSql } from '@/lib/db/time';
 
 /** 与 migrate.ts cases.stage 注释逐字对齐 */
@@ -216,6 +219,19 @@ export function listEvidence(
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
   return { ok: true, evidence: store.listEvidence(db, input.caseId) };
+}
+
+/**
+ * 案件名下的文书。文书目前只由对话里的 draft_write 产出，本函数是它唯一的读出口——
+ * 在此之前文书页对任何案件都渲染演示数据，真实用户在自己案子里读到的是别家公司的文书。
+ */
+export function listDrafts(
+  db: Database,
+  input: { caseId: number; userId: number },
+): Result<{ drafts: DraftRow[] }> {
+  const found = assertOwned(db, input.caseId, input.userId);
+  if (isFailure(found)) return found;
+  return { ok: true, drafts: listDraftRows(db, input.caseId) };
 }
 
 // ========== 写 ==========
