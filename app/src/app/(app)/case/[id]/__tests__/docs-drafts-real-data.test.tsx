@@ -55,7 +55,7 @@ const { fetchDrafts, findDraft, toDraftView } = await import('../drafts/_compone
 const { DraftsListView } = await import('../drafts/_components/DraftsListView');
 const { RealDraftBody } = await import('../drafts/_components/RealDraftView');
 const { DocsEmpty } = await import('../docs/_components/DocsEmpty');
-const { CaseStatusBarBody } = await import('../_components/CaseStatusBar');
+const { CaseStatusBar, CaseStatusBarBody } = await import('../_components/CaseStatusBar');
 const { fetchCaseStatus, demoCaseStatus, hasStatus } = await import('../_components/caseStatus');
 const { mockDrafts, mockDocs, getDoc } = await import('@/app/_mock/docs-drafts');
 
@@ -66,7 +66,15 @@ const DraftDetailPage = (await import('../drafts/[draftId]/page')).default;
 
 const ssr = (node: React.ReactNode) => renderToStaticMarkup(<>{node}</>);
 const text = (html: string) => html.replace(/<[^>]+>/g, '');
-const MOCK_FILE = join(process.cwd(), 'src/app/_mock/docs-drafts.ts');
+const SRC = join(process.cwd(), 'src');
+const MOCK_FILE = join(SRC, 'app/_mock/docs-drafts.ts');
+
+/** 只看代码行，注释里提到 demo 不算（注释误报会让下一个人把守卫当噪音关掉） */
+function codeLines(relPath: string): string[] {
+  return readFileSync(join(SRC, relPath), 'utf8')
+    .split('\n')
+    .filter((l) => !/^\s*(\/\/|\/?\*)/.test(l));
+}
 
 /** 一个真实案件的文书行，字段名逐字照后端行（lib/db/agent 的 DraftRow） */
 function realDraftRows() {
@@ -248,6 +256,29 @@ describe('对话页的状态提要', () => {
   });
 });
 
+/**
+ * 上面那一节验的是**画法**那一层（CaseStatusBarBody：给什么画什么）。
+ * 接线那一层——`useState(demo ? demoCaseStatus() : null)`——它管不着：
+ * 把初值改成恒 `demoCaseStatus()`，真实案件的第一帧就会挂出「仲裁准备」和一个别人的到期日，
+ * 而画法层的判据一条都不会红。取数在 useEffect 里，SSR 到不了第二帧，
+ * **首帧正是用户瞥见的那一帧**，也正是这类回潮唯一露头的地方（骨架层标题那次就是这么发作的）。
+ */
+describe('状态提要的首帧', () => {
+  it('真实案件首帧什么都不画——宁可晚一步，也不先闪一下演示阶段', () => {
+    const html = ssr(<CaseStatusBar caseId="1" demo={false} />);
+    expect(html).toBe('');
+    expect(html).not.toContain('仲裁准备');
+    expect(html).not.toContain('星曜网络');
+  });
+
+  /** 正对照：演示案件首帧就该有演示阶段，否则上一条可能只是这个组件压根画不出东西 */
+  it('演示案件首帧就是演示阶段与演示期限', () => {
+    const html = ssr(<CaseStatusBar caseId="demo" demo={true} />);
+    expect(text(html)).toContain('仲裁准备');
+    expect(text(html)).toContain('当前阶段与最近期限');
+  });
+});
+
 /* ── 三、路由分叉：真实 caseId 走的到底是哪一条 ────────────────── */
 
 describe('页面按 caseId 分叉', () => {
@@ -302,5 +333,34 @@ describe('演示案件照旧显示演示数据', () => {
   it('状态提要仍是演示案件的阶段与期限', () => {
     const html = ssr(<CaseStatusBarBody status={demoCaseStatus()} />);
     expect(text(html)).toContain('仲裁准备');
+  });
+});
+
+/* ── 五、结构守卫：接线回潮会被点名 ─────────────────────────── */
+
+/**
+ * 状态提要那两个 prop 是**跨 effect 那条缝**的接线：
+ * `demo` 决定读演示值还是现查接口，`caseId` 决定查谁的案子。
+ * 本仓 vitest 没有 DOM、SSR 跑不到 effect，这两个 prop 传错的后果在渲染判据里看不见——
+ * `demo={true}` 会让每一个真实案件都读演示阶段，`caseId={'demo'}` 会让它去查演示案件，
+ * 两者在上面**任何一条**判据下都是绿的。所以这里按源码行钉死。
+ */
+describe('结构守卫', () => {
+  it('Workbench 把本案的 caseId 与「是不是演示案件」原样交给状态提要', () => {
+    const lines = codeLines('app/(app)/case/[id]/_components/Workbench.tsx');
+    expect(lines.filter((l) => l.includes('<CaseStatusBar')).map((l) => l.trim())).toEqual([
+      '<CaseStatusBar caseId={caseId} demo={seeded} />',
+    ]);
+  });
+
+  /**
+   * 上一条只钉住「传的是 seeded」。seeded 本身若变成恒 true（或跟别的东西挂钩），
+   * 那条守卫照样绿。判定的原文一并钉住，两句合起来才是完整的一句话。
+   */
+  it('seeded 的定义就是「这个 id 是演示案件」，没有第二种解释', () => {
+    const lines = codeLines('app/(app)/case/[id]/_components/Workbench.tsx');
+    expect(lines.filter((l) => l.includes('const seeded')).map((l) => l.trim())).toEqual([
+      'const seeded = caseId === demoCase.id;',
+    ]);
   });
 });
