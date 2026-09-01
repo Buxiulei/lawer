@@ -4,12 +4,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { cn } from '@/app/_ui/cn';
-import { useCurrentCaseId } from '@/app/_ui/currentCase';
+import { caseIdFromPath, useCurrentCaseId } from '@/app/_ui/currentCase';
 import { DocumentTitle, useDiscreet } from '@/app/_ui/discreet';
 import { DiscreetVeil } from '@/app/_ui/veil';
 import { SidebarInset, SidebarProvider } from '@/components/shadcn/sidebar';
 import { TooltipProvider } from '@/components/shadcn/tooltip';
 import { AppSidebar } from './AppSidebar';
+import { shellTitles, useRealCaseTitle } from './caseTitle';
 import { CasePanelProvider } from './casePanel';
 import { DemoBanner } from './DemoBanner';
 import { PanicButton } from './PanicButton';
@@ -21,25 +22,23 @@ import { CASE_NAV_ITEMS } from './navItems';
  * 壳层：PC 是可折叠侧栏 + 顶栏，移动端是顶栏 + 底部 Tab。
  * 低调模式与主题的行为一律沿用 _ui/discreet 与 _ui/theme，这里只搬控件位置。
  */
-export function AppShell({
-  children,
-  caseTitle,
-}: {
-  children: ReactNode;
-  caseTitle: string;
-}) {
+export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '/';
   // 案件页取路径里的 id；非案件页取本人名下那个（取不到就是 null＝还不知道，绝不兜底成 demo）
   const caseId = useCurrentCaseId(pathname);
   const onDemoCase = /^\/case\/demo(\/|$)/.test(pathname);
+  // 标题只认**路径里**那个案件：站在「我的」「设置」或中转那一瞬，没有"当前案件"
+  // 可写，一律中性词。缓存里那个 id 只管导航去处，不上顶栏也不上标签页。
+  const realTitle = useRealCaseTitle(caseIdFromPath(pathname));
+  const titles = shellTitles({ onDemoCase, realTitle });
 
   return (
     <TooltipProvider delayDuration={300}>
       <CasePanelProvider>
         <SidebarProvider>
-          <DocumentTitle title={`${caseTitle} · 土八鼠`} />
+          <DocumentTitle title={titles.document} />
           <DiscreetVeil />
-          <AppSidebar caseId={caseId} caseTitle={caseTitle} pathname={pathname} />
+          <AppSidebar caseId={caseId} caseTitle={titles.sidebar} pathname={pathname} />
           <SidebarInset>
             <ShellHeader pathname={pathname} caseId={caseId} />
             {onDemoCase && <DemoBanner />}
