@@ -21,7 +21,7 @@ import type {
 } from '../types';
 import { emptyUsage } from '../types';
 import { acquireSlot, connectWithRetry } from './gate';
-import { createStreamTimers, httpError, sseData } from './sse';
+import { assertTruncatedNotEmpty, createStreamTimers, httpError, sseData } from './sse';
 
 export const ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -203,7 +203,7 @@ export function createAnthropic(o: ProviderOptions): Provider {
         timers.clear();
         release();
       };
-      return parseAnthropicStream(res.body, timers.resetIdle, done, report, opts.onUsage, opts.onReasoning);
+      return parseAnthropicStream(res.body, tag, timers.resetIdle, done, report, opts.onUsage, opts.onReasoning);
     },
   };
 }
@@ -219,6 +219,7 @@ export function createAnthropic(o: ProviderOptions): Provider {
  *  按 index 落槽累积 tool_use 块，流末压实为 ToolCall[]，与 OpenAI 侧同形。 */
 async function* parseAnthropicStream(
   body: ReadableStream<Uint8Array>,
+  tag: string,
   onChunk: () => void,
   onDone: () => void,
   report: (usage: TokenUsage) => UsageReport,
@@ -229,14 +230,17 @@ async function* parseAnthropicStream(
   const usage: TokenUsage = emptyUsage();
   let sawUsage = false;
   let reasoningChars = 0;
+  /** 本条流是否产出过**非空白**正文（思考链不算：它不进正文，用户一个字都看不到） */
+  let sawText = false;
   const acc: { id: string; name: string; args: string }[] = [];
-  const finalize = (): ChatStreamResult => ({
-    finishReason,
-    toolCalls: acc
+  // 两个 return 出口（message_stop 与流末）都经这里，所以「截断到空」的判据放在这一处就够
+  const finalize = (): ChatStreamResult => {
+    const toolCalls = acc
       .filter((t) => t && (t.id || t.name || t.args))
-      .map((t) => ({ id: t.id, type: 'function' as const, function: { name: t.name, arguments: t.args } })),
-    usage: report(usage),
-  });
+      .map((t) => ({ id: t.id, type: 'function' as const, function: { name: t.name, arguments: t.args } }));
+    assertTruncatedNotEmpty(tag, finishReason, sawText, toolCalls.length);
+    return { finishReason, toolCalls, usage: report(usage) };
+  };
   /** input/output 分别在流首、流末给出，两处都要并进同一份计量。
    *  Anthropic 的 input_tokens 天然不含缓存读写量，四桶直接对上，无需像兼容层那样做减法。 */
   const mergeUsage = (u: AnthropicUsage) => {
@@ -274,6 +278,7 @@ async function* parseAnthropicStream(
       case 'content_block_delta': {
         const d = ev.delta;
         if (d?.type === 'text_delta' && d.text) {
+          if (d.text.trim()) sawText = true;
           yield d.text;
         } else if (d?.type === 'input_json_delta' && d.partial_json && ev.index !== undefined) {
           const slot = acc[ev.index] ?? (acc[ev.index] = { id: '', name: '', args: '' });

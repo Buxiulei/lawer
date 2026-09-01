@@ -3,7 +3,7 @@
 // OpenAI 兼容侧与 Anthropic 侧的事件语义完全不同，但「怎么把字节流切成一条条 data: 负载」
 // 和「怎么在空闲时掐断」是同一件事，只写一份。
 
-import type { ChatStreamOptions } from '../types';
+import type { ChatStreamOptions, FinishReason } from '../types';
 
 const DEFAULT_IDLE_MS = 90_000;
 const DEFAULT_MAX_MS = 900_000;
@@ -86,4 +86,32 @@ export async function httpError(tag: string, res: Response): Promise<Error> {
       ? body
       : `${body.slice(0, BODY_HEAD_CHARS)}…〔略 ${body.length - BODY_HEAD_CHARS - BODY_TAIL_CHARS} 字〕…${body.slice(-BODY_TAIL_CHARS)}`;
   return new Error(`${tag} HTTP ${res.status}: ${brief}`);
+}
+
+/** 「截断到空」判据，两个解析器在交出结果前各调一次（判断只写这一份，见文件头）。
+ *
+ *  形态：上游报 finish_reason=length（Anthropic 的 max_tokens 已在 provider 内映射过来），
+ *  却一个非空白正文字符都没产出、也没拼出任何工具调用。
+ *
+ *  为什么必须抛而不是照常交出：空正文对用户就是一次失败——他等了几分钟拿到一片空白，
+ *  而静默 return 会让上层把这一轮当作**正常收尾**：落库、计费、进下一轮上下文，
+ *  失败既不可见也无从重试。抛出来才进得了上层既有的失败通路（chat 路由的 error 帧）。
+ *
+ *  为什么只认 length、且要求没有工具调用：
+ *   · refusal 也常是空正文，但那是模型**决定**不答（types.ts 有言在先），重来一次还是同一个答案，
+ *     报成故障只会让用户白等一轮；length 是被 max_tokens 从半路切断，重来是有意义的。
+ *   · 带工具调用的 length 轮对用户不是空回复——tool-loop 还要往下走，拦在这里等于把正常一轮打断。 */
+export function assertTruncatedNotEmpty(
+  tag: string,
+  finishReason: FinishReason,
+  sawText: boolean,
+  toolCallCount: number,
+): void {
+  if (finishReason !== 'length' || sawText || toolCallCount > 0) return;
+  throw new Error(
+    `缺：${tag} 本轮的回复正文——上游报 finish_reason=length（输出被 max_tokens 截断），` +
+      `却没有产出任何正文或工具调用。` +
+      `原因：token 预算在正文出字之前就用尽（思考链吃满预算，或 max_tokens 给得过小）。` +
+      `怎么办：这一轮对用户等同失败，按错误处理——重试或换更长的输出预算，不要把空白当正常回复下发。`,
+  );
 }

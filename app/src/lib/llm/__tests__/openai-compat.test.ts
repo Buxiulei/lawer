@@ -258,3 +258,81 @@ describe('错误与非流式小调用', () => {
     await expect(p.chatJSON!([{ role: 'user', content: 'x' }])).rejects.toThrow(/空响应/);
   });
 });
+
+// 上游把预算全烧在思考链上、正文一个字没出来时，解析器原先照常交出
+// {finishReason:'length', 正文空}，上层当正常一轮收尾并落库计费——用户等了几分钟拿到一片空白，
+// 系统却认为这次成功了。空回复对用户就是失败，必须是错误（判据见 sse.assertTruncatedNotEmpty）。
+describe('流式空回：length 截断 + 空正文 = 失败，不是正常收尾', () => {
+  const emptyLength = dataLine({ choices: [{ index: 0, delta: {}, finish_reason: 'length' }] });
+  const deepseek = (fetchImpl: typeof fetch) => createDeepSeek({ apiKey: 'k', model: 'deepseek-v4-pro', fetchImpl });
+  /** 收干并交出错误（成功则为 null）——要断言错误正文，不能只判抛没抛 */
+  const drainErr = async (p: ReturnType<typeof deepseek>) =>
+    drain(await p.chatStream([{ role: 'user', content: 'x' }])).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+  test('🔑 空正文 + finish_reason=length → 抛错，不静默返回空', async () => {
+    const [fetchImpl] = mockFetch(() => sseResponse(emptyLength + 'data: [DONE]\n\n'));
+    const err = await drainErr(deepseek(fetchImpl));
+    // 三段式：缺什么（连同是哪家哪个型号）/ 为什么缺 / 怎么办
+    expect(err?.message).toMatch(/^缺：deepseek\(deepseek-v4-pro\) 本轮的回复正文/);
+    expect(err?.message).toMatch(/finish_reason=length/);
+    expect(err?.message).toMatch(/原因：[\s\S]*预算/);
+    expect(err?.message).toMatch(/怎么办：/);
+  });
+
+  test('🔑 思考链吃满预算（reasoning 有字、正文没字）—— 线上就是这个形态', async () => {
+    const sse =
+      dataLine({ choices: [{ index: 0, delta: { reasoning_content: '先看时效，再算 2N……' } }] }) +
+      emptyLength +
+      dataLine({ choices: [], usage: { prompt_tokens: 1200, completion_tokens: 8000 } }) +
+      'data: [DONE]\n\n';
+    const [fetchImpl] = mockFetch(() => sseResponse(sse));
+    expect((await drainErr(deepseek(fetchImpl)))?.message).toMatch(/finish_reason=length/);
+  });
+
+  test('仅空白正文也算空（几个换行不是回复）', async () => {
+    const sse = textDelta('  ') + textDelta('\n\n') + emptyLength + 'data: [DONE]\n\n';
+    const [fetchImpl] = mockFetch(() => sseResponse(sse));
+    expect((await drainErr(deepseek(fetchImpl)))?.message).toMatch(/finish_reason=length/);
+  });
+
+  test('流末无 [DONE] 的那条出口同样判（两个 return 出口都过判据）', async () => {
+    const [fetchImpl] = mockFetch(() => sseResponse(emptyLength));
+    expect((await drainErr(deepseek(fetchImpl)))?.message).toMatch(/finish_reason=length/);
+  });
+
+  // ── 以下三条是「不误伤」：长回复被截断、工具轮、模型自己决定不答，都不是本判据的对象 ──
+  test('有正文的 length（长回复正常结束）照常交出，不误判为错', async () => {
+    const [fetchImpl] = mockFetch(() => sseResponse(textDelta('半句话') + emptyLength + 'data: [DONE]\n\n'));
+    const { text, result } = await drain(await deepseek(fetchImpl).chatStream([{ role: 'user', content: 'x' }]));
+    expect(text).toBe('半句话');
+    expect(result.finishReason).toBe('length');
+  });
+
+  test('正文空但拼出了工具调用 → 不抛：那一轮对用户不是空回复，tool-loop 还要往下走', async () => {
+    const sse =
+      dataLine({
+        choices: [
+          { index: 0, delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'knowledge_search', arguments: '{"q":"时效"}' } }] } },
+        ],
+      }) +
+      emptyLength +
+      'data: [DONE]\n\n';
+    const [fetchImpl] = mockFetch(() => sseResponse(sse));
+    const { result } = await drain(await deepseek(fetchImpl).chatStream([{ role: 'user', content: 'x' }]));
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.finishReason).toBe('length');
+  });
+
+  test('空正文但结束原因不是 length（stop / refusal）→ 不抛：只有被截断才值得重来', async () => {
+    for (const reason of ['stop', 'refusal']) {
+      const sse = dataLine({ choices: [{ index: 0, delta: {}, finish_reason: reason }] }) + 'data: [DONE]\n\n';
+      const [fetchImpl] = mockFetch(() => sseResponse(sse));
+      const { text, result } = await drain(await deepseek(fetchImpl).chatStream([{ role: 'user', content: 'x' }]));
+      expect(text).toBe('');
+      expect(result.finishReason).toBe(reason);
+    }
+  });
+});

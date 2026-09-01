@@ -213,6 +213,27 @@ describe('chatStream 事件流解析', () => {
     }
   });
 
+  /** 与 OpenAI 兼容侧同一判据（sse.assertTruncatedNotEmpty）：max_tokens 映射成 length 之后，
+   *  「截断 + 正文为空」在这个解析器上也必须是错误，否则换回直连就又静默一次。
+   *  refusal 的空正文照旧不算错——那是模型决定不答，重来一次还是同一个答案。 */
+  test('🔑 max_tokens 截断且正文为空 → 抛错；refusal 空正文照常交出', async () => {
+    const truncatedEmpty =
+      ev({ type: 'message_start', message: { id: 'msg_1', usage: { input_tokens: 2100 } } }) +
+      ev({ type: 'message_delta', delta: { stop_reason: 'max_tokens' }, usage: { output_tokens: 8000 } }) +
+      ev({ type: 'message_stop' });
+    const [truncFetch] = mockFetch(() => sseResponse(truncatedEmpty));
+    const trunc = createAnthropic({ apiKey: 'k', model: 'claude-sonnet-5', fetchImpl: truncFetch });
+    await expect(drain(await trunc.chatStream([{ role: 'user', content: 'x' }]))).rejects.toThrow(
+      /anthropic\(claude-sonnet-5\)[\s\S]*finish_reason=length/,
+    );
+
+    const [refuseFetch] = mockFetch(() => sseResponse(truncatedEmpty.replace('max_tokens', 'refusal')));
+    const refuse = createAnthropic({ apiKey: 'k', model: 'claude-sonnet-5', fetchImpl: refuseFetch });
+    const { text, result } = await drain(await refuse.chatStream([{ role: 'user', content: 'x' }]));
+    expect(text).toBe('');
+    expect(result.finishReason).toBe('refusal');
+  });
+
   test('流内 error 事件抛错（HTTP 已 200，错误藏在流里）', async () => {
     const sse =
       ev({ type: 'message_start', message: { usage: { input_tokens: 10 } } }) +
