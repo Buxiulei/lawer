@@ -75,6 +75,9 @@ export function resolveSkuKind(db: Database.Database, skuId: number): SkuKind {
 /**
  * 授予会员期。续期叠加：新到期 = max(当前有效到期, now) + 套餐天数。
  * 幂等：同 orderNo 只赋一次（uq_memberships_order）。
+ * @param overrideDays 覆盖套餐自带天数。**只给后台手工开通用**（lib/admin，档位与时长解耦：
+ *   同一个 pro 档可以开 31/92/365 天）。支付履约侧一律不传——套餐卖的是「哪一档 × 多少天」
+ *   这一整个组合，让回调能自己挑天数就等于让订单金额与所得权益脱钩。
  * @returns true=本次真实写入会员期；false=命中幂等（该订单已赋期）。
  */
 export function grantMembership(
@@ -82,8 +85,9 @@ export function grantMembership(
   userId: number,
   plan: MembershipPlan,
   orderNo: string,
+  overrideDays?: number,
 ): boolean {
-  const days = MEMBERSHIP[plan].days;
+  const days = overrideDays ?? MEMBERSHIP[plan].days;
   const res = db
     .prepare(
       `INSERT OR IGNORE INTO memberships (user_id, plan, order_no, started_at, expires_at)

@@ -1,0 +1,279 @@
+// app/src/app/api/v1/admin/__tests__/routes.test.ts
+// 后台四条路由的端到端。判据全在这里过一遍真 Request/Response：
+//   非白名单 404 / ADMIN_UIDS 空全拒 / 列表只出掩码 / 发值走账本且同 refId 只一次 /
+//   调会员写行带操作痕 / 每笔操作落 admin_audit。
+import { beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import crypto from 'node:crypto';
+import os from 'node:os';
+import path from 'node:path';
+import type { Database } from 'better-sqlite3';
+
+import { signToken } from '@/lib/auth/jwt';
+
+type Handler = (req: Request) => Promise<Response>;
+type UidHandler = (req: Request, ctx: { params: Promise<{ uid: string }> }) => Promise<Response>;
+
+let listUsers: Handler;
+let listAudit: Handler;
+let postMembership: UidHandler;
+let postGongdao: UidHandler;
+let db: Database;
+
+let ADMIN = 0;
+let TARGET = 0;
+
+function get(url: string, token?: string): Request {
+  const headers: Record<string, string> = {};
+  if (token) headers.authorization = `Bearer ${token}`;
+  return new Request(`http://localhost${url}`, { headers });
+}
+
+function post(url: string, body: unknown, token?: string): Request {
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (token) headers.authorization = `Bearer ${token}`;
+  return new Request(`http://localhost${url}`, { method: 'POST', headers, body: JSON.stringify(body) });
+}
+
+const ctx = (uid: number) => ({ params: Promise.resolve({ uid: String(uid) }) });
+
+beforeAll(async () => {
+  process.env.JWT_SECRET = 'test-secret-do-not-use-in-prod';
+  process.env.LAWER_DATA_KEY = crypto.randomBytes(32).toString('base64');
+  process.env.DB_PATH = path.join(os.tmpdir(), `lawer-admin-${crypto.randomUUID()}.db`);
+
+  listUsers = (await import('../users/route')).GET;
+  listAudit = (await import('../audit/route')).GET;
+  postMembership = (await import('../users/[uid]/membership/route')).POST;
+  postGongdao = (await import('../users/[uid]/gongdao/route')).POST;
+  db = (await import('@/lib/db/client')).getDb();
+});
+
+beforeEach(async () => {
+  db.prepare('DELETE FROM admin_audit').run();
+  db.prepare('DELETE FROM gongdao_ledger').run();
+  db.prepare('DELETE FROM gongdao').run();
+  db.prepare('DELETE FROM memberships').run();
+  db.prepare('DELETE FROM cases').run();
+  db.prepare('DELETE FROM users').run();
+
+  const { encryptField, hashLookup } = await import('@/lib/crypto');
+  ADMIN = Number(db.prepare('INSERT INTO users (email) VALUES (?)').run('boss@t.com').lastInsertRowid);
+  TARGET = Number(
+    db.prepare('INSERT INTO users (phone_enc, phone_hash, email) VALUES (?,?,?)')
+      .run(encryptField('13800138888'), hashLookup('13800138888'), 'zhang@example.com')
+      .lastInsertRowid,
+  );
+  process.env.ADMIN_UIDS = String(ADMIN);
+});
+
+// ───────────────────────────── 鉴权面 ─────────────────────────────
+
+describe('非白名单一律 404', () => {
+  test('未登录 / 非白名单登录用户 / 空 ADMIN_UIDS，四条路由全部 404 且响应同形', async () => {
+    const outsiderToken = signToken(TARGET);
+    const cases: { name: string; token?: string; env: string }[] = [
+      { name: '未登录', token: undefined, env: String(ADMIN) },
+      { name: '非白名单', token: outsiderToken, env: String(ADMIN) },
+      { name: 'ADMIN_UIDS 空', token: signToken(ADMIN), env: '' },
+    ];
+
+    for (const c of cases) {
+      process.env.ADMIN_UIDS = c.env;
+      const responses = await Promise.all([
+        listUsers(get('/api/v1/admin/users', c.token)),
+        listAudit(get('/api/v1/admin/audit', c.token)),
+        postMembership(post(`/api/v1/admin/users/${TARGET}/membership`, { plan: 'pro', days: 31 }, c.token), ctx(TARGET)),
+        postGongdao(post(`/api/v1/admin/users/${TARGET}/gongdao`, { delta: 100, note: 'x' }, c.token), ctx(TARGET)),
+      ]);
+      for (const res of responses) {
+        expect(res.status, c.name).toBe(404);
+        expect(await res.json(), c.name).toEqual({
+          ok: false,
+          error_code: 'NOT_FOUND',
+          message: '这个地址上没有内容。',
+        });
+      }
+    }
+  });
+
+  test('被拒的写请求确实什么都没写（不是只把响应改成 404）', async () => {
+    process.env.ADMIN_UIDS = '';
+    await postGongdao(post(`/api/v1/admin/users/${TARGET}/gongdao`, { delta: 999, note: 'x' }, signToken(ADMIN)), ctx(TARGET));
+    await postMembership(post(`/api/v1/admin/users/${TARGET}/membership`, { plan: 'pro', days: 31 }, signToken(ADMIN)), ctx(TARGET));
+    expect(db.prepare('SELECT COUNT(*) c FROM gongdao_ledger').get()).toEqual({ c: 0 });
+    expect(db.prepare('SELECT COUNT(*) c FROM memberships').get()).toEqual({ c: 0 });
+    expect(db.prepare('SELECT COUNT(*) c FROM admin_audit').get()).toEqual({ c: 0 });
+  });
+});
+
+// ───────────────────────────── 列表 ─────────────────────────────
+
+describe('GET /admin/users', () => {
+  test('手机号只出尾 4：响应正文里没有 11 位连续数字', async () => {
+    const res = await listUsers(get('/api/v1/admin/users', signToken(ADMIN)));
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).not.toMatch(/\d{11}/);
+    expect(text).toContain('****8888');
+  });
+
+  test('按手机全号检索命中；给前缀则空结果 + 提示', async () => {
+    const hit = await (await listUsers(get('/api/v1/admin/users?field=phone&q=13800138888', signToken(ADMIN)))).json();
+    expect(hit.total).toBe(1);
+    expect(hit.rows[0].uid).toBe(TARGET);
+
+    const miss = await (await listUsers(get('/api/v1/admin/users?field=phone&q=138', signToken(ADMIN)))).json();
+    expect(miss.total).toBe(0);
+    expect(miss.hint).toContain('11 位全号');
+  });
+
+  test('按 uid 精确、按邮箱子串', async () => {
+    const byUid = await (await listUsers(get(`/api/v1/admin/users?field=uid&q=${TARGET}`, signToken(ADMIN)))).json();
+    expect(byUid.total).toBe(1);
+    const byEmail = await (await listUsers(get('/api/v1/admin/users?field=email&q=example.com', signToken(ADMIN)))).json();
+    expect(byEmail.total).toBe(1);
+  });
+
+  test('回 self_uid（前端拿它拼幂等键，不自己猜）', async () => {
+    const body = await (await listUsers(get('/api/v1/admin/users', signToken(ADMIN)))).json();
+    expect(body.self_uid).toBe(ADMIN);
+  });
+});
+
+// ───────────────────────────── 调会员 ─────────────────────────────
+
+describe('POST /admin/users/{uid}/membership', () => {
+  test('写 memberships 行，order_no 带 admin-<操作者uid>- 操作痕，并落审计', async () => {
+    const res = await postMembership(
+      post(`/api/v1/admin/users/${TARGET}/membership`, { plan: 'standard', days: 92 }, signToken(ADMIN)),
+      ctx(TARGET),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.order_no).toMatch(new RegExp(`^admin-${ADMIN}-\\d{10,}$`));
+
+    const row = db.prepare('SELECT plan, order_no FROM memberships WHERE user_id=?').get(TARGET) as
+      { plan: string; order_no: string };
+    expect(row.plan).toBe('standard');
+    expect(row.order_no).toBe(body.order_no);
+    expect(row.order_no.startsWith(`admin-${ADMIN}-`)).toBe(true);
+
+    const audit = db.prepare('SELECT * FROM admin_audit').all() as {
+      action: string; operator_uid: number; target_uid: number; detail_json: string;
+    }[];
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({ action: 'grant_membership', operator_uid: ADMIN, target_uid: TARGET });
+    expect(JSON.parse(audit[0].detail_json)).toMatchObject({ plan: 'standard', days: 92, order_no: body.order_no });
+  });
+
+  test('降档：立即生效，原档提前到期', async () => {
+    await postMembership(post(`/api/v1/admin/users/${TARGET}/membership`, { plan: 'pro', days: 365 }, signToken(ADMIN)), ctx(TARGET));
+    await new Promise((r) => setTimeout(r, 2)); // 换一个毫秒，order_no 不撞
+    const res = await postMembership(
+      post(`/api/v1/admin/users/${TARGET}/membership`, { plan: 'entry', days: 31 }, signToken(ADMIN)),
+      ctx(TARGET),
+    );
+    const body = await res.json();
+    expect(body.downgraded).toBe(true);
+    const { getMembership } = await import('@/lib/billing/fulfillment');
+    expect(getMembership(db, TARGET).plan).toBe('entry');
+  });
+
+  test('档位/天数不合法 → 400，且一行都不写', async () => {
+    for (const bad of [{ plan: 'vip', days: 31 }, { plan: 'pro', days: 30 }, { plan: 'pro', days: 0 }]) {
+      const res = await postMembership(
+        post(`/api/v1/admin/users/${TARGET}/membership`, bad, signToken(ADMIN)),
+        ctx(TARGET),
+      );
+      expect(res.status, JSON.stringify(bad)).toBe(400);
+    }
+    expect(db.prepare('SELECT COUNT(*) c FROM memberships').get()).toEqual({ c: 0 });
+    expect(db.prepare('SELECT COUNT(*) c FROM admin_audit').get()).toEqual({ c: 0 });
+  });
+
+  test('目标 uid 不存在 → 404（与非白名单同形，不泄漏 uid 是否被占用）', async () => {
+    const res = await postMembership(
+      post('/api/v1/admin/users/99999/membership', { plan: 'pro', days: 31 }, signToken(ADMIN)),
+      ctx(99999),
+    );
+    expect(res.status).toBe(404);
+    expect((await res.json()).error_code).toBe('NOT_FOUND');
+  });
+});
+
+// ───────────────────────────── 发公道值 ─────────────────────────────
+
+describe('POST /admin/users/{uid}/gongdao', () => {
+  test('走账本入账 + 落审计；余额 ≡ Σledger', async () => {
+    const res = await postGongdao(
+      post(`/api/v1/admin/users/${TARGET}/gongdao`, { delta: 1500, note: '客诉补偿' }, signToken(ADMIN)),
+      ctx(TARGET),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ ok: true, delta: 1500, balance: 1500, applied: true });
+    expect(body.ref_id).toMatch(new RegExp(`^admin-${ADMIN}-\\d{10,}-[0-9a-f]{8}$`));
+
+    const ledger = db.prepare('SELECT delta, type FROM gongdao_ledger WHERE ref_id=?').get(body.ref_id) as
+      { delta: number; type: string };
+    expect(ledger).toEqual({ delta: 1500, type: '管理员调整' });
+
+    const bal = db.prepare('SELECT balance FROM gongdao WHERE user_id=?').get(TARGET) as { balance: number };
+    const sum = db.prepare('SELECT COALESCE(SUM(delta),0) s FROM gongdao_ledger WHERE user_id=?').get(TARGET) as { s: number };
+    expect(bal.balance).toBe(sum.s);
+
+    const audit = db.prepare('SELECT action, detail_json FROM admin_audit').all() as
+      { action: string; detail_json: string }[];
+    expect(audit).toHaveLength(1);
+    expect(audit[0].action).toBe('grant_gongdao');
+    expect(JSON.parse(audit[0].detail_json)).toMatchObject({ delta: 1500, note: '客诉补偿', applied: true });
+  });
+
+  test('同 op_ref 双发只入账一次，余额不翻倍，第二次 applied=false', async () => {
+    const opRef = `admin-${ADMIN}-${Date.now()}-abcdef01`;
+    const body = { delta: 500, note: '重试', op_ref: opRef };
+    const first = await (await postGongdao(post(`/api/v1/admin/users/${TARGET}/gongdao`, body, signToken(ADMIN)), ctx(TARGET))).json();
+    const second = await (await postGongdao(post(`/api/v1/admin/users/${TARGET}/gongdao`, body, signToken(ADMIN)), ctx(TARGET))).json();
+
+    expect(first.applied).toBe(true);
+    expect(second.applied).toBe(false);
+    expect(second.balance).toBe(500);
+    expect(db.prepare('SELECT COUNT(*) c FROM gongdao_ledger WHERE ref_id=?').get(opRef)).toEqual({ c: 1 });
+    // 两次都留审计（试过但没生效 ≠ 没试过）
+    expect(db.prepare('SELECT COUNT(*) c FROM admin_audit').get()).toEqual({ c: 2 });
+  });
+
+  test('op_ref 冒充别人的操作痕 → 400，不入账', async () => {
+    const res = await postGongdao(
+      post(`/api/v1/admin/users/${TARGET}/gongdao`, { delta: 100, note: 'x', op_ref: `admin-${ADMIN + 99}-1788220800000-abcdef01` }, signToken(ADMIN)),
+      ctx(TARGET),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error_code).toBe('BAD_OP_REF');
+    expect(db.prepare('SELECT COUNT(*) c FROM gongdao_ledger').get()).toEqual({ c: 0 });
+  });
+
+  test('数额非正 / 备注为空 → 400，不入账不落审计', async () => {
+    for (const bad of [{ delta: 0, note: 'x' }, { delta: -5, note: 'x' }, { delta: 1.5, note: 'x' }, { delta: 10, note: '  ' }]) {
+      const res = await postGongdao(post(`/api/v1/admin/users/${TARGET}/gongdao`, bad, signToken(ADMIN)), ctx(TARGET));
+      expect(res.status, JSON.stringify(bad)).toBe(400);
+    }
+    expect(db.prepare('SELECT COUNT(*) c FROM gongdao_ledger').get()).toEqual({ c: 0 });
+    expect(db.prepare('SELECT COUNT(*) c FROM admin_audit').get()).toEqual({ c: 0 });
+  });
+});
+
+// ───────────────────────────── 审计列表 ─────────────────────────────
+
+describe('GET /admin/audit', () => {
+  test('倒序给出最近操作，两类动作都在', async () => {
+    await postGongdao(post(`/api/v1/admin/users/${TARGET}/gongdao`, { delta: 10, note: 'a' }, signToken(ADMIN)), ctx(TARGET));
+    await postMembership(post(`/api/v1/admin/users/${TARGET}/membership`, { plan: 'entry', days: 31 }, signToken(ADMIN)), ctx(TARGET));
+
+    const body = await (await listAudit(get('/api/v1/admin/audit', signToken(ADMIN)))).json();
+    expect(body.rows).toHaveLength(2);
+    expect(body.rows[0].action).toBe('grant_membership'); // 最新在前
+    expect(body.rows[1].action).toBe('grant_gongdao');
+    expect(body.rows.every((r: { operator_uid: number }) => r.operator_uid === ADMIN)).toBe(true);
+  });
+});
