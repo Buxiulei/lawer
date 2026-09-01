@@ -19,7 +19,8 @@ import {
   writeCachedCaseId,
   caseIdFromPath,
 } from '../currentCase';
-import { TOKEN_STORAGE_KEY, signedInRedirectScript } from '../bootstrap';
+import * as bootstrap from '../bootstrap';
+import { TOKEN_STORAGE_KEY } from '../bootstrap';
 import { CASE_NAV_ITEMS } from '@/components/shell/navItems';
 import { caseHref } from '@/components/shell/navItems';
 import { crumbsFor } from '@/components/shell/breadcrumbs';
@@ -215,56 +216,77 @@ describe('登录态存得住', () => {
   });
 });
 
-/* ── 五、首屏跳转脚本 ───────────────────────────────────── */
+/* ── 五、首屏脚本一个都不许跳走 ─────────────────────────── */
 
 /**
- * 这段脚本在 React 之前同步执行，是"刷新首页之后落在哪儿"的**唯一**决定者。
- * 它是个字符串，但不该只按文本验——真跑一遍才知道它把人送去哪。
+ * 【这一节反过来了，2026-09-01】原来这里验的是「有 token 就跳进案件」，
+ * 逐条断言它把人送到 /case/2、/case。产品负责人亲测后裁定那整个机制是病：
+ * 「不要默认都跳转到 case 里！默认就是主页！」——登录用户地址栏输 `/`
+ * 在首帧前就被换成 `/case/…`，主页对他等于不存在。
+ *
+ * 所以现在验的是**没有任何首屏脚本会跳走**。仍然真跑脚本本尊，不照文本断言：
+ * 「源码里没有 location.replace 这串字」挡不住有人换成 `location['rep'+'lace']`
+ * 或 `history.replaceState` + `assign`。跑一遍才知道它到底动没动导航。
  */
-describe('落地页的已登录跳转脚本', () => {
+describe('首屏脚本（已登录也不许把人跳走）', () => {
+  /** 落地页与根布局注入的每一段首屏脚本。新增一段忘了加进来，下面那条正对照会点名。 */
+  const bootScripts: [string, string][] = Object.entries(bootstrap).filter(
+    (entry): entry is [string, string] =>
+      typeof entry[1] === 'string' && entry[1].includes('(function(){'),
+  );
+
   /**
-   * 把脚本放进替身环境跑一遍，回它调用 location.replace 的地址（没跳就是 null）。
-   * new Function 的函数体是本仓自己的源码常量（不接受任何外部输入），
-   * 这里就是要执行它本尊——照文本断言验不出它实际把人送去哪。
+   * 把脚本放进替身环境跑一遍，回它动过的导航（没动就是 null）。
+   * new Function 的函数体是本仓自己的源码常量（不接受任何外部输入）。
+   * 首屏脚本要摸 document（主题 class、低调标题、favicon），给一份最小替身，
+   * 免得它们在第一行就被自己的 try/catch 吞掉——那样等于什么都没验。
    */
-  function runBootScript(store: Record<string, string>): string | null {
-    let replaced: string | null = null;
-    const sandbox = new Function('localStorage', 'location', signedInRedirectScript);
+  function runBootScript(script: string, store: Record<string, string>): string | null {
+    let navigated: string | null = null;
+    const nav = (url: string) => {
+      navigated = url;
+    };
+    const doc = {
+      documentElement: { classList: { add: () => {} }, dataset: {} as Record<string, string> },
+      title: '',
+      head: { appendChild: () => {} },
+      querySelectorAll: () => [] as unknown[],
+      querySelector: () => null,
+      createElement: () => ({ setAttribute: () => {} }),
+    };
+    const sandbox = new Function('localStorage', 'location', 'history', 'document', script);
     sandbox(
-      { getItem: (k: string) => store[k] ?? null },
-      {
-        replace: (url: string) => {
-          replaced = url;
-        },
-      },
+      { getItem: (k: string) => store[k] ?? null, setItem: () => {}, removeItem: () => {} },
+      { replace: nav, assign: nav, href: '/' },
+      { replaceState: (_s: unknown, _t: unknown, url: string) => nav(url), pushState: nav },
+      doc,
     );
-    return replaced;
+    return navigated;
   }
 
-  const signedIn = { [TOKEN_STORAGE_KEY]: 'jwt-abc' };
+  /** 最"该"被跳走的那个人：登录了、缓存里还躺着案件 id、低调模式也开着。 */
+  const signedInWithCase = {
+    [TOKEN_STORAGE_KEY]: 'jwt-abc',
+    [CASE_ID_STORAGE_KEY]: '2',
+    'lawer.discreet': '1',
+  };
 
-  it('没登录的人留在落地页', () => {
-    expect(runBootScript({})).toBeNull();
+  // 正对照：清单空了下面那条会永远绿（本仓现有主题 + 低调两段）
+  it('确实取到了首屏脚本（否则下一条在空集上断言）', () => {
+    expect(bootScripts.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('登录 + 缓存里有案件 → 直接进他自己的案件', () => {
-    expect(runBootScript({ ...signedIn, [CASE_ID_STORAGE_KEY]: '2' })).toBe('/case/2');
+  // 变异核：把 signedInRedirectScript 加回 bootstrap.ts，这条立刻红
+  it.each(bootScripts)('%s：带 token 跑一遍也不动导航', (_name, script) => {
+    expect(runBootScript(script, signedInWithCase)).toBeNull();
+    expect(runBootScript(script, {})).toBeNull();
   });
 
-  // 变异核：把 '/case/demo' 写回去当兜底，这两条立刻红
-  it('登录 + 没有缓存 → 交给解析页，不是演示案件', () => {
-    expect(runBootScript(signedIn)).toBe(CASE_RESOLVER_PATH);
-  });
-
-  it('登录 + 缓存是脏值 → 同样交给解析页，不拿去拼地址', () => {
-    for (const dirty of ['demo', '0', '../admin', 'null']) {
-      expect(runBootScript({ ...signedIn, [CASE_ID_STORAGE_KEY]: dirty })).toBe(CASE_RESOLVER_PATH);
-    }
-  });
-
-  it('脚本里那份 id 白名单与模块里的是同一套', () => {
-    // 脚本里只能写字符串字面量，没法共用常量，所以在这儿盯着两处别走散
-    expect(signedInRedirectScript).toContain(CASE_ID_PATTERN.source);
+  it('bootstrap 不再导出任何"登录即跳走"的脚本', () => {
+    expect(Object.keys(bootstrap)).not.toContain('signedInRedirectScript');
+    // 反过来说，解析页那个常量必须还在：主动点击的去处仍要有人给
+    expect(CASE_RESOLVER_PATH).toBe('/case');
+    expect(CASE_ID_PATTERN.test('2')).toBe(true);
   });
 });
 

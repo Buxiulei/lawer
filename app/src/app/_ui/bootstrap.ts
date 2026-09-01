@@ -9,11 +9,12 @@ import { faviconBootstrapSnippet } from './favicon';
 export const THEME_STORAGE_KEY = 'lawer.theme';
 export const DISCREET_STORAGE_KEY = 'lawer.discreet';
 
-/** 登录态 JWT 的键名。读写一律走 _ui/auth，这里只是给首屏脚本一份字面量。 */
+/** 登录态 JWT 的键名。读写一律走 _ui/auth，键名放这儿是为了不与它成环。 */
 export const TOKEN_STORAGE_KEY = 'lawer.token';
 
 /**
- * 上次解析出来的「我的案件」id。读写一律走 _ui/currentCase，这里同样只是给首屏脚本用。
+ * 上次解析出来的「我的案件」id。读写一律走 _ui/currentCase，键名同样放这儿避免成环
+ * （_ui/auth 退出登录时要清它，而 currentCase 反过来要 import auth）。
  * 它是缓存不是真相：真相在 GET /api/v1/cases，缓存只为省掉首屏那次往返。
  */
 export const CASE_ID_STORAGE_KEY = 'lawer.caseId';
@@ -41,17 +42,14 @@ export const themeBootstrapScript = `(function(){try{var m=localStorage.getItem(
 export const discreetBootstrapScript = `(function(){try{if(localStorage.getItem('${DISCREET_STORAGE_KEY}')==='1'){document.documentElement.dataset.discreet='1';document.title='${NEUTRAL_TITLE}';${faviconBootstrapSnippet}}}catch(e){}})();`;
 
 /**
- * 落地页专用：已登录的人不该看见 landing。放在落地页正文之前同步执行，
- * 抢在首帧前跳走，不闪一下营销页。React 里用 useEffect 判断做不到这一点——
- * 首帧恒为未登录（见 _ui/auth 的 useAuthToken）。
+ * 【这里曾经有一段「登录即跳走」的首屏脚本，2026-09-01 由产品负责人裁定删除】
  *
- * 【这里曾经把每个登录用户都送进演示案件】P0：原实现写死 `/case/demo`。
- * 产品唯一的真实用户刷新一次首页就落在演示案件上，横幅写着「这是演示案件」，
- * 名下 20 条时间线一条不见——在他眼里这不是"跳错了"，是"我的登录没了"。
- * 现在只往两个地方去：缓存里有案件 id 就直接进那个案件，没有就交给 CASE_RESOLVER_PATH
- * 现查接口。**这个脚本不再认识 demo 这个词**，别把它加回来。
+ * 它在落地页正文之前同步执行：读到 token 就 `location.replace` 进案件（或解析页）。
+ * 后果是登录用户**永远看不到主页**——地址栏输 `/` 会在首帧前被换成 `/case/…`，
+ * 想看一眼首页只能先退出登录。用户原话：「不要默认都跳转到 case 里！默认就是主页！」
  *
- * id 过白名单再拼路径：缓存是浏览器里的可写数据，脏值应当确定性地退回解析页，
- * 而不是把用户领到一个 404 的案件页上。
+ * 现在的规矩只有一条，简单可预期：**`/` 永远渲染主页，不自动跳**。
+ * 进自己的案件只靠主动点击（主页 CTA / 壳层导航 → `CASE_RESOLVER_PATH` → 自己的案件）。
+ * 别把这个机制以任何形式加回来——包括 useEffect 版、middleware 版、meta refresh 版。
+ * 判据见 _ui/__tests__/currentCase.test.ts 第五节与 app/__tests__/landing-cta.test.tsx。
  */
-export const signedInRedirectScript = `(function(){try{if(!localStorage.getItem('${TOKEN_STORAGE_KEY}'))return;var id=localStorage.getItem('${CASE_ID_STORAGE_KEY}');location.replace(/^[1-9][0-9]*$/.test(id||'')?'/case/'+id:'${CASE_RESOLVER_PATH}')}catch(e){}})();`;

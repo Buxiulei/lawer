@@ -46,11 +46,7 @@ export function myCaseHref(input: { signedIn: boolean; caseId: number | null }):
   return input.caseId === null ? CASE_RESOLVER_PATH : `/case/${input.caseId}`;
 }
 
-/**
- * 真实案件 id 的字面形状（后端是 SQLite 自增主键）。
- * 首屏脚本 signedInRedirectScript 里另有一份同样的正则——那边只能是字符串字面量，
- * 没法共用，所以由测试盯着两处别走散。
- */
+/** 真实案件 id 的字面形状（后端是 SQLite 自增主键）。 */
 export const CASE_ID_PATTERN = /^[1-9][0-9]*$/;
 
 /**

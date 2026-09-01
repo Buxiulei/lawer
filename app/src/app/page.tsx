@@ -1,9 +1,10 @@
 // app/src/app/page.tsx
 // 落地页「案卷」版（批 5）：设计稿见 DESIGN.md 视觉方向 v3 的公链。
-// 已登录的人不看这页——signedInRedirectScript 在首帧前把他送回工作台。
+// **这一页对所有人都渲染，登录与否都不自动跳走**（2026-09-01 产品负责人裁定）。
+// 变的只是主 CTA 的字面与去处，由 PrimaryCta 在客户端判登录态。
 import Link from 'next/link';
+import { PrimaryCta } from '@/app/_components/PrimaryCta';
 import { DISCLAIMER_TEXT } from '@/app/_mock/authpay';
-import { signedInRedirectScript } from '@/app/_ui/bootstrap';
 
 /** 卷一的三张文书卡。**全部是示例**，卡上带「示例」角标，不留可被误读成真实数据的余地。 */
 const DOCS = [
@@ -86,12 +87,7 @@ function CtaRow({ center = false }: { center?: boolean }) {
     <div
       className={`flex flex-col gap-3.5 sm:flex-row sm:flex-wrap ${center ? 'sm:justify-center' : ''}`}
     >
-      <Link
-        href="/login"
-        className="block w-full rounded-[6px] bg-primary px-8 py-[15px] text-center text-[17px] font-semibold text-on-primary shadow-[0_3px_0_var(--primary-ink)] transition-colors hover:bg-primary-ink sm:w-auto"
-      >
-        开始我的案件
-      </Link>
+      <PrimaryCta />
       <Link
         href="/case/demo"
         className="block w-full rounded-[6px] border-[1.5px] border-ink px-8 py-[15px] text-center text-[17px] font-semibold text-ink transition-colors hover:bg-kraft sm:w-auto"
@@ -118,9 +114,6 @@ function SectionTab({ no, title }: { no: string; title: string }) {
 export default function LandingPage() {
   return (
     <>
-      {/* 正文之前同步执行：已登录就地跳走，不闪一下营销页 */}
-      <script dangerouslySetInnerHTML={{ __html: signedInRedirectScript }} />
-
       <header className="border-b border-kraft-deep">
         <div className="mx-auto flex max-w-[1120px] items-center justify-between px-6 py-5">
           {/*
