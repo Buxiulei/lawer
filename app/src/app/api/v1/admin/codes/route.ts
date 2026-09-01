@@ -1,11 +1,17 @@
 // app/src/app/api/v1/admin/codes/route.ts
 // 管理后台的兑换码面：GET 列表 / POST 批量签发。
-// 鉴权 = 登录态 uid ∈ env ADMIN_UIDS（见 lib/auth/admin.ts）。
+//
+// 【鉴权全部交给 lib/auth/admin.requireAdmin】= 网页登录态（via='jwt'）+ uid ∈ env ADMIN_UIDS，
+// 不过一律空体 404。本路由**不许自己再判一遍**白名单或 via：判两次就有两套口径，
+// 而这条路后面接的是凭空造公道值。（那一份是 ws/admin-console 的 lib/admin/auth.ts 的临时替身，
+// 合并轮归口，见该文件头。）
+//
+// 【为什么 GET 也走同一道闸】列表回的是**明文码**。一批还没被兑的码泄出去就是钱，
+// 与签发同级敏感，没有「只读所以放松一点」这回事。
 import { NextResponse } from 'next/server';
 
-import { isAdminUid } from '@/lib/auth/admin';
+import { requireAdmin } from '@/lib/auth/admin';
 import { badRequest, readJsonBody, stringField } from '@/lib/auth/http';
-import { resolveIdentity } from '@/lib/auth/identity';
 import { issueRedeemCodes, listRedeemCodes } from '@/lib/billing/redeem';
 import { getDb } from '@/lib/db/client';
 import { toSql } from '@/lib/db/time';
@@ -13,26 +19,8 @@ import { toSql } from '@/lib/db/time';
 /** 本路由每次都要按当前 env 与当前凭据判权，绝不能被静态化成一份「谁来都一样」的响应。 */
 export const dynamic = 'force-dynamic';
 
-/**
- * 不是管理员就当**这条路由不存在**：空体 404，不是 403。
- *
- * 403 等于承认「这里有个后台，只是你进不去」——那正是值得花时间撞的东西。
- * 三种人拿到的东西必须一模一样：没登录的、登录了但不在白名单的、随便试地址的。
- * 所以不区分 401/403，也不回任何 error_code（error_code 本身就是「路由存在」的证据）。
- */
-function notThere(): NextResponse {
-  return new NextResponse(null, { status: 404 });
-}
-
-/** 过了就是管理员 uid，没过就是那个 404。 */
-function requireAdmin(req: Request): { ok: true; uid: number } | { ok: false; response: NextResponse } {
-  const identity = resolveIdentity(getDb(), req.headers);
-  if (!identity || !isAdminUid(identity.uid)) return { ok: false, response: notThere() };
-  return { ok: true, uid: identity.uid };
-}
-
 export async function GET(req: Request): Promise<NextResponse> {
-  const admin = requireAdmin(req);
+  const admin = requireAdmin(getDb(), req);
   if (!admin.ok) return admin.response;
 
   return NextResponse.json({ ok: true, codes: listRedeemCodes(getDb()) });
@@ -42,7 +30,7 @@ export async function GET(req: Request): Promise<NextResponse> {
 const MAX_BATCH = 500;
 
 export async function POST(req: Request): Promise<NextResponse> {
-  const admin = requireAdmin(req);
+  const admin = requireAdmin(getDb(), req);
   if (!admin.ok) return admin.response;
 
   const body = await readJsonBody(req);
@@ -72,7 +60,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     count,
     gongdaoValue: gongdao,
     note,
-    createdBy: admin.uid,
+    createdBy: admin.identity.uid,
     expiresAt,
   });
 
