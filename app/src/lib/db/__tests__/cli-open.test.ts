@@ -19,6 +19,11 @@ import { runMigrations } from '../migrate';
 import { reminderCli } from '../../notify/deadline-reminder';
 import { reconcileCli } from '../reconcile';
 
+// 本文件每条用例都要在磁盘上建库、跑一整套迁移（磁盘库每条 DDL 一次 fsync）；单跑就已
+// 实耗数秒，全量跑批里和几十个同样吃 CPU 的文件挤在一起，默认 5s 的余量不够——超时红过，
+// 但代码一行没错。放宽的**只是这个文件**：全局改宽会把真慢化一起盖掉。
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
+
 const tmps: string[] = [];
 
 /** 造一个"滚更前"的库：完整结构，但缺掉指定的表。 */
