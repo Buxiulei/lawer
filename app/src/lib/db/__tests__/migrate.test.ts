@@ -3,9 +3,9 @@ import Database from 'better-sqlite3';
 import { runMigrations } from '../migrate';
 
 /**
- * 全部表名单（47 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。
+ * 全部表名单（48 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。
  *
- * 【张数怎么来的】不照抄任何一支的自报数：47 = 实跑 runMigrations 之后数 sqlite_master 里的用户表。
+ * 【张数怎么来的】不照抄任何一支的自报数：48 = 实跑 runMigrations 之后数 sqlite_master 里的用户表。
  * 合并时两支分别报过 47 与 42，两个数在各自基线上都对，加起来却不是并集——
  * 三张表（pricing_config / entitlements / company_dossiers）两支都建，去重后才是真值。
  */
@@ -33,6 +33,8 @@ const ALL_TABLES = [
   'notify_log',
   // 任务运行
   'job_runs',
+  // 管理后台审计
+  'admin_audit',
 ];
 
 function newDb(): Database.Database {
@@ -99,10 +101,10 @@ describe('runMigrations', () => {
 
   it('幂等：连跑两遍不抛错', () => {
     expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(47);
+    expect(ALL_TABLES.length).toBe(48);
   });
 
-  it('47 张表全部建成', () => {
+  it('48 张表全部建成', () => {
     const rows = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[];

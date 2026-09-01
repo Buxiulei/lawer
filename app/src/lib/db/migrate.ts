@@ -1,7 +1,7 @@
 // app/src/lib/db/migrate.ts
 //
 // ───────────────── ⚠️ 改本文件之前先读这一段 ⚠️ ─────────────────
-// **本迁移框架没有事务。** runMigrations() 的 46 个 db.exec() 是一串裸调用，
+// **本迁移框架没有事务。** runMigrations() 的 47 个 db.exec() 是一串裸调用，
 // 中途失败不回滚——2026-08-26 实测：人为中断，库里留下 22/38 张表，重跑既不前进也不后退。
 // 现在之所以能安全滚更，是因为迁移**全是纯加法**、靠 IF NOT EXISTS 与 addColumnIfMissing
 // 能重跑自愈：**安全是「改动足够简单」给的，不是框架给的。**
@@ -1017,6 +1017,37 @@ export function runMigrations(db: Database.Database): void {
       note           TEXT                                   -- 人话摘要，给读表的人看
     );
     CREATE INDEX IF NOT EXISTS idx_job_runs_name ON job_runs (job_name, id DESC);
+  `);
+
+  // ───────────────── 管理后台审计 ─────────────────
+  // 后台每一次**变更**落一行（调会员、发公道值）。只追加，永不 UPDATE、永不 DELETE——
+  // 一张能被后台自己改的审计表，等于没有审计表。
+  //
+  // 【为什么它与账本/会员行同时存在，不是重复】
+  //   gongdao_ledger 答「钱变了多少」，memberships 答「会员期到哪天」，
+  //   两者都只留下 order_no / ref_id 里那一小截 `admin-<uid>-<ts>` 操作痕。
+  //   本表答的是**另一个问题**：谁、在什么时候、对谁、做了什么、当时填的备注是什么。
+  //   没有本表，「误发了 5 万公道值」只能从一条 ref_id 反推操作者，且**读不出他当时的理由**；
+  //   而后台的全部风险恰恰在「操作者是人、人会手滑也会有私心」。
+  //
+  // 【detail_json 必须写清后果，不许只写动作名】
+  //   发值写 {delta, note, ref_id, applied}；调会员写 {plan, days, order_no, downgraded, expires_at}。
+  //   只记 action='grant_gongdao' 而不记金额，与不记一样——事后没人能判断这一笔对不对。
+  //   applied=false（撞幂等、被拒）也落行：**「试过但没生效」与「没试过」必须分得开**，
+  //   否则重放攻击与手滑重复点击在审计里长得一模一样。
+  //
+  // action 值域在 lib/admin/audit.ts 的 ADMIN_ACTION 锁死，不加 DB 级 CHECK
+  //（沿 intake_stage / milestone 裁决：SQLite 改 CHECK 要重建表，本迁移框架无事务）。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS admin_audit (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      operator_uid INTEGER NOT NULL REFERENCES users(id),
+      action       TEXT NOT NULL,                            -- 值域见 lib/admin/audit.ts 的 ADMIN_ACTION
+      target_uid   INTEGER NOT NULL REFERENCES users(id),
+      detail_json  TEXT,                                     -- 本次变更的后果与备注，禁止只写动作名
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_admin_audit_target ON admin_audit (target_uid, id DESC);
   `);
 
   // ───────────────── 存量迁移区 ─────────────────
