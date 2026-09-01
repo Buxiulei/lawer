@@ -100,8 +100,12 @@ function fmtTime(value: string | null): string {
   }).format(d);
 }
 
-/** 幂等键在**打开确认框那一刻**生成，重试复用同一个——重复提交才真的被账本挡下。 */
-function newOpRef(operatorHint: number): string {
+/**
+ * 幂等键在**打开确认框那一刻**生成，随 pending 存一次、在整个重试生命周期复用——
+ * 重复提交（同一把 op_ref）才真的被服务端挡下。形状与服务端 isAdminGrantRef 同构：
+ * `admin-<操作者uid>-<毫秒>-<8 位十六进制>`。两处一致由 __tests__/admin-op-ref.test.ts 机检。
+ */
+export function newOpRef(operatorHint: number): string {
   const rand = Array.from(crypto.getRandomValues(new Uint8Array(4)))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
@@ -109,8 +113,19 @@ function newOpRef(operatorHint: number): string {
 }
 
 type Pending =
-  | { kind: 'membership'; uid: number; plan: string; days: number }
+  | { kind: 'membership'; uid: number; plan: string; days: number; opRef: string }
   | { kind: 'gongdao'; uid: number; delta: number; note: string; opRef: string };
+
+/**
+ * 从待确认动作拼请求体。**op_ref 恒取 pending.opRef**（不在这里重新生成）：
+ * pending 在点「发放/调整」那一刻带上 op_ref，失败不清 pending，故重试拼出的 op_ref 与首发**同一把**。
+ * 服务端据此跨请求幂等：会员期不叠成两倍、公道值不双发。改成这里现生成 ref 即破幂等，由组件测试挡。
+ */
+export function opRequestBody(p: Pending): Record<string, unknown> {
+  return p.kind === 'membership'
+    ? { plan: p.plan, days: p.days, op_ref: p.opRef }
+    : { delta: p.delta, note: p.note, op_ref: p.opRef };
+}
 
 export function AdminUsersView() {
   const [field, setField] = useState<string>('uid');
@@ -199,21 +214,24 @@ export function AdminUsersView() {
     setFlash(null);
     try {
       if (pending.kind === 'membership') {
-        const res = await apiFetch<{ expires_at: string | null; downgraded: boolean }>(
-          `/admin/users/${pending.uid}/membership`,
-          { method: 'POST', body: { plan: pending.plan, days: pending.days } },
-        );
+        const res = await apiFetch<{
+          expires_at: string | null;
+          downgraded: boolean;
+          applied: boolean;
+        }>(`/admin/users/${pending.uid}/membership`, {
+          method: 'POST',
+          body: opRequestBody(pending),
+        });
         setFlash(
-          `已把 ${pending.uid} 调为「${PLAN_LABEL[pending.plan]}」${pending.days} 天` +
-            `${res.downgraded ? '（降档：原档已提前到期）' : ''}，到期 ${fmtTime(res.expires_at)}`,
+          res.applied
+            ? `已把 ${pending.uid} 调为「${PLAN_LABEL[pending.plan]}」${pending.days} 天` +
+                `${res.downgraded ? '（降档：原档已提前到期）' : ''}，到期 ${fmtTime(res.expires_at)}`
+            : `这一次调整此前已经生效过，本次没有重复叠加，当前到期仍是 ${fmtTime(res.expires_at)}`,
         );
       } else {
         const res = await apiFetch<{ balance: number; applied: boolean; ref_id: string }>(
           `/admin/users/${pending.uid}/gongdao`,
-          {
-            method: 'POST',
-            body: { delta: pending.delta, note: pending.note, op_ref: pending.opRef },
-          },
+          { method: 'POST', body: opRequestBody(pending) },
         );
         setFlash(
           res.applied
@@ -221,10 +239,12 @@ export function AdminUsersView() {
             : `这一笔（${res.ref_id}）此前已经发过，本次没有重复入账，余额仍是 ${res.balance}`,
         );
       }
+      // 只有成功才清 pending（关弹层）。
       setPending(null);
       await load();
     } catch (err) {
-      setPending(null);
+      // catch 里**不清 pending**：弹层保持打开，用户重试时复用同一把 op_ref，
+      // 服务端据此跨请求幂等短路，绝不双发。清了 pending，下一次点击会换一把新 ref → 双发。
       setFlash(humanError(err));
     } finally {
       setBusy(false);
@@ -396,7 +416,15 @@ export function AdminUsersView() {
               <Button
                 size="sm"
                 disabled={busy}
-                onClick={() => setPending({ kind: 'membership', uid: selected.uid, plan, days })}
+                onClick={() =>
+                  setPending({
+                    kind: 'membership',
+                    uid: selected.uid,
+                    plan,
+                    days,
+                    opRef: newOpRef(data?.self_uid ?? 0),
+                  })
+                }
               >
                 调整会员
               </Button>

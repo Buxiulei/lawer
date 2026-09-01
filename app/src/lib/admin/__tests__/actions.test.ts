@@ -230,11 +230,14 @@ describe('调会员', () => {
     expect(Math.round(gap)).toBe(31);
   });
 
-  test('order_no 撞已有行 → 整笔拒绝：不提前到期、不写新行、不写审计', () => {
+  test('order_no 撞已有行 → 幂等短路：applied=false，不提前到期、不写新行、不重复落审计', () => {
+    // 同一把 order_no（前端的 op_ref）的重试：参数与首发一致，是同一操作的重放，不是第二次真实操作。
     adminSetMembership(db, { operatorUid: OPERATOR, targetUid: target, plan: 'pro', days: 365, orderNo: 'admin-1-dup' });
     const before = getMembership(db, target);
-    const res = adminSetMembership(db, { operatorUid: OPERATOR, targetUid: target, plan: 'entry', days: 31, orderNo: 'admin-1-dup' });
-    expect(res).toEqual({ ok: false, reason: 'duplicate_order' });
+    const res = adminSetMembership(db, { operatorUid: OPERATOR, targetUid: target, plan: 'pro', days: 365, orderNo: 'admin-1-dup' });
+    // 撞幂等不是失败：回成功 + applied=false + 首次结果，重试因此看到成功而非报错
+    expect(res).toMatchObject({ ok: true, applied: false });
+    // 首发那一行原封不动：没被叠加、没被提前到期
     expect(getMembership(db, target)).toEqual(before);
     expect((db.prepare('SELECT COUNT(*) c FROM memberships').get() as { c: number }).c).toBe(1);
     expect(auditRows()).toHaveLength(1);

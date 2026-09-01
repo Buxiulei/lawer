@@ -2,9 +2,20 @@
 // POST  后台调会员档（立即生效；降档 = 当前行提前到期 + 新行）。
 // 写入的 memberships.order_no = `admin-<操作者uid>-<时间戳>`，那截前缀就是操作痕：
 // 事后从会员行本身就能看出「这一档不是买来的，是某个后台账号手动开的」。
+//
+// 【op_ref（幂等键）为什么由前端给】order_no 就是跨请求幂等键。若每次都由服务端现生成毫秒戳，
+// 「同 order_no 只写一行」只在 lib 单测里成立，生产上一次网络重试照样叠出第二行——365 天变 730。
+// 前端在**弹确认框那一刻**生成一个 op_ref 并在重试中复用，服务端拿它当 order_no，重复提交才真被挡下。
+// 形状受 isAdminGrantRef 约束（必须是本操作者的操作痕，与发公道值同构），冒充他人→400。
+// 缺省（非前端直连、无 op_ref）退回服务端 stamp，不改既有非幂等调用方的行为。
 import { NextResponse } from 'next/server';
 
-import { ADMIN_MEMBERSHIP_DAYS, adminOpStamp, adminSetMembership } from '@/lib/admin/actions';
+import {
+  ADMIN_MEMBERSHIP_DAYS,
+  adminOpStamp,
+  adminSetMembership,
+  isAdminGrantRef,
+} from '@/lib/admin/actions';
 import { adminBadRequest, adminNotFound, requireAdmin } from '@/lib/admin/auth';
 import { readJsonBody } from '@/lib/auth/http';
 import { parseId } from '@/lib/auth/guard';
@@ -33,24 +44,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ uid: st
     return adminBadRequest('BAD_DAYS', `时长只能是 ${ADMIN_MEMBERSHIP_DAYS.join(' / ')} 天`);
   }
 
+  const opRef = typeof body.op_ref === 'string' ? body.op_ref : '';
+  if (opRef && !isAdminGrantRef(opRef, guard.identity.uid)) {
+    return adminBadRequest('BAD_OP_REF', '幂等键形状不对');
+  }
+
   const result = adminSetMembership(db, {
     operatorUid: guard.identity.uid,
     targetUid,
     plan,
     days,
-    orderNo: adminOpStamp(guard.identity.uid),
+    orderNo: opRef || adminOpStamp(guard.identity.uid),
     note: typeof body.note === 'string' ? body.note : '',
   });
 
   if (!result.ok) {
-    // duplicate_order：同一毫秒内同一个管理员点了两次。不静默当成功——那会让第二次
-    // 「看起来生效了」而实际什么都没写。让他隔一下再点，下一个时间戳就不撞了。
-    if (result.reason === 'duplicate_order') {
-      return NextResponse.json(
-        { ok: false, error_code: 'OP_TOO_FAST', message: '这一秒已经有一次同样的操作，稍等一下再点' },
-        { status: 409 },
-      );
-    }
     return adminBadRequest('BAD_DAYS', `时长只能是 ${ADMIN_MEMBERSHIP_DAYS.join(' / ')} 天`);
   }
 
@@ -60,6 +68,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ uid: st
     plan: result.plan,
     days: result.days,
     downgraded: result.downgraded,
+    // applied=false 表示这个 order_no 此前已经调整过：本次没有再写行，会员态是原来那个。
+    // 前端要把这句话说出来，别显示成「又调了一次」。
+    applied: result.applied,
     expires_at: result.expiresAt,
     prev_plan: result.prevPlan,
     prev_expires_at: result.prevExpiresAt,

@@ -117,6 +117,20 @@ describe('GET /admin/users', () => {
     expect(text).toContain('****8888');
   });
 
+  // M13：出参绝不带 phone_enc（密文是 base64，不含 11 位数字，`\d{11}` 那条判据挡不住它）。
+  // 掩码在服务端算完即把 phone_enc 从行里剔除；这条独立盯住「密文没随行漏出去」。
+  test('出参不含 phone_enc 字段，也不含手机号密文本体', async () => {
+    const res = await listUsers(get('/api/v1/admin/users', signToken(ADMIN)));
+    const text = await res.text();
+    const body = JSON.parse(text);
+    expect(body.rows.length).toBeGreaterThan(0);
+    for (const r of body.rows) expect(Object.prototype.hasOwnProperty.call(r, 'phone_enc')).toBe(false);
+    // 库里 TARGET 的真实密文一个字符都不该出现在响应里
+    const enc = (db.prepare('SELECT phone_enc AS e FROM users WHERE id=?').get(TARGET) as { e: string }).e;
+    expect(enc).toBeTruthy();
+    expect(text).not.toContain(enc);
+  });
+
   test('按手机全号检索命中；给前缀则空结果 + 提示', async () => {
     const hit = await (await listUsers(get('/api/v1/admin/users?field=phone&q=13800138888', signToken(ADMIN)))).json();
     expect(hit.total).toBe(1);
@@ -198,6 +212,40 @@ describe('POST /admin/users/{uid}/membership', () => {
     );
     expect(res.status).toBe(404);
     expect((await res.json()).error_code).toBe('NOT_FOUND');
+  });
+
+  // ── 跨请求幂等（钱/权益路径的双发洞）──
+  test('同 op_ref 双发只写一行、到期恒 365 天（非 730）：一次重试不把会员期翻倍', async () => {
+    const opRef = `admin-${ADMIN}-${Date.now()}-abcdef01`;
+    const body = { plan: 'pro', days: 365, op_ref: opRef };
+    const first = await (await postMembership(post(`/api/v1/admin/users/${TARGET}/membership`, body, signToken(ADMIN)), ctx(TARGET))).json();
+    const second = await (await postMembership(post(`/api/v1/admin/users/${TARGET}/membership`, body, signToken(ADMIN)), ctx(TARGET))).json();
+
+    expect(first.applied).toBe(true);
+    // 第二次（重试）幂等短路：不是报错，是成功 + applied=false
+    expect(second.applied).toBe(false);
+    expect(second.order_no).toBe(opRef);
+
+    // 恒 1 行，order_no 就是这把 op_ref
+    expect(db.prepare('SELECT COUNT(*) c FROM memberships WHERE user_id=?').get(TARGET)).toEqual({ c: 1 });
+    const row = db.prepare('SELECT started_at, expires_at, order_no FROM memberships WHERE user_id=?').get(TARGET) as
+      { started_at: string; expires_at: string; order_no: string };
+    expect(row.order_no).toBe(opRef);
+    // 到期 = 起算 + 365 天，不是 730：证明第二次没有叠加
+    const span = (Date.parse(`${row.expires_at.replace(' ', 'T')}Z`) - Date.parse(`${row.started_at.replace(' ', 'T')}Z`)) / 86400000;
+    expect(Math.round(span)).toBe(365);
+    // 审计只在首发落一行（幂等短路不重复落）
+    expect(db.prepare("SELECT COUNT(*) c FROM admin_audit WHERE action='grant_membership'").get()).toEqual({ c: 1 });
+  });
+
+  test('op_ref 冒充别人的操作痕 → 400，不写行', async () => {
+    const res = await postMembership(
+      post(`/api/v1/admin/users/${TARGET}/membership`, { plan: 'pro', days: 31, op_ref: `admin-${ADMIN + 99}-1788220800000-abcdef01` }, signToken(ADMIN)),
+      ctx(TARGET),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error_code).toBe('BAD_OP_REF');
+    expect(db.prepare('SELECT COUNT(*) c FROM memberships').get()).toEqual({ c: 0 });
   });
 });
 

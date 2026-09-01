@@ -61,8 +61,10 @@ export type AdminMembershipResult =
       expiresAt: string | null;
       prevPlan: MembershipPlan | null;
       prevExpiresAt: string | null;
+      /** false = 撞幂等（同 orderNo 已应用过）：本次未写新行、未提前到期、未再落审计，回的是首次结果 */
+      applied: boolean;
     }
-  | { ok: false; reason: 'bad_days' | 'duplicate_order' };
+  | { ok: false; reason: 'bad_days' };
 
 /**
  * 后台调会员档，**立即生效**。
@@ -77,7 +79,11 @@ export type AdminMembershipResult =
  * 提前到期用 UPDATE 而不是 DELETE：那一行是历史事实（他确实买过、确实用过一段），
  * 删掉就再也解释不了他这半年为什么走的是 Claude 路由。
  *
- * 幂等：orderNo 撞已存在的行即整笔拒绝（不提前到期、不写审计），由调用方重试换新 stamp。
+ * 幂等（跨请求）：orderNo 就是幂等键。由前端在「点确认」那一刻生成一次、在整个重试生命周期
+ * 复用同一把（op_ref），所以一次网络重试落回同一个 orderNo，撞已存在的行即**幂等短路**：
+ * 不提前到期、不写新行、不再落审计，回 applied=false + 当前会员态（首次结果），重试因此看到
+ * 的是成功而非报错。若 orderNo 每次由服务端现生成毫秒戳，这条短路永远撞不上，重试就会把
+ * 365 天叠成 730——这正是本函数存在的理由。
  * 事务内原子：提前到期 + 新行 + 审计三样一起成、一起不成。
  */
 export function adminSetMembership(
@@ -98,7 +104,22 @@ export function adminSetMembership(
 
   return db.transaction((): AdminMembershipResult => {
     const dup = db.prepare('SELECT 1 AS x FROM memberships WHERE order_no=?').get(input.orderNo);
-    if (dup) return { ok: false, reason: 'duplicate_order' };
+    if (dup) {
+      // 幂等短路：同一把 orderNo 已经应用过。不提前到期、不写新行、不再落审计——
+      // 把当前会员态当作「首次结果」回给调用方（applied=false），重试据此看到成功。
+      const cur = getMembership(db, input.targetUid);
+      return {
+        ok: true,
+        orderNo: input.orderNo,
+        plan: input.plan,
+        days,
+        downgraded: false,
+        expiresAt: cur.expiresAt,
+        prevPlan: cur.plan,
+        prevExpiresAt: cur.expiresAt,
+        applied: false,
+      };
+    }
 
     const before = getMembership(db, input.targetUid);
     const downgraded =
@@ -138,6 +159,7 @@ export function adminSetMembership(
       expiresAt: after.expiresAt,
       prevPlan: before.plan,
       prevExpiresAt: before.expiresAt,
+      applied: true,
     };
   })();
 }
