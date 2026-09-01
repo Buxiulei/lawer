@@ -471,6 +471,45 @@ describe('删除行为', () => {
 });
 
 describe('存量迁移区', () => {
+  it('redemption_codes.note / created_by：列存在，存量行取 NULL，幂等重跑不重复加列', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    // 先造一张**没有这两列**的老表，模拟已上线的库
+    db.exec(`
+      CREATE TABLE redemption_codes (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        code          TEXT NOT NULL UNIQUE,
+        gongdao_value INTEGER NOT NULL,
+        enabled       INTEGER NOT NULL DEFAULT 1,
+        redeemed_by   INTEGER,
+        redeemed_at   TEXT,
+        expires_at    TEXT,
+        created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    db.prepare('INSERT INTO redemption_codes (code, gongdao_value) VALUES (?,?)').run('OLD-CODE', 100);
+
+    const cols = (name: string) =>
+      (db.prepare('PRAGMA table_info(redemption_codes)').all() as { name: string }[]).filter(
+        (c) => c.name === name,
+      ).length;
+    expect(cols('note')).toBe(0);
+    expect(cols('created_by')).toBe(0);
+
+    runMigrations(db);
+    expect(cols('note')).toBe(1);
+    expect(cols('created_by')).toBe(1);
+    // 第二遍：addColumnIfMissing 跳过，不报 duplicate column name（裸 ALTER 会在这里炸）
+    expect(() => runMigrations(db)).not.toThrow();
+    expect(cols('note')).toBe(1);
+    expect(cols('created_by')).toBe(1);
+
+    // 存量行原样保留，两个新列是 NULL——**不回填**「未知」之类的占位
+    expect(
+      db.prepare('SELECT code, gongdao_value, note, created_by FROM redemption_codes').all(),
+    ).toEqual([{ code: 'OLD-CODE', gongdao_value: 100, note: null, created_by: null }]);
+  });
+
   it('threads.intake_stage：列存在，默认 NULL 且可写读', () => {
     const db = newDb();
     const caseId = mkCase(db, mkUser(db));

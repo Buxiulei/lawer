@@ -9,7 +9,8 @@
     "test": "vitest run --passWithNoTests",
     "reconcile": "tsx ../scripts/reconcile.ts",
     "gc:files": "tsx ../scripts/gc-files.ts",
-    "audit:storage": "tsx ../scripts/storage-audit.ts"
+    "audit:storage": "tsx ../scripts/storage-audit.ts",
+    "gen:codes": "tsx ../scripts/gen-redeem-codes.ts"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",

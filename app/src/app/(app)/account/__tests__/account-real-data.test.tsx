@@ -26,8 +26,9 @@ const billingState = {
   unauthorized: false,
   hasMore: false,
   loadMore: () => {},
+  refresh: () => {},
 };
-const meState = { data: null as null | Record<string, unknown>, loading: false, unauthorized: false };
+const meState ={ data: null as null | Record<string, unknown>, loading: false, unauthorized: false };
 vi.mock('../_components/useBilling', () => ({ useBilling: () => billingState }));
 vi.mock('../_components/useMe', () => ({ useMe: () => meState }));
 vi.mock('@/app/_ui/auth', () => ({ useSignedIn: () => true }));
@@ -55,6 +56,7 @@ function billing(over: Partial<NonNullable<Billing['data']>> & { entries: Return
     unauthorized: false,
     hasMore: false,
     loadMore: () => {},
+    refresh: () => {},
   };
 }
 
