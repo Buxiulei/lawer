@@ -43,6 +43,9 @@ export interface BackfillReport {
   unreported: number;
   /** tokens_json 解析不了或缺 model → 不补，单列（数据问题，需人看） */
   malformed: number;
+  /** 补记的轮里型号对账不一致（回显 substituted/unrecognized，已留痕待核）的轮数——
+   *  这批就是实时侧 SERVED_MODEL_MISMATCH 告警对应的历史缺口，单列出来别让它只在 meta 里零信号。 */
+  mismatched: number;
   /** 补记的公道值合计 */
   gongdao: number;
   /** 窗口期：本次补记覆盖的最早/最晚一轮（PR 里要记录的那段时间） */
@@ -107,6 +110,7 @@ export function backfillTokenUsage(db: Database, apply = false): BackfillReport 
     alreadyRecorded: 0,
     unreported: 0,
     malformed: 0,
+    mismatched: 0,
     gongdao: 0,
     windowFrom: null,
     windowTo: null,
@@ -130,7 +134,8 @@ export function backfillTokenUsage(db: Database, apply = false): BackfillReport 
     }
     // 型号对账与实时记账同一条：回填也是记账点，只在这条路上按请求型号计价，
     // 等于「实时修好了、补记的仍然算错钱」——同一笔账不该因为走哪条路而是两个数。
-    const served = reconcileServedModel(parsed.model, parsed.servedModel);
+    const served = reconcileServedModel(parsed.model, parsed.servedModel, (m) => getRatesForModel(db, m));
+    if (served.trace) report.mismatched += 1;
     const cost = costOfUsage(parsed.tokens, getRatesForModel(db, served.billingModel));
     const feature = featureOfMode(row.mode);
     if (apply) {
@@ -168,6 +173,7 @@ export function backfillCli(dbPath: string, apply: boolean): number {
     db.close();
   }
   console.log(`[回填] 扫描 ${r.scanned} 轮：补记 ${r.backfilled}、已有账 ${r.alreadyRecorded}、当时未回报计量 ${r.unreported}、数据异常 ${r.malformed}`);
+  console.log(`[回填] 补记里型号对账不一致（已留痕待核）${r.mismatched} 轮`);
   console.log(`[回填] 合计公道值 ${r.gongdao}｜窗口期 ${r.windowFrom ?? '—'} 至 ${r.windowTo ?? '—'}`);
   if (!apply) console.log('[回填] 试算完成，未写任何行；确认无误后加 --apply 执行');
   if (r.malformed > 0) {

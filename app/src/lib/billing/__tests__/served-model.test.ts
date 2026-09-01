@@ -3,6 +3,7 @@
 // 中转把 opus 请求路由到 sonnet 返回时，按 opus 收钱就是让用户为没拿到的高档付费。
 import { describe, expect, it } from 'vitest';
 import { reconcileServedModel } from '../served-model';
+import type { TokenRates } from '../pricing';
 import { MODELS, billingKey } from '@/lib/llm/routing.config';
 
 /** 高配 critical 的真实目标：opus 经中转。两个串不同是设计如此（api 别名 vs 计费锁定串）。 */
@@ -92,5 +93,35 @@ describe('回显是没登记过的串：不猜价，但必须留痕', () => {
       billed: OPUS.key,
       verdict: 'unrecognized',
     });
+  });
+});
+
+describe('换型号取两者较低价（billed = min(requested, served)）：传 rateOf 才做方向裁决', () => {
+  // 量纲对齐 modelRates 种子（opus $5/$25、sonnet $2/$10）：这里只需相对大小对得上。
+  const RATE: Record<string, TokenRates> = {
+    [OPUS.key]: { in: 5, out: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+    [SONNET.key]: { in: 2, out: 10, cacheRead: 0.2, cacheWrite: 2.5 },
+  };
+  const rateOf = (m: string): TokenRates => RATE[m];
+
+  it('降档（请求 opus 回 sonnet）：按 served=sonnet 收——用户不为没拿到的高档付', () => {
+    const r = reconcileServedModel(OPUS.key, SONNET.api, rateOf);
+    expect(r.verdict).toBe('substituted');
+    expect(r.billingModel).toBe(SONNET.key);
+    expect(r.trace).toEqual({ requested: OPUS.key, served: SONNET.api, billed: SONNET.key, verdict: 'substituted' });
+  });
+
+  it('升档（请求 sonnet 回 opus）：按 requested=sonnet 收——用户不为中转擅自的升档买单', () => {
+    const r = reconcileServedModel(SONNET.key, OPUS.api, rateOf);
+    expect(r.verdict).toBe('substituted');
+    // billed 落在较低的 sonnet 上；但实情如实留痕：这一轮确实由 opus 服务的。
+    expect(r.billingModel).toBe(SONNET.key);
+    expect(r.trace).toEqual({ requested: SONNET.key, served: OPUS.api, billed: SONNET.key, verdict: 'substituted' });
+  });
+
+  it('不传 rateOf：退回「按 served」的身份口径（只解析服务了谁、不做方向裁决）', () => {
+    // 升档方向下这一档确实会多扣——正因如此生产两个记账点必须传 rateOf，本条钉住这条契约边界。
+    expect(reconcileServedModel(SONNET.key, OPUS.api).billingModel).toBe(OPUS.key);
+    expect(reconcileServedModel(OPUS.key, SONNET.api).billingModel).toBe(SONNET.key);
   });
 });

@@ -114,6 +114,14 @@ const RELAY_USAGE = (servedModel?: string | null) =>
     ...(servedModel === undefined ? {} : { servedModel }),
   });
 
+/** 中配那条真实通路：请求 sonnet（relay/claude-sonnet-5）。升档时上游回 opus。 */
+const SONNET_REQ_USAGE = (servedModel?: string | null) =>
+  JSON.stringify({
+    model: 'relay/claude-sonnet-5',
+    usage: { prompt: 1000, completion: 200, cachedRead: null, cachedWrite: null },
+    ...(servedModel === undefined ? {} : { servedModel }),
+  });
+
 describe('回填走同一条型号对账', () => {
   const row = (db: Database.Database) =>
     db.prepare("SELECT model, api_model FROM token_usage").get() as { model: string; api_model: string | null };
@@ -163,5 +171,43 @@ describe('回填走同一条型号对账', () => {
     expect(backfillTokenUsage(db, true).backfilled).toBe(1);
     expect(row(db).model).toBe('relay/claude-opus-5');
     expect(ledger(db).meta_json).toBeNull();
+  });
+
+  // ── 升档封堵（账本铁律4「宁可少扣不可多扣」的另一半方向）──
+  test('升档：中配请求 sonnet、上游回 opus → 按 sonnet 收，不按 opus（ledger.delta 取较低）', () => {
+    const up = makeDb([SONNET_REQ_USAGE('claude-opus-5')]); // 请求 sonnet、回 opus（升档）
+    const opusReq = makeDb([RELAY_USAGE('claude-opus-5')]); // 对照：请求即 opus、也回 opus（高价）
+    const rUp = backfillTokenUsage(up.db, true);
+    const rOpus = backfillTokenUsage(opusReq.db, true);
+    // 计费键落在较低价的 sonnet，不是上游实际的 opus
+    expect(row(up.db).model).toBe('relay/claude-sonnet-5');
+    // 但实情如实留痕：api_model 记着确实由 opus 服务
+    expect(row(up.db).api_model).toBe('claude-opus-5');
+    expect(JSON.parse(ledger(up.db).meta_json!)).toMatchObject({
+      requested: 'relay/claude-sonnet-5',
+      served: 'claude-opus-5',
+      billed: 'relay/claude-sonnet-5',
+      verdict: 'substituted',
+    });
+    // 实扣＝按 sonnet(2/10)，且严格少于按 opus(5/25)——封堵的正是这 ~2.5 倍多扣
+    expect(-ledger(up.db).delta).toBe(rUp.gongdao);
+    expect(rUp.gongdao).toBeLessThan(rOpus.gongdao);
+    // 与「请求即 sonnet、也由 sonnet 服务」算出来的钱分毫不差（同四桶、同 sonnet 费率）
+    const plain = makeDb([SONNET_REQ_USAGE('claude-sonnet-5')]);
+    backfillTokenUsage(plain.db, true);
+    expect(-ledger(up.db).delta).toBe(-ledger(plain.db).delta);
+  });
+
+  test('mismatch 计入报告：substituted/unrecognized 单列，match/absent 不计', () => {
+    const { db } = makeDb([
+      RELAY_USAGE('claude-sonnet-5'), // substituted（降档）
+      SONNET_REQ_USAGE('claude-opus-5'), // substituted（升档）
+      RELAY_USAGE('claude-opus-5-20260514'), // unrecognized（日期快照后缀）
+      RELAY_USAGE('claude-opus-5'), // match（回显=请求）
+      RELAY_USAGE(), // absent（无 servedModel 键）
+    ]);
+    const r = backfillTokenUsage(db, true);
+    expect(r.backfilled).toBe(5);
+    expect(r.mismatched).toBe(3);
   });
 });

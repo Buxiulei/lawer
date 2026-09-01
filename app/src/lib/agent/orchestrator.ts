@@ -229,7 +229,7 @@ function chargeTurn(args: {
   // ── 型号对账：按**真实服务的**型号计价，不按我们请求的（评测遗留②）──
   // 中转按渠道分组路由，请求 opus 不等于拿到 opus（providers/relay.ts 文件头实测）。
   // 照请求型号收钱就是让用户为没拿到的高档买单——2.5 倍的错账，方向朝着用户吃亏。
-  const served = reconcileServedModel(provider.billingModel, servedModel);
+  const served = reconcileServedModel(provider.billingModel, servedModel, (m) => getRatesForModel(db, m));
   const cost = costOfUsage(tokens, getRatesForModel(db, served.billingModel));
   if (served.trace) {
     // 告警要当场可见：ledger 的 meta 是给对账脚本看的，notice 是给正在盯这条流的人看的。
@@ -239,7 +239,7 @@ function chargeTurn(args: {
         code: 'SERVED_MODEL_MISMATCH',
         message:
           served.trace.verdict === 'substituted'
-            ? `上游实际由 ${served.trace.served} 服务（我们请求的是 ${provider.model}），本轮已按实际型号计价（${served.trace.billed}）。`
+            ? `上游实际由 ${served.trace.served} 服务（我们请求的是 ${provider.model}），本轮按两者较低价计价（${served.trace.billed}）。`
             : `上游回显了未登记的型号 ${served.trace.served}（我们请求的是 ${provider.model}），本轮仍按请求型号计价，已留痕待核。`,
       },
     });
@@ -950,8 +950,9 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     });
   }
 
-  // tokens_json 存 {model, usage}：billing 对账要的是「按哪个计费键、四桶各多少」，
-  // 只存四桶会在换模型后对不上账（token_usage.model 与这里必须能互验）。
+  // tokens_json 存 {model, usage, servedModel}：billing 对账要的是「按哪个计费键、四桶各多少、
+  // 上游实际回显了谁」，只存四桶会在换模型后对不上账（token_usage.model 与这里必须能互验）；
+  // servedModel 是回填那条路唯一的方向裁决依据（历史行缺它即按「未回显」原价补记）。
   // 资源卡落痕按**实际输出**判，而不是按「我们注入了没有」：
   // 模型完全可能自己调 knowledge_search 找到这张卡并给出去（实测发生过），
   // 那一次同样要计入 24 小时窗口，否则用户会连着两轮看见同一张卡。
