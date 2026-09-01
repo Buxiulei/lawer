@@ -15,6 +15,11 @@ import { sendEmailCode, sendPhoneCode, verifyEmailCode, verifyPhoneCode } from '
 import { verifyToken } from '../jwt';
 import { lastEmailCode, lastSmsCode, makeTestDb } from './helpers';
 
+// 本文件每条用例都要建一个真库跑一整套迁移，再灌上百条限流流水；单跑就已实耗数秒，
+// 而全量跑批里它和几十个同样吃 CPU 的文件挤在一起，默认 5s 的余量不够——超时红过，
+// 但代码一行没错。放宽的**只是这个文件**：全局改宽会把真慢化一起盖掉。
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
+
 const PHONE = '13800138000';
 const IP = '203.0.113.7';
 const T0 = new Date('2026-08-19T10:00:00.000Z');

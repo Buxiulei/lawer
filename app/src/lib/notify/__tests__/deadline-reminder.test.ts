@@ -5,7 +5,7 @@
 // 多发一封 = 打扰；漏发一封 = 用户错过仲裁时效，**权利灭失，没有救济**。
 // 所以每一条"不发"的分支都要单独钉住，而"多发"只需要不至于每分钟轰炸。
 import Database from 'better-sqlite3';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { formatCountdown } from '@/app/_ui/format';
 
@@ -19,6 +19,11 @@ import {
   stageFor,
   type DueRow,
 } from '../deadline-reminder';
+
+// 本文件每条用例的 beforeEach 都要跑一整套迁移建库；单跑就已实耗数秒，全量跑批里和
+// 几十个同样吃 CPU 的文件挤在一起，默认 5s 的余量不够——超时红过，但代码一行没错。
+// 放宽的**只是这个文件**：全局改宽会把真慢化一起盖掉。
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 const NOW = new Date('2026-09-01T08:00:00Z');
 let db: Database.Database;

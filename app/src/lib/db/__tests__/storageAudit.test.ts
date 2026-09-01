@@ -379,19 +379,18 @@ describe('storageAuditCli', () => {
 
 const DB_DIR = path.resolve(__dirname, '..');
 const SRC = path.join(DB_DIR, 'storageAudit.ts');
-const MUTANT_PREFIX = 'storageAudit.mutant-';
-
-/** 扫掉可能残留的变异副本（用例超时被中断时 finally 跑不到）。 */
-function sweepMutants() {
-  for (const f of fs.readdirSync(DB_DIR)) {
-    if (f.startsWith(MUTANT_PREFIX)) fs.unlinkSync(path.join(DB_DIR, f));
-  }
-}
 
 describe('产线变异', () => {
   let mutantSeq = 0;
-
-  afterAll(sweepMutants);
+  /**
+   * 变异副本落在 os.tmpdir() 下本次跑批独占的目录，**绝不进 src/**。
+   *
+   * 放在 src/ 里时，副本在「写出 → import → 删掉」之间对整个 src 可见，
+   * 任何并发扫 src 的东西都会踩进那个空档：theme-contrast 的 readdir+readFileSync
+   * 会 ENOENT，并发 tsc 会 TS6053；同前缀的残留清扫还会把另一个并发跑批**正在用的**
+   * 副本删掉，让那边的 unlinkSync ENOENT。这三种红都是真出现过的假红。
+   */
+  let mutantDir: string;
 
   /**
    * 复制一份 storageAudit.ts、施一处文本改动、import 回来跑真 CLI。
@@ -411,10 +410,11 @@ describe('产线变异', () => {
       mutated = src.replace(find, replace);
       expect(mutated).not.toBe(src);
     }
-    // 放在源文件同目录，'./cli-open' 之类的相对 import 才照旧解析；
-    // .ts 不匹配 vitest.config.ts 的 include（*.test.ts），不会被当成测试收走。
-    const file = path.join(DB_DIR, `${MUTANT_PREFIX}${process.pid}-${mutantSeq++}.ts`);
-    fs.writeFileSync(file, mutated);
+    // 副本不在源目录，'./cli-open' 这类相对 import 得改写成 @ 别名（vitest.config.ts
+    // 里指向 app/src），才仍旧解析到同一份产线模块；改写没生效会当场 import 不到。
+    const rebased = mutated.replace(/(\bfrom\s+')\.\/(?=[\w./-]+')/g, '$1@/lib/db/');
+    const file = path.join(mutantDir, `storageAudit.mutant-${mutantSeq++}.ts`);
+    fs.writeFileSync(file, rebased);
     const errs: string[] = [];
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const err = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => {
@@ -486,10 +486,12 @@ describe('产线变异', () => {
   // 而建库要跑一整套迁移（本机实测数秒），每个用例各建一次会把本文件拖慢一个量级。
   let fixture: string;
   beforeAll(() => {
+    mutantDir = fs.mkdtempSync(path.join(os.tmpdir(), 'storage-audit-mutant-'));
     fixture = seedDisk();
   });
   afterAll(() => {
     if (fixture && fs.existsSync(fixture)) fs.unlinkSync(fixture);
+    if (mutantDir) fs.rmSync(mutantDir, { recursive: true, force: true });
   });
 
   test('控制组：原样复制的副本退出码仍是 0', async () => {
