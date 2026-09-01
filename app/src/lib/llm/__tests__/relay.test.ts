@@ -169,6 +169,17 @@ describe('SSE 与 tool_calls：中转报文形态与现有解析器兼容', () =
     expect(text).toBe('好');
     expect(result.usage.usage.completion).toBe(1);
   });
+
+  /** 中转的 claude 思考链恒开，最容易出现「预算全烧在思考上、正文一个字没出来」。
+   *  这一轮对用户就是失败，不能当正常收尾交出去（判据见 sse.assertTruncatedNotEmpty）。 */
+  test('🔑 length 截断且正文为空 → 抛错，中转这条腿也不放过', async () => {
+    const sse = dataLine({ choices: [{ index: 0, delta: {}, finish_reason: 'length' }] }) + DONE;
+    const [fetchImpl] = mockFetch(() => sseResponse(sse, 5));
+    const p = createRelay({ apiKey: 'k', model: 'claude-opus-5', baseUrl: 'http://x/v1', fetchImpl });
+    await expect(drain(await p.chatStream([{ role: 'user', content: 'x' }]))).rejects.toThrow(
+      /relay\(claude-opus-5\)[\s\S]*finish_reason=length/,
+    );
+  });
 });
 
 describe('错误报文：503 必须还认得出是哪个模型没了', () => {

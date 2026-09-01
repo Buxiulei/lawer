@@ -19,7 +19,7 @@ import type {
 } from '../types';
 import { emptyUsage } from '../types';
 import { acquireSlot, connectWithRetry } from './gate';
-import { createStreamTimers, httpError, sseData } from './sse';
+import { assertTruncatedNotEmpty, createStreamTimers, httpError, sseData } from './sse';
 
 /** 缓存写入档的字段名。中转（new-api 系）两种写法都出现过，且既可能挂在
  *  prompt_tokens_details 下、也可能是顶层裸字段——两处都认，代价是两个 ?? 项。 */
@@ -151,7 +151,7 @@ export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
         timers.clear();
         release();
       };
-      return parseCompatStream(res.body, timers.resetIdle, done, report, opts.onUsage, opts.onReasoning);
+      return parseCompatStream(res.body, tag, timers.resetIdle, done, report, opts.onUsage, opts.onReasoning);
     },
 
     async chatJSON(messages, opts = {}) {
@@ -202,6 +202,7 @@ export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
  *  无法 JSON 解析的行是注释/保活行，按 SSE 规范跳过（非错误）。 */
 async function* parseCompatStream(
   body: ReadableStream<Uint8Array>,
+  tag: string,
   onChunk: () => void,
   onDone: () => void,
   report: (usage: TokenUsage) => UsageReport,
@@ -211,15 +212,18 @@ async function* parseCompatStream(
   let finishReason: string | null = null;
   let usage: UsageReport = report(emptyUsage());
   let reasoningChars = 0;
+  /** 本条流是否产出过**非空白**正文。逐片判即可：整条流有非空白字符 ⟺ 某一片有。 */
+  let sawText = false;
   // 按 index 落槽累积工具调用分片（稀疏；末尾压实为密集 ToolCall[]）
   const acc: { id: string; name: string; args: string }[] = [];
-  const finalize = (): ChatStreamResult => ({
-    finishReason,
-    toolCalls: acc
+  // 两个 return 出口（[DONE] 与流末）都经这里，所以「截断到空」的判据放在这一处就够
+  const finalize = (): ChatStreamResult => {
+    const toolCalls = acc
       .filter((t) => t && (t.id || t.name || t.args))
-      .map((t) => ({ id: t.id, type: 'function' as const, function: { name: t.name, arguments: t.args } })),
-    usage,
-  });
+      .map((t) => ({ id: t.id, type: 'function' as const, function: { name: t.name, arguments: t.args } }));
+    assertTruncatedNotEmpty(tag, finishReason, sawText, toolCalls.length);
+    return { finishReason, toolCalls, usage };
+  };
 
   for await (const payload of sseData(body, onChunk, onDone)) {
     if (payload === '[DONE]') return finalize();
@@ -259,7 +263,10 @@ async function* parseCompatStream(
     }
     if (choice.finish_reason) finishReason = choice.finish_reason;
     const delta = choice.delta?.content;
-    if (delta) yield delta;
+    if (delta) {
+      if (delta.trim()) sawText = true;
+      yield delta;
+    }
   }
   // 流末无 [DONE]（连接自然关闭）也交出已拼好的工具调用与计量
   return finalize();
