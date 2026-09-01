@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { demoCase } from '@/app/_mock/demo';
 import { getDoc, revisePointsByDoc } from '@/app/_mock/docs-drafts';
 import { formatDateTime } from '@/app/_ui/format';
 import { AdviceCard } from '../_components/AdviceCard';
@@ -16,7 +17,9 @@ export default async function DocDetailPage({
   params: Promise<{ id: string; docId: string }>;
 }) {
   const { id, docId } = await params;
-  const doc = getDoc(docId);
+  // 样张只属于演示案件。真实案件下 cd_* 一律 404，而不是把别家公司的解除通知
+  // 摆到用户自己的档案里——那正是「上传文件」那条演示流水线会把人送到的地址。
+  const doc = id === demoCase.id ? getDoc(docId) : undefined;
   if (!doc) notFound();
 
   return (

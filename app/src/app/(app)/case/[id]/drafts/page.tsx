@@ -1,64 +1,22 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
+import { demoCase } from '@/app/_mock/demo';
 import { mockDrafts } from '@/app/_mock/docs-drafts';
-import { formatDateTime } from '@/app/_ui/format';
-import { NeutralLabel } from '@/app/_ui/NeutralLabel';
-import { NEUTRAL_WORD } from '@/app/_ui/neutral';
-import { Card } from '@/components/shadcn/card';
-import { DraftKindBadge, DraftStatusBadge } from './_components/badges';
+import { DraftsListView } from './_components/DraftsListView';
+import { RealDrafts } from './_components/RealDrafts';
 
 export const metadata: Metadata = { title: '文书' };
 
+/**
+ * 【谁看到什么】演示案件走 mock（那几份「星曜网络」的文书是给人看产品长什么样的），
+ * 其余一律现查接口。这里原本是一行 `const drafts = mockDrafts`——**对任何 caseId 都是它**，
+ * 于是真实用户在自己案子的文书页上读到别家公司的异议函和仲裁申请书。
+ */
 export default async function DraftsPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  // 接后端前取 mock；后续换成按 caseId 查 drafts。
-  const drafts = mockDrafts;
-
-  return (
-    <div className="pt-1">
-      <header className="py-3">
-        <h1 className="text-[20px] font-semibold text-ink">
-          <NeutralLabel plain="文书" neutral={NEUTRAL_WORD.drafts} />
-        </h1>
-        {/* 标题换了中性词，这句导语里还有「仲裁委」，得进糊层 */}
-        <p data-veil="" className="mt-0.5 text-[15px] leading-7 text-ink-2">
-          写给公司和仲裁委的东西都在这儿。需要新的一份，去
-          <Link href={`/case/${id}/ask`} className="mx-1 text-primary-ink underline underline-offset-4">
-            问它
-          </Link>
-          说一句就行。
-        </p>
-      </header>
-
-      <ul className="flex flex-col gap-3">
-        {drafts.map((draft) => (
-          <li key={draft.id}>
-            <Link href={`/case/${id}/drafts/${draft.id}`} className="group block">
-              <Card
-                data-veil=""
-                className="p-4 transition-colors duration-150 ease-out group-hover:bg-muted"
-              >
-              <div className="flex flex-wrap items-center gap-2">
-                <DraftKindBadge kind={draft.kind} />
-                <DraftStatusBadge status={draft.status} />
-                <span className="num text-[13px] text-ink-2">v{draft.version}</span>
-              </div>
-
-              <h2 className="mt-2 text-[17px] leading-7 font-semibold text-ink">
-                {draft.title}
-              </h2>
-              <p className="num mt-1.5 text-[13px] text-ink-2">
-                更新于 {formatDateTime(draft.updatedAt)}
-              </p>
-              </Card>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
+  if (id === demoCase.id) return <DraftsListView caseId={id} drafts={mockDrafts} />;
+  return <RealDrafts caseId={id} />;
 }

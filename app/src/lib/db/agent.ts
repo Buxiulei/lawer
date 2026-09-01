@@ -419,3 +419,16 @@ export function insertDraft(
   );
   return db.prepare('SELECT * FROM drafts WHERE id = ?').get(id) as DraftRow;
 }
+
+/**
+ * 按案件列文书，新的在前。
+ *
+ * content 一并取回：文书页打开就要读全文，而一个案子的文书本来就只有几份，
+ * 为省这几 KB 再开一条「取正文」的接口，换来的是详情页多一次往返。
+ * 归属校验不在这里——本文件的调用方（lib/cases.listDrafts）已先过 assertOwned。
+ */
+export function listDrafts(db: Database, caseId: number): DraftRow[] {
+  return db
+    .prepare('SELECT * FROM drafts WHERE case_id = ? ORDER BY id DESC')
+    .all(caseId) as DraftRow[];
+}

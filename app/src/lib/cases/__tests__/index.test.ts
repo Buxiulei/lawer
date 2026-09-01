@@ -15,6 +15,9 @@ describe('跨用户访问（红线）', () => {
       listActions: cases.listActions(db, { caseId: caseA, userId: userB }),
       listDeadlines: cases.listDeadlines(db, { caseId: caseA, userId: userB }),
       listEvidence: cases.listEvidence(db, { caseId: caseA, userId: userB }),
+      // 【为什么这条也在】listDrafts 是 2026-09-01 新加的对外函数（文书页接真数据那一刀）。
+      // 文书正文里是主张金额、对公司的措辞、要递给仲裁委的原话——串号一次比证据串号更直接。
+      listDrafts: cases.listDrafts(db, { caseId: caseA, userId: userB }),
       updateCase: cases.updateCase(db, { caseId: caseA, userId: userB, stage: '已解除' }),
       addTimelineEvent: cases.addTimelineEvent(db, {
         caseId: caseA,
@@ -186,6 +189,25 @@ describe('正常流程', () => {
     expect(evidence.ok && evidence.evidence[0]).toMatchObject({ name: '劳动合同', category: '合同' });
     // 落盘路径这类东西不该出现在列表里
     expect(JSON.stringify(evidence)).not.toContain('enc_path');
+  });
+
+  test('文书按案件列、新的在前，正文一并回；别人的文书一份都不掺', () => {
+    const { db, userA, caseA, caseB } = makeFixture();
+    const insert = db.prepare(
+      "INSERT INTO drafts (case_id, kind, title, content, version, status, created_at, updated_at) VALUES (?, ?, ?, ?, 1, 'draft', '2026-08-19T00:00:00.000Z', '2026-08-19T00:00:00.000Z')",
+    );
+    insert.run(caseA, '异议函', '解除通知异议函', '本人不认可解除理由……');
+    insert.run(caseA, '证据清单', '证据清单（第一批）', '一、劳动合同一份……');
+    insert.run(caseB, '异议函', '乙的异议函', '乙的正文');
+
+    const drafts = cases.listDrafts(db, { caseId: caseA, userId: userA });
+    expect(drafts.ok && drafts.drafts.map((d) => d.title)).toEqual([
+      '证据清单（第一批）',
+      '解除通知异议函',
+    ]);
+    // 正文要回：文书页打开就要读全文，回一个空壳等于页面上一片白
+    expect(drafts.ok && drafts.drafts[1].content).toBe('本人不认可解除理由……');
+    expect(JSON.stringify(drafts)).not.toContain('乙的');
   });
 
   test('timeline_limit 会被夹在 1..200，异常值不炸', () => {
