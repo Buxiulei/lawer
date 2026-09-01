@@ -102,3 +102,66 @@ describe('窗口期回填', () => {
     expect(second.alreadyRecorded).toBe(2);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 型号对账（评测遗留②）：回填也是**记账点**。只在实时那条路上按实际型号计价、
+// 补记的仍按请求型号算，会让同一笔账因为「走了哪条路」而是两个数——那是对账永远填不平的坑。
+// ─────────────────────────────────────────────────────────────────────────────
+const RELAY_USAGE = (servedModel?: string | null) =>
+  JSON.stringify({
+    model: 'relay/claude-opus-5',
+    usage: { prompt: 1000, completion: 200, cachedRead: null, cachedWrite: null },
+    ...(servedModel === undefined ? {} : { servedModel }),
+  });
+
+describe('回填走同一条型号对账', () => {
+  const row = (db: Database.Database) =>
+    db.prepare("SELECT model, api_model FROM token_usage").get() as { model: string; api_model: string | null };
+  const ledger = (db: Database.Database) =>
+    db.prepare("SELECT delta, meta_json FROM gongdao_ledger WHERE type='消耗'").get() as {
+      delta: number;
+      meta_json: string | null;
+    };
+
+  test('落库时记着「实际由 sonnet 服务」→ 补记按 sonnet 计价并留痕', () => {
+    const { db } = makeDb([RELAY_USAGE('claude-sonnet-5')]);
+    backfillTokenUsage(db, true);
+    expect(row(db).model).toBe('relay/claude-sonnet-5');
+    expect(row(db).api_model).toBe('claude-sonnet-5');
+    expect(JSON.parse(ledger(db).meta_json!)).toMatchObject({
+      requested: 'relay/claude-opus-5',
+      served: 'claude-sonnet-5',
+      billed: 'relay/claude-sonnet-5',
+      verdict: 'substituted',
+    });
+  });
+
+  test('补记的钱与实时那条路算出来的是同一个数（不是各算各的）', () => {
+    const sub = makeDb([RELAY_USAGE('claude-sonnet-5')]);
+    const same = makeDb([RELAY_USAGE('claude-sonnet-5')]);
+    const opus = makeDb([RELAY_USAGE('claude-opus-5')]);
+    const rSub = backfillTokenUsage(sub.db, true);
+    backfillTokenUsage(same.db, true);
+    const rOpus = backfillTokenUsage(opus.db, true);
+    // 同一份四桶，按 sonnet 算出来的钱必须**少于**按 opus 算的——否则本条测不出东西
+    expect(rSub.gongdao).toBeLessThan(rOpus.gongdao);
+    expect(-ledger(sub.db).delta).toBe(rSub.gongdao);
+    expect(-ledger(same.db).delta).toBe(rSub.gongdao); // 确定性：同输入同结果
+  });
+
+  test('历史行没有 servedModel 这个键 → 按「未回显」走原价，不崩不留痕', () => {
+    const { db } = makeDb([RELAY_USAGE()]); // 键整个缺席，正是 2026-09-01 之前落的行
+    const r = backfillTokenUsage(db, true);
+    expect(r.backfilled).toBe(1);
+    expect(row(db).model).toBe('relay/claude-opus-5');
+    expect(row(db).api_model).toBeNull();
+    expect(ledger(db).meta_json).toBeNull();
+  });
+
+  test('显式 null 的 servedModel 同样按「未回显」处理', () => {
+    const { db } = makeDb([RELAY_USAGE(null)]);
+    expect(backfillTokenUsage(db, true).backfilled).toBe(1);
+    expect(row(db).model).toBe('relay/claude-opus-5');
+    expect(ledger(db).meta_json).toBeNull();
+  });
+});

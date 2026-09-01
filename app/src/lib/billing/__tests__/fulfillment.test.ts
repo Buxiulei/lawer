@@ -217,7 +217,7 @@ describe('reverseOrder 退款核销', () => {
     const { db, uid } = makeDb();
     insertOrder(db, 'M1', uid, MEMBERSHIP_SKU_NAME.entry, 1990);
     payCallback(db, 'M1');
-    gongdaoSettle(uid, 2500, 'intake-9', 'intake', db); // 花掉大半
+    gongdaoSettle(uid, 2500, 'intake-9', 'intake', null, db); // 花掉大半
     reverseOrder(db, { user_id: uid, order_no: 'M1', amount_fen: 1990, sku_id: skuId(db, MEMBERSHIP_SKU_NAME.entry) });
     expect(getGongdao(uid, db)).toBe(MEMBERSHIP.entry.gongdao - 2500 - MEMBERSHIP.entry.gongdao);
     expect(ledgerSum(db, uid)).toBe(-2500);

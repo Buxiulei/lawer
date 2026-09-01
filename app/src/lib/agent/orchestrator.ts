@@ -9,6 +9,7 @@ import type { Database } from 'better-sqlite3';
 
 import * as cases from '@/lib/cases';
 import { gongdaoSettle, recordTokenUsage, turnRefId } from '@/lib/billing';
+import { reconcileServedModel } from '@/lib/billing/served-model';
 import { featureOfMode } from '@/lib/billing/features';
 import { costOfUsage, type UsageTokens } from '@/lib/billing/pricing';
 import { countSubstantiveHits } from '@/lib/knowledge';
@@ -196,9 +197,11 @@ function chargeTurn(args: {
   messageId: number;
   usage: TokenUsage;
   provider: Provider;
+  /** 厂商回显的实际服务型号（本轮最后一次回显者）；null=没回显过 */
+  servedModel: string | null;
   emit: AgentEventSink;
 }): void {
-  const { db, userId, mode, messageId, usage, provider, emit } = args;
+  const { db, userId, mode, messageId, usage, provider, servedModel, emit } = args;
   // 四桶全 null = 本次流根本没回报计量。**不许拿 0 冒充**（llm/types.ts 铁律：
   // null 表示未回报，不可当 0 结算）——记一行 0 成本的用量等于宣称"这轮不要钱"，
   // 而真相是"这轮花了多少我们不知道"。不知道就要让人看见，不是悄悄记成免费。
@@ -222,13 +225,32 @@ function chargeTurn(args: {
   };
   const refId = turnRefId(messageId);
   const feature = featureOfMode(mode);
-  const cost = costOfUsage(tokens, getRatesForModel(db, provider.billingModel));
+
+  // ── 型号对账：按**真实服务的**型号计价，不按我们请求的（评测遗留②）──
+  // 中转按渠道分组路由，请求 opus 不等于拿到 opus（providers/relay.ts 文件头实测）。
+  // 照请求型号收钱就是让用户为没拿到的高档买单——2.5 倍的错账，方向朝着用户吃亏。
+  const served = reconcileServedModel(provider.billingModel, servedModel);
+  const cost = costOfUsage(tokens, getRatesForModel(db, served.billingModel));
+  if (served.trace) {
+    // 告警要当场可见：ledger 的 meta 是给对账脚本看的，notice 是给正在盯这条流的人看的。
+    emit({
+      event: 'notice',
+      data: {
+        code: 'SERVED_MODEL_MISMATCH',
+        message:
+          served.trace.verdict === 'substituted'
+            ? `上游实际由 ${served.trace.served} 服务（我们请求的是 ${provider.model}），本轮已按实际型号计价（${served.trace.billed}）。`
+            : `上游回显了未登记的型号 ${served.trace.served}（我们请求的是 ${provider.model}），本轮仍按请求型号计价，已留痕待核。`,
+      },
+    });
+  }
   // 两笔写入同事务：只落其一正是对账器判的「漏账」（用量无消耗流水），不能自己造出来。
   db.transaction(() => {
-    // model=priced 计费键（决定扣多少），apiModel=厂商回显串（决定真跑了哪个快照）——
-    // 两串不同是设计如此（厂商 API 不收 dated 串），真漂移是同一 priced 键下 api_model 变化。
-    recordTokenUsage(userId, feature, provider.billingModel, tokens, refId, provider.model, db);
-    gongdaoSettle(userId, cost, refId, feature, db);
+    // model=实际计价键（决定扣多少），apiModel=**厂商回显串**（决定真跑了哪个快照）。
+    // apiModel 曾经填的是 provider.model——那是我们自己发出去的常量，
+    // 拿它喂对账探针等于比较一个常量和它自己，漂移永远查不出来。回显不到就留 NULL。
+    recordTokenUsage(userId, feature, served.billingModel, tokens, refId, servedModel, db);
+    gongdaoSettle(userId, cost, refId, feature, served.trace, db);
   })();
 }
 
@@ -549,6 +571,10 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   }
   let usage: TokenUsage = { prompt: null, completion: null, cachedRead: null, cachedWrite: null };
   let finishReason: string | null = null;
+  // 本轮实际服务我们的型号（厂商回显）。tool-loop 每次往返都可能落到不同上游渠道，
+  // 这里取**最后一次回显**：一轮只记一笔账，也就只能挂一个计费键。
+  // 若某轮没回显（null），保留此前见过的值——「这一段没说」不等于「换回请求的型号了」。
+  let servedModel: string | null = null;
 
   /** 跑一次流。emitText=false 时正文不下发给用户（补救轮用，见下方） */
   const runOnce = async (emitText: boolean) => {
@@ -565,6 +591,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
         // 但 return 值一定会到，回调只在流里真的出现 usage 帧时才触发。
         // 一轮里跑了几次流就累加几次——tool-loop 的每一次往返都是要付钱的。
         usage = addUsage(usage, step.value.usage.usage);
+        servedModel = step.value.usage.servedModel ?? servedModel;
         const tail = citations.flush();
         if (tail) {
           round += tail;
@@ -932,10 +959,10 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     store.recordCrisisCardGiven(db, caseId, CRISIS_CARD_MARKER, crisis.triggered ? `命中：${crisis.matched.join('、')}` : '模型主动给出');
   }
 
-  const usageReport: UsageReport = { model: routed.client.billingModel, usage };
+  const usageReport: UsageReport = { model: routed.client.billingModel, usage, servedModel };
   store.finalizeMessage(db, messageId, { content: text, tokensJson: JSON.stringify(usageReport) });
   store.touchThread(db, thread.id);
-  chargeTurn({ db, userId, mode, messageId, usage, provider: routed.client, emit });
+  chargeTurn({ db, userId, mode, messageId, usage, provider: routed.client, servedModel, emit });
 
   emit({
     event: 'usage',

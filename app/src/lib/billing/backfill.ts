@@ -17,6 +17,7 @@ import { openCliDb, rethrowIfSchemaStale } from '../db/cli-open';
 
 import { getRatesForModel } from '../db/modelRates';
 import { gongdaoSettle, recordTokenUsage, turnRefId } from './index';
+import { reconcileServedModel } from './served-model';
 import { featureOfMode } from './features';
 import { costOfUsage, type UsageTokens } from './pricing';
 
@@ -59,16 +60,18 @@ interface Candidate {
   user_id: number;
 }
 
-/** tokens_json 形如 {model, usage:{prompt,completion,cachedRead,cachedWrite}}（orchestrator 写入） */
-function parseUsage(raw: string): { model: string; tokens: UsageTokens | null } | null {
+/** tokens_json 形如 {model, usage:{prompt,completion,cachedRead,cachedWrite}, servedModel}（orchestrator 写入）。
+ *  servedModel 是 2026-09-01 之后才写的，历史行没有这个键——缺失按「未回显」处理（reconcile 的 'absent' 档）。 */
+function parseUsage(raw: string): { model: string; tokens: UsageTokens | null; servedModel: string | null } | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
     return null;
   }
-  const rec = parsed as { model?: unknown; usage?: Record<string, unknown> };
+  const rec = parsed as { model?: unknown; usage?: Record<string, unknown>; servedModel?: unknown };
   if (typeof rec?.model !== 'string' || !rec.model || typeof rec.usage !== 'object' || rec.usage === null) return null;
+  const servedModel = typeof rec.servedModel === 'string' && rec.servedModel !== '' ? rec.servedModel : null;
   const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
   const four = {
     promptTokens: num(rec.usage.prompt),
@@ -77,9 +80,10 @@ function parseUsage(raw: string): { model: string; tokens: UsageTokens | null } 
     cacheWriteTokens: num(rec.usage.cachedWrite),
   };
   // 四桶全 null = 当时就没回报，无从补起（不是 0）
-  if (Object.values(four).every((v) => v === null)) return { model: rec.model, tokens: null };
+  if (Object.values(four).every((v) => v === null)) return { model: rec.model, tokens: null, servedModel };
   return {
     model: rec.model,
+    servedModel,
     tokens: {
       promptTokens: four.promptTokens ?? 0,
       completionTokens: four.completionTokens ?? 0,
@@ -124,13 +128,16 @@ export function backfillTokenUsage(db: Database, apply = false): BackfillReport 
       report.unreported += 1;
       continue;
     }
-    const cost = costOfUsage(parsed.tokens, getRatesForModel(db, parsed.model));
+    // 型号对账与实时记账同一条：回填也是记账点，只在这条路上按请求型号计价，
+    // 等于「实时修好了、补记的仍然算错钱」——同一笔账不该因为走哪条路而是两个数。
+    const served = reconcileServedModel(parsed.model, parsed.servedModel);
+    const cost = costOfUsage(parsed.tokens, getRatesForModel(db, served.billingModel));
     const feature = featureOfMode(row.mode);
     if (apply) {
       // 与实时记账同一条纪律：用量行与消耗流水同事务，不制造「用量无落账」的孤儿。
       db.transaction(() => {
-        recordTokenUsage(row.user_id, feature, parsed.model, parsed.tokens!, refId, null, db);
-        gongdaoSettle(row.user_id, cost, refId, feature, db);
+        recordTokenUsage(row.user_id, feature, served.billingModel, parsed.tokens!, refId, parsed.servedModel, db);
+        gongdaoSettle(row.user_id, cost, refId, feature, served.trace, db);
       })();
     }
     report.backfilled += 1;

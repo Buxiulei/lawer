@@ -153,7 +153,7 @@ describe('withPiiRedaction：包在 provider 上的整体行为', () => {
             toolCalls: reply.toolArgs
               ? [{ id: 't1', type: 'function', function: { name: 'draft_write', arguments: reply.toolArgs } }]
               : [],
-            usage: { model: 'x', usage: emptyUsage() },
+            usage: { model: 'x', usage: emptyUsage(), servedModel: null },
           };
         })();
       },

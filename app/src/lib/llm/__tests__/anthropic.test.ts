@@ -121,6 +121,8 @@ describe('chatStream 事件流解析', () => {
         cachedRead: null,
         cachedWrite: null,
       },
+      // 本条的 message_start 没带 model 字段 → 没回显，留 null 而不是拿请求串冒充
+      servedModel: null,
     });
     expect(seen).toEqual([result.usage]);
 
@@ -242,5 +244,33 @@ describe('chatStream 事件流解析', () => {
   test('刻意不提供 chatJSON（bulk 档恒不走 Claude，实现了就是死代码）', () => {
     const [fetchImpl] = mockFetch(() => sseResponse(''));
     expect(createAnthropic({ apiKey: 'k', model: 'claude-sonnet-5', fetchImpl }).chatJSON).toBeUndefined();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// served model 回显（评测遗留②）：Anthropic 在 message_start 的 message.model 上回显
+// 实际服务的型号。它是计费对账的凭据（billing/served-model.ts）——请求的型号不作数。
+// ─────────────────────────────────────────────────────────────────────────────
+describe('实际服务模型回显（servedModel）', () => {
+  const stream = (model?: string) =>
+    ev({
+      type: 'message_start',
+      message: { id: 'msg_1', ...(model === undefined ? {} : { model }), usage: { input_tokens: 10, output_tokens: 1 } },
+    }) +
+    ev({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 5 } }) +
+    ev({ type: 'message_stop' });
+
+  test('message_start 的 model 被认出来，作为本次流的实际服务型号', async () => {
+    const [fetchImpl] = mockFetch(() => sseResponse(stream('claude-sonnet-5')));
+    const p = createAnthropic({ apiKey: 'k', model: 'claude-opus-5', fetchImpl });
+    const { result } = await drain(await p.chatStream([{ role: 'user', content: 'x' }]));
+    expect(result.usage.servedModel).toBe('claude-sonnet-5');
+  });
+
+  test('没回显就留 null，不拿请求串冒充（冒充等于让对账探针比较常量和它自己）', async () => {
+    const [fetchImpl] = mockFetch(() => sseResponse(stream()));
+    const p = createAnthropic({ apiKey: 'k', model: 'claude-opus-5', fetchImpl });
+    const { result } = await drain(await p.chatStream([{ role: 'user', content: 'x' }]));
+    expect(result.usage.servedModel).toBeNull();
   });
 });

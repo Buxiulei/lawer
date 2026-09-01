@@ -67,6 +67,19 @@ export function emptyUsage(): TokenUsage {
 export interface UsageReport {
   model: string;
   usage: TokenUsage;
+  /**
+   * 厂商响应回显的**实际服务模型**串（OpenAI 兼容侧的 `model` 字段、Anthropic 的
+   * `message.model`）。与请求下发的 `Provider.model` 是两回事：
+   * **请求 opus 不等于拿到 opus**——中转按渠道分组路由，同一个型号名在不同请求可能落到
+   * 不同上游（见 providers/relay.ts 文件头实测），厂商也可能把别名重新指向新快照。
+   *
+   * 它是**计费的对账凭据**：billing 侧据此判断「这一轮到底该按哪个型号收钱」。
+   * 没有它，请求 opus 而实际由 sonnet 服务时我们仍按 opus 收费——用户为没拿到的高档买单。
+   *
+   * null = 本次流没回显（保活行、老网关、非流式降级）。**不用请求串冒充**：
+   * 拿请求串填这里，对账探针量的就是个常量，永远发现不了漂移。
+   */
+  servedModel: string | null;
 }
 
 /** 流末计量回调。与 chatStream 的 return.usage 内容一致，回调用于「边流边记账」，

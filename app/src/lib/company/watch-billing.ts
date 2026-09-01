@@ -76,7 +76,7 @@ function billOneWatch(db: Database.Database, w: BillableWatch, mk: string): Bill
     const balance = getGongdao(w.user_id, db);
     if (balance >= price) {
       // 够扣：走账本入口扣一笔（refId 幂等），状态置 paid 并清欠费计数。
-      gongdaoSettle(w.user_id, price, `watch-${w.id}-${mk}`, 'companywatch', db);
+      gongdaoSettle(w.user_id, price, `watch-${w.id}-${mk}`, 'companywatch', null, db);
       db.prepare(
         "UPDATE company_watches SET billing_status='paid', paid_through=?, arrears_rounds=0, billed_month=? WHERE id=?",
       ).run(mk, mk, w.id);

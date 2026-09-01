@@ -42,7 +42,7 @@ describe('真实条目', () => {
   test('入账与消耗都如实出现，条数与内容对得上', () => {
     const { db, a } = makeDb();
     gongdaoGrant(a, 1000, '充值', 'order-1', null, db);
-    gongdaoSettle(a, 120, 'turn-1', '问诊', db);
+    gongdaoSettle(a, 120, 'turn-1', '问诊', null, db);
 
     const v = listGongdaoLedger(a, 50, db);
     expect(v.entries).toHaveLength(2);
@@ -55,7 +55,7 @@ describe('真实条目', () => {
     const { db, a } = makeDb();
     gongdaoGrant(a, 100, '充值', 'o1', null, db);
     gongdaoGrant(a, 200, '充值', 'o2', null, db);
-    gongdaoSettle(a, 50, 't1', '问诊', db);
+    gongdaoSettle(a, 50, 't1', '问诊', null, db);
     // 余额 250；倒序为 [-50, +200, +100]
     const full = listGongdaoLedger(a, 50, db);
     expect(full.entries.map((e) => e.balance_after)).toEqual([250, 300, 100]);

@@ -86,13 +86,25 @@ function toTokenUsage(u: CompatUsage): TokenUsage {
   };
 }
 
+/** 回显的 model 字段 → servedModel。空串/非串一律归 null：`model: ""` 是「没回显」而不是
+ *  「服务模型叫空字符串」，让空串流进对账会造出一个假的「不匹配」告警。 */
+function servedOf(m: unknown): string | null {
+  return typeof m === 'string' && m.trim() !== '' ? m.trim() : null;
+}
+
 export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
   const base = o.baseUrl ?? o.defaultBaseUrl;
   const doFetch = o.fetchImpl ?? fetch;
   const headers = { 'content-type': 'application/json', authorization: `Bearer ${o.apiKey}` };
   const billingModel = o.billingModel ?? o.model;
   const tag = `${o.name}(${o.model})`;
-  const report = (usage: TokenUsage): UsageReport => ({ model: billingModel, usage });
+  // servedModel 由响应回显填入（见 UsageReport.servedModel）。**绝不缺省成 o.model**：
+  // 拿请求串冒充回显串，对账就是在比较一个常量和它自己，永远相等。
+  const report = (usage: TokenUsage, servedModel: string | null): UsageReport => ({
+    model: billingModel,
+    usage,
+    servedModel,
+  });
 
   return {
     name: o.name,
@@ -179,10 +191,14 @@ export function createOpenAICompatProvider(o: OpenAICompatOptions): Provider {
           }),
         });
         if (!res.ok) throw await httpError(`${tag} chatJSON`, res);
-        const j = (await res.json()) as { choices?: { message?: { content?: string } }[]; usage?: CompatUsage | null };
+        const j = (await res.json()) as {
+          choices?: { message?: { content?: string } }[];
+          usage?: CompatUsage | null;
+          model?: string;
+        };
         let content = j.choices?.[0]?.message?.content;
         if (!content) throw new Error(`${tag} chatJSON 空响应`);
-        if (opts.onUsage && j.usage != null) opts.onUsage(report(toTokenUsage(j.usage)));
+        if (opts.onUsage && j.usage != null) opts.onUsage(report(toTokenUsage(j.usage), servedOf(j.model)));
         // 降级解析：剥三引号代码围栏（```json… 或 ```…），再截取首 { 到末 }
         content = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
         const first = content.indexOf('{');
@@ -204,12 +220,15 @@ async function* parseCompatStream(
   body: ReadableStream<Uint8Array>,
   onChunk: () => void,
   onDone: () => void,
-  report: (usage: TokenUsage) => UsageReport,
+  report: (usage: TokenUsage, servedModel: string | null) => UsageReport,
   onUsage?: UsageCallback,
   onReasoning?: (totalChars: number) => void,
 ): AsyncGenerator<string, ChatStreamResult, void> {
   let finishReason: string | null = null;
-  let usage: UsageReport = report(emptyUsage());
+  // 实际服务模型：每个 data 帧都回显 model，后来者覆盖。取「最后见到的」而不是「第一个见到的」——
+  // usage 帧是流里的最后一帧，而计费认的就是它那一帧的口径。
+  let servedModel: string | null = null;
+  let usage: UsageReport = report(emptyUsage(), null);
   let reasoningChars = 0;
   // 按 index 落槽累积工具调用分片（稀疏；末尾压实为密集 ToolCall[]）
   const acc: { id: string; name: string; args: string }[] = [];
@@ -233,14 +252,17 @@ async function* parseCompatStream(
         finish_reason?: string | null;
       }[];
       usage?: CompatUsage | null;
+      model?: string;
     };
     try {
       j = JSON.parse(payload);
     } catch {
       continue; // SSE 注释/保活行
     }
+    // 先认回显再记账：usage 帧自己也带 model，晚一步就会拿上一帧的型号给这一帧的用量记账。
+    servedModel = servedOf(j.model) ?? servedModel;
     if (j.usage != null) {
-      usage = report(toTokenUsage(j.usage));
+      usage = report(toTokenUsage(j.usage), servedModel);
       onUsage?.(usage);
     }
     const choice = j.choices?.[0];

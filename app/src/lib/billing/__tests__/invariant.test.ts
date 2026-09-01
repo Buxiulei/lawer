@@ -119,13 +119,13 @@ describe('账本不变量：混合事务序列后 balance==SUM(ledger)（唯一�
     assertGlobalInvariant(db);
 
     // ── 阶段5：消耗结算 + 重放不双扣 ──
-    gongdaoSettle(A, 23, 'intake-A1', 'intake', db);
-    gongdaoSettle(A, 23, 'intake-A1', 'intake', db);
+    gongdaoSettle(A, 23, 'intake-A1', 'intake', null, db);
+    gongdaoSettle(A, 23, 'intake-A1', 'intake', null, db);
     expect(getGongdao(A, db)).toBe(300 + MEMBERSHIP.standard.gongdao - 23);
     assertGlobalInvariant(db);
 
     // ── 阶段6：最后一单透支入负（宁可少扣不可多扣；负余额随后被 gate 拦）──
-    gongdaoSettle(C, 5000, 'draft-C1', 'draft', db);
+    gongdaoSettle(C, 5000, 'draft-C1', 'draft', null, db);
     expect(getGongdao(C, db)).toBe(500 - 5000);
     expect(gongdaoGate(C, db)).toBe(false);
     assertGlobalInvariant(db);
@@ -138,7 +138,7 @@ describe('账本不变量：混合事务序列后 balance==SUM(ledger)（唯一�
     assertGlobalInvariant(db);
 
     // ── 阶段8：定额预扣 + 失败退款（refund-<chargeRef> 幂等）──
-    gongdaoSettle(B, 2000, 'attest-B1', 'attest', db);
+    gongdaoSettle(B, 2000, 'attest-B1', 'attest', null, db);
     expect(gongdaoRefund(B, 2000, 'attest-B1', 'attest', db)).toBe(true);
     expect(gongdaoRefund(B, 2000, 'attest-B1', 'attest', db)).toBe(false);
     expect(getGongdao(B, db)).toBe(300 + rechargeGongdao(30));
@@ -182,8 +182,8 @@ describe('账本不变量：消费结算 = 实际 usage 汇总 ceil（无双扣�
     expect(cost).toBe(Math.ceil(exactGongdaoOfUsage(usage, DEFAULT_RATES)));
 
     const before = getGongdao(uid, db);
-    gongdaoSettle(uid, cost, ref, 'intake', db);
-    gongdaoSettle(uid, cost, ref, 'intake', db); // 重放同 ref → 不双扣
+    gongdaoSettle(uid, cost, ref, 'intake', null, db);
+    gongdaoSettle(uid, cost, ref, 'intake', null, db); // 重放同 ref → 不双扣
     expect(getGongdao(uid, db)).toBe(before - cost);
 
     const consume = db.prepare(
@@ -201,7 +201,7 @@ describe('账本不变量：消费结算 = 实际 usage 汇总 ceil（无双扣�
     const db = makeDb();
     const uid = addUser(db, 'f@t.com');
     gongdaoGrant(uid, 300, GONGDAO_LEDGER_TYPE.register, `reg-${uid}`, null, db);
-    gongdaoSettle(uid, 0, 'intake-F1', 'intake', db);
+    gongdaoSettle(uid, 0, 'intake-F1', 'intake', null, db);
     expect(getGongdao(uid, db)).toBe(300);
     const row = db.prepare('SELECT delta FROM gongdao_ledger WHERE ref_id=? AND type=?')
       .get('intake-F1', GONGDAO_LEDGER_TYPE.consume) as { delta: number };
@@ -253,8 +253,8 @@ describe('账本不变量：随机混打序列（含幂等重放）后仍恒等'
         const ref = `settle-${seq}`;
         const feature = pick(features);
         const amount = Math.floor(rand() * 800);
-        gongdaoSettle(uid, amount, ref, feature, db);
-        if (replay) gongdaoSettle(uid, amount, ref, feature, db);
+        gongdaoSettle(uid, amount, ref, feature, null, db);
+        if (replay) gongdaoSettle(uid, amount, ref, feature, null, db);
         if (amount > 0) charges.push({ uid, amount, ref, feature });
       } else if (op === 2) {
         const c = charges.length ? charges[Math.floor(rand() * charges.length)] : null;

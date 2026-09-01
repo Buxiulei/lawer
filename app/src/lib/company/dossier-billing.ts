@@ -511,12 +511,12 @@ export function confirmDossier(
       // 券覆盖的核心模块：落 delta=0 标记行（不动余额），让「买过没有」对券付也成立。
       if (usedCredit) {
         for (const it of payableCore) {
-          gongdaoSettle(userId, 0, dossierChargeRef(row.id, userId, it.module), DOSSIER_MODULE_FEATURE[it.module], db);
+          gongdaoSettle(userId, 0, dossierChargeRef(row.id, userId, it.module), DOSSIER_MODULE_FEATURE[it.module], null, db);
         }
       }
       // 走公道值的模块：逐块各扣一笔（含 venue 的 0，也落标记行）。退一块不牵连另一块。
       for (const it of gongdaoItems) {
-        gongdaoSettle(userId, it.gongdao, dossierChargeRef(row.id, userId, it.module), DOSSIER_MODULE_FEATURE[it.module], db);
+        gongdaoSettle(userId, it.gongdao, dossierChargeRef(row.id, userId, it.module), DOSSIER_MODULE_FEATURE[it.module], null, db);
         charged += it.gongdao;
       }
 
