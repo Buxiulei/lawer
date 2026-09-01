@@ -16,10 +16,18 @@ export interface BillingState {
   /** 还有没有更多可取 */
   hasMore: boolean;
   loadMore: () => void;
+  /**
+   * 重取余额与流水。给「兑换码到账后余额要立刻变」用——
+   * 前端自己把面值加到旧余额上也能让数字动起来，但那个数是**算出来的**，
+   * 后端真到了多少无从得知；这一页的用途恰恰是对账，不能显示一个前端推测值。
+   */
+  refresh: () => void;
 }
 
 export function useBilling(): BillingState {
   const [limit, setLimit] = useState(LEDGER_PAGE_SIZE);
+  /** 重取的触发器：limit 没变时也要能让下面那个 effect 再跑一遍 */
+  const [nonce, setNonce] = useState(0);
   const [state, setState] = useState<{
     data: BillingView | null;
     loading: boolean;
@@ -44,13 +52,15 @@ export function useBilling(): BillingState {
     return () => {
       alive = false;
     };
-  }, [limit]);
+  }, [limit, nonce]);
 
   const loadMore = useCallback(() => setLimit((n) => n + LEDGER_PAGE_SIZE), []);
+  const refresh = useCallback(() => setNonce((n) => n + 1), []);
 
   return {
     ...state,
     hasMore: state.data !== null && !state.data.complete,
     loadMore,
+    refresh,
   };
 }

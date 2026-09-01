@@ -11,6 +11,7 @@ import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
 import { LedgerList } from './LedgerList';
 import { RechargePanel } from './RechargePanel';
+import { RedeemPanel } from './RedeemPanel';
 import { useBilling, type BillingState } from './useBilling';
 import { useMe, type MeState } from './useMe';
 
@@ -44,6 +45,13 @@ export function AccountView() {
       </header>
 
       {signedIn ? <BalanceCard billing={billing} me={me} /> : <SignInCard />}
+
+      {/* 没登录就没有账户可以到账，兑换框摆在那儿只会让人填完才被告知要先登录 */}
+      {signedIn && (
+        <div className="mt-4">
+          <RedeemPanel onRedeemed={billing.refresh} />
+        </div>
+      )}
 
       <div className="mt-6">
         {/* 套餐没有真值可取，就不显示徽标——同一条纪律：没有真值就没有徽标 */}

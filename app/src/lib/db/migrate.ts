@@ -1123,6 +1123,18 @@ export function runMigrations(db: Database.Database): void {
   addColumnIfMissing(db, 'company_litigation', 'amount_awarded_fen', 'INTEGER');
   addColumnIfMissing(db, 'company_litigation', 'dossier_id', 'INTEGER REFERENCES company_dossiers(id)');
 
+  // redemption_codes 的两列：管理后台批量发码留下的「这批是谁、为什么发的」。
+  //
+  // 【为什么不是可选的锦上添花】兑换码是**凭空造公道值**的唯一入口——一张码落地就是一笔
+  // 无对价的入账。没有这两列，事后只能看到「某年某月某日凭空多了 N 笔 300」，
+  // 既查不出是哪次活动发的，也查不出是谁批的；出了滥发只能全表人肉核对。
+  // note 存批次备注（如「2026-09 老用户回馈」），created_by 存签发人 uid。
+  //
+  // 两列都可空且不回填：既有的存量码（含手工 INSERT 的）本来就没有出处，
+  // 拿 '未知' / 0 填上等于把「查不到」伪装成「查到了是这个」。读侧一律容得下 NULL。
+  addColumnIfMissing(db, 'redemption_codes', 'note', 'TEXT');
+  addColumnIfMissing(db, 'redemption_codes', 'created_by', 'INTEGER REFERENCES users(id)');
+
   // 档案维度的去重键。**必须与 uq_company_litigation（案件维度）并存，不能替代它**：
   // 一个档案可以被多个案件的 company_profiles 指向，同一份 JSONL 若先后挂在两个 profile 下导入，
   // 只有案件维度那把唯一键的话两行都能进去，docs_total 当场翻倍——而那个数是比率的分母之一。

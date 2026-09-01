@@ -106,6 +106,29 @@ export async function fetchBilling(limit: number): Promise<BillingView> {
   };
 }
 
+// ───────────────────────────── 兑换码 ─────────────────────────────
+
+export interface RedeemResultView {
+  /** 这一张码的面值 */
+  gongdao: number;
+  /** 到账后的余额（服务端的真值，不是前端加出来的） */
+  balance: number;
+}
+
+/**
+ * 核销一条兑换码。失败一律抛 ApiError，文案由后端给——
+ * **前端不许按 error_code 把失败再分细**：后端把「码不存在 / 已被兑 / 已过期 / 已停用」
+ * 合流成一条 REDEEM_INVALID 正是为了不当码存在性预言机（见 api/v1/redeem/route.ts），
+ * 在这里按别的信号（比如响应耗时、字段有无）分叉回去，等于把那道防护从前端拆了。
+ */
+export async function redeemCode(code: string): Promise<RedeemResultView> {
+  const raw = await apiFetch<{ gongdao: number; balance: number }>('/redeem', {
+    method: 'POST',
+    body: { code },
+  });
+  return { gongdao: raw.gongdao, balance: raw.balance };
+}
+
 // ───────────────────────────── 本人身份摘要 ─────────────────────────────
 
 export interface MeView {

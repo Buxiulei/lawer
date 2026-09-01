@@ -31,6 +31,7 @@ const billingState = {
   unauthorized: false,
   hasMore: false,
   loadMore: () => {},
+  refresh: () => {},
 };
 const meState = { data: null as null | Record<string, unknown>, loading: false, unauthorized: false };
 const auth = { signedIn: true };
