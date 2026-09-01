@@ -249,6 +249,15 @@ describe('served_model 与请求型号对账（不对账＝算错钱，命脉）
     expect(notices.some((n) => n.data.code === 'SERVED_MODEL_MISMATCH')).toBe(false);
   });
 
+  // 两个记账点之间的接缝：实时记账落 messages.tokens_json，回填**只**读它。
+  // orchestrator 少写一个 servedModel，回填那条路就永远只看到「未回显」，
+  // 于是「实时按 sonnet 算、补记按 opus 算」——同一笔账两个数，而且没有任何测试会红。
+  it('回显串要落进 messages.tokens_json —— 回填那条路只认得它', async () => {
+    const { f } = await relayTurn('claude-sonnet-5');
+    const [m] = rows<{ tokens_json: string }>(f, "SELECT tokens_json FROM messages WHERE role='assistant'");
+    expect(JSON.parse(m.tokens_json).servedModel).toBe('claude-sonnet-5');
+  });
+
   it('tool-loop 中途换渠道：以**最后一次**回显为准（一轮一笔账，只能挂一个计费键）', async () => {
     const script: ScriptedRound[] = [
       { text: '先查依据。', tools: [{ name: 'knowledge_search', args: { query: '客观情况重大变化' } }], servedModel: 'claude-opus-5' },
