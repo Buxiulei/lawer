@@ -7,6 +7,7 @@ import type { Database as Db } from 'better-sqlite3';
 
 import { signToken } from '@/lib/auth/jwt';
 import { generateApiKey, hashApiKey } from '@/lib/auth/api-key';
+import { resolveIdentity } from '@/lib/auth/identity';
 import { runMigrations } from '@/lib/db/migrate';
 import { ADMIN_UIDS_ENV, adminUids, isAdminUid, requireAdmin } from '../auth';
 
@@ -57,6 +58,26 @@ describe('白名单解析', () => {
     expect(isAdminUid(21, { [ADMIN_UIDS_ENV]: '2' })).toBe(false);
     expect(isAdminUid(2, { [ADMIN_UIDS_ENV]: '2' })).toBe(true);
   });
+
+  test('小数 / 科学计数法碎片一律丢弃（Number 宽松解析的洞）', () => {
+    // 3.5 是小数、1e3 会被 Number 解成 1000——白名单只认整串数字，两者都不该入集
+    expect(adminUids({ [ADMIN_UIDS_ENV]: '2x, abc, 0, -1, 3.5, 1e3, , 2' })).toEqual([2]);
+  });
+
+  test('默认从 process.env.ADMIN_UIDS 读，改了立刻生效（不缓存）', () => {
+    const saved = process.env[ADMIN_UIDS_ENV];
+    try {
+      process.env[ADMIN_UIDS_ENV] = '42';
+      expect(isAdminUid(42)).toBe(true);
+      expect(isAdminUid(43)).toBe(false);
+      process.env[ADMIN_UIDS_ENV] = '43';
+      expect(isAdminUid(42)).toBe(false);
+      expect(isAdminUid(43)).toBe(true);
+    } finally {
+      if (saved === undefined) delete process.env[ADMIN_UIDS_ENV];
+      else process.env[ADMIN_UIDS_ENV] = saved;
+    }
+  });
 });
 
 describe('requireAdmin', () => {
@@ -80,7 +101,7 @@ describe('requireAdmin', () => {
     expect(guard.ok).toBe(false);
     if (!guard.ok) {
       expect(guard.response.status).toBe(404);
-      expect((await guard.response.json()).error_code).toBe('NOT_FOUND');
+      expect(await guard.response.text()).toBe(''); // 空体：与不存在的地址同形
     }
   });
 
@@ -92,7 +113,9 @@ describe('requireAdmin', () => {
     expect(outsider.ok).toBe(false);
     if (!anon.ok && !outsider.ok) {
       expect(anon.response.status).toBe(outsider.response.status);
-      expect(await anon.response.json()).toEqual(await outsider.response.json());
+      const [a, b] = [await anon.response.text(), await outsider.response.text()];
+      expect(a).toBe(b);
+      expect(a).toBe(''); // 空体：连响应体都读不出「你差在哪」
     }
   });
 
@@ -113,13 +136,41 @@ describe('requireAdmin', () => {
     if (!guard.ok) expect(guard.response.status).toBe(404);
   });
 
+  test('四种被拒的人拿到的响应逐字节相同（含正对照：那把 key 确实有效）', async () => {
+    process.env[ADMIN_UIDS_ENV] = String(admin); // uid 在白名单里，只是 via 不对
+    const key = generateApiKey();
+    db.prepare('INSERT INTO api_keys (user_id, name, key_hash, scopes) VALUES (?,?,?,?)')
+      .run(admin, 'agent', hashApiKey(key), '["case:read"]');
+    // 正对照：这把 key 确实解析成同一个管理员 uid（via=api_key）。
+    // 少了这条，「key 坏了所以被拒」与「key 好用但被 via 挡住」在断言上同形。
+    expect(resolveIdentity(db, new Headers({ 'x-api-key': key }))).toMatchObject({
+      uid: admin,
+      via: 'api_key',
+    });
+
+    const shots: string[] = [];
+    for (const [token, k] of [
+      [undefined, undefined],
+      ['not.a.jwt', undefined],
+      [signToken(civilian), undefined],
+      [undefined, key],
+    ] as [string | undefined, string | undefined][]) {
+      const g = requireAdmin(db, req(token, k));
+      expect(g.ok).toBe(false);
+      if (!g.ok) shots.push(`${g.response.status}|${await g.response.text()}`);
+    }
+    expect(shots).toHaveLength(4);
+    expect(new Set(shots).size).toBe(1); // 四种拒绝理由，一种响应
+  });
+
   test('两次失败各自拿到可独立读取的 Response（不是共享单例）', async () => {
     process.env[ADMIN_UIDS_ENV] = String(admin);
     const a = requireAdmin(db, req());
     const b = requireAdmin(db, req());
     if (!a.ok && !b.ok) {
-      expect((await a.response.json()).ok).toBe(false);
-      expect((await b.response.json()).ok).toBe(false);
+      expect(a.response).not.toBe(b.response); // 不是共享单例
+      await expect(a.response.text()).resolves.toBe('');
+      await expect(b.response.text()).resolves.toBe('');
     }
   });
 });

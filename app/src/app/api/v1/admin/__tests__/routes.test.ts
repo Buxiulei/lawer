@@ -87,11 +87,7 @@ describe('非白名单一律 404', () => {
       ]);
       for (const res of responses) {
         expect(res.status, c.name).toBe(404);
-        expect(await res.json(), c.name).toEqual({
-          ok: false,
-          error_code: 'NOT_FOUND',
-          message: '这个地址上没有内容。',
-        });
+        expect(await res.text(), c.name).toBe(''); // 空体：与不存在的地址逐字同形
       }
     }
   });
@@ -211,7 +207,7 @@ describe('POST /admin/users/{uid}/membership', () => {
       ctx(99999),
     );
     expect(res.status).toBe(404);
-    expect((await res.json()).error_code).toBe('NOT_FOUND');
+    expect(await res.text()).toBe(''); // 空体：与非白名单闸门 404 逐字同形
   });
 
   // ── 跨请求幂等（钱/权益路径的双发洞）──

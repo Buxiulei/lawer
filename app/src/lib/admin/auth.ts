@@ -12,9 +12,11 @@
 // ── 为什么是 404 不是 403 ──
 // 403 等于对着未授权的人承认「这里确实有个后台，只是你进不来」。后台是老板面板，
 // 它的存在本身就是情报：知道有 /admin/users 的人才会去猜参数、扫子路径、试越权。
-// 回 404 让「路径不存在」与「你不是管理员」在响应上完全同形——状态码、错误码、
-// 文案、响应体逐字一致（下面 notFound() 是唯一出口，两条分支共用同一个对象），
+// 回 404 让「路径不存在」与「你不是管理员」在响应上完全同形——**空体 404**，
+// 与随便敲一个不存在的地址（Next 未匹配路由）逐字一致：状态 404、体为空，
+// 不带任何 error_code/文案（error_code 本身就是「这是一个真实存在的处理器」的证据）。
 // 因此也不能靠响应差异做用户枚举。
+//（合并轮裁决：与 /admin/codes 签发面统一为空体 404，见 lib/auth/api-key 的同级纪律。）
 //
 // ── 为什么额外要求网页登录态（via='jwt'）──
 // api key 是用户自己在设置页里签发的长期凭据（lib/auth/api-key），拿去给自己的 agent 用。
@@ -35,14 +37,11 @@ export type AdminGuardResult =
   | { ok: false; response: NextResponse };
 
 /**
- * 唯一的失败出口：与「这个地址上没有内容」逐字一致。
+ * 唯一的失败出口：**空体 404**，与随便敲一个不存在的地址完全同形。
  * 每次都新建 NextResponse（Response 体只能读一次，共享单例会在第二个请求上炸）。
  */
 function notFound(): NextResponse {
-  return NextResponse.json(
-    { ok: false, error_code: 'NOT_FOUND', message: '这个地址上没有内容。' },
-    { status: 404 },
-  );
+  return new NextResponse(null, { status: 404 });
 }
 
 /**

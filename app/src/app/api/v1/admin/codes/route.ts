@@ -1,16 +1,15 @@
 // app/src/app/api/v1/admin/codes/route.ts
 // 管理后台的兑换码面：GET 列表 / POST 批量签发。
 //
-// 【鉴权全部交给 lib/auth/admin.requireAdmin】= 网页登录态（via='jwt'）+ uid ∈ env ADMIN_UIDS，
+// 【鉴权全部交给 lib/admin/auth.requireAdmin】= 网页登录态（via='jwt'）+ uid ∈ env ADMIN_UIDS，
 // 不过一律空体 404。本路由**不许自己再判一遍**白名单或 via：判两次就有两套口径，
-// 而这条路后面接的是凭空造公道值。（那一份是 ws/admin-console 的 lib/admin/auth.ts 的临时替身，
-// 合并轮归口，见该文件头。）
+// 而这条路后面接的是凭空造公道值。（鉴权唯一入口 lib/admin/auth，与 /admin/users 管理台共用同一份。）
 //
 // 【为什么 GET 也走同一道闸】列表回的是**明文码**。一批还没被兑的码泄出去就是钱，
 // 与签发同级敏感，没有「只读所以放松一点」这回事。
 import { NextResponse } from 'next/server';
 
-import { requireAdmin } from '@/lib/auth/admin';
+import { requireAdmin } from '@/lib/admin/auth';
 import { badRequest, readJsonBody, stringField } from '@/lib/auth/http';
 import { issueRedeemCodes, listRedeemCodes } from '@/lib/billing/redeem';
 import { getDb } from '@/lib/db/client';
@@ -20,8 +19,8 @@ import { toSql } from '@/lib/db/time';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request): Promise<NextResponse> {
-  const admin = requireAdmin(getDb(), req);
-  if (!admin.ok) return admin.response;
+  const guard = requireAdmin(getDb(), req);
+  if (!guard.ok) return guard.response;
 
   return NextResponse.json({ ok: true, codes: listRedeemCodes(getDb()) });
 }
@@ -30,8 +29,8 @@ export async function GET(req: Request): Promise<NextResponse> {
 const MAX_BATCH = 500;
 
 export async function POST(req: Request): Promise<NextResponse> {
-  const admin = requireAdmin(getDb(), req);
-  if (!admin.ok) return admin.response;
+  const guard = requireAdmin(getDb(), req);
+  if (!guard.ok) return guard.response;
 
   const body = await readJsonBody(req);
   if (!body) return badRequest('BAD_REQUEST', '请求体不是合法 JSON');
@@ -60,7 +59,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     count,
     gongdaoValue: gongdao,
     note,
-    createdBy: admin.identity.uid,
+    createdBy: guard.identity.uid,
     expiresAt,
   });
 
