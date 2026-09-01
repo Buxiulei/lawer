@@ -76,7 +76,7 @@ describe('gongdaoSettle 结算', () => {
   test('原子扣减：余额减、流水记负 delta、feature 落库', () => {
     const { db, uid } = makeDb();
     gongdaoGrant(uid, 100, GONGDAO_LEDGER_TYPE.register, null, null, db);
-    gongdaoSettle(uid, 23, 'intake-1', 'intake', db);
+    gongdaoSettle(uid, 23, 'intake-1', 'intake', null, db);
     expect(getGongdao(uid, db)).toBe(77);
     expect(ledgerSum(db, uid)).toBe(77);
     const row = db.prepare("SELECT delta, feature, type FROM gongdao_ledger WHERE ref_id='intake-1'").get() as
@@ -87,8 +87,8 @@ describe('gongdaoSettle 结算', () => {
   test('幂等：同 refId 二次结算只扣一次', () => {
     const { db, uid } = makeDb();
     gongdaoGrant(uid, 100, GONGDAO_LEDGER_TYPE.register, null, null, db);
-    gongdaoSettle(uid, 30, 'job-x', 'draft', db);
-    gongdaoSettle(uid, 30, 'job-x', 'draft', db); // 重放：唯一索引挡下
+    gongdaoSettle(uid, 30, 'job-x', 'draft', null, db);
+    gongdaoSettle(uid, 30, 'job-x', 'draft', null, db); // 重放：唯一索引挡下
     expect(getGongdao(uid, db)).toBe(70);
     const n = (db.prepare("SELECT COUNT(*) c FROM gongdao_ledger WHERE ref_id='job-x'").get() as { c: number }).c;
     expect(n).toBe(1);
@@ -98,7 +98,7 @@ describe('gongdaoSettle 结算', () => {
     const { db, uid } = makeDb();
     gongdaoGrant(uid, 5, GONGDAO_LEDGER_TYPE.register, null, null, db);
     expect(gongdaoGate(uid, db)).toBe(true);
-    gongdaoSettle(uid, 23, 'last', 'intake', db);
+    gongdaoSettle(uid, 23, 'last', 'intake', null, db);
     expect(getGongdao(uid, db)).toBe(-18);
     expect(ledgerSum(db, uid)).toBe(-18);
     expect(gongdaoGate(uid, db)).toBe(false); // 负余额被 gate 拦
@@ -107,7 +107,7 @@ describe('gongdaoSettle 结算', () => {
   test('cost=0（失败无消耗）：落幂等标记但余额不变', () => {
     const { db, uid } = makeDb();
     gongdaoGrant(uid, 100, GONGDAO_LEDGER_TYPE.register, null, null, db);
-    gongdaoSettle(uid, 0, 'fail-0', 'intake', db);
+    gongdaoSettle(uid, 0, 'fail-0', 'intake', null, db);
     expect(getGongdao(uid, db)).toBe(100);
     const row = db.prepare("SELECT delta FROM gongdao_ledger WHERE ref_id='fail-0'").get() as { delta: number };
     expect(row.delta).toBe(0); // 幂等标记行
@@ -115,7 +115,7 @@ describe('gongdaoSettle 结算', () => {
 
   test('结算用户尚无 gongdao 行：UPSERT 建行入负', () => {
     const { db, uid } = makeDb();
-    gongdaoSettle(uid, 10, 'no-row', 'intake', db);
+    gongdaoSettle(uid, 10, 'no-row', 'intake', null, db);
     expect(getGongdao(uid, db)).toBe(-10);
   });
 });
@@ -124,7 +124,7 @@ describe('gongdaoRefund 定额退款', () => {
   test('退还并回补余额，流水 type=退款、ref=refund-<chargeRef>', () => {
     const { db, uid } = makeDb();
     gongdaoGrant(uid, 3000, GONGDAO_LEDGER_TYPE.membership, 'o-1', null, db);
-    gongdaoSettle(uid, 2000, 'attest-7', 'attest', db); // 定额预扣
+    gongdaoSettle(uid, 2000, 'attest-7', 'attest', null, db); // 定额预扣
     expect(gongdaoRefund(uid, 2000, 'attest-7', 'attest', db)).toBe(true);
     expect(getGongdao(uid, db)).toBe(3000);
     const row = db.prepare("SELECT delta, type, feature FROM gongdao_ledger WHERE ref_id='refund-attest-7'").get() as
@@ -135,7 +135,7 @@ describe('gongdaoRefund 定额退款', () => {
   test('幂等：同 chargeRef 只退一次', () => {
     const { db, uid } = makeDb();
     gongdaoGrant(uid, 3000, GONGDAO_LEDGER_TYPE.membership, 'o-1', null, db);
-    gongdaoSettle(uid, 1000, 'export-3', 'export', db);
+    gongdaoSettle(uid, 1000, 'export-3', 'export', null, db);
     expect(gongdaoRefund(uid, 1000, 'export-3', 'export', db)).toBe(true);
     expect(gongdaoRefund(uid, 1000, 'export-3', 'export', db)).toBe(false);
     expect(getGongdao(uid, db)).toBe(3000);
@@ -158,7 +158,7 @@ describe('gongdaoGate 门槛', () => {
     expect(gongdaoGate(uid, db)).toBe(false); // 无行
     gongdaoGrant(uid, 1, GONGDAO_LEDGER_TYPE.register, null, null, db);
     expect(gongdaoGate(uid, db)).toBe(true);
-    gongdaoSettle(uid, 1, 'g', 'intake', db);
+    gongdaoSettle(uid, 1, 'g', 'intake', null, db);
     expect(getGongdao(uid, db)).toBe(0);
     expect(gongdaoGate(uid, db)).toBe(false); // =0 不足
   });
@@ -196,7 +196,7 @@ describe('adminAdjustGongdao 管理员调整（不可致负）', () => {
 
   test('已透支入负时，任何负向调整都被拒（不许雪上加霜）', () => {
     const { db, uid } = makeDb();
-    gongdaoSettle(uid, 50, 'overdraft', 'intake', db); // 余额 -50
+    gongdaoSettle(uid, 50, 'overdraft', 'intake', null, db); // 余额 -50
     expect(adminAdjustGongdao(uid, -1, '再扣', db)).toEqual({ ok: false, balance: -50 });
     // 正向调整仍可（把负余额补回来）
     expect(adminAdjustGongdao(uid, 50, '补回', db)).toEqual({ ok: true, balance: 0 });

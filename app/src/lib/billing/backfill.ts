@@ -17,6 +17,7 @@ import { openCliDb, rethrowIfSchemaStale } from '../db/cli-open';
 
 import { getRatesForModel } from '../db/modelRates';
 import { gongdaoSettle, recordTokenUsage, turnRefId } from './index';
+import { reconcileServedModel } from './served-model';
 import { featureOfMode } from './features';
 import { costOfUsage, type UsageTokens } from './pricing';
 
@@ -42,6 +43,9 @@ export interface BackfillReport {
   unreported: number;
   /** tokens_json 解析不了或缺 model → 不补，单列（数据问题，需人看） */
   malformed: number;
+  /** 补记的轮里型号对账不一致（回显 substituted/unrecognized，已留痕待核）的轮数——
+   *  这批就是实时侧 SERVED_MODEL_MISMATCH 告警对应的历史缺口，单列出来别让它只在 meta 里零信号。 */
+  mismatched: number;
   /** 补记的公道值合计 */
   gongdao: number;
   /** 窗口期：本次补记覆盖的最早/最晚一轮（PR 里要记录的那段时间） */
@@ -59,16 +63,18 @@ interface Candidate {
   user_id: number;
 }
 
-/** tokens_json 形如 {model, usage:{prompt,completion,cachedRead,cachedWrite}}（orchestrator 写入） */
-function parseUsage(raw: string): { model: string; tokens: UsageTokens | null } | null {
+/** tokens_json 形如 {model, usage:{prompt,completion,cachedRead,cachedWrite}, servedModel}（orchestrator 写入）。
+ *  servedModel 是 2026-09-01 之后才写的，历史行没有这个键——缺失按「未回显」处理（reconcile 的 'absent' 档）。 */
+function parseUsage(raw: string): { model: string; tokens: UsageTokens | null; servedModel: string | null } | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
     return null;
   }
-  const rec = parsed as { model?: unknown; usage?: Record<string, unknown> };
+  const rec = parsed as { model?: unknown; usage?: Record<string, unknown>; servedModel?: unknown };
   if (typeof rec?.model !== 'string' || !rec.model || typeof rec.usage !== 'object' || rec.usage === null) return null;
+  const servedModel = typeof rec.servedModel === 'string' && rec.servedModel !== '' ? rec.servedModel : null;
   const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
   const four = {
     promptTokens: num(rec.usage.prompt),
@@ -77,9 +83,10 @@ function parseUsage(raw: string): { model: string; tokens: UsageTokens | null } 
     cacheWriteTokens: num(rec.usage.cachedWrite),
   };
   // 四桶全 null = 当时就没回报，无从补起（不是 0）
-  if (Object.values(four).every((v) => v === null)) return { model: rec.model, tokens: null };
+  if (Object.values(four).every((v) => v === null)) return { model: rec.model, tokens: null, servedModel };
   return {
     model: rec.model,
+    servedModel,
     tokens: {
       promptTokens: four.promptTokens ?? 0,
       completionTokens: four.completionTokens ?? 0,
@@ -103,6 +110,7 @@ export function backfillTokenUsage(db: Database, apply = false): BackfillReport 
     alreadyRecorded: 0,
     unreported: 0,
     malformed: 0,
+    mismatched: 0,
     gongdao: 0,
     windowFrom: null,
     windowTo: null,
@@ -124,13 +132,17 @@ export function backfillTokenUsage(db: Database, apply = false): BackfillReport 
       report.unreported += 1;
       continue;
     }
-    const cost = costOfUsage(parsed.tokens, getRatesForModel(db, parsed.model));
+    // 型号对账与实时记账同一条：回填也是记账点，只在这条路上按请求型号计价，
+    // 等于「实时修好了、补记的仍然算错钱」——同一笔账不该因为走哪条路而是两个数。
+    const served = reconcileServedModel(parsed.model, parsed.servedModel, (m) => getRatesForModel(db, m));
+    if (served.trace) report.mismatched += 1;
+    const cost = costOfUsage(parsed.tokens, getRatesForModel(db, served.billingModel));
     const feature = featureOfMode(row.mode);
     if (apply) {
       // 与实时记账同一条纪律：用量行与消耗流水同事务，不制造「用量无落账」的孤儿。
       db.transaction(() => {
-        recordTokenUsage(row.user_id, feature, parsed.model, parsed.tokens!, refId, null, db);
-        gongdaoSettle(row.user_id, cost, refId, feature, db);
+        recordTokenUsage(row.user_id, feature, served.billingModel, parsed.tokens!, refId, parsed.servedModel, db);
+        gongdaoSettle(row.user_id, cost, refId, feature, served.trace, db);
       })();
     }
     report.backfilled += 1;
@@ -161,6 +173,7 @@ export function backfillCli(dbPath: string, apply: boolean): number {
     db.close();
   }
   console.log(`[回填] 扫描 ${r.scanned} 轮：补记 ${r.backfilled}、已有账 ${r.alreadyRecorded}、当时未回报计量 ${r.unreported}、数据异常 ${r.malformed}`);
+  console.log(`[回填] 补记里型号对账不一致（已留痕待核）${r.mismatched} 轮`);
   console.log(`[回填] 合计公道值 ${r.gongdao}｜窗口期 ${r.windowFrom ?? '—'} 至 ${r.windowTo ?? '—'}`);
   if (!apply) console.log('[回填] 试算完成，未写任何行；确认无误后加 --apply 执行');
   if (r.malformed > 0) {

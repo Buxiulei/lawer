@@ -18,10 +18,10 @@ function makeDb() {
 
   gongdaoGrant(u1, 1000, GONGDAO_LEDGER_TYPE.register, `reg-${u1}`, null, db);
   recordTokenUsage(u1, 'intake', 'deepseek-v3', { promptTokens: 12000, completionTokens: 4000 }, 'intake-u1', null, db);
-  gongdaoSettle(u1, 17, 'intake-u1', 'intake', db);
+  gongdaoSettle(u1, 17, 'intake-u1', 'intake', null, db);
 
   gongdaoGrant(u2, 5000, GONGDAO_LEDGER_TYPE.recharge, 'ORD-u2', null, db);
-  gongdaoSettle(u2, 2000, 'attest-u2', 'attest', db); // 定额端点，无 token_usage
+  gongdaoSettle(u2, 2000, 'attest-u2', 'attest', null, db); // 定额端点，无 token_usage
 
   return { db, u1, u2 };
 }
@@ -65,7 +65,7 @@ describe('reconcile', () => {
     const { db, u1 } = makeDb();
     const rec = (apiModel: string, ref: string) => {
       recordTokenUsage(u1, 'ocr', 'qwen-vl-ocr-2025-11-20', { promptTokens: 100 }, ref, apiModel, db);
-      gongdaoSettle(u1, 1, ref, 'ocr', db); // 配一条消耗流水，避免触发「用量无落账」那条判错
+      gongdaoSettle(u1, 1, ref, 'ocr', null, db); // 配一条消耗流水，避免触发「用量无落账」那条判错
     };
     rec('qwen-vl-ocr-2025-11-20', 'd-1');
     rec('qwen-vl-ocr-2025-11-20', 'd-2');
@@ -85,7 +85,7 @@ describe('reconcile', () => {
     const { db, u1 } = makeDb();
     for (const ref of ['s-1', 's-2', 's-3']) {
       recordTokenUsage(u1, 'ocr', 'qwen-vl-ocr-2025-11-20', { promptTokens: 100 }, ref, 'qwen-vl-ocr', db);
-      gongdaoSettle(u1, 1, ref, 'ocr', db);
+      gongdaoSettle(u1, 1, ref, 'ocr', null, db);
     }
     const r = reconcile(db);
     expect(r.warnings.filter((w) => w.includes('计费口径漂移'))).toEqual([]);
@@ -147,7 +147,7 @@ describe('reconcile · 空账本', () => {
     withAssistantMessage(db, uid);
     gongdaoGrant(uid, 1000, GONGDAO_LEDGER_TYPE.register, `reg-${uid}`, null, db);
     recordTokenUsage(uid, 'intake', 'DeepSeek-V4-Pro-0813', { promptTokens: 100, completionTokens: 20 }, 'turn-1', 'deepseek-v4-pro', db);
-    gongdaoSettle(uid, 1, 'turn-1', 'intake', db);
+    gongdaoSettle(uid, 1, 'turn-1', 'intake', null, db);
 
     expect(reconcile(db).problems).toEqual([]);
   });

@@ -6,7 +6,7 @@
 import BetterSqlite3, { type Database } from 'better-sqlite3';
 
 import { runMigrations } from '@/lib/db/migrate';
-import type { ChatStreamResult, Provider, TokenUsage, ToolCall } from '@/lib/llm';
+import type { ChatStreamResult, Provider, ProviderName, TokenUsage, ToolCall } from '@/lib/llm';
 import { emptyUsage } from '@/lib/llm';
 import type { AgentEvent } from '../events';
 import type { KnowledgePack, KnowledgeSearcher } from '../retrieval';
@@ -47,6 +47,12 @@ export interface ScriptedRound {
    * 与「用量为 0」完全不同（types.ts：null 不可当 0 结算），不给夹具这个开关就测不到那条路。
    */
   usage?: TokenUsage | null;
+  /**
+   * 本轮厂商回显的**实际服务型号**。缺省 = 回显请求的那个（'deepseek-v4-pro'，正常情形）；
+   * 显式传 null = 本次流没回显。传别的串 = 上游把请求路由到了另一个型号——
+   * 计费必须按**实际**那个算（见 billing/served-model.ts），不给夹具这个开关就测不到那条路。
+   */
+  servedModel?: string | null;
 }
 
 export interface ScriptedProvider extends Provider {
@@ -60,14 +66,29 @@ export interface ScriptedProvider extends Provider {
  * 按剧本回放的假 provider。剧本用完后回一轮空的 'stop'，
  * 这样「编排循环会不会无限转」这类问题会表现为测试超时而不是静默死循环。
  */
-export function scriptedProvider(script: ScriptedRound[]): ScriptedProvider {
+/** 假 provider 的身份三件套。缺省是直连 deepseek——想测中转/Claude 档就整组换掉，
+ *  别只换其中一个：name/model/billingModel 三者是一致的，单换一个会造出现实中不存在的组合。 */
+export interface ScriptedIdentity {
+  name: ProviderName;
+  /** 发给 API 的型号串（别名） */
+  model: string;
+  /** 计费键（priced 锁定串，中转带 relay/ 前缀） */
+  billingModel: string;
+}
+
+export function scriptedProvider(script: ScriptedRound[], identity?: ScriptedIdentity): ScriptedProvider {
   const calls: { role: string; content: string }[][] = [];
   let cursor = 0;
-
-  const p = {
-    name: 'deepseek' as const,
+  const id: ScriptedIdentity = identity ?? {
+    name: 'deepseek',
     model: 'deepseek-v4-pro',
     billingModel: 'DeepSeek-V4-Pro-0813',
+  };
+
+  const p = {
+    name: id.name,
+    model: id.model,
+    billingModel: id.billingModel,
     get calls() {
       return calls;
     },
@@ -89,11 +110,12 @@ export function scriptedProvider(script: ScriptedRound[]): ScriptedProvider {
           finishReason: round.finishReason ?? (toolCalls.length ? 'tool_calls' : 'stop'),
           toolCalls,
           usage: {
-            model: 'DeepSeek-V4-Pro-0813',
+            model: id.billingModel,
             usage:
               round.usage === null
                 ? emptyUsage()
                 : { ...emptyUsage(), ...(round.usage ?? { prompt: 100, completion: 20 }) },
+            servedModel: round.servedModel === undefined ? id.model : round.servedModel,
           },
         };
       })();

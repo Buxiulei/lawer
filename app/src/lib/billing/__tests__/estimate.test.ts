@@ -29,7 +29,7 @@ function makeDb() {
 
 /** 插 n 笔某 feature 的消耗流水（各 amount 公道值，ref 唯一）。 */
 function seedConsumption(db: Database.Database, uid: number, feature: string, amounts: number[]) {
-  amounts.forEach((amt, i) => gongdaoSettle(uid, amt, `${feature}-ref-${i}`, feature, db));
+  amounts.forEach((amt, i) => gongdaoSettle(uid, amt, `${feature}-ref-${i}`, feature, null, db));
 }
 
 describe('estimateGongdao · 定额端点', () => {
@@ -63,7 +63,7 @@ describe('estimateGongdao · 种子回落（样本不足 / 零历史）', () => 
     seedConsumption(db, uid, 'ocr', Array(7).fill(80));
     expect(estimateGongdao(db, 'ocr')).toEqual({ gongdao: SEED.ocr, basis: 'seed', sampleN: 7 });
 
-    gongdaoSettle(uid, 80, 'ocr-ref-7', 'ocr', db); // 第 8 笔
+    gongdaoSettle(uid, 80, 'ocr-ref-7', 'ocr', null, db); // 第 8 笔
     const at8 = estimateGongdao(db, 'ocr');
     expect(at8.basis).toBe('history');
     expect(at8.sampleN).toBe(8);
@@ -108,7 +108,7 @@ describe('estimateGongdao · feature 精确匹配 + 零成本行排除', () => {
   test('cost=0 的零成本 / 幂等标记行（delta=0）被排除，不计入样本', () => {
     const { db, uid } = makeDb();
     gongdaoGrant(uid, 100, GONGDAO_LEDGER_TYPE.register, null, null, db);
-    for (let i = 0; i < 10; i++) gongdaoSettle(uid, 0, `intake-zero-${i}`, 'intake', db);
+    for (let i = 0; i < 10; i++) gongdaoSettle(uid, 0, `intake-zero-${i}`, 'intake', null, db);
     expect(estimateGongdao(db, 'intake')).toEqual({ gongdao: SEED.intake, basis: 'seed', sampleN: 0 });
   });
 });
@@ -135,7 +135,7 @@ describe('ensureGongdaoFor · 服务端 gate（余额 ≥ 预计）', () => {
   test('负余额（末单透支入负）→ ok:false，shortfall = estimate + |负余额|', () => {
     const { db, uid } = makeDb();
     gongdaoGrant(uid, 5, GONGDAO_LEDGER_TYPE.register, null, null, db);
-    gongdaoSettle(uid, 23, 'last', 'intake', db); // 余额 → -18
+    gongdaoSettle(uid, 23, 'last', 'intake', null, db); // 余额 → -18
     expect(ensureGongdaoFor(db, uid, 'intake')).toEqual({
       ok: false, estimate: SEED.intake, balance: -18, shortfall: SEED.intake + 18,
     });

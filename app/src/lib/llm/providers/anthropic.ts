@@ -137,7 +137,13 @@ export function createAnthropic(o: ProviderOptions): Provider {
   };
   const billingModel = o.billingModel ?? o.model;
   const tag = `anthropic(${o.model})`;
-  const report = (usage: TokenUsage): UsageReport => ({ model: billingModel, usage });
+  // servedModel 由 message_start 的 message.model 回显填入（见 UsageReport.servedModel），
+  // 缺省 null 而不是 o.model——用请求串冒充回显串，对账探针量的就是个常量。
+  const report = (usage: TokenUsage, servedModel: string | null): UsageReport => ({
+    model: billingModel,
+    usage,
+    servedModel,
+  });
 
   return {
     name: 'anthropic',
@@ -222,12 +228,14 @@ async function* parseAnthropicStream(
   tag: string,
   onChunk: () => void,
   onDone: () => void,
-  report: (usage: TokenUsage) => UsageReport,
+  report: (usage: TokenUsage, servedModel: string | null) => UsageReport,
   onUsage?: UsageCallback,
   onReasoning?: (totalChars: number) => void,
 ): AsyncGenerator<string, ChatStreamResult, void> {
   let finishReason: FinishReason = null;
   const usage: TokenUsage = emptyUsage();
+  // 实际服务模型：只在 message_start 回显一次（OpenAI 兼容侧是每帧都带，这里不是）。
+  let servedModel: string | null = null;
   let sawUsage = false;
   let reasoningChars = 0;
   /** 本条流是否产出过**非空白**正文（思考链不算：它不进正文，用户一个字都看不到） */
@@ -238,8 +246,10 @@ async function* parseAnthropicStream(
     const toolCalls = acc
       .filter((t) => t && (t.id || t.name || t.args))
       .map((t) => ({ id: t.id, type: 'function' as const, function: { name: t.name, arguments: t.args } }));
+    // 「截断到空」判据（stream-length）与 servedModel 上报（served-reconcile）两侧都保：
+    // 前者在交出前拦下 length 截断的空回，后者把回显型号带进计费口径。
     assertTruncatedNotEmpty(tag, finishReason, sawText, toolCalls.length);
-    return { finishReason, toolCalls, usage: report(usage) };
+    return { finishReason, toolCalls, usage: report(usage, servedModel) };
   };
   /** input/output 分别在流首、流末给出，两处都要并进同一份计量。
    *  Anthropic 的 input_tokens 天然不含缓存读写量，四桶直接对上，无需像兼容层那样做减法。 */
@@ -255,7 +265,7 @@ async function* parseAnthropicStream(
     let ev: {
       type?: string;
       index?: number;
-      message?: { usage?: AnthropicUsage };
+      message?: { usage?: AnthropicUsage; model?: string };
       content_block?: { type?: string; id?: string; name?: string };
       delta?: { type?: string; text?: string; partial_json?: string; thinking?: string; stop_reason?: string | null };
       usage?: AnthropicUsage;
@@ -268,6 +278,10 @@ async function* parseAnthropicStream(
     }
     switch (ev.type) {
       case 'message_start':
+        // 空串按「没回显」处理：`model: ""` 会在对账里造出一个假的「不匹配」。
+        if (typeof ev.message?.model === 'string' && ev.message.model.trim() !== '') {
+          servedModel = ev.message.model.trim();
+        }
         if (ev.message?.usage) mergeUsage(ev.message.usage);
         break;
       case 'content_block_start':
@@ -296,7 +310,7 @@ async function* parseAnthropicStream(
         if (ev.usage) mergeUsage(ev.usage);
         break;
       case 'message_stop':
-        if (sawUsage) onUsage?.(report(usage));
+        if (sawUsage) onUsage?.(report(usage, servedModel));
         return finalize();
       case 'error':
         throw new Error(`anthropic 流内错误 ${ev.error?.type ?? 'unknown'}: ${ev.error?.message ?? ''}`);
@@ -305,6 +319,6 @@ async function* parseAnthropicStream(
     }
   }
   // 流末无 message_stop（连接自然关闭）也交出已拼好的工具调用与计量
-  if (sawUsage) onUsage?.(report(usage));
+  if (sawUsage) onUsage?.(report(usage, servedModel));
   return finalize();
 }

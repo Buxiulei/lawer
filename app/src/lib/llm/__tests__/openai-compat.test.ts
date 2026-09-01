@@ -30,6 +30,8 @@ describe('chatStream 正文与结束原因', () => {
     expect(result.usage).toEqual({
       model: 'DeepSeek-V4-Pro-0813',
       usage: { prompt: 1200, completion: 340, cachedRead: null, cachedWrite: null },
+      // 本条的报文没带 model 字段 → 没回显。**不拿请求串冒充**（见 UsageReport.servedModel）
+      servedModel: null,
     });
   });
 
@@ -334,5 +336,62 @@ describe('流式空回：length 截断 + 空正文 = 失败，不是正常收尾
       expect(text).toBe('');
       expect(result.finishReason).toBe(reason);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// served model 回显（评测遗留②）。中转按渠道分组路由，**请求的型号 ≠ 实际服务的型号**，
+// 只有回显串能说明这一轮到底是谁跑的——计费按它对账（billing/served-model.ts）。
+// ─────────────────────────────────────────────────────────────────────────────
+describe('实际服务模型回显（servedModel）', () => {
+  test('usage 帧上的 model 被认出来，作为本次流的实际服务型号', async () => {
+    const sse =
+      dataLine({ model: 'claude-sonnet-5', choices: [{ index: 0, delta: { content: '好' } }] }) +
+      dataLine({ model: 'claude-sonnet-5', choices: [], usage: { prompt_tokens: 10, completion_tokens: 2 } }) +
+      'data: [DONE]\n\n';
+    const [fetchImpl] = mockFetch(() => sseResponse(sse));
+    // 请求的是 opus，中转回的是 sonnet —— 正是要抓的那个形态
+    const p = createDeepSeek({ apiKey: 'k', model: 'claude-opus-5', billingModel: 'relay/claude-opus-5', fetchImpl });
+
+    const { result } = await drain(await p.chatStream([{ role: 'user', content: 'x' }]));
+    expect(result.usage.servedModel).toBe('claude-sonnet-5');
+    // 计费键仍是请求侧算出来的那个：换不换价是 billing 层的裁量，provider 只负责如实回报
+    expect(result.usage.model).toBe('relay/claude-opus-5');
+  });
+
+  test('回显以 usage 帧那一刻为准：中途换渠道时不拿前面的型号给这一帧的用量记账', async () => {
+    const sse =
+      dataLine({ model: 'claude-opus-5', choices: [{ index: 0, delta: { content: 'a' } }] }) +
+      dataLine({ model: 'claude-sonnet-5', choices: [], usage: { prompt_tokens: 5, completion_tokens: 1 } }) +
+      'data: [DONE]\n\n';
+    const [fetchImpl] = mockFetch(() => sseResponse(sse));
+    const p = createDeepSeek({ apiKey: 'k', model: 'claude-opus-5', fetchImpl });
+
+    const { result } = await drain(await p.chatStream([{ role: 'user', content: 'x' }]));
+    expect(result.usage.servedModel).toBe('claude-sonnet-5');
+  });
+
+  test('usage 帧自己没带 model 时沿用此前见过的回显（保活/裸 usage 帧不算「换回去了」）', async () => {
+    const sse =
+      dataLine({ model: 'claude-sonnet-5', choices: [{ index: 0, delta: { content: 'a' } }] }) +
+      dataLine({ choices: [], usage: { prompt_tokens: 5, completion_tokens: 1 } }) +
+      'data: [DONE]\n\n';
+    const [fetchImpl] = mockFetch(() => sseResponse(sse));
+    const p = createDeepSeek({ apiKey: 'k', model: 'claude-opus-5', fetchImpl });
+
+    const { result } = await drain(await p.chatStream([{ role: 'user', content: 'x' }]));
+    expect(result.usage.servedModel).toBe('claude-sonnet-5');
+  });
+
+  test('空串 model 按「没回显」处理——否则对账会收到一个凭空的「不匹配」', async () => {
+    const sse =
+      dataLine({ model: '', choices: [{ index: 0, delta: { content: 'a' } }] }) +
+      dataLine({ model: '', choices: [], usage: { prompt_tokens: 5, completion_tokens: 1 } }) +
+      'data: [DONE]\n\n';
+    const [fetchImpl] = mockFetch(() => sseResponse(sse));
+    const p = createDeepSeek({ apiKey: 'k', model: 'deepseek-v4-pro', fetchImpl });
+
+    const { result } = await drain(await p.chatStream([{ role: 'user', content: 'x' }]));
+    expect(result.usage.servedModel).toBeNull();
   });
 });

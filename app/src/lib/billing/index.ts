@@ -125,19 +125,26 @@ export function gongdaoGrant(
  * 消耗流水（幂等 ref）+ 余额扣减。允许扣成负数（最后一单可透支，后续被 gongdaoGate 拦）。
  * 失败结算按「实际已消耗」传 cost（无预扣退费那套）；cost=0 时只落幂等标记不动余额。
  * 幂等：同 refId 重复结算只扣一次（唯一索引 uq_gongdao_ledger_ref）。
+ *
+ * meta：本笔的审计痕（如「请求 opus 而实际由 sonnet 服务，故按 sonnet 计价」，
+ * 见 billing/served-model.ts）。**异常才写，正常轮传 null**——每笔都塞 meta 就没人会去看它。
+ * 参数位置与 gongdaoGrant 一致（meta 在 db 之前），两个入账口的形状不该各是各的。
  */
 export function gongdaoSettle(
   userId: number,
   cost: number,
   refId: string,
   feature: string | null = null,
+  meta: Record<string, unknown> | null = null,
   db: Database.Database = getDb(),
 ): void {
   const amount = Math.max(0, Math.trunc(cost)); // 结算额非负整数
   db.transaction(() => {
     const res = db
-      .prepare('INSERT OR IGNORE INTO gongdao_ledger (user_id, delta, type, ref_id, feature) VALUES (?,?,?,?,?)')
-      .run(userId, -amount, GONGDAO_LEDGER_TYPE.consume, refId, feature);
+      .prepare(
+        'INSERT OR IGNORE INTO gongdao_ledger (user_id, delta, type, ref_id, feature, meta_json) VALUES (?,?,?,?,?,?)',
+      )
+      .run(userId, -amount, GONGDAO_LEDGER_TYPE.consume, refId, feature, meta ? JSON.stringify(meta) : null);
     if (res.changes === 0) return; // 命中幂等，已扣过
     if (amount !== 0) {
       db.prepare('INSERT INTO gongdao (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance = balance - ?')
