@@ -16,12 +16,9 @@ export default function LoginPage() {
             <TubashuMark size={28} className="size-7" />
             <span className="text-[18px] font-semibold text-ink">土八鼠</span>
           </div>
-          {/* 只说眼前这一步。补绑邮箱是**少数人**（新号注册那一次）才会撞上的支路，
-              预先摆在首屏上，等于让所有人先替那批人担一次心：
-              「原来要验两样」是这一句造成的误解，不是流程本身。 */}
-          <p className="mt-3 text-[15px] leading-7 text-ink-2">
-            手机号验证码登录，大约半分钟。
-          </p>
+          {/* 引言那一句不在这里：它说的是**眼前这一格**要填什么，得跟着通道换，
+              而这一页是无状态的服务端组件（/login 要保持静态预渲染），换不动。
+              见 LoginFlow 的 CHANNEL_INTRO。 */}
         </header>
 
         <LoginFlow />

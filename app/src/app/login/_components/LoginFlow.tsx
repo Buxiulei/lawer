@@ -37,6 +37,21 @@ interface PhoneVerifyResponse {
 type Channel = 'phone' | 'email';
 
 /**
+ * 引言：说的是**眼前这一格**要填什么、大概多久，所以它跟着通道换。
+ *
+ * 【为什么不能留在 page.tsx】那一页是无状态的服务端组件（/login 要保持静态预渲染），
+ * 换不动通道：点进邮箱那屏之后，顶上仍写着"手机号验证码登录"，跟下面的邮箱表单对不上。
+ *
+ * 【为什么只说眼前这一步】补绑邮箱是**少数人**（新号注册那一次）才会撞上的支路，
+ * 预先摆在首屏上，等于让所有人先替那批人担一次心：
+ * 「原来要验两样」是那种句子造成的误解，不是流程本身。
+ */
+const CHANNEL_INTRO: Record<Channel, string> = {
+  phone: '手机号验证码登录，大约半分钟。',
+  email: '邮箱验证码登录，大约半分钟。',
+};
+
+/**
  * 登录：**手机号或邮箱，验一个就进**；手机号是主路，邮箱收在一条次级入口后面。
  *
  * 【为什么不是两个平等的 Tab】两条路都能登录不等于两条路一样常用：
@@ -59,28 +74,18 @@ export function LoginFlow() {
 
   if (completing) {
     return (
-      <div className="flex flex-col gap-5">
-        <Steps current={1} />
-        <Card className="p-5">
-          <EmailChannel completing email={email} onEmailChange={setEmail} agreed={agreed} />
-        </Card>
-        <p className="text-[13px] leading-5 text-ink-2">
-          这是新账号，还差一个邮箱：换手机号时靠它找回账号，文书和存证证明也发到这里。只这一次。
-        </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setCompleting(false)}
-          className="self-start px-2 text-[14px] text-ink-2"
-        >
-          返回上一步
-        </Button>
-      </div>
+      <CompletionPane
+        email={email}
+        onEmailChange={setEmail}
+        agreed={agreed}
+        onBack={() => setCompleting(false)}
+      />
     );
   }
 
   return (
     <div className="flex flex-col gap-5">
+      <ChannelIntro channel={channel} />
       {channel === 'email' ? (
         <EmailPane
           email={email}
@@ -150,6 +155,15 @@ export function LoginFlow() {
 }
 
 /**
+ * 引言那一句。单独成组件，是因为 LoginFlow 自己的 channel state 在 SSR 判据里驱动不了：
+ * 两种取值只有能各自渲染，「引言跟着通道换」这件事才盯得住
+ * （它错位时页面照常能用，只有用户对着邮箱表单读到"手机号验证码登录"）。
+ */
+export function ChannelIntro({ channel }: { channel: Channel }) {
+  return <p className="text-[15px] leading-7 text-ink-2">{CHANNEL_INTRO[channel]}</p>;
+}
+
+/**
  * 换通道那一行：首屏底下的「用邮箱登录 →」和邮箱那屏顶上的「← 用手机号登录」是同一个东西。
  *
  * 收成一处，是因为「次级入口长什么样」这件事有一条**不能靠记性维持**的约束：
@@ -201,6 +215,47 @@ export function EmailPane({
         />
       </Card>
     </>
+  );
+}
+
+/**
+ * 补绑邮箱那一屏（只有新号注册那一次走到）：两格进度 → 邮箱那一格 → 为什么要它 → 退路。
+ *
+ * 单独成组件的理由跟 EmailPane 一样，而这一屏更需要：它藏在 need_email=true 后面，
+ * `completing` 在 SSR 判据里驱动不了，于是复审时把两格进度、那段说明、「返回上一步」
+ * 各删一次，全套测试仍然全绿。三样都是**静默失效**——删了页面照常能用，
+ * 只有走到这一步的新用户不知道自己在哪、为什么要给邮箱、以及怎么退回去。
+ */
+export function CompletionPane({
+  email,
+  onEmailChange,
+  agreed,
+  onBack,
+}: {
+  email: string;
+  onEmailChange: (next: string) => void;
+  agreed: boolean;
+  /** 退回手机号那一步 */
+  onBack: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-5">
+      <Steps current={1} />
+      <Card className="p-5">
+        <EmailChannel completing email={email} onEmailChange={onEmailChange} agreed={agreed} />
+      </Card>
+      <p className="text-[13px] leading-5 text-ink-2">
+        这是新账号，还差一个邮箱：换手机号时靠它找回账号，文书和存证证明也发到这里。只这一次。
+      </p>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onBack}
+        className="self-start px-2 text-[14px] text-ink-2"
+      >
+        返回上一步
+      </Button>
+    </div>
   );
 }
 

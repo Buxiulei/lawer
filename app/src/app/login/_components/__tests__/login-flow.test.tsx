@@ -17,10 +17,16 @@
  *  · `setCompleting(true)`：靠「need_email=true 时不跳走」这条反面判据兜住（跳走了立刻红）。
  *  · `setChannel(...)`：两屏各自能独立渲染（LoginFlow 首屏 / EmailPane），
  *    但「点那条链真的会换屏」只剩源码里那两次赋值可盯，见「两条入口都真接在 channel 上」。
+ *  · `setCompleting(false)`（补绑屏那条退路）同理：屏能独立渲染（CompletionPane），
+ *    接线只剩源码那一次赋值可盯。引言接的是不是活的 channel，也是同一类源码锚点。
  *
  * 【这一版新增的守卫对象】手机号是主路、邮箱是次级入口。
  * 它整个是**视觉层级**上的交付物——把两屏合回并排 Tab、或把次级链改成实心主按钮，
  * 后端一条判据都不会响，登录照样能用，只有用户重新开始困惑。
+ *
+ * 【这一版补的两处】都属于"删掉也全绿"的既有缺口：
+ *  · 引言那一句原先钉死在 page.tsx 上，邮箱那屏顶上仍写着"手机号验证码登录"；
+ *  · 补绑屏（need_email=true）整屏无人看守——两格进度、说明段、「返回上一步」删掉全绿。
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -56,8 +62,9 @@ vi.mock('../ChannelStep', async (importOriginal) => {
   };
 });
 
-const { EmailChannel, EmailPane, LoginFlow } = await import('../LoginFlow');
-// 引言那句预告住在 page.tsx，只渲染 LoginFlow 是看不见它的
+const { ChannelIntro, CompletionPane, EmailChannel, EmailPane, LoginFlow } =
+  await import('../LoginFlow');
+// 整页实渲。它只到得了页面装出来的**默认那一态**（手机号），别的态得各自渲染
 const LoginPage = (await import('../../page')).default;
 
 const text = (html: string) => html.replace(/<[^>]+>/g, '');
@@ -145,6 +152,41 @@ describe('登录第一屏', () => {
   });
 });
 
+/**
+ * 引言那一句。它原先钉在 page.tsx（无状态服务端组件）上写死"手机号验证码登录"，
+ * 点进邮箱那屏之后不跟着换：顶上一句和下面的表单说的是两码事。
+ * 这类错位**不会让任何东西坏掉**——页面照常能登录，只有用户读到两个互相矛盾的说法。
+ */
+describe('引言跟着通道走', () => {
+  const intro = (channel: 'phone' | 'email') =>
+    text(renderToStaticMarkup(<ChannelIntro channel={channel} />));
+
+  it('🔴 手机态：手机号验证码登录', () => {
+    expect(intro('phone')).toContain('手机号验证码登录，大约半分钟。');
+    expect(intro('phone'), '手机那屏读到的是邮箱的说法').not.toContain('邮箱验证码登录');
+  });
+
+  it('🔴 邮箱态：邮箱验证码登录', () => {
+    expect(intro('email')).toContain('邮箱验证码登录，大约半分钟。');
+    expect(
+      intro('email'),
+      '邮箱那屏顶上还写着"手机号验证码登录"，跟下面的邮箱表单对不上',
+    ).not.toContain('手机号验证码登录');
+  });
+
+  it('🔴 首屏实渲就是手机那一句，且引言真接在 channel 上（不是死值）', () => {
+    expect(
+      text(renderToStaticMarkup(<LoginPage />)),
+      '整页渲染里根本没有引言 = 上面两条测的是个没人用的组件',
+    ).toContain('手机号验证码登录，大约半分钟。');
+    // 渲染判据够不着"换了通道真的会换句子"这一处（node 环境驱动不了 channel）。
+    // 把它写死成 <ChannelIntro channel="phone" /> 时，上面两条照样全绿，只有这里会响。
+    expect(SOURCE, '引言写死了通道，换屏也不会跟着变').toContain(
+      '<ChannelIntro channel={channel} />',
+    );
+  });
+});
+
 describe('点开那条次级入口之后', () => {
   const pane = () =>
     renderToStaticMarkup(
@@ -190,6 +232,47 @@ describe('手机验完之后的去向', () => {
     expect(writeToken).toHaveBeenCalledWith('tok-xin');
     // 邮箱是换手机号后找回账号的唯一落点，这一步不能被跳过：一跳走就等于绕过了它
     expect(push, 'need_email=true 还直接进站 = 注册没走完就放人进来').not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 补绑邮箱那一屏（need_email=true，新号注册那一次才走到）。
+ *
+ * 【为什么补这一组】这一屏此前整个没人看守：复审时把两格进度、那段说明、
+ * 「返回上一步」各删一次，vitest / tsc / build 三样全绿——`completing` 在 node 环境里
+ * 驱动不了，判据根本渲染不到这一屏。三样东西的失效形态都是静默的：删掉页面照常能用，
+ * 只有走到这一步的新用户不知道自己在哪、凭什么还要交一个邮箱、以及怎么退回去。
+ * 抽成能独立渲染的组件（照 EmailPane 的做法）之后，下面三条各钉一样。
+ */
+describe('补绑邮箱那一屏（新号注册那一次）', () => {
+  const html = () =>
+    renderToStaticMarkup(
+      <CompletionPane email="xin@example.com" onEmailChange={() => {}} agreed onBack={() => {}} />,
+    );
+
+  it('🔴 两格进度还在：手机验证（已完成）→ 邮箱验证（当前这一格）', () => {
+    const copy = text(html());
+    expect(copy, '删了进度条，走到这一步的人不知道自己在哪、还剩几步').toContain('手机验证');
+    expect(copy, '删了进度条，走到这一步的人不知道自己在哪、还剩几步').toContain('邮箱验证');
+    expect([...html().matchAll(/<li\b/g)].length, '两格，不多不少').toBe(2);
+    expect(copy, '第一格没打勾 = 看着像刚验过的手机白验了').toContain('✓');
+  });
+
+  it('🔴 那段说明还在：凭什么还要一个邮箱，以及只这一次', () => {
+    const copy = text(html());
+    expect(copy, '删了说明，新号注册就成了"莫名其妙又被要一样东西"').toContain('还差一个邮箱');
+    expect(copy, '「只这一次」没了，看着就像从此每次登录都要验两样').toContain('只这一次');
+  });
+
+  it('🔴 退路还在：「返回上一步」，44px 触区，且真接回 completing', () => {
+    // buttonClasses 找不到这个按钮当场红——"删掉那条链"正是这个形态
+    const cls = buttonClasses(html(), '返回上一步');
+    expect(
+      tapHeightPx(cls),
+      '退路也得是 44px 触区（DESIGN.md：触屏目标 ≥44px）',
+    ).toBeGreaterThanOrEqual(44);
+    // 渲染判据够不着接线（node 环境点不动）：拆掉时源码里这次赋值是唯一会响的地方
+    expect(SOURCE, '「返回上一步」没接回 completing，点了没反应').toContain('setCompleting(false)');
   });
 });
 
