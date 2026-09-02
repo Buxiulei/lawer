@@ -210,6 +210,11 @@
 - **W1 MUST_FIX**：/welcome（server component）本支新加接入卡把 BYO.lead（证据/文书）与常规计费句（案件）明文渲染，低调模式基线 1 命中→本支 4；页面注释还断言「本就不含案情词」。修法：两段加 data-veil（纯 CSS 糊层，server component 也生效）+ 按页面锁守卫 + J5 手写词表改 import。已派单。
 - **教训**：同一形态的泄露在相邻页面复现——复核清单里「必查页面」要枚举**所有新增入口页**，不只落地页。
 
+**2026-09-02 16:40 · byo W1 复核：本体修实，经理裁决三项后 PASS（164a950）并合入主干 9c10da8**：
+- W1 修实：/welcome 低调模式剔糊层后命中 4→0（本支新增两处进糊层，品牌行一并糊）；/settings/agent、/case、/account 与上轮逐字节一致；变异 M1–M5 全红点名对应词；三统计 +1 文件 +3 用例，tsc/build 零错。
+- 裁决：①接受 /welcome 低调命中 0 为新基线（品牌名在 CASE_WORDS 内，低调模式本义就是「猜不出这台手机在办什么」，糊品牌合理）；②复核唯一 MUST_FIX 是「范围铁律」——执行者把第三份手抄 `unveiledText` 收成 `_ui/__tests__/unveiled.ts` 唯一入口并让两份旧守卫改 import，纯测试去重、函数体逐行相同、全量绿——**按「修入口不修五处」豁免**，范围铁律本意是防产品代码越界，不是禁止收口；③/welcome 裸布局无 DiscreetVeil 手势层，糊层揭不开（先例 /woo/users 同形），页面仍可用，**另开一单**：裸布局页挂客户端边界 + server component 糊层底下口径改低调变体。
+- 主干 9c10da8 已 push，CI 盯梢中；上产与 chat-finalize 第三轮合批。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
