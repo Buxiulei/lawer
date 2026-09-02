@@ -512,6 +512,37 @@ describe('存量迁移区', () => {
     ).toEqual([{ code: 'OLD-CODE', gongdao_value: 100, note: null, created_by: null }]);
   });
 
+  it('api_keys.client_name：列存在，存量行取 NULL，幂等重跑不重复加列', () => {
+    // 「已上线的老库」= 跑一遍迁移拿到完整 schema，再把这一列摘掉。
+    // 手写一张老 api_keys 是行不通的：它 REFERENCES users，而 users 得由迁移自己建
+    // （手写一张残缺的 users 会让后面的部分索引在 email 列上炸）。
+    const db = newDb();
+    db.exec('ALTER TABLE api_keys DROP COLUMN client_name');
+    const uid = mkUser(db, 'h');
+    db.prepare('INSERT INTO api_keys (user_id, name, key_hash) VALUES (?, ?, ?)').run(
+      uid,
+      '旧钥匙',
+      'hh',
+    );
+
+    const cols = () =>
+      (db.prepare('PRAGMA table_info(api_keys)').all() as { name: string }[]).filter(
+        (c) => c.name === 'client_name',
+      ).length;
+    expect(cols()).toBe(0);
+
+    runMigrations(db);
+    expect(cols()).toBe(1);
+    expect(() => runMigrations(db)).not.toThrow(); // 第二遍跳过，不报 duplicate column name
+    expect(cols()).toBe(1);
+
+    // 存量行的新列是 NULL——**不回填**「未知」之类的占位：走 REST 的客户端本来就不报名字，
+    // 编一个默认值等于假装我们认出了他的助手。
+    expect(db.prepare('SELECT name, client_name FROM api_keys').all()).toEqual([
+      { name: '旧钥匙', client_name: null },
+    ]);
+  });
+
   it('threads.intake_stage：列存在，默认 NULL 且可写读', () => {
     const db = newDb();
     const caseId = mkCase(db, mkUser(db));

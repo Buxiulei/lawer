@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
+import { DiscreetCollapse } from '@/app/_ui/DiscreetCollapse';
 import { useDiscreet } from '@/app/_ui/discreet';
 import { Button } from '@/components/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/shadcn/card';
@@ -19,13 +19,12 @@ import { useAgentSetup } from './useAgentSetup';
  *
  * 【低调模式】话术里逐字带着「土八鼠 / 劳动仲裁」，整卡打码不现实（那是一整段要复制的文本），
  * 所以改成折叠：标题换成中性的「接入配置」，正文点开才渲染，任何提示也不带案件字样。
+ * 折叠这件事本身归 _ui/DiscreetCollapse——接入指南 /settings/agent 用的是同一个壳，
+ * 两处各写一份的那天，新写的那份不会有人替它想起折叠。
  */
 export function AgentSetupCard() {
   const { discreet } = useDiscreet();
   const { info, loading, error, unauthorized } = useAgentSetup();
-  const [expanded, setExpanded] = useState(false);
-
-  const collapsed = discreet && !expanded;
 
   return (
     <Card>
@@ -33,77 +32,59 @@ export function AgentSetupCard() {
         <CardTitle>{discreet ? '接入配置' : '接到你自己的 AI 助手上'}</CardTitle>
       </CardHeader>
       <CardContent>
-        {collapsed ? (
-          <button
-            type="button"
-            onClick={() => setExpanded(true)}
-            className="flex min-h-11 w-full items-center text-[15px] text-ink-2 hover:text-ink"
-          >
-            接入配置（点开查看）
-          </button>
-        ) : (
-          <>
-            <p className="text-[14px] leading-6 text-ink-2">
-              把下面这段话整段发给你的 AI 助手，它就能直接读写这里的档案：传证据、跑解读、起草文书都在你自己的对话里完成。
-              支持 MCP 的走 MCP，不支持的走 REST，两条路能力一样。网页端功能一样齐全，不接也不影响。
+        <DiscreetCollapse label="接入配置（点开查看）">
+          <p className="text-[14px] leading-6 text-ink-2">
+            把下面这段话整段发给你的 AI 助手，它就能直接读写这里的档案：传证据、跑解读、起草文书都在你自己的对话里完成。
+            支持 MCP 的走 MCP，不支持的走 REST，两条路能力一样。网页端功能一样齐全，不接也不影响。
+          </p>
+
+          {/*
+            省钱引导。**措辞的边界**：只说「MCP 这几个工具不扣公道值」，
+            这是可核对的事实——`lib/mcp/tools.ts` 里七个工具全是读写案件数据，
+            没有一个在我们这边调模型。**不写「接了就免费」**：网页对话照旧扣费，
+            把话说满会在用户第一次看见扣费时变成谎话。
+          */}
+          <div className="mt-3 rounded-[8px] border-l-4 border-success bg-success-wash px-3 py-2.5">
+            <p className="text-[14px] leading-6 font-semibold text-success-ink">
+              用你自己的助手干活，能省下公道值
             </p>
+            <p className="mt-0.5 text-[13.5px] leading-6 text-success-ink">
+              接上之后，读档案、记时间线、管待办和期限、列证据这些，都是
+              <span className="font-semibold">你的助手在想</span>
+              ——烧的是它那边的额度，不扣公道值。
+              公道值只在我们这边真的替你调模型时才扣（比如网页里的这个对话）。
+            </p>
+          </div>
 
-            {/*
-              省钱引导。**措辞的边界**：只说「MCP 这几个工具不扣公道值」，
-              这是可核对的事实——`lib/mcp/tools.ts` 里七个工具全是读写案件数据，
-              没有一个在我们这边调模型。**不写「接了就免费」**：网页对话照旧扣费，
-              把话说满会在用户第一次看见扣费时变成谎话。
-            */}
-            <div className="mt-3 rounded-[8px] border-l-4 border-success bg-success-wash px-3 py-2.5">
-              <p className="text-[14px] leading-6 font-semibold text-success-ink">
-                用你自己的助手干活，能省下公道值
-              </p>
-              <p className="mt-0.5 text-[13.5px] leading-6 text-success-ink">
-                接上之后，读档案、记时间线、管待办和期限、列证据这些，都是
-                <span className="font-semibold">你的助手在想</span>
-                ——烧的是它那边的额度，不扣公道值。
-                公道值只在我们这边真的替你调模型时才扣（比如网页里的这个对话）。
-              </p>
-            </div>
+          {loading && <Skeleton className="mt-3 h-40 w-full" />}
 
-            {loading && <Skeleton className="mt-3 h-40 w-full" />}
+          {unauthorized && !loading && <LoggedOutTabs />}
 
-            {unauthorized && !loading && <LoggedOutTabs />}
+          {error && !loading && !unauthorized && (
+            <p className="mt-3 text-[14px] leading-6 text-ink-2">
+              接入信息这次没取到（{error}），稍后回来再看。
+            </p>
+          )}
 
-            {error && !loading && !unauthorized && (
-              <p className="mt-3 text-[14px] leading-6 text-ink-2">
-                接入信息这次没取到（{error}），稍后回来再看。
-              </p>
-            )}
+          {info && (
+            <>
+              <dl className="mt-3 border-t border-line pt-3 text-[14px] leading-6">
+                <Row label="MCP 地址" value={info.mcp_url} mono />
+                <Row label="REST 基址" value={info.api_base} mono />
+                <Row label="能力清单" value={info.manifest_url} mono />
+                <Row
+                  label="可用工具"
+                  value={info.tools.map((t) => t.name).join(' · ') || '（接口未返回工具清单）'}
+                  mono
+                />
+              </dl>
 
-            {info && (
-              <>
-                <dl className="mt-3 border-t border-line pt-3 text-[14px] leading-6">
-                  <Row label="MCP 地址" value={info.mcp_url} mono />
-                  <Row label="REST 基址" value={info.api_base} mono />
-                  <Row label="能力清单" value={info.manifest_url} mono />
-                  <Row
-                    label="可用工具"
-                    value={info.tools.map((t) => t.name).join(' · ') || '（接口未返回工具清单）'}
-                    mono
-                  />
-                </dl>
-
-                <div className="mt-4">
-                  <SetupPrompt info={info} />
-                </div>
-              </>
-            )}
-
-            {discreet && (
-              <div className="mt-4 border-t border-line pt-3">
-                <Button size="sm" variant="secondary" onClick={() => setExpanded(false)}>
-                  收起
-                </Button>
+              <div className="mt-4">
+                <SetupPrompt info={info} />
               </div>
-            )}
-          </>
-        )}
+            </>
+          )}
+        </DiscreetCollapse>
       </CardContent>
     </Card>
   );

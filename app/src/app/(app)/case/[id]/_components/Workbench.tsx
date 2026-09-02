@@ -27,6 +27,7 @@ import {
   useCitationBridge,
 } from './citations';
 import { toActionItem, type DraftFrame } from '../_stream/frames';
+import { ByoAgentNotice } from './ByoAgentNotice';
 import { readToken } from '../_stream/httpTransport';
 import { useCaseHistory } from '../_stream/useCaseHistory';
 import { useChatStream, type SettledTurn } from '../_stream/useChatStream';
@@ -329,6 +330,9 @@ export function Workbench({ caseId }: { caseId: string }) {
           **这仍是 768 与 393 版式不同的可量证据**：同一段文字的左边界 x
           会从 16px 变成 (可用宽-672)/2。 */}
       <div className="min-w-0 @min-[736px]/work:mx-auto @min-[736px]/work:max-w-2xl">
+        {/* 已接入自己 agent 的人才看得到；没接入时它自己返回 null。
+            放在正文收窄容器内，左边界与消息对齐——它是说给这一栏听的一句话。 */}
+        <ByoAgentNotice />
         {stream.demoFallback && <DemoDataBanner />}
 
         <div className="flex flex-col gap-5 md:gap-7">

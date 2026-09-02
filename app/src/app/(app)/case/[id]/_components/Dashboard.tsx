@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { demoCase } from '@/app/_mock/demo';
 import type { ActionItem } from '@/app/_mock/types';
-
+import { ByoAgentEntry } from '@/app/_ui/ByoAgentEntry';
 import { useDiscreet } from '@/app/_ui/discreet';
 import { NeutralLabel } from '@/app/_ui/NeutralLabel';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
@@ -152,6 +152,10 @@ export function DashboardBody({
       )}
       <DeadlineTiles deadlines={deadlines} />
       <DossierEntry caseId={caseId} />
+      {/* 「用你自己的 agent」的常驻入口。排在期限与公司档案之后、最近材料之前：
+          它是入口不是内容，不该挤在"该做什么 / 什么时候之前"前面；
+          但也不能只留在设置页——想省钱的念头是在办事的路上起的。 */}
+      <ByoAgentEntry className="mt-3" />
       <div data-mo-enter>
         <RecentRecords caseId={caseId} records={data.records} />
       </div>

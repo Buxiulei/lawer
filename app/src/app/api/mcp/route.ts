@@ -4,6 +4,7 @@
 //
 // 路由照例是薄的：鉴权 → 解析 JSON-RPC → 分发到 lib/mcp/tools 的注册表 → 包壳返回。
 import { hasScope, resolveIdentity } from '@/lib/auth/identity';
+import { recordClientName } from '@/lib/db/api-keys';
 import { getDb } from '@/lib/db/client';
 import { findTool, TOOLS } from '@/lib/mcp/tools';
 import {
@@ -61,7 +62,16 @@ export async function POST(req: Request) {
   const params = (msg.params ?? {}) as Record<string, unknown>;
 
   switch (msg.method) {
-    case 'initialize':
+    case 'initialize': {
+      // 客户端自报的名字（MCP 规范 initialize.params.clientInfo）。此前整个丢掉，
+      // 于是页面上只能显示用户自己给钥匙起的名，说不出"到底是哪个助手接进来了"。
+      // 没报名字就**不写**——不能拿一次匿名握手把上一次报过的名字抹掉。
+      const clientInfo = params.clientInfo as { name?: unknown } | undefined;
+      const reported =
+        typeof clientInfo?.name === 'string' ? clientInfo.name.trim().slice(0, 64) : '';
+      if (identity.keyId !== undefined && reported) {
+        recordClientName(getDb(), identity.keyId, reported);
+      }
       return json(
         rpcResult(id, {
           protocolVersion: negotiateVersion(params.protocolVersion),
@@ -72,6 +82,7 @@ export async function POST(req: Request) {
             '时间线只追加不修改，记错了补一条更正事件。',
         }),
       );
+    }
 
     case 'tools/list':
       return json(

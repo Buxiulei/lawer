@@ -110,6 +110,59 @@ describe('协议握手', () => {
     expect((await unknown.json()).result.protocolVersion).toBe('2025-06-18');
   });
 
+  /**
+   * clientInfo.name 要落库。
+   *
+   * 【为什么这条值得单立】页面上「已接入：claude-code」那一行的名字就来自这里。
+   * 握手照收、名字照丢的话，页面只能念用户自己给钥匙起的备注，
+   * 于是**它看起来在报告"哪个助手接进来了"，其实只是在复读用户自己填的字**——
+   * 这种假话没有任何报错，也没有任何人会去核对。
+   */
+  test('initialize 带 clientInfo.name → 落进 api_keys.client_name', async () => {
+    const keyRow = () =>
+      db.prepare('SELECT client_name FROM api_keys WHERE key_hash = ?').get(hashApiKey(keyA)) as {
+        client_name: string | null;
+      };
+    expect(keyRow().client_name).toBeNull(); // 正对照：一开始确实是空的
+
+    await POST(
+      rpc(
+        {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: { protocolVersion: '2025-06-18', clientInfo: { name: 'claude-code' } },
+        },
+        keyA,
+      ),
+    );
+    expect(keyRow().client_name).toBe('claude-code');
+
+    // 不报名字的那一次**不许把已有的名字抹掉**：同一把 key 换个不报名的客户端握手，
+    // 页面会当场从「claude-code」退回「你给钥匙起的名」，而没有任何东西变坏。
+    await POST(rpc({ jsonrpc: '2.0', id: 2, method: 'initialize' }, keyA));
+    expect(keyRow().client_name).toBe('claude-code');
+
+    // 空白名同理：空格不是自报名
+    await POST(
+      rpc({ jsonrpc: '2.0', id: 3, method: 'initialize', params: { clientInfo: { name: '   ' } } }, keyA),
+    );
+    expect(keyRow().client_name).toBe('claude-code');
+  });
+
+  test('自报名过长会被截到 64 字符——长度由我们定，不由对方定', async () => {
+    await POST(
+      rpc(
+        { jsonrpc: '2.0', id: 1, method: 'initialize', params: { clientInfo: { name: 'x'.repeat(500) } } },
+        keyA,
+      ),
+    );
+    const row = db
+      .prepare('SELECT client_name FROM api_keys WHERE key_hash = ?')
+      .get(hashApiKey(keyA)) as { client_name: string | null };
+    expect(row.client_name).toHaveLength(64);
+  });
+
   test('MCP-Protocol-Version 头不认识 → 400；认识或不带 → 放行', async () => {
     const bad = await POST(
       rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, keyA, {
