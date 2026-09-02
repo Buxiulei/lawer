@@ -304,10 +304,15 @@ describe('J19 api key 能碰到的扣费路由，仍是那两条具名的', () =
    * 那些一行扣费都不走（self-host-hint.test 已钉死）。
    *
    * 但 api key 在**路由层**并非碰不到扣费路由。当前恰好两条，两条都不在 manifest 里：
-   *   ① cases/[id]/chat        —— 让我们这边的模型跑一轮，按轮扣。《接入说明》计费节
-   *                               已写明这条例外，并明确告诉对方的 agent「不要调它」。
-   *   ③ company/dossiers/confirm —— 公司档案购买，先报价、用户确认才扣（主动下单）。
+   *   ① cases/[id]/chat          —— 让我们这边的模型跑一轮，按轮扣。
+   *   ② company/dossiers/confirm —— 公司档案购买，先报价、用户确认才扣（主动下单）。
    * 多出第三条，这句承诺就需要重写——而它多出来的时候，页面看起来完全正常。
+   *
+   * 【为什么还要连着查文档】《接入说明》是给**对方的 agent** 看的那一份，它写过一版
+   * 「⚠️ 唯一例外：POST /api/v1/cases/{id}/chat」——路由清单钉着两条，文档只写了一条，
+   * 两边各自都读得通顺，合起来才看得出少了一条：照说明接进来的 agent 会以为
+   * dossiers/confirm 不花钱，而用户是在账单上发现它的。所以下面第二条把
+   * **文档写的例外数**与**守卫钉的路由数**绑在一起，两边必须一起动。
    */
   const API = join(SRC, 'app', 'api');
   const BILLING_ENTRIES = ['runTurn', 'confirmDossier', 'runWatchBilling', 'watchBillingCli'];
@@ -327,6 +332,12 @@ describe('J19 api key 能碰到的扣费路由，仍是那两条具名的', () =
     walk(API);
     return out;
   };
+
+  /** api key 够得着的扣费路由。文档与代码两边都按它对齐。 */
+  const EXPECTED = [
+    'api/v1/cases/[id]/chat/route.ts',
+    'api/v1/company/dossiers/confirm/route.ts',
+  ];
 
   it('清单恰好是那两条', () => {
     const reachable: string[] = [];
@@ -354,7 +365,36 @@ describe('J19 api key 能碰到的扣费路由，仍是那两条具名的', () =
         `怎么办：要么把新路由改成 requireWebSession（api key 一律 401），` +
         `要么在 skill/接入说明.md 的「计费」节写明这条例外并把它加进本清单。` +
         `注意：这两条都**不在** /api/manifest 里，照说明接进来的 agent 撞不上。`,
-    ).toEqual(['api/v1/cases/[id]/chat/route.ts', 'api/v1/company/dossiers/confirm/route.ts']);
+    ).toEqual([...EXPECTED].sort());
+  });
+
+  /** 路由文件路径 → 《接入说明》里该写的那个 REST 路径。派生，不手抄。 */
+  const restPath = (routeFile: string): string =>
+    '/' + routeFile.replace(/\/route\.tsx?$/, '').replace('[id]', '{id}');
+
+  it('《接入说明》计费节写的例外，与上面这份清单逐条对得上', () => {
+    const doc = read('../skill/接入说明.md');
+    const billing = doc.slice(doc.indexOf('\n## 计费'), doc.indexOf('\n## 接入方式一'));
+    expect(billing, '《接入说明》里找不到「## 计费」与它后面那节').not.toBe('');
+
+    const bullets = billing.split('\n').filter((l) => l.trim().startsWith('- ⚠️'));
+    expect(
+      bullets.length,
+      `缺什么：计费节写了 ${bullets.length} 条例外，而 api key 够得着的扣费路由有 ${EXPECTED.length} 条。\n` +
+        `为什么缺：这份说明是给对方的 agent 看的。少写一条，它会以为那条端点不花钱，` +
+        `照着调下去——用户是在账单上发现的。多写一条，它会绕开一条根本不扣费的端点。\n` +
+        `怎么办：例外要与上面那份路由清单一一对应，一条路由一条 bullet，写明什么时候扣。`,
+    ).toBe(EXPECTED.length);
+
+    for (const route of EXPECTED) {
+      const path = restPath(route);
+      expect(
+        billing.includes(path),
+        `缺什么：计费节里没有 \`${path}\`。\n` +
+          `为什么缺：这条路由 api key 够得着且会扣费，而给 agent 看的说明里没提它。\n` +
+          `怎么办：在「## 计费」节补一条 ⚠️ 例外，写清什么时候扣、扣多少怎么定。`,
+      ).toBe(true);
+    }
   });
 
   it('正对照：扫描确实认得出扣费路由（否则上一条在空集上永远绿）', () => {
