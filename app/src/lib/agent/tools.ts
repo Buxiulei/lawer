@@ -18,6 +18,14 @@ import * as store from '@/lib/db/agent';
 import type { ToolDef } from '@/lib/llm';
 import type { AgentEventSink } from './events';
 import * as calc from './calc';
+import {
+  isSanbeiCapVerified,
+  readCardValueFen,
+  readSanbeiCap,
+  SANBEI_CAP_PACK_ID,
+  SANBEI_CAP_UNVERIFIED_CAVEAT,
+  sanbeiCapFacts,
+} from '@/lib/cap/sanbei';
 import { citationCorrectionDirective, type CitationGuard } from './citation-guard';
 import { compactCrisisCard, CRISIS_RESOURCE_PACK_ID } from './crisis';
 import { unsupportedVerbatimQuotes } from './citation-block';
@@ -48,59 +56,17 @@ export const DRAFT_KINDS = [
  *  加进来之前不列进 enum——列了模型就会调，然后拿到一个「不支持」的错误。 */
 export const CALC_KINDS = ['N', 'N+1', '2N', '年假', '双倍工资', '加班费', '待岗', '加付赔偿金', '竞业补偿', '病假工资'] as const;
 
-/** 三倍封顶基数所在的数据卡（值逐年更新，代码里的常量只能当兜底） */
-export const SANBEI_CAP_PACK_ID = 'data-beijing-shepin-fengding';
-
 /**
- * 从数据卡的**结构化 facts** 里读当前三倍封顶值（分）。
- *
- * 【manager 2026-08-20 定式：纯函数保持纯，数据活性归卡】
- * WS1 的 calc 是纯函数，它的 `SANBEI_CAP_FEN_DEFAULT` 是一个**逐年会变的数字**被写死在代码里——
- * 卡更新了代码不会变，而这个数直接决定赔偿金额。修法不是去动纯函数，而是在**工具包装层**
- * 把卡里的当前值注入入参；死常量降级为「卡拿不到时的最后兜底」。
- *
- * 【本函数只读 facts，不解析正文】新写的消费者不该再犯「让代码去猜散文」那个错——
- * 这是号码事故的根因（见 crisis.ts）。facts 基建未到之前，本函数恒返回 null，
- * 即「卡不可用」是当前常态，走兜底路径（带 notice + calc_json 强制标待核实）。
+ * 三倍封顶基数的定义**不在本文件**：值、key、卡 id、单位换算与「待核实」口径
+ * 统一收在 `@/lib/cap/sanbei`，首诊结果页与对话共用同一份。
+ * 这里只把它们原样再导出，好让既有的 `tools.SANBEI_CAP_*` 引用不必逐处改。
  */
-/**
- * 从数据卡的**结构化 facts** 里读当前三倍封顶基数，返回 { capFen, confidence }。
- *
- * 【manager 2026-08-20 定式：纯函数保持纯，数据活性归卡】
- * WS1 的 calc 是纯函数，其 `SANBEI_CAP_FEN_DEFAULT` 是一个**逐年会变的数字**写死在代码里——
- * 卡更新了代码不会变，而这个数直接决定赔偿金额。修法不动纯函数，而是在**工具包装层**
- * 把卡里的当前值注入入参；死常量降级为「卡拿不到时的最后兜底」。
- *
- * 【只读 facts，不解析正文】新消费者不该再犯「让代码去猜散文」那个错（见 crisis.ts 的号码事故）。
- * 【单位换算在这一层做】卡里记的是「元/月」（人读的单位），calc 要「分」——
- * 换算写在读取处，别让两边各自换一次。
- */
-export function readSanbeiCap(
-  facts?: KnowledgePack['facts'],
-): { capFen: number; confidence: string; effectiveFrom: string; yuan: number } | null {
-  const hit = readCardValueFen(facts, SANBEI_CAP_VALUE_KEY);
-  return hit ? { capFen: hit.fen, ...hit } : null;
-}
-
-/**
- * 从 data 卡的结构化 values 里读一个「元/月」的钱数，换算成分。
- *
- * 【为什么换算写在这一处】卡的单位是元、calc 全程用分。两边各换一次迟早差一个百倍，
- * 而这个数最后会写进仲裁申请书。单位不是预期值时**返回 null 走兜底，绝不猜**。
- *
- * 【为什么这些数不写死在 calc 里】最低工资、社平封顶、生活费标准每年都会调。
- * 纯函数保持纯、数据活性归卡（manager 2026-08-20 裁决）——calc 只保留内置缺省值当兜底，
- * 当前值一律现取，卡更新了产品自动跟随，不用改代码。
- */
-export function readCardValueFen(
-  facts: KnowledgePack['facts'] | undefined,
-  key: string,
-): { fen: number; confidence: string; effectiveFrom: string; yuan: number } | null {
-  const hit = facts?.values?.find((v) => v?.key === key);
-  if (!hit || typeof hit.value !== 'number' || !(hit.value > 0)) return null;
-  if (hit.unit !== '元/月') return null; // 单位不是预期的就别猜，走兜底
-  return { fen: Math.round(hit.value * 100), confidence: hit.confidence, effectiveFrom: hit.effective_from, yuan: hit.value };
-}
+export {
+  SANBEI_CAP_PACK_ID,
+  SANBEI_CAP_VALUE_KEY,
+  readCardValueFen,
+  readSanbeiCap,
+} from '@/lib/cap/sanbei';
 
 /**
  * 四个非解除补偿类算法的分派：未休年假 / 未签合同双倍工资 / 加班费 / 待岗工资。
@@ -360,9 +326,6 @@ function persistCalc(
 
 /** 期间计算通则卡（逐字条文来源，见 lib/deadline） */
 export const PERIOD_RULE_PACK_ID = 'statute-qijian-jisuan-tongze';
-
-/** 封顶基数在数据卡 values 里的 key */
-export const SANBEI_CAP_VALUE_KEY = 'fengding_jishu_monthly';
 
 /** 最低工资数据卡：年假折算、双倍工资、加班费、待岗四个公式都要用它兜底下限 */
 export const MIN_WAGE_PACK_ID = 'data-beijing-zuidi-gongzi';
@@ -1224,7 +1187,7 @@ const HANDLERS: Record<string, Handler> = {
     const capCard = ctx.searcher?.get?.(SANBEI_CAP_PACK_ID);
     const cap = readSanbeiCap(capCard?.facts);
     const sanbeiCapFen = cap?.capFen ?? null;
-    if (cap && cap.confidence !== '原文核实') {
+    if (cap && !isSanbeiCapVerified(cap)) {
       // 值取到了但卡自己标着待核实——charter §3 要求如实带上这个状态，不能因为「有数」就当它坐实了
       ctx.emit({
         event: 'notice',
@@ -1249,8 +1212,8 @@ const HANDLERS: Record<string, Handler> = {
     // 展示要求紧贴数据本身下发：把「这个数怎么讲给用户」写在返回值里，
     // 比写在通用指令区管用得多（实测：写在开头的「别重印整张卡」被无视了两轮）。
     const capNote = cap
-      ? `本次三倍封顶基数取自数据卡：**${cap.yuan} 元/月**（生效期间 ${cap.effectiveFrom}，可信度「${cap.confidence}」）。` +
-        `讲封顶检查时这三项要逐字给全${cap.confidence !== '原文核实' ? '，并明说该值仍待核实、以最新公布值为准' : ''}。`
+      ? `本次三倍封顶基数取自数据卡：**${sanbeiCapFacts(cap)}**。` +
+        `讲封顶检查时这三项要逐字给全${isSanbeiCapVerified(cap) ? '' : `，并明说${SANBEI_CAP_UNVERIFIED_CAVEAT}`}。`
       : null;
 
     // sanbeiCapFen 传 undefined 时 calc 会用内置常量并自动打上「社平新值待核实」flag。

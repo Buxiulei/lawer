@@ -4,7 +4,13 @@
  * 接后端后估算逻辑由 lib/cases 计算器替换，页面组件签名不变。
  */
 
-import { BJ_AVG_WAGE_YUAN, BJ_CAP_YUAN } from './demo';
+import type { SanbeiCap } from '@/lib/cap/sanbei';
+import { sanbeiCapFacts, SANBEI_CAP_UNVERIFIED_CAVEAT, isSanbeiCapVerified } from '@/lib/cap/sanbei';
+import {
+  INTAKE_STAGE_ACTIONS,
+  intakeActionDueAt,
+  intakeActionPriority,
+} from '@/lib/cases/intake-actions';
 import type { ActionItem, CaseStage, EvidenceCategory, EvidenceItem } from './types';
 
 /* ── 步骤 1：现在处于哪一步 ─────────────────────────────── */
@@ -95,6 +101,12 @@ export interface ClaimEstimateInput {
   /** 月工资（元），NaN 表示还没填 */
   monthlyWageYuan: number;
   goals: string[];
+  /**
+   * 三倍社平封顶基数的当前读数，由服务端从知识卡取好传进来（见 lib/cap/sanbei）。
+   * **null = 卡里没读到**：这时一分钱都不算，绝不落回任何写死的旧数字——
+   * 封顶线决定赔偿上限，猜错的代价是给劳动者一个错误的期待值。
+   */
+  cap: SanbeiCap | null;
 }
 
 export interface ClaimEstimateRow {
@@ -113,8 +125,10 @@ export interface ClaimEstimate {
   baseWageYuan: number;
   capped: boolean;
   capNote: string;
-  /** 缺基本信息时为 true，金额一律显示为待补 */
+  /** 算不出金额时为 true，金额一律显示为待补 */
   incomplete: boolean;
+  /** 算不出的原因：用户还没填全，还是封顶基数没取到。两者该说的话不一样 */
+  incompleteReason: 'inputs' | 'cap' | null;
 }
 
 /** 经济补偿年限：满一年算一年，满半年不满一年算一年，不满半年算半年。 */
@@ -145,17 +159,33 @@ export function estimateClaims(
   now: Date = new Date(),
 ): ClaimEstimate {
   const wage = input.monthlyWageYuan;
-  const incomplete = !input.hiredOn || !Number.isFinite(wage) || wage <= 0;
+  const cap = input.cap;
+  // 缺输入与缺封顶基数都算不出钱，但要分开说：一个是「回去补两格」，一个是我们这边的问题。
+  const missingInputs = !input.hiredOn || !Number.isFinite(wage) || wage <= 0;
+  const incompleteReason: 'inputs' | 'cap' | null = missingInputs
+    ? 'inputs'
+    : cap === null
+      ? 'cap'
+      : null;
+  const incomplete = incompleteReason !== null;
   const serviceYears = input.hiredOn ? serviceYearsBetween(input.hiredOn, now) : 0;
-  const capped = !incomplete && wage > BJ_CAP_YUAN;
-  const baseWageYuan = capped ? BJ_CAP_YUAN : incomplete ? 0 : wage;
+  const capped = !incomplete && cap !== null && wage > cap.yuan;
+  const baseWageYuan = incomplete ? 0 : capped && cap !== null ? cap.yuan : wage;
   const cappedYears = capped ? Math.min(serviceYears, 12) : serviceYears;
 
-  const capNote = incomplete
-    ? `北京口径：月工资超过上年度职工月平均工资的三倍（按 ${BJ_AVG_WAGE_YUAN} 元计，封顶线 ${BJ_CAP_YUAN} 元）时，按封顶线计且年限最多 12 年。`
-    : capped
-      ? `月工资高于北京三倍社平封顶线（${BJ_CAP_YUAN} 元），基数按封顶线计，年限最多算 12 年。`
-      : `月工资未超过北京三倍社平封顶线（${BJ_CAP_YUAN} 元），不封顶，年限也不受 12 年上限限制。`;
+  // 封顶线的三项事实（值 / 生效期间 / 可信度）走 lib/cap/sanbei 的统一口径，
+  // 与对话里讲的是同一份；待核实的状态一路带到用户面前，不因为「有数」就当它坐实了。
+  const capNote =
+    cap === null
+      ? '三倍社平封顶基数这次没从数据卡读到，所以金额先不算——这个数决定赔偿上限，读不到就不猜。' +
+        '刷新一次通常就好；一直不行请告诉我们，这是我们这边的问题。'
+      : `北京三倍社平封顶基数：${sanbeiCapFacts(cap)}。` +
+        (isSanbeiCapVerified(cap) ? '' : `${SANBEI_CAP_UNVERIFIED_CAVEAT}。`) +
+        (missingInputs
+          ? '月工资超过它时按它计，且年限最多算 12 年。'
+          : capped
+            ? '你的月工资高于它，基数按封顶线计，年限最多算 12 年。'
+            : '你的月工资未超过它，不封顶，年限也不受 12 年上限限制。');
 
   const yuanToFen = (yuan: number) => Math.round(yuan * 100);
   const moneyGoals = input.goals.filter((g) =>
@@ -192,128 +222,10 @@ export function estimateClaims(
     rows.push({ key: goal, label: goal, amountFen: null, note });
   }
 
-  return { rows, serviceYears, baseWageYuan, capped, capNote, incomplete };
+  return { rows, serviceYears, baseWageYuan, capped, capNote, incomplete, incompleteReason };
 }
 
 /* ── 首诊结束后的下一步行动（按阶段给 3 条）───────────────── */
-
-interface ActionSeed {
-  title: string;
-  detail: string;
-  /** 距今天几天到期，null = 不设期限 */
-  dueInDays: number | null;
-}
-
-const STAGE_ACTIONS: Record<CaseStage | '', ActionSeed[]> = {
-  '': [],
-  风声: [
-    {
-      title: '先把劳动合同和近 12 个月工资流水导出来',
-      detail:
-        '一旦被收走权限，这些材料就不好拿了。合同拍照存到自己手机，工资流水从银行 App 导出带电子章的 PDF。',
-      dueInDays: 3,
-    },
-    {
-      title: '把公司宣布调整的场合记下来',
-      detail:
-        '开会时间、说了什么、谁说的，写成一句话记到时间线里。将来公司说"和裁员无关"时，这些是最早的印证。',
-      dueInDays: 7,
-    },
-    {
-      title: '暂时不要主动提离职，也不要签任何空白表格',
-      detail:
-        '主动辞职拿不到补偿。在没有书面方案之前，口头答应也可能被当成协商一致的证据。',
-      dueInDays: null,
-    },
-  ],
-  约谈中: [
-    {
-      title: '下次约谈前打开手机录音',
-      detail:
-        '在北京，当事人对自己参与的谈话录音是合法的，仲裁中可以作为证据。录完不要剪辑，原始文件留在手机里。',
-      dueInDays: 2,
-    },
-    {
-      title: '不要当场签《协商解除协议》',
-      detail:
-        '协议一旦签了，再主张违法解除赔偿金会非常被动。可以说"我要拿回去看看"，这句话不需要任何理由。',
-      dueInDays: null,
-    },
-    {
-      title: '用书面方式要公司出具方案',
-      detail:
-        '发一封工作邮件，请公司写明解除理由、补偿计算方式和支付时间，抄送自己的私人邮箱留底。',
-      dueInDays: 5,
-    },
-  ],
-  已收通知: [
-    {
-      title: '把解除通知原件拍照，传到文件解读',
-      detail:
-        '通知书上写的解除理由决定了你能主张 N 还是 2N。上传后会逐条标出对你不利的表述。',
-      dueInDays: 2,
-    },
-    {
-      title: '书面回复公司，保留异议',
-      detail:
-        '收到通知后不表态，容易被解读为默认接受。一封写明"不认可解除理由、保留全部权利"的回复就够了。',
-      dueInDays: 5,
-    },
-    {
-      title: '办交接可以配合，但别签认可解除理由的字',
-      detail:
-        '交接清单只写物品和工作，遇到"本人认可公司解除决定"这类表述，划掉再签，或者写明"仅确认交接物品"。',
-      dueInDays: null,
-    },
-  ],
-  已解除: [
-    {
-      title: '确认仲裁时效的起算日',
-      detail:
-        '劳动争议仲裁时效是一年，从你知道权利被侵害那天起算；欠薪的时效从劳动关系终止之日起算。先把这个日子定下来。',
-      dueInDays: 3,
-    },
-    {
-      title: '把工资流水、考勤、聊天记录补齐到证据库',
-      detail:
-        '离职后公司系统会陆续关闭，钉钉、企业微信里的记录要趁还能登录的时候导出来。',
-      dueInDays: 7,
-    },
-    {
-      title: '要求公司出具离职证明并办理退工',
-      detail:
-        '离职证明是法定义务，不能以"没签协议"为由扣着。拿不到会影响下一家入职，也是可以一并主张的诉求。',
-      dueInDays: 10,
-    },
-  ],
-  仲裁准备: [
-    {
-      title: '核对被申请人主体信息',
-      detail:
-        '申请书上的公司名称、统一社会信用代码必须和劳动合同上的签约主体一致，写错会被要求补正，白跑一趟。',
-      dueInDays: 3,
-    },
-    {
-      title: '按诉求逐条整理证据清单',
-      detail:
-        '每一条诉求对应哪几份证据、证明什么，列成表。朝阳区仲裁委立案时要提交证据目录。',
-      dueInDays: 5,
-    },
-    {
-      title: '把证据固化，拿到存证证明',
-      detail:
-        '聊天记录和录音这类电子证据，固化后带时间戳和哈希值，公司质疑真实性时能直接复核。',
-      dueInDays: 7,
-    },
-  ],
-  已立案: [],
-  开庭: [],
-  裁决: [],
-  一审: [],
-  二审: [],
-  执行: [],
-  结案: [],
-};
 
 /** 档案预览里的「下一步做什么」，按阶段取 3 条。 */
 export function previewActions(
@@ -321,17 +233,17 @@ export function previewActions(
   caseId = 'demo',
   now: Date = new Date(),
 ): ActionItem[] {
-  const seeds = STAGE_ACTIONS[stage] ?? [];
+  // 种子表在 lib/cases/intake-actions（服务端落库用的是同一份）。这里只做「种子 → 视图行」，
+  // 不再自己存一份文案：屏幕上写着三件事、库里一件都没有，就是这么来的。
+  const seeds = INTAKE_STAGE_ACTIONS[stage] ?? [];
   return seeds.map((seed, i) => ({
     id: `intake_action_${i + 1}`,
     caseId,
     title: seed.title,
     detail: seed.detail,
-    dueAt:
-      seed.dueInDays === null
-        ? null
-        : new Date(now.getTime() + seed.dueInDays * 86_400_000).toISOString(),
-    priority: (i + 1) as 1 | 2 | 3,
+    dueAt: intakeActionDueAt(seed, now),
+    // 与落库口径一致：种子顺序即轻重顺序，越靠前越急，而 action_items 按 priority **降序**取。
+    priority: intakeActionPriority(seeds.length, i) as 1 | 2 | 3,
     status: '待办',
     sourceMessageId: null,
     createdAt: now.toISOString(),

@@ -14,10 +14,16 @@ import {
   CardTitle,
 } from '@/components/shadcn/card';
 import { Sensitive } from '@/components/Sensitive';
+import type { SanbeiCap } from '@/lib/cap/sanbei';
 import type { ActionItem } from '@/app/_mock/types';
 import type { IntakeDraft } from './draft';
 
-export function StepPreview({ draft }: { draft: IntakeDraft }) {
+/**
+ * 档案预览。**封顶基数由外面传进来**（服务端从知识卡取的当前值），
+ * 这一页不再拿 `_mock/demo.ts` 里那个封顶常量当法定封顶线——它是给演示案件叙事用的，
+ * 却一直参与着真实用户的金额估算。来源与口径见 lib/cap/sanbei（守卫见 lib/cap/__tests__）。
+ */
+export function StepPreview({ draft, cap }: { draft: IntakeDraft; cap: SanbeiCap | null }) {
   const estimate = useMemo(
     () =>
       estimateClaims({
@@ -25,8 +31,9 @@ export function StepPreview({ draft }: { draft: IntakeDraft }) {
         hiredOn: draft.hiredOn,
         monthlyWageYuan: Number.parseFloat(draft.monthlyWage),
         goals: draft.goals,
+        cap,
       }),
-    [draft.stage, draft.hiredOn, draft.monthlyWage, draft.goals],
+    [draft.stage, draft.hiredOn, draft.monthlyWage, draft.goals, cap],
   );
 
   const actions = useMemo(() => previewActions(draft.stage), [draft.stage]);
@@ -125,9 +132,11 @@ export function StepPreview({ draft }: { draft: IntakeDraft }) {
             {estimate.capNote}
           </p>
           <p data-veil="" className="mt-2 text-[14px] leading-6 text-ink-2">
-            {estimate.incomplete
-              ? '回到第 2 步补上入职时间和月工资，这里就会算出具体金额。现在没填也不影响往下走，之后随时能回来补。'
-              : '这是按你刚才填的数字先算的一版。传上工资流水和劳动合同后，基数和年限会自动校正，金额也会跟着变。'}
+            {estimate.incompleteReason === 'inputs'
+              ? '回到第 2 步补上入职时间和月工资，这里就会算出具体金额。'
+              : estimate.incompleteReason === 'cap'
+                ? '封顶基数取不到，所以这次没算金额——这是我们这边的问题，其余内容照常存进档案。'
+                : '这是按你刚才填的数字先算的一版。传上工资流水和劳动合同后，基数和年限会自动校正，金额也会跟着变。'}
           </p>
 
           {otherGoals.length > 0 && (

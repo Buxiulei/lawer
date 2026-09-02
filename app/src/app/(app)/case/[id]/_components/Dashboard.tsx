@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { demoCase } from '@/app/_mock/demo';
 import type { ActionItem } from '@/app/_mock/types';
-import { humanError } from '@/app/_ui/api';
+
 import { useDiscreet } from '@/app/_ui/discreet';
 import { NeutralLabel } from '@/app/_ui/NeutralLabel';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
@@ -20,10 +20,12 @@ import { RecentRecords } from './RecentRecords';
 import { FULL_JOURNEY } from './milestones';
 import {
   demoDashboard,
+  failureOf,
   fetchDashboard,
   saveActionStatus,
   viewState,
   type DashboardData,
+  type LoadFailure,
 } from './dashboardData';
 
 /**
@@ -40,7 +42,7 @@ import {
 export function Dashboard({ caseId }: { caseId: string }) {
   const isDemo = caseId === demoCase.id;
   const [data, setData] = useState<DashboardData | null>(isDemo ? demoDashboard(caseId) : null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadFailure | null>(null);
 
   const load = useCallback(async () => {
     if (isDemo) {
@@ -52,7 +54,7 @@ export function Dashboard({ caseId }: { caseId: string }) {
     try {
       setData(await fetchDashboard(caseId));
     } catch (err) {
-      setError(humanError(err));
+      setError(failureOf(err));
     }
   }, [caseId, isDemo]);
 
@@ -80,14 +82,15 @@ export function Dashboard({ caseId }: { caseId: string }) {
       if (isDemo) return;
       void saveActionStatus(caseId, id, done).catch((err) => {
         apply(done ? '待办' : '完成');
-        setError(humanError(err));
+        setError(failureOf(err));
       });
     },
     [caseId, isDemo],
   );
 
   const state = viewState({ error, data });
-  if (state === 'failed') return <LoadFailed message={error ?? ''} onRetry={() => void load()} />;
+  if (state === 'missing') return <CaseMissing />;
+  if (state === 'failed') return <LoadFailed message={error?.message ?? ''} onRetry={() => void load()} />;
   if (state === 'loading' || data === null) return <Loading />;
   if (state === 'blank') return <FirstCase />;
 
@@ -148,10 +151,41 @@ export function DashboardBody({
         </p>
       )}
       <DeadlineTiles deadlines={deadlines} />
+      <DossierEntry caseId={caseId} />
       <div data-mo-enter>
         <RecentRecords caseId={caseId} records={data.records} />
       </div>
     </div>
+  );
+}
+
+/**
+ * 公司档案的入口。**先免费查有没有货**：这家公司被仲裁过多少次、赔没赔、有没有关联主体，
+ * 决定了谈判时敢不敢硬、以及把谁列成被申请人。
+ *
+ * 【为什么摆在驾驶舱而不是加一个底部 Tab】底部导航是全站最贵的四个位置，
+ * 加第五个会把每一个都挤窄；而这件事是**案件里的一步**，不是一个常驻场所。
+ * 在此之前它没有任何入口：功能整套做好了，用户找不到门。
+ */
+function DossierEntry({ caseId }: { caseId: string }) {
+  return (
+    <Link
+      href={`/case/${caseId}/dossier`}
+      data-mo-enter
+      className="mt-4 flex min-h-11 items-center gap-3 rounded-[10px] border border-line bg-surface px-3.5 py-3 no-underline"
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] leading-6 font-medium text-ink">
+          公司档案：先免费查有没有货
+        </span>
+        <span className="mt-0.5 block text-[13px] leading-5 text-ink-2">
+          这家公司被仲裁过几次、赔没赔、有没有关联主体——免费的那部分先看着。
+        </span>
+      </span>
+      <span aria-hidden className="shrink-0 text-[15px] text-ink-2">
+        ›
+      </span>
+    </Link>
   );
 }
 
@@ -194,6 +228,37 @@ function LoadFailed({ message, onRetry }: { message: string; onRetry: () => void
         title="这一屏没取出来"
         description={`${message}你的案件和材料都还在，只是这次没读到。点下面再试一次。`}
         action={<Button onClick={onRetry}>重试</Button>}
+      />
+    </div>
+  );
+}
+
+/**
+ * 这个案件不存在，或者不是你的。**终局，不给重试**。
+ *
+ * 【为什么单开一种，而不是并进「这一屏没取出来」】那一屏写着「你的案件和材料都还在，
+ * 只是这次没读到。点下面再试一次」——对着一个**根本不属于他的案件号**说这句话，
+ * 每个字都是错的：材料不是他的，重试一万次也一样。用户实测读到的是
+ * 「案件不存在你的案件和材料都还在」，两句话粘在一起，前后自相矛盾。
+ *
+ * 【为什么不解释是"不存在"还是"不属于你"】后端刻意让两者同码（lib/cases 的红线）：
+ * 区分开就等于承认这个案件号是有效的，攻击者靠遍历 id 就能数出平台有多少案件。
+ * 所以这一页也只能说到这儿，并把人送回他自己的案件。
+ */
+export function CaseMissing() {
+  return (
+    <div className="pt-6">
+      <EmptyState
+        title="这个案件不存在或不属于你"
+        description="地址里的案件号在你名下查不到。可能是链接过期、复制串了，或者这本来是别人的案件。"
+        action={
+          <Link
+            href="/case"
+            className="inline-block rounded-[8px] bg-primary px-5 py-2.5 text-[15px] font-semibold text-on-primary no-underline"
+          >
+            回我的案件
+          </Link>
+        }
       />
     </div>
   );

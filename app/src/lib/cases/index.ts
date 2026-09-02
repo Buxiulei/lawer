@@ -10,26 +10,17 @@
 import type { Database } from 'better-sqlite3';
 
 import * as store from '@/lib/db/cases';
+import { submitIntakeInto, type IntakeInput, type IntakeResult } from './intake';
+import { CASE_STAGES } from './stages';
 // drafts 的 SQL 早已在 lib/db/agent.ts 的 drafts 段（与 insertDraft 同处）。读侧不另起
 // 一份表访问：同一张表两处 SELECT，将来加一列就会漏一处。归属校验仍在本文件把关。
 import { listDrafts as listDraftRows, type DraftRow } from '@/lib/db/agent';
 import { nowSql } from '@/lib/db/time';
 
-/** 与 migrate.ts cases.stage 注释逐字对齐 */
-export const CASE_STAGES = [
-  '风声',
-  '约谈中',
-  '已收通知',
-  '已解除',
-  '仲裁准备',
-  '已立案',
-  '开庭',
-  '裁决',
-  '一审',
-  '二审',
-  '执行',
-  '结案',
-] as const;
+// 阶段词表单独成文件（lib/cases/stages.ts），因为首诊页也要按阶段取那三件事，
+// 而页面引 lib/cases 会把整个 lib/db 拖进浏览器包。此处原样再导出，引用方不必改。
+export { CASE_STAGES, type CaseStage } from './stages';
+export type { IntakeInput, IntakeResult } from './intake';
 
 /** 与 migrate.ts timeline_events.kind 注释逐字对齐 */
 export const TIMELINE_KINDS = ['公司动作', '我方动作', '系统动作', '期限'] as const;
@@ -276,6 +267,22 @@ export function updateCase(
 
   store.updateCaseFields(db, input.caseId, fields);
   return { ok: true, case: store.findCaseById(db, input.caseId)! };
+}
+
+/**
+ * 首诊提交：六步内容一次性写进**这个人自己的案件**。
+ * 归属校验在这里做完（不是自己的案件与不存在的一样回 404），落库细节在 ./intake。
+ */
+export function submitIntake(
+  db: Database,
+  input: IntakeInput,
+): Result<{ result: IntakeResult }> {
+  const found = assertOwned(db, input.caseId, input.userId);
+  if (isFailure(found)) return found;
+
+  const done = submitIntakeInto(db, input.caseId, input);
+  if (!done.ok) return done;
+  return { ok: true, result: done.result };
 }
 
 /** 加一条时间线事件。只追加，写错了补一条新的（spec §7），本模块不提供改/删。 */

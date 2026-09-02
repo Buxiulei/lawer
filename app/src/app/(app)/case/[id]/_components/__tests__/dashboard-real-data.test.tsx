@@ -204,14 +204,16 @@ describe('四种屏幕状态', () => {
     deadlines: [],
     attainments: [{ milestone: '协商', happenedAt: '2026-07-24T10:00:00+08:00' }],
     records: [],
+    timelineCount: 1,
   };
+  const transient = { message: '网络没连上', kind: 'transient' as const };
 
   it('取数失败 → 报错重试，绝不是空案件', () => {
-    expect(viewState({ error: '网络没连上', data: null })).toBe('failed');
+    expect(viewState({ error: transient, data: null })).toBe('failed');
   });
 
   it('失败时手里就算还攥着上一次的数据，也照样报错，不拿旧数据盖住', () => {
-    expect(viewState({ error: '网络没连上', data: full })).toBe('failed');
+    expect(viewState({ error: transient, data: full })).toBe('failed');
   });
 
   it('还没回来 → 骨架，不是空案件（否则每次进页面都闪一句"你没有案件"）', () => {
@@ -222,7 +224,7 @@ describe('四种屏幕状态', () => {
     expect(
       viewState({
         error: null,
-        data: { actions: [], deadlines: [], attainments: [], records: [] },
+        data: { actions: [], deadlines: [], attainments: [], records: [], timelineCount: 0 },
       }),
     ).toBe('blank');
   });
