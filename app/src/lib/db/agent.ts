@@ -124,6 +124,19 @@ export function listRecentMessages(db: Database, threadId: number, limit: number
 }
 
 /**
+ * 「本案的历史消息」这件事的唯一口径：跨全部线程，排掉「生成中」占位行（content IS NULL）。
+ * 列表与计数共用它——两边各写一份 WHERE，就会出现「统计 40 条、列表只有 38 条」。
+ */
+const CASE_MESSAGES_SCOPE = `FROM messages m
+        JOIN threads t ON t.id = m.thread_id
+       WHERE t.case_id = ? AND m.content IS NOT NULL`;
+
+/** listCaseMessages 的行：比 MessageRow 多一个「这条消息发生在哪个模式」——跨模式历史要靠它标注来源 */
+export interface CaseMessageRow extends MessageRow {
+  thread_mode: string;
+}
+
+/**
  * 案件名下**所有线程**的消息，按写入顺序正序，取最近 limit 条。回显历史对话用。
  *
  * 【为什么不是「主线程」那一条】一个案子的线程按 mode 分（ensureThread），而 mode 是
@@ -137,16 +150,43 @@ export function listRecentMessages(db: Database, threadId: number, limit: number
  * content IS NULL 的行不返回：那是「生成中」占位（见 insertMessage），
  * 流断了就永远停在那儿——把它当成一条空回复画出去，用户只会看见一片空白的自己。
  */
-export function listCaseMessages(db: Database, caseId: number, limit: number): MessageRow[] {
+export function listCaseMessages(db: Database, caseId: number, limit: number): CaseMessageRow[] {
   const rows = db
     .prepare(
-      `SELECT m.* FROM messages m
-        JOIN threads t ON t.id = m.thread_id
-       WHERE t.case_id = ? AND m.content IS NOT NULL
+      `SELECT m.*, t.mode AS thread_mode ${CASE_MESSAGES_SCOPE}
        ORDER BY m.id DESC LIMIT ?`,
     )
-    .all(caseId, limit) as MessageRow[];
+    .all(caseId, limit) as CaseMessageRow[];
   return rows.reverse();
+}
+
+/**
+ * 本案历史消息的总条数与最早那条的时间。**这不是摘要，是计数**。
+ *
+ * 【为什么要它】喂给模型的历史有上限（HISTORY_LIMIT），而模型看不见「上限之外还有多少」——
+ * 它会把手上这一段当成全部，然后理直气壮地说「你从没提过这件事」。事实卡靠这两个数
+ * 如实说出「我只看得到最近一段」。口径与 listCaseMessages 共用同一个 SCOPE：
+ * 两边各写一份 WHERE，迟早出现「统计说 40 条、实际只取到 38 条」这种谁也对不上的数。
+ */
+export function countCaseMessages(db: Database, caseId: number): { total: number; firstAt: string | null } {
+  const row = db
+    .prepare(`SELECT COUNT(*) AS total, MIN(m.created_at) AS first_at ${CASE_MESSAGES_SCOPE}`)
+    .get(caseId) as { total: number; first_at: string | null };
+  return { total: row.total, firstAt: row.first_at };
+}
+
+/**
+ * 实名信息原件（密文未解）。解密留给调用方——lib/db 只管取数，密钥的事归 lib/crypto。
+ * 返回 null = 用户不存在（外键约束下不该发生，但 users 行被删过的老库存在这种情形）。
+ */
+export function findUserIdentity(
+  db: Database,
+  userId: number,
+): { real_name_enc: string | null; auth_status: string } | null {
+  const row = db.prepare('SELECT real_name_enc, auth_status FROM users WHERE id = ?').get(userId) as
+    | { real_name_enc: string | null; auth_status: string }
+    | undefined;
+  return row ?? null;
 }
 
 /** content 传 null = 「生成中」占位（migrate.ts：无 content 即断线重连要续跑的那条） */

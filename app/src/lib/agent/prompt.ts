@@ -1,14 +1,15 @@
 // app/src/lib/agent/prompt.ts
-// system prompt 组装（manager 契约）：charter 全文 + 案件档案摘要 + 检索到的 packs 逐字原文。
+// system prompt 组装（manager 契约）：charter 全文 + 案件事实卡 + 检索到的 packs 逐字原文。
 //
 // 【顺序是有讲究的】准则在最前、知识在最后：
 //   ① charter 定的是「怎么做人」，必须先于一切内容生效，包括在读到 pack 内容之后；
-//   ② 档案摘要在中间，因为它是 charter 各条纪律的作用对象（跟踪上轮行动卡、别重复问已知的事）；
+//   ② 案件事实卡在中间，因为它是 charter 各条纪律的作用对象（跟踪上轮行动卡、别重复问已知的事）；
 //   ③ pack 原文放最后、紧挨用户消息，是让「引用依据」这件事离生成点最近。
 //
 // 【不做的事】本文件不做任何摘要、压缩、改写。档案是事实，packs 是法条原文，
 // 任何一处「为了省 token 而转述」都会以「模型把转述当原文引用」的形式变成可信度事故。
 
+import { buildCaseFacts, renderCaseFacts } from './case-facts';
 import { CHARTER } from './charter';
 import { intakeDirective, recapBrief, type IntakeStage } from './intake';
 import { MAX_ACTION_CARDS } from './tools';
@@ -35,57 +36,6 @@ export function beijingNow(now: Date): { readable: string; iso: string } {
     readable: `${date}（周${WEEKDAYS[bj.getUTCDay()]}）${time}`,
     iso: `${date}T${time}:00+08:00`,
   };
-}
-
-/** 案件档案摘要。空档案也要如实说「空」——模型看不见「没有」就会假设「有」。 */
-export function caseDigest(s: CaseSnapshot): string {
-  const c = s.case;
-  const lines: string[] = [
-    '## 案件档案（服务端读出的当前事实，以此为准，用户说法与此矛盾时先核对再改档）',
-    '',
-    `- 案件：#${c.id}《${c.title}》 阶段：${c.stage} 地区：${c.district}`,
-    `- 用户目标：${c.goal ?? '（未记录）'}`,
-    `- 用户底线：${c.bottom_line ?? '（未记录）'}`,
-  ];
-
-  lines.push('', `### 公司主体（${s.companies.length} 个）`);
-  if (s.companies.length === 0) lines.push('（空——还不知道是哪家公司）');
-  else {
-    for (const p of s.companies) {
-      const bits = [p.role, p.uscc ? `统一社会信用代码 ${p.uscc}` : null, p.legal_rep ? `法定代表人 ${p.legal_rep}` : null]
-        .filter(Boolean)
-        .join('，');
-      lines.push(`- ${p.name}（${bits}）${p.risk_notes ? ` 风险：${p.risk_notes}` : ''}`);
-    }
-  }
-
-  lines.push('', `### 时间线（最近 ${s.timeline.length} 条，倒序）`);
-  if (s.timeline.length === 0) lines.push('（空——还没有任何已落档的事件）');
-  else for (const e of s.timeline) lines.push(`- ${e.happened_at}｜${e.kind}｜${e.title}${e.detail ? `：${e.detail}` : ''}`);
-
-  lines.push('', `### 诉求（claims，${s.claims.length} 项）`);
-  if (s.claims.length === 0) lines.push('（空——还没有登记任何金额诉求）');
-  else {
-    for (const cl of s.claims) {
-      const amount = cl.amount_fen > 0 ? `${(cl.amount_fen / 100).toFixed(2)} 元` : '待计算';
-      lines.push(`- ${cl.kind}：${amount}${cl.basis ? `｜依据 ${cl.basis}` : ''}${cl.calc_json ? `｜算式 ${cl.calc_json}` : ''}`);
-    }
-  }
-
-  lines.push('', `### 未完成的行动卡（${s.openActions.length} 张，charter §9 要求本轮跟踪）`);
-  if (s.openActions.length === 0) lines.push('（空）');
-  else for (const a of s.openActions) lines.push(`- #${a.id}《${a.title}》${a.due_at ? ` 截止 ${a.due_at}` : ''}`);
-
-  if (s.deadlines.length) {
-    lines.push('', '### 生效中的法定期限');
-    for (const d of s.deadlines) lines.push(`- ${d.kind}：${d.due_at}${d.derived_from ? `（推算依据：${d.derived_from}）` : ''}`);
-  }
-
-  if (s.referredNbdpsy) {
-    lines.push('', '> 本案**已经**转介过一次心理咨询（NBDpsy）。spec §10：一案最多一次，不得再提。');
-  }
-
-  return lines.join('\n');
 }
 
 /** 检索到的 packs 逐字原文段。
@@ -242,7 +192,7 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
   const { readable, iso } = beijingNow(input.now);
   const parts = [
     CHARTER,
-    // 危机指令紧跟 charter，排在案件档案与问诊指令**之前**：
+    // 危机指令紧跟 charter，排在案件事实卡与问诊指令**之前**：
     // 它要压过本轮其它一切安排（问诊清单、行动卡、依据纪律），放在后面会被前面的
     // 「每轮必须问 1-3 个问题」「必须给行动卡」稀释成又一条并列要求。
     input.crisis ? CRISIS_DIRECTIVE : '',
@@ -257,7 +207,7 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
       `- 默认适用地区：${input.snapshot.case.district}区（北京市）。`,
       `- 当前会话模式：${input.mode}。`,
     ].join('\n'),
-    caseDigest(input.snapshot),
+    renderCaseFacts(buildCaseFacts(input.snapshot)),
     // 陪跑/文书这类"回头继续"的模式先给前情提要；首诊(问诊)不需要，用户刚开口
     input.mode === '问诊' ? intakeDirective(input.stage) : `${recapBrief(input.snapshot)}\n\n${intakeDirective(input.stage)}`,
     outputDiscipline(),

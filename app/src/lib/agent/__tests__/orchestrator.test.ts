@@ -39,13 +39,13 @@ async function turn(script: ScriptedRound[], over: Record<string, unknown> = {})
 }
 
 describe('上下文组装（manager 契约）', () => {
-  it('system = charter 全文 + 案件档案摘要 + 检索到的 pack 逐字原文', async () => {
+  it('system = charter 全文 + 案件事实卡 + 检索到的 pack 逐字原文', async () => {
     const { provider } = await turn([{ text: '好的。', tools: [GOOD_CARD] }]);
     const system = provider.calls[0][0].content;
 
     expect(provider.calls[0][0].role).toBe('system');
     expect(system).toContain(CHARTER);
-    expect(system).toContain('## 案件档案');
+    expect(system).toContain('## 案件事实卡');
     expect(system).toContain('李哲诉某安全公司违法解除');
     // pack 正文一字不改地进了 prompt——摘要过一道就等于让模型转述法条
     expect(system).toContain(FIXTURE_PACK.body);
@@ -290,14 +290,14 @@ describe('危机响应：心理危机资源卡强制注入（charter §5）', ()
     expect(codes).toContain('KNOWLEDGE_MISS');
   });
 
-  it('危机指令排在 charter 之后、案件档案之前（不能被问诊/行动卡纪律稀释）', async () => {
+  it('危机指令排在 charter 之后、案件事实卡之前（不能被问诊/行动卡纪律稀释）', async () => {
     const { provider } = await turn([{ text: '我在。', tools: [GOOD_CARD] }], {
       message: CRISIS,
       searcher: idOnlySearcher,
     });
     const system = provider.calls[0][0].content;
     expect(system).toContain('【危机响应 · 本轮最高优先级');
-    expect(system.indexOf('【危机响应')).toBeLessThan(system.indexOf('## 案件档案'));
+    expect(system.indexOf('【危机响应')).toBeLessThan(system.indexOf('## 案件事实卡'));
     expect(system.indexOf('【危机响应')).toBeLessThan(system.indexOf('## 本轮输出纪律'));
   });
 
@@ -885,9 +885,87 @@ describe('模式与会话', () => {
 
     expect(second.threadId).toBe(first.threadId);
     const history = p2.calls[0].map((m) => m.content);
-    expect(history).toContain('第一句');
-    expect(history).toContain('第一轮回复');
+    // 历史每条带模式标签（跨模式历史要靠它标出来源，见 orchestrator.historyModeTag）
+    expect(history).toContain('[问诊] 第一句');
+    expect(history).toContain('[问诊] 第一轮回复');
     // 本轮消息只出现一次，不会因为「先落库再取历史」而重复
     expect(history.filter((c) => c === '第二句')).toHaveLength(1);
+  });
+});
+
+/**
+ * G-F8 跨模式历史。
+ *
+ * 【它修的是什么】线程按 mode 分（ensureThread），mode 由服务端按首诊进度自己切
+ * （问诊 → 陪跑）。历史按 thread 取时，首诊走完的那一刻此前所有原话就从上下文里消失了——
+ * 用户在同一个输入框里连续说话，模型却突然什么都不记得。
+ *
+ * 变异：把 listCaseMessages 改回 listRecentMessages(thread.id, ...) → 本组必须红。
+ */
+describe('G-F8 跨模式历史：换了模式也接得上前面说过的话', () => {
+  it('★陪跑轮能看见问诊轮的原话，且带 [问诊] 前缀', async () => {
+    const f = makeAgentFixture();
+    const sink = makeSink();
+
+    // 第一轮：问诊模式
+    await runTurn({
+      db: f.db,
+      caseId: f.caseId,
+      userId: f.userId,
+      mode: '问诊',
+      message: '公司说要把我调到北京四区，上级换成王磊',
+      provider: scriptedProvider([{ text: '先把这封通知留证。', tools: [GOOD_CARD] }, { text: '' }]),
+      emit: sink.emit,
+      now: new Date('2026-08-19T12:40:00Z'),
+    });
+
+    // 第二轮：模式切到陪跑（另一条 thread）
+    const p2 = scriptedProvider([{ text: '接着上次。', tools: [GOOD_CARD] }, { text: '' }]);
+    const second = (await runTurn({
+      db: f.db,
+      caseId: f.caseId,
+      userId: f.userId,
+      mode: '陪跑',
+      message: '今天他们又来找我了',
+      provider: p2,
+      emit: makeSink().emit,
+      now: new Date('2026-08-20T12:40:00Z'),
+    })) as RunTurnResult;
+
+    const threads = f.db.prepare('SELECT mode FROM threads WHERE case_id = ?').all(f.caseId) as { mode: string }[];
+    expect(threads.map((t) => t.mode).sort()).toEqual(['问诊', '陪跑']);
+
+    const history = p2.calls[0].map((m) => m.content);
+    expect(history).toContain('[问诊] 公司说要把我调到北京四区，上级换成王磊');
+    expect(history).toContain('[问诊] 先把这封通知留证。');
+    // 本轮自己的消息不带前缀（它不是历史，是用户刚说的这一句）
+    expect(history).toContain('今天他们又来找我了');
+    expect(second.ok).toBe(true);
+  });
+
+  it('事实卡里的历史统计跨模式计数，并说明方括号标签是系统加的', async () => {
+    const f = makeAgentFixture();
+    await runTurn({
+      db: f.db,
+      caseId: f.caseId,
+      userId: f.userId,
+      mode: '问诊',
+      message: '第一句',
+      provider: scriptedProvider([{ text: '第一答', tools: [GOOD_CARD] }, { text: '' }]),
+      emit: makeSink().emit,
+    });
+    const p2 = scriptedProvider([{ text: 'x', tools: [GOOD_CARD] }, { text: '' }]);
+    await runTurn({
+      db: f.db,
+      caseId: f.caseId,
+      userId: f.userId,
+      mode: '陪跑',
+      message: '第二句',
+      provider: p2,
+      emit: makeSink().emit,
+    });
+    const system = p2.calls[0][0].content;
+    expect(system).toContain('本案历史消息共 2 条');
+    expect(system).toContain('是系统加的模式标签，不是用户打的字');
   });
 });

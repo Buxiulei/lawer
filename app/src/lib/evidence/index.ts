@@ -17,6 +17,7 @@ import { findCaseById } from '@/lib/db/cases';
 import * as store from '@/lib/db/evidence';
 
 import { fail, type Result } from './attest';
+import { EVIDENCE_CATEGORIES } from './categories';
 import { storeBytes } from './files';
 
 export {
@@ -41,17 +42,8 @@ export {
   type RecheckReport,
 } from './recheck';
 
-/** spec §7 evidence.category 枚举 */
-export const EVIDENCE_CATEGORIES = [
-  '合同',
-  '工资',
-  '社保',
-  '考勤',
-  '沟通记录',
-  '公司文件',
-  '录音',
-  '其他',
-] as const;
+/** spec §7 evidence.category 枚举。定义在零依赖的叶子模块里（见 ./categories 文件头），此处只转出。 */
+export { EVIDENCE_CATEGORIES } from './categories';
 
 /** 上传单个文件建证据条目。文件本身按哈希去重，重复上传不重复占盘。 */
 export function uploadEvidence(

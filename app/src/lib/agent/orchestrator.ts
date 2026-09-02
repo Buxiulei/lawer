@@ -255,15 +255,29 @@ function chargeTurn(args: {
 }
 
 /**
+ * 历史消息前缀：标出这条话发生在哪个模式。
+ *
+ * 【为什么要标】历史现在跨线程取（listCaseMessages），一个案子的"问诊"与"陪跑"会并在
+ * 同一条时间轴上。不标的话，模型读到的是一段突然改变语气的连续对话，分不清哪些是首诊时
+ * 边问边答的半成品结论。标签由服务端加，事实卡里有一句话告诉模型这不是用户打的字。
+ */
+function historyModeTag(mode: string): string {
+  return `[${mode}] `;
+}
+
+/**
  * 历史消息 → ChatMessage。
  * 只取 user/assistant 的正文，**不重放工具调用**：工具的结果早已落进档案，
- * 而档案摘要就在 system prompt 里。把上一轮的 tool_calls 重放给模型，
+ * 而事实卡就在 system prompt 里。把上一轮的 tool_calls 重放给模型，
  * 它会以为那些动作还没做完，于是再做一遍——重复的时间线事件比缺失更难收拾。
  */
-function toHistory(rows: store.MessageRow[]): ChatMessage[] {
+function toHistory(rows: store.CaseMessageRow[]): ChatMessage[] {
   return rows
     .filter((r) => (r.role === 'user' || r.role === 'assistant') && r.content)
-    .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content! }));
+    .map((r) => ({
+      role: r.role as 'user' | 'assistant',
+      content: `${historyModeTag(r.thread_mode)}${r.content!}`,
+    }));
 }
 
 /**
@@ -355,8 +369,13 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   }
 
   const thread = store.ensureThread(db, caseId, mode);
-  // 先取历史再落本轮 user 行，免得本轮消息在历史里出现两次
-  const history = toHistory(store.listRecentMessages(db, thread.id, HISTORY_LIMIT));
+  // 先取历史再落本轮 user 行，免得本轮消息在历史里出现两次。
+  //
+  // 【按 case 取而不是按 thread 取】线程是按 mode 分的（ensureThread），而 mode 由服务端按
+  // 首诊进度自己切（问诊 → 陪跑）。按 thread 取的话，首诊走完的那一刻历史清零——
+  // 用户在同一个输入框里连续说话，模型却突然什么都不记得了。取数范围从 thread 扩到 case，
+  // 条数上限不变（HISTORY_LIMIT），所以每轮 input token 不增加。
+  const history = toHistory(store.listCaseMessages(db, caseId, HISTORY_LIMIT));
   store.insertMessage(db, { threadId: thread.id, role: 'user', content: message });
 
   const taskClass = classifyTask({ message, mode });
