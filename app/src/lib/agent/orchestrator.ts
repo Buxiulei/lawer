@@ -266,9 +266,78 @@ function toHistory(rows: store.MessageRow[]): ChatMessage[] {
     .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content! }));
 }
 
+/**
+ * 正文里「卡已经挂上了」这类**承诺句**的短语表。
+ *
+ * 【为什么必须有它】纠正段要纠正的是**一句具体的谎**（"两张行动卡已挂上"），
+ * 不是"这一轮没有卡"这件事本身——后者已经由 `ACTION_CARD_MISSING` 那条 notice 记着。
+ * 没有承诺却追加一段"补一句实话：这一轮我没能把行动卡挂进你的档案"，
+ * 是**系统凭空自我指控**：真机第 4 行「按上面那张行动卡先做第一件」这一轮零承诺，
+ * 却会被永久追加那段道歉，用户读到的是一条自相矛盾的回复。
+ *
+ * 【口径对着 prompt.ts 那三句禁令来】outputDiscipline 明写不许说的是
+ *「行动卡已挂上」「已记进档案」「系统会按截止时间提醒你」——这张表把它们连同近形一并收下：
+ * **提示词禁什么，这里就认什么**。两边各写各的，就会出现"提示词禁了、纠正认不出"，
+ * 或反过来"纠正在纠正一句我们从没禁过的话"。这条对应关系有判据钉着
+ *（action-card-promise.test.ts「提示词禁的那三句话一句都不许漏认」）。
+ *
+ * 【只收正向形】故意不收裸的「挂进」「记进档案」：模型说「我没能把行动卡挂进档案」
+ * 是**如实报告**而不是承诺，收进来就把老实话也判成谎话了（纠正段自己那句也含这几个字）。
+ */
+const ACTION_CARD_PROMISE_PHRASES = [
+  '已挂上',
+  '已经挂上',
+  '已挂进',
+  '已经挂进',
+  '已挂到',
+  '已产出行动卡',
+  '已生成行动卡',
+  '已记进档案',
+  '已经记进档案',
+  '帮你记进档案',
+  '记进了档案',
+  '按截止时间提醒',
+] as const;
+
+/** 这段正文里有没有「卡已经挂上了」的承诺。没有就不该有纠正段。 */
+function promisesActionCard(body: string): boolean {
+  return ACTION_CARD_PROMISE_PHRASES.some((p) => body.includes(p));
+}
+
 export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
-  const { db, caseId, userId, emit } = input;
+  const { db, caseId, userId } = input;
   const now = input.now ?? new Date();
+
+  /**
+   * 【下发失败不许掀翻这一轮】——**"给用户看"是一条链，"记进档案 / 记账"是另一条，
+   * 前者断了不该传染后者。**
+   *
+   * 实测事故（2026-09-02 真机）：用户读完回答后离开或刷新，SSE 的 controller 随之关闭，
+   * 此后每一次 `controller.enqueue` 都抛 `TypeError: Invalid state: Controller is already closed`。
+   * 那个异常是从 `timeline_add` 里的 `ctx.emit` 抛出来的，于是一路掀翻整个 tool-loop：
+   *   · 排在它后面的 `action_card` / `deadline_set` **再也不会执行**
+   *     → 时间线写进去了，`action_items`／`deadlines` 恒空（这就是"承诺了行动卡却没有卡"）；
+   *   · `store.finalizeMessage` 与 `chargeTurn` 永远走不到
+   *     → assistant 行的 content 停在 NULL（刷新后那一轮**永久消失**）、账本一行不落。
+   * 三个症状一个病因。而用户走开与我们该不该记账无关——**模型的钱已经花掉了**。
+   *
+   * 【为什么包在 runTurn 而不是各调用点】与 `chargeTurn` 同一条理由：runTurn 是**收敛点**，
+   * SSE 路由、评测脚本、日后任何入口调的都是它；包在调用点上就是"漏接一个入口即失效"。
+   *
+   * 【为什么断一次就彻底停发】连接已经没了，后面每一帧都会再抛一次——
+   * 继续试只是把同一个异常重复吞 20 遍，还会掩盖真正第一现场的那条日志。
+   */
+  let sinkBroken = false;
+  const emit: AgentEventSink = (e) => {
+    if (sinkBroken) return;
+    try {
+      input.emit(e);
+    } catch (err) {
+      sinkBroken = true;
+      // 吞掉但不静音：这一轮之后的帧用户都收不到了，这件事必须能在服务端日志里查到。
+      console.error('[chat] SSE 下发中断，本轮改为静默跑完（落库与记账照常）', err);
+    }
+  };
 
   // 归属校验先行（lib/cases 红线：不是自己的案件与不存在的案件返回同一个错误）
   const owned = cases.getCase(db, { caseId, userId, timelineLimit: 1 });
@@ -950,14 +1019,117 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     });
   }
 
+  // ── 行动卡承诺纠正段（F-09）：**承诺了却没落库，必须当场说清，且说进档案** ──
+  //
+  // 【实测事故】真机 staging 库：某一轮正文写着「两张行动卡已挂上，系统会按截止时间提醒你」，
+  // 而该案 `action_items` 一张都没有。补救轮已经跑过（`actionCardMissing` 即"补救之后仍然没有"），
+  // 唯一的信号是 `ACTION_CARD_MISSING` 这条 notice——而它在前端映射表里是 `null`，
+  // **屏幕上一个字都不出**。于是用户读到一句承诺、点开档案空的、没有任何地方说过它失败了。
+  //
+  // 【为什么写进正文而不是把那条 notice 改成可见】notice 是**流帧**，刷新即消失；
+  // 而那句骗人的承诺是**归档正文**的一部分，永久留在历史里。纠正必须和它同寿命，
+  // 否则 F5 之后又回到「正文承诺了、档案空的、没人解释」——F-02 修的正是这条刷新链路。
+  //
+  // 【为什么不去正文里把那句话剥掉】它已经逐字流给用户了。事后从归档里抹掉，
+  // 就成了「用户看见过、档案里没有」——推荐段注释里那句"审计上最坏的一种不一致"，方向相反而已。
+  // 所以是**追加纠正**，不是删除。
+  //
+  // 【位置】与推荐段同理：放在所有出口闸之后（它是我们自己的确定性文案，不该被闸剥），
+  // 且必须在 `finalizeMessage` 之前进 `text`。排在推荐段之前，让推荐段稳居末尾。
+  //
+  // ── 两个前提，缺一不许追加（复审 2026-09-02 定）──
+  //
+  // 【① 正文里确有承诺句】纠正的对象是**一句具体的谎**，不是"这一轮没有卡"这件事。
+  // 只判 `actionCardMissing` 就是无条件触发：真机第 4 行「按上面那张行动卡先做第一件」
+  // 这一轮一个字的承诺都没有，却会被永久追加一段"我没能把行动卡挂进你的档案"——
+  // **系统凭空自我指控**，而"这一轮没产出卡"该由 ACTION_CARD_MISSING 那条 notice 记，
+  // 那是运维信号，不是给用户看的忏悔。判据表见 promisesActionCard（与提示词禁令同源）。
+  //
+  // 【② 不是危机轮】这是 KNOWLEDGE_MISS 那条注释**亲手写过的反面**：
+  // 用户刚说完"要是人没了"，归档正文里多出一段「补一句实话：这一轮我没能把行动卡
+  // 挂进你的档案」——那是系统在谈论自己的能力，而不是在回应这个人。
+  // 危机轮一律静默：notice 照发（内部指标要看见），归档正文一个字都不加（外部通知要克制）。
+  if (actionCardMissing && !crisis.triggered && promisesActionCard(text)) {
+    const correction =
+      '\n\n---\n\n' +
+      '**补一句实话：这一轮我没能把行动卡挂进你的档案。**' +
+      '上面正文里如果出现了「已挂上」「已记进档案」这类说法，以这一行为准——档案里现在没有这几张卡。' +
+      '你回我一句「把上面几件事记进档案」，我就补上。';
+    emit({ event: 'delta', data: { text: correction } });
+    text += correction;
+  }
+
+  // ── D14 推荐段：**独立段落追加在正文之后，绝不插进正文中间** ──
+  //
+  // 【为什么放在所有出口闸之后】它是我们自己的确定性文案，不该被判「模型在推销」的那道闸剥掉；
+  // 而它又必须在 `store.finalizeMessage` 之前进 `text`，否则归档里没有它——
+  // **用户看见了、档案里没有，是审计上最坏的一种不一致。**
+  //（这一段此前排在 finalizeMessage 之后，注释与代码正好说反了：推荐段下发给了用户，
+  //  归档正文里却没有它。同批修的还有帧序——它插在 usage 与 done 之间，
+  //  把「usage / done 是最后两帧」这条契约在推荐轮里撞坏。）
+  //
+  // 【先占位再开口】`tryOffer` 返回 true 才拼文案。倒过来（先说后记）一旦记录那步失败，
+  // 下一轮会再推一遍——**反复骚扰就是这么来的**（referral-offers.ts 的原话）。
+  // **一轮最多成一次**：按序试，第一个占位成功的就是本轮的推荐，其余不再试。
+  //
+  // 【为什么这里要包一层 try】(复审 2026-09-02) 推荐段被挪到 `finalizeMessage` **之前**
+  // 是对的（否则用户看见了、档案里没有），但代价是它成了收尾链上的一环：
+  // `referral_offers` 的 INSERT 一抛（撞约束、库被锁、磁盘满），异常就穿出 runTurn，
+  // 正文停在 NULL、这一轮不记账——**F-02 原样复发，只是换了个病灶**。
+  // 所以定一条分层：**`finalizeMessage` + `chargeTurn` 是一等公民，推荐/留痕这类写库是尽力而为**。
+  // 尽力而为的那一类失败了就当没做成，绝不许拖着落库与记账一起死。
+  //
+  // 【失败一律当"没占到位"】方向与「先占位再开口」一致：占位这步没成功就不开口。
+  // 反过来（占不到也照说）会在写库恢复之后变成"台账里没有、用户已经被推过"——
+  // 下一轮再推一遍，正是这段注释开头要防的那种反复骚扰。
+  let referralScene: string | null = null;
+  for (const scene of referralDecision.scenes) {
+    let claimed = false;
+    try {
+      claimed = referralOffers.tryOffer(db, {
+        userId,
+        caseId,
+        scene,
+        threadId: thread.id,
+        note: `message #${messageId}`,
+      });
+    } catch (err) {
+      // 吞掉但不静音：这一轮本该推的推荐没推成，事后要能从服务端日志查到是哪一步断的。
+      console.error(`[chat] 推荐位点「${scene}」占位失败（本轮不推，落库与记账照常）`, err);
+    }
+    if (claimed) {
+      referralScene = scene;
+      const block = `\n\n---\n\n${renderReferral(scene)}`;
+      emit({ event: 'delta', data: { text: block } });
+      text += block;
+      emit({
+        event: 'notice',
+        data: {
+          code: 'REFERRAL_OFFERED',
+          message: `本轮在「${scene}」位点推荐了一次心理咨询，同一位点不再推第二次。`,
+          referral_scene: scene,
+        },
+      });
+      break;
+    }
+  }
+
   // tokens_json 存 {model, usage, servedModel}：billing 对账要的是「按哪个计费键、四桶各多少、
   // 上游实际回显了谁」，只存四桶会在换模型后对不上账（token_usage.model 与这里必须能互验）；
   // servedModel 是回填那条路唯一的方向裁决依据（历史行缺它即按「未回显」原价补记）。
   // 资源卡落痕按**实际输出**判，而不是按「我们注入了没有」：
   // 模型完全可能自己调 knowledge_search 找到这张卡并给出去（实测发生过），
   // 那一次同样要计入 24 小时窗口，否则用户会连着两轮看见同一张卡。
+  //
+  // 【同为"尽力而为"那一类】它也是排在 finalizeMessage 之前的写库调用（写 timeline_events）。
+  // 抛出去的下场与推荐段一模一样：正文停在 NULL、这一轮不记账。留痕丢了只影响下一轮
+  // 会不会重印一张资源卡；正文与账丢了是永久损失。两者不该同生共死。
   if (responseGaveCrisisCard(text)) {
-    store.recordCrisisCardGiven(db, caseId, CRISIS_CARD_MARKER, crisis.triggered ? `命中：${crisis.matched.join('、')}` : '模型主动给出');
+    try {
+      store.recordCrisisCardGiven(db, caseId, CRISIS_CARD_MARKER, crisis.triggered ? `命中：${crisis.matched.join('、')}` : '模型主动给出');
+    } catch (err) {
+      console.error('[chat] 危机资源卡留痕失败（本轮落库与记账照常，下一轮可能重印一次卡）', err);
+    }
   }
 
   const usageReport: UsageReport = { model: routed.client.billingModel, usage, servedModel };
@@ -975,40 +1147,6 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
       cached_write: usage.cachedWrite,
     },
   });
-  // ── D14 推荐段：**独立段落追加在正文之后，绝不插进正文中间** ──
-  //
-  // 【为什么放在所有出口闸之后】它是我们自己的确定性文案，不该被判「模型在推销」的那道闸剥掉；
-  // 而它又必须在 `store.finalizeMessage` 之前进 `text`，否则归档里没有它——
-  // **用户看见了、档案里没有，是审计上最坏的一种不一致。**
-  //
-  // 【先占位再开口】`tryOffer` 返回 true 才拼文案。倒过来（先说后记）一旦记录那步失败，
-  // 下一轮会再推一遍——**反复骚扰就是这么来的**（referral-offers.ts 的原话）。
-  // **一轮最多成一次**：按序试，第一个占位成功的就是本轮的推荐，其余不再试。
-  let referralScene: string | null = null;
-  for (const scene of referralDecision.scenes) {
-    const claimed = referralOffers.tryOffer(db, {
-      userId,
-      caseId,
-      scene,
-      threadId: thread.id,
-      note: `message #${messageId}`,
-    });
-    if (claimed) {
-      referralScene = scene;
-      const block = `\n\n---\n\n${renderReferral(scene)}`;
-      emit({ event: 'delta', data: { text: block } });
-      text += block;
-      emit({
-        event: 'notice',
-        data: {
-          code: 'REFERRAL_OFFERED',
-          message: `本轮在「${scene}」位点推荐了一次心理咨询，同一位点不再推第二次。`,
-          referral_scene: scene,
-        },
-      });
-      break;
-    }
-  }
 
   // 型号三件套随收尾帧下发（events.ts done 的注释）：meta 那时只知道我们请求了谁。
   // 判「换没换」不在这儿自己写 `!==`：前缀 relay/ 与变体后缀 :think 都不是换型号，

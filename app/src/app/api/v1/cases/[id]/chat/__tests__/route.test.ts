@@ -3,12 +3,14 @@
 // 模型经 vi.mock 换成剧本化假 provider——这里要验的是「路由到 SSE 线格式」这一段，
 // 不是模型答得好不好（那是 scripts/eval-agent.ts 的活）。
 import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Database } from 'better-sqlite3';
 
 import { scriptedProvider, type ScriptedRound } from '@/lib/agent/__tests__/fixtures';
+import type { AgentEventSink } from '@/lib/agent';
 
 /** 本轮要回放的剧本，由每个用例改写 */
 let script: ScriptedRound[] = [];
@@ -18,6 +20,28 @@ vi.mock('@/lib/llm', async (importOriginal) => {
   return {
     ...actual,
     getProvider: () => ({ client: scriptedProvider(script), route: { degraded: false } }),
+  };
+});
+
+/**
+ * 路由**实际交给心跳定时器**的那个函数，原样接住。
+ *
+ * 【为什么要接它】事故现场就是这个位置：心跳在 `setInterval` 回调里调它，
+ * 而定时器回调没有任何调用栈接得住异常——Node 直接记 uncaughtException，
+ * 且 `clearInterval` 与它同在那个回调里会被跳过，于是每个周期再抛一次，
+ * 直到把整个 next 进程带走。所以「心跳拿到的是不是那个永不抛的 sink.emit」
+ * 是一条要钉住的产线事实，而不是路由内部的实现细节。
+ */
+const heartbeatWiring = vi.hoisted(() => ({ emit: null as AgentEventSink | null }));
+
+vi.mock('@/lib/agent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/agent')>();
+  return {
+    ...actual,
+    startHeartbeat: (emit: AgentEventSink, opts?: { intervalMs?: number; now?: () => number }) => {
+      heartbeatWiring.emit = emit;
+      return actual.startHeartbeat(emit, opts);
+    },
   };
 });
 
@@ -213,6 +237,146 @@ describe('SSE 通路', () => {
     spy.mockRestore();
   });
 });
+
+/* ── 客户端中途走人 ────────────────────────────────────────────
+   真机事故（2026-09-02）：用户读完回答后刷新/关页，SSE 的 controller 随之关闭，
+   之后每一次 enqueue 抛 `Invalid state: Controller is already closed`。它有两条路，
+   两条都致命：从 runTurn 的 emit 抛出去 → 正文不落库、这一轮不记账；
+   从**心跳的 setInterval 回调**抛出去 → 没有调用栈接得住，Node 记 uncaughtException，
+   且 clearInterval 被跳过，于是每个心跳周期再抛一次，直到把 next 进程带走。
+   这一组钉的是：断开只影响下发，不影响这一轮跑完。 */
+describe('客户端断开', () => {
+  test('读到一半就走人 ⇒ 这一轮照样落库记账，且不抛未捕获异常', async () => {
+    const gated = await stubProviderGated();
+
+    const res = await post(request(signToken(userA), { message: '刚收到辞退邮件' }), ctx(caseA));
+    const reader = res.body!.getReader();
+    // 先收一帧（meta），确认流真的开起来了；再断开——这就是"回答渲染完随手 F5"
+    const first = await reader.read();
+    expect(new TextDecoder().decode(first.value)).toContain('event: meta');
+    await reader.cancel();
+
+    // 客户端走了，模型这才把这一轮跑完：正文 → 工具 → 收尾
+    gated.release();
+
+    await vi.waitFor(() => {
+      const row = db.prepare("SELECT content FROM messages WHERE role = 'assistant'").get() as
+        | { content: string | null }
+        | undefined;
+      expect(row?.content, '正文停在 NULL = 刷新之后那一轮永久消失').toBe('手抖是正常的。');
+    }, { timeout: 5000 });
+
+    expect(db.prepare('SELECT COUNT(*) AS n FROM action_items WHERE case_id = ?').get(caseA)).toEqual({ n: 1 });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM gongdao_ledger WHERE type = '消耗'").get()).toEqual({ n: 1 });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM token_usage').get()).toEqual({ n: 1 });
+
+    gated.restore();
+  });
+
+  /**
+   * ★这一条钉的是**接线**，不是 sse-sink 自己的行为。
+   *
+   * 复审 2026-09-02（RV-V）指出：把 `const emit = out.emit` 换回一整套裸
+   * `controller.enqueue` 闭包，现有判据全部无感——而心跳正是那条**不经过任何一层 try**
+   * 的通路（sse-sink.ts 文件头的第 ② 条）。所以直接问路由：
+   * 你交给 `setInterval` 的到底是哪个函数？客户端走了之后它抛不抛？
+   *
+   * 变异臂 M-H1：route.ts 换回裸 controller.enqueue ⇒ 这一条红。
+   */
+  test('★心跳拿到的是永不抛的 sink.emit：客户端走人之后 tick 静默，不抛', async () => {
+    const gated = await stubProviderGated();
+    heartbeatWiring.emit = null;
+
+    const res = await post(request(signToken(userA), { message: '刚收到辞退邮件' }), ctx(caseA));
+    const reader = res.body!.getReader();
+    await reader.read(); // 先收一帧，确认流真的开起来了
+    // 显式标注：上面那句 `= null` 会让 TS 把这个属性一路窄成 null，`tick!` 就成了 never
+    const tick: AgentEventSink | null = heartbeatWiring.emit;
+    expect(tick, '路由根本没把心跳接上（接线断了，这条判据会变成空跑）').toBeTypeOf('function');
+
+    // 客户端走人：controller 随之关闭，此后 enqueue 一律抛 Invalid state（实测同形）
+    await reader.cancel();
+
+    // 心跳周期到点时，setInterval 回调就是拿这个函数发 ping 的
+    expect(() => tick!({ event: 'ping', data: { waited_seconds: 15 } })).not.toThrow();
+    // 第二个周期同样不抛——"断一次就彻底停发"，不是"第一次吞掉、后面继续抛"
+    expect(() => tick!({ event: 'ping', data: { waited_seconds: 30 } })).not.toThrow();
+
+    // 顺带：这一轮照样跑完（下发断了不影响落库），免得留一个悬挂的 runTurn
+    gated.release();
+    await vi.waitFor(() => {
+      const row = db.prepare("SELECT content FROM messages WHERE role = 'assistant'").get() as
+        | { content: string | null }
+        | undefined;
+      expect(row?.content).toBe('手抖是正常的。');
+    }, { timeout: 5000 });
+
+    gated.restore();
+  });
+});
+
+/* ── 接线的结构守卫 ──────────────────────────────────────────────
+   行为判据（上面那条）钉住"心跳拿到的函数不抛"；这一组钉住**为什么不抛**——
+   路由里根本不该再有第二个下发口。两条一起，RV-V 那种"换回裸 enqueue 全套"
+   才不会有一条缝隙可钻。 */
+describe('心跳与断开的接线（结构守卫）', () => {
+  const SRC = readFileSync(new URL('../route.ts', import.meta.url), 'utf8');
+
+  test('路由里没有第二个下发口：裸 controller.enqueue / controller.close 一处都不许有', () => {
+    expect(SRC, '判可写只能做在唯一的出口上（sse-sink.ts 文件头）').not.toMatch(/controller\.enqueue/);
+    expect(SRC, 'close 抛在 async start 的 finally 里就是 unhandledRejection').not.toMatch(/controller\.close/);
+  });
+
+  test('心跳接的是 sink 的 emit', () => {
+    expect(SRC).toMatch(/const\s+out\s*=\s*createSseSink\(controller\)/);
+    expect(SRC).toMatch(/const\s+emit\s*=\s*out\.emit/);
+    expect(SRC).toMatch(/startHeartbeat\(\s*emit\s*[,)]/);
+  });
+
+  test('cancel 回调把 sink 标记为已断（客户端断开的第一手信号，不必等第一次 enqueue 抛）', () => {
+    expect(SRC).toMatch(/cancel\(\)\s*\{[^}]*markGone\(\)/);
+  });
+});
+
+/**
+ * 门控假 provider：第一次 chatStream 停在闸口，等测试放行才吐字。
+ * 剧本与默认那份等价（正文 + 一张行动卡 + 收尾轮），只是多了个可控的停顿点，
+ * 好让"客户端断开"精确地落在**这一轮还没跑完**的时候——否则这条用例会变成空跑。
+ */
+async function stubProviderGated() {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let round = 0;
+  const client = {
+    name: 'deepseek' as const,
+    model: 'deepseek-v4-pro',
+    billingModel: 'DeepSeek-V4-Pro-0813',
+    async chatStream() {
+      const mine = round++;
+      return (async function* () {
+        if (mine === 0) await gate;
+        for (const ch of mine === 0 ? '手抖是正常的。' : '') yield ch;
+        return {
+          finishReason: mine === 0 ? 'tool_calls' : 'stop',
+          toolCalls:
+            mine === 0
+              ? [{ id: 'call_1', type: 'function' as const, function: { name: CARD.name, arguments: JSON.stringify(CARD.args) } }]
+              : [],
+          usage: {
+            model: 'DeepSeek-V4-Pro-0813',
+            usage: { prompt: 100, completion: 20, cachedRead: 0, cachedWrite: 0 },
+            servedModel: 'deepseek-v4-pro',
+          },
+        };
+      })();
+    },
+  };
+  const llm = await import('@/lib/llm');
+  const spy = vi.spyOn(llm, 'getProvider').mockReturnValue({ client, route: { degraded: false } } as never);
+  return { release, restore: () => spy.mockRestore() };
+}
 
 /** 把 provider 换成"一调用就抛"的假货，抛出指定 message */
 async function stubProviderThrowing(message: string) {

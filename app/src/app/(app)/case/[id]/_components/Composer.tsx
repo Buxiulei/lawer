@@ -8,6 +8,9 @@ const MAX_HEIGHT_PX = 168;
 
 export const PLACEHOLDER = '说说现在的情况，或者问下一步该怎么做';
 
+/** 键位提示。它必须与 `shouldSendOnEnter` 说同一句话——文案和行为分家就是在教错用法。 */
+export const KEY_HINT = '回车发送，Shift + 回车换行';
+
 /** 量高只需要这三样；抽成结构类型是为了测试能塞一个假 textarea 进来。 */
 interface Measurable {
   placeholder: string;
@@ -29,9 +32,38 @@ export function fitHeight(el: Measurable, value: string): void {
   if (!value) el.placeholder = placeholder;
 }
 
+/** 按键事件里做这个判断需要的字段。抽成结构类型是为了让测试能直接喂假事件。 */
+export interface EnterKeyEvent {
+  key: string;
+  shiftKey: boolean;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  /** 输入法正在组词（React 从 nativeEvent 上取） */
+  isComposing: boolean;
+  /** 组词中的历史兜底：部分 Safari/iOS 版本此时 isComposing 为 false，只有 keyCode 是 229 */
+  keyCode?: number;
+}
+
+/**
+ * 这一下回车该不该发送。
+ *
+ * 【为什么是回车发送而不是 ⌘/Ctrl+回车】用户在这里打的是一句话不是一封信，
+ * 而"打完一句话按回车"是不需要学的；要按住修饰键才发得出去，等于每一轮都要先学一遍。
+ *
+ * 【输入法必须让路】中文输入法里回车是**选词**。组词途中抢走它，用户就打不出汉字了——
+ * 而这个产品的每一个用户都在打汉字。所以 `isComposing`（含 keyCode 229 的老兜底）优先于一切。
+ */
+export function shouldSendOnEnter(e: EnterKeyEvent): boolean {
+  if (e.key !== 'Enter') return false;
+  if (e.isComposing || e.keyCode === 229) return false;
+  // Shift+回车 = 换行（要写多段情况的人用这个）；⌘/Ctrl+回车仍然发送，老习惯不打断
+  if (e.shiftKey) return false;
+  return true;
+}
+
 /**
  * 输入区：多行自适应 textarea + 发送。流式中发送键变停止。
- * 回车换行、Ctrl/⌘+Enter 发送——中文输入法下回车是选词，不能抢。
+ * 回车发送、Shift+回车换行——中文输入法组词中的回车是选词，不能抢。
  */
 export function Composer({
   streaming,
@@ -69,7 +101,16 @@ export function Composer({
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            if (
+              shouldSendOnEnter({
+                key: e.key,
+                shiftKey: e.shiftKey,
+                metaKey: e.metaKey,
+                ctrlKey: e.ctrlKey,
+                isComposing: e.nativeEvent.isComposing,
+                keyCode: e.nativeEvent.keyCode,
+              })
+            ) {
               e.preventDefault();
               send();
             }
@@ -115,7 +156,7 @@ export function Composer({
         )}
       </div>
       <p className="mt-1.5 hidden text-[13px] text-ink-2 lg:block">
-        回车换行，⌘/Ctrl + 回车发送
+        {KEY_HINT}
       </p>
     </StickyBottomBar>
   );

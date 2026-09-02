@@ -1267,6 +1267,14 @@ function confirmationFooter(consequences: string): string {
  * 执行一次模型发起的工具调用。
  * 参数解析失败、工具不存在、校验不过——一律**回喂错误让模型改正**，不抛错中断整轮：
  * 用户等在屏幕前，一次参数写错就把整个回复弄丢是不可接受的。
+ *
+ * 【这句话此前只对参数解析成立】(2026-09-02) 上面这段注释写着「不抛错中断整轮」，
+ * 但 `handler(args, ctx)` 是**裸调**的：句柄自己抛（落库撞约束、库被锁、磁盘满），
+ * 异常就一路穿出 tool-loop → runTurn → 路由的 catch，一次坏三样，与 F-02/F-10 同形：
+ * 排在它后面的工具不再执行、正文停在 NULL（刷新即永久消失）、这一轮不记账。
+ * 病灶不同（那次是 SSE controller 关了，这次是写库真的失败），**下场完全一样**，
+ * 所以补在同一个地方：`executeTool` 是全部工具调用的**唯一入口**，
+ * 包在这里等于一次覆盖十几个句柄；包在调用点上则是「漏接一个入口即失效」。
  */
 export function executeTool(name: string, rawArguments: string, ctx: AgentToolContext): ToolOutcome {
   const handler = HANDLERS[name];
@@ -1279,7 +1287,22 @@ export function executeTool(name: string, rawArguments: string, ctx: AgentToolCo
     return reject(`${name} 的参数不是合法 JSON，请重新生成`);
   }
 
-  const outcome = handler(args, ctx);
+  let outcome: ToolOutcome;
+  try {
+    outcome = handler(args, ctx);
+  } catch (err) {
+    // 【写失败要有痕，但不能装成"参数写错了"】两者对模型的下一步完全相反：
+    // 参数错该改参数重试，写库坏了重试多少次都一样。所以回喂里明说「别原样重试」，
+    // 并要求它在正文里如实告诉用户"这条没记进去"——**静默是最坏的一种**：
+    // 用户读到「已经帮你记下了」，档案里什么都没有，而且没有任何地方说过它失败了。
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error(`[chat] 工具 ${name} 落库失败（本轮继续跑完，该条未入库）`, err);
+    outcome = reject(
+      `${name} 执行失败，这一条**没有写进档案**：${detail}。` +
+        '这不是参数问题，原样重试也不会成功——请不要重复调用本工具，' +
+        '并在正文里如实告诉用户这一条没能记进档案、让他稍后再说一次。',
+    );
+  }
   // claim_calc 的拒绝**按轮收口**，不逐次发帧：模型算钱普遍要试两三次（七种算法的必填项
   // 各不相同，回喂一句「缺什么」它下一轮就补上了），逐次发等于把正常的重试过程报成异常。
   // 但原先的写法是**整条通路静默**——重试到最后一次都没算出来，也一个信号都不留，
