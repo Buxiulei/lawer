@@ -4812,14 +4812,16 @@
     ],
     "region": "北京",
     "sources": [
+      "https://nj.tjj.beijing.gov.cn/nj/main/2024-tjnj/zk/e/html/C03-14.xls",
       "https://rsj.beijing.gov.cn/xxgk/tzgg/201912/t20191207_951033.html",
-      "https://www.helsen.com.cn/news/info/article/696",
-      "https://news.qq.com/rain/a/20240625A03N9G00",
+      "https://rsj.beijing.gov.cn/xxgk/tzgg/202007/t20200702_1937157.html",
       "https://rsj.beijing.gov.cn/bm/ywml/202007/t20200717_1950961.html",
-      "https://www.beijing.gov.cn/zhengce/zhengcefagui/202509/t20250918_4205116.html"
+      "https://www.beijing.gov.cn/zhengce/zhengcefagui/202509/t20250918_4205116.html",
+      "https://www.helsen.com.cn/news/info/article/696",
+      "https://news.qq.com/rain/a/20240625A03N9G00"
     ],
     "confidence": "待核实",
-    "updated": "2026-08-19",
+    "updated": "2026-09-02",
     "path": "packs/data/beijing-shepin-fengding.md",
     "facts": {
       "values": [
@@ -4828,8 +4830,8 @@
           "value": 47103.25,
           "unit": "元/月",
           "effective_from": "2024-06-19",
-          "confidence": "待核实",
-          "source_idx": 1
+          "confidence": "原文核实",
+          "source_idx": 0
         },
         {
           "key": "geshui_mianzheng_total",
@@ -4837,15 +4839,15 @@
           "unit": "元",
           "effective_from": "2024-06-19",
           "confidence": "待核实",
-          "source_idx": 1
+          "source_idx": 5
         },
         {
           "key": "faren_avg_monthly",
           "value": 15701.08,
           "unit": "元/月",
           "effective_from": "2024-06-19",
-          "confidence": "待核实",
-          "source_idx": 1
+          "confidence": "原文核实",
+          "source_idx": 0
         }
       ]
     }
