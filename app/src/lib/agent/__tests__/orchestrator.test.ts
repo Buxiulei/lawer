@@ -885,11 +885,13 @@ describe('模式与会话', () => {
 
     expect(second.threadId).toBe(first.threadId);
     const history = p2.calls[0].map((m) => m.content);
-    // 历史每条带模式标签（跨模式历史要靠它标出来源，见 orchestrator.historyModeTag）
-    expect(history).toContain('[问诊] 第一句');
-    expect(history).toContain('[问诊] 第一轮回复');
+    // ★同模式历史一律不加前缀：本轮就是问诊，再标一遍 [问诊] 没有信息量，
+    // 只是每条多耗 token、多一份让模型照抄进输出开头的噪声（变异：同模式也加 → 红）
+    expect(history).toContain('第一句');
+    expect(history).toContain('第一轮回复');
+    expect(history.some((c) => c.startsWith('[问诊]'))).toBe(false);
     // 本轮消息只出现一次，不会因为「先落库再取历史」而重复。
-    // **必须按后缀数**：历史条目带 [问诊] 前缀，按全等数的话重复的那条是 '[问诊] 第二句'，
+    // **必须按后缀数**：跨模式历史条目会带前缀，按全等数的话重复的那条是 '[问诊] 第二句'，
     // 永远数到 1——本工单加前缀时差点就这么把这道守卫拆了牙（复审 MF-2）。
     expect(history.filter((c) => c.endsWith('第二句'))).toHaveLength(1);
     expect(history).not.toContain('[问诊] 第二句');
@@ -906,7 +908,7 @@ describe('模式与会话', () => {
  * 变异：把 listCaseMessages 改回 listRecentMessages(thread.id, ...) → 本组必须红。
  */
 describe('G-F8 跨模式历史：换了模式也接得上前面说过的话', () => {
-  it('★陪跑轮能看见问诊轮的原话，且带 [问诊] 前缀', async () => {
+  it('★陪跑轮能看见问诊轮的原话：user 轮带 [问诊] 前缀，assistant 轮不带', async () => {
     const f = makeAgentFixture();
     const sink = makeSink();
 
@@ -938,9 +940,17 @@ describe('G-F8 跨模式历史：换了模式也接得上前面说过的话', ()
     const threads = f.db.prepare('SELECT mode FROM threads WHERE case_id = ?').all(f.caseId) as { mode: string }[];
     expect(threads.map((t) => t.mode).sort()).toEqual(['问诊', '陪跑']);
 
-    const history = p2.calls[0].map((m) => m.content);
+    const msgs = p2.calls[0];
+    const history = msgs.map((m) => m.content);
+    // 异模式的 user 轮：标出这句话是在问诊时说的
     expect(history).toContain('[问诊] 公司说要把我调到北京四区，上级换成王磊');
-    expect(history).toContain('[问诊] 先把这封通知留证。');
+    // ★assistant 轮一律不加前缀。连着几条 assistant 都以 `[X] ` 开头是最强的 few-shot 信号，
+    // 模型会照着在自己输出的开头复写一个 `[陪跑] `，那串字会原样流到用户屏幕上。
+    // 变异：assistant 也加前缀 → 本条红。
+    expect(history).toContain('先把这封通知留证。');
+    expect(msgs.filter((m) => m.role === 'assistant').some((m) => m.content.startsWith('['))).toBe(false);
+    // ★同模式（本轮就是陪跑）一律不加：全场不许出现任何以 [陪跑] 开头的条目
+    expect(history.some((c) => c.startsWith('[陪跑]'))).toBe(false);
     // 本轮自己的消息不带前缀（它不是历史，是用户刚说的这一句）
     expect(history).toContain('今天他们又来找我了');
     expect(second.ok).toBe(true);

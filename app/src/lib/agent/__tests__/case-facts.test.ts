@@ -83,12 +83,13 @@ function actions(n: number): ActionItemRow[] {
 }
 
 function makeSnapshot(over: Partial<CaseSnapshot> = {}): CaseSnapshot {
-  return {
+  const s: CaseSnapshot = {
     case: CASE_BASE,
     identity: { realName: null, authStatus: '未认证', nameUnreadable: false },
     evidence: [],
     historyStats: { total: 0, firstAt: null },
     timeline: [],
+    timelineStats: { total: 0, earliest: null },
     claims: [],
     companies: [],
     openActions: [],
@@ -98,6 +99,12 @@ function makeSnapshot(over: Partial<CaseSnapshot> = {}): CaseSnapshot {
     referredNbdpsy: false,
     ...over,
   };
+  // 夹具默认「窗口即全部」：没显式给 timelineStats 时按 timeline 推。
+  // 窗口截过一刀的形态（真总数 > 窗口）由 snapshot.test.ts 的真库判据守（G-F11）。
+  if (!over.timelineStats) {
+    s.timelineStats = { total: s.timeline.length, earliest: s.timeline[s.timeline.length - 1] ?? null };
+  }
+  return s;
 }
 
 const render = (over: Partial<CaseSnapshot> = {}) => renderCaseFacts(buildCaseFacts(makeSnapshot(over)));
@@ -263,7 +270,8 @@ describe('G-F1 零编造：缺的就是缺的，不给默认值', () => {
     expect(statNum(text, /已登记的金额诉求：(\d+) 项/), `${label} 诉求项数`).toBe(s.claims.length);
     expect(statNum(text, /首诊四项已记录 (\d+)\/4/), `${label} 首诊已记录数`).toBe(
       [s.case.employed_from, s.case.position, s.case.monthly_wage_fen, s.case.contract_count].filter(
-        (v) => v != null,
+        // 口径与渲染器一致：null / 空串 / 0 都不算「已记录」（见 G-F5 的空值防御那条）
+        (v) => v != null && (typeof v === 'number' ? v > 0 : v.trim().length > 0),
       ).length,
     );
     // 分类计数：8 类逐类核对，不是"出现过就算"
@@ -325,6 +333,26 @@ describe('G-F2 缺失显式化：没有的东西必须写出来「档案里没�
     expect(text).not.toContain('【');
     expect(text).not.toMatch(/【[^】]*】/);
     expect(text).not.toContain('已使用档案中的真实姓名');
+  });
+
+  /**
+   * ★已实名但档案里没有姓名（real_name_enc 为 NULL）。
+   *
+   * 【为什么必须与「未实名」分成两句】这一态原来复用未实名那句，等于对着一个刚做完实名认证的
+   * 用户说「你未实名」——他读到的是系统在否认他刚办完的事，而真正该做的动作也说反了：
+   * 这一态要补的是姓名，不是再去实名一遍。变异：两态合并成一句 → 本条红。
+   */
+  it('★已实名但无姓名记录 → 说"实名已通过、档案里没有姓名"，不谎报未实名', () => {
+    const text = render({ identity: { realName: null, authStatus: '已实名', nameUnreadable: false } });
+    expect(text).toContain('姓名：实名已通过，但档案里没有姓名记录，文书里我不会替你填');
+    expect(text).not.toContain('姓名：未实名');
+    expect(text).not.toMatch(/【[^】]*】/);
+  });
+
+  it('★未实名那句原样不动（变异：与"已实名无姓名"合并成一句 → 红）', () => {
+    const text = render({ identity: { realName: null, authStatus: '未认证', nameUnreadable: false } });
+    expect(text).toContain('姓名：未实名，档案里没有你的姓名，文书里我不会替你填');
+    expect(text).not.toContain('实名已通过');
   });
 
   it('已实名 → 给明文姓名 + 使用约束（manager 方案 A）', () => {
@@ -521,6 +549,35 @@ describe('G-F4 裁剪留痕：裁了必须说裁了多少', () => {
     expect(Number(m![1])).toBeLessThan(20); // 预算比条数上限更早生效
   });
 
+  /**
+   * ★窗口截过一刀时，「共 N 条」与锚点都必须是真值。
+   *
+   * 【它修的是什么】snapshot 的 TIMELINE_WINDOW=30 先截一刀，事件 45 条时窗口里只有 30 条。
+   * 原实现把 lines.length 当总数、把窗口末行当"最早 1 条"：卡上写「共 30 条」
+   * （模型据此断言"你一共就这 30 件事"），锚点是第 16 条（拿它当入职起点算工龄少算一大截）。
+   * 变异：留痕的 total 改回窗口长度 → 本条红；锚点取窗口最早行 → 本条红。
+   */
+  it('★真总数 45 / 窗口 30 → 留痕写「共 45 条」，锚点是真最早那条', () => {
+    const all = timeline(45).map((e) => ({ ...e, detail: null }));
+    const window = all.slice(0, 30); // listTimelineEvents 的 LIMIT 30（倒序，最新在前）
+    const text = render({ timeline: window, timelineStats: { total: 45, earliest: all[44] } });
+    expect(text).toMatch(/共 45 条，此处只列 \d+ 条/);
+    expect(text).not.toMatch(/共 30 条，此处只列/);
+    expect(text).toContain('起点锚点');
+    // 锚点说明行的下一行就是锚点本身：它必须是真最早那条，不是窗口末行
+    const lines = text.split('\n');
+    const anchorLine = lines[lines.findIndex((l) => l.includes('起点锚点')) + 1];
+    expect(anchorLine).toContain(all[44].title); // 真最早那条（第 1 号事件）
+    expect(anchorLine).not.toContain(window[29].title); // 窗口末行（第 15 号事件）不是锚点
+  });
+
+  it('★窗口已含最早事件 → 锚点不重复印同一条', () => {
+    const all = timeline(12).map((e) => ({ ...e, detail: null }));
+    const text = render({ timeline: all, timelineStats: { total: 12, earliest: all[11] } });
+    const earliestLine = `- ${all[11].happened_at}｜${all[11].kind}｜${all[11].title}`;
+    expect(text.split(earliestLine).length - 1).toBe(1);
+  });
+
   it('9 张待办只列 8 张 → 留痕', () => {
     const text = render({ openActions: actions(9) });
     expect(text).toContain('共 9 条，此处只列 8 条');
@@ -537,6 +594,38 @@ describe('G-F5 首诊四列进卡', () => {
     expect(text).toContain('月工资：36440.00 元');
     expect(text).toContain('合同签订次数：续签过一次');
     expect(text).toContain('首诊四项已记录 4/4');
+  });
+
+  /**
+   * ★空串与 0 是「没填」，不是「填了个空的 / 填了 0 元」。
+   *
+   * 【它修的是什么】cases 那四列没有 CHECK 约束，表单空提交与整数默认值都进得来。
+   * 原来用 `?? '未记录'` 只挡 null：employed_from='' 渲染成「入职日期：」（模型会当成
+   * "有个日期我没看清"），monthly_wage_fen=0 渲染成「月工资：0.00 元」——一个会一路
+   * 算进赔偿金额的假事实，而且两者都被计进「已记录 N/4」。变异：改回 `??` → 本条红。
+   */
+  it('★空串 / 0 一律按未记录处理，且不计进已记录数（变异：改回 `??` → 红）', () => {
+    const text = render({
+      case: {
+        ...CASE_BASE,
+        employed_from: '',
+        position: '   ',
+        monthly_wage_fen: 0,
+        contract_count: '',
+      },
+    });
+    expect(text).toContain('入职日期：未记录');
+    expect(text).toContain('岗位：未记录');
+    expect(text).toContain('月工资：未记录');
+    expect(text).toContain('合同签订次数：未记录');
+    expect(text).not.toContain('0.00 元');
+    expect(text).toContain('首诊四项已记录 0/4');
+  });
+
+  it('负数工资同样按未记录处理（脏数据不许变成"欠了用户钱"的事实）', () => {
+    const text = render({ case: { ...CASE_BASE, monthly_wage_fen: -1 } });
+    expect(text).toContain('月工资：未记录');
+    expect(text).toContain('首诊四项已记录 0/4');
   });
 
   it('★无值时渲染「未记录」而不是省略（变异：null 时跳过该行 → 红）', () => {

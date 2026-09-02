@@ -255,28 +255,26 @@ function chargeTurn(args: {
 }
 
 /**
- * 历史消息前缀：标出这条话发生在哪个模式。
- *
- * 【为什么要标】历史现在跨线程取（listCaseMessages），一个案子的"问诊"与"陪跑"会并在
- * 同一条时间轴上。不标的话，模型读到的是一段突然改变语气的连续对话，分不清哪些是首诊时
- * 边问边答的半成品结论。标签由服务端加，事实卡里有一句话告诉模型这不是用户打的字。
- */
-function historyModeTag(mode: string): string {
-  return `[${mode}] `;
-}
-
-/**
  * 历史消息 → ChatMessage。
  * 只取 user/assistant 的正文，**不重放工具调用**：工具的结果早已落进档案，
  * 而事实卡就在 system prompt 里。把上一轮的 tool_calls 重放给模型，
  * 它会以为那些动作还没做完，于是再做一遍——重复的时间线事件比缺失更难收拾。
+ *
+ * 【模式前缀只给异模式的 user 轮】历史现在跨线程取（listCaseMessages），一个案子的
+ * "问诊"与"陪跑"并在同一条时间轴上，不标的话模型读到的是一段突然改变语气的连续对话。
+ * 但标签**只解决"这句话是在哪个模式下说的"**，所以：
+ *   - assistant 轮一律不加。连着几十条 assistant 都以 `[陪跑] ` 开头是最强的 few-shot 信号，
+ *     模型会照着在自己的输出开头复写一个 `[陪跑] `——那串字会原样流到用户屏幕上。
+ *   - 与本轮同模式的轮次一律不加。同模式没有歧义，加了只是每条多耗 token、多一份噪声。
+ * 事实卡里那句"方括号标记是系统加的"仍在，用户原话被前缀改写这件事必须让模型知道。
  */
-function toHistory(rows: store.CaseMessageRow[]): ChatMessage[] {
+function toHistory(rows: store.CaseMessageRow[], currentMode: string): ChatMessage[] {
   return rows
     .filter((r) => (r.role === 'user' || r.role === 'assistant') && r.content)
     .map((r) => ({
       role: r.role as 'user' | 'assistant',
-      content: `${historyModeTag(r.thread_mode)}${r.content!}`,
+      content:
+        r.role === 'user' && r.thread_mode !== currentMode ? `[${r.thread_mode}] ${r.content!}` : r.content!,
     }));
 }
 
@@ -375,7 +373,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   // 首诊进度自己切（问诊 → 陪跑）。按 thread 取的话，首诊走完的那一刻历史清零——
   // 用户在同一个输入框里连续说话，模型却突然什么都不记得了。取数范围从 thread 扩到 case，
   // 条数上限不变（HISTORY_LIMIT），所以每轮 input token 不增加。
-  const history = toHistory(store.listCaseMessages(db, caseId, HISTORY_LIMIT));
+  const history = toHistory(store.listCaseMessages(db, caseId, HISTORY_LIMIT), mode);
   store.insertMessage(db, { threadId: thread.id, role: 'user', content: message });
 
   const taskClass = classifyTask({ message, mode });

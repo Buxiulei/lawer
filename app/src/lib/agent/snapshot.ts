@@ -39,7 +39,13 @@ export interface CaseSnapshot {
   evidence: caseStore.EvidenceRow[];
   /** 本案历史消息的总量与最早时间。给事实卡说"我只看得到最近一段"用，不是摘要 */
   historyStats: { total: number; firstAt: string | null };
+  /** 窗口内最近 TIMELINE_WINDOW 条（倒序，最新在前） */
   timeline: caseStore.TimelineEventRow[];
+  /**
+   * 时间线的真总数与真最早 1 条。**不能从 timeline 推**：窗口先截过一刀，
+   * 窗口长度冒充总数会让模型以为「一共就这 30 件事」，窗口末行冒充入职锚点会算错工龄。
+   */
+  timelineStats: { total: number; earliest: caseStore.TimelineEventRow | null };
   claims: agentStore.ClaimRow[];
   companies: agentStore.CompanyProfileRow[];
   /** 未完成的行动卡：charter §9「每次给出的行动卡要在下轮跟踪」的输入 */
@@ -69,6 +75,7 @@ export function loadCaseSnapshot(db: Database, caseId: number): CaseSnapshot {
     evidence: caseStore.listEvidence(db, caseId),
     historyStats: agentStore.countCaseMessages(db, caseId),
     timeline,
+    timelineStats: caseStore.timelineStats(db, caseId),
     claims: agentStore.listClaims(db, caseId),
     companies: agentStore.listCompanyProfiles(db, caseId),
     openActions: allActions.filter((a) => a.status === '待办'),

@@ -144,6 +144,21 @@ function identitySection(s: CaseSnapshot): FactSection {
       ],
     };
   }
+  // 已实名却没有姓名记录（real_name_enc 为 NULL：认证流程过了但姓名没落库）。
+  // 说成「未实名」是把我们这边的空档栽给用户——他刚做完实名，读到"你未实名"只会认为系统在骗人。
+  // 两态各说各的话：这一态该做的是补一次姓名，不是再去实名一遍。
+  if (id.authStatus === '已实名') {
+    return {
+      key: 'identity',
+      priority: 0,
+      heading: '当事人',
+      stat: '- 姓名：实名已通过，但档案里没有姓名记录，文书里我不会替你填〔未记录〕',
+      detail: [
+        '- 需要姓名的文书，先问用户要——' +
+          '**不许在文书里放任何形式的姓名占位符，也不许声称已经用上了档案里的真名**（真机事故原句就是这么写的）。',
+      ],
+    };
+  }
   return {
     key: 'identity',
     priority: 0,
@@ -215,23 +230,36 @@ function deadlineSection(s: CaseSnapshot): FactSection {
   };
 }
 
+/**
+ * 首诊四列的「真的填了吗」。
+ *
+ * 【为什么不能只判 != null】库里允许写进空串与 0（cases 的四列没有 CHECK 约束，
+ * 表单空提交与整数默认值都进得来），而 `?? '未记录'` 只挡 null：
+ * employed_from='' 渲染成「入职日期：」（后面什么都没有，模型会把它当成"有个日期我没看清"），
+ * monthly_wage_fen=0 渲染成「月工资：0.00 元」——一个会一路算进赔偿金额的假事实，
+ * 两者还都被计进「已记录 N/4」，于是首诊状态机也以为这一项问过了。
+ */
+function hasValue(v: string | number | null | undefined): boolean {
+  if (v == null) return false;
+  if (typeof v === 'number') return v > 0;
+  return v.trim().length > 0;
+}
+
 /** P1 首诊四项。有值必现、无值写「未记录」——省略等于让模型以为没问过。 */
 function employmentSection(s: CaseSnapshot): FactSection {
   const c = s.case;
-  const wage = c.monthly_wage_fen == null ? '未记录' : `${(c.monthly_wage_fen / 100).toFixed(2)} 元`;
-  const filled = [c.employed_from, c.position, c.monthly_wage_fen, c.contract_count].filter(
-    (v) => v != null,
-  ).length;
+  const wage = hasValue(c.monthly_wage_fen) ? `${(c.monthly_wage_fen! / 100).toFixed(2)} 元` : '未记录';
+  const filled = [c.employed_from, c.position, c.monthly_wage_fen, c.contract_count].filter(hasValue).length;
   return {
     key: 'employment',
     priority: 1,
     heading: '用工基本盘（首诊四项）',
     stat: `- 首诊四项已记录 ${filled}/4〔用户自述待核实〕`,
     detail: [
-      `- 入职日期：${c.employed_from ?? '未记录'}`,
-      `- 岗位：${c.position ? trunc(c.position, 40) : '未记录'}`,
+      `- 入职日期：${hasValue(c.employed_from) ? c.employed_from : '未记录'}`,
+      `- 岗位：${hasValue(c.position) ? trunc(c.position!, 40) : '未记录'}`,
       `- 月工资：${wage}`,
-      `- 合同签订次数：${c.contract_count ? trunc(c.contract_count, 20) : '未记录'}`,
+      `- 合同签订次数：${hasValue(c.contract_count) ? trunc(c.contract_count!, 20) : '未记录'}`,
     ],
   };
 }
@@ -315,32 +343,46 @@ const TIMELINE_ANCHOR = '- （下面这条是本卡收到的最早一条事件�
  * 时间线明细按给定字符预算重裁。**room 再小也返回三行**（留痕 + 锚点说明 + 最早 1 条），
  * 绝不返回空数组：那正是复审 MF-1 指出的悬崖——整区一丢，工龄起点就没了，
  * 模型只能从"最近发生的事"往回猜入职时间。
+ *
+ * @param lines   窗口内的事件行（倒序，最新在前）
+ * @param total   **全案真总数**，不是 lines.length：留痕的「共 N 条」写窗口长度，
+ *                就是拿被截过一刀的数字冒充全部（45 条的库会写成「共 30 条」）。
+ * @param anchor  **真最早 1 条**的行；窗口内已经含着它时传 null，避免同一条印两遍。
  */
-function timelineDetail(lines: string[], room: number): string[] {
+function timelineDetail(lines: string[], room: number, total: number, anchor: string | null): string[] {
   if (lines.length === 0) return [];
-  if (sumLen(lines) <= room) return lines;
-  const earliest = lines[lines.length - 1];
+  // 窗口内已含最早事件时，锚点就是窗口末行，它不再重复占一行
+  const earliest = anchor ?? lines[lines.length - 1];
+  const body = anchor === null ? lines.slice(0, -1) : lines;
   const kept: string[] = [];
   // 先把锚点与留痕的位置留出来，再拿剩下的预算装最新的几条
   let used = earliest.length + TIMELINE_ANCHOR.length + 120;
-  for (const l of lines.slice(0, -1)) {
+  for (const l of body) {
     if (used + l.length + 1 > room) break;
     kept.push(l);
     used += l.length + 1;
   }
+  // 窗口就是全部、且一条都没被预算挤掉：没有裁剪，也就没有留痕可留
+  if (anchor === null && total === lines.length && kept.length === body.length && sumLen(lines) <= room) {
+    return lines;
+  }
   return [
     ...kept,
-    trimmedNote(lines.length, kept.length + 1, `（最新 ${kept.length} 条 + 最早 1 条）`),
+    trimmedNote(total, kept.length + 1, `（最新 ${kept.length} 条 + 最早 1 条）`),
     TIMELINE_ANCHOR,
     earliest,
   ];
 }
 
 function timelineSection(s: CaseSnapshot): FactSection {
-  const lines = s.timeline.map(
-    (e) =>
-      `- ${e.happened_at}｜${e.kind}｜${e.title}${e.detail ? `：${trunc(e.detail, TIMELINE_DETAIL_MAX)}` : ''}`,
-  );
+  const fmt = (e: CaseSnapshot['timeline'][number]) =>
+    `- ${e.happened_at}｜${e.kind}｜${e.title}${e.detail ? `：${trunc(e.detail, TIMELINE_DETAIL_MAX)}` : ''}`;
+  const lines = s.timeline.map(fmt);
+  // 真总数 / 真最早 1 条来自 timelineStats（独立取数），不从被窗口截过的 timeline 推。
+  // 窗口已经含住最早那条时传 null：重复印一遍会让模型以为同一件事发生了两次。
+  const { total, earliest } = s.timelineStats;
+  const inWindow = earliest != null && s.timeline.some((e) => e.id === earliest.id);
+  const anchor = earliest && !inWindow ? fmt(earliest) : null;
   const stat = lines.length
     ? `- 档案里最近的 ${lines.length} 条事件（倒序，最新在前）〔用户自述待核实——全部是用户口述落档，没有第三方证据支撑〕`
     : '- 时间线：0 条〔未记录〕——还没有任何已落档的事件。';
@@ -350,8 +392,8 @@ function timelineSection(s: CaseSnapshot): FactSection {
     priority: 2,
     heading: '时间线',
     stat,
-    detail: timelineDetail(lines, TIMELINE_BUDGET),
-    refit: (room: number) => timelineDetail(lines, room),
+    detail: timelineDetail(lines, TIMELINE_BUDGET, total, anchor),
+    refit: (room: number) => timelineDetail(lines, room, total, anchor),
   };
 }
 

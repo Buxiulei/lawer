@@ -88,11 +88,28 @@ describe('G-F9 姓名接线：明文出境的两条前置条件，四态各一�
     expect(text).not.toContain('姓名：未实名');
   });
 
-  it('★已实名但没有密文（还没填过实名）→ 走未实名那句，不谎报读取失败', () => {
+  /**
+   * ★已实名但 real_name_enc 为 NULL：认证过了、姓名没落库。
+   * 原来这一态复用「未实名」那句，等于对着刚做完实名的用户说"你未实名"——
+   * 系统在否认他刚办完的事，而且把该做的动作说反了（要补的是姓名，不是再实名一遍）。
+   * 变异：把这一态与未实名合并成一句 → 本条红。
+   */
+  it('★已实名但没有姓名记录 → 说"实名已通过、档案里没有姓名"，既不谎报未实名也不谎报读取失败', () => {
     const f = makeAgentFixture();
     const s = loadCaseSnapshot(f.db, f.caseId);
     expect(s.identity).toEqual({ realName: null, authStatus: '已实名', nameUnreadable: false });
-    expect(card(f.db, f.caseId)).toContain('姓名：未实名，档案里没有你的姓名，文书里我不会替你填');
+    const text = card(f.db, f.caseId);
+    expect(text).toContain('姓名：实名已通过，但档案里没有姓名记录，文书里我不会替你填');
+    expect(text).not.toContain('姓名：未实名');
+    expect(text).not.toContain('解密失败');
+  });
+
+  it('★未认证用户仍走未实名那句（两态不许合并）', () => {
+    const f = makeAgentFixture();
+    f.db.prepare("UPDATE users SET auth_status = '未认证' WHERE id = ?").run(f.userId);
+    const text = card(f.db, f.caseId);
+    expect(text).toContain('姓名：未实名，档案里没有你的姓名，文书里我不会替你填');
+    expect(text).not.toContain('实名已通过');
   });
 
   it('★端到端：runTurn 真的把姓名与约束行送进了 system prompt', async () => {
@@ -122,6 +139,57 @@ describe('G-F9 姓名接线：明文出境的两条前置条件，四态各一�
     const system = provider.calls[0][0].content;
     expect(system).toContain('姓名：王小明〔已实名｜已核验〕');
     expect(system).toContain('只用于用户明确要求的文书填写');
+  });
+});
+
+/**
+ * G-F11 时间线的真总数与真锚点。
+ *
+ * 【为什么必须走真库】case-facts.test.ts 的夹具是手搓 snapshot，窗口截断这一刀
+ * 只发生在 loadCaseSnapshot 里（TIMELINE_WINDOW=30）——45 条事件的库里，
+ * 「共 N 条」写窗口长度、锚点取窗口末行，这两个错误在纯夹具下永远看不见。
+ */
+describe('G-F11 时间线窗口：卡上的「共 N 条」与起点锚点都是全案真值', () => {
+  it('★45 条事件的库 → 窗口 30 条，但卡里写「共 45 条」、锚点是第 1 条', () => {
+    const f = makeAgentFixture();
+    const ins = f.db.prepare(
+      'INSERT INTO timeline_events (case_id, happened_at, kind, title) VALUES (?, ?, ?, ?)',
+    );
+    // 第 1 条最早（2026-01-01），第 45 条最新
+    for (let i = 1; i <= 45; i += 1) {
+      const d = new Date(Date.UTC(2026, 0, 1) + (i - 1) * 86400000).toISOString().slice(0, 10);
+      ins.run(f.caseId, `${d} 09:00:00`, '公司动作', `第 ${i} 号事件`);
+    }
+
+    const s = loadCaseSnapshot(f.db, f.caseId);
+    expect(s.timeline).toHaveLength(30); // 窗口只给最近 30 条
+    expect(s.timelineStats.total).toBe(45); // 但总数是真的
+    expect(s.timelineStats.earliest!.title).toBe('第 1 号事件');
+    // 窗口末行是第 16 条——原实现拿它当入职锚点，工龄少算 15 天
+    expect(s.timeline[s.timeline.length - 1].title).toBe('第 16 号事件');
+
+    const text = renderCaseFacts(buildCaseFacts(s));
+    expect(text).toMatch(/共 45 条，此处只列 \d+ 条/);
+    expect(text).not.toMatch(/共 30 条，此处只列/);
+    const lines = text.split('\n');
+    const anchorLine = lines[lines.findIndex((l) => l.includes('起点锚点')) + 1];
+    expect(anchorLine).toContain('第 1 号事件');
+    expect(anchorLine).toContain('2026-01-01');
+  });
+
+  it('★事件不超窗口 → 总数就是条数，锚点不重复印', () => {
+    const f = makeAgentFixture();
+    const ins = f.db.prepare(
+      'INSERT INTO timeline_events (case_id, happened_at, kind, title) VALUES (?, ?, ?, ?)',
+    );
+    for (let i = 1; i <= 5; i += 1) ins.run(f.caseId, `2026-03-0${i} 09:00:00`, '公司动作', `第 ${i} 号事件`);
+
+    const s = loadCaseSnapshot(f.db, f.caseId);
+    expect(s.timelineStats).toMatchObject({ total: 5 });
+    expect(s.timelineStats.earliest!.title).toBe('第 1 号事件');
+    const text = renderCaseFacts(buildCaseFacts(s));
+    expect(text).not.toContain('此处只列'); // 没裁就没有留痕
+    expect(text.split('第 1 号事件').length - 1).toBe(1); // 锚点不重复
   });
 });
 

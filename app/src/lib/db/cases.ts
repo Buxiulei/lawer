@@ -166,6 +166,28 @@ export function listTimelineEvents(db: Database, caseId: number, limit: number):
 }
 
 /**
+ * 时间线的**真总数**与**真最早 1 条**。listTimelineEvents 取的是窗口内最近 N 条，
+ * 事实卡的「共 N 条」留痕与「起点锚点」都不能用那个窗口的长度和末行冒充：
+ * 45 条事件、窗口 30 时，窗口末行是第 16 条，拿它当入职锚点算工龄会少算一大截，
+ * 而「共 30 条」会让模型断言「你只有这 30 件事」。排序口径与 listTimelineEvents 反向对齐。
+ */
+export function timelineStats(
+  db: Database,
+  caseId: number,
+): { total: number; earliest: TimelineEventRow | null } {
+  const total = Number(
+    (db.prepare('SELECT COUNT(*) AS n FROM timeline_events WHERE case_id = ?').get(caseId) as { n: number }).n,
+  );
+  const earliest =
+    (db
+      .prepare(
+        'SELECT id, case_id, happened_at, kind, title, detail, milestone, created_at FROM timeline_events WHERE case_id = ? ORDER BY happened_at ASC, id ASC LIMIT 1',
+      )
+      .get(caseId) as TimelineEventRow | undefined) ?? null;
+  return { total, earliest };
+}
+
+/**
  * 给一条已存在的事件盖上里程碑。**全仓写 milestone 列的 SQL 只有这一条。**
  *
  * 【为什么不做成 insertTimelineEvent 的一个参数】契约 §六·二：通用写路径**在类型上就不该
