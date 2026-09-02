@@ -183,6 +183,11 @@
 **✅ order-guard @0685196(只加测试,DESC 变异红,3693 绿)→ intake-persist 整单闭卷,合主干盯 CI**。执行者据实偏离派单:用 listProfiles(company-graph,生产链路 dossier route 喂 pickRespondent 的那个)而非 listCompanyProfiles(agent.ts 的另一个同名 CompanyProfileRow,tsc TS2345)——既有类型分叉记案。
 **🎉 首诊落库上产(2026-09-02 15:3x,生产HEAD=fcc4cb8,CI 绿)**:merge-tree 零冲突→push→CI success→备份 pre-intake→build EXIT=0→restart→getDb 触发迁移(cases 四新列 YES,48 表)→零错误;冒烟 /intake 200、POST intake 405(GET)存在;**uid1 真打 POST intake 201**(timelineAdded 5/actionsAdded 3/deadlinesAdded 1),回读 stage=已收通知/employed_from/position 正确,deadlines 仲裁时效 2027-08-30。测试案件 55 张行动卡=历史危机评测堆积,非本单。**用户须重做首诊**(邮件第4条已告知)。
 **记案(login-persist 小瑕)**:/login 在 sessionStorage 有 step=entry 且 target 已录入部分手机号时首帧恢复输入值→React #418 hydration mismatch 一条 console.error(复审称 entry 路径零错误未覆盖"entry+已输号"形态);页面功能正常仅控制台错。修法:entry 步不持久化/不首帧恢复 target(只在发码后记),或 effect 内恢复。下次登录页小单顺手收。
+**2026-09-02 15:50 · 复审裁决与派单**：
+- **byo-agent-front 复审 FAIL**（114ee37）：一条真阻断——新建 `/settings/agent` 在低调模式下明文渲染话术块「我的劳动仲裁案件档案库」等案情词，而入口卡在低调下特意改成中性词，点进去即泄露；既有守卫按组件名锁在 AgentSetupCard，看不见新页。另：《接入说明》「唯一例外」错（api key 可达扣费路由两条：chat + dossiers/confirm）；30 例变异 4 存活（listApiKeys 去 client_name / useConnectedAgent 失败回落已接入 / 未登录门 / woff2 字形表），前三条要补牙。执行者报告数字全部复核属实；但 18 例「零存活」只在它自选的点上成立。→ 已派修复+合入 fcc4cb8（Dashboard.tsx 冲突两边都留）+复核单。**教训**：守卫按组件名锁 = 新页绕过；低调模式守卫要按**页面**锁。
+- **案件事实卡工单已派**（基座 d8b33aa = fcc4cb8 + ws/chat-finalize d203752，分支 ws/case-facts）。经理裁决设计文档三处待拍板：①姓名走方案 A（已认证且可解密才注入，带「只用于文书填写不复述」约束；未实名明写「档案里没有你的姓名」）；②首诊四列在基座已存在，直接渲染，null→「未记录」；③时间线预算 2400/总 4600，裁剪永远保留最早 1 条入职锚点。纠正设计文档过时事实：`listCaseMessages` 在基座已存在（chat-trio 加的），复用不复制。姓名进 prompt 是 PII 出境面扩张，可一键回退，已向主理人报备。
+- chat-finalize-fix2（d203752）复审仍在跑。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
