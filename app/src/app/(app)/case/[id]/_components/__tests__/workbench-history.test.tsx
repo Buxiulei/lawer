@@ -17,6 +17,7 @@
  *  · C2 把 failed 分支换成走正常那一屏（"没取到"画成"没聊过"）⇒ 「重试非空态」那条红
  *  · C3 取回来的历史不落进 messages（`if (history.messages)` 那句删掉）⇒ 「两条都画出来」红
  *  · C4 演示案件也去请求 ⇒ 「演示案件不请求」那条红
+ *  · B10 落定时不把 servedModel / modelMismatch 传给消息 ⇒ 「实际型号进消息」那条红
  */
 import type { ReactElement, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -44,24 +45,29 @@ vi.mock('@/app/_ui/motion', async (importOriginal) => ({
   scrollBehavior: () => 'auto' as const,
   useReducedMotion: () => true,
 }));
+/** 落定回调的接住处：本轮流走完之后 Workbench 拿它把新消息追进列表 */
+const chat: { settle: (turn: unknown) => void } = { settle: () => {} };
 vi.mock('../../_stream/useChatStream', () => ({
-  useChatStream: () => ({
-    phase: 'idle',
-    meta: null,
-    text: '',
-    deterministicChars: 0,
-    records: [],
-    actions: [],
-    drafts: [],
-    notices: [],
-    error: null,
-    waitBaseAt: null,
-    busy: false,
-    demoFallback: false,
-    send: () => {},
-    retry: () => {},
-    stop: () => {},
-  }),
+  useChatStream: ({ onSettled }: { onSettled: (turn: unknown) => void }) => {
+    chat.settle = onSettled;
+    return {
+      phase: 'idle',
+      meta: null,
+      text: '',
+      deterministicChars: 0,
+      records: [],
+      actions: [],
+      drafts: [],
+      notices: [],
+      error: null,
+      waitBaseAt: null,
+      busy: false,
+      demoFallback: false,
+      send: () => {},
+      retry: () => {},
+      stop: () => {},
+    };
+  },
 }));
 
 /** 登录态替身：默认已登录，否则页面走的是「去做首诊」那一屏，根本不到取历史这一步 */
@@ -166,14 +172,27 @@ function realRows() {
    只沿 children 与那几个"内容型" prop 往下走，收组件名与可见文字。 */
 const TEXT_PROPS = ['children', 'title', 'description', 'action'] as const;
 
-function walk(node: unknown, types: string[], texts: string[]): void {
+/** 消息组件收到的那个数据对象（正文之外还带型号两件套，落款就是照它画的） */
+interface ProbedMessage {
+  content?: unknown;
+  model?: unknown;
+  servedModel?: unknown;
+  modelMismatch?: unknown;
+}
+
+function walk(
+  node: unknown,
+  types: string[],
+  texts: string[],
+  messages: ProbedMessage[],
+): void {
   if (node === null || node === undefined || typeof node === 'boolean') return;
   if (typeof node === 'string' || typeof node === 'number') {
     texts.push(String(node));
     return;
   }
   if (Array.isArray(node)) {
-    for (const child of node) walk(child, types, texts);
+    for (const child of node) walk(child, types, texts, messages);
     return;
   }
   const el = node as ReactElement<Record<string, unknown>>;
@@ -182,16 +201,22 @@ function walk(node: unknown, types: string[], texts: string[]): void {
   types.push(typeof t === 'string' ? t : (t?.displayName ?? t?.name ?? '?'));
   // 消息组件把正文放在 message 这个**数据对象**里（不是 ReactNode），单独取一下：
   // 少了它，"两条都画出来"那条会在空字符串上断言，静默空过。
-  const message = el.props?.message as { content?: unknown } | undefined;
+  const message = el.props?.message as ProbedMessage | undefined;
+  if (message) messages.push(message);
   if (typeof message?.content === 'string') texts.push(message.content);
-  for (const key of TEXT_PROPS) walk(el.props?.[key], types, texts);
+  for (const key of TEXT_PROPS) walk(el.props?.[key], types, texts, messages);
 }
 
-function probe(node: ReactNode): { types: string[]; text: string } {
+function probe(node: ReactNode): {
+  types: string[];
+  text: string;
+  messages: ProbedMessage[];
+} {
   const types: string[] = [];
   const texts: string[] = [];
-  walk(node, types, texts);
-  return { types, text: texts.join(' ') };
+  const messages: ProbedMessage[] = [];
+  walk(node, types, texts, messages);
+  return { types, text: texts.join(' '), messages };
 }
 
 /** 推一帧：只在这期间接管 hook */
@@ -305,5 +330,66 @@ describe('取不到时说清楚 + 给重试', () => {
     const { types, text } = probe(await settled(CASE));
     expect(types).toContain('Composer');
     expect(text).not.toContain('重试');
+  });
+});
+
+/* ── 三、本轮落定：型号两件套跟着消息一起进列表 ────────────────
+   收帧那一层把「实际服务的型号」收进了 SettledTurn（见 _stream 那组判据），
+   但**从流里收到 ≠ 画到屏幕上**：中间还隔着 Workbench 落定时拼消息这一步。
+   那一步漏传 servedModel/modelMismatch，页面照常出落款、照常是个好听的中文名，
+   只不过它标的是 `meta.model`——我们**请求**的那个。用户按型号付费，读到的是假答案。 */
+
+describe('落定的一轮把「实际型号」带进消息', () => {
+  /** 本轮流走完时 useChatStream 交回来的东西，形状照 SettledTurn */
+  function turn() {
+    return {
+      messageId: 'm_77',
+      meta: {
+        type: 'meta',
+        thread_id: 'th_1',
+        message_id: 'm_77',
+        mode: '陪跑',
+        intake_stage: null,
+        task_class: 'critical',
+        // 我们**请求**的那个
+        model: 'claude-opus-5',
+        degraded: false,
+      },
+      text: '这三句话不是一段话，是三个动作。',
+      deterministicChars: 0,
+      records: [],
+      actions: [],
+      drafts: [],
+      notices: [],
+      // 厂商**实际**派来的那个
+      servedModel: 'claude-sonnet-5',
+      servedMismatch: true,
+      complete: true,
+    };
+  }
+
+  /** 变异臂 B10：settle 里删掉 servedModel / modelMismatch 两行 ⇒ 这条红 */
+  it('实际型号与「换过型号」一起进消息，请求值另存不覆盖', async () => {
+    await settled(CASE);
+    chat.settle(turn());
+
+    const { messages } = probe(frame(CASE));
+    const last = messages.at(-1);
+    expect(last?.content).toBe('这三句话不是一段话，是三个动作。');
+    expect(last?.servedModel).toBe('claude-sonnet-5');
+    expect(last?.modelMismatch).toBe(true);
+    expect(last?.model).toBe('claude-opus-5');
+  });
+
+  /** 新消息追在历史后面，不是把历史顶掉——两个来源必须合流成同一条列表 */
+  it('历史两条 + 本轮一条 = 三条，顺序不乱', async () => {
+    await settled(CASE);
+    chat.settle(turn());
+
+    const { messages, text } = probe(frame(CASE));
+    expect(messages).toHaveLength(3);
+    expect(text).toContain('我上周三被通知解除');
+    expect(text).toContain('先别签任何文件');
+    expect(text).toContain('这三句话不是一段话');
   });
 });

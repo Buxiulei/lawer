@@ -779,6 +779,11 @@ export const demoThread: Thread = {
  *
  * 【格式约束】`RichText` 只认段落、`- ` / `1. ` 列表与 `**加粗**`，没有引用块。
  * 照读话术因此写成带引号的独立段落，不用 `> `（会原样显示成一个大于号）。
+ *
+ * 【`model` 必须是真型号 id】每条回答底下现在会照它渲染一行落款
+ * （`MODEL_LABELS[model] ?? model`，认不出就把这串字原样印出去）。
+ * 演示这几轮发生在买了中配月卡之后，critical 档在中配走 Claude Sonnet
+ * （`lib/llm/routing.config.ts`），所以填 `claude-sonnet-5`，屏幕上是「主力模型」。
  */
 export const demoMessages: Message[] = [
   {
@@ -793,7 +798,7 @@ export const demoMessages: Message[] = [
     id: 'm_2',
     threadId: 'th_1',
     role: 'assistant',
-    model: 'claude',
+    model: 'claude-sonnet-5',
     createdAt: demoDay(DEMO_FIRSTTALK_DAY, '12:42'),
     content: `这三句话不是一段话，是三个动作。一句一句拆。
 
@@ -842,7 +847,7 @@ export const demoMessages: Message[] = [
     id: 'm_4',
     threadId: 'th_1',
     role: 'assistant',
-    model: 'claude',
+    model: 'claude-sonnet-5',
     createdAt: demoDay(DEMO_PIP_DAY + 1, '09:23'),
     content: `先说这份文件是什么：中国法里没有"PIP"这个概念。它唯一能挂上的法律外壳，是《劳动合同法》第 40 条第 2 项那条路径——"不能胜任工作，经过培训或者调整工作岗位，仍不能胜任工作的"。公司现在做的事，是在给这条路径攒证据链：让你先签一次"我认可本期考核为不胜任"，再签一次"改进未通过"，两步签完，它按第 40 条第 2 项解除，付 N 加代通知金，而不是 2N。
 
@@ -894,7 +899,7 @@ export const demoMessages: Message[] = [
     id: 'm_6',
     threadId: 'th_1',
     role: 'assistant',
-    model: 'claude',
+    model: 'claude-sonnet-5',
     createdAt: demoDay(-57, '21:12'),
     content: `怕是正常的——他挑的正是你现在最没底的那块。先把这句话本身处理掉，再说事实。
 
@@ -945,7 +950,7 @@ export const demoMessages: Message[] = [
     id: 'm_8',
     threadId: 'th_1',
     role: 'assistant',
-    model: 'claude',
+    model: 'claude-sonnet-5',
     createdAt: demoDay(DEMO_DISMISSAL_DAY + 1, '09:31'),
     content: `通知书我逐段读完了，五处标在「文件解读」页，四处高风险。这里只说决定动作的三件事。
 

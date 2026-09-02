@@ -26,6 +26,7 @@ vi.mock('@/app/_ui/discreet', () => ({
 
 const { servedModelLabel } = await import('../../_stream/frames');
 const { AssistantMessage, UserMessage } = await import('../Messages');
+const { demoMessages } = await import('@/app/_mock/demo');
 
 const ssr = (node: ReactNode) => renderToStaticMarkup(<>{node}</>);
 const text = (html: string) => html.replace(/<[^>]+>/g, '');
@@ -138,4 +139,55 @@ describe('二、落款真的画在回答底下', () => {
     expect(text(html)).toContain('我上周三被通知解除');
     expect(text(html)).not.toContain('深度推理模型');
   });
+});
+
+/* ── 三、演示页那四条回答 ─────────────────────────────────────
+   演示页是核心客户的首屏：风闻裁员的人第一眼看到的就是这四轮。
+   `demoMessages` 的 `model` 此前写的是 `'claude'`——一个**不存在的型号 id**。
+   在这一单之前它是死数据（没人渲染），这一单把落款接上之后，
+   `MODEL_LABELS['claude']` 取不到，`?? model` 兜底把这串小写英文原样印在每条回答底下。
+   变异臂：demo.ts 的 model 改回 `'claude'`（或任何没登记的串）⇒ 这一组红。 */
+
+describe('三、演示页落款：不许出现裸型号串', () => {
+  const demoAssistants = demoMessages.filter((m) => m.role === 'assistant');
+
+  it('演示剧本里确实有四条回答（数量变了这组要重看）', () => {
+    expect(demoAssistants.length).toBe(4);
+  });
+
+  it.each(demoAssistants.map((m) => [m.id, m] as const))(
+    '%s 的落款是已登记的中文标签，正文与落款里都没有裸型号串',
+    (id, message) => {
+      const requested = message.model;
+      expect(requested, `${id} 没写型号`).toBeTruthy();
+
+      // 认得出的型号才会被换成中文名；认不出的 servedModelLabel 原样返回那串 id。
+      // 所以「label !== id」就是「这个 id 在 MODEL_LABELS 里」——即落款 ∈ 已登记标签集。
+      const label = servedModelLabel({ requested });
+      expect(label, `${id} 的型号 ${requested} 不在已登记标签集里`).not.toBe(requested);
+      expect(label).toBe('主力模型');
+
+      const markup = ssr(
+        <AssistantMessage
+          message={message as never}
+          actions={[]}
+          onToggleAction={() => {}}
+          caseId="demo"
+          confirmedDrafts={new Set()}
+          onRequestConfirmDraft={() => {}}
+        />,
+      );
+      const seen = text(markup);
+
+      expect(seen).toContain(label);
+      // 用户眼里不该出现任何型号 id——「claude」是这一处最容易漏出去的那个
+      expect(seen).not.toMatch(/claude/i);
+
+      /* 正文块用 RichText 那个 data-rich-text 锚住：全篇恰一处，
+         落款排在它之后（先读完回答，再看这一行小字）。
+         渲染器要是把正文降级成纯文本、锚点没了，这两条会红。 */
+      expect(markup.match(/data-rich-text=""/g) ?? []).toHaveLength(1);
+      expect(markup.indexOf(label!)).toBeGreaterThan(markup.indexOf('data-rich-text'));
+    },
+  );
 });
