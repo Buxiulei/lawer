@@ -4,7 +4,7 @@
 // 所以只能靠机检，不能靠"记得"。
 //   ① 后台发钱只经 lib/billing 唯一入口——绕过去直写账本表即红；
 //   ② admin_audit 只有一个写入口——写点散开就等于"有没有落审计"取决于每个调用点的记性；
-//   ③ /admin 不出现在任何普通用户可达的导航里——入口只有直接输 URL；
+//   ③ /woo 不出现在任何普通用户可达的导航里——入口只有直接输 URL；
 //   ④ 前端可选时长与服务端值域一致——分叉的现象是"下拉里有个选项，选了就报 400"。
 //
 // 每条都配一条**对照臂**（证明这把尺子确实能量出违规），防守卫本身失效后长期假绿。
@@ -18,12 +18,14 @@ import { ADMIN_MEMBERSHIP_DAYS } from '../actions';
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const ADMIN_LIB = path.join(SRC, 'lib/admin');
 const ADMIN_API = path.join(SRC, 'app/api/v1/admin');
-const ADMIN_UI = path.join(SRC, 'app/admin');
+// 后台页面目录。对外地址是 /woo（不叫 admin）；**接口仍在 /api/v1/admin，没跟着改名**，
+// 所以页面里那些 apiFetch('/admin/...') 是接口路径、不是页面链接——见 ③ 的反向对照臂。
+const ADMIN_UI = path.join(SRC, 'app/woo');
 const VIEW = path.join(ADMIN_UI, 'users/_components/AdminUsersView.tsx');
 
 /**
  * 把 TS 行注释、块注释与 SQL 的 `--` 注释抹成等长空格（保住行号）。
- * **必须先剥注释再扫**：本仓的中文注释里反复写着 `INSERT INTO gongdao_ledger`、`/admin/users`
+ * **必须先剥注释再扫**：本仓的中文注释里反复写着 `INSERT INTO gongdao_ledger`、`/woo/users`
  * 这些串（它们正是被禁的那些东西的名字），直接 grep 全是误判。
  * 同 migrate-idempotency-guard.test.ts 的 stripComments，此处不 import 它——
  * 跨 test 文件 import 会把那边的用例在这边再注册一遍。
@@ -158,9 +160,15 @@ describe('② admin_audit 只有一个写入口', () => {
 
 // ───────────────────── ③ 后台不出现在任何普通用户可达的导航里 ─────────────────────
 
-describe('③ /admin 只能靠直接输 URL 进', () => {
-  /** 字符串字面量形态的 /admin 路径（import 说明符是 '@/lib/admin/…'，以 @ 开头，不会误命中）。 */
-  const ADMIN_HREF = /['"`]\/admin(\/|['"`])/;
+describe('③ /woo 只能靠直接输 URL 进', () => {
+  /**
+   * 字符串字面量形态的 /woo 路径。
+   *
+   * **只认页面地址，不认接口地址**：后台页面搬到 /woo 后，页面里的 apiFetch 仍打
+   * '/admin/users'（接口没改名，前缀 /api/v1）。若这把尺子还盯着 /admin，
+   * 它量到的就永远是那些接口串——一把恒亮的尺子等于没有尺子。
+   */
+  const WOO_HREF = /['"`]\/woo(\/|['"`])/;
   const OUTSIDE = walk(SRC, { withTests: true }).filter(
     (f) => !f.startsWith(ADMIN_UI) && !f.startsWith(ADMIN_API) && !f.startsWith(ADMIN_LIB),
   );
@@ -172,18 +180,36 @@ describe('③ /admin 只能靠直接输 URL 进', () => {
     expect(names).toContain('components/shell/bottomBar.ts');
   });
 
-  test('admin 目录之外没有任何指向 /admin 的链接', () => {
-    const hits = OUTSIDE.filter((f) => ADMIN_HREF.test(read(f))).map(rel);
-    expect(hits, `这些文件里出现了 /admin 链接：${hits.join(', ')}`).toEqual([]);
+  test('后台目录之外没有任何指向 /woo 的链接', () => {
+    const hits = OUTSIDE.filter((f) => WOO_HREF.test(read(f))).map(rel);
+    expect(hits, `这些文件里出现了 /woo 链接：${hits.join(', ')}`).toEqual([]);
   });
 
   test('后台页不在 (app) 路由组里（在里面就必然要在导航上有个位置）', () => {
-    expect(fs.existsSync(path.join(SRC, 'app/admin/users/page.tsx'))).toBe(true);
+    expect(fs.existsSync(path.join(SRC, 'app/woo/users/page.tsx'))).toBe(true);
+    expect(fs.existsSync(path.join(SRC, 'app/woo/codes/page.tsx'))).toBe(true);
+    expect(fs.existsSync(path.join(SRC, 'app/(app)/woo'))).toBe(false);
+  });
+
+  test('旧地址 /admin 的页面目录不复存在（改名不能留下第二个入口）', () => {
+    // 留着旧目录 = 两个地址都通，等于没改名；构建产物里也会同时冒出 /admin/* 两条路由。
+    expect(fs.existsSync(path.join(SRC, 'app/admin'))).toBe(false);
     expect(fs.existsSync(path.join(SRC, 'app/(app)/admin'))).toBe(false);
   });
 
-  test('对照臂：同一把尺子在后台页自己身上必须命中（证明它认得出链接）', () => {
-    expect(ADMIN_HREF.test(read(VIEW))).toBe(true);
+  test('对照臂：同一把尺子量「导航里挂了后台链接」的坏样本必须命中', () => {
+    // 违规的两种真实形态：模板里的 href、代码里的跳转
+    expect(WOO_HREF.test(stripComments('<Link href="/woo/users">后台</Link>'))).toBe(true);
+    expect(WOO_HREF.test(stripComments("router.push('/woo/codes');"))).toBe(true);
+  });
+
+  test('反向对照臂：三种不该命中的形态（否则守卫恒红或恒绿，都等于没有）', () => {
+    // ① 后台页自己那些 apiFetch('/admin/...') 是接口路径，不是页面链接——不该被认作违规
+    expect(WOO_HREF.test(read(VIEW))).toBe(false);
+    // ② 前缀撞上但不是这条路由
+    expect(WOO_HREF.test("const u = '/woohoo';")).toBe(false);
+    // ③ 只写在注释里的地址（read 先剥注释；本页 page.tsx 的抬头就是这种）
+    expect(WOO_HREF.test(stripComments('// /woo/users 管理后台。'))).toBe(false);
   });
 });
 

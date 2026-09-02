@@ -1,4 +1,4 @@
-// app/src/app/admin/users/_components/__tests__/admin-op-ref.test.ts
+// app/src/app/woo/users/_components/__tests__/admin-op-ref.test.ts
 //
 // 后台操作台的**跨请求幂等键（op_ref）**在前端这一侧的落点。要害两条，都对着「钱/权益双发洞」：
 //   ① op_ref 在点「发放/调整」那一刻生成一次、随 pending 存下，**重试复用同一把**——
@@ -82,7 +82,7 @@ function stripComments(src: string): string {
 }
 
 const SRC = stripComments(
-  readFileSync(join(process.cwd(), 'src/app/admin/users/_components/AdminUsersView.tsx'), 'utf-8'),
+  readFileSync(join(process.cwd(), 'src/app/woo/users/_components/AdminUsersView.tsx'), 'utf-8'),
 );
 
 /** runPending 的函数体（从声明到下一个顶层 const）。 */

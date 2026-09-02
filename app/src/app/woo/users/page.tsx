@@ -1,5 +1,5 @@
-// app/src/app/admin/users/page.tsx
-// /admin/users 管理后台。
+// app/src/app/woo/users/page.tsx
+// /woo/users 管理后台。
 //
 // ── 为什么这一页不在 (app) 路由组里 ──
 // (app) 组的布局套的是 AppShell（侧栏 + 底部 Tab + 面包屑），任何挂在里面的页面

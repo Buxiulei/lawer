@@ -1,7 +1,7 @@
 // app/src/lib/admin/auth.ts
 // 管理后台鉴权闸门（唯一入口）。
 //
-// ⚠️ 【并行实现，合并轮收敛为一】ws/redeem-codes 单同期在做 /admin/codes（兑换码管理页），
+// ⚠️ 【并行实现，合并轮收敛为一】ws/redeem-codes 单同期在做兑换码管理页（今在 /woo/codes），
 // 其中另有一份 ADMIN_UIDS 鉴权实现。两支的**接口约定一致**：
 //     登录态 uid ∈ env ADMIN_UIDS（逗号白名单） → 放行；
 //     其余一律 404（不 401 不 403），不暴露后台存在；
