@@ -27,6 +27,36 @@ function daysUntilLocalLegacy(dueAt: string, now: Date): number {
   return Math.round((due - today) / 86400000);
 }
 
+/**
+ * 【对照臂必须自带时区】旧的两把尺都读**进程本地时区**：ceil 尺里
+ * `new Date('2026-09-10 00:00:00')`（无时区标记）按本地解析，local 尺里
+ * `now.getFullYear()` 系列取本地日历日。所以"旧尺会怎么错"这类**先验断言**
+ * 在不同机器上结论不同——机器 TZ 是断言的隐藏输入。
+ *
+ * 2026-08-31 起 main 连红就是这么来的：开发机 TZ=Asia/Shanghai 时三种形态确实分裂，
+ * 而 CI runner 是 UTC，`'2026-09-10 00:00:00'` 与 `'2026-09-10'` 解析成同一时刻 ⇒
+ * 分裂消失 ⇒ 对照臂垮掉。**同一句断言，绿或红取决于跑它的机器**。
+ *
+ * 修法不是给 CI 设 TZ 了事（那只是把隐藏输入换个地方藏），而是把时区**写进断言**：
+ * 旧邮件尺的产线口径本来就是"部署时把 TZ 设成 Asia/Shanghai"，那就在这里钉死北京时间。
+ * 被测的新尺不需要这个（它自带案件时区），最后那个 describe 专门盯着这一点。
+ */
+function withCaseTz<T>(fn: () => T): T {
+  const saved = process.env.TZ;
+  process.env.TZ = 'Asia/Shanghai';
+  // 先验量具：确认 TZ 真的换动了。改不动就说明下面整段是在别的时区上跑的，
+  // 那时无论绿红都不算数 —— 宁可在这里炸，不要在那里给假结论。
+  expect(new Date('2026-01-01 00:00:00').toISOString(), 'process.env.TZ 未生效').toBe(
+    '2025-12-31T16:00:00.000Z',
+  );
+  try {
+    return fn();
+  } finally {
+    if (saved === undefined) delete process.env.TZ;
+    else process.env.TZ = saved;
+  }
+}
+
 const DUE = '2026-09-10';
 
 /**
@@ -74,9 +104,11 @@ describe('案件时区日历日', () => {
   test('先验对照臂：旧的 ceil 尺对这三种形态本来就给不出同一个数', () => {
     // 【仪器错 vs 范围错】上一条若因为判据太松而恒绿，这一条会先垮——
     // 它要求同一个判据施加在旧实现上必然分裂。
-    const now = atBeijing(DUE, 7);
-    const legacy = Object.values(DUE_FORMS).map((f) => daysUntilCeilLegacy(f, now));
-    expect(new Set(legacy).size).toBeGreaterThan(1);
+    withCaseTz(() => {
+      const now = atBeijing(DUE, 7);
+      const legacy = Object.values(DUE_FORMS).map((f) => daysUntilCeilLegacy(f, now));
+      expect(new Set(legacy).size, JSON.stringify(legacy)).toBeGreaterThan(1);
+    });
   });
 });
 
@@ -109,19 +141,24 @@ describe('🔴 驾驶舱与邮件必须是同一把尺', () => {
 
   test('先验对照臂：同一个矩阵施加在旧的两把尺上必然出现分歧', () => {
     // 没有这一条，上面那条"零分歧"可能只是因为矩阵根本没覆盖到出事的时刻。
-    const disagreements: string[] = [];
-    for (const day of ['2026-09-08', '2026-09-09', DUE, '2026-09-11']) {
-      for (const [name, form] of Object.entries(DUE_FORMS)) {
-        for (const hour of HOURS) {
-          const now = atBeijing(day, hour);
-          const u = daysUntilCeilLegacy(form, now);
-          const m = daysUntilLocalLegacy(form, now);
-          if (u !== m) disagreements.push(`${name} @ ${day} ${hour}:00 → UI=${u} 邮件=${m}`);
+    const disagreements = withCaseTz(() => {
+      const found: string[] = [];
+      for (const day of ['2026-09-08', '2026-09-09', DUE, '2026-09-11']) {
+        for (const [name, form] of Object.entries(DUE_FORMS)) {
+          for (const hour of HOURS) {
+            const now = atBeijing(day, hour);
+            const u = daysUntilCeilLegacy(form, now);
+            const m = daysUntilLocalLegacy(form, now);
+            if (u !== m) found.push(`${name} @ ${day} ${hour}:00 → UI=${u} 邮件=${m}`);
+          }
         }
       }
-    }
+      return found;
+    });
     expect(disagreements.length).toBeGreaterThan(0);
-    // 且分歧的方向是 UI 恒**不小于**邮件，即驾驶舱那侧在夸大剩余时间
+    // 且分歧的方向是 UI 恒**不小于**邮件，即驾驶舱那侧在夸大剩余时间。
+    // 【这条方向断言尤其吃时区】机器在美西时，local 尺的"今天"比北京早一天，
+    // 方向会整个翻过来（UI=2 邮件=3）——所以它必须跑在上面那个钉死的北京时间里。
     for (const d of disagreements) {
       const [, u, m] = /UI=(-?\d+) 邮件=(-?\d+)/.exec(d)!;
       expect(Number(u), d).toBeGreaterThan(Number(m));
