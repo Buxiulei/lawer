@@ -16,9 +16,11 @@ export default function LoginPage() {
             <TubashuMark size={28} className="size-7" />
             <span className="text-[18px] font-semibold text-ink">土八鼠</span>
           </div>
+          {/* 只说眼前这一步。补绑邮箱是**少数人**（新号注册那一次）才会撞上的支路，
+              预先摆在首屏上，等于让所有人先替那批人担一次心：
+              「原来要验两样」是这一句造成的误解，不是流程本身。 */}
           <p className="mt-3 text-[15px] leading-7 text-ink-2">
-            手机号或邮箱，验一个就能进，大约半分钟。第一次用手机号注册时会多一步绑邮箱——
-            换手机号时靠它找回账号，文书和存证证明也发到那里。
+            手机号验证码登录，大约半分钟。
           </p>
         </header>
 

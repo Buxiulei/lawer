@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   DISCLAIMER_TEXT,
@@ -15,7 +15,6 @@ import { cn } from '@/app/_ui/cn';
 import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
 import { Checkbox } from '@/components/shadcn/checkbox';
-import { Tabs, TabsList, TabsTrigger } from '@/components/shadcn/tabs';
 import { ChannelStep } from './ChannelStep';
 
 /** 登录完成后落在这里：档案已创建的引导页 */
@@ -37,18 +36,17 @@ interface PhoneVerifyResponse {
 
 type Channel = 'phone' | 'email';
 
-const CHANNELS: { key: Channel; label: string }[] = [
-  { key: 'phone', label: '手机号' },
-  { key: 'email', label: '邮箱' },
-];
-
 /**
- * 登录：**手机号或邮箱，验一个就进**。
+ * 登录：**手机号或邮箱，验一个就进**；手机号是主路，邮箱收在一条次级入口后面。
+ *
+ * 【为什么不是两个平等的 Tab】两条路都能登录不等于两条路一样常用：
+ * 摆成并排的 Tab，等于要求每个进来的人先替自己选一次通道，而绝大多数人的答案都是手机号。
+ * 邮箱那条仍然是完整的独立入口（老用户绑过邮箱后可以只用它进），只是**默认不占首屏**。
  *
  * 只有一种情况要验两样——手机号验完发现这个号还没有账号，也就是注册。
  * 那时后端回 need_email=true，这里才切到补绑邮箱那一步（邮箱是换手机号后找回账号、
  * 以及收文书与存证证明的唯一落点，建号时不收，用户丢了号就再也回不来）。
- * 老用户走哪条通道都只有一步，两条通道各自独立可登录。
+ * 老用户走哪条通道都只有一步。
  */
 export function LoginFlow() {
   const router = useRouter();
@@ -59,15 +57,13 @@ export function LoginFlow() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
 
-  const emailStep = (
-    <EmailChannel completing={completing} email={email} onEmailChange={setEmail} agreed={agreed} />
-  );
-
   if (completing) {
     return (
       <div className="flex flex-col gap-5">
         <Steps current={1} />
-        <Card className="p-5">{emailStep}</Card>
+        <Card className="p-5">
+          <EmailChannel completing email={email} onEmailChange={setEmail} agreed={agreed} />
+        </Card>
         <p className="text-[13px] leading-5 text-ink-2">
           这是新账号，还差一个邮箱：换手机号时靠它找回账号，文书和存证证明也发到这里。只这一次。
         </p>
@@ -85,18 +81,15 @@ export function LoginFlow() {
 
   return (
     <div className="flex flex-col gap-5">
-      <Tabs value={channel} onValueChange={(key) => setChannel(key as Channel)}>
-        <TabsList>
-          {CHANNELS.map((item) => (
-            <TabsTrigger key={item.key} value={item.key}>
-              {item.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-
-      <Card className="p-5">
-        {channel === 'phone' ? (
+      {channel === 'email' ? (
+        <EmailPane
+          email={email}
+          onEmailChange={setEmail}
+          agreed={agreed}
+          onBack={() => setChannel('phone')}
+        />
+      ) : (
+        <Card className="p-5">
           <ChannelStep
             key="phone"
             fieldLabel="手机号"
@@ -133,10 +126,8 @@ export function LoginFlow() {
               else router.push(AFTER_LOGIN);
             }}
           />
-        ) : (
-          emailStep
-        )}
-      </Card>
+        </Card>
+      )}
 
       {/* 点整条由浏览器转发给里面的 Checkbox（button 是 labelable 元素），
           这一层不要再挂 onClick，否则勾选状态会被切两次。 */}
@@ -150,7 +141,66 @@ export function LoginFlow() {
           我已阅读并理解：{DISCLAIMER_TEXT}
         </span>
       </label>
+
+      {channel === 'phone' && (
+        <ChannelSwitchLink onClick={() => setChannel('email')}>用邮箱登录 →</ChannelSwitchLink>
+      )}
     </div>
+  );
+}
+
+/**
+ * 换通道那一行：首屏底下的「用邮箱登录 →」和邮箱那屏顶上的「← 用手机号登录」是同一个东西。
+ *
+ * 收成一处，是因为「次级入口长什么样」这件事有一条**不能靠记性维持**的约束：
+ * 样子要轻（ghost 文字链、贴左不铺满，跟 w-full 的实心主 CTA 一眼分得开），
+ * 触区不能跟着轻（size=sm 即 h-11=44px）。分散写两遍，就是两次忘掉后半句的机会。
+ */
+function ChannelSwitchLink({
+  onClick,
+  children,
+}: {
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Button variant="ghost" size="sm" onClick={onClick} className="self-start px-2 text-[15px]">
+      {children}
+    </Button>
+  );
+}
+
+/**
+ * 邮箱登录那一屏：从次级入口点进来的形态——顶上一行回手机号，下面是邮箱那一格。
+ *
+ * 单独成组件的理由和 EmailChannel 一样：它是 channel 的一个取值，
+ * 而 LoginFlow 自己的 state 在 SSR 判据里驱动不了，只有能独立渲染才盯得住
+ * （少了那行返回，用户就被关在邮箱这屏里出不去，而那是一处静默失效）。
+ */
+export function EmailPane({
+  email,
+  onEmailChange,
+  agreed,
+  onBack,
+}: {
+  email: string;
+  onEmailChange: (next: string) => void;
+  agreed: boolean;
+  /** 回主路（手机号） */
+  onBack: () => void;
+}) {
+  return (
+    <>
+      <ChannelSwitchLink onClick={onBack}>← 用手机号登录</ChannelSwitchLink>
+      <Card className="p-5">
+        <EmailChannel
+          completing={false}
+          email={email}
+          onEmailChange={onEmailChange}
+          agreed={agreed}
+        />
+      </Card>
+    </>
   );
 }
 
@@ -183,7 +233,9 @@ export function EmailChannel({
           ? '换手机号时用它找回账号，文书和存证证明也会发到这里。'
           : // 后端对「这个邮箱注册过没有」一个字都不说（否则接口就成了注册状态探针），
             // 所以打错字的人得不到错误码——这句常驻提示就是替他准备的那份解释。
-            '注册时绑定过的那个邮箱，验证码发到这里。没绑过的邮箱收不到码：邮箱是手机号注册完成后那一步绑的，先用手机号登录一次绑上它，之后就能直接用邮箱进。'
+            // 只讲"没收到码该怎么办"，不讲"你这个邮箱有没有账号"：
+            // 句子本身也不能变成那个探针，否则隐私决定在后端守住、在文案上漏掉。
+            '验证码发到这个邮箱。还没绑过邮箱的账号，先用手机号登录。'
       }
       placeholder="you@example.com"
       inputType="email"
