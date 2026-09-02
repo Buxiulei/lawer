@@ -234,6 +234,10 @@
 - 经理裁决余下 nit：①「你的姓名」字面按「禁占位形态」解读，原句保留；②listRecentMessages 零调用**留**（通用取数接口）；③旧 digest「已转介 NBDpsy 不得再提」行删除无回归（prompt 硬禁段+工具闸仍在）；④四条小项**再派一单**：时间线真总数与真最早锚点、历史前缀只标异模式 user 轮（防 assistant 连续同前缀 few-shot）、已实名无姓名措辞、首诊四列空串/0 防御。
 - 合并顺序：chat-finalize（第四轮后）→ case-facts（merge-tree 对 77facdd 干净）→ main。
 
+**2026-09-02 17:15 · 9c10da8 生产目视核对 7/7 通过**（Sonnet Playwright 真机，产物 scratchpad/verify-9c10da8/）：首页卷〇在卷一之前、卷三收费条带条件从句、主 CTA 在；/welcome 推荐卡实点落 /settings/agent；接入页四步+六档话术+已接入横幅；驾驶舱公司档案入口后一行已接入态；账户页计费句均带「在你自己的 agent 上」；低调模式 /welcome 与 /settings/agent 标题「工作台」、剔糊层案情词 0 命中、话术块折叠；1280 桌面卷〇无溢出。全程 console error 0、scrollWidth 恒等视口。
+- 观察项：/login 有 1 条 React #418 hydration mismatch（登录保态那单已知 nit：sessionStorage 恢复入口步）——排入待办。
+- 量具坑（记入方法）：detached cloneNode 上读 innerText 退化成 textContent，把 RSC flight payload 的转义 JSON 也读进来造成假阳性；**低调模式核对必须在挂载 DOM 上隐藏 [data-veil] 后读 body.innerText**。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
