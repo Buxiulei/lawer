@@ -141,6 +141,20 @@ const EXEMPT: { file: string; line: string; why: string }[] = [
     line: '除此之外，任何操作都不扣。',
     why: '同上，SelfHostHint 段内',
   },
+  {
+    file: 'src/app/(app)/case/[id]/_components/Dashboard.tsx',
+    line: '公司档案：先免费查有没有货',
+    why:
+      '说的是**公司档案自己的免费预览档**（查得到什么先白看，买不买另说），' +
+      '与「在你自己的 agent 上处理不收费」是两笔账。买那一步走 dossiers/quote 报价 → ' +
+      'dossiers/confirm 扣费，《接入说明》计费节的例外二写着它。' +
+      '（本行随 fcc4cb8 的 DossierEntry 一起进入本文件的扫描范围。）',
+  },
+  {
+    file: 'src/app/(app)/case/[id]/_components/Dashboard.tsx',
+    line: '这家公司被仲裁过几次、赔没赔、有没有关联主体——免费的那部分先看着。',
+    why: '同上，DossierEntry 段内的副标题',
+  },
 ];
 
 /** 那两条 SelfHostHint 豁免的附带条件：它们必须仍与自己的条件从句同段 */

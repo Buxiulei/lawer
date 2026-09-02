@@ -40,9 +40,19 @@ jobs:
   app:
     name: app · tsc + vitest
     runs-on: ubuntu-latest
+    # runner 默认 UTC，本项目的产线机器是 Asia/Shanghai。差这八小时曾让 main 连红 5 次
+    # （case-day 的先验对照臂在 UTC 下不成立）。这里对齐产线，是**兜底不是手段**：
+    # 判据本身必须自带时区，别指望这一行。谁想验"没有它也绿"，把这两行删掉跑一遍即可。
+    env:
+      TZ: Asia/Shanghai
+    # v4 那批仍是 node20，runner 已在强制降级执行并告警（node20 已废弃）。
+    # 这三个都取当前最新 major（均 runs.using: node24）：checkout v7 / setup-node v7 /
+    # setup-python v7。本工作流不受它们的破坏性变更影响：不用 pull_request_target
+    # （checkout v7 只在那里收紧了 fork 检出）、cache 三处都是显式写死的
+    # （setup-node v5/v6 改的是**自动**缓存推断）、没用过 setup-python 的 pip-install（v7 删了）。
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
@@ -61,8 +71,8 @@ jobs:
     name: sidecar · pytest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: pip

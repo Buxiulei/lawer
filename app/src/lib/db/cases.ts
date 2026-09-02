@@ -15,6 +15,13 @@ export interface CaseRow {
   goal: string | null;
   bottom_line: string | null;
   status: string;
+  /** 入职日期 'YYYY-MM-DD'；NULL = 首诊还没填。是 N/2N 年限的计算输入之一 */
+  employed_from: string | null;
+  /** 月工资（分）；NULL = 还没填。**不存 0 冒充没填**——0 会一路算进赔偿金额 */
+  monthly_wage_fen: number | null;
+  position: string | null;
+  /** 合同签了几次（只签过一次 / 续签过一次 / …），首诊原样记录 */
+  contract_count: string | null;
   created_at: string;
 }
 
@@ -91,11 +98,27 @@ export function listCasesByUser(db: Database, userId: number): CaseRow[] {
 export function updateCaseFields(
   db: Database,
   caseId: number,
-  fields: { stage?: string; goal?: string; bottom_line?: string },
+  fields: {
+    stage?: string;
+    goal?: string;
+    bottom_line?: string;
+    employed_from?: string;
+    monthly_wage_fen?: number;
+    position?: string;
+    contract_count?: string;
+  },
 ): void {
   const sets: string[] = [];
   const values: unknown[] = [];
-  for (const key of ['stage', 'goal', 'bottom_line'] as const) {
+  for (const key of [
+    'stage',
+    'goal',
+    'bottom_line',
+    'employed_from',
+    'monthly_wage_fen',
+    'position',
+    'contract_count',
+  ] as const) {
     if (fields[key] !== undefined) {
       sets.push(`${key} = ?`);
       values.push(fields[key]);

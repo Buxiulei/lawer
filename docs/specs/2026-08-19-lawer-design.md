@@ -157,7 +157,7 @@ lawer/
 - `api_keys`(id, user_id, name, key_hash UNIQUE, scopes, last_used_at, enabled)
 
 **案件档案（心脏）**
-- `cases`(id, user_id, title, stage[风声|约谈中|已收通知|已解除|仲裁准备|已立案|开庭|裁决|一审|二审|执行|结案], district DEFAULT '朝阳', goal, bottom_line, status, created_at)
+- `cases`(id, user_id, title, stage[风声|约谈中|已收通知|已解除|仲裁准备|已立案|开庭|裁决|一审|二审|执行|结案], district DEFAULT '朝阳', goal, bottom_line, status, employed_from, monthly_wage_fen, position, contract_count, created_at) —— 后四列是首诊填的计算输入（入职日期/月工资分/岗位/合同签署次数），全部可空、不回填；**只存输入不存金额结论**，N/2N/N+1 一律现算
 - `company_profiles`(id, case_id, name, uscc, role[签约主体|用工主体|关联], reg_capital, legal_rep, risk_notes, sources_json, investigated_at)
 - `timeline_events`(id, case_id, happened_at, kind[公司动作|我方动作|系统动作|期限], title, detail, evidence_ids_json, created_at)  — 只追加，修正用新事件
 - `evidence`(id, case_id, user_id, file_id, name, category[合同|工资|社保|考勤|沟通记录|公司文件|录音|其他], prove_purpose, original_medium, status[已上传|已固化|已出证], created_at)

@@ -24,6 +24,7 @@ import {
   demoCompanyDocs,
   demoDeadlines,
   demoEvidence,
+  demoTimeline,
 } from '@/app/_mock/demo';
 import type {
   ActionItem,
@@ -31,7 +32,7 @@ import type {
   Deadline,
   DeadlineKind,
 } from '@/app/_mock/types';
-import { apiFetch } from '@/app/_ui/api';
+import { apiFetch, ApiError, humanError } from '@/app/_ui/api';
 import type { BadgeTone } from '@/components/shadcn/badge';
 import { demoAttainments, type Attainment, type Milestone } from './milestones';
 
@@ -50,19 +51,46 @@ export interface DashboardData {
   deadlines: Deadline[];
   attainments: Attainment[];
   records: RecordRow[];
+  /**
+   * 这个案件有多少条时间线事件。**不是 attainments 的替身**：
+   * attainments 只数带 milestone 的那几条，而首诊记下的「HR 找我谈」之类一条 milestone 都没有。
+   * 只看行动卡/期限/里程碑/材料判空，会让一个刚讲完全部经过的人看到「这个案件还是空的」。
+   */
+  timelineCount: number;
 }
 
-/** 四块全空＝这个案件确实还什么都没有（刚注册建的档），这时才该出建档引导 */
+/** 四块全空且时间线也空＝这个案件确实还什么都没有（刚注册建的档），这时才该出建档引导 */
 export function isBlank(data: DashboardData): boolean {
   return (
     data.actions.length === 0 &&
     data.deadlines.length === 0 &&
     data.attainments.length === 0 &&
-    data.records.length === 0
+    data.records.length === 0 &&
+    data.timelineCount === 0
   );
 }
 
-export type ViewState = 'failed' | 'loading' | 'blank' | 'ready';
+/**
+ * 取数没成的两种：**能重试的**（网络、5xx）与**终局的**（这个案件不存在或不属于你）。
+ * 两者的界线是「材料还在不在」——对终局的那种说「你的案件和材料都还在」是在骗人，
+ * 而给它一个重试按钮，用户会一直点下去。
+ */
+export interface LoadFailure {
+  message: string;
+  kind: 'transient' | 'missing';
+}
+
+export type ViewState = 'failed' | 'missing' | 'loading' | 'blank' | 'ready';
+
+/**
+ * 异常 → 哪一种失败。CASE_NOT_FOUND 是**终局**：后端对「不存在」和「不是你的」回同一个码
+ * （lib/cases 的红线：403 等于承认这个案件号有效，攻击者能靠遍历 id 数出平台有多少案件）。
+ * 两者都不该给重试按钮，更不该顺口保证「你的案件和材料都还在」——那份材料可能不是他的。
+ */
+export function failureOf(err: unknown): LoadFailure {
+  const missing = err instanceof ApiError && err.errorCode === 'CASE_NOT_FOUND';
+  return { message: humanError(err), kind: missing ? 'missing' : 'transient' };
+}
 
 /**
  * 这一屏该画哪一种。抽成纯函数是为了让「没取到」与「确实没有」这条界线验得出来：
@@ -72,10 +100,10 @@ export type ViewState = 'failed' | 'loading' | 'blank' | 'ready';
  * 出错优先于一切：手里那份 data 可能是上一次的残留，不能拿它盖住错误。
  */
 export function viewState(input: {
-  error: string | null;
+  error: LoadFailure | null;
   data: DashboardData | null;
 }): ViewState {
-  if (input.error !== null) return 'failed';
+  if (input.error !== null) return input.error.kind === 'missing' ? 'missing' : 'failed';
   if (input.data === null) return 'loading';
   return isBlank(input.data) ? 'blank' : 'ready';
 }
@@ -268,6 +296,7 @@ export async function fetchDashboard(caseId: string): Promise<DashboardData> {
     actions: actions.actions.map(toAction),
     deadlines: deadlines.deadlines.map(toDeadline),
     attainments: toAttainments(detail.timeline),
+    timelineCount: detail.timeline.length,
     // 公司文件（「解读结论：不签」那一类）后端还没有列表接口，真实案件这一半先只有证据。
     // 不拿 demoCompanyDocs 填——那会把编的公司名混进用户自己的材料列表里。
     records: latestThree(evidence.evidence.map((row) => toRecord(row, caseId))),
@@ -281,6 +310,7 @@ export function demoDashboard(caseId: string): DashboardData {
     deadlines: demoDeadlines,
     attainments: demoAttainments(),
     records: demoRecords(caseId),
+    timelineCount: demoTimeline.length,
   };
 }
 
