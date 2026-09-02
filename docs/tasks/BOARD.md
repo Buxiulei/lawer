@@ -258,6 +258,8 @@
 - 集成：ws/chat-finalize (f55849e) → ws/case-facts (b1925f0) 依次 merge-tree 干净合入，主干 9b5358b（29 文件 +3874/−172）已 push，CI 盯梢中。绿了即 bundle 上产。
 - **教训**：①执行者在代码注释里替经理"裁定"是新型越权，复核要把注释里的裁决当断言核；②纯字面短语表零误伤的充分条件是**每条短语字面含施事+完成态+对象**，隐含施事一律不算。
 
+**2026-09-02 18:35 · 生产上线 9b5358b（对话收尾 + 案件事实卡）**：CI 绿 → 备份 lawer-pre-9b5358b-*.db → 预放 bundle fetch + ff → root 脱管 build EXIT=0 → restart 双服务 active → 迁移触发（49 表，无新列）→ / /login /case/1 /case/1/ask /settings/agent 全 200 → uid=1 测试 JWT 打 /api/v1/cases/1/messages 返回带 model/served 字段的历史。真机核对（主理人报的路径：问→答→F5→落款）已派 Sonnet，待回。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
