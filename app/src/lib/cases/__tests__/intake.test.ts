@@ -11,6 +11,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { submitIntake } from '@/lib/cases';
 import { INTAKE_STAGE_ACTIONS } from '@/lib/cases/intake-actions';
+// agent 侧的写法（按 name 收敛）——用它把「存量已有两行同角色」这个形态真造出来，
+// 而不是手写 INSERT 假装 agent 写过
+import { upsertCompanyProfile } from '@/lib/db/agent';
+// listProfiles 就是 /api/v1/cases/{id}/dossier 喂给 pickRespondent 的那个读法（route.ts:61）。
+// 换成 agent.ts 的同名列表函数会拿到另一个 CompanyProfileRow（少 reg_capital / investigated_at），
+// 那不是被申请人这条链路上的读者。
+import { listProfiles } from '@/lib/db/company-graph';
 // pickRespondent 收的是 lib/db/company-graph 的那个 CompanyProfileRow（含 reg_capital /
 // investigated_at 两列）；SELECT * 取回来的行本来就是它，用同一个类型才不会把断言放松掉
 import type { CompanyProfileRow } from '@/lib/db/company-graph';
@@ -172,6 +179,41 @@ describe('首诊落库', () => {
     expect(
       f.db.prepare('SELECT COUNT(*) n FROM timeline_events WHERE case_id = ?').get(f.caseA),
     ).toEqual({ n: 12 });
+  });
+
+  // 上一条只有一行签约主体，取最早还是取最晚都会碰到同一行——它证不了
+  // upsertCompanyProfileByRole 的 `ORDER BY id`（升序）。这条把存量形态补上：
+  // agent 的 company_profile_upsert 按 name 收敛，用户换个写法说公司名就会再长一行
+  // 签约主体。此时「改哪一行」才有区别，而下游 pickRespondent 只读 id 最早的那行。
+  it('同案已有两行签约主体（agent 背调另写过一行）→ 首诊改名仍要落在下游读的那一行上', () => {
+    const f = makeFixture();
+    // 第一次首诊：凭记忆写了个错名，落成 id 最早的那行签约主体
+    const wrong = '华衡永泰供应链管理（北京）有限公司';
+    submitIntake(f.db, { caseId: f.caseA, userId: f.userA, ...fullIntake({ companyName: wrong }) });
+
+    // agent 背调时按另一个写法登记 → 按 name 收敛，长出第二行同角色
+    upsertCompanyProfile(f.db, {
+      caseId: f.caseA,
+      name: '华衡永泰供应链管理有限公司',
+      uscc: null,
+      role: '签约主体',
+      legalRep: null,
+      riskNotes: null,
+      sourcesJson: null,
+    });
+    expect(listProfiles(f.db, f.caseA).filter((p) => p.role === '签约主体')).toHaveLength(2);
+
+    // 用户回首诊，照营业执照把公司名订正成半角括号的工商全称
+    const fixed = '华衡永泰供应链管理(北京)有限公司';
+    submitIntake(f.db, { caseId: f.caseA, userId: f.userA, ...fullIntake({ companyName: fixed }) });
+
+    // 真正会被写进仲裁申请书的是 pickRespondent 取的那一行（同档取 id 最早）。
+    // 改到最晚那行的话：库里确实有 fixed、函数也返回成功，而这里读到的仍是用户刚划掉的错名。
+    const profiles = listProfiles(f.db, f.caseA);
+    expect(pickRespondent(profiles)?.name).toBe(fixed);
+    expect(pickRespondent(profiles)?.name).not.toBe(wrong);
+    // 只改不删：背调那行还在，没被首诊顺手抹掉
+    expect(profiles.filter((p) => p.role === '签约主体')).toHaveLength(2);
   });
 
   it('中途写失败 → 一个字都不留：首诊落库全程一个事务', () => {
