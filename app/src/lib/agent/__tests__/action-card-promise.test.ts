@@ -21,6 +21,7 @@
 //  · M-P2 纠正只 emit 不进 text（不写 `text += correction`）⇒ 「活过刷新」那条红
 //  · M-P3 executeTool 去掉 handler 的 try/catch（写路径断即掀翻整轮）⇒ 「写路径断」整组红
 //  · M-P4 prompt 去掉「卡只能由 action_card 产出」那几行 ⇒ 「话术不得承诺」那条红
+//  · M-P5 纠正段条件退回无条件（`if (actionCardMissing)`）⇒ 「没有承诺句」「危机轮静默」两条红
 import { describe, expect, it } from 'vitest';
 
 import { runTurn } from '../orchestrator';
@@ -42,14 +43,16 @@ const PROMISE = '两张行动卡已挂上，系统会按截止时间提醒你。
 /** 纠正段里必须出现的那句实话（orchestrator 的确定性文案）。 */
 const CORRECTION = '这一轮我没能把行动卡挂进你的档案';
 
-async function turn(script: ScriptedRound[], f: AgentFixture = makeAgentFixture()) {
+const DEFAULT_MESSAGE = 'HR 让我三天内签自愿离职协议，我该不该签？';
+
+async function turn(script: ScriptedRound[], f: AgentFixture = makeAgentFixture(), message = DEFAULT_MESSAGE) {
   const sink = makeSink();
   const provider = scriptedProvider(script);
   const result = await runTurn({
     db: f.db,
     caseId: f.caseId,
     userId: f.userId,
-    message: 'HR 让我三天内签自愿离职协议，我该不该签？',
+    message,
     provider,
     searcher: fixtureSearcher(),
     emit: sink.emit,
@@ -109,8 +112,82 @@ describe('★承诺了却没有卡：纠正必须进归档正文（活过一次 
     expect(t.content).toContain('记进档案');
   });
 
+  /**
+   * 承诺短语表与提示词禁令的对应关系，钉在这里。
+   * prompt.ts 明写不许说的就是这三句；纠正段认不出其中任何一句，
+   * 就等于"提示词禁了、系统却纠正不了"——那条禁令在产线上没有任何执行力。
+   * 变异臂：把 ACTION_CARD_PROMISE_PHRASES 砍到只剩一条 ⇒ 这组红。
+   */
+  it.each([
+    '这一轮的行动卡已挂上，你照着做就行。',
+    '这三件事我已记进档案了。',
+    '安排好了，系统会按截止时间提醒你。',
+  ])('提示词禁的那三句话，纠正段一句都不许漏认——「%s」', async (body) => {
+    const { f } = await turn([{ text: body }]);
+    expect(traces(f).actions, '前提：这一轮确实没有卡').toBe(0);
+    expect(traces(f).content, '这句承诺没被认出来，纠正段就不会追加').toContain(CORRECTION);
+  });
+
   it('ACTION_CARD_MISSING 这条运维信号照旧发（前端静默，但服务端要能查）', async () => {
     const { sink } = await turn([{ text: `先落档。${PROMISE}` }]);
+    expect(sink.of('notice').map((e) => e.data.code)).toContain('ACTION_CARD_MISSING');
+  });
+});
+
+/* ── 纠正段的两个前提：没有承诺就不纠正、危机轮一律静默 ────────────────
+   （复审 2026-09-02：原条件只判 `actionCardMissing`，等于**无条件追加**）
+   变异臂 M-P5：条件退回 `if (actionCardMissing)` ⇒ 下面两条一起红。 */
+describe('★没有承诺句：一个字的纠正都不许加（系统不许凭空自我指控）', () => {
+  /**
+   * 真机第 4 行的原话形态：**引用上一轮的卡**，这一轮自己什么都没承诺。
+   * 它同样跑不出卡（actionCardMissing 成立），但它没骗任何人——
+   * 追加一段「补一句实话：这一轮我没能把行动卡挂进你的档案」，
+   * 用户读到的是一条自相矛盾的回复：正文让他照卡做，末尾说卡不存在。
+   */
+  const NO_PROMISE = '按上面那张行动卡先做第一件，做完回我一句。';
+
+  it('正文零承诺 + 零行动卡 ⇒ 归档正文里没有纠正段', async () => {
+    const { f, sink } = await turn([{ text: NO_PROMISE }]);
+
+    const t = traces(f);
+    expect(t.actions, '这一轮确实没有卡——前提成立，测的才是"有没有承诺"这一半').toBe(0);
+    expect(t.content).toContain(NO_PROMISE);
+    expect(t.content, '没承诺过却道歉 = 系统凭空自我指控').not.toContain(CORRECTION);
+    expect(sink.text, '直播那一侧同样不许出现').not.toContain(CORRECTION);
+  });
+
+  it('但运维信号照发：「这一轮没产出卡」由 notice 记，不由正文忏悔', async () => {
+    // 内部指标要看见、外部通知要克制——与 KNOWLEDGE_MISS 那条同一口径。
+    const { sink } = await turn([{ text: NO_PROMISE }]);
+    expect(sink.of('notice').map((e) => e.data.code)).toContain('ACTION_CARD_MISSING');
+  });
+});
+
+describe('★危机轮：纠正段一律静默，L1 确定性首段完好', () => {
+  /** 用户说出自伤念头的那一轮。 */
+  const CRISIS_INPUT = '有时候半夜想，要是人没了是不是就不用还房贷了。就是想想。';
+  /** 确定性首段的第一句（crisis.ts 的 CRISIS_OPENER_HEAD[0]，逐字）。 */
+  const OPENER_HEAD =
+    '我在。你刚才说的话我听见了，不会当作没听见，也不会因为你说「就是想想」就翻过去。';
+
+  it('危机轮 + 承诺 + 零行动卡 ⇒ 归档正文零纠正段，且首段一个字都没动', async () => {
+    // 承诺句照旧摆在模型段里：这一条要证的是「危机轮**即使**有承诺也不追加」，
+    // 而不是"这一轮碰巧没承诺所以没追加"——否则它与上一组测的是同一件事。
+    const { f, sink, result } = await turn([{ text: `我在这儿。${PROMISE}` }], makeAgentFixture(), CRISIS_INPUT);
+    expect('ok' in result && result.ok).toBe(true);
+    expect('ok' in result && result.ok && result.actionCardMissing, '前提：这一轮确实没有卡').toBe(true);
+
+    const t = traces(f);
+    expect(t.actions).toBe(0);
+    // ① 用户刚说完"要是人没了"，档案里不许多出一段系统自我指控
+    expect(t.content, '危机轮里系统在谈论自己的能力，而不是在回应这个人').not.toContain(CORRECTION);
+    expect(sink.text, '直播那一侧同样静默').not.toContain(CORRECTION);
+    // ② L1 首段完好：号码/接住那句话仍是归档正文的开头，一个字没被挤掉
+    expect(t.content!.startsWith(OPENER_HEAD), `首段被动过：${t.content?.slice(0, 60)}`).toBe(true);
+  });
+
+  it('危机轮的 ACTION_CARD_MISSING 信号照发（静默的是正文，不是留痕）', async () => {
+    const { sink } = await turn([{ text: `我在这儿。${PROMISE}` }], makeAgentFixture(), CRISIS_INPUT);
     expect(sink.of('notice').map((e) => e.data.code)).toContain('ACTION_CARD_MISSING');
   });
 });

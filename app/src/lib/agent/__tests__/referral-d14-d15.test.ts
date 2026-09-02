@@ -327,3 +327,61 @@ describe('D14 ③「法律问答过程中不插入推销」——"过程中"是�
     expect(referralOffers.listByUser(f.db, f.userId), '模型自己说的不该落台账').toHaveLength(0);
   });
 });
+
+/* ── 推荐是「尽力而为」，落库记账是「一等」 ──────────────────────────────
+   （复审 2026-09-02）推荐段被挪到 `finalizeMessage` **之前**是对的——否则用户看见了、
+   归档正文里没有。但那一挪也把 `referral_offers` 的 INSERT 放进了收尾链：它一抛
+   （撞约束、库被锁、磁盘满），异常穿出 runTurn → 正文停在 NULL、这一轮不记账。
+   **F-02 原样复发，只是换了个病灶**，而这一次连"客户端断开"这种借口都没有。
+
+   所以定分层：`finalizeMessage` + `chargeTurn` 是一等公民，推荐/留痕这类写库尽力而为。
+   变异臂 M-R2：去掉 tryOffer 外面那层 try/catch ⇒ 本组三条一起红。 */
+describe('★推荐写库炸了：这一轮照样落库记账（推荐不推就是了）', () => {
+  /**
+   * 故障注入 = 只打断 referral_offers 的**写**（BEFORE INSERT 触发器 RAISE(ABORT)），
+   * 读照常——`shouldStopOffering` / `listByUser` 是 SELECT，走的还是正常路。
+   * 与生产同形：占位那一行 INSERT 自己抛。
+   */
+  function fixtureWithBrokenReferralWrite(): AgentFixture {
+    const f = makeAgentFixture();
+    pastIntakeOpening(f);
+    f.db.prepare("UPDATE cases SET stage = '已立案' WHERE id = ?").run(f.caseId);
+    f.db.exec(
+      "CREATE TRIGGER referral_offers_write_broken BEFORE INSERT ON referral_offers " +
+        "BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END;",
+    );
+    return f;
+  }
+
+  it('占位 INSERT 抛错 ⇒ runTurn 不抛，正文非 NULL、账照样记', async () => {
+    const f = fixtureWithBrokenReferralWrite();
+    const { result } = await turn(f, '案子立上了，接下来干嘛？');
+
+    expect(result.ok, '一次推荐写库失败把整轮弄丢了').toBe(true);
+    const content = (
+      f.db.prepare("SELECT content FROM messages WHERE role = 'assistant' ORDER BY id DESC LIMIT 1").get() as
+        | { content: string | null }
+        | undefined
+    )?.content;
+    expect(content, '正文停在 NULL = 刷新即永久消失').toContain('好的。');
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM token_usage WHERE user_id = ?').get(f.userId)).toEqual({ n: 1 });
+    expect(
+      f.db.prepare("SELECT COUNT(*) AS n FROM gongdao_ledger WHERE user_id = ? AND type = '消耗'").get(f.userId),
+    ).toEqual({ n: 1 });
+  });
+
+  it('占位没成就不开口：正文里没有推荐段，返回里 scene 为 null', async () => {
+    // 方向与「先占位再开口」一致。占不到也照说，会在写库恢复后变成
+    // 「台账里没有、用户已经被推过」——下一轮再推一遍，正是频控要防的反复骚扰。
+    const f = fixtureWithBrokenReferralWrite();
+    const { result } = await turn(f, '案子立上了，接下来干嘛？');
+    expect(result.referralScene).toBeNull();
+    expect(result.text).not.toContain('NBDpsy');
+  });
+
+  it('行动卡这类一等产物照样落库（推荐炸了不许连坐）', async () => {
+    const f = fixtureWithBrokenReferralWrite();
+    await turn(f, '案子立上了，接下来干嘛？');
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM action_items WHERE case_id = ?').get(f.caseId)).toEqual({ n: 1 });
+  });
+});

@@ -24,9 +24,12 @@
 //  · M-A orchestrator 里的 emit 不包一层（直接用 input.emit）⇒ 本文件几乎全红
 //  · M-C 断开后跳过记账（chargeTurn 前加 `if (sinkBroken) return`）⇒ 「照样记账」那几条红
 //  · M-D 把 finalizeMessage 挪到 done 帧之后 ⇒ 「done 之前正文已经在库里」那条红
+//  · M-R3 去掉 recordCrisisCardGiven 外面那层 try/catch ⇒ 「留痕炸了」那组红
+//    （同一条纪律的另一半——推荐段占位那处在 referral-d14-d15.test.ts，M-R2）
 import { describe, expect, it } from 'vitest';
 
 import { runTurn } from '../orchestrator';
+import { CRISIS_CARD_MARKER } from '../crisis';
 import type { AgentEvent } from '../events';
 import { fixtureSearcher, makeAgentFixture, scriptedProvider, type AgentFixture, type ScriptedRound } from './fixtures';
 
@@ -81,13 +84,17 @@ function brokenSink(breakAt: number) {
   };
 }
 
-async function turn(sink: { emit: (e: AgentEvent) => void }, f: AgentFixture = makeAgentFixture()) {
+async function turn(
+  sink: { emit: (e: AgentEvent) => void },
+  f: AgentFixture = makeAgentFixture(),
+  script: ScriptedRound[] = SCRIPT,
+) {
   const result = await runTurn({
     db: f.db,
     caseId: f.caseId,
     userId: f.userId,
     message: '刚收到辞退邮件，说什么客观情况重大变化，我现在手都是抖的',
-    provider: scriptedProvider(SCRIPT),
+    provider: scriptedProvider(script),
     searcher: fixtureSearcher(),
     emit: sink.emit,
     now: new Date('2026-08-19T12:40:00Z'),
@@ -213,5 +220,58 @@ describe('落库与收尾帧的先后：done 发出去的时候，正文必须�
       f,
     );
     expect(contentAtDone, 'done 帧发出时正文还没落库').toBe('先把这件事记进档案。接下来按上面那张卡做。');
+  });
+});
+
+/* ── 收尾链上的写库分两等 ──────────────────────────────────────────────
+   （复审 2026-09-02）病灶换成"写库自己抛"之后，链路形状与上面完全一样：
+   `finalizeMessage` / `chargeTurn` 之前的任何一次 INSERT 抛出去，都会掀翻这一轮的
+   落库与记账——**F-02 原样复发**。所以定一条分层：
+
+     一等（必须做到）：`store.finalizeMessage` + `chargeTurn`
+     尽力而为（做不到就算了）：推荐段占位、危机资源卡留痕这类记录性写库
+
+   这一组钉的是**尽力而为那一类不许连坐一等的**。危机资源卡留痕丢了，
+   最坏后果是下一轮可能重印一次卡；正文与账丢了是永久损失。 */
+describe('★留痕炸了：这一轮照样落库记账（重印一次卡 vs 永久丢一轮）', () => {
+  /** 正文里给了热线号 ⇒ 走 responseGaveCrisisCard ⇒ 触发 recordCrisisCardGiven 留痕。 */
+  const GAVE_CARD: ScriptedRound[] = [
+    { text: '先把最急的一件事做掉。另外把 12356 心理援助热线存下来，随时能打。', tools: [CARD] },
+  ];
+
+  /**
+   * 故障注入只掐**这一条**留痕的 INSERT（按 title 精确匹配 CRISIS_CARD_MARKER），
+   * timeline_add 那条正常写入的路一个字都不动——否则测的就成了"工具写库失败"那条路
+   * （那条另有 executeTool 的 try 兜着），判据看着红、量的却是另一段。
+   */
+  function fixtureWithBrokenTrace(): AgentFixture {
+    const f = makeAgentFixture();
+    f.db.exec(
+      `CREATE TRIGGER crisis_card_trace_broken BEFORE INSERT ON timeline_events
+         WHEN NEW.title = '${CRISIS_CARD_MARKER}'
+         BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END;`,
+    );
+    return f;
+  }
+
+  const traceRows = (f: AgentFixture) =>
+    one<{ n: number }>(f, 'SELECT COUNT(*) AS n FROM timeline_events WHERE case_id = ? AND title = ?', f.caseId, CRISIS_CARD_MARKER).n;
+
+  it('正对照：留痕正常时确实写了一行（否则下面那条是空跑）', async () => {
+    const { f } = await turn(brokenSink(Number.POSITIVE_INFINITY), makeAgentFixture(), GAVE_CARD);
+    expect(traceRows(f), '这一轮本该留痕——不写这条就分不清"注入没生效"和"留痕本来就没有"').toBe(1);
+  });
+
+  it('留痕 INSERT 抛错 ⇒ runTurn 不抛，正文非 NULL、账照样记，只是那一行痕迹没了', async () => {
+    const f = fixtureWithBrokenTrace();
+    const { result } = await turn(brokenSink(Number.POSITIVE_INFINITY), f, GAVE_CARD);
+
+    expect('ok' in result && result.ok, '一次留痕失败把整轮弄丢了').toBe(true);
+    const t = traces(f);
+    expect(t.assistant?.content, '正文停在 NULL = 刷新即永久消失').toContain('先把最急的一件事做掉。');
+    expect(t.usage, 'token_usage：模型的钱已经花掉了').toBe(1);
+    expect(t.ledger, 'gongdao_ledger 消耗流水').toBe(1);
+    expect(t.actions, '行动卡这类一等产物照样落库').toBe(1);
+    expect(traceRows(f), '故障注入确实打中了这条留痕').toBe(0);
   });
 });
