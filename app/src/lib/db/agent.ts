@@ -352,31 +352,19 @@ export function hasReferredNbdpsy(db: Database, caseId: number): boolean {
 
 // ========== company_profiles ==========
 
-/** 按 (case_id, name) upsert：同一家公司反复补充信息是常态（先只知道名字，后来查到统一社会信用代码）。 */
-export function upsertCompanyProfile(
-  db: Database,
-  params: {
-    caseId: number;
-    name: string;
-    uscc: string | null;
-    role: string;
-    legalRep: string | null;
-    riskNotes: string | null;
-    sourcesJson: string | null;
-  },
-): { id: number; created: boolean } {
-  const found = db
-    .prepare('SELECT id FROM company_profiles WHERE case_id = ? AND name = ? ORDER BY id DESC LIMIT 1')
-    .get(params.caseId, params.name) as { id: number } | undefined;
-  if (found) {
-    db.prepare(
-      `UPDATE company_profiles SET uscc = COALESCE(?, uscc), role = ?, legal_rep = COALESCE(?, legal_rep),
-       risk_notes = COALESCE(?, risk_notes), sources_json = COALESCE(?, sources_json),
-       investigated_at = datetime('now') WHERE id = ?`,
-    ).run(params.uscc, params.role, params.legalRep, params.riskNotes, params.sourcesJson, found.id);
-    return { id: found.id, created: false };
-  }
-  const id = Number(
+export interface CompanyProfileInput {
+  caseId: number;
+  name: string;
+  uscc: string | null;
+  role: string;
+  legalRep: string | null;
+  riskNotes: string | null;
+  sourcesJson: string | null;
+}
+
+/** 两个 upsert 共用的插入语句。写第二份的话，加一列时必然只改到其中一份。 */
+function insertCompanyProfile(db: Database, params: CompanyProfileInput): number {
+  return Number(
     db
       .prepare(
         `INSERT INTO company_profiles (case_id, name, uscc, role, legal_rep, risk_notes, sources_json, investigated_at)
@@ -392,7 +380,60 @@ export function upsertCompanyProfile(
         params.sourcesJson,
       ).lastInsertRowid,
   );
-  return { id, created: true };
+}
+
+/** 按 (case_id, name) upsert：同一家公司反复补充信息是常态（先只知道名字，后来查到统一社会信用代码）。 */
+export function upsertCompanyProfile(
+  db: Database,
+  params: CompanyProfileInput,
+): { id: number; created: boolean } {
+  const found = db
+    .prepare('SELECT id FROM company_profiles WHERE case_id = ? AND name = ? ORDER BY id DESC LIMIT 1')
+    .get(params.caseId, params.name) as { id: number } | undefined;
+  if (found) {
+    db.prepare(
+      `UPDATE company_profiles SET uscc = COALESCE(?, uscc), role = ?, legal_rep = COALESCE(?, legal_rep),
+       risk_notes = COALESCE(?, risk_notes), sources_json = COALESCE(?, sources_json),
+       investigated_at = datetime('now') WHERE id = ?`,
+    ).run(params.uscc, params.role, params.legalRep, params.riskNotes, params.sourcesJson, found.id);
+    return { id: found.id, created: false };
+  }
+  return { id: insertCompanyProfile(db, params), created: true };
+}
+
+/**
+ * 按 (case_id, role) upsert：**同一个角色位上只该有一家公司**，已有就把名字改过去。
+ *
+ * 【与 upsertCompanyProfile 的分工】那个按 (case_id, name) 收敛，服务的是「同一家公司反复
+ * 补充信息」——名字在那里是**主键**，换个名字就是另一家。首诊填的公司名不是这个语义：
+ * 它是「被申请人是谁」**这一个问题的答案**，用户把全角括号改成半角、把简称换成工商全称，
+ * 都是**订正同一个答案**，不是又冒出一家公司。按 name 收敛会让改名后的重提留下两行
+ * `签约主体`，而 pickRespondent（lib/dossier/build.ts）同档取 id 最早的一条——
+ * 取到的正是用户刚改掉的那个错名，仲裁申请书上的被申请人就此写错，且屏幕上看不出来。
+ *
+ * 【为什么取 id 最早的一行改，而不是最晚的】要更新的必须是下游真正会读到的那一行，
+ * 也就是 pickRespondent 的 `sort((a, b) => a.id - b.id)[0]`。改最晚那行，库里名字确实变了、
+ * 函数也返回成功，而下游读到的仍是旧行——看起来生效了，其实没有。
+ *
+ * 【只改不删】本函数不碰其它角色的行（用工主体 / 关联多是背调查出来的），
+ * 也不删除同角色的历史行；这里只保证「首诊这一格的答案」落在下游会读的那一行上。
+ */
+export function upsertCompanyProfileByRole(
+  db: Database,
+  params: CompanyProfileInput,
+): { id: number; created: boolean } {
+  const found = db
+    .prepare('SELECT id FROM company_profiles WHERE case_id = ? AND role = ? ORDER BY id LIMIT 1')
+    .get(params.caseId, params.role) as { id: number } | undefined;
+  if (found) {
+    db.prepare(
+      `UPDATE company_profiles SET name = ?, uscc = COALESCE(?, uscc), legal_rep = COALESCE(?, legal_rep),
+       risk_notes = COALESCE(?, risk_notes), sources_json = COALESCE(?, sources_json),
+       investigated_at = datetime('now') WHERE id = ?`,
+    ).run(params.name, params.uscc, params.legalRep, params.riskNotes, params.sourcesJson, found.id);
+    return { id: found.id, created: false };
+  }
+  return { id: insertCompanyProfile(db, params), created: true };
 }
 
 export function listCompanyProfiles(db: Database, caseId: number): CompanyProfileRow[] {

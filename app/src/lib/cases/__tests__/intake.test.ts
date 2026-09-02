@@ -3,10 +3,19 @@
 // 用户填完六步、点「进入驾驶舱」，此前服务器上一个字都没有。
 // 所以这里不验「函数返回了 ok」，一律回头查表：字段落没落、时间线有没有、
 // 三件事在不在、别人的案件能不能写。
-import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { submitIntake } from '@/lib/cases';
 import { INTAKE_STAGE_ACTIONS } from '@/lib/cases/intake-actions';
+// pickRespondent 收的是 lib/db/company-graph 的那个 CompanyProfileRow（含 reg_capital /
+// investigated_at 两列）；SELECT * 取回来的行本来就是它，用同一个类型才不会把断言放松掉
+import type { CompanyProfileRow } from '@/lib/db/company-graph';
+import { pickRespondent } from '@/lib/dossier/build';
+import * as knowledge from '@/lib/knowledge';
 import { makeFixture } from './fixtures';
 
 /** 一份填满的首诊，字段名照 lib/cases 的入参 */
@@ -136,17 +145,61 @@ describe('首诊落库', () => {
     ).toEqual({ n: 0 });
   });
 
-  it('重复提交不长出第二套行动卡与第二家公司（时间线相反，只追加）', () => {
+  it('重复提交不长出第二套行动卡；**公司名改一次**也只订正那一行（时间线相反，只追加）', () => {
     const f = makeFixture();
-    submitIntake(f.db, { caseId: f.caseA, userId: f.userA, ...fullIntake() });
-    const again = submitIntake(f.db, { caseId: f.caseA, userId: f.userA, ...fullIntake() });
+    // 第一次凭记忆写成全角括号，第二次照营业执照订正成半角。这是同一个被申请人的两种写法，
+    // 不是两家公司——按 name 收敛的话这里会留下两行「签约主体」。
+    const first = '华衡永泰供应链管理（北京）有限公司';
+    const fixed = '华衡永泰供应链管理(北京)有限公司';
+    submitIntake(f.db, { caseId: f.caseA, userId: f.userA, ...fullIntake({ companyName: first }) });
+    const again = submitIntake(f.db, {
+      caseId: f.caseA,
+      userId: f.userA,
+      ...fullIntake({ companyName: fixed }),
+    });
     expect(again.ok && again.result.actionsAdded).toBe(0);
-    expect(
-      f.db.prepare('SELECT COUNT(*) n FROM company_profiles WHERE case_id = ?').get(f.caseA),
-    ).toEqual({ n: 1 });
+
+    const profiles = f.db
+      .prepare('SELECT * FROM company_profiles WHERE case_id = ? ORDER BY id')
+      .all(f.caseA) as CompanyProfileRow[];
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0].name).toBe(fixed);
+
+    // 光看「只有一行」还不够：真正会被写进仲裁申请书的是 pickRespondent 取的那一行，
+    // 它同档取 id 最早的一条。改名后它必须指向改后的名字，不能还指着用户刚划掉的错名。
+    expect(pickRespondent(profiles)?.name).toBe(fixed);
+
     expect(
       f.db.prepare('SELECT COUNT(*) n FROM timeline_events WHERE case_id = ?').get(f.caseA),
     ).toEqual({ n: 12 });
+  });
+
+  it('中途写失败 → 一个字都不留：首诊落库全程一个事务', () => {
+    const f = makeFixture();
+    f.db.prepare('DELETE FROM deadlines WHERE case_id = ?').run(f.caseA);
+    // 故障注入：写行动卡这一步崩掉。它排在第 4 步——案件字段、公司、时间线都已经写过了，
+    // 正是「半截档案」会留在库里的那个位置。
+    f.db.exec(
+      "CREATE TRIGGER intake_action_boom BEFORE INSERT ON action_items " +
+        "BEGIN SELECT RAISE(ABORT, '注入故障：写行动卡时崩了'); END",
+    );
+    expect(() =>
+      submitIntake(f.db, { caseId: f.caseA, userId: f.userA, ...fullIntake() }),
+    ).toThrow(/注入故障/);
+    f.db.exec('DROP TRIGGER intake_action_boom');
+
+    // 写了一半的档案比没写更糟：用户看到时间线有、诉求没有，会以为是自己漏填了
+    const row = f.db.prepare('SELECT * FROM cases WHERE id = ?').get(f.caseA) as Record<string, unknown>;
+    expect(row.stage).toBe('风声');
+    expect(row.employed_from).toBeNull();
+    expect(row.monthly_wage_fen).toBeNull();
+    expect(row.goal).toBeNull();
+    expect(row.bottom_line).toBeNull();
+    for (const table of ['timeline_events', 'company_profiles', 'deadlines']) {
+      expect(
+        f.db.prepare(`SELECT COUNT(*) n FROM ${table} WHERE case_id = ?`).get(f.caseA),
+      ).toEqual({ n: 0 });
+    }
   });
 });
 
@@ -176,4 +229,85 @@ describe('必填项：服务端才是权威（前端那道可以被绕过）', (
       ).toEqual({ n: 0 });
     });
   }
+});
+
+/**
+ * 首诊落的这条仲裁时效，它的 derived_from 会原样渲染给用户（驾驶舱期限卡）、逐字进 agent 的
+ * system context、进引用块。所以这里盯的不是「有没有写依据」，而是**写进去的是不是真依据**——
+ * 一句「依据卡未取到，以上为代码内置副本，可能已陈旧」在卡好端端在库里的时候出现，
+ * 就是我们自己对用户说的假话，而它长得和尽责的免责声明一模一样。
+ */
+describe('仲裁时效的推算依据：两态都要对', () => {
+  /** __tests__ → cases → lib → src → app → 仓库根 */
+  const REAL_KNOWLEDGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..', 'knowledge');
+  const ORIGINAL_ENV = process.env.LAWER_KNOWLEDGE_DIR;
+  let tempDir: string | null = null;
+
+  afterEach(() => {
+    if (ORIGINAL_ENV === undefined) delete process.env.LAWER_KNOWLEDGE_DIR;
+    else process.env.LAWER_KNOWLEDGE_DIR = ORIGINAL_ENV;
+    knowledge.__resetForTest();
+    if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
+    tempDir = null;
+  });
+
+  /** 落一条仲裁时效并把它的 derived_from 取回来 */
+  function derivedFromOfLimitation(): string {
+    const f = makeFixture();
+    f.db.prepare('DELETE FROM deadlines WHERE case_id = ?').run(f.caseA);
+    const res = submitIntake(f.db, { caseId: f.caseA, userId: f.userA, ...fullIntake() });
+    expect(res.ok && res.result.deadlinesAdded).toBe(1);
+    return (
+      f.db
+        .prepare("SELECT derived_from FROM deadlines WHERE case_id = ? AND kind = '仲裁时效'")
+        .get(f.caseA) as { derived_from: string }
+    ).derived_from;
+  }
+
+  it('卡在库里 → 写的是卡里的逐字条文，不含「依据卡未取到」', () => {
+    process.env.LAWER_KNOWLEDGE_DIR = REAL_KNOWLEDGE_DIR;
+    knowledge.__resetForTest();
+    const derived = derivedFromOfLimitation();
+
+    // 这两句只在**卡**里有，代码内置副本没有；用它们区分两态，光看「不含未取到」区分不出来
+    expect(derived).toContain('期间包括法定期间和人民法院指定的期间');
+    expect(derived).toContain('仲裁期间包括法定期间和仲裁委员会指定期间');
+    expect(derived).toContain('依据卡 statute-qijian-jisuan-tongze，可信度：待核实');
+    expect(derived).not.toContain('依据卡未取到');
+    expect(derived).not.toContain('可能已陈旧');
+  });
+
+  it('卡真的不在了 → 才回落内置副本，并明说它可能已陈旧', () => {
+    // 知识库是好的（index 能读、有别的卡），单单缺期间计算通则那一张
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lawer-knowledge-'));
+    fs.mkdirSync(path.join(tempDir, 'packs'));
+    fs.writeFileSync(path.join(tempDir, 'packs', 'other.md'), '---\nid: other-card\n---\n无关卡\n');
+    fs.writeFileSync(
+      path.join(tempDir, 'index.json'),
+      JSON.stringify([
+        {
+          id: 'other-card',
+          type: '法条卡',
+          title: '一张无关的卡',
+          keywords: [],
+          applies_to: [],
+          region: '全国',
+          sources: [],
+          confidence: '待核实',
+          updated: '2026-08-19',
+          path: 'packs/other.md',
+        },
+      ]),
+    );
+    process.env.LAWER_KNOWLEDGE_DIR = tempDir;
+    knowledge.__resetForTest();
+    const derived = derivedFromOfLimitation();
+
+    // 读不到卡不能让期限推算停摆，但也不能假装依据是新的
+    expect(derived).toContain('依据卡未取到');
+    expect(derived).toContain('可能已陈旧');
+    expect(derived).toContain('第八十五条');
+    // 到期日照算不误
+    expect(derived).toContain('2027-08-30');
+  });
 });

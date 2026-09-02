@@ -16,7 +16,7 @@
 import type { Database } from 'better-sqlite3';
 
 import { computeDeadline } from '@/lib/deadline';
-import { insertActionItem, insertDeadline, upsertCompanyProfile } from '@/lib/db/agent';
+import { insertActionItem, insertDeadline, upsertCompanyProfileByRole } from '@/lib/db/agent';
 import * as store from '@/lib/db/cases';
 import { nowSql } from '@/lib/db/time';
 import { INTAKE_STAGE_ACTIONS, intakeActionDueAt, intakeActionPriority } from './intake-actions';
@@ -224,6 +224,10 @@ function persist(
       : null;
 
   const write = db.transaction((): IntakeResult => {
+    // 【只改不删】下面三个字段用条件展开：这一次没填就**不写这个键**，库里原来的值原样留着。
+    // 所以「上次填了底线、这次清空重提」不会把底线清掉——这是刻意的，不是漏了 else 分支。
+    // 留着旧值最坏是过时，用户看得见也改得回；而替他删掉上一次亲手写下的底线是不可撤销的。
+    // 真要清空得有一个明确的「删掉这条」动作，不能靠一个空输入框顺手完成。
     store.updateCaseFields(db, caseId, {
       stage: value.stage,
       goal: value.goals.join('、'),
@@ -234,8 +238,12 @@ function persist(
       ...(trimmed(input.contractCount) === null ? {} : { contract_count: trimmed(input.contractCount)! }),
     });
 
-    // 公司名就是仲裁申请书上的被申请人，按 (case_id, name) upsert，重填不会长出第二家
-    upsertCompanyProfile(db, {
+    // 公司名就是仲裁申请书上的被申请人。按 (case_id, role='签约主体') 收敛，**不是**按 name：
+    // 首诊这一格问的是「被申请人是谁」，用户把全角括号改成半角再提交，是订正同一个答案，
+    // 不是又来了一家公司。按 name 收敛会留下改名前那一行，而 pickRespondent 同档取 id 最早的
+    // 一条，正好取到用户刚改掉的错名——仲裁申请书上的被申请人就此写错（lib/db/agent.ts 详述）。
+    // 同上只改不删：本案其它角色的公司行（用工主体 / 关联，多是背调查出来的）一律不碰。
+    upsertCompanyProfileByRole(db, {
       caseId,
       name: value.companyName,
       uscc: null,

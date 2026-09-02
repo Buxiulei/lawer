@@ -324,8 +324,8 @@ function persistCalc(
   });
 }
 
-/** 期间计算通则卡（逐字条文来源，见 lib/deadline） */
-export const PERIOD_RULE_PACK_ID = 'statute-qijian-jisuan-tongze';
+/** 期间计算通则卡（逐字条文来源）。id 的定义在 lib/deadline——那里也要用它自取卡，全仓只留一份。 */
+export const PERIOD_RULE_PACK_ID = deadline.PERIOD_RULE_PACK_ID;
 
 /** 最低工资数据卡：年假折算、双倍工资、加班费、待岗四个公式都要用它兜底下限 */
 export const MIN_WAGE_PACK_ID = 'data-beijing-zuidi-gongzi';
