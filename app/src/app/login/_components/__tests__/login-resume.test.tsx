@@ -9,10 +9,16 @@
  *    照着勾了，按钮还是灰的。唯一那句话把人指到了错的地方。
  *
  * 【判据只用 renderToStaticMarkup】测试环境是 node，没有 DOM（仓库既有套路）。
- * 半程恢复必须发生在**首帧的渲染里**才验得到，这跟产品要求正好是同一件事：
- * 挪进 useEffect 就得先渲染一帧手机号格再跳回来，而"闪一下"跟"掉回去"在用户眼里没区别。
  * 够不着的一处如实记下：**写**半程记录靠 useEffect（node 环境不跑），
  * 所以这里钉的是「写入口只有一个」这条源码锚点 + 存取本身的往返判据。
+ *
+ * 【为什么这一组渲染的是 LoginForm 而不是 LoginFlow】读半程记录挪到了挂载之后
+ * （在初始 state 里读会让客户端首帧跟服务端对不上，就是生产 console 那条 React #418；
+ * 见 LoginFlow 的长注释）。LoginFlow = 「挂载后读一次」+ LoginForm，
+ * 而这一组要盯的「F5 之后停在哪一格」长在 LoginForm 身上：拿到记录之后渲染成什么。
+ * 没有 DOM 就跑不了那次 useEffect，所以这里替它把读到的记录直接喂进去——
+ * 喂的仍是**真的 loadLoginStep()**，不是手捏的对象。
+ * 「首帧不许读 sessionStorage」由下面「服务端那一帧」那一组单独盯，两半合起来才是完整的。
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -43,7 +49,7 @@ vi.mock('../ChannelStep', async (importOriginal) => {
 });
 
 const { ChannelStep } = await import('../ChannelStep');
-const { EmailChannel, LoginFlow } = await import('../LoginFlow');
+const { EmailChannel, LoginFlow, LoginForm } = await import('../LoginFlow');
 const { LOGIN_STEP_KEY, loadLoginStep, saveLoginStep } = await import('../loginStep');
 type LoginStep = Awaited<ReturnType<typeof loadLoginStep>>;
 
@@ -86,7 +92,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const flow = () => renderToStaticMarkup(<LoginFlow />);
+/** 「拿到半程记录之后的那一帧」——LoginFlow 挂载后渲染的正是它 */
+const flow = () =>
+  renderToStaticMarkup(<LoginForm resume={{ ready: true, step: loadLoginStep() }} />);
 
 describe('刷新之后还停在原来那一格', () => {
   it('🔴 量具自检：没有半程记录时（第一次进来）照旧是手机号那一格', () => {
@@ -184,6 +192,67 @@ describe('刷新之后还停在原来那一格', () => {
   });
 });
 
+/**
+ * 服务端那一帧：**不读 sessionStorage**，因此跟客户端首帧一模一样。
+ *
+ * 【由头】原先半程记录是在初始 state 里读的（useState(loadLoginStep)）。
+ * 服务端渲染时没有 sessionStorage，读出来是 null → 手机号格；
+ * 客户端首帧读得到 → 验证码格。两边对不上，生产 console 恒有一条 React #418，
+ * 而 hydration mismatch 会让 React 把整棵树丢掉重渲一遍。
+ *
+ * 【为什么"挪到挂载后会闪一帧手机号格"这个顾虑不成立】用户看到的第一帧本来就是
+ * 服务端那一帧，它从来没有半程。修之前也照样先看到手机号格，只是外带一条报错。
+ */
+describe('首帧与服务端一致：登录页首帧不读 sessionStorage', () => {
+  it('🔴 渲染 LoginFlow 的首帧一次 sessionStorage 都不读', () => {
+    const getItem = vi.fn(() => null);
+    vi.stubGlobal('sessionStorage', {
+      getItem,
+      setItem: () => {},
+      removeItem: () => {},
+    });
+    renderToStaticMarkup(<LoginFlow />);
+    expect(
+      getItem.mock.calls.length,
+      '缺什么：首帧就去读了半程记录（读了 ' +
+        getItem.mock.calls.length +
+        ' 次）。\n' +
+        '为什么缺：服务端那一帧读不到 sessionStorage、客户端首帧读得到，' +
+        '两边渲染出来的不是同一格——这就是生产 console 里那条 React #418，' +
+        '它的形态是静默的：页面看着正常，只有 console 里多一条，而 React 会把整棵树重渲。\n' +
+        '怎么办：把读挪到挂载之后（LoginFlow 的 useResumedLoginStep），' +
+        '首帧一律当"没有半程"，读到之后再按记录重挂。',
+    ).toBe(0);
+  });
+
+  it('🔴 有没有半程记录，首帧渲染出来的 HTML 一模一样', () => {
+    // 服务端那一帧永远是"没有记录"的那一版；两版不同就等于 SSR/CSR 首帧不同。
+    const fresh = renderToStaticMarkup(<LoginFlow />);
+    saveLoginStep({
+      channel: 'phone',
+      step: 'code',
+      target: '13800001111',
+      expiresAt: Date.now() + 45_000,
+    });
+    expect(
+      renderToStaticMarkup(<LoginFlow />),
+      '有半程记录时首帧长得不一样 = 客户端首帧跟服务端对不上（React #418）',
+    ).toBe(fresh);
+  });
+
+  it('🔴 反向对照：量具本身认得出差别（同一段 HTML 不是恒等于自己）', () => {
+    // 少了这条，把 LoginFlow 渲染成空字符串也能让上面两条全绿。
+    saveLoginStep({
+      channel: 'phone',
+      step: 'code',
+      target: '13800001111',
+      expiresAt: Date.now() + 45_000,
+    });
+    expect(renderToStaticMarkup(<LoginFlow />)).toContain('11 位手机号');
+    expect(flow()).not.toBe(renderToStaticMarkup(<LoginFlow />));
+  });
+});
+
 describe('半程记录存在哪儿', () => {
   const sample: NonNullable<LoginStep> = {
     channel: 'phone',
@@ -260,6 +329,23 @@ describe('进站之前要擦掉半程记录', () => {
     // 渲染判据够不着「写」（靠 useEffect，node 环境不跑）。分散写几处的现象是
     // 刷新之后回到**上一个**状态，没有任何报错——所以这里钉的是"只有一处"。
     expect(countOf(CHANNEL_STEP_SRC, 'saveLoginStep('), '半程记录冒出了第二个写入口').toBe(1);
+    // 读也只有一处，且不在 ChannelStep 里：它自己去读的那一版，首帧又跟服务端对不上了
+    expect(countOf(LOGIN_FLOW_SRC, 'loadLoginStep()'), '半程记录冒出了第二个读入口').toBe(1);
+    expect(
+      CHANNEL_STEP_SRC.includes('loadLoginStep'),
+      'ChannelStep 又自己去读 sessionStorage 了——半程记录该由 LoginFlow 挂载后读、当 prop 传下来',
+    ).toBe(false);
+    /*
+     * 落盘 effect 必须**先看记录读完没有**再写。这条只能钉源码：写靠 useEffect，
+     * node 环境不跑（文件头那句"够不着的一处"说的就是它）。
+     * 它挡的是一处真机上验出来的静默失效——子组件的 effect 比父组件先跑，
+     * 各格一挂载就把默认态写下去，正好抹掉要恢复的那条记录，
+     * 于是 F5 之后仍然掉回手机号格，而 console 里一个字都没有。
+     */
+    expect(
+      /if \(!resume\.ready\) return;\s*\n\s*saveLoginStep\(/.test(CHANNEL_STEP_SRC),
+      '落盘 effect 没有等半程记录读完就写——写下去的默认态会把要恢复的那条抹掉',
+    ).toBe(true);
     expect(countOf(LOGIN_FLOW_SRC, 'clearLoginStep()'), '擦记录不该有第二处').toBe(1);
     expect(countOf(LOGIN_FLOW_SRC, 'router.push(AFTER_LOGIN)'), '进站不该有第二处').toBe(1);
   });

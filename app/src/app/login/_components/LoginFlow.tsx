@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   DISCLAIMER_TEXT,
@@ -16,7 +16,7 @@ import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
 import { Checkbox } from '@/components/shadcn/checkbox';
 import { ChannelStep } from './ChannelStep';
-import { clearLoginStep, loadLoginStep } from './loginStep';
+import { clearLoginStep, loadLoginStep, NO_RESUME, type LoginResume } from './loginStep';
 
 /** 登录完成后落在这里：档案已创建的引导页 */
 const AFTER_LOGIN = '/welcome';
@@ -66,12 +66,45 @@ const CHANNEL_INTRO: Record<Channel, string> = {
  *
  * 【这些 state 都是可恢复的】刷新一下就全没，人被静默退回手机号那一格，
  * 而短信已经发出去了——补绑那一步更糟，token 已经在手上，人却被打回登录第一格。
- * 所以首帧先问一次半程记录（sessionStorage，关标签页即清），见 loginStep.ts。
+ * 所以要问一次半程记录（sessionStorage，关标签页即清），见 loginStep.ts。
  */
 export function LoginFlow() {
+  const resume = useResumedLoginStep();
+  // 记录到手那一刻整块重挂，让下面各格的初始 state 按记录重新播种。
+  // 没有记录时 key 一直是 fresh，压根不会重挂。
+  return <LoginForm key={resume.step ? 'resumed' : 'fresh'} resume={resume} />;
+}
+
+/**
+ * 半程记录：**挂载之后**才读，首帧一律当"没有半程"。
+ *
+ * 【为什么不能在初始 state 里读】服务端渲染时根本没有 sessionStorage
+ * （loadLoginStep 吞掉异常返回 null），客户端首帧却读得到——两边首帧不一样，
+ * 就是生产 console 里那条 React #418 hydration mismatch。
+ *
+ * 【为什么"挪到挂载后会闪一帧"这个顾虑不成立】用户眼里的第一帧是**服务端那一帧**，
+ * 它从来就没有半程（服务端读不到 sessionStorage）。也就是说"先看到手机号格再跳过来"
+ * 在修之前也照样发生，只是外带一条报错，而 mismatch 会让 React 把整棵树重渲一遍。
+ * 挪到挂载后，可见行为不变，报错没了。
+ *
+ * 【ready 那一位不是多余的】读完之前**谁都不许写** sessionStorage：
+ * 各格的落盘 effect 比这里先跑（子组件 effect 先于父组件，React 定的顺序），
+ * 它写下去的是"这一格的默认态"，正好把要恢复的那条抹掉。
+ * 少了这一位，真机上 F5 照样掉回手机号格，而且一个报错都没有。
+ */
+function useResumedLoginStep(): LoginResume {
+  const [resume, setResume] = useState<LoginResume>({ ready: false, step: null });
+  useEffect(() => setResume({ ready: true, step: loadLoginStep() }), []);
+  return resume;
+}
+
+/**
+ * 登录表单本体。半程记录当 prop 收，不自己去读——
+ * 「什么时候读 sessionStorage」这件事只由上面那个 hook 说了算。
+ */
+export function LoginForm({ resume }: { resume: LoginResume }) {
+  const resumed = resume.step;
   const enterSite = useEnterSite();
-  /** 半程记录只在首帧读这一次；之后的写入归 ChannelStep（状态长在那儿） */
-  const [resumed] = useState(loadLoginStep);
   const [channel, setChannel] = useState<Channel>(resumed?.channel === 'email' ? 'email' : 'phone');
   /** true = 手机验过了、是个新号，正停在补绑邮箱那一步（此时请求带 token） */
   const [completing, setCompleting] = useState(resumed?.channel === 'completion');
@@ -87,6 +120,7 @@ export function LoginFlow() {
         email={email}
         onEmailChange={setEmail}
         agreed={agreed}
+        resume={resume}
         onBack={() => setCompleting(false)}
       />
     );
@@ -100,6 +134,7 @@ export function LoginFlow() {
           email={email}
           onEmailChange={setEmail}
           agreed={agreed}
+          resume={resume}
           onBack={() => setChannel('phone')}
         />
       ) : (
@@ -122,6 +157,7 @@ export function LoginFlow() {
             gateHint="先勾选下方的说明，再发送验证码。"
             ctaLabel="验证并登录"
             persistAs="phone"
+            resume={resume}
             onSend={async () => {
               const res = await apiFetch<SendResponse>('/auth/sms/send', {
                 method: 'POST',
@@ -220,11 +256,13 @@ export function EmailPane({
   email,
   onEmailChange,
   agreed,
+  resume = NO_RESUME,
   onBack,
 }: {
   email: string;
   onEmailChange: (next: string) => void;
   agreed: boolean;
+  resume?: LoginResume;
   /** 回主路（手机号） */
   onBack: () => void;
 }) {
@@ -237,6 +275,7 @@ export function EmailPane({
           email={email}
           onEmailChange={onEmailChange}
           agreed={agreed}
+          resume={resume}
         />
       </Card>
     </>
@@ -255,11 +294,13 @@ export function CompletionPane({
   email,
   onEmailChange,
   agreed,
+  resume = NO_RESUME,
   onBack,
 }: {
   email: string;
   onEmailChange: (next: string) => void;
   agreed: boolean;
+  resume?: LoginResume;
   /** 退回手机号那一步 */
   onBack: () => void;
 }) {
@@ -267,7 +308,13 @@ export function CompletionPane({
     <div className="flex flex-col gap-5">
       <Steps current={1} />
       <Card className="p-5">
-        <EmailChannel completing email={email} onEmailChange={onEmailChange} agreed={agreed} />
+        <EmailChannel
+          completing
+          email={email}
+          onEmailChange={onEmailChange}
+          agreed={agreed}
+          resume={resume}
+        />
       </Card>
       <p className="text-[13px] leading-5 text-ink-2">
         这是新账号，还差一个邮箱：换手机号时靠它找回账号，文书和存证证明也发到这里。只这一次。
@@ -296,12 +343,14 @@ export function EmailChannel({
   email,
   onEmailChange,
   agreed,
+  resume = NO_RESUME,
 }: {
   /** true = 新号补绑那一步（带 token）；false = 邮箱通道登录（匿名） */
   completing: boolean;
   email: string;
   onEmailChange: (next: string) => void;
   agreed: boolean;
+  resume?: LoginResume;
 }) {
   const enterSite = useEnterSite();
   return (
@@ -331,6 +380,7 @@ export function EmailChannel({
       gateHint="先勾选下方的说明，再发送验证码。"
       ctaLabel={completing ? '完成，开始' : '验证并登录'}
       persistAs={completing ? 'completion' : 'email'}
+      resume={resume}
       onSend={async () => {
         const res = await apiFetch<SendResponse>('/auth/email/send', {
           method: 'POST',
