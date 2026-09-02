@@ -9,6 +9,7 @@ import {
   byoBillingLine,
   byoConnectedLine,
 } from '@/app/_ui/byoAgent';
+import { DiscreetCollapse } from '@/app/_ui/DiscreetCollapse';
 import { useDiscreet } from '@/app/_ui/discreet';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import {
@@ -37,6 +38,15 @@ import { useAgentSetup } from '../../_components/useAgentSetup';
  *
  * 【话术零新代码】第二步整段复用 SetupPrompt + agentSetup 的六档，一个字都不抄。
  * 抄一遍就等于以后改地址要改两处，而漏掉的那处生成的配置**看起来完全正常**。
+ *
+ * 【低调模式】这一页是四处入口的落地页，而低调模式下那张入口卡显示的是中性的
+ * 「接入你自己的助手」——点进来却看见「我的劳动仲裁案件档案库」，等于入口改名白改。
+ * 所以三处各归各的层：
+ *   ① 话术那一整块（逐字带着土八鼠 / 劳动仲裁）折叠，与设置页 AgentSetupCard 同一个壳；
+ *   ② 引子与第四步说明是普通正文，进糊层（按住能看清）；
+ *   ③ 标题换成 BYO.titleNeutral。
+ * 守卫按**页面**锁在 __tests__/agent-page-discreet.test.tsx——按组件名锁的守卫看不见新页面，
+ * 这一页第一版正是这么漏出去的。
  */
 export function ConnectGuide() {
   const { discreet } = useDiscreet();
@@ -53,9 +63,11 @@ export function ConnectGuide() {
     <div className="pt-1 pb-4">
       <header className="py-3">
         <h1 className="text-[22px] leading-8 font-semibold tracking-tight text-ink">
-          {BYO.titleNeutral}
+          {discreet ? BYO.titleNeutral : BYO.title}
         </h1>
-        <p className="prose-measure mt-2 text-[15px] leading-7 text-ink-2">{BYO.lead}</p>
+        <p data-veil="" className="prose-measure mt-2 text-[15px] leading-7 text-ink-2">
+          {BYO.lead}
+        </p>
         <p
           data-veil=""
           className="prose-measure mt-2 border-l-[3px] border-primary pl-3 text-[14px] leading-6 font-semibold text-primary-ink"
@@ -92,7 +104,9 @@ export function ConnectGuide() {
                   选你手里那个客户端；不确定就用「通用」，让它自己判断走 MCP 还是 REST。
                 </p>
                 <div className="mt-2">
-                  <SetupPrompt info={urls} apiKey={issued?.key} />
+                  <DiscreetCollapse label="接入配置（点开查看）">
+                    <SetupPrompt info={urls} apiKey={issued?.key} />
+                  </DiscreetCollapse>
                 </div>
               </>
             )}
@@ -302,7 +316,7 @@ function VerifyStep({ issuedId }: { issuedId: number | null }) {
 
   return (
     <div>
-      <p className="text-[14px] leading-6 text-ink-2">
+      <p data-veil="" className="text-[14px] leading-6 text-ink-2">
         在你的助手里问一句「读一下我的案件档案」，然后回来点下面这颗。
       </p>
       {phase === 'timeout' && (
