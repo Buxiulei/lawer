@@ -15,12 +15,16 @@
  * 词表与取字器都是 import 来的，不手抄：抄漏一个词的那页看起来跟守住了的页面
  * 一模一样——守卫绿着，屏幕上照样写着「仲裁」。
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 import { BYO, byoBillingLine } from '@/app/_ui/byoAgent';
-import { CASE_WORDS } from '@/app/_ui/neutral';
-import { allText, unveiledText } from '@/app/_ui/__tests__/unveiled';
+import { CASE_WORDS, NEUTRAL_WORD } from '@/app/_ui/neutral';
+import { DiscreetVeil } from '@/app/_ui/veil';
+import { allText, unveiledText, visibleText } from '@/app/_ui/__tests__/unveiled';
 
 vi.mock('next/link', () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -28,9 +32,15 @@ vi.mock('next/link', () => ({
   ),
 }));
 const WelcomePage = (await import('../page')).default;
+const WelcomeLayout = (await import('../layout')).default;
 const html = () => renderToStaticMarkup(<WelcomePage />);
 
 const NORMAL_BILLING = byoBillingLine({ credit: '公道值', watch: '守望', discreet: false });
+const DISCREET_BILLING = byoBillingLine({
+  credit: NEUTRAL_WORD.credits,
+  watch: NEUTRAL_WORD.watch,
+  discreet: true,
+});
 
 describe('低调模式：/welcome 这一屏上没有一个清晰可读的案情词', () => {
   it('词表逐词点名——劳动 / 仲裁 / 案件 / 维权 / 证据 / 文书 / 土八鼠', () => {
@@ -69,5 +79,74 @@ describe('反向对照：这些话确实在这一页上，只是进了糊层', (
     expect(clear).toContain('开始首诊');
     expect(clear).toContain(BYO.title.replace(/\s+/g, ''));
     expect(clear).toContain(BYO.cta.replace(/\s+/g, ''));
+  });
+});
+
+
+/**
+ * 揭得开，且揭开看到的是低调那一句。
+ *
+ * 【为什么这两条要一起立】糊层与手势层是一件事的两半：
+ * 只有糊层 = 糊死了揭不开（这一页原先就是这样，注册完那一屏的接入卡再也读不到）；
+ * 只有手势层而底下摆的是常规变体 = 按住那一眼露出「案件」，
+ * 而低调模式的承诺正是"按住看清的那一眼也不许出现案情词"。
+ */
+describe('揭开手势存在：这一页糊了要能按住看清', () => {
+  /** 在 layout 的元素树里找 DiscreetVeil 本尊（认组件身份，不认名字字符串） */
+  const hasVeil = (node: ReactNode): boolean => {
+    if (Array.isArray(node)) return node.some(hasVeil);
+    if (!isValidElement(node)) return false;
+    if (node.type === DiscreetVeil) return true;
+    return hasVeil((node.props as { children?: ReactNode }).children);
+  };
+
+  it('/welcome 的 layout 挂着 AppShell 用的那一个 DiscreetVeil', () => {
+    const tree = WelcomeLayout({ children: <div /> }) as ReactElement;
+    expect(
+      hasVeil(tree),
+      '缺什么：/welcome 没有按住看清的手势层。\n' +
+        '为什么缺：糊层是纯 CSS（globals.css 的 html[data-discreet=\'1\'] [data-veil]），' +
+        '揭开却要文档级的指针委托（_ui/veil 的 DiscreetVeil）。少了它，这一屏是**糊死的**——' +
+        '排版正常、没有任何报错，只是接入卡那两段再也读不到。\n' +
+        '怎么办：在 welcome/layout.tsx 里挂 <DiscreetVeil />（就是 AppShell 用的那一个，' +
+        '别另抄一份手势逻辑）。挂在 layout 上，page.tsx 才留得住 server component 的身份。',
+    ).toBe(true);
+  });
+
+  it('页面本身仍是能裸渲的 server component——手势层不许挪进 page', () => {
+    // 挪进去 landing-byo.test 的 J8（裸渲这一页、没有 DiscreetProvider）当场炸。
+    expect(() => html()).not.toThrow();
+  });
+});
+
+describe('低调下可见的是低调变体：口径与壳层一致', () => {
+  it('低调模式看得到的是「对话与分析」，看不到带「案件」的那句', () => {
+    const seen = visibleText(html(), { discreet: true });
+    expect(seen, '低调变体没渲染出来').toContain(DISCREET_BILLING.replace(/\s+/g, ''));
+    expect(
+      seen,
+      '缺什么：低调模式下这一页摆的仍是常规计费句（带「案件分析」「公道值」「守望」）。\n' +
+        '为什么缺：糊层按住就能看清，看清的那一眼读到的必须已经是低调变体；' +
+        '壳层糊着、指尖一按却露出「案件」，两处口径打架比一处不写更糟。\n' +
+        '怎么办：两种变体都渲染，常规那句挂 .discreet-hide、低调那句挂 .discreet-only，' +
+        '显隐交给 globals.css 的 html[data-discreet=\'1\']。',
+    ).not.toContain(NORMAL_BILLING.replace(/\s+/g, ''));
+  });
+
+  it('反向对照：常规模式看得到的是常规变体，低调那句收着', () => {
+    // 少了这条，把两句都写成低调变体也全绿——那时常规模式也不再说「公道值」，
+    // 而「公道值」是用户在余额卡、流水、充值页看到的同一个词。
+    const seen = visibleText(html(), { discreet: false });
+    expect(seen).toContain(NORMAL_BILLING.replace(/\s+/g, ''));
+    expect(seen).not.toContain(DISCREET_BILLING.replace(/\s+/g, ''));
+  });
+
+  it('那两个类的 CSS 规则确实在 globals.css 里——没有它们，两句会同时显示', () => {
+    // 上面两条按类名推断「看得见什么」。规则被删掉的那一版，两条照样绿，
+    // 而屏幕上两句话叠着一起出现。
+    const css = readFileSync(join(process.cwd(), 'src/app/globals.css'), 'utf8');
+    expect(css).toMatch(/\.discreet-only\s*\{[^}]*display:\s*none/);
+    expect(css).toMatch(/html\[data-discreet='1'\]\s+\.discreet-only\s*\{[^}]*display:/);
+    expect(css).toMatch(/html\[data-discreet='1'\]\s+\.discreet-hide\s*\{[^}]*display:\s*none/);
   });
 });

@@ -739,6 +739,27 @@ html[data-discreet='1'] [data-veil] .discreet-blur {
   filter: none;
 }
 
+/* ── 同一句话的两种写法，由模式挑一个 ─────────────────────
+   server component 取不到 useDiscreet（/welcome 是裸布局的服务端页），
+   于是两种变体都渲染出来，靠这两个类挑：
+     .discreet-hide  常规模式显示，低调模式收起
+     .discreet-only  反过来
+   **为什么不是「糊住就够了」**：糊层按住就能看清，看清的那一眼读到的必须
+   已经是低调变体——否则壳层糊着、指尖一按却露出带「案件」的那句，
+   两处口径打架比一处不写更糟。
+   放在 @layer 外面、跟糊层规则同一段：它们是同一件事的两半。 */
+.discreet-only {
+  display: none;
+}
+
+html[data-discreet='1'] .discreet-only {
+  display: revert;
+}
+
+html[data-discreet='1'] .discreet-hide {
+  display: none;
+}
+
 /* 块套块时两层一起亮。行动卡、法条卡这类共享卡片会落在别的块里，
    各糊各的就会出现「点住了却还是看不清」——揭开外层内层跟着亮，
    点中内层外层也让开，两个方向都要写。 */

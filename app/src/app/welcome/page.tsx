@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BYO, BYO_GUIDE_HREF, byoBillingLine } from '@/app/_ui/byoAgent';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Button } from '@/components/shadcn/button';
 import { TubashuMark } from '@/components/shell/TubashuMark';
 
@@ -21,12 +22,16 @@ export const metadata: Metadata = { title: '档案已创建' };
  * 这一屏**含案情词**：品牌名「土八鼠」、BYO.lead 里的「证据 / 文书」、
  * 计费口径常规变体里的「案件」——三处都进糊层。守卫见 __tests__/welcome-discreet.test.tsx。
  *
- * 【已知代价：这一页糊了就揭不开】按住看清的手势层（_ui/veil 的 DiscreetVeil）挂在
- * AppShell 里，而这一页是裸布局，所以低调模式下上面三块是**糊死的**。
- * 仍然这么做：泄漏是不可逆的，糊过头只是少读两句——标题、CTA、「不接也不影响」那句
- * 都还清晰，同一段话点进 /settings/agent（在 AppShell 内）按住就能看全。
- * 要让这一页也能揭，把 DiscreetVeil 挂进来即可；那会给这张裸页加一道客户端边界，
- * 值不值得单开一单议。
+ * 【糊了也揭得开】按住看清的手势层挂在同目录的 layout.tsx 上（就是 AppShell 用的
+ * 那一个 DiscreetVeil，不是另抄一份），所以这一屏跟站内其它页一样：糊着，按住能看清。
+ * 页面自己仍是纯 server component——手势层在 layout 里，这一页不带任何客户端 hook。
+ *
+ * 【计费口径两种变体都渲染，由 CSS 挑一个】这句话有常规与低调两种写法
+ * （低调那版把「案件分析」收成「分析」，见 byoAgent.byoBillingLine）。
+ * server component 取不到 useDiscreet，挑不了；两句都印上去，
+ * 用 globals.css 的 .discreet-hide / .discreet-only 按 html[data-discreet] 显示其一。
+ * **不这么做的后果是口径不一致**：壳层按低调模式糊着，一按住却读到带「案件」的那句，
+ * 而低调模式的整个承诺就是"按住看清的那一眼也不许出现案情词"。
  */
 export default function WelcomePage() {
   return (
@@ -55,7 +60,16 @@ export default function WelcomePage() {
             <p className="text-[15px] leading-6 font-semibold text-ink">{BYO.title}</p>
             <p data-veil="" className="mt-1 text-[13.5px] leading-6 text-ink-2">{BYO.lead}</p>
             <p data-veil="" className="mt-2 text-[13.5px] leading-6 font-semibold text-primary-ink">
-              {byoBillingLine({ credit: '公道值', watch: '守望', discreet: false })}
+              <span className="discreet-hide">
+                {byoBillingLine({ credit: '公道值', watch: '守望', discreet: false })}
+              </span>
+              <span className="discreet-only">
+                {byoBillingLine({
+                  credit: NEUTRAL_WORD.credits,
+                  watch: NEUTRAL_WORD.watch,
+                  discreet: true,
+                })}
+              </span>
             </p>
             <Button asChild variant="secondary" className="mt-3 w-full">
               <Link href={BYO_GUIDE_HREF}>{BYO.cta}（三步，两分钟）</Link>
