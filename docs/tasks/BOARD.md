@@ -260,6 +260,10 @@
 
 **2026-09-02 18:35 · 生产上线 9b5358b（对话收尾 + 案件事实卡）**：CI 绿 → 备份 lawer-pre-9b5358b-*.db → 预放 bundle fetch + ff → root 脱管 build EXIT=0 → restart 双服务 active → 迁移触发（49 表，无新列）→ / /login /case/1 /case/1/ask /settings/agent 全 200 → uid=1 测试 JWT 打 /api/v1/cases/1/messages 返回带 model/served 字段的历史。真机核对（主理人报的路径：问→答→F5→落款）已派 Sonnet，待回。
 
+**2026-09-02 18:50 · 9b5358b 真机核对 6/6 通过 + 库证**（Sonnet Playwright，产物 scratchpad/verify-9b5358b/）：/case/1/ask 历史回显 72/71 条；回车发送；流式结束不跳错误页；markdown 真 DOM（table/strong/list/heading 全有，字面 `**`/`#` 为 0）；落款「deepseek-v4-pro · 深度推理」；**事实卡可见生效**：回答逐类列出 劳动合同/工资流水/社保/考勤/沟通记录/公司文件/录音 各 0 份，明说「系统现在不做文件内容提取…只能看文件名和类别」；F5 后两轮问答与落款仍在；console error 0；scrollWidth 393。库证：messages 149–152 content 873/1568 字非 NULL、model deepseek-v4-pro；gongdao_ledger #81/#82 消耗 −85/−197 对应 turn-150/152。
+- 观察项（历史遗留数据，非本次）：SMOKE-TEST 案件早期历史里有一条助手免责句被单独以用户气泡重复、后接一段无落款孤立 article——疑为评测污染期的数据形态，排入待查。
+- 今日两批上产合计：台账 118 条、封顶线卡 F-04、自带 agent 前置四入口+接入页、对话收尾（崩溃页真凶/历史/markdown/型号/回车/写库兜底/零误伤短语表）、案件事实卡。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
