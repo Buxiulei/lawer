@@ -19,6 +19,8 @@
 // 「未含节假日顺延」。宁可让用户看见「这个日子没考虑放假」，也不能给一个看起来精确、
 // 实际可能早一天或晚一天的日子。
 
+import * as knowledge from '@/lib/knowledge';
+
 /** 起算方式。两者差一天，而这一天就是生死线本身。 */
 export type CountFrom =
   /** 自当日起算（「之日起计算」）——法定时效多为此种 */
@@ -156,6 +158,35 @@ export function buildPeriodGeneralRule(quotes?: StatuteQuote[], confidence?: str
   return `期间计算通则依据 ${cited}（依据卡 statute-qijian-jisuan-tongze，可信度：${confidence ?? '未标注'}）`;
 }
 
+/** 期间计算通则卡的 id。**全仓只此一份**（lib/agent/tools.ts 从这里再导出）。 */
+export const PERIOD_RULE_PACK_ID = 'statute-qijian-jisuan-tongze';
+
+/**
+ * 期间计算通则说明的**默认来源**：调用方没传就由本模块自己去取卡。
+ *
+ * 【为什么这个口收在这里，而不是叮嘱每个调用点记得传】原先 generalRule 只是个可选参数，
+ * 谁忘了传，谁落进库的 derived_from 就恒带那句「**依据卡未取到，以上为代码内置副本，
+ * 可能已陈旧**」——而卡明明在库里、内容也是新的。首诊（lib/cases/intake.ts）正是这样的
+ * 调用点：它写的每一条仲裁时效都带着这句**假话**，而且这句话会一路渲染给用户（驾驶舱期限卡）、
+ * 逐字进 agent 的 system context（lib/agent/prompt.ts ← snapshot.ts）、进引用块。
+ * 「忘了传就说谎」的默认值不该靠下一个人记得传来兜住——记不住才是常态。所以改成：
+ * **不传就等于要真依据**，说谎这条路只留给真取不到卡的时候。
+ *
+ * 【仍然与「今天几号」无关】这里读的是仓库里只读的知识库（lib/knowledge 进程级缓存一次），
+ * 不读时钟；同样的 ruleKey + anchor 仍然算出同样的日期。
+ *
+ * 【真取不到才说取不到】卡缺失、知识库没装好时回落内置副本并如实标注：
+ * 期限推算不能因为读不到卡就停摆，但也不能假装依据是新的。
+ */
+function resolvePeriodGeneralRule(): string {
+  try {
+    const card = knowledge.get(PERIOD_RULE_PACK_ID);
+    return buildPeriodGeneralRule(card.facts?.statute_quotes, card.confidence);
+  } catch {
+    return buildPeriodGeneralRule();
+  }
+}
+
 /** 卡不可用时的兜底副本。**只作兜底**，正常路径走 buildPeriodGeneralRule。 */
 export const PERIOD_GENERAL_RULE_FALLBACK =
   '期间计算通则依据《中华人民共和国民事诉讼法》第八十五条：' +
@@ -244,6 +275,9 @@ function addDays(date: Date, days: number): Date {
  * @param ruleKey DEADLINE_RULES 的键
  * @param anchor 起算锚点，'YYYY-MM-DD'（如裁决书签收日、解除日）
  * @param options.days 仅 daysFromCaller 的规则需要（举证期限：通知书上指定的天数）
+ * @param options.generalRule 期间计算通则说明。**不传就由本模块自取依据卡**
+ *        （见 resolvePeriodGeneralRule）；传了以传入的为准——tools.ts 在调用前已取过同一张卡，
+ *        保留它现有的传参既是兼容，也免得同一轮里把卡读两遍。
  */
 export function computeDeadline(
   ruleKey: string,
@@ -288,7 +322,7 @@ export function computeDeadline(
     rule,
     derivedFrom:
       `${rule.label}：自 ${fmt(anchorDate)}（${startText}）起 ${spanText} → ${fmt(rolled)}${rolledText}。` +
-      `依据：${rule.basis} ${options.generalRule ?? buildPeriodGeneralRule()}`,
+      `依据：${rule.basis} ${options.generalRule ?? resolvePeriodGeneralRule()}`,
     caveats: [...(rule.caveats ?? []), HOLIDAY_CAVEAT, MAIL_BEFORE_EXPIRY_CAVEAT],
   };
 }

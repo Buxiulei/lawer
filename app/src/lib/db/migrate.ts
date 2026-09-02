@@ -1073,6 +1073,24 @@ export function runMigrations(db: Database.Database): void {
   // 值域由 lib/cases 的 confirmMilestone 把关 + 测试钉死；CHECK 并进 WS1 那笔递延。
   addColumnIfMissing(db, 'timeline_events', 'milestone', 'TEXT');
 
+  // cases 的首诊四列：**首诊填的那几个数字要有地方落**。
+  //
+  // 【为什么非加不可】首诊六步里，入职日期与月工资是 N/2N/N+1 的**计算输入**，
+  // 岗位与合同签署次数决定能主张什么。此前 cases 只有 goal/bottom_line 两个自述列，
+  // 于是这四项在库里根本没有落脚点——用户填完六步，一个数字都没存下来。
+  //
+  // 【存输入不存结论】只存 employed_from / monthly_wage_fen 这类**用户给的事实**，
+  // 不存「2N=22 万」这类算出来的结论：封顶基数与年限口径会随卡更新，
+  // 存下来的结论第二天就可能与现算的对不上，而用户没有任何办法看出哪个是新的。
+  //
+  // 【为什么可空、不回填】存量案件本来就没填过首诊，拿 0 或 '' 顶上等于把「没填」
+  // 伪装成「填了是这个」——月工资 0 会一路算进赔偿金额。读侧一律容得下 NULL。
+  // 金额一律存分（全仓口径），日期存 'YYYY-MM-DD'（ADR-002：日期列保持字符串）。
+  addColumnIfMissing(db, 'cases', 'employed_from', 'TEXT');
+  addColumnIfMissing(db, 'cases', 'monthly_wage_fen', 'INTEGER');
+  addColumnIfMissing(db, 'cases', 'position', 'TEXT');
+  addColumnIfMissing(db, 'cases', 'contract_count', 'TEXT');
+
   // users.cert_type：id_card_enc 里那个证件号是什么证（身份证 | 护照）。
   //
   // 【为什么必须显式存，不能靠长度猜】掩码规则依赖证件类型：18 位身份证留头 4 尾 4

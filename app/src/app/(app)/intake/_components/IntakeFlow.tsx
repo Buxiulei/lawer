@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import type { SanbeiCap } from '@/lib/cap/sanbei';
 import { useSignedIn } from '@/app/_ui/auth';
 import { scrollBehavior, useReducedMotion } from '@/app/_ui/motion';
 import { Button } from '@/components/shadcn/button';
@@ -23,8 +24,8 @@ import {
   saveDraft,
   type IntakeDraft,
 } from './draft';
-
-const DEMO_CASE_ID = 'demo';
+import { destinationForFinish, saveIntake } from './submit';
+import { advanceBlock } from './validate';
 
 /** 未登录时最后一步的说明：服务器上还没有这份档案，不能说"档案建好了" */
 const DRAFT_REASSURANCE =
@@ -34,7 +35,12 @@ interface StepDef {
   title: string;
   /** 每步固定的一行安抚说明：给确定感，不煽情 */
   reassurance: string;
-  render: (draft: IntakeDraft, patch: (p: Partial<IntakeDraft>) => void) => ReactNode;
+  /** cap = 三倍社平封顶基数的当前读数，由服务端从知识卡取好传下来；只有末步的金额表用得上 */
+  render: (
+    draft: IntakeDraft,
+    patch: (p: Partial<IntakeDraft>) => void,
+    cap: SanbeiCap | null,
+  ) => ReactNode;
 }
 
 const STEPS: StepDef[] = [
@@ -65,12 +71,12 @@ const STEPS: StepDef[] = [
   },
   {
     title: '你的档案',
-    reassurance: '档案建好了。金额是按现有信息初算的，材料补齐后会自动更新。接下来一件一件来。',
-    render: (d) => <StepPreview draft={d} />,
+    reassurance: '下面是按你填的信息初算的一版。点「进入驾驶舱」才会存进你的档案，接下来一件一件来。',
+    render: (d, _p, cap) => <StepPreview draft={d} cap={cap} />,
   },
 ];
 
-export function IntakeFlow() {
+export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
   const router = useRouter();
   const toast = useToast();
   const signedIn = useSignedIn();
@@ -78,6 +84,9 @@ export function IntakeFlow() {
   const [restored, setRestored] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [saving, setSaving] = useState(false);
+  /** 上一次提交没成的原因。留在页面上，不靠一闪而过的 toast 交代「没存下」 */
+  const [saveFailure, setSaveFailure] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = loadDraft();
@@ -102,7 +111,9 @@ export function IntakeFlow() {
   const step = Math.min(draft.step, STEPS.length - 1);
   const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
-  const canAdvance = step !== 0 || Boolean(draft.stage);
+  // 「今天」现取：入职时间填在未来要当场拦下，不能等提交时才由后端说不行
+  const block = advanceBlock(step, draft, new Date().toISOString().slice(0, 10));
+  const canAdvance = block === null;
 
   const go = (next: number) => {
     setDraft((prev) => ({ ...prev, step: next }));
@@ -121,21 +132,27 @@ export function IntakeFlow() {
   };
 
   /**
-   * 末步的去处取决于有没有登录。没登录时这些内容**只在这台设备的浏览器里**，
-   * 服务器上还没有任何东西——按钮和提示都得照实说，不能假装档案已经建好了。
+   * 末步。**先真的存进去，再说"存好了"**——四种结局各自的去处与说辞
+   * 全在 destinationForFinish 里定死（含"失败不许弹成功提示""失败不许清草稿"），
+   * 这一层只负责把它执行出来。
    */
-  const finish = () => {
-    if (!signedIn) {
-      toast(
-        '你填的内容已暂存在这台设备上，注册后我会把它并入你的案件档案',
-        'success',
-        '已经暂存在这台设备上',
-      );
-      router.push('/login');
-      return;
+  const finish = async () => {
+    if (saving) return;
+    const outcome = signedIn ? await runSave() : ({ kind: 'signed-out' } as const);
+    const dest = destinationForFinish(outcome);
+    setSaveFailure(dest.href === null ? dest.notice.message : null);
+    toast(dest.notice.message, dest.notice.tone, dest.notice.discreet);
+    if (dest.clearDraft) clearDraft();
+    if (dest.href) router.push(dest.href);
+  };
+
+  const runSave = async () => {
+    setSaving(true);
+    try {
+      return await saveIntake(draft);
+    } finally {
+      setSaving(false);
     }
-    toast('档案已建好，正在打开驾驶舱', 'success', '已经准备好了');
-    router.push(`/case/${DEMO_CASE_ID}`);
   };
 
   return (
@@ -158,7 +175,7 @@ export function IntakeFlow() {
         </div>
       )}
 
-      <div className="mt-4">{current.render(draft, patch)}</div>
+      <div className="mt-4">{current.render(draft, patch, cap)}</div>
 
       <p
         data-veil=""
@@ -175,8 +192,8 @@ export function IntakeFlow() {
             </Button>
           )}
           {isLast ? (
-            <Button onClick={finish} className="flex-1">
-              {signedIn ? '进入驾驶舱' : '保存草稿并注册'}
+            <Button onClick={() => void finish()} disabled={saving} className="flex-1">
+              {saving ? '正在存进你的档案…' : signedIn ? '进入驾驶舱' : '保存草稿并注册'}
             </Button>
           ) : (
             <Button onClick={() => go(step + 1)} disabled={!canAdvance} className="flex-1">
@@ -184,9 +201,13 @@ export function IntakeFlow() {
             </Button>
           )}
         </div>
-        {!canAdvance && (
-          <p className="mt-2 text-[13px] leading-5 text-ink-2">
-            先选一个最接近你现在情况的阶段。
+        {/* 拦下来的理由用**这一步自己的话**说。一句放之四海皆准的「有必填项未填」等于没说 */}
+        {!isLast && block !== null && (
+          <p className="mt-2 text-[13px] leading-5 text-ink-2">{block}</p>
+        )}
+        {isLast && saveFailure !== null && (
+          <p role="alert" className="mt-2 text-[13px] leading-5 text-amber-ink">
+            {saveFailure}
           </p>
         )}
         {step === 0 && (
