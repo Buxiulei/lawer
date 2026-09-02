@@ -161,31 +161,57 @@ const FRAME_TYPES = new Set([
 /**
  * 把一条 SSE 事件收成帧。未知帧类型返回 null（调用方忽略并 warn）——
  * 后端加帧不该让老前端崩掉。
+ *
+ * 【为什么这里要动 message_id】(2026-09-02 真机)
+ * 服务端 `events.ts` 里 meta / done 的 `message_id` 是**数据库主键，number**；
+ * 这一层的 `MetaFrame`／`DoneFrame` 却把它写成 `string`。两边从来没对过账，
+ * 因为末行那个 `as StreamFrame` 是**无校验断言**——TS 于是一路默许，编译全绿。
+ *
+ * 真机后果：演示替身发的是 `m_<剧本id>_<时间戳>`（真字符串），所以演示页一切正常；
+ * 而真对话每一轮收尾时 `mockLawRefs(turn.messageId)` 会对着一个 number 调
+ * `.startsWith`，抛 `TypeError: r.startsWith is not a function`。它抛在 React 渲染里，
+ * 整棵树垮掉 → **每一轮回答刚渲染完，页面就变成 "This page couldn't load"**。
+ * （这正是此前被记在服务端 uncaughtException 名下的那个症状——同一句话，两个病因。）
+ *
+ * 【为什么修在这里】这是所有帧进入前端的**唯一入口**。在消费点上各自 `String(...)`
+ * 是"漏接一个即失效"，而漏掉的那个恰恰只在真对话里走到——演示页永远测不出来。
  */
 export function toFrame(event: string | null, data: unknown): StreamFrame | null {
   if (!data || typeof data !== 'object') return null;
   const payload = data as Record<string, unknown>;
   const type = event ?? (typeof payload.type === 'string' ? payload.type : null);
   if (!type || !FRAME_TYPES.has(type)) return null;
-  return { ...payload, type } as StreamFrame;
+  // 归一成本层声明的类型：数字主键照实转成串，其余原样（不存在就不要凭空造一个）
+  const normalized =
+    typeof payload.message_id === 'number'
+      ? { ...payload, message_id: String(payload.message_id) }
+      : payload;
+  return { ...normalized, type } as StreamFrame;
 }
 
 /* ── 展示口径 ────────────────────────────────────────────────── */
 
-/** 型号 → 给劳动者看的中文名。用户不认识 model id，只需要知道这一轮谁在算。 */
-const MODEL_LABELS: Record<string, string> = {
-  'claude-opus-5': '深度推理模型',
-  'claude-sonnet-5': '主力模型',
-  'deepseek-v4-pro': '深度推理模型',
-  'deepseek-v4-flash': '快速模型',
-  'qwen3.7-max': '备用主力模型',
-  'qwen3.6-flash': '快速模型',
+/**
+ * 型号 → 档位。**档位是型号的注解，不是型号的替身。**
+ *
+ * 这张表以前叫 MODEL_LABELS，值是「主力模型」这样的中文名，屏幕上只印这个名字。
+ * 那等于把用户唯一能核对的事实（他这一轮到底拿到了 opus 还是 flash）换成了一个
+ * 我们自己起的好听说法——**换了模型、换了厂商，这行字一个像素都不变**。
+ * 用户按型号付费，落款就必须印**型号 id 本身**；档位只作小字跟在后面，帮他知道那是贵的还是快的。
+ */
+const MODEL_TIERS: Record<string, string> = {
+  'claude-opus-5': '深度推理',
+  'claude-sonnet-5': '主力',
+  'deepseek-v4-pro': '深度推理',
+  'deepseek-v4-flash': '快速',
+  'qwen3.7-max': '备用主力',
+  'qwen3.6-flash': '快速',
 };
 
 /** 等待卡的主语：认得出型号就点名，认不出就不硬编一个假名字。 */
 export function waitingHeadline(model: string | null | undefined): string {
-  const label = model ? MODEL_LABELS[model] : undefined;
-  return label ? `正在用${label}斟酌` : '正在斟酌';
+  const tier = model ? MODEL_TIERS[model] : undefined;
+  return tier ? `正在用${tier}模型斟酌` : '正在斟酌';
 }
 
 /**
@@ -196,7 +222,10 @@ export function waitingHeadline(model: string | null | undefined): string {
  * （billing/served-model.ts 文件头的实测），所以拿请求值当"实际"标出去就是在撒谎——
  * 而这一行字的全部意义正是"实际"。两个都没有就一个字都不写：宁可不标，不猜。
  *
- * 认不出的型号串原样显示（多半是厂商新加的日期快照），不硬编一个好听的假名字。
+ * 【形状：型号 id 为主，档位为辅】`claude-opus-5 · 深度推理`。
+ * 主语必须是**型号 id 本身**——用户按型号付费，他要核对的就是这串字；
+ * 只印「深度推理模型」的话，把 opus 换成 flash 这行字也不会变，那就不叫核对。
+ * 认不出的型号串原样显示（多半是厂商新加的日期快照），后面不缀档位，也不硬编一个好听的假名字。
  * `(替代)` 只在服务端判定换过型号时加——判据同源于记账那一处，前端不自己比字符串。
  */
 export function servedModelLabel(input: {
@@ -206,7 +235,8 @@ export function servedModelLabel(input: {
 }): string | null {
   const model = input.served?.trim() || input.requested?.trim() || '';
   if (!model) return null;
-  const label = MODEL_LABELS[model] ?? model;
+  const tier = MODEL_TIERS[model];
+  const label = tier ? `${model} · ${tier}` : model;
   return input.mismatch ? `${label}（替代）` : label;
 }
 

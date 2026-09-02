@@ -266,9 +266,175 @@ function toHistory(rows: store.MessageRow[]): ChatMessage[] {
     .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content! }));
 }
 
+/**
+ * 承诺短语表：**纯字面**，逐条比对，不做任何句法泛化。
+ *
+ * 【为什么退回字面表（manager 2026-09-02 终局裁决）】上一版是「完成标记 + 动作词 + 对象词」
+ * 的语义判定。它确实多抓了几条同义谎话，但四轮收窄，每一轮都把误伤搬到**另一族如实句**上：
+ *   第一轮「建议你把材料清单准备好了再去社保中心。」
+ *   第二轮「你可以自己建一份待办清单，把这三件事列进去就好了。」
+ *   第三轮「你把工资流水传进档案了吗？」
+ *   第四轮「你刚才把解除通知存进档案了，我已经看到。」
+ * 每一次都是**同一个病**：泛化出来的规则不认施事、不认语气，中文里「已 / 进 / 了」这三个字
+ * 本身没有承诺的意思，靠它们组合去猜一句话是不是断言，猜错的方向永远朝着误伤。
+ *
+ * 【口径：宁可漏判一次谎，也不凭空自我指控一次】
+ * 误伤（如实句被判承诺）= 阻断级缺陷；漏判（谎话没抓到）= 可接受。
+ * 漏判的代价是"这一轮少了一句纠正"，误伤的代价是**系统对着一句老实话追加一段自我指控**——
+ * 用户读到的是一条自相矛盾的回复（真机第 4 行那一轮正是这个形状）。两者不对称，所以判据不对称。
+ *
+ * 【表的两截】
+ *  ① prompt.ts 输出纪律那 12 条禁令字面形：**提示词禁什么，这里就认什么**。
+ *    两边各写各的，就会出现"提示词禁了、纠正认不出"，或反过来"纠正在纠正一句我们从没禁过的话"。
+ *  ② 复核历次核实的谎话里提炼出的**完整短语**：每条都必须同时带
+ *    **施事 + 完成态 + 行动卡/待办**三要素的字面。三要素缺一不收——缺了就会去命中如实句。
+ *
+ * 【第二截为什么从 14 条砍到 7 条（复核 RV6，manager 2026-09-02 裁决）】
+ * 上一版第二截收了 14 条，其中 7 条其实不满足三要素，复核在 c2c1983 上当场抓到 9 条误伤：
+ *   · 缺施事（短语本身没说是谁干的，用户干的同样命中）——
+ *     「落进档案了」→「你刚才传的三份材料都落进档案了」
+ *     「记到档案里了」→「这几个日期你已经记到档案里了吗？」
+ *     「写进你的档案了」→「你把三条底线写进你的档案了」
+ *     「已经进你的待办了」→「面谈时间已经进你的待办了吗？」
+ *     「安排进你的待办了」→「HR 约谈的时间你安排进你的待办了吗？」
+ *   · 对象不是行动卡（时间线录入、文书草稿都是**真实发生的工具事件**，说出来不是谎）——
+ *     「我已经录入档案」→「你说的两个日期我已经录入档案的时间线，行动卡这轮还没挂」
+ *     「为你创建了」→「我已经为你创建了一份异议邮件草稿，在文书页」
+ * 这 7 条一并删除。**不许用泛化补回**——泛化正是前四轮的病根。
+ *
+ * 【故意不收的形】裸的「挂进」「记进档案」「存进档案」「进你的档案」：
+ * 「我没能把行动卡挂进档案」是如实报告，「你刚才把解除通知存进档案了」是在说用户，
+ * 收进来就把老实话判成谎话。同理不收裸「了」——中文里最没有信息量的那个字。
+ *
+ * 【已知漏判形态】(本轮实测，见 action-card-promise.test.ts 的谎话组)
+ * 字面表天然追不上模型的措辞变体。当前已知会漏的形态：
+ *  · 施事词与完成态被数量词/内容词隔开且不成固定串的，如「已为你创建了两张行动卡」之外的同族改写；
+ *  · 完全新造的同义动词（如「录进」「归进」「入了档」）；
+ *  · 把承诺拆成两句说（「行动卡我处理好了。都在档案里。」）；
+ *  · **RV6 删表带来的 7 条**（测试里「已知漏判」组逐条断言 MISS，防止有人日后靠泛化"修"回来）：
+ *    「这三件事我已经写进你的档案了」「已为你创建了两张行动卡」「我把上面三件事记到档案里了」
+ *    「这几项我已经录入档案」「这几件事已经进你的待办了」「已经把这两件事安排进你的待办了」
+ *    「三件事都落进档案了」——它们的字面与如实句完全同形，收了就必然误伤，只能漏。
+ * 漏掉的这些**不补进来靠泛化解决**——泛化就是上面那四轮的病根。要补只能补字面：
+ * 真机抓到一条新说法，就往表里加一条完整短语，并在判据表的如实组跑一遍确认不误伤。
+ */
+const ACTION_CARD_PROMISE_PHRASES = [
+  // ── ① prompt.ts 输出纪律的 12 条禁令字面形 ──
+  '已挂上',
+  '已经挂上',
+  '已挂进',
+  '已经挂进',
+  '已挂到',
+  '已产出行动卡',
+  '已生成行动卡',
+  '已记进档案',
+  '已经记进档案',
+  '帮你记进档案',
+  '记进了档案',
+  '按截止时间提醒',
+  // ── ② 谎话提炼的完整短语：每条**字面**上必须三要素齐全（施事 / 完成态 / 行动卡·待办）──
+  // 施事「我」｜完成态「已经…好了」｜对象「行动卡」
+  '行动卡我已经建好了',
+  // 施事：对象即行动卡，只有系统能产出（用户无从"生成行动卡"）｜完成态「已经…好了」｜对象「行动卡」
+  '行动卡已经生成好了',
+  // 施事「我给你」｜完成态「好了」｜对象「行动卡」
+  '行动卡我给你建好了',
+  // 【第七轮删掉的 4 条（复核 RV7，manager 2026-09-02 裁决：三要素必须是字面，不认"隐含施事"）】
+  //   「帮你挂上」——缺完成态字面，如实跟踪句「上一轮帮你挂上的两张行动卡，做到哪一步了？」命中；
+  //   「我已经替你安排妥当」——短语自身无行动卡/待办；
+  //   「加到你的待办清单里了」「落进你的档案了」——无施事，「你把面试加到你的待办清单里了吗」
+  //   「你刚才传的三份材料都落进你的档案了」这类用户施事的如实句命中，e2e 实跑已追加自我指控。
+  //   四条对应的谎话进「已知漏判」组断言 MISS。**不许改成正则、不许靠泛化补回。**
+] as const;
+
+/**
+ * 否定：这一句是**如实报告**或在**引述**，不是承诺。
+ *
+ * 【为什么字面表还需要这一条】纠正段自己那一段里逐字写着「已挂上」「已记进档案」——
+ * 它在**引用**模型可能说过的话，好让用户知道以哪一行为准。没有这条排除，
+ * 纠正段会命中自己，于是给自己再追加一段纠正。那一句里带着「档案里现在没有这几张卡」，
+ * 靠否定认得出来。同族的还有「我没能把行动卡挂进你的档案」「我无法直接生成行动卡」。
+ */
+const CLAIM_NEGATED = /没能|没有|未能|无法|不能|没法|不了/;
+
+/**
+ * 这段正文里有没有**声称行动卡已经存在**的句子。没有就不该有纠正段。
+ *
+ * 【为什么按句切分，而不是整段找短语】否定排除是**逐句**成立的：
+ * 「档案里现在没有这几张卡」否定的是它自己那一句，不该赦免同一段里别处的一句谎话。
+ * 断言在一句话里做出，排除也就在一句话里做。
+ */
+export function claimsActionCardExists(body: string): boolean {
+  return body
+    .split(/[。！？!?；;\n]+/)
+    .some((sentence) =>
+      !CLAIM_NEGATED.test(sentence) && ACTION_CARD_PROMISE_PHRASES.some((p) => sentence.includes(p)),
+    );
+}
+
+/**
+ * 【尽力而为的记录性写库：只此一个入口】失败就当这件事没做成，**绝不许拖着落库与记账一起死**。
+ *
+ * 【分层口径】`store.finalizeMessage` + `chargeTurn` 是一等公民——正文与账丢了是永久损失；
+ * 推荐占位 / 危机卡留痕 / 杠杆闸留痕是**记录性**的，丢了只影响下一轮的去重与统计。
+ * 这两类排在同一段收尾代码里，却不该同生共死。
+ *
+ * 【为什么是一个函数，而不是各包各的 try】(复审 2026-09-02 RV2-①)
+ * 上一轮给 `referralOffers.tryOffer` 与 `store.recordCrisisCardGiven` 各包了一层 try/catch，
+ * **漏掉了排在它们前面的杠杆闸留痕**（`cases.addTimelineEvent`）。故障注入实测：
+ * `BEFORE INSERT ON timeline_events WHEN NEW.title='危机轮杠杆闸拦截' RAISE(ABORT)`
+ * ⇒ 危机轮 content 停在 NULL、token_usage 0、gongdao_ledger 0——**F-02 原样复发**。
+ *
+ * 独立写 N 次就会忘第 N 次，那是**默认形态而不是疏忽**：所以收成唯一入口，
+ * 再加一条结构守卫钉住「`finalizeMessage` 之前不许有裸的记录性写库调用」
+ *（best-effort-writes.test.ts，改回裸调用即红）。新增一个同类写库时，
+ * 守卫会点名，而不是等下一次故障注入才发现。
+ *
+ * 【吞但不静音】错误进 `console.error('[chat] …')`：事后要能从服务端日志查到是哪一步断的。
+ */
+function bestEffort<T>(label: string, fn: () => T, fallback: T): T {
+  try {
+    return fn();
+  } catch (err) {
+    console.error(`[chat] ${label}`, err);
+    return fallback;
+  }
+}
+
 export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
-  const { db, caseId, userId, emit } = input;
+  const { db, caseId, userId } = input;
   const now = input.now ?? new Date();
+
+  /**
+   * 【下发失败不许掀翻这一轮】——**"给用户看"是一条链，"记进档案 / 记账"是另一条，
+   * 前者断了不该传染后者。**
+   *
+   * 实测事故（2026-09-02 真机）：用户读完回答后离开或刷新，SSE 的 controller 随之关闭，
+   * 此后每一次 `controller.enqueue` 都抛 `TypeError: Invalid state: Controller is already closed`。
+   * 那个异常是从 `timeline_add` 里的 `ctx.emit` 抛出来的，于是一路掀翻整个 tool-loop：
+   *   · 排在它后面的 `action_card` / `deadline_set` **再也不会执行**
+   *     → 时间线写进去了，`action_items`／`deadlines` 恒空（这就是"承诺了行动卡却没有卡"）；
+   *   · `store.finalizeMessage` 与 `chargeTurn` 永远走不到
+   *     → assistant 行的 content 停在 NULL（刷新后那一轮**永久消失**）、账本一行不落。
+   * 三个症状一个病因。而用户走开与我们该不该记账无关——**模型的钱已经花掉了**。
+   *
+   * 【为什么包在 runTurn 而不是各调用点】与 `chargeTurn` 同一条理由：runTurn 是**收敛点**，
+   * SSE 路由、评测脚本、日后任何入口调的都是它；包在调用点上就是"漏接一个入口即失效"。
+   *
+   * 【为什么断一次就彻底停发】连接已经没了，后面每一帧都会再抛一次——
+   * 继续试只是把同一个异常重复吞 20 遍，还会掩盖真正第一现场的那条日志。
+   */
+  let sinkBroken = false;
+  const emit: AgentEventSink = (e) => {
+    if (sinkBroken) return;
+    try {
+      input.emit(e);
+    } catch (err) {
+      sinkBroken = true;
+      // 吞掉但不静音：这一轮之后的帧用户都收不到了，这件事必须能在服务端日志里查到。
+      console.error('[chat] SSE 下发中断，本轮改为静默跑完（落库与记账照常）', err);
+    }
+  };
 
   // 归属校验先行（lib/cases 红线：不是自己的案件与不存在的案件返回同一个错误）
   const owned = cases.getCase(db, { caseId, userId, timelineLimit: 1 });
@@ -880,14 +1046,18 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
         model_body_raw: modelBody,
       },
     });
-    cases.addTimelineEvent(db, {
-      caseId,
-      userId,
-      happenedAt: now.toISOString(),
-      kind: '系统动作',
-      title: '危机轮杠杆闸拦截',
-      detail: `处置：${action}｜消息 #${messageId}`,
-    });
+    // 【同为"尽力而为"那一类】这条留痕排在 `finalizeMessage` 之前，抛出去就是危机轮的
+    // 正文停在 NULL、这一轮不记账——用户刚说完"要是人没了"，那一轮反而是最不能丢的。
+    // 拦截统计丢一条只影响人工复核的计数。分层与入口见 bestEffort。
+    bestEffort('危机轮杠杆闸留痕失败（本轮落库与记账照常，这次拦截不进时间线）', () =>
+      cases.addTimelineEvent(db, {
+        caseId,
+        userId,
+        happenedAt: now.toISOString(),
+        kind: '系统动作',
+        title: '危机轮杠杆闸拦截',
+        detail: `处置：${action}｜消息 #${messageId}`,
+      }), undefined);
   }
 
   if (citations.found.length > 0) {
@@ -950,14 +1120,116 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     });
   }
 
+  // ── 行动卡承诺纠正段（F-09）：**承诺了却没落库，必须当场说清，且说进档案** ──
+  //
+  // 【实测事故】真机 staging 库：某一轮正文写着「两张行动卡已挂上，系统会按截止时间提醒你」，
+  // 而该案 `action_items` 一张都没有。补救轮已经跑过（`actionCardMissing` 即"补救之后仍然没有"），
+  // 唯一的信号是 `ACTION_CARD_MISSING` 这条 notice——而它在前端映射表里是 `null`，
+  // **屏幕上一个字都不出**。于是用户读到一句承诺、点开档案空的、没有任何地方说过它失败了。
+  //
+  // 【为什么写进正文而不是把那条 notice 改成可见】notice 是**流帧**，刷新即消失；
+  // 而那句骗人的承诺是**归档正文**的一部分，永久留在历史里。纠正必须和它同寿命，
+  // 否则 F5 之后又回到「正文承诺了、档案空的、没人解释」——F-02 修的正是这条刷新链路。
+  //
+  // 【为什么不去正文里把那句话剥掉】它已经逐字流给用户了。事后从归档里抹掉，
+  // 就成了「用户看见过、档案里没有」——推荐段注释里那句"审计上最坏的一种不一致"，方向相反而已。
+  // 所以是**追加纠正**，不是删除。
+  //
+  // 【位置】与推荐段同理：放在所有出口闸之后（它是我们自己的确定性文案，不该被闸剥），
+  // 且必须在 `finalizeMessage` 之前进 `text`。排在推荐段之前，让推荐段稳居末尾。
+  //
+  // ── 两个前提，缺一不许追加（复审 2026-09-02 定）──
+  //
+  // 【① 正文里确有承诺句】纠正的对象是**一句具体的谎**，不是"这一轮没有卡"这件事。
+  // 只判 `actionCardMissing` 就是无条件触发：真机第 4 行「按上面那张行动卡先做第一件」
+  // 这一轮一个字的承诺都没有，却会被永久追加一段"我没能把行动卡挂进你的档案"——
+  // **系统凭空自我指控**，而"这一轮没产出卡"该由 ACTION_CARD_MISSING 那条 notice 记，
+  // 那是运维信号，不是给用户看的忏悔。判据表见 claimsActionCardExists（语义判定 ∪ 提示词禁令原文）。
+  //
+  // 【② 不是危机轮】这是 KNOWLEDGE_MISS 那条注释**亲手写过的反面**：
+  // 用户刚说完"要是人没了"，归档正文里多出一段「补一句实话：这一轮我没能把行动卡
+  // 挂进你的档案」——那是系统在谈论自己的能力，而不是在回应这个人。
+  // 危机轮一律静默：notice 照发（内部指标要看见），归档正文一个字都不加（外部通知要克制）。
+  //
+  // 【为什么那句加粗后面必须换行】(复审 2026-09-02 RV2-②) 真机 DOM 实测这一段渲染成
+  // `<p>**补一句实话：……。**上面正文里…</p>`——**strong 计数 0，星号原样摊在屏幕上**。
+  // 根因是 CommonMark 的 right-flanking 规则：闭合的 `**` 前面是「。」（标点）、
+  // 后面是「上」（既非空白也非标点），两条都不满足，于是它**不成其为闭合定界符**。
+  // 这不是渲染器的毛病，中文标点紧跟加粗收尾就是这个下场。
+  // 修法是让这一句**自成一段**：闭合 `**` 后面跟空行，右侧是空白就能闭合。
+  // 判据钉在 action-card-correction-render.test.tsx（真渲染器出 AST，去掉换行即红）。
+  if (actionCardMissing && !crisis.triggered && claimsActionCardExists(text)) {
+    const correction =
+      '\n\n---\n\n' +
+      '**补一句实话：这一轮我没能把行动卡挂进你的档案。**\n\n' +
+      '上面正文里如果出现了「已挂上」「已记进档案」这类说法，以这一行为准——档案里现在没有这几张卡。' +
+      '你回我一句「把上面几件事记进档案」，我就补上。';
+    emit({ event: 'delta', data: { text: correction } });
+    text += correction;
+  }
+
+  // ── D14 推荐段：**独立段落追加在正文之后，绝不插进正文中间** ──
+  //
+  // 【为什么放在所有出口闸之后】它是我们自己的确定性文案，不该被判「模型在推销」的那道闸剥掉；
+  // 而它又必须在 `store.finalizeMessage` 之前进 `text`，否则归档里没有它——
+  // **用户看见了、档案里没有，是审计上最坏的一种不一致。**
+  //（这一段此前排在 finalizeMessage 之后，注释与代码正好说反了：推荐段下发给了用户，
+  //  归档正文里却没有它。同批修的还有帧序——它插在 usage 与 done 之间，
+  //  把「usage / done 是最后两帧」这条契约在推荐轮里撞坏。）
+  //
+  // 【先占位再开口】`tryOffer` 返回 true 才拼文案。倒过来（先说后记）一旦记录那步失败，
+  // 下一轮会再推一遍——**反复骚扰就是这么来的**（referral-offers.ts 的原话）。
+  // **一轮最多成一次**：按序试，第一个占位成功的就是本轮的推荐，其余不再试。
+  //
+  // 【为什么这里走 bestEffort】(复审 2026-09-02) 推荐段被挪到 `finalizeMessage` **之前**
+  // 是对的（否则用户看见了、档案里没有），但代价是它成了收尾链上的一环：
+  // `referral_offers` 的 INSERT 一抛（撞约束、库被锁、磁盘满），异常就穿出 runTurn，
+  // 正文停在 NULL、这一轮不记账——**F-02 原样复发，只是换了个病灶**。
+  // 分层与唯一入口见 `bestEffort` 的注释：一等公民照抛，记录性写库一律尽力而为。
+  //
+  // 【失败一律当"没占到位"】方向与「先占位再开口」一致：占位这步没成功就不开口。
+  // 反过来（占不到也照说）会在写库恢复之后变成"台账里没有、用户已经被推过"——
+  // 下一轮再推一遍，正是这段注释开头要防的那种反复骚扰。
+  let referralScene: string | null = null;
+  for (const scene of referralDecision.scenes) {
+    const claimed = bestEffort(`推荐位点「${scene}」占位失败（本轮不推，落库与记账照常）`, () =>
+      referralOffers.tryOffer(db, {
+        userId,
+        caseId,
+        scene,
+        threadId: thread.id,
+        note: `message #${messageId}`,
+      }), false);
+    if (claimed) {
+      referralScene = scene;
+      const block = `\n\n---\n\n${renderReferral(scene)}`;
+      emit({ event: 'delta', data: { text: block } });
+      text += block;
+      emit({
+        event: 'notice',
+        data: {
+          code: 'REFERRAL_OFFERED',
+          message: `本轮在「${scene}」位点推荐了一次心理咨询，同一位点不再推第二次。`,
+          referral_scene: scene,
+        },
+      });
+      break;
+    }
+  }
+
   // tokens_json 存 {model, usage, servedModel}：billing 对账要的是「按哪个计费键、四桶各多少、
   // 上游实际回显了谁」，只存四桶会在换模型后对不上账（token_usage.model 与这里必须能互验）；
   // servedModel 是回填那条路唯一的方向裁决依据（历史行缺它即按「未回显」原价补记）。
   // 资源卡落痕按**实际输出**判，而不是按「我们注入了没有」：
   // 模型完全可能自己调 knowledge_search 找到这张卡并给出去（实测发生过），
   // 那一次同样要计入 24 小时窗口，否则用户会连着两轮看见同一张卡。
+  //
+  // 【同为"尽力而为"那一类】它也是排在 finalizeMessage 之前的写库调用（写 timeline_events）。
+  // 抛出去的下场与推荐段一模一样：正文停在 NULL、这一轮不记账。留痕丢了只影响下一轮
+  // 会不会重印一张资源卡；正文与账丢了是永久损失。两者不该同生共死（入口见 bestEffort）。
   if (responseGaveCrisisCard(text)) {
-    store.recordCrisisCardGiven(db, caseId, CRISIS_CARD_MARKER, crisis.triggered ? `命中：${crisis.matched.join('、')}` : '模型主动给出');
+    bestEffort('危机资源卡留痕失败（本轮落库与记账照常，下一轮可能重印一次卡）', () =>
+      store.recordCrisisCardGiven(db, caseId, CRISIS_CARD_MARKER, crisis.triggered ? `命中：${crisis.matched.join('、')}` : '模型主动给出'), undefined);
   }
 
   const usageReport: UsageReport = { model: routed.client.billingModel, usage, servedModel };
@@ -975,40 +1247,6 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
       cached_write: usage.cachedWrite,
     },
   });
-  // ── D14 推荐段：**独立段落追加在正文之后，绝不插进正文中间** ──
-  //
-  // 【为什么放在所有出口闸之后】它是我们自己的确定性文案，不该被判「模型在推销」的那道闸剥掉；
-  // 而它又必须在 `store.finalizeMessage` 之前进 `text`，否则归档里没有它——
-  // **用户看见了、档案里没有，是审计上最坏的一种不一致。**
-  //
-  // 【先占位再开口】`tryOffer` 返回 true 才拼文案。倒过来（先说后记）一旦记录那步失败，
-  // 下一轮会再推一遍——**反复骚扰就是这么来的**（referral-offers.ts 的原话）。
-  // **一轮最多成一次**：按序试，第一个占位成功的就是本轮的推荐，其余不再试。
-  let referralScene: string | null = null;
-  for (const scene of referralDecision.scenes) {
-    const claimed = referralOffers.tryOffer(db, {
-      userId,
-      caseId,
-      scene,
-      threadId: thread.id,
-      note: `message #${messageId}`,
-    });
-    if (claimed) {
-      referralScene = scene;
-      const block = `\n\n---\n\n${renderReferral(scene)}`;
-      emit({ event: 'delta', data: { text: block } });
-      text += block;
-      emit({
-        event: 'notice',
-        data: {
-          code: 'REFERRAL_OFFERED',
-          message: `本轮在「${scene}」位点推荐了一次心理咨询，同一位点不再推第二次。`,
-          referral_scene: scene,
-        },
-      });
-      break;
-    }
-  }
 
   // 型号三件套随收尾帧下发（events.ts done 的注释）：meta 那时只知道我们请求了谁。
   // 判「换没换」不在这儿自己写 `!==`：前缀 relay/ 与变体后缀 :think 都不是换型号，

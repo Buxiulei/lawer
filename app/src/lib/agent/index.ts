@@ -12,6 +12,7 @@ export {
   type NoticeCode,
   type RecordTool,
 } from './events';
+export { createSseSink, type SseController, type SseSink } from './sse-sink';
 export { CHARTER } from './charter';
 export { intakeStage, intakeDirective, recapBrief, TIMELINE_DONE_THRESHOLD, type IntakeStage } from './intake';
 export { loadCaseSnapshot, type CaseSnapshot } from './snapshot';
