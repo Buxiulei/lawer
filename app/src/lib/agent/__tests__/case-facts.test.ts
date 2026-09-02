@@ -140,6 +140,51 @@ function uid2Snapshot(): CaseSnapshot {
   });
 }
 
+/**
+ * 富形态：uid=2 之上补 2 个公司主体 + 3 项金额诉求。
+ * 【为什么要它】公司/诉求的统计行有两条分支，uid=2 走的是「0 个/0 项」那条；
+ * 只用 uid=2 断言，非零分支里的 `rows.length` 改成 `rows.length + 1` 也没人吭声（复审 RV-F1）。
+ */
+function richSnapshot(): CaseSnapshot {
+  return {
+    ...uid2Snapshot(),
+    companies: [
+      {
+        id: 1,
+        case_id: 2,
+        name: '宜信惠民（北京）信息科技有限公司',
+        uscc: '91110000MA00000000',
+        role: '签约主体',
+        legal_rep: '张三',
+        risk_notes: null,
+        sources_json: null,
+        created_at: '2026-08-20 09:00:00',
+      },
+      {
+        id: 2,
+        case_id: 2,
+        name: '宜信普惠信息咨询（北京）有限公司',
+        uscc: null,
+        role: '发薪主体',
+        legal_rep: null,
+        risk_notes: null,
+        sources_json: null,
+        created_at: '2026-08-20 09:00:00',
+      },
+    ] as CompanyProfileRow[],
+    claims: Array.from({ length: 3 }, (_, i) => ({
+      id: i,
+      case_id: 2,
+      kind: `诉求${i}`,
+      amount_fen: 100000 * (i + 1),
+      calc_json: null,
+      basis: '依据若干',
+      status: '待定',
+      created_at: '2026-08-20 09:00:00',
+    })) as ClaimRow[],
+  };
+}
+
 // ========== G-F0 单一入口 ==========
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -193,6 +238,71 @@ describe('G-F1 零编造：缺的就是缺的，不给默认值', () => {
     expect(text).not.toMatch(/入职日期：\d/);
   });
 
+  /** 从渲染文本里把某个统计行的数字抠出来。抠不到本身就是失败——统计行不许消失。 */
+  function statNum(text: string, re: RegExp): number {
+    const m = text.match(re);
+    expect(m, `渲染里找不到统计行 ${re}`).not.toBeNull();
+    return Number(m![1]);
+  }
+
+  /**
+   * ★统计行逐值核对：每个计数都必须等于 snapshot 里对应数组的长度。
+   *
+   * 【为什么单靠"4 位数字有来源"不够】计数是 1~2 位数，那条判据根本看不见它们；
+   * 复审实测把「证据总数 +1 / 期限条数 +1 / 公司个数 +1 / 行动卡张数 +1 / 诉求项数 +1 /
+   * 历史最早日期写死」六种编造打进渲染器，全套测试零失败（rd-case-facts/rv-fabrication-mutation.log
+   * 行 B/C/D/E/F/G）。运行时今天读的都是 rows.length，但一次把 rows.length 误写成
+   * shown.length 的重构就会把假总数灌进 prompt——而假总数正是模型最信、最不会去质疑的那种事实。
+   */
+  function expectStatsMatchSnapshot(label: string, s: CaseSnapshot) {
+    const text = renderCaseFacts(buildCaseFacts(s));
+    expect(statNum(text, /证据共 (\d+) 条/), `${label} 证据总数`).toBe(s.evidence.length);
+    expect(statNum(text, /法定期限：(\d+) 条/), `${label} 期限条数`).toBe(s.deadlines.length);
+    expect(statNum(text, /已登记的公司主体：(\d+) 个/), `${label} 公司个数`).toBe(s.companies.length);
+    expect(statNum(text, /未完成的行动卡：(\d+) 张/), `${label} 行动卡张数`).toBe(s.openActions.length);
+    expect(statNum(text, /已登记的金额诉求：(\d+) 项/), `${label} 诉求项数`).toBe(s.claims.length);
+    expect(statNum(text, /首诊四项已记录 (\d+)\/4/), `${label} 首诊已记录数`).toBe(
+      [s.case.employed_from, s.case.position, s.case.monthly_wage_fen, s.case.contract_count].filter(
+        (v) => v != null,
+      ).length,
+    );
+    // 分类计数：8 类逐类核对，不是"出现过就算"
+    for (const cat of EVIDENCE_CATEGORIES) {
+      const n = s.evidence.filter((e) => e.category === cat).length;
+      expect(text, `${label} 分类计数 ${cat}`).toContain(`${cat} ${n}`);
+    }
+    // 时间线：条数 + 最早 1 条的日期都得对得上（锚点行是工龄起点）
+    if (s.timeline.length) {
+      expect(statNum(text, /档案里最近的 (\d+) 条事件/), `${label} 时间线条数`).toBe(s.timeline.length);
+      expect(text, `${label} 时间线最早 1 条`).toContain(s.timeline[s.timeline.length - 1].happened_at);
+    } else {
+      expect(text).toContain('时间线：0 条');
+    }
+    // 历史统计：总数与最早日期都来自 historyStats，不许写死
+    if (s.historyStats.total) {
+      expect(statNum(text, /本案历史消息共 (\d+) 条/), `${label} 历史总数`).toBe(s.historyStats.total);
+      expect(text, `${label} 历史最早日期`).toContain(
+        `（最早 ${s.historyStats.firstAt!.slice(0, 10)}）`,
+      );
+    } else {
+      expect(text).toContain('本案还没有已落库的历史消息');
+    }
+    // 免责句常驻：证据 0 条时最容易被"顺手省略"，而那正是最需要它的形态
+    expect(text, `${label} 免责句`).toContain(EVIDENCE_DISCLAIMER.replace(/^- /, ''));
+  }
+
+  it('★uid=2 形态：六个统计行逐值等于 snapshot（变异：任一 rows.length + 1 → 红）', () => {
+    expectStatsMatchSnapshot('uid2', uid2Snapshot());
+  });
+
+  it('★富形态（公司 2 / 诉求 3）：非零分支的计数同样逐值核对', () => {
+    expectStatsMatchSnapshot('rich', richSnapshot());
+  });
+
+  it('★全空档案：0 也得是真的 0，且证据 0 条时免责句仍在（变异：0 条时省略免责句 → 红）', () => {
+    expectStatsMatchSnapshot('empty', makeSnapshot());
+  });
+
   it('渲染出来的每一串 4 位以上数字都能在 snapshot 里找到同值来源（变异：编一个金额/日期 → 红）', () => {
     const snapshot = uid2Snapshot();
     const json = JSON.stringify(snapshot);
@@ -228,6 +338,16 @@ describe('G-F2 缺失显式化：没有的东西必须写出来「档案里没�
     const text = render({ identity: { realName: null, authStatus: '已实名', nameUnreadable: true } });
     expect(text).toContain('解密失败');
     expect(text).not.toContain('姓名：未实名');
+  });
+
+  it('★realName 有值但 auth_status 不是已实名 → 一个字都不许印（变异：删掉渲染器的 authStatus 闸 → 红）', () => {
+    // 裁决①的条件是**两条**：已实名 且 解得开。snapshot.loadIdentity 卡一次、渲染器再卡一次；
+    // 复审实测把 loadIdentity 里的 auth_status 条件删掉，全套 3811 例零失败（rv-fabrication-mutation.log 变异 A）。
+    for (const st of ['未认证', '待审']) {
+      const text = render({ identity: { realName: '冒名者', authStatus: st, nameUnreadable: false } });
+      expect(text, `authStatus=${st} 不该印姓名`).not.toContain('冒名者');
+      expect(text).toContain('姓名：未实名，档案里没有你的姓名，文书里我不会替你填');
+    }
   });
 
   it('★否定事实：19 条证据里 0 条合同，必须写出「合同 0」（变异：0 件的类别跳过 → 红）', () => {
@@ -307,6 +427,70 @@ describe('G-F3 预算上限：极端数据也不越界', () => {
     const text = renderCaseFacts(buildCaseFacts(extreme));
     expect(text).toContain('明细因预算未注入');
     expect(text).toContain('首诊四项已记录');
+  });
+});
+
+describe('G-F3b 时间线降级不是悬崖：任何形态下都留着最早 1 条锚点', () => {
+  /**
+   * 复审 MF-1：原实现里时间线是「整区压成统计行」——证据明细压掉后仍超预算，
+   * 时间线 2400 字整段消失（含裁决③要求永远保留的入职锚点），卡只剩 2300 字、
+   * 2200 字预算白白空置。触发形态可达：uid=2 + goal 400 字 + 底线 400 字 + 30 条时间线×104 字明细。
+   */
+  const realistic = makeSnapshot({
+    case: {
+      ...CASE_BASE,
+      goal: '目'.repeat(400),
+      bottom_line: '底'.repeat(400),
+      employed_from: '2020-11-26',
+      monthly_wage_fen: 3644000,
+      position: '高级风控经理',
+      contract_count: '续签过一次',
+    },
+    timeline: timeline(30).map((e) => ({ ...e, detail: '细'.repeat(104) })),
+    evidence: evidence(19),
+    openActions: actions(8),
+    historyStats: { total: 40, firstAt: '2026-08-01 00:00:00' },
+    deadlines: [
+      {
+        id: 1,
+        case_id: 2,
+        kind: '仲裁时效',
+        due_at: '2027-08-19',
+        derived_from: '解除之日 2026-08-19 起一年',
+        resolved_at: null,
+        created_at: '2026-08-20 09:00:00',
+      },
+    ],
+  });
+
+  const tlLines = (text: string) => (text.match(/^- 20\d\d-\d\d-\d\d｜/gm) ?? []).length;
+
+  it('★双满形态（30 条时间线×104 字 + goal/底线各 400 字）：时间线不整段消失', () => {
+    const events = realistic.timeline;
+    const text = renderCaseFacts(buildCaseFacts(realistic));
+    expect(text.length).toBeLessThanOrEqual(CASE_FACTS_BUDGET);
+    expect(text).toContain('起点锚点');
+    expect(text).toContain(events[events.length - 1].title); // 入职锚点那条
+    expect(text).toMatch(/共 30 条，此处只列 \d+ 条/);
+    // ★预算不许空置：整区丢弃时这里是 0，重裁后应当仍装得下若干条最新事件
+    expect(tlLines(text)).toBeGreaterThan(5);
+  });
+
+  it('★极端形态（200 条时间线 + 100 证据 + 5000 字 goal）：锚点仍在，且不越界', () => {
+    const events = timeline(200);
+    const text = renderCaseFacts(
+      buildCaseFacts(
+        makeSnapshot({
+          case: { ...CASE_BASE, goal: '目'.repeat(5000), bottom_line: '底'.repeat(5000) },
+          timeline: events,
+          evidence: evidence(100),
+          openActions: actions(50),
+        }),
+      ),
+    );
+    expect(text.length).toBeLessThanOrEqual(CASE_FACTS_BUDGET);
+    expect(text).toContain('起点锚点');
+    expect(text).toContain(events[events.length - 1].title);
   });
 });
 

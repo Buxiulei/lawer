@@ -77,6 +77,12 @@ export interface FactSection {
   stat: string;
   /** 明细行：区内已按条数上限/单条上限裁过；仍超预算时整段被 DETAIL_DROPPED 顶掉 */
   detail: string[];
+  /**
+   * 「按剩余预算重裁」的能力。有它的分区**不整段丢**，只缩到 room 字符——
+   * 时间线用它：整段丢会连最早 1 条起点锚点一起丢掉（裁决③要求永远保留），
+   * 而且会白白空出两千多字预算（复审 MF-1：卡只剩 2300 字、2200 字预算空置）。
+   */
+  refit?: (room: number) => string[];
 }
 
 export interface FactCard {
@@ -123,7 +129,10 @@ function identitySection(s: CaseSnapshot): FactSection {
       detail: [],
     };
   }
-  if (id.realName) {
+  // 第二道闸：姓名明文出境的条件是 manager 裁决①的**两条**——已实名 **且** 解得开。
+  // snapshot.loadIdentity 已经卡过一次；这里再卡一次是因为渲染器拿到什么就印什么，
+  // 上游哪天把 auth_status 条件删了（复审 RV-F2 的变异 A），这一行是最后一道门。
+  if (id.realName && id.authStatus === '已实名') {
     return {
       key: 'identity',
       priority: 0,
@@ -300,6 +309,33 @@ function claimSection(s: CaseSnapshot): FactSection {
  * P2 时间线。裁剪时**永远保留最早 1 条**（入职/起点锚点）+ 最新若干条：
  * 最早那条是年限计算的起点，裁掉它，模型算工龄就只能从"最近发生的事"往回猜。
  */
+const TIMELINE_ANCHOR = '- （下面这条是本卡收到的最早一条事件，起点锚点，永不裁掉）';
+
+/**
+ * 时间线明细按给定字符预算重裁。**room 再小也返回三行**（留痕 + 锚点说明 + 最早 1 条），
+ * 绝不返回空数组：那正是复审 MF-1 指出的悬崖——整区一丢，工龄起点就没了，
+ * 模型只能从"最近发生的事"往回猜入职时间。
+ */
+function timelineDetail(lines: string[], room: number): string[] {
+  if (lines.length === 0) return [];
+  if (sumLen(lines) <= room) return lines;
+  const earliest = lines[lines.length - 1];
+  const kept: string[] = [];
+  // 先把锚点与留痕的位置留出来，再拿剩下的预算装最新的几条
+  let used = earliest.length + TIMELINE_ANCHOR.length + 120;
+  for (const l of lines.slice(0, -1)) {
+    if (used + l.length + 1 > room) break;
+    kept.push(l);
+    used += l.length + 1;
+  }
+  return [
+    ...kept,
+    trimmedNote(lines.length, kept.length + 1, `（最新 ${kept.length} 条 + 最早 1 条）`),
+    TIMELINE_ANCHOR,
+    earliest,
+  ];
+}
+
 function timelineSection(s: CaseSnapshot): FactSection {
   const lines = s.timeline.map(
     (e) =>
@@ -309,30 +345,14 @@ function timelineSection(s: CaseSnapshot): FactSection {
     ? `- 档案里最近的 ${lines.length} 条事件（倒序，最新在前）〔用户自述待核实——全部是用户口述落档，没有第三方证据支撑〕`
     : '- 时间线：0 条〔未记录〕——还没有任何已落档的事件。';
 
-  let detail: string[];
-  if (lines.length === 0) {
-    detail = [];
-  } else if (sumLen(lines) <= TIMELINE_BUDGET) {
-    detail = lines;
-  } else {
-    const earliest = lines[lines.length - 1];
-    const anchor = '- （下面这条是本卡收到的最早一条事件，起点锚点，永不裁掉）';
-    const kept: string[] = [];
-    // 先把锚点与留痕的位置留出来，再拿剩下的预算装最新的几条
-    let used = earliest.length + anchor.length + 120;
-    for (const l of lines.slice(0, -1)) {
-      if (used + l.length + 1 > TIMELINE_BUDGET) break;
-      kept.push(l);
-      used += l.length + 1;
-    }
-    detail = [
-      ...kept,
-      trimmedNote(lines.length, kept.length + 1, `（最新 ${kept.length} 条 + 最早 1 条）`),
-      anchor,
-      earliest,
-    ];
-  }
-  return { key: 'timeline', priority: 2, heading: '时间线', stat, detail };
+  return {
+    key: 'timeline',
+    priority: 2,
+    heading: '时间线',
+    stat,
+    detail: timelineDetail(lines, TIMELINE_BUDGET),
+    refit: (room: number) => timelineDetail(lines, room),
+  };
 }
 
 /**
@@ -428,16 +448,25 @@ function degradeOrder(card: FactCard): string[] {
  *
  * 【为什么上限必须是后置保证而不是"估算够用"】milestone-a3 那次就是按数据形态估的，
  * 实际数据一变就把 25k 字符灌进了 prompt。这里的三段裁剪把上限变成与数据形态无关的性质：
- * 区内裁 → 整区降级（P3→P2→P1）→ 兜底硬截。P0 永不降级，所以「我是谁、案子是哪个、
- * 期限还剩几天、历史我看不全」这四件事在任何数据形态下都在。
+ * 区内裁 → 整区降级（P3→P2→P1；带 refit 的分区改为按剩余预算重裁）→ 兜底硬截。
+ * P0 永不降级，所以「我是谁、案子是哪个、期限还剩几天、历史我看不全」这四件事
+ * 在任何数据形态下都在；时间线因为带 refit，最早 1 条锚点也一样在。
  */
-export function renderCaseFacts(card: FactCard): string {
+export function renderCaseFacts(input: FactCard): string {
+  // 浅拷贝一份分区：refit 会就地改写 detail，不能污染调用方手里的卡
+  const card: FactCard = { header: input.header, sections: input.sections.map((s) => ({ ...s })) };
   const dropped = new Set<string>();
   let out = compose(card, dropped);
   if (out.length <= CASE_FACTS_BUDGET) return out;
 
   for (const key of degradeOrder(card)) {
-    dropped.add(key);
+    const sec = card.sections.find((s) => s.key === key)!;
+    if (sec.refit) {
+      // 按剩余预算重裁而不是整段丢：把超出的那部分从本区明细里扣掉，锚点与留痕仍在
+      sec.detail = sec.refit(Math.max(sumLen(sec.detail) - (out.length - CASE_FACTS_BUDGET), 0));
+    } else {
+      dropped.add(key);
+    }
     out = compose(card, dropped);
     if (out.length <= CASE_FACTS_BUDGET) return out;
   }

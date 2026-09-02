@@ -888,8 +888,11 @@ describe('模式与会话', () => {
     // 历史每条带模式标签（跨模式历史要靠它标出来源，见 orchestrator.historyModeTag）
     expect(history).toContain('[问诊] 第一句');
     expect(history).toContain('[问诊] 第一轮回复');
-    // 本轮消息只出现一次，不会因为「先落库再取历史」而重复
-    expect(history.filter((c) => c === '第二句')).toHaveLength(1);
+    // 本轮消息只出现一次，不会因为「先落库再取历史」而重复。
+    // **必须按后缀数**：历史条目带 [问诊] 前缀，按全等数的话重复的那条是 '[问诊] 第二句'，
+    // 永远数到 1——本工单加前缀时差点就这么把这道守卫拆了牙（复审 MF-2）。
+    expect(history.filter((c) => c.endsWith('第二句'))).toHaveLength(1);
+    expect(history).not.toContain('[问诊] 第二句');
   });
 });
 
