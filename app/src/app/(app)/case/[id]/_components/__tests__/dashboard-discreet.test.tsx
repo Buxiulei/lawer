@@ -26,49 +26,13 @@ import { DeadlineTiles } from '../DeadlineTiles';
 import { RecentRecords } from '../RecentRecords';
 import { FULL_JOURNEY, demoAttainments } from '../milestones';
 import { demoRecords } from '../dashboardData';
+import { unveiledText } from '@/app/_ui/__tests__/unveiled';
 
 /**
  * 断言的是**标记**（谁挂了 data-veil），不是运行时糊没糊，所以按低调**关**的状态渲染。
  * 糊层怎么实现是 _ui/veil 的事，这里只管「该挂的地方挂没挂」。
  */
 const ssr = (node: React.ReactNode) => renderToStaticMarkup(<>{node}</>);
-
-/**
- * 取出所有**没有** data-veil 的可见文字，用来问一句「这一屏上还有什么是清晰的」。
- *
- * 用配对标签的方式整棵子树剔除，不用正则一把梭：正则的非贪婪匹配会停在**第一个**
- * 闭合标签上，遇到嵌套（期限卡就是 data-veil 挂在外层、标题在里层）会少剔一截，
- * 于是守卫看起来在守、其实漏。
- */
-const VOID_TAGS = new Set(['img', 'br', 'hr', 'input', 'meta', 'link']);
-
-function unveiledText(html: string): string {
-  const tokens = html.split(/(<[^>]+>)/);
-  const out: string[] = [];
-  let skipDepth = 0; // >0 表示正在一棵被剔除的子树里
-  const stack: string[] = [];
-
-  for (const tok of tokens) {
-    if (!tok) continue;
-    if (!tok.startsWith('<')) {
-      if (skipDepth === 0) out.push(tok);
-      continue;
-    }
-    const closing = tok.startsWith('</');
-    const name = (tok.match(/^<\/?([a-zA-Z0-9]+)/)?.[1] ?? '').toLowerCase();
-    const selfClosing = tok.endsWith('/>') || VOID_TAGS.has(name);
-
-    if (closing) {
-      stack.pop();
-      if (skipDepth > 0 && stack.length < skipDepth) skipDepth = 0;
-      continue;
-    }
-    if (selfClosing) continue;
-    stack.push(name);
-    if (skipDepth === 0 && /\sdata-veil\b/.test(tok)) skipDepth = stack.length;
-  }
-  return out.join('').replace(/\s+/g, '');
-}
 
 describe('里程碑轨道', () => {
   const html = ssr(<MilestoneTrack track={FULL_JOURNEY} attainments={demoAttainments()} />);

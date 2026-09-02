@@ -20,6 +20,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BYO } from '@/app/_ui/byoAgent';
 import { CASE_WORDS } from '@/app/_ui/neutral';
+import { allText, unveiledText } from '@/app/_ui/__tests__/unveiled';
 
 const ui = { discreet: false };
 vi.mock('@/app/_ui/discreet', () => ({
@@ -54,43 +55,7 @@ vi.mock('../../_components/useAgentSetup', () => ({
 
 const AgentConnectPage = (await import('../page')).default;
 
-/**
- * 取出所有**没有** data-veil 的可见文字——即「不按住也读得到的那些字」。
- * 配对标签整棵子树剔除（同 dashboard-discreet.test 的做法）：正则一把梭会停在
- * 第一个闭合标签上，遇到嵌套少剔一截，于是守卫看起来在守、其实漏。
- */
-const VOID_TAGS = new Set(['img', 'br', 'hr', 'input', 'meta', 'link']);
-
-function unveiledText(html: string): string {
-  const tokens = html.split(/(<[^>]+>)/);
-  const out: string[] = [];
-  let skipDepth = 0;
-  const stack: string[] = [];
-
-  for (const tok of tokens) {
-    if (!tok) continue;
-    if (!tok.startsWith('<')) {
-      if (skipDepth === 0) out.push(tok);
-      continue;
-    }
-    const closing = tok.startsWith('</');
-    const name = (tok.match(/^<\/?([a-zA-Z0-9]+)/)?.[1] ?? '').toLowerCase();
-    const selfClosing = tok.endsWith('/>') || VOID_TAGS.has(name);
-
-    if (closing) {
-      stack.pop();
-      if (skipDepth > 0 && stack.length < skipDepth) skipDepth = 0;
-      continue;
-    }
-    if (selfClosing) continue;
-    stack.push(name);
-    if (skipDepth === 0 && /\sdata-veil\b/.test(tok)) skipDepth = stack.length;
-  }
-  return out.join('').replace(/\s+/g, '');
-}
-
 const html = () => renderToStaticMarkup(<AgentConnectPage />);
-const allText = (h: string) => h.replace(/<[^>]+>/g, '').replace(/\s+/g, '');
 
 beforeEach(() => {
   ui.discreet = false;

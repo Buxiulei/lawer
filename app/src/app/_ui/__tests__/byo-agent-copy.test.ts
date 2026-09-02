@@ -17,6 +17,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { CASE_WORDS } from '../neutral';
 import {
   BYO,
   BYO_CONDITION,
@@ -76,9 +77,18 @@ describe('J2 三要素齐全——只说「不收」会被读成「接了就全�
 /* ── J5 / J6：低调模式与它的反向对照 ──────────────────── */
 
 describe('J5 低调变体不带案情词', () => {
-  it('「仲裁 / 案件 / 劳动 / 维权」一个都不许出现', () => {
-    for (const leak of ['仲裁', '案件', '劳动', '维权']) {
-      expect(DISCREET).not.toContain(leak);
+  /*
+   * 词表从 _ui/neutral import，**不手抄**。手抄那一版写的是四个词
+   * （仲裁 / 案件 / 劳动 / 维权），而页面级守卫按的是七个词（多出 证据 / 文书 / 土八鼠）：
+   * 两张表各自都全绿，合起来才看得出这一句是按一张更松的表验的。
+   */
+  it('CASE_WORDS 逐词点名，一个都不许出现', () => {
+    for (const leak of CASE_WORDS) {
+      expect(
+        DISCREET,
+        `低调变体里写着案情词「${leak}」——这句会以正文出现在带 data-veil 的段落里，` +
+          `而糊层按住就能看清，等于旁人指尖一按就读到。`,
+      ).not.toContain(leak);
     }
   });
 });

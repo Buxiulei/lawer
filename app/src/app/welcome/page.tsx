@@ -14,15 +14,27 @@ export const metadata: Metadata = { title: '档案已创建' };
  * 【接入那条为什么从次级按钮升成卡】对已经有惯用 agent 的人，那条是**更省的那条路**，
  * 而它原先只是一颗次级按钮加一段小字，读起来像"高级用户可选项"。
  *
- * 【这一页不吃低调模式】server component 取不到 useDiscreet；
- * 但这一屏的文案本就不含任何案情词（标题「档案已创建」、正文只讲接入），无需处理。
+ * 【低调模式】server component 取不到 useDiscreet，但糊层是纯 CSS
+ * （globals.css 的 `html[data-discreet='1'] [data-veil]`），server component 照样吃得上：
+ * 该糊的块写个 data-veil 属性就进层了。
+ *
+ * 这一屏**含案情词**：品牌名「土八鼠」、BYO.lead 里的「证据 / 文书」、
+ * 计费口径常规变体里的「案件」——三处都进糊层。守卫见 __tests__/welcome-discreet.test.tsx。
+ *
+ * 【已知代价：这一页糊了就揭不开】按住看清的手势层（_ui/veil 的 DiscreetVeil）挂在
+ * AppShell 里，而这一页是裸布局，所以低调模式下上面三块是**糊死的**。
+ * 仍然这么做：泄漏是不可逆的，糊过头只是少读两句——标题、CTA、「不接也不影响」那句
+ * 都还清晰，同一段话点进 /settings/agent（在 AppShell 内）按住就能看全。
+ * 要让这一页也能揭，把 DiscreetVeil 挂进来即可；那会给这张裸页加一道客户端边界，
+ * 值不值得单开一单议。
  */
 export default function WelcomePage() {
   return (
     <div className="flex min-h-dvh flex-col items-center px-4 py-10">
       <div className="w-full max-w-[420px]">
         <header className="mb-7">
-          <div className="flex items-center gap-2.5">
+          {/* 品牌名整块进糊层：logo 与「土八鼠」三个字一起糊，只糊字会留下一枚认得出的头像 */}
+          <div data-veil="" className="flex items-center gap-2.5">
             <TubashuMark size={28} className="size-7" />
             <span className="text-[18px] font-semibold text-ink">土八鼠</span>
           </div>
@@ -41,8 +53,8 @@ export default function WelcomePage() {
               点了只会落到设置页顶部——指到一页式指南之后这个锚点自然消失。 */}
           <div className="rounded-[10px] border-[1.5px] border-primary bg-primary-wash p-4">
             <p className="text-[15px] leading-6 font-semibold text-ink">{BYO.title}</p>
-            <p className="mt-1 text-[13.5px] leading-6 text-ink-2">{BYO.lead}</p>
-            <p className="mt-2 text-[13.5px] leading-6 font-semibold text-primary-ink">
+            <p data-veil="" className="mt-1 text-[13.5px] leading-6 text-ink-2">{BYO.lead}</p>
+            <p data-veil="" className="mt-2 text-[13.5px] leading-6 font-semibold text-primary-ink">
               {byoBillingLine({ credit: '公道值', watch: '守望', discreet: false })}
             </p>
             <Button asChild variant="secondary" className="mt-3 w-full">
