@@ -205,6 +205,11 @@
 - **台账事故**：主工作目录一直停在 `ws/guard-alter-fix`，本会话及此前 **118 条 docs(board) 提交从未进 origin/main**（BOARD 主干 496 行 vs 本地 670 行）。已随本次集成合入主干，分支已 ff 到 e39aa5f；**规矩**：每次集成先合台账分支，台账不进主干等于没记。
 - 主干 e39aa5f 已 push，CI 盯梢中；上产与 chat-finalize 第三轮合批。
 
+**2026-09-02 16:50 · byo 修复合并复核：原阻断项已修实，余一条同形态 W1**（359a492，已合入 fcc4cb8）：
+- 已修实：/settings/agent 低调模式剔糊层后案情词 0 命中，话术块折叠（抽 `_ui/DiscreetCollapse` 公共壳，AgentSetupCard 同用）；按页面锁的守卫 import CASE_WORDS；《接入说明》「唯一例外」→ 两条例外各 bullet，J19 加「文档例外数 == 守卫钉的路由数」；三条存活变异补牙（client_name 接口层真握手断言、useConnectedAgent 两分支）。复核官独立 9 例变异 9 红；MCP 自报名链活体走通；Dashboard.tsx 冲突解法核对无误；禁区零改动。三统计 3794→3855。
+- **W1 MUST_FIX**：/welcome（server component）本支新加接入卡把 BYO.lead（证据/文书）与常规计费句（案件）明文渲染，低调模式基线 1 命中→本支 4；页面注释还断言「本就不含案情词」。修法：两段加 data-veil（纯 CSS 糊层，server component 也生效）+ 按页面锁守卫 + J5 手写词表改 import。已派单。
+- **教训**：同一形态的泄露在相邻页面复现——复核清单里「必查页面」要枚举**所有新增入口页**，不只落地页。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
