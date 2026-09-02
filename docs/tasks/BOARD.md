@@ -194,6 +194,12 @@
 - **中转同源**：主理人确认 relayrouter.ai 与向量引擎是同一家，向量引擎是前身、**之后停服**，所以必须换（已换）。→ 不做向量引擎备用通道；仓内与生产 env 已无 vectorengine 残留（grep 零命中，app.env 只剩 RELAY_API_KEY/RELAY_BASE_URL）。冗余需另找第二家，暂不排期。
 - 三条工作流（案件事实卡/对话收尾复审/byo 修复合并）撞额度后已按半成品检查（三棵树均干净、无未提交改动）原样 resume。
 
+**2026-09-02 16:20 · chat-finalize 第二轮复审 FAIL（d203752）→ 派第三轮**：
+- M1（纠正段条件化）/M3（心跳判据）立得住，10 臂变异复审独立重跑计数逐条吻合；真机一轮 content 非 NULL、ledger 一行、F5 回显、0 console error。
+- **must-fix RV2-①**：finalize 之前第三处裸写库——`orchestrator.ts:952` 危机轮杠杆闸留痕 `addTimelineEvent` 未兜底，故障注入实测 content NULL/usage 0/ledger 0，**F-02 在危机轮原样复发**；执行者包了两处漏了第三处，自报的 recordDecline 反而无害。裁决：按「修入口不修五处」收单一入口 bestEffort + 结构守卫，不加第三个 try/catch。
+- 观察项 RV2-②：纠正段加粗真机是字面 `**`（CommonMark right-flanking：闭合 `**` 夹在「。」与汉字之间不成定界符）——整条回复唯一一句实话恰是唯一排版坏的；RV2-③：承诺短语表 9 条同义谎话探针 8 条漏网。两条一并进第三轮（语义式入口判定 + 否定排除）。
+- **教训**：「独立写 N 次忘 N 次」第三次实证；复审官的价值在于找**同缺陷类的下一处**而非复核报告表格。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
