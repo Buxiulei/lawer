@@ -226,6 +226,14 @@
 - 目视核对已派 Sonnet（Playwright 真机：首页卷〇、/welcome 推荐卡、/settings/agent、驾驶舱入口、账户页口径、低调模式两页剔糊层零命中、1280 桌面）。
 - 教训（规矩化）：生产 pull 一律**先试 bundle**，不再等 pull 超时（两次都是 GnuTLS/不可达）。
 
+**2026-09-02 17:10 · 案件事实卡工单：三视角复审 → 一轮修复 → PASS（18dcc7d，基座 d8b33aa）**：
+- 实现 3a47a5d：`lib/agent/case-facts.ts` 纯函数（buildCaseFacts/renderCaseFacts，CASE_FACTS_BUDGET=4600，P0 永不降级、时间线保留最早锚点、8 类证据含 0 件、免责句常驻、未实名明写）；snapshot 增 identity/evidence/historyStats；prompt 注入点不变；orchestrator 历史改按 case 取（复用 listCaseMessages）带模式前缀。
+- 复审：零编造视角 MUST_FIX（9 变异 8 存活——计数/日期编造无牙、auth_status 闸无判据）；预算视角 MUST_FIX（时间线降级悬崖：uid=2 形态 goal400+底线400+30×104 字时时间线整区被压掉、连锚点都没了，2200 字预算空置；既有守卫「本轮消息只出现一次」被本单测试改动静默拆牙；snapshot 接线零判据）；集成视角 PASS（禁区四路径 diff 空、事实卡位次在危机指令之后、HISTORY_LIMIT 仍生效）。
+- 修复 18dcc7d：统计行逐值核对判据、snapshot.test 真库真加密四态+runTurn 端到端、渲染器第二道姓名闸、FactSection.refit 按剩余预算重裁时间线（双满形态 0/30 行→15/30 行 4439 字）、守卫改 endsWith+not.toContain。复核 24/24 变异全红（执行者 15 + 复核 9），PASS。
+- 环境备注：wt-facts 的 node_modules 软链自 wt-batch3，缺 react-markdown → 4 个 tsx 测试文件与 tsc 24 条 src/app 错误为环境既有，CI 合并后验证。
+- 经理裁决余下 nit：①「你的姓名」字面按「禁占位形态」解读，原句保留；②listRecentMessages 零调用**留**（通用取数接口）；③旧 digest「已转介 NBDpsy 不得再提」行删除无回归（prompt 硬禁段+工具闸仍在）；④四条小项**再派一单**：时间线真总数与真最早锚点、历史前缀只标异模式 user 轮（防 assistant 连续同前缀 few-shot）、已实名无姓名措辞、首诊四列空串/0 防御。
+- 合并顺序：chat-finalize（第四轮后）→ case-facts（merge-tree 对 77facdd 干净）→ main。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
