@@ -269,6 +269,9 @@
 - 巡检②期限提醒 job_runs：08-30 01:30 有一轮 items_ok=1「1 条到档，成功 1」（此前记忆为「从未真发过一封」）——正在核 notify_log 是否真有一封发出。
 - 派单：**naive-qa-gaps**（两位 Sonnet 小白在 9b5358b 本地 staging 并行补跑覆盖缺口：包 A 退出重登/兑换码实兑/低调内容打码/连点防重复扣费/邮箱通道；包 B 文件解读/公司档案免费探测/慢网低端机/多案件/后退与超大文件）；**ui-nits**（/welcome 裸布局糊层可揭开 + 糊层底下口径改低调变体；/login hydration #418）；**Sonnet 只读诊断** SMOKE 案件历史里免责句被当用户气泡重复 + 无落款孤立 article 是数据还是回显 bug。
 
+**2026-09-02 19:20 · SMOKE 案件「诡异重复消息」诊断：非 bug，是核对员误读 DOM**（Sonnet 只读，库 152 行/API 146 条逐条比长度一致）：免责句「暂无逐字依据…已标记待补」只存在于 SSE 直播流的 KNOWLEDGE_MISS notice 帧（frames.ts:283），渲染成 `<p data-veil>` 的 NoticeLine（StreamParts.tsx:269）；「无落款孤立 article」是行动卡自己的 `<article data-veil>`（ActionCard.tsx:44）。三者是同一助手回合按设计并列的三个节点，只因共用 data-veil 被当成三条消息；历史回显路径不产出 notices/actionItemIds，刷新后不会出现。库里 role=user 含免责句 0 行、assistant model NULL 0 行。
+- 待办（低优先）：data-veil 语义过载，给 UserMessage 加 `data-role="user"` 之类角色标记，便于人工核对按角色分类；**量具方法**：核对员按 DOM 判「消息条数」要按 role 属性，不按糊码标记。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
