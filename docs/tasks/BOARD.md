@@ -221,6 +221,11 @@
 - **教训**：从「短语表太窄」修到「语义判定太宽」是同一根刻度尺的两端，判据表必须**谎话与如实句两列同时打**，只打一列的判据无牙。
 - 同时段：主干 9c10da8（台账+封顶线卡+byo）CI 绿，生产 pull 卡住（GitHub 从服务器不可达，第二次）→ 改 bundle 投递，构建已脱管启动、盯梢中。
 
+**2026-09-02 17:00 · 生产上线 9c10da8（台账 + 封顶线卡 F-04 + 自带 agent 前置）**：
+- 流程：备份 lawer-pre-9c10da8-*.db + pre SHA → CI 绿 → 生产 `git pull` 卡死（GitHub 从服务器不可达，本日第二次）→ kill 卡住的 pull，`git bundle create fcc4cb8..origin/main` + scp + `git fetch bundle` + ff → HEAD=9c10da8 → root 脱管 build（EXIT=0）→ restart lawer-app/lawer-sidecar 均 active → 手动触发迁移（49 表，api_keys 新增 client_name 列）→ curl / /login /welcome /settings/agent 全 200 → uid=1 测试 JWT 打 /api/v1/keys 返回含 client_name 字段。
+- 目视核对已派 Sonnet（Playwright 真机：首页卷〇、/welcome 推荐卡、/settings/agent、驾驶舱入口、账户页口径、低调模式两页剔糊层零命中、1280 桌面）。
+- 教训（规矩化）：生产 pull 一律**先试 bundle**，不再等 pull 超时（两次都是 GnuTLS/不可达）。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
