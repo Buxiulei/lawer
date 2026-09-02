@@ -16,6 +16,7 @@ import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
 import { Checkbox } from '@/components/shadcn/checkbox';
 import { ChannelStep } from './ChannelStep';
+import { clearLoginStep, loadLoginStep } from './loginStep';
 
 /** 登录完成后落在这里：档案已创建的引导页 */
 const AFTER_LOGIN = '/welcome';
@@ -62,15 +63,23 @@ const CHANNEL_INTRO: Record<Channel, string> = {
  * 那时后端回 need_email=true，这里才切到补绑邮箱那一步（邮箱是换手机号后找回账号、
  * 以及收文书与存证证明的唯一落点，建号时不收，用户丢了号就再也回不来）。
  * 老用户走哪条通道都只有一步。
+ *
+ * 【这些 state 都是可恢复的】刷新一下就全没，人被静默退回手机号那一格，
+ * 而短信已经发出去了——补绑那一步更糟，token 已经在手上，人却被打回登录第一格。
+ * 所以首帧先问一次半程记录（sessionStorage，关标签页即清），见 loginStep.ts。
  */
 export function LoginFlow() {
-  const router = useRouter();
-  const [channel, setChannel] = useState<Channel>('phone');
+  const enterSite = useEnterSite();
+  /** 半程记录只在首帧读这一次；之后的写入归 ChannelStep（状态长在那儿） */
+  const [resumed] = useState(loadLoginStep);
+  const [channel, setChannel] = useState<Channel>(resumed?.channel === 'email' ? 'email' : 'phone');
   /** true = 手机验过了、是个新号，正停在补绑邮箱那一步（此时请求带 token） */
-  const [completing, setCompleting] = useState(false);
+  const [completing, setCompleting] = useState(resumed?.channel === 'completion');
   const [agreed, setAgreed] = useState(false);
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState(resumed?.channel === 'phone' ? resumed.target : '');
+  const [email, setEmail] = useState(
+    resumed && resumed.channel !== 'phone' ? resumed.target : '',
+  );
 
   if (completing) {
     return (
@@ -112,6 +121,7 @@ export function LoginFlow() {
             gateOk={agreed}
             gateHint="先勾选下方的说明，再发送验证码。"
             ctaLabel="验证并登录"
+            persistAs="phone"
             onSend={async () => {
               const res = await apiFetch<SendResponse>('/auth/sms/send', {
                 method: 'POST',
@@ -128,7 +138,7 @@ export function LoginFlow() {
               });
               writeToken(res.token);
               if (res.need_email) setCompleting(true);
-              else router.push(AFTER_LOGIN);
+              else enterSite();
             }}
           />
         </Card>
@@ -161,6 +171,21 @@ export function LoginFlow() {
  */
 export function ChannelIntro({ channel }: { channel: Channel }) {
   return <p className="text-[15px] leading-7 text-ink-2">{CHANNEL_INTRO[channel]}</p>;
+}
+
+/**
+ * 登录成功的**唯一出口**：先擦掉半程记录，再进站。
+ *
+ * 收成一处，是因为出口有两个（手机号验完就进 / 邮箱那条路验完就进），
+ * 而"漏擦了一处"的现象是**下一次打开登录页被丢回上一回的验证码格**——
+ * 那时码早就过期了，人得自己看出来该点「换一个手机号」。没有任何报错。
+ */
+function useEnterSite(): () => void {
+  const router = useRouter();
+  return () => {
+    clearLoginStep();
+    router.push(AFTER_LOGIN);
+  };
 }
 
 /**
@@ -278,7 +303,7 @@ export function EmailChannel({
   onEmailChange: (next: string) => void;
   agreed: boolean;
 }) {
-  const router = useRouter();
+  const enterSite = useEnterSite();
   return (
     <ChannelStep
       key={completing ? 'email-completion' : 'email-login'}
@@ -305,6 +330,7 @@ export function EmailChannel({
       gateOk={completing || agreed}
       gateHint="先勾选下方的说明，再发送验证码。"
       ctaLabel={completing ? '完成，开始' : '验证并登录'}
+      persistAs={completing ? 'completion' : 'email'}
       onSend={async () => {
         const res = await apiFetch<SendResponse>('/auth/email/send', {
           method: 'POST',
@@ -322,7 +348,7 @@ export function EmailChannel({
         });
         // 后端换发了新 token（补绑那一路此时双验证已齐），要覆盖旧的
         writeToken(res.token);
-        router.push(AFTER_LOGIN);
+        enterSite();
       }}
     />
   );
