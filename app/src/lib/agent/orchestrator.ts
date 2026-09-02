@@ -304,6 +304,35 @@ function promisesActionCard(body: string): boolean {
   return ACTION_CARD_PROMISE_PHRASES.some((p) => body.includes(p));
 }
 
+/**
+ * 【尽力而为的记录性写库：只此一个入口】失败就当这件事没做成，**绝不许拖着落库与记账一起死**。
+ *
+ * 【分层口径】`store.finalizeMessage` + `chargeTurn` 是一等公民——正文与账丢了是永久损失；
+ * 推荐占位 / 危机卡留痕 / 杠杆闸留痕是**记录性**的，丢了只影响下一轮的去重与统计。
+ * 这两类排在同一段收尾代码里，却不该同生共死。
+ *
+ * 【为什么是一个函数，而不是各包各的 try】(复审 2026-09-02 RV2-①)
+ * 上一轮给 `referralOffers.tryOffer` 与 `store.recordCrisisCardGiven` 各包了一层 try/catch，
+ * **漏掉了排在它们前面的杠杆闸留痕**（`cases.addTimelineEvent`）。故障注入实测：
+ * `BEFORE INSERT ON timeline_events WHEN NEW.title='危机轮杠杆闸拦截' RAISE(ABORT)`
+ * ⇒ 危机轮 content 停在 NULL、token_usage 0、gongdao_ledger 0——**F-02 原样复发**。
+ *
+ * 独立写 N 次就会忘第 N 次，那是**默认形态而不是疏忽**：所以收成唯一入口，
+ * 再加一条结构守卫钉住「`finalizeMessage` 之前不许有裸的记录性写库调用」
+ *（best-effort-writes.test.ts，改回裸调用即红）。新增一个同类写库时，
+ * 守卫会点名，而不是等下一次故障注入才发现。
+ *
+ * 【吞但不静音】错误进 `console.error('[chat] …')`：事后要能从服务端日志查到是哪一步断的。
+ */
+function bestEffort<T>(label: string, fn: () => T, fallback: T): T {
+  try {
+    return fn();
+  } catch (err) {
+    console.error(`[chat] ${label}`, err);
+    return fallback;
+  }
+}
+
 export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   const { db, caseId, userId } = input;
   const now = input.now ?? new Date();
@@ -949,14 +978,18 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
         model_body_raw: modelBody,
       },
     });
-    cases.addTimelineEvent(db, {
-      caseId,
-      userId,
-      happenedAt: now.toISOString(),
-      kind: '系统动作',
-      title: '危机轮杠杆闸拦截',
-      detail: `处置：${action}｜消息 #${messageId}`,
-    });
+    // 【同为"尽力而为"那一类】这条留痕排在 `finalizeMessage` 之前，抛出去就是危机轮的
+    // 正文停在 NULL、这一轮不记账——用户刚说完"要是人没了"，那一轮反而是最不能丢的。
+    // 拦截统计丢一条只影响人工复核的计数。分层与入口见 bestEffort。
+    bestEffort('危机轮杠杆闸留痕失败（本轮落库与记账照常，这次拦截不进时间线）', () =>
+      cases.addTimelineEvent(db, {
+        caseId,
+        userId,
+        happenedAt: now.toISOString(),
+        kind: '系统动作',
+        title: '危机轮杠杆闸拦截',
+        detail: `处置：${action}｜消息 #${messageId}`,
+      }), undefined);
   }
 
   if (citations.found.length > 0) {
@@ -1072,31 +1105,25 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   // 下一轮会再推一遍——**反复骚扰就是这么来的**（referral-offers.ts 的原话）。
   // **一轮最多成一次**：按序试，第一个占位成功的就是本轮的推荐，其余不再试。
   //
-  // 【为什么这里要包一层 try】(复审 2026-09-02) 推荐段被挪到 `finalizeMessage` **之前**
+  // 【为什么这里走 bestEffort】(复审 2026-09-02) 推荐段被挪到 `finalizeMessage` **之前**
   // 是对的（否则用户看见了、档案里没有），但代价是它成了收尾链上的一环：
   // `referral_offers` 的 INSERT 一抛（撞约束、库被锁、磁盘满），异常就穿出 runTurn，
   // 正文停在 NULL、这一轮不记账——**F-02 原样复发，只是换了个病灶**。
-  // 所以定一条分层：**`finalizeMessage` + `chargeTurn` 是一等公民，推荐/留痕这类写库是尽力而为**。
-  // 尽力而为的那一类失败了就当没做成，绝不许拖着落库与记账一起死。
+  // 分层与唯一入口见 `bestEffort` 的注释：一等公民照抛，记录性写库一律尽力而为。
   //
   // 【失败一律当"没占到位"】方向与「先占位再开口」一致：占位这步没成功就不开口。
   // 反过来（占不到也照说）会在写库恢复之后变成"台账里没有、用户已经被推过"——
   // 下一轮再推一遍，正是这段注释开头要防的那种反复骚扰。
   let referralScene: string | null = null;
   for (const scene of referralDecision.scenes) {
-    let claimed = false;
-    try {
-      claimed = referralOffers.tryOffer(db, {
+    const claimed = bestEffort(`推荐位点「${scene}」占位失败（本轮不推，落库与记账照常）`, () =>
+      referralOffers.tryOffer(db, {
         userId,
         caseId,
         scene,
         threadId: thread.id,
         note: `message #${messageId}`,
-      });
-    } catch (err) {
-      // 吞掉但不静音：这一轮本该推的推荐没推成，事后要能从服务端日志查到是哪一步断的。
-      console.error(`[chat] 推荐位点「${scene}」占位失败（本轮不推，落库与记账照常）`, err);
-    }
+      }), false);
     if (claimed) {
       referralScene = scene;
       const block = `\n\n---\n\n${renderReferral(scene)}`;
@@ -1123,13 +1150,10 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   //
   // 【同为"尽力而为"那一类】它也是排在 finalizeMessage 之前的写库调用（写 timeline_events）。
   // 抛出去的下场与推荐段一模一样：正文停在 NULL、这一轮不记账。留痕丢了只影响下一轮
-  // 会不会重印一张资源卡；正文与账丢了是永久损失。两者不该同生共死。
+  // 会不会重印一张资源卡；正文与账丢了是永久损失。两者不该同生共死（入口见 bestEffort）。
   if (responseGaveCrisisCard(text)) {
-    try {
-      store.recordCrisisCardGiven(db, caseId, CRISIS_CARD_MARKER, crisis.triggered ? `命中：${crisis.matched.join('、')}` : '模型主动给出');
-    } catch (err) {
-      console.error('[chat] 危机资源卡留痕失败（本轮落库与记账照常，下一轮可能重印一次卡）', err);
-    }
+    bestEffort('危机资源卡留痕失败（本轮落库与记账照常，下一轮可能重印一次卡）', () =>
+      store.recordCrisisCardGiven(db, caseId, CRISIS_CARD_MARKER, crisis.triggered ? `命中：${crisis.matched.join('、')}` : '模型主动给出'), undefined);
   }
 
   const usageReport: UsageReport = { model: routed.client.billingModel, usage, servedModel };
