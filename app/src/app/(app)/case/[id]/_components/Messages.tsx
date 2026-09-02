@@ -7,6 +7,7 @@ import { formatDate } from '@/app/_ui/format';
 import { ActionGroup } from '@/components/case/ActionCard';
 import { LawRefCard } from '@/components/case/LawRefCard';
 import type { DraftFrame, NoticeFrame, RecordFrame } from '../_stream/frames';
+import { servedModelLabel } from '../_stream/frames';
 import { lawCiteId } from './citations';
 import { MaskedText, RichText } from './RichText';
 import {
@@ -27,6 +28,14 @@ export interface StreamedMessage extends Message {
   notices?: NoticeFrame[];
   /** meta.degraded：本轮由备用模型完成 */
   degraded?: boolean;
+  /**
+   * 厂商回显的**实际**服务型号（done 帧 / 历史行的 tokens_json.servedModel）。
+   * 与 `model`（我们请求的那个）是两件事：中转请求 opus 完全可能由 sonnet 服务，
+   * 拿请求值当"实际"标出去就是在撒谎，而这行小字的全部意义正是"实际"。
+   */
+  servedModel?: string | null;
+  /** 实际与请求不是同一个型号。判据在服务端算好（记账那一处同源），前端不自己比串 */
+  modelMismatch?: boolean;
   /** content 前多少个字符来自 deterministic 首段，单独渲染成「即时回应」卡 */
   deterministicChars?: number;
 }
@@ -83,6 +92,15 @@ export function AssistantMessage({
   // 流式中末尾可能停在半个 ** 上，先剪掉避免星号一闪
   const body = streaming ? rest.replace(/\*{1,2}$/, '') : rest;
   const laws = message.lawRefs ?? [];
+  // 「这一轮实际是谁答的」。流式途中不标：型号要到 done 帧才回显，
+  // 半路先标一个请求值、收完再换成实际值，等于当着用户的面改口。
+  const modelName = streaming
+    ? null
+    : servedModelLabel({
+        served: message.servedModel,
+        requested: message.model,
+        mismatch: message.modelMismatch,
+      });
   const records = message.records ?? [];
   const notices = message.notices ?? [];
   const drafts = message.drafts ?? [];
@@ -140,6 +158,13 @@ export function AssistantMessage({
             ))}
           </div>
         </section>
+      )}
+
+      {/* 型号落款：极淡、极小，压在这一轮**所有产出的最下面**（含依据卡）。
+          三态（实际 / 缺实际时退回请求 / 两个都没有就整行不出现）由 servedModelLabel 定。
+          它是**可核对的事实**不是装饰：用户按型号付费，就有权知道这一轮实际拿到的是谁。 */}
+      {modelName && (
+        <p className="mt-3 text-[12px] leading-5 text-ink-2 opacity-60">{modelName}</p>
       )}
     </article>
   );

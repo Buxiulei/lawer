@@ -191,7 +191,16 @@ export function createMockTransport(): ChatTransport {
         cached_write: script.model.startsWith('claude') ? 512 : null,
       };
 
-      yield { type: 'done', message_id: messageId, finish_reason: 'stop' };
+      // 演示替身里「请求的」与「实际服务的」恒同一个：换型号是真实中转才有的事，
+      // 演示剧本没有理由伪造一次替代，那会让人以为自己真被降过档。
+      yield {
+        type: 'done',
+        message_id: messageId,
+        finish_reason: 'stop',
+        model: script.model,
+        served_model: script.model,
+        served_mismatch: false,
+      };
     },
   };
 }

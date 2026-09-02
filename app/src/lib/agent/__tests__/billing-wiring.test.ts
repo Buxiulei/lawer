@@ -314,3 +314,52 @@ describe('served_model 与请求型号对账（不对账＝算错钱，命脉）
     expect(u.model).toBe('relay/claude-sonnet-5'); // 不是 relay/claude-opus-5
   });
 });
+
+/**
+ * done 帧必须带上「这一轮**实际**是谁答的」。
+ *
+ * ─────────────── 这组补的是哪个缺口 ───────────────
+ * 前端要在每条回答底下标出实际服务的型号，而它手上唯一现成的值是 `meta.model`——
+ * 那是**开跑前**我们请求的那个。实际派谁来服务要到流末才回显，
+ * 服务端不把它随 done 帧发下去，前端就只能拿请求值冒充实际值：
+ * 请求 opus、实际 sonnet 的那一轮，用户会读到「深度推理模型」。
+ * **标错比不标更坏**——不标只是缺信息，标错是给了一个假答案，而他是按型号付费的。
+ *
+ * 变异臂：orchestrator 的 done 帧里 `served_model: servedModel` 换成 `null`
+ *        （或把这三个字段整个删掉）⇒ 下面第一条与第三条红。
+ */
+describe('done 帧带得出「实际是谁答的」（前端那行落款的唯一来源）', () => {
+  const doneOf = (sink: ReturnType<typeof makeSink>) => sink.of('done')[0].data;
+
+  it('中转把 opus 路由到 sonnet ⇒ served_model 是 sonnet，且判定为替代', async () => {
+    const { sink } = await relayTurn('claude-sonnet-5');
+    const done = doneOf(sink);
+    expect(done.model).toBe('claude-opus-5'); // 我们请求的
+    expect(done.served_model).toBe('claude-sonnet-5'); // 实际服务的
+    expect(done.served_mismatch).toBe(true);
+  });
+
+  it('回显与请求一致 ⇒ 不算替代（前端据此不加「（替代）」）', async () => {
+    const { sink } = await relayTurn('claude-opus-5');
+    const done = doneOf(sink);
+    expect(done.served_model).toBe('claude-opus-5');
+    expect(done.served_mismatch).toBe(false);
+  });
+
+  /** 没回显是常态（不是每个网关都回显），此时前端退回请求值，不该被标成替代 */
+  it('整轮都没回显 ⇒ served_model 为 null，且不算替代', async () => {
+    const { sink } = await relayTurn(null);
+    const done = doneOf(sink);
+    expect(done.model).toBe('claude-opus-5');
+    expect(done.served_model).toBeNull();
+    expect(done.served_mismatch).toBe(false);
+  });
+
+  /** 未登记的新快照串：认不出也要如实报出去，不能悄悄换成请求值 */
+  it('回显一个没登记过的串 ⇒ 原样报出，并判为替代（留痕待核）', async () => {
+    const { sink } = await relayTurn('claude-opus-5-20260901');
+    const done = doneOf(sink);
+    expect(done.served_model).toBe('claude-opus-5-20260901');
+    expect(done.served_mismatch).toBe(true);
+  });
+});

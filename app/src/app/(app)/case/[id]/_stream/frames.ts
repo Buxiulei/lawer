@@ -107,10 +107,21 @@ export interface UsageFrame {
   cached_write: number | null;
 }
 
+/**
+ * 收尾帧。型号三件套在这一帧而不是 meta：meta 在开跑前就发了，那时只知道我们**请求**了谁，
+ * 厂商实际派谁来服务要到流末才回显。三个字段都可选——旧服务端（或演示替身）不带它们时
+ * 前端照旧工作，标注不出现而已；**绝不拿 meta.model 顶替**，那是请求值不是实际值。
+ */
 export interface DoneFrame {
   type: 'done';
   message_id: string;
   finish_reason: string;
+  /** 我们请求的型号（API 别名） */
+  model?: string;
+  /** 厂商回显的**实际**服务型号；null = 这一轮没回显过 */
+  served_model?: string | null;
+  /** 实际与请求不是同一个型号 */
+  served_mismatch?: boolean;
 }
 
 /** error 帧只有 code/message；retry_after 来自非流错误体 {ok:false,error_code,message,retry_after?}，
@@ -175,6 +186,28 @@ const MODEL_LABELS: Record<string, string> = {
 export function waitingHeadline(model: string | null | undefined): string {
   const label = model ? MODEL_LABELS[model] : undefined;
   return label ? `正在用${label}斟酌` : '正在斟酌';
+}
+
+/**
+ * 每条回答底下那行「这一轮谁答的」。
+ *
+ * 【口径：实际优先，没有实际才退回请求】`served` 是厂商回显的**实际**服务型号，
+ * `requested` 是我们发出去的。中转按渠道分组路由，请求 opus 完全可能由 sonnet 返回
+ * （billing/served-model.ts 文件头的实测），所以拿请求值当"实际"标出去就是在撒谎——
+ * 而这一行字的全部意义正是"实际"。两个都没有就一个字都不写：宁可不标，不猜。
+ *
+ * 认不出的型号串原样显示（多半是厂商新加的日期快照），不硬编一个好听的假名字。
+ * `(替代)` 只在服务端判定换过型号时加——判据同源于记账那一处，前端不自己比字符串。
+ */
+export function servedModelLabel(input: {
+  served?: string | null;
+  requested?: string | null;
+  mismatch?: boolean;
+}): string | null {
+  const model = input.served?.trim() || input.requested?.trim() || '';
+  if (!model) return null;
+  const label = MODEL_LABELS[model] ?? model;
+  return input.mismatch ? `${label}（替代）` : label;
 }
 
 /** 「已等待 3 分 12 秒」。不足一分钟只说秒。 */

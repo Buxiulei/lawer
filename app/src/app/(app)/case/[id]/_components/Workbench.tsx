@@ -14,6 +14,7 @@ import { scrollBehavior, useReducedMotion } from '@/app/_ui/motion';
 import { EmptyState } from '@/components/shadcn/empty-state';
 import { AppSheet } from '@/components/shadcn/app-sheet';
 import { Button } from '@/components/shadcn/button';
+import { SkeletonList } from '@/components/shadcn/skeleton';
 import { useRegisterCasePanel } from '@/components/shell/casePanel';
 import {
   useCaseWorkspace,
@@ -27,6 +28,7 @@ import {
 } from './citations';
 import { toActionItem, type DraftFrame } from '../_stream/frames';
 import { readToken } from '../_stream/httpTransport';
+import { useCaseHistory } from '../_stream/useCaseHistory';
 import { useChatStream, type SettledTurn } from '../_stream/useChatStream';
 import { CasePanel } from './CasePanel';
 import { CaseStatusBar } from './CaseStatusBar';
@@ -53,9 +55,19 @@ export function Workbench({ caseId }: { caseId: string }) {
   const seeded = caseId === demoCase.id;
   const [signedIn, setSignedIn] = useState(false);
 
+  // 历史对话。**演示案件不请求**：它有自己的剧本，那些消息不在库里。
+  const history = useCaseHistory({ caseId, enabled: !seeded });
+
   const [messages, setMessages] = useState<StreamedMessage[]>(
     seeded ? demoMessages : [],
   );
+
+  /* 取回来的历史落进消息列表。放 effect 而不是拿 history.messages 直接当数据源，
+     是因为这条列表随后还要被本轮的一问一答追加（send / settle），
+     两个来源必须合流成同一个数组，否则新消息会在下一次 history 变化时被冲掉。 */
+  useEffect(() => {
+    if (history.messages) setMessages(history.messages);
+  }, [history.messages]);
   const [actions, setActions] = useState<ActionItem[]>(seeded ? demoActions : []);
   const [confirmedDrafts, setConfirmedDrafts] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -113,7 +125,11 @@ export function Workbench({ caseId }: { caseId: string }) {
           role: 'assistant',
           content: turn.text,
           deterministicChars: turn.deterministicChars,
+          // model = 我们请求的（meta，开跑前就知道）；servedModel = 厂商实际派了谁（done 帧）。
+          // 两个都留着：底下那行小字优先标实际的，缺实际时才退回请求的。
           model: turn.meta?.model,
+          servedModel: turn.servedModel,
+          modelMismatch: turn.servedMismatch,
           createdAt: new Date().toISOString(),
           actionItemIds: items.map((a) => a.id),
           // 法条卡不在九帧契约里，mock 期间按 message_id 回填
@@ -234,6 +250,23 @@ export function Workbench({ caseId }: { caseId: string }) {
     viewer && viewed ? <LawOriginal law={viewed} /> : null,
   );
 
+  /* 取数中先出骨架，**不先画一屏空对话**：真实案件几乎都有历史，
+     先给空的再补上，用户看到的是"我的记录闪了一下才回来"。
+     输入框此刻也不出现——在历史落定之前发出去的话，会排在历史前面。
+
+     【它必须排在「未登录」那一屏前面】登录态要等 effect 读完 localStorage 才知道
+     （SSR 那一遍读不到），首帧 `signedIn` 恒为 false。放在后面的话，一个名下有整套
+     记录的人打开页面，第一帧读到的是「这个案件还没有对话记录 / 去做首诊」——
+     那句话正是这次要消灭的那一句，不该在自己的修法里再闪一次。
+     骨架是中性的：它只说"在读"，没有对任何人下结论。 */
+  if (history.phase === 'loading') {
+    return (
+      <div className="pt-4">
+        <SkeletonList rows={4} />
+      </div>
+    );
+  }
+
   if (!seeded && !signedIn) {
     return (
       <div className="pt-8">
@@ -245,6 +278,22 @@ export function Workbench({ caseId }: { caseId: string }) {
               <Link href="/intake">去做首诊</Link>
             </Button>
           }
+        />
+      </div>
+    );
+  }
+
+  /* 【没取到 ≠ 没聊过】这两屏在像素上都是"一片什么都没有"，
+     但上面那一屏说的是"你还没开始"。对一个刚聊完两小时的人说这句话，
+     他会从头再讲一遍——那既是钱，也是又一次把被裁的经过复述一遍。
+     所以取数失败必须自己占一屏：说清楚发生了什么 + 给一个重试。 */
+  if (history.phase === 'failed') {
+    return (
+      <div className="pt-8">
+        <EmptyState
+          title="这次没读到你的对话记录"
+          description={`${history.error ?? ''}你聊过的内容都还在，只是这一次没取回来。点下面再试一次。`}
+          action={<Button onClick={history.reload}>重试</Button>}
         />
       </div>
     );

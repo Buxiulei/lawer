@@ -123,6 +123,32 @@ export function listRecentMessages(db: Database, threadId: number, limit: number
   return rows.reverse();
 }
 
+/**
+ * 案件名下**所有线程**的消息，按写入顺序正序，取最近 limit 条。回显历史对话用。
+ *
+ * 【为什么不是「主线程」那一条】一个案子的线程按 mode 分（ensureThread），而 mode 是
+ * 服务端按首诊进度自己选的：首诊没走完是 '问诊'，走完了变 '陪跑'（orchestrator.runTurn）。
+ * 用户从头到尾只在同一个输入框里说话，却会被切成两条线程。只回其中一条，
+ * 首诊结束的那一刻，用户此前讲的全部经过就从页面上消失了——**那正是这次要修的症状本身**。
+ *
+ * 排序按 m.id 而不是 created_at：created_at 是秒级的（SQLite CURRENT_TIMESTAMP），
+ * 同一秒内的一问一答会并列，顺序就成了随机的。id 是全局自增，跨线程也仍是真实写入顺序。
+ *
+ * content IS NULL 的行不返回：那是「生成中」占位（见 insertMessage），
+ * 流断了就永远停在那儿——把它当成一条空回复画出去，用户只会看见一片空白的自己。
+ */
+export function listCaseMessages(db: Database, caseId: number, limit: number): MessageRow[] {
+  const rows = db
+    .prepare(
+      `SELECT m.* FROM messages m
+        JOIN threads t ON t.id = m.thread_id
+       WHERE t.case_id = ? AND m.content IS NOT NULL
+       ORDER BY m.id DESC LIMIT ?`,
+    )
+    .all(caseId, limit) as MessageRow[];
+  return rows.reverse();
+}
+
 /** content 传 null = 「生成中」占位（migrate.ts：无 content 即断线重连要续跑的那条） */
 export function insertMessage(
   db: Database,

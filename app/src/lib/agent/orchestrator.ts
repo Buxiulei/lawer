@@ -1010,7 +1010,20 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
     }
   }
 
-  emit({ event: 'done', data: { message_id: messageId, finish_reason: finishReason } });
+  // 型号三件套随收尾帧下发（events.ts done 的注释）：meta 那时只知道我们请求了谁。
+  // 判「换没换」不在这儿自己写 `!==`：前缀 relay/ 与变体后缀 :think 都不是换型号，
+  // 逐字比较会把它们判成换了。口径只认记账那一处（reconcileServedModel），
+  // 这里不传 rateOf——只要身份结论，计价方向裁决在 chargeTurn 里已经做过。
+  emit({
+    event: 'done',
+    data: {
+      message_id: messageId,
+      finish_reason: finishReason,
+      model: routed.client.model,
+      served_model: servedModel,
+      served_mismatch: reconcileServedModel(routed.client.billingModel, servedModel).trace !== null,
+    },
+  });
 
   return {
     ok: true,

@@ -34,6 +34,13 @@ export interface SettledTurn {
   actions: ActionFrame[];
   drafts: DraftFrame[];
   notices: NoticeFrame[];
+  /**
+   * 本轮**实际**服务的型号（done 帧回显）。null = 没回显过——
+   * 这时才退回 meta.model（我们请求的那个），两者不可混为一谈。
+   */
+  servedModel: string | null;
+  /** 实际服务的型号与请求的不是同一个。判据来自服务端，前端不自己比字符串 */
+  servedMismatch: boolean;
   /** 收到 done 帧才算完整；中途停止/断流为 false */
   complete: boolean;
 }
@@ -128,6 +135,8 @@ function emptyTurn(): SettledTurn {
     actions: [],
     drafts: [],
     notices: [],
+    servedModel: null,
+    servedMismatch: false,
     complete: false,
   };
 }
@@ -199,6 +208,9 @@ export function useChatStream({
               break;
             case 'done':
               turn.complete = true;
+              // 「这一轮实际是谁答的」只有这一帧知道（meta 那时还没开跑）
+              turn.servedModel = frame.served_model ?? null;
+              turn.servedMismatch = frame.served_mismatch === true;
               break;
             case 'error':
               return false;

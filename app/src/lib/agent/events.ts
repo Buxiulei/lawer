@@ -272,7 +272,25 @@ export type AgentEvent =
         cached_write: number | null;
       };
     }
-  | { event: 'done'; data: { message_id: number; finish_reason: string | null } }
+  /**
+   * 收尾帧。**型号三件套在这里而不是 meta 里**：meta 在开跑前就发了，那时只知道
+   * 我们**请求**了谁；厂商实际派谁来服务要到流末才回显（openai-compat / anthropic 的
+   * servedModel）。前端要在每条回答底下标「这一轮实际是谁答的」，只能等这一帧。
+   * 缺了它，前端唯一拿得到的就是 meta.model —— 那是请求值，把它标成"实际"就是在撒谎。
+   */
+  | {
+      event: 'done';
+      data: {
+        message_id: number;
+        finish_reason: string | null;
+        /** 我们请求的型号（API 别名），与 meta.model 同值 */
+        model: string;
+        /** 厂商回显的**实际**服务型号；null = 这一轮没回显过 */
+        served_model: string | null;
+        /** 实际与请求不是同一个型号（含未登记的新串）。判据与记账那侧同源 */
+        served_mismatch: boolean;
+      };
+    }
   | { event: 'error'; data: { code: string; message: string } };
 
 export type AgentEventSink = (event: AgentEvent) => void;

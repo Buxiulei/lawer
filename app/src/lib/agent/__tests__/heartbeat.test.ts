@@ -127,7 +127,7 @@ describe('贯穿 tool 轮', () => {
     expect(s.pings()).toHaveLength(afterResume);
 
     // ⑤ done 是终态：收尾之后一帧都不再发，定时器也不留
-    hb.observe({ event: 'done', data: { message_id: 7, finish_reason: 'stop' } });
+    hb.observe({ event: 'done', data: { message_id: 7, finish_reason: 'stop', model: 'claude-opus-5', served_model: null, served_mismatch: false } });
     vi.advanceTimersByTime(10 * HEARTBEAT_INTERVAL_MS);
     expect(s.pings()).toHaveLength(afterResume);
     expect(vi.getTimerCount()).toBe(0);
@@ -161,7 +161,7 @@ describe('贯穿 tool 轮', () => {
     vi.advanceTimersByTime(47_000); // ⑤ 第三轮 tool：一轮扛住不等于轮轮扛住
     prose('两笔合计 4.3 万，');
     prose('明细在下面。');
-    hb.observe({ event: 'done', data: { message_id: 7, finish_reason: 'stop' } });
+    hb.observe({ event: 'done', data: { message_id: 7, finish_reason: 'stop', model: 'claude-opus-5', served_model: null, served_mismatch: false } });
 
     const marks = [startedAt, ...arrivals];
     const gaps = marks.slice(1).map((t, i) => t - marks[i]);

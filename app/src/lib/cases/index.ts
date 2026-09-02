@@ -12,8 +12,12 @@ import type { Database } from 'better-sqlite3';
 import * as store from '@/lib/db/cases';
 // drafts 的 SQL 早已在 lib/db/agent.ts 的 drafts 段（与 insertDraft 同处）。读侧不另起
 // 一份表访问：同一张表两处 SELECT，将来加一列就会漏一处。归属校验仍在本文件把关。
-import { listDrafts as listDraftRows, type DraftRow } from '@/lib/db/agent';
+import { listDrafts as listDraftRows, listCaseMessages, type DraftRow } from '@/lib/db/agent';
 import { nowSql } from '@/lib/db/time';
+// 历史消息要标「这一轮实际是谁答的」，判「实际 ≠ 请求」的口径只有记账那一处
+// （billing/served-model）。在这儿另写一个 `a !== b` 就是同一个问题两个答案：
+// 前缀（relay/）与变体后缀（:think）都会让逐字比较判错，而它俩恰恰不是换型号。
+import { reconcileServedModel } from '@/lib/billing/served-model';
 
 /** 与 migrate.ts cases.stage 注释逐字对齐 */
 export const CASE_STAGES = [
@@ -232,6 +236,73 @@ export function listDrafts(
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
   return { ok: true, drafts: listDraftRows(db, input.caseId) };
+}
+
+/** 回显给页面的一条历史消息。字段名照库里的行（snake_case），与 drafts 端点同口径。 */
+export interface CaseMessageView {
+  id: number;
+  role: string;
+  content: string;
+  created_at: string;
+  /** 我们请求的型号（messages.model，API 别名）。历史行可能没有 */
+  model: string | null;
+  /** 厂商回显的**实际**服务型号；null = 这一轮没回显过 */
+  served_model: string | null;
+  /** 实际服务的型号与请求的不是同一个（含未登记的新快照串） */
+  served_mismatch: boolean;
+}
+
+/** 一次最多回多少条。够长到覆盖一个案子的全部对话，又不至于让首屏拖着几 MB 正文 */
+export const MESSAGE_PAGE_SIZE = 200;
+
+/**
+ * tokens_json（orchestrator 写的 {model, usage, servedModel}）→ 展示要的两项。
+ * 解析不出来一律当"不知道"：坏的 JSON 不该让整条消息读不出来。
+ */
+function servedOf(tokensJson: string | null): { served: string | null; mismatch: boolean } {
+  if (!tokensJson) return { served: null, mismatch: false };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(tokensJson);
+  } catch {
+    return { served: null, mismatch: false };
+  }
+  if (typeof parsed !== 'object' || parsed === null) return { served: null, mismatch: false };
+  const rec = parsed as { model?: unknown; servedModel?: unknown };
+  const served =
+    typeof rec.servedModel === 'string' && rec.servedModel.trim() ? rec.servedModel : null;
+  if (served === null || typeof rec.model !== 'string') return { served, mismatch: false };
+  // rateOf 不传：这里只要「是不是换了型号」这个身份结论，不做计价方向裁决（钱在记账那侧已经算过）
+  return { served, mismatch: reconcileServedModel(rec.model, served).trace !== null };
+}
+
+/**
+ * 案件的历史对话。**在此之前这条读出口根本不存在**——库里一直有（messages 表），
+ * 但只喂给服务端拼上下文（listRecentMessages），网页从来没取过。
+ * 于是用户关掉页面再打开，聊过的一切在屏幕上消失得干干净净，
+ * 而它们其实一条不少地躺在库里。
+ */
+export function listMessages(
+  db: Database,
+  input: { caseId: number; userId: number },
+): Result<{ messages: CaseMessageView[] }> {
+  const found = assertOwned(db, input.caseId, input.userId);
+  if (isFailure(found)) return found;
+
+  const messages = listCaseMessages(db, input.caseId, MESSAGE_PAGE_SIZE).map((row) => {
+    const { served, mismatch } = servedOf(row.tokens_json);
+    return {
+      id: row.id,
+      role: row.role,
+      // SQL 已经把 content IS NULL 的占位行滤掉了，这里的非空是那一条的结论
+      content: row.content!,
+      created_at: row.created_at,
+      model: row.model,
+      served_model: served,
+      served_mismatch: mismatch,
+    };
+  });
+  return { ok: true, messages };
 }
 
 // ========== 写 ==========
