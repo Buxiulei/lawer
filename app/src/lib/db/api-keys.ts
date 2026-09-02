@@ -13,13 +13,19 @@ export interface ApiKeyRow {
   last_used_at: string | null;
   enabled: number;
   created_at: string;
+  /**
+   * MCP 客户端在 `initialize` 里自报的名字（clientInfo.name）。
+   * 走 REST 的客户端不报名字 → 恒为 null。**不编默认值**：读侧退到 name，
+   * 并在页面上说明那是用户自己起的名，否则等于假装我们认出了他的助手。
+   */
+  client_name: string | null;
 }
 
 /** 列出某用户的 key（不含 key_hash：接口层没有任何理由回显它） */
 export function listApiKeys(db: Database, userId: number): Omit<ApiKeyRow, 'key_hash'>[] {
   return db
     .prepare(
-      'SELECT id, user_id, name, scopes, last_used_at, enabled, created_at FROM api_keys WHERE user_id = ? ORDER BY id DESC',
+      'SELECT id, user_id, name, scopes, last_used_at, enabled, created_at, client_name FROM api_keys WHERE user_id = ? ORDER BY id DESC',
     )
     .all(userId) as Omit<ApiKeyRow, 'key_hash'>[];
 }
@@ -46,6 +52,14 @@ export function findEnabledApiKeyByHash(db: Database, keyHash: string): ApiKeyRo
 
 export function findApiKeyById(db: Database, id: number): ApiKeyRow | undefined {
   return db.prepare('SELECT * FROM api_keys WHERE id = ?').get(id) as ApiKeyRow | undefined;
+}
+
+/**
+ * 记下客户端自报的名字。**只在有名字时调**——传空会把已有的名字抹成空串。
+ * 名字由调用方截断到 64 字符：它是对方随便填的字符串，不设上限就等于让别人决定我们存多长。
+ */
+export function recordClientName(db: Database, id: number, name: string): void {
+  db.prepare('UPDATE api_keys SET client_name = ? WHERE id = ?').run(name, id);
 }
 
 /** 时间由 SQLite 自己取，不从 JS 落 ISO 串（ADR-002 canonical = datetime('now')） */

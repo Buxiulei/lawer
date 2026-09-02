@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { GONGDAO_PER_YUAN } from '@/app/_mock/authpay';
 import { useSignedIn } from '@/app/_ui/auth';
+import { ByoAgentEntry } from '@/app/_ui/ByoAgentEntry';
 import { useDiscreet } from '@/app/_ui/discreet';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Sensitive } from '@/components/Sensitive';
@@ -117,6 +118,15 @@ function BalanceCard({ billing, me }: { billing: BillingState; me: MeState }) {
       </p>
 
       <SelfHostHint creditWord={creditWord} discreet={discreet} />
+
+      {/*
+        接入指南的入口，与上面那段引导分工不同，两者都留着：
+        上面那段讲的是**扣与不扣的全貌**（含公司档案 / 盯守两处主动下单），
+        这一条讲的是**怎么接、接没接上**，并带当前接入状态（接上之后它自己收成一行状态）。
+        追加在新组件里而不是改上面那段：那段的字面被 self-host-hint.test 九条钉死
+        （含「href="/settings"」必须出现在**同一段**里），改一个字就是红。
+      */}
+      <ByoAgentEntry className="mt-3" />
     </Card>
   );
 }

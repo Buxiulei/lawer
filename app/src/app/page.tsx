@@ -5,6 +5,7 @@
 import Link from 'next/link';
 import { PrimaryCta } from '@/app/_components/PrimaryCta';
 import { DISCLAIMER_TEXT } from '@/app/_mock/authpay';
+import { BYO, byoBillingLine } from '@/app/_ui/byoAgent';
 
 /** 卷一的三张文书卡。**全部是示例**，卡上带「示例」角标，不留可被误读成真实数据的余地。 */
 const DOCS = [
@@ -56,12 +57,20 @@ const STEPS = [
   },
 ] as const;
 
-/** 卷三：三句摆在明面上的话。**收费一句写明按 token 计费，全页无「免费」承诺。** */
+/**
+ * 卷三：三句摆在明面上的话。**收费一句写明按 token 计费，全页无无条件的「免费」承诺。**
+ * 「不收」那半句一律带着 `BYO_CONDITION` 的条件从句（见 _ui/byoAgent）——
+ * 卷〇刚说了"接自己的 agent 不收"，这里不跟着写清条件就与卷〇打架，
+ * 用户会读成"网页对话也免费"。
+ */
 const PROMISES = [
   {
     head: '收费',
     em: '明码标价',
-    body: '按对话消耗的 token 计费（公道值），价目公开可查；不卖课、不推销、不拿你的焦虑加价。',
+    body:
+      '网页里的对话按轮消耗 token 计费（公道值），价目公开可查；' +
+      '在你自己的 agent 上处理的对话与案件分析，我们不收公道值。' +
+      '不卖课、不推销、不拿你的焦虑加价。',
   },
   {
     head: '证据',
@@ -190,6 +199,30 @@ export default function LandingPage() {
       </div>
 
       <hr className="border-0 border-t-[1.5px] border-kraft-deep" />
+
+      {/* ── 卷〇 ── 排在卷一之前：先给「你可以不在这儿对话」这条路，再谈这儿能给你什么。
+          位置就是承诺本身——把这条藏到页脚，等于承认它是备选。 */}
+      <section className="pt-[76px]">
+        <div className="mx-auto max-w-[1120px] px-6">
+          <SectionTab no="卷〇" title="用你自己的 AI 助手，也能办" />
+          <div className="border-t-[1.5px] border-kraft-line pt-[34px]">
+            <div className="rounded-[10px] border-[1.5px] border-ink bg-surface px-[22px] py-[26px] md:px-[34px] md:py-[32px]">
+              <p className="max-w-[40em] text-[16px] leading-[1.9] text-ink">{BYO.lead}</p>
+              <p className="mt-3 max-w-[40em] border-l-[3px] border-primary pl-3.5 text-[15px] leading-[1.9] font-semibold text-primary-ink-on-surface">
+                {byoBillingLine({ credit: '公道值', watch: '守望', discreet: false })}
+              </p>
+              <p className="mt-3 max-w-[40em] text-[14px] leading-[1.8] text-ink-2">{BYO.how}</p>
+              {/* 未登录页只能指登录：钥匙是绑账号的，先摆一个点进去要先登录的链接是骗点击 */}
+              <Link
+                href="/login"
+                className="mt-5 inline-block rounded-[6px] border-[1.5px] border-ink px-6 py-3 text-[16px] font-semibold text-ink no-underline hover:bg-kraft"
+              >
+                {BYO.ctaSignedOut} →
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* ── 卷一 ── */}
       <section className="pt-[76px]">

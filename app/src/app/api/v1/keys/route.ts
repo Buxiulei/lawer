@@ -24,6 +24,8 @@ export async function GET(req: Request) {
     enabled: row.enabled === 1,
     last_used_at: row.last_used_at,
     created_at: row.created_at,
+    // MCP 客户端自报的名字。走 REST 的不报 → null，前端退到 name 并说明那是用户自己起的名。
+    client_name: row.client_name,
   }));
   return NextResponse.json({ ok: true, keys });
 }

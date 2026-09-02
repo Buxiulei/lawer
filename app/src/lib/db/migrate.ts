@@ -1166,6 +1166,13 @@ export function runMigrations(db: Database.Database): void {
   addColumnIfMissing(db, 'redemption_codes', 'note', 'TEXT');
   addColumnIfMissing(db, 'redemption_codes', 'created_by', 'INTEGER REFERENCES users(id)');
 
+  // api_keys.client_name：MCP 客户端在 `initialize` 里自报的名字（clientInfo.name）。
+  // 此前握手拿到就丢掉，于是页面上只说得出「用户给钥匙起的名」，说不出**到底是哪个助手接进来了**。
+  //
+  // 可空且不回填：走 REST 的客户端根本不报名字，存量行更是无从得知。读侧退到钥匙名，
+  // 并在页面上写明「这是你给钥匙起的名字」——**不编默认值**，否则用户会以为我们认出了他的助手。
+  addColumnIfMissing(db, 'api_keys', 'client_name', 'TEXT');
+
   // 档案维度的去重键。**必须与 uq_company_litigation（案件维度）并存，不能替代它**：
   // 一个档案可以被多个案件的 company_profiles 指向，同一份 JSONL 若先后挂在两个 profile 下导入，
   // 只有案件维度那把唯一键的话两行都能进去，docs_total 当场翻倍——而那个数是比率的分母之一。

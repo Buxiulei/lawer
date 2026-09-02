@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { ApiError, apiFetch, humanError } from '@/app/_ui/api';
+import { BYO_GUIDE_HREF } from '@/app/_ui/byoAgent';
 import { cn } from '@/app/_ui/cn';
 import { formatDateTime } from '@/app/_ui/format';
 import { Badge } from '@/components/shadcn/badge';
@@ -175,6 +177,18 @@ export function ApiKeysCard() {
         <CardContent>
           <p className="text-[14px] leading-6 text-ink-2">
             给你自己的 agent 用。一把 key 能做什么由勾选的权限决定，随时可以吊销。
+          </p>
+          {/* 这张卡是给"已经知道自己在干什么"的人管密钥用的。第一次接的人要的是顺序，
+              那条路在 /settings/agent（生成 → 配置 → 粘贴 → 验证），不在这儿重做一遍。 */}
+          <p className="mt-1 text-[14px] leading-6 text-ink-2">
+            第一次接？
+            <Link
+              href={BYO_GUIDE_HREF}
+              className="mx-1 text-primary-ink underline underline-offset-4"
+            >
+              照指南一步步来
+            </Link>
+            。
           </p>
 
           {loading && <Skeleton className="mt-3 h-20 w-full" />}

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { BYO, BYO_GUIDE_HREF, byoBillingLine } from '@/app/_ui/byoAgent';
 import { Button } from '@/components/shadcn/button';
 import { TubashuMark } from '@/components/shell/TubashuMark';
 
@@ -7,8 +8,14 @@ export const metadata: Metadata = { title: '档案已创建' };
 
 /**
  * 注册完成页：双验证走完之后落在这里。
- * 只给两个去处——先去首诊（主路），或者去拿接入密钥（给自己接工具用的少数人）。
+ * 两个去处并列首位——先去首诊（主路），或者把档案接到自己惯用的 AI 助手上。
  * 裸布局，不套 AppShell：此时还没有当前案件，底部 Tab 无处可指。
+ *
+ * 【接入那条为什么从次级按钮升成卡】对已经有惯用 agent 的人，那条是**更省的那条路**，
+ * 而它原先只是一颗次级按钮加一段小字，读起来像"高级用户可选项"。
+ *
+ * 【这一页不吃低调模式】server component 取不到 useDiscreet；
+ * 但这一屏的文案本就不含任何案情词（标题「档案已创建」、正文只讲接入），无需处理。
  */
 export default function WelcomePage() {
   return (
@@ -29,12 +36,21 @@ export default function WelcomePage() {
           <Button asChild className="w-full">
             <Link href="/intake">开始首诊</Link>
           </Button>
-          <Button asChild variant="secondary" className="w-full">
-            <Link href="/settings#api-keys">生成接入密钥</Link>
-          </Button>
+          {/* 与「开始首诊」并列首位。
+              顺带修掉一个死链：原来指 `/settings#api-keys`，而全仓没有 id="api-keys" 的锚点，
+              点了只会落到设置页顶部——指到一页式指南之后这个锚点自然消失。 */}
+          <div className="rounded-[10px] border-[1.5px] border-primary bg-primary-wash p-4">
+            <p className="text-[15px] leading-6 font-semibold text-ink">{BYO.title}</p>
+            <p className="mt-1 text-[13.5px] leading-6 text-ink-2">{BYO.lead}</p>
+            <p className="mt-2 text-[13.5px] leading-6 font-semibold text-primary-ink">
+              {byoBillingLine({ credit: '公道值', watch: '守望', discreet: false })}
+            </p>
+            <Button asChild variant="secondary" className="mt-3 w-full">
+              <Link href={BYO_GUIDE_HREF}>{BYO.cta}（三步，两分钟）</Link>
+            </Button>
+          </div>
           <p className="text-[13px] leading-6 text-ink-2">
-            接入密钥用来把这个档案接到自己的工具里（例如 Claude
-            这类支持 MCP 的客户端）。不需要的话跳过就行，之后在设置里随时能建。
+            不接也不影响，网页端功能同样齐全；之后在设置里随时能接。
           </p>
         </div>
       </div>
