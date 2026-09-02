@@ -15,6 +15,7 @@ type IdHandler = (req: Request, ctx: { params: Promise<{ id: string }> }) => Pro
 let listKeys: Handler;
 let createKey: Handler;
 let revokeKey: IdHandler;
+let mcpPost: Handler;
 let db: Database;
 let userA: number;
 let userB: number;
@@ -38,6 +39,8 @@ beforeAll(async () => {
   listKeys = collection.GET;
   createKey = collection.POST;
   revokeKey = (await import('../[id]/route')).DELETE;
+  // MCP 握手：client_name 是从那条链路落库的，测「响应里的名字对不对」就得让它真的握一次手
+  mcpPost = (await import('../../../mcp/route')).POST;
   db = (await import('@/lib/db/client')).getDb();
 });
 
@@ -114,6 +117,48 @@ describe('列出', () => {
     expect(body.keys[0]).toMatchObject({ name: '甲的', enabled: true, scopes: ['case:read', 'case:write'] });
     expect(JSON.stringify(body)).not.toContain('key_hash');
     expect(body.keys[0].key).toBeUndefined();
+  });
+
+  /**
+   * MCP 自报名整条链：initialize 的 clientInfo.name → api_keys.client_name → GET /keys 响应
+   * → 页面上的「已接入：claude-code」。
+   *
+   * 【为什么必须在接口层测】lib/db 那边只钉了「列有没有落进去」，api/mcp 那边只钉了
+   * 「握手写没写这一列」。把 listApiKeys 的 SELECT 里 client_name 三个字删掉，
+   * 那两处照样全绿：响应里这个字段变成 undefined → 前端 `nameIsKeyName` 恒真 →
+   * 页面从此永远念用户自己给钥匙起的名，并附一句「你的客户端没报自己的名字」。
+   * **对面明明报了名字，我们却当着用户的面说它没报**——而没有任何报错。
+   */
+  test('MCP 自报的名字要出现在响应里，且与握手写进去的那个字一致', async () => {
+    const created = await createKey(req('POST', { name: '我的 Claude' }, signToken(userA)));
+    const { key } = await created.json();
+
+    // 正对照：握手之前这一列是空的，下面那条断言才不是恒真
+    const before = await (await listKeys(req('GET', undefined, signToken(userA)))).json();
+    expect(before.keys[0]).toHaveProperty('client_name');
+    expect(before.keys[0].client_name).toBeNull();
+
+    const handshake = await mcpPost(
+      new Request('http://localhost/api/mcp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: { protocolVersion: '2025-06-18', clientInfo: { name: 'claude-code' } },
+        }),
+      }),
+    );
+    expect(handshake.status).toBe(200);
+
+    const after = await (await listKeys(req('GET', undefined, signToken(userA)))).json();
+    const stored = db.prepare('SELECT client_name FROM api_keys').get() as {
+      client_name: string | null;
+    };
+    expect(stored.client_name).toBe('claude-code'); // 握手确实写了
+    expect(after.keys[0].client_name).toBe('claude-code'); // 响应确实带出来了
+    expect(after.keys[0].client_name).toBe(stored.client_name); // 且是同一个字，不是巧合
   });
 });
 
