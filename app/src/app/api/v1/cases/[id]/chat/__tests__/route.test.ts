@@ -214,6 +214,82 @@ describe('SSE 通路', () => {
   });
 });
 
+/* ── 客户端中途走人 ────────────────────────────────────────────
+   真机事故（2026-09-02）：用户读完回答后刷新/关页，SSE 的 controller 随之关闭，
+   之后每一次 enqueue 抛 `Invalid state: Controller is already closed`。它有两条路，
+   两条都致命：从 runTurn 的 emit 抛出去 → 正文不落库、这一轮不记账；
+   从**心跳的 setInterval 回调**抛出去 → 没有调用栈接得住，Node 记 uncaughtException，
+   且 clearInterval 被跳过，于是每个心跳周期再抛一次，直到把 next 进程带走。
+   这一组钉的是：断开只影响下发，不影响这一轮跑完。 */
+describe('客户端断开', () => {
+  test('读到一半就走人 ⇒ 这一轮照样落库记账，且不抛未捕获异常', async () => {
+    const gated = await stubProviderGated();
+
+    const res = await post(request(signToken(userA), { message: '刚收到辞退邮件' }), ctx(caseA));
+    const reader = res.body!.getReader();
+    // 先收一帧（meta），确认流真的开起来了；再断开——这就是"回答渲染完随手 F5"
+    const first = await reader.read();
+    expect(new TextDecoder().decode(first.value)).toContain('event: meta');
+    await reader.cancel();
+
+    // 客户端走了，模型这才把这一轮跑完：正文 → 工具 → 收尾
+    gated.release();
+
+    await vi.waitFor(() => {
+      const row = db.prepare("SELECT content FROM messages WHERE role = 'assistant'").get() as
+        | { content: string | null }
+        | undefined;
+      expect(row?.content, '正文停在 NULL = 刷新之后那一轮永久消失').toBe('手抖是正常的。');
+    }, { timeout: 5000 });
+
+    expect(db.prepare('SELECT COUNT(*) AS n FROM action_items WHERE case_id = ?').get(caseA)).toEqual({ n: 1 });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM gongdao_ledger WHERE type = '消耗'").get()).toEqual({ n: 1 });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM token_usage').get()).toEqual({ n: 1 });
+
+    gated.restore();
+  });
+});
+
+/**
+ * 门控假 provider：第一次 chatStream 停在闸口，等测试放行才吐字。
+ * 剧本与默认那份等价（正文 + 一张行动卡 + 收尾轮），只是多了个可控的停顿点，
+ * 好让"客户端断开"精确地落在**这一轮还没跑完**的时候——否则这条用例会变成空跑。
+ */
+async function stubProviderGated() {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let round = 0;
+  const client = {
+    name: 'deepseek' as const,
+    model: 'deepseek-v4-pro',
+    billingModel: 'DeepSeek-V4-Pro-0813',
+    async chatStream() {
+      const mine = round++;
+      return (async function* () {
+        if (mine === 0) await gate;
+        for (const ch of mine === 0 ? '手抖是正常的。' : '') yield ch;
+        return {
+          finishReason: mine === 0 ? 'tool_calls' : 'stop',
+          toolCalls:
+            mine === 0
+              ? [{ id: 'call_1', type: 'function' as const, function: { name: CARD.name, arguments: JSON.stringify(CARD.args) } }]
+              : [],
+          usage: {
+            model: 'DeepSeek-V4-Pro-0813',
+            usage: { prompt: 100, completion: 20, cachedRead: 0, cachedWrite: 0 },
+            servedModel: 'deepseek-v4-pro',
+          },
+        };
+      })();
+    },
+  };
+  const llm = await import('@/lib/llm');
+  const spy = vi.spyOn(llm, 'getProvider').mockReturnValue({ client, route: { degraded: false } } as never);
+  return { release, restore: () => spy.mockRestore() };
+}
+
 /** 把 provider 换成"一调用就抛"的假货，抛出指定 message */
 async function stubProviderThrowing(message: string) {
   const boom = {

@@ -780,10 +780,11 @@ export const demoThread: Thread = {
  * 【格式约束】`RichText` 只认段落、`- ` / `1. ` 列表与 `**加粗**`，没有引用块。
  * 照读话术因此写成带引号的独立段落，不用 `> `（会原样显示成一个大于号）。
  *
- * 【`model` 必须是真型号 id】每条回答底下现在会照它渲染一行落款
- * （`MODEL_LABELS[model] ?? model`，认不出就把这串字原样印出去）。
+ * 【`model` 必须是真型号 id】每条回答底下现在会照它渲染一行落款，而落款印的就是**这串 id**
+ * （`servedModelLabel`：型号 id 为主、档位为辅）。填错一个不存在的串，核心客户首屏
+ * 四条回答底下就各挂一行假型号——比不标更坏。
  * 演示这几轮发生在买了中配月卡之后，critical 档在中配走 Claude Sonnet
- * （`lib/llm/routing.config.ts`），所以填 `claude-sonnet-5`，屏幕上是「主力模型」。
+ * （`lib/llm/routing.config.ts`），所以填 `claude-sonnet-5`，屏幕上是「claude-sonnet-5 · 主力」。
  */
 export const demoMessages: Message[] = [
   {

@@ -122,7 +122,7 @@ describe('done 帧的型号三件套落进 SettledTurn', () => {
   });
 
   /**
-   * 一路走到屏幕：这一轮落定之后，用户读到的那行小字是「主力模型（替代）」。
+   * 一路走到屏幕：这一轮落定之后，用户读到的那行小字是「claude-sonnet-5 · 主力（替代）」。
    * 只验字段的话，B9 那种"字段对了、口径错了"的改法会从渲染这一侧漏过去。
    */
   it('落定值喂给落款 ⇒ 屏幕上是实际那个 +（替代），不是请求那个', async () => {
@@ -144,8 +144,9 @@ describe('done 帧的型号三件套落进 SettledTurn', () => {
       requested: turn.meta?.model,
       mismatch: turn.servedMismatch,
     });
-    expect(label).toBe('主力模型（替代）');
-    expect(label).not.toContain('深度推理');
+    expect(label).toBe('claude-sonnet-5 · 主力（替代）');
+    // 请求的那个（opus）一个字都不许出现在屏幕上
+    expect(label).not.toContain('claude-opus-5');
   });
 
   /** 正对照：厂商没回显时才允许退回请求值——退回是三态里的一态，不是默认态 */
@@ -165,7 +166,7 @@ describe('done 帧的型号三件套落进 SettledTurn', () => {
         requested: turn.meta?.model,
         mismatch: turn.servedMismatch,
       }),
-    ).toBe('深度推理模型');
+    ).toBe('claude-opus-5 · 深度推理');
   });
 
   /** 实际与请求同一个型号：不加「（替代）」，别让用户以为每轮都被换 */
@@ -191,6 +192,6 @@ describe('done 帧的型号三件套落进 SettledTurn', () => {
         requested: turn.meta?.model,
         mismatch: turn.servedMismatch,
       }),
-    ).toBe('深度推理模型');
+    ).toBe('claude-opus-5 · 深度推理');
   });
 });

@@ -5,7 +5,7 @@
 // 编排、状态机、工具、落库全在 lib/agent；事件帧形状在 lib/agent/events.ts。
 import { NextResponse } from 'next/server';
 
-import { createKnowledgeSearcher, encodeSse, runTurn, startHeartbeat, THREAD_MODES, type AgentEvent } from '@/lib/agent';
+import { createKnowledgeSearcher, createSseSink, runTurn, startHeartbeat, THREAD_MODES, type AgentEvent, type SseSink } from '@/lib/agent';
 import { requireIdentity, parseId } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 // 会员档决定路由到哪个模型（routing.config.ts 的 Plan）。lib/billing 的 barrel 未导出
@@ -56,11 +56,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const plan = getMembership(db, guard.identity.uid).plan ?? 'entry';
   // 检索器无状态（lib/knowledge 自带进程级索引缓存），每次建一个即可，不必挂全局
   const searcher = createKnowledgeSearcher();
-  const encoder = new TextEncoder();
+
+  // 下发口。客户端一断开，controller 就是关的，再 enqueue 一律抛 Invalid state——
+  // 而它从心跳的 setInterval 里抛出去时没有任何调用栈接得住（uncaughtException，
+  // 会把 next 进程带走）。所以判可写做在这一个出口上，见 sse-sink.ts 文件头。
+  let sink: SseSink | null = null;
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const emit = (e: AgentEvent) => controller.enqueue(encoder.encode(encodeSse(e)));
+      const out = createSseSink(controller);
+      sink = out;
+      const emit = out.emit;
       // 正文没在流的每一段静默期都发心跳：首字前推理模型可能想三四分钟，首字之后
       // 每一轮 tool 往返又是几十秒零帧（实测 88.6s）。期间连接必须保持活跃、
       // 前端也需要一个「还在跑」的信号。正文一续上自动停，done 终止。
@@ -91,8 +97,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         emit({ event: 'error', data: { code: u.code, message: u.message } });
       } finally {
         heartbeat.stop();
-        controller.close();
+        // 断开后流已经是关的，close() 同样抛 Invalid state——而这里是 async start 的
+        // finally，抛出去就是一条没人接的 unhandledRejection。sink.close() 自己判。
+        out.close();
       }
+    },
+    // 客户端断开的第一手信号：拿到它就一帧都不再往里塞（不必等第一次 enqueue 抛）
+    cancel() {
+      sink?.markGone();
     },
   });
 

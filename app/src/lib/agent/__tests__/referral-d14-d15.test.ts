@@ -231,6 +231,17 @@ describe('D14 硬边界与频控', () => {
     const first = await turn(f, '案子立上了，接下来干嘛？');
     expect(first.result.referralScene).toBe('立案后');
     expect(first.result.text).toContain('NBDpsy');
+
+    /* ★推荐段必须**跟着正文一起进档案**（这一段曾排在 finalizeMessage 之后，
+       于是用户屏幕上读到了它、归档正文里却没有——审计上最坏的一种不一致）。
+       变异臂：把推荐段挪回 finalizeMessage 之后 ⇒ 这两条红。 */
+    const archived = f.db
+      .prepare("SELECT content FROM messages WHERE role = 'assistant' ORDER BY id DESC LIMIT 1")
+      .get() as { content: string | null };
+    expect(archived.content, '用户看见了、档案里没有').toContain('NBDpsy');
+    expect(archived.content).toBe(first.result.text);
+    // 帧序契约：usage / done 恒为最后两帧。推荐段插在它们中间就把这条撞坏了。
+    expect(first.sink.events.map((e) => e.event).slice(-2)).toEqual(['usage', 'done']);
     const rows = referralOffers.listByUser(f.db, f.userId);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ scene: '立案后', outcome: 'offered' });
