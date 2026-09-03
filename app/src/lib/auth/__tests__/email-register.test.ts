@@ -589,6 +589,7 @@ describe('验码的边界与失败形态', () => {
     expect(rows(), '发失败还留着行 = 当日额度被白吃一次').toBe(0);
 
     // 一秒后重发：撞的必须是 ≤5 秒防连击闸，而不是那次失败换来的 60 秒冷却
+    // 【口径未裁决】工单原判据是「立即重发放行」，改写成「5 秒后放行」属 ADR-003 的 A 案，见 docs/adr/003
     expect(
       await sendEmailRegisterCode(db, { email: EMAIL, ip: IP }, makeDeps(at(1)).deps),
     ).toMatchObject({ ok: false, status: 429, errorCode: 'SEND_TOO_FAST', retryAfter: 5 });
