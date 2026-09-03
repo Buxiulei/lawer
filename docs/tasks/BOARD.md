@@ -349,6 +349,12 @@
 
 **2026-09-03 · dialog-buttons 复核 MUST_FIX 一条（2f7ff9a）→ 派修复**：排布本身达标（320/360/393 六弹窗 column 主上次下全宽 48、1280 row 次左主右 min-w、固化文案「确认固化」、M1–M6 全红；仪器事故：第一版 g6 按 DOM 第一个认主按钮，M2 反序时尺子跟着反——改按 data-slot 认人）。硬伤：ConfirmDialog 传整串 buttonVariants 的 text-[16px] 经 tailwind-merge 覆盖 BUTTON_LAYOUT 的 clamp，主按钮不缩字号，360/320 档主次字号不等（执行者只量 393 恰好量不到）。修法：AlertDialogAction 收 variant prop；g6 加 360/320 档与字号相等断言、退出登录场景（route abort）。裁决：12 字守卫只覆盖字面量——接受；toast 压弹窗 z-order 既有问题另记。
 
+**2026-09-03 · admin-passport-review PASS（5bfdca7）合入主干 848cbbf；byo-key-rotate PASS（91fc05f）与 dialog-buttons PASS（89cfdbc）合入主干；两条收尾单派出**：
+- admin 审核：三路复审 PASS——requireAdmin 唯一闸门（28 次非管理员/未登录/api key 探测全 404）、照片鉴权路由 no-store、解密只在 admin 路由、审计无 PII、真机全链路（提交→待审→看图→驳回回显重交→通过→已实名→固化闸放行）、手机 11 位全显与 4 位模糊。收尾单 admin-review-polish：审核后自动刷新、通知三态提示、落定校验最新流水、nosniff/仅 image、五条判据补牙、reason 上限。
+- byo-key：一轮修复后 PASS——密文落库、查看/轮换仅网页登录态、旧钥即 401、低调下当前密钥也折叠（RV-S01）、生成→轮换话术同步（MF-1）、同页两卡共享 state（MF-2）；模拟 agent 只凭话术取 SKILL.md→MCP initialize→case_facts→knowledge_search 走通。生产 app.env 已有 LAWER_PUBLIC_URL/LAWER_SKILL_DIR。裁决：「暂不交付」名单去掉 knowledge_search **接受**。收尾单 byo-key-polish：no-store、吊销轮换 409、吊销同步、弹层标题、limit 归一、%ZZ 404、issued 剔 key。
+- dialog：AlertDialogAction 收 variant 后主次字号 320→14/360→14.76/393→16 一致，g6 四档 205 断言绿，变异 M7 红；仪器坑记账（tailwind-merge 同组后者胜、只量 393 量不到）。
+- 主干 CI 盯梢中；上产要跑迁移（api_keys.secret_enc）。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
