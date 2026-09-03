@@ -6,11 +6,13 @@ import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Database } from 'better-sqlite3';
 
 import { scriptedProvider, type ScriptedRound } from '@/lib/agent/__tests__/fixtures';
 import type { AgentEventSink } from '@/lib/agent';
+import { getGongdao, gongdaoGrant, gongdaoSettle } from '@/lib/billing';
+import { GONGDAO_LEDGER_TYPE } from '@/lib/billing/pricing';
 
 /** 本轮要回放的剧本，由每个用例改写 */
 let script: ScriptedRound[] = [];
@@ -83,6 +85,18 @@ async function readSse(res: Response): Promise<{ event: string; data: Record<str
   return parseSse(await res.text());
 }
 
+/** 给某人入一笔公道值。走账本入口，不直写表——直写会绕开幂等与事务，且守卫按写语句扫。 */
+function seedBalance(userId: number, amount: number): void {
+  gongdaoGrant(
+    userId,
+    amount,
+    GONGDAO_LEDGER_TYPE.recharge,
+    `seed-${userId}-${amount}-${crypto.randomUUID()}`,
+    null,
+    db,
+  );
+}
+
 const CARD = {
   name: 'action_card',
   args: {
@@ -108,7 +122,7 @@ beforeEach(() => {
   // 它们都外键指向 users——清 users 之前必须先清它们（子表先于父表）。
   for (const t of [
     'action_items', 'messages', 'threads', 'timeline_events', 'cases',
-    'token_usage', 'gongdao_ledger', 'gongdao', 'users',
+    'token_usage', 'gongdao_ledger', 'gongdao', 'memberships', 'users',
   ]) {
     db.prepare(`DELETE FROM ${t}`).run();
   }
@@ -116,6 +130,9 @@ beforeEach(() => {
   userA = Number(insertUser.run(`a-${crypto.randomUUID()}`).lastInsertRowid);
   userB = Number(insertUser.run(`b-${crypto.randomUUID()}`).lastInsertRowid);
   caseA = Number(db.prepare("INSERT INTO cases (user_id, title, stage) VALUES (?, '甲的案子', '已收通知')").run(userA).lastInsertRowid);
+  // 余额闸接上之后，「能开一轮」的前提是有余额。这里给足，好让下面每一条验的仍是
+  // 它本来要验的那件事；闸本身的判据在「余额闸」那一组里，各人余额各自设。
+  seedBalance(userA, 1000);
   script = [{ text: '手抖是正常的。', tools: [CARD] }, { text: '' }];
 });
 
@@ -152,6 +169,152 @@ describe('闸门（开流之前就要判完）', () => {
       body: '不是 json',
     });
     expect((await post(req, ctx(caseA))).status).toBe(400);
+  });
+});
+
+/* ── 余额闸（主理人 2026-09-03「拦」）────────────────────────────
+   余额 ≤ 0 时**新一轮开不了**：不调模型、不插用户消息、不记一行账，HTTP 402。
+   判定必须在开流之前——一旦开了流，状态码就定死 200，402 再也发不出去，
+   页面只能收到「200 + 流里一帧 error」，那既不是可分支的 HTTP 语义，也没法禁输入框。
+
+   【为什么零新增要逐张表点名】只断言「没扣钱」是不够的：把闸放到 runTurn **之后**，
+   钱确实没扣（失败轮本来就不记账），但用户那句问话已经进了 messages、模型也已经被调过——
+   免费答了一轮，且档案里多出一问没答的记录。三张表一起点名才拦得住这种放法。
+
+   【变异臂】
+    · M-G1 闸整个删掉                        ⇒「0 拦」「-5 拦」「会员且 0 拦」红
+    · M-G2 门槛写成 `balance >= 0`（把 0 当够）⇒「0 拦」红（「1 放行」仍绿，故必须两条都在）
+    · M-G3 闸挪到 runTurn 之后                ⇒「零新增」的 messages/模型调用次数红
+    · M-G4 402 体里不带 balance / 不带余额数字 ⇒「三段式含余额」红
+    · M-G5 会员身份放行（读 membership 开口子）⇒「会员且 0 拦」红 */
+describe('余额闸', () => {
+  /** 本轮假上游被调了几次。0 = 模型根本没被碰过（拦住了就该是 0）。 */
+  let upstreamCalls = 0;
+
+  let spy: { mockRestore: () => void } | null = null;
+
+  beforeEach(async () => {
+    upstreamCalls = 0;
+    const llm = await import('@/lib/llm');
+    // 计数器版假上游：**取 provider 这一下就算「模型被碰过」**。真正拦住时连取都不会取。
+    spy = vi.spyOn(llm, 'getProvider').mockImplementation((() => {
+      upstreamCalls += 1;
+      return { client: scriptedProvider(script), route: { degraded: false } };
+    }) as never);
+  });
+
+  afterEach(() => {
+    spy?.mockRestore();
+    spy = null;
+  });
+
+  /** 拦下之后这三张表必须一行都没多；每一张都是一种「已经发生过」的痕迹。 */
+  const rowCounts = () => ({
+    messages: (db.prepare('SELECT COUNT(*) AS n FROM messages').get() as { n: number }).n,
+    ledger: (db.prepare('SELECT COUNT(*) AS n FROM gongdao_ledger WHERE delta < 0').get() as { n: number }).n,
+    usage: (db.prepare('SELECT COUNT(*) AS n FROM token_usage').get() as { n: number }).n,
+  });
+
+  /** 把某人的余额调到指定值（可负）。负数只可能来自透支结算，故走 settle 造。 */
+  function setBalance(userId: number, target: number): void {
+    const now = getGongdao(userId, db);
+    const diff = target - now;
+    if (diff > 0) seedBalance(userId, diff);
+    else if (diff < 0) {
+      gongdaoSettle(userId, -diff, `spend-${userId}-${crypto.randomUUID()}`, 'companion', null, db);
+    }
+    expect(getGongdao(userId, db)).toBe(target);
+  }
+
+  test('★余额 1（恰好够）⇒ 放行，正常出流', async () => {
+    setBalance(userA, 1);
+    const res = await post(request(signToken(userA), { message: '刚收到辞退邮件' }), ctx(caseA));
+    expect(res.status).toBe(200);
+    const frames = await readSse(res);
+    expect(frames.at(-1)!.event).toBe('done');
+    expect(upstreamCalls, '放行了却没调模型 ⇒ 下面那些「0 次」的断言会变成空跑').toBeGreaterThan(0);
+  });
+
+  test('★余额 0 ⇒ 402 GONGDAO_EXHAUSTED，且 messages / ledger / usage 零新增、模型零调用', async () => {
+    setBalance(userA, 0);
+    const before = rowCounts();
+
+    const res = await post(request(signToken(userA), { message: '刚收到辞退邮件' }), ctx(caseA));
+
+    expect(res.status).toBe(402);
+    expect(res.headers.get('content-type')).toContain('application/json'); // 不是 event-stream：流没开
+    const body = await res.json();
+    expect(body).toMatchObject({ ok: false, error_code: 'GONGDAO_EXHAUSTED', balance: 0 });
+    expect(rowCounts()).toEqual(before);
+    expect(upstreamCalls, '模型被调过 = 已经花了钱，只是没记账').toBe(0);
+  });
+
+  test('★余额 -5（上一轮透支）⇒ 照拦（最多欠一轮，不许欠第二轮）', async () => {
+    setBalance(userA, -5);
+    const before = rowCounts();
+    const res = await post(request(signToken(userA), { message: '在吗' }), ctx(caseA));
+    expect(res.status).toBe(402);
+    expect((await res.json()).balance).toBe(-5);
+    expect(rowCounts()).toEqual(before);
+    expect(upstreamCalls).toBe(0);
+  });
+
+  test('★会员且余额 0 ⇒ 照拦（会员的额度是买来入账的公道值，不是绕闸的资格）', async () => {
+    db.prepare(
+      "INSERT INTO memberships (user_id, plan, started_at, expires_at) VALUES (?, 'standard', '2026-01-01 00:00:00', '2099-01-01 00:00:00')",
+    ).run(userA);
+    // 正对照：这个会员身份**是真生效的**，否则这条就退化成「普通用户余额 0 被拦」
+    const { getMembership } = await import('@/lib/billing/fulfillment');
+    expect(getMembership(db, userA)).toMatchObject({ active: true, plan: 'standard' });
+
+    setBalance(userA, 0);
+    const before = rowCounts();
+    const res = await post(request(signToken(userA), { message: '在吗' }), ctx(caseA));
+    expect(res.status).toBe(402);
+    expect(rowCounts()).toEqual(before);
+    expect(upstreamCalls).toBe(0);
+  });
+
+  test('★402 的正文是自述三段式，且**说出余额**（缺什么 / 为什么缺 / 怎么办）', async () => {
+    setBalance(userA, 0);
+    const message = String((await (await post(request(signToken(userA), { message: '在吗' }), ctx(caseA))).json()).message);
+
+    expect(message, '缺什么：余额这个数得在正文里，不能只在字段里').toContain('余额 0');
+    expect(message, '为什么缺：按 token 扣').toContain('token');
+    expect(message, '怎么办①：兑换').toContain('兑换');
+    expect(message, '怎么办②：充值').toContain('充值');
+    // 裸报错让人重推一遍你推过的那遍：这条不许退化成「余额不足」四个字
+    expect(message.length).toBeGreaterThan(40);
+  });
+
+  test('余额够不够都轮不到：别人的案子仍是 404（不许把余额拿去探别人有没有案子）', async () => {
+    setBalance(userB, 0);
+    const res = await post(request(signToken(userB), { message: '你好' }), ctx(caseA));
+    expect(res.status).toBe(404);
+  });
+});
+
+/* 结构守卫：闸的判定是**唯一入口**（lib/billing 的 canStartTurn），路由不许自己读 gongdao 表。
+   行为判据钉住「拦不拦」，这一条钉住「判据长在哪」——路由里就地 SELECT 一次余额，
+   门槛就有了第二份定义，且行为判据全绿（这一刻两份是一样的）。
+   变异臂 M-G6：把 canStartTurn 换成路由内的 `SELECT balance FROM gongdao` ⇒ 这一组红。 */
+describe('余额闸的接线（结构守卫）', () => {
+  const SRC = readFileSync(new URL('../route.ts', import.meta.url), 'utf8');
+
+  test('路由不自己读 gongdao 表', () => {
+    expect(SRC, '余额口径与门槛长在 lib/billing，路由抄第二份就会各自演化').not.toMatch(
+      /\bFROM\s+`?gongdao/i,
+    );
+    expect(SRC).not.toMatch(/\bgongdao(_ledger)?\b\s*(WHERE|SET)/i);
+    expect(SRC, '连读余额的函数也不该在这里调：判定连同门槛一起给出').not.toMatch(/getGongdao\s*\(/);
+  });
+
+  test('闸走的是 lib/billing 的那一个入口，且在 runTurn 之前', () => {
+    expect(SRC).toMatch(/canStartTurn\s*\(/);
+    expect(SRC.indexOf('canStartTurn('), '闸挪到 runTurn 之后 = 免费答一轮').toBeLessThan(
+      SRC.indexOf('runTurn({'),
+    );
+    expect(SRC).toMatch(/status:\s*402/);
   });
 });
 

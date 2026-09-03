@@ -32,6 +32,9 @@ function errorFrameFrom(body: unknown, status: number): ErrorFrame {
         : '这一轮没能连上，稍后再试一次。',
     retry_after:
       typeof payload.retry_after === 'number' ? payload.retry_after : undefined,
+    // 余额（402 GONGDAO_EXHAUSTED 才有）。缺席就是缺席，不补 0——
+    // 0 是一个**真实且不同**的余额，凭空造一个会让横幅说出一个服务端没说过的数。
+    balance: typeof payload.balance === 'number' ? payload.balance : undefined,
   };
 }
 

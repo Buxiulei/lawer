@@ -49,12 +49,17 @@ vi.mock('@/app/_ui/motion', async (importOriginal) => ({
 }));
 /** 落定回调的接住处：本轮流走完之后 Workbench 拿它把新消息追进列表。
  *  `retried` 记下「点了历史里那条失败轮的重试」时传出去的 id。 */
-const chat: { settle: (turn: unknown) => void; retried: string[] } = { settle: () => {}, retried: [] };
+/** `error` 让用例把流的失败态摆上去（余额闸那一组用它摆 402）。 */
+const chat: {
+  settle: (turn: unknown) => void;
+  retried: string[];
+  error: Record<string, unknown> | null;
+} = { settle: () => {}, retried: [], error: null };
 vi.mock('../../_stream/useChatStream', () => ({
   useChatStream: ({ onSettled }: { onSettled: (turn: unknown) => void }) => {
     chat.settle = onSettled;
     return {
-      phase: 'idle',
+      phase: chat.error ? 'error' : 'idle',
       meta: null,
       text: '',
       deterministicChars: 0,
@@ -62,7 +67,7 @@ vi.mock('../../_stream/useChatStream', () => ({
       actions: [],
       drafts: [],
       notices: [],
-      error: null,
+      error: chat.error,
       waitBaseAt: null,
       busy: false,
       demoFallback: false,
@@ -231,11 +236,21 @@ function walk(
   }
   // 消息组件把正文放在 message 这个**数据对象**里（不是 ReactNode），单独取一下：
   // 少了它，"两条都画出来"那条会在空字符串上断言，静默空过。
+  // 输入框「禁没禁用」是一个 prop，不走 children，也不显示成文字——单独取
+  if (typeName === 'Composer') {
+    composers.push({
+      disabled: el.props?.disabled === true,
+      placeholder: el.props?.disabledPlaceholder,
+    });
+  }
   const message = el.props?.message as ProbedMessage | undefined;
   if (message) messages.push(message);
   if (typeof message?.content === 'string') texts.push(message.content);
   for (const key of TEXT_PROPS) walk(el.props?.[key], types, texts, messages);
 }
+
+/** 这一帧画出来的输入框及其禁用态（walk 的收集处，probe 每次开跑前清空） */
+const composers: { disabled: boolean; placeholder: unknown }[] = [];
 
 /** 这一帧画出来的失败横幅（walk 的收集处，probe 每次开跑前清空） */
 const errorCards: {
@@ -250,13 +265,21 @@ function probe(node: ReactNode): {
   text: string;
   messages: ProbedMessage[];
   errors: typeof errorCards;
+  composers: typeof composers;
 } {
   const types: string[] = [];
   const texts: string[] = [];
   const messages: ProbedMessage[] = [];
   errorCards.length = 0;
+  composers.length = 0;
   walk(node, types, texts, messages);
-  return { types, text: texts.join(' '), messages, errors: [...errorCards] };
+  return {
+    types,
+    text: texts.join(' '),
+    messages,
+    errors: [...errorCards],
+    composers: [...composers],
+  };
 }
 
 /** 推一帧：只在这期间接管 hook */
@@ -294,6 +317,7 @@ beforeEach(() => {
   bus.rows = realRows();
   bus.calls.length = 0;
   chat.retried.length = 0;
+  chat.error = null;
   harness.slots.length = 0;
 });
 
@@ -484,3 +508,67 @@ describe('失败轮回显：横幅 + 重试', () => {
     expect(errors).toEqual([]);
   });
 });
+
+/* ── 五、余额用尽（主理人 2026-09-03「拦」）─────────────────────────
+   服务端 402 之后，这一屏必须换掉两样东西：失败卡换成横幅（重试不是出路），
+   输入框禁掉（能打字、点发送、被同一句话弹回来，读起来像产品坏了）。
+
+   【变异臂】
+    · M-F1 去掉 exhausted 分支（一律 StreamErrorCard）⇒「换横幅」两条红
+    · M-F2 Composer 不传 disabled                     ⇒「输入框禁用」红
+    · M-F9 别的错误也当成余额用尽                      ⇒ 正对照那条红 */
+describe('余额用尽这一屏', () => {
+  const EXHAUSTED = { code: 'GONGDAO_EXHAUSTED', message: '公道值余额 0，这一轮开不了。', balance: 0 };
+
+  it('★画横幅、不画失败卡（重试一百次也不会有回答）', async () => {
+    chat.error = EXHAUSTED;
+    const { types, errors } = probe(await settled(CASE));
+    expect(types).toContain('GongdaoExhaustedBanner');
+    expect(errors, '画成失败卡 = 屏幕上摆着一个点不出结果的重试').toHaveLength(0);
+  });
+
+  it('★输入框禁用，且占位符说清为什么打不了字', async () => {
+    chat.error = EXHAUSTED;
+    const { composers } = probe(await settled(CASE));
+    expect(composers, '这一屏根本没画输入框，判据会变成空过').toHaveLength(1);
+    expect(composers[0].disabled).toBe(true);
+    expect(String(composers[0].placeholder)).toContain('用完了');
+  });
+
+  it('★余额那个数原样交给横幅（不从文案里抠）', async () => {
+    chat.error = { ...EXHAUSTED, balance: -5 };
+    const banner = findBanner(await settled(CASE));
+    expect(banner?.balance).toBe(-5);
+  });
+
+  it('正对照：普通失败照旧画失败卡、输入框照常能用', async () => {
+    chat.error = { code: 'AGENT_FAILED', message: '模型这会儿连不上。' };
+    const { types, errors, composers } = probe(await settled(CASE));
+    expect(types).not.toContain('GongdaoExhaustedBanner');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].retryable).toBe(true);
+    expect(composers[0].disabled).toBe(false);
+  });
+});
+
+/** 从这一帧里翻出横幅拿到的 props（balance 不走 children，probe 收不到） */
+function findBanner(node: ReactNode): { balance?: number } | null {
+  let found: { balance?: number } | null = null;
+  const visit = (n: unknown): void => {
+    if (found || n === null || n === undefined || typeof n !== 'object') return;
+    if (Array.isArray(n)) {
+      for (const child of n) visit(child);
+      return;
+    }
+    const el = n as ReactElement<Record<string, unknown>>;
+    const t = el.type as { name?: string; displayName?: string } | string | undefined;
+    const name = typeof t === 'string' ? t : (t?.displayName ?? t?.name ?? '');
+    if (name === 'GongdaoExhaustedBanner') {
+      found = el.props as { balance?: number };
+      return;
+    }
+    for (const key of ['children', 'title', 'description', 'action'] as const) visit(el.props?.[key]);
+  };
+  visit(node);
+  return found;
+}

@@ -5,7 +5,9 @@ import { describe, test, expect } from 'vitest';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../../db/migrate';
 import {
+  canStartTurn,
   getGongdao,
+  gongdaoExhaustedMessage,
   gongdaoGate,
   gongdaoGrant,
   gongdaoSettle,
@@ -161,6 +163,54 @@ describe('gongdaoGate 门槛', () => {
     gongdaoSettle(uid, 1, 'g', 'intake', null, db);
     expect(getGongdao(uid, db)).toBe(0);
     expect(gongdaoGate(uid, db)).toBe(false); // =0 不足
+  });
+});
+
+/**
+ * 对话闸的唯一入口（主理人 2026-09-03「拦」第 5 条）。路由只调它、不自己读表，
+ * 所以门槛的边界得在这一层逐分钱地钉住——路由那边的判据验的是"拦没拦"，
+ * 验不出"门槛是几"（那要靠一个恰好卡在边界上的余额）。
+ *
+ * 【变异臂】
+ *  · M-G2 门槛写成 `balance >= 0` ⇒「余额 0 拦」红
+ *  · M-G8 门槛写成 `balance > 1`  ⇒「余额 1 放行」红
+ *  · M-G9 canStartTurn 不回 balance（只回 bool）⇒ 编译期就断（402 文案说不出余额）
+ */
+describe('canStartTurn 对话闸', () => {
+  test('余额 1 放行、0 拦、-5 拦，且每次都把余额一并交出来', () => {
+    const { db, uid } = makeDb();
+    // 无行 = 0：拦，且报的余额就是 0（不是 undefined，也不是 null）
+    expect(canStartTurn(uid, db)).toEqual({ ok: false, balance: 0 });
+
+    gongdaoGrant(uid, 1, GONGDAO_LEDGER_TYPE.register, 'seed-1', null, db);
+    expect(canStartTurn(uid, db), '1 是门槛本身，必须放行').toEqual({ ok: true, balance: 1 });
+
+    gongdaoSettle(uid, 1, 'turn-1', 'companion', null, db);
+    expect(canStartTurn(uid, db), '0 不够开新的一轮').toEqual({ ok: false, balance: 0 });
+
+    // 透支入负（最后一单允许，之后就该被这道闸收住）
+    gongdaoSettle(uid, 5, 'turn-2', 'companion', null, db);
+    expect(canStartTurn(uid, db)).toEqual({ ok: false, balance: -5 });
+  });
+
+  test('gongdaoGate 是同一道判定的布尔外壳（两处门槛不许各是各的）', () => {
+    const { db, uid } = makeDb();
+    for (const amount of [0, 1, 2, 300]) {
+      if (amount > 0) gongdaoGrant(uid, amount, GONGDAO_LEDGER_TYPE.recharge, `g-${amount}`, null, db);
+      expect(gongdaoGate(uid, db)).toBe(canStartTurn(uid, db).ok);
+    }
+  });
+});
+
+describe('gongdaoExhaustedMessage 拦下时说的那句话', () => {
+  test('自述三段式：余额多少 / 为什么缺 / 怎么办，且余额是传进来的那个数', () => {
+    for (const balance of [0, -5, -1200]) {
+      const message = gongdaoExhaustedMessage(balance);
+      expect(message, `balance=${balance}`).toContain(`余额 ${balance}`);
+      expect(message).toContain('token'); // 为什么缺
+      expect(message).toContain('兑换'); // 怎么办①
+      expect(message).toContain('充值'); // 怎么办②
+    }
   });
 });
 

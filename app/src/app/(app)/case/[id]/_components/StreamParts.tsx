@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useState, type CSSProperties } from 'react';
+import { useDiscreet } from '@/app/_ui/discreet';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Badge } from '@/components/shadcn/badge';
 import { Button } from '@/components/shadcn/button';
 import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
@@ -406,6 +408,53 @@ export function StreamErrorCard({
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * 余额用尽的提示条（HTTP 402 GONGDAO_EXHAUSTED）。
+ *
+ * 【为什么它不是又一张 StreamErrorCard】那张卡说的是「这一轮没说完，点重试」——
+ * 而这里重试一百次也不会有回答，出路在别处（兑换 / 充值）。把它画成错误卡，
+ * 用户会一直点那个按钮，直到以为产品坏了。所以：借那张卡的版式（同一处视觉语言），
+ * 换掉全部三段内容——**缺什么（余额这个数）/ 为什么缺（每轮按 token 扣）/ 怎么办（两个入口）**。
+ *
+ * 【为什么文案在这里重写一遍，而不是渲染服务端那句 message】
+ * 服务端那句是 API 面的说法（curl / 自带 agent 都读它），用产品原词「公道值」。
+ * 网页有旁人在肩后看屏幕：低调模式下这里换成中性词「额度」（NEUTRAL_WORD.credits）。
+ * 两处受众不同，说法就该不同；共用一句的代价是低调模式下泄漏一个产品词。
+ * 唯一跨过来的是**余额那个数**（error.balance），它不从 message 里抠——换了说法就抠不着了。
+ *
+ * 【余额缺席时不编】服务端没给数（老版本、代理改写过响应）就整句不报数字，
+ * 而不是显示「余额 0」——0 是一个真实且不同的余额。
+ */
+export function GongdaoExhaustedBanner({ balance }: { balance?: number }) {
+  const { discreet } = useDiscreet();
+  const word = discreet ? NEUTRAL_WORD.credits : '公道值';
+
+  return (
+    <div
+      role="status"
+      className="prose-measure my-2 rounded-[12px] border border-line bg-surface-2 p-3.5"
+    >
+      <p className="text-[14px] font-medium text-amber-ink">{word}用完了</p>
+      <p className="mt-1 text-[15px] leading-7 text-ink">
+        {balance === undefined ? `你的${word}不够开始新的一轮。` : (
+          <>
+            你的{word}余额是 <span className="num">{balance}</span>。
+          </>
+        )}
+        每一轮按实际消耗的 token 扣{word}，不够就不再起新的一轮——已经开始的那一轮会照常答完。
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button asChild size="sm">
+          <Link href="/account#redeem">去兑换</Link>
+        </Button>
+        <Button asChild size="sm" variant="secondary">
+          <Link href="/account#recharge">去充值</Link>
+        </Button>
+      </div>
     </div>
   );
 }

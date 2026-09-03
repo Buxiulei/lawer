@@ -9,7 +9,9 @@ import {
   demoMessages,
 } from '@/app/_mock/demo';
 import { mockLawRefs } from '@/app/_mock/workbench';
+import { useDiscreet } from '@/app/_ui/discreet';
 import { formatDate } from '@/app/_ui/format';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { scrollBehavior, useReducedMotion } from '@/app/_ui/motion';
 import { EmptyState } from '@/components/shadcn/empty-state';
 import { AppSheet } from '@/components/shadcn/app-sheet';
@@ -26,7 +28,7 @@ import {
   prefersReducedMotion,
   useCitationBridge,
 } from './citations';
-import { toActionItem, type DraftFrame } from '../_stream/frames';
+import { GONGDAO_EXHAUSTED, toActionItem, type DraftFrame } from '../_stream/frames';
 import { ByoAgentNotice } from './ByoAgentNotice';
 import { readToken } from '../_stream/httpTransport';
 import { useCaseHistory } from '../_stream/useCaseHistory';
@@ -44,6 +46,7 @@ import {
   AcceptedLine,
   DemoDataBanner,
   DraftConfirmDialog,
+  GongdaoExhaustedBanner,
   StreamErrorCard,
   WaitingCard,
 } from './StreamParts';
@@ -89,6 +92,7 @@ export function Workbench({ caseId }: { caseId: string }) {
      `globals.css` 底部那条 `* { animation-duration: .01ms }` 兜底**管不到 JS**，
      而整屏平滑滚动正是前庭敏感者最难受的一类运动——这一处此前在减弱动效下照跑。 */
   const reduce = useReducedMotion();
+  const { discreet } = useDiscreet();
 
   // 滚到文档末尾而不是锚点：末尾处输入区回到静态位置，最后一行不会被它压住
   const scrollToBottom = useCallback(
@@ -313,6 +317,14 @@ export function Workbench({ caseId }: { caseId: string }) {
     );
   }
 
+  /**
+   * 这一轮是被余额闸拦下的（HTTP 402），不是普通失败。
+   * 判据是服务端的错误码，前端不自己认字符串里的「余额」。
+   */
+  const exhausted = stream.error?.code === GONGDAO_EXHAUSTED;
+  // 输入框里那句「为什么打不了字」也走中性词：低调模式下屏幕上不该出现产品原词。
+  const composerHint = `${discreet ? NEUTRAL_WORD.credits : '公道值'}用完了，先去兑换或充值`;
+
   /** 流里正在长出来的那条回复 */
   const live: StreamedMessage = {
     id: 'streaming',
@@ -418,10 +430,25 @@ export function Workbench({ caseId }: { caseId: string }) {
             />
           )}
 
-          {stream.error && <StreamErrorCard error={stream.error} onRetry={retry} />}
+          {/* 余额用尽自成一屏内容：那不是「这一轮没说完」，重试再多次也不会有回答，
+              出路在兑换 / 充值两个入口上。所以换横幅、且不给重试按钮。 */}
+          {stream.error &&
+            (exhausted ? (
+              <GongdaoExhaustedBanner balance={stream.error.balance} />
+            ) : (
+              <StreamErrorCard error={stream.error} onRetry={retry} />
+            ))}
         </div>
 
-        <Composer streaming={stream.busy} onSend={send} onStop={stream.stop} />
+        {/* 余额用尽时输入框禁用：能打字、点发送、每次被同一句话弹回来，读起来像产品坏了。
+            余额一恢复（去 /account 兑换或充值后回来，这一屏重挂）输入框跟着回来。 */}
+        <Composer
+          streaming={stream.busy}
+          onSend={send}
+          onStop={stream.stop}
+          disabled={exhausted}
+          disabledPlaceholder={composerHint}
+        />
         {/* 锚点放在输入区之后：滚到底时最新一段正好落在输入区上方 */}
         <div ref={bottom} className="h-px" />
       </div>

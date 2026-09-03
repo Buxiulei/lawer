@@ -31,6 +31,8 @@ export interface StreamError {
    * 缺席 = 这次失败没落成行（例如根本没连上），那时只能退回"照原文再发一次"。
    */
   messageId?: string;
+  /** 公道值余额；只有 GONGDAO_EXHAUSTED 带。横幅照它说话，缺席时横幅不报数字 */
+  balance?: number;
 }
 
 /** 一轮对话落定后交给页面的东西 */
@@ -129,6 +131,7 @@ export function reduce(state: State, action: Action): State {
           message: frame.message,
           retryAfter: frame.retry_after,
           messageId: frame.message_id,
+          balance: frame.balance,
         },
       };
     default:

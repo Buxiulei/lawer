@@ -169,6 +169,41 @@ describe('arrears 状态机（D3）· 变异核', () => {
     expect(getGongdao(ctx.userId, ctx.db)).toBe(500 - 199);
   });
 
+  /**
+   * ★闸的边界（余额闸工单 2026-09-03 第 2 条：下单类在确认时余额不够即拦）。
+   *
+   * 上面那条 D3 用的是「一分没有」，它同时被**任何**一种拦法满足——包括一种错的：
+   * 把判据写成 `balance > 0`。那时余额 198、月费 199 会被判为够，扣出 -1 的透支订阅，
+   * 而 D3 全绿。所以这里逐分钱地钉边界：差 1 分拦、刚好够放行。
+   *
+   * 【变异臂】
+   *  · M-W1 判据改成 `balance > 0`   ⇒「差 1 就拦」红
+   *  · M-W2 判据改成 `balance >= 0`  ⇒「差 1 就拦」红
+   *  · M-W3 不足也照扣（去掉分支）   ⇒「差 1 就拦」的零流水与余额不动两条红
+   */
+  test('★余额差 1 就拦：不扣、零流水、余额纹丝不动；刚好够则放行', async () => {
+    const short = setup({ balance: 198 }); // 每日档 199，差 1
+    const w1 = addWatch(short.db, { caseId: short.caseId, name: 'A', tier: 'daily' }).id;
+    const m1 = mailer();
+    const r1 = await runWatchBilling(short.db, { sendMail: m1.sendMail, now: JUN });
+
+    expect(r1).toMatchObject({ examined: 1, charged: 0, arrears: 1 });
+    expect(getGongdao(short.userId, short.db), '差 1 也扣 ⇒ 订阅被扣成透支').toBe(198);
+    expect(consumeCount(short.db, w1, '202606')).toBe(0);
+    expect(watchRow(short.db, w1)).toMatchObject({ billing_status: 'arrears', arrears_rounds: 1 });
+
+    // 正对照：刚好够就必须放行，否则上面那条也可能只是「谁都扣不动」
+    const exact = setup({ balance: 199 });
+    const w2 = addWatch(exact.db, { caseId: exact.caseId, name: 'A', tier: 'daily' }).id;
+    const m2 = mailer();
+    const r2 = await runWatchBilling(exact.db, { sendMail: m2.sendMail, now: JUN });
+
+    expect(r2).toMatchObject({ examined: 1, charged: 1, arrears: 0 });
+    expect(getGongdao(exact.userId, exact.db)).toBe(0);
+    expect(consumeCount(exact.db, w2, '202606')).toBe(1);
+    expect(watchRow(exact.db, w2)).toMatchObject({ billing_status: 'paid' });
+  });
+
   test('paused 的盯梢不再被扫描计费（stop 是软停、留行）', async () => {
     const ctx = setup({ balance: 1000 });
     const w = addWatch(ctx.db, { caseId: ctx.caseId, name: 'A', tier: 'daily' }).id;

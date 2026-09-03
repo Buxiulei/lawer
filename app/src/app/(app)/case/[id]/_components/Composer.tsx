@@ -69,10 +69,21 @@ export function Composer({
   streaming,
   onSend,
   onStop,
+  /**
+   * 停用输入（当前唯一的来源：公道值余额用尽，见 GongdaoExhaustedBanner）。
+   * 为什么要**真的禁掉**而不是只挂一条提示：能打字、能点发送、每次都被同一句话弹回来，
+   * 是一种「产品坏了」的体验；禁掉之后出路只剩横幅上那两个入口，那正是唯一能走的路。
+   * 占位符一并换成 disabledPlaceholder，好让「为什么打不了字」就写在打字的地方。
+   */
+  disabled = false,
+  /** 停用时输入框里的那句说明。 */
+  disabledPlaceholder,
 }: {
   streaming: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
+  disabled?: boolean;
+  disabledPlaceholder?: string;
 }) {
   const [value, setValue] = useState('');
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -84,7 +95,7 @@ export function Composer({
 
   const send = () => {
     const text = value.trim();
-    if (!text || streaming) return;
+    if (!text || streaming || disabled) return;
     onSend(text);
     setValue('');
   };
@@ -115,7 +126,8 @@ export function Composer({
               send();
             }
           }}
-          placeholder={PLACEHOLDER}
+          disabled={disabled}
+          placeholder={disabled ? (disabledPlaceholder ?? PLACEHOLDER) : PLACEHOLDER}
           aria-label="输入消息"
           className="min-h-11 flex-1 resize-none rounded-[10px] border border-line bg-surface-2 px-3 py-2.5 text-[16px] leading-7 text-ink placeholder:text-ink-2 focus:border-focus-ring focus:outline-none"
         />
@@ -136,7 +148,7 @@ export function Composer({
             type="button"
             size="icon"
             onClick={send}
-            disabled={!value.trim()}
+            disabled={disabled || !value.trim()}
             aria-label="发送"
           >
             <svg
