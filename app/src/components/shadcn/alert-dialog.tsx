@@ -110,15 +110,28 @@ function AlertDialogDescription({
   );
 }
 
+/**
+ * 主按钮。
+ *
+ * 【为什么色板要走 `variant` 这个 prop，不能由调用方拿 className 传】
+ * `className` 排在 `cn()` 的最后，tailwind-merge 里**同一组后者胜**。
+ * `buttonVariants()` 默认 `size: 'md'`，串里带着 `text-[16px]`，跟 BUTTON_LAYOUT 的
+ * `text-[clamp(14px,4.1vw,16px)]` 同属字号组——调用方只想换个红底，却顺带把
+ * clamp 顶掉了：主按钮字号钉死 16px，次按钮照常缩，360/320 上两钮字号一大一小。
+ * 改成收 `variant`，在函数内部先展开成类串、再叠 BUTTON_LAYOUT，clamp 稳在后面。
+ */
 function AlertDialogAction({
   className,
+  variant = 'primary',
   ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Action>) {
+}: React.ComponentProps<typeof AlertDialogPrimitive.Action> & {
+  variant?: 'primary' | 'danger';
+}) {
   return (
     <AlertDialogPrimitive.Action
       data-slot="alert-dialog-action"
       className={cn(
-        buttonVariants({ variant: 'primary' }),
+        buttonVariants({ variant }),
         BUTTON_LAYOUT,
         'sm:order-2 sm:min-w-28',
         className,

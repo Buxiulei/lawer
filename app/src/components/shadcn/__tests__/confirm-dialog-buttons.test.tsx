@@ -16,6 +16,8 @@ import path from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { AlertDialogFooter } from '../alert-dialog';
+import { buttonVariants } from '../button';
+import { cn } from '../utils';
 
 const read = (p: string) => fs.readFileSync(path.resolve(__dirname, p), 'utf8');
 const alertSrc = read('../alert-dialog.tsx');
@@ -74,6 +76,38 @@ describe('确认弹窗 footer 的排布', () => {
     expect(actionBody).toMatch(/sm:min-w-/);
     expect(cancelBody).toMatch(/sm:min-w-/);
     expect(alertSrc).toMatch(/const BUTTON_LAYOUT = '[^']*\bw-full\b[^']*sm:w-auto[^']*'/);
+  });
+
+  it('两钮最终类串里 clamp 活着（tailwind-merge 同组后者胜，16px 必须被顶掉）', () => {
+    // 挡的是「有人把 buttonVariants 整串塞进 className」：className 排在 cn() 最后，
+    // buttonVariants 默认 size md 带 text-[16px]，跟 clamp 同属字号组，后者胜，
+    // 于是主按钮字号钉死 16px、次按钮照常缩 —— 360 上 16 vs 14.76，320 上 16 vs 14。
+    // 这里就地跑一次 twMerge，把「谁在后面」这件事钉住，不用等浏览器。
+    const layout = /const BUTTON_LAYOUT = '([^']*)'/.exec(alertSrc)?.[1] ?? '';
+    expect(layout).toMatch(/text-\[clamp\(/);
+    const arms: [string, string][] = [
+      ['主-danger', cn(buttonVariants({ variant: 'danger' }), layout, 'sm:order-2 sm:min-w-28')],
+      ['主-primary', cn(buttonVariants({ variant: 'primary' }), layout, 'sm:order-2 sm:min-w-28')],
+      ['次', cn(buttonVariants({ variant: 'outline' }), layout, 'sm:order-1 sm:min-w-24')],
+    ];
+    for (const [name, cls] of arms) {
+      const tokens = cls.split(/\s+/);
+      expect(tokens, name).toContain('text-[clamp(14px,4.1vw,16px)]');
+      // 裸的 text-[16px]（buttonVariants size md 那一个）必须已被 clamp 合掉；
+      // sm:text-[16px] 是另一组（带断点前缀），得留着。
+      expect(tokens, name).not.toContain('text-[16px]');
+      expect(tokens, name).toContain('sm:text-[16px]');
+    }
+  });
+
+  it('主按钮的色板走 variant prop，ConfirmDialog 不再拿 className 覆盖', () => {
+    // 挡的是「改回 className={cn(buttonVariants({variant: tone}))}」。
+    expect(fnBody(alertSrc, 'AlertDialogAction')).toMatch(/buttonVariants\(\{\s*variant\s*\}\)/);
+    expect(confirmSrc).toMatch(/<AlertDialogAction[^>]*variant=\{tone\}/);
+    // 主按钮身上不许再挂 className，色板也不必再从 ./button 拿。
+    // （不能直接搜 buttonVariants 这个词：上面那段注释里就有它。）
+    expect(confirmSrc).not.toMatch(/<AlertDialogAction[^>]*className=/);
+    expect(confirmSrc).not.toMatch(/^import .*from '\.\/button';$/m);
   });
 
   it('两个按钮各带 data-slot（浏览器判据靠它认主次，不靠 DOM 位置）', () => {

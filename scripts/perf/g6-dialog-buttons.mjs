@@ -9,10 +9,13 @@
 // 弹窗根本打不开——而失败形态是"找不到按钮"，跟真坏了长得一样。
 //
 // 量的是**真浏览器里的几何**，不是类串：
-//   窄屏(393) footer flex-direction=column；主按钮 rect.top < 次按钮 rect.top；
+//   窄屏(320/360/393) footer flex-direction=column；主按钮 rect.top < 次按钮 rect.top；
 //   两个按钮等宽且等于 footer 内宽；高 ≥44；文字只占一行（Range.getClientRects()===1）；
 //   scrollWidth ≤ clientWidth（whitespace-nowrap 下溢出不会换行，只会横着漏出去）。
 //   宽屏(1280) flex-direction=row；次按钮在左、主按钮在右；两者 top 相同。
+//   主次**字号相同**且各自单行——字号这条是 360/320 才露：主按钮若拿 className 收下
+//   buttonVariants 的 text-[16px]，会把 BUTTON_LAYOUT 的 clamp 合掉，主不缩次缩，
+//   393 上两者都是 16px 看不出来，360 上就是 16 vs 14.76、320 上 16 vs 14。
 // 另加一臂**最长文案**：把主按钮文字就地换成 12 个汉字（守卫里定的上限）再量一次，
 // 证明上限内不溢出——不是靠算，是靠量。
 import fs from 'node:fs';
@@ -99,6 +102,9 @@ async function check(page, tag, w) {
       `次 right=${c.right} 主 left=${a.left} top 差 ${(a.top - c.top).toFixed(1)}`);
     ok(`${tag}@${w} 主按钮有最小宽`, a.w >= 112 - 0.6, `主宽 ${a.w}`);
   }
+  // 主次字号必须一样：一大一小是"主按钮被 className 顶掉了 clamp"的唯一外显。
+  ok(`${tag}@${w} 主次字号一致`, a.fontSize === c.fontSize, `主 ${a.fontSize} 次 ${c.fontSize}`);
+  ok(`${tag}@${w} 主次等高`, Math.abs(a.h - c.h) < 0.6, `主 ${a.h} 次 ${c.h}`);
   for (const [n, b] of [['主', a], ['次', c]]) {
     ok(`${tag}@${w} ${n}按钮高 ≥44`, b.h >= 44, `${b.h}px`);
     ok(`${tag}@${w} ${n}按钮不换行`, b.lines === 1 && b.whiteSpace === 'nowrap',
@@ -128,6 +134,18 @@ try {
       await sleep(2500);
       return clickText(page, '清空重填');
     }],
+    ['退出登录', async (page) => {
+      // 【为什么要掐掉 /api/】localStorage 里那个 perf-fake-token 会被后端判 401，
+      // _ui/api 的 401 处置就地 clearToken()，useSignedIn 翻成未登录，
+      // 「退出登录」按钮当场消失——而"按钮找不到"跟"排布没坏"在日志里同形，
+      // 这条场景于是一直静默跳过（复核官那轮 4 个宽度全跳）。
+      // 路由级 abort 让 401 根本不会发生，登录态留在本机，按钮在。
+      // 挂在 page 上不挂 context：其余场景要真数据（证据页得先列出那份证据）。
+      await page.route('**/api/**', (route) => route.abort());
+      await page.goto(`${BASE}/settings`, { waitUntil: 'load', timeout: 120000 });
+      await sleep(2500);
+      return clickText(page, '退出登录');
+    }],
     ['关低调模式', async (page) => {
       // 全仓最长的确认文案「确认关闭，恢复明文显示」(11 字) 在这条路径上。
       await page.goto(`${BASE}/settings`, { waitUntil: 'load', timeout: 120000 });
@@ -143,7 +161,8 @@ try {
     }],
   ];
 
-  for (const w of [393, 1280]) {
+  // 320/360 是主次字号分叉才看得见的两档（clamp 在 390 以下才真的开始收）。
+  for (const w of [320, 360, 393, 1280]) {
     const ctx = await browser.newContext({
       viewport: { width: w, height: w < 640 ? 852 : 900 },
       deviceScaleFactor: 2, isMobile: w < 640, hasTouch: w < 640, locale: 'zh-CN',

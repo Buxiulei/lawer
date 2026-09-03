@@ -11,8 +11,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from './alert-dialog';
-import { buttonVariants } from './button';
-import { cn } from './utils';
 import { useFocusRestore } from './use-focus-restore';
 
 /**
@@ -55,10 +53,10 @@ export function ConfirmDialog({
         <AlertDialogFooter>
           {/* 主按钮写在前面：footer 窄屏是 flex-col（没有 reverse），上下顺序就是
               DOM 顺序，主按钮得在上。电脑端靠 sm:order-* 把次按钮摆回左边。 */}
-          <AlertDialogAction
-            onClick={onConfirm}
-            className={cn(buttonVariants({ variant: tone }))}
-          >
+          {/* tone 走 variant 而不是 className：className 排在 cn() 最后，
+              buttonVariants 里 size md 的 text-[16px] 会把 BUTTON_LAYOUT 的
+              clamp 顶掉，主按钮不缩、次按钮缩，360/320 上两钮字号不一。 */}
+          <AlertDialogAction onClick={onConfirm} variant={tone}>
             {confirmLabel}
           </AlertDialogAction>
           <AlertDialogCancel onClick={onCancel}>{cancelLabel}</AlertDialogCancel>
