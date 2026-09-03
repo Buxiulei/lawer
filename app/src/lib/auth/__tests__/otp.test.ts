@@ -365,6 +365,118 @@ describe('发码限流', () => {
       await sendEmailCode(db, { userId: uid, email: mail, ip: IP }, makeDeps(at(21)).deps),
     ).toMatchObject({ ok: false, status: 429, errorCode: 'RATE_LIMITED', retryAfter: 60 });
   });
+
+  // 【为什么要按 error_code 再钉一次】上面三条钉的都是走兜底分支的失败
+  // （SMS_UPSTREAM_ERROR / EMAIL_SEND_FAILED）。而工单里用户真正撞到的那次，是审查那台
+  // 机器没配短信凭证：sendOtp 抛「阿里云短信凭证未配置」，classifySmsError 把它归到
+  // SMS_CONFIG_ERROR(500)，跟兜底的 502 不是同一条分支。只钉 502 的话，「只在 502 时撤行」
+  // 这种改法能活着通过全部测试，而复现工单的恰恰是 500 这一条路。
+  test('🔴 凭证未配置（SMS_CONFIG_ERROR，工单复现的正是这条）也不占冷却与额度（F-204）', async () => {
+    const db = makeTestDb();
+
+    const failed = await sendPhoneCode(
+      db,
+      { phone: PHONE, ip: IP },
+      {
+        now: T0,
+        sendSms: async () => {
+          throw new Error('阿里云短信凭证未配置');
+        },
+      },
+    );
+    expect(failed).toMatchObject({ ok: false, status: 500, errorCode: 'SMS_CONFIG_ERROR' });
+    expect(smsRowCount(db, PHONE), '发失败还留着行 = 当日额度被白吃一次').toBe(0);
+
+    expect(
+      (await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(T0).deps)).ok,
+      '发失败后立刻重发被拦 = F-204 复发',
+    ).toBe(true);
+  });
+
+  // 【撤行必须是外科手术】撤行撤宽了是反方向的同一个 bug：用户之前真收到过的那几条
+  // 短信/邮件本来就该占掉当日额度，被一次失败连坐抹掉，等于把限流白送出去。
+  // 上面几条判据里库表始终只有 0 或 1 行，撤宽撤窄看不出区别，所以这里先垫上几条真发成功的行。
+  test('🔴 失败撤行只撤自己那一行，之前成功发出去的额度不受连坐（F-204）', async () => {
+    const db = makeTestDb();
+
+    // 手机侧：按 60s 冷却的节奏真发出去 3 次，这 3 次是实打实占额度的
+    for (let i = 0; i < 3; i++) {
+      expect(
+        (await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(i * 60)).deps)).ok,
+        `前置失败：第 ${i + 1} 次没发出去`,
+      ).toBe(true);
+    }
+    expect(smsRowCount(db, PHONE)).toBe(3);
+
+    expect((await sendPhoneCode(db, { phone: PHONE, ip: IP }, smsBoom(at(180)))).ok).toBe(false);
+    expect(smsRowCount(db, PHONE), '一次发失败把之前成功的行也抹了 = 当日额度被凭空退回').toBe(3);
+
+    // 邮箱侧同一条规矩（历史上 otp.ts 手机侧/邮箱侧同名代码漏改过，两侧各钉一次）
+    await makeExistingUser(db, nthPhone(204), T0);
+    const uid = (db.prepare('SELECT id FROM users ORDER BY id DESC LIMIT 1').get() as { id: number })
+      .id;
+    const mail = 'f204-scope@example.com';
+    const mailRows = () =>
+      (db.prepare('SELECT COUNT(*) AS n FROM email_codes WHERE email = ?').get(mail) as {
+        n: number;
+      }).n;
+
+    for (let i = 0; i < 3; i++) {
+      expect(
+        (await sendEmailCode(db, { userId: uid, email: mail, ip: IP }, makeDeps(at(i * 60)).deps))
+          .ok,
+        `前置失败：邮箱第 ${i + 1} 次没发出去`,
+      ).toBe(true);
+    }
+    expect(mailRows()).toBe(3);
+
+    const mailFailed = await sendEmailCode(
+      db,
+      { userId: uid, email: mail, ip: IP },
+      {
+        now: at(180),
+        sendEmail: async () => {
+          throw new Error('SMTP 挂了');
+        },
+      },
+    );
+    expect(mailFailed.ok).toBe(false);
+    expect(mailRows(), '邮箱侧一次发失败把之前成功的行也抹了').toBe(3);
+  });
+
+  // 【先插行后发送不是顺手写的，那一行在发送期间就是防连击闸】撤行只发生在通道确认发不出去
+  // 之后，所以闸只存活「一次通道调用」那么久。要是图省事改成「发成功了再插行」，失败不占额度
+  // 这件事照样成立、上面所有判据全绿，但发送途中同一号码再点就会并发打第二条短信出去。
+  test('🔴 第一条还在通道里飞时，同号再点会被挡住（发送期间的防连击闸，F-204）', async () => {
+    const db = makeTestDb();
+
+    let release!: () => void;
+    const stillInChannel = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const inflight = sendPhoneCode(
+      db,
+      { phone: PHONE, ip: IP },
+      {
+        now: T0,
+        sendSms: async () => {
+          await stillInChannel;
+        },
+      },
+    );
+
+    // 此刻第一条还卡在通道里，用户手一抖又点了一次
+    const second = await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(T0).deps);
+    expect(second, '发送期间同号再点没被挡 = 一次点击并发打两条短信出去').toMatchObject({
+      ok: false,
+      status: 429,
+      errorCode: 'RATE_LIMITED',
+    });
+
+    release();
+    expect((await inflight).ok, '闸放行后第一条本身要正常成功').toBe(true);
+    expect(smsRowCount(db, PHONE), '两次点击只该留下一行').toBe(1);
+  });
 });
 
 describe('验证码校验', () => {
