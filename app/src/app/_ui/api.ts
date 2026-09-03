@@ -9,6 +9,7 @@
  */
 
 import { clearToken, readToken } from './auth';
+import { markSessionExpired } from './session';
 
 export const API_BASE = '/api/v1';
 
@@ -74,10 +75,16 @@ export function humanError(err: unknown): string {
 /**
  * 401：token 已经不作数了，就地清掉，登录态 hook 会跟着翻成未登录。
  * 回传清掉之前有没有 token——文案要靠它区分「没登录」和「登录过期」。
+ *
+ * 【本机原本有 token 时还要立一面旗（F-202）】清掉 token 只让登录态翻成"未登录"，
+ * 页面这一刻手里拿着的是一个 catch 到的异常，各自画各自的「重试」——
+ * 而重试拿的是同一个坏 token，点不完。旗子由 _ui/session 收着，
+ * 案件路由的闸门认它，整块换成「去登录」。它是全站唯一一处置这面旗的地方。
  */
 function handleUnauthorized(): boolean {
   const hadToken = readToken() !== null;
   clearToken();
+  if (hadToken) markSessionExpired();
   return hadToken;
 }
 
