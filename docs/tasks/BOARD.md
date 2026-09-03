@@ -359,6 +359,11 @@
 
 **2026-09-03 · 生产上线 417b602（后台护照审核 + 密钥查看/轮换 + 一段话术 + MCP case_facts/knowledge_search + skill 包 + 弹窗按钮）**：备份 → bundle ff → build EXIT=0 → restart 双 active → 迁移触发（api_keys.secret_enc/rotated_at 到位）→ / /settings/agent 200、/woo 307、/skill/SKILL.md 200（frontmatter 土八鼠陪跑）、/api/manifest 200、agent-setup skill_url=https://law.nbdpsy.com/skill/SKILL.md。真机核对（生成→话术含真密钥→轮换同步→旧钥 401；模拟 agent 取 SKILL.md→MCP initialize→tools/list→case_facts→knowledge_search；低调折叠；后台待审队列只读查看含主理人本人护照）已派 Sonnet；管理员 token 只读、不点审核。
 
+**2026-09-03 · 417b602 生产真机核对通过 + admin 收尾 PASS + 侧栏「案件」低调收口**：
+- 真机（Sonnet）：/settings/agent 生成→话术内嵌真密钥→复制一致→轮换后话术/配置即刻新密钥；393 可读；模拟 agent 只凭话术：SKILL.md 200（含陪跑指南链接）→ MCP initialize 200（serverInfo 土八鼠）→ tools/list 9 工具含 case_facts/knowledge_search → case_facts(case 1) 返回事实卡（证据分类计数+免责句）→ knowledge_search「经济补偿 封顶」带 confidence 原文核实 → 旧密钥 401；低调：话术与当前密钥折叠、剔糊层无密钥明文；后台 /woo/users「实名待审核 1 件」= 主理人本人护照提交，姓名/护照号解密、两图 naturalWidth>0；手机 11 位、中间 4 位模糊命中；console 0（剔预期 401）。**唯一不通过**：低调下侧栏分组标题「案件」裸露（AppSidebar.tsx:81 硬编码）→ 经理亲改 NEUTRAL_WORD.caseGroup「事项」+ 判据。核对顺带轮换了 SMOKE-TEST agent key（新明文只在 scratchpad），测试临时 key 已吊销。
+- admin-review-polish PASS（12398d2）：审后无刷新联动（行状态+审计）、三态分句、陈旧流水 409 与 400 分码、nosniff+非图 415、≤500 字闸、17 变异全红。知悉：sent 态只能在 dev dry-run 下真机触发；旧待审行残留属既有语义。
+- 合入主干（集成后本地 tsc 零输出），CI 盯梢中。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
