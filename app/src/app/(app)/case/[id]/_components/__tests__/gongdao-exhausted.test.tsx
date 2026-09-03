@@ -15,6 +15,7 @@
  *  · M-F4 横幅去掉两个入口之一                                 ⇒「两个入口」红
  *  · M-F5 横幅低调模式不换词（写死「公道值」）                  ⇒「低调用额度」红
  *  · M-F6 /account 上的两个锚点被删                            ⇒「入口不落空」红
+ *  · M-R5 Composer 收下 defaultValue 却仍 useState('')          ⇒「原文真进了框」红
  */
 import type { ReactNode } from 'react';
 import { readFileSync } from 'node:fs';
@@ -33,6 +34,7 @@ vi.mock('next/link', () => ({
 }));
 
 const { GongdaoExhaustedBanner } = await import('../StreamParts');
+const { Composer } = await import('../Composer');
 
 const render = (balance?: number, discreet = false) => {
   ui.discreet = discreet;
@@ -99,5 +101,34 @@ describe('入口的另一半：/account 上的锚点', () => {
   it('★#redeem / #recharge 两个锚点都在页面上', () => {
     expect(SRC).toMatch(/id="redeem"/);
     expect(SRC).toMatch(/id="recharge"/);
+  });
+});
+
+/**
+ * 回填的最后一米（RV-1）。上游那条判据只验到「Workbench 把原文传给了输入框」——
+ * Composer 要是收下 `defaultValue` 却照旧 `useState('')`，那条仍然全绿，
+ * 而用户面前的框还是空的：撤了他的问话又没还给他，等于逼他重打一遍。
+ */
+describe('输入框：被拦下时原文真的回到框里', () => {
+  const html = (defaultValue?: string) =>
+    renderToStaticMarkup(
+      <Composer
+        streaming={false}
+        onSend={() => {}}
+        onStop={() => {}}
+        disabled
+        disabledPlaceholder="公道值用完了，先去兑换或充值"
+        defaultValue={defaultValue}
+      />,
+    );
+
+  it('★原文出现在 textarea 里（不是只当了个 prop）', () => {
+    expect(html('HR 让我今天签自愿离职。')).toContain('HR 让我今天签自愿离职。');
+  });
+
+  it('正对照：不传就是空框（框里一个字都没有，只剩占位符那句说明）', () => {
+    const empty = html();
+    expect(empty).toMatch(/<textarea[^>]*><\/textarea>/);
+    expect(empty).toContain('公道值用完了，先去兑换或充值');
   });
 });

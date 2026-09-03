@@ -78,14 +78,23 @@ export function Composer({
   disabled = false,
   /** 停用时输入框里的那句说明。 */
   disabledPlaceholder,
+  /**
+   * 开局就摆在框里的那句话（当前唯一来源：被余额闸拦下的那一轮，原文得还给用户）。
+   * 只在**挂载**这一次生效——框里的字此后归用户，不由外面改写。
+   * 所以要把一句话放回来，调用方得换 `key` 让这一块重来一次
+   * （见 Workbench 的 draft.seq）；这是「非受控 + key」那条老路，
+   * 不是把每一次击键都提到上层去（那会让每打一个字整屏对话重画一遍）。
+   */
+  defaultValue = '',
 }: {
   streaming: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
   disabled?: boolean;
   disabledPlaceholder?: string;
+  defaultValue?: string;
 }) {
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState(defaultValue);
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useLayoutEffect(() => {

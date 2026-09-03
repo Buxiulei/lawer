@@ -20,6 +20,9 @@
  *  · B10 落定时不把 servedModel / modelMismatch 传给消息 ⇒ 「实际型号进消息」那条红
  *  · M-C6 失败轮那一支删掉（照 AssistantMessage 画）⇒ 「失败轮画成横幅」那组红
  *  · M-C7 重试按钮收窄成只给最后一条（加回 `i === messages.length - 1`）⇒ 「不是最后一条也给重试」红
+ *  · M-R1 Workbench 不接 onFailed（402 之后不撤回显）⇒ 「问话不留在流里」红
+ *  · M-R2 撤了回显但不把原文放回输入框 ⇒ 「原文回到输入框」红
+ *  · M-R3 撤回显时不看错误码（普通失败也撤）⇒ 正对照那条红
  */
 import type { ReactElement, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -50,14 +53,23 @@ vi.mock('@/app/_ui/motion', async (importOriginal) => ({
 /** 落定回调的接住处：本轮流走完之后 Workbench 拿它把新消息追进列表。
  *  `retried` 记下「点了历史里那条失败轮的重试」时传出去的 id。 */
 /** `error` 让用例把流的失败态摆上去（余额闸那一组用它摆 402）。 */
+/** `failed` 是流层的 onFailed：用例拿它摆「这一轮以 error 帧收场」这一刻。 */
 const chat: {
   settle: (turn: unknown) => void;
+  failed: (error: unknown) => void;
   retried: string[];
   error: Record<string, unknown> | null;
-} = { settle: () => {}, retried: [], error: null };
+} = { settle: () => {}, failed: () => {}, retried: [], error: null };
 vi.mock('../../_stream/useChatStream', () => ({
-  useChatStream: ({ onSettled }: { onSettled: (turn: unknown) => void }) => {
+  useChatStream: ({
+    onSettled,
+    onFailed,
+  }: {
+    onSettled: (turn: unknown) => void;
+    onFailed?: (error: unknown) => void;
+  }) => {
     chat.settle = onSettled;
+    chat.failed = onFailed ?? (() => {});
     return {
       phase: chat.error ? 'error' : 'idle',
       meta: null,
@@ -241,6 +253,10 @@ function walk(
     composers.push({
       disabled: el.props?.disabled === true,
       placeholder: el.props?.disabledPlaceholder,
+      // 框里开局摆的那句话 + 它的换代号（key 一变这块重挂，初值才作数）
+      defaultValue: el.props?.defaultValue,
+      key: el.key,
+      onSend: el.props?.onSend as ((text: string) => void) | undefined,
     });
   }
   const message = el.props?.message as ProbedMessage | undefined;
@@ -250,7 +266,13 @@ function walk(
 }
 
 /** 这一帧画出来的输入框及其禁用态（walk 的收集处，probe 每次开跑前清空） */
-const composers: { disabled: boolean; placeholder: unknown }[] = [];
+const composers: {
+  disabled: boolean;
+  placeholder: unknown;
+  defaultValue?: unknown;
+  key?: unknown;
+  onSend?: (text: string) => void;
+}[] = [];
 
 /** 这一帧画出来的失败横幅（walk 的收集处，probe 每次开跑前清空） */
 const errorCards: {
@@ -548,6 +570,95 @@ describe('余额用尽这一屏', () => {
     expect(errors).toHaveLength(1);
     expect(errors[0].retryable).toBe(true);
     expect(composers[0].disabled).toBe(false);
+  });
+});
+
+/* ── 六、被拦下的那一轮：连本地回显一起撤（RV-1）─────────────────
+   闸在 runTurn 之前，服务端一个字都没写库（不调模型、不插用户消息、不记账）。
+   而页面是**先把问话画上去再发**的，402 回来时那条回显没人撤——
+   于是屏幕上是「已经发出去了」，F5 之后它消失。用户看到的是
+   「发出去了 → 刷新没了 → 还得重打一遍」，比当场被拦更伤，
+   因为他已经以为说出去了。判据钉两样：回显撤掉、原文回到输入框。
+
+   【变异臂】
+    · M-R1 Workbench 不接 onFailed        ⇒ 第一条红（问话仍留在流里）
+    · M-R2 撤了回显但不回填输入框          ⇒ 第二条红
+    · M-R3 撤回显时不看错误码              ⇒ 正对照红（普通失败也被抹掉问话） */
+describe('被拦下的那一轮不留痕（RV-1）', () => {
+  const ASK = 'HR 让我今天签自愿离职。';
+  const REFUSED = { code: 'GONGDAO_EXHAUSTED', message: '公道值余额 0，这一轮开不了。', balance: 0 };
+
+  /** 发一句：走的是 Workbench 真的那条 send（本地回显 + 交给流层） */
+  async function ask(): Promise<void> {
+    // send 里那句 requestAnimationFrame 在 node 环境没有；回调里只有滚动，不执行也不影响判据
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    const { composers } = probe(await settled(CASE));
+    expect(composers[0]?.onSend, '这一屏没画输入框：下面全是空过').toBeTypeOf('function');
+    composers[0].onSend!(ASK);
+    // 正对照（同一条用例内）：闸响之前，问话确实画在流里
+    expect(probe(frame(CASE)).text, '压根没回显过 ⇒ 「撤掉了」是空过').toContain(ASK);
+  }
+
+  it('★402 回来 ⇒ 那句问话从对话流里撤掉（库里没有它，留着就是刷新后消失）', async () => {
+    await ask();
+    chat.failed(REFUSED);
+    const { text, messages } = probe(frame(CASE));
+    expect(text, '库里一个字都没有的问话留在屏幕上 = 发出去了→刷新后没了').not.toContain(ASK);
+    expect(messages.map((m) => m.content)).not.toContain(ASK);
+    // 历史那两条不许被殃及
+    expect(text).toContain('我上周三被通知解除');
+  });
+
+  it('★原文放回输入框（撤了却不还，等于让他重打一遍）', async () => {
+    await ask();
+    const before = probe(frame(CASE)).composers[0];
+    chat.failed(REFUSED);
+    const after = probe(frame(CASE)).composers[0];
+    expect(after.defaultValue).toBe(ASK);
+    // 初值只在挂载那一次作数 ⇒ key 必须换代，否则这块不会重来、框里仍是空的
+    expect(after.key, 'key 没换 ⇒ defaultValue 白传，框里还是空的').not.toBe(before.key);
+  });
+
+  it('★正对照：普通失败不撤回显（服务端已落一条失败轮，撤掉才是改历史）', async () => {
+    await ask();
+    chat.failed({ code: 'AGENT_FAILED', message: '模型这会儿连不上。' });
+    const { text, composers } = probe(frame(CASE));
+    expect(text, '普通失败把用户的问话抹了 = 改历史').toContain(ASK);
+    expect(composers[0].defaultValue).toBe('');
+  });
+
+  /**
+   * 撤的是**那一条**，不是"内容长得一样的都撤"。同一件事问第二遍很常见
+   * （第一遍答完了、想再确认一次），按正文匹配会把已经答过的那一问一并抹掉。
+   * 变异臂 M-R8：撤回显时按 content 匹配 ⇒ 这条红。
+   */
+  it('★同一句话问两遍 ⇒ 只撤被拦下的那一条', async () => {
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    const { composers } = probe(await settled(CASE));
+    composers[0].onSend!(ASK);
+    composers[0].onSend!(ASK);
+    const asked = (node: ReactNode) =>
+      probe(node).messages.filter((m) => m.content === ASK).length;
+    expect(asked(frame(CASE)), '两遍没都画上去 ⇒ 下面是空过').toBe(2);
+
+    chat.failed(REFUSED);
+    expect(asked(frame(CASE)), '把前一遍也抹了 = 抹掉了一段已经发生过的对话').toBe(1);
+  });
+
+  /**
+   * 重试走 retry_of，**不带新的本地回显**（正文由服务端从库里取）。
+   * 它要是也被拦下，撤的绝不能是上一轮那条还挂着的回显——那句话跟这次重试无关。
+   * 变异臂 M-R4：retryFailedTurn 里那句 `pendingEcho.current = null` 删掉 ⇒ 这条红。
+   */
+  it('★重试被拦 ⇒ 撤的不是上一轮那条回显', async () => {
+    bus.rows = [...realRows(), FAILED_ROW];
+    await ask();
+    probe(frame(CASE)).errors[0].onRetry!();
+    chat.failed(REFUSED);
+    expect(
+      probe(frame(CASE)).text,
+      '重试被拦，却把上一轮那句问话抹了',
+    ).toContain(ASK);
   });
 });
 
