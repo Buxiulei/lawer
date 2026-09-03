@@ -373,6 +373,8 @@
 
 **2026-09-03 · 主理人反馈：后台「确认通过这次实名」弹窗排版 → 派单 admin-review-dialog**（基座 0c49919）。裁决：主按钮常量短句「确认通过/确认驳回」，姓名不进按钮；正文改字段块（姓名/证件等宽）；驳回同套；confirm-dialog 12 字守卫扩展到动态 confirmLabel（模板串即红），woo/users 调会员也改常量；弹窗 ≥sm max-w-md。这正是上一单复核 nit「12 字守卫只覆盖字面量」的现实后果。
 
+**2026-09-03 · admin-review-dialog PASS（b3bec60）→ 主干 a9dbb53**：两弹窗 confirmLabel 常量短句、字段块（姓名 600 / 证件等宽 tabular）、驳回原因引用块、弹窗 sm:max-w-md；调会员/发公道值也改短句；confirmLabel 守卫升级为「先解再量」（模板串/三元含变量/String(x) 四种拼法红，模块常量表可解）。裁决：alert-dialog 桌面全站宽 420→448 **接受**；EvidenceLibrary 的 NEUTRAL_WORD 模板按「静态可判定」放行 **接受**。真机 1280/393 通过与驳回四张量值通过。CI 盯梢中。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
