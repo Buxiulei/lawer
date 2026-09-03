@@ -111,6 +111,8 @@ describe('J6 常规变体不含「额度」——反向对照', () => {
 const COPY_FILES = [
   'src/app/page.tsx',
   'src/app/welcome/page.tsx',
+  // /welcome 的两屏正文（F-201 之后接入卡搬到这里；page.tsx 只剩一个挑屏的闸门）
+  'src/app/welcome/_components/WelcomeScreens.tsx',
   'src/app/_ui/byoAgent.ts',
   'src/app/_ui/ByoAgentEntry.tsx',
   'src/app/_ui/useConnectedAgent.ts',

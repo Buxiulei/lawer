@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { SessionGate } from '@/app/_ui/session';
 import { DiscreetVeil } from '@/app/_ui/veil';
 
 /**
@@ -17,12 +18,17 @@ import { DiscreetVeil } from '@/app/_ui/veil';
  * 于是这一屏的糊层是糊死的：糊了揭不开。
  *
  * 判据：__tests__/welcome-discreet.test.tsx 的「揭开手势存在」。
+ *
+ * 【登录态失效的闸门也挂在这儿（F-202 的同一个出路，不是另抄一份）】
+ * 这一页要靠接口回答"你是新来的还是回来的"。token 坏掉时那几条请求全是 401，
+ * 问不出答案就只能退回新人那一屏——那正好是 F-201 要消灭的那句话。
+ * 挂上闸门，失效时整块换成「去登录」，而不是拿一屏"你的档案刚建好"糊弄一个老用户。
  */
 export default function WelcomeLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <DiscreetVeil />
-      {children}
+      <SessionGate next="/welcome">{children}</SessionGate>
     </>
   );
 }
