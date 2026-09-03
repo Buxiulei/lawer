@@ -12,7 +12,11 @@ import type {
 } from './frames';
 import { createHttpTransport, readToken } from './httpTransport';
 import { createMockTransport } from './mockTransport';
-import { NeedsDemoFallbackError, type ChatTransport } from './transport';
+import {
+  NeedsDemoFallbackError,
+  SessionExpiredError,
+  type ChatTransport,
+} from './transport';
 
 export type StreamPhase = 'idle' | 'connecting' | 'waiting' | 'streaming' | 'error';
 
@@ -143,7 +147,9 @@ function emptyTurn(): SettledTurn {
 
 /**
  * 一轮对话的收帧与状态机。组件只看 phase/text/…，不关心背后是 mock 还是真端点。
- * demo 案件恒走演示数据；其余案件有 JWT 才走真端点，没有或 401 就回落演示数据并挂横幅。
+ * demo 案件恒走演示数据；其余案件**没登录**才回落演示数据并挂横幅。
+ * 登录态失效（原本有 token 的 401）不在此列：那一支交给案件路由 layout 上的闸门，
+ * 回落演示等于把别人的案情当他的答案端出去（F-202 复核 MF-1）。
  */
 export function useChatStream({
   caseId,
@@ -223,6 +229,12 @@ export function useChatStream({
       try {
         ok = await consume(forceMock ? mock : http);
       } catch (err) {
+        if (err instanceof SessionExpiredError) {
+          // 闸门（case/[id]/layout 的 SessionGate）此刻已经接手整块屏幕：
+          // 既不回落演示数据（那是别人的案情），也不留一张点不动的错误卡。
+          dispatch({ type: 'reset' });
+          return;
+        }
         if (err instanceof NeedsDemoFallbackError) {
           setDemoFallback(true);
           try {

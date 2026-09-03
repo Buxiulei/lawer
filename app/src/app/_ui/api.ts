@@ -88,6 +88,31 @@ function handleUnauthorized(): boolean {
   return hadToken;
 }
 
+/** 一个响应在登录态上算什么。'ok' 不是 401；其余两支见 classifyAuthStatus。 */
+export type AuthVerdict = 'ok' | 'expired' | 'signed-out';
+
+/**
+ * **不走 apiFetch 的那条通道也从这道口过**。
+ *
+ * 【为什么要有它（F-202 复核 MF-1）】「问它」的流式对话收的是 text/event-stream，
+ * 用不了 apiFetch，于是它自己写了一句 `if (res.status === 401)`——既不清 token
+ * 也不立失效旗，反倒把这一轮回落成演示数据：老用户会话过期之后发一句话，
+ * 屏幕上端出来的是**演示案件的案情**当作他的答案。比死循环重试更糟。
+ * 现在那句 401 分支改成调这里，清 token 与立旗都只发生在 handleUnauthorized 这一处。
+ *
+ * 【为什么连状态码判定也收进来】判据（session-single-entry 环④）扫的是
+ * case/[id] 子树里还有没有按状态码写的第二处 401 分支。判定收进来之后，
+ * 调用方连 401 这个数字都不必写——"下一处自己写"就无处可写了。
+ *
+ * 返回：'expired' 登录态失效（本机原本有 token）→ 出路归案件路由 layout 上那道闸门；
+ *       'signed-out' 本机压根没登录 → 该说「请先登录」/回落演示数据的那一支；
+ *       'ok' 不是 401。
+ */
+export function classifyAuthStatus(status: number): AuthVerdict {
+  if (status !== 401) return 'ok';
+  return handleUnauthorized() ? 'expired' : 'signed-out';
+}
+
 function toApiError(body: unknown, status: number, hadToken = false): ApiError {
   const payload = (body ?? {}) as Record<string, unknown>;
   const code = typeof payload.error_code === 'string' ? payload.error_code : `HTTP_${status}`;
@@ -130,7 +155,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   }
 
   const payload = await res.json().catch(() => null);
-  const hadToken = res.status === 401 ? handleUnauthorized() : false;
+  const hadToken = classifyAuthStatus(res.status) === 'expired';
 
   // ok:false 也可能配 200（防守性）：只认响应体，不认状态码
   const failed = !res.ok || (payload as { ok?: unknown } | null)?.ok === false;
@@ -175,7 +200,7 @@ export function apiUpload<T>(
       } catch {
         payload = null;
       }
-      const hadToken = xhr.status === 401 ? handleUnauthorized() : false;
+      const hadToken = classifyAuthStatus(xhr.status) === 'expired';
       const failed = xhr.status < 200 || xhr.status >= 300 || (payload as { ok?: unknown } | null)?.ok === false;
       if (failed) {
         reject(toApiError(payload, xhr.status, hadToken));
