@@ -298,6 +298,13 @@
 
 **2026-09-03 · 生产上线 5243bf2（otp 5 秒短闸 + 新表 otp_send_attempts）**：备份 → bundle ff → build EXIT=0 → restart 双 active → 迁移触发（表数见冒烟输出）→ 路由 200。
 
+**2026-09-03 12:0x · qa2-fixes 收官一半：intake PASS、failedturn PASS、otp ADR 收口；auth/minors 第三轮**：
+- **intake（F-205）PASS**（e385ffe）：挂载后现查名下案件（异常回 unknown），第 1 步与第 6 步同一条关不掉的引导条→/login 补绑，submit no-case 支带 guide；复核亲证 CTA 落点与补绑往返、基线复现。nit：挂载查案接线与 saveIntake no-case 支只有搜字守卫。
+- **failedturn（F-203）PASS**（8f8f79d，二轮）：失败轮落库 failed_code、store.failMessage 唯一入口走 bestEffort、历史回显横幅+按行重试、失败轮零记账、重试不重复插用户消息；一轮 must-fix「对账器把失败轮当模型回复」已修（SQL 加 failed_code IS NULL）。**经理裁决**：任一失败轮均可重试（二轮已按此落地并真机证）。**上产要跑迁移**（messages.failed_code 列）。
+- **otp**：脚本补丁改了 impl prompt 导致 otp 工单在已合并的 a52c319 之上重跑，执行者写 ADR-003「待经理裁决」并给 B 案补丁——裁决其实已于 11:05 记台账（06d3663）且 A 案已上产 5243bf2。经理手改：ADR 状态→已接受（A 案）、代码/测试注释去「未裁决」、SEND_TOO_FAST 文案改如实（「刚才刚点过一次发送」）。**教训**：resume 时改 prompt 会让已 PASS 且已合并的工单重跑——patch 前先看 journal 哪些已完成，用 label/条件跳过。
+- **auth 第三轮**（fd164ec MUST_FIX）：MF-A F-201 判据无牙（删 returning 分支/直接画新人屏/三维接线恒 0 全存活，前任复核列出的存活臂被修复轮静默略过）；MF-B 失效旗登录后从不复位。**minors 第二轮**（30e6a34 MUST_FIX）：F-208 重挂载重复铺栈（第 1 步返回弹回第 2 步，修复引入）；F-206 桌面端角标被侧栏压住。两单已并行派出。口径：/account、settings 各自 UNAUTHORIZED 处理另立单。
+- 主干合入 otp(ADR)+intake+failedturn，CI 盯梢中。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
