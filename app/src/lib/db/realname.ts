@@ -87,6 +87,23 @@ export function setStatus(
 }
 
 /**
+ * 该用户**最新一条**核验流水的 id（没有流水则 null）。
+ *
+ * 【为什么审核前要拿它比一次】队列（listPendingByProvider）与用户端状态（latestByUser）
+ * 都只认 MAX(id) 那一行。管理员的页面是一份快照：他打开队列之后、点「通过」之前，
+ * 那个人完全可能又交了一份新材料。此时旧行仍是「待审」，approve 会**成功落定**，
+ * 而 /realname/status 读的是那条更新的行 —— 用户界面继续显示「等待人工核验」，
+ * 管理员界面显示「已通过」。不报错、不崩，两边各看各的。
+ * 所以落定前比一次 MAX(id)：不是最新的一律 409，让操作者先刷新再决定。
+ */
+export function latestVerificationIdForUser(db: Database, userId: number): number | null {
+  const row = db
+    .prepare('SELECT MAX(id) AS id FROM realname_verifications WHERE user_id = ?')
+    .get(userId) as { id: number | null } | undefined;
+  return row?.id ?? null;
+}
+
+/**
  * 某个 provider 下待人工审核的流水，**每个用户至多一行**：只列出「这一行正好是该用户
  * 最新一次核验」的那些。
  *

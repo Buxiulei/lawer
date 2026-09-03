@@ -91,6 +91,21 @@ export function adminBadRequest(errorCode: string, message: string): NextRespons
 }
 
 /**
+ * 后台的「你看到的这一版已经过期了」（409）。**与 400 分开**：400 是"你填错了"，
+ * 改一下参数重来即可；409 是"参数没错，但你手上那张队列是旧的"——
+ * 唯一的处置是刷新再看一眼，然后决定要不要仍旧这么审。
+ * 两者混成同一个码，前端就无法在其中一种上提示"刷新"。
+ */
+export function adminConflict(errorCode: string, message: string): NextResponse {
+  return NextResponse.json({ ok: false, error_code: errorCode, message }, { status: 409 });
+}
+
+/** 后台的「这个字节流不是我们答应回的那类东西」（415）。 */
+export function adminUnsupportedMedia(errorCode: string, message: string): NextResponse {
+  return NextResponse.json({ ok: false, error_code: errorCode, message }, { status: 415 });
+}
+
+/**
  * 后台侧的「我们这边坏了」（500）。**只给管理员看，所以 message 说实话**：
  * 密钥没配、密文对不上、盘上文件没了——这些原话是运维排障的全部线索，
  * 换成"服务器开了个小差"等于把线索扔了，而看到它的人本来就是能改配置的那个人。

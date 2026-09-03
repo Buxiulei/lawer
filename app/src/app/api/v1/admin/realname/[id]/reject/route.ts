@@ -11,6 +11,7 @@ import { NextResponse } from 'next/server';
 import { adminRejectPassportRealname } from '@/lib/admin/actions';
 import {
   adminBadRequest,
+  adminConflict,
   adminNotFound,
   adminServerError,
   requireAdmin,
@@ -20,6 +21,10 @@ import { readPassportEnvelope } from '@/lib/auth/passport-realname';
 import { parseId } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 import { getDb } from '@/lib/db/client';
+import { latestVerificationIdForUser } from '@/lib/db/realname';
+
+/** 驳回原因/备注的字数上限（与 approve 路由同一个数）。 */
+const MAX_REVIEW_TEXT = 500;
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const db = getDb();
@@ -40,12 +45,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   if (!record) return adminNotFound();
 
+  // 与 approve 同一条：审的必须是该用户最新那一行，否则驳的是一份他已经作废的旧材料，
+  // 而他手上那份新的还在队列里等着（见 approve 路由同处注释）。
+  if (latestVerificationIdForUser(db, record.userId) !== id) {
+    return adminConflict(
+      'STALE_VERIFICATION',
+      '这条不是该用户最新一次提交（他在你打开这一页之后又交了一份）。请刷新队列后再审。',
+    );
+  }
+
   const body = await readJsonBody(req);
   if (!body) return adminBadRequest('BAD_BODY', '请求体不是合法 JSON');
   // trim 之后为空同样拒：全是空格的"原因"和没写原因，对用户来说是同一件事。
   const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
   if (!reason) {
     return adminBadRequest('BAD_REASON', '驳回原因必填：用户会原样看到这句话，据此决定怎么重交');
+  }
+  // 上限：这句话会原样显示在用户的设置页上，也会原样进审计明细。
+  if (reason.length > MAX_REVIEW_TEXT) {
+    return adminBadRequest('BAD_REASON', `驳回原因最多 ${MAX_REVIEW_TEXT} 字`);
   }
 
   const result = adminRejectPassportRealname(db, {

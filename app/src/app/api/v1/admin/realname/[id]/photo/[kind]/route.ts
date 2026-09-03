@@ -8,6 +8,12 @@
 // 解密一份丢进 public/，那份明文就永远躺在那儿了——一条能被猜到路径的 URL
 // 等于把身份证照片公开发布，而它的失败形态是"一切正常，只是有人拿到了"。
 //
+// 【为什么只放行 image/*，且带 nosniff】这条路由回的是**用户上传的字节**，Content-Type
+// 也随上传走。上传面若哪天松了口（或历史行里躺着一条 text/html 的材料），浏览器就会把
+// 它当页面渲染——一段脚本在本站源上执行，而本站的登录态就在 localStorage 里。
+// nosniff 挡住"声明是图片、内容像 HTML 就按 HTML 渲染"那条嗅探路径；
+// 415 挡住"声明本来就不是图片"那条。两条各挡一半，缺一条都还剩另一半。
+//
 // 【为什么带 no-store】证件照经过的每一层（浏览器磁盘缓存、公司代理、CDN）都会留副本。
 // 后台在办公室的电脑上打开，缓存就落在那台电脑上；管理员换人、电脑转手，照片还在。
 //
@@ -16,7 +22,13 @@
 //（见 RealnamePendingQueue.tsx）。
 import { NextResponse } from 'next/server';
 
-import { adminBadRequest, adminNotFound, adminServerError, requireAdmin } from '@/lib/admin/auth';
+import {
+  adminBadRequest,
+  adminNotFound,
+  adminServerError,
+  adminUnsupportedMedia,
+  requireAdmin,
+} from '@/lib/admin/auth';
 import { readPassportEnvelope } from '@/lib/auth/passport-realname';
 import { parseId } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
@@ -57,6 +69,16 @@ export async function GET(
   const file = ref ? findFileById(db, ref.file_id) : undefined;
   if (!ref || !file) return adminNotFound();
 
+  // 材料只可能是图片。不是图片的一律不回字节——审核台没有任何理由把别的东西
+  // 塞进浏览器，而 415 也让"上传面松了口"这件事当场可见，而不是等到出事。
+  const mime = file.mime ?? '';
+  if (!/^image\//i.test(mime)) {
+    return adminUnsupportedMedia(
+      'BAD_MATERIAL_MIME',
+      `这份材料的类型是 ${mime || '（空）'}，不是图片；审核台只回图片字节。`,
+    );
+  }
+
   let bytes: Buffer;
   try {
     bytes = readBytes(db, ref.file_id);
@@ -72,9 +94,10 @@ export async function GET(
   return new NextResponse(new Uint8Array(bytes), {
     status: 200,
     headers: {
-      'Content-Type': file.mime || 'application/octet-stream',
+      'Content-Type': mime,
       'Content-Length': String(bytes.length),
       'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
     },
   });
 }

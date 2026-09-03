@@ -12,6 +12,7 @@ import { NextResponse } from 'next/server';
 import { adminApprovePassportRealname } from '@/lib/admin/actions';
 import {
   adminBadRequest,
+  adminConflict,
   adminNotFound,
   adminServerError,
   requireAdmin,
@@ -21,6 +22,10 @@ import { readPassportEnvelope } from '@/lib/auth/passport-realname';
 import { parseId } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 import { getDb } from '@/lib/db/client';
+import { latestVerificationIdForUser } from '@/lib/db/realname';
+
+/** 备注/驳回原因的字数上限（与 reject 路由同一个数）。 */
+const MAX_REVIEW_TEXT = 500;
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const db = getDb();
@@ -43,8 +48,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   if (!record) return adminNotFound();
 
+  // 【为什么还要比一次 MAX(id)】管理员手上那张队列是快照。他打开之后、点「通过」之前，
+  // 这个人可能又交了一份新材料——旧行仍是「待审」，approve 会**成功落定**，
+  // 而 /realname/status 只认最新那行，用户界面继续显示「等待人工核验」。
+  // 不报错、不崩，两边各看各的。409 让操作者先刷新，再决定要不要审。
+  if (latestVerificationIdForUser(db, record.userId) !== id) {
+    return adminConflict(
+      'STALE_VERIFICATION',
+      '这条不是该用户最新一次提交（他在你打开这一页之后又交了一份）。请刷新队列后再审。',
+    );
+  }
+
   const body = (await readJsonBody(req)) ?? {};
   const note = typeof body.note === 'string' ? body.note.trim() : '';
+  // 备注会原样进审计明细。不设上限的字段迟早会被粘进一整份聊天记录，
+  // 而审计表是要给人翻的——一行 10 万字的备注等于把这张表读废。
+  if (note.length > MAX_REVIEW_TEXT) {
+    return adminBadRequest('BAD_NOTE', `备注最多 ${MAX_REVIEW_TEXT} 字`);
+  }
 
   const result = adminApprovePassportRealname(db, {
     operatorUid: guard.identity.uid,
