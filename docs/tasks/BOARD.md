@@ -292,6 +292,8 @@
 
 **2026-09-03 11:2x · 额度恢复：qa2-fixes 四单接手半成品续跑；otp 跟进小单派出；025c0c1（F-204）CI 绿→生产构建中**。脚本补丁事故：往模板字符串里塞了反引号导致 parse error，改为无反引号措辞后续跑成功——**规矩**：patch workflow 脚本的 prompt 段不得含反引号。
 
+**2026-09-03 · 生产上线 025c0c1（F-204 验证码发送失败不占冷却/配额）**：备份 → bundle ff → build EXIT=0 → restart 双 active → getDb ok → 路由 200。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
