@@ -23,6 +23,12 @@ export interface ApiMessageRow {
   model: string | null;
   served_model: string | null;
   served_mismatch: boolean;
+  /**
+   * 这一轮**终态失败**的错误码；null = 正常轮。非空时 `content` 是那段三段式失败文案，
+   * 页面据此画成「这一轮没能生成回答 + 重试」而不是画成一条回答——
+   * 失败这件事必须挺过一次刷新（naive-qa-2 F-203）。
+   */
+  failed_code: string | null;
 }
 
 /**
@@ -44,6 +50,9 @@ export function toHistoryMessage(row: ApiMessageRow): StreamedMessage {
     model: row.model ?? undefined,
     servedModel: row.served_model,
     modelMismatch: row.served_mismatch,
+    failedCode: row.failed_code,
+    // 重试要发回的是库主键本身，不是展示 id（后者带 `m_` 前缀，反解一次就多一处会坏的地方）
+    failedMessageId: row.failed_code ? String(row.id) : undefined,
   };
 }
 

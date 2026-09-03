@@ -21,6 +21,12 @@ export interface StreamError {
   message: string;
   /** 秒；有值时重试按钮要等倒计时走完 */
   retryAfter?: number;
+  /**
+   * 这一轮的失败**已经落成的那条 assistant 行**的 id（服务端 error 帧带回来的）。
+   * 重试时把它发回去：服务端重发同一句问话，且不再插一条新的用户消息。
+   * 缺席 = 这次失败没落成行（例如根本没连上），那时只能退回"照原文再发一次"。
+   */
+  messageId?: string;
 }
 
 /** 一轮对话落定后交给页面的东西 */
@@ -118,6 +124,7 @@ export function reduce(state: State, action: Action): State {
           code: frame.code,
           message: frame.message,
           retryAfter: frame.retry_after,
+          messageId: frame.message_id,
         },
       };
     default:
@@ -162,21 +169,29 @@ export function useChatStream({
 
   const abort = useRef<AbortController | null>(null);
   const lastMessage = useRef('');
+  /**
+   * 刚才那次失败**落成的那条 assistant 行**的 id（服务端 error 帧带回来的）。
+   * 重试拿它当 retry_of：服务端据此重发同一句问话，且不再插一条新的用户消息。
+   * undefined = 这次失败没落成行（连都没连上），那时只能退回"照原文再发一次"。
+   */
+  const lastFailedId = useRef<string | undefined>(undefined);
   const settledRef = useRef(onSettled);
   settledRef.current = onSettled;
 
   useEffect(() => () => abort.current?.abort(), []);
 
   const run = useCallback(
-    async (message: string) => {
+    async (message: string, retryOf?: string) => {
       abort.current?.abort();
       const controller = new AbortController();
       abort.current = controller;
-      lastMessage.current = message;
+      // 重试走 retryOf（正文由服务端从库里取），别拿空串把上一句问话冲掉
+      if (message) lastMessage.current = message;
+      lastFailedId.current = undefined;
       dispatch({ type: 'start' });
 
       const turn = emptyTurn();
-      const req = { caseId, message, signal: controller.signal };
+      const req = { caseId, message, signal: controller.signal, retryOf };
 
       const consume = async (transport: ChatTransport) => {
         for await (const frame of transport.send(req)) {
@@ -213,6 +228,8 @@ export function useChatStream({
               turn.servedMismatch = frame.served_mismatch === true;
               break;
             case 'error':
+              // 这一轮的失败已经落成一条 assistant 行；记下它，重试要指名道姓
+              lastFailedId.current = frame.message_id;
               return false;
           }
         }
@@ -253,7 +270,18 @@ export function useChatStream({
   );
 
   const send = useCallback((message: string) => void run(message), [run]);
+  /**
+   * 重试某一条**已经落库的失败轮**（刷新后从历史里点进来的那条，也包括本轮刚失败的那条）。
+   * 走 retry_of 而不是"把原文再发一遍"：后者会在档案里插第二句一模一样的问话。
+   */
+  const retryFailed = useCallback((failedMessageId: string) => void run('', failedMessageId), [run]);
   const retry = useCallback(() => {
+    // 失败已经落成行 ⇒ 按行重试（不重复插用户消息）；没落成行才退回照原文再发一次
+    const failedId = lastFailedId.current;
+    if (failedId) {
+      void run('', failedId);
+      return;
+    }
     if (lastMessage.current) void run(lastMessage.current);
   }, [run]);
   const stop = useCallback(() => abort.current?.abort(), []);
@@ -267,6 +295,7 @@ export function useChatStream({
     demoFallback,
     send,
     retry,
+    retryFailed,
     stop,
   };
 }

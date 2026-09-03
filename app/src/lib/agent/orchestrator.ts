@@ -16,6 +16,7 @@ import { countSubstantiveHits } from '@/lib/knowledge';
 import * as store from '@/lib/db/agent';
 import { getRatesForModel } from '@/lib/db/modelRates';
 import { fromSql } from '@/lib/db/time';
+import { toUserFacingError } from '@/lib/errors/user-facing';
 import {
   getProvider,
   type ChatMessage,
@@ -135,6 +136,13 @@ export interface RunTurnInput {
   provider?: Provider;
   now?: Date;
   emit: AgentEventSink;
+  /**
+   * 「重试这一轮」：失败那条 assistant 消息的 id（messages.failed_code 非空的那行）。
+   * 给了它就**不再插一条新的用户消息**——问题原文从库里那条用户行取（findRetryTarget），
+   * 否则重试一次档案里就多一句一模一样的问话，用户看见自己把同一件事讲了两遍。
+   * `message` 此时可以是空串（服务端不看它）。
+   */
+  retryOf?: number;
 }
 
 export interface RunTurnResult {
@@ -165,7 +173,20 @@ export interface RunTurnResult {
   referralScene: string | null;
 }
 
-export type RunTurnOutcome = RunTurnResult | { ok: false; status: number; errorCode: string; message: string };
+export type RunTurnOutcome =
+  | RunTurnResult
+  | {
+      ok: false;
+      status: number;
+      errorCode: string;
+      message: string;
+      /**
+       * 这一轮的失败**已经落成一条 assistant 行**时，是那行的 id。
+       * 校验类失败（案件不存在、空消息、mode 非法）没有这一行，恒为 undefined。
+       * 调用方把它随 error 帧下发，用户点「重试」时才说得出重试的是哪一轮。
+       */
+      failedMessageId?: number;
+    };
 
 /** 四桶累加：有一轮报了数就参与求和，从头到尾没报过才留 null（绝不用 0 冒充，见 types.ts） */
 function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
@@ -267,10 +288,15 @@ function chargeTurn(args: {
  *     模型会照着在自己的输出开头复写一个 `[陪跑] `——那串字会原样流到用户屏幕上。
  *   - 与本轮同模式的轮次一律不加。同模式没有歧义，加了只是每条多耗 token、多一份噪声。
  * 事实卡里那句"方括号标记是系统加的"仍在，用户原话被前缀改写这件事必须让模型知道。
+ *
+ * 【失败轮不进历史】failed_code 非空的行 content 是我们写的那段「这一轮没能生成回答…」，
+ * **不是模型说过的话**。重放给它就是往它嘴里塞一句自陈答不出来的回复——
+ * 最强的 few-shot 信号，它会照着再来一遍。页面照常画那一行（那是给人看的），
+ * 但模型的历史里当它不存在。
  */
 function toHistory(rows: store.CaseMessageRow[], currentMode: string): ChatMessage[] {
   return rows
-    .filter((r) => (r.role === 'user' || r.role === 'assistant') && r.content)
+    .filter((r) => (r.role === 'user' || r.role === 'assistant') && r.content && r.failed_code === null)
     .map((r) => ({
       role: r.role as 'user' | 'assistant',
       content:
@@ -413,7 +439,74 @@ function bestEffort<T>(label: string, fn: () => T, fallback: T): T {
   }
 }
 
+/**
+ * 这一轮跑到哪一步了——**只为失败态落库存在**。失败可能发生在两个不同的时刻，
+ * 落法不一样，而只有 `runTurnCore` 知道自己走到了哪：
+ *   · `threadId` 已知、`messageId` 还是 null —— 占位行都还没落（缺 key 时 `getProvider`
+ *     在它之前就抛了，naive-qa-2 F-203 的真实现场）；补插一整行。
+ *   · 两者都已知 —— 占位行在，就地回填成失败态。
+ * 两者都还没有 = 连线程都没开（校验就没过），那一支走 `ok:false` 返回，不落任何行。
+ */
+interface TurnProgress {
+  threadId: number | null;
+  messageId: number | null;
+  /**
+   * 正文已经回填、这一轮已经**结清**（finalizeMessage 之后）。
+   * 置位之后再抛出来的东西一律不许标失败：那时用户的回答已经生成、已经记账，
+   * 把它改写成「这一轮没能生成回答」等于当着他的面销毁一条他付过钱的回答
+   *（`chargeTurn` 里的写库真抛过，就落在 finalize 之后一行）。
+   */
+  settled: boolean;
+}
+
+/**
+ * 一轮对话。**外壳只做一件事：终态失败要在库里留下痕迹。**
+ *
+ * 【这一层是为什么加的】(naive-qa-2 F-203) 模型不可用 / 超时 / 断连时，页面上有一张
+ * 「这一轮没能生成回答 … 错误码 / 重试」的卡，但它是**纯前端瞬时状态**：一刷新就没了，
+ * 屏幕上只剩用户自己的问题一句挨一句排着，没有任何"没答上"的痕迹，也没有重试入口。
+ * 对一个在等仲裁的人，那个形状与"我讲的话被系统吞了"分辨不出来。
+ *
+ * 【为什么落在这里而不是路由的 catch 里】路由只做四件事（鉴权/取参/开流/转发事件），
+ * 业务落库归 lib/agent；而且占位行的 id 只有编排层知道。
+ *
+ * 【为什么落库失败也不许掀翻这一层】原始异常才是要报给用户的那件事。
+ * 标记失败这一步失手，最多是"这一轮刷新后仍会消失"，绝不能变成"用户收到了另一个错误"
+ *——分层口径与唯一入口见 `bestEffort`。
+ */
 export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
+  const progress: TurnProgress = { threadId: null, messageId: null, settled: false };
+  try {
+    return await runTurnCore(input, progress);
+  } catch (err) {
+    // 原文进服务端日志，出去的是三段式文案（说不出内部实现的那一份）
+    const u = toUserFacingError(err, { code: 'AGENT_FAILED', where: 'agent.runTurn' });
+    // 已经结清的一轮不许被改写成失败（见 TurnProgress.settled）；线程都没开则没有可挂靠的行。
+    if (progress.settled || progress.threadId === null) throw err;
+    const failedMessageId = bestEffort(
+      '失败态落库失败（这一轮刷新后仍会消失，用户只会看见自己那句问题）',
+      () =>
+        store.failMessage(input.db, {
+          threadId: progress.threadId!,
+          messageId: progress.messageId,
+          code: u.code,
+          content: u.message,
+        }),
+      null,
+    );
+    // 抛改成返回：失败这件事现在**是有结构的**（哪一行失败了、重试该指向谁），
+    // 路由拿它发 error 帧（它本来就有 `if (!result.ok)` 那一支）。
+    return {
+      ok: false,
+      status: 502,
+      errorCode: u.code,
+      message: u.message,
+      ...(failedMessageId === null ? {} : { failedMessageId }),
+    };
+  }
+}
+
+async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise<RunTurnOutcome> {
   const { db, caseId, userId } = input;
   const now = input.now ?? new Date();
 
@@ -452,7 +545,17 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   const owned = cases.getCase(db, { caseId, userId, timelineLimit: 1 });
   if (!owned.ok) return { ok: false, status: owned.status, errorCode: owned.errorCode, message: owned.message };
 
-  const message = input.message.trim();
+  /**
+   * 重试那一轮。**重试的定义是「重发上一条用户消息」**，所以问题原文只认库里那条用户行：
+   * 让客户端回传就意味着它可以传别的，那时档案里那一问一答会从此对不上。
+   * 取不到（id 不是本案的失败轮 / 前面没有用户行）当 404——与"别人的案件"同一个说法。
+   */
+  const retry = input.retryOf === undefined ? null : store.findRetryTarget(db, caseId, input.retryOf);
+  if (input.retryOf !== undefined && retry === null) {
+    return { ok: false, status: 404, errorCode: 'RETRY_TARGET_NOT_FOUND', message: '找不到要重试的那一轮' };
+  }
+
+  const message = (retry ? retry.userContent : input.message).trim();
   if (!message) return { ok: false, status: 400, errorCode: 'EMPTY_MESSAGE', message: '消息不能为空' };
 
   const snapshot = loadCaseSnapshot(db, caseId);
@@ -464,14 +567,27 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   }
 
   const thread = store.ensureThread(db, caseId, mode);
+  // 从这里起，这一轮失败了就有地方挂（见 runTurn 外壳与 TurnProgress）
+  progress.threadId = thread.id;
   // 先取历史再落本轮 user 行，免得本轮消息在历史里出现两次。
   //
   // 【按 case 取而不是按 thread 取】线程是按 mode 分的（ensureThread），而 mode 由服务端按
   // 首诊进度自己切（问诊 → 陪跑）。按 thread 取的话，首诊走完的那一刻历史清零——
   // 用户在同一个输入框里连续说话，模型却突然什么都不记得了。取数范围从 thread 扩到 case，
   // 条数上限不变（HISTORY_LIMIT），所以每轮 input token 不增加。
-  const history = toHistory(store.listCaseMessages(db, caseId, HISTORY_LIMIT), mode);
-  store.insertMessage(db, { threadId: thread.id, role: 'user', content: message });
+  //
+  // 【重试时截到那句问话之前】那条用户行还在库里（重试不重复插），失败行也在。
+  // 不截的话模型会先读到"用户问了 X、我答不出来"，再读到我们显式追加的同一句 X——
+  // 同一个问题在上下文里出现两次，第二次还紧跟着一次失败。失败行本身由 toHistory 滤掉。
+  const history = toHistory(
+    store
+      .listCaseMessages(db, caseId, HISTORY_LIMIT)
+      .filter((r) => retry === null || r.id < retry.userMessageId),
+    mode,
+  );
+  // 重试**不再插一条新的用户消息**：插了档案里就多一句一模一样的问话，
+  // 用户看见自己把同一件事讲了两遍（判据：重试后 user 行数不变）。
+  if (retry === null) store.insertMessage(db, { threadId: thread.id, role: 'user', content: message });
 
   const taskClass = classifyTask({ message, mode });
   const routed = input.provider
@@ -689,6 +805,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   // assistant 行先落空壳：行动卡要按 source_message_id 回指它（「这条为什么要做」），
   // 而卡是在流跑到一半时产生的，所以 id 必须先有。content 留 NULL = 生成中（migrate.ts）。
   const messageId = store.insertMessage(db, { threadId: thread.id, role: 'assistant', content: null, model: routed.client.model });
+  // 占位行落住了：此后失败就地回填这一行，不再补插（见 TurnProgress）
+  progress.messageId = messageId;
 
   const state = newTurnState();
   state.retrieved.push(...packs);
@@ -1251,6 +1369,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
 
   const usageReport: UsageReport = { model: routed.client.billingModel, usage, servedModel };
   store.finalizeMessage(db, messageId, { content: text, tokensJson: JSON.stringify(usageReport) });
+  // 这一轮到此为止已经**结清**：往后再抛什么，都不许回头把这条回答改写成失败态
+  progress.settled = true;
   store.touchThread(db, thread.id);
   chargeTurn({ db, userId, mode, messageId, usage, provider: routed.client, servedModel, emit });
 

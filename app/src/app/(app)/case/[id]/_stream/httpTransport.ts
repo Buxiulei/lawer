@@ -36,7 +36,7 @@ function errorFrameFrom(body: unknown, status: number): ErrorFrame {
 export function createHttpTransport(): ChatTransport {
   return {
     kind: 'http',
-    async *send({ caseId, message, mode, signal }: ChatRequest) {
+    async *send({ caseId, message, mode, signal, retryOf }: ChatRequest) {
       const token = readToken();
       if (!token) throw new NeedsDemoFallbackError('no-token');
 
@@ -48,7 +48,11 @@ export function createHttpTransport(): ChatTransport {
           Accept: 'text/event-stream',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(mode ? { message, mode } : { message }),
+        body: JSON.stringify({
+          message,
+          ...(mode ? { mode } : {}),
+          ...(retryOf ? { retry_of: Number(retryOf) } : {}),
+        }),
       });
 
       if (res.status === 401) throw new NeedsDemoFallbackError('unauthorized');

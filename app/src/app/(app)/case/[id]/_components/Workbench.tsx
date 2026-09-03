@@ -186,6 +186,19 @@ export function Workbench({ caseId }: { caseId: string }) {
     stream.retry();
   }, [stream]);
 
+  /**
+   * 重试一条**回显出来的失败轮**（刷新之后从历史里点进来的那条）。
+   * 走 retry_of 而不是把原文再发一遍：后者会在档案里插第二句一模一样的问话。
+   * 重试成功后这一行仍留在原地（它是这一轮确实失败过的如实记录），新回答排在它后面。
+   */
+  const retryFailedTurn = useCallback(
+    (messageId: string) => {
+      follow.current = true;
+      stream.retryFailed(messageId);
+    },
+    [stream],
+  );
+
   const toggleAction = useCallback((id: string, done: boolean) => {
     setActions((prev) =>
       prev.map((a) => (a.id === id ? { ...a, status: done ? '完成' : '待办' } : a)),
@@ -340,6 +353,26 @@ export function Workbench({ caseId }: { caseId: string }) {
             const prev = messages[i - 1];
             const newDay =
               !prev || formatDate(prev.createdAt) !== formatDate(m.createdAt);
+            /* 【失败轮：横幅 + 重试，刷新后原样还在】(naive-qa-2 F-203)
+               这一行的 content 是那段三段式失败文案，不是回答——当回答画出去，
+               "模型连不上"读起来就成了律师在回答问题。
+               重试按钮只给**最后一条**：后面已经有新回答时再点一次，
+               只是对着一个已经答过的问题重新收一次费。 */
+            if (m.failedCode) {
+              return (
+                <div key={m.id}>
+                  {newDay && <DateDivider iso={m.createdAt} />}
+                  <StreamErrorCard
+                    error={{ code: m.failedCode, message: m.content }}
+                    onRetry={
+                      i === messages.length - 1 && m.failedMessageId
+                        ? () => retryFailedTurn(m.failedMessageId!)
+                        : undefined
+                    }
+                  />
+                </div>
+              );
+            }
             return (
               <div key={m.id}>
                 {newDay && <DateDivider iso={m.createdAt} />}

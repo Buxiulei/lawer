@@ -15,6 +15,8 @@
  * 【变异臂】
  *  · C13 `toHistoryMessage` 删掉 `servedModel` / `modelMismatch` 两行（不直传）⇒ 「型号两件套」那条红
  *  · C14 `toRole` 兜底翻向（`raw === 'assistant' ? 'assistant' : 'user'`）⇒ 「认不出当助手画」那条红
+ *  · M-C5 删掉 `failedCode` / `failedMessageId` 两行 ⇒ 「失败轮」那两条红
+ *    （失败轮会被当成一条**回答**画出去：屏幕上"模型这会儿连不上"读起来像律师在回答问题）
  */
 import { describe, expect, it } from 'vitest';
 import { toHistoryMessage, type ApiMessageRow } from '../caseHistory';
@@ -29,6 +31,7 @@ function row(extra: Partial<ApiMessageRow> = {}): ApiMessageRow {
     model: 'claude-opus-5',
     served_model: 'claude-sonnet-5',
     served_mismatch: true,
+    failed_code: null,
     ...extra,
   };
 }
@@ -62,6 +65,31 @@ describe('历史行 → 页面消息', () => {
     expect(message.servedModel).toBeNull();
     expect(message.modelMismatch).toBe(false);
     expect(message.model).toBe('deepseek-v4-pro');
+  });
+
+  /** 变异臂 M-C5（naive-qa-2 F-203） */
+  it('失败轮：failedCode 直传，并单独带出裸的库主键给重试用', () => {
+    const message = toHistoryMessage(
+      row({
+        id: 77,
+        content: '这一轮没能生成回答：模型服务这会儿连不上。',
+        failed_code: 'AGENT_FAILED',
+        model: null,
+        served_model: null,
+        served_mismatch: false,
+      }),
+    );
+    expect(message.failedCode).toBe('AGENT_FAILED');
+    // 展示 id 带 `m_` 前缀，重试要发回服务端的是裸主键——两个值不是一个东西
+    expect(message.id).toBe('m_77');
+    expect(message.failedMessageId).toBe('77');
+  });
+
+  /** 反向对照：正常行不许被标成失败，否则页面会把每条回答都画成横幅 */
+  it('正常轮：failedCode 为 null，也不带重试用的 id', () => {
+    const message = toHistoryMessage(row());
+    expect(message.failedCode).toBeNull();
+    expect(message.failedMessageId).toBeUndefined();
   });
 
   it('用户行没有型号 ⇒ model 为 undefined（落款整行不出现）', () => {

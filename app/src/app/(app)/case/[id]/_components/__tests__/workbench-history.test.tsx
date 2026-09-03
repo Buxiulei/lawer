@@ -18,6 +18,8 @@
  *  · C3 取回来的历史不落进 messages（`if (history.messages)` 那句删掉）⇒ 「两条都画出来」红
  *  · C4 演示案件也去请求 ⇒ 「演示案件不请求」那条红
  *  · B10 落定时不把 servedModel / modelMismatch 传给消息 ⇒ 「实际型号进消息」那条红
+ *  · M-C6 失败轮那一支删掉（照 AssistantMessage 画）⇒ 「失败轮画成横幅」那组红
+ *  · M-C7 重试按钮不限最后一条（`i === messages.length - 1` 去掉）⇒ 「只有最后一条给重试」红
  */
 import type { ReactElement, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -45,8 +47,9 @@ vi.mock('@/app/_ui/motion', async (importOriginal) => ({
   scrollBehavior: () => 'auto' as const,
   useReducedMotion: () => true,
 }));
-/** 落定回调的接住处：本轮流走完之后 Workbench 拿它把新消息追进列表 */
-const chat: { settle: (turn: unknown) => void } = { settle: () => {} };
+/** 落定回调的接住处：本轮流走完之后 Workbench 拿它把新消息追进列表。
+ *  `retried` 记下「点了历史里那条失败轮的重试」时传出去的 id。 */
+const chat: { settle: (turn: unknown) => void; retried: string[] } = { settle: () => {}, retried: [] };
 vi.mock('../../_stream/useChatStream', () => ({
   useChatStream: ({ onSettled }: { onSettled: (turn: unknown) => void }) => {
     chat.settle = onSettled;
@@ -65,6 +68,7 @@ vi.mock('../../_stream/useChatStream', () => ({
       demoFallback: false,
       send: () => {},
       retry: () => {},
+      retryFailed: (id: string) => chat.retried.push(id),
       stop: () => {},
     };
   },
@@ -155,6 +159,7 @@ function realRows() {
       model: null,
       served_model: null,
       served_mismatch: false,
+      failed_code: null,
     },
     {
       id: 42,
@@ -164,9 +169,22 @@ function realRows() {
       model: 'claude-opus-5',
       served_model: 'claude-sonnet-5',
       served_mismatch: true,
+      failed_code: null,
     },
   ];
 }
+
+/** 一条失败轮：模型连不上那一轮落库的样子（content 是三段式失败文案，不是回答） */
+const FAILED_ROW = {
+  id: 43,
+  role: 'assistant',
+  content: '这一轮没能生成回答：模型服务这会儿连不上。稍等一下点「重试」。',
+  created_at: '2026-08-20T10:00:30+08:00',
+  model: null,
+  served_model: null,
+  served_mismatch: false,
+  failed_code: 'AGENT_FAILED',
+};
 
 /* ── 元素树探针：不经 React 渲染（Workbench 底下挂着 Radix 弹层，渲染要 DOM）──
    只沿 children 与那几个"内容型" prop 往下走，收组件名与可见文字。 */
@@ -198,7 +216,19 @@ function walk(
   const el = node as ReactElement<Record<string, unknown>>;
   if (!el.props && !el.type) return;
   const t = el.type as { name?: string; displayName?: string } | string;
-  types.push(typeof t === 'string' ? t : (t?.displayName ?? t?.name ?? '?'));
+  const typeName = typeof t === 'string' ? t : (t?.displayName ?? t?.name ?? '?');
+  types.push(typeName);
+  // 失败轮画的是 StreamErrorCard，它的内容在 `error` 这个数据对象里（不是 ReactNode），
+  // 且「给不给重试」体现为 onRetry 在不在——两样都不走 children，得单独取。
+  if (typeName === 'StreamErrorCard') {
+    const err = el.props?.error as { code?: unknown; message?: unknown } | undefined;
+    errorCards.push({
+      code: err?.code,
+      message: err?.message,
+      retryable: typeof el.props?.onRetry === 'function',
+      onRetry: el.props?.onRetry as (() => void) | undefined,
+    });
+  }
   // 消息组件把正文放在 message 这个**数据对象**里（不是 ReactNode），单独取一下：
   // 少了它，"两条都画出来"那条会在空字符串上断言，静默空过。
   const message = el.props?.message as ProbedMessage | undefined;
@@ -207,16 +237,26 @@ function walk(
   for (const key of TEXT_PROPS) walk(el.props?.[key], types, texts, messages);
 }
 
+/** 这一帧画出来的失败横幅（walk 的收集处，probe 每次开跑前清空） */
+const errorCards: {
+  code: unknown;
+  message: unknown;
+  retryable: boolean;
+  onRetry?: () => void;
+}[] = [];
+
 function probe(node: ReactNode): {
   types: string[];
   text: string;
   messages: ProbedMessage[];
+  errors: typeof errorCards;
 } {
   const types: string[] = [];
   const texts: string[] = [];
   const messages: ProbedMessage[] = [];
+  errorCards.length = 0;
   walk(node, types, texts, messages);
-  return { types, text: texts.join(' '), messages };
+  return { types, text: texts.join(' '), messages, errors: [...errorCards] };
 }
 
 /** 推一帧：只在这期间接管 hook */
@@ -253,6 +293,7 @@ beforeEach(() => {
   bus.fails = false;
   bus.rows = realRows();
   bus.calls.length = 0;
+  chat.retried.length = 0;
   harness.slots.length = 0;
 });
 
@@ -391,5 +432,52 @@ describe('落定的一轮把「实际型号」带进消息', () => {
     expect(text).toContain('我上周三被通知解除');
     expect(text).toContain('先别签任何文件');
     expect(text).toContain('这三句话不是一段话');
+  });
+});
+
+/* ── 四、失败轮：刷新之后横幅与重试还在 ─────────────────────
+   (naive-qa-2 F-203) 此前失败只是一张前端的卡：刷新后屏幕上只剩用户自己那句问题
+   一句挨一句排着，没有任何"没答上"的痕迹，也没有重试入口。
+   现在失败落成了一条 failed_code 行，页面必须把它画成横幅——而**不是画成一条回答**：
+   那会让"模型这会儿连不上"读起来像律师在回答问题。 */
+
+describe('失败轮回显：横幅 + 重试', () => {
+  /** 变异臂 M-C6，整组的由头 */
+  it('★历史里有失败轮 ⇒ 画成失败横幅（带错误码与失败文案），不画成回答', async () => {
+    bus.rows = [...realRows(), FAILED_ROW];
+    const { errors, messages } = probe(await settled(CASE));
+
+    expect(errors, '失败轮没画成横幅').toHaveLength(1);
+    expect(errors[0].code).toBe('AGENT_FAILED');
+    expect(errors[0].message).toContain('没能生成回答');
+    // 那一行不许同时又被当成一条回答画出去
+    expect(messages.map((m) => m.content)).not.toContain(FAILED_ROW.content);
+  });
+
+  it('★横幅带重试，且点下去发的是那一行的库主键（不是展示 id）', async () => {
+    bus.rows = [...realRows(), FAILED_ROW];
+    const { errors } = probe(await settled(CASE));
+    expect(errors[0].retryable, '失败轮没有重试入口 = 用户走进死胡同').toBe(true);
+    errors[0].onRetry!();
+    expect(chat.retried).toEqual(['43']);
+  });
+
+  /** 变异臂 M-C7：重试成功之后那条失败行不再是最后一条——再点一次只是重复收费 */
+  it('失败轮后面已经有新回答 ⇒ 横幅还在（如实记录），但不再给重试', async () => {
+    bus.rows = [
+      ...realRows(),
+      FAILED_ROW,
+      { ...realRows()[1], id: 44, content: '重试之后答上了。', created_at: '2026-08-20T10:01:00+08:00' },
+    ];
+    const { errors, text } = probe(await settled(CASE));
+    expect(errors).toHaveLength(1);
+    expect(errors[0].retryable).toBe(false);
+    expect(text, '这一轮确实失败过，抹掉它就是改历史').toContain('重试之后答上了');
+  });
+
+  /** 反向对照：没有失败轮时一张横幅都不许出现 */
+  it('全是正常轮 ⇒ 一张失败横幅都没有', async () => {
+    const { errors } = probe(await settled(CASE));
+    expect(errors).toEqual([]);
   });
 });

@@ -388,6 +388,8 @@ export function runMigrations(db: Database.Database): void {
 
   // 对话消息：user 行 content 恒有（问句）；assistant 行 content 由模型完成后回写，
   // NULL = 生成中/中断——这是断线恢复的判定位（无 content 即重连续跑，非空即回放）。
+  // **终态失败**不留在 NULL 上：它回填三段式失败文案 + failed_code（见存量迁移区），
+  // 否则刷新后这一轮连同"没答上"这件事一起消失。
   // tokens_json 记本轮用量明细，供 token_usage 计费对账。
   db.exec(`
     CREATE TABLE IF NOT EXISTS messages (
@@ -1190,6 +1192,23 @@ export function runMigrations(db: Database.Database): void {
   // 可空且不回填：走 REST 的客户端根本不报名字，存量行更是无从得知。读侧退到钥匙名，
   // 并在页面上写明「这是你给钥匙起的名字」——**不编默认值**，否则用户会以为我们认出了他的助手。
   addColumnIfMissing(db, 'api_keys', 'client_name', 'TEXT');
+
+  // messages.failed_code：这一轮**终态失败**的错误码（AGENT_FAILED 等，值集见 lib/errors/user-facing）。
+  // NULL = 这不是失败轮（绝大多数行）。
+  //
+  // 【为什么必须落库】在此之前失败是**纯前端瞬时状态**：模型连不上时页面有一张
+  // 「这一轮没能生成回答 / 重试」的卡，一刷新就没了——库里只剩用户自己那句问题
+  // 一句挨一句排着，没有任何"没答上"的痕迹，也没有重试入口。对一个在等仲裁的人，
+  // 那个形状与"我讲的话被吞了"无法分辨（naive-qa-2 F-203）。
+  //
+  // 【与 content IS NULL 的分工】content IS NULL 是「生成中」占位（见建表段注释），
+  // 是**未定**；本列非空是**已定的失败**，同一行的 content 同时被回填成三段式失败文案，
+  // 所以它照常被 listCaseMessages 取出来、照常在页面上占一格。两者不许混用：
+  // 把失败也留成 NULL content，就是这条缺陷本身。
+  //
+  // 可空 TEXT、不回填、无 DB 级 CHECK：同 intake_stage / milestone 的既定裁决
+  //（SQLite 加无默认 NOT NULL 列会半途炸，改 CHECK 要重建表，本迁移框架无事务）。
+  addColumnIfMissing(db, 'messages', 'failed_code', 'TEXT');
 
   // 档案维度的去重键。**必须与 uq_company_litigation（案件维度）并存，不能替代它**：
   // 一个档案可以被多个案件的 company_profiles 指向，同一份 JSONL 若先后挂在两个 profile 下导入，
