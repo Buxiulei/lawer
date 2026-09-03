@@ -114,6 +114,7 @@ export function runMigrations(db: Database.Database): void {
   `);
 
   // 发码的「≤5 秒防连击闸」流水（判定与常量见 lib/auth/otp.ts 的 SEND_BURST_SECONDS）。
+  // ⚠️ 本表依 ADR-003（已接受 A 案）保留。
   // 一次**真正开始发送**一行，判定 = 该 target 5 秒内有没有行。
   //
   // 【为什么不能复用 sms_codes / email_codes 的行】那两张表的行是「用户手上有这串码」的凭据，
