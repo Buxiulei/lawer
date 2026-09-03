@@ -388,6 +388,8 @@
 
 **2026-09-04 · 「每轮两次模型请求」诊断：② 同一轮内合法二次调用，已按一轮记账**（Sonnet 只读）：第二次是 orchestrator.ts:932-951 的「收口检查」补救轮（charter §2 每轮必落行动卡；state.actionCards===0 时追加一条固定系统提示再打一次）；137 字符差 = 那条系统消息 JSON 长度 136 + 逗号，三组样本逐字符对上；usage 每次 runOnce 累加、chargeTurn 只记一笔（ref_id=turn-<id>）——未漏账未双扣。假上游从不吐 tool_calls 所以补救轮 100% 触发，是测试环境极端值。**待办**：查生产真实流量里补救轮触发率（ACTION_CARD_MISSING 信号 / actionCards===0 分支计数），若常态触发则是模型不听第一次工具指令，要从提示词修，而不是多付一次钱。
 
+**2026-09-04 · 生产上线 9b88798（余额闸）并实弹验证**：restart 双 active → 路由 200 → 用余额 −154 的 smoke 账号打 POST /chat → **HTTP 402 GONGDAO_EXHAUSTED**，三段式含余额（「余额 −154，这一轮开不了…到「我的」页兑换…」），messages 146→146 零新增、ledger 无新行 → 之后给 uid=1 补 5000 测试额度（余额 4846，ledger 管理员调整），供核对员使用。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
