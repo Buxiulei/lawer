@@ -325,6 +325,8 @@
 - 派生工作项（按序）：①在飞 mcp-nav（侧栏单独一栏）与 byo-key-rotate（一段话术接通 + case_facts/knowledge_search）；②**MCP 能力补全**（byo-key 落地后派）：knowledge_search 覆盖 法条/判例/SOP/数据卡 四类并带来源与可信度；写回工具镜像 lib/agent/tools.ts 的 claims_upsert / deadline_set / action_card / draft_write / timeline_add（同一入口复用，不复制），让 agent 的分析结果回到网页驾驶舱/文书页；法律 skill 包（N/2N/封顶/时效/工资口径等算式与 SOP 作为可下载 skill 文档）；SKILL.md 明写「网页看状态，分析在你这」。③网页文案重定位：首页/驾驶舱/欢迎页把「接入你的 agent」置于「问它」之前；**「问它」保留为无 agent 用户兜底，不隐藏**（主理人 2026-09-03 确认：「不排除用户自己没有好用的 agent，那就我们提供网页上的服务」）。④评测与守卫：MCP 工具集要有「模拟 agent 走完整分析」的常驻真机判据。
 - 已记入记忆（项目定位）。
 
+**2026-09-03 · minors MF-4 PASS（b370966）+ 经理补⑨一例（02a04dc）→ 主干 e6b4776**：seedStepHistory 里 seeded>step 时 h.go(step-seeded) 后 return（选此而非 finish 前退栈：另一标签页清草稿后 F5 不经过 finish）；onPop 对齐空转守卫（真机 mutK 臂 I9 restoredHint 为其判据，vitest 无 jsdom 咬不住）。真机 I6 6→1、I7 3→1、I9 5→3，I3/I4/I5 仍 3 且回退过程草稿与表单未清。复核 nit「⑨只量 step=0，臂 I go(-seeded) 存活」——经理补一例 seeded=4→step=2 期望 [-2]。至此小白二轮 8 条缺陷全部闭卷，CI 盯梢中。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
