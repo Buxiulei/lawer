@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { useDiscreet } from './discreet';
+import { DISCREET_ON_HINT, HOLD_HINT } from './revealHint';
 
 /** 按住多久才算「我要看清这块」。短于它的都是滚动时手指划过。 */
 const PRESS_MS = 150;
@@ -12,7 +13,7 @@ const MOVE_SLOP = 10;
 const RECOVER_MS = 1500;
 
 const HINT_KEY = 'lawer.veilHint';
-const HINT_TEXT = '低调模式已开启：点住任意段落可暂时看清';
+const HINT_TEXT = DISCREET_ON_HINT;
 
 /**
  * 低调模式二档的手势层：正文由 CSS 整体糊着（见 globals.css 的 [data-veil]），
@@ -192,5 +193,36 @@ export function DiscreetVeil() {
     };
   }, [discreet]);
 
-  return null;
+  // 常驻提示：糊层的手势只能写在糊块**外面**——filter 对整棵子树一视同仁，
+  // 贴在糊块上的角标会跟着糊掉，糊掉的角标等于没有（见 revealHint 的长注释）。
+  // **闸只有低调模式这一道**：这一句是「两种块各自写明手势」的糊层那一半，
+  // 低调模式开着它就得在。按「用过一次就退场」之类的条件收起来，等于对用过的人
+  // 又回到 F-206 报的原样（同屏两种糊块、零视觉区分），而那是台账上没有的裁决。
+  //
+  // 【位置为什么要跟着侧栏走】≥lg 的桌面布局左边固定着一条 240px 的侧栏
+  // （shadcn/sidebar 的 sidebar-container：fixed inset-y-0 left-0 z-40）。
+  // 角标钉在 left-3 就整个落在它底下，z 又同为 40、DOM 里还排在侧栏前面——
+  // 桌面上这句提示**一个像素都看不见**，糊层于是回到零视觉区分（F-206 复核）。
+  // 所以 lg 起把它推到侧栏右边：--sidebar-width 由 SidebarProvider 写在外层，
+  // /welcome 那种没有壳层的页面读不到，回退 0px＝还是原来的 left-3。
+  // 只动横向那一档：桌面的 bottom-4 实测没问题——sticky 操作条被 main 的
+  // 底部留白顶着，从来没贴到视口底（1280x560 滚到底/滚一半都量过，
+  // 条底 444/492 而视口 560），不必跟着改（rd-qa2-minors/fix3-barpin-fix.log）。
+  //
+  // 【为什么不吃点击】这是一枚常驻的固定角标，糊层铺满正文，它落在哪里都压着
+  // 页面上的东西（实测：1024 的案件页压着一条链接，393 的「我的」压着一个输入框）。
+  // role="note" 的东西没人要点它，pointer-events-none 让指针**穿过去**——
+  // 压住的只剩绘制，点按一律落到它下面那个控件上（Toast 那一层同理）。
+  // 于是「可见」与「不遮内容」两件事各有各的判据：可见＝把命中打开后
+  // elementFromPoint 命中它自己（有东西盖在上面就红），不遮＝常态下命中的是底下那个。
+  if (!discreet) return null;
+  return (
+    <p
+      role="note"
+      data-reveal-hint="hold"
+      className="pointer-events-none fixed bottom-[calc(var(--bottom-bar-h)+8px)] left-3 z-40 rounded-full border border-line bg-surface/95 px-2.5 py-1 text-[12px] leading-5 text-ink-2 shadow-soft backdrop-blur-sm lg:bottom-4 lg:left-[calc(var(--sidebar-width,0px)+12px)]"
+    >
+      {HOLD_HINT}
+    </p>
+  );
 }
