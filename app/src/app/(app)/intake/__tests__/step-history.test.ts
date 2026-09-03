@@ -221,6 +221,18 @@ describe('F-208 向导的历史栈：一步一个条目', () => {
     expect(stepFromHistoryState(h.back()), '再返回一下才离开向导').toBe(null);
   });
 
+  it('条目比草稿深且草稿不在第 1 步：退的是差值那几格，不是退到底（复核 nit：臂 I 用 go(-seeded) 也能过上一条）', () => {
+    const h = new FakeHistory();
+    seedStepHistory(h, 0);
+    pushStepHistory(h, 1);
+    pushStepHistory(h, 2);
+    pushStepHistory(h, 3);
+    pushStepHistory(h, 4); // 条目写着第 5 步
+    seedStepHistory(h, 2); // 草稿停在第 3 步（另一标签页退了两步后本页 F5）
+    expect(h.goCalls, '该退 (2-4) = -2 格，退到底就把草稿那一步也退没了').toEqual([-2]);
+    expect(stepFromHistoryState(h.state), '退完当前条目该与屏幕同步在第 3 步').toBe(2);
+  });
+
   it('条目比草稿深：退掉多出来的那几格，之后返回一下就离开向导', () => {
     const h = new FakeHistory();
     seedStepHistory(h, 0);
