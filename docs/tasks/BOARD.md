@@ -305,6 +305,8 @@
 - **auth 第三轮**（fd164ec MUST_FIX）：MF-A F-201 判据无牙（删 returning 分支/直接画新人屏/三维接线恒 0 全存活，前任复核列出的存活臂被修复轮静默略过）；MF-B 失效旗登录后从不复位。**minors 第二轮**（30e6a34 MUST_FIX）：F-208 重挂载重复铺栈（第 1 步返回弹回第 2 步，修复引入）；F-206 桌面端角标被侧栏压住。两单已并行派出。口径：/account、settings 各自 UNAUTHORIZED 处理另立单。
 - 主干合入 otp(ADR)+intake+failedturn，CI 盯梢中。
 
+**2026-09-03 · 生产上线 3170e89（F-205 首诊建档前置 / F-203 对话失败态持久化 / ADR-003 收口）**：备份 → bundle ff → build EXIT=0 → restart 双 active → 迁移触发（50 表，messages.failed_code 列到位）→ / /login /intake /case/1/ask 200 → 历史接口正常。真机小核对（/welcome 低调揭开+老用户变体、401 出路、历史回显）已派 Sonnet（该项对应 auth 单尚在第三轮，生产现为 F-202 未合并态——核对结果用于确认基线现状，不作 PASS 依据）。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
