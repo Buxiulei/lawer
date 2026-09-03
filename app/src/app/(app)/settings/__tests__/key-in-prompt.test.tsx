@@ -62,7 +62,7 @@ const html = (node: React.ReactElement) => renderToStaticMarkup(node);
 
 describe('话术里落的是真密钥', () => {
   it.each([
-    ['设置页接入卡', <AgentSetupCard key="card" />],
+    ['设置页接入卡', <AgentSetupCard key="card" secret={keySecret} />],
     ['接入指南', <ConnectGuide key="guide" />],
   ])('%s', (_label, node) => {
     const out = html(node as React.ReactElement);
@@ -73,7 +73,7 @@ describe('话术里落的是真密钥', () => {
   });
 
   it('话术里同时带着 skill 第一步——两样都得在同一段里', () => {
-    const out = html(<AgentSetupCard />);
+    const out = html(<AgentSetupCard secret={keySecret} />);
     expect(out).toContain(INFO.skill_url);
     expect(out).toContain('【第一步，先做这个】');
   });

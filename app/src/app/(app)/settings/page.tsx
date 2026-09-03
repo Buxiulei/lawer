@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
-import { AgentSetupCard } from './_components/AgentSetupCard';
-import { ApiKeysCard } from './_components/ApiKeysCard';
+import { AgentKeyCards } from './_components/AgentKeyCards';
 import { PreferencesCard } from './_components/PreferencesCard';
 import { RealnameCard } from './_components/RealnameCard';
 
@@ -15,8 +14,8 @@ export default function SettingsPage() {
 
       <div className="mt-2 flex flex-col gap-4">
         <RealnameCard />
-        <ApiKeysCard />
-        <AgentSetupCard />
+        {/* API key 卡 + 接入卡：两张吃同一份密钥 state，见 AgentKeyCards */}
+        <AgentKeyCards />
         <PreferencesCard />
       </div>
     </div>

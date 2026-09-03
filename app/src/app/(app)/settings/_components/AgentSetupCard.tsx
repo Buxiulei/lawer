@@ -11,7 +11,7 @@ import { SETUP_TABS } from './agentSetup';
 import { CurrentKey } from './CurrentKey';
 import { SetupPrompt } from './SetupPrompt';
 import { useAgentSetup } from './useAgentSetup';
-import { useAgentKeySecret } from './useAgentKeySecret';
+import type { AgentKeySecret } from './useAgentKeySecret';
 
 /**
  * 一键接入：把这份档案库接到用户自己的 AI 助手上（spec D4）。
@@ -23,13 +23,16 @@ import { useAgentKeySecret } from './useAgentKeySecret';
  * 所以改成折叠：标题换成中性的「接入配置」，正文点开才渲染，任何提示也不带案件字样。
  * 折叠这件事本身归 _ui/DiscreetCollapse——接入指南 /settings/agent 用的是同一个壳，
  * 两处各写一份的那天，新写的那份不会有人替它想起折叠。
+ *
+ * 【密钥明文从外面传进来】话术里要填的是**当前这把**密钥的明文，不是占位符；
+ * 但这张卡不自己实例化 useAgentKeySecret——同一屏上的 ApiKeysCard 新建一把之后，
+ * 各自持有一份 state 的形态是：上面列表已经列出「启用中」，这张卡还写着「还没有密钥」、
+ * 话术还是占位符，要整页刷新才对上，而两张卡各自看都很正常。
+ * 一份 state 由 AgentKeyCards 实例化后喂给两张卡（prop 必填，漏传是编译错，不是静默过期）。
  */
-export function AgentSetupCard() {
+export function AgentSetupCard({ secret }: { secret: AgentKeySecret }) {
   const { discreet } = useDiscreet();
   const { info, loading, error, unauthorized } = useAgentSetup();
-  // 话术里要填的是**当前这把**密钥的明文，不是占位符。取数归 useAgentKeySecret，
-  // 接入指南那一页用的是同一个 hook（两处各写一份就会一处填真密钥、一处填占位符）。
-  const secret = useAgentKeySecret();
 
   return (
     <Card>

@@ -25,6 +25,7 @@ import { CodeBlock } from './CodeBlock';
 import { SetupPrompt } from './SetupPrompt';
 import { SignInHint } from './SignInHint';
 import type { SetupUrls } from './agentSetup';
+import type { AgentKeySecret } from './useAgentKeySecret';
 
 /**
  * API key：用户自己的 agent 直连档案库的长期凭据。
@@ -79,7 +80,13 @@ interface CreatedKey extends SetupUrls {
 
 const SCOPE_LABEL = new Map<string, string>(SCOPES.map((s) => [s.key, s.label]));
 
-export function ApiKeysCard() {
+/**
+ * @param secret 同一屏上「接到你自己的 AI 助手上」那张卡吃的同一份密钥 state
+ *   （由 AgentKeyCards 实例化）。这张卡新建出一把之后要**当场**把它顶上去（adopt），
+ *   否则关掉弹层，下面那张卡还写着「还没有密钥」、话术还是占位符，
+ *   用户从常驻卡复制走的是一段粘过去必然 401 的占位符话术。
+ */
+export function ApiKeysCard({ secret }: { secret: AgentKeySecret }) {
   const toast = useToast();
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,6 +141,8 @@ export function ApiKeysCard() {
         body: { name: name.trim(), scopes },
       });
       setIssued(body);
+      // 刚生成的这把就是「当前那把」：同屏的接入卡与话术立刻跟着换，不用等整页刷新
+      secret.adopt(body);
       setKeys((prev) => [
         {
           id: body.id,

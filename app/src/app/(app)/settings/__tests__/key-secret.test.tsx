@@ -138,6 +138,7 @@ describe('话术里填的是真密钥', () => {
 describe('取明文只有一个入口', () => {
   const SRC = join(process.cwd(), 'src');
   const SURFACES = [
+    'app/(app)/settings/_components/AgentKeyCards.tsx',
     'app/(app)/settings/_components/AgentSetupCard.tsx',
     'app/(app)/settings/agent/_components/ConnectGuide.tsx',
   ];
@@ -158,5 +159,54 @@ describe('取明文只有一个入口', () => {
     const hook = readFileSync(join(SRC, 'app/(app)/settings/_components/useAgentKeySecret.ts'), 'utf8');
     expect(hook).toContain('/secret');
     expect(hook).toContain('/rotate');
+  });
+});
+
+/* ── 同一屏上只有一份 state ───────────────────────────── */
+
+describe('设置页那两张卡吃同一份密钥 state', () => {
+  const SRC = join(process.cwd(), 'src');
+  const read = (rel: string) => readFileSync(join(SRC, rel), 'utf8');
+
+  /*
+   * 【守的是什么】ApiKeysCard（列表/新建）与 AgentSetupCard（话术）挨着摆在同一屏上。
+   * 各自实例化一份 useAgentKeySecret 的形态是：在上面那张卡点「新建」，弹层里的话术
+   * 确实带着真密钥，关掉弹层——上面列表已经列出「启用中」，下面那张卡还写着
+   * 「还没有密钥。照指南生成一把」、话术还是占位符，要整页刷新才对上。
+   * 用户从常驻那张卡复制走的是一段粘过去必然 401 的占位符话术，而两张卡各自看都很正常。
+   *
+   * 【为什么钉源码】要走到那个状态得点「新建」再填表提交，本仓测试环境是 node
+   * （无 DOM、无 testing-library），SSR 只渲染首帧、事件不跑。端到端那一版在
+   * playwright-core 真机脚本里（rd-byo-key/rv-browser.mjs 的「关掉弹层后（不刷新）」那步）。
+   */
+  it('页面不直接摆那两张卡——只有 AgentKeyCards 那一处实例化 hook', () => {
+    const page = read('app/(app)/settings/page.tsx');
+    expect(page).toContain('AgentKeyCards');
+    for (const card of ['ApiKeysCard', 'AgentSetupCard']) {
+      expect(
+        page,
+        `缺什么：设置页又直接摆了 ${card}。\n` +
+          `为什么缺：这两张卡各自实例化 useAgentKeySecret 时，一张卡里刚生成的密钥` +
+          `另一张卡看不见——它还写着「还没有密钥」、话术还是占位符，要整页刷新才对上。\n` +
+          `怎么办：两张卡都从 AgentKeyCards 里渲染，共吃它实例化的那一份 state。`,
+      ).not.toContain(card);
+    }
+    const wrapper = read('app/(app)/settings/_components/AgentKeyCards.tsx');
+    expect(wrapper.match(/useAgentKeySecret\(\)/g) ?? []).toHaveLength(1);
+    expect(wrapper).toMatch(/<ApiKeysCard secret=\{secret\} \/>/);
+    expect(wrapper).toMatch(/<AgentSetupCard secret=\{secret\} \/>/);
+  });
+
+  it('API key 卡新建成功后当场把新密钥顶成「当前那把」', () => {
+    const src = read('app/(app)/settings/_components/ApiKeysCard.tsx');
+    const create = src.slice(src.indexOf('const create ='), src.indexOf('const toggleScope'));
+    expect(create, '正对照：截到的确实是新建那段').toContain("apiFetch<CreatedKey>('/keys'");
+    expect(
+      create,
+      '缺什么：新建成功后没有 secret.adopt(body)。\n' +
+        '为什么缺：同屏那张接入卡吃的是同一份 state，不顶上去它就还停在「还没有密钥」，' +
+        '用户从常驻卡复制走的是占位符话术。\n' +
+        '怎么办：拿到响应后调 secret.adopt(body)。',
+    ).toContain('secret.adopt(body)');
   });
 });

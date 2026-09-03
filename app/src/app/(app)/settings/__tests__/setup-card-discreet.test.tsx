@@ -19,15 +19,27 @@ vi.mock('next/link', () => ({
 const { AgentSetupCard } = await import('../_components/AgentSetupCard');
 const HOOK = '用你自己的助手干活，能省下公道值';
 
+/**
+ * 密钥 state 由 AgentKeyCards 实例化后传进来（同一屏两张卡共吃一份），
+ * 这一组只关心折叠，给一份「还没有密钥」的稳定态就够。
+ */
+const secret = {
+  state: { kind: 'none' as const },
+  rotate: async () => {},
+  rotating: false,
+  adopt: () => {},
+};
+const card = () => renderToStaticMarkup(<AgentSetupCard secret={secret} />);
+
 describe('MCP 省钱引导', () => {
   it('常规模式下出现在接入卡里', () => {
     ui.discreet = false;
-    expect(renderToStaticMarkup(<AgentSetupCard />)).toContain(HOOK);
+    expect(card()).toContain(HOOK);
   });
 
   it('低调模式下整卡折叠，引导跟着收起来', () => {
     ui.discreet = true;
-    const html = renderToStaticMarkup(<AgentSetupCard />);
+    const html = card();
     expect(html).not.toContain(HOOK);
     expect(html).not.toContain('公道值'); // 卡里任何一处都不许露出这三个字
     ui.discreet = false;
@@ -41,9 +53,9 @@ describe('MCP 省钱引导', () => {
    */
   it('新加的「当前密钥」小节也在折叠里，不是摆在外面', () => {
     ui.discreet = false;
-    expect(renderToStaticMarkup(<AgentSetupCard />)).toContain('当前密钥'); // 正对照
+    expect(card()).toContain('当前密钥'); // 正对照
     ui.discreet = true;
-    expect(renderToStaticMarkup(<AgentSetupCard />)).not.toContain('当前密钥');
+    expect(card()).not.toContain('当前密钥');
     ui.discreet = false;
   });
 });
