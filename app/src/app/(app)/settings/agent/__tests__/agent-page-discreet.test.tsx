@@ -22,6 +22,9 @@ import { BYO } from '@/app/_ui/byoAgent';
 import { CASE_WORDS } from '@/app/_ui/neutral';
 import { allText, unveiledText } from '@/app/_ui/__tests__/unveiled';
 
+/** 一串谁也不会当成别的东西的假明文：判据扫的就是它 */
+const SECRET = 'sk-guard-plaintext-key-7c1f0a';
+
 const ui = { discreet: false };
 vi.mock('@/app/_ui/discreet', () => ({
   useDiscreet: () => ({ discreet: ui.discreet, toggle: () => {} }),
@@ -54,6 +57,24 @@ vi.mock('../../_components/useAgentSetup', () => ({
   }),
 }));
 
+/**
+ * 【为什么必须把密钥 state 顶成 ready】这一页真正的泄漏面之一是「当前这把」那串明文，
+ * 而它只在 ready 态才渲染。上面那条 apiFetch 恒 reject 的 mock 加上 SSR 不跑 effect，
+ * 让 useAgentKeySecret 永远停在 loading——于是这一组从来没见过 ready 态那一屏，
+ * 两边守卫全绿而屏幕上密钥明文常驻（复审 RV-S01 正是这么漏出去的）。
+ * 顶成 ready 之后，下面「密钥明文」那一组才落在真有明文的那一屏上。
+ */
+const KEY_STATE = { kind: 'ready' as const, id: 7, name: '我的 Claude', secret: SECRET };
+vi.mock('../../_components/useAgentKeySecret', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../_components/useAgentKeySecret')>()),
+  useAgentKeySecret: () => ({
+    state: KEY_STATE,
+    rotate: async () => {},
+    rotating: false,
+    adopt: () => {},
+  }),
+}));
+
 const AgentConnectPage = (await import('../page')).default;
 
 const html = () => renderToStaticMarkup(<AgentConnectPage />);
@@ -83,6 +104,38 @@ describe('低调模式：这一屏上没有一个清晰可读的案情词', () =
     ui.discreet = true;
     expect(allText(html())).toContain('按用量收'); // 正对照：这句确实渲染了
     expect(unveiledText(html())).not.toContain('按用量收');
+  });
+});
+
+describe('低调模式：密钥明文也不许摊在外面', () => {
+  /*
+   * 【为什么单开一条，不指望词表那条】密钥明文不是案情词，词表逐词点名的那条守卫
+   * 一个字都不会红。而它是这一屏上最不该常驻的东西：旁人扫一眼就看得出这台手机上
+   * 挂着个要拿密钥连的服务，第一步那句「当前这把」还替他标好了这是什么。
+   * 出路与话术同一条：DiscreetCollapse（点开才渲染），不是糊层——明文是要复制走的。
+   */
+  it('剔掉糊层之后，屏幕上读不到那串密钥', () => {
+    ui.discreet = true;
+    expect(
+      unveiledText(html()),
+      '缺什么：低调模式下 /settings/agent 上有一处清晰可读的密钥明文。\n' +
+        '为什么缺：第一步「当前这把」渲染在折叠外面，而按案情词点名的那条守卫看不见它。\n' +
+        '怎么办：那一小节（CurrentKey）套进 _ui/DiscreetCollapse，折叠标签保持中性。',
+    ).not.toContain(SECRET);
+  });
+
+  it('正对照：常规模式下它就该清晰可读——否则删掉整段也全绿', () => {
+    ui.discreet = false;
+    expect(unveiledText(html())).toContain(SECRET);
+  });
+
+  it('折叠不等于删掉：那一小节还在，露在外面的只有一行中性标签', () => {
+    ui.discreet = true;
+    // 标签是低调模式下这一小节唯一露在外面的字，所以它自己也得是中性的。
+    // 改了组件里那句、这里跟着改的那一刻，下面这条会替你把新写的那句也点一遍名。
+    const LABEL = '当前密钥（点开查看）';
+    expect(allText(html())).toContain(LABEL);
+    for (const word of CASE_WORDS) expect(LABEL.includes(word), word).toBe(false);
   });
 });
 

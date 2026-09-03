@@ -35,6 +35,15 @@ import {
 } from '../../_components/useAgentKeySecret';
 
 /**
+ * 生成那一次的响应里，这一页还用得上的部分：接入地址（省一次 agent-setup 往返）
+ * 与 id（第四步只盯这把刚生成的钥匙）。
+ *
+ * **明文故意不在这个类型里**。留一份的形态见下面 apiKey 那段——这里不留，
+ * 是为了让「再从 issued 里取明文」连编译都过不去，而不是靠下一个人记得别取。
+ */
+type IssuedRef = SetupUrls & { id: number };
+
+/**
  * 一页式接入指南：从零到"接上了"四步走完，中途不用跳去别的页面翻。
  *
  * 【为什么不复用设置页那两张卡】ApiKeysCard 是**管理**用的（列出、吊销、看最近使用），
@@ -63,14 +72,25 @@ export function ConnectGuide() {
    * （issued），关掉页面再回来就退回占位符，而用户能做的只剩再生成一把。
    */
   const secret = useAgentKeySecret();
-  const [issued, setIssued] = useState<IssuedKey | null>(null);
+  const [issued, setIssued] = useState<IssuedRef | null>(null);
 
   const credit = discreet ? NEUTRAL_WORD.credits : '公道值';
   const watch = discreet ? NEUTRAL_WORD.watch : '守望';
   /** 地址：刚生成的响应里就带着（省一次往返），否则用 agent-setup 那份 */
   const urls: SetupUrls | null = issued ?? setup.info;
-  /** 话术里填哪一串：刚生成的优先，否则取回来的那把当前密钥 */
-  const apiKey = issued?.key ?? (secret.state.kind === 'ready' ? secret.state.secret : undefined);
+  /**
+   * 话术里填哪一串：**只认 hook**。
+   *
+   * 这里曾经写成 `issued?.key ?? hook`——本次刚生成的那把永远压过 hook。形态是：
+   * 在这一页生成一把、随手点「轮换密钥」，第一步「当前这把」已经换成新的，
+   * 下面第二步的话术与配置块却还内嵌着那把**刚刚失效**的，两块并排摆在同一屏上；
+   * 「复制这段话术」复制走的就是一把 401 的钥匙，粘过去接不上，而页面没有任何报错。
+   *
+   * 明文只有一处正本：useAgentKeySecret（生成时 adopt 顶上、轮换时就地换成新的）。
+   * 这一页不再留第二份——留了就得记得每条改动路径都去同步它，而漏掉的那条
+   * 生成的配置**看起来完全正常**。
+   */
+  const apiKey = secret.state.kind === 'ready' ? secret.state.secret : undefined;
 
   return (
     <div className="pt-1 pb-4">
@@ -199,9 +219,9 @@ function IssueKey({
   secret,
   onIssued,
 }: {
-  issued: IssuedKey | null;
+  issued: IssuedRef | null;
   secret: AgentKeySecret;
-  onIssued: (k: IssuedKey) => void;
+  onIssued: (k: IssuedRef) => void;
 }) {
   const [name, setName] = useState('');
   const [creating, setCreating] = useState(false);
@@ -218,8 +238,16 @@ function IssueKey({
           </p>
         )}
         <div className={issued ? 'mt-2' : undefined}>
-          {/* 接入指南自己就是「去生成」那条路的落地页，所以不再给一条指回自己的链接 */}
-          <CurrentKey secret={secret} offerIssueLink={false} />
+          {/*
+            低调模式下这一小节要**折叠**，和第二步的话术同一个壳。
+            摆在折叠外面的形态是：屏幕上常驻一串密钥明文——它不是案情词，
+            按词表点名的那条页面守卫一个字都不会红，而旁人扫一眼就看得出
+            这台手机上挂着个要拿密钥连的服务。折叠标签保持中性。
+            接入指南自己就是「去生成」那条路的落地页，所以不再给一条指回自己的链接。
+          */}
+          <DiscreetCollapse label="当前密钥（点开查看）">
+            <CurrentKey secret={secret} offerIssueLink={false} />
+          </DiscreetCollapse>
         </div>
       </div>
     );
