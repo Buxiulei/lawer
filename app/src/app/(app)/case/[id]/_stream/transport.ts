@@ -9,6 +9,11 @@ export interface ChatRequest {
   message: string;
   mode?: string;
   signal: AbortSignal;
+  /**
+   * 重试那一轮：失败那条 assistant 消息的 id。带上它，服务端从库里取回同一句问话重发，
+   * **不再插一条新的用户消息**（不带的话档案里会多出一句一模一样的问话）。
+   */
+  retryOf?: string;
 }
 
 export interface ChatTransport {

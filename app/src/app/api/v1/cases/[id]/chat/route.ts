@@ -29,8 +29,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!body) {
     return NextResponse.json({ ok: false, error_code: 'INVALID_BODY', message: '请求体格式不正确' }, { status: 400 });
   }
+  // retry_of = 「重试这一轮」，值是失败那条 assistant 消息的 id（messages.failed_code 非空的那行）。
+  // 带了它就不看 message：问题原文由编排层从库里那条用户行取（重试的定义是**重发上一条用户消息**，
+  // 让客户端回传就等于允许它传别的，那时档案里那一问一答会对不上）。
+  const retryOf =
+    body.retry_of === undefined || body.retry_of === null ? undefined : Number(body.retry_of);
+  if (retryOf !== undefined && (!Number.isInteger(retryOf) || retryOf <= 0)) {
+    return NextResponse.json(
+      { ok: false, error_code: 'INVALID_RETRY_OF', message: 'retry_of 必须是消息 id' },
+      { status: 400 },
+    );
+  }
+
   const message = typeof body.message === 'string' ? body.message.trim() : '';
-  if (!message) {
+  if (!message && retryOf === undefined) {
     return NextResponse.json({ ok: false, error_code: 'EMPTY_MESSAGE', message: 'message 不能为空' }, { status: 400 });
   }
   // mode 是用户可控输入，且会直接写进 threads.mode。在开流之前校验，
@@ -85,9 +97,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           plan,
           searcher,
           emit: emitAndWatch,
+          retryOf,
         });
-        // 流已经开了，此时的失败只能以 error 帧告知（前置校验已经拦掉了绝大多数）
-        if (!result.ok) emit({ event: 'error', data: { code: result.errorCode, message: result.message } });
+        // 流已经开了，此时的失败只能以 error 帧告知（前置校验已经拦掉了绝大多数）。
+        // message_id 是这一轮的失败**已经落成的那条 assistant 行**（runTurn 落的）：
+        // 前端点「重试」时拿它当 retry_of，才不会重复插一条用户消息。
+        if (!result.ok) {
+          emit({
+            event: 'error',
+            data: {
+              code: result.errorCode,
+              message: result.message,
+              ...(result.failedMessageId === undefined ? {} : { message_id: result.failedMessageId }),
+            },
+          });
+        }
       } catch (e) {
         // 模型侧异常（连接失败、非 2xx、流内错误）必须告知：
         // 用户宁可看见「模型这会儿连不上」，也不该看着一个永远转圈的光标。

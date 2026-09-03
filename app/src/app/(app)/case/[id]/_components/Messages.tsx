@@ -38,6 +38,19 @@ export interface StreamedMessage extends Message {
   modelMismatch?: boolean;
   /** content 前多少个字符来自 deterministic 首段，单独渲染成「即时回应」卡 */
   deterministicChars?: number;
+  /**
+   * 这一轮**终态失败**的错误码（messages.failed_code）。非空 = 这不是一条回答，
+   * 而是「这一轮没能生成回答」本身，`content` 是那段三段式失败文案。
+   * 页面必须按失败态画它（横幅 + 重试），**绝不能当成回答正文渲染**：
+   * 那会让"模型连不上"读起来像是律师在回答问题。
+   */
+  failedCode?: string | null;
+  /**
+   * 失败轮重试时要发回服务端的 messages.id（**裸的库主键**，不是展示用的 `m_` 串）。
+   * 只有回显出来的失败行才有。不从 `id` 里反解那个前缀：展示 id 的构成规则一改，
+   * 反解就会静默地把重试指向一个不存在的行。
+   */
+  failedMessageId?: string;
 }
 
 /** 日期分隔：跨天时插一条细线，案件对话往往横跨几周。 */

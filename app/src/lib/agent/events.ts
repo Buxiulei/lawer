@@ -291,7 +291,12 @@ export type AgentEvent =
         served_mismatch: boolean;
       };
     }
-  | { event: 'error'; data: { code: string; message: string } };
+  /**
+   * 这一轮失败了。**`message_id` 是那条已经落库的失败 assistant 行**（messages.failed_code
+   * 非空）——前端点「重试」时把它当 retry_of 发回来，服务端才知道重发的是哪一句问话、
+   * 也才不会重复插一条用户消息。缺席 = 这次失败没能落成行（校验失败，或落库本身也失手）。
+   */
+  | { event: 'error'; data: { code: string; message: string; message_id?: number } };
 
 export type AgentEventSink = (event: AgentEvent) => void;
 

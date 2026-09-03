@@ -670,6 +670,36 @@ describe('存量迁移区', () => {
     ).toEqual([{ billing_status: 'free', paid_through: null, arrears_rounds: 0, billed_month: null }]);
   });
 
+  /**
+   * messages.failed_code（naive-qa-2 F-203）：这一轮终态失败的错误码。
+   * 老库存量行取 NULL——读侧必须容得下这个缺省（NULL = 不是失败轮），
+   * 否则上线那一刻，所有历史消息会被判成失败轮，整段对话变成一屏红横幅。
+   */
+  it('messages.failed_code：老库补列幂等，存量行取 NULL', () => {
+    const db = newDb();
+    db.exec('ALTER TABLE messages DROP COLUMN failed_code');
+    const caseId = mkCase(db, mkUser(db));
+    const threadId = Number(
+      db.prepare("INSERT INTO threads (case_id, mode) VALUES (?, '问诊')").run(caseId).lastInsertRowid,
+    );
+    db.prepare("INSERT INTO messages (thread_id, role, content) VALUES (?, 'user', '公司让我签字')").run(threadId);
+
+    const cols = () =>
+      (db.prepare('PRAGMA table_info(messages)').all() as { name: string }[]).filter(
+        (c) => c.name === 'failed_code',
+      ).length;
+    expect(cols()).toBe(0);
+
+    runMigrations(db);
+    expect(cols()).toBe(1);
+    runMigrations(db); // 二次幂等：裸 ALTER 会在这里报 duplicate column name
+    expect(cols()).toBe(1);
+
+    expect(db.prepare('SELECT content, failed_code FROM messages').all()).toEqual([
+      { content: '公司让我签字', failed_code: null },
+    ]);
+  });
+
   it('老库补列幂等：跑两遍只补一次，原有行数据不丢', () => {
     // 模拟一个 intake_stage 落地之前的老库：建全量表后把该列摘掉，再灌一条存量线程
     const db = newDb();

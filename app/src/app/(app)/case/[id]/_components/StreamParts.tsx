@@ -361,13 +361,21 @@ export function DraftConfirmDialog({
   );
 }
 
-/** error 帧 / 非流错误：流内错误卡，retry_after 有值时先走倒计时 */
+/**
+ * error 帧 / 非流错误 / **回显出来的失败轮**：流内错误卡，retry_after 有值时先走倒计时。
+ *
+ * 【为什么历史里的失败轮共用这一张卡】刷新前后是同一件事，长得不一样只会让人以为
+ * 刷新后看到的是另一个问题。同一张卡、同一句话、同一个错误码。
+ *
+ * `onRetry` 可缺省：**说不出重试的是哪一轮**时不给按钮（回显的失败行没带库主键，
+ * 例如失败发生在落行之前）。给不出重试目标还摆一个按钮，点下去只会什么都不发生。
+ */
 export function StreamErrorCard({
   error,
   onRetry,
 }: {
   error: StreamError;
-  onRetry: () => void;
+  onRetry?: () => void;
 }) {
   const [left, setLeft] = useState(error.retryAfter ?? 0);
 
@@ -391,11 +399,13 @@ export function StreamErrorCard({
       <p className="mt-1 text-[13px] text-ink-2">
         错误码 <span className="num">{error.code}</span>
       </p>
-      <div className="mt-3">
-        <Button size="sm" variant="secondary" disabled={left > 0} onClick={onRetry}>
-          {left > 0 ? `${left} 秒后可重试` : '重试'}
-        </Button>
-      </div>
+      {onRetry && (
+        <div className="mt-3">
+          <Button size="sm" variant="secondary" disabled={left > 0} onClick={onRetry}>
+            {left > 0 ? `${left} 秒后可重试` : '重试'}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

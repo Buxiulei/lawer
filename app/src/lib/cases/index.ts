@@ -241,6 +241,12 @@ export interface CaseMessageView {
   served_model: string | null;
   /** 实际服务的型号与请求的不是同一个（含未登记的新快照串） */
   served_mismatch: boolean;
+  /**
+   * 这一轮**终态失败**的错误码（模型连不上/超时/断连）；null = 正常轮。
+   * 非空时 `content` 是那段三段式失败文案，页面据此画成「没能生成回答 + 重试」
+   * 而不是画成一条回答——**失败这件事必须挺过一次刷新**（naive-qa-2 F-203）。
+   */
+  failed_code: string | null;
 }
 
 /** 一次最多回多少条。够长到覆盖一个案子的全部对话，又不至于让首屏拖着几 MB 正文 */
@@ -291,6 +297,7 @@ export function listMessages(
       model: row.model,
       served_model: served,
       served_mismatch: mismatch,
+      failed_code: row.failed_code,
     };
   });
   return { ok: true, messages };

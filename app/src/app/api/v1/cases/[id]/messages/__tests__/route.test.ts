@@ -218,8 +218,32 @@ describe('读自己的：两条都在，顺序是当时说话的顺序', () => {
   });
 
   /**
-   * 「生成中/失败」占位行（content IS NULL）不许出去。
+   * 【失败轮必须带得出来】(naive-qa-2 F-203) 模型连不上时那一轮会落成一条
+   * failed_code 非空的 assistant 行，content 是三段式失败文案。
+   * 端点不把 failed_code 带出去的话，页面只能把它当成一条**回答**画出来——
+   * "模型这会儿连不上"读起来就成了律师在回答问题。
+   *
+   * 变异臂：lib/cases 的映射里删掉 `failed_code: row.failed_code` ⇒ 这条红。
+   */
+  test('失败轮带 failed_code 与失败文案出来；正常轮的 failed_code 是 null', async () => {
+    const t = db.prepare('SELECT id FROM threads WHERE case_id = ? LIMIT 1').get(caseB) as { id: number };
+    db.prepare(
+      "INSERT INTO messages (thread_id, role, content, failed_code) VALUES (?, 'assistant', ?, 'AGENT_FAILED')",
+    ).run(t.id, '这一轮没能生成回答：模型服务这会儿连不上。');
+
+    const rows = rowsOf((await body(signToken(userB), caseB)).json);
+    expect(rows).toHaveLength(3);
+    expect(rows[2].failed_code).toBe('AGENT_FAILED');
+    expect(rows[2].content).toContain('没能生成回答');
+    // 正对照：正常那两行不许被标成失败，否则"带得出来"只是把所有行都染红
+    expect(rows[0].failed_code).toBeNull();
+    expect(rows[1].failed_code).toBeNull();
+  });
+
+  /**
+   * 「生成中」占位行（content IS NULL）不许出去。
    * 放出去就是一条空的助手气泡：用户会以为自己被回了一句空话。
+   * 注意它与上一条的分工：**未定**留 NULL，**已定的失败**回填文案 + failed_code。
    */
   test('content 为 NULL 的占位行不返回', async () => {
     const tB = db.prepare('SELECT id FROM threads WHERE case_id = ? LIMIT 1').get(caseB) as {

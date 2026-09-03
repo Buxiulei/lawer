@@ -27,6 +27,8 @@ export interface MessageRow {
   content: string | null;
   model: string | null;
   tokens_json: string | null;
+  /** 这一轮**终态失败**的错误码；null = 不是失败轮。非空时 content 是三段式失败文案（非 NULL） */
+  failed_code: string | null;
   created_at: string;
 }
 
@@ -149,6 +151,11 @@ export interface CaseMessageRow extends MessageRow {
  *
  * content IS NULL 的行不返回：那是「生成中」占位（见 insertMessage），
  * 流断了就永远停在那儿——把它当成一条空回复画出去，用户只会看见一片空白的自己。
+ *
+ * **失败轮（failed_code 非空）照常返回**：它的 content 是三段式失败文案，本来就是要给人看的
+ * ——页面按 failed_code 把它画成「这一轮没能生成回答 + 重试」，而不是画成一条回答。
+ * 喂给模型的历史另有口径（orchestrator 的 toHistory 会把失败轮滤掉：
+ * 那不是模型说过的话，重放给它等于让它照着学怎么答不出来）。
  */
 export function listCaseMessages(db: Database, caseId: number, limit: number): CaseMessageRow[] {
   const rows = db
@@ -202,7 +209,11 @@ export function insertMessage(
 }
 
 /**
- * 本线程最后一条 assistant 消息的 id（还没回填正文的空壳不算）。
+ * 本线程最后一条 assistant 消息的 id（还没回填正文的空壳、以及失败轮都不算）。
+ *
+ * 【失败轮为什么不算】失败行的 content 非空（三段式失败文案），单靠 `content IS NOT NULL`
+ * 拦不住它。而这个 id 的用途是「**我们刚问过**的那一轮」——一轮根本没生成出来的回答里
+ * 不可能问过任何话，把它当锚点会让用户下一句"不需要"落在一个空轮上。
  *
  * 【它是干什么用的】D14 的拒绝判定要钉在「**我们刚问过**的那一轮」上：
  * 推荐时把 messageId 记进台账 note，用户下一轮说"不需要"时拿它比对。
@@ -211,9 +222,93 @@ export function insertMessage(
  */
 export function lastAssistantMessageId(db: Database, threadId: number): number | null {
   const row = db
-    .prepare("SELECT id FROM messages WHERE thread_id = ? AND role = 'assistant' AND content IS NOT NULL ORDER BY id DESC LIMIT 1")
+    .prepare(
+      "SELECT id FROM messages WHERE thread_id = ? AND role = 'assistant' AND content IS NOT NULL AND failed_code IS NULL ORDER BY id DESC LIMIT 1",
+    )
     .get(threadId) as { id: number } | undefined;
   return row?.id ?? null;
+}
+
+/**
+ * 【这一轮终态失败了】把它落成一条**看得见的** assistant 行：content = 三段式失败文案，
+ * failed_code = 稳定错误码。**唯一入口**，两种形态收在这一个函数里：
+ *
+ *  · `messageId` 非空 —— 占位行已经落过（模型开跑之后才断），就地回填；
+ *  · `messageId` 为 null —— 占位行还没来得及落（缺 key 时 `getProvider` 在它之前就抛了，
+ *    naive-qa-2 F-203 的真实现场正是这一支），补插一整行。
+ *
+ * 【为什么 content 不许留 NULL】listCaseMessages 按 `content IS NOT NULL` 取数
+ * （NULL 是"生成中"占位）。失败留在 NULL 上 = 刷新后这一轮**整个消失**，
+ * 用户屏幕上只剩自己那句问题干晾着——那正是这次要修的症状本身。
+ *
+ * 返回这一行的 id：调用方要把它下发给前端（error 帧的 message_id），
+ * 否则用户点"重试"时说不出重试的是哪一轮。
+ */
+export function failMessage(
+  db: Database,
+  params: { threadId: number; messageId: number | null; code: string; content: string; model?: string | null },
+): number {
+  if (params.messageId !== null) {
+    db.prepare('UPDATE messages SET content = ?, failed_code = ? WHERE id = ?').run(
+      params.content,
+      params.code,
+      params.messageId,
+    );
+    return params.messageId;
+  }
+  return Number(
+    db
+      .prepare(
+        "INSERT INTO messages (thread_id, role, content, model, failed_code) VALUES (?, 'assistant', ?, ?, ?)",
+      )
+      .run(params.threadId, params.content, params.model ?? null, params.code).lastInsertRowid,
+  );
+}
+
+/** 重试要用的两件事：失败那一行在哪个线程，以及它回答的是哪一句用户原话 */
+export interface RetryTarget {
+  failedMessageId: number;
+  threadId: number;
+  userMessageId: number;
+  userContent: string;
+}
+
+/**
+ * 「重试这一轮」的取数口：给一条失败的 assistant 行，回它前面那句用户原话。
+ *
+ * 【为什么问题原文从库里取，而不是让客户端回传】重试的定义是**重发上一条用户消息**，
+ * 客户端回传就意味着它可以传别的——那时我们会把另一个问题挂在这条用户行下面，
+ * 档案里那一问一答从此对不上。库里那行是唯一真源。
+ *
+ * 归属靠 `t.case_id = ?` 一起判（调用方已校验案件归属），**不接受只给 message_id**：
+ * 消息主键是全局自增的，只按 id 取就能读到别人案子里的话。
+ * 返回 null = 这个 id 不是本案的失败轮（不存在 / 不是失败 / 是别人的），调用方按 404 处理。
+ */
+export function findRetryTarget(db: Database, caseId: number, messageId: number): RetryTarget | null {
+  const failed = db
+    .prepare(
+      `SELECT m.id, m.thread_id FROM messages m
+         JOIN threads t ON t.id = m.thread_id
+        WHERE m.id = ? AND t.case_id = ? AND m.role = 'assistant' AND m.failed_code IS NOT NULL`,
+    )
+    .get(messageId, caseId) as { id: number; thread_id: number } | undefined;
+  if (!failed) return null;
+
+  const asked = db
+    .prepare(
+      `SELECT id, content FROM messages
+        WHERE thread_id = ? AND role = 'user' AND content IS NOT NULL AND id < ?
+        ORDER BY id DESC LIMIT 1`,
+    )
+    .get(failed.thread_id, failed.id) as { id: number; content: string } | undefined;
+  if (!asked) return null;
+
+  return {
+    failedMessageId: failed.id,
+    threadId: failed.thread_id,
+    userMessageId: asked.id,
+    userContent: asked.content,
+  };
 }
 
 /** 流跑完后回填正文与用量。tokensJson 传 null 表示本次没拿到计量（不写 0 冒充） */

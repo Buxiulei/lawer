@@ -198,6 +198,70 @@ describe('SSE 通路', () => {
     spy.mockRestore();
   });
 
+  /**
+   * 【失败要挺过一次刷新】(naive-qa-2 F-203) 此前失败只是一张前端的卡：刷新后
+   * 屏幕上只剩用户自己那句问题干晾着。现在这一轮落成一条 failed_code 行，
+   * 且 error 帧带回它的 id——前端点「重试」时靠它说出重试的是哪一轮。
+   *
+   * 变异臂：runTurn 外壳的 catch 改回直接 rethrow ⇒ 这条红。
+   */
+  test('★模型失败 ⇒ 库里落一条失败的 assistant 行，error 帧带回它的 id，且不记账', async () => {
+    const spy = await stubProviderThrowing('anthropic(claude-sonnet-5) chatStream 502');
+    const frames = await readSse(await post(request(signToken(userA), { message: '在吗' }), ctx(caseA)));
+    spy.mockRestore();
+
+    const rows = db
+      .prepare('SELECT id, role, content, failed_code FROM messages ORDER BY id')
+      .all() as { id: number; role: string; content: string | null; failed_code: string | null }[];
+    expect(rows.map((r) => r.role)).toEqual(['user', 'assistant']);
+    expect(rows[1].failed_code).toBe('AGENT_FAILED');
+    expect(rows[1].content, 'content 停在 NULL = 刷新后这一轮整个消失').not.toBeNull();
+
+    const err = frames.at(-1)!;
+    expect(err.event).toBe('error');
+    // toFrame 那一层把数字主键转成串，这里断言的是服务端发出去的原值（number）
+    expect(err.data.message_id).toBe(rows[1].id);
+
+    expect(db.prepare('SELECT COUNT(*) AS n FROM token_usage').get()).toEqual({ n: 0 });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM gongdao_ledger WHERE type = '消耗'").get()).toEqual({ n: 0 });
+  });
+
+  /** 变异臂：路由不透传 retryOf（或编排层照插用户行）⇒ 这条红 */
+  test('★retry_of 重试 ⇒ 新增一条回答，用户消息不重复', async () => {
+    const spy = await stubProviderThrowing('anthropic(claude-sonnet-5) chatStream 502');
+    await readSse(await post(request(signToken(userA), { message: '在吗' }), ctx(caseA)));
+    spy.mockRestore();
+
+    const failed = db
+      .prepare("SELECT id FROM messages WHERE failed_code IS NOT NULL ORDER BY id DESC LIMIT 1")
+      .get() as { id: number };
+
+    script = [{ text: '在的。先别签任何文件。' }];
+    const frames = await readSse(
+      await post(request(signToken(userA), { retry_of: failed.id }), ctx(caseA)),
+    );
+    expect(frames.at(-1)!.event).toBe('done');
+
+    const rows = db.prepare('SELECT role, content, failed_code FROM messages ORDER BY id').all() as {
+      role: string;
+      content: string | null;
+      failed_code: string | null;
+    }[];
+    expect(rows.filter((r) => r.role === 'user'), '重试插了第二句一模一样的问话').toHaveLength(1);
+    expect(rows.map((r) => r.role)).toEqual(['user', 'assistant', 'assistant']);
+    expect(rows[2].failed_code).toBeNull();
+    expect(rows[2].content).toContain('先别签');
+  });
+
+  test('retry_of 不是消息 id（负数 / 小数 / 乱串）⇒ 400，不开流', async () => {
+    for (const bad of [-1, 0, 1.5, 'abc']) {
+      const res = await post(request(signToken(userA), { retry_of: bad }), ctx(caseA));
+      expect(res.status, `retry_of=${bad}`).toBe(400);
+      expect((await res.json()).error_code).toBe('INVALID_RETRY_OF');
+    }
+    expect(db.prepare('SELECT COUNT(*) AS n FROM threads').get()).toEqual({ n: 0 });
+  });
+
   // 这一帧会渲染成当事人屏幕上的报错卡。llm/router 缺 key 时的 message 是写给运维看的
   // （环境变量名 + 要改哪个文件），当事人既看不懂也做不了——原文进服务端日志，出去的是三段式。
   test('内部异常原文不过边界：error 帧只带稳定错误码 + 三段式文案，原文只在服务端日志里', async () => {
@@ -230,7 +294,10 @@ describe('SSE 通路', () => {
     // ③ 原文完整留在服务端日志（换壳不是消音）
     const log = logs.join('\n');
     expect(log).toContain('DEEPSEEK_API_KEY');
-    expect(log).toContain('chat.runTurn');
+    // 定位串是 `agent.runTurn` 而不是 `chat.runTurn`：F-203 之后这次换壳发生在编排层的
+    // 失败分支里（它同时要把这一轮标成失败落库），不再是路由 catch 里那一处。
+    // 路由那一层的 catch 仍在，接的是 emit / 心跳这类**流之外**抛出来的东西。
+    expect(log).toContain('agent.runTurn');
     expect(log).toContain('AGENT_FAILED');
 
     logSpy.mockRestore();

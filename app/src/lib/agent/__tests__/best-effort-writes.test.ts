@@ -57,6 +57,9 @@ const RECORDING_WRITES: Array<[string, RegExp]> = [
   ['危机轮杠杆闸留痕', /cases\.addTimelineEvent\(/g],
   ['推荐位点占位', /referralOffers\.tryOffer\(/g],
   ['危机资源卡留痕', /store\.recordCrisisCardGiven\(/g],
+  // F-203：失败态落库。它同样排在 finalizeMessage 之前，抛出去的下场比前三处更绕——
+  // 用户等的是"模型这会儿连不上"，收到的会变成另一个错误（真正的病因就此消失在日志里）。
+  ['失败态落库', /store\.failMessage\(/g],
 ];
 
 describe('结构守卫：finalizeMessage 之前的记录性写库，一处都不许是裸调用', () => {

@@ -131,6 +131,12 @@ export interface ErrorFrame {
   code: string;
   message: string;
   retry_after?: number;
+  /**
+   * 这一轮的失败已经落成的那条 assistant 行的 id（服务端发的是 number，
+   * `toFrame` 统一转成串，见下方 message_id 那段注释）。
+   * 点「重试」时把它发回去当 retry_of：服务端据此重发**同一句**问话，且不再插一条新的用户消息。
+   */
+  message_id?: string;
 }
 
 export type StreamFrame =
