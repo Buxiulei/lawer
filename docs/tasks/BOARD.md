@@ -319,6 +319,8 @@
 **2026-09-03 · 1ac1624 生产小核对 4/4 通过**：/welcome 老用户「欢迎回来」变体、标题「欢迎 · 土八鼠」、首帧两次读均无「档案已创建」、「进入我的案件」→/case/1；坏 token 刷新 /case/1 显示「登录状态已失效」+「去登录」、401 计数 0s/5s 恒 5 条不增长、点去登录落 /login?next=%2Fcase%2F1 且 token 清空；/case/1/ask 中途失效发消息→失效屏，无演示横幅、不用演示案情作答；console 剔预期 401 后 0，scrollWidth 393。
 **主理人新需求 → 派单 byo-key-rotate**（基座 1ac1624）：密钥可查看/轮换、话术内嵌真密钥并随轮换同步、一段话术接通 MCP+REST+先取 https://law.nbdpsy.com/skill/SKILL.md、MCP 增 case_facts/knowledge_search、陪跑指南（先事实卡→只引检索结果→不编案号→危机先热线→不劝找律师→文书本人确认→档案不外传）。**经理安全裁决**：secret_enc 加密存库（LAWER_DATA_KEY），查看/轮换只认网页登录态、API key 身份 403，旧密钥轮换即失效；计费不变（MCP/REST 免费，三处扣费点守卫不动）。流程：Sonnet 勘查设计 → Opus 两提交 → 安全/产品(模拟 agent 走话术)/集成三视角复审 → 一轮修复。
 
+**2026-09-03 · 主理人需求：MCP 接入在电脑版左侧栏单独一栏（核心功能前置）→ 派单 mcp-nav**（基座 1ac1624，独立 worktree，不碰 byo-key-rotate 正在改的 /settings/agent 页内部）。裁决：紧随「驾驶舱」之后、「问它」之前；文案走 byoAgent.ts 唯一入口（navLabel/中性变体）；徽标未接入「推荐」/已接入「已接入」复用 useConnectedAgent；手机底部栏五格不动；低调守卫全绿；结构守卫 AppShell 不含字面。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
