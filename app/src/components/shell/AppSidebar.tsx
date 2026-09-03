@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { NEUTRAL_TITLE } from '@/app/_ui/bootstrap';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { BYO } from '@/app/_ui/byoAgent';
 import { cn } from '@/app/_ui/cn';
 import { useDiscreet } from '@/app/_ui/discreet';
@@ -78,7 +79,7 @@ export function AppSidebar({
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>案件</SidebarGroupLabel>
+          <SidebarGroupLabel>{discreet ? NEUTRAL_WORD.caseGroup : '案件'}</SidebarGroupLabel>
           <SidebarMenu>
             {NAV_ITEMS.map((item) => {
               const label = (discreet && item.discreetLabel) || item.label;

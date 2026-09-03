@@ -14,6 +14,8 @@
 export const NEUTRAL_WORD = {
   /** 「驾驶舱」：一个记事应用的首页就叫首页 */
   dashboard: '首页',
+  /** 侧栏分组标题「案件」：低调下只说「事项」 */
+  caseGroup: '事项',
   /** 「问它」：对话入口，中性说法就是消息 */
   ask: '消息',
   evidence: '资料',
