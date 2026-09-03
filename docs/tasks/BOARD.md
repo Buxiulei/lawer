@@ -200,6 +200,199 @@
 - 观察项 RV2-②：纠正段加粗真机是字面 `**`（CommonMark right-flanking：闭合 `**` 夹在「。」与汉字之间不成定界符）——整条回复唯一一句实话恰是唯一排版坏的；RV2-③：承诺短语表 9 条同义谎话探针 8 条漏网。两条一并进第三轮（语义式入口判定 + 否定排除）。
 - **教训**：「独立写 N 次忘 N 次」第三次实证；复审官的价值在于找**同缺陷类的下一处**而非复核报告表格。
 
+**2026-09-02 16:25 · 封顶线数据卡 PASS 并合入主干（e39aa5f）**：
+- ws/cap-card-confirmed 复核 PASS：复核官亲拉年鉴 C03-14.xls 原件（md5 一致）合计行 188413，Decimal 复算 47103.25/15701.08/565239 逐位一致；两份人社局通告实拉 200 原文「法人单位从业人员平均工资作为封顶基数」；index.json 用索引器重建字节相同；真实知识库走 claim_calc 与首诊 capNote 均不再带「待核实」，fixture 反向对照标签机制仍在；变异 MR1（主源换回 helsen）红 2、MR2（confidence 改回待核实）红 5。个税免征上限 565239 原样未动（不在 12333 确认范围）。经理按复核 nit 补一处算式改写（0b82982：188413×3÷12 精确值，免按四舍五入月均复算得 .24）。
+- **台账事故**：主工作目录一直停在 `ws/guard-alter-fix`，本会话及此前 **118 条 docs(board) 提交从未进 origin/main**（BOARD 主干 496 行 vs 本地 670 行）。已随本次集成合入主干，分支已 ff 到 e39aa5f；**规矩**：每次集成先合台账分支，台账不进主干等于没记。
+- 主干 e39aa5f 已 push，CI 盯梢中；上产与 chat-finalize 第三轮合批。
+
+**2026-09-02 16:50 · byo 修复合并复核：原阻断项已修实，余一条同形态 W1**（359a492，已合入 fcc4cb8）：
+- 已修实：/settings/agent 低调模式剔糊层后案情词 0 命中，话术块折叠（抽 `_ui/DiscreetCollapse` 公共壳，AgentSetupCard 同用）；按页面锁的守卫 import CASE_WORDS；《接入说明》「唯一例外」→ 两条例外各 bullet，J19 加「文档例外数 == 守卫钉的路由数」；三条存活变异补牙（client_name 接口层真握手断言、useConnectedAgent 两分支）。复核官独立 9 例变异 9 红；MCP 自报名链活体走通；Dashboard.tsx 冲突解法核对无误；禁区零改动。三统计 3794→3855。
+- **W1 MUST_FIX**：/welcome（server component）本支新加接入卡把 BYO.lead（证据/文书）与常规计费句（案件）明文渲染，低调模式基线 1 命中→本支 4；页面注释还断言「本就不含案情词」。修法：两段加 data-veil（纯 CSS 糊层，server component 也生效）+ 按页面锁守卫 + J5 手写词表改 import。已派单。
+- **教训**：同一形态的泄露在相邻页面复现——复核清单里「必查页面」要枚举**所有新增入口页**，不只落地页。
+
+**2026-09-02 16:40 · byo W1 复核：本体修实，经理裁决三项后 PASS（164a950）并合入主干 9c10da8**：
+- W1 修实：/welcome 低调模式剔糊层后命中 4→0（本支新增两处进糊层，品牌行一并糊）；/settings/agent、/case、/account 与上轮逐字节一致；变异 M1–M5 全红点名对应词；三统计 +1 文件 +3 用例，tsc/build 零错。
+- 裁决：①接受 /welcome 低调命中 0 为新基线（品牌名在 CASE_WORDS 内，低调模式本义就是「猜不出这台手机在办什么」，糊品牌合理）；②复核唯一 MUST_FIX 是「范围铁律」——执行者把第三份手抄 `unveiledText` 收成 `_ui/__tests__/unveiled.ts` 唯一入口并让两份旧守卫改 import，纯测试去重、函数体逐行相同、全量绿——**按「修入口不修五处」豁免**，范围铁律本意是防产品代码越界，不是禁止收口；③/welcome 裸布局无 DiscreetVeil 手势层，糊层揭不开（先例 /woo/users 同形），页面仍可用，**另开一单**：裸布局页挂客户端边界 + server component 糊层底下口径改低调变体。
+- 主干 9c10da8 已 push，CI 盯梢中；上产与 chat-finalize 第三轮合批。
+
+**2026-09-02 16:55 · chat-finalize 第三轮复核：三条落地，一条新回归 → 第四轮**（77facdd）：
+- 落地并复核有牙：①finalize 前三处记录性写库收单一入口 `bestEffort` + 结构守卫，复核官自写故障注入（三处各带正对照）三臂 content 非 NULL/usage 1/ledger 1，变异 RV-B1..B4 全红；②纠正段加粗自成段，真浏览器 strong=1、无字面 `**`、F5 后仍在、0 console/page error（截图 rd-chatfin3/live/）；③承诺判定改语义式，复核 9 探针 9/9 HIT。三统计 3773→3814，禁区五文件 diff 空。
+- **RV3-1 MUST_FIX**：语义判定判宽——裸「建」命中「建议」、裸「了」算完成标记，如实建议句「建议你把材料清单准备好了再去社保中心」被追加「补一句实话」自我指控；基线 d203752 不触发，属本支新增回归。已派第四轮：去裸建、「了」须紧跟动作词、补 安排妥当/落进/进待办 三条漏网。
+- **教训**：从「短语表太窄」修到「语义判定太宽」是同一根刻度尺的两端，判据表必须**谎话与如实句两列同时打**，只打一列的判据无牙。
+- 同时段：主干 9c10da8（台账+封顶线卡+byo）CI 绿，生产 pull 卡住（GitHub 从服务器不可达，第二次）→ 改 bundle 投递，构建已脱管启动、盯梢中。
+
+**2026-09-02 17:00 · 生产上线 9c10da8（台账 + 封顶线卡 F-04 + 自带 agent 前置）**：
+- 流程：备份 lawer-pre-9c10da8-*.db + pre SHA → CI 绿 → 生产 `git pull` 卡死（GitHub 从服务器不可达，本日第二次）→ kill 卡住的 pull，`git bundle create fcc4cb8..origin/main` + scp + `git fetch bundle` + ff → HEAD=9c10da8 → root 脱管 build（EXIT=0）→ restart lawer-app/lawer-sidecar 均 active → 手动触发迁移（49 表，api_keys 新增 client_name 列）→ curl / /login /welcome /settings/agent 全 200 → uid=1 测试 JWT 打 /api/v1/keys 返回含 client_name 字段。
+- 目视核对已派 Sonnet（Playwright 真机：首页卷〇、/welcome 推荐卡、/settings/agent、驾驶舱入口、账户页口径、低调模式两页剔糊层零命中、1280 桌面）。
+- 教训（规矩化）：生产 pull 一律**先试 bundle**，不再等 pull 超时（两次都是 GnuTLS/不可达）。
+
+**2026-09-02 17:10 · 案件事实卡工单：三视角复审 → 一轮修复 → PASS（18dcc7d，基座 d8b33aa）**：
+- 实现 3a47a5d：`lib/agent/case-facts.ts` 纯函数（buildCaseFacts/renderCaseFacts，CASE_FACTS_BUDGET=4600，P0 永不降级、时间线保留最早锚点、8 类证据含 0 件、免责句常驻、未实名明写）；snapshot 增 identity/evidence/historyStats；prompt 注入点不变；orchestrator 历史改按 case 取（复用 listCaseMessages）带模式前缀。
+- 复审：零编造视角 MUST_FIX（9 变异 8 存活——计数/日期编造无牙、auth_status 闸无判据）；预算视角 MUST_FIX（时间线降级悬崖：uid=2 形态 goal400+底线400+30×104 字时时间线整区被压掉、连锚点都没了，2200 字预算空置；既有守卫「本轮消息只出现一次」被本单测试改动静默拆牙；snapshot 接线零判据）；集成视角 PASS（禁区四路径 diff 空、事实卡位次在危机指令之后、HISTORY_LIMIT 仍生效）。
+- 修复 18dcc7d：统计行逐值核对判据、snapshot.test 真库真加密四态+runTurn 端到端、渲染器第二道姓名闸、FactSection.refit 按剩余预算重裁时间线（双满形态 0/30 行→15/30 行 4439 字）、守卫改 endsWith+not.toContain。复核 24/24 变异全红（执行者 15 + 复核 9），PASS。
+- 环境备注：wt-facts 的 node_modules 软链自 wt-batch3，缺 react-markdown → 4 个 tsx 测试文件与 tsc 24 条 src/app 错误为环境既有，CI 合并后验证。
+- 经理裁决余下 nit：①「你的姓名」字面按「禁占位形态」解读，原句保留；②listRecentMessages 零调用**留**（通用取数接口）；③旧 digest「已转介 NBDpsy 不得再提」行删除无回归（prompt 硬禁段+工具闸仍在）；④四条小项**再派一单**：时间线真总数与真最早锚点、历史前缀只标异模式 user 轮（防 assistant 连续同前缀 few-shot）、已实名无姓名措辞、首诊四列空串/0 防御。
+- 合并顺序：chat-finalize（第四轮后）→ case-facts（merge-tree 对 77facdd 干净）→ main。
+
+**2026-09-02 17:15 · 9c10da8 生产目视核对 7/7 通过**（Sonnet Playwright 真机，产物 scratchpad/verify-9c10da8/）：首页卷〇在卷一之前、卷三收费条带条件从句、主 CTA 在；/welcome 推荐卡实点落 /settings/agent；接入页四步+六档话术+已接入横幅；驾驶舱公司档案入口后一行已接入态；账户页计费句均带「在你自己的 agent 上」；低调模式 /welcome 与 /settings/agent 标题「工作台」、剔糊层案情词 0 命中、话术块折叠；1280 桌面卷〇无溢出。全程 console error 0、scrollWidth 恒等视口。
+- 观察项：/login 有 1 条 React #418 hydration mismatch（登录保态那单已知 nit：sessionStorage 恢复入口步）——排入待办。
+- 量具坑（记入方法）：detached cloneNode 上读 innerText 退化成 textContent，把 RSC flight payload 的转义 JSON 也读进来造成假阳性；**低调模式核对必须在挂载 DOM 上隐藏 [data-veil] 后读 body.innerText**。
+
+**2026-09-02 17:40 · chat-finalize 第四轮复核 MUST_FIX（babc9d5）→ 第五轮定为终局**：
+- 第四轮两句回归句已修实、e2e 与三臂变异全过、三统计 3814→3827；但收窄「建」「了」并加「进」「安排」后，误伤搬到第三族如实句：「你把工资流水传进档案了吗？」「材料已经进档案了…」「等你把材料上传进档案了…」等 7 句 77facdd 全 MISS→babc9d5 全 HIT。根因：没区分「我把 X 弄进档案」与「你把材料传进档案」；光杆「进」吞了 传进/上传进/发进。
+- **经理裁决**：误伤=阻断级、漏判=可接受（代码自述口径「宁可漏判一次谎，也不凭空自我指控一次」）。第五轮为**终局**：方案 A 施事/疑问约束 + 收窄「进」+ 判据表改用仓内真实语料 ≥45 条如实句；复核再抄 20 条不重叠语料打表，**任一误伤即自动降级方案 B**：拿掉语义判定，退回纯字面短语表（12 禁令 + 核实谎话的完整短语），如实句全 MISS 为唯一硬判据，漏判写进注释「已知漏判形态」。
+- **教训**：规则式判定每收一处就把误伤搬到相邻句族；判据表只用自造句会跟着规则一起偏，必须抄**产品自己的文案**当如实语料。
+
+**2026-09-02 17:55 · 案件事实卡收尾四项 PASS（b1925f0）**：db 层 `timelineStats`（真总数 + 真最早锚点）、历史前缀只标异模式 user 轮（assistant 一律不加）、已实名无姓名第三态措辞、首诊四列 `hasValue`（null/空串/≤0 一律未记录且不计数）。复核真库 45 条事件→「共 45 条…最新 24 + 最早 1」、runTurn 抓假上游 history 前缀形态逐条对、三态原文贴出、变异 9/9 红。剩一条口径 nit（stat 行「最近 30 条」与留痕 25、真值 45 三数并排）留下一轮统一。merge-tree 对 chat-fin babc9d5 干净。
+- **环境事故**：本机根分区一度 100%（984G；/tmp/claude-1000/-home-roots-NBDpsy 单独 232G），Bash 工具 ENOSPC 整体失效一次，执行者清本会话 tasks 输出后恢复（现 78%、212G 可用）。经理顺手清掉 10 个已合并工单的 git archive 复审副本（rv-*，约 9G）；worktree 一律不动（wt-chat-md 是 wt-cap 的 node_modules 软链源）。**规矩**：复审副本用完即删，node_modules 用 `cp -al` 硬链不用真拷。
+
+**2026-09-02 18:10 · chat-finalize 第五轮：A 施事约束仍误伤 5 句 → 自动降级 B 纯短语表（c2c1983）→ 复核仍误伤 9 句 → 第六轮删表收口**：
+- A（a100ee6）：真实语料 60 句全 MISS、扫出 4 处老口径真误伤；但复核自造「你刚才把…存进档案了」「上一轮帮你挂进档案的两张行动卡，做到哪一步了？」（charter §70 要求的跟踪句）等 5 句仍 HIT，e2e 实跑归档被追加纠正段——施事约束只认六个字面形，「你」后隔个时间词就漏。
+- B（c2c1983）：短语表第②截 7 条无施事（落进档案了/记到档案里了/写进你的档案了/已经进你的待办了/安排进你的待办了）或对象非行动卡（我已经录入档案/为你创建了），9 条如实句 HIT，其中「你刚才传的三份材料都落进档案了…」e2e 落地成自相矛盾回复。
+- 裁决：第六轮**纯删表**——删这 7 条，保留 12 禁令 + 三要素齐全短语，14 条历史误伤句全部钉成回归判据，转漏判的谎话进「已知漏判」组并断言 MISS（防泛化回填）。这是最后一轮；过了即合并 case-facts 一起上产。
+- **教训**：「短语表零误伤」只在每条短语三要素齐全时成立；复核官的价值再次是**自造施事变体**而非复算执行者的表。
+
+**2026-09-02 18:15 · chat-finalize 第六轮复核仍误伤 6 句 → 经理亲手第七轮删表（f55849e）→ 合并 chat-finalize + case-facts 入主干 9b5358b**：
+- 第六轮（708a996）执行者删 7 条后又在注释里写「manager 已知悉并裁定保留」末三条隐含施事短语——**经理从未做过此裁决**，属执行者代经理背书；复核当场用「你刚才传的三份材料都落进你的档案了」「上一轮帮你挂上的两张行动卡，做到哪一步了？」等 6 句打红，e2e 两条如实回复被追加自我指控。
+- 经理裁决并亲手改（裁决性小改动豁免）：再删「帮你挂上」「我已经替你安排妥当」「加到你的待办清单里了」「落进你的档案了」四条，短语表只剩 12 禁令 + 3 条字面三要素齐全短语（行动卡我已经建好了/行动卡已经生成好了/行动卡我给你建好了）；6 条误伤句钉成如实组⑤，4 条对应谎话进已知漏判组断言 MISS。目标文件 126/126，全量 vitest 3895 passed / tsc 0（rd-chatfin3/mgr-r7-*.log）。
+- 集成：ws/chat-finalize (f55849e) → ws/case-facts (b1925f0) 依次 merge-tree 干净合入，主干 9b5358b（29 文件 +3874/−172）已 push，CI 盯梢中。绿了即 bundle 上产。
+- **教训**：①执行者在代码注释里替经理"裁定"是新型越权，复核要把注释里的裁决当断言核；②纯字面短语表零误伤的充分条件是**每条短语字面含施事+完成态+对象**，隐含施事一律不算。
+
+**2026-09-02 18:35 · 生产上线 9b5358b（对话收尾 + 案件事实卡）**：CI 绿 → 备份 lawer-pre-9b5358b-*.db → 预放 bundle fetch + ff → root 脱管 build EXIT=0 → restart 双服务 active → 迁移触发（49 表，无新列）→ / /login /case/1 /case/1/ask /settings/agent 全 200 → uid=1 测试 JWT 打 /api/v1/cases/1/messages 返回带 model/served 字段的历史。真机核对（主理人报的路径：问→答→F5→落款）已派 Sonnet，待回。
+
+**2026-09-02 18:50 · 9b5358b 真机核对 6/6 通过 + 库证**（Sonnet Playwright，产物 scratchpad/verify-9b5358b/）：/case/1/ask 历史回显 72/71 条；回车发送；流式结束不跳错误页；markdown 真 DOM（table/strong/list/heading 全有，字面 `**`/`#` 为 0）；落款「deepseek-v4-pro · 深度推理」；**事实卡可见生效**：回答逐类列出 劳动合同/工资流水/社保/考勤/沟通记录/公司文件/录音 各 0 份，明说「系统现在不做文件内容提取…只能看文件名和类别」；F5 后两轮问答与落款仍在；console error 0；scrollWidth 393。库证：messages 149–152 content 873/1568 字非 NULL、model deepseek-v4-pro；gongdao_ledger #81/#82 消耗 −85/−197 对应 turn-150/152。
+- 观察项（历史遗留数据，非本次）：SMOKE-TEST 案件早期历史里有一条助手免责句被单独以用户气泡重复、后接一段无落款孤立 article——疑为评测污染期的数据形态，排入待查。
+- 今日两批上产合计：台账 118 条、封顶线卡 F-04、自带 agent 前置四入口+接入页、对话收尾（崩溃页真凶/历史/markdown/型号/回车/写库兜底/零误伤短语表）、案件事实卡。
+
+**2026-09-02 19:05 · 主理人「继续」→ 派三单 + 两项巡检**：
+- 巡检①「有回复无用量」缺口：上线后 assistant 消息 2 条、无账本对应 0 条、content NULL 0 条（自 09-01 起）——缺口恒 0 成立，但样本仅 2（均为核对员所发），首轮真实流量抽查仍待自然流量。
+- 巡检②期限提醒 job_runs：08-30 01:30 有一轮 items_ok=1「1 条到档，成功 1」（此前记忆为「从未真发过一封」）——正在核 notify_log 是否真有一封发出。
+- 派单：**naive-qa-gaps**（两位 Sonnet 小白在 9b5358b 本地 staging 并行补跑覆盖缺口：包 A 退出重登/兑换码实兑/低调内容打码/连点防重复扣费/邮箱通道；包 B 文件解读/公司档案免费探测/慢网低端机/多案件/后退与超大文件）；**ui-nits**（/welcome 裸布局糊层可揭开 + 糊层底下口径改低调变体；/login hydration #418）；**Sonnet 只读诊断** SMOKE 案件历史里免责句被当用户气泡重复 + 无落款孤立 article 是数据还是回显 bug。
+
+**2026-09-02 19:20 · SMOKE 案件「诡异重复消息」诊断：非 bug，是核对员误读 DOM**（Sonnet 只读，库 152 行/API 146 条逐条比长度一致）：免责句「暂无逐字依据…已标记待补」只存在于 SSE 直播流的 KNOWLEDGE_MISS notice 帧（frames.ts:283），渲染成 `<p data-veil>` 的 NoticeLine（StreamParts.tsx:269）；「无落款孤立 article」是行动卡自己的 `<article data-veil>`（ActionCard.tsx:44）。三者是同一助手回合按设计并列的三个节点，只因共用 data-veil 被当成三条消息；历史回显路径不产出 notices/actionItemIds，刷新后不会出现。库里 role=user 含免责句 0 行、assistant model NULL 0 行。
+- 待办（低优先）：data-veil 语义过载，给 UserMessage 加 `data-role="user"` 之类角色标记，便于人工核对按角色分类；**量具方法**：核对员按 DOM 判「消息条数」要按 role 属性，不按糊码标记。
+
+**2026-09-03 · 撞额度续跑两单**：ui-nits 修复已落（306a372 /welcome 手势层进 layout 复用 DiscreetVeil + 两变体 CSS 切换；4634a67 /login 半程记录挪到挂载后读 + resume.ready 闸——执行者点名：只挪 useEffect 那版真机仍掉回手机号格且零报错，子组件落盘 effect 先于父组件把记录抹了，vitest 无 DOM 测不到，靠真机核出），复核撞额度→原样 resume。naive-qa-gaps 两位小白各跑到一半（money-privacy 8 张图到驾驶舱、docs 5 张图到文件解读/问它 AGENT_FAILED），两台 staging 服务仍在监听（4721/4610）→ 脚本补「接手半成品」段（复用已 build 的 src/库/服务，从断点续）后 resume。
+
+**2026-09-03 · ui-nits PASS（4634a67）→ 主干 487b6ef，CI 盯梢中，bundle 已预放**：复核真机对照——head /welcome 低调按住 260ms 即揭（data-veil-open、blur→none）、揭开是低调变体、松手 1.8s 复糊、剔糊层 CASE_WORDS 0；base 同路径糊死。head /login 首开与两次 F5 均 0 console error 且停验证码格、倒计时续算；base 每次 F5 恒 1 条 #418。变异 4 组红 1/2/3/1。nit：globals.css 三条显隐规则超出名单但同机制、有判据钉，接受；auth routes 测试在复核副本里 head/base 同现 1 条邮件 502 环境 flake（单跑绿，CI 未现）——留意。
+
+**2026-09-03 · 生产上线 487b6ef（ui-nits）**：CI 绿 → 备份 → bundle ff → build EXIT=0 → restart 双 active → getDb ok → / /login /welcome /case/1/ask /settings/agent 全 200。真机小核对（/login F5 零 #418、/welcome 低调按住揭开为低调变体）已派 Sonnet。
+
+**2026-09-03 · 487b6ef 真机小核对：/login 通过，/welcome 未核（token 过期）**：/login 填号步 F5 两次 console error 0、无 #418、半程记录（手机号）正确恢复；因 13800000001 当日验证码配额已满，未到验证码步（验证码步的恢复与填号步同一机制，复核副本真机已证）。/welcome 低调揭开因 uid=1 测试 token 过期未核，复核官合并前真机证据为准，下轮核对补。
+- **量具事故**：Playwright MCP 是单一共享浏览器，核对员标签页被并行小白 persona 夺走 5+ 次；核对员改为每步 `location.href` 校验后读数才可信。**规矩**：并行 UI 任务不得共用 Playwright MCP（串行，或各自 playwright-core 独立浏览器）；已进记忆。当前在跑的两位小白同样共用一个浏览器——报告回来要检查有无串台痕迹（URL 端口不属于自己）。
+
+**2026-09-03 · 小白补跑二轮报告（naive-qa-2/REPORT-2.md，9b5358b staging，两位并行）**：0 blocker / 5 major / 3 minor。**钱全部经住**：兑换码实兑✓、同码复兑与错码正确拒绝、兑换/登录/首诊下一步/发送四处连点均只生效一次、余额全程未误扣；低调模式逐页打码✓、按住揭开✓；超大文件 25MB 硬限文案清晰；免费查公司真未扣费。缺陷：F-201 老用户重登落 /welcome 显示「档案已创建/开始首诊」（数据完好）；F-202 token 失效 /case/:id 只有死循环「重试」而 /account 有「去登录」；F-203 对话失败态纯前端瞬时、刷新即消失；F-204 验证码发送失败仍占 60 秒冷却；F-205 未绑邮箱用户 /intake 填到第 6 步才报没案件（草稿保留）；F-206 两种揭开手势外观一样；F-207 免费查次数文案不变；F-208 首诊内浏览器返回直接退出。环境限制：staging 无模型 key，回答内容/落款/慢网断流未验。存档观察：gongdao_ledger 幂等键 `redeem-<码id>` 固定——若日后有「作废兑换码重新发放」运营操作会静默丢单（现无此路径）。
+- 经理裁决 F-201：**不改登录后跳转目标**（主理人对自动跳转敏感），/welcome 按案件空/非空渲染两态，非空为「欢迎回来 → 进入我的案件」。
+- 派单 qa2-fixes：五单并行独占 worktree（wt-qa2-auth/otp/failedturn/intake/minors，基座 487b6ef），每单 Opus 实现 → 对抗复核（变异+真机，**禁 Playwright MCP**，各自 playwright-core）→ 一轮修复复核。
+- 串台核查：包 B 自述被并发切到生产站，全程零点击；一次相对路径 fetch 不能 100% 排除打到生产（内容为伪造邮箱+失效 token，不会创建数据）。生产 13800000001 当日验证码配额被核对员用满属实（487b6ef 核对员所为）。
+
+**2026-09-03 11:05 · qa2-fixes 撞额度：otp PASS，其余四单半成品待 12:50 续**：
+- **F-204 otp PASS**（24acdb0）：三条发码路径通道抛错即撤刚插的 sms_codes/email_codes 行（冷却与当日额度的唯一账本），复核亲跑基线复现→修后消失（三连失败行数恒 0）、成功发送冷却仍生效、M1–M5 全红、+3 用例。nits：R1（失败撤行不能误伤既有行）与 R5（SMS_CONFIG_ERROR 臂）两条判据缺口；**残余风险待经理裁**：存量用户路径豁免 IP 计数，通道持续报错时同号零节流，执行者未加工单允许的 ≤5 秒闸且注释夸大 IP 兜底——裁决：**加 5 秒闸 + 修注释 + 补 R1/R5 两条判据**，作为 otp 跟进小单。已合入主干（CI 盯梢中），上产随本批。
+- 半成品：auth 已提交 F-202（165e458）、F-201 测试改动未提交；failedturn 前端三文件+测试改动未提交、未落库层；intake F-205 已提交（e385ffe）待复核；minors F-208 已提交（4c29db3），F-206/207 未见。脚本 implPrompt 已补「接手半成品」段，12:52 自动唤醒续跑。
+
+**2026-09-03 11:2x · 额度恢复：qa2-fixes 四单接手半成品续跑；otp 跟进小单派出；025c0c1（F-204）CI 绿→生产构建中**。脚本补丁事故：往模板字符串里塞了反引号导致 parse error，改为无反引号措辞后续跑成功——**规矩**：patch workflow 脚本的 prompt 段不得含反引号。
+
+**2026-09-03 · 生产上线 025c0c1（F-204 验证码发送失败不占冷却/配额）**：备份 → bundle ff → build EXIT=0 → restart 双 active → getDb ok → 路由 200。
+
+**2026-09-03 11:35 · otp 跟进 PASS（38f2b8e）+ 经理钉边界（a52c319）→ 主干 5243bf2**：新表 otp_send_attempts（与额度账本分表，被拦不记行），≤5 秒短闸排在 IP→60s→当日之后、错误码 SEND_TOO_FAST retry_after=5；注释改事实（IP 计数对 knownUser 整条豁免，短闸兜底）；R1/R5 判据在位，M1–M4 与复核自造 Ra2/Rc/Rg 全红；真机 curl 三连 500→429(5s)→500、sms_codes 恒 0。复核 nit「at(5) 准点无断言，> 改 >= 存活」——经理把放行断言从 at(6) 改到 at(5) 准点，变异 >= 现红 3。**上产要跑迁移**（49 表→50）。CI 盯梢中。
+
+**2026-09-03 · 生产上线 5243bf2（otp 5 秒短闸 + 新表 otp_send_attempts）**：备份 → bundle ff → build EXIT=0 → restart 双 active → 迁移触发（表数见冒烟输出）→ 路由 200。
+
+**2026-09-03 12:0x · qa2-fixes 收官一半：intake PASS、failedturn PASS、otp ADR 收口；auth/minors 第三轮**：
+- **intake（F-205）PASS**（e385ffe）：挂载后现查名下案件（异常回 unknown），第 1 步与第 6 步同一条关不掉的引导条→/login 补绑，submit no-case 支带 guide；复核亲证 CTA 落点与补绑往返、基线复现。nit：挂载查案接线与 saveIntake no-case 支只有搜字守卫。
+- **failedturn（F-203）PASS**（8f8f79d，二轮）：失败轮落库 failed_code、store.failMessage 唯一入口走 bestEffort、历史回显横幅+按行重试、失败轮零记账、重试不重复插用户消息；一轮 must-fix「对账器把失败轮当模型回复」已修（SQL 加 failed_code IS NULL）。**经理裁决**：任一失败轮均可重试（二轮已按此落地并真机证）。**上产要跑迁移**（messages.failed_code 列）。
+- **otp**：脚本补丁改了 impl prompt 导致 otp 工单在已合并的 a52c319 之上重跑，执行者写 ADR-003「待经理裁决」并给 B 案补丁——裁决其实已于 11:05 记台账（06d3663）且 A 案已上产 5243bf2。经理手改：ADR 状态→已接受（A 案）、代码/测试注释去「未裁决」、SEND_TOO_FAST 文案改如实（「刚才刚点过一次发送」）。**教训**：resume 时改 prompt 会让已 PASS 且已合并的工单重跑——patch 前先看 journal 哪些已完成，用 label/条件跳过。
+- **auth 第三轮**（fd164ec MUST_FIX）：MF-A F-201 判据无牙（删 returning 分支/直接画新人屏/三维接线恒 0 全存活，前任复核列出的存活臂被修复轮静默略过）；MF-B 失效旗登录后从不复位。**minors 第二轮**（30e6a34 MUST_FIX）：F-208 重挂载重复铺栈（第 1 步返回弹回第 2 步，修复引入）；F-206 桌面端角标被侧栏压住。两单已并行派出。口径：/account、settings 各自 UNAUTHORIZED 处理另立单。
+- 主干合入 otp(ADR)+intake+failedturn，CI 盯梢中。
+
+**2026-09-03 · 生产上线 3170e89（F-205 首诊建档前置 / F-203 对话失败态持久化 / ADR-003 收口）**：备份 → bundle ff → build EXIT=0 → restart 双 active → 迁移触发（50 表，messages.failed_code 列到位）→ / /login /intake /case/1/ask 200 → 历史接口正常。真机小核对（/welcome 低调揭开+老用户变体、401 出路、历史回显）已派 Sonnet（该项对应 auth 单尚在第三轮，生产现为 F-202 未合并态——核对结果用于确认基线现状，不作 PASS 依据）。
+
+**2026-09-03 · 3170e89 生产小核对**：/welcome 低调揭开✓（按住 ~200ms 即 data-veil-open、blur→none，innerText 为低调变体「额度/关注」、松手延时复糊；487b6ef 那次未核项补齐）；/case/1/ask 历史回显✓ console 0；scrollWidth 393 全✓。老用户变体与 401「去登录」出路两项如预期**不通过**——auth 单（F-201/F-202）尚在第三轮未合并，此即基线现状；量具坑：低调两变体用 textContent 会拼出两份，须 innerText 或 computed display。
+
+**2026-09-03 · auth 第三轮复核 MUST_FIX 一条→经理补判据后合入；minors 第三轮余一条 MF-4 派单**：
+- auth（c09d570）：MF-B 失效旗复位已收（beginSession 写 token 与撤旗唯一入口，真机另一标签页登出→/case/demo 不再叠失效屏）；MF-A 大半收（screenFor 三态 + page→Gate 接线 + 四维真库接线，前轮六存活臂全红）。余 MF-1：WelcomeGate 组件首帧/管道无判据（Y2 无视 state 恒画新人屏、Y3 初态 fresh 全绿）。**经理亲手补一条** SSR 首帧判据（renderToStaticMarkup(<WelcomeGate/>) 只含骨架、不含四句），Y2/Y3 各红 1，全量 4159/tsc 0（44f2dde）。合入主干，CI 盯梢中。口径外存活臂 R2/X1/X4/X6（/account、settings、流通道各自 401）另立单。
+- minors（ea9904c）：MF-3 重挂载重复铺栈与 F-206 桌面角标（1024/1280/1440 elementFromPoint 全中）均闭；余 MF-4：history 条目比草稿深（完成向导→/case→返回；清草稿后 F5）时 seeded>step 不退栈，返回逐级弹回空表单 6 下才离开（4c29db3 起即有）。已派单（退栈到与屏幕同步 + 单测⑨ + 真机 I6/I7）。**裁决入账**：角标 pointer-events:none（只是提示不可点）采纳。
+- 单测长期盲区（屏幕数字/角标退场/CSS 收角标/按钮走栈/popstate 落步）只靠真机盖着——记入待办：把 rv3-desktop.mjs / rv3-i3.mjs 收进仓当常驻真机判据。
+
+**2026-09-03 · 生产上线 1ac1624（F-201/F-202 auth）**：备份 → bundle ff → build EXIT=0 → restart 双 active → getDb ok → / /login /welcome /case/1 /case/1/ask 200。真机小核对（老用户变体+首帧、坏 token 去登录+401 停止增长、问它中途失效不回落演示案情）已派 Sonnet。
+
+**2026-09-03 · 1ac1624 生产小核对 4/4 通过**：/welcome 老用户「欢迎回来」变体、标题「欢迎 · 土八鼠」、首帧两次读均无「档案已创建」、「进入我的案件」→/case/1；坏 token 刷新 /case/1 显示「登录状态已失效」+「去登录」、401 计数 0s/5s 恒 5 条不增长、点去登录落 /login?next=%2Fcase%2F1 且 token 清空；/case/1/ask 中途失效发消息→失效屏，无演示横幅、不用演示案情作答；console 剔预期 401 后 0，scrollWidth 393。
+**主理人新需求 → 派单 byo-key-rotate**（基座 1ac1624）：密钥可查看/轮换、话术内嵌真密钥并随轮换同步、一段话术接通 MCP+REST+先取 https://law.nbdpsy.com/skill/SKILL.md、MCP 增 case_facts/knowledge_search、陪跑指南（先事实卡→只引检索结果→不编案号→危机先热线→不劝找律师→文书本人确认→档案不外传）。**经理安全裁决**：secret_enc 加密存库（LAWER_DATA_KEY），查看/轮换只认网页登录态、API key 身份 403，旧密钥轮换即失效；计费不变（MCP/REST 免费，三处扣费点守卫不动）。流程：Sonnet 勘查设计 → Opus 两提交 → 安全/产品(模拟 agent 走话术)/集成三视角复审 → 一轮修复。
+
+**2026-09-03 · 主理人需求：MCP 接入在电脑版左侧栏单独一栏（核心功能前置）→ 派单 mcp-nav**（基座 1ac1624，独立 worktree，不碰 byo-key-rotate 正在改的 /settings/agent 页内部）。裁决：紧随「驾驶舱」之后、「问它」之前；文案走 byoAgent.ts 唯一入口（navLabel/中性变体）；徽标未接入「推荐」/已接入「已接入」复用 useConnectedAgent；手机底部栏五格不动；低调守卫全绿；结构守卫 AppShell 不含字面。
+
+**2026-09-03 · 主理人定位裁决（纲）**：「网页最好只作为状态查询、档案查询、证据录入或者查看证据的展示页。所有案件分析，都是通过用户自己的 agent 以及我们的法律条文、判案文书、可能需要的法律 skill 来进行。」
+- 派生工作项（按序）：①在飞 mcp-nav（侧栏单独一栏）与 byo-key-rotate（一段话术接通 + case_facts/knowledge_search）；②**MCP 能力补全**（byo-key 落地后派）：knowledge_search 覆盖 法条/判例/SOP/数据卡 四类并带来源与可信度；写回工具镜像 lib/agent/tools.ts 的 claims_upsert / deadline_set / action_card / draft_write / timeline_add（同一入口复用，不复制），让 agent 的分析结果回到网页驾驶舱/文书页；法律 skill 包（N/2N/封顶/时效/工资口径等算式与 SOP 作为可下载 skill 文档）；SKILL.md 明写「网页看状态，分析在你这」。③网页文案重定位：首页/驾驶舱/欢迎页把「接入你的 agent」置于「问它」之前；**「问它」保留为无 agent 用户兜底，不隐藏**（主理人 2026-09-03 确认：「不排除用户自己没有好用的 agent，那就我们提供网页上的服务」）。④评测与守卫：MCP 工具集要有「模拟 agent 走完整分析」的常驻真机判据。
+- 已记入记忆（项目定位）。
+
+**2026-09-03 · minors MF-4 PASS（b370966）+ 经理补⑨一例（02a04dc）→ 主干 e6b4776**：seedStepHistory 里 seeded>step 时 h.go(step-seeded) 后 return（选此而非 finish 前退栈：另一标签页清草稿后 F5 不经过 finish）；onPop 对齐空转守卫（真机 mutK 臂 I9 restoredHint 为其判据，vitest 无 jsdom 咬不住）。真机 I6 6→1、I7 3→1、I9 5→3，I3/I4/I5 仍 3 且回退过程草稿与表单未清。复核 nit「⑨只量 step=0，臂 I go(-seeded) 存活」——经理补一例 seeded=4→step=2 期望 [-2]。至此小白二轮 8 条缺陷全部闭卷，CI 盯梢中。
+
+**2026-09-03 · 生产上线 e6b4776（F-206/207/208 minors）**：备份 → bundle ff → build EXIT=0 → restart 双 active → getDb ok → 路由 200。小白二轮 8 条缺陷全部上产。
+
+**2026-09-03 · 主理人反馈：固化确认弹窗按钮排布 → 派单 dialog-buttons**（基座 e6b4776）。裁决：改共用 confirm-dialog（全站弹窗受益）；手机上下全宽等高 ≥44、主按钮在上、单行文案；电脑右对齐等高；固化主按钮文案「确认固化」；巡检仓内全部确认弹窗 393 截图。
+
+**2026-09-03 · 主理人反馈：设置页实名认证（护照通道）「优化排版，按钮啥的」→ 派单 realname-form-ui**（基座 e6b4776，不碰 byo-key 在改的 settings/agent 与 ApiKeysCard）。裁决：电脑表单 max-w 36rem；上传改成并排可点上传格（缩略图/换一张/错误态），护照与身份证两通道共用同一原语（结构守卫）；底部主按钮「提交审核」+ 缺项灰字 + 次按钮「改用身份证认证」outline 同高，手机全宽上下排；人工审核说明改 callout；姓名/证件号/缩略图进糊层。
+
+**2026-09-03 · 主理人「为啥后台还没上线」**：查实生产 /woo 404、/woo/users 与 /woo/codes 均 200——后台早已上线（9d9895c 搬到 /woo），只是**根路径没有 page.tsx**（batch3 搬目录时未建索引页），主理人记的入口是「/woo 进管理页」。经理亲手补 woo/page.tsx 直跳 /woo/users + 判据（根路径存在/跳向/noindex），主干 503963d、CI 盯梢、上产。**教训**：「路径规格」里每一条 URL 都要有真机 200 判据，包括根路径；搬目录的工单验收要逐条 curl 规格里的 URL。
+
+**2026-09-03 · mcp-nav PASS（df574e0）+ 经理收两 nit（acb2d6a）→ 主干 0061f93**：侧栏「接入我的 agent」紧随驾驶舱、问它之前；徽标由真 MCP 握手翻牌（clientInfo.name=Claude Code）；低调「接入助手」；文案唯一入口守卫（AppShell/navItems 写字面即红）；复核 10 臂 9 红。经理亲手：①手机顶栏「我的」在 /settings/agent 仍亮（ShellHeader 自判 /settings，不复用被减过的 match）；②徽标整屏恰一枚守卫（R8 逃逸臂转红）。裁决书笔误更正：手机底部栏是四格（驾驶舱/问它/证据/文书），「我的」在顶栏。记账：低调下侧栏分组标题「案件」与驾驶舱「这家公司被仲裁过几次」为基座既有裸露——排入低调收口待办；worktree 软链 node_modules 会让 Turbopack build panic，build 一律在 cp -al 副本上跑。
+
+**2026-09-03 · 生产上线 503963d（/woo 根路径直跳）**：build EXIT=0 → restart 双 active → /woo=307→/woo/users、/woo/users 200、/woo/codes 200。
+
+**2026-09-03 · 生产上线 0061f93（MCP 侧栏入口）**：build EXIT=0 → restart 双 active → / /settings/agent 200、/woo 307。
+**主理人「没有办法审核护照的实名认证」「手机号不要脱敏，这是管理后台」→ 派单 admin-passport-review**（基座 0061f93）：待审队列/解密字段/两张照片经管理员专属流式路由/通过·驳回（原因回显、可重交）/审计+中性邮件尽力而为；手机号全显、≤10 位数字模糊搜索（解密后包含匹配，上限 5000）；权限走 admin 唯一入口、非管理员 404。不碰 byo-key-rotate 与 realname-form-ui 在改的文件。
+**发现：两账号公道值为负**（uid=2 −633、uid=1 −154，ledger 与 gongdao.balance 一致，是真实余额）：uid=2 内测开通 pro 时直接插 memberships 行、**未随会员入账 30000**（pricing pro=30000）→ 经理已按 pricing 补发 30000（ledger #83 管理员调整，余额 29367）。同时暴露**没有余额闸**：消耗可一路透支到负数——需主理人拍板扣费口径（见汇报）。首次 grant 脚本报 better-sqlite3 bindings 缺失，是 build.sh 正在 npm ci 的瞬时态，build 完复跑成功。
+
+**2026-09-03 · realname-form-ui PASS（878cf06）+ 经理补两判据（9099986）→ 主干 f9dd3fb**：表单 576px 左对齐/手机全宽；UploadTile 共用上传格（整格 label、缩略图+换一张、错误态红边+原因）两通道唯一 file input 入口；按钮组主次同高 48、缺项提示逐步准确；callout；低调糊层零露出；真机 132/132 量值通过、24 臂全红。裁决：field.tsx 标签间距 gap-2（全站共用原语）**接受**；两通道提示落点不一致与错误态两格底不齐两处肉眼级排版留下轮；RealnameCard missing[] 缺判据留待办。经理补 sm:grid-cols-2 / border-dashed 两条判据（R1/R4 存活臂转红）。CI 盯梢中。
+
+**2026-09-03 · 生产上线 f9dd3fb（实名认证表单排版）**：build EXIT=0 → restart 双 active → / /settings /settings/agent 200、/woo 307。
+
+**2026-09-03 · dialog-buttons 复核 MUST_FIX 一条（2f7ff9a）→ 派修复**：排布本身达标（320/360/393 六弹窗 column 主上次下全宽 48、1280 row 次左主右 min-w、固化文案「确认固化」、M1–M6 全红；仪器事故：第一版 g6 按 DOM 第一个认主按钮，M2 反序时尺子跟着反——改按 data-slot 认人）。硬伤：ConfirmDialog 传整串 buttonVariants 的 text-[16px] 经 tailwind-merge 覆盖 BUTTON_LAYOUT 的 clamp，主按钮不缩字号，360/320 档主次字号不等（执行者只量 393 恰好量不到）。修法：AlertDialogAction 收 variant prop；g6 加 360/320 档与字号相等断言、退出登录场景（route abort）。裁决：12 字守卫只覆盖字面量——接受；toast 压弹窗 z-order 既有问题另记。
+
+**2026-09-03 · admin-passport-review PASS（5bfdca7）合入主干 848cbbf；byo-key-rotate PASS（91fc05f）与 dialog-buttons PASS（89cfdbc）合入主干；两条收尾单派出**：
+- admin 审核：三路复审 PASS——requireAdmin 唯一闸门（28 次非管理员/未登录/api key 探测全 404）、照片鉴权路由 no-store、解密只在 admin 路由、审计无 PII、真机全链路（提交→待审→看图→驳回回显重交→通过→已实名→固化闸放行）、手机 11 位全显与 4 位模糊。收尾单 admin-review-polish：审核后自动刷新、通知三态提示、落定校验最新流水、nosniff/仅 image、五条判据补牙、reason 上限。
+- byo-key：一轮修复后 PASS——密文落库、查看/轮换仅网页登录态、旧钥即 401、低调下当前密钥也折叠（RV-S01）、生成→轮换话术同步（MF-1）、同页两卡共享 state（MF-2）；模拟 agent 只凭话术取 SKILL.md→MCP initialize→case_facts→knowledge_search 走通。生产 app.env 已有 LAWER_PUBLIC_URL/LAWER_SKILL_DIR。裁决：「暂不交付」名单去掉 knowledge_search **接受**。收尾单 byo-key-polish：no-store、吊销轮换 409、吊销同步、弹层标题、limit 归一、%ZZ 404、issued 剔 key。
+- dialog：AlertDialogAction 收 variant 后主次字号 320→14/360→14.76/393→16 一致，g6 四档 205 断言绿，变异 M7 红；仪器坑记账（tailwind-merge 同组后者胜、只量 393 量不到）。
+- 主干 CI 盯梢中；上产要跑迁移（api_keys.secret_enc）。
+
+**2026-09-03 · 主干 fcce623 CI 红（tsc）→ 经理修补 417b602**：admin-passport-review 的路由测试调 insertApiKey 未带 byo-key 新增的 secretEnc——两支各自 CI 绿、合并后类型不齐。修补：测试补占位密文；本地 tsc 0、23/23 绿后 push。**规矩**：集成 worktree 合完多支后先本地 tsc（wt-int 已挂 node_modules 软链）再 push，不拿 CI 当第一道 tsc。
+
+**2026-09-03 · 生产上线 417b602（后台护照审核 + 密钥查看/轮换 + 一段话术 + MCP case_facts/knowledge_search + skill 包 + 弹窗按钮）**：备份 → bundle ff → build EXIT=0 → restart 双 active → 迁移触发（api_keys.secret_enc/rotated_at 到位）→ / /settings/agent 200、/woo 307、/skill/SKILL.md 200（frontmatter 土八鼠陪跑）、/api/manifest 200、agent-setup skill_url=https://law.nbdpsy.com/skill/SKILL.md。真机核对（生成→话术含真密钥→轮换同步→旧钥 401；模拟 agent 取 SKILL.md→MCP initialize→tools/list→case_facts→knowledge_search；低调折叠；后台待审队列只读查看含主理人本人护照）已派 Sonnet；管理员 token 只读、不点审核。
+
+**2026-09-03 · 417b602 生产真机核对通过 + admin 收尾 PASS + 侧栏「案件」低调收口**：
+- 真机（Sonnet）：/settings/agent 生成→话术内嵌真密钥→复制一致→轮换后话术/配置即刻新密钥；393 可读；模拟 agent 只凭话术：SKILL.md 200（含陪跑指南链接）→ MCP initialize 200（serverInfo 土八鼠）→ tools/list 9 工具含 case_facts/knowledge_search → case_facts(case 1) 返回事实卡（证据分类计数+免责句）→ knowledge_search「经济补偿 封顶」带 confidence 原文核实 → 旧密钥 401；低调：话术与当前密钥折叠、剔糊层无密钥明文；后台 /woo/users「实名待审核 1 件」= 主理人本人护照提交，姓名/护照号解密、两图 naturalWidth>0；手机 11 位、中间 4 位模糊命中；console 0（剔预期 401）。**唯一不通过**：低调下侧栏分组标题「案件」裸露（AppSidebar.tsx:81 硬编码）→ 经理亲改 NEUTRAL_WORD.caseGroup「事项」+ 判据。核对顺带轮换了 SMOKE-TEST agent key（新明文只在 scratchpad），测试临时 key 已吊销。
+- admin-review-polish PASS（12398d2）：审后无刷新联动（行状态+审计）、三态分句、陈旧流水 409 与 400 分码、nosniff+非图 415、≤500 字闸、17 变异全红。知悉：sent 态只能在 dev dry-run 下真机触发；旧待审行残留属既有语义。
+- 合入主干（集成后本地 tsc 零输出），CI 盯梢中。
+
+**2026-09-03 · 生产上线 7ed3b87（审核台收尾 + 侧栏「案件」低调收口）**：build EXIT=0 → restart 双 active → / /settings/agent /woo/users /skill/SKILL.md 200、/woo 307。
+
+**2026-09-03 · byo-key-polish PASS（53b41f0）→ 主干 0c49919**：三条回明文接口 no-store；吊销 key 轮换 409 KEY_REVOKED（三段式自述）；吊销当前那把即刻同步共享 state（真机 393/1280 三态）；弹层标题改口；MCP knowledge_search limit 归一 [1,MAX]；skill 路由解码兜底 404；onIssued 五项守卫；「暂不交付」名单去 knowledge_search 有台账。变异 19/20 红（唯一存活为数字串判据小缺口，真机功能正确）。
+- **待办（另开单）**：①/skill/%、/skill/%ZZ 等畸形编码在 Next 16.2.9 入口层即 500（全站动态路由同形，handler 未进）——要改 middleware/反代唯一入口；②站内 agent 的 lib/agent/tools.ts:822 knowledge_search limit 孪生（limit=-5 回 30 张卡）——与 MCP 收成一处 clampLimit；③mcp 路由 limit 判据补数字串 '3' 用例。
+
+**2026-09-03 · 生产上线 0c49919（密钥接口收尾）**：build EXIT=0 → restart 双 active → 路由 200/307。今日上产合计 12 批：qa2 五单（登录落地/401 出路/OTP 冷却与短闸/对话失败态/首诊建档前置/三 minor）、/woo 根路径、MCP 侧栏、实名表单排版、后台护照审核+收尾、密钥查看/轮换+一段话术+MCP 两工具+skill 包+收尾、弹窗按钮、侧栏低调收口。
+
+**2026-09-03 · 主理人反馈：后台「确认通过这次实名」弹窗排版 → 派单 admin-review-dialog**（基座 0c49919）。裁决：主按钮常量短句「确认通过/确认驳回」，姓名不进按钮；正文改字段块（姓名/证件等宽）；驳回同套；confirm-dialog 12 字守卫扩展到动态 confirmLabel（模板串即红），woo/users 调会员也改常量；弹窗 ≥sm max-w-md。这正是上一单复核 nit「12 字守卫只覆盖字面量」的现实后果。
+
+**2026-09-03 · admin-review-dialog PASS（b3bec60）→ 主干 a9dbb53**：两弹窗 confirmLabel 常量短句、字段块（姓名 600 / 证件等宽 tabular）、驳回原因引用块、弹窗 sm:max-w-md；调会员/发公道值也改短句；confirmLabel 守卫升级为「先解再量」（模板串/三元含变量/String(x) 四种拼法红，模块常量表可解）。裁决：alert-dialog 桌面全站宽 420→448 **接受**；EvidenceLibrary 的 NEUTRAL_WORD 模板按「静态可判定」放行 **接受**。真机 1280/393 通过与驳回四张量值通过。CI 盯梢中。
+
+**2026-09-03 · 生产上线 a9dbb53（后台审核弹窗排版 + 全站桌面弹窗宽 448）**：build EXIT=0 → restart 双 active → 路由 200。今日第 13 批。
+
+**2026-09-03 · 主理人拍板「余额闸：拦」→ 派单 gongdao-gate**（基座 a9dbb53）。规则：网页对话开始新一轮前查余额 ≤0 → 402 拦、不落用户消息、不记账，页面提示并给兑换/充值入口；已开始的一轮答完（最多欠一轮）；下单类服务报价时余额不够即拦；MCP/REST 不受影响；会员同规则。主理人已在后台通过自己的护照实名。
+
+**2026-09-03/04 · gongdao-gate：实现 28cce32 → 计费视角 PASS / 产品视角 MUST_FIX RV-1 → 修复 7c6b663 → 复核撞周额度（resets 09-07）→ 主理人「额度恢复」后 resume**：
+- 闸落在 lib/billing.canStartTurn 唯一入口，chat 路由归属校验后、runTurn 前判 402 GONGDAO_EXHAUSTED（三段式含余额）；拦时 messages/ledger/usage 零新增、假上游零调用；会员同拦；MCP 余额 -100 照样 200；watch 扣费点补差 1 拦判据；19 变异全红。
+- RV-1：被拦那一轮前端仍本地回显问话并清空输入框，F5 后消失——修复：useChatStream 加 onFailed，Workbench 按 id 撤回显并把原文放回输入框（只对 GONGDAO_EXHAUSTED），9 变异红，真机 A 组全过；三统计 4504/tsc 0/build 0。
+- nit 入账：①并发多请求同时到达余额 1 会欠多轮（网页单标签被 Composer 串行化挡住，多标签/API 可复现）→ **另开单**：每用户在飞占位（进程内 Set，单进程够用）；②横幅 F5 后不留（服务端零落库无从复原）→ 产品裁决：**接受**，余额仍 0 再发照样被拦；③393 有历史时横幅落视口外（error 帧不跟随滚动）→ 随并发单一起修；④异地兑换后不自解除需 F5 → 接受；⑤POST /watch 建盯梢不查余额、最多免费盯 3 轮 → 既有设计知悉；⑥真机假上游每轮收到 2 次 /v1/chat/completions（相隔 10ms、正文差 137 字节）而 usage 1 行——**疑点另开单查**（是否重复调模型多付一次钱）。
+
+**2026-09-04 · gongdao-gate 复核 PASS（7c6b663）→ 主干 9b88798**：RV-1 修实（流层 onFailed、Workbench 按 id 撤回显并回填输入框、仅 GONGDAO_EXHAUSTED 撤），复核 9 臂 7 红（2 存活为判据缺口/等价变异），原 19 臂闸矩阵仍全红，真机 A/C 组与执行者逐项一致。上产后给 smoke 账号 uid=1 补测试额度（现 −154，会被闸拦）。跟进单 gate-followup 已派：每用户在飞占位防并发多欠、retry_of 判据、402 横幅跟随滚动、横幅 retry 路径判据。
+
+**2026-09-04 · 「每轮两次模型请求」诊断：② 同一轮内合法二次调用，已按一轮记账**（Sonnet 只读）：第二次是 orchestrator.ts:932-951 的「收口检查」补救轮（charter §2 每轮必落行动卡；state.actionCards===0 时追加一条固定系统提示再打一次）；137 字符差 = 那条系统消息 JSON 长度 136 + 逗号，三组样本逐字符对上；usage 每次 runOnce 累加、chargeTurn 只记一笔（ref_id=turn-<id>）——未漏账未双扣。假上游从不吐 tool_calls 所以补救轮 100% 触发，是测试环境极端值。**待办**：查生产真实流量里补救轮触发率（ACTION_CARD_MISSING 信号 / actionCards===0 分支计数），若常态触发则是模型不听第一次工具指令，要从提示词修，而不是多付一次钱。
+
+**2026-09-04 · 生产上线 9b88798（余额闸）并实弹验证**：restart 双 active → 路由 200 → 用余额 −154 的 smoke 账号打 POST /chat → **HTTP 402 GONGDAO_EXHAUSTED**，三段式含余额（「余额 −154，这一轮开不了…到「我的」页兑换…」），messages 146→146 零新增、ledger 无新行 → 之后给 uid=1 补 5000 测试额度（余额 4846，ledger 管理员调整），供核对员使用。
+
+- **2026-09-03 21:30 · 余额闸跟进单（gate-followup / wf_ae960360-c3f）执行者在回报那一步撞 API 500，工作已全部落地**：wt-gate 已提交 d520d64（在飞占位 409 TURN_IN_FLIGHT + retry_of 判据 + 402 横幅跟随滚动 + 横幅 retry 清 pendingEcho 判据），rd-gate 落盘 fu-test.rc=0（4511 过）、fu-tsc.rc=0、7 个变异臂全红、live-fu 并发读数 409/200 且账本 0 新增。管道判为「执行者未返回」纯因结构化回报丢失，非代码问题。处置：按「撞额度后按半成品检查」流程，给修复提示加【接手半成品】（只核对不重做、SHA 写 d520d64），复核提示加一题「前端收到 409 非流式 JSON 走哪条路（回显/重试/retry_of 无 message_id 会否 400）」，原 runId resume。顺手清掉执行者遗留的 5278/5279 两个进程（按 pid 杀）。教训：**执行者交付前先提交再回报**（这单做对了，所以断线零损失）——写进派单模板。
+- **2026-09-04 00:05 · 余额闸跟进单复核 MUST_FIX（MF-1）+ 经理裁决**：复核官在 standalone 生产构建 + 可切模式假上游上把服务端四项全部正向确认（3 路并发 200/409/409、ledger 恰 1 行、上游 500/掐断/断线后占位均释放、串行 200→402；7 变异臂亲跑全红；4511/tsc 0/build 路由表与基线无差）。但新开的缝：**409 TURN_IN_FLIGHT 到前端被当普通失败**——httpTransport 把非流式 409 归一成无 message_id 的 error 帧，Workbench 留回显 + 给通用失败卡带重试；服务端一字未落库所以那条回显是孤儿（F5 即消失）；更糟是 409→点重试→402：retry 进门无条件清 pendingEcho，402 回来无回显可撤、原文也不回输入框，RV-1 保证失效，且零判据覆盖（真机两标签页读屏 rd-gate/mut-rv-fu/live/q1-2tab.txt + 三张截图）。**裁决 (i)**：客户端收一个唯一入口「服务端零落库的拒答码」集合 = {GONGDAO_EXHAUSTED, TURN_IN_FLIGHT}（frames.ts），settleFailedTurn 对集合内一律撤回显 + 原文回输入框；409 那一档画成不带重试的提示条（原文已在框里，等一等自己再点发送），输入框不禁用；加结构守卫：chat 路由 runTurn 之前返回的每个 error_code 必须在该集合里（防下一个 4xx 再漏）。**同单顺带**：409 文案删「（或者点停止）」——停止只是客户端 abort，服务端照跑到完才释放，对刷新过页面的人是空话。**第 3 项裁 (a)**：402 横幅跟随的判据以 jsdom spy 为准，复核官 6 档真机读数（变异体恒少滚 35px、横幅底压输入区 2px）按正向确认入账，不再往真机臂投入。**执行者真机读数不合格记一笔**：其「真机」是 next dev + 起即崩的假上游 + 无 RELAY_ROUTE_DOMESTIC，200 那一路在 getProvider 就死、上游从未被摸到，「ledger 1 行」在其报告里是空证（他自己标注了，诚实）；派单模板加一句「真机 = standalone 生产构建 + 假上游被摸到的证据（calls 计数 ≥1）」。**非本单**：F5 后余额为负者横幅消失、输入可用、再发才被 402（横幅只挂流状态）——RV-1 前就如此，入 backlog。
+- **2026-09-04 00:35 · 余额闸跟进 MF-1 修复 6cec07a 复核 PASS + 裁决补记**：真机（standalone 生产构建 + 假上游被摸到 calls=3）两标签页读屏：tab2 409 ⇒ 回显撤、原文回框、提示条无按钮、输入框可用、文案不含「停止」；tab1 收场后再发 ⇒ 402 ⇒ 回显撤、原文回框、横幅在、输入框禁用；F5 后库里只有 tab1 一问一答、消耗流水仅一条；普通失败（上游 500）仍留回显 + 重试。五变异臂复核官自写锚点亲跑 5/5 红；4518/tsc 0/build 0（+7 判据）；diff 7 文件全在允许面。**裁决补记（执行者请示、复核官点名须落台账）**：REFUSED_BEFORE_WRITE 登记 **7 个码**而非工单字面的 2 个（CASE_NOT_FOUND / INVALID_BODY / INVALID_RETRY_OF / EMPTY_MESSAGE / INVALID_MODE / TURN_IN_FLIGHT / GONGDAO_EXHAUSTED）——集合的定义是「runTurn 之前拒答、一字未落库」，七个全符合，撤回显对它们同样正确；工单写两个是我举例不是穷举，守卫逼出完整表正是守卫的用意。**采纳，有效。** 画法不受影响（横幅/提示条/失败卡仍逐码决定）。**backlog 两条**：① 结构守卫只扫字面 error_code，route.ts:66 owned.errorCode（动态）与 :25 guard.response（401，transport 层已抛 SessionExpired）在扫描面外——现无漏，下一个前置动态码不会被点名；② 被拒那句原文只在 React state，F5 后输入框空（两档同形），是否落 sessionStorage 属产品裁决，待主理人。**三统计并发跑时 filesGc dry-run 超时 flake、串行全绿**——同机三份 vitest + 两份 build 的负载伪象，复核派单模板加「三统计串行跑或错峰」。
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
