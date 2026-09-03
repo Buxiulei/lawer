@@ -322,8 +322,10 @@ describe('发码限流', () => {
       retryAfter: 5,
     });
 
-    // 过了短闸就放行，而这时离那次失败才 6 秒——远在 60 秒之内，说明冷却一点没被占
-    const retry = await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(6)).deps);
+    // 过了短闸就放行——而且是 retry_after 说的第 5 秒**准点**就放行（边界钉死：闸用的是 >，
+    // 改成 >= 会让按提示准点重试的人再吃一次 SEND_TOO_FAST）。离那次失败才 5 秒，远在 60 秒之内，
+    // 说明冷却一点没被占
+    const retry = await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(5)).deps);
     expect(retry.ok, '发失败后过了短闸仍被拦 = F-204 复发').toBe(true);
     expect(smsRowCount(db, PHONE)).toBe(1);
 
