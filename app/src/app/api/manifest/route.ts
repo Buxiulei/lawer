@@ -28,6 +28,12 @@ export async function GET() {
       protocol_version: PROTOCOL_VERSION,
       tools: TOOLS.map((t) => ({ name: t.name, title: t.title, scope: t.scope })),
     },
+    skill: {
+      // 接进来之前先读这个：总纲 SKILL.md 会指路到《接入说明》与《陪跑指南》。
+      // 与本清单同为公开无鉴权——第一步就要鉴权的话，用户还没有 key 可用。
+      entry: '/skill/SKILL.md',
+      files: ['/skill/SKILL.md', '/skill/接入说明.md', '/skill/陪跑指南.md'],
+    },
     rest: {
       base: '/api/v1',
       endpoints: [
@@ -42,6 +48,8 @@ export async function GET() {
         { method: 'GET', path: '/api/v1/agent-setup', auth: 'jwt|api_key', description: '一键接入信息：mcp_url / api_base、工具清单、接入说明全文' },
         { method: 'GET', path: '/api/v1/keys', auth: 'jwt', description: '列出自己的 api key' },
         { method: 'POST', path: '/api/v1/keys', auth: 'jwt', description: '创建 api key，明文只返回这一次' },
+        { method: 'GET', path: '/api/v1/keys/{id}/secret', auth: 'jwt', description: '取回这把 key 的明文（本列上线前签发的旧密钥没有密文，回 KEY_NOT_VIEWABLE）' },
+        { method: 'POST', path: '/api/v1/keys/{id}/rotate', auth: 'jwt', description: '轮换：换发新明文，旧明文立即失效；id / name / scopes / client_name 不变' },
         { method: 'DELETE', path: '/api/v1/keys/{id}', auth: 'jwt', description: '吊销 api key' },
         { method: 'GET', path: '/api/v1/cases/{id}', auth: 'jwt|api_key', scope: 'case:read', description: '案件档案 + 时间线' },
         { method: 'PATCH', path: '/api/v1/cases/{id}', auth: 'jwt|api_key', scope: 'case:write', description: '更新 stage / goal / bottom_line' },

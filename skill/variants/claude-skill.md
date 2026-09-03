@@ -34,6 +34,8 @@ description: 通过 MCP 连接「土八鼠」的案件档案库，读写案件�
 | `action_complete` | 把行动卡标为完成或放弃 | `case_id`、`action_id`；`status` 默认「完成」 |
 | `deadline_list` | 列出法定期限 | `case_id`；`include_resolved` 默认只列生效中的 |
 | `evidence_list` | 列出已登记的证据条目 | `case_id` |
+| `case_facts` | 读「案件事实卡」全文：当事人、期限、用工基本盘、公司主体、行动卡、诉求、时间线、证据一次给全 | `case_id` |
+| `knowledge_search` | 检索知识库（法条卡/判例卡/计算规则/流程SOP/文书模板/话术卡/情绪指南/数据卡），带可直接照抄的 `citation_guide` 与可信度 | `query`；`limit`、`type` 可选 |
 
 只能读写用户自己的案件。传了别人的 `case_id`，服务端一律回「案件不存在」。
 
@@ -51,7 +53,7 @@ description: 通过 MCP 连接「土八鼠」的案件档案库，读写案件�
 
 ## 接入步骤
 
-1. 在网页端「设置 → API keys」创建一把 key，明文只显示这一次，当场存好。
+1. 在网页端「设置 → API keys」创建一把 key。忘了可以回设置页再看一次，或者轮换换一把新的。
 2. 把 MCP server 配进来（标准 Streamable HTTP）。地址与这份说明都能从
    `GET /api/v1/agent-setup` 拿到（用同一把 key 鉴权）：
 
@@ -67,8 +69,12 @@ description: 通过 MCP 连接「土八鼠」的案件档案库，读写案件�
    }
    ```
 
-3. 连上后先调一次 `case_get`，把案件当前阶段、目标和底线读进来，再开始对话。
+3. 连上后先调一次 `case_facts`，把当前事实读进来，再开始对话。事实卡里写着「未记录」的项是
+   **档案里没有这一项**，不是"不存在"——缺哪一项就问用户，不要拿默认值替它。
    不知道 `case_id` 就问用户，或让他在网页端案件页地址栏里看。
+4. 引用法条与案例一律只从 `knowledge_search` 的结果里引，照抄它给的 `citation_guide`，
+   并带上 `confidence`；检索不到就说查不到，**不要编条号和案号**。
+   完整的陪跑纪律见 `GET /skill/陪跑指南.md`（免鉴权）。
 
 接口的完整形状（REST 端点、错误码、权限项）在 `GET /api/manifest`，无需鉴权即可读。
 错误响应统一是 `{"ok": false, "error_code": "...", "message": "..."}`，

@@ -123,6 +123,11 @@ const COPY_FILES = [
   'src/app/(app)/settings/agent/_components/ConnectGuide.tsx',
   'src/app/(app)/settings/_components/ApiKeysCard.tsx',
   '../skill/接入说明.md',
+  // 本单新增的两份 skill 文件。**现在它们一句「不收 / 不扣 / 免费」都没有**（计费口径
+  // 统一指回《接入说明》那一节），所以列进来暂时一行都命中不到——列的正是这个理由：
+  // 哪天有人在里面顺手写一句「接了就免费」，那句话不能是全站唯一一处没人看守的。
+  '../skill/SKILL.md',
+  '../skill/陪跑指南.md',
 ];
 
 /**
