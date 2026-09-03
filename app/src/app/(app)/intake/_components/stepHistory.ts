@@ -50,6 +50,21 @@ export function stepFromHistoryState(state: unknown): number | null {
  * 第 2 步，要按 4 下才离开（F-208 复核 MF-3；这是修 F-208 引入的新缺陷，
  * 基线一按返回即离开）。
  *
+ * 【为什么反过来也要管】条目步数比草稿**深**的那一种，补格补不着，得退栈：
+ * 走完向导点「进入驾驶舱」（clearDraft + router.push /case/<id>）之后按浏览器返回，
+ * 或另一个标签页把草稿清了本页再 F5——草稿没了、步数回到第 1 步，而这副栈里
+ * 向导那几格连同它们的步数原样留着（实测：屏幕第 1 步、条目写着第 5 步）。
+ * 一格不退的话，返回键要逐级弹回第 5 → 4 → 3 → 2 → 1 步的**空表单**，
+ * 按满 6 下才出得去（复核 MF-4，rv3-i3-head2.log 的 I6 backs=6 / I7 backs=3）。
+ * 补格那条路在这里是空转（seeded+1 > step，一格都不补），所以必须单独退栈：
+ * `h.go(step - seeded)` 把栈退到与屏幕同步的那一格。多出来的几格留在前进方向上，
+ * 下一次 pushStepHistory 自己会把它们截断，不用也不该在这里清。
+ *
+ * 【为什么不在 finish 里退栈】那只堵得住「完成向导」这一条路（I6），
+ * 堵不住「草稿在别处被清掉再回到本页」（I7）——后者根本不经过 finish。
+ * 「条目与屏幕差了几格」只有这副栈答得了，收在这一个入口，
+ * 免得每多一条清草稿的路就漏一次。
+ *
  * 【为什么不是「铺过就整个不管」】那样会漏掉**条目步数比草稿步数浅**的那一种：
  * 同一个标签页再打开一次 /intake 是「导航到当前 URL」＝浏览器按重载处理，
  * 条目连同它的步数原样留着（实测：条目写着第 2 步、草稿却恢复到第 3 步）。
@@ -57,13 +72,21 @@ export function stepFromHistoryState(state: unknown): number | null {
  * 这时点「清空重填」，resetStepHistory 按屏幕上的步数退 2 格，直接把用户退出了向导
  * （实测 afterReset 落到 /account）。所以铺过的栈只**补齐差的那几格**，一格不重复。
  *
- * 判据：step-history.test 的⑦（条目与草稿同步时不增条目，返回序列照旧 1 → 0 → 离开）
- * 与⑧（条目浅一格时补一格，清空重填仍退回第一格）。
+ * 判据：step-history.test 的⑦（条目与草稿同步时不增条目，返回序列照旧 1 → 0 → 离开）、
+ * ⑧（条目浅一格时补一格，清空重填仍退回第一格）
+ * 与⑨（条目比草稿深时退 seeded-step 格，之后返回一下就离开）。
  */
 export function seedStepHistory(h: HistoryLike, step: number): void {
   // 已经铺到第几步了：读不出就是这副栈还没铺过，从当前条目起头。
   const seeded = stepFromHistoryState(h.state);
-  if (seeded === null) h.replaceState({ [STEP_STATE_KEY]: 0 }, '');
+  if (seeded === null) {
+    h.replaceState({ [STEP_STATE_KEY]: 0 }, '');
+  } else if (seeded > step) {
+    // 条目比屏幕深：退到与屏幕同步的那一格。退完浏览器发一个 popstate，
+    // 里面的步数就是屏幕上这一步，组件那边落成空转（见 IntakeFlow 的 onPop）。
+    h.go(step - seeded);
+    return;
+  }
   for (let i = (seeded ?? 0) + 1; i <= step; i += 1) {
     h.pushState({ [STEP_STATE_KEY]: i }, '');
   }

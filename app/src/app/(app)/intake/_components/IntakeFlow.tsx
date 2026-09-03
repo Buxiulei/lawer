@@ -158,6 +158,10 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
       // 读不出步数＝这个条目不是向导压的（第 1 步再往回就是它）：
       // 什么都不做，让浏览器照常离开。
       if (back === null) return;
+      // 退回来的就是屏幕上这一步：seedStepHistory 发现条目比屏幕深时会退栈
+      // （复核 MF-4），那一下只动栈、不该动屏幕。落一遍 applyStep 步数虽然不变，
+      // 却会把「已恢复上次填的内容」那行提示按掉——只对齐栈的一下不算用户操作。
+      if (back === stepRef.current) return;
       applyStep(Math.min(back, STEPS.length - 1));
     };
     window.addEventListener('popstate', onPop);

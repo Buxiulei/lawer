@@ -16,6 +16,10 @@
  *      退出要按 4 下（复核 MF-3，修 F-208 引入的新缺陷）。
  *   ⑧ 条目比草稿浅时补齐差的那几格——「铺过就整个不管」会让屏幕上第 3 步而栈里 2 格，
  *      清空重填按屏幕步数退栈就把人退出了向导（实测 afterReset 落到 /account）。
+ *   ⑨ 条目比草稿**深**时退掉多的那几格——完成向导（清草稿 + 跳驾驶舱）后按返回回来，
+ *      或另一处清了草稿本页再 F5：屏幕第 1 步而条目还写着第 5 步。补格那条路在这里是
+ *      空转，不退栈的话返回键要逐级弹回第 5→4→3→2→1 步的空表单，按满 6 下才离开
+ *      （复核 MF-4，真机 I6 backs=6 / I7 backs=3）。
  * 外加一条接线守卫：IntakeFlow 真的用了这几个函数——纯函数全绿而组件没调，
  * 和没修一模一样。
  *
@@ -24,6 +28,7 @@
  *   · resetStepHistory 改回「只改写栈顶」（replaceState 第 0 步）→ ④红
  *   · seedStepHistory 从头铺（不看当前条目铺到第几步）→ ⑦红
  *   · seedStepHistory 铺过就整个 return（不补差的那几格）→ ⑧红
+ *   · seedStepHistory 去掉「条目比草稿深就退栈」那一支 → ⑨红
  *   · IntakeFlow 里删掉 pushStepHistory 那一行 → 接线守卫红
  */
 import { readFileSync } from 'node:fs';
@@ -214,6 +219,38 @@ describe('F-208 向导的历史栈：一步一个条目', () => {
     resetStepHistory(h, 2); // 点「清空重填」
     expect(stepFromHistoryState(h.state), '清空后该退回第一格').toBe(0);
     expect(stepFromHistoryState(h.back()), '再返回一下才离开向导').toBe(null);
+  });
+
+  it('条目比草稿深：退掉多出来的那几格，之后返回一下就离开向导', () => {
+    const h = new FakeHistory();
+    seedStepHistory(h, 0);
+    pushStepHistory(h, 1);
+    pushStepHistory(h, 2); // 用户填到第 3 步
+    const len = h.length;
+
+    // 完成向导（清草稿 + 跳驾驶舱）之后按返回回到 /intake，或另一个标签页把草稿
+    // 清了本页再 F5：草稿没了、屏幕回到第 1 步，而条目还写着第 3 步。
+    seedStepHistory(h, 0);
+
+    expect(
+      h.goCalls,
+      '缺什么：条目写着第 3 步、屏幕上是第 1 步，多出来的 2 格一格都没退。\n' +
+        '为什么缺：补格那条路在这里是空转（要补的那几格全在身后），' +
+        '于是这一支什么都没做——屏幕第 1 步，栈里却还压着第 2、3 步。' +
+        '按返回不是离开向导，而是逐级弹回第 3、第 2 步的**空表单**' +
+        '（草稿已经清了，弹回去的每一格都是空的），要按满 4 下才出得去；' +
+        '真机上第 6 步完成向导那一路是 6 下（复核 MF-4，I6 backs=6 / I7 backs=3）。\n' +
+        '怎么办：seedStepHistory 里 seeded > step 时 h.go(step - seeded)，' +
+        '把栈退到与屏幕同步的那一格；多出来的几格留在前进方向上，下次 push 自会截断。',
+    ).toEqual([-2]);
+    expect(h.length - len, '退栈不是压条目，一格都不该多').toBe(0);
+    expect(stepFromHistoryState(h.state), '退完当前条目该是第 1 步，与屏幕一致').toBe(0);
+    expect(
+      stepFromHistoryState(h.back()),
+      '缺什么：退栈之后再按返回，弹出来的还是向导内部的某一步。\n' +
+        '为什么缺：那说明只退了一部分，「第 1 步返回才离开」照旧失效。\n' +
+        '怎么办：退的格数正好是 seeded - step，不多不少。',
+    ).toBe(null);
   });
 
   it('反向对照：非本向导压的 state 一律读成 null，不瞎猜', () => {
