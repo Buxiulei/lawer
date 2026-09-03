@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { CASE_RESOLVER_PATH } from '@/app/_ui/bootstrap';
+import { BYO, BYO_GUIDE_HREF } from '@/app/_ui/byoAgent';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 
 export interface NavItem {
@@ -99,6 +100,35 @@ export const CASE_NAV_ITEMS: NavItem[] = [
 ];
 
 /**
+ * 「接自己的 agent」独立一栏。产品负责人 2026-09-03 明示这是核心能力，
+ * 要「放在最左侧的栏目里，单独一栏」——所以它**不塞进「我的」**，
+ * 也不排到四栏末尾，而是紧跟驾驶舱、排在问它之前。
+ *
+ * 【不进底部 Tab】移动端四格是案件四栏，满了；那边的入口在「我的」页顶部（既有）。
+ * 位置不同，可达性没变——同 ACCOUNT_NAV_ITEM 的处理。
+ *
+ * 【文案不写在这里】label / discreetLabel 都取自 _ui/byoAgent 的 BYO，
+ * 与首页、驾驶舱、账户页共用同一个入口。壳层手写字面量的那天，
+ * 改口径的人改了 byoAgent 就以为改完了，而侧栏还念着老词。
+ */
+export const AGENT_NAV_ITEM: NavItem = {
+  key: 'agent',
+  label: BYO.navLabel,
+  discreetLabel: BYO.navLabelNeutral,
+  href: () => BYO_GUIDE_HREF,
+  match: (p) => p === BYO_GUIDE_HREF || p.startsWith(`${BYO_GUIDE_HREF}/`),
+  icon: (
+    // 插头：两根引脚 + 插体 + 一段线。说的是"把外面的东西接进来"，
+    // 与「我的」那个人像、四栏那批案件语义都不撞。
+    <svg viewBox="0 0 24 24" className="size-6" {...stroke}>
+      <path d="M9 3.5v4M15 3.5v4" />
+      <path d="M6.5 7.5h11v3.2a5.5 5.5 0 0 1-11 0z" />
+      <path d="M12 16.2v4.3" />
+    </svg>
+  ),
+};
+
+/**
  * 「我的」不进底部 Tab——四格被案件四栏占满了。
  * 移动端它在顶栏，PC 侧栏里仍然跟在四栏后面。位置变了，可达性没变。
  */
@@ -106,7 +136,10 @@ export const ACCOUNT_NAV_ITEM: NavItem = {
   key: 'account',
   label: '我的',
   href: () => '/account',
-  match: (p) => p.startsWith('/account') || p.startsWith('/settings'),
+  // /settings 整棵子树归「我的」，**除了**已经自成一栏的接入页——
+  // 不减掉它，站在 /settings/agent 上两栏会同时高亮，等于告诉用户"你在两个地方"。
+  match: (p) =>
+    p.startsWith('/account') || (p.startsWith('/settings') && !AGENT_NAV_ITEM.match(p, null)),
   icon: (
     <svg viewBox="0 0 24 24" className="size-6" {...stroke}>
       <circle cx="12" cy="8.5" r="3.5" />
@@ -115,5 +148,15 @@ export const ACCOUNT_NAV_ITEM: NavItem = {
   ),
 };
 
-/** PC 侧栏用：案件四栏 + 我的 */
-export const NAV_ITEMS: NavItem[] = [...CASE_NAV_ITEMS, ACCOUNT_NAV_ITEM];
+const [DASHBOARD_NAV_ITEM, ...CASE_NAV_ITEMS_AFTER_DASHBOARD] = CASE_NAV_ITEMS;
+
+/**
+ * PC 侧栏用：驾驶舱 → 接入 → 问它 / 证据 / 文书 → 我的。
+ * 接入那一栏插在驾驶舱之后，是「核心功能前置」这条产品裁决的落点，不是排版口味。
+ */
+export const NAV_ITEMS: NavItem[] = [
+  DASHBOARD_NAV_ITEM,
+  AGENT_NAV_ITEM,
+  ...CASE_NAV_ITEMS_AFTER_DASHBOARD,
+  ACCOUNT_NAV_ITEM,
+];

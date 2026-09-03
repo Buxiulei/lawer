@@ -24,6 +24,18 @@ export const BYO = {
   how: '支持 MCP 的走 MCP，不支持的走 REST，两条路能力一样。不接也不影响，网页端功能同样齐全。',
   cta: '看怎么接',
   ctaSignedOut: '注册后两分钟就能接上',
+  /**
+   * PC 侧栏那一栏的名字。**壳层不许手写这几个字**——
+   * 侧栏、底部栏、面包屑将来都可能要念它，散着写就会分叉成三个说法。
+   * 守卫见 components/shell/__tests__/sidebar-agent-nav.test.tsx 的结构那条。
+   */
+  navLabel: '接入我的 agent',
+  /** 低调模式下的栏目名：不带案情词，也不点出"这是我的助手"。 */
+  navLabelNeutral: '接入助手',
+  /** 栏目右侧状态小标——还没连进来过时推一把。两种模式共用：这两个字本来就中性。 */
+  navBadgeIdle: '推荐',
+  /** 同上，已经连进来过时的那一态。 */
+  navBadgeConnected: '已接入',
 } as const;
 
 /**
