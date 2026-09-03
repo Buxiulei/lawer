@@ -14,7 +14,7 @@ import { encryptField } from '@/lib/crypto';
 import { getDb } from '@/lib/db/client';
 import * as store from '@/lib/db/api-keys';
 import { issuedKeyBody } from './_issued';
-import { masterKeyConfigured, secretUnavailable } from './_secret';
+import { NO_STORE, masterKeyConfigured, secretUnavailable } from './_secret';
 
 export async function GET(req: Request) {
   const guard = requireWebSession(getDb(), req);
@@ -84,6 +84,7 @@ export async function POST(req: Request) {
 
   return NextResponse.json(
     issuedKeyBody(req, { id, name, scopes, clientName: null, key }),
-    { status: 201 },
+    // 正文里躺着明文：这一趟谁都不许缓存（NO_STORE 那段注释说了为什么）
+    { status: 201, headers: NO_STORE },
   );
 }

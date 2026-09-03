@@ -42,6 +42,7 @@ const secretOf = (state: AgentKeySecret['state']): AgentKeySecret => ({
   rotate: async () => {},
   rotating: false,
   adopt: () => {},
+  revoked: () => {},
 });
 
 const text = (node: React.ReactElement) =>
@@ -86,6 +87,25 @@ describe('当前密钥这一小节', () => {
     // 反向对照：不许还挂着那句已经不成立的话
     expect(t).not.toContain('只显示这一次');
     expect(t).not.toContain('不会再次显示');
+  });
+
+  /*
+   * 生成成功那一屏的标题。正文写的是「随时可以回设置页把它再看一次」（服务端 note），
+   * 标题却还写着「这把 key 只显示这一次」——两句话摆在同一屏上，信标题的那位会为了
+   * 换台设备去吊销重建，而重建会让他已经配好的其它客户端一起断连。
+   * 【为什么钉源码】那一屏要点「新建」再提交才出得来，本仓测试环境无 DOM、事件不跑；
+   * 真机那一版在 polish-browser.mjs（「弹层标题不再说只显示这一次」）。
+   */
+  it('生成成功弹层的标题与正文说同一件事', () => {
+    const src = readFileSync(
+      join(process.cwd(), 'src/app/(app)/settings/_components/ApiKeysCard.tsx'),
+      'utf8',
+    );
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const title = code.split('\n').find((l) => l.includes('title={issued'));
+    expect(title, '正对照：这一屏确实靠 issued 分标题').toBeDefined();
+    expect(title).not.toContain('只显示这一次');
+    expect(title).toContain('随时可回设置页查看');
   });
 
   it('存量旧密钥：照实说看不到，出路是轮换而不是「知道了」', () => {
@@ -208,5 +228,37 @@ describe('设置页那两张卡吃同一份密钥 state', () => {
         '用户从常驻卡复制走的是占位符话术。\n' +
         '怎么办：拿到响应后调 secret.adopt(body)。',
     ).toContain('secret.adopt(body)');
+  });
+
+  /*
+   * 【反过来那一半】新建要顶上去，吊销也要说一声。吊销掉的可能正是接入卡上摆着的那把：
+   * 列表这一行立刻变成「已吊销」，而下面那张卡照旧显示它的明文与「整段复制粘过去就能接上」
+   * ——用户复制走的是一把自己刚吊销、粘过去必然 401 的钥匙，两张卡各自看都很正常。
+   * 端到端那一版在真机脚本里（rd-byo-key/polish-browser.mjs 的「吊销当前那把之后」那步）。
+   */
+  it('API key 卡吊销成功后当场通知共享 state', () => {
+    const src = read('app/(app)/settings/_components/ApiKeysCard.tsx');
+    // 结束锚点带上换行与恰好两个空格：`return () => {` 那种缩进更深的行不算
+    const revoke = src.slice(src.indexOf('const revoke ='), src.indexOf('\n  return ('));
+    expect(revoke, '正对照：截到的确实是吊销那段').toContain("method: 'DELETE'");
+    expect(
+      revoke,
+      '缺什么：吊销成功后没有 secret.revoked(row.id)。\n' +
+        '为什么缺：吊销的可能正是同屏接入卡摆着的那把，不说一声它就继续显示' +
+        '一把已经作废的密钥与「粘过去就能接上」的话术。\n' +
+        '怎么办：DELETE 成功后调 secret.revoked(row.id)，由 hook 自己判断要不要重挑。',
+    ).toContain('secret.revoked(row.id)');
+  });
+
+  /*
+   * hook 那一侧：revoked 只对「吊销的就是当前这把」有反应。少了这半条，
+   * 用户清理一把八百年没用的旧钥匙也会把接入卡整段推倒重来（闪一下 loading）。
+   */
+  it('hook 的 revoked 只管当前那把，别的 id 一律不动', () => {
+    const hook = read('app/(app)/settings/_components/useAgentKeySecret.ts');
+    const fn = hook.slice(hook.indexOf('const revoked = useCallback'), hook.indexOf('return { state'));
+    expect(fn).toContain("if (!('id' in state) || state.id !== id) return;");
+    // 真要重挑时走的是与首帧同一份 loadState，不是就地再写一套挑选逻辑
+    expect(fn).toContain('loadState()');
   });
 });

@@ -196,6 +196,28 @@ describe('话术里的明文只有一处正本', () => {
     expect(src).toMatch(/type IssuedRef = SetupUrls & \{ id: number \}/);
     expect(code).not.toMatch(/issued\s*\??\.key/);
   });
+
+  /*
+   * 【结构守卫】上面那条只管「取不出来」，这条管「压根没进去」。
+   *
+   * onIssued(body) 是能过编译的：body 比 IssuedRef 多一个 key，TS 对变量（非字面量）
+   * 不做多余属性检查，于是那串明文原样进了这一页的 React state。屏幕上什么都看不出来，
+   * 而任何一处 JSON.stringify(issued)——埋点、报错上报、调试打印——都会把它带出去。
+   * 所以这里逐字段核对交给 onIssued 的那个对象字面量：只准这五项，多一项就红。
+   */
+  it('交给 onIssued 的是逐字段挑出来的五项，key 不在其中', () => {
+    const call = code.slice(code.indexOf('onIssued({'), code.indexOf('secret.adopt(body)'));
+    expect(call, '正对照：截到的确实是那次调用').toContain('onIssued({');
+    const fields = [...call.matchAll(/^\s*([a-z_]+):/gm)].map((m) => m[1]);
+    expect(new Set(fields)).toEqual(
+      new Set(['id', 'mcp_url', 'api_base', 'manifest_url', 'skill_url']),
+    );
+    expect(fields).not.toContain('key');
+    // 整个响应对象不许再原样塞进去（那正是 key 混进来的那条路）
+    expect(code).not.toMatch(/onIssued\(body\)/);
+    // 正对照：body.key 确实还在这一页用着（secret.adopt 要它），不是被整段删干净了
+    expect(code).toContain('secret.adopt(body)');
+  });
 });
 
 describe('验证这一步不需要新端点', () => {

@@ -16,7 +16,14 @@ import { encryptField } from '@/lib/crypto';
 import * as store from '@/lib/db/api-keys';
 import { getDb } from '@/lib/db/client';
 import { issuedKeyBody } from '../../_issued';
-import { keyNotFound, masterKeyConfigured, ownedKey, secretUnavailable } from '../../_secret';
+import {
+  NO_STORE,
+  keyNotFound,
+  keyRevoked,
+  masterKeyConfigured,
+  ownedKey,
+  secretUnavailable,
+} from '../../_secret';
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const guard = requireWebSession(getDb(), req);
@@ -24,6 +31,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const row = ownedKey(parseId((await params).id), guard.identity.uid);
   if (!row) return keyNotFound();
+
+  // 【吊销的不给轮换】enabled=0 之后 resolveIdentity 一律不认这一行，换多少次新明文
+  // 都还是一把 401 的 key。放它过去的形态最坏：用户在设置页看着「已吊销」那枚标记，
+  // 手里却拿到一串刚发的、看起来完全正常的新密钥，配进客户端之后一头撞上 401，
+  // 而页面从头到尾没说过一句它不能用。出路是新建，不是再轮换一次。
+  if (row.enabled !== 1) return keyRevoked();
 
   // 先探再写：主密钥不可用时若照旧 UPDATE，旧明文已经作废而新明文存不下密文，
   // 用户会拿到一把"这辈子只能看这一眼"的 key——比直接说不行更糟。
@@ -44,5 +57,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       clientName: row.client_name,
       key,
     }),
+    // 正文里躺着明文：这一趟谁都不许缓存
+    { headers: NO_STORE },
   );
 }

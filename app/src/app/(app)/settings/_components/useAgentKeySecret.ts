@@ -54,6 +54,14 @@ export interface AgentKeySecret {
   rotating: boolean;
   /** 刚生成/刚轮换出一把新的：直接顶掉当前 state（省一次往返，也省一次闪烁） */
   adopt: (k: { id: number; name: string; key: string }) => void;
+  /**
+   * 某把 key 被吊销了。吊销的**恰好是当前这把**时重挑一次，其余情况什么都不做。
+   *
+   * 【为什么不能不管】同屏那张接入卡吃的是这份 state。在 API key 卡里把当前这把吊销掉，
+   * 列表那一行立刻变成「已吊销」，而下面接入卡照旧摆着它的明文与「整段复制粘过去就能接上」
+   * ——用户复制走的是一把刚被自己吊销、粘过去必然 401 的钥匙，而两张卡各自看都很正常。
+   */
+  revoked: (id: number) => void;
 }
 
 /** 启用中的里面挑一把：用过的优先，都没用过就取最近创建的（列表已按 id DESC） */
@@ -73,6 +81,33 @@ export interface IssuedKey extends SetupUrls {
   key: string;
 }
 
+/**
+ * 拉列表 → 挑一把 → 取明文，算出下一个 state。**只算不写**，好让「首帧」与
+ * 「吊销掉当前那把之后重挑」用的是同一份口径——各写一份的形态是首帧认 legacy、
+ * 重挑那份忘了这一档，于是吊销之后页面对同一把旧密钥换了个说法。
+ */
+async function loadState(): Promise<KeySecretState> {
+  let row: KeyBrief | null;
+  try {
+    const body = await apiFetch<{ keys: KeyBrief[] }>('/keys');
+    row = pickManageable(body.keys);
+  } catch {
+    // 列表都取不到就当没有：这一屏还有「生成一把」那条路走得通，
+    // 摆一句「列表没取到」占住位置，比让他先去生成更没用。
+    return { kind: 'none' };
+  }
+  if (!row) return { kind: 'none' };
+  if (!row.viewable) return { kind: 'legacy', id: row.id, name: row.name };
+  try {
+    const secret = await apiFetch<{ key: string }>(`/keys/${row.id}/secret`);
+    return { kind: 'ready', id: row.id, name: row.name, secret: secret.key };
+  } catch (err) {
+    // 服务端的自述型 message 原样端上来：它已经写清了「这把 key 本身没事」
+    // 还是「只能轮换」，页面再包一层「出错了」等于把出路盖掉
+    return { kind: 'error', id: row.id, name: row.name, message: humanError(err) };
+  }
+}
+
 export function useAgentKeySecret(): AgentKeySecret {
   const signedIn = useSignedIn();
   const [state, setState] = useState<KeySecretState>({ kind: 'loading' });
@@ -84,30 +119,9 @@ export function useAgentKeySecret(): AgentKeySecret {
       return;
     }
     let alive = true;
-    void (async () => {
-      let row: KeyBrief | null;
-      try {
-        const body = await apiFetch<{ keys: KeyBrief[] }>('/keys');
-        row = pickManageable(body.keys);
-      } catch {
-        // 列表都取不到就当没有：这一屏还有「生成一把」那条路走得通，
-        // 摆一句「列表没取到」占住位置，比让他先去生成更没用。
-        if (alive) setState({ kind: 'none' });
-        return;
-      }
-      if (!alive) return;
-      if (!row) return setState({ kind: 'none' });
-      if (!row.viewable) return setState({ kind: 'legacy', id: row.id, name: row.name });
-
-      try {
-        const secret = await apiFetch<{ key: string }>(`/keys/${row.id}/secret`);
-        if (alive) setState({ kind: 'ready', id: row.id, name: row.name, secret: secret.key });
-      } catch (err) {
-        // 服务端的自述型 message 原样端上来：它已经写清了「这把 key 本身没事」
-        // 还是「只能轮换」，页面再包一层「出错了」等于把出路盖掉
-        if (alive) setState({ kind: 'error', id: row.id, name: row.name, message: humanError(err) });
-      }
-    })();
+    void loadState().then((next) => {
+      if (alive) setState(next);
+    });
     return () => {
       alive = false;
     };
@@ -130,5 +144,15 @@ export function useAgentKeySecret(): AgentKeySecret {
     }
   }, [state]);
 
-  return { state, rotate, rotating, adopt };
+  const revoked = useCallback(
+    (id: number) => {
+      // 吊销的不是当前这把（用户在列表里清理别的旧钥匙）：这一份 state 不该动
+      if (!('id' in state) || state.id !== id) return;
+      setState({ kind: 'loading' });
+      void loadState().then(setState);
+    },
+    [state],
+  );
+
+  return { state, rotate, rotating, adopt, revoked };
 }

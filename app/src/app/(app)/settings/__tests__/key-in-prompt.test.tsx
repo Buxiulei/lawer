@@ -24,6 +24,7 @@ const keySecret = {
   rotate: async () => {},
   rotating: false,
   adopt: () => {},
+  revoked: () => {},
 };
 
 vi.mock('@/app/_ui/discreet', () => ({ useDiscreet: () => ({ discreet: false, toggle: () => {} }) }));

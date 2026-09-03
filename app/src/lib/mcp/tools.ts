@@ -268,7 +268,7 @@ export const TOOLS: ToolDefinition[] = [
         },
         limit: {
           type: 'integer',
-          description: `最多几张，默认与上限都是 ${agent.MAX_INJECTED_PACKS}`,
+          description: `最多几张，默认与上限都是 ${agent.MAX_INJECTED_PACKS}；超出这个范围会被夹回 1~${agent.MAX_INJECTED_PACKS}`,
         },
       },
       required: ['query'],
@@ -286,7 +286,21 @@ export const TOOLS: ToolDefinition[] = [
           message: 'query 不能为空：给一组案情关键词，比如「经济补偿 计算 北京」',
         };
       }
-      const limit = Math.min(Number(args.limit) || agent.MAX_INJECTED_PACKS, agent.MAX_INJECTED_PACKS);
+      // limit 归一到 [1, MAX]，越界一律夹回来而**不报错**：这是对面模型自己填的数，
+      // 负数/0/小数/一万都属于它一眼看不出错在哪的填法，为此回一条 isError 只让它白跑一轮。
+      // 【夹不住的后果是实测出来的，不是推理】原来的 `Number(x) || MAX` 下：
+      //   limit=-5 → 检索器回 **30 张卡**，每张最长 1200 字摘要，一次调用填满对方一轮上下文；
+      //   limit=0  → 落回 MAX 看似无害，但 0 本身该被读成「他填错了」而不是「不限」。
+      // 两种都返回 200、格式完全正常，没有任何一处会报错。
+      // 只有数字（或数字串，有些客户端把入参一律序列化成字符串）才算「他真的给了个数」；
+      // true / {} / 'abc' / 没给，都落回默认满额，而不是 Number(true)=1 这种巧合值。
+      const asked =
+        typeof args.limit === 'number' || (typeof args.limit === 'string' && args.limit.trim())
+          ? Math.floor(Number(args.limit))
+          : NaN;
+      const limit = Number.isFinite(asked)
+        ? Math.min(Math.max(asked, 1), agent.MAX_INJECTED_PACKS)
+        : agent.MAX_INJECTED_PACKS;
       const type = typeof args.type === 'string' ? args.type : undefined;
       const packs = agent.createKnowledgeSearcher().search(query, { limit, type });
       return {

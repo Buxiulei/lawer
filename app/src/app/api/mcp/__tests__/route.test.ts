@@ -9,7 +9,12 @@ import path from 'node:path';
 import type { Database } from 'better-sqlite3';
 
 import { generateApiKey, hashApiKey } from '@/lib/auth/api-key';
-import { CASE_FACTS_BUDGET, createKnowledgeSearcher, packCitationGuide } from '@/lib/agent';
+import {
+  CASE_FACTS_BUDGET,
+  MAX_INJECTED_PACKS,
+  createKnowledgeSearcher,
+  packCitationGuide,
+} from '@/lib/agent';
 
 type Handler = (req: Request) => Promise<Response>;
 let POST: Handler;
@@ -255,6 +260,13 @@ describe('tools/list', () => {
     expect(tool.inputSchema.required).not.toContain('case_id');
   });
 
+  /*
+   * 【knowledge_search 已从这份名单里删掉】它曾经与下面四项并列在「暂不交付」里。
+   * 2026-09-03 经理裁决：**接受已交付**（ws/byo-key-rotate 复审台账，本单第 8 项）——
+   * 它在 1a2ae29 随 case_facts 一起上线，走的是站内 agent 同一个 createKnowledgeSearcher，
+   * 不在我们这边调模型。名单留着它的形态是：一条永远红的守卫钉着一件已经做完的事，
+   * 下一个人要么删判据要么删功能，而两条路都没有台账可依。其余四项原样禁止。
+   */
   test('暂不交付的工具（计算器/文书/上传/OCR）一个都不许出现', async () => {
     const res = await POST(rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, keyA));
     const names: string[] = (await res.json()).result.tools.map((t: { name: string }) => t.name);
@@ -412,6 +424,47 @@ describe('tools/call', () => {
         expect(body.result.isError, JSON.stringify(args)).toBe(true);
         expect(JSON.parse(body.result.content[0].text).error_code).toBe('INVALID_QUERY');
       }
+    });
+
+    /**
+     * limit 归一到 [1, MAX]。
+     *
+     * 【为什么这条判据不是形式主义】limit 是对面模型自己填的数。原来的
+     * `Math.min(Number(x) || MAX, MAX)` 把负数原样放行：实测 limit=-5 时检索器回
+     * **30 张卡**，每张最长 1200 字摘要，一次 tools/call 就把对方一轮上下文填满——
+     * 而它返回 200、格式完全正常，没有任何一处会报错。
+     */
+    test('limit 越界一律夹回 [1, MAX]，不报错也不回 0 张', async () => {
+      const packsOf = async (args: Record<string, unknown>) => {
+        const { body } = await call('knowledge_search', { query: '经济补偿 计算', ...args }, keyA);
+        expect(body.result.isError, JSON.stringify(args)).toBe(false);
+        return (JSON.parse(body.result.content[0].text) as { packs: unknown[] }).packs;
+      };
+
+      // 正对照：这条 query 本身命中足够多，下面「夹到 1」「不超 MAX」才量得出来
+      const full = await packsOf({});
+      expect(full).toHaveLength(MAX_INJECTED_PACKS);
+
+      // 夹下界：负数与 0 都不是「不限」也不是「一张都不要」
+      for (const bad of [-5, -1, 0, 0.4]) {
+        const got = await packsOf({ limit: bad });
+        expect(got.length, `limit=${bad}`).toBeGreaterThanOrEqual(1);
+        expect(got.length, `limit=${bad}`).toBeLessThanOrEqual(MAX_INJECTED_PACKS);
+      }
+      // 夹上界：要多少都不给超
+      for (const big of [MAX_INJECTED_PACKS + 1, 9999]) {
+        expect((await packsOf({ limit: big })).length, `limit=${big}`).toBe(MAX_INJECTED_PACKS);
+      }
+      // 压根不是个数：落回默认满额，而不是 NaN 一路传进检索器
+      for (const junk of ['abc', null, true, {}]) {
+        expect((await packsOf({ limit: junk })).length, JSON.stringify(junk)).toBe(
+          MAX_INJECTED_PACKS,
+        );
+      }
+      // 正对照：合法的 limit 照旧说了算（否则上面全绿也可能只是「limit 从此没人看」）
+      expect(await packsOf({ limit: 1 })).toHaveLength(1);
+      expect(await packsOf({ limit: 2 })).toHaveLength(2);
+      expect(await packsOf({ limit: 2.7 })).toHaveLength(2);
     });
 
     /**

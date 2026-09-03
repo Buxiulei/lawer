@@ -263,7 +263,17 @@ function IssueKey({
         // 想收紧到只读的人走设置页那张卡自己勾。
         body: { name: name.trim(), scopes: ['case:read', 'case:write'] },
       });
-      onIssued(body);
+      // 【逐字段挑出来，不整个塞】body 里带着明文 key。整个塞进 issued 之后，
+      // 类型上它是 IssuedRef（没有 key 这一位）、页面也确实不渲染它——但那串明文
+      // 从此挂在这一页的 React state 里，任何一处 JSON.stringify(issued)（埋点、
+      // 报错上报、调试打印）都会把它原样带出去，而屏幕上什么都看不出来。
+      onIssued({
+        id: body.id,
+        mcp_url: body.mcp_url,
+        api_base: body.api_base,
+        manifest_url: body.manifest_url,
+        skill_url: body.skill_url,
+      });
       // 顶掉 hook 的 'none' 态：刚生成的这把就是当前那把，不必再往返一趟去问
       secret.adopt(body);
     } catch (err) {

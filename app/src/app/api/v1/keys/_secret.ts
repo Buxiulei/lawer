@@ -10,6 +10,17 @@ import { findApiKeyById, type ApiKeyRow } from '@/lib/db/api-keys';
 import { getDb } from '@/lib/db/client';
 
 /**
+ * 回明文那几趟的响应头。
+ *
+ * 【为什么必须 no-store】签发、轮换、查看这三条响应的正文里躺着一串可以直接读写
+ * 用户全部案件档案的凭据。默认响应头下，浏览器与中途任何一层共享缓存都有权把它
+ * 留在磁盘上——用户在网吧或公用电脑上看过一眼密钥，人走了，那份 JSON 还在。
+ * 更隐蔽的是 bfcache/前进后退：页面回退时把带明文的响应重放出来，而屏幕上
+ * 一切正常。这一行不改变任何人看得见的东西，所以只能靠判据钉住。
+ */
+export const NO_STORE = { 'cache-control': 'no-store' } as const;
+
+/**
  * 归属校验。**别人的 key 与不存在的 key 返回同一个响应体**，不泄漏 id 是否被占用
  *（与 DELETE /keys/{id} 逐字一致）。
  */
@@ -72,6 +83,22 @@ export function keyNotViewable(): NextResponse {
         '缺什么：这把是旧密钥，看不到明文。' +
         '为什么缺：它签发的时候我们还没有留存明文，当年就只存了指纹，今天也变不出来。' +
         '怎么办：点「轮换」换一把新的——名字、权限都不变，换完把新密钥重新配进你的客户端。',
+    },
+    { status: 409 },
+  );
+}
+
+/** 已吊销的 key 不能轮换：轮换是「换一串密码继续用这把」，而这把已经没有「继续用」可言。 */
+export function keyRevoked(): NextResponse {
+  return NextResponse.json(
+    {
+      ok: false,
+      error_code: 'KEY_REVOKED',
+      message:
+        '缺什么：这把 key 已经吊销了，不能轮换。' +
+        '为什么缺：轮换换的只是那串明文，「这把 key 还能不能用」原样不变——' +
+        '给一把吊销掉的 key 换新明文，只会得到一串照样 401 的新密钥。' +
+        '怎么办：新建一把——名字、权限你重新勾一遍，生成完把新密钥配进客户端。',
     },
     { status: 409 },
   );

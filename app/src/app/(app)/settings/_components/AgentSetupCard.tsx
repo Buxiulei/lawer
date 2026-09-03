@@ -48,7 +48,7 @@ export function AgentSetupCard({ secret }: { secret: AgentKeySecret }) {
 
           {/*
             省钱引导。**措辞的边界**：只说「MCP 这几个工具不扣公道值」，
-            这是可核对的事实——`lib/mcp/tools.ts` 里七个工具全是读写案件数据，
+            这是可核对的事实——`lib/mcp/tools.ts` 里九个工具全是读写案件数据与检索本地知识库，
             没有一个在我们这边调模型。**不写「接了就免费」**：网页对话照旧扣费，
             把话说满会在用户第一次看见扣费时变成谎话。
           */}

@@ -72,6 +72,7 @@ vi.mock('../../_components/useAgentKeySecret', async (importOriginal) => ({
     rotate: async () => {},
     rotating: false,
     adopt: () => {},
+    revoked: () => {},
   }),
 }));
 

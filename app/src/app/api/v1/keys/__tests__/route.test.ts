@@ -362,6 +362,52 @@ describe('轮换', () => {
     });
   });
 
+  /*
+   * 【为什么必须挡】轮换换的只是明文那一串，enabled 那一位不动。放它过去的形态是：
+   * 用户拿到一串刚发的、看起来完全正常的新密钥，配进客户端一头撞上 401——
+   * 而页面上那一行明明写着「已吊销」，只是没人在他点下去的时候拦一句。
+   */
+  test('【自述】吊销了的 key 不给轮换 → 409 KEY_REVOKED，出路是新建', async () => {
+    const created = await createKey(req('POST', { name: '待吊销' }, signToken(userA)));
+    const { id, key } = await created.json();
+    const before = db.prepare('SELECT key_hash, rotated_at FROM api_keys WHERE id = ?').get(id) as {
+      key_hash: string;
+      rotated_at: string | null;
+    };
+
+    await withId(revokeKey, id, signToken(userA), 'DELETE');
+    const res = await withId(rotateKey, id, signToken(userA), 'POST');
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error_code).toBe('KEY_REVOKED');
+    // 自述三段式，且把出路说成「新建」而不是再轮换一次
+    for (const part of ['缺什么', '为什么缺', '怎么办']) expect(body.message).toContain(part);
+    expect(body.message).toContain('新建');
+    // 响应里当然不许带明文
+    expect(body.key).toBeUndefined();
+    // 库里那一行纹丝不动：没换 hash、没落 rotated_at（挡在写之前，不是写完再报错）
+    expect(db.prepare('SELECT key_hash, rotated_at FROM api_keys WHERE id = ?').get(id)).toEqual(before);
+    // 正对照：吊销之前这把是能轮换的（否则上面那条落在「谁都轮换不了」的空集上）
+    const other = await createKey(req('POST', { name: '还活着' }, signToken(userA)));
+    const alive = await other.json();
+    expect((await withId(rotateKey, alive.id, signToken(userA), 'POST')).status).toBe(200);
+    expect(key).toBeTruthy();
+  });
+
+  /*
+   * 【查看仍然给看】吊销挡的是「轮换」这一个动作，不是「看一眼当年配进去的是哪一把」。
+   * 一并钉住，免得下一个人顺手把 enabled 检查搬进 _secret 的公共段，
+   * 于是 GET /secret 也跟着 409——那条路径的注释里写着它故意让看。
+   */
+  test('吊销不影响查看明文（挡的只是轮换这一个动作）', async () => {
+    const created = await createKey(req('POST', { name: '吊销了还想核对' }, signToken(userA)));
+    const { id, key } = await created.json();
+    await withId(revokeKey, id, signToken(userA), 'DELETE');
+    const res = await withId(readSecret, id, signToken(userA));
+    expect(res.status).toBe(200);
+    expect((await res.json()).key).toBe(key);
+  });
+
   test('【红线】api key 身份轮换不了，别人的 key 也轮换不了', async () => {
     const created = await createKey(req('POST', { name: '甲的' }, signToken(userA)));
     const { id, key } = await created.json();
@@ -391,5 +437,42 @@ describe('列表面', () => {
     db.prepare('UPDATE api_keys SET secret_enc = NULL WHERE id = ?').run(id);
     const old = await (await listKeys(req('GET', undefined, signToken(userA)))).json();
     expect(old.keys[0].viewable).toBe(false);
+  });
+});
+
+/* ── 明文出网这几趟不许被缓存 ─────────────────────────── */
+
+describe('回明文的响应一律 no-store', () => {
+  /*
+   * 【守的是什么】这三条响应的正文里躺着一串能读写用户全部案件档案的凭据。
+   * 少了这一行，浏览器与中途任何一层共享缓存都有权把它落到磁盘上——用户在公用电脑上
+   * 看过一眼密钥，人走了，那份 JSON 还在；前进后退时 bfcache 还会把它重放出来，
+   * 而屏幕上一切正常。这一行不改变任何人看得见的东西，只能靠判据钉住。
+   */
+  test('签发 / 轮换 / 查看：三条都带 cache-control: no-store', async () => {
+    const created = await createKey(req('POST', { name: '缓存判据' }, signToken(userA)));
+    expect(created.headers.get('cache-control')).toBe('no-store');
+    const { id, key } = await created.json();
+    expect(key).toBeTruthy(); // 正对照：这一趟确实回了明文，才谈得上不许缓存
+
+    const read = await withId(readSecret, id, signToken(userA));
+    expect(read.headers.get('cache-control')).toBe('no-store');
+    expect((await read.json()).key).toBe(key);
+
+    const rotated = await withId(rotateKey, id, signToken(userA), 'POST');
+    expect(rotated.headers.get('cache-control')).toBe('no-store');
+    expect((await rotated.json()).key).toBeTruthy();
+  });
+
+  /*
+   * 反向对照：不回明文的那条（列表）不必背这条头。少了它，把 no-store 撒在整个
+   * NextResponse 工具层上也照样全绿，而判据就变成了「随便哪儿有就行」。
+   */
+  test('列表面不回明文，也就不在这条判据的管辖内', async () => {
+    await createKey(req('POST', { name: '列表' }, signToken(userA)));
+    const list = await listKeys(req('GET', undefined, signToken(userA)));
+    const body = await list.json();
+    expect(body.keys).toHaveLength(1);
+    expect(JSON.stringify(body)).not.toMatch(/"key"/);
   });
 });
