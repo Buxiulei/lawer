@@ -5,6 +5,14 @@ import { ApiError, apiUpload, humanError } from '@/app/_ui/api';
 import { formatBytes } from '@/app/_ui/format';
 import { Button } from '@/components/shadcn/button';
 import { InputField } from '@/components/shadcn/field';
+import { UploadTile } from '@/components/UploadTile';
+import {
+  FORM_ACTION_BUTTON,
+  FORM_ACTIONS,
+  FORM_BODY,
+  FORM_FIELDS,
+  missingHint,
+} from './formLayout';
 
 /**
  * 护照实名通道。**给没有身份证的人用**——阿里云那条刷脸通道只认大陆二代证，
@@ -80,7 +88,12 @@ const SHOTS: Shot[] = [
   },
 ];
 
-export function passportReady({
+/**
+ * 缺哪几样。顺序与表单里从上往下的顺序一致——用户照着这句话回去补，不用自己找。
+ * 「能不能提交」与「还缺什么」**由同一个函数算**：分开写两遍，
+ * 迟早出现按钮亮着却说还缺、或按钮灰着说都齐了这种自相矛盾的状态。
+ */
+export function passportMissing({
   realName,
   passportNo,
   hasIdPage,
@@ -90,10 +103,22 @@ export function passportReady({
   passportNo: string;
   hasIdPage: boolean;
   hasSelfie: boolean;
+}): string[] {
+  const missing: string[] = [];
+  if (realName.trim().length === 0) missing.push('姓名');
+  if (passportNo.trim().length === 0) missing.push('护照号');
+  if (!hasIdPage) missing.push('护照资料页照片');
+  if (!hasSelfie) missing.push('手持护照自拍');
+  return missing;
+}
+
+export function passportReady(input: {
+  realName: string;
+  passportNo: string;
+  hasIdPage: boolean;
+  hasSelfie: boolean;
 }): boolean {
-  return (
-    realName.trim().length > 0 && passportNo.trim().length > 0 && hasIdPage && hasSelfie
-  );
+  return passportMissing(input).length === 0;
 }
 
 export function PassportForm({
@@ -111,6 +136,8 @@ export function PassportForm({
   const [passportNo, setPassportNo] = useState('');
   const [files, setFiles] = useState<Partial<Record<Shot['key'], File>>>({});
   const [previews, setPreviews] = useState<Partial<Record<Shot['key'], string>>>({});
+  /** 每格自己的错误（太大）就落在那一格上：整表一句红字，用户不知道是哪张照片的事 */
+  const [shotErrors, setShotErrors] = useState<Partial<Record<Shot['key'], string>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -128,15 +155,17 @@ export function PassportForm({
     if (!file) return;
     // 传之前就拦：8MB 的图在移动数据上传完再被服务端退，那几 MB 是白花的
     if (file.size > MAX_MATERIAL_BYTES) {
-      setError(
-        `这张 ${formatBytes(file.size)}，超过单张 8MB 的上限。用手机相册里的「编辑」压一下，或者把拍摄分辨率调低一档再选一次。`,
-      );
+      setShotErrors((prev) => ({
+        ...prev,
+        [key]: `这张 ${formatBytes(file.size)}，超过单张 8MB。用相册里的「编辑」压一下，或把拍摄分辨率调低一档再选一次。`,
+      }));
       return;
     }
     const url = URL.createObjectURL(file);
     urls.current.push(url);
     setFiles((prev) => ({ ...prev, [key]: file }));
     setPreviews((prev) => ({ ...prev, [key]: url }));
+    setShotErrors((prev) => ({ ...prev, [key]: undefined }));
     setError(null);
   };
 
@@ -146,12 +175,14 @@ export function PassportForm({
    * 误拒一部分真实护照——**而误拒的代价是用户被自己的证件挡在门外，且他没有申诉入口**。
    * 格式判断交给后端（它有 INVALID_PASSPORT_NO），前端只做非空。
    */
-  const ready = passportReady({
+  const missing = passportMissing({
     realName,
     passportNo,
     hasIdPage: Boolean(files.id_page),
     hasSelfie: Boolean(files.selfie),
   });
+  const ready = missing.length === 0;
+  const hint = missingHint(missing);
 
   const submit = async () => {
     setSubmitting(true);
@@ -176,129 +207,120 @@ export function PassportForm({
 
   return (
     <form
-      className="flex flex-col gap-4"
+      className={FORM_BODY}
       onSubmit={(e) => {
         e.preventDefault();
         if (ready && !submitting) void submit();
       }}
     >
-      {rejectedMessage && (
-        <p className="rounded-[10px] bg-amber-wash px-3 py-2.5 text-[14px] leading-6 text-amber-ink">
-          上一次没通过：{rejectedMessage}。常见原因是照片糊、有反光、四角没拍全，
-          或姓名拼写与护照不一致。重拍时把护照放平、避开顶灯，字能看清就够了。
+      <div className="flex flex-col gap-3">
+        {rejectedMessage && (
+          <p className="rounded-[10px] bg-amber-wash px-3 py-2.5 text-[14px] leading-6 text-amber-ink">
+            上一次没通过：{rejectedMessage}。常见原因是照片糊、有反光、四角没拍全，
+            或姓名拼写与护照不一致。重拍时把护照放平、避开顶灯，字能看清就够了。
+          </p>
+        )}
+
+        {/* 「人工审核」这件事决定了用户提交后该期待什么，不能混在正文里当一句普通说明 */}
+        <p className="flex items-start gap-2 rounded-[10px] bg-surface-2 px-3 py-2.5 text-[14px] leading-6 text-ink-2">
+          <ClockIcon />
+          <span>
+            护照通道是<span className="font-semibold text-ink">人工审核</span>
+            ，提交后一般一到两个工作日出结果，期间不影响你用其他功能。
+          </span>
         </p>
-      )}
+      </div>
 
-      <p className="text-[14px] leading-6 text-ink-2">
-        护照通道是<span className="font-semibold text-ink">人工审核</span>
-        ，提交后一般一到两个工作日出结果，期间不影响你用其他功能。
-      </p>
+      {/* 姓名与护照号是本人身份信息：低调模式下整块进糊层（输入时聚焦自动清晰） */}
+      <div className={FORM_FIELDS}>
+        <div data-veil="">
+          <InputField
+            label="姓名"
+            hint="与护照上的一致；护照上是拼音就填拼音"
+            autoComplete="name"
+            value={realName}
+            onChange={(e) => setRealName(e.target.value)}
+            maxLength={60}
+          />
+        </div>
+        <div data-veil="">
+          <InputField
+            label="护照号"
+            hint="护照资料页右上角那串"
+            inputMode="text"
+            autoComplete="off"
+            value={passportNo}
+            onChange={(e) => setPassportNo(e.target.value.replace(/\s/g, ''))}
+            maxLength={20}
+          />
+        </div>
+      </div>
 
-      <InputField
-        label="姓名"
-        hint="与护照上的一致；护照上是拼音就填拼音"
-        autoComplete="name"
-        value={realName}
-        onChange={(e) => setRealName(e.target.value)}
-        maxLength={60}
-      />
-      <InputField
-        label="护照号"
-        hint="护照资料页右上角那串"
-        inputMode="text"
-        autoComplete="off"
-        value={passportNo}
-        onChange={(e) => setPassportNo(e.target.value.replace(/\s/g, ''))}
-        maxLength={20}
-      />
+      <div className="flex flex-col gap-3">
+        <p className="text-[15px] font-medium text-ink">两张照片</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {SHOTS.map((shot) => (
+            <UploadTile
+              key={shot.key}
+              id={`passport-${shot.key}`}
+              label={shot.label}
+              hint={shot.hint}
+              file={files[shot.key]}
+              preview={previews[shot.key]}
+              error={shotErrors[shot.key]}
+              disabled={submitting}
+              onPick={(f) => pick(shot.key, f)}
+            />
+          ))}
+        </div>
+      </div>
 
-      {SHOTS.map((shot) => (
-        <ShotPicker
-          key={shot.key}
-          shot={shot}
-          file={files[shot.key]}
-          preview={previews[shot.key]}
-          disabled={submitting}
-          onPick={(f) => pick(shot.key, f)}
-        />
-      ))}
+      <div className="flex flex-col gap-3">
+        {error && (
+          <p className="rounded-[10px] bg-amber-wash px-3 py-2.5 text-[14px] leading-6 text-amber-ink">
+            {error}
+          </p>
+        )}
 
-      {error && (
-        <p className="rounded-[10px] bg-amber-wash px-3 py-2.5 text-[14px] leading-6 text-amber-ink">
-          {error}
-        </p>
-      )}
+        {submitting && progress > 0 && (
+          <p className="num text-[13px] leading-5 text-ink-2">
+            正在上传 {Math.round(progress * 100)}%
+          </p>
+        )}
 
-      {submitting && progress > 0 && (
-        <p className="num text-[13px] leading-5 text-ink-2">
-          正在上传 {Math.round(progress * 100)}%
-        </p>
-      )}
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={!ready || submitting}>
-          {submitting ? '正在提交…' : '提交审核'}
-        </Button>
-        <Button type="button" variant="ghost" onClick={onCancel} disabled={submitting}>
-          用身份证认证
-        </Button>
+        <div className={FORM_ACTIONS}>
+          <Button type="submit" className={FORM_ACTION_BUTTON} disabled={!ready || submitting}>
+            {submitting ? '正在提交…' : '提交审核'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={FORM_ACTION_BUTTON}
+            onClick={onCancel}
+            disabled={submitting}
+          >
+            改用身份证认证
+          </Button>
+          {hint && <span className="text-[13px] leading-5 text-ink-2">{hint}</span>}
+        </div>
       </div>
     </form>
   );
 }
 
-/**
- * 一张照片的选择位。**预览要给到整列宽**——这张预览的唯一用途是让用户自己看出糊没糊，
- * 缩略图大小的预览看什么都清楚，等于没给。同时把文件大小摆出来：
- * 手机直出照片动辄好几 MB，用移动数据的人有权在点提交之前知道这件事。
- */
-function ShotPicker({
-  shot,
-  file,
-  preview,
-  disabled,
-  onPick,
-}: {
-  shot: Shot;
-  file?: File;
-  preview?: string;
-  disabled: boolean;
-  onPick: (file: File | undefined) => void;
-}) {
-  const inputId = `passport-${shot.key}`;
+function ClockIcon() {
   return (
-    <div>
-      <p className="text-[15px] font-medium text-ink">{shot.label}</p>
-      <p className="mt-0.5 text-[13px] leading-5 text-ink-2">{shot.hint}</p>
-
-      {preview && (
-        <img
-          src={preview}
-          alt={`${shot.label}预览`}
-          className="mt-2 block w-full rounded-[10px] border border-line"
-        />
-      )}
-
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        {/* label 关联 input：整块都是触区，不用另做一个假按钮 */}
-        <label
-          htmlFor={inputId}
-          className="inline-flex min-h-11 cursor-pointer items-center rounded-[8px] border border-ink px-4 text-[14px] font-medium text-ink"
-        >
-          {file ? '重新选' : '选择照片'}
-        </label>
-        <input
-          id={inputId}
-          type="file"
-          accept="image/*"
-          disabled={disabled}
-          className="sr-only"
-          onChange={(e) => onPick(e.target.files?.[0])}
-        />
-        {file && (
-          <span className="num text-[13px] text-ink-2">{formatBytes(file.size)}</span>
-        )}
-      </div>
-    </div>
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="mt-1 size-4 shrink-0 text-ink-2"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    >
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 1.8" />
+    </svg>
   );
 }

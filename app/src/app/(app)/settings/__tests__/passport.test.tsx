@@ -104,7 +104,9 @@ describe('表单初始渲染', () => {
   });
 
   it('提交键默认禁用——四样没齐不给点', () => {
-    expect(html).toMatch(/<button[^>]*disabled[^>]*>[^<]*提交审核/);
+    // `disabled=""` 要连等号一起钉：按钮 class 里本就有 disabled:pointer-events-none，
+    // 松正则（/[^>]*disabled[^>]*/）在属性被删掉之后照样绿。
+    expect(html).toMatch(/<button[^>]*\sdisabled=""[^>]*>[^<]*提交审核/);
   });
 
   it('留了回到身份证通道的路', () => {
