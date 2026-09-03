@@ -345,6 +345,8 @@
 
 **2026-09-03 · realname-form-ui PASS（878cf06）+ 经理补两判据（9099986）→ 主干 f9dd3fb**：表单 576px 左对齐/手机全宽；UploadTile 共用上传格（整格 label、缩略图+换一张、错误态红边+原因）两通道唯一 file input 入口；按钮组主次同高 48、缺项提示逐步准确；callout；低调糊层零露出；真机 132/132 量值通过、24 臂全红。裁决：field.tsx 标签间距 gap-2（全站共用原语）**接受**；两通道提示落点不一致与错误态两格底不齐两处肉眼级排版留下轮；RealnameCard missing[] 缺判据留待办。经理补 sm:grid-cols-2 / border-dashed 两条判据（R1/R4 存活臂转红）。CI 盯梢中。
 
+**2026-09-03 · 生产上线 f9dd3fb（实名认证表单排版）**：build EXIT=0 → restart 双 active → / /settings /settings/agent 200、/woo 307。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
