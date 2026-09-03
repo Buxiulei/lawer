@@ -355,6 +355,8 @@
 - dialog：AlertDialogAction 收 variant 后主次字号 320→14/360→14.76/393→16 一致，g6 四档 205 断言绿，变异 M7 红；仪器坑记账（tailwind-merge 同组后者胜、只量 393 量不到）。
 - 主干 CI 盯梢中；上产要跑迁移（api_keys.secret_enc）。
 
+**2026-09-03 · 主干 fcce623 CI 红（tsc）→ 经理修补 417b602**：admin-passport-review 的路由测试调 insertApiKey 未带 byo-key 新增的 secretEnc——两支各自 CI 绿、合并后类型不齐。修补：测试补占位密文；本地 tsc 0、23/23 绿后 push。**规矩**：集成 worktree 合完多支后先本地 tsc（wt-int 已挂 node_modules 软链）再 push，不拿 CI 当第一道 tsc。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
