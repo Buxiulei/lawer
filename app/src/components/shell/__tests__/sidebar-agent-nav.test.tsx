@@ -163,8 +163,11 @@ describe('侧栏：状态徽标两态', () => {
   it('两态徽标都在整屏侧栏里真的渲染出来（不是只有组件单测绿）', () => {
     agent.connected = false;
     expect(html()).toContain(BYO.navBadgeIdle);
+    // 徽标只许挂在接入那一栏上：整屏恰好一枚（复核 R8：去掉 item.key 条件后每栏都长「推荐」，此前无判据）
+    expect(html().match(/data-agent-nav-badge=/g)?.length, '徽标数量不是 1——挂到别的栏上了或没挂').toBe(1);
     agent.connected = true;
     expect(html()).toContain(BYO.navBadgeConnected);
+    expect(html().match(/data-agent-nav-badge=/g)?.length).toBe(1);
   });
 });
 
