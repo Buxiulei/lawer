@@ -18,11 +18,12 @@
 /** 压在 history state 里的步数键。**不许改名**：改了等于旧条目全成了「不是我们的」。 */
 export const STEP_STATE_KEY = 'intakeStep';
 
-/** history 的最小面：只用到这四样，测试拿假栈顶上。 */
+/** history 的最小面：只用到这几样，测试拿假栈顶上。 */
 export interface HistoryLike {
   readonly state: unknown;
   pushState(state: unknown, unused: string): void;
   replaceState(state: unknown, unused: string): void;
+  go(delta: number): void;
 }
 
 /**
@@ -50,4 +51,20 @@ export function seedStepHistory(h: HistoryLike, step: number): void {
 /** 往前走一步：压一个条目，于是返回键能退回来。**别改成 replaceState**。 */
 export function pushStepHistory(h: HistoryLike, next: number): void {
   h.pushState({ [STEP_STATE_KEY]: next }, '');
+}
+
+/**
+ * 清空重填：把历史栈退回向导的**第一格**。
+ *
+ * 【为什么不能只改栈顶】走到第 3 步时栈里是 [外面那页, 第1步, 第2步, 第3步]，
+ * 只把栈顶改写成「第 1 步」的话，下面那两格还写着第 1、2 步，
+ * 按一下返回就弹回其中一格——屏幕上是「第 2 / 6 步」的一张空表单，
+ * 而「第 1 步返回才离开」当场失效（F-208 复核 MF-1 实测到的正是这一幕）。
+ * 退回第一格才把「栈深＝步数」这条不变量恢复过来：清空后第 1 步，栈里也就一格。
+ *
+ * 【为什么 step 为 0 时什么都不做】`history.go(0)` 在浏览器里是**刷新当前页**，
+ * 而这时栈深已经是 0、栈顶就是第 1 步那一格，本来就没有要退的。
+ */
+export function resetStepHistory(h: HistoryLike, step: number): void {
+  if (step > 0) h.go(-step);
 }

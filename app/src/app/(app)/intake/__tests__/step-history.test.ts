@@ -8,12 +8,15 @@
  * 这一组拿一个假历史栈把三件事逐条量出来（测试环境里没有浏览器）：
  *   ① 每前进一步压一个条目 → 返回键逐级退回；
  *   ② 第 1 步再往回，弹出来的是**向导压之前**那个条目 → 读不出步数 → 该离开；
- *   ③ 草稿恢复到第 N 步时也要把 N 个条目铺上，否则返回键第一下照样直接出去。
+ *   ③ 草稿恢复到第 N 步时也要把 N 个条目铺上，否则返回键第一下照样直接出去；
+ *   ④ 清空重填之后，栈也退回第一格——只改栈顶的话，返回一下弹回的是
+ *      「第 2 / 6 步」的一张空表单，②那一条当场失效（复核 MF-1）。
  * 外加一条接线守卫：IntakeFlow 真的用了这几个函数——纯函数全绿而组件没调，
  * 和没修一模一样。
  *
  * 变异臂：
  *   · pushStepHistory 改成 replaceState（不 pushState）→ ①③红
+ *   · resetStepHistory 改回「只改写栈顶」（replaceState 第 0 步）→ ④红
  *   · IntakeFlow 里删掉 pushStepHistory 那一行 → 接线守卫红
  */
 import { readFileSync } from 'node:fs';
@@ -24,6 +27,7 @@ import { describe, expect, it } from 'vitest';
 import {
   STEP_STATE_KEY,
   pushStepHistory,
+  resetStepHistory,
   seedStepHistory,
   stepFromHistoryState,
   type HistoryLike,
@@ -49,6 +53,12 @@ class FakeHistory implements HistoryLike {
   }
   replaceState(state: unknown): void {
     this.entries[this.i] = state;
+  }
+  /** 退了几格：go(0) 在真浏览器里是刷新当前页，所以「调没调、调的几」都要看得见。 */
+  goCalls: number[] = [];
+  go(delta: number): void {
+    this.goCalls.push(delta);
+    this.i = Math.max(0, Math.min(this.entries.length - 1, this.i + delta));
   }
   /** 模拟返回键：退一格，返回那一格的 state（就是 popstate 事件里的 e.state）。 */
   back(): unknown {
@@ -107,6 +117,40 @@ describe('F-208 向导的历史栈：一步一个条目', () => {
     expect(stepFromHistoryState(h.back())).toBe(1);
   });
 
+  it('清空重填之后再按返回，是离开向导，不是弹回一张空表单', () => {
+    const h = new FakeHistory();
+    seedStepHistory(h, 0);
+    pushStepHistory(h, 1);
+    pushStepHistory(h, 2); // 用户填到第 3 步
+    resetStepHistory(h, 2); // 点「清空重填」
+
+    expect(stepFromHistoryState(h.state), '清空后当前条目该是第 1 步').toBe(0);
+    expect(
+      stepFromHistoryState(h.back()),
+      '缺什么：清空重填之后按一下返回，弹出来的还是向导内部的某一步。\n' +
+        '为什么缺：只把栈顶改写成第 1 步的话，栈里下面那几格还写着第 1、2 步——' +
+        '返回一下就回到「第 2 / 6 步」的一张空表单，四个输入框全空。' +
+        '用户刚说了「清空重填」，屏幕上却退到了半截；' +
+        '而且「第 1 步返回才离开」这条当场失效（复核 MF-1 实测到的正是这一幕）。\n' +
+        '怎么办：清空时调 resetStepHistory 退回第一格，别只 replaceState 栈顶。',
+    ).toBe(null);
+  });
+
+  it('第 1 步上清空重填，一格都不退（go(0) 在浏览器里是刷新当前页）', () => {
+    const h = new FakeHistory();
+    seedStepHistory(h, 0);
+    resetStepHistory(h, 0);
+    expect(
+      h.goCalls,
+      '缺什么：第 1 步点清空重填也调了 history.go。\n' +
+        '为什么缺：这时栈里本来就只有第 1 步那一格，没有要退的；' +
+        '而 go(0) 不是「不动」，是**刷新当前页**——用户会看见整页白闪一下。\n' +
+        '怎么办：resetStepHistory 里 step > 0 才退。',
+    ).toEqual([]);
+    expect(stepFromHistoryState(h.state), '当前条目照旧是第 1 步').toBe(0);
+    expect(stepFromHistoryState(h.back()), '再返回一下照旧该离开').toBe(null);
+  });
+
   it('反向对照：非本向导压的 state 一律读成 null，不瞎猜', () => {
     for (const junk of [null, undefined, {}, { [STEP_STATE_KEY]: '2' }, { [STEP_STATE_KEY]: -1 }, 42]) {
       expect(stepFromHistoryState(junk)).toBe(null);
@@ -125,6 +169,10 @@ describe('F-208 接线守卫：组件真的用上了这几个函数', () => {
     ['pushStepHistory(', '前进不压条目，返回键弹掉的就是整个向导——F-208 的原样复现'],
     ['stepFromHistoryState(', '不读 popstate 里的步数，返回键退回来了页面却还停在原处'],
     ["addEventListener('popstate'", '不听 popstate，浏览器退了一格，React 里的步数纹丝不动'],
+    [
+      'resetStepHistory(',
+      '清空重填只改栈顶，栈里下面几格还写着第 2、3 步，返回一下弹回一张空表单',
+    ],
   ] as const) {
     // 认**调用形态**不认名字：只 import 不调用的那一版，import 行里照样有这个名字。
   it(`IntakeFlow 里真的调了 ${name}`, () => {

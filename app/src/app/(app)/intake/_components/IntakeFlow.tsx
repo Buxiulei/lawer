@@ -24,7 +24,12 @@ import {
   saveDraft,
   type IntakeDraft,
 } from './draft';
-import { pushStepHistory, seedStepHistory, stepFromHistoryState } from './stepHistory';
+import {
+  pushStepHistory,
+  resetStepHistory,
+  seedStepHistory,
+  stepFromHistoryState,
+} from './stepHistory';
 import { destinationForFinish, saveIntake } from './submit';
 import { advanceBlock } from './validate';
 
@@ -168,8 +173,11 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
 
   const reset = () => {
     clearDraft();
-    // 清空后当前条目对应的就是第 1 步，别让它还写着「第 4 步」
-    seedStepHistory(window.history, 0);
+    // 清空后回到第 1 步，历史栈也得跟着退回第一格。只改写栈顶的话，
+    // 下面那几格还写着第 2、3 步，按一下返回就弹回一张空表单，
+    // 「第 1 步返回才离开」当场失效（见 stepHistory 的 resetStepHistory）。
+    // 退栈是异步的，popstate 回来时 applyStep(0) 会把步数再落一遍，与这里一致。
+    resetStepHistory(window.history, stepRef.current);
     setDraft(EMPTY_DRAFT);
     setRestored(false);
     setConfirmReset(false);
