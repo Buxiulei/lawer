@@ -62,7 +62,9 @@ describe('四步骨架', () => {
   it('生成密钥 / 复制配置 / 粘到助手 / 验证连通，一步都不少', () => {
     const t = text(ssr());
     for (const step of ['第一步', '第二步', '第三步', '第四步']) expect(t).toContain(step);
-    expect(t).toContain('生成一把密钥');
+    // 第一步从「生成一把密钥」改名成「拿到你的密钥」：密钥现在取得回来，
+    // 已经有一把的人进这一页不该被要求再生成一把（那样两把 key 挂着，谁也不知道哪把在用）
+    expect(t).toContain('拿到你的密钥');
     expect(t).toContain('复制配置');
     expect(t).toContain('粘到你的助手里');
     expect(t).toContain('验一下接上没有');

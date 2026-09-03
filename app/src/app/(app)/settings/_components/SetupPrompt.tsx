@@ -23,7 +23,7 @@ export function SetupPrompt({
   apiKey,
 }: {
   info: SetupUrls;
-  /** 密钥明文只在创建那一次拿得到；没有就渲染占位符 */
+  /** 当前那把 key 的明文（来自 useAgentKeySecret）；取不到就渲染占位符 */
   apiKey?: string;
 }) {
   const [tab, setTab] = useState<SetupTabKey>('general');
@@ -43,9 +43,15 @@ export function SetupPrompt({
       </Tabs>
 
       {!apiKey && (
+        /*
+         * 【为什么不再说「密钥只在生成那一次显示」】那句话从 secret_enc 落库那天起就是假的，
+         * 而它的代价是让人为了一件不必要的事去吊销重建。落到占位符只剩三种场合，
+         * 上面那一小节（CurrentKey）会说清是哪一种、出路是什么，这里只提醒别把占位符原样粘走。
+         */
         <p className="mt-3 text-[13px] leading-5 text-ink-2">
-          话术里的 <span className="font-mono">{KEY_PLACEHOLDER}</span>{' '}
-          要换成你生成密钥时保存的那串。密钥只在生成那一次显示，这里补不出来。
+          还没填进真密钥，话术里是占位符{' '}
+          <span className="font-mono">{KEY_PLACEHOLDER}</span>
+          ——按上面那一小节的提示拿到密钥后，这段会自动填上，别把占位符原样粘给助手。
         </p>
       )}
 
@@ -59,25 +65,30 @@ export function SetupPrompt({
         />
       </div>
 
-      {tab === 'claude' && <SkillDownload />}
+      {tab === 'claude' && <SkillDownload skillUrl={info.skill_url} />}
     </div>
   );
 }
 
 /**
- * 配套 skill 的下载入口。
- * GET /api/v1/agent-setup 目前只回地址、工具清单与《接入说明》全文，没有 skill 包的下载地址，
- * 所以这里只能置灰——接口给了地址再把按钮接上，绝不先摆一个点了没反应的按钮。
+ * 配套 skill 的入口。
+ *
+ * 【按钮为什么是链接而不是下载】skill 包现在是三份公开的 Markdown（/skill/…，免鉴权），
+ * 话术第一步已经让对方 agent 自己去取；这里给的是**人**想先读一眼时的入口。
+ * 这一档之前是个置灰的「即将提供」，现在东西真的在了，就别再摆一个点了没反应的按钮。
  */
-function SkillDownload() {
+function SkillDownload({ skillUrl }: { skillUrl: string }) {
   return (
     <div className="mt-4 border-t border-line pt-3">
       <p className="text-[14px] leading-6 text-ink-2">
-        配套 skill 把问诊、金额核算和文书的提示词打成一包，装进 Claude 就能直接用。
+        配套 skill 已经在话术第一步里了：你的助手会自己取走它，按里面写的规矩办。
+        想自己先读一眼就点这里。
       </p>
       <div className="mt-2">
-        <Button size="sm" variant="secondary" disabled>
-          下载配套 skill（即将提供）
+        <Button asChild size="sm" variant="secondary">
+          <a href={skillUrl} target="_blank" rel="noreferrer">
+            打开配套 skill
+          </a>
         </Button>
       </div>
     </div>

@@ -8,8 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/shadcn/ca
 import { Skeleton } from '@/components/shadcn/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/shadcn/tabs';
 import { SETUP_TABS } from './agentSetup';
+import { CurrentKey } from './CurrentKey';
 import { SetupPrompt } from './SetupPrompt';
 import { useAgentSetup } from './useAgentSetup';
+import { useAgentKeySecret } from './useAgentKeySecret';
 
 /**
  * 一键接入：把这份档案库接到用户自己的 AI 助手上（spec D4）。
@@ -25,6 +27,9 @@ import { useAgentSetup } from './useAgentSetup';
 export function AgentSetupCard() {
   const { discreet } = useDiscreet();
   const { info, loading, error, unauthorized } = useAgentSetup();
+  // 话术里要填的是**当前这把**密钥的明文，不是占位符。取数归 useAgentKeySecret，
+  // 接入指南那一页用的是同一个 hook（两处各写一份就会一处填真密钥、一处填占位符）。
+  const secret = useAgentKeySecret();
 
   return (
     <Card>
@@ -66,6 +71,13 @@ export function AgentSetupCard() {
             </p>
           )}
 
+          <div className="mt-3 border-t border-line pt-3">
+            <p className="text-[14px] font-medium text-ink">当前密钥</p>
+            <div className="mt-1.5">
+              <CurrentKey secret={secret} />
+            </div>
+          </div>
+
           {info && (
             <>
               <dl className="mt-3 border-t border-line pt-3 text-[14px] leading-6">
@@ -80,7 +92,10 @@ export function AgentSetupCard() {
               </dl>
 
               <div className="mt-4">
-                <SetupPrompt info={info} />
+                <SetupPrompt
+                  info={info}
+                  apiKey={secret.state.kind === 'ready' ? secret.state.secret : undefined}
+                />
               </div>
             </>
           )}
