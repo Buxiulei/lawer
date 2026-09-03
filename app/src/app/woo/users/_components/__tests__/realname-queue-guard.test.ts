@@ -142,11 +142,41 @@ describe('③ 每个审核动作都过二次确认，确认文案写明后果', 
     }
   });
 
-  test('🔴 confirmLabel 不是「确定」，且通过/驳回两条各说各的后果', () => {
-    expect(queue).toContain('confirmLabel=');
+  test('🔴 主按钮是短句常量，通过/驳回各说各的，且不把姓名拼进按钮', () => {
+    // 【为什么按钮上不许出现姓名】原来这里写的是 `确认认定为 ${row.cert_name}`，
+    // 于是主按钮宽度由那个人的名字决定：「WOO ALEXANDER BAI-YI」一来，主按钮
+    // 撑到次按钮的两倍宽，393 上直接顶到边。要核对的身份写在正文的字段块里。
+    // 长度那条尺子在 shadcn/__tests__/confirm-dialog-buttons.test.tsx（静态可判定性）。
+    expect(queue).toMatch(/confirmLabel=\{review\?\.kind === 'reject' \? '确认驳回' : '确认通过'\}/);
     expect(queue).not.toMatch(/confirmLabel="确定"/);
-    expect(queue).toContain('确认驳回');
-    expect(queue).toContain('确认认定为');
+    expect(queue).not.toContain('确认认定为');
+  });
+
+  test('🔴 弹窗正文里有身份字段块：姓名一行、证件一行，各自独占一行且带值', () => {
+    // 【为什么要字段块】操作者按"通过"之前要逐字比对照片上的姓名与护照号。
+    // 挤在一句话里没法扫；而且证件号得等宽 + tabular，否则 0/O、1/l 分不开。
+    expect(queue).toMatch(/function ReviewFields\(\{ row \}: \{ row: PendingRow \}\)/);
+    const block = queue.slice(queue.indexOf('function ReviewFields'), queue.indexOf('export function RealnamePendingQueue'));
+    expect(block).toMatch(/<dt[^>]*>姓名<\/dt>/);
+    expect(block).toMatch(/<dd[^>]*>\{row\.cert_name \?\? '—'\}<\/dd>/);
+    expect(block).toMatch(/<dt[^>]*>证件<\/dt>/);
+    expect(block).toMatch(/护照 \{row\.cert_no \?\? '—'\}/);
+    // 等宽 + tabular 钉在证件那一行上（比对靠它）
+    const certLine = block.split('\n').find((l) => l.includes('row.cert_no')) ?? '';
+    expect(certLine).toContain('font-mono-num');
+    expect(certLine).toContain('tabular-nums');
+    // 通过与驳回两条弹窗都用同一个字段块（驳回也要能看清驳的是谁）
+    expect(queue.match(/<ReviewFields row=\{review\.row\} \/>/g) ?? []).toHaveLength(2);
+    // 驳回那条还要把原因原样引出来（用户会看到这句）
+    expect(queue).toMatch(/<blockquote[\s\S]*?\{review\.reason\}[\s\S]*?<\/blockquote>/);
+  });
+
+  test('对照臂：同一把尺子量「把姓名拼回按钮」的坏样本必须命中', () => {
+    const ruler = (src: string) =>
+      /confirmLabel=\{review\?\.kind === 'reject' \? '确认驳回' : '确认通过'\}/.test(src) &&
+      !src.includes('确认认定为');
+    expect(ruler(stripComments("confirmLabel={review?.kind === 'reject' ? '确认驳回' : '确认通过'}"))).toBe(true);
+    expect(ruler(stripComments('confirmLabel={`确认认定为 ${review.row.cert_name}`}'))).toBe(false);
   });
 
   test('🔴 驳回原因为空时按钮禁用（服务端会 400，但不该让人先撞一次墙）', () => {

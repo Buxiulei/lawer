@@ -164,6 +164,27 @@ function MaterialViewer({ row }: { row: PendingRow }) {
   );
 }
 
+/**
+ * 确认弹窗里的身份字段块。
+ *
+ * 【为什么姓名/证件号要单独成行，而不是塞进一句话或按钮里】
+ * 操作者按下"通过"之前要做的事是**逐字比对**：屏幕上那两张照片里的姓名、护照号，
+ * 和这里写的是不是一模一样。挤在一句话里（"把账号 2 认定为「WOO ALEXANDER BAI-YI／
+ * 护照 A81880042」"）就没法扫——两个值中间隔着标点和引号，眼睛得自己去切。
+ * 更别说塞进按钮：那串名字会把主按钮撑成次按钮的两倍宽（主理人截图里就是这个）。
+ * 证件号走等宽 + tabular：0/O、1/l 在比例字体里长得太像，比对是要出错的。
+ */
+function ReviewFields({ row }: { row: PendingRow }) {
+  return (
+    <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[15px] leading-6">
+      <dt className="text-ink-2">姓名</dt>
+      <dd className="font-semibold break-words text-ink">{row.cert_name ?? '—'}</dd>
+      <dt className="text-ink-2">证件</dt>
+      <dd className="font-mono-num break-all tabular-nums text-ink">护照 {row.cert_no ?? '—'}</dd>
+    </dl>
+  );
+}
+
 export function RealnamePendingQueue({ onReviewed }: { onReviewed?: () => void } = {}) {
   const [rows, setRows] = useState<PendingRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -344,30 +365,41 @@ export function RealnamePendingQueue({ onReviewed }: { onReviewed?: () => void }
         ))}
       </div>
 
+      {/* 主按钮文案恒为短句常量：拼上姓名（「确认认定为 WOO ALEXANDER BAI-YI」）
+          会把按钮撑到次按钮的两倍宽，而且姓名越长撑得越离谱——
+          要核对的那个身份写在上面的字段块里，按钮只说这一下要干什么。
+          由 shadcn/__tests__/confirm-dialog-buttons.test.tsx 的静态可判定性守卫钉住。 */}
       <ConfirmDialog
         open={review !== null}
-        title={review?.kind === 'reject' ? '确认驳回这次实名' : '确认通过这次实名'}
+        title={review?.kind === 'reject' ? '确认驳回' : '确认通过这次实名'}
         description={
           review?.kind === 'reject' ? (
-            <span>
-              驳回账号 <b className="num">{review.row.user_id}</b> 的护照实名，原因「{review.reason}」。
-              这句话会<b>原样</b>显示给用户；他会被打回「未认证」，可以重新提交。
-            </span>
+            <>
+              <div>
+                驳回账号 <b className="num">{review.row.user_id}</b> 的这次实名提交。
+              </div>
+              <ReviewFields row={review.row} />
+              <div className="mt-3 text-[13px] leading-5 text-ink-2">驳回原因（用户会原样看到）</div>
+              <blockquote className="mt-1 border-l-2 border-line pl-3 text-[14px] leading-6 text-ink">
+                {review.reason}
+              </blockquote>
+              <div className="mt-3 text-[13px] leading-5 text-ink-2">
+                他会被打回「未认证」，可以重新提交。
+              </div>
+            </>
           ) : review ? (
-            <span>
-              把账号 <b className="num">{review.row.user_id}</b> 认定为
-              「<b>{review.row.cert_name ?? '—'}</b>／护照 <b className="num">{review.row.cert_no ?? '—'}</b>」。
-              这是一次<b>身份断言</b>：此后他出具的存证文件都以这个身份署名，且不可撤销。
-            </span>
+            <>
+              <div>
+                把账号 <b className="num">{review.row.user_id}</b> 认定为以下身份。
+              </div>
+              <ReviewFields row={review.row} />
+              <div className="mt-3 text-[13px] leading-5 text-ink-2">
+                这是一次身份断言：此后他出具的存证文件都以这个身份署名，且不可撤销。
+              </div>
+            </>
           ) : null
         }
-        confirmLabel={
-          review?.kind === 'reject'
-            ? `确认驳回并告知原因`
-            : review
-              ? `确认认定为 ${review.row.cert_name ?? '该身份'}`
-              : '确认'
-        }
+        confirmLabel={review?.kind === 'reject' ? '确认驳回' : '确认通过'}
         tone={review?.kind === 'reject' ? 'danger' : 'primary'}
         onConfirm={() => void runReview()}
         onCancel={() => setReview(null)}

@@ -36,7 +36,9 @@ function AlertDialogContent({
       <AlertDialogPrimitive.Content
         data-slot="alert-dialog-content"
         className={cn(
-          'fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-60 w-[calc(100%-2rem)] max-w-[420px] -translate-x-1/2',
+          // 宽度：手机全宽（只留两侧 1rem 的边），电脑收在 max-w-md。
+          // 420px 太窄，弹窗正文里的字段块（姓名 / 证件号那两行）会被挤到折行。
+          'fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-60 w-[calc(100%-2rem)] sm:max-w-md -translate-x-1/2',
           'sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2',
           'rounded-[12px] border border-border bg-card p-5 shadow-soft outline-none',
           'data-[state=open]:animate-[fade-in_150ms_ease-out] data-[state=closed]:animate-[fade-out_150ms_ease-out]',
