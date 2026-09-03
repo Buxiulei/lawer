@@ -307,6 +307,8 @@
 
 **2026-09-03 · 生产上线 3170e89（F-205 首诊建档前置 / F-203 对话失败态持久化 / ADR-003 收口）**：备份 → bundle ff → build EXIT=0 → restart 双 active → 迁移触发（50 表，messages.failed_code 列到位）→ / /login /intake /case/1/ask 200 → 历史接口正常。真机小核对（/welcome 低调揭开+老用户变体、401 出路、历史回显）已派 Sonnet（该项对应 auth 单尚在第三轮，生产现为 F-202 未合并态——核对结果用于确认基线现状，不作 PASS 依据）。
 
+**2026-09-03 · 3170e89 生产小核对**：/welcome 低调揭开✓（按住 ~200ms 即 data-veil-open、blur→none，innerText 为低调变体「额度/关注」、松手延时复糊；487b6ef 那次未核项补齐）；/case/1/ask 历史回显✓ console 0；scrollWidth 393 全✓。老用户变体与 401「去登录」出路两项如预期**不通过**——auth 单（F-201/F-202）尚在第三轮未合并，此即基线现状；量具坑：低调两变体用 textContent 会拼出两份，须 innerText 或 computed display。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
