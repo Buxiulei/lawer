@@ -14,13 +14,16 @@
  *   ⑦ 同一副栈上再铺一次不多出条目——F5 / 跳走再返回 / 二进 /intake 都会让组件
  *      重新挂载而栈还是上一轮那副，再铺一遍就叠成 [1,0,1,0]：第 1 步返回弹回第 2 步，
  *      退出要按 4 下（复核 MF-3，修 F-208 引入的新缺陷）。
+ *   ⑧ 条目比草稿浅时补齐差的那几格——「铺过就整个不管」会让屏幕上第 3 步而栈里 2 格，
+ *      清空重填按屏幕步数退栈就把人退出了向导（实测 afterReset 落到 /account）。
  * 外加一条接线守卫：IntakeFlow 真的用了这几个函数——纯函数全绿而组件没调，
  * 和没修一模一样。
  *
  * 变异臂：
  *   · pushStepHistory 改成 replaceState（不 pushState）→ ①③红
  *   · resetStepHistory 改回「只改写栈顶」（replaceState 第 0 步）→ ④红
- *   · seedStepHistory 去掉「已铺过就不再铺」那一行 → ⑦红
+ *   · seedStepHistory 从头铺（不看当前条目铺到第几步）→ ⑦红
+ *   · seedStepHistory 铺过就整个 return（不补差的那几格）→ ⑧红
  *   · IntakeFlow 里删掉 pushStepHistory 那一行 → 接线守卫红
  */
 import { readFileSync } from 'node:fs';
@@ -186,6 +189,31 @@ describe('F-208 向导的历史栈：一步一个条目', () => {
         '为什么缺：那正是重复铺栈叠出来的第二段——退出向导的按键数跟着挂载次数涨。\n' +
         '怎么办：同上，已铺过的栈不再铺。',
     ).toBe(null);
+  });
+
+  it('条目比草稿浅一格：补上差的那一格，栈深仍等于步数', () => {
+    const h = new FakeHistory();
+    seedStepHistory(h, 0);
+    pushStepHistory(h, 1); // 栈铺到第 2 步（条目写着 1）
+    const len = h.length;
+
+    // 同一个标签页再打开一次 /intake：浏览器按「重载当前 URL」处理，条目连同
+    // 它的步数原样留着，而草稿恢复出来的是第 3 步——两边差一格。
+    seedStepHistory(h, 2);
+
+    expect(
+      h.length - len,
+      '缺什么：条目写着第 2 步、草稿恢复到第 3 步，差的那一格没补。\n' +
+        '为什么缺：屏幕上是第 3 步而栈里只有 2 格，「栈深＝步数」这条不变量断了。' +
+        '这时点「清空重填」，resetStepHistory 按屏幕上的步数退 2 格，' +
+        '退过了头——用户直接被弹出向导（实测 afterReset 落到 /account）。\n' +
+        '怎么办：铺过的栈只补差的那几格（从条目里那个数 +1 铺到 step），一格不重复。',
+    ).toBe(1);
+    expect(stepFromHistoryState(h.state), '补完当前条目该写着第 3 步').toBe(2);
+
+    resetStepHistory(h, 2); // 点「清空重填」
+    expect(stepFromHistoryState(h.state), '清空后该退回第一格').toBe(0);
+    expect(stepFromHistoryState(h.back()), '再返回一下才离开向导').toBe(null);
   });
 
   it('反向对照：非本向导压的 state 一律读成 null，不瞎猜', () => {

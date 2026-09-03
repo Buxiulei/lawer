@@ -45,17 +45,28 @@ export function stepFromHistoryState(state: unknown): number | null {
  *
  * 【为什么先看一眼当前条目】组件会**重新挂载好几次而栈还是上一轮那副栈**：
  * F5、点站内链接跳走再返回、同一个标签页第二次进 /intake。这些时候当前条目
- * 自己就写着步数（history state 跨刷新与前进后退都留着），再铺一遍等于在它上面
+ * 自己就写着步数（history state 跨刷新与前进后退都留着），从头铺一遍等于在它上面
  * 叠出第二段 [0,1,…]——栈成了 [1,0,1,0]：第 1 步按返回不出去，反而弹回上一段的
  * 第 2 步，要按 4 下才离开（F-208 复核 MF-3；这是修 F-208 引入的新缺陷，
- * 基线一按返回即离开）。所以：当前条目已带步数键 ＝ 已经铺过，一格都不再压。
+ * 基线一按返回即离开）。
  *
- * 判据：step-history.test 的⑦（同栈再 seed 不增条目，返回序列照旧 1 → 0 → 离开）。
+ * 【为什么不是「铺过就整个不管」】那样会漏掉**条目步数比草稿步数浅**的那一种：
+ * 同一个标签页再打开一次 /intake 是「导航到当前 URL」＝浏览器按重载处理，
+ * 条目连同它的步数原样留着（实测：条目写着第 2 步、草稿却恢复到第 3 步）。
+ * 一格不补的话，屏幕上是第 3 步而栈里只有 2 格，「栈深＝步数」这条不变量断了——
+ * 这时点「清空重填」，resetStepHistory 按屏幕上的步数退 2 格，直接把用户退出了向导
+ * （实测 afterReset 落到 /account）。所以铺过的栈只**补齐差的那几格**，一格不重复。
+ *
+ * 判据：step-history.test 的⑦（条目与草稿同步时不增条目，返回序列照旧 1 → 0 → 离开）
+ * 与⑧（条目浅一格时补一格，清空重填仍退回第一格）。
  */
 export function seedStepHistory(h: HistoryLike, step: number): void {
-  if (stepFromHistoryState(h.state) !== null) return;
-  h.replaceState({ [STEP_STATE_KEY]: 0 }, '');
-  for (let i = 1; i <= step; i += 1) h.pushState({ [STEP_STATE_KEY]: i }, '');
+  // 已经铺到第几步了：读不出就是这副栈还没铺过，从当前条目起头。
+  const seeded = stepFromHistoryState(h.state);
+  if (seeded === null) h.replaceState({ [STEP_STATE_KEY]: 0 }, '');
+  for (let i = (seeded ?? 0) + 1; i <= step; i += 1) {
+    h.pushState({ [STEP_STATE_KEY]: i }, '');
+  }
 }
 
 /** 往前走一步：压一个条目，于是返回键能退回来。**别改成 replaceState**。 */
