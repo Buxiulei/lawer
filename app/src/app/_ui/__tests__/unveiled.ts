@@ -10,7 +10,12 @@
  */
 const VOID_TAGS = new Set(['img', 'br', 'hr', 'input', 'meta', 'link']);
 
-export function unveiledText(html: string): string {
+/**
+ * 取文字，但把 `isSkip` 认下的那些开标签**连同整棵子树**剔掉。
+ * 两个取字器（糊层、CSS 显隐）共用这一趟遍历——上面那段说明讲的正是
+ * 「这段解析不许再抄第二遍」。
+ */
+function textExcluding(html: string, isSkip: (openTag: string) => boolean): string {
   const tokens = html.split(/(<[^>]+>)/);
   const out: string[] = [];
   let skipDepth = 0; // >0 表示正在一棵被剔除的子树里
@@ -33,9 +38,27 @@ export function unveiledText(html: string): string {
     }
     if (selfClosing) continue;
     stack.push(name);
-    if (skipDepth === 0 && /\sdata-veil\b/.test(tok)) skipDepth = stack.length;
+    if (skipDepth === 0 && isSkip(tok)) skipDepth = stack.length;
   }
   return out.join('').replace(/\s+/g, '');
+}
+
+export function unveiledText(html: string): string {
+  return textExcluding(html, (tag) => /\sdata-veil\b/.test(tag));
+}
+
+/**
+ * 这一刻**眼睛真能看到**的字：把 CSS 会 `display:none` 掉的那一半剔掉。
+ *
+ * 那两个类的规则写在 globals.css（`.discreet-only` 默认收起、
+ * `html[data-discreet='1']` 下换成收起 `.discreet-hide`）。测试跑不了真 CSS，
+ * 所以这里照着它的语义走，而 welcome-discreet.test 另有一条守卫钉住
+ * globals.css 里那三条规则还在——只剩一半的话，看得见的就成了另一句。
+ */
+export function visibleText(html: string, opts: { discreet: boolean }): string {
+  const hidden = opts.discreet ? 'discreet-hide' : 'discreet-only';
+  const re = new RegExp(`class="[^"]*\\b${hidden}\\b`);
+  return textExcluding(html, (tag) => re.test(tag));
 }
 
 /** 整屏文字（不剔除任何东西）——反向对照用：糊住不等于删掉。 */

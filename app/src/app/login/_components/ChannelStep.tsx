@@ -6,7 +6,7 @@ import { OTP_LENGTH, OTP_RESEND_SECONDS } from '@/app/_mock/authpay';
 import { Button } from '@/components/shadcn/button';
 import { InputField } from '@/components/shadcn/field';
 import { CodeInput } from './CodeInput';
-import { loadLoginStep, saveLoginStep, type LoginChannel } from './loginStep';
+import { NO_RESUME, saveLoginStep, type LoginChannel, type LoginResume } from './loginStep';
 
 /**
  * 一个验证通道的完整交互：填标识 → 发码 → 输码 → 校验。
@@ -19,6 +19,10 @@ import { loadLoginStep, saveLoginStep, type LoginChannel } from './loginStep';
  * 别处拿不到。它们没落盘，就是 F5 之后人被退回手机号那一格、短信却已经发出去的那个洞
  * （见 loginStep.ts）。所以 persistAs 只告诉它"这一格算哪条通道的半程"，
  * 它照旧不认识具体接口。
+ *
+ * 【读半程记录不在这里】**写**在这里、**读**由 LoginFlow 挂载后统一做一次，
+ * 结果当 prop 传进来。这个组件自己去读 sessionStorage 的那一版，
+ * 会让首帧的客户端渲染跟服务端渲染对不上（React #418），见 LoginFlow 的长注释。
  */
 export function ChannelStep({
   fieldLabel,
@@ -37,6 +41,7 @@ export function ChannelStep({
   gateHint,
   ctaLabel,
   persistAs,
+  resume = NO_RESUME,
   onSend,
   onVerify,
 }: {
@@ -57,20 +62,18 @@ export function ChannelStep({
   ctaLabel: string;
   /** 这一格属于哪条通道的半程（刷新后靠它认领自己那条记录） */
   persistAs: LoginChannel;
+  /**
+   * 半程记录：读完了没有、读到了什么（由 LoginFlow 读、逐层传下来）。
+   * 通道对不上就当没有——三条通道共用这一个组件，认错了会把别人的号填进来。
+   */
+  resume?: LoginResume;
   /** 发码；resolve 出的秒数用作重发倒计时，失败请 throw */
   onSend: () => Promise<number>;
   /** 校验；成功即推进，失败请 throw */
   onVerify: (code: string) => Promise<void>;
 }) {
-  /**
-   * 这一格是不是接着半程走的。**只在首帧读一次**：
-   * 读晚了（挪进 useEffect）就得先渲染一帧手机号格再跳回来，
-   * 而"闪一下手机号格"跟"刷新后掉回手机号格"在用户眼里是同一种事故。
-   */
-  const [resumed] = useState(() => {
-    const saved = loadLoginStep();
-    return saved?.channel === persistAs ? saved : null;
-  });
+  /** 这一格是不是接着半程走的。整块由 LoginFlow 按记录重挂，所以这里直接算即可 */
+  const resumed = resume.step?.channel === persistAs ? resume.step : null;
   const [sent, setSent] = useState(resumed?.step === 'code');
   const [sending, setSending] = useState(false);
   const [code, setCode] = useState('');
@@ -93,13 +96,17 @@ export function ChannelStep({
    * 而忘掉的现象是刷新后回到**上一个**状态，没有任何报错。
    */
   useEffect(() => {
+    // 记录还没读完之前一个字都不许写：这时这一格是默认态（没发码、什么都没填），
+    // 写下去正好把要恢复的那条抹掉。**子组件的 effect 比父组件先跑**（React 定的顺序），
+    // 所以"父组件挂载后去读"挡不住这一下——真机现象是 F5 后照样掉回手机号格，零报错。
+    if (!resume.ready) return;
     saveLoginStep({
       channel: persistAs,
       step: sent ? 'code' : 'entry',
       target: value,
       expiresAt: resendAt,
     });
-  }, [persistAs, sent, value, resendAt]);
+  }, [resume.ready, persistAs, sent, value, resendAt]);
 
   /**
    * 开一轮新冷却。要先对表：now 只在倒计时跑动时才刷新，

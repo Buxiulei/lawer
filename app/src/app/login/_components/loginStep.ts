@@ -34,6 +34,20 @@ export interface LoginStep {
 }
 
 /**
+ * 半程记录读到没有：`ready=false` 是**挂载之前那一小会儿**——
+ * 那会儿谁都不许往 sessionStorage 里写，否则写下去的是"这一格的默认态"，
+ * 正好把要恢复的那条抹掉（子组件的 effect 比父组件先跑，这个顺序是 React 定的，
+ * 不是可以指望改的）。真机上的现象：F5 之后仍然掉回手机号格，一个报错都没有。
+ */
+export interface LoginResume {
+  ready: boolean;
+  step: LoginStep | null;
+}
+
+/** 「没有人告诉我半程记录」的默认值：当成读完了、没有记录（独立渲染某一格时用） */
+export const NO_RESUME: LoginResume = { ready: true, step: null };
+
+/**
  * 读半程记录。**认形状不认版本号**：标签页可以一直开着跨过一次发版，
  * 那时旧记录会撞上新代码；形状对不上就当没有，回到第一格重新来——
  * 总好过按一个渲染不出来的态把人卡住。
