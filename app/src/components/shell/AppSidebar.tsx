@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { NEUTRAL_TITLE } from '@/app/_ui/bootstrap';
+import { BYO } from '@/app/_ui/byoAgent';
 import { cn } from '@/app/_ui/cn';
 import { useDiscreet } from '@/app/_ui/discreet';
+import { useConnectedAgent } from '@/app/_ui/useConnectedAgent';
 import { useTheme, type ThemeMode } from '@/app/_ui/theme';
 import {
   DropdownMenu,
@@ -25,7 +27,7 @@ import {
 } from '@/components/shadcn/sidebar';
 import { AutoIcon, EyeIcon, EyeOffIcon, MoonIcon, SunIcon } from './shellIcons';
 import { TubashuMark } from './TubashuMark';
-import { NAV_ITEMS, caseHref } from './navItems';
+import { AGENT_NAV_ITEM, NAV_ITEMS, caseHref } from './navItems';
 import { useDiscreetToggle } from './useDiscreetToggle';
 
 export const THEME_LABEL: Record<ThemeMode, string> = {
@@ -90,7 +92,8 @@ export function AppSidebar({
                 >
                   <Link href={item.href(caseId)}>
                     {item.icon}
-                    <span>{label}</span>
+                    <span className="flex-1 truncate">{label}</span>
+                    {item.key === AGENT_NAV_ITEM.key && <AgentNavBadge />}
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -109,6 +112,40 @@ export function AppSidebar({
 
       <SidebarRail />
     </Sidebar>
+  );
+}
+
+/**
+ * 接入那一栏右侧的状态小标：没接上说「推荐」，接上了说「已接入」。
+ *
+ * 【为什么不复制判据】接没接上只有 useConnectedAgent 一个来源（它自己的注释写着
+ * 为什么）。这里再写一份"有钥匙就算接上"，形态是侧栏说已接入、驾驶舱说还没接，
+ * 两边都看起来正常。
+ *
+ * 【loading 那一帧不占位】首帧恒为 loading（SSR 到不了 effect）。此时渲染「推荐」，
+ * 已接入的用户每次刷新都会先被推销一次再翻牌；渲染「已接入」则是撒谎。所以不渲染。
+ *
+ * 【两种模式共用】「推荐 / 已接入」本来就不含案情词，低调模式下不需要中性变体——
+ * 需要换词的是栏目名，那一份在 BYO.navLabelNeutral 里。
+ */
+export function AgentNavBadge() {
+  const { loading, connected } = useConnectedAgent();
+  if (loading) return null;
+  return (
+    <span
+      data-agent-nav-badge={connected ? 'connected' : 'idle'}
+      className={cn(
+        'shrink-0 rounded-full px-1.5 py-0.5 text-[11px] leading-none',
+        // 推荐那一态要被看见，用主色 wash；已接入是个安静的事实，不给底色。
+        // 文字色一律走 -on-surface 那支：--primary-ink 压 surface 只有 3.86，
+        // globals.css 里写着「主色文字不要再指它」。
+        connected
+          ? 'text-muted-foreground'
+          : 'bg-primary-wash text-primary-ink-on-surface',
+      )}
+    >
+      {connected ? BYO.navBadgeConnected : BYO.navBadgeIdle}
+    </span>
   );
 }
 

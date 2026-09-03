@@ -62,7 +62,9 @@ export function ShellHeader({
 
 /** 移动端才出现：PC 上同一条入口在侧栏导航里 */
 function AccountButton({ pathname }: { pathname: string }) {
-  const active = ACCOUNT_NAV_ITEM.match(pathname, '');
+  // 手机端顶栏只有这一个入口，没有单独的「接入」栏可亮，所以 /settings 整棵子树（含 /settings/agent）
+  // 在手机上仍由「我的」承担位置指示；侧栏那边的互斥归 navItems.tsx 的 match 管，这里不复用它。
+  const active = ACCOUNT_NAV_ITEM.match(pathname, '') || pathname.startsWith('/settings');
   return (
     <Link
       href={ACCOUNT_NAV_ITEM.href('')}
