@@ -154,8 +154,15 @@ export function planPassportApproval(db: Database, verificationId: number): Appr
  * 【留痕写进流水而不是日志】谁核的、何时、核的是哪两份材料（哈希），
  * 跟着这条流水一起存——日志会轮转，流水不会。管理后台以后接的就是这份语义。
  *
- * 【为什么不做成 HTTP 端点】实名是身份断言，写它是生产手术。
- * 这个函数由脚本调用、由 manager 执行 `--apply`；干跑打印 planPassportApproval 的结果。
+ * 【操作面有两个，这里只有一个落定口】原先本函数只由 CLI 调用（`--apply`），
+ * 抬头写着"不做 HTTP 端点：实名是身份断言，写它是生产手术"。
+ * **2026-09-03 经理裁决 A 推翻了那条**：主理人在 /woo/users 看得到「待审」，
+ * 却没有任何审核动作——护照用户因此卡在待审里，而唯一的出路是有人 ssh 上生产跑脚本。
+ * 「只能上生产手术」不是审慎，它把一条常规业务动作变成了没人敢做的动作。
+ * 现在加了后台端点（app/api/v1/admin/realname/*），闸门是 lib/admin/auth 的 requireAdmin：
+ * ADMIN_UIDS 白名单 + 网页登录态，非白名单一律空体 404，api key 同样进不来。
+ * CLI 保留不删：它不依赖网页登录态，是白名单配错或前端挂掉时的后路。
+ * 两个操作面共用**这一个**落定函数，所以"落定时写什么"永远只有一份实现。
  */
 export function approvePassportRealname(
   db: Database,
@@ -188,6 +195,110 @@ export function approvePassportRealname(
       VERIFICATION_STATUS.passed,
       encryptField(JSON.stringify(env)),
     );
+  });
+  run();
+  return plan;
+}
+
+
+/** 信封里一份材料的记录（storeBytes 落的那三样）。 */
+export interface PassportMaterialRef {
+  file_id: number;
+  sha256: string;
+  size: number;
+}
+
+/** 一条护照流水的可读全貌。**含 PII（姓名、护照号）**，只许在 admin 闸门之后出现。 */
+export interface PassportRecord {
+  verificationId: number;
+  userId: number;
+  status: string;
+  certName: string;
+  certNo: string;
+  materials: { id_page: PassportMaterialRef; selfie: PassportMaterialRef };
+  submittedAt: string;
+  /** 通过时写的留痕（没通过/未审为 undefined） */
+  audit?: { operator: string; approved_at: string; note: string | null };
+  /** 驳回时写的留痕；用户端的「上一次没通过：<原因>」读的就是这里的 reason */
+  reject?: { operator: string; rejected_at: string; reason: string };
+}
+
+/**
+ * 读一条护照流水的全貌，**不带"必须还待审"这道门**——审核台要能翻看已落定的记录。
+ *
+ * 与 planPassportApproval 的分工：那个是**写前的算式**（状态不对就不许算），
+ * 这个是**只读的取件**。别把只读路由接到 planPassportApproval 上：
+ * 那样查看一条已通过的记录会抛「已落定，不可重复审核」，一条正常的查看变成一个错误。
+ *
+ * @returns 查无此行 / 不是护照通道 → null（调用方回 404）；
+ *          信封缺失或解不开 → **抛错**（那是密钥或数据坏了，不该伪装成"没这条记录"）
+ */
+export function readPassportEnvelope(db: Database, verificationId: number): PassportRecord | null {
+  const row = store.findById(db, verificationId);
+  if (!row || row.provider !== PASSPORT_PROVIDER) return null;
+  if (!row.raw_meta_enc) {
+    throw new Error(
+      `流水 ${verificationId} 没有材料元数据：这条护照流水落库时信封为空，` +
+        `无法取出姓名/护照号/材料哈希。请查该行 raw_meta_enc 是否被清过。`,
+    );
+  }
+  const env = JSON.parse(decryptField(row.raw_meta_enc)) as Omit<
+    PassportRecord,
+    'verificationId' | 'userId' | 'status' | 'certName' | 'certNo' | 'submittedAt'
+  > & { cert_name: string; cert_no: string };
+  return {
+    verificationId: row.id,
+    userId: row.user_id,
+    status: row.status,
+    certName: env.cert_name,
+    certNo: env.cert_no,
+    materials: env.materials,
+    submittedAt: row.created_at,
+    audit: env.audit,
+    reject: env.reject,
+  };
+}
+
+/**
+ * 人工核过材料后驳回：流水转「未通过」+ 信封里写下谁驳的、何时、为什么；
+ * users 打回「未认证」。
+ *
+ * 【为什么打回"未认证"而不是留在"待审"】留在待审的用户在设置页看到的是
+ * 「材料已收到，正在人工审核」——他会一直等一个永远不会来的结果，也交不了新材料
+ *（重交路径在前端是"未通过"分支才出现）。cloudauth 失败路径同样是 setUserAuthStatus(none)，
+ * 两条通道在这一点上不分叉。
+ *
+ * 【为什么原因必填、且写进流水】"没通过"而不说为什么，等于让用户猜着重交，
+ * 大概率原样再交一次。原因跟着流水存（不是日志）：用户端 /realname/status 要把它原样回显。
+ *
+ * 复用 planPassportApproval 做前置校验（存在 / 是护照通道 / 还待审）——
+ * 落定过的流水不许被二次改写，approve 与 reject 在这一点上必须同一把尺子。
+ */
+export function rejectPassportRealname(
+  db: Database,
+  input: { verificationId: number; operator: string; reason: string; now?: Date },
+): ApprovalPlan {
+  const operator = input.operator.trim();
+  if (!operator) throw new Error('必须记名审核人：留痕没有"谁"就不成其为留痕');
+  const reason = input.reason.trim();
+  if (!reason) throw new Error('驳回必须写明原因：不说为什么，用户只能原样再交一次');
+
+  const plan = planPassportApproval(db, input.verificationId);
+  const at = (input.now ?? new Date()).toISOString();
+
+  const run = db.transaction(() => {
+    const row = store.findById(db, input.verificationId)!;
+    const env = JSON.parse(decryptField(row.raw_meta_enc!)) as Record<string, unknown>;
+    env.reject = { operator, rejected_at: at, reason };
+    store.setStatus(
+      db,
+      input.verificationId,
+      VERIFICATION_STATUS.failed,
+      encryptField(JSON.stringify(env)),
+    );
+    // 打回未认证，允许重交。users 的其余实名列（real_name_enc / id_card_enc）本就没写过
+    // ——提交时只落流水，回填 users 是 approve 那一步的事。
+    users.setUserAuthStatus(db, plan.userId, AUTH_STATUS.none);
   });
   run();
   return plan;

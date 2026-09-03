@@ -7,6 +7,7 @@ import {
   deadlineReminder,
   emailNotRegistered,
   emailVerifyCode,
+  realnameReviewResult,
   smsVerifyTemplateParam,
   watchBillingNotice,
 } from '../copy';
@@ -151,6 +152,42 @@ describe('watchBillingNotice（守望计费通知，spec v3 §2.2）', () => {
         expect(c.subject, `paused=${paused}/主题/${word}`).not.toContain(word);
         expect(c.text, `paused=${paused}/正文/${word}`).not.toContain(word);
       }
+    }
+  });
+});
+
+describe('realnameReviewResult（实名审核结果通知，2026-09-03 新增）', () => {
+  test('默认（中性）模式：主题与正文不含敏感词，也不含平台名', () => {
+    const c = realnameReviewResult();
+    for (const word of [...SENSITIVE, '土八鼠', '土拨鼠', '裁员应对专员']) {
+      expect(c.subject, `主题/${word}`).not.toContain(word);
+      expect(c.text, `正文/${word}`).not.toContain(word);
+    }
+  });
+
+  test('🔴 中性模式连"实名/认证/护照/审核"都不给 —— 只说"有结果了，去看看"', () => {
+    // 判据不是避开某张词表：一封写着「实名审核未通过」的邮件被工位旁人瞟见，
+    // 暴露的是他在某个需要实名固化证据的平台上办事。
+    const c = realnameReviewResult();
+    for (const w of ['实名', '认证', '护照', '审核', '通过', '驳回']) {
+      expect(c.subject, `主题/${w}`).not.toContain(w);
+      expect(c.text, `正文/${w}`).not.toContain(w);
+    }
+  });
+
+  test('🔴 函数不接受结论/原因参数：无论通过还是驳回，发出去的是同一封', () => {
+    // 变异对照：给它加一个 passed/reason 入口，这条断言（长度=1，且只有 options）会红。
+    expect(realnameReviewResult.length).toBeLessThanOrEqual(1);
+    expect(realnameReviewResult()).toEqual(realnameReviewResult({}));
+  });
+
+  test('detailed 模式才带平台名与事项类型，且仍不出现业务敏感词', () => {
+    const c = realnameReviewResult({ detailed: true });
+    expect(c.subject).toContain('土八鼠');
+    expect(c.subject).toContain('实名');
+    for (const word of SENSITIVE) {
+      expect(c.subject, `主题/${word}`).not.toContain(word);
+      expect(c.text, `正文/${word}`).not.toContain(word);
     }
   });
 });

@@ -141,6 +141,32 @@ export function watchBillingNotice(paused: boolean, options: CopyOptions = {}): 
 }
 
 /**
+ * 实名审核出结果的通知（manager 2026-09-03 裁决 A）。**中性档连"通过了没有"都不说。**
+ *
+ * 【为什么不带 passed / reason 参数】收件人多半还在原公司上班，邮件会在共用电脑上弹横幅。
+ * 一封「实名审核未通过：手持照片看不清护照号」被旁人瞟见，暴露的不只是他在做实名，
+ * 而是**他在某个需要实名固化证据的平台上办事**——与期限提醒那条同一个后果。
+ * 所以出站只承担一件事：告诉他"有结果了，去看看"。结果本身与驳回原因留在站内
+ * /realname/status（那要他自己的登录态才读得到）。
+ *
+ * 这也让本函数不可能踩线：它没有任何可变的信息量，无论审核结论是什么，发出去的都是同一封。
+ *
+ * detailed 模式（用户自己开的 notify_verbose）才允许出现平台名与"实名认证"这个事项类型。
+ */
+export function realnameReviewResult(options: CopyOptions = {}): MailCopy {
+  if (options.detailed) {
+    return {
+      subject: `${NOTIFY_BRAND}：实名认证已有审核结果`,
+      text: `您在${NOTIFY_BRAND}提交的实名认证材料已完成人工审核。\n请登录在设置页查看结果与下一步。`,
+    };
+  }
+  return {
+    subject: '您有一项待处理事项已更新',
+    text: '您此前提交的一项待处理事项已经有结果了。\n请登录查看详情与下一步。',
+  };
+}
+
+/**
  * 验证码短信的 TemplateParam。
  * 正文措辞取决于阿里云模板本身，本函数只填变量；模板必须是通用「验证码」模板，
  * 不得申请带业务描述（如「仲裁提醒」）的签名或模板。

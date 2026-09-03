@@ -14,6 +14,7 @@
 // 所以这一页不套 Sensitive、不加 data-veil。
 import type { Metadata } from 'next';
 import { AdminUsersView } from './_components/AdminUsersView';
+import { RealnamePendingQueue } from './_components/RealnamePendingQueue';
 
 export const metadata: Metadata = {
   title: '后台',
@@ -22,5 +23,13 @@ export const metadata: Metadata = {
 };
 
 export default function AdminUsersPage() {
-  return <AdminUsersView />;
+  // 待审队列在最上面：它是**有人在等**的那一块（护照用户交完材料就卡在待审，
+  // 只有这里能推动他），而下面的账号表是随时可查的。两块各自独立取数、
+  // 各自处理 404，其中一块不通不该把另一块也拖成空白页。
+  return (
+    <main className="mx-auto max-w-5xl px-4 pt-6">
+      <RealnamePendingQueue />
+      <AdminUsersView />
+    </main>
+  );
 }

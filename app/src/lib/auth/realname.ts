@@ -262,6 +262,33 @@ function readEnvelope(rawMetaEnc: string | null): MetaEnvelope | null {
 }
 
 /**
+ * 护照被驳回时，把审核人写下的**原因原文**取出来当 message。
+ *
+ * 【为什么不是硬编码的"认证未通过"】刷脸那条路的失败原因来自阿里云（SUB_CODE_MESSAGES，
+ * 落定时已经写进 result），护照这条路的原因来自人——它只存在于信封的 reject.reason 里。
+ * 不取出来，用户在设置页看到的就是光秃秃三个字「认证未通过」：他不知道是照片糊了、
+ * 护照过期了还是姓名对不上，只能原样再交一次，而管理员会再驳回一次。
+ *
+ * 【为什么内联解密而不是 import passport-realname】那个模块 import 本文件（AUTH_STATUS /
+ * VERIFICATION_STATUS 在这里），反向 import 就成环。要的只有三行，不值得为它拆模块。
+ *
+ * 解不开 / 没有 reject 段一律返回 null，由调用方退回原来的硬编码文案——
+ * 一条流水的信封坏掉不该让整个状态接口报错。
+ */
+function passportRejectReason(row: store.RealnameVerificationRow): string | null {
+  if (row.provider !== PASSPORT_PROVIDER || !row.raw_meta_enc) return null;
+  try {
+    const env = JSON.parse(decryptField(row.raw_meta_enc)) as {
+      reject?: { reason?: unknown };
+    };
+    const reason = env.reject?.reason;
+    return typeof reason === 'string' && reason.trim() ? reason : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 发起实名认证：调阿里云 → 落一条 待审 流水 → 把 H5 认证 URL 交给前端。
  * 幂等策略是"允许重复发起"：每次都是新流水（改名/换证也走这条路），
  * 轮询只认最新一行，旧的未完成流水自然作废。
@@ -340,7 +367,10 @@ export async function refreshRealnameStatus(
       authStatus: user.auth_status,
       verificationStatus: row.status,
       method: row.provider,
-      message: row.status === VERIFICATION_STATUS.passed ? '认证通过' : '认证未通过',
+      message:
+        row.status === VERIFICATION_STATUS.passed
+          ? '认证通过'
+          : (passportRejectReason(row) ?? '认证未通过'),
     };
   }
 

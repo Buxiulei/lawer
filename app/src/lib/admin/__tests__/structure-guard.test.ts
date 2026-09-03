@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
 
 import { ADMIN_MEMBERSHIP_DAYS } from '../actions';
+import { ADMIN_ACTION } from '../audit';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const ADMIN_LIB = path.join(SRC, 'lib/admin');
@@ -144,9 +145,13 @@ describe('② admin_audit 只有一个写入口', () => {
     expect(writers.map(rel)).toEqual(['lib/admin/audit.ts']);
   });
 
-  test('两个动作都经 writeAudit（不是各写各的）', () => {
+  test('每一个后台动作都经 writeAudit（不是各写各的、也不许有动作漏落）', () => {
+    // 【为什么绑在 ADMIN_ACTION 的个数上，而不是写死一个数字】2026-09-03 加护照审核时
+    // 动作从 2 个变成 4 个，这条断言若是硬编码的 2，唯一的"修法"就是把它改成 4——
+    // 而改数字这个动作本身不检查新动作到底有没有落审计。绑到值域上之后，
+    // 新加一个 ADMIN_ACTION 却忘了在 actions.ts 里调 writeAudit，这里立刻红。
     const src = read(path.join(ADMIN_LIB, 'actions.ts'));
-    expect(src.match(/writeAudit\s*\(/g) ?? []).toHaveLength(2);
+    expect(src.match(/writeAudit\s*\(/g) ?? []).toHaveLength(Object.keys(ADMIN_ACTION).length);
   });
 
   test('admin_audit 没有 UPDATE / DELETE 入口（能被后台自己改的审计表等于没有）', () => {

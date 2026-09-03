@@ -13,6 +13,10 @@ export const ADMIN_ACTION = {
   grantMembership: 'grant_membership',
   /** 发公道值：走 lib/billing 的 gongdaoGrant 入账 */
   grantGongdao: 'grant_gongdao',
+  /** 护照实名审核通过：users 转已实名 + 回填姓名/证件号/证件类型 */
+  approveRealname: 'approve_realname',
+  /** 护照实名审核驳回：流水转未通过 + users 打回未认证（可重交） */
+  rejectRealname: 'reject_realname',
 } as const;
 export type AdminAction = (typeof ADMIN_ACTION)[keyof typeof ADMIN_ACTION];
 

@@ -29,7 +29,10 @@ import {
 interface AdminUser {
   uid: number;
   email: string | null;
-  phone_masked: string | null;
+  /** 11 位全号（裁决 B：后台不脱敏）。没绑手机或解不开 → null */
+  phone: string | null;
+  /** 解不开时的原话；正常为 null。「没绑手机」与「密钥配错」在页面上必须长得不一样 */
+  phone_error: string | null;
   created_at: string;
   auth_status: string;
   plan: string | null;
@@ -68,7 +71,7 @@ const PLAN_LABEL: Record<string, string> = { entry: '入门', standard: '中配'
 const FIELDS = [
   { value: 'uid', label: 'UID（精确）' },
   { value: 'email', label: '邮箱（子串）' },
-  { value: 'phone', label: '手机（全号）' },
+  { value: 'phone', label: '手机（全号精确 / ≤10 位模糊）' },
 ] as const;
 
 /**
@@ -191,11 +194,11 @@ export function AdminUsersView() {
 
   if (gone) {
     return (
-      <main className="mx-auto max-w-md px-4 py-16">
+      <div className="mx-auto max-w-md py-16">
         <Card className="p-5">
           <p className="text-[15px] text-ink">这个地址上没有内容。</p>
         </Card>
-      </main>
+      </div>
     );
   }
 
@@ -254,11 +257,12 @@ export function AdminUsersView() {
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
+    <div className="pb-6">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-[20px] font-semibold text-ink">账号管理台</h1>
         <p className="text-[13px] text-ink-2">
-          手机号加密存储，列表只显尾 4；检索手机须填 11 位全号（密文无法模糊匹配）。
+          手机号加密存储，本页解密后全号显示。检索：11 位全号走精确比对；1–10
+          位数字按号码片段模糊匹配（服务端逐行解密，只扫最近 5000 个绑手机的账号，到顶会提示）。
         </p>
       </header>
 
@@ -317,8 +321,15 @@ export function AdminUsersView() {
               <TableRow key={u.uid}>
                 <TableCell className="num">{u.uid}</TableCell>
                 <TableCell className="max-w-[220px] truncate">{u.email ?? '—'}</TableCell>
-                {/* 只显尾 4。这里**没有**展开全号的入口，服务端也不出全号。 */}
-                <TableCell className="num">{u.phone_masked ?? '—'}</TableCell>
+                {/* 全号。解不开时显示原因，不静默退化成 '—'——那会把"密钥配错了"
+                    伪装成"这些人都没绑手机"。 */}
+                <TableCell className="num">
+                  {u.phone ?? (u.phone_error ? (
+                    <span className="text-[13px] text-danger-ink">无法解密：{u.phone_error}</span>
+                  ) : (
+                    '—'
+                  ))}
+                </TableCell>
                 <TableCell className="num whitespace-nowrap">{fmtTime(u.created_at)}</TableCell>
                 <TableCell>
                   <Badge tone={u.auth_status === '已实名' ? 'success' : 'neutral'}>
@@ -380,7 +391,7 @@ export function AdminUsersView() {
           <h2 className="text-[16px] font-semibold text-ink">
             账号 <span className="num">{selected.uid}</span>
             <span className="ml-2 text-[14px] font-normal text-ink-2">
-              {selected.email ?? selected.phone_masked ?? '（无联系方式）'}
+              {selected.email ?? selected.phone ?? '（无联系方式）'}
             </span>
           </h2>
 
@@ -531,6 +542,6 @@ export function AdminUsersView() {
         onConfirm={() => void runPending()}
         onCancel={() => setPending(null)}
       />
-    </main>
+    </div>
   );
 }

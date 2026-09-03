@@ -105,12 +105,19 @@ describe('非白名单一律 404', () => {
 // ───────────────────────────── 列表 ─────────────────────────────
 
 describe('GET /admin/users', () => {
-  test('手机号只出尾 4：响应正文里没有 11 位连续数字', async () => {
+  // 【2026-09-03 判据翻转】主理人：「手机号不要脱敏，这是管理后台」。
+  // 原判据是"正文里没有 11 位连续数字"，现在反过来：全号必须原样出现在响应里。
+  // 掩码回潮（把 maskPhoneTail4 找回来）在这条上即红。
+  test('🔴 手机号出全号：响应正文里就是那 11 位', async () => {
     const res = await listUsers(get('/api/v1/admin/users', signToken(ADMIN)));
     expect(res.status).toBe(200);
     const text = await res.text();
-    expect(text).not.toMatch(/\d{11}/);
-    expect(text).toContain('****8888');
+    expect(text).toContain('13800138888');
+    expect(text).not.toContain('****8888');
+    const body = JSON.parse(text);
+    const row = body.rows.find((r: { uid: number }) => r.uid === TARGET);
+    expect(row.phone).toBe('13800138888');
+    expect(row.phone_error).toBe(null);
   });
 
   // M13：出参绝不带 phone_enc（密文是 base64，不含 11 位数字，`\d{11}` 那条判据挡不住它）。
@@ -127,14 +134,20 @@ describe('GET /admin/users', () => {
     expect(text).not.toContain(enc);
   });
 
-  test('按手机全号检索命中；给前缀则空结果 + 提示', async () => {
+  test('🔴 手机检索：全号走 hash 精确，≤10 位片段走解密扫描（原来这里是空结果 + 提示）', async () => {
     const hit = await (await listUsers(get('/api/v1/admin/users?field=phone&q=13800138888', signToken(ADMIN)))).json();
     expect(hit.total).toBe(1);
     expect(hit.rows[0].uid).toBe(TARGET);
 
-    const miss = await (await listUsers(get('/api/v1/admin/users?field=phone&q=138', signToken(ADMIN)))).json();
-    expect(miss.total).toBe(0);
-    expect(miss.hint).toContain('11 位全号');
+    const fuzzy = await (await listUsers(get('/api/v1/admin/users?field=phone&q=138', signToken(ADMIN)))).json();
+    expect(fuzzy.total).toBe(1);
+    expect(fuzzy.rows[0].uid).toBe(TARGET);
+    expect(fuzzy.hint).toBe(null);
+
+    // 12 位以上仍是"格式不对"，不静默当全量
+    const bad = await (await listUsers(get('/api/v1/admin/users?field=phone&q=138001388881', signToken(ADMIN)))).json();
+    expect(bad.total).toBe(0);
+    expect(bad.hint).toContain('11 位全号');
   });
 
   test('按 uid 精确、按邮箱子串', async () => {
