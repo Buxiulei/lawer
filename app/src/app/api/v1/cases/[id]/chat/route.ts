@@ -8,6 +8,9 @@ import { NextResponse } from 'next/server';
 import { createKnowledgeSearcher, createSseSink, runTurn, startHeartbeat, THREAD_MODES, type AgentEvent, type SseSink } from '@/lib/agent';
 import { requireIdentity, parseId } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
+// 余额闸：**判定不在本文件**，只调 lib/billing 那一个入口（主理人 2026-09-03「拦」）。
+// 路由不许自己 SELECT gongdao——门槛与余额口径长在 lib/billing，抄第二份就会各自演化。
+import { canStartTurn, gongdaoExhaustedMessage } from '@/lib/billing';
 // 会员档决定路由到哪个模型（routing.config.ts 的 Plan）。lib/billing 的 barrel 未导出
 // getMembership，故直取该文件——本路由只读不写，不碰账本。
 import { getMembership } from '@/lib/billing/fulfillment';
@@ -62,6 +65,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json(
       { ok: false, error_code: owned.errorCode, message: owned.message },
       { status: owned.status },
+    );
+  }
+
+  // 余额闸：**开流之前**判完（spec：开了流状态码就定死 200，402 再也发不出去）。
+  // 拦下时不调模型、不插用户消息、不记一行账——这一轮从没发生过。
+  // 已经开始的那一轮不受影响（闸在 runTurn 之前，不进编排层），所以最多欠一轮。
+  // 会员同规则：会员的额度是买来入账的公道值，不是绕闸的资格。
+  const gate = canStartTurn(guard.identity.uid, db);
+  if (!gate.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error_code: 'GONGDAO_EXHAUSTED',
+        message: gongdaoExhaustedMessage(gate.balance),
+        // 余额单独成字段：页面要照它渲染横幅（低调模式下换中性词，不能靠拆 message 取数）
+        balance: gate.balance,
+      },
+      { status: 402 },
     );
   }
 

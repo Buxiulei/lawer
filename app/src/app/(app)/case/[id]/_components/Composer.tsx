@@ -69,12 +69,32 @@ export function Composer({
   streaming,
   onSend,
   onStop,
+  /**
+   * 停用输入（当前唯一的来源：公道值余额用尽，见 GongdaoExhaustedBanner）。
+   * 为什么要**真的禁掉**而不是只挂一条提示：能打字、能点发送、每次都被同一句话弹回来，
+   * 是一种「产品坏了」的体验；禁掉之后出路只剩横幅上那两个入口，那正是唯一能走的路。
+   * 占位符一并换成 disabledPlaceholder，好让「为什么打不了字」就写在打字的地方。
+   */
+  disabled = false,
+  /** 停用时输入框里的那句说明。 */
+  disabledPlaceholder,
+  /**
+   * 开局就摆在框里的那句话（当前唯一来源：被余额闸拦下的那一轮，原文得还给用户）。
+   * 只在**挂载**这一次生效——框里的字此后归用户，不由外面改写。
+   * 所以要把一句话放回来，调用方得换 `key` 让这一块重来一次
+   * （见 Workbench 的 draft.seq）；这是「非受控 + key」那条老路，
+   * 不是把每一次击键都提到上层去（那会让每打一个字整屏对话重画一遍）。
+   */
+  defaultValue = '',
 }: {
   streaming: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
+  disabled?: boolean;
+  disabledPlaceholder?: string;
+  defaultValue?: string;
 }) {
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState(defaultValue);
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useLayoutEffect(() => {
@@ -84,7 +104,7 @@ export function Composer({
 
   const send = () => {
     const text = value.trim();
-    if (!text || streaming) return;
+    if (!text || streaming || disabled) return;
     onSend(text);
     setValue('');
   };
@@ -115,7 +135,8 @@ export function Composer({
               send();
             }
           }}
-          placeholder={PLACEHOLDER}
+          disabled={disabled}
+          placeholder={disabled ? (disabledPlaceholder ?? PLACEHOLDER) : PLACEHOLDER}
           aria-label="输入消息"
           className="min-h-11 flex-1 resize-none rounded-[10px] border border-line bg-surface-2 px-3 py-2.5 text-[16px] leading-7 text-ink placeholder:text-ink-2 focus:border-focus-ring focus:outline-none"
         />
@@ -136,7 +157,7 @@ export function Composer({
             type="button"
             size="icon"
             onClick={send}
-            disabled={!value.trim()}
+            disabled={disabled || !value.trim()}
             aria-label="发送"
           >
             <svg

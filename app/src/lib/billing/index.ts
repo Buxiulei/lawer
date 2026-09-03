@@ -89,9 +89,58 @@ export function listGongdaoLedger(
   return { balance, ledger_sum: sumRow.s, entries };
 }
 
-/** 计费门槛：余额 ≥ GONGDAO_GATE_MIN（=1）即可发起计费行为；负余额自然为 false。 */
+/** 一轮对话能不能开始，以及此刻的余额（拦下时文案要说出这个数）。 */
+export interface TurnGate {
+  ok: boolean;
+  balance: number;
+}
+
+/**
+ * **对话闸的唯一入口**（主理人 2026-09-03「拦」）：开始新一轮之前问它一句。
+ * 余额 ≥ GONGDAO_GATE_MIN（=1）放行；0 与负数一律拦（负余额来自上一轮的透支结算，
+ * 「最多欠一轮」的那一轮就是被这里收住的）。
+ *
+ * 【为什么判定收在 lib/billing 而不是写在路由里】判定要读 gongdao 表，而余额的口径
+ * （物化余额 vs 账本求和、门槛是几、会员算不算数）全长在本文件。路由自己 SELECT 一次，
+ * 门槛就有了第二份定义——下一处需要闸的调用方会照抄那一份，而那一份不会跟着这里改。
+ * 判据侧另有结构守卫钉住「chat 路由不许自己读 gongdao 表」。
+ *
+ * 【会员没有口子】会员的额度是**买来入账的公道值**（gongdaoGrant），不是绕过闸的资格，
+ * 所以这里不看 membership：会员余额到 0 同样拦。
+ *
+ * 只读，不写任何行——拦下的那一轮必须做到 messages / ledger / token_usage 全部零新增。
+ */
+export function canStartTurn(userId: number, db: Database.Database = getDb()): TurnGate {
+  const balance = getGongdao(userId, db);
+  return { ok: balance >= GONGDAO_GATE_MIN, balance };
+}
+
+/**
+ * 被闸拦下时对外说的那句话，自述三段式：**余额多少 / 为什么开不了 / 怎么办**。
+ *
+ * 与判定同处一处，是为了让「说出去的余额」和「判定用的余额」永远是同一个数：
+ * 在路由里就地拼一句，下一处需要拦的地方会照抄，而余额口径改了那份不会跟着改。
+ *
+ * 这是**服务端 API 面**的文案（curl / 自带 agent / 第三方客户端都读它），
+ * 所以用产品原词「公道值」。网页横幅另有一份低调模式下换成中性词的说法
+ * （见 case/[id]/_components/StreamParts 的 GongdaoExhaustedBanner）——
+ * 两处受众不同：API 面没有旁人在肩后看屏幕，网页有。
+ */
+export function gongdaoExhaustedMessage(balance: number): string {
+  return (
+    `公道值余额 ${balance}，这一轮开不了。` +
+    `每轮对话按实际消耗的 token 扣公道值，余额低于 ${GONGDAO_GATE_MIN} 就不再起新的一轮` +
+    `（已经开始的那一轮会照常答完）。` +
+    `到「我的」页兑换一张公道值码，或买一份套餐充值，回来接着问。`
+  );
+}
+
+/**
+ * 计费门槛的布尔外壳（同一道判定，见 canStartTurn）。
+ * 两个名字共用一份判定，改门槛只改一处。
+ */
 export function gongdaoGate(userId: number, db: Database.Database = getDb()): boolean {
-  return getGongdao(userId, db) >= GONGDAO_GATE_MIN;
+  return canStartTurn(userId, db).ok;
 }
 
 /**

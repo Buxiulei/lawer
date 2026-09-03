@@ -137,7 +137,20 @@ export interface ErrorFrame {
    * 点「重试」时把它发回去当 retry_of：服务端据此重发**同一句**问话，且不再插一条新的用户消息。
    */
   message_id?: string;
+  /**
+   * 公道值余额（只有 `code === 'GONGDAO_EXHAUSTED'` 的那一帧带）。
+   * 横幅要照它渲染，**不从 message 里抠数字**：低调模式下横幅换的是整句说法
+   * （见 StreamParts 的 GongdaoExhaustedBanner），抠字符串那条路在换词的那一刻就断了。
+   */
+  balance?: number;
 }
+
+/**
+ * 余额闸拦下这一轮时服务端给的错误码（HTTP 402）。
+ * 前端据它换整块 UI（横幅 + 禁输入框），不是当成又一种「这一轮没说完」。
+ * 与服务端 route.ts 里写的那个串必须一致——那边由路由用例按行为钉住（402 + 这个码）。
+ */
+export const GONGDAO_EXHAUSTED = 'GONGDAO_EXHAUSTED';
 
 export type StreamFrame =
   | MetaFrame

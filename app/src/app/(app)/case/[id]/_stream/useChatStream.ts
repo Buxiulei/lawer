@@ -5,6 +5,7 @@ import { demoCase } from '@/app/_mock/demo';
 import type {
   ActionFrame,
   DraftFrame,
+  ErrorFrame,
   MetaFrame,
   NoticeFrame,
   RecordFrame,
@@ -31,6 +32,8 @@ export interface StreamError {
    * 缺席 = 这次失败没落成行（例如根本没连上），那时只能退回"照原文再发一次"。
    */
   messageId?: string;
+  /** 公道值余额；只有 GONGDAO_EXHAUSTED 带。横幅照它说话，缺席时横幅不报数字 */
+  balance?: number;
 }
 
 /** 一轮对话落定后交给页面的东西 */
@@ -121,19 +124,24 @@ export function reduce(state: State, action: Action): State {
     case 'notice':
       return { ...state, notices: [...state.notices, frame] };
     case 'error':
-      return {
-        ...state,
-        phase: 'error',
-        error: {
-          code: frame.code,
-          message: frame.message,
-          retryAfter: frame.retry_after,
-          messageId: frame.message_id,
-        },
-      };
+      return { ...state, phase: 'error', error: toStreamError(frame) };
     default:
       return state;
   }
+}
+
+/**
+ * error 帧 → StreamError 的**唯一一份**换算。状态机与 onFailed 回调都走它：
+ * 各抄一遍的下场是其中一处漏抄一个字段（balance 就漏过一次），而漏抄的那一处照样不报错。
+ */
+function toStreamError(frame: ErrorFrame): StreamError {
+  return {
+    code: frame.code,
+    message: frame.message,
+    retryAfter: frame.retry_after,
+    messageId: frame.message_id,
+    balance: frame.balance,
+  };
 }
 
 function emptyTurn(): SettledTurn {
@@ -161,9 +169,16 @@ function emptyTurn(): SettledTurn {
 export function useChatStream({
   caseId,
   onSettled,
+  onFailed,
 }: {
   caseId: string;
   onSettled: (turn: SettledTurn) => void;
+  /**
+   * 这一轮以 error 帧收场时叫一声（服务端给了错误码，与断网不是一回事）。
+   * 页面据此收拾自己那份乐观回显——被余额闸拦下的那一轮服务端一个字都没落库，
+   * 屏幕上那句问话得撤回去。错误本身照旧进 state.error，这个回调只报「发生了」。
+   */
+  onFailed?: (error: StreamError) => void;
 }) {
   const [state, dispatch] = useReducer(reduce, INITIAL);
   /** 真端点回落到演示数据：要在页面上说明白，不能让人以为看的是自己的档案 */
@@ -183,6 +198,8 @@ export function useChatStream({
   const lastFailedId = useRef<string | undefined>(undefined);
   const settledRef = useRef(onSettled);
   settledRef.current = onSettled;
+  const failedRef = useRef(onFailed);
+  failedRef.current = onFailed;
 
   useEffect(() => () => abort.current?.abort(), []);
 
@@ -236,6 +253,7 @@ export function useChatStream({
             case 'error':
               // 这一轮的失败已经落成一条 assistant 行；记下它，重试要指名道姓
               lastFailedId.current = frame.message_id;
+              failedRef.current?.(toStreamError(frame));
               return false;
           }
         }

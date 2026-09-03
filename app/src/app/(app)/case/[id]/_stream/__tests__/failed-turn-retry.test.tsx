@@ -16,6 +16,8 @@
  *  · M-C1 收帧的 error 分支不记 `frame.message_id`   ⇒「重试带 retry_of」红
  *  · M-C2 `retry()` 改回 `run(lastMessage.current)`  ⇒「重试带 retry_of」「不重发原文」红
  *  · M-C3 httpTransport 的 body 不带 retry_of        ⇒ 同目录 http-transport-retry 那组红
+ *  · M-R6 收帧的 error 分支不叫 onFailed             ⇒「这一轮失败了要叫一声」红
+ *  · M-R7 onFailed 只传 code（不走 toStreamError）    ⇒「余额一并带出去」红
  */
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,10 +56,10 @@ const FAILED: StreamFrame = {
 /** 连都没连上（前端自己造的那一帧）：没有落成行，也就没有 id */
 const OFFLINE: StreamFrame = { type: 'error', code: 'NETWORK', message: '网络断了。' };
 
-function mount() {
+function mount(onFailed?: (error: unknown) => void) {
   let api: ReturnType<typeof useChatStream> | null = null;
   function Probe() {
-    api = useChatStream({ caseId: '9', onSettled: () => {} });
+    api = useChatStream({ caseId: '9', onSettled: () => {}, onFailed });
     return null;
   }
   renderToStaticMarkup(<Probe />);
@@ -131,5 +133,51 @@ describe('★重试走 retry_of，不把问题再发一遍', () => {
     await settle();
 
     expect(bus.sent.map((s) => s.retryOf)).toEqual([undefined, '77', '88']);
+  });
+});
+
+/**
+ * 【这一轮以 error 帧收场，得叫调用方一声】(RV-1)
+ * 页面是**先把问话画上去再发**的。被余额闸拦下时服务端一个字都没写库，
+ * 那条乐观回显必须撤——而页面只有在流层告诉它"这一轮黄了"时才撤得动。
+ * 错误进 state.error 是给屏幕看的，不等于"通知过调用方"：
+ * 少了这一声，Workbench 那半边接得再对，回显也永远撤不掉。
+ */
+describe('★失败了要叫调用方一声（回显得有人撤）', () => {
+  const REFUSED: StreamFrame = {
+    type: 'error',
+    code: 'GONGDAO_EXHAUSTED',
+    message: '公道值余额 0，这一轮开不了。',
+    balance: 0,
+  };
+
+  it('402 那一帧 ⇒ onFailed 被叫到，且**余额一并带出去**（横幅与撤回显读同一份）', async () => {
+    const seen: unknown[] = [];
+    bus.frames = [[REFUSED]];
+    const api = mount((e) => seen.push(e));
+    api.send(ASK);
+    await settle();
+
+    expect(seen, '流层没通知调用方 ⇒ 那条回显没人撤').toHaveLength(1);
+    expect(seen[0]).toMatchObject({ code: 'GONGDAO_EXHAUSTED', balance: 0 });
+  });
+
+  it('普通失败也叫（撤不撤由调用方按错误码定，不由这一层替它裁）', async () => {
+    const seen: unknown[] = [];
+    bus.frames = [[FAILED]];
+    const api = mount((e) => seen.push(e));
+    api.send(ASK);
+    await settle();
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ code: 'AGENT_FAILED', messageId: '77' });
+  });
+
+  it('正对照：这一轮好好答完 ⇒ 一声都不叫', async () => {
+    const seen: unknown[] = [];
+    bus.frames = [[{ type: 'delta', text: '好。' } as StreamFrame, { type: 'done' } as StreamFrame]];
+    const api = mount((e) => seen.push(e));
+    api.send(ASK);
+    await settle();
+    expect(seen).toEqual([]);
   });
 });

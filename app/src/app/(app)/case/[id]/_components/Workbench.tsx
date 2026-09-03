@@ -9,7 +9,9 @@ import {
   demoMessages,
 } from '@/app/_mock/demo';
 import { mockLawRefs } from '@/app/_mock/workbench';
+import { useDiscreet } from '@/app/_ui/discreet';
 import { formatDate } from '@/app/_ui/format';
+import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { scrollBehavior, useReducedMotion } from '@/app/_ui/motion';
 import { EmptyState } from '@/components/shadcn/empty-state';
 import { AppSheet } from '@/components/shadcn/app-sheet';
@@ -26,11 +28,15 @@ import {
   prefersReducedMotion,
   useCitationBridge,
 } from './citations';
-import { toActionItem, type DraftFrame } from '../_stream/frames';
+import { GONGDAO_EXHAUSTED, toActionItem, type DraftFrame } from '../_stream/frames';
 import { ByoAgentNotice } from './ByoAgentNotice';
 import { readToken } from '../_stream/httpTransport';
 import { useCaseHistory } from '../_stream/useCaseHistory';
-import { useChatStream, type SettledTurn } from '../_stream/useChatStream';
+import {
+  useChatStream,
+  type SettledTurn,
+  type StreamError,
+} from '../_stream/useChatStream';
 import { CasePanel } from './CasePanel';
 import { CaseStatusBar } from './CaseStatusBar';
 import { Composer } from './Composer';
@@ -44,6 +50,7 @@ import {
   AcceptedLine,
   DemoDataBanner,
   DraftConfirmDialog,
+  GongdaoExhaustedBanner,
   StreamErrorCard,
   WaitingCard,
 } from './StreamParts';
@@ -79,6 +86,19 @@ export function Workbench({ caseId }: { caseId: string }) {
   const bottom = useRef<HTMLDivElement>(null);
   const follow = useRef(false);
 
+  /** 本地回显的自增序号：同一毫秒内连发两句也不会撞 id */
+  const localSeq = useRef(0);
+  /**
+   * 刚发出、服务端还没接住的那条**本地回显**（列表里的 id + 问话原文）。
+   * 只在被余额闸拦下时用得上；一轮走完与否都不影响它——下一次 send 会覆盖它。
+   */
+  const pendingEcho = useRef<{ id: string; content: string } | null>(null);
+  /**
+   * 输入框的初值与它的换代号。`seq` 一变，Composer 整块重挂、`text` 成为框里的字；
+   * 平时不动，用户打的字不经过这里（见 Composer 的 defaultValue）。
+   */
+  const [draft, setDraft] = useState({ seq: 0, text: '' });
+
   useEffect(() => setSignedIn(Boolean(readToken())), []);
 
   // 顶栏那个「案件档案」按钮由壳层渲染，这里把开抽屉的动作交给它
@@ -89,6 +109,7 @@ export function Workbench({ caseId }: { caseId: string }) {
      `globals.css` 底部那条 `* { animation-duration: .01ms }` 兜底**管不到 JS**，
      而整屏平滑滚动正是前庭敏感者最难受的一类运动——这一处此前在减弱动效下照跑。 */
   const reduce = useReducedMotion();
+  const { discreet } = useDiscreet();
 
   // 滚到文档末尾而不是锚点：末尾处输入区回到静态位置，最后一行不会被它压住
   const scrollToBottom = useCallback(
@@ -149,7 +170,37 @@ export function Workbench({ caseId }: { caseId: string }) {
     [caseId, scrollToBottom],
   );
 
-  const stream = useChatStream({ caseId, onSettled: settle });
+  /**
+   * 【被拦下的那一轮要连回显一起撤】(RV-1)
+   * 闸在 runTurn 之前：服务端一个字都没写库——不调模型、不插用户消息、不记账。
+   * 所以屏幕上那句问话是页面自己画的一条孤儿，F5 之后它就没了；
+   * 用户看到的是「发出去了 → 刷新一下没了、还得重打一遍」——那比当场被拦更伤，
+   * 因为他已经以为说出去了。撤掉这条回显，并把原文放回输入框：
+   * 这一轮从没发生过，那句话仍然是他的。
+   *
+   * **只对余额闸这一档**这么做。普通失败（模型连不上）服务端已经落了一条失败轮，
+   * 那句问话在库里，撤掉它才是改历史；那一档照旧留回显 + 给重试。
+   */
+  const rollbackRefusedTurn = useCallback((error: StreamError) => {
+    if (error.code !== GONGDAO_EXHAUSTED) return;
+    const pending = pendingEcho.current;
+    if (!pending) return;
+    pendingEcho.current = null;
+    setMessages((prev) => prev.filter((m) => m.id !== pending.id));
+    setDraft((prev) => ({ seq: prev.seq + 1, text: pending.content }));
+  }, []);
+
+  const stream = useChatStream({
+    caseId,
+    onSettled: settle,
+    onFailed: rollbackRefusedTurn,
+  });
+
+  /**
+   * 这一轮是被余额闸拦下的（HTTP 402），不是普通失败。
+   * 判据是服务端的错误码，前端不自己认字符串里的「余额」。
+   */
+  const exhausted = stream.error?.code === GONGDAO_EXHAUSTED;
 
   // 流式中只在用户还停在底部时跟随；一旦用户往回翻，这一轮就不再拽他
   useEffect(() => {
@@ -164,10 +215,13 @@ export function Workbench({ caseId }: { caseId: string }) {
 
   const send = useCallback(
     (content: string) => {
+      const id = `m_local_${localSeq.current++}_${Date.now()}`;
+      // 这条回显还没被服务端接住：拦下时要按 id 把它撤回来（见下面那条 effect）
+      pendingEcho.current = { id, content };
       setMessages((prev) => [
         ...prev,
         {
-          id: `m_local_${prev.length}_${Date.now()}`,
+          id,
           threadId: 'th_1',
           role: 'user',
           content,
@@ -183,6 +237,8 @@ export function Workbench({ caseId }: { caseId: string }) {
 
   const retry = useCallback(() => {
     follow.current = true;
+    // 重试不带新的本地回显（服务端按 retry_of 重发原话），别让它撤走上一轮那条
+    pendingEcho.current = null;
     stream.retry();
   }, [stream]);
 
@@ -194,6 +250,7 @@ export function Workbench({ caseId }: { caseId: string }) {
   const retryFailedTurn = useCallback(
     (messageId: string) => {
       follow.current = true;
+      pendingEcho.current = null;
       stream.retryFailed(messageId);
     },
     [stream],
@@ -313,6 +370,9 @@ export function Workbench({ caseId }: { caseId: string }) {
     );
   }
 
+  // 输入框里那句「为什么打不了字」也走中性词：低调模式下屏幕上不该出现产品原词。
+  const composerHint = `${discreet ? NEUTRAL_WORD.credits : '公道值'}用完了，先去兑换或充值`;
+
   /** 流里正在长出来的那条回复 */
   const live: StreamedMessage = {
     id: 'streaming',
@@ -418,10 +478,27 @@ export function Workbench({ caseId }: { caseId: string }) {
             />
           )}
 
-          {stream.error && <StreamErrorCard error={stream.error} onRetry={retry} />}
+          {/* 余额用尽自成一屏内容：那不是「这一轮没说完」，重试再多次也不会有回答，
+              出路在兑换 / 充值两个入口上。所以换横幅、且不给重试按钮。 */}
+          {stream.error &&
+            (exhausted ? (
+              <GongdaoExhaustedBanner balance={stream.error.balance} />
+            ) : (
+              <StreamErrorCard error={stream.error} onRetry={retry} />
+            ))}
         </div>
 
-        <Composer streaming={stream.busy} onSend={send} onStop={stream.stop} />
+        {/* 余额用尽时输入框禁用：能打字、点发送、每次被同一句话弹回来，读起来像产品坏了。
+            余额一恢复（去 /account 兑换或充值后回来，这一屏重挂）输入框跟着回来。 */}
+        <Composer
+          key={draft.seq}
+          defaultValue={draft.text}
+          streaming={stream.busy}
+          onSend={send}
+          onStop={stream.stop}
+          disabled={exhausted}
+          disabledPlaceholder={composerHint}
+        />
         {/* 锚点放在输入区之后：滚到底时最新一段正好落在输入区上方 */}
         <div ref={bottom} className="h-px" />
       </div>

@@ -9,6 +9,7 @@ import path from 'node:path';
 import type { Database } from 'better-sqlite3';
 
 import { generateApiKey, hashApiKey } from '@/lib/auth/api-key';
+import { getGongdao, gongdaoSettle } from '@/lib/billing';
 import {
   CASE_FACTS_BUDGET,
   MAX_INJECTED_PACKS,
@@ -23,6 +24,7 @@ let keyA: string;
 let keyAReadOnly: string;
 let keyB: string;
 let caseA: number;
+let ownerA: number;
 
 function rpc(body: unknown, key?: string, extraHeaders: Record<string, string> = {}): Request {
   const headers: Record<string, string> = { 'content-type': 'application/json', ...extraHeaders };
@@ -52,7 +54,11 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  for (const table of ['api_keys', 'timeline_events', 'action_items', 'cases', 'users']) {
+  for (const table of [
+    'api_keys', 'timeline_events', 'action_items', 'cases',
+    // 余额闸那一轮之后，本组要造负余额；gongdao 两张表外键指向 users，得先于它清
+    'token_usage', 'gongdao_ledger', 'gongdao', 'users',
+  ]) {
     db.prepare(`DELETE FROM ${table}`).run();
   }
   const insertUser = db.prepare(
@@ -70,6 +76,7 @@ beforeEach(() => {
   keyA = issueKey(userA, ['case:read', 'case:write']);
   keyAReadOnly = issueKey(userA, ['case:read']);
   keyB = issueKey(userB, ['case:read', 'case:write']);
+  ownerA = userA;
 });
 
 describe('鉴权', () => {
@@ -483,5 +490,52 @@ describe('tools/call', () => {
         expect(p.citation_guide, p.id).toBe(packCitationGuide(pack));
       }
     });
+  });
+});
+
+/* ── 余额闸不装到这里（主理人 2026-09-03「拦」第 3 条）─────────────────
+   网页对话余额 ≤ 0 就拦；**MCP 与 v1 案件数据路由不设闸、也不扣费**。
+   理由是「我的」页上印着的那句事实：数据读写不花钱，只有我们替你调模型才花钱
+   （account/self-host-hint.test.tsx 按源码把「只有 orchestrator 等三处扣费」钉死了）。
+   两条判据分工：那一条守「不扣」，这一条守「不拦」——一个把闸抄到 MCP 上的改动
+   不会新增任何 gongdaoSettle 调用点，那边全绿，只有这里会红。
+
+   变异臂 M-G7：给 MCP 路由加同一道 canStartTurn 闸 ⇒ 本组两条全红。 */
+describe('MCP 不设余额闸', () => {
+  /** 把某人的余额压到 -100：比「刚好欠一轮」更狠，网页那边这种账号一句话都发不出去。 */
+  function goNegative(userId: number, amount = 100): void {
+    gongdaoSettle(userId, amount, `mcp-gate-probe-${userId}`, 'companion', null, db);
+    expect(getGongdao(userId, db)).toBe(-amount);
+  }
+
+  test('余额 -100 的 key 照样 initialize 200', async () => {
+    goNegative(ownerA);
+    const res = await POST(
+      rpc({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } }, keyA),
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).result).toMatchObject({ serverInfo: { name: 'lawer-caiyuan' } });
+  });
+
+  test('余额 -100 的 key 照样 tools/list 与 tools/call 200，且一分不扣', async () => {
+    goNegative(ownerA);
+    const before = (db.prepare('SELECT COUNT(*) AS n FROM gongdao_ledger').get() as { n: number }).n;
+
+    const list = await POST(rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, keyA));
+    expect(list.status).toBe(200);
+    expect((await list.json()).result.tools.length).toBeGreaterThan(0);
+
+    const call = await POST(
+      rpc(
+        { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'case_get', arguments: { case_id: caseA } } },
+        keyA,
+      ),
+    );
+    expect(call.status).toBe(200);
+    expect((await call.json()).result.isError).toBe(false);
+
+    // 读写数据不记账：余额还是那个 -100，账本没多出一行
+    expect(getGongdao(ownerA, db)).toBe(-100);
+    expect((db.prepare('SELECT COUNT(*) AS n FROM gongdao_ledger').get() as { n: number }).n).toBe(before);
   });
 });
