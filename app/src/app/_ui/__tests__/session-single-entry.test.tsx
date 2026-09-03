@@ -37,9 +37,11 @@ vi.mock('next/link', () => ({
 const {
   SessionExpiredScreen,
   SessionGate,
+  beginSession,
   forgetSession,
   isSessionExpired,
   loginHref,
+  markSessionExpired,
   resetSessionExpired,
   sessionGateContent,
 } = await import('../session');
@@ -447,5 +449,86 @@ describe('环⑤：「问它」的流式通道（不走 apiFetch）也从同一�
     expect(frames[0].code).toBe('UPSTREAM_DOWN');
     expect(isSessionExpired(), '把「立旗」写成 status !== 200 就会在这里把人踢去登录页').toBe(false);
     expect(store.has(TOKEN_STORAGE_KEY)).toBe(true);
+  });
+});
+
+/* ── 环⑥ 旗子怎么撤：登录成功那一刻 ───────────────────────── */
+
+/**
+ * 【为什么补这一环（复核 MF-B）】前五环把旗子**立**得严丝合缝，却没有一处**撤**它：
+ * resetSessionExpired 全站零调用（只有判据在 beforeEach 里清场）。
+ * 于是这条链上多出一个没人看的尾巴：
+ *   会话过期 → 立旗 → 「去登录」→ 重新登录成功（写了新 token）。
+ * 这一刻屏幕是对的，因为 useSessionExpired = 旗 && 无 token，而 token 刚写进来；
+ * **但旗还举着**。之后任何一刻本机又没了 token——另一个标签页登出、隐私模式写不进去、
+ * 手动清了 localStorage——软导航到 /case/demo（未登录也看得见的演示案件），
+ * 上一轮那面陈旧的旗立刻把整块屏幕换成「登录状态已失效，请重新验证」。
+ * 他这一轮既没过期，甚至可能压根没登录过。
+ *
+ * 所以写 token 与撤旗收成同一个入口 beginSession，登录页两处调用点都走它。
+ */
+describe('环⑥：登录成功写 token 的那一刻，旗子必须撤下来', () => {
+  it('立过旗之后重新登录 → 旗撤了，token 也写进去了', () => {
+    const { store } = stubStorage({});
+    markSessionExpired();
+    expect(isSessionExpired(), '前置：这一刻旗是立着的').toBe(true);
+
+    beginSession('刚换来的新 token');
+
+    expect(
+      isSessionExpired(),
+      '缺什么：登录成功、新 token 都写进本机了，「这次会话已失效」那面旗还举着。\n' +
+        '为什么缺：旗与 token 是联立的（旗 && 无 token），所以此刻屏幕看不出问题——' +
+        '错误要等到之后本机再一次没有 token 时才发作：另一个标签页登出、隐私模式写不进去，' +
+        '然后软导航到 /case/demo，上一轮的陈旧旗把整块屏幕换成「登录状态已失效」，' +
+        '而这一轮他既没过期、甚至可能没登录过。\n' +
+        '怎么办：_ui/session 的 beginSession 里，写完 token 调 resetSessionExpired()。',
+    ).toBe(false);
+    expect(store.get(TOKEN_STORAGE_KEY), 'beginSession 得真的把 token 写进本机').toBe(
+      '刚换来的新 token',
+    );
+  });
+
+  it('重新登录之后再登出，不会又叠出「登录状态已失效」', () => {
+    // 这条盯的是上面那句"错误要等到之后才发作"：撤了旗，后面这一步才是干净的。
+    stubStorage({});
+    markSessionExpired();
+    beginSession('新 token');
+    forgetSession(); // = 另一个标签页登出 / 主动退出
+    expect(
+      isSessionExpired(),
+      '登出之后本机没有 token，此时若旗还在，/case/demo 这类未登录也看得见的页面' +
+        '会被整块换成「登录状态已失效」——那是上一轮的事，不该记在这一轮头上。',
+    ).toBe(false);
+  });
+
+  it('反向对照：beginSession 不是把旗焊死成 false——之后再来一个 401 照样立得起来', () => {
+    // 少了这条，把 markSessionExpired 写成空函数也全绿，那时 F-202 整条链直接失效。
+    stubStorage({});
+    beginSession('新 token');
+    markSessionExpired();
+    expect(isSessionExpired()).toBe(true);
+  });
+
+  it('写 token 只有这一个入口：登录页不许自己 import writeToken', () => {
+    // 独立写 N 次就会忘 N 次，而忘掉的那一处不报错、判据也不响——
+    // 「登录成功了却没撤旗」正是这么来的。所以把入口收成 beginSession 一处，
+    // 并在这里钉住"别处不许再写 token"。
+    const APP = join(process.cwd(), 'src/app');
+    const allowed = new Set([join(APP, '_ui/auth.ts'), join(APP, '_ui/session.tsx')]);
+    const files = sourceFiles(APP);
+    expect(files.length, '正对照：扫描器得真的扫到文件，扫了个空也会全绿').toBeGreaterThan(100);
+    const offenders = files
+      .filter((f) => !allowed.has(f) && /\bwriteToken\b/.test(codeOnly(readFileSync(f, 'utf8'))))
+      .map((f) => f.slice(APP.length + 1));
+    expect(
+      offenders,
+      '缺什么：这些地方绕开 beginSession 自己写 token：\n  ' +
+        offenders.join('\n  ') +
+        '\n为什么缺：写 token 的地方现在是两处（手机验完、邮箱验完），将来还会有第三处。' +
+        '每一处都要记得顺手撤旗，就等于每一处都会有人忘；忘掉的那一处不报错，' +
+        '屏幕当场也是对的，坏处推迟到下一次本机没有 token 时才发作。\n' +
+        '怎么办：登录成功后调 _ui/session 的 beginSession(token)，它把写 token 与撤旗绑在一起。',
+    ).toEqual([]);
   });
 });

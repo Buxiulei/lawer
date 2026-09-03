@@ -1,7 +1,12 @@
 import type { Metadata } from 'next';
 import { WelcomeGate } from './_components/WelcomeGate';
 
-export const metadata: Metadata = { title: '档案已创建' };
+/**
+ * 标签页标题对**两种态**都得成立：这一页画的可能是「档案已创建」，
+ * 也可能是「欢迎回来」。写死成前者，老用户的标签页上仍旧挂着那句
+ * 「你的档案刚建好」——F-201 那句话从 <title> 上原样漏出来（复核顺带）。
+ */
+export const metadata: Metadata = { title: '欢迎' };
 
 /**
  * 登录成功后的落地页。**两种态**：

@@ -10,15 +10,15 @@ import {
   maskPhone,
 } from '@/app/_mock/authpay';
 import { apiFetch } from '@/app/_ui/api';
-import { writeToken } from '@/app/_ui/auth';
 import { cn } from '@/app/_ui/cn';
+import { beginSession } from '@/app/_ui/session';
 import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
 import { Checkbox } from '@/components/shadcn/checkbox';
 import { ChannelStep } from './ChannelStep';
 import { clearLoginStep, loadLoginStep, NO_RESUME, type LoginResume } from './loginStep';
 
-/** 登录完成后落在这里：档案已创建的引导页 */
+/** 登录完成后落在这里：/welcome 会先问一句「你是新来的还是回来的」再决定说什么 */
 const AFTER_LOGIN = '/welcome';
 
 /** 只在「新号补绑邮箱」这条路上显示的两格进度；单因素登录一步就完，没什么好指的 */
@@ -172,7 +172,7 @@ export function LoginForm({ resume }: { resume: LoginResume }) {
                 body: { phone: phone.trim(), code },
                 auth: false,
               });
-              writeToken(res.token);
+              beginSession(res.token);
               if (res.need_email) setCompleting(true);
               else enterSite();
             }}
@@ -397,7 +397,7 @@ export function EmailChannel({
           auth: completing,
         });
         // 后端换发了新 token（补绑那一路此时双验证已齐），要覆盖旧的
-        writeToken(res.token);
+        beginSession(res.token);
         enterSite();
       }}
     />

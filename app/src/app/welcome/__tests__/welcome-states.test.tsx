@@ -30,9 +30,13 @@ const { isFreshCase, intakeUntouched } = await import('@/lib/cases/freshness');
 type CaseSnapshot = Parameters<typeof isFreshCase>[0];
 const { welcomeStateFor, loadWelcomeState } = await import('../_components/welcomeData');
 const { FreshWelcome, ReturningWelcome } = await import('../_components/WelcomeScreens');
+const { WelcomeGate, screenFor } = await import('../_components/WelcomeGate');
 const { fetchMyCases } = await import('@/app/_ui/currentCase');
 const { apiFetch } = await import('@/app/_ui/api');
 const { SessionGate } = await import('@/app/_ui/session');
+const welcomePageModule = await import('../page');
+const WelcomePage = welcomePageModule.default;
+const welcomeMetadata = welcomePageModule.metadata;
 
 /** 刚注册那一刻的案件：ensureDefaultCase 建好了，里面什么都没有 */
 const BRAND_NEW: CaseSnapshot = {
@@ -175,6 +179,80 @@ describe('两种态各自那一屏', () => {
       const main = h.indexOf(name === '新人' ? '开始首诊' : '进入我的案件');
       expect(main, `${name}那一屏找不到主 CTA`).toBeGreaterThan(-1);
       expect(main, `${name}：接入卡排到了主 CTA 前面`).toBeLessThan(h.indexOf('href="/settings/agent"'));
+    }
+  });
+});
+
+/* ── ②b 挑屏：判出来的那个答案，真的换成了对应那一屏 ─────── */
+
+/**
+ * 【为什么单独补这一组（复核 MF-A）】上面 ② 验的是"两屏各自说什么"（裸渲两个组件），
+ * ③ 验的是"判定的结果对不对"，中间那一步——**拿答案去挑屏**——原先谁都没验：
+ * 它长在 WelcomeGate 的 useEffect 里，node 环境驱动不了。复核实测两条变异
+ * （把 returning 那一支整个删掉、把 loading 直接画成 FreshWelcome）
+ * 在全站判据下毫发无损地活着，而前者正是 F-201 本体的复发形态。
+ * 现在那三行是 screenFor 这个纯函数，三态一条一条验。
+ */
+describe('screenFor：答案 → 屏', () => {
+  const html = (state: Parameters<typeof screenFor>[0]) => renderToStaticMarkup(screenFor(state));
+
+  it('returning → 欢迎回来那一屏（不是新人屏）', () => {
+    const h = html({ kind: 'returning', caseId: 5 });
+    expect(
+      text(h),
+      '缺什么：判定说了「他回来了」，挑屏这一步没把它换成「欢迎回来」那一屏。\n' +
+        '为什么缺：这一支删掉之后，判定函数、两屏渲染、取数接线的判据一条都不会红' +
+        '（它们各自都还对），而屏幕上端给老用户的又是「档案已创建 / 开始首诊」——' +
+        'F-201 一字不差地复发，且这一次连异常都没有。\n' +
+        '怎么办：WelcomeGate 的 screenFor 里，kind === "returning" 要渲 ReturningWelcome，' +
+        '并把 caseId 原样传下去。',
+    ).toContain('欢迎回来');
+    expect(text(h), '老用户那一屏上出现了新人那句话').not.toContain('档案已创建');
+    expect(h, 'caseId 没传下去，主 CTA 就不知道该回哪个案件').toContain('href="/case/5"');
+  });
+
+  it('fresh → 新人那一屏', () => {
+    const h = html({ kind: 'fresh' });
+    expect(text(h)).toContain('档案已创建');
+    expect(h).toContain('href="/intake"');
+  });
+
+  it('loading → 骨架，两屏的话一句都不许先说出口', () => {
+    // 反向对照兼本体：把 loading 直接画成 FreshWelcome，用户读到的仍是那一闪
+    // 「你的档案刚建好」——问出答案之前就先对他下了结论。
+    const t = text(html({ kind: 'loading' }));
+    for (const word of ['档案已创建', '开始首诊', '欢迎回来', '进入我的']) {
+      expect(
+        t.includes(word),
+        `缺什么：还没问出「你是新来的还是回来的」，屏幕上就已经写着「${word}」。\n` +
+          '为什么缺：先画一屏再改口，那一闪正是 F-201 里伤人的那句话；' +
+          '它出现在自己的修法里就更没道理。\n' +
+          '怎么办：loading 态渲 WelcomeLoading（骨架），它对任何人都不下结论。',
+      ).toBe(false);
+    }
+  });
+});
+
+/* ── ②c 这一页真的把答案交给了 WelcomeGate ────────────────── */
+
+describe('welcome/page.tsx 交给 WelcomeGate', () => {
+  it('页面渲的是 WelcomeGate 本尊，不是某一屏', () => {
+    const tree = WelcomePage();
+    expect(
+      isValidElement(tree) && tree.type === WelcomeGate,
+      '缺什么：/welcome 这一页没把"该给哪一屏"交给 WelcomeGate。\n' +
+        '为什么缺：page.tsx 直接渲 FreshWelcome 就等于回到 F-201 之前——' +
+        '判定、两屏、接线的判据全都还在、全都还绿，因为它们验的是没人调用的那条路。\n' +
+        '怎么办：page.tsx 只留 <WelcomeGate />。',
+    ).toBe(true);
+  });
+
+  it('标签页标题对两种态都成立——不写「档案已创建」', () => {
+    // 老用户重登，正文改口了、<title> 还挂着那句，切标签页时照样读得到。
+    for (const word of ['档案已创建', '首诊']) {
+      expect(String(welcomeMetadata?.title).includes(word), `<title> 里出现了「${word}」`).toBe(
+        false,
+      );
     }
   });
 });

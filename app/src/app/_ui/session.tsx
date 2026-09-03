@@ -24,7 +24,7 @@ import Link from 'next/link';
 import { useSyncExternalStore, type ReactNode } from 'react';
 import { Button } from '@/components/shadcn/button';
 import { EmptyState } from '@/components/shadcn/empty-state';
-import { clearToken, useAuthToken } from './auth';
+import { clearToken, useAuthToken, writeToken } from './auth';
 
 /* ── 「这次会话的登录态已经失效了」这件事本身 ───────────────── */
 
@@ -58,11 +58,33 @@ export function isSessionExpired(): boolean {
   return expired;
 }
 
-/** 只给测试与登录成功后复位用 */
+/** 撤旗。登录成功时由 beginSession 调，判据里也用它清场。 */
 export function resetSessionExpired(): void {
   if (!expired) return;
   expired = false;
   emit();
+}
+
+/**
+ * 登录成功、拿到新 token 的那一刻：**写 token 与撤旗是同一件事**。
+ *
+ * 【为什么要有这个入口（复核 MF-B）】旗子原先只立不撤——resetSessionExpired
+ * 全站零调用。它一天里能这么伤人：会话过期 → 立旗 → 「去登录」→ 重新登录成功。
+ * 此刻 useSessionExpired = 旗 && 无 token，token 刚写进来，所以屏幕是对的，
+ * **旗子却还举着**。等到之后任何一刻本机又没了 token（另一个标签页登出、
+ * 手动清了 localStorage、隐私模式写不进去），软导航到 /case/demo 这种
+ * 未登录也看得见的页面，上一轮那面陈旧的旗立刻把整块屏幕换成
+ * 「登录状态已失效，请重新验证」——而这一轮他既没过期、甚至可能从没登录。
+ *
+ * 【为什么收成一个入口而不是在调用点各写一行】写 token 的地方现在是两处
+ * （手机验完、邮箱验完），将来还会有第三处；独立写 N 次就会忘 N 次，
+ * 而忘掉的那一处不报错、判据也不响。所以 LoginFlow 不再直接 import writeToken，
+ * 结构守卫（session-single-entry 环⑥）盯着这件事。
+ */
+export function beginSession(token: string): void {
+  writeToken(token);
+  // 撤旗放在写 token 之后：中间这一瞬没有任何订阅者能读到"有 token 且已失效"。
+  resetSessionExpired();
 }
 
 /**
