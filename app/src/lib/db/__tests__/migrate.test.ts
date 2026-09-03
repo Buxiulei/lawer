@@ -11,7 +11,8 @@ import { runMigrations } from '../migrate';
  */
 const ALL_TABLES = [
   // 用户与实名
-  'users', 'sms_codes', 'email_codes', 'ip_quota_events', 'realname_verifications', 'api_keys',
+  'users', 'sms_codes', 'email_codes', 'ip_quota_events', 'otp_send_attempts',
+  'realname_verifications', 'api_keys',
   // 案件档案
   'cases', 'company_profiles', 'timeline_events', 'files', 'evidence', 'attestations',
   'company_docs', 'contract_reviews', 'review_findings', 'claims', 'action_items',
@@ -101,10 +102,10 @@ describe('runMigrations', () => {
 
   it('幂等：连跑两遍不抛错', () => {
     expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(48);
+    expect(ALL_TABLES.length).toBe(49);
   });
 
-  it('48 张表全部建成', () => {
+  it('49 张表全部建成', () => {
     const rows = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[];

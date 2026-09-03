@@ -567,7 +567,8 @@ describe('验码的边界与失败形态', () => {
   // 理由写的是「上游持续报错时不会被无限重试打爆」。代价是用户读到「稍后再试」、
   // 照做立刻再点，收到的却是「发送太频繁，60 秒后再试」——两句话互相打架，
   // 上游抖动时就成了「报错→等 60 秒→再报错」的死循环。发送本身没成功，
-  // 不该算在用户的额度上；拦无限重试的活交给出口 IP 那条计数（失败照记不退）。
+  // 不该算在用户的额度上；拦无限重试的活交给 ≤5 秒防连击闸（otp_send_attempts，
+  // 与额度账本分表，失败照记不退）——**不是出口 IP 那条计数**，那条对存量用户登录整条豁免。
   test('🔴 发信失败 → EMAIL_SEND_FAILED，且不占额度：立刻重发就能成（F-204）', async () => {
     const db = makeTestDb();
     const rows = () =>
@@ -587,16 +588,21 @@ describe('验码的边界与失败形态', () => {
     expect(res).toMatchObject({ ok: false, status: 502, errorCode: 'EMAIL_SEND_FAILED' });
     expect(rows(), '发失败还留着行 = 当日额度被白吃一次').toBe(0);
 
-    // 同一秒立刻重发：不该撞上 60 秒冷却
+    // 一秒后重发：撞的必须是 ≤5 秒防连击闸，而不是那次失败换来的 60 秒冷却
     expect(
-      (await sendEmailRegisterCode(db, { email: EMAIL, ip: IP }, makeDeps(T0).deps)).ok,
-      '发失败后立刻重发被拦 = F-204 复发',
+      await sendEmailRegisterCode(db, { email: EMAIL, ip: IP }, makeDeps(at(1)).deps),
+    ).toMatchObject({ ok: false, status: 429, errorCode: 'SEND_TOO_FAST', retryAfter: 5 });
+
+    // 过了短闸就放行，此刻离那次失败才 6 秒——远在 60 秒之内，说明冷却一点没被占
+    expect(
+      (await sendEmailRegisterCode(db, { email: EMAIL, ip: IP }, makeDeps(at(6)).deps)).ok,
+      '发失败后过了短闸仍被拦 = F-204 复发',
     ).toBe(true);
     expect(rows()).toBe(1);
 
     // 反向对照：真发出去的那次照旧起 60 秒冷却
     expect(
-      await sendEmailRegisterCode(db, { email: EMAIL, ip: IP }, makeDeps(at(1)).deps),
+      await sendEmailRegisterCode(db, { email: EMAIL, ip: IP }, makeDeps(at(12)).deps),
     ).toMatchObject({ ok: false, status: 429, errorCode: 'RATE_LIMITED', retryAfter: 60 });
   });
 

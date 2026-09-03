@@ -10,6 +10,8 @@
 //   - 同一手机号/邮箱 60s 内只能再发一次（retry_after: 60）
 //   - 同一手机号/邮箱 24h 内最多 10 次
 //   - 同一 IP 24h 内最多 300 次（走库，且存量用户登录豁免，见 ip-quota.ts）
+// 外加一条本站自己的（NBDpsy 没有）：
+//   - 同一手机号/邮箱 5 秒内只真正开始发送一次（SEND_TOO_FAST，见 SEND_BURST_SECONDS）
 //   - 单条验证码最多错 5 次，第 5 次错直接锁定，必须重新获取
 //   - 验证码 6 位数字，有效期 SMS_CODE_EXPIRY_MINUTES（默认 5 分钟）
 // 路由只做「校验参数 → 调这里 → 把结果转成 JSON」，不许有第二处业务判断（spec §3.2）。
@@ -30,6 +32,17 @@ import { normalizePhone } from './phone';
 import { classifySmsError } from './sms-errors';
 
 const RESEND_COOLDOWN_SECONDS = 60;
+/**
+ * 防连击闸：同一手机号/邮箱 5 秒内只真正开始发送一次。
+ *
+ * 【它补的是哪个洞】60 秒冷却的账本是 sms_codes / email_codes 的行，而通道发失败时那一行
+ * 会被撤掉（F-204）；IP 那条计数又对存量用户登录整条豁免。两者叠起来，一个老用户在通道
+ * 持续报错时**零节流**——按住重发就是对上游的一轮无限重试。这个短闸兜的就是这一格。
+ * 5 秒是「人读完一句错误提示再点一次」的量级：拦得住连点与脚本，拦不住正常重试。
+ */
+const SEND_BURST_SECONDS = 5;
+/** 短闸流水的保留时长。判定只看 5 秒，多留是为了出问题时看得见刚才那一串连点。 */
+const SEND_BURST_RETENTION_MS = 60 * 1000;
 const DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const DAILY_MAX_SENDS = 10;
 const MAX_VERIFY_ATTEMPTS = 5;
@@ -90,19 +103,28 @@ function normalizeEmail(raw: string): string {
 }
 
 /**
- * 三条发码限流的公共部分：IP → 60s 冷却 → 24h 上限。
- * 顺序照抄 NBDpsy：IP 计数在最前，所以 60s 内重复点也会消耗 IP 额度。
+ * 四条发码限流的公共部分：IP → 60s 冷却 → 24h 上限 → ≤5s 防连击。
+ * 前三条的顺序照抄 NBDpsy：IP 计数在最前，所以 60s 内重复点也会消耗 IP 额度。
  *
  * knownUser=true 即「目标手机号/邮箱已经是验证过的存量用户」＝登录场景，此时**跳过 IP 这条**：
  * 一家公司几百人从同一个 NAT 出口上来，老用户回来登录不该被同事的注册量挤掉。
  * 这不开口子——按号码/邮箱的 60s 冷却与 10 次/日对每一次发码照旧全额生效，
  * 而豁免的前提本身就是「这个号码已经属于某个真实账号」，拿它灌不出新账号来。
+ *
+ * 【短闸为什么排在最后】它只在前三条都放行时才可能触发，而前三条都放行意味着
+ * 「这个号码 60 秒内没有一条成功发出的码」——也就是上一次发送要么根本没发过、要么发失败了。
+ * 排在最后，用户在正常冷却期里读到的仍是那句更有用的「60 秒后再试」，
+ * 短闸只在 F-204 撤行留下的那个缺口上说话。
+ *
+ * 【被短闸拦下的这一次不记流水】否则按住不放的人会把窗口一直往后推、永远出不来；
+ * 记的只有「真的开始发送」的那一次，所以窗口从上一次真发起算，5 秒后必定放行。
  */
 function checkSendQuota(
   db: Database,
   ip: string,
   now: Date,
   knownUser: boolean,
+  target: string,
   countSince: (sinceIso: string) => number,
 ): AuthFailure | null {
   if (!knownUser && !checkAndRecordIp(db, ip, now)) {
@@ -116,7 +138,32 @@ function checkSendQuota(
   if (countSince(dayFrom) >= DAILY_MAX_SENDS) {
     return fail(429, 'RATE_LIMITED', '今日发送次数已达上限，请明天再试');
   }
+  const burstFrom = toSql(new Date(now.getTime() - SEND_BURST_SECONDS * 1000));
+  if (store.countSendAttemptsSince(db, target, burstFrom) > 0) {
+    // 错误码与 RATE_LIMITED 分开：这不是「你今天/这一分钟发太多了」，
+    // 而是「刚才那次还没落地」，用户等几秒就好，说成 60 秒会把人劝走。
+    return fail(
+      429,
+      'SEND_TOO_FAST',
+      `刚才那次发送还没有结果，请 ${SEND_BURST_SECONDS} 秒后再点一次。` +
+        '这几秒是防止连点把同一条验证码重复发出去，不占用今天的发送次数。',
+      SEND_BURST_SECONDS,
+    );
+  }
+  store.recordSendAttempt(db, {
+    target,
+    createdAt: toSql(now),
+    gcBeforeIso: toSql(new Date(now.getTime() - SEND_BURST_RETENTION_MS)),
+  });
   return null;
+}
+
+/** 短闸的账本键：手机号只留哈希，邮箱本就明文存在 email_codes 里。两侧共用一张表。 */
+function smsBurstKey(phoneHash: string): string {
+  return `sms:${phoneHash}`;
+}
+function emailBurstKey(email: string): string {
+  return `email:${email}`;
 }
 
 /** 一条验证码在比对前的状态校验：不存在 / 已用 / 过期 / 已锁 */
@@ -145,7 +192,12 @@ function isSixDigits(code: string): boolean {
  * （同一号码此刻再点会被 60s 冷却挡住，不会并发打两条短信出去）；但短信通道明确报错时
  * 这一行会被撤掉：发送本身没成功，60s 冷却与当日 10 次都不该算在用户头上，
  * 否则用户就同时收到「稍后再试」和「60 秒后再试」两句互相打架的话（F-204）。
- * 上游持续报错时拦住无限重试的是出口 IP 那条计数（checkSendQuota 里，失败照记不退）。
+ *
+ * 【上游持续报错时拦住无限重试的是谁】是 checkSendQuota 末尾那道 ≤5 秒短闸——它的流水
+ * （otp_send_attempts）与额度账本是两张表，撤行不影响它，发失败照记不退。
+ * **不是出口 IP 那条计数**：那条对 knownUser=true（存量用户登录）整条豁免，
+ * 而老用户按住重发正是这里最可能出现的形态，指望 IP 计数拦它等于没拦。
+ * IP 计数只对新号码/新邮箱有效，是另一格的兜底。
  */
 export async function sendPhoneCode(
   db: Database,
@@ -159,7 +211,7 @@ export async function sendPhoneCode(
   const phoneHash = hashLookup(phone);
   // 已验证过手机号的存量用户 = 登录，不吃 IP 配额（见 checkSendQuota 的 knownUser）
   const knownUser = Boolean(store.findUserByPhoneHash(db, phoneHash)?.phone_verified_at);
-  const quotaFailure = checkSendQuota(db, input.ip, now, knownUser, (since) =>
+  const quotaFailure = checkSendQuota(db, input.ip, now, knownUser, smsBurstKey(phoneHash), (since) =>
     store.countSmsCodesSince(db, phoneHash, since),
   );
   if (quotaFailure) return quotaFailure;
@@ -311,7 +363,7 @@ export async function sendEmailCode(
   if (!target.ok) return target;
   const user = target.user;
 
-  const quotaFailure = checkSendQuota(db, input.ip, now, target.knownUser, (since) =>
+  const quotaFailure = checkSendQuota(db, input.ip, now, target.knownUser, emailBurstKey(email), (since) =>
     store.countEmailCodesSince(db, email, since),
   );
   if (quotaFailure) return quotaFailure;
@@ -462,7 +514,7 @@ export async function sendEmailRegisterCode(
 
   const owner = store.findUserByEmail(db, email);
   const knownUser = Boolean(owner?.email_verified_at);
-  const quotaFailure = checkSendQuota(db, input.ip, now, knownUser, (since) =>
+  const quotaFailure = checkSendQuota(db, input.ip, now, knownUser, emailBurstKey(email), (since) =>
     store.countEmailCodesSince(db, email, since),
   );
   if (quotaFailure) return quotaFailure;
