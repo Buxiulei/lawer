@@ -48,6 +48,22 @@ export function unveiledText(html: string): string {
 }
 
 /**
+ * 低调模式下**不按住也读得到**的字：既不在糊层里，也没被 `.discreet-hide` 收起来。
+ *
+ * 页面级泄漏守卫要的正是这一份。原先只剔糊层就够，是因为壳层换词都发生在
+ * 客户端组件里（NeutralLabel 直接换字符串）；到了 server component 上，换词只能靠
+ * 「两句都印、CSS 挑一句」（见 /welcome 的计费句与「进入我的案件」那颗 CTA），
+ * 那时常规变体确实在 DOM 里、确实没进糊层，但低调模式下它 display:none。
+ * 拿 unveiledText 去扫会把它当成泄漏——守卫红着，屏幕上其实什么都没露。
+ */
+export function unveiledVisibleText(html: string): string {
+  return textExcluding(
+    html,
+    (tag) => /\sdata-veil\b/.test(tag) || /class="[^"]*\bdiscreet-hide\b/.test(tag),
+  );
+}
+
+/**
  * 这一刻**眼睛真能看到**的字：把 CSS 会 `display:none` 掉的那一半剔掉。
  *
  * 那两个类的规则写在 globals.css（`.discreet-only` 默认收起、

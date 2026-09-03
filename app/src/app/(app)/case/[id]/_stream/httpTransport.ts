@@ -5,12 +5,14 @@
  * 非流错误统一 {ok:false, error_code, message, retry_after?}，在这里归一成 error 帧。
  */
 
+import { classifyAuthStatus } from '@/app/_ui/api';
 import { readToken } from '@/app/_ui/auth';
 
 import type { ErrorFrame, StreamFrame } from './frames';
 import { readSseFrames } from './sse';
 import {
   NeedsDemoFallbackError,
+  SessionExpiredError,
   type ChatRequest,
   type ChatTransport,
 } from './transport';
@@ -55,7 +57,17 @@ export function createHttpTransport(): ChatTransport {
         }),
       });
 
-      if (res.status === 401) throw new NeedsDemoFallbackError('unauthorized');
+      /**
+       * 登录态这一关不自己判（F-202 复核 MF-1）：这条流用不了 apiFetch，但清 token、
+       * 立失效旗、区分「失效」与「没登录」全归 _ui/api 那一个入口。
+       * 原先这里是 `NeedsDemoFallbackError('unauthorized')`——会话一过期，
+       * 页面就拿**演示案件的案情**当他的答案端出去，还留着那个不作数的 token。
+       */
+      const verdict = classifyAuthStatus(res.status);
+      // 失效：出路归 layout 上那道闸门，这一屏马上整块换成「去登录」
+      if (verdict === 'expired') throw new SessionExpiredError();
+      // 没登录：演示回落仍然是对的，横幅会说清楚这不是他的档案
+      if (verdict === 'signed-out') throw new NeedsDemoFallbackError('no-token');
 
       const contentType = res.headers.get('content-type') ?? '';
       if (!res.ok || !contentType.includes('text/event-stream') || !res.body) {

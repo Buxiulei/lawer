@@ -24,7 +24,10 @@ vi.mock('@/app/_ui/auth', () => ({
 }));
 
 const { default: LandingPage } = await import('../page');
-const { default: WelcomePage } = await import('../welcome/page');
+// J8 认的是**新人那一屏**：/welcome 现在有两种态（F-201），页面本体只是个挑屏的闸门。
+// 「接入卡与开始首诊并列首位」这条规矩说的就是新人那一屏——老用户那一屏没有「开始首诊」，
+// 它自己的并列关系由 welcome-discreet.test 的反向对照盯着。
+const { FreshWelcome } = await import('../welcome/_components/WelcomeScreens');
 
 beforeEach(() => {
   vi.stubGlobal('localStorage', {
@@ -74,8 +77,8 @@ describe('J7 主页：卷〇排在卷一之前', () => {
   });
 });
 
-describe('J8 欢迎页：接入卡与「开始首诊」并列首位，且指向一页式指南', () => {
-  const html = () => renderToStaticMarkup(<WelcomePage />);
+describe('J8 欢迎页（新人那一屏）：接入卡与「开始首诊」并列首位，且指向一页式指南', () => {
+  const html = () => renderToStaticMarkup(<FreshWelcome />);
 
   it('卡在页面上，指向 /settings/agent', () => {
     const h = html();
