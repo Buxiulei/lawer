@@ -13,8 +13,7 @@
 // 老板看的就是这些数，糊掉只会让他把糊层关了再看——那反而让开关变成摆设。
 // 所以这一页不套 Sensitive、不加 data-veil。
 import type { Metadata } from 'next';
-import { AdminUsersView } from './_components/AdminUsersView';
-import { RealnamePendingQueue } from './_components/RealnamePendingQueue';
+import { AdminUsersPanels } from './_components/AdminUsersPanels';
 
 export const metadata: Metadata = {
   title: '后台',
@@ -26,10 +25,11 @@ export default function AdminUsersPage() {
   // 待审队列在最上面：它是**有人在等**的那一块（护照用户交完材料就卡在待审，
   // 只有这里能推动他），而下面的账号表是随时可查的。两块各自独立取数、
   // 各自处理 404，其中一块不通不该把另一块也拖成空白页。
+  // 顺序与"审完了要通知下面一声"都在 AdminUsersPanels 里——这一页是服务端组件
+  // （要 export metadata），递不了回调。
   return (
     <main className="mx-auto max-w-5xl px-4 pt-6">
-      <RealnamePendingQueue />
-      <AdminUsersView />
+      <AdminUsersPanels />
     </main>
   );
 }

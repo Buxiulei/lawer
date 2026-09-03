@@ -21,6 +21,12 @@
 // 所以取图走 fetch 手动带头 → blob → createObjectURL，收起面板时 revoke
 //（不 revoke 就是每看一张证件照在内存里永久留一份）。
 //
+// ── 为什么审完要告诉外面一声（onReviewed）──
+// 这一块和下面的「账号管理台」看的是同一个人：审核通过那一刻，账号表里那一行的
+// 「实名状态」和「最近操作」都变了，可它们各自取各自的数，谁也不知道对方动过。
+// 不吼这一声，操作者面前就是"上面说通过了、下面还写着待审"——他会以为没生效，
+// 再点一次（拿到 400），或者去手动刷新。回调由 AdminUsersPanels 接住。
+//
 // ── 低调模式不适用后台 ──
 // 与 users/page.tsx 同一条既有约定：这一页不套 Sensitive、不加 data-veil。
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -46,6 +52,20 @@ interface PendingRow {
 }
 
 type Review = { kind: 'approve'; row: PendingRow } | { kind: 'reject'; row: PendingRow; reason: string };
+
+/**
+ * 审核结果邮件的三种结局（服务端 lib/admin/realname-notify 的 RealnameNotifyOutcome）。
+ * **三句话必须分开写**：合成一句"已尽力发一封通知"，操作者就分不出
+ * "他压根没留邮箱"（正常，不用管）与"邮件通道坏了"（要去修，而且这个人不会被通知到）。
+ * 三者都不影响审核本身已经落定——failed 那句把这件事说明白，免得有人以为要重审一次。
+ */
+type NotifyOutcome = 'sent' | 'no_email' | 'failed';
+
+const NOTIFY_COPY: Record<NotifyOutcome, string> = {
+  sent: '已给他发了一封通知。',
+  no_email: '他没留邮箱，未发通知。',
+  failed: '邮件没发出去，审核已生效。',
+};
 
 const MATERIALS = [
   { kind: 'id_page', label: '护照资料页' },
@@ -144,7 +164,7 @@ function MaterialViewer({ row }: { row: PendingRow }) {
   );
 }
 
-export function RealnamePendingQueue() {
+export function RealnamePendingQueue({ onReviewed }: { onReviewed?: () => void } = {}) {
   const [rows, setRows] = useState<PendingRow[]>([]);
   const [loading, setLoading] = useState(true);
   /** 404 = 不是白名单（或这条路径不存在）。整块隐身，不解释、不出「后台」字样。 */
@@ -185,18 +205,32 @@ export function RealnamePendingQueue() {
     setFlash(null);
     try {
       const path = `/admin/realname/${review.row.verification_id}/${review.kind}`;
+      // 字段名是与服务端的约定：驳回必须叫 reason（route 只认这一个名字，
+      // 叫别的等于"原因没填"，会被 400 BAD_REASON 挡下）。
       const body = review.kind === 'reject' ? { reason: review.reason } : {};
-      await apiFetch<{ ok: true }>(path, { method: 'POST', body });
-      setFlash(
+      const res = await apiFetch<{ ok: true; notified: NotifyOutcome }>(path, {
+        method: 'POST',
+        body,
+      });
+      const base =
         review.kind === 'approve'
-          ? `账号 ${review.row.user_id} 已转「已实名」（证件类型：护照）。已尽力给他发一封中性通知。`
-          : `已驳回账号 ${review.row.user_id} 的这次提交，他会在设置页看到你写的原因，并可以重新提交。`,
-      );
+          ? `账号 ${review.row.user_id} 已转「已实名」（证件类型：护照）。`
+          : `已驳回账号 ${review.row.user_id} 的这次提交，他会在设置页看到你写的原因，并可以重新提交。`;
+      setFlash(`${base}${NOTIFY_COPY[res.notified] ?? ''}`);
       setReview(null);
       setOpenId(null);
       await load();
+      onReviewed?.();
     } catch (err) {
-      // 失败不关弹层：审核不像发钱那样怕重试（非待审的流水只会拿到 400），
+      // 【409 例外：关弹层并重取】STALE_VERIFICATION 说的是"你手上这张队列是旧的"，
+      // 原地重试只会再撞一次同一堵墙。把队列换成新的，让操作者看着新材料重新决定。
+      if (err instanceof ApiError && err.status === 409) {
+        setReview(null);
+        setOpenId(null);
+        await load();
+        onReviewed?.();
+      }
+      // 其余失败不关弹层：审核不像发钱那样怕重试（非待审的流水只会拿到 400），
       // 但把错误显示在原地，操作者才知道自己刚才那一下到底成没成。
       setFlash(humanError(err));
     } finally {

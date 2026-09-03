@@ -130,7 +130,12 @@ export function opRequestBody(p: Pending): Record<string, unknown> {
     : { delta: p.delta, note: p.note, op_ref: p.opRef };
 }
 
-export function AdminUsersView() {
+/**
+ * @param refreshKey 每变一次就重取一遍列表与审计。上面的实名审核台审完一条会把它 +1
+ *   （见 AdminUsersPanels）：不重取的话，刚被通过的那个人在这张表里还写着「待审」，
+ *   「最近操作」里也看不到刚落的那行审计——操作者会以为自己那一下没生效。
+ */
+export function AdminUsersView({ refreshKey = 0 }: { refreshKey?: number } = {}) {
   const [field, setField] = useState<string>('uid');
   const [query, setQuery] = useState('');
   const [submitted, setSubmitted] = useState<{ field: string; query: string }>({
@@ -183,7 +188,9 @@ export function AdminUsersView() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+    // refreshKey 只做触发用（load 的函数体里读不到它）：它一变就重取一遍，
+    // 让上面刚审完的那条在这张表和「最近操作」里当场可见。
+  }, [load, refreshKey]);
 
   // 列表刷新后把操作面板上的余额/会员档跟上：不同步的话，刚发完钱那一刻面板还写着旧余额，
   // 而这一页的用途正是让操作者确认自己刚才那一下的后果。选中的人不在本页结果里就保持原样。

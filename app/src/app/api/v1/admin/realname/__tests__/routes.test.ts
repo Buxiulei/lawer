@@ -9,7 +9,12 @@
 //   ④ 已落定的流水不得二次审核（400 BAD_STATE，不静默改写）；
 //   ⑤ 照片路由：无鉴权 404、有鉴权 200 且 Content-Type 与上传时一致、带 no-store、
 //      kind 非法 400；
-//   ⑥ 发信尽力而为：SMTP 没配（sendMail 抛）照样 200 且 DB 已落定；没邮箱则优雅跳过。
+//   ⑥ 发信尽力而为：SMTP 没配（sendMail 抛）照样 200 且 DB 已落定；没邮箱则优雅跳过；
+//   ⑦ 队列每一行都自述得清：信封坏掉的那条照样现身并带 envelope_error（不是静默消失），
+//      手机号是**解密后的全号**（不是掩码、也不是 null）；
+//   ⑧ 陈旧流水不许落定：审的不是该用户 MAX(id) 那行 → 409 STALE_VERIFICATION，且什么都没写；
+//   ⑨ 备注/原因有字数上限（400 BAD_NOTE / BAD_REASON）；
+//   ⑩ 照片路由带 nosniff，且只回 image/*（其余 415，不把用户上传的字节交给浏览器渲染）。
 import { beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -210,6 +215,37 @@ describe('GET /admin/realname/pending', () => {
     expect(body.rows[0].verification_id).not.toBe(first);
   });
 
+  test('🔴 信封坏掉的那条照样现身，带 envelope_error 自述原因（静默跳过=这条待审永远没人看见）', async () => {
+    const vid = await submit();
+    // 真实形态：密钥换过 / 那一列被清过。解密在 readPassportEnvelope 里抛。
+    db.prepare('UPDATE realname_verifications SET raw_meta_enc=? WHERE id=?').run('enc:v1:坏掉了', vid);
+
+    const res = await pendingGet(get('/api/v1/admin/realname/pending', signToken(ADMIN)));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // 【变异对照】把那段 try/catch 改成"解不开就 continue"（或整条 500）→ count 变 0 / 状态非 200 → 红
+    expect(body.count).toBe(1);
+    expect(body.rows[0].verification_id).toBe(vid);
+    expect(typeof body.rows[0].envelope_error).toBe('string');
+    expect(body.rows[0].envelope_error.length).toBeGreaterThan(0);
+    // 解不开就是解不开：不许在这两个字段上编一个占位值
+    expect(body.rows[0].cert_name).toBe(null);
+    expect(body.rows[0].cert_no).toBe(null);
+  });
+
+  test('🔴 队列里的手机号是解密后的全号（不是掩码、不是 null）', async () => {
+    const { encryptField, hashLookup } = await import('@/lib/crypto');
+    const SEEDED = '13800138888';
+    db.prepare('UPDATE users SET phone_enc=?, phone_hash=? WHERE id=?')
+      .run(encryptField(SEEDED), hashLookup(SEEDED), TARGET);
+    await submit();
+
+    const body = await (await pendingGet(get('/api/v1/admin/realname/pending', signToken(ADMIN)))).json();
+    // 【变异对照】回退成 phone_masked（`138****8888`）或忘了解密（null）→ 这里逐字对不上 → 红
+    expect(body.rows[0].phone).toBe(SEEDED);
+    expect(body.rows[0].phone_error).toBe(null);
+  });
+
   test('审结之后离开队列', async () => {
     const vid = await submit();
     await approvePost(post(`/api/v1/admin/realname/${vid}/approve`, {}, signToken(ADMIN)), idCtx(vid));
@@ -267,6 +303,10 @@ describe('🔴 GET /admin/realname/:id/photo/:kind', () => {
       // 【变异对照】若路由用 NextResponse.json 包了一层，这里会是 application/json → 红
       expect(res.headers.get('content-type'), kind).toBe(mime);
       expect(res.headers.get('cache-control'), kind).toBe('no-store');
+      // 【为什么这条也要钉】回的是用户上传的字节。没有 nosniff，浏览器会按内容猜类型——
+      // 一份"声明是 image/jpeg、内容是 HTML"的材料就会在本站源上被当页面渲染，
+      // 而本站的登录态就在 localStorage 里。少这一个头不报错、不崩，平时看不出来。
+      expect(res.headers.get('x-content-type-options'), kind).toBe('nosniff');
       const got = Buffer.from(await res.arrayBuffer());
       expect(got.equals(bytes), kind).toBe(true);
     }
@@ -288,6 +328,22 @@ describe('🔴 GET /admin/realname/:id/photo/:kind', () => {
     );
     expect(outsider.status).toBe(404);
     expect(await outsider.text()).toBe('');
+  });
+
+  test('🔴 非图片的材料一律 415，不把字节交给浏览器', async () => {
+    const vid = await submit();
+    // 真实形态：上传面哪天松了口，或历史行里躺着一条别的类型。
+    db.prepare("UPDATE files SET mime='text/html'").run();
+    const res = await photoGet(
+      get(`/api/v1/admin/realname/${vid}/photo/id_page`, signToken(ADMIN)),
+      photoCtx(vid, 'id_page'),
+    );
+    // 【变异对照】把 mime 白名单去掉 → 这里变成 200 + text/html → 红
+    expect(res.status).toBe(415);
+    const body = await res.json();
+    expect(body.error_code).toBe('BAD_MATERIAL_MIME');
+    // 415 的体里不许夹带原始字节
+    expect(JSON.stringify(body)).not.toContain(ID_PAGE.toString('utf-8'));
   });
 
   test('盘上密文没了 → 500 且说清是哪一种坏（不伪装成"没这张图"）', async () => {
@@ -423,6 +479,85 @@ describe('🔴 POST /admin/realname/:id/reject', () => {
     const res = await approvePost(post(`/api/v1/admin/realname/${vid}/approve`, {}, signToken(ADMIN)), idCtx(vid));
     expect(res.status).toBe(400);
     expect((db.prepare('SELECT auth_status a FROM users WHERE id=?').get(TARGET) as { a: string }).a).toBe('未认证');
+  });
+});
+
+// ─────────────── ⑧ 陈旧流水：审的必须是该用户最新那一行 ───────────────
+
+describe('🔴 STALE_VERIFICATION：不是 MAX(id) 那行，一律 409 且什么都没写', () => {
+  test('管理员打开队列之后用户又交了一份 → 审旧行 409，审新行照常 200', async () => {
+    const stale = await submit();
+    const fresh = await submit();
+    expect(fresh).toBeGreaterThan(stale);
+
+    for (const [name, call] of [
+      ['approve', () => approvePost(post(`/api/v1/admin/realname/${stale}/approve`, {}, signToken(ADMIN)), idCtx(stale))],
+      ['reject', () => rejectPost(post(`/api/v1/admin/realname/${stale}/reject`, { reason: '照片模糊' }, signToken(ADMIN)), idCtx(stale))],
+    ] as const) {
+      const res = await call();
+      // 【变异对照】去掉 latestVerificationIdForUser 那一比 → 这里变 200（旧行落定，
+      // 而 /realname/status 只认新行，用户界面继续显示"等待人工核验"）→ 红
+      expect(res.status, name).toBe(409);
+      expect((await res.json()).error_code, name).toBe('STALE_VERIFICATION');
+    }
+
+    // 被拒的两次确实什么都没写：两行流水都还在待审，用户没被改，审计 0 行
+    for (const id of [stale, fresh]) {
+      expect((db.prepare('SELECT status s FROM realname_verifications WHERE id=?').get(id) as { s: string }).s).toBe('待审');
+    }
+    expect((db.prepare('SELECT auth_status a FROM users WHERE id=?').get(TARGET) as { a: string }).a).toBe('待审');
+    expect(db.prepare('SELECT COUNT(*) c FROM admin_audit').get()).toEqual({ c: 0 });
+
+    const ok = await approvePost(post(`/api/v1/admin/realname/${fresh}/approve`, {}, signToken(ADMIN)), idCtx(fresh));
+    expect(ok.status).toBe(200);
+  });
+
+  test('409 与 400 分得开：同一条流水"陈旧"和"已落定"不是同一个码', async () => {
+    const vid = await submit();
+    await approvePost(post(`/api/v1/admin/realname/${vid}/approve`, {}, signToken(ADMIN)), idCtx(vid));
+    // 仍是 MAX(id)，只是已经落定 → 400 BAD_STATE（不是 409）
+    const again = await approvePost(post(`/api/v1/admin/realname/${vid}/approve`, {}, signToken(ADMIN)), idCtx(vid));
+    expect(again.status).toBe(400);
+    expect((await again.json()).error_code).toBe('BAD_STATE');
+  });
+});
+
+// ─────────────── ⑨ 备注 / 驳回原因的字数上限 ───────────────
+
+describe('🔴 reason / note 超长 → 400（审计表要给人翻，不能被一份聊天记录读废）', () => {
+  test('note 500 字放行、501 字 BAD_NOTE 且什么都没写', async () => {
+    const vid = await submit();
+    const tooLong = await approvePost(
+      post(`/api/v1/admin/realname/${vid}/approve`, { note: '核'.repeat(501) }, signToken(ADMIN)),
+      idCtx(vid),
+    );
+    expect(tooLong.status).toBe(400);
+    expect((await tooLong.json()).error_code).toBe('BAD_NOTE');
+    expect(db.prepare('SELECT COUNT(*) c FROM admin_audit').get()).toEqual({ c: 0 });
+    expect((db.prepare('SELECT status s FROM realname_verifications WHERE id=?').get(vid) as { s: string }).s).toBe('待审');
+
+    const ok = await approvePost(
+      post(`/api/v1/admin/realname/${vid}/approve`, { note: '核'.repeat(500) }, signToken(ADMIN)),
+      idCtx(vid),
+    );
+    expect(ok.status).toBe(200);
+  });
+
+  test('reason 500 字放行、501 字 BAD_REASON 且什么都没写', async () => {
+    const vid = await submit();
+    const tooLong = await rejectPost(
+      post(`/api/v1/admin/realname/${vid}/reject`, { reason: '糊'.repeat(501) }, signToken(ADMIN)),
+      idCtx(vid),
+    );
+    expect(tooLong.status).toBe(400);
+    expect((await tooLong.json()).error_code).toBe('BAD_REASON');
+    expect(db.prepare('SELECT COUNT(*) c FROM admin_audit').get()).toEqual({ c: 0 });
+
+    const ok = await rejectPost(
+      post(`/api/v1/admin/realname/${vid}/reject`, { reason: '糊'.repeat(500) }, signToken(ADMIN)),
+      idCtx(vid),
+    );
+    expect(ok.status).toBe(200);
   });
 });
 
