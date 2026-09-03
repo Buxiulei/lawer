@@ -85,3 +85,29 @@ export function setStatus(
     verificationId,
   );
 }
+
+/**
+ * 某个 provider 下待人工审核的流水，**每个用户至多一行**：只列出「这一行正好是该用户
+ * 最新一次核验」的那些。
+ *
+ * 【为什么必须收敛到每人一行】发起实名不挡「待审」态（initPassportRealname 只挡已实名），
+ * 所以同一个人可以连交两次护照材料，库里就有两条 待审。而判「当前实名状态」的
+ * latestByUser 只认 id 最大的那条 —— 审核台若把旧行也列出来，管理员点了旧行的「通过」，
+ * users 表会转「已实名」，可 /realname/status 读到的仍是那条更新的 待审 行，
+ * 页面继续显示「等待人工核验」。这种不一致不报错、不崩，只是让用户和管理员各看各的。
+ * 于是这里用「id = 该用户的 MAX(id)」把队列钉在与 latestByUser 同一行上。
+ */
+export function listPendingByProvider(
+  db: Database,
+  provider: string,
+  status: string,
+): RealnameVerificationRow[] {
+  return db
+    .prepare(
+      `SELECT v.* FROM realname_verifications v
+        WHERE v.provider = ? AND v.status = ?
+          AND v.id = (SELECT MAX(w.id) FROM realname_verifications w WHERE w.user_id = v.user_id)
+        ORDER BY v.id DESC`,
+    )
+    .all(provider, status) as RealnameVerificationRow[];
+}

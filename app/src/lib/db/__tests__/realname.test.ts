@@ -66,12 +66,14 @@ describe('realname_verifications', () => {
 
   it('接口面只读+插入：模块不导出 delete，也不碰 users.auth_status', () => {
     // findById 是 2026-08-29 护照通道加的：人工审核要先读出材料哈希与信封再决定落不落定。
+    // listPendingByProvider 是 2026-09-03 后台审核台加的：仍是只读（一条 SELECT）。
     // 这张清单**故意钉死全集**——新增导出必须来这里改一次，
     // 否则"这个模块只读+插入"这句保证会随每次顺手加函数而悄悄失效。
     expect(Object.keys(store).sort()).toEqual([
       'findById',
       'insertVerification',
       'latestByUser',
+      'listPendingByProvider',
       'setStatus',
     ]);
     store.insertVerification(db, { userId, provider: 'cloudauth', status: 'passed' });

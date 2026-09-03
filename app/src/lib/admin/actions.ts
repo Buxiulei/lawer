@@ -1,5 +1,6 @@
 // app/src/lib/admin/actions.ts
-// 后台的两个变更动作：调会员档、发公道值。两者都在一个事务里连同 admin_audit 一起落。
+// 后台的四个变更动作：调会员档、发公道值、护照实名通过/驳回。
+// 每一个都在一个事务里连同 admin_audit 一起落。
 //
 // ── 铁律：发钱只经 lib/billing 的唯一入口 ──
 // 本文件**不含**任何 `INSERT INTO gongdao_ledger` / `UPDATE gongdao`，一律调 gongdaoGrant。
@@ -13,6 +14,12 @@ import crypto from 'node:crypto';
 import { getGongdao, gongdaoGrant } from '@/lib/billing/index';
 import { getMembership, grantMembership } from '@/lib/billing/fulfillment';
 import { GONGDAO_LEDGER_TYPE, type MembershipPlan } from '@/lib/billing/pricing';
+import {
+  approvePassportRealname,
+  rejectPassportRealname,
+} from '@/lib/auth/passport-realname';
+import { AUTH_STATUS } from '@/lib/auth/realname';
+import { CERT_TYPE } from '@/lib/evidence/attest';
 import { ADMIN_ACTION, writeAudit } from './audit';
 
 /** 后台可选的会员时长（天）。档位与时长解耦，见 grantMembership 的 overrideDays。 */
@@ -228,4 +235,115 @@ export function adminGrantGongdao(
 
     return { ok: true, refId: input.refId, delta, balance, applied };
   })();
+}
+
+// ─────────────────────── 护照实名审核（通过 / 驳回）───────────────────────
+
+export type AdminRealnameResult =
+  | { ok: true; userId: number; authStatus: string; certType?: string }
+  /** 流水已落定 / 不是护照通道 / 原因为空等业务拒绝，reason 是可直接展示给管理员的原话 */
+  | { ok: false; reason: string };
+
+/**
+ * 审核人的记名。**不是管理员填的字符串，是登录态里的 uid** ——
+ * 让操作者自己写名字，等于让留痕可以署别人的名。
+ */
+function operatorTag(operatorUid: number): string {
+  return `admin:${operatorUid}`;
+}
+
+/**
+ * 审计明细**不放姓名与护照号**。admin_audit 会原样出现在 /woo 的「最近操作」表里，
+ * 那张表不设权限分级、还会被截图。留痕要能回溯，靠的是 verification_id 与材料哈希：
+ * 顺着它能查回那条流水（PII 在信封密文里，取它要另过一次 admin 闸门），
+ * 而截图本身泄露不了任何一个人的证件信息。
+ */
+function realnameDetail(
+  verificationId: number,
+  plan: { materials: { id_page: { sha256: string }; selfie: { sha256: string } } },
+  extra: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    verification_id: verificationId,
+    provider: 'passport',
+    material_sha256: [plan.materials.id_page.sha256, plan.materials.selfie.sha256],
+    ...extra,
+  };
+}
+
+/**
+ * 通过：落定实名 + 落审计，一个事务。
+ *
+ * 【为什么把 approvePassportRealname 包在事务里而不是让它自己管】它内部已有一个
+ * db.transaction（better-sqlite3 嵌套即 SAVEPOINT，与 adminSetMembership → grantMembership 同款）。
+ * 外面再包一层，是为了让**审计与落定同生同死**：审计落了而实名没落，事后看就是
+ * 「某人被通过了」而库里查无此事；反过来则是一次没人认领的身份断言。
+ *
+ * 业务性拒绝（流水不存在 / 不是护照 / 已落定）由 approvePassportRealname 抛出，
+ * 在这里被转成 {ok:false}——事务已随抛出整体回滚，所以**审计行也不会留下**。
+ */
+export function adminApprovePassportRealname(
+  db: Database.Database,
+  input: { operatorUid: number; verificationId: number; note?: string },
+): AdminRealnameResult {
+  try {
+    return db.transaction((): AdminRealnameResult => {
+      const plan = approvePassportRealname(db, {
+        verificationId: input.verificationId,
+        operator: operatorTag(input.operatorUid),
+        note: input.note,
+      });
+      writeAudit(db, {
+        operatorUid: input.operatorUid,
+        action: ADMIN_ACTION.approveRealname,
+        targetUid: plan.userId,
+        detail: realnameDetail(input.verificationId, plan, {
+          auth_status: AUTH_STATUS.verified,
+          cert_type: CERT_TYPE.passport,
+          note: input.note ?? '',
+        }),
+      });
+      return {
+        ok: true,
+        userId: plan.userId,
+        authStatus: AUTH_STATUS.verified,
+        certType: CERT_TYPE.passport,
+      };
+    })();
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * 驳回：流水转未通过（信封里写下原因）+ users 打回未认证 + 落审计，一个事务。
+ *
+ * 【原因进审计明细，姓名护照号不进】原因是审核人自己写的一句话，本就要给用户看
+ *（用户端 /realname/status 原样回显），不是 PII；它同时是事后判断"这次驳得对不对"的唯一依据。
+ */
+export function adminRejectPassportRealname(
+  db: Database.Database,
+  input: { operatorUid: number; verificationId: number; reason: string },
+): AdminRealnameResult {
+  try {
+    return db.transaction((): AdminRealnameResult => {
+      const plan = rejectPassportRealname(db, {
+        verificationId: input.verificationId,
+        operator: operatorTag(input.operatorUid),
+        reason: input.reason,
+      });
+      writeAudit(db, {
+        operatorUid: input.operatorUid,
+        action: ADMIN_ACTION.rejectRealname,
+        targetUid: plan.userId,
+        detail: realnameDetail(input.verificationId, plan, {
+          auth_status: AUTH_STATUS.none,
+          reason: input.reason.trim(),
+        }),
+      });
+      return { ok: true, userId: plan.userId, authStatus: AUTH_STATUS.none };
+    })();
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  }
 }

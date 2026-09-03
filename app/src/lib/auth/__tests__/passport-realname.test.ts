@@ -17,7 +17,11 @@ import {
   approvePassportRealname,
   initPassportRealname,
   planPassportApproval,
+  readPassportEnvelope,
+  rejectPassportRealname,
 } from '../passport-realname';
+import { PASSPORT_PROVIDER } from '../realname';
+import { listPendingByProvider } from '@/lib/db/realname';
 import { AUTH_STATUS, VERIFICATION_STATUS, refreshRealnameStatus } from '../realname';
 import { makeTestDb } from './helpers';
 
@@ -206,5 +210,198 @@ describe('🔴 status 不得对待审护照报 500（差点引入的 bug）', ()
       verificationStatus: VERIFICATION_STATUS.passed,
       method: 'passport',
     });
+  });
+});
+
+// ───────────────────────── 驳回（2026-09-03 新增）─────────────────────────
+
+describe('🔴 驳回', () => {
+  test('流水转「未通过」、信封里写下谁驳的/何时/为什么', () => {
+    const r = init();
+    if (!r.ok) throw new Error('前置失败');
+    rejectPassportRealname(db, {
+      verificationId: r.verificationId,
+      operator: 'admin:7',
+      reason: '手持自拍看不清护照号，请在光线足的地方重拍',
+    });
+
+    const row = db
+      .prepare('SELECT status, raw_meta_enc FROM realname_verifications WHERE id=?')
+      .get(r.verificationId) as { status: string; raw_meta_enc: string };
+    expect(row.status).toBe(VERIFICATION_STATUS.failed);
+    const env = JSON.parse(decryptField(row.raw_meta_enc));
+    expect(env.reject.operator).toBe('admin:7');
+    expect(env.reject.reason).toBe('手持自拍看不清护照号，请在光线足的地方重拍');
+    expect(typeof env.reject.rejected_at).toBe('string');
+    // 材料信封没被驳回覆盖掉：还要能翻回去看当时交的是哪两张
+    expect(env.materials.id_page.file_id).toBeGreaterThan(0);
+  });
+
+  test('🔴 users 打回「未认证」，且能重交一次新的（不留在待审卡死）', () => {
+    const r = init();
+    if (!r.ok) throw new Error('前置失败');
+    rejectPassportRealname(db, { verificationId: r.verificationId, operator: 'admin:7', reason: '照片模糊' });
+
+    const u = db.prepare('SELECT auth_status FROM users WHERE id=?').get(uid) as { auth_status: string };
+    expect(u.auth_status).toBe(AUTH_STATUS.none);
+
+    // 变异对照：若忘了 setUserAuthStatus，这里仍是「待审」——用户端不显示重交入口，
+    // 而这条断言正是"看似正常但用户被卡死"的唯一现形处。
+    const again = init();
+    expect(again.ok).toBe(true);
+    expect((db.prepare('SELECT COUNT(*) c FROM realname_verifications WHERE user_id=?').get(uid) as { c: number }).c).toBe(2);
+  });
+
+  test('🔴 原因必填：空串/纯空格都抛，不许 trim 之后悄悄放行', () => {
+    const r = init();
+    if (!r.ok) throw new Error('前置失败');
+    for (const reason of ['', '   ', '\t\n']) {
+      expect(() =>
+        rejectPassportRealname(db, { verificationId: r.verificationId, operator: 'admin:7', reason }),
+      ).toThrow(/原因/);
+    }
+    // 一次都没写进去
+    const row = db.prepare('SELECT status FROM realname_verifications WHERE id=?').get(r.verificationId) as { status: string };
+    expect(row.status).toBe(VERIFICATION_STATUS.pending);
+  });
+
+  test('不记名不许驳回；已落定的流水不得二次审核（approve / reject 同一把尺子）', () => {
+    const r = init();
+    if (!r.ok) throw new Error('前置失败');
+    expect(() =>
+      rejectPassportRealname(db, { verificationId: r.verificationId, operator: ' ', reason: 'x' }),
+    ).toThrow(/必须记名/);
+
+    rejectPassportRealname(db, { verificationId: r.verificationId, operator: 'admin:7', reason: '照片模糊' });
+    expect(() =>
+      rejectPassportRealname(db, { verificationId: r.verificationId, operator: 'admin:7', reason: '再驳一次' }),
+    ).toThrow(/已落定/);
+    // 已驳回的记录也不许被"通过"——否则用户会莫名其妙地被批准
+    expect(() =>
+      approvePassportRealname(db, { verificationId: r.verificationId, operator: 'admin:7' }),
+    ).toThrow(/已落定/);
+  });
+});
+
+describe('🔴 驳回原因回显到用户端 status', () => {
+  test('message 恰是审核人写的那句原话，verificationStatus=未通过', async () => {
+    const r = init();
+    if (!r.ok) throw new Error('前置失败');
+    const REASON = '护照已过期（有效期至 2024-05），请换新护照后重交';
+    rejectPassportRealname(db, { verificationId: r.verificationId, operator: 'admin:7', reason: REASON });
+
+    const res = await refreshRealnameStatus(db, { userId: uid });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    // 【变异对照】读错字段路径（如读 env.audit 而不是 env.reject）→ 这里会退回硬编码
+    // 「认证未通过」，与原话不等 → 红。
+    expect(res.message).toBe(REASON);
+    expect(res.verificationStatus).toBe(VERIFICATION_STATUS.failed);
+    expect(res.authStatus).toBe(AUTH_STATUS.none);
+    expect(res.method).toBe(PASSPORT_PROVIDER);
+  });
+
+  test('信封坏掉不让状态接口报错：退回硬编码文案', async () => {
+    const r = init();
+    if (!r.ok) throw new Error('前置失败');
+    rejectPassportRealname(db, { verificationId: r.verificationId, operator: 'admin:7', reason: '照片模糊' });
+    db.prepare("UPDATE realname_verifications SET raw_meta_enc='enc:v1:坏' WHERE id=?").run(r.verificationId);
+    const res = await refreshRealnameStatus(db, { userId: uid });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.message).toBe('认证未通过');
+  });
+
+  test('刷脸通道的失败不受影响（仍是阿里云那句话，不去翻 reject 段）', async () => {
+    const vid = Number(
+      db
+        .prepare(
+          "INSERT INTO realname_verifications (user_id, provider, status, raw_meta_enc) VALUES (?, 'cloudauth', ?, ?)",
+        )
+        .run(uid, VERIFICATION_STATUS.failed, null).lastInsertRowid,
+    );
+    expect(vid).toBeGreaterThan(0);
+    const res = await refreshRealnameStatus(db, { userId: uid });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.message).toBe('认证未通过');
+    expect(res.method).toBe('cloudauth');
+  });
+});
+
+describe('只读取件 readPassportEnvelope', () => {
+  test('待审 / 已通过 / 已驳回三种状态都取得出来（不带"必须待审"的门）', () => {
+    const a = init();
+    if (!a.ok) throw new Error('前置失败');
+    const pendingRec = readPassportEnvelope(db, a.verificationId)!;
+    expect(pendingRec.certName).toBe(NAME);
+    expect(pendingRec.certNo).toBe(PASSPORT);
+    expect(pendingRec.status).toBe(VERIFICATION_STATUS.pending);
+    expect(pendingRec.materials.selfie.file_id).toBeGreaterThan(0);
+
+    rejectPassportRealname(db, { verificationId: a.verificationId, operator: 'admin:7', reason: '照片模糊' });
+    // 【变异对照】若这里接的是 planPassportApproval，这一行会抛「已落定，不可重复审核」，
+    // 一次正常的"翻看已审结记录"就变成一个错误。
+    const rejected = readPassportEnvelope(db, a.verificationId)!;
+    expect(rejected.status).toBe(VERIFICATION_STATUS.failed);
+    expect(rejected.reject?.reason).toBe('照片模糊');
+
+    const b = init();
+    if (!b.ok) throw new Error('前置失败');
+    approvePassportRealname(db, { verificationId: b.verificationId, operator: 'admin:7', note: 'ok' });
+    const passed = readPassportEnvelope(db, b.verificationId)!;
+    expect(passed.status).toBe(VERIFICATION_STATUS.passed);
+    expect(passed.audit?.note).toBe('ok');
+  });
+
+  test('查无此行 / 不是护照通道 → null；信封坏掉 → 抛自述式错误（不伪装成"没这条"）', () => {
+    expect(readPassportEnvelope(db, 99999)).toBe(null);
+    const vid = Number(
+      db.prepare("INSERT INTO realname_verifications (user_id, provider, status) VALUES (?, 'cloudauth', ?)")
+        .run(uid, VERIFICATION_STATUS.pending).lastInsertRowid,
+    );
+    expect(readPassportEnvelope(db, vid)).toBe(null);
+
+    const r = init();
+    if (!r.ok) throw new Error('前置失败');
+    db.prepare('UPDATE realname_verifications SET raw_meta_enc=NULL WHERE id=?').run(r.verificationId);
+    expect(() => readPassportEnvelope(db, r.verificationId)).toThrow(/没有材料元数据/);
+  });
+});
+
+describe('🔴 待审队列：每人至多一行', () => {
+  test('同一个人连交两次，队列只列最新那条（否则审到旧行会静默不一致）', () => {
+    const first = init();
+    const second = init();
+    if (!first.ok || !second.ok) throw new Error('前置失败');
+    expect((db.prepare("SELECT COUNT(*) c FROM realname_verifications WHERE status=?").get(VERIFICATION_STATUS.pending) as { c: number }).c).toBe(2);
+
+    const queue = listPendingByProvider(db, PASSPORT_PROVIDER, VERIFICATION_STATUS.pending);
+    // 【变异对照】裸 `WHERE status='待审'` 不做按用户收敛 → 这里会是 2，
+    // 管理员可能审到 first 那条，而 latestByUser 只认 second → 用户状态纹丝不动。
+    expect(queue).toHaveLength(1);
+    expect(queue[0].id).toBe(second.verificationId);
+  });
+
+  test('多个用户各出一行，倒序；已落定的不再出现；刷脸通道不混进来', () => {
+    const a = init();
+    const otherUid = Number(db.prepare("INSERT INTO users (email) VALUES ('q@t.com')").run().lastInsertRowid);
+    const b = initPassportRealname(db, {
+      userId: otherUid,
+      realName: '李四',
+      passportNo: 'G87654321',
+      idPage: { bytes: png('b-idpage'), mime: 'image/png' },
+      selfie: { bytes: png('b-selfie'), mime: 'image/png' },
+    });
+    if (!a.ok || !b.ok) throw new Error('前置失败');
+    db.prepare("INSERT INTO realname_verifications (user_id, provider, status) VALUES (?, 'cloudauth', ?)")
+      .run(Number(db.prepare("INSERT INTO users (email) VALUES ('r@t.com')").run().lastInsertRowid), VERIFICATION_STATUS.pending);
+
+    let queue = listPendingByProvider(db, PASSPORT_PROVIDER, VERIFICATION_STATUS.pending);
+    expect(queue.map((q) => q.id)).toEqual([b.verificationId, a.verificationId]);
+
+    approvePassportRealname(db, { verificationId: a.verificationId, operator: 'admin:7' });
+    queue = listPendingByProvider(db, PASSPORT_PROVIDER, VERIFICATION_STATUS.pending);
+    expect(queue.map((q) => q.id)).toEqual([b.verificationId]);
   });
 });

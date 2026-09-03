@@ -17,13 +17,17 @@ import { runMigrations } from '@/lib/db/migrate';
 import {
   ADMIN_GRANT_SCENE,
   ADMIN_MEMBERSHIP_DAYS,
+  adminApprovePassportRealname,
   adminGrantGongdao,
   adminOpStamp,
+  adminRejectPassportRealname,
   adminSetMembership,
   isAdminGrantRef,
   newAdminGrantRef,
 } from '../actions';
 import { ADMIN_ACTION } from '../audit';
+import { initPassportRealname } from '@/lib/auth/passport-realname';
+import { AUTH_STATUS, VERIFICATION_STATUS } from '@/lib/auth/realname';
 
 const OPERATOR = 1;
 let db: Db;
@@ -271,5 +275,127 @@ describe('混打后对账仍恒等', () => {
       expect(assertInvariant()).toBe(1);
     }
     expect(auditRows()).toHaveLength(40);
+  });
+});
+
+
+// ──────────────── 护照实名审核（2026-09-03 新增的两个动作）────────────────
+
+const PASSPORT_NO = 'E12345678';
+const CERT_NAME = '张三';
+
+/** 给 target 交一份护照材料，返回流水 id */
+function submitPassport(): number {
+  const bytes = (tag: string) => Buffer.from(`png-${tag}-${'x'.repeat(64)}`);
+  const r = initPassportRealname(db, {
+    userId: target,
+    realName: CERT_NAME,
+    passportNo: PASSPORT_NO,
+    idPage: { bytes: bytes('id'), mime: 'image/png' },
+    selfie: { bytes: bytes('selfie'), mime: 'image/png' },
+  });
+  if (!r.ok) throw new Error(`前置失败：${r.message}`);
+  return r.verificationId;
+}
+
+describe('审核通过', () => {
+  test('落定实名 + 恰好一行审计，action=approve_realname', () => {
+    const vid = submitPassport();
+    const res = adminApprovePassportRealname(db, {
+      operatorUid: OPERATOR,
+      verificationId: vid,
+      note: '姓名与护照号逐字核对一致',
+    });
+    expect(res).toMatchObject({ ok: true, userId: target, authStatus: AUTH_STATUS.verified, certType: '护照' });
+
+    const u = db
+      .prepare('SELECT auth_status, cert_type, real_name_enc, id_card_enc FROM users WHERE id=?')
+      .get(target) as Record<string, string | null>;
+    expect(u.auth_status).toBe(AUTH_STATUS.verified);
+    expect(u.cert_type).toBe('护照');
+    expect(u.real_name_enc).toBeTruthy();
+    expect(u.id_card_enc).toBeTruthy();
+
+    const audit = db.prepare('SELECT * FROM admin_audit').all() as {
+      action: string; operator_uid: number; target_uid: number; detail_json: string;
+    }[];
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({
+      action: ADMIN_ACTION.approveRealname,
+      operator_uid: OPERATOR,
+      target_uid: target,
+    });
+    const detail = JSON.parse(audit[0].detail_json);
+    expect(detail.verification_id).toBe(vid);
+    expect(detail.cert_type).toBe('护照');
+    expect(detail.material_sha256).toHaveLength(2);
+  });
+
+  test('🔴 审计明细里不出现姓名与护照号（那张表会被截图）', () => {
+    const vid = submitPassport();
+    adminApprovePassportRealname(db, { operatorUid: OPERATOR, verificationId: vid, note: '核对一致' });
+    const detail = (db.prepare('SELECT detail_json d FROM admin_audit').get() as { d: string }).d;
+    expect(detail).not.toContain(PASSPORT_NO);
+    expect(detail).not.toContain(CERT_NAME);
+  });
+
+  test('🔴 业务性拒绝（已落定 / 不存在）→ ok:false，且**一行审计都不留**', () => {
+    const vid = submitPassport();
+    adminApprovePassportRealname(db, { operatorUid: OPERATOR, verificationId: vid });
+    expect(db.prepare('SELECT COUNT(*) c FROM admin_audit').get()).toEqual({ c: 1 });
+
+    // 二次审核：领域层抛错 → 整个事务回滚 → 审计不多一行（把 writeAudit 挪到事务外就会多）
+    const again = adminApprovePassportRealname(db, { operatorUid: OPERATOR, verificationId: vid });
+    expect(again.ok).toBe(false);
+    if (!again.ok) expect(again.reason).toMatch(/已落定/);
+    expect(db.prepare('SELECT COUNT(*) c FROM admin_audit').get()).toEqual({ c: 1 });
+
+    const missing = adminApprovePassportRealname(db, { operatorUid: OPERATOR, verificationId: 99999 });
+    expect(missing.ok).toBe(false);
+    expect(db.prepare('SELECT COUNT(*) c FROM admin_audit').get()).toEqual({ c: 1 });
+  });
+});
+
+describe('审核驳回', () => {
+  test('流水转未通过、users 打回未认证、恰好一行审计带原因', () => {
+    const vid = submitPassport();
+    const res = adminRejectPassportRealname(db, {
+      operatorUid: OPERATOR,
+      verificationId: vid,
+      reason: '手持自拍看不清护照号',
+    });
+    expect(res).toMatchObject({ ok: true, userId: target, authStatus: AUTH_STATUS.none });
+
+    const row = db.prepare('SELECT status FROM realname_verifications WHERE id=?').get(vid) as { status: string };
+    expect(row.status).toBe(VERIFICATION_STATUS.failed);
+    expect((db.prepare('SELECT auth_status a FROM users WHERE id=?').get(target) as { a: string }).a)
+      .toBe(AUTH_STATUS.none);
+
+    const audit = db.prepare('SELECT action, detail_json FROM admin_audit').all() as
+      { action: string; detail_json: string }[];
+    expect(audit).toHaveLength(1);
+    expect(audit[0].action).toBe(ADMIN_ACTION.rejectRealname);
+    const detail = JSON.parse(audit[0].detail_json);
+    expect(detail.reason).toBe('手持自拍看不清护照号');
+    expect(detail.verification_id).toBe(vid);
+    expect(audit[0].detail_json).not.toContain(PASSPORT_NO);
+  });
+
+  test('🔴 空原因 → ok:false，且流水与审计都没动', () => {
+    const vid = submitPassport();
+    const res = adminRejectPassportRealname(db, { operatorUid: OPERATOR, verificationId: vid, reason: '   ' });
+    expect(res.ok).toBe(false);
+    expect((db.prepare('SELECT status s FROM realname_verifications WHERE id=?').get(vid) as { s: string }).s)
+      .toBe(VERIFICATION_STATUS.pending);
+    expect(db.prepare('SELECT COUNT(*) c FROM admin_audit').get()).toEqual({ c: 0 });
+  });
+
+  test('已驳回的记录不得被二次审核（approve 也不行）', () => {
+    const vid = submitPassport();
+    adminRejectPassportRealname(db, { operatorUid: OPERATOR, verificationId: vid, reason: '照片模糊' });
+    expect(adminApprovePassportRealname(db, { operatorUid: OPERATOR, verificationId: vid }).ok).toBe(false);
+    expect((db.prepare('SELECT auth_status a FROM users WHERE id=?').get(target) as { a: string }).a)
+      .toBe(AUTH_STATUS.none);
+    expect(db.prepare('SELECT COUNT(*) c FROM admin_audit').get()).toEqual({ c: 1 });
   });
 });

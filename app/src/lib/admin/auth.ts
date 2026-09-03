@@ -89,3 +89,15 @@ export function adminNotFound(): NextResponse {
 export function adminBadRequest(errorCode: string, message: string): NextResponse {
   return NextResponse.json({ ok: false, error_code: errorCode, message }, { status: 400 });
 }
+
+/**
+ * 后台侧的「我们这边坏了」（500）。**只给管理员看，所以 message 说实话**：
+ * 密钥没配、密文对不上、盘上文件没了——这些原话是运维排障的全部线索，
+ * 换成"服务器开了个小差"等于把线索扔了，而看到它的人本来就是能改配置的那个人。
+ *
+ * 走到这里的前提永远是先过了 requireAdmin：非管理员在闸门那一步就是 404，
+ * 拿不到这条错误，也就无法拿它探测后台是否存在。
+ */
+export function adminServerError(errorCode: string, message: string): NextResponse {
+  return NextResponse.json({ ok: false, error_code: errorCode, message }, { status: 500 });
+}
