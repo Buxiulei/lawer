@@ -278,6 +278,9 @@
 
 **2026-09-03 · 生产上线 487b6ef（ui-nits）**：CI 绿 → 备份 → bundle ff → build EXIT=0 → restart 双 active → getDb ok → / /login /welcome /case/1/ask /settings/agent 全 200。真机小核对（/login F5 零 #418、/welcome 低调按住揭开为低调变体）已派 Sonnet。
 
+**2026-09-03 · 487b6ef 真机小核对：/login 通过，/welcome 未核（token 过期）**：/login 填号步 F5 两次 console error 0、无 #418、半程记录（手机号）正确恢复；因 13800000001 当日验证码配额已满，未到验证码步（验证码步的恢复与填号步同一机制，复核副本真机已证）。/welcome 低调揭开因 uid=1 测试 token 过期未核，复核官合并前真机证据为准，下轮核对补。
+- **量具事故**：Playwright MCP 是单一共享浏览器，核对员标签页被并行小白 persona 夺走 5+ 次；核对员改为每步 `location.href` 校验后读数才可信。**规矩**：并行 UI 任务不得共用 Playwright MCP（串行，或各自 playwright-core 独立浏览器）；已进记忆。当前在跑的两位小白同样共用一个浏览器——报告回来要检查有无串台痕迹（URL 端口不属于自己）。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
