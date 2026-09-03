@@ -177,6 +177,8 @@ describe('低调模式', () => {
     const markup = html();
     expect(markup).toContain(BYO.navLabelNeutral);
     expect(markup).not.toContain(BYO.navLabel);
+    // 生产真机（417b602）低调模式剔糊层后侧栏仍裸露分组标题「案件」——同文件其它标签都换了词，唯独它漏了
+    expect(markup, '侧栏分组标题「案件」在低调模式下裸露').not.toContain('案件');
   });
 
   it('徽标不含案情词（两态都扫）', () => {
