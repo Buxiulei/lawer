@@ -19,7 +19,7 @@
  *  · C4 演示案件也去请求 ⇒ 「演示案件不请求」那条红
  *  · B10 落定时不把 servedModel / modelMismatch 传给消息 ⇒ 「实际型号进消息」那条红
  *  · M-C6 失败轮那一支删掉（照 AssistantMessage 画）⇒ 「失败轮画成横幅」那组红
- *  · M-C7 重试按钮不限最后一条（`i === messages.length - 1` 去掉）⇒ 「只有最后一条给重试」红
+ *  · M-C7 重试按钮收窄成只给最后一条（加回 `i === messages.length - 1`）⇒ 「不是最后一条也给重试」红
  */
 import type { ReactElement, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -462,8 +462,9 @@ describe('失败轮回显：横幅 + 重试', () => {
     expect(chat.retried).toEqual(['43']);
   });
 
-  /** 变异臂 M-C7：重试成功之后那条失败行不再是最后一条——再点一次只是重复收费 */
-  it('失败轮后面已经有新回答 ⇒ 横幅还在（如实记录），但不再给重试', async () => {
+  /** 变异臂 M-C7：工单原文是「渲染出横幅与重试」，没限定哪一条——**每一条失败轮都给重试**。
+   *  把它收窄成"只给最后一条"是一条尚未入台账的产品裁决，不由实现方在注释里裁定。 */
+  it('★失败轮后面已经有新回答 ⇒ 横幅还在（如实记录），重试也照常给', async () => {
     bus.rows = [
       ...realRows(),
       FAILED_ROW,
@@ -471,7 +472,9 @@ describe('失败轮回显：横幅 + 重试', () => {
     ];
     const { errors, text } = probe(await settled(CASE));
     expect(errors).toHaveLength(1);
-    expect(errors[0].retryable).toBe(false);
+    expect(errors[0].retryable, '不是最后一条就没了重试入口 = 那条失败轮永远重试不了').toBe(true);
+    errors[0].onRetry!();
+    expect(chat.retried).toEqual(['43']); // 重试指向那条失败行本身，不是末尾那条
     expect(text, '这一轮确实失败过，抹掉它就是改历史').toContain('重试之后答上了');
   });
 

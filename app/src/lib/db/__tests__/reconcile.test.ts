@@ -6,6 +6,7 @@ import Database from 'better-sqlite3';
 import { runMigrations } from '../migrate';
 import { reconcile } from '../reconcile';
 import { gongdaoGrant, gongdaoSettle, recordTokenUsage } from '../../billing/index';
+import { failMessage } from '../agent';
 import { GONGDAO_LEDGER_TYPE } from '../../billing/pricing';
 
 function makeDb() {
@@ -157,6 +158,54 @@ describe('reconcile · 空账本', () => {
     db.pragma('foreign_keys = ON');
     runMigrations(db);
     expect(reconcile(db).problems).toEqual([]);
+  });
+
+  // ── 失败轮不是「模型跑过」（F-203 复核 RV-1）─────────────────────────────
+  // 失败轮的 content 非 NULL（三段式失败文案，为了历史回显有话可说），但模型并没有产出回复，
+  // 且按规定**零记账**。若把它算进「模型真跑过」，一个只有失败轮的库就会被判成「根本没记账」——
+  // 那是**假红**：监控层 cron 跑的正是这个退出码，而现场（新库 + 上游全挂）必现。
+  function withFailedTurn(db: Database.Database, userId: number): void {
+    const caseId = Number(db.prepare("INSERT INTO cases (user_id, title) VALUES (?, 'f')").run(userId).lastInsertRowid);
+    const threadId = Number(db.prepare("INSERT INTO threads (case_id, mode) VALUES (?, '问诊')").run(caseId).lastInsertRowid);
+    db.prepare("INSERT INTO messages (thread_id, role, content) VALUES (?, 'user', '我被裁了')").run(threadId);
+    failMessage(db, {
+      threadId,
+      messageId: null,
+      code: 'AGENT_FAILED',
+      content: '这一轮没能生成回答。\n错误码：AGENT_FAILED\n可以点「重试」重新发一次。',
+    });
+  }
+
+  test('只有失败轮的库对账干净：失败轮零记账，不该被判成「根本没记账」', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    runMigrations(db);
+    const uid = Number(db.prepare('INSERT INTO users (email) VALUES (?)').run('fail@t.com').lastInsertRowid);
+    withFailedTurn(db, uid);
+
+    // 前置自证：这一行确实是「content 非 NULL 的 assistant 行」——
+    // 排除它靠的是 failed_code，不是靠它恰好为空而蒙混过关。
+    const row = db
+      .prepare("SELECT content, failed_code FROM messages WHERE role = 'assistant'")
+      .get() as { content: string | null; failed_code: string | null };
+    expect(row.content).not.toBeNull();
+    expect(row.failed_code).toBe('AGENT_FAILED');
+
+    expect(reconcile(db).problems).toEqual([]);
+  });
+
+  test('失败轮不计入「N 条模型回复」：一失败一真回复且未记账 → 报 1 条，不是 2 条', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    runMigrations(db);
+    const uid = Number(db.prepare('INSERT INTO users (email) VALUES (?)').run('mix@t.com').lastInsertRowid);
+    withFailedTurn(db, uid);
+    withAssistantMessage(db, uid); // 真回复，仍然没落账 ⇒ 该判错
+
+    const joined = reconcile(db).problems.join('\n');
+    expect(joined).toMatch(/账本空表/);
+    expect(joined).toMatch(/有 1 条模型回复/);
+    expect(joined).not.toMatch(/有 2 条模型回复/);
   });
 
   test('只有用户消息、模型还没回（生成中）不报错', () => {

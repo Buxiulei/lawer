@@ -48,11 +48,17 @@ const SQL_API_MODEL_DRIFT = `
 /**
  * 「模型真跑过」的证据：assistant 消息行。content 非空 = 那一轮确实产出了回复
  *（content 为 NULL 是生成中/中断，见 messages 表注释，不算跑完）。
+ *
+ * **failed_code 非空的行要排除**：那是终态失败轮（模型不可用/超时/断连）回填的三段式
+ * 失败文案，content 非 NULL 只是为了让历史回显有话可说，模型并没有产出回复——
+ * 而失败轮按规定**零记账**（ledger/token_usage 零行）。若把它算进「模型真跑过」，
+ * 一个只有失败轮的库（新库 + 上游全挂，正是无 key 现场）会被判成「根本没记账」，
+ * 而监控层 cron 跑的就是这个退出码——那是**假红**，和假绿一样会让人不再看账。
  */
 const SQL_ASSISTANT_ACTIVITY = `
   SELECT COUNT(*) AS n, MIN(created_at) AS first_at, MAX(created_at) AS last_at
     FROM messages
-   WHERE role = 'assistant' AND content IS NOT NULL
+   WHERE role = 'assistant' AND content IS NOT NULL AND failed_code IS NULL
 `;
 
 /** ledger 有消耗行但无 token_usage——定额端点（出证/导出）本就不产 token，只警告不判错。 */

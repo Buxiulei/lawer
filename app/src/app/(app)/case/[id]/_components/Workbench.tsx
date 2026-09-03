@@ -356,8 +356,10 @@ export function Workbench({ caseId }: { caseId: string }) {
             /* 【失败轮：横幅 + 重试，刷新后原样还在】(naive-qa-2 F-203)
                这一行的 content 是那段三段式失败文案，不是回答——当回答画出去，
                "模型连不上"读起来就成了律师在回答问题。
-               重试按钮只给**最后一条**：后面已经有新回答时再点一次，
-               只是对着一个已经答过的问题重新收一次费。 */
+               工单原文是「渲染出横幅与重试」，没有限定哪一条 ⇒ **每一条失败轮都给重试**，
+               包括后面已经有新回答的那些（重试走 retry_of，新回答排在末尾，这一行留在原地）。
+               若要把重试收窄成"只给最后一条"（避免对已答过的问题重复收费），
+               那是一条产品裁决，得先进台账、再改这里——不在注释里自行裁定。 */
             if (m.failedCode) {
               return (
                 <div key={m.id}>
@@ -365,9 +367,7 @@ export function Workbench({ caseId }: { caseId: string }) {
                   <StreamErrorCard
                     error={{ code: m.failedCode, message: m.content }}
                     onRetry={
-                      i === messages.length - 1 && m.failedMessageId
-                        ? () => retryFailedTurn(m.failedMessageId!)
-                        : undefined
+                      m.failedMessageId ? () => retryFailedTurn(m.failedMessageId!) : undefined
                     }
                   />
                 </div>
