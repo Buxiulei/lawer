@@ -152,6 +152,43 @@ export interface ErrorFrame {
  */
 export const GONGDAO_EXHAUSTED = 'GONGDAO_EXHAUSTED';
 
+/**
+ * 在飞占位拦下这一轮时服务端给的错误码（HTTP 409）。
+ * **不与 402 归成一个码**：一个等一等就好，一个等多久都没用（得先兑换/充值）。
+ * 归一了会把「等一会儿」的人指去兑换页白跑一趟。
+ */
+export const TURN_IN_FLIGHT = 'TURN_IN_FLIGHT';
+
+/**
+ * 服务端**在 runTurn 之前**就拒答的那些码：一个字都没落库——不调模型、不插用户消息、
+ * 不记一行账。于是页面上那条本地回显是一条**孤儿**：屏幕上写着「发出去了」，
+ * F5 之后它就没了。这些码一律要撤掉回显、把原文还回输入框。
+ *
+ * 【这是一份登记表，不是两三个特例】route.ts 里 runTurn 之前的**每一个** error_code
+ * 都在这里，由那侧的结构守卫按源码逐个核对（见 chat/__tests__/route.test.ts）。
+ * 下一个前置 4xx 加进路由却忘了登记，守卫当场点名——而漏掉的后果是静默的：
+ * 那一档的回显留在屏幕上，刷新后消失，页面看不出任何异样。
+ *
+ * 【登记 ≠ 画法相同】「撤回显」是这些码的共同处置。画成什么（横幅 / 提示条 / 失败卡）、
+ * 输入框禁不禁用，仍由 Workbench 逐码决定：402 要禁输入框（充值之前打什么都白打），
+ * 409 不禁（上一轮答完就能接着问，禁掉等于把唯一的出路也关了）。
+ */
+export const REFUSED_BEFORE_WRITE: ReadonlySet<string> = new Set([
+  GONGDAO_EXHAUSTED,
+  TURN_IN_FLIGHT,
+  // 以下同为「开流之前就返回、一字未落库」的前置校验（route.ts 里挨着写的那几条）
+  'CASE_NOT_FOUND',
+  'INVALID_BODY',
+  'INVALID_RETRY_OF',
+  'EMPTY_MESSAGE',
+  'INVALID_MODE',
+]);
+
+/** 这个错误码是不是「服务端一字未落库」的那一档（见 REFUSED_BEFORE_WRITE）。 */
+export function isRefusedBeforeWrite(code: string | null | undefined): boolean {
+  return typeof code === 'string' && REFUSED_BEFORE_WRITE.has(code);
+}
+
 export type StreamFrame =
   | MetaFrame
   | PingFrame

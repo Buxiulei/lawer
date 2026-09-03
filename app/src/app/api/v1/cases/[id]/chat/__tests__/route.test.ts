@@ -13,6 +13,9 @@ import { scriptedProvider, type ScriptedRound } from '@/lib/agent/__tests__/fixt
 import type { AgentEventSink } from '@/lib/agent';
 import { getGongdao, gongdaoGrant, gongdaoSettle } from '@/lib/billing';
 import { GONGDAO_LEDGER_TYPE } from '@/lib/billing/pricing';
+// 前端那份「一字未落库」的登记表。放在这里核对是因为**新码是在本文件里加的**：
+// 加码的人手边就是这一条判据，而漏登记的后果只在页面上、且是静默的。
+import { REFUSED_BEFORE_WRITE } from '@/app/(app)/case/[id]/_stream/frames';
 
 /** 本轮要回放的剧本，由每个用例改写 */
 let script: ScriptedRound[] = [];
@@ -441,6 +444,43 @@ describe('余额闸的接线（结构守卫）', () => {
     expect(SRC, '占位不在 finally 里还 ⇒ 异常/断线之后这个人被永久锁在门外').toMatch(
       /finally\s*\{[^}]*releaseTurn\(\)/,
     );
+  });
+});
+
+/* 结构守卫：**runTurn 之前**返回的每一个 error_code 都要登记进 REFUSED_BEFORE_WRITE。
+
+   这一段代码的共同事实是「一个字都没落库」——不调模型、不插用户消息、不记账。
+   而页面是**先把问话画上去再发**的：这一档回来时那条回显没人撤，屏幕上就写着
+   「已经发出去了」，F5 之后它消失。用户看到的是「发出去了 → 刷新没了 → 还得重打一遍」。
+
+   402 漏过一次（RV-1 补的），409 又漏了一次（本次补的）——**独立写两次、忘两次**，
+   说明它是默认形态而不是疏忽。所以判据不去数「哪两个码」，而是逼着这里与那份登记表
+   对账：下一个前置 4xx 加进本文件却没登记，这一条当场点名。
+
+   变异臂 M-C4：在 runTurn 之前伪加一个 `error_code: 'X'` 的返回 ⇒ 这一条红。
+   变异臂 M-C1：登记表里删掉 TURN_IN_FLIGHT ⇒ 这一条红（页面那组也红）。 */
+describe('零落库拒答码的登记（结构守卫）', () => {
+  const SRC = readFileSync(new URL('../route.ts', import.meta.url), 'utf8');
+  /** 扫代码不扫注释：上面几段注释里就写着这些码的名字 */
+  const CODE_ONLY = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+
+  test('runTurn 之前的每一个 error_code 都在 REFUSED_BEFORE_WRITE 里', () => {
+    const cut = CODE_ONLY.indexOf('runTurn(');
+    expect(cut, '源码里找不到 runTurn( ⇒ 这条判据在扫一段空文本').toBeGreaterThan(0);
+    const codes = [...CODE_ONLY.slice(0, cut).matchAll(/error_code:\s*'([^']+)'/g)].map((m) => m[1]);
+
+    // 空跑自证：路由前置校验本来就有好几档（案件不存在、请求体、retry_of、空消息、mode、
+    // 余额、在飞），一个都没抓到就是正则失了效，而那时下面的 for 一次都不跑、判据全绿。
+    expect(codes.length, '一个 error_code 都没抓到 ⇒ 下面是空过').toBeGreaterThanOrEqual(5);
+    expect(codes, '在飞那一档没在 runTurn 之前 ⇒ 登记表核对的不是这件事').toContain('TURN_IN_FLIGHT');
+
+    for (const code of codes) {
+      expect(
+        REFUSED_BEFORE_WRITE.has(code),
+        `${code} 在 runTurn 之前就拒答（一字未落库），却没登记进 REFUSED_BEFORE_WRITE：` +
+          '页面不会撤那条本地回显，用户看到「发出去了」，刷新之后它消失',
+      ).toBe(true);
+    }
   });
 });
 

@@ -459,6 +459,40 @@ export function GongdaoExhaustedBanner({ balance }: { balance?: number }) {
   );
 }
 
+/**
+ * 上一轮还在答（HTTP 409 TURN_IN_FLIGHT）。
+ *
+ * 【为什么不是 StreamErrorCard】那张卡的落点是「点重试」——而这里重试只会再撞一次
+ * 同一道门：上一轮还在跑，第二次、第一百次都是 409。摆着那个按钮等于告诉他出路在按钮上，
+ * 他会一直点到以为产品坏了。这一档的出路是**等**，所以整块不给任何按钮。
+ *
+ * 【为什么也不是 402 那张横幅】那一档要连输入框一起禁（充值之前打什么都白打），
+ * 这一档上一轮答完就能接着问，禁掉反而把唯一的出路也关了。
+ *
+ * 【为什么要说清「花费要答完才结算」】不说的话，「一次只答一轮」听起来就是我们抠门。
+ * 说了他才知道：两轮同时开，两边都按「还没扣钱」的余额放行，最后一起扣——
+ * 这条规矩护的是他的账。
+ *
+ * 文案自述三段式：**怎么了 / 为什么 / 怎么办**（原文已经放回输入框，这一句必须说出来，
+ * 否则他看到自己那句问话从屏幕上消失，会以为白打了一遍）。
+ */
+export function TurnInFlightNotice() {
+  return (
+    <div
+      role="status"
+      className="prose-measure my-2 rounded-[12px] border border-line bg-surface-2 p-3.5"
+    >
+      <p className="text-[14px] font-medium text-amber-ink">上一轮还在答</p>
+      <p className="mt-1 text-[15px] leading-7 text-ink">
+        同一个账号一次只答一轮：一轮的花费要等答完才结算，两轮同时开就会各自按「还没扣钱」的余额放行，最后一起扣。
+      </p>
+      <p className="mt-1 text-[15px] leading-7 text-ink">
+        你刚打的那句话已经放回输入框。等上面那一轮答完，再点发送。
+      </p>
+    </div>
+  );
+}
+
 /** 没有登录态时的兜底说明：让人知道看到的不是自己的档案 */
 export function DemoDataBanner() {
   return (
