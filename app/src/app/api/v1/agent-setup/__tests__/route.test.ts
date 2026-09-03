@@ -49,6 +49,9 @@ describe('GET /api/v1/agent-setup', () => {
     expect(body.mcp_url).toBe('http://localhost/api/mcp');
     expect(body.api_base).toBe('http://localhost/api/v1');
     expect(body.manifest_url).toBe('http://localhost/api/manifest');
+    // 话术里「第一步 curl 它」的那个地址，同样从基址派生——写死生产域名的那份在
+    // 预发环境上指向生产，而它看起来完全正常
+    expect(body.skill_url).toBe('http://localhost/skill/SKILL.md');
     expect(body.tools).toEqual(TOOLS.map((t) => ({ name: t.name, description: t.description })));
     // 接入说明读的是仓库根 skill/ 的真文件，不是硬编码进 TS 的字符串
     expect(body.setup_markdown).toContain('# 土八鼠 · 接入说明');
@@ -75,6 +78,7 @@ describe('GET /api/v1/agent-setup', () => {
     const res = await agentSetup(get({ authorization: `Bearer ${signToken(1)}` }));
     const body = await res.json();
     expect(body.mcp_url).toBe('https://lawer.example.com/api/mcp');
+    expect(body.skill_url).toBe('https://lawer.example.com/skill/SKILL.md');
     delete process.env.LAWER_PUBLIC_URL;
   });
 });

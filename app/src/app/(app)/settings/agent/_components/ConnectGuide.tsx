@@ -23,10 +23,25 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/shadcn/ca
 import { InputField } from '@/components/shadcn/field';
 import { Skeleton } from '@/components/shadcn/skeleton';
 import { CodeBlock } from '../../_components/CodeBlock';
+import { CurrentKey } from '../../_components/CurrentKey';
 import { SetupPrompt } from '../../_components/SetupPrompt';
 import { SignInHint } from '../../_components/SignInHint';
 import type { SetupUrls } from '../../_components/agentSetup';
 import { useAgentSetup } from '../../_components/useAgentSetup';
+import {
+  useAgentKeySecret,
+  type AgentKeySecret,
+  type IssuedKey,
+} from '../../_components/useAgentKeySecret';
+
+/**
+ * 生成那一次的响应里，这一页还用得上的部分：接入地址（省一次 agent-setup 往返）
+ * 与 id（第四步只盯这把刚生成的钥匙）。
+ *
+ * **明文故意不在这个类型里**。留一份的形态见下面 apiKey 那段——这里不留，
+ * 是为了让「再从 issued 里取明文」连编译都过不去，而不是靠下一个人记得别取。
+ */
+type IssuedRef = SetupUrls & { id: number };
 
 /**
  * 一页式接入指南：从零到"接上了"四步走完，中途不用跳去别的页面翻。
@@ -52,12 +67,30 @@ export function ConnectGuide() {
   const { discreet } = useDiscreet();
   const setup = useAgentSetup();
   const agent = useConnectedAgent();
-  const [issued, setIssued] = useState<CreatedKey | null>(null);
+  /**
+   * 手上那把 key 的明文。**二次进这一页也要有**——以前这里只认「本次刚生成的那把」
+   * （issued），关掉页面再回来就退回占位符，而用户能做的只剩再生成一把。
+   */
+  const secret = useAgentKeySecret();
+  const [issued, setIssued] = useState<IssuedRef | null>(null);
 
   const credit = discreet ? NEUTRAL_WORD.credits : '公道值';
   const watch = discreet ? NEUTRAL_WORD.watch : '守望';
-  /** 有刚生成的就用它（话术里能带上明文密钥），否则用 agent-setup 那份（话术里只能给占位符） */
+  /** 地址：刚生成的响应里就带着（省一次往返），否则用 agent-setup 那份 */
   const urls: SetupUrls | null = issued ?? setup.info;
+  /**
+   * 话术里填哪一串：**只认 hook**。
+   *
+   * 这里曾经写成 `issued?.key ?? hook`——本次刚生成的那把永远压过 hook。形态是：
+   * 在这一页生成一把、随手点「轮换密钥」，第一步「当前这把」已经换成新的，
+   * 下面第二步的话术与配置块却还内嵌着那把**刚刚失效**的，两块并排摆在同一屏上；
+   * 「复制这段话术」复制走的就是一把 401 的钥匙，粘过去接不上，而页面没有任何报错。
+   *
+   * 明文只有一处正本：useAgentKeySecret（生成时 adopt 顶上、轮换时就地换成新的）。
+   * 这一页不再留第二份——留了就得记得每条改动路径都去同步它，而漏掉的那条
+   * 生成的配置**看起来完全正常**。
+   */
+  const apiKey = secret.state.kind === 'ready' ? secret.state.secret : undefined;
 
   return (
     <div className="pt-1 pb-4">
@@ -87,8 +120,13 @@ export function ConnectGuide() {
         </Card>
       ) : (
         <div className="mt-4 flex flex-col gap-4">
-          <Step no="一" title="生成一把密钥">
-            <IssueKey issued={issued} onIssued={setIssued} />
+          {/*
+            标题不随状态变：它在首帧（还没问过服务端）与水合后必须是同一句，
+            否则第一步的名字会当着用户的面跳一下。「拿到你的密钥」两种情形都成立——
+            没有就生成一把，有就把它取回来。
+          */}
+          <Step no="一" title="拿到你的密钥">
+            <IssueKey issued={issued} secret={secret} onIssued={setIssued} />
           </Step>
 
           <Step no="二" title="复制配置">
@@ -105,7 +143,7 @@ export function ConnectGuide() {
                 </p>
                 <div className="mt-2">
                   <DiscreetCollapse label="接入配置（点开查看）">
-                    <SetupPrompt info={urls} apiKey={issued?.key} />
+                    <SetupPrompt info={urls} apiKey={apiKey} />
                   </DiscreetCollapse>
                 </div>
               </>
@@ -168,39 +206,48 @@ function ConnectedBanner({ agent }: { agent: ConnectedAgent }) {
   );
 }
 
-/** POST /api/v1/keys 的成功响应：明文 + 接入地址（服务端顺手给全） */
-interface CreatedKey extends SetupUrls {
-  id: number;
-  name: string;
-  key: string;
-}
-
+/**
+ * 第一步。
+ *
+ * 【它不再只是「生成」】以前这一步只有一条路：填个名字、生成、把明文当场存走。
+ * 二次进这一页时 issued 是空的，于是页面装作你还没有密钥，而你其实有一把在用——
+ * 唯一的出路是再生成一把，接着两把 key 挂在那儿谁也不知道哪把在用。
+ * 现在有 key 就把那把亮出来（明文可取回），没有才给生成表单。
+ */
 function IssueKey({
   issued,
+  secret,
   onIssued,
 }: {
-  issued: CreatedKey | null;
-  onIssued: (k: CreatedKey) => void;
+  issued: IssuedRef | null;
+  secret: AgentKeySecret;
+  onIssued: (k: IssuedRef) => void;
 }) {
   const [name, setName] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (issued) {
+  // 已经有一把（含刚生成的）：亮出来 + 给轮换，不再摆生成表单
+  if (issued || (secret.state.kind !== 'none' && secret.state.kind !== 'signedOut')) {
     return (
       <div>
-        <p className="text-[15px] leading-7 text-ink">
-          这串是「{issued.name}」的密钥，
-          <span className="font-semibold text-danger-ink">只显示这一次</span>
-          ——现在就存下来，下一步的配置里已经替你填好了。
-        </p>
-        <div className="mt-2">
-          <CodeBlock
-            code={issued.key}
-            wrap
-            copyLabel="复制完整密钥"
-            copiedMessage="密钥已复制，记得妥善保管"
-          />
+        {issued && (
+          <p className="text-[15px] leading-7 text-ink">
+            生成好了。下一步的配置里已经替你填上它——
+            <span className="font-semibold text-ink">忘了也不要紧，随时回这一页看</span>。
+          </p>
+        )}
+        <div className={issued ? 'mt-2' : undefined}>
+          {/*
+            低调模式下这一小节要**折叠**，和第二步的话术同一个壳。
+            摆在折叠外面的形态是：屏幕上常驻一串密钥明文——它不是案情词，
+            按词表点名的那条页面守卫一个字都不会红，而旁人扫一眼就看得出
+            这台手机上挂着个要拿密钥连的服务。折叠标签保持中性。
+            接入指南自己就是「去生成」那条路的落地页，所以不再给一条指回自己的链接。
+          */}
+          <DiscreetCollapse label="当前密钥（点开查看）">
+            <CurrentKey secret={secret} offerIssueLink={false} />
+          </DiscreetCollapse>
         </div>
       </div>
     );
@@ -210,14 +257,15 @@ function IssueKey({
     setCreating(true);
     setError(null);
     try {
-      onIssued(
-        await apiFetch<CreatedKey>('/keys', {
-          method: 'POST',
-          // 两项权限都给：接入的意义就是让它替你读写档案，
-          // 想收紧到只读的人走设置页那张卡自己勾。
-          body: { name: name.trim(), scopes: ['case:read', 'case:write'] },
-        }),
-      );
+      const body = await apiFetch<IssuedKey>('/keys', {
+        method: 'POST',
+        // 两项权限都给：接入的意义就是让它替你读写档案，
+        // 想收紧到只读的人走设置页那张卡自己勾。
+        body: { name: name.trim(), scopes: ['case:read', 'case:write'] },
+      });
+      onIssued(body);
+      // 顶掉 hook 的 'none' 态：刚生成的这把就是当前那把，不必再往返一趟去问
+      secret.adopt(body);
     } catch (err) {
       setError(humanError(err));
     } finally {
@@ -239,9 +287,6 @@ function IssueKey({
       <Button disabled={!name.trim() || creating} onClick={() => void create()}>
         {creating ? '正在生成…' : '生成密钥'}
       </Button>
-      <p className="text-[13px] leading-5 text-ink-2">
-        已经有密钥了？跳过这一步，下一步的配置里把占位符换成你当时存下的那串就行。
-      </p>
     </div>
   );
 }

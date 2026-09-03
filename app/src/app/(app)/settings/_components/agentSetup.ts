@@ -18,6 +18,12 @@ export interface SetupUrls {
   mcp_url: string;
   api_base: string;
   manifest_url: string;
+  /**
+   * skill 总纲的公开地址（免鉴权）。话术里让对方 agent **第一步**就取它，
+   * 由它再指路到《接入说明》与《陪跑指南》。
+   * 与其它三个一样来自服务端 setupUrls()，本文件不硬编码任何地址。
+   */
+  skill_url: string;
 }
 
 export interface AgentSetupInfo extends SetupUrls {
@@ -36,13 +42,16 @@ export const SETUP_TABS: { key: SetupTabKey; label: string }[] = [
 ];
 
 /**
- * 没有明文密钥可填时的占位。密钥明文只在创建响应里出现一次，
- * 之后设置页只能给占位符，让用户自己换成当时存下的那串。
+ * 没有明文密钥可填时的占位。
+ *
+ * 【什么时候还会落到它】密钥本身现在是取得回来的（GET /keys/{id}/secret），
+ * 所以占位符只剩三种场合：还一把 key 都没有、这把是拿不回明文的存量旧密钥、
+ * 这一次取明文没取到。三种都不是「你自己去翻当初存的那串」，页面要各说各的出路。
  */
 export const KEY_PLACEHOLDER = '<粘贴你生成时保存的密钥>';
 
 export interface PromptVars extends SetupUrls {
-  /** 生成时拿到的明文；没有就传 undefined，落到 KEY_PLACEHOLDER */
+  /** 当前这把 key 的明文；取不到就传 undefined，落到 KEY_PLACEHOLDER */
   apiKey?: string;
 }
 
@@ -71,10 +80,26 @@ const BOUNDARY =
 
 const OPENING = '请帮我接入「土八鼠」法律陪跑平台（我的劳动仲裁案件档案库）。';
 
+/**
+ * 「先取 skill」那一行。
+ *
+ * 【为什么排在 MCP 配置之前】接上只是能调工具，而调工具之前要先知道**先调哪个、
+ * 引用怎么算数、哪几条不能碰**。这些全在 SKILL.md 指路的两份文件里。
+ * 顺序反过来的形态是：对方 agent 接上就开始答，答得很流畅，条号是它自己想起来的。
+ */
+function firstStep(vars: PromptVars): string {
+  return (
+    `【第一步，先做这个】取一份使用说明读完再动手：curl ${vars.skill_url}` +
+    `——那份 SKILL.md 会告诉你接下来该读哪几份、先调哪个工具、引用法条和案例要守什么规矩。` +
+    `跳过它直接调工具，最容易漏掉的是引用纪律和边界红线，而漏掉的那部分从你的回答里看不出来。`
+  );
+}
+
 /** 通用话术：主文案，三个客户端变体都在它后面追加自己那段 */
 function general(vars: PromptVars): string {
   return [
     OPENING,
+    firstStep(vars),
     `【若你支持 MCP（Model Context Protocol）】传输：Streamable HTTP；服务地址：${vars.mcp_url}；鉴权请求头：Authorization: Bearer ${key(vars)}。常见客户端 JSON 配置：`,
     clientJson(vars),
     `【若你不支持 MCP】直接调 REST：先读能力清单 GET ${vars.manifest_url}（免鉴权，含全部接口自描述）；业务基址 ${vars.api_base}，同样 Bearer 鉴权。`,
@@ -184,9 +209,11 @@ export function restCurl(vars: PromptVars): string {
 function rest(vars: PromptVars): string {
   return [
     `${OPENING}你不需要支持 MCP，直接调 REST 就行。`,
-    '第一步，读能力清单（免鉴权，全部接口都在里面自描述）：',
+    // 这一档同样从 skill 起步：不走 MCP 不等于不用守引用纪律与边界红线
+    firstStep(vars),
+    '第二步，读能力清单（免鉴权，全部接口都在里面自描述）：',
     `curl ${vars.manifest_url}`,
-    `第二步，业务接口都在 ${vars.api_base} 下，每个请求都带上我的密钥。先用这条验一下通不通：`,
+    `第三步，业务接口都在 ${vars.api_base} 下，每个请求都带上我的密钥。先用这条验一下通不通：`,
     restCurl(vars),
     ABILITIES,
     BOUNDARY,

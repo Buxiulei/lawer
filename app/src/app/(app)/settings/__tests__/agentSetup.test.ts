@@ -10,6 +10,7 @@ const VARS = {
   mcp_url: 'https://example.test/api/mcp',
   api_base: 'https://example.test/api/v1',
   manifest_url: 'https://example.test/api/manifest',
+  skill_url: 'https://example.test/skill/SKILL.md',
 };
 const KEY = 'sk-test-abc123';
 const keys = SETUP_TABS.map((t) => t.key);
@@ -35,6 +36,24 @@ describe('接入话术', () => {
   it.each(keys)('%s：话术里带得上业务地址', (k) => {
     const out = setupPrompt(k, { ...VARS, apiKey: KEY });
     expect(out.includes(VARS.mcp_url) || out.includes(VARS.api_base)).toBe(true);
+  });
+
+  /*
+   * 【为什么每一档都必须带】接上只是能调工具；先调哪个、引用怎么算数、哪几条不能碰，
+   * 全在 SKILL.md 指路的那两份里。漏掉这一行的形态是：对方 agent 接上就开始答，
+   * 答得很流畅，而条号是它自己想起来的——**从回答本身看不出来**。
+   * 「仅 REST」那一档同样要带：不走 MCP 不等于不用守引用纪律。
+   */
+  it.each(keys)('%s：话术第一步是取 skill，且地址是传进来的那个', (k) => {
+    const out = setupPrompt(k, { ...VARS, apiKey: KEY });
+    expect(out).toContain(VARS.skill_url);
+    expect(out).toContain('【第一步，先做这个】');
+    // 顺序：取 skill 要排在 MCP/REST 那几段之前，不能挂在末尾当补充说明
+    const first = out.indexOf(VARS.skill_url);
+    for (const later of [VARS.mcp_url, VARS.manifest_url]) {
+      const at = out.indexOf(later);
+      if (at >= 0) expect(first, `${k}: ${later}`).toBeLessThan(at);
+    }
   });
 
   it('仅 REST 那版不许提 MCP——它是给不支持 MCP 的客户端的', () => {

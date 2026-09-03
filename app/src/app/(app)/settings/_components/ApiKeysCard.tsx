@@ -25,13 +25,17 @@ import { CodeBlock } from './CodeBlock';
 import { SetupPrompt } from './SetupPrompt';
 import { SignInHint } from './SignInHint';
 import type { SetupUrls } from './agentSetup';
+import type { AgentKeySecret } from './useAgentKeySecret';
 
 /**
  * API key：用户自己的 agent 直连档案库的长期凭据。
  *
- * 【明文只有一次】POST /api/v1/keys 的响应是这串明文唯一一次出现的地方，
- * 库里只留 SHA256。所以创建成功页把「接入话术」也一并组装好——用户在这一屏
- * 复制走的那段话术里已经带着真密钥，不必自己去拼。关掉就只剩占位符了。
+ * 【明文是可以再看的】库里除 SHA256（鉴权用）之外还留了一份密文（secret_enc），
+ * 所以关掉这一屏之后，明文仍可在「接到你自己的 AI 助手上」那张卡里再取回来
+ *（GET /keys/{id}/secret），或者轮换换一把新的。这张卡管的是**列表与吊销**。
+ *
+ * 【存量旧密钥例外】本列上线之前签发的那些没有密文，明文当年就没留，`viewable` 为 false。
+ * 列表上照实说「看不到明文」，不装作也能取回。
  */
 
 /** 后端 ALL_SCOPES（lib/auth/api-key.ts）就这两项，多传一项会被 INVALID_SCOPES 打回 */
@@ -48,6 +52,8 @@ interface ApiKeyRow {
   scopes: string[];
   enabled: boolean;
   last_used_at: string | null;
+  /** 这把能不能取回明文。存量旧密钥恒 false */
+  viewable: boolean;
 }
 
 /**
@@ -61,18 +67,26 @@ function toIso(sqlUtc: string): string {
     : sqlUtc;
 }
 
-/** POST /api/v1/keys 的成功响应：key 明文 + 接入地址（服务端顺手给全） */
+/** POST /api/v1/keys 的成功响应：key 明文 + 接入地址（服务端 _issued.ts 一处拼装） */
 interface CreatedKey extends SetupUrls {
   id: number;
   name: string;
   scopes: string[];
   key: string;
   warning: string;
+  /** 「忘了怎么办」。服务端给的实话，页面不自己写一份 */
+  note: string;
 }
 
 const SCOPE_LABEL = new Map<string, string>(SCOPES.map((s) => [s.key, s.label]));
 
-export function ApiKeysCard() {
+/**
+ * @param secret 同一屏上「接到你自己的 AI 助手上」那张卡吃的同一份密钥 state
+ *   （由 AgentKeyCards 实例化）。这张卡新建出一把之后要**当场**把它顶上去（adopt），
+ *   否则关掉弹层，下面那张卡还写着「还没有密钥」、话术还是占位符，
+ *   用户从常驻卡复制走的是一段粘过去必然 401 的占位符话术。
+ */
+export function ApiKeysCard({ secret }: { secret: AgentKeySecret }) {
   const toast = useToast();
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,6 +141,8 @@ export function ApiKeysCard() {
         body: { name: name.trim(), scopes },
       });
       setIssued(body);
+      // 刚生成的这把就是「当前那把」：同屏的接入卡与话术立刻跟着换，不用等整页刷新
+      secret.adopt(body);
       setKeys((prev) => [
         {
           id: body.id,
@@ -134,6 +150,8 @@ export function ApiKeysCard() {
           scopes: body.scopes,
           enabled: true,
           last_used_at: null,
+          // 刚签发的一定留了密文，否则 POST 会先 503（route.ts 先探再签）
+          viewable: true,
         },
         ...prev,
       ]);
@@ -235,6 +253,12 @@ export function ApiKeysCard() {
                       ? `最近使用 ${formatDateTime(toIso(row.last_used_at))}`
                       : '还没被用过'}
                   </p>
+                  {row.enabled && !row.viewable && (
+                    /* 照实说。装作它也能取回，用户点进去只会撞上一条 409 */
+                    <p className="mt-1 text-[13px] leading-5 text-ink-2">
+                      旧密钥，看不到明文——要看就轮换换一把新的。
+                    </p>
+                  )}
                 </div>
 
                 {row.enabled && (
@@ -350,9 +374,7 @@ function IssuedKey({ issued }: { issued: CreatedKey }) {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-[15px] leading-7 text-ink">
-        现在就复制保存。关掉这一屏之后我们只留下加密后的指纹，
-        <span className="font-semibold text-danger-ink">此密钥不会再次显示</span>
-        ——丢了只能吊销后重新生成一把。
+        复制走它。{issued.note}
       </p>
 
       <CodeBlock
@@ -373,7 +395,7 @@ function IssuedKey({ issued }: { issued: CreatedKey }) {
       </div>
 
       <p className="rounded-[10px] bg-amber-wash px-3 py-2.5 text-[14px] leading-6 text-amber-ink">
-        妥善保管：拿到这串字符的人，就能以你的身份读写案件档案。不要贴进聊天群、截图或公开仓库。
+        妥善保管：{issued.warning}
       </p>
     </div>
   );

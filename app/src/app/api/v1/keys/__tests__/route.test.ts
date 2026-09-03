@@ -1,5 +1,8 @@
 // app/src/app/api/v1/keys/__tests__/route.test.ts
-// key 管理面。两条要害：明文只出现一次且不回显；api key 不能自我增殖（拿 key 再造 key）。
+// key 管理面。三条要害：
+//   ① 列表面永不回显 hash 或密文；
+//   ② api key 不能自我增殖（拿 key 再造 key），也不能拿去查看/轮换任何密钥；
+//   ③ 明文可以回看，但回看的必须是**当初那一串**，而且轮换之后旧的立刻作废。
 import { beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import crypto from 'node:crypto';
 import os from 'node:os';
@@ -15,6 +18,8 @@ type IdHandler = (req: Request, ctx: { params: Promise<{ id: string }> }) => Pro
 let listKeys: Handler;
 let createKey: Handler;
 let revokeKey: IdHandler;
+let readSecret: IdHandler;
+let rotateKey: IdHandler;
 let mcpPost: Handler;
 let db: Database;
 let userA: number;
@@ -39,6 +44,8 @@ beforeAll(async () => {
   listKeys = collection.GET;
   createKey = collection.POST;
   revokeKey = (await import('../[id]/route')).DELETE;
+  readSecret = (await import('../[id]/secret/route')).GET;
+  rotateKey = (await import('../[id]/rotate/route')).POST;
   // MCP 握手：client_name 是从那条链路落库的，测「响应里的名字对不对」就得让它真的握一次手
   mcpPost = (await import('../../../mcp/route')).POST;
   db = (await import('@/lib/db/client')).getDb();
@@ -205,5 +212,184 @@ describe('吊销', () => {
   test('伪造的 key 不因为存在同名用户就放行', async () => {
     const { resolveIdentity } = await import('@/lib/auth/identity');
     expect(resolveIdentity(db, new Headers({ authorization: `Bearer ${generateApiKey()}` }))).toBeNull();
+  });
+});
+
+/* ── 明文可回看 / 轮换 ───────────────────────────────────── */
+
+/** 这两条路由的入参形状一样，包一层免得每个用例都写一遍 Promise.resolve */
+function withId(handler: IdHandler, id: number | string, auth?: string, method = 'GET') {
+  return handler(req(method, undefined, auth), { params: Promise.resolve({ id: String(id) }) });
+}
+
+describe('查看明文', () => {
+  test('拿回来的就是创建时那一串（不是 hash、不是别的东西）', async () => {
+    const created = await createKey(req('POST', { name: '我的 Claude' }, signToken(userA)));
+    const { id, key } = await created.json();
+
+    const res = await withId(readSecret, id, signToken(userA));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ ok: true, id, name: '我的 Claude' });
+    expect(body.key).toBe(key);
+    // 正对照：库里存的密文既不是明文也不是 hash，是真的加过密的
+    const row = db.prepare('SELECT key_hash, secret_enc FROM api_keys WHERE id = ?').get(id) as {
+      key_hash: string;
+      secret_enc: string;
+    };
+    expect(row.secret_enc).not.toBe(key);
+    expect(row.secret_enc).not.toBe(row.key_hash);
+    expect(row.secret_enc.startsWith('v1:')).toBe(true);
+  });
+
+  test('查看不算「接进来过」——绝不碰 last_used_at', async () => {
+    const created = await createKey(req('POST', { name: 'x' }, signToken(userA)));
+    const { id } = await created.json();
+    await withId(readSecret, id, signToken(userA));
+    // 碰了这一列，页面会在用户一个字都还没粘进客户端时就说「已接入」
+    expect(db.prepare('SELECT last_used_at FROM api_keys WHERE id = ?').get(id)).toEqual({
+      last_used_at: null,
+    });
+  });
+
+  test('存量旧密钥（没有密文）→ 409 KEY_NOT_VIEWABLE，指路去轮换', async () => {
+    const created = await createKey(req('POST', { name: '假装是老的' }, signToken(userA)));
+    const { id } = await created.json();
+    db.prepare('UPDATE api_keys SET secret_enc = NULL WHERE id = ?').run(id);
+
+    const res = await withId(readSecret, id, signToken(userA));
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error_code).toBe('KEY_NOT_VIEWABLE');
+    expect(body.message).toContain('轮换');
+  });
+
+  test('密文解不开（主密钥换过）→ 500 SECRET_DECRYPT_FAILED，不吐内部异常', async () => {
+    const created = await createKey(req('POST', { name: 'x' }, signToken(userA)));
+    const { id } = await created.json();
+    // 换一把主密钥重新加密的密文，等价于"这条密文对不上现在这把钥匙"
+    db.prepare('UPDATE api_keys SET secret_enc = ? WHERE id = ?').run('v1:bm90LWEtcmVhbC1jaXBoZXI=', id);
+
+    const res = await withId(readSecret, id, signToken(userA));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error_code).toBe('SECRET_DECRYPT_FAILED');
+    // 自述三段式，且不把服务端的环境变量名/异常原文端出去
+    for (const part of ['缺什么', '为什么缺', '怎么办']) expect(body.message).toContain(part);
+    expect(body.message).not.toContain('LAWER_DATA_KEY');
+  });
+
+  test('【红线】api key 身份看不了明文（连自己那把也不行）', async () => {
+    const created = await createKey(req('POST', { name: 'x' }, signToken(userA)));
+    const { id, key } = await created.json();
+    const res = await withId(readSecret, id, key);
+    expect(res.status).toBe(403);
+    expect((await res.json()).error_code).toBe('WEB_SESSION_REQUIRED');
+  });
+
+  test('【红线】看不了别人的 key，且报错与「不存在」一字不差', async () => {
+    const created = await createKey(req('POST', { name: '甲的' }, signToken(userA)));
+    const { id } = await created.json();
+
+    const byB = await withId(readSecret, id, signToken(userB));
+    const missing = await withId(readSecret, 999999, signToken(userB));
+    expect(byB.status).toBe(404);
+    expect(await byB.json()).toEqual(await missing.json());
+  });
+});
+
+describe('轮换', () => {
+  test('换发新明文，旧明文立刻作废', async () => {
+    const created = await createKey(req('POST', { name: '我的 Claude' }, signToken(userA)));
+    const { id, key: oldKey } = await created.json();
+    const { resolveIdentity } = await import('@/lib/auth/identity');
+    expect(resolveIdentity(db, new Headers({ authorization: `Bearer ${oldKey}` }))).not.toBeNull();
+
+    const res = await withId(rotateKey, id, signToken(userA), 'POST');
+    expect(res.status).toBe(200);
+    const { key: newKey } = await res.json();
+    expect(newKey).not.toBe(oldKey);
+
+    // 旧的当场不认，新的能用
+    expect(resolveIdentity(db, new Headers({ authorization: `Bearer ${oldKey}` }))).toBeNull();
+    expect(resolveIdentity(db, new Headers({ authorization: `Bearer ${newKey}` }))).not.toBeNull();
+  });
+
+  test('新明文也能立刻回看', async () => {
+    const created = await createKey(req('POST', { name: 'x' }, signToken(userA)));
+    const { id } = await created.json();
+    const { key: newKey } = await (await withId(rotateKey, id, signToken(userA), 'POST')).json();
+    expect((await (await withId(readSecret, id, signToken(userA))).json()).key).toBe(newKey);
+  });
+
+  test('id / name / scopes / client_name 一个都不变，rotated_at 落痕', async () => {
+    const created = await createKey(
+      req('POST', { name: '我的 Claude', scopes: ['case:read'] }, signToken(userA)),
+    );
+    const { id } = await created.json();
+    db.prepare("UPDATE api_keys SET client_name = 'claude-code' WHERE id = ?").run(id);
+
+    const body = await (await withId(rotateKey, id, signToken(userA), 'POST')).json();
+    expect(body).toMatchObject({
+      ok: true,
+      id, // 不是新建一行：新建会换 id，前端本地缓存的那一行当场对不上
+      name: '我的 Claude',
+      scopes: ['case:read'],
+      client_name: 'claude-code',
+    });
+    const row = db
+      .prepare('SELECT name, scopes, client_name, rotated_at FROM api_keys WHERE id = ?')
+      .get(id) as { name: string; scopes: string; client_name: string; rotated_at: string };
+    expect(row).toMatchObject({ name: '我的 Claude', client_name: 'claude-code' });
+    expect(JSON.parse(row.scopes)).toEqual(['case:read']);
+    expect(row.rotated_at).toBeTruthy();
+    expect(db.prepare('SELECT COUNT(*) AS n FROM api_keys').get()).toEqual({ n: 1 });
+  });
+
+  test('【要害】轮换把 last_used_at 清零——旧那把已作废，「已接入」不该继续挂着', async () => {
+    const created = await createKey(req('POST', { name: 'x' }, signToken(userA)));
+    const { id, key } = await created.json();
+    const { resolveIdentity } = await import('@/lib/auth/identity');
+    resolveIdentity(db, new Headers({ authorization: `Bearer ${key}` })); // 用一次，落 last_used_at
+    expect(
+      (db.prepare('SELECT last_used_at FROM api_keys WHERE id = ?').get(id) as { last_used_at: string })
+        .last_used_at,
+    ).toBeTruthy();
+
+    await withId(rotateKey, id, signToken(userA), 'POST');
+    expect(db.prepare('SELECT last_used_at FROM api_keys WHERE id = ?').get(id)).toEqual({
+      last_used_at: null,
+    });
+  });
+
+  test('【红线】api key 身份轮换不了，别人的 key 也轮换不了', async () => {
+    const created = await createKey(req('POST', { name: '甲的' }, signToken(userA)));
+    const { id, key } = await created.json();
+
+    const byKey = await withId(rotateKey, id, key, 'POST');
+    expect(byKey.status).toBe(403);
+    expect((await byKey.json()).error_code).toBe('WEB_SESSION_REQUIRED');
+
+    const byB = await withId(rotateKey, id, signToken(userB), 'POST');
+    expect(byB.status).toBe(404);
+    // 甲那把纹丝不动：明文还是原来那串
+    expect((await (await withId(readSecret, id, signToken(userA))).json()).key).toBe(key);
+  });
+});
+
+describe('列表面', () => {
+  test('回「能不能查看」这一位，但不回密文本身', async () => {
+    const created = await createKey(req('POST', { name: '新的' }, signToken(userA)));
+    const { id } = await created.json();
+    const fresh = await (await listKeys(req('GET', undefined, signToken(userA)))).json();
+    expect(fresh.keys[0].viewable).toBe(true);
+    const row = db.prepare('SELECT secret_enc FROM api_keys WHERE id = ?').get(id) as {
+      secret_enc: string;
+    };
+    expect(JSON.stringify(fresh)).not.toContain(row.secret_enc);
+
+    db.prepare('UPDATE api_keys SET secret_enc = NULL WHERE id = ?').run(id);
+    const old = await (await listKeys(req('GET', undefined, signToken(userA)))).json();
+    expect(old.keys[0].viewable).toBe(false);
   });
 });

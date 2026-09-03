@@ -8,8 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/shadcn/ca
 import { Skeleton } from '@/components/shadcn/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/shadcn/tabs';
 import { SETUP_TABS } from './agentSetup';
+import { CurrentKey } from './CurrentKey';
 import { SetupPrompt } from './SetupPrompt';
 import { useAgentSetup } from './useAgentSetup';
+import type { AgentKeySecret } from './useAgentKeySecret';
 
 /**
  * 一键接入：把这份档案库接到用户自己的 AI 助手上（spec D4）。
@@ -21,8 +23,14 @@ import { useAgentSetup } from './useAgentSetup';
  * 所以改成折叠：标题换成中性的「接入配置」，正文点开才渲染，任何提示也不带案件字样。
  * 折叠这件事本身归 _ui/DiscreetCollapse——接入指南 /settings/agent 用的是同一个壳，
  * 两处各写一份的那天，新写的那份不会有人替它想起折叠。
+ *
+ * 【密钥明文从外面传进来】话术里要填的是**当前这把**密钥的明文，不是占位符；
+ * 但这张卡不自己实例化 useAgentKeySecret——同一屏上的 ApiKeysCard 新建一把之后，
+ * 各自持有一份 state 的形态是：上面列表已经列出「启用中」，这张卡还写着「还没有密钥」、
+ * 话术还是占位符，要整页刷新才对上，而两张卡各自看都很正常。
+ * 一份 state 由 AgentKeyCards 实例化后喂给两张卡（prop 必填，漏传是编译错，不是静默过期）。
  */
-export function AgentSetupCard() {
+export function AgentSetupCard({ secret }: { secret: AgentKeySecret }) {
   const { discreet } = useDiscreet();
   const { info, loading, error, unauthorized } = useAgentSetup();
 
@@ -66,6 +74,13 @@ export function AgentSetupCard() {
             </p>
           )}
 
+          <div className="mt-3 border-t border-line pt-3">
+            <p className="text-[14px] font-medium text-ink">当前密钥</p>
+            <div className="mt-1.5">
+              <CurrentKey secret={secret} />
+            </div>
+          </div>
+
           {info && (
             <>
               <dl className="mt-3 border-t border-line pt-3 text-[14px] leading-6">
@@ -80,7 +95,10 @@ export function AgentSetupCard() {
               </dl>
 
               <div className="mt-4">
-                <SetupPrompt info={info} />
+                <SetupPrompt
+                  info={info}
+                  apiKey={secret.state.kind === 'ready' ? secret.state.secret : undefined}
+                />
               </div>
             </>
           )}

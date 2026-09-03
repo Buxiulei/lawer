@@ -1215,6 +1215,22 @@ export function runMigrations(db: Database.Database): void {
   // 并在页面上写明「这是你给钥匙起的名字」——**不编默认值**，否则用户会以为我们认出了他的助手。
   addColumnIfMissing(db, 'api_keys', 'client_name', 'TEXT');
 
+  // api_keys.secret_enc / rotated_at：让用户**回来还能看见自己的密钥明文**。
+  //
+  // 【为什么推翻「明文只显示一次」】那条铁律的代价全落在用户身上：密钥只在创建响应里出现
+  // 一次，关掉那一屏之后设置页的接入话术里就只剩 `<粘贴你生成时保存的密钥>` 占位符——
+  // 用户想换台设备接一次，唯一的出路是吊销重建。而这把 key 保护的是他自己的案件档案，
+  // 不是别人的钱：他本来就有权看见它。所以改成**加密留存**：secret_enc 存
+  // lib/crypto encryptField 的自包含密文（主密钥只在 env LAWER_DATA_KEY，不入库），
+  // key_hash 照旧是鉴权用的那一列，两者各司其职、互不替代。
+  //
+  // 两列都可空且**不回填**：存量密钥的明文我们当年就没留，今天也变不出来。
+  // 给 secret_enc 塞任何默认值都是把「找不回了」伪装成「找得回」——读侧据
+  // `secret_enc IS NULL` 显示「旧密钥不可查看，请轮换」，那是实话。
+  // rotated_at 记最近一次轮换时间，NULL = 从没轮换过（不是「1970 年轮换过」）。
+  addColumnIfMissing(db, 'api_keys', 'secret_enc', 'TEXT');
+  addColumnIfMissing(db, 'api_keys', 'rotated_at', 'TEXT');
+
   // messages.failed_code：这一轮**终态失败**的错误码（AGENT_FAILED 等，值集见 lib/errors/user-facing）。
   // NULL = 这不是失败轮（绝大多数行）。
   //

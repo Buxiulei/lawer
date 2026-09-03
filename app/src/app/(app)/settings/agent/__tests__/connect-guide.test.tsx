@@ -62,7 +62,9 @@ describe('四步骨架', () => {
   it('生成密钥 / 复制配置 / 粘到助手 / 验证连通，一步都不少', () => {
     const t = text(ssr());
     for (const step of ['第一步', '第二步', '第三步', '第四步']) expect(t).toContain(step);
-    expect(t).toContain('生成一把密钥');
+    // 第一步从「生成一把密钥」改名成「拿到你的密钥」：密钥现在取得回来，
+    // 已经有一把的人进这一页不该被要求再生成一把（那样两把 key 挂着，谁也不知道哪把在用）
+    expect(t).toContain('拿到你的密钥');
     expect(t).toContain('复制配置');
     expect(t).toContain('粘到你的助手里');
     expect(t).toContain('验一下接上没有');
@@ -152,6 +154,47 @@ describe('「接没接上」的判据：钥匙被用过，不是钥匙存在', (
     ]);
     expect(got.name).toBe('我的 Claude');
     expect(got.nameIsKeyName).toBe(true);
+  });
+});
+
+describe('话术里的明文只有一处正本', () => {
+  /*
+   * 【这条守的是什么】这一页上有两处都"像是"当前密钥：hook 取回来的那把，
+   * 和「本次刚生成的那把」（issued）。曾经写成 `issued?.key ?? hook`——
+   * 生成完随手点一下「轮换密钥」，第一步「当前这把」已经换成新的，
+   * 第二步的话术与配置块还内嵌着刚失效的那把，「复制这段话术」复制走一把 401 的钥匙。
+   * 两块并排在同一屏上、都没有任何报错，刷新一下又自己好了。
+   *
+   * 【为什么只能钉源码】这一页要走到那个状态得**点两下**（生成、轮换），
+   * 而本仓测试环境是 node（vitest environment: 'node'，无 DOM、无 testing-library），
+   * SSR 只渲染首帧、effect 与事件都不跑，issued 永远是 null——
+   * 端到端那一版判据在 playwright-core 真机脚本里（rd-byo-key/rv-browser.mjs）。
+   * 这里钉的是那条路彻底不存在：明文不许再有第二个来源。
+   */
+  const src = readFileSync(
+    join(process.cwd(), 'src/app/(app)/settings/agent/_components/ConnectGuide.tsx'),
+    'utf8',
+  );
+  /** 只看代码：上面那段说明里逐字写着当年那个错的表达式，扫源码原文会扫到它自己 */
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  it('话术那一串只从 useAgentKeySecret 取，不从「本次刚生成的那把」取', () => {
+    const line = code.split('\n').find((l) => l.includes('const apiKey'));
+    expect(line, '这一页应当有且只有一处算出话术里那串密钥').toBeDefined();
+    expect(line).toContain('secret.state');
+    expect(
+      line,
+      '缺什么：话术里的密钥又多了一个来源（issued）。\n' +
+        '为什么缺：issued 是「本次生成的那把」的快照，轮换不会更新它——' +
+        '于是当前密钥小节与话术会各显示一把，用户复制走的是已经 401 的那把。\n' +
+        '怎么办：明文只认 useAgentKeySecret；生成时用 secret.adopt 顶上去。',
+    ).not.toContain('issued');
+  });
+
+  it('issued 里根本没留明文——再取一次连编译都过不去', () => {
+    // 正对照：它确实还存着（地址与 id 这一页用得上），只是没有 key 那一项
+    expect(src).toMatch(/type IssuedRef = SetupUrls & \{ id: number \}/);
+    expect(code).not.toMatch(/issued\s*\??\.key/);
   });
 });
 

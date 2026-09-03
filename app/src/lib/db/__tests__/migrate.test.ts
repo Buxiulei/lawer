@@ -544,6 +544,39 @@ describe('存量迁移区', () => {
     ]);
   });
 
+  it('api_keys.secret_enc / rotated_at：列存在，存量行取 NULL，幂等重跑不重复加列', () => {
+    const db = newDb();
+    db.exec('ALTER TABLE api_keys DROP COLUMN secret_enc');
+    db.exec('ALTER TABLE api_keys DROP COLUMN rotated_at');
+    const uid = mkUser(db, 'secret-enc');
+    db.prepare('INSERT INTO api_keys (user_id, name, key_hash) VALUES (?, ?, ?)').run(
+      uid,
+      '旧钥匙',
+      'hh-secret',
+    );
+
+    const cols = (name: string) =>
+      (db.prepare('PRAGMA table_info(api_keys)').all() as { name: string }[]).filter(
+        (c) => c.name === name,
+      ).length;
+    expect(cols('secret_enc')).toBe(0);
+    expect(cols('rotated_at')).toBe(0);
+
+    runMigrations(db);
+    expect(cols('secret_enc')).toBe(1);
+    expect(cols('rotated_at')).toBe(1);
+    // 第二遍：addColumnIfMissing 跳过，不报 duplicate column name（裸 ALTER 会在这里炸）
+    expect(() => runMigrations(db)).not.toThrow();
+    expect(cols('secret_enc')).toBe(1);
+    expect(cols('rotated_at')).toBe(1);
+
+    // 存量行两列取 NULL——**不回填**。这把 key 当年就没留明文，塞任何默认值都是把
+    // 「找不回了」伪装成「找得回」，而页面据 secret_enc IS NULL 说的正是那句实话。
+    expect(db.prepare('SELECT name, secret_enc, rotated_at FROM api_keys').all()).toEqual([
+      { name: '旧钥匙', secret_enc: null, rotated_at: null },
+    ]);
+  });
+
   it('threads.intake_stage：列存在，默认 NULL 且可写读', () => {
     const db = newDb();
     const caseId = mkCase(db, mkUser(db));

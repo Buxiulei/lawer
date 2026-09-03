@@ -216,7 +216,18 @@ describe('G-F0 单一入口：事实卡是纯函数，且只在一处注入', ()
     expect(source).not.toContain('@/lib/db/');
   });
 
-  it('renderCaseFacts 全 src 只被调用一次，且在 buildSystemPrompt 里（变异：别处再调一次 → 红）', () => {
+  /**
+   * 事实卡有**两个出口**，一个都不许多：
+   *   ① 站内 agent 的 system prompt（lib/agent/prompt.ts）
+   *   ② 用户自己的 agent 走 MCP 的 case_facts 工具（lib/mcp/tools.ts）
+   * 出口可以有两个，**口径只能有一个**——所以下面不只点名文件，还要求每一处都写成
+   * `renderCaseFacts(buildCaseFacts(…))`：谁想自己拼一份事实卡（跳过 buildCaseFacts、
+   * 或绕过 renderCaseFacts 的预算裁剪直接 JSON 化 snapshot），这条就红。
+   * 那种分叉的形态是：同一个案子在网页里和在用户助手里，「当前事实」不是同一份。
+   */
+  const RENDER_SITES = ['lib/agent/prompt.ts', 'lib/mcp/tools.ts'];
+
+  it('renderCaseFacts 只有两处出口，且两处都经 buildCaseFacts（变异：别处再调一次 → 红）', () => {
     const callers: string[] = [];
     for (const file of walk(SRC_ROOT)) {
       if (file.endsWith('case-facts.ts')) continue; // 定义处自身不算调用
@@ -224,8 +235,15 @@ describe('G-F0 单一入口：事实卡是纯函数，且只在一处注入', ()
       const hits = text.match(/renderCaseFacts\(/g);
       if (hits) callers.push(...hits.map(() => file));
     }
-    expect(callers).toEqual([path.join(SRC_ROOT, 'lib/agent/prompt.ts')]);
+    expect(callers.sort()).toEqual(RENDER_SITES.map((r) => path.join(SRC_ROOT, r)).sort());
 
+    for (const rel of RENDER_SITES) {
+      const text = fs.readFileSync(path.join(SRC_ROOT, rel), 'utf-8');
+      // 允许命名空间前缀（lib/mcp 那侧是 `agent.renderCaseFacts(agent.buildCaseFacts(…))`）
+      expect(text, rel).toMatch(/renderCaseFacts\(\s*(?:[\w$]+\.)?buildCaseFacts\(/);
+    }
+
+    // 注入侧还要钉在 buildSystemPrompt 里：换个函数注入等于换了注入时机
     const prompt = fs.readFileSync(path.join(SRC_ROOT, 'lib/agent/prompt.ts'), 'utf-8');
     const body = prompt.slice(prompt.indexOf('export function buildSystemPrompt'));
     expect(body).toContain('renderCaseFacts(buildCaseFacts(input.snapshot))');
