@@ -296,6 +296,8 @@
 
 **2026-09-03 11:35 · otp 跟进 PASS（38f2b8e）+ 经理钉边界（a52c319）→ 主干 5243bf2**：新表 otp_send_attempts（与额度账本分表，被拦不记行），≤5 秒短闸排在 IP→60s→当日之后、错误码 SEND_TOO_FAST retry_after=5；注释改事实（IP 计数对 knownUser 整条豁免，短闸兜底）；R1/R5 判据在位，M1–M4 与复核自造 Ra2/Rc/Rg 全红；真机 curl 三连 500→429(5s)→500、sms_codes 恒 0。复核 nit「at(5) 准点无断言，> 改 >= 存活」——经理把放行断言从 at(6) 改到 at(5) 准点，变异 >= 现红 3。**上产要跑迁移**（49 表→50）。CI 盯梢中。
 
+**2026-09-03 · 生产上线 5243bf2（otp 5 秒短闸 + 新表 otp_send_attempts）**：备份 → bundle ff → build EXIT=0 → restart 双 active → 迁移触发（表数见冒烟输出）→ 路由 200。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
