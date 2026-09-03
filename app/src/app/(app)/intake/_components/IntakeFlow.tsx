@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import type { SanbeiCap } from '@/lib/cap/sanbei';
 import { useSignedIn } from '@/app/_ui/auth';
@@ -24,6 +24,7 @@ import {
   saveDraft,
   type IntakeDraft,
 } from './draft';
+import { pushStepHistory, seedStepHistory, stepFromHistoryState } from './stepHistory';
 import { destinationForFinish, saveIntake } from './submit';
 import { advanceBlock } from './validate';
 
@@ -109,22 +110,66 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
 
   const reduce = useReducedMotion();
   const step = Math.min(draft.step, STEPS.length - 1);
+  const stepRef = useRef(step);
+  stepRef.current = step;
   const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
   // 「今天」现取：入职时间填在未来要当场拦下，不能等提交时才由后端说不行
   const block = advanceBlock(step, draft, new Date().toISOString().slice(0, 10));
   const canAdvance = block === null;
 
+  /** 落一步：改 state + 回到顶部。前进与「返回键弹回来」共用这一处，两边不许各写一遍。 */
+  const applyStep = useCallback(
+    (next: number) => {
+      setDraft((prev) => ({ ...prev, step: next }));
+      setRestored(false);
+      // 程序化平滑滚动是前庭敏感者最难受的一类运动，而 globals.css 那条全局
+      // reduced-motion 规则只管 CSS、管不到这里——必须过 scrollBehavior()
+      window.scrollTo({ top: 0, behavior: scrollBehavior(reduce) });
+    },
+    [reduce],
+  );
+
+  /**
+   * 【F-208】向导的 6 步全在同一个 URL 上。不往 history 里压条目，浏览器返回键
+   * 第一下就把整个 /intake 弹掉——用户在第 2 步按返回，期待回第 1 步，实际跳出向导。
+   * 挂载后先把已恢复的步数铺进栈（草稿恢复到第 3 步时栈里本来一个条目都没有，
+   * 不铺就跟没修一样），此后每前进一步压一个条目。
+   */
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (!hydrated || seeded.current) return;
+    seeded.current = true;
+    seedStepHistory(window.history, stepRef.current);
+  }, [hydrated]);
+
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const back = stepFromHistoryState(e.state);
+      // 读不出步数＝这个条目不是向导压的（第 1 步再往回就是它）：
+      // 什么都不做，让浏览器照常离开。
+      if (back === null) return;
+      applyStep(Math.min(back, STEPS.length - 1));
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [applyStep]);
+
   const go = (next: number) => {
-    setDraft((prev) => ({ ...prev, step: next }));
-    setRestored(false);
-    // 程序化平滑滚动是前庭敏感者最难受的一类运动，而 globals.css 那条全局
-    // reduced-motion 规则只管 CSS、管不到这里——必须过 scrollBehavior()
-    window.scrollTo({ top: 0, behavior: scrollBehavior(reduce) });
+    // 往回走一律走浏览器的栈（「上一步」按钮与返回键是同一件事）：
+    // 按钮自己改 state 的话，栈还停在原处，下一次返回就会多退一格或直接出去。
+    if (next < step) {
+      window.history.back();
+      return;
+    }
+    pushStepHistory(window.history, next);
+    applyStep(next);
   };
 
   const reset = () => {
     clearDraft();
+    // 清空后当前条目对应的就是第 1 步，别让它还写着「第 4 步」
+    seedStepHistory(window.history, 0);
     setDraft(EMPTY_DRAFT);
     setRestored(false);
     setConfirmReset(false);
