@@ -255,6 +255,21 @@ describe('welcome/page.tsx 交给 WelcomeGate', () => {
       );
     }
   });
+
+  /**
+   * ②d 首帧：WelcomeGate **组件本身**的 SSR 首帧只能是骨架。
+   * 复核第三轮抓到两条一行变异全站全绿：组件无视 state 恒画新人屏（F-201 本体原样复发）、
+   * 初态写成 fresh（服务端首帧就印「档案已创建」——本单要消灭的那一闪）。
+   * screenFor 的三态判据咬不到组件自己的管道；renderToStaticMarkup 不跑 effect，
+   * 渲出来的就是初态 = 首帧，所以这一条同时钉住「初态是 loading」与「拿 state 去挑屏」。
+   */
+  it('WelcomeGate 首帧（SSR）只有骨架：不写档案已创建/开始首诊/欢迎回来/进入我的', () => {
+    const first = renderToStaticMarkup(<WelcomeGate />);
+    expect(first.includes('data-slot="skeleton"'), '首帧没有骨架——初态不是 loading，或没拿 state 去挑屏').toBe(true);
+    for (const word of ['档案已创建', '开始首诊', '欢迎回来', '进入我的']) {
+      expect(first.includes(word), `首帧就印了「${word}」——服务端那一帧会闪给用户`).toBe(false);
+    }
+  });
 });
 
 /* ── ③ 接线：问出这一屏所需的那几个数，以及问不出来时怎么办 ─── */
