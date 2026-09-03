@@ -140,7 +140,12 @@ function isSixDigits(code: string): boolean {
 
 /**
  * 发送手机验证码。
- * 验证码先入库再发短信：发失败也占掉一次 24h 额度，这样上游持续报错时不会被无限重试打爆。
+ *
+ * 【冷却与当日额度只认「通道确认发出」】码先落库再发短信——这一行在发送期间兼作防连击闸
+ * （同一号码此刻再点会被 60s 冷却挡住，不会并发打两条短信出去）；但短信通道明确报错时
+ * 这一行会被撤掉：发送本身没成功，60s 冷却与当日 10 次都不该算在用户头上，
+ * 否则用户就同时收到「稍后再试」和「60 秒后再试」两句互相打架的话（F-204）。
+ * 上游持续报错时拦住无限重试的是出口 IP 那条计数（checkSendQuota 里，失败照记不退）。
  */
 export async function sendPhoneCode(
   db: Database,
@@ -161,7 +166,7 @@ export async function sendPhoneCode(
 
   const minutes = codeExpiryMinutes();
   const code = generateCode();
-  store.insertSmsCode(db, {
+  const codeId = store.insertSmsCode(db, {
     phoneHash,
     code,
     expiresAt: toSql(new Date(now.getTime() + minutes * 60 * 1000)),
@@ -171,6 +176,8 @@ export async function sendPhoneCode(
   try {
     await (deps.sendSms ?? ((p, c) => sendOtp(p, c)))(phone, code);
   } catch (err) {
+    // 没发出去 = 这次不算数：撤掉上面那一行，冷却与当日计数都回到发之前（F-204）
+    store.deleteSmsCode(db, codeId);
     const classified = classifySmsError(err);
     return fail(classified.status, classified.errorCode, classified.message);
   }
@@ -313,7 +320,7 @@ export async function sendEmailCode(
   const code = generateCode();
   // 陌生邮箱（user === null）也照样落这一行：不落的话 /verify 那边就会分叉成
   // 「没有码可比」与「码错了」两种回答，注册状态探针换个接口又回来了。
-  store.insertEmailCode(db, {
+  const codeId = store.insertEmailCode(db, {
     email,
     code,
     purpose: store.EMAIL_PURPOSE.verify,
@@ -330,6 +337,8 @@ export async function sendEmailCode(
   try {
     await (deps.sendEmail ?? ((to, c) => sendMail(to, c)))(email, copy);
   } catch {
+    // 与手机侧同一条规矩：没发出去就撤行，60s 冷却与当日 10 次都不占（F-204）
+    store.deleteEmailCode(db, codeId);
     return fail(502, 'EMAIL_SEND_FAILED', '邮件发送失败，请稍后重试');
   }
 
@@ -460,7 +469,7 @@ export async function sendEmailRegisterCode(
 
   const minutes = codeExpiryMinutes();
   const code = generateCode();
-  store.insertEmailCode(db, {
+  const codeId = store.insertEmailCode(db, {
     email,
     code,
     purpose: store.EMAIL_PURPOSE.register,
@@ -474,6 +483,8 @@ export async function sendEmailRegisterCode(
   try {
     await (deps.sendEmail ?? ((to, c) => sendMail(to, c)))(email, copy);
   } catch {
+    // 与手机侧同一条规矩：没发出去就撤行，60s 冷却与当日 10 次都不占（F-204）
+    store.deleteEmailCode(db, codeId);
     return fail(502, 'EMAIL_SEND_FAILED', '邮件发送失败，请稍后重试');
   }
 

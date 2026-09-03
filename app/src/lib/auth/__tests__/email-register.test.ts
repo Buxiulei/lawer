@@ -563,8 +563,17 @@ describe('验码的边界与失败形态', () => {
     expect((db.prepare('SELECT COUNT(*) c FROM users').get() as { c: number }).c).toBe(0);
   });
 
-  test('发信失败 → EMAIL_SEND_FAILED，但这次已占掉额度（上游持续报错时不会被无限重试打爆）', async () => {
+  // 【这条判据 2026-09-03 被 F-204 翻面】旧版断言的是「发信失败也占掉一次额度」，
+  // 理由写的是「上游持续报错时不会被无限重试打爆」。代价是用户读到「稍后再试」、
+  // 照做立刻再点，收到的却是「发送太频繁，60 秒后再试」——两句话互相打架，
+  // 上游抖动时就成了「报错→等 60 秒→再报错」的死循环。发送本身没成功，
+  // 不该算在用户的额度上；拦无限重试的活交给出口 IP 那条计数（失败照记不退）。
+  test('🔴 发信失败 → EMAIL_SEND_FAILED，且不占额度：立刻重发就能成（F-204）', async () => {
     const db = makeTestDb();
+    const rows = () =>
+      (db.prepare('SELECT COUNT(*) c FROM email_codes WHERE email = ?').get(EMAIL) as { c: number })
+        .c;
+
     const res = await sendEmailRegisterCode(
       db,
       { email: EMAIL, ip: IP },
@@ -576,10 +585,19 @@ describe('验码的边界与失败形态', () => {
       },
     );
     expect(res).toMatchObject({ ok: false, status: 502, errorCode: 'EMAIL_SEND_FAILED' });
+    expect(rows(), '发失败还留着行 = 当日额度被白吃一次').toBe(0);
+
+    // 同一秒立刻重发：不该撞上 60 秒冷却
     expect(
-      (db.prepare('SELECT COUNT(*) c FROM email_codes WHERE email = ?').get(EMAIL) as { c: number })
-        .c,
-    ).toBe(1);
+      (await sendEmailRegisterCode(db, { email: EMAIL, ip: IP }, makeDeps(T0).deps)).ok,
+      '发失败后立刻重发被拦 = F-204 复发',
+    ).toBe(true);
+    expect(rows()).toBe(1);
+
+    // 反向对照：真发出去的那次照旧起 60 秒冷却
+    expect(
+      await sendEmailRegisterCode(db, { email: EMAIL, ip: IP }, makeDeps(at(1)).deps),
+    ).toMatchObject({ ok: false, status: 429, errorCode: 'RATE_LIMITED', retryAfter: 60 });
   });
 
   test('🔴 发出去的邮件恒用中性文案：把这里改成 detailed 会红（匿名收件人可能还不是我们的用户）', async () => {

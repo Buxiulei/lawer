@@ -272,6 +272,99 @@ describe('发码限流', () => {
     const result = await sendPhoneCode(db, { phone: PHONE, ip: IP }, deps);
     expect(result).toMatchObject({ ok: false, status: 429, errorCode: 'SMS_RATE_LIMITED' });
   });
+
+  // ===== F-204：发失败的那次不许占冷却与当日额度 =====
+  //
+  // 【为什么这条判据非有不可】用户看到的是「短信通道暂时发不出验证码…稍后再试」，
+  // 照做立刻再点，得到的却是「发送太频繁，60 秒后再试」——两句话互相打架，
+  // 而且上游抖动时会变成「报错→等 60 秒→再报错→再等 60 秒」的死循环。
+  // 冷却与当日 10 次的**唯一账本就是 sms_codes / email_codes 的行**，所以判据直接钉行数：
+  // 发失败留下了行 = 额度被吃掉了，与用户那侧看到的「被拦」是同一件事。
+
+  function smsRowCount(db: Database, phone: string): number {
+    return (
+      db
+        .prepare('SELECT COUNT(*) AS n FROM sms_codes WHERE phone_hash = ?')
+        .get(hashLookup(phone)) as { n: number }
+    ).n;
+  }
+
+  /** 短信通道明确发不出去（走 classifySmsError 的兜底分支 SMS_UPSTREAM_ERROR） */
+  function smsBoom(now: Date) {
+    return {
+      now,
+      sendSms: async () => {
+        throw new Error('短信网关连接超时');
+      },
+    };
+  }
+
+  test('🔴 短信没发出去 → 不占 60s 冷却也不占当日额度，立刻重发就能成（F-204）', async () => {
+    const db = makeTestDb();
+
+    const failed = await sendPhoneCode(db, { phone: PHONE, ip: IP }, smsBoom(T0));
+    expect(failed).toMatchObject({ ok: false, status: 502, errorCode: 'SMS_UPSTREAM_ERROR' });
+    expect(smsRowCount(db, PHONE), '发失败还留着行 = 当日额度被白吃一次').toBe(0);
+
+    // 同一秒立刻重发——这正是用户读完「稍后再试」后的第一个动作
+    const retry = await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(T0).deps);
+    expect(retry.ok, '发失败后立刻重发被拦 = F-204 复发').toBe(true);
+    expect(smsRowCount(db, PHONE)).toBe(1);
+
+    // 反向对照：这一次是真发出去了，60 秒冷却必须照常拦住下一次
+    expect(await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(1)).deps)).toMatchObject({
+      ok: false,
+      status: 429,
+      errorCode: 'RATE_LIMITED',
+      retryAfter: 60,
+    });
+  });
+
+  test('🔴 连着 10 次发失败也没吃掉当日 10 次额度，第 11 次仍发得出去（F-204）', async () => {
+    const db = makeTestDb();
+    for (let i = 0; i < 10; i++) {
+      expect((await sendPhoneCode(db, { phone: PHONE, ip: IP }, smsBoom(T0))).ok, `第 ${i + 1} 次`).toBe(
+        false,
+      );
+    }
+    expect(smsRowCount(db, PHONE)).toBe(0);
+    // 老逻辑走到这里当日额度已被失败发送吃光，这一次会是 RATE_LIMITED
+    expect((await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(T0).deps)).ok).toBe(true);
+  });
+
+  test('🔴 邮件没发出去同样不占额度：邮箱侧与手机侧同一条规矩（F-204）', async () => {
+    const db = makeTestDb();
+    await makeExistingUser(db, PHONE, T0);
+    const uid = (db.prepare('SELECT id FROM users ORDER BY id DESC LIMIT 1').get() as { id: number })
+      .id;
+    const mail = 'f204@example.com';
+    const rows = () =>
+      (db.prepare('SELECT COUNT(*) AS n FROM email_codes WHERE email = ?').get(mail) as {
+        n: number;
+      }).n;
+
+    const failed = await sendEmailCode(
+      db,
+      { userId: uid, email: mail, ip: IP },
+      {
+        now: at(20),
+        sendEmail: async () => {
+          throw new Error('SMTP 挂了');
+        },
+      },
+    );
+    expect(failed).toMatchObject({ ok: false, status: 502, errorCode: 'EMAIL_SEND_FAILED' });
+    expect(rows(), '发失败还留着行 = 当日额度被白吃一次').toBe(0);
+
+    const retry = await sendEmailCode(db, { userId: uid, email: mail, ip: IP }, makeDeps(at(20)).deps);
+    expect(retry.ok, '发失败后立刻重发被拦 = F-204 复发').toBe(true);
+    expect(rows()).toBe(1);
+
+    // 反向对照：真发出去的那次照旧起 60 秒冷却
+    expect(
+      await sendEmailCode(db, { userId: uid, email: mail, ip: IP }, makeDeps(at(21)).deps),
+    ).toMatchObject({ ok: false, status: 429, errorCode: 'RATE_LIMITED', retryAfter: 60 });
+  });
 });
 
 describe('验证码校验', () => {

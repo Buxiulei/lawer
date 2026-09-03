@@ -74,14 +74,20 @@ export function countSmsCodesSince(db: Database, phoneHash: string, sinceIso: st
   return row.n;
 }
 
-/** 每次发码插新行而不是 UPSERT：限流统计与审计都依赖历史行（照抄 NBDpsy） */
+/**
+ * 每次发码插新行而不是 UPSERT：限流统计与审计都依赖历史行（照抄 NBDpsy）。
+ * 返回新行 id：短信通道确认发不出去时，调用方要拿它把这一行撤掉（见 deleteSmsCode）。
+ */
 export function insertSmsCode(
   db: Database,
   params: { phoneHash: string; code: string; expiresAt: string; createdAt: string },
-): void {
-  db.prepare(
-    'INSERT INTO sms_codes (phone_hash, code, purpose, expires_at, used, attempts, created_at) VALUES (?, ?, ?, ?, 0, 0, ?)',
-  ).run(params.phoneHash, params.code, SMS_PURPOSE, params.expiresAt, params.createdAt);
+): number {
+  const info = db
+    .prepare(
+      'INSERT INTO sms_codes (phone_hash, code, purpose, expires_at, used, attempts, created_at) VALUES (?, ?, ?, ?, 0, 0, ?)',
+    )
+    .run(params.phoneHash, params.code, SMS_PURPOSE, params.expiresAt, params.createdAt);
+  return Number(info.lastInsertRowid);
 }
 
 /** 取该手机号最新一条验证码；旧码不再可用，等价于发新码即作废旧码 */
@@ -99,6 +105,15 @@ export function bumpSmsCodeAttempts(db: Database, id: number): void {
 
 export function markSmsCodeUsed(db: Database, id: number): void {
   db.prepare('UPDATE sms_codes SET used = 1 WHERE id = ?').run(id);
+}
+
+/**
+ * 撤掉一条刚插入、但短信通道确认没发出去的码。
+ * 这张表的行**同时**是「用户手上有这串码」与「已占掉一次 60s 冷却 / 当日 10 次额度」两件事的
+ * 唯一凭据——发失败时两件都不成立，所以行也不该留（F-204：失败的发送不占冷却与当日配额）。
+ */
+export function deleteSmsCode(db: Database, id: number): void {
+  db.prepare('DELETE FROM sms_codes WHERE id = ?').run(id);
 }
 
 // ========== email_codes ==========
@@ -122,7 +137,10 @@ export function countEmailCodesSince(db: Database, email: string, sinceIso: stri
   return row.n;
 }
 
-/** purpose 必填、不给默认值：漏传会被类型系统当场拦下，而不是静默落进 'verify' 桶 */
+/**
+ * purpose 必填、不给默认值：漏传会被类型系统当场拦下，而不是静默落进 'verify' 桶。
+ * 返回新行 id：邮件通道确认发不出去时，调用方要拿它把这一行撤掉（见 deleteEmailCode）。
+ */
 export function insertEmailCode(
   db: Database,
   params: {
@@ -132,10 +150,13 @@ export function insertEmailCode(
     expiresAt: string;
     createdAt: string;
   },
-): void {
-  db.prepare(
-    'INSERT INTO email_codes (email, code, purpose, expires_at, used, attempts, created_at) VALUES (?, ?, ?, ?, 0, 0, ?)',
-  ).run(params.email, params.code, params.purpose, params.expiresAt, params.createdAt);
+): number {
+  const info = db
+    .prepare(
+      'INSERT INTO email_codes (email, code, purpose, expires_at, used, attempts, created_at) VALUES (?, ?, ?, ?, 0, 0, ?)',
+    )
+    .run(params.email, params.code, params.purpose, params.expiresAt, params.createdAt);
+  return Number(info.lastInsertRowid);
 }
 
 export function latestEmailCode(
@@ -156,6 +177,11 @@ export function bumpEmailCodeAttempts(db: Database, id: number): void {
 
 export function markEmailCodeUsed(db: Database, id: number): void {
   db.prepare('UPDATE email_codes SET used = 1 WHERE id = ?').run(id);
+}
+
+/** 撤掉一条刚插入、但邮件通道确认没发出去的码。理由与 deleteSmsCode 逐字相同（F-204）。 */
+export function deleteEmailCode(db: Database, id: number): void {
+  db.prepare('DELETE FROM email_codes WHERE id = ?').run(id);
 }
 
 // ========== users ==========
