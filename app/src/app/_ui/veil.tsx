@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { useDiscreet } from './discreet';
+import { DISCREET_ON_HINT, HOLD_HINT } from './revealHint';
 
 /** 按住多久才算「我要看清这块」。短于它的都是滚动时手指划过。 */
 const PRESS_MS = 150;
@@ -12,7 +13,9 @@ const MOVE_SLOP = 10;
 const RECOVER_MS = 1500;
 
 const HINT_KEY = 'lawer.veilHint';
-const HINT_TEXT = '低调模式已开启：点住任意段落可暂时看清';
+/** 已经真的按住揭开过一次：常驻角标退场，不再占屏幕 */
+const HELD_KEY = 'lawer.veilHeld';
+const HINT_TEXT = DISCREET_ON_HINT;
 
 /**
  * 低调模式二档的手势层：正文由 CSS 整体糊着（见 globals.css 的 [data-veil]），
@@ -28,6 +31,27 @@ const HINT_TEXT = '低调模式已开启：点住任意段落可暂时看清';
 export function DiscreetVeil() {
   const { discreet } = useDiscreet();
   const toast = useToast();
+  /** 用过一次按住手势没有。没用过就常驻一枚角标写明手势（见 revealHint 的长注释）。 */
+  const [held, setHeld] = useState(false);
+
+  // 挂载即读，早于 discreet 由 bootstrap 属性翻上来的那一帧——
+  // 否则老用户会先看见角标闪一下再消失。
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(HELD_KEY) === '1') setHeld(true);
+    } catch {
+      // 隐私模式下读不到：那就每次都提示一遍，比不提示好
+    }
+  }, []);
+
+  const markHeld = useCallback(() => {
+    setHeld(true);
+    try {
+      localStorage.setItem(HELD_KEY, '1');
+    } catch {
+      // 同上
+    }
+  }, []);
 
   // 二档第一次开启时说一句怎么用，否则一片糊看着像页面坏了
   useEffect(() => {
@@ -105,6 +129,7 @@ export function DiscreetVeil() {
         next.dataset.veilOpen = '';
         open = next;
         swallowClick = true;
+        markHeld();
       }, PRESS_MS);
     };
 
@@ -190,7 +215,18 @@ export function DiscreetVeil() {
         focused = null;
       }
     };
-  }, [discreet]);
+  }, [discreet, markHeld]);
 
-  return null;
+  // 常驻角标：糊层的手势提示只能落在糊块**外面**——filter 对整棵子树一视同仁，
+  // 贴在糊块上的角标会跟着糊掉，糊掉的角标等于没有（见 revealHint 的长注释）。
+  if (!discreet || held) return null;
+  return (
+    <p
+      role="note"
+      data-reveal-hint="hold"
+      className="fixed bottom-[calc(var(--bottom-bar-h)+8px)] left-3 z-40 rounded-full border border-line bg-surface/95 px-2.5 py-1 text-[12px] leading-5 text-ink-2 shadow-soft backdrop-blur-sm lg:bottom-4"
+    >
+      {HOLD_HINT}
+    </p>
+  );
 }

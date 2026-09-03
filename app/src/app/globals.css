@@ -739,6 +739,13 @@ html[data-discreet='1'] [data-veil] .discreet-blur {
   filter: none;
 }
 
+/* 同理，糊块里的「点一下看清」角标也收起来：这一块的手势是**按住**，
+   块里再挂一排说「点一下」的角标既互相打架、又跟着块一起被糊掉（filter 管整棵子树），
+   等于一排读不出字的噪点。块外的 <Sensitive> 角标不受这条影响。 */
+html[data-discreet='1'] [data-veil] [data-reveal-hint='tap'] {
+  display: none;
+}
+
 /* ── 同一句话的两种写法，由模式挑一个 ─────────────────────
    server component 取不到 useDiscreet（/welcome 是裸布局的服务端页），
    于是两种变体都渲染出来，靠这两个类挑：
