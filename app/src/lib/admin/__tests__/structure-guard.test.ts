@@ -250,11 +250,17 @@ describe('④ 管理页：可选时长同源、每个变更都过二次确认', 
     }
   });
 
-  test('确认文案写明后果，不是「确定」', () => {
-    expect(src).toMatch(/confirmLabel=/);
+  test('确认文案写明后果，不是「确定」；档位/天数/数额写在正文不写在按钮', () => {
+    // 主按钮是短句常量：拼上「中配 365 天」会把主按钮撑得远宽过次按钮，
+    // 档位名越长撑得越离谱。要确认的那些值在 description 里，一个不少。
+    expect(src).toMatch(/confirmLabel=\{pending\?\.kind === 'gongdao' \? '确认发放' : '确认调整'\}/);
     expect(src).not.toMatch(/confirmLabel="确定"/);
-    expect(src).toContain('确认发放');
-    expect(src).toContain('确认调为');
+    expect(src).not.toContain('确认调为');
+    // 正文仍然把档位、天数、数额、备注全写出来（按钮短了，信息不许跟着少）
+    expect(src).toContain('{PLAN_LABEL[pending.plan]}');
+    expect(src).toContain('{pending.days}');
+    expect(src).toContain("{pending.delta.toLocaleString('zh-CN')}");
+    expect(src).toContain('{pending.note}');
   });
 });
 

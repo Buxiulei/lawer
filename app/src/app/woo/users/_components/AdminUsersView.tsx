@@ -520,6 +520,10 @@ export function AdminUsersView({ refreshKey = 0 }: { refreshKey?: number } = {})
         </Card>
       </section>
 
+      {/* 主按钮文案恒为短句常量：拼上档位/天数/数额（「确认调为 中配 365 天」）
+          会把主按钮撑得远宽过次按钮，档位名越长撑得越离谱。要确认的那些值
+          写在上面的正文里（档位、天数、数额、备注一个不少），按钮只说这一下要干什么。
+          由 shadcn/__tests__/confirm-dialog-buttons.test.tsx 的静态可判定性守卫钉住。 */}
       <ConfirmDialog
         open={pending !== null}
         title={pending?.kind === 'gongdao' ? '确认发放公道值' : '确认调整会员'}
@@ -538,13 +542,7 @@ export function AdminUsersView({ refreshKey = 0 }: { refreshKey?: number } = {})
             </span>
           ) : null
         }
-        confirmLabel={
-          pending?.kind === 'gongdao'
-            ? `确认发放 ${pending.delta} 公道值`
-            : pending
-              ? `确认调为 ${PLAN_LABEL[pending.plan]} ${pending.days} 天`
-              : '确认'
-        }
+        confirmLabel={pending?.kind === 'gongdao' ? '确认发放' : '确认调整'}
         tone="primary"
         onConfirm={() => void runPending()}
         onCancel={() => setPending(null)}
