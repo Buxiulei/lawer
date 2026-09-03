@@ -31,7 +31,8 @@ export function Field({
   htmlFor?: string;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    /* 标签-输入 8px：与 formLayout 里字段 20px / 分区 32px 同一把尺 */
+    <div className="flex flex-col gap-2">
       <Label htmlFor={htmlFor}>
         {label}
         {required && <span className="ml-1 text-amber-ink">必填</span>}

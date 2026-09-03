@@ -13,9 +13,9 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/shadcn/card';
-import { InputField } from '@/components/shadcn/field';
 import { Skeleton } from '@/components/shadcn/skeleton';
 import { CodeBlock } from './CodeBlock';
+import { IdCardForm } from './IdCardForm';
 import { PassportForm } from './PassportForm';
 import { SignInHint } from './SignInHint';
 
@@ -198,7 +198,13 @@ export function RealnameCard() {
     }
   };
 
-  const canSubmit = name.trim().length > 0 && isIdCard(idCard) && !submitting;
+  /**
+   * 还差哪几样。**「能不能点提交」与「还缺什么」由同一个数组算**——
+   * 分开写两遍，迟早出现按钮亮着却说还缺、或按钮灰着说都齐了这种自相矛盾的状态。
+   */
+  const missing: string[] = [];
+  if (name.trim().length === 0) missing.push('姓名');
+  if (!isIdCard(idCard)) missing.push('身份证号');
 
   return (
     <Card>
@@ -259,69 +265,25 @@ export function RealnameCard() {
                 onCancel={() => setChannel('cloudauth')}
               />
             ) : (
-              <form
-                className="flex flex-col gap-4"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (canSubmit) void submit();
-                }}
-              >
-                {status.verification_status === '未通过' && (
-                  <p className="rounded-[10px] bg-amber-wash px-3 py-2.5 text-[14px] leading-6 text-amber-ink">
-                    上一次没通过：{status.message}。姓名和身份证号要与本人证件完全一致，光线足一点再刷一次。
-                  </p>
-                )}
-                {/* 护照被打回的人不会走到这个分支（channel 跟着 method 走），
-                    这里留的是"他手动切回身份证通道"那种情形，不该再提护照 */}
-
-                <InputField
-                  label="姓名"
-                  hint="与身份证上一致"
-                  autoComplete="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  maxLength={30}
-                />
-                <InputField
-                  label="身份证号"
-                  hint="18 位，末位是 X 的直接输 X"
-                  inputMode="text"
-                  autoComplete="off"
-                  value={idCard}
-                  onChange={(e) => setIdCard(e.target.value)}
-                  maxLength={18}
-                  error={idCard.length >= 18 && !isIdCard(idCard) ? '身份证号格式不对，再核一遍' : undefined}
-                />
-
-                {formError && (
-                  <p className="text-[14px] leading-6 text-ink-2">{formError}</p>
-                )}
-
-                <div>
-                  <Button type="submit" disabled={!canSubmit}>
-                    {submitting ? '正在发起…' : '开始实名认证'}
-                  </Button>
-                  <p className="mt-2 text-[13px] leading-5 text-ink-2">
-                    下一步会跳到人脸核验页，需要用手机的摄像头完成。
-                  </p>
-                </div>
-
-                {/* 这条通道只认大陆二代证。没有身份证的人必须能在这里找到出路，
-                    否则他会以为是自己填错了，反复试同一个走不通的入口 */}
-                <div className="border-t border-line pt-3">
-                  <p className="text-[14px] leading-6 text-ink-2">
-                    没有中国大陆身份证？
-                    <button
-                      type="button"
-                      onClick={() => setChannel('passport')}
-                      className="mx-1 min-h-11 text-primary-ink underline underline-offset-4"
-                    >
-                      用护照认证
-                    </button>
-                    （人工审核，一到两个工作日）
-                  </p>
-                </div>
-              </form>
+              <IdCardForm
+                name={name}
+                idCard={idCard}
+                rejectedMessage={
+                  status.verification_status === '未通过' ? status.message : undefined
+                }
+                idCardError={
+                  idCard.length >= 18 && !isIdCard(idCard)
+                    ? '身份证号格式不对，再核一遍'
+                    : undefined
+                }
+                formError={formError}
+                submitting={submitting}
+                missing={missing}
+                onNameChange={setName}
+                onIdCardChange={setIdCard}
+                onSubmit={() => void submit()}
+                onUsePassport={() => setChannel('passport')}
+              />
             )}
           </div>
         )}
