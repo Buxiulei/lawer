@@ -63,4 +63,61 @@ describe('公开取 skill 包', () => {
       expect(text, bad).toContain('SKILL.md');
     }
   });
+
+  /**
+   * 畸形百分号编码。
+   *
+   * 【这条判据的形状是真机改出来的，读它之前先读这段】第一版把畸形串当成
+   * 「params 里给的原样字符串」，单测全绿——而真机 polish-browser.mjs 三条 FAIL
+   * 指出线上照旧 500。实测（next 16.2.9 生产模式）：/skill/% 这类请求在 Next
+   * **匹配动态段那一步**就 500 了，这个 handler 一次都没进；且全站每条动态路由同形
+   * （/verify/%、/case/%/ask、/api/v1/keys/%/secret 一律 500）。那是入口层的事，
+   * 已上报，不在本单。
+   *
+   * 所以下面两条量的是本路由自己那一份责任：params 解不开时不再由我们再补一发 500，
+   * 以及「解得开但仍非法」照旧 404。**别把它们读成「/skill/% 线上会回 404」。**
+   */
+  test('畸形百分号编码：params 解不开时也落到同一句 404 自述，不是 500', async () => {
+    const getBroken = (raw: string) =>
+      GET(new Request(`http://localhost/skill/${raw}`), {
+        // Next 对畸形段就是这么炸的：拿不到 filename，只有一个 rejected promise
+        params: Promise.reject(new URIError('URI malformed')),
+      });
+    for (const bad of ['%', '%zz', 'SKILL%.md']) {
+      const res = await getBroken(bad);
+      expect(res.status, bad).toBe(404);
+      expect(res.headers.get('content-type'), bad).toContain('text/plain');
+      const text = await res.text();
+      for (const part of ['缺什么', '为什么缺', '怎么办']) expect(text, bad).toContain(part);
+      // 自述里点名的是他真的敲进去的那一段，不是一个空文件名
+      expect(text, bad).toContain(bad);
+      expect(text, bad).not.toContain('URI');
+    }
+  });
+
+  /* 保险起见把「已解码但仍畸形」那一档也留着：换个 Next 版本它可能真交进来 */
+  test('畸形串当作已解码段交进来时同样 404', async () => {
+    for (const bad of ['%', '%zz', '%E4%A', 'SKILL%.md']) {
+      const res = await get(bad);
+      expect(res.status, bad).toBe(404);
+      expect(res.headers.get('content-type'), bad).toContain('text/plain');
+      const text = await res.text();
+      // 与上面那组一字不差的同一句自述：缺什么/为什么缺/怎么办
+      for (const part of ['缺什么', '为什么缺', '怎么办']) expect(text, bad).toContain(part);
+      expect(text, bad).toContain('SKILL.md');
+      // 不许把 URIError 的原文或堆栈端给对方
+      expect(text, bad).not.toContain('URI');
+    }
+  });
+
+  /*
+   * 正对照：合法的百分号编码照旧解得开——接住异常不等于从此不解码。
+   * 少了这一条，把 decodeURIComponent 整个删掉上面那组也全绿，
+   * 而中文文件名（/skill/%E6%8E%A5%E5%85%A5%E8%AF%B4%E6%98%8E.md）会开始 404。
+   */
+  test('合法百分号编码照旧解得开（正对照）', async () => {
+    const res = await get(encodeURIComponent('接入说明.md'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/markdown');
+  });
 });

@@ -17,6 +17,7 @@ import { parseId, requireWebSession } from '@/lib/auth/guard';
 import { decryptField } from '@/lib/crypto';
 import { getDb } from '@/lib/db/client';
 import {
+  NO_STORE,
   keyNotFound,
   keyNotViewable,
   masterKeyConfigured,
@@ -44,5 +45,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return secretDecryptFailed();
   }
 
-  return NextResponse.json({ ok: true, id: row.id, name: row.name, key });
+  return NextResponse.json(
+    { ok: true, id: row.id, name: row.name, key },
+    // 正文里躺着明文：这一趟谁都不许缓存
+    { headers: NO_STORE },
+  );
 }

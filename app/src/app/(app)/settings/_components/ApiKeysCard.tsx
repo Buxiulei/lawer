@@ -99,7 +99,7 @@ export function ApiKeysCard({ secret }: { secret: AgentKeySecret }) {
   const [scopes, setScopes] = useState<string[]>(DEFAULT_SCOPES);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  /** 生成后的完整 key：只在这一次露面，关掉就再也拿不到 */
+  /** 生成后的完整 key。关掉这一屏也不丢：它已加密落库，接入卡与设置页随时能再取回来 */
   const [issued, setIssued] = useState<CreatedKey | null>(null);
   const [revoking, setRevoking] = useState<ApiKeyRow | null>(null);
 
@@ -173,6 +173,10 @@ export function ApiKeysCard({ secret }: { secret: AgentKeySecret }) {
     try {
       await apiFetch(`/keys/${row.id}`, { method: 'DELETE' });
       setKeys((prev) => prev.map((k) => (k.id === row.id ? { ...k, enabled: false } : k)));
+      // 吊销的可能正是同屏接入卡摆着的那把。不说一声的形态是：这一行已经写着「已吊销」，
+      // 下面那张卡照旧显示它的明文与「整段复制粘过去就能接上」——复制走的是一把
+      // 自己刚吊销、粘过去必然 401 的钥匙。hook 自己判断要不要重挑。
+      secret.revoked(row.id);
       toast(`${row.name} 已吊销`, 'neutral', '已更新');
     } catch (err) {
       toast(humanError(err), 'amber', '这一步没成功');
@@ -280,7 +284,9 @@ export function ApiKeysCard({ secret }: { secret: AgentKeySecret }) {
       <AppSheet
         open={sheetOpen}
         onClose={closeSheet}
-        title={issued ? '这把 key 只显示这一次' : '新建 API key'}
+        // 标题不许再说「只显示这一次」：正文写的是「随时可以回设置页把它再看一次」，
+        // 两句话摆在同一屏上，用户信哪句都会做错事——信标题的会为了换台设备去吊销重建。
+        title={issued ? '密钥已生成，随时可回设置页查看' : '新建 API key'}
         footer={
           issued ? (
             <Button className="w-full" variant="secondary" onClick={closeSheet}>

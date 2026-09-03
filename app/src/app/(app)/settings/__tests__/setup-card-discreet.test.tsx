@@ -28,6 +28,7 @@ const secret = {
   rotate: async () => {},
   rotating: false,
   adopt: () => {},
+  revoked: () => {},
 };
 const card = () => renderToStaticMarkup(<AgentSetupCard secret={secret} />);
 
