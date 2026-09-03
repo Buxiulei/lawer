@@ -272,6 +272,8 @@
 **2026-09-02 19:20 · SMOKE 案件「诡异重复消息」诊断：非 bug，是核对员误读 DOM**（Sonnet 只读，库 152 行/API 146 条逐条比长度一致）：免责句「暂无逐字依据…已标记待补」只存在于 SSE 直播流的 KNOWLEDGE_MISS notice 帧（frames.ts:283），渲染成 `<p data-veil>` 的 NoticeLine（StreamParts.tsx:269）；「无落款孤立 article」是行动卡自己的 `<article data-veil>`（ActionCard.tsx:44）。三者是同一助手回合按设计并列的三个节点，只因共用 data-veil 被当成三条消息；历史回显路径不产出 notices/actionItemIds，刷新后不会出现。库里 role=user 含免责句 0 行、assistant model NULL 0 行。
 - 待办（低优先）：data-veil 语义过载，给 UserMessage 加 `data-role="user"` 之类角色标记，便于人工核对按角色分类；**量具方法**：核对员按 DOM 判「消息条数」要按 role 属性，不按糊码标记。
 
+**2026-09-03 · 撞额度续跑两单**：ui-nits 修复已落（306a372 /welcome 手势层进 layout 复用 DiscreetVeil + 两变体 CSS 切换；4634a67 /login 半程记录挪到挂载后读 + resume.ready 闸——执行者点名：只挪 useEffect 那版真机仍掉回手机号格且零报错，子组件落盘 effect 先于父组件把记录抹了，vitest 无 DOM 测不到，靠真机核出），复核撞额度→原样 resume。naive-qa-gaps 两位小白各跑到一半（money-privacy 8 张图到驾驶舱、docs 5 张图到文件解读/问它 AGENT_FAILED），两台 staging 服务仍在监听（4721/4610）→ 脚本补「接手半成品」段（复用已 build 的 src/库/服务，从断点续）后 resume。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
