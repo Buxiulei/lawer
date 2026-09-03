@@ -14,7 +14,16 @@
  * 【为什么两处提示的挂法不一样】糊层是 filter 打在块自己身上，filter 对整棵子树
  * （含伪元素）一视同仁——贴在糊块上的角标会跟着糊掉，糊掉的角标等于没有。
  * 所以糊层那句由手势层 DiscreetVeil 出，落在糊块外面。详见 _ui/revealHint。
+ *
+ * 【为什么还要一条源码守卫】上面四条走的是 renderToStaticMarkup：那条路上任何
+ * 「读 localStorage 决定收不收起来」的闸都读不到值，于是**加了闸也照样全绿**。
+ * 复核实测过这一幕——给糊层提示加一道「真按住揭开过一次就永久退场」，
+ * 单测五条不动声色，真机上老用户的 [data-veil] 块又回到零视觉区分（F-206 原样）。
+ * 所以下面单独钉一条：这一句的闸**只有低调模式一道**，不许再挂第二道。
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -122,5 +131,34 @@ describe('低调模式：点一下的块和按住的块，屏幕上写的不是�
         ).toBe(false);
       }
     }
+  });
+});
+
+describe('F-206 守卫：糊层那句提示的闸只有低调模式一道', () => {
+  const src = readFileSync(join(__dirname, '..', 'veil.tsx'), 'utf8');
+
+  it('DiscreetVeil 的渲染闸就是 !discreet，没有第二个条件', () => {
+    const gates = [...src.matchAll(/if \(([^)]*)\) return null;/g)].map((m) => m[1]);
+    expect(
+      gates,
+      '缺什么：DiscreetVeil 的「不渲染」条件不再是单一的 !discreet。\n' +
+        '为什么缺：这一句是「两种块各自写明手势」的糊层那一半。给它加任何第二道闸' +
+        '（用过一次就退场、看够 N 次就收起…），对被这道闸挡住的人来说，同屏两种糊块' +
+        '就又回到零视觉区分——F-206 报的正是那一幕，而这类「用过即退场」的产品裁决' +
+        '台账上没有记过。上面几条走 SSR，读不到 localStorage，加了闸也全绿，抓不住。\n' +
+        '怎么办：闸写成 if (!discreet) return null;；真要收起来，先把裁决写进台账。',
+    ).toEqual(['!discreet']);
+  });
+
+  it('veil.tsx 只持久化「开启时提示说过没有」这一个键', () => {
+    const keys = [...src.matchAll(/'(lawer\.[\w.]+)'/g)].map((m) => m[1]).sort();
+    expect(
+      keys,
+      '缺什么：veil.tsx 里多出了一个本地存储键。\n' +
+        '为什么缺：这个文件里唯一该记住的是「开启低调模式那句 toast 说过没有」' +
+        '（lawer.veilHint）。再记一个「手势用过没有」，就等于把上一条守卫绕开——' +
+        '闸不写在 return 那一行，改写成读盘算出来的一个变量。\n' +
+        '怎么办：手势提示不按用户用没用过收起来；要改先过台账。',
+    ).toEqual(['lawer.veilHint']);
   });
 });

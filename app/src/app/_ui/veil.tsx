@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { useDiscreet } from './discreet';
 import { DISCREET_ON_HINT, HOLD_HINT } from './revealHint';
@@ -13,8 +13,6 @@ const MOVE_SLOP = 10;
 const RECOVER_MS = 1500;
 
 const HINT_KEY = 'lawer.veilHint';
-/** 已经真的按住揭开过一次：常驻角标退场，不再占屏幕 */
-const HELD_KEY = 'lawer.veilHeld';
 const HINT_TEXT = DISCREET_ON_HINT;
 
 /**
@@ -31,27 +29,6 @@ const HINT_TEXT = DISCREET_ON_HINT;
 export function DiscreetVeil() {
   const { discreet } = useDiscreet();
   const toast = useToast();
-  /** 用过一次按住手势没有。没用过就常驻一枚角标写明手势（见 revealHint 的长注释）。 */
-  const [held, setHeld] = useState(false);
-
-  // 挂载即读，早于 discreet 由 bootstrap 属性翻上来的那一帧——
-  // 否则老用户会先看见角标闪一下再消失。
-  useEffect(() => {
-    try {
-      if (localStorage.getItem(HELD_KEY) === '1') setHeld(true);
-    } catch {
-      // 隐私模式下读不到：那就每次都提示一遍，比不提示好
-    }
-  }, []);
-
-  const markHeld = useCallback(() => {
-    setHeld(true);
-    try {
-      localStorage.setItem(HELD_KEY, '1');
-    } catch {
-      // 同上
-    }
-  }, []);
 
   // 二档第一次开启时说一句怎么用，否则一片糊看着像页面坏了
   useEffect(() => {
@@ -129,7 +106,6 @@ export function DiscreetVeil() {
         next.dataset.veilOpen = '';
         open = next;
         swallowClick = true;
-        markHeld();
       }, PRESS_MS);
     };
 
@@ -215,11 +191,14 @@ export function DiscreetVeil() {
         focused = null;
       }
     };
-  }, [discreet, markHeld]);
+  }, [discreet]);
 
-  // 常驻角标：糊层的手势提示只能落在糊块**外面**——filter 对整棵子树一视同仁，
+  // 常驻提示：糊层的手势只能写在糊块**外面**——filter 对整棵子树一视同仁，
   // 贴在糊块上的角标会跟着糊掉，糊掉的角标等于没有（见 revealHint 的长注释）。
-  if (!discreet || held) return null;
+  // **闸只有低调模式这一道**：这一句是「两种块各自写明手势」的糊层那一半，
+  // 低调模式开着它就得在。按「用过一次就退场」之类的条件收起来，等于对用过的人
+  // 又回到 F-206 报的原样（同屏两种糊块、零视觉区分），而那是台账上没有的裁决。
+  if (!discreet) return null;
   return (
     <p
       role="note"
