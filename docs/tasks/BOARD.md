@@ -327,6 +327,8 @@
 
 **2026-09-03 · minors MF-4 PASS（b370966）+ 经理补⑨一例（02a04dc）→ 主干 e6b4776**：seedStepHistory 里 seeded>step 时 h.go(step-seeded) 后 return（选此而非 finish 前退栈：另一标签页清草稿后 F5 不经过 finish）；onPop 对齐空转守卫（真机 mutK 臂 I9 restoredHint 为其判据，vitest 无 jsdom 咬不住）。真机 I6 6→1、I7 3→1、I9 5→3，I3/I4/I5 仍 3 且回退过程草稿与表单未清。复核 nit「⑨只量 step=0，臂 I go(-seeded) 存活」——经理补一例 seeded=4→step=2 期望 [-2]。至此小白二轮 8 条缺陷全部闭卷，CI 盯梢中。
 
+**2026-09-03 · 生产上线 e6b4776（F-206/207/208 minors）**：备份 → bundle ff → build EXIT=0 → restart 双 active → getDb ok → 路由 200。小白二轮 8 条缺陷全部上产。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
