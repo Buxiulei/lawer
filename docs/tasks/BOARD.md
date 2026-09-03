@@ -357,6 +357,8 @@
 
 **2026-09-03 · 主干 fcce623 CI 红（tsc）→ 经理修补 417b602**：admin-passport-review 的路由测试调 insertApiKey 未带 byo-key 新增的 secretEnc——两支各自 CI 绿、合并后类型不齐。修补：测试补占位密文；本地 tsc 0、23/23 绿后 push。**规矩**：集成 worktree 合完多支后先本地 tsc（wt-int 已挂 node_modules 软链）再 push，不拿 CI 当第一道 tsc。
 
+**2026-09-03 · 生产上线 417b602（后台护照审核 + 密钥查看/轮换 + 一段话术 + MCP case_facts/knowledge_search + skill 包 + 弹窗按钮）**：备份 → bundle ff → build EXIT=0 → restart 双 active → 迁移触发（api_keys.secret_enc/rotated_at 到位）→ / /settings/agent 200、/woo 307、/skill/SKILL.md 200（frontmatter 土八鼠陪跑）、/api/manifest 200、agent-setup skill_url=https://law.nbdpsy.com/skill/SKILL.md。真机核对（生成→话术含真密钥→轮换同步→旧钥 401；模拟 agent 取 SKILL.md→MCP initialize→tools/list→case_facts→knowledge_search；低调折叠；后台待审队列只读查看含主理人本人护照）已派 Sonnet；管理员 token 只读、不点审核。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
