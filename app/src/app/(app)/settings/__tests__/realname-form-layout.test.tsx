@@ -78,6 +78,11 @@ describe('上传格', () => {
    * 拿 indexOf('护照资料页') 去比，两格对调了它照样绿——第一版就是这么写的，
    * 变异 M3 当场抓到（GREEN），这行注释是那次的墓碑。
    */
+  it('两格在 ≥sm 并排、格子是虚线边（复核 R1/R4：这两个 class 一去，只有真机看得出来）', () => {
+    expect(passportHtml, '两格不再并排——裁决 2「≥sm 并排」').toContain('sm:grid-cols-2');
+    expect(passportHtml, '上传格丢了虚线边——它是「这一块可以点」的视觉信号').toContain('border-dashed');
+  });
+
   it('护照通道正好两格，顺序是资料页在前、手持自拍在后', () => {
     const tiles = [...passportHtml.matchAll(/data-upload-tile=""/g)];
     expect(tiles).toHaveLength(2);
