@@ -343,6 +343,8 @@
 **主理人「没有办法审核护照的实名认证」「手机号不要脱敏，这是管理后台」→ 派单 admin-passport-review**（基座 0061f93）：待审队列/解密字段/两张照片经管理员专属流式路由/通过·驳回（原因回显、可重交）/审计+中性邮件尽力而为；手机号全显、≤10 位数字模糊搜索（解密后包含匹配，上限 5000）；权限走 admin 唯一入口、非管理员 404。不碰 byo-key-rotate 与 realname-form-ui 在改的文件。
 **发现：两账号公道值为负**（uid=2 −633、uid=1 −154，ledger 与 gongdao.balance 一致，是真实余额）：uid=2 内测开通 pro 时直接插 memberships 行、**未随会员入账 30000**（pricing pro=30000）→ 经理已按 pricing 补发 30000（ledger #83 管理员调整，余额 29367）。同时暴露**没有余额闸**：消耗可一路透支到负数——需主理人拍板扣费口径（见汇报）。首次 grant 脚本报 better-sqlite3 bindings 缺失，是 build.sh 正在 npm ci 的瞬时态，build 完复跑成功。
 
+**2026-09-03 · realname-form-ui PASS（878cf06）+ 经理补两判据（9099986）→ 主干 f9dd3fb**：表单 576px 左对齐/手机全宽；UploadTile 共用上传格（整格 label、缩略图+换一张、错误态红边+原因）两通道唯一 file input 入口；按钮组主次同高 48、缺项提示逐步准确；callout；低调糊层零露出；真机 132/132 量值通过、24 臂全红。裁决：field.tsx 标签间距 gap-2（全站共用原语）**接受**；两通道提示落点不一致与错误态两格底不齐两处肉眼级排版留下轮；RealnameCard missing[] 缺判据留待办。经理补 sm:grid-cols-2 / border-dashed 两条判据（R1/R4 存活臂转红）。CI 盯梢中。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
