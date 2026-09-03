@@ -347,6 +347,8 @@
 
 **2026-09-03 · 生产上线 f9dd3fb（实名认证表单排版）**：build EXIT=0 → restart 双 active → / /settings /settings/agent 200、/woo 307。
 
+**2026-09-03 · dialog-buttons 复核 MUST_FIX 一条（2f7ff9a）→ 派修复**：排布本身达标（320/360/393 六弹窗 column 主上次下全宽 48、1280 row 次左主右 min-w、固化文案「确认固化」、M1–M6 全红；仪器事故：第一版 g6 按 DOM 第一个认主按钮，M2 反序时尺子跟着反——改按 data-slot 认人）。硬伤：ConfirmDialog 传整串 buttonVariants 的 text-[16px] 经 tailwind-merge 覆盖 BUTTON_LAYOUT 的 clamp，主按钮不缩字号，360/320 档主次字号不等（执行者只量 393 恰好量不到）。修法：AlertDialogAction 收 variant prop；g6 加 360/320 档与字号相等断言、退出登录场景（route abort）。裁决：12 字守卫只覆盖字面量——接受；toast 压弹窗 z-order 既有问题另记。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
