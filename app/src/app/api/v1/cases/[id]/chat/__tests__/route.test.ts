@@ -13,6 +13,9 @@ import { scriptedProvider, type ScriptedRound } from '@/lib/agent/__tests__/fixt
 import type { AgentEventSink } from '@/lib/agent';
 import { getGongdao, gongdaoGrant, gongdaoSettle } from '@/lib/billing';
 import { GONGDAO_LEDGER_TYPE } from '@/lib/billing/pricing';
+// 前端那份「一字未落库」的登记表。放在这里核对是因为**新码是在本文件里加的**：
+// 加码的人手边就是这一条判据，而漏登记的后果只在页面上、且是静默的。
+import { REFUSED_BEFORE_WRITE } from '@/app/(app)/case/[id]/_stream/frames';
 
 /** 本轮要回放的剧本，由每个用例改写 */
 let script: ScriptedRound[] = [];
@@ -95,6 +98,17 @@ function seedBalance(userId: number, amount: number): void {
     null,
     db,
   );
+}
+
+/** 把某人的余额调到指定值（可负）。负数只可能来自透支结算，故走 settle 造。 */
+function setBalance(userId: number, target: number): void {
+  const now = getGongdao(userId, db);
+  const diff = target - now;
+  if (diff > 0) seedBalance(userId, diff);
+  else if (diff < 0) {
+    gongdaoSettle(userId, -diff, `spend-${userId}-${crypto.randomUUID()}`, 'companion', null, db);
+  }
+  expect(getGongdao(userId, db)).toBe(target);
 }
 
 const CARD = {
@@ -190,16 +204,22 @@ describe('闸门（开流之前就要判完）', () => {
 describe('余额闸', () => {
   /** 本轮假上游被调了几次。0 = 模型根本没被碰过（拦住了就该是 0）。 */
   let upstreamCalls = 0;
+  /** 打开它这一轮就会失败（用来造一条真的失败轮，好验重试那条路同样过闸） */
+  let upstreamThrows = false;
 
   let spy: { mockRestore: () => void } | null = null;
 
   beforeEach(async () => {
     upstreamCalls = 0;
+    upstreamThrows = false;
     const llm = await import('@/lib/llm');
     // 计数器版假上游：**取 provider 这一下就算「模型被碰过」**。真正拦住时连取都不会取。
     spy = vi.spyOn(llm, 'getProvider').mockImplementation((() => {
       upstreamCalls += 1;
-      return { client: scriptedProvider(script), route: { degraded: false } };
+      const client = upstreamThrows
+        ? { name: 'deepseek', model: 'x', billingModel: 'x', chatStream: async () => { throw new Error('anthropic(claude-sonnet-5) chatStream 502'); } }
+        : scriptedProvider(script);
+      return { client, route: { degraded: false } };
     }) as never);
   });
 
@@ -214,17 +234,6 @@ describe('余额闸', () => {
     ledger: (db.prepare('SELECT COUNT(*) AS n FROM gongdao_ledger WHERE delta < 0').get() as { n: number }).n,
     usage: (db.prepare('SELECT COUNT(*) AS n FROM token_usage').get() as { n: number }).n,
   });
-
-  /** 把某人的余额调到指定值（可负）。负数只可能来自透支结算，故走 settle 造。 */
-  function setBalance(userId: number, target: number): void {
-    const now = getGongdao(userId, db);
-    const diff = target - now;
-    if (diff > 0) seedBalance(userId, diff);
-    else if (diff < 0) {
-      gongdaoSettle(userId, -diff, `spend-${userId}-${crypto.randomUUID()}`, 'companion', null, db);
-    }
-    expect(getGongdao(userId, db)).toBe(target);
-  }
 
   test('★余额 1（恰好够）⇒ 放行，正常出流', async () => {
     setBalance(userA, 1);
@@ -287,10 +296,115 @@ describe('余额闸', () => {
     expect(message.length).toBeGreaterThan(40);
   });
 
+  /**
+   * ★重试不是绕闸的口子。retry_of 走的是**另一条入参路径**（正文由编排层从库里取，
+   * 不看 message），闸要是判在「有没有 message」之后，这一条就会免费答一轮：
+   * 页面上那个「重试」按钮此刻正好摆在余额已经见底的人面前，他会去点。
+   * 代码本来就是对的（闸在取参之后、runTurn 之前，两条路都过它），这一条是给它上牙。
+   *
+   * 变异臂 M-I4：闸挪进 `if (message)` 那一支（只拦带正文的请求）⇒ 这条红。
+   */
+  test('★余额 0 + retry_of ⇒ 照拦 402，且 messages / ledger / usage 零新增、模型零调用', async () => {
+    // 先造一条真的失败轮（余额充足时失败的那种），好让重试有的可重
+    upstreamThrows = true;
+    const failedFrames = await readSse(await post(request(signToken(userA), { message: '在吗' }), ctx(caseA)));
+    upstreamThrows = false;
+    expect(failedFrames.at(-1)!.event, '没造出失败轮 ⇒ 下面这条是空跑').toBe('error');
+    const failed = db
+      .prepare('SELECT id FROM messages WHERE failed_code IS NOT NULL ORDER BY id DESC LIMIT 1')
+      .get() as { id: number } | undefined;
+    expect(failed?.id, '失败轮没落库 ⇒ retry_of 无从谈起').toBeTypeOf('number');
+
+    setBalance(userA, 0);
+    const before = rowCounts();
+    const callsBefore = upstreamCalls;
+
+    const res = await post(request(signToken(userA), { retry_of: failed!.id }), ctx(caseA));
+
+    expect(res.status).toBe(402);
+    expect(await res.json()).toMatchObject({ error_code: 'GONGDAO_EXHAUSTED', balance: 0 });
+    expect(rowCounts(), '重试这条路上闸没生效 = 免费答一轮').toEqual(before);
+    expect(upstreamCalls).toBe(callsBefore);
+  });
+
   test('余额够不够都轮不到：别人的案子仍是 404（不许把余额拿去探别人有没有案子）', async () => {
     setBalance(userB, 0);
     const res = await post(request(signToken(userB), { message: '你好' }), ctx(caseA));
     expect(res.status).toBe(404);
+  });
+});
+
+/* ── 在飞占位：同一个人一次只答一轮 ────────────────────────────
+   余额闸读的是 gongdao.balance，而这一轮花了多少要**等答完才结算**。于是余额 1 的人
+   同时发两句（手机上双击发送、两个标签页各问一句），两个请求读到的余额都是 1、
+   都放行、都跑完——「最多欠一轮」当场变成欠两轮，账上多出一笔消耗，
+   而两边屏幕上各自都在好好答题，看不出任何异样。所以闸之外还要占一格。
+
+   【为什么判据必须是并发的】串行两次跑不出这个形态：第一轮结算完余额已经掉下去，
+   第二次自然被余额闸拦。只有两个请求同时压在**同一个余额快照**上才复现得出。
+
+   【变异臂】
+    · M-I1 去掉 beginTurn 占位            ⇒「一个 200 一个 409」红（两个都是 200、账上两笔）
+    · M-I2 去掉 finally 里的 releaseTurn  ⇒「异常之后照样问得出」「串行第二次是 402」红
+    · M-I3 判与占之间加一句 await         ⇒ 结构守卫红（并发那条也会红）
+    · M-I5 409 归成 402 GONGDAO_EXHAUSTED ⇒「是 409 不是 402」红 */
+describe('在飞占位（同一个人一次只答一轮）', () => {
+  const consumeRows = () =>
+    (db.prepare("SELECT COUNT(*) AS n FROM gongdao_ledger WHERE type = '消耗'").get() as { n: number }).n;
+  const userRows = () =>
+    (db.prepare("SELECT COUNT(*) AS n FROM messages WHERE role = 'user'").get() as { n: number }).n;
+
+  test('★余额 1、两个请求同时来 ⇒ 一个 200 一个 409，账上只多一笔、库里只多一问', async () => {
+    setBalance(userA, 1);
+    // 调余额本身要走一笔结算（透支那条路），所以基线在这里取，不是从 0 数起
+    const ledgerBefore = consumeRows();
+
+    // 同时发出：两个请求压在同一个「余额还是 1」的快照上，正是产线那一下双击
+    const [first, second] = await Promise.all([
+      post(request(signToken(userA), { message: '刚收到辞退邮件' }), ctx(caseA)),
+      post(request(signToken(userA), { message: '刚收到辞退邮件' }), ctx(caseA)),
+    ]);
+
+    expect(
+      [first.status, second.status].sort(),
+      '两个都 200 = 两轮一起跑，「最多欠一轮」变成欠两轮',
+    ).toEqual([200, 409]);
+
+    const passed = first.status === 200 ? first : second;
+    const refused = first.status === 409 ? first : second;
+
+    const body = await refused.json();
+    expect(body).toMatchObject({ ok: false, error_code: 'TURN_IN_FLIGHT' });
+    expect(String(body.message), '自述三段式：怎么了').toContain('上一轮还在答');
+    expect(String(body.message), '怎么办').toContain('等');
+    expect(body, '被在飞拦下不是余额的事，别把人指去充值').not.toHaveProperty('balance');
+
+    // 放行的那一轮照常答完（拦住的是第二个，不是把两个一起拦了）
+    expect((await readSse(passed)).at(-1)!.event).toBe('done');
+    expect(consumeRows() - ledgerBefore, '账上两笔 = 同一份余额被扣了两轮').toBe(1);
+    expect(userRows(), '被拦那一句也进了库 = 档案里多一问没答').toBe(1);
+  });
+
+  test('★串行两次 ⇒ 第一次 200、第二次 402（占位早还回去了，不该是 409）', async () => {
+    setBalance(userA, 1);
+    expect((await readSse(await post(request(signToken(userA), { message: '刚收到辞退邮件' }), ctx(caseA)))).at(-1)!.event)
+      .toBe('done');
+    expect(getGongdao(userA, db), '这一轮没扣到门槛以下 ⇒ 下面那条 402 是空跑').toBeLessThan(1);
+
+    const res = await post(request(signToken(userA), { message: '再问一句' }), ctx(caseA));
+    expect(res.status, '占位没还回去 ⇒ 这里会是 409，而他看到的是「上一轮还在答」——上一轮明明答完了').toBe(402);
+    expect((await res.json()).error_code).toBe('GONGDAO_EXHAUSTED');
+  });
+
+  test('★这一轮以异常收场，占位也跟着还回去（下一句照样问得出）', async () => {
+    const spy = await stubProviderThrowing('anthropic(claude-sonnet-5) chatStream 502');
+    const frames = await readSse(await post(request(signToken(userA), { message: '在吗' }), ctx(caseA)));
+    expect(frames.at(-1)!.event, '这一轮没失败 ⇒ 下面那条是空跑').toBe('error');
+    spy.mockRestore();
+
+    const res = await post(request(signToken(userA), { message: '再问一次' }), ctx(caseA));
+    expect(res.status, '异常没走 finally ⇒ 这个人此后每一句都是 409，且他等不到「上一轮」结束').toBe(200);
+    expect((await readSse(res)).at(-1)!.event).toBe('done');
   });
 });
 
@@ -315,6 +429,58 @@ describe('余额闸的接线（结构守卫）', () => {
       SRC.indexOf('runTurn({'),
     );
     expect(SRC).toMatch(/status:\s*402/);
+  });
+
+  /* 判与占之间让出一次事件循环，另一个请求就会在同一个「没人占位」的快照上过闸——
+     两轮一起跑，而并发判据在快的机器上仍可能碰巧全绿。行为判据钉「拦不拦」，
+     这一条钉「为什么拦得住」。变异臂 M-I3：中间插一句 await ⇒ 这条红。 */
+  test('占位紧跟在闸后面：判与占之间没有 await', () => {
+    const gate = SRC.indexOf('canStartTurn(');
+    const hold = SRC.indexOf('beginTurn(');
+    expect(hold, '路由根本没占位 ⇒ 这条判据会变成空跑').toBeGreaterThan(gate);
+    // 注释里说得出「await」这个词（上面那段就在说它），扫的是代码
+    const between = SRC.slice(gate, hold).replace(/\/\/.*$/gm, '');
+    expect(between, '判与占之间让出一次事件循环 = 白判').not.toMatch(/\bawait\b/);
+    expect(SRC, '占位不在 finally 里还 ⇒ 异常/断线之后这个人被永久锁在门外').toMatch(
+      /finally\s*\{[^}]*releaseTurn\(\)/,
+    );
+  });
+});
+
+/* 结构守卫：**runTurn 之前**返回的每一个 error_code 都要登记进 REFUSED_BEFORE_WRITE。
+
+   这一段代码的共同事实是「一个字都没落库」——不调模型、不插用户消息、不记账。
+   而页面是**先把问话画上去再发**的：这一档回来时那条回显没人撤，屏幕上就写着
+   「已经发出去了」，F5 之后它消失。用户看到的是「发出去了 → 刷新没了 → 还得重打一遍」。
+
+   402 漏过一次（RV-1 补的），409 又漏了一次（本次补的）——**独立写两次、忘两次**，
+   说明它是默认形态而不是疏忽。所以判据不去数「哪两个码」，而是逼着这里与那份登记表
+   对账：下一个前置 4xx 加进本文件却没登记，这一条当场点名。
+
+   变异臂 M-C4：在 runTurn 之前伪加一个 `error_code: 'X'` 的返回 ⇒ 这一条红。
+   变异臂 M-C1：登记表里删掉 TURN_IN_FLIGHT ⇒ 这一条红（页面那组也红）。 */
+describe('零落库拒答码的登记（结构守卫）', () => {
+  const SRC = readFileSync(new URL('../route.ts', import.meta.url), 'utf8');
+  /** 扫代码不扫注释：上面几段注释里就写着这些码的名字 */
+  const CODE_ONLY = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+
+  test('runTurn 之前的每一个 error_code 都在 REFUSED_BEFORE_WRITE 里', () => {
+    const cut = CODE_ONLY.indexOf('runTurn(');
+    expect(cut, '源码里找不到 runTurn( ⇒ 这条判据在扫一段空文本').toBeGreaterThan(0);
+    const codes = [...CODE_ONLY.slice(0, cut).matchAll(/error_code:\s*'([^']+)'/g)].map((m) => m[1]);
+
+    // 空跑自证：路由前置校验本来就有好几档（案件不存在、请求体、retry_of、空消息、mode、
+    // 余额、在飞），一个都没抓到就是正则失了效，而那时下面的 for 一次都不跑、判据全绿。
+    expect(codes.length, '一个 error_code 都没抓到 ⇒ 下面是空过').toBeGreaterThanOrEqual(5);
+    expect(codes, '在飞那一档没在 runTurn 之前 ⇒ 登记表核对的不是这件事').toContain('TURN_IN_FLIGHT');
+
+    for (const code of codes) {
+      expect(
+        REFUSED_BEFORE_WRITE.has(code),
+        `${code} 在 runTurn 之前就拒答（一字未落库），却没登记进 REFUSED_BEFORE_WRITE：` +
+          '页面不会撤那条本地回显，用户看到「发出去了」，刷新之后它消失',
+      ).toBe(true);
+    }
   });
 });
 

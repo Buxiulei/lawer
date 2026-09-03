@@ -23,6 +23,9 @@
  *  · M-R1 Workbench 不接 onFailed（402 之后不撤回显）⇒ 「问话不留在流里」红
  *  · M-R2 撤了回显但不把原文放回输入框 ⇒ 「原文回到输入框」红
  *  · M-R3 撤回显时不看错误码（普通失败也撤）⇒ 正对照那条红
+ *  · M-C1 REFUSED_BEFORE_WRITE 里删掉 TURN_IN_FLIGHT ⇒ 409 那组「撤回显/原文回框」红
+ *  · M-C2 409 也画 StreamErrorCard ⇒ 409 那条「不给重试」红
+ *  · M-C3 409 也禁 Composer ⇒ 409 那条「输入框照常能用」红
  */
 import type { ReactElement, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -259,6 +262,15 @@ function walk(
       onSend: el.props?.onSend as ((text: string) => void) | undefined,
     });
   }
+  // 409 那块提示条**没有按钮**是它的判据之一，而「有没有按钮」体现为有没有回调 prop
+  // ——不走 children、也不显示成文字，得在这里取。
+  if (typeName === 'TurnInFlightNotice') {
+    inFlightNotices.push({
+      handlers: Object.values((el.props ?? {}) as Record<string, unknown>).filter(
+        (v) => typeof v === 'function',
+      ).length,
+    });
+  }
   const message = el.props?.message as ProbedMessage | undefined;
   if (message) messages.push(message);
   if (typeof message?.content === 'string') texts.push(message.content);
@@ -274,6 +286,9 @@ const composers: {
   onSend?: (text: string) => void;
 }[] = [];
 
+/** 这一帧画出来的「上一轮还在答」提示条（walk 的收集处，probe 每次开跑前清空） */
+const inFlightNotices: { handlers: number }[] = [];
+
 /** 这一帧画出来的失败横幅（walk 的收集处，probe 每次开跑前清空） */
 const errorCards: {
   code: unknown;
@@ -288,12 +303,14 @@ function probe(node: ReactNode): {
   messages: ProbedMessage[];
   errors: typeof errorCards;
   composers: typeof composers;
+  inFlight: typeof inFlightNotices;
 } {
   const types: string[] = [];
   const texts: string[] = [];
   const messages: ProbedMessage[] = [];
   errorCards.length = 0;
   composers.length = 0;
+  inFlightNotices.length = 0;
   walk(node, types, texts, messages);
   return {
     types,
@@ -301,6 +318,7 @@ function probe(node: ReactNode): {
     messages,
     errors: [...errorCards],
     composers: [...composers],
+    inFlight: [...inFlightNotices],
   };
 }
 
@@ -333,7 +351,17 @@ async function settled(caseId: string): Promise<ReactNode> {
 
 const CASE = '9';
 
+/**
+ * 一副最小的窗子（node 环境没有 window/document）：Workbench 的跟随滚动只读这两样。
+ * **每个用例都要装**：一轮收场时排的那一拍滚动会在 80ms 后落到某个别的用例里，
+ * 那时没有 window 就是一条没人接得住的异常。scrolls.n 是这一拍的读数。
+ */
+const scrolls = { n: 0 };
+
 beforeEach(() => {
+  scrolls.n = 0;
+  vi.stubGlobal('window', { scrollTo: () => { scrolls.n += 1; }, innerHeight: 800 });
+  vi.stubGlobal('document', { documentElement: { scrollHeight: 3000 } });
   auth.token = 'jwt-token';
   bus.fails = false;
   bus.rows = realRows();
@@ -583,7 +611,9 @@ describe('余额用尽这一屏', () => {
    【变异臂】
     · M-R1 Workbench 不接 onFailed        ⇒ 第一条红（问话仍留在流里）
     · M-R2 撤了回显但不回填输入框          ⇒ 第二条红
-    · M-R3 撤回显时不看错误码              ⇒ 正对照红（普通失败也被抹掉问话） */
+    · M-R3 撤回显时不看错误码              ⇒ 正对照红（普通失败也被抹掉问话）
+    · M-R9 retry 进门不清 pendingEcho      ⇒「失败卡上的重试被拦」红
+    · M-S1 收场不滚（scrollToTurnEnd 删掉）⇒「把横幅带进视野」红 */
 describe('被拦下的那一轮不留痕（RV-1）', () => {
   const ASK = 'HR 让我今天签自愿离职。';
   const REFUSED = { code: 'GONGDAO_EXHAUSTED', message: '公道值余额 0，这一轮开不了。', balance: 0 };
@@ -646,6 +676,49 @@ describe('被拦下的那一轮不留痕（RV-1）', () => {
   });
 
   /**
+   * 失败卡上那个「重试」（本轮刚失败、还没刷新过页面的那一张）走的是另一条入口
+   * ——Workbench.retry，与历史里那条失败轮的重试不是同一个函数。它同样不带新回显，
+   * 所以进门也得先把 pendingEcho 清掉：否则这次被拦时，撤走的是上一轮那句问话。
+   * 两条重试路径各写一遍「进门先清」，漏掉哪一条都不会有人当场发现。
+   * 变异臂 M-R9：`retry` 里那句 `pendingEcho.current = null` 删掉 ⇒ 这条红。
+   */
+  it('★失败卡上的重试被拦 ⇒ 撤的不是上一轮那条回显', async () => {
+    // 摆上「本轮刚失败」这一刻：流里那张失败卡带的重试就是 Workbench.retry
+    chat.error = { code: 'AGENT_FAILED', message: '模型这会儿连不上。' };
+    await ask();
+    const card = probe(frame(CASE)).errors.at(-1);
+    expect(card?.retryable, '这一屏没画带重试的失败卡 ⇒ 下面是空过').toBe(true);
+
+    card!.onRetry!();
+    chat.failed(REFUSED);
+    expect(
+      probe(frame(CASE)).text,
+      '重试被拦，却把上一轮那句问话抹了',
+    ).toContain(ASK);
+  });
+
+  /**
+   * 【拦下也要看得见】横幅长在流的末尾，而出路的那两个入口就长在横幅上。
+   * 402 回来时页面还同时**撤掉了一条消息**（页面变矮），停在原地就是
+   * 「屏幕上什么也没发生」——他刚被拦下，却只看到自己那句问话消失了。
+   * 跟随用的是落定那一份（scrollToTurnEnd），不是另抄一遍。
+   * 变异臂 M-S1：onFailed 里那句 scrollToTurnEnd() 删掉 ⇒ 这条红。
+   */
+  it('★402 回来 ⇒ 把末尾（横幅与那两个入口）带进视野', async () => {
+    await ask();
+    const before = scrolls.n;
+    // 假时钟：跟随延一拍滚（量高要等这一块画出来），且别让**别的用例**排下的那一拍混进读数
+    vi.useFakeTimers();
+    try {
+      chat.failed(REFUSED);
+      vi.advanceTimersByTime(200);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(scrolls.n - before, '拦下时不跟随 ⇒ 横幅与那两个入口停在视口外').toBe(1);
+  });
+
+  /**
    * 重试走 retry_of，**不带新的本地回显**（正文由服务端从库里取）。
    * 它要是也被拦下，撤的绝不能是上一轮那条还挂着的回显——那句话跟这次重试无关。
    * 变异臂 M-R4：retryFailedTurn 里那句 `pendingEcho.current = null` 删掉 ⇒ 这条红。
@@ -659,6 +732,87 @@ describe('被拦下的那一轮不留痕（RV-1）', () => {
       probe(frame(CASE)).text,
       '重试被拦，却把上一轮那句问话抹了',
     ).toContain(ASK);
+  });
+});
+
+/* ── 七、上一轮还在答（HTTP 409 TURN_IN_FLIGHT）─────────────────
+   两个标签页各问一句、手机上双击发送：后一句撞上自己的前一句，服务端在 runTurn 之前
+   就回 409——**与 402 同属「一字未落库」**，所以那条本地回显同样是孤儿，同样要撤。
+
+   【复核官两标签页读屏（rd-gate/mut-rv-fu/live/q1-2tab.txt）看到的就是漏掉这一档的样子】
+    · 回显留在流里（库里没有它，F5 之后消失）
+    · 画成失败卡 + 摆一个「重试」——而重试一百次都是同一句 409
+    · 原文没回输入框（框里是空的，他得重打一遍）
+   三样错在同一处：撤回显只认了 GONGDAO_EXHAUSTED 一个码。
+
+   【画法为什么与 402 不同】402 的出路是兑换/充值，所以横幅 + 禁输入框；
+   409 的出路是**等**，禁掉输入框等于把唯一的出路也关了。
+
+   【变异臂】
+    · M-C1 REFUSED_BEFORE_WRITE 里删掉 TURN_IN_FLIGHT ⇒「撤回显」「原文回框」红
+    · M-C2 409 也画 StreamErrorCard                   ⇒「不给重试」红
+    · M-C3 409 也禁 Composer                          ⇒「输入框照常能用」红 */
+describe('上一轮还在答这一屏（409）', () => {
+  const ASK = '两个标签页各问一句：我能要求 N+1 吗？';
+  const IN_FLIGHT = {
+    code: 'TURN_IN_FLIGHT',
+    message: '上一轮还在答，等它结束。同一个账号一次只答一轮——…',
+  };
+  const EXHAUSTED = { code: 'GONGDAO_EXHAUSTED', message: '公道值余额 0，这一轮开不了。', balance: 0 };
+
+  /** 发一句（走 Workbench 真的那条 send），并当场自证问话确实回显过 */
+  async function ask(): Promise<void> {
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    const { composers } = probe(await settled(CASE));
+    expect(composers[0]?.onSend, '这一屏没画输入框：下面全是空过').toBeTypeOf('function');
+    composers[0].onSend!(ASK);
+    expect(probe(frame(CASE)).text, '压根没回显过 ⇒ 「撤掉了」是空过').toContain(ASK);
+  }
+
+  it('★409 回来 ⇒ 撤回显、原文回输入框、出提示条、不给重试、输入框照常能用', async () => {
+    await ask();
+    chat.error = IN_FLIGHT;
+    chat.failed(IN_FLIGHT);
+
+    const { types, text, errors, composers, inFlight } = probe(frame(CASE));
+    expect(inFlight, '没画提示条 ⇒ 他只看到自己那句问话消失了').toHaveLength(1);
+    expect(inFlight[0].handlers, '提示条上挂着回调 = 那里有个按钮，而这一档没有出路可点').toBe(0);
+    expect(text, '库里一个字都没有的问话留在屏幕上 = 发出去了→刷新后没了').not.toContain(ASK);
+    expect(composers[0].defaultValue, '撤了却不还，等于让他重打一遍').toBe(ASK);
+    expect(
+      composers[0].disabled,
+      '409 禁输入框 = 把唯一的出路（等一会儿再点发送）也关了',
+    ).toBe(false);
+    expect(errors, '画成失败卡 = 摆一个点一百次都是同一句 409 的重试').toHaveLength(0);
+    expect(types, '409 不是余额的事，别把人指去兑换页白跑一趟').not.toContain(
+      'GongdaoExhaustedBanner',
+    );
+    // 历史那两条不许被殃及
+    expect(text).toContain('我上周三被通知解除');
+  });
+
+  /** 复核官那条路：409 之后他照提示条说的等一会儿再点发送，这次撞上的是余额闸 */
+  it('★409 ⇒ 再点发送 ⇒ 402：回显仍撤掉、原文仍回框、横幅在场、输入框禁用', async () => {
+    await ask();
+    chat.error = IN_FLIGHT;
+    chat.failed(IN_FLIGHT);
+
+    const afterInFlight = probe(frame(CASE)).composers[0];
+    expect(afterInFlight.defaultValue, '原文没回框 ⇒ 下面「再点发送」是空过').toBe(ASK);
+    // 他等了一会儿，把框里那句原样再发一次
+    afterInFlight.onSend!(ASK);
+    expect(probe(frame(CASE)).text, '第二次压根没回显 ⇒ 下面是空过').toContain(ASK);
+
+    chat.error = EXHAUSTED;
+    chat.failed(EXHAUSTED);
+    const { types, text, composers, inFlight } = probe(frame(CASE));
+    expect(text, '第二次被拦，回显却留下了').not.toContain(ASK);
+    expect(composers[0].defaultValue, '两次被拦之后那句话丢了 = 他得重打一遍').toBe(ASK);
+    expect(types, '402 没换横幅：重试不是出路，兑换/充值才是').toContain(
+      'GongdaoExhaustedBanner',
+    );
+    expect(composers[0].disabled, '余额见底还能接着打字，每次被同一句话弹回来').toBe(true);
+    expect(inFlight, '上一档的提示条没换掉').toHaveLength(0);
   });
 });
 

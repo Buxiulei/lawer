@@ -28,7 +28,13 @@ import {
   prefersReducedMotion,
   useCitationBridge,
 } from './citations';
-import { GONGDAO_EXHAUSTED, toActionItem, type DraftFrame } from '../_stream/frames';
+import {
+  GONGDAO_EXHAUSTED,
+  TURN_IN_FLIGHT,
+  isRefusedBeforeWrite,
+  toActionItem,
+  type DraftFrame,
+} from '../_stream/frames';
 import { ByoAgentNotice } from './ByoAgentNotice';
 import { readToken } from '../_stream/httpTransport';
 import { useCaseHistory } from '../_stream/useCaseHistory';
@@ -52,6 +58,7 @@ import {
   DraftConfirmDialog,
   GongdaoExhaustedBanner,
   StreamErrorCard,
+  TurnInFlightNotice,
   WaitingCard,
 } from './StreamParts';
 
@@ -127,6 +134,18 @@ export function Workbench({ caseId }: { caseId: string }) {
     if (follow.current) scrollToBottom();
   }, [scrollToBottom]);
 
+  /**
+   * 一轮收场之后，把末尾新出现的那一块带进视野：落定时是回答与行动卡，
+   * 被拦下时是横幅（**出路的那两个入口就长在横幅上**，看不见等于没有出路）。
+   * 用户中途往回翻过（follow 已经落回 false）就不再拽他。
+   * 收场的两条路共用这一份：各写各的，其中一处迟早会漏掉「翻上去了就别拽」这半句。
+   */
+  const scrollToTurnEnd = useCallback(() => {
+    // 延一拍：这一块此刻才刚进 state，量高要等它画出来
+    if (follow.current) setTimeout(() => scrollToBottom(), 80);
+    follow.current = false;
+  }, [scrollToBottom]);
+
   /** 等待久了的去处：滚到最近一组行动卡 */
   const jumpToActions = useCallback(() => {
     const groups = document.querySelectorAll('[data-action-group]');
@@ -164,36 +183,48 @@ export function Workbench({ caseId }: { caseId: string }) {
       ]);
       if (items.length) setActions((prev) => [...prev, ...items]);
       // 回复落定后行动卡才出现，再滚一次让「现在做什么」进视野
-      if (follow.current) setTimeout(() => scrollToBottom(), 80);
-      follow.current = false;
+      scrollToTurnEnd();
     },
-    [caseId, scrollToBottom],
+    [caseId, scrollToTurnEnd],
   );
 
   /**
+   * 这一轮以 error 帧收场时的收拾：撤回显（只零落库那一档）+ 把末尾带进视野。
+   *
    * 【被拦下的那一轮要连回显一起撤】(RV-1)
-   * 闸在 runTurn 之前：服务端一个字都没写库——不调模型、不插用户消息、不记账。
+   * 服务端在 runTurn 之前就拒答的那些码，一个字都没写库——不调模型、不插用户消息、不记账。
    * 所以屏幕上那句问话是页面自己画的一条孤儿，F5 之后它就没了；
    * 用户看到的是「发出去了 → 刷新一下没了、还得重打一遍」——那比当场被拦更伤，
    * 因为他已经以为说出去了。撤掉这条回显，并把原文放回输入框：
    * 这一轮从没发生过，那句话仍然是他的。
    *
-   * **只对余额闸这一档**这么做。普通失败（模型连不上）服务端已经落了一条失败轮，
-   * 那句问话在库里，撤掉它才是改历史；那一档照旧留回显 + 给重试。
+   * **只对零落库那一档**这么做，判据是 REFUSED_BEFORE_WRITE 那份登记表（不在这里数码）：
+   * 余额闸 402、在飞占位 409 都在其中，此后再加的前置 4xx 由 route 侧的结构守卫逼着登记。
+   * 普通失败（模型连不上）服务端已经落了一条失败轮，那句问话在库里，撤掉它才是改历史；
+   * 那一档照旧留回显 + 给重试。
    */
-  const rollbackRefusedTurn = useCallback((error: StreamError) => {
-    if (error.code !== GONGDAO_EXHAUSTED) return;
-    const pending = pendingEcho.current;
-    if (!pending) return;
-    pendingEcho.current = null;
-    setMessages((prev) => prev.filter((m) => m.id !== pending.id));
-    setDraft((prev) => ({ seq: prev.seq + 1, text: pending.content }));
-  }, []);
+  const settleFailedTurn = useCallback(
+    (error: StreamError) => {
+      if (isRefusedBeforeWrite(error.code)) {
+        const pending = pendingEcho.current;
+        if (pending) {
+          pendingEcho.current = null;
+          setMessages((prev) => prev.filter((m) => m.id !== pending.id));
+          setDraft((prev) => ({ seq: prev.seq + 1, text: pending.content }));
+        }
+      }
+      // 失败也是这一轮的收场：横幅/失败卡就长在流的末尾，跟落定走同一份跟随逻辑。
+      // 少了这一句，被拦下的人停在原地看着自己那句问话消失，横幅与那两个入口
+      // 在视口外——屏幕上「什么也没发生」，而他刚被拦下。
+      scrollToTurnEnd();
+    },
+    [scrollToTurnEnd],
+  );
 
   const stream = useChatStream({
     caseId,
     onSettled: settle,
-    onFailed: rollbackRefusedTurn,
+    onFailed: settleFailedTurn,
   });
 
   /**
@@ -201,6 +232,12 @@ export function Workbench({ caseId }: { caseId: string }) {
    * 判据是服务端的错误码，前端不自己认字符串里的「余额」。
    */
   const exhausted = stream.error?.code === GONGDAO_EXHAUSTED;
+
+  /**
+   * 这一轮撞上了自己的上一轮（HTTP 409）。与 402 同属「一字未落库」，但出路不同：
+   * 等上一轮答完就能接着问，所以给的是提示条而不是横幅，输入框也**不禁**。
+   */
+  const inFlight = stream.error?.code === TURN_IN_FLIGHT;
 
   // 流式中只在用户还停在底部时跟随；一旦用户往回翻，这一轮就不再拽他
   useEffect(() => {
@@ -483,13 +520,17 @@ export function Workbench({ caseId }: { caseId: string }) {
           {stream.error &&
             (exhausted ? (
               <GongdaoExhaustedBanner balance={stream.error.balance} />
+            ) : inFlight ? (
+              /* 上一轮还在答：重试只会再撞一次同一道门，所以不给按钮，也不禁输入框 */
+              <TurnInFlightNotice />
             ) : (
               <StreamErrorCard error={stream.error} onRetry={retry} />
             ))}
         </div>
 
         {/* 余额用尽时输入框禁用：能打字、点发送、每次被同一句话弹回来，读起来像产品坏了。
-            余额一恢复（去 /account 兑换或充值后回来，这一屏重挂）输入框跟着回来。 */}
+            余额一恢复（去 /account 兑换或充值后回来，这一屏重挂）输入框跟着回来。
+            **只有这一档禁**：409（上一轮还在答）等一会儿就能接着问，禁掉它等于连出路一起关。 */}
         <Composer
           key={draft.seq}
           defaultValue={draft.text}
