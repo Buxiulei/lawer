@@ -536,7 +536,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
             。传错文件的话，先取消，删掉重传再固化。
           </div>
         }
-        confirmLabel={discreet ? `确认${NEUTRAL_WORD.freeze}，不再修改` : '确认固化，不再修改'}
+        confirmLabel={discreet ? `确认${NEUTRAL_WORD.freeze}` : '确认固化'}
         cancelLabel="再检查一下"
         onConfirm={() => freezeTarget && void runAttest(freezeTarget)}
         onCancel={() => setFreezeTarget(null)}
@@ -562,7 +562,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
             。已经出过证的那几份会跳过，不会重复扣费。
           </div>
         }
-        confirmLabel={discreet ? `确认${NEUTRAL_WORD.freeze}` : '确认固化，不再修改'}
+        confirmLabel={discreet ? `确认${NEUTRAL_WORD.freeze}` : '确认固化'}
         cancelLabel="再检查一下"
         onConfirm={() => void runBatchAttest()}
         onCancel={() => setBatchFreeze(false)}

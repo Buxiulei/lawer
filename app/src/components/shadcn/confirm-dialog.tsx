@@ -53,13 +53,15 @@ export function ConfirmDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={onCancel}>{cancelLabel}</AlertDialogCancel>
+          {/* 主按钮写在前面：footer 窄屏是 flex-col（没有 reverse），上下顺序就是
+              DOM 顺序，主按钮得在上。电脑端靠 sm:order-* 把次按钮摆回左边。 */}
           <AlertDialogAction
             onClick={onConfirm}
             className={cn(buttonVariants({ variant: tone }))}
           >
             {confirmLabel}
           </AlertDialogAction>
+          <AlertDialogCancel onClick={onCancel}>{cancelLabel}</AlertDialogCancel>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
