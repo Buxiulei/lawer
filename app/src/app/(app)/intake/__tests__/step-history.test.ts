@@ -11,12 +11,16 @@
  *   ③ 草稿恢复到第 N 步时也要把 N 个条目铺上，否则返回键第一下照样直接出去；
  *   ④ 清空重填之后，栈也退回第一格——只改栈顶的话，返回一下弹回的是
  *      「第 2 / 6 步」的一张空表单，②那一条当场失效（复核 MF-1）。
+ *   ⑦ 同一副栈上再铺一次不多出条目——F5 / 跳走再返回 / 二进 /intake 都会让组件
+ *      重新挂载而栈还是上一轮那副，再铺一遍就叠成 [1,0,1,0]：第 1 步返回弹回第 2 步，
+ *      退出要按 4 下（复核 MF-3，修 F-208 引入的新缺陷）。
  * 外加一条接线守卫：IntakeFlow 真的用了这几个函数——纯函数全绿而组件没调，
  * 和没修一模一样。
  *
  * 变异臂：
  *   · pushStepHistory 改成 replaceState（不 pushState）→ ①③红
  *   · resetStepHistory 改回「只改写栈顶」（replaceState 第 0 步）→ ④红
+ *   · seedStepHistory 去掉「已铺过就不再铺」那一行 → ⑦红
  *   · IntakeFlow 里删掉 pushStepHistory 那一行 → 接线守卫红
  */
 import { readFileSync } from 'node:fs';
@@ -149,6 +153,39 @@ describe('F-208 向导的历史栈：一步一个条目', () => {
     ).toEqual([]);
     expect(stepFromHistoryState(h.state), '当前条目照旧是第 1 步').toBe(0);
     expect(stepFromHistoryState(h.back()), '再返回一下照旧该离开').toBe(null);
+  });
+
+  it('重新挂载后再铺一次：不多出条目，返回序列照旧 1 → 0 → 离开', () => {
+    const h = new FakeHistory();
+    seedStepHistory(h, 0);
+    pushStepHistory(h, 1);
+    pushStepHistory(h, 2); // 用户走到第 3 步
+    const len = h.length;
+
+    // F5 / 点站内链接跳走再返回 / 同标签页第二次进 /intake：组件重新挂载，
+    // 又按当前步数铺了一次，而栈还是上面那副（当前条目自己写着第 3 步）。
+    seedStepHistory(h, 2);
+
+    expect(
+      h.length - len,
+      '缺什么：在已经铺过的那副栈上又铺了一遍，栈里多出 ' + (h.length - len) + ' 格。\n' +
+        '为什么缺：history state 跨刷新、跨前进后退都留着，而组件会重新挂载好几次' +
+        '（F5、跳走再返回、同标签页二进 /intake）。再铺一遍是在原来那段上面叠出第二段' +
+        '[0,1,…]，栈成了 [1,0,1,0]：第 1 步按返回不但没离开，还弹回上一段的第 2 步，' +
+        '要按 4 下才出得去（复核 MF-3；这是修 F-208 引入的新缺陷，基线一按返回即离开）。\n' +
+        '怎么办：seedStepHistory 开头先 stepFromHistoryState(h.state)，读得出步数' +
+        '就说明这副栈已经铺过，一格都不再压。',
+    ).toBe(0);
+
+    expect(stepFromHistoryState(h.state), '重挂载不该改动当前条目的步数').toBe(2);
+    expect(stepFromHistoryState(h.back()), '返回一下该回到第 2 步').toBe(1);
+    expect(stepFromHistoryState(h.back()), '再返回一下该回到第 1 步').toBe(0);
+    expect(
+      stepFromHistoryState(h.back()),
+      '缺什么：第 1 步之后还有第四格向导条目，用户按第 4 下才出得去。\n' +
+        '为什么缺：那正是重复铺栈叠出来的第二段——退出向导的按键数跟着挂载次数涨。\n' +
+        '怎么办：同上，已铺过的栈不再铺。',
+    ).toBe(null);
   });
 
   it('反向对照：非本向导压的 state 一律读成 null，不瞎猜', () => {

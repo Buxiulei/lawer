@@ -198,12 +198,26 @@ export function DiscreetVeil() {
   // **闸只有低调模式这一道**：这一句是「两种块各自写明手势」的糊层那一半，
   // 低调模式开着它就得在。按「用过一次就退场」之类的条件收起来，等于对用过的人
   // 又回到 F-206 报的原样（同屏两种糊块、零视觉区分），而那是台账上没有的裁决。
+  //
+  // 【位置为什么要跟着侧栏走】≥lg 的桌面布局左边固定着一条 240px 的侧栏
+  // （shadcn/sidebar 的 sidebar-container：fixed inset-y-0 left-0 z-40）。
+  // 角标钉在 left-3 就整个落在它底下，z 又同为 40、DOM 里还排在侧栏前面——
+  // 桌面上这句提示**一个像素都看不见**，糊层于是回到零视觉区分（F-206 复核）。
+  // 所以 lg 起把它推到侧栏右边：--sidebar-width 由 SidebarProvider 写在外层，
+  // /welcome 那种没有壳层的页面读不到，回退 0px＝还是原来的 left-3。
+  //
+  // 【为什么桌面不再单独压到 bottom-4】推到右边之后，屏幕底部左侧那一格正是
+  // 首诊「上一步 / 下一步」那条 sticky 操作条（z-30，被 z-40 的角标压住）。
+  // 底部偏移一律读 --bottom-bar-h（StickyBottomBar 把实测高写进去，没有条时回退
+  // Tab 条高），角标就落在那条之上，两端同一套算法。
+  // 判据：真机 elementFromPoint —— 393 与 1280 下角标中心命中的都是它自己，
+  // 且矩形与侧栏、与底部操作条都不相交（rd-qa2-minors/fix3-desktop-*.log）。
   if (!discreet) return null;
   return (
     <p
       role="note"
       data-reveal-hint="hold"
-      className="fixed bottom-[calc(var(--bottom-bar-h)+8px)] left-3 z-40 rounded-full border border-line bg-surface/95 px-2.5 py-1 text-[12px] leading-5 text-ink-2 shadow-soft backdrop-blur-sm lg:bottom-4"
+      className="fixed bottom-[calc(var(--bottom-bar-h)+8px)] left-3 z-40 rounded-full border border-line bg-surface/95 px-2.5 py-1 text-[12px] leading-5 text-ink-2 shadow-soft backdrop-blur-sm lg:left-[calc(var(--sidebar-width,0px)+12px)]"
     >
       {HOLD_HINT}
     </p>

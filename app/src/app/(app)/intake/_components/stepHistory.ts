@@ -42,8 +42,18 @@ export function stepFromHistoryState(state: unknown): number | null {
  *
  * 【为什么恢复草稿时也要铺】草稿恢复到第 3 步时栈里一个条目都没压过，
  * 返回键第一下还是直接离开——那和没修一样。铺过之后返回三下才出向导。
+ *
+ * 【为什么先看一眼当前条目】组件会**重新挂载好几次而栈还是上一轮那副栈**：
+ * F5、点站内链接跳走再返回、同一个标签页第二次进 /intake。这些时候当前条目
+ * 自己就写着步数（history state 跨刷新与前进后退都留着），再铺一遍等于在它上面
+ * 叠出第二段 [0,1,…]——栈成了 [1,0,1,0]：第 1 步按返回不出去，反而弹回上一段的
+ * 第 2 步，要按 4 下才离开（F-208 复核 MF-3；这是修 F-208 引入的新缺陷，
+ * 基线一按返回即离开）。所以：当前条目已带步数键 ＝ 已经铺过，一格都不再压。
+ *
+ * 判据：step-history.test 的⑦（同栈再 seed 不增条目，返回序列照旧 1 → 0 → 离开）。
  */
 export function seedStepHistory(h: HistoryLike, step: number): void {
+  if (stepFromHistoryState(h.state) !== null) return;
   h.replaceState({ [STEP_STATE_KEY]: 0 }, '');
   for (let i = 1; i <= step; i += 1) h.pushState({ [STEP_STATE_KEY]: i }, '');
 }

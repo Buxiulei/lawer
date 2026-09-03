@@ -140,6 +140,10 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
    * 第一下就把整个 /intake 弹掉——用户在第 2 步按返回，期待回第 1 步，实际跳出向导。
    * 挂载后先把已恢复的步数铺进栈（草稿恢复到第 3 步时栈里本来一个条目都没有，
    * 不铺就跟没修一样），此后每前进一步压一个条目。
+   *
+   * seeded 这个 ref 只挡得住**同一次挂载**里的重复调用。F5、跳走再返回、
+   * 同标签页二进 /intake 都是**新的一次挂载配上一轮那副栈**，ref 是新的、栈是旧的——
+   * 「已经铺过没有」只有栈自己答得了，所以那道闸在 seedStepHistory 里（见其注释）。
    */
   const seeded = useRef(false);
   useEffect(() => {
