@@ -274,6 +274,8 @@
 
 **2026-09-03 · 撞额度续跑两单**：ui-nits 修复已落（306a372 /welcome 手势层进 layout 复用 DiscreetVeil + 两变体 CSS 切换；4634a67 /login 半程记录挪到挂载后读 + resume.ready 闸——执行者点名：只挪 useEffect 那版真机仍掉回手机号格且零报错，子组件落盘 effect 先于父组件把记录抹了，vitest 无 DOM 测不到，靠真机核出），复核撞额度→原样 resume。naive-qa-gaps 两位小白各跑到一半（money-privacy 8 张图到驾驶舱、docs 5 张图到文件解读/问它 AGENT_FAILED），两台 staging 服务仍在监听（4721/4610）→ 脚本补「接手半成品」段（复用已 build 的 src/库/服务，从断点续）后 resume。
 
+**2026-09-03 · ui-nits PASS（4634a67）→ 主干 487b6ef，CI 盯梢中，bundle 已预放**：复核真机对照——head /welcome 低调按住 260ms 即揭（data-veil-open、blur→none）、揭开是低调变体、松手 1.8s 复糊、剔糊层 CASE_WORDS 0；base 同路径糊死。head /login 首开与两次 F5 均 0 console error 且停验证码格、倒计时续算；base 每次 F5 恒 1 条 #418。变异 4 组红 1/2/3/1。nit：globals.css 三条显隐规则超出名单但同机制、有判据钉，接受；auth routes 测试在复核副本里 head/base 同现 1 条邮件 502 环境 flake（单跑绿，CI 未现）——留意。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
