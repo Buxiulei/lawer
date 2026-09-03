@@ -309,6 +309,11 @@
 
 **2026-09-03 · 3170e89 生产小核对**：/welcome 低调揭开✓（按住 ~200ms 即 data-veil-open、blur→none，innerText 为低调变体「额度/关注」、松手延时复糊；487b6ef 那次未核项补齐）；/case/1/ask 历史回显✓ console 0；scrollWidth 393 全✓。老用户变体与 401「去登录」出路两项如预期**不通过**——auth 单（F-201/F-202）尚在第三轮未合并，此即基线现状；量具坑：低调两变体用 textContent 会拼出两份，须 innerText 或 computed display。
 
+**2026-09-03 · auth 第三轮复核 MUST_FIX 一条→经理补判据后合入；minors 第三轮余一条 MF-4 派单**：
+- auth（c09d570）：MF-B 失效旗复位已收（beginSession 写 token 与撤旗唯一入口，真机另一标签页登出→/case/demo 不再叠失效屏）；MF-A 大半收（screenFor 三态 + page→Gate 接线 + 四维真库接线，前轮六存活臂全红）。余 MF-1：WelcomeGate 组件首帧/管道无判据（Y2 无视 state 恒画新人屏、Y3 初态 fresh 全绿）。**经理亲手补一条** SSR 首帧判据（renderToStaticMarkup(<WelcomeGate/>) 只含骨架、不含四句），Y2/Y3 各红 1，全量 4159/tsc 0（44f2dde）。合入主干，CI 盯梢中。口径外存活臂 R2/X1/X4/X6（/account、settings、流通道各自 401）另立单。
+- minors（ea9904c）：MF-3 重挂载重复铺栈与 F-206 桌面角标（1024/1280/1440 elementFromPoint 全中）均闭；余 MF-4：history 条目比草稿深（完成向导→/case→返回；清草稿后 F5）时 seeded>step 不退栈，返回逐级弹回空表单 6 下才离开（4c29db3 起即有）。已派单（退栈到与屏幕同步 + 单测⑨ + 真机 I6/I7）。**裁决入账**：角标 pointer-events:none（只是提示不可点）采纳。
+- 单测长期盲区（屏幕数字/角标退场/CSS 收角标/按钮走栈/popstate 落步）只靠真机盖着——记入待办：把 rv3-desktop.mjs / rv3-i3.mjs 收进仓当常驻真机判据。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
