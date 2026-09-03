@@ -21,7 +21,7 @@ import type {
   DossierQuoteItem,
   PriceBasis,
 } from '@/lib/company/dossier-billing';
-import type { ProbePayload } from '@/lib/company/probe';
+import type { ProbePayload, ProbeResult } from '@/lib/company/probe';
 import type { DossierRefundReason } from '@/lib/company/refund';
 
 /* ── 六模块目录 ───────────────────────────────────────── */
@@ -359,6 +359,47 @@ export function preChargeDisclosures(quote: DossierQuote, probedDocs: number): s
     );
   }
   return lines;
+}
+
+/* ── 免费探测次数怎么减 ───────────────────────────────── */
+
+/**
+ * 免费次数的**计数维度**。屏幕上必须写出来的那一句。
+ *
+ * 【为什么这句非写不可】配额只由「真去采集侧现查一次」消耗（lib/company/probe：
+ * 只有 status='collected' 才落 company_probe_events 一行）；缓存命中 0 成本、不限次、
+ * 不占配额，降级态（采集器不在场 / 今日用完）本来就没采到东西，也不扣。
+ * 于是用户连点两次「免费查」，屏幕上那句「今日还剩 2 次」可以一动不动——
+ * **它是对的，但看起来像限流根本没生效**（F-207 报的正是这个）。
+ * 一个不会变的计数器，跟一个坏掉的计数器，在屏幕上长得一模一样。
+ */
+export const PROBE_QUOTA_DIMENSION =
+  '免费次数按「真去现查一次」减 1：读存档不限次、也不减，没查着同样不减。';
+
+/** 屏幕上那行免费次数说明的三段：这次减没减 / 还剩几次 / 按什么维度减。 */
+export interface ProbeQuotaNote {
+  /** 这一次到底减没减、为什么。**每种探测结局各说各的**，不给一句放之四海皆准的废话。 */
+  spent: string;
+  /** 今日剩余的现查免费次数 */
+  left: number;
+  /** 计数维度，恒为 PROBE_QUOTA_DIMENSION */
+  dimension: string;
+}
+
+/**
+ * 把一次探测的结局翻成「这次减没减」。
+ * 四种结局与 lib/company/probe 的 ProbeStatus 一一对上，别在组件里写三元收敛掉。
+ */
+export function probeQuotaNote(probe: Pick<ProbeResult, 'status' | 'quota_left'>): ProbeQuotaNote {
+  const spent =
+    probe.status === 'collected'
+      ? '这次是真去现查的，减掉 1 次。'
+      : probe.status === 'hit'
+        ? '这次读的是存档，没减免费次数。'
+        : probe.status === 'quota_exhausted'
+          ? '今日的现查次数已经用完，这次没去现查。'
+          : '这次没能现查（采集器不在场），没减免费次数。';
+  return { spent, left: probe.quota_left, dimension: PROBE_QUOTA_DIMENSION };
 }
 
 /* ── 默认勾选 ─────────────────────────────────────────── */

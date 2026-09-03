@@ -22,6 +22,7 @@ import {
   moduleAvailability,
   moduleDisclosure,
   preChargeDisclosures,
+  probeQuotaNote,
   subjectKey,
   summarizeSelection,
 } from '@/lib/dossier/order';
@@ -294,9 +295,7 @@ export function ProbeCard({ probe }: { probe: ProbeResult }) {
         <p data-veil="" className="prose-measure mt-1 text-[14px] leading-7 text-ink">
           {probe.reason}
         </p>
-        <p data-veil="" className="mt-1.5 text-[13px] leading-6 text-ink-2">
-          今日还剩 <span className="num">{probe.quota_left}</span> 次免费查。
-        </p>
+        <QuotaNote probe={probe} className="mt-1.5" />
       </section>
     );
   }
@@ -333,11 +332,31 @@ export function ProbeCard({ probe }: { probe: ProbeResult }) {
 
         {/* as_of 是硬门槛：没有采集时点的四个数就是四个悬浮的数 */}
         <p className="mt-2 text-[12.5px] leading-6 text-ink-2">
-          数据截至 <span className="num">{formatDate(p.as_of)}</span> · 今日还剩{' '}
-          <span className="num">{probe.quota_left}</span> 次免费查
+          数据截至 <span className="num">{formatDate(p.as_of)}</span>
         </p>
+        <QuotaNote probe={probe} className="mt-1.5" />
       </div>
     </section>
+  );
+}
+
+/**
+ * 免费次数那一行。**「今日还剩 N 次」后面必须跟着计数维度**：
+ * 配额只由「真去现查一次」消耗，读存档和没查着都不减（lib/company/probe 的形态约束）。
+ * 只写数字不写维度，用户连查两次看见数字一动不动，跟「限流根本没生效」分不开
+ * ——F-207 报的正是这个。措辞与三段拆分在 lib/dossier/order 的 probeQuotaNote，
+ * 这里只负责摆出来。
+ */
+function QuotaNote({ probe, className }: { probe: ProbeResult; className?: string }) {
+  const note = probeQuotaNote(probe);
+  return (
+    <p
+      data-testid="probe-quota-note"
+      data-veil=""
+      className={['text-[13px] leading-6 text-ink-2', className].filter(Boolean).join(' ')}
+    >
+      {note.spent}今日还剩 <span className="num">{note.left}</span> 次。{note.dimension}
+    </p>
   );
 }
 
