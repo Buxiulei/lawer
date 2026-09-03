@@ -337,6 +337,8 @@
 
 **2026-09-03 · mcp-nav PASS（df574e0）+ 经理收两 nit（acb2d6a）→ 主干 0061f93**：侧栏「接入我的 agent」紧随驾驶舱、问它之前；徽标由真 MCP 握手翻牌（clientInfo.name=Claude Code）；低调「接入助手」；文案唯一入口守卫（AppShell/navItems 写字面即红）；复核 10 臂 9 红。经理亲手：①手机顶栏「我的」在 /settings/agent 仍亮（ShellHeader 自判 /settings，不复用被减过的 match）；②徽标整屏恰一枚守卫（R8 逃逸臂转红）。裁决书笔误更正：手机底部栏是四格（驾驶舱/问它/证据/文书），「我的」在顶栏。记账：低调下侧栏分组标题「案件」与驾驶舱「这家公司被仲裁过几次」为基座既有裸露——排入低调收口待办；worktree 软链 node_modules 会让 Turbopack build panic，build 一律在 cp -al 副本上跑。
 
+**2026-09-03 · 生产上线 503963d（/woo 根路径直跳）**：build EXIT=0 → restart 双 active → /woo=307→/woo/users、/woo/users 200、/woo/codes 200。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
