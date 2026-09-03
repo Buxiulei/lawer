@@ -152,6 +152,8 @@ describe('🔴 非管理员一律空体 404（五条路由同形）', () => {
       name: 'boss-agent',
       keyHash: hashApiKey(key),
       scopesJson: JSON.stringify(['case:read', 'case:write']),
+      // 本测试只用这把 key 证明「api key 身份打后台一律 404」，不回看明文，密文占位即可
+      secretEnc: 'test-envelope-not-decryptable',
     });
 
     const responses = await Promise.all([
