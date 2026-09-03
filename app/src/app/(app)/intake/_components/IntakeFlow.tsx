@@ -16,6 +16,7 @@ import { StepTimeline } from './StepTimeline';
 import { StepCompanyDocs } from './StepCompanyDocs';
 import { StepGoals } from './StepGoals';
 import { StepPreview } from './StepPreview';
+import { guidePlacement, NoCaseGuide, useCaseGuard } from './caseGuard';
 import {
   EMPTY_DRAFT,
   clearDraft,
@@ -80,6 +81,11 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
   const router = useRouter();
   const toast = useToast();
   const signedIn = useSignedIn();
+  /**
+   * 名下有没有案件可以存。挂载后现查一次（F-205）——只验了手机号还没补邮箱的人
+   * 名下一个案件都没有，这件事必须在第 1 步就说，不能等他填完六步才撞墙。
+   */
+  const [caseGuard, setCaseGuard] = useCaseGuard(signedIn);
   const [draft, setDraft] = useState<IntakeDraft>(EMPTY_DRAFT);
   const [restored, setRestored] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -114,6 +120,8 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
   // 「今天」现取：入职时间填在未来要当场拦下，不能等提交时才由后端说不行
   const block = advanceBlock(step, draft, new Date().toISOString().slice(0, 10));
   const canAdvance = block === null;
+  // 引导条摆哪一步由 caseGuard 一处说了算；'unknown'（还没查到 / 查不到）一律不摆
+  const placement = guidePlacement({ guard: caseGuard, step, total: STEPS.length });
 
   const go = (next: number) => {
     setDraft((prev) => ({ ...prev, step: next }));
@@ -140,7 +148,11 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
     if (saving) return;
     const outcome = signedIn ? await runSave() : ({ kind: 'signed-out' } as const);
     const dest = destinationForFinish(outcome);
-    setSaveFailure(dest.href === null ? dest.notice.message : null);
+    // 名下没有案件那一支的出路是引导条，不是一行红字：把结论写回 caseGuard，
+    // 第 6 步就摆出跟第 1 步同一条引导条（带「去补邮箱」）。红字那条留给
+    // 真正没有现成出路的支（网络断了、后端拒收）。
+    if (dest.guide) setCaseGuard('no-case');
+    setSaveFailure(dest.href === null && !dest.guide ? dest.notice.message : null);
     toast(dest.notice.message, dest.notice.tone, dest.notice.discreet);
     if (dest.clearDraft) clearDraft();
     if (dest.href) router.push(dest.href);
@@ -158,6 +170,8 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
   return (
     <div className="pb-2">
       <StepBar current={step} total={STEPS.length} title={current.title} />
+
+      {placement === 'first-step' && <NoCaseGuide className="mt-3" />}
 
       {restored && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-[10px] bg-surface-2 px-3.5 py-2.5">
@@ -183,6 +197,9 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
       >
         {isLast && !signedIn ? DRAFT_REASSURANCE : current.reassurance}
       </p>
+
+      {/* 末步这一条贴着「进入驾驶舱」摆：按下去之前就把出路给他，而不是按下去之后 */}
+      {placement === 'last-step' && <NoCaseGuide className="mt-3" />}
 
       <StickyBottomBar className="-mx-4 mt-4 border-t border-line bg-bg/95 px-4 py-3 backdrop-blur-sm lg:-mx-6 lg:px-6">
         <div className="flex gap-2.5">

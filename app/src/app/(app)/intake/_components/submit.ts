@@ -16,6 +16,7 @@
 import { apiFetch, humanError } from '@/app/_ui/api';
 import { fetchMyCases } from '@/app/_ui/currentCase';
 import { latestOf } from '@/app/(app)/case/_components/resolve';
+import { NO_CASE_GUIDE_LEAD } from './caseGuard';
 import type { IntakeDraft } from './draft';
 
 /** 末步按钮按下之后的四种结局，没有一种是「看不出所以然就给 demo」 */
@@ -42,6 +43,15 @@ export interface FinishDestination {
   notice: FinishNotice;
   /** 能不能清掉本地草稿。**只有确实存进服务器的那一支为 true** */
   clearDraft: boolean;
+  /**
+   * 这一支的出路是不是「先去补邮箱」那条引导条（_components/caseGuard.tsx）。
+   *
+   * 【为什么要多这一位（F-205）】名下没有案件时，页面从前只在按钮下面留一行红字，
+   * 说清了「没存进去」，却一个字都没说该去哪儿——而答案是确定的：补一个邮箱。
+   * 红字与引导条是两种东西：**只有这一位为 true 的那一支才摆引导条**，
+   * 其余没存下的支（网络断了、后端拒收）仍然走那行红字，它们没有一条现成的出路可指。
+   */
+  guide: boolean;
 }
 
 export function destinationForFinish(outcome: FinishOutcome): FinishDestination {
@@ -55,6 +65,7 @@ export function destinationForFinish(outcome: FinishOutcome): FinishDestination 
           discreet: '已经暂存在这台设备上',
         },
         clearDraft: false,
+        guide: false,
       };
 
     case 'saved':
@@ -66,19 +77,27 @@ export function destinationForFinish(outcome: FinishOutcome): FinishDestination 
           discreet: '已经存好了',
         },
         clearDraft: true,
+        guide: false,
       };
 
     // 【这一支不许说"存好了"，也不许去 demo】名下没有案件是个异常，不是一种正常去处。
     // 把人送进演示案件，他会以为那就是自己的档案。
+    //
+    // 【F-205：这一支给的是出路，不是一行裸报错】原文是
+    // 「没找到你名下的案件……退出重进或联系我们之后再试一次」——三句话没有一句
+    // 说得出他到底该做什么，而答案是确定的：这个账号只验过手机号，还差一个邮箱。
+    // 所以这里换成同一条引导条的话（NO_CASE_GUIDE_LEAD），并把 guide 置起来，
+    // 由页面摆出那条带「去补邮箱」按钮的引导条。
     case 'no-case':
       return {
         href: null,
         notice: {
-          message: '没找到你名下的案件，所以这一份还没能存进去。你填的内容还在这台设备上，退出重进或联系我们之后再试一次。',
+          message: `${NO_CASE_GUIDE_LEAD}。邮箱验完才会给你建好这份档案，现在这六步还存不进去。`,
           tone: 'amber',
-          discreet: '这一份还没能存进去，内容还在本机',
+          discreet: '还差一步，内容还在本机',
         },
         clearDraft: false,
+        guide: true,
       };
 
     case 'failed':
@@ -91,6 +110,7 @@ export function destinationForFinish(outcome: FinishOutcome): FinishDestination 
           discreet: '这一份还没能存进去，内容还在本机',
         },
         clearDraft: false,
+        guide: false,
       };
   }
 }
@@ -127,6 +147,11 @@ export function toIntakePayload(draft: IntakeDraft): Record<string, unknown> {
 /**
  * 真正去存。先问「我的案件是哪一个」（与 /case 解析页同一个口径），再往它上面提交。
  * 任何一步失败都回 failed —— **不吞异常、不回落 demo**。
+ *
+ * 【这次查就是第 6 步的前置检查（F-205）】问案件在先、POST 在后：名下没有案件时
+ * 一个字都不会发出去，直接回 no-case，由页面摆出「先去补邮箱」那条引导条。
+ * 页面挂载时那次查（useCaseGuard）是**提前**告知，不能代替这一次：
+ * 用户可能在另一个标签页刚把邮箱补完，也可能刚好相反。
  */
 export async function saveIntake(draft: IntakeDraft): Promise<FinishOutcome> {
   try {
