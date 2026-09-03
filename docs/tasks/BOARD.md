@@ -369,6 +369,8 @@
 **2026-09-03 · byo-key-polish PASS（53b41f0）→ 主干 0c49919**：三条回明文接口 no-store；吊销 key 轮换 409 KEY_REVOKED（三段式自述）；吊销当前那把即刻同步共享 state（真机 393/1280 三态）；弹层标题改口；MCP knowledge_search limit 归一 [1,MAX]；skill 路由解码兜底 404；onIssued 五项守卫；「暂不交付」名单去 knowledge_search 有台账。变异 19/20 红（唯一存活为数字串判据小缺口，真机功能正确）。
 - **待办（另开单）**：①/skill/%、/skill/%ZZ 等畸形编码在 Next 16.2.9 入口层即 500（全站动态路由同形，handler 未进）——要改 middleware/反代唯一入口；②站内 agent 的 lib/agent/tools.ts:822 knowledge_search limit 孪生（limit=-5 回 30 张卡）——与 MCP 收成一处 clampLimit；③mcp 路由 limit 判据补数字串 '3' 用例。
 
+**2026-09-03 · 生产上线 0c49919（密钥接口收尾）**：build EXIT=0 → restart 双 active → 路由 200/307。今日上产合计 12 批：qa2 五单（登录落地/401 出路/OTP 冷却与短闸/对话失败态/首诊建档前置/三 minor）、/woo 根路径、MCP 侧栏、实名表单排版、后台护照审核+收尾、密钥查看/轮换+一段话术+MCP 两工具+skill 包+收尾、弹窗按钮、侧栏低调收口。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
