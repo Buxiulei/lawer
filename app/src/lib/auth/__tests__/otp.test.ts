@@ -11,7 +11,13 @@ import type { Database } from 'better-sqlite3';
 
 import { hashLookup } from '@/lib/crypto';
 import type { MailCopy } from '@/lib/notify';
-import { sendEmailCode, sendPhoneCode, verifyEmailCode, verifyPhoneCode } from '../otp';
+import {
+  sendEmailCode,
+  sendEmailRegisterCode,
+  sendPhoneCode,
+  verifyEmailCode,
+  verifyPhoneCode,
+} from '../otp';
 import { verifyToken } from '../jwt';
 import { lastEmailCode, lastSmsCode, makeTestDb } from './helpers';
 
@@ -306,13 +312,23 @@ describe('发码限流', () => {
     expect(failed).toMatchObject({ ok: false, status: 502, errorCode: 'SMS_UPSTREAM_ERROR' });
     expect(smsRowCount(db, PHONE), '发失败还留着行 = 当日额度被白吃一次').toBe(0);
 
-    // 同一秒立刻重发——这正是用户读完「稍后再试」后的第一个动作
-    const retry = await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(T0).deps);
-    expect(retry.ok, '发失败后立刻重发被拦 = F-204 复发').toBe(true);
+    // 一秒后立刻重发——这正是用户读完「稍后再试」后的第一个动作。挡住它的是 ≤5 秒防连击闸，
+    // **不是 60 秒冷却**：错误码与 retry_after 都不同。这一句同时钉两件事——
+    // 连点被拦住了（上游不会被无限重试打爆），而拦它的不是那次失败换来的冷却。
+    expect(await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(1)).deps)).toMatchObject({
+      ok: false,
+      status: 429,
+      errorCode: 'SEND_TOO_FAST',
+      retryAfter: 5,
+    });
+
+    // 过了短闸就放行，而这时离那次失败才 6 秒——远在 60 秒之内，说明冷却一点没被占
+    const retry = await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(6)).deps);
+    expect(retry.ok, '发失败后过了短闸仍被拦 = F-204 复发').toBe(true);
     expect(smsRowCount(db, PHONE)).toBe(1);
 
-    // 反向对照：这一次是真发出去了，60 秒冷却必须照常拦住下一次
-    expect(await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(1)).deps)).toMatchObject({
+    // 反向对照：这一次是真发出去了，60 秒冷却必须照常拦住下一次（且早于短闸报出来）
+    expect(await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(12)).deps)).toMatchObject({
       ok: false,
       status: 429,
       errorCode: 'RATE_LIMITED',
@@ -322,14 +338,17 @@ describe('发码限流', () => {
 
   test('🔴 连着 10 次发失败也没吃掉当日 10 次额度，第 11 次仍发得出去（F-204）', async () => {
     const db = makeTestDb();
+    // 每次隔 6 秒（跨过 ≤5 秒短闸）再点，并逐次断言错误码是 SMS_UPSTREAM_ERROR：
+    // 这 10 次必须都真打到通道上才算数，被短闸挡掉的空转不占额度是废话，不是判据。
     for (let i = 0; i < 10; i++) {
-      expect((await sendPhoneCode(db, { phone: PHONE, ip: IP }, smsBoom(T0))).ok, `第 ${i + 1} 次`).toBe(
-        false,
-      );
+      expect(
+        await sendPhoneCode(db, { phone: PHONE, ip: IP }, smsBoom(at(i * 6))),
+        `第 ${i + 1} 次`,
+      ).toMatchObject({ ok: false, status: 502, errorCode: 'SMS_UPSTREAM_ERROR' });
     }
     expect(smsRowCount(db, PHONE)).toBe(0);
     // 老逻辑走到这里当日额度已被失败发送吃光，这一次会是 RATE_LIMITED
-    expect((await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(T0).deps)).ok).toBe(true);
+    expect((await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(60)).deps)).ok).toBe(true);
   });
 
   test('🔴 邮件没发出去同样不占额度：邮箱侧与手机侧同一条规矩（F-204）', async () => {
@@ -356,13 +375,18 @@ describe('发码限流', () => {
     expect(failed).toMatchObject({ ok: false, status: 502, errorCode: 'EMAIL_SEND_FAILED' });
     expect(rows(), '发失败还留着行 = 当日额度被白吃一次').toBe(0);
 
-    const retry = await sendEmailCode(db, { userId: uid, email: mail, ip: IP }, makeDeps(at(20)).deps);
-    expect(retry.ok, '发失败后立刻重发被拦 = F-204 复发').toBe(true);
+    // 与手机侧同一条：1 秒内重发撞的是 ≤5 秒短闸，不是那次失败换来的 60 秒冷却
+    expect(
+      await sendEmailCode(db, { userId: uid, email: mail, ip: IP }, makeDeps(at(21)).deps),
+    ).toMatchObject({ ok: false, status: 429, errorCode: 'SEND_TOO_FAST', retryAfter: 5 });
+
+    const retry = await sendEmailCode(db, { userId: uid, email: mail, ip: IP }, makeDeps(at(26)).deps);
+    expect(retry.ok, '发失败后过了短闸仍被拦 = F-204 复发').toBe(true);
     expect(rows()).toBe(1);
 
     // 反向对照：真发出去的那次照旧起 60 秒冷却
     expect(
-      await sendEmailCode(db, { userId: uid, email: mail, ip: IP }, makeDeps(at(21)).deps),
+      await sendEmailCode(db, { userId: uid, email: mail, ip: IP }, makeDeps(at(32)).deps),
     ).toMatchObject({ ok: false, status: 429, errorCode: 'RATE_LIMITED', retryAfter: 60 });
   });
 
@@ -387,9 +411,16 @@ describe('发码限流', () => {
     expect(failed).toMatchObject({ ok: false, status: 500, errorCode: 'SMS_CONFIG_ERROR' });
     expect(smsRowCount(db, PHONE), '发失败还留着行 = 当日额度被白吃一次').toBe(0);
 
+    // 1 秒内重发撞的是 ≤5 秒短闸（错误码不同于 60 秒冷却），过了短闸就放行
+    expect(await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(1)).deps)).toMatchObject({
+      ok: false,
+      status: 429,
+      errorCode: 'SEND_TOO_FAST',
+      retryAfter: 5,
+    });
     expect(
-      (await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(T0).deps)).ok,
-      '发失败后立刻重发被拦 = F-204 复发',
+      (await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(6)).deps)).ok,
+      '发失败后过了短闸仍被拦 = F-204 复发',
     ).toBe(true);
   });
 
@@ -442,6 +473,117 @@ describe('发码限流', () => {
     );
     expect(mailFailed.ok).toBe(false);
     expect(mailRows(), '邮箱侧一次发失败把之前成功的行也抹了').toBe(3);
+  });
+
+  // 【9 成功 + 1 失败 + 第 10 次成功，第 11 次必须被拒】上一条用 3 行垫底钉「撤宽了」，
+  // 这一条把垫底铺满到当日上限的边界上：撤行只要多撤一行，当日 10 次就凭空多出一次，
+  // 而多出来的那一次在 3 行的规模下看不出来（3 与 2 都远离上限，两种实现全绿）。
+  // 反过来也钉住了「失败不占额度」不是靠少算一次蒙对的：第 10 次仍要发得出去。
+  test('🔴 9 次成功 + 1 次失败 + 第 10 次成功 → 第 11 次仍被当日上限拒（F-204 / R1）', async () => {
+    const db = makeTestDb();
+
+    // 按 60s 冷却的节奏真发 9 次，每一次都实打实占掉一格当日额度
+    for (let i = 0; i < 9; i++) {
+      expect(
+        (await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(i * 60)).deps)).ok,
+        `前置失败：第 ${i + 1} 次没发出去`,
+      ).toBe(true);
+    }
+    expect(smsRowCount(db, PHONE)).toBe(9);
+
+    // 第 10 次通道报错：撤掉自己那一行，前面 9 行一行不许少
+    expect(await sendPhoneCode(db, { phone: PHONE, ip: IP }, smsBoom(at(540)))).toMatchObject({
+      ok: false,
+      status: 502,
+      errorCode: 'SMS_UPSTREAM_ERROR',
+    });
+    expect(smsRowCount(db, PHONE), '失败连坐抹掉了之前成功的行 = 当日额度被凭空退回').toBe(9);
+
+    // 那次失败没占额度，所以第 10 格还空着（隔过 ≤5 秒短闸再点）
+    expect(
+      (await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(546)).deps)).ok,
+      '失败占掉了当日额度 = F-204 复发',
+    ).toBe(true);
+    expect(smsRowCount(db, PHONE)).toBe(10);
+
+    // 而第 11 次必须撞上当日上限：额度是被 10 次**成功**发送吃满的，不是被那次失败吃的
+    expect(await sendPhoneCode(db, { phone: PHONE, ip: IP }, makeDeps(at(606)).deps)).toMatchObject({
+      ok: false,
+      status: 429,
+      errorCode: 'RATE_LIMITED',
+    });
+  });
+
+  // ===== ≤5 秒防连击闸：F-204 撤行后留下的那个缺口 =====
+  //
+  // 【为什么非有不可】撤行让失败的发送不占 60s 冷却，而 IP 那条计数对存量用户登录整条豁免。
+  // 两者叠起来，一个老用户在通道持续报错时**一点节流都没有**——按住重发就是对上游的无限重试。
+  // 判据钉三件事：拦得住（1 秒内重发被拒）、拦的不是 60 秒那道闸（错误码与 retry_after 都不同）、
+  // 5 秒后一定放行（短闸误设成 60 秒就会红在这一句上）。
+
+  test('🔴 存量用户 + 通道持续报错：1 秒内重发被 5 秒闸拦，5 秒后放行且仍回通道错误', async () => {
+    const db = makeTestDb();
+    await makeExistingUser(db, PHONE, T0); // 这条路径 knownUser=true，IP 计数整条豁免
+
+    const first = await sendPhoneCode(db, { phone: PHONE, ip: IP }, smsBoom(at(120)));
+    expect(first).toMatchObject({ ok: false, status: 502, errorCode: 'SMS_UPSTREAM_ERROR' });
+
+    // 1 秒后按住再点：被短闸拦下，且这一次根本没打到通道上（sms 假实现一次都没被调）
+    const boomAgain = { now: at(121), sendSms: vi.fn(async () => { throw new Error('短信网关连接超时'); }) };
+    expect(await sendPhoneCode(db, { phone: PHONE, ip: IP }, boomAgain)).toMatchObject({
+      ok: false,
+      status: 429,
+      errorCode: 'SEND_TOO_FAST',
+      retryAfter: 5,
+    });
+    expect(boomAgain.sendSms, '被短闸拦下的请求仍然打到了上游 = 节流没生效').not.toHaveBeenCalled();
+    // 拦它的不是 60 秒冷却：文案必须分得开，否则用户被告知要等 60 秒（实际只要 5 秒）
+    const blocked = await sendPhoneCode(db, { phone: PHONE, ip: IP }, smsBoom(at(122)));
+    expect((blocked as { message: string }).message).not.toContain('60 秒');
+
+    // 连点不会把窗口往后推：4 秒处又点一次，6 秒处照样放行（窗口从上一次真发起算）
+    expect(await sendPhoneCode(db, { phone: PHONE, ip: IP }, smsBoom(at(124)))).toMatchObject({
+      ok: false,
+      errorCode: 'SEND_TOO_FAST',
+    });
+    // 5 秒后放行：闸开了，但通道还是坏的——放行 ≠ 把错误吞掉
+    expect(await sendPhoneCode(db, { phone: PHONE, ip: IP }, smsBoom(at(126)))).toMatchObject({
+      ok: false,
+      status: 502,
+      errorCode: 'SMS_UPSTREAM_ERROR',
+    });
+    expect(smsRowCount(db, PHONE), '这一串连点一行额度都不该留下').toBe(1); // 只剩注册那次
+  });
+
+  test('🔴 邮箱侧同一条短闸：两侧不许只做一半（otp.ts 手机/邮箱同名代码漏改过）', async () => {
+    const db = makeTestDb();
+    const mail = 'burst@example.com';
+    const boom = (now: Date) => ({
+      now,
+      sendEmail: async () => {
+        throw new Error('SMTP 挂了');
+      },
+    });
+
+    expect(await sendEmailRegisterCode(db, { email: mail, ip: IP }, boom(T0))).toMatchObject({
+      ok: false,
+      errorCode: 'EMAIL_SEND_FAILED',
+    });
+    expect(await sendEmailRegisterCode(db, { email: mail, ip: IP }, boom(at(1)))).toMatchObject({
+      ok: false,
+      status: 429,
+      errorCode: 'SEND_TOO_FAST',
+      retryAfter: 5,
+    });
+    // 5 秒后放行，且仍回通道错误
+    expect(await sendEmailRegisterCode(db, { email: mail, ip: IP }, boom(at(6)))).toMatchObject({
+      ok: false,
+      errorCode: 'EMAIL_SEND_FAILED',
+    });
+    // 短闸按邮箱分桶：另一个地址不受连坐
+    expect(
+      await sendEmailRegisterCode(db, { email: 'other@example.com', ip: IP }, boom(at(6))),
+    ).toMatchObject({ ok: false, errorCode: 'EMAIL_SEND_FAILED' });
   });
 
   // 【先插行后发送不是顺手写的，那一行在发送期间就是防连击闸】撤行只发生在通道确认发不出去

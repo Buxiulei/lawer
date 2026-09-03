@@ -116,6 +116,42 @@ export function deleteSmsCode(db: Database, id: number): void {
   db.prepare('DELETE FROM sms_codes WHERE id = ?').run(id);
 }
 
+// ========== otp_send_attempts（≤5 秒防连击闸的流水）==========
+
+/**
+ * 某 target（'sms:<phone_hash>' / 'email:<邮箱>'）在 sinceIso 之后开始过几次发送。
+ * 时间比较两边都套 datetime()：理由见 countSmsCodesSince。
+ *
+ * 与 countSmsCodesSince / countEmailCodesSince 的分工：那两个数的是**额度账本**
+ * （发失败会把行撤掉），这个数的是「刚刚是不是已经在发了」，发失败照记不退。
+ */
+export function countSendAttemptsSince(db: Database, target: string, sinceIso: string): number {
+  const row = db
+    .prepare(
+      'SELECT COUNT(*) AS n FROM otp_send_attempts WHERE target = ? AND datetime(created_at) > datetime(?)',
+    )
+    .get(target, sinceIso) as { n: number };
+  return row.n;
+}
+
+/**
+ * 记一次「开始发送」，并顺手删掉该 target 早于 gcBeforeIso 的旧行。
+ * GC 只删本 target 的行、不设定时任务，两点都同 recordIpEvent，理由也逐字相同。
+ */
+export function recordSendAttempt(
+  db: Database,
+  params: { target: string; createdAt: string; gcBeforeIso: string },
+): void {
+  const insert = db.prepare('INSERT INTO otp_send_attempts (target, created_at) VALUES (?, ?)');
+  const gc = db.prepare(
+    'DELETE FROM otp_send_attempts WHERE target = ? AND datetime(created_at) < datetime(?)',
+  );
+  db.transaction(() => {
+    insert.run(params.target, params.createdAt);
+    gc.run(params.target, params.gcBeforeIso);
+  })();
+}
+
 // ========== email_codes ==========
 
 /**

@@ -1,7 +1,7 @@
 // app/src/lib/db/migrate.ts
 //
 // ───────────────── ⚠️ 改本文件之前先读这一段 ⚠️ ─────────────────
-// **本迁移框架没有事务。** runMigrations() 的 47 个 db.exec() 是一串裸调用，
+// **本迁移框架没有事务。** runMigrations() 的 48 个 db.exec() 是一串裸调用，
 // 中途失败不回滚——2026-08-26 实测：人为中断，库里留下 22/38 张表，重跑既不前进也不后退。
 // 现在之所以能安全滚更，是因为迁移**全是纯加法**、靠 IF NOT EXISTS 与 addColumnIfMissing
 // 能重跑自愈：**安全是「改动足够简单」给的，不是框架给的。**
@@ -111,6 +111,27 @@ export function runMigrations(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_ip_quota_events_ip ON ip_quota_events (ip, created_at);
+  `);
+
+  // 发码的「≤5 秒防连击闸」流水（判定与常量见 lib/auth/otp.ts 的 SEND_BURST_SECONDS）。
+  // 一次**真正开始发送**一行，判定 = 该 target 5 秒内有没有行。
+  //
+  // 【为什么不能复用 sms_codes / email_codes 的行】那两张表的行是「用户手上有这串码」的凭据，
+  // 通道确认发不出去时必须撤掉（F-204：失败不占 60s 冷却与当日额度）——而防连击要拦的
+  // 恰恰就是「上一次发失败、行已经撤掉」之后的那一秒。同一份记录不能既撤又留，所以另开一张：
+  // 这张只回答「刚刚是不是已经在发了」，与额度账本无关，因此发失败也照记不退。
+  //
+  // 【为什么不能是进程内 Map】理由与 ip_quota_events 逐字相同：重启清零、多副本互不可见。
+  // target 存 'sms:<phone_hash>' / 'email:<邮箱>'：与两条通道各自的限流键一致（手机号只留哈希，
+  // 邮箱本就明文存于 email_codes），一张表管两侧，判据不会只在一侧生效。
+  // 无 id 列、旧行靠写入侧机会式 GC 清，两点都同 ip_quota_events。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS otp_send_attempts (
+      target     TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_otp_send_attempts_target
+      ON otp_send_attempts (target, created_at);
   `);
 
   // 实名核验流水：一次核验一行，只追加（用户改名/换证 = 新一行），users.auth_status 为其物化结论。
