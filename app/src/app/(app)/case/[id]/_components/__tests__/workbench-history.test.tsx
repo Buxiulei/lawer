@@ -333,7 +333,17 @@ async function settled(caseId: string): Promise<ReactNode> {
 
 const CASE = '9';
 
+/**
+ * 一副最小的窗子（node 环境没有 window/document）：Workbench 的跟随滚动只读这两样。
+ * **每个用例都要装**：一轮收场时排的那一拍滚动会在 80ms 后落到某个别的用例里，
+ * 那时没有 window 就是一条没人接得住的异常。scrolls.n 是这一拍的读数。
+ */
+const scrolls = { n: 0 };
+
 beforeEach(() => {
+  scrolls.n = 0;
+  vi.stubGlobal('window', { scrollTo: () => { scrolls.n += 1; }, innerHeight: 800 });
+  vi.stubGlobal('document', { documentElement: { scrollHeight: 3000 } });
   auth.token = 'jwt-token';
   bus.fails = false;
   bus.rows = realRows();
@@ -583,7 +593,9 @@ describe('余额用尽这一屏', () => {
    【变异臂】
     · M-R1 Workbench 不接 onFailed        ⇒ 第一条红（问话仍留在流里）
     · M-R2 撤了回显但不回填输入框          ⇒ 第二条红
-    · M-R3 撤回显时不看错误码              ⇒ 正对照红（普通失败也被抹掉问话） */
+    · M-R3 撤回显时不看错误码              ⇒ 正对照红（普通失败也被抹掉问话）
+    · M-R9 retry 进门不清 pendingEcho      ⇒「失败卡上的重试被拦」红
+    · M-S1 收场不滚（scrollToTurnEnd 删掉）⇒「把横幅带进视野」红 */
 describe('被拦下的那一轮不留痕（RV-1）', () => {
   const ASK = 'HR 让我今天签自愿离职。';
   const REFUSED = { code: 'GONGDAO_EXHAUSTED', message: '公道值余额 0，这一轮开不了。', balance: 0 };
@@ -643,6 +655,49 @@ describe('被拦下的那一轮不留痕（RV-1）', () => {
 
     chat.failed(REFUSED);
     expect(asked(frame(CASE)), '把前一遍也抹了 = 抹掉了一段已经发生过的对话').toBe(1);
+  });
+
+  /**
+   * 失败卡上那个「重试」（本轮刚失败、还没刷新过页面的那一张）走的是另一条入口
+   * ——Workbench.retry，与历史里那条失败轮的重试不是同一个函数。它同样不带新回显，
+   * 所以进门也得先把 pendingEcho 清掉：否则这次被拦时，撤走的是上一轮那句问话。
+   * 两条重试路径各写一遍「进门先清」，漏掉哪一条都不会有人当场发现。
+   * 变异臂 M-R9：`retry` 里那句 `pendingEcho.current = null` 删掉 ⇒ 这条红。
+   */
+  it('★失败卡上的重试被拦 ⇒ 撤的不是上一轮那条回显', async () => {
+    // 摆上「本轮刚失败」这一刻：流里那张失败卡带的重试就是 Workbench.retry
+    chat.error = { code: 'AGENT_FAILED', message: '模型这会儿连不上。' };
+    await ask();
+    const card = probe(frame(CASE)).errors.at(-1);
+    expect(card?.retryable, '这一屏没画带重试的失败卡 ⇒ 下面是空过').toBe(true);
+
+    card!.onRetry!();
+    chat.failed(REFUSED);
+    expect(
+      probe(frame(CASE)).text,
+      '重试被拦，却把上一轮那句问话抹了',
+    ).toContain(ASK);
+  });
+
+  /**
+   * 【拦下也要看得见】横幅长在流的末尾，而出路的那两个入口就长在横幅上。
+   * 402 回来时页面还同时**撤掉了一条消息**（页面变矮），停在原地就是
+   * 「屏幕上什么也没发生」——他刚被拦下，却只看到自己那句问话消失了。
+   * 跟随用的是落定那一份（scrollToTurnEnd），不是另抄一遍。
+   * 变异臂 M-S1：onFailed 里那句 scrollToTurnEnd() 删掉 ⇒ 这条红。
+   */
+  it('★402 回来 ⇒ 把末尾（横幅与那两个入口）带进视野', async () => {
+    await ask();
+    const before = scrolls.n;
+    // 假时钟：跟随延一拍滚（量高要等这一块画出来），且别让**别的用例**排下的那一拍混进读数
+    vi.useFakeTimers();
+    try {
+      chat.failed(REFUSED);
+      vi.advanceTimersByTime(200);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(scrolls.n - before, '拦下时不跟随 ⇒ 横幅与那两个入口停在视口外').toBe(1);
   });
 
   /**

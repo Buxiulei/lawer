@@ -9,6 +9,7 @@
 import type Database from 'better-sqlite3';
 import { getDb } from '../db/client';
 import { getRatesForModel } from '../db/modelRates';
+import { isTurnInFlight } from './in-flight';
 import {
   GONGDAO_GATE_MIN,
   GONGDAO_LEDGER_TYPE,
@@ -23,6 +24,12 @@ import {
  * 重放同一轮由 (type, ref_id) 唯一索引挡下。实时记账与回填脚本必须用同一个函数生成，
  * 各写各的格式会让回填在已记过账的轮上再扣一笔。
  */
+/**
+ * 在飞占位（同一个人一次只答一轮）。判定收在 canStartTurn 里，占位与释放归调用方，
+ * 实现与「换成数据库一行」的路见 ./in-flight。
+ */
+export { beginTurn, isTurnInFlight, turnInFlightMessage } from './in-flight';
+
 export function turnRefId(messageId: number): string {
   return `turn-${messageId}`;
 }
@@ -93,6 +100,12 @@ export function listGongdaoLedger(
 export interface TurnGate {
   ok: boolean;
   balance: number;
+  /**
+   * 拦下的**理由**，只在「这个人还有一轮在跑」那一档给出（HTTP 409，等一等就好）。
+   * 缺席 = 余额那一档（HTTP 402，等多久都没用，得先充值）。两者的出路完全不同，
+   * 归成同一个错误码，用户会照着「去兑换」的指引白跑一趟。
+   */
+  reason?: 'IN_FLIGHT';
 }
 
 /**
@@ -108,10 +121,17 @@ export interface TurnGate {
  * 【会员没有口子】会员的额度是**买来入账的公道值**（gongdaoGrant），不是绕过闸的资格，
  * 所以这里不看 membership：会员余额到 0 同样拦。
  *
+ * 【两道拦，出路不是同一条】余额不够 → 402，等多久都没用，得先兑换/充值；
+ * 这个人还有一轮在跑 → 409（reason=IN_FLIGHT），等它答完就好。见 ./in-flight。
+ *
  * 只读，不写任何行——拦下的那一轮必须做到 messages / ledger / token_usage 全部零新增。
  */
 export function canStartTurn(userId: number, db: Database.Database = getDb()): TurnGate {
   const balance = getGongdao(userId, db);
+  // 在飞先判：这一轮的花费要等答完才结算，所以并发那两个请求读到的余额都还是「够」的
+  // （见 ./in-flight 文件头）。余额也不够时先说这一条——那一轮跑完之后余额这一档还在，
+  // 而反过来说「去充值」会让人在上一轮正答着的时候白跑一趟兑换页。
+  if (isTurnInFlight(userId)) return { ok: false, balance, reason: 'IN_FLIGHT' };
   return { ok: balance >= GONGDAO_GATE_MIN, balance };
 }
 

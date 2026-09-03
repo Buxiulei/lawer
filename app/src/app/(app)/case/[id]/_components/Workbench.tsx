@@ -127,6 +127,18 @@ export function Workbench({ caseId }: { caseId: string }) {
     if (follow.current) scrollToBottom();
   }, [scrollToBottom]);
 
+  /**
+   * 一轮收场之后，把末尾新出现的那一块带进视野：落定时是回答与行动卡，
+   * 被拦下时是横幅（**出路的那两个入口就长在横幅上**，看不见等于没有出路）。
+   * 用户中途往回翻过（follow 已经落回 false）就不再拽他。
+   * 收场的两条路共用这一份：各写各的，其中一处迟早会漏掉「翻上去了就别拽」这半句。
+   */
+  const scrollToTurnEnd = useCallback(() => {
+    // 延一拍：这一块此刻才刚进 state，量高要等它画出来
+    if (follow.current) setTimeout(() => scrollToBottom(), 80);
+    follow.current = false;
+  }, [scrollToBottom]);
+
   /** 等待久了的去处：滚到最近一组行动卡 */
   const jumpToActions = useCallback(() => {
     const groups = document.querySelectorAll('[data-action-group]');
@@ -164,13 +176,14 @@ export function Workbench({ caseId }: { caseId: string }) {
       ]);
       if (items.length) setActions((prev) => [...prev, ...items]);
       // 回复落定后行动卡才出现，再滚一次让「现在做什么」进视野
-      if (follow.current) setTimeout(() => scrollToBottom(), 80);
-      follow.current = false;
+      scrollToTurnEnd();
     },
-    [caseId, scrollToBottom],
+    [caseId, scrollToTurnEnd],
   );
 
   /**
+   * 这一轮以 error 帧收场时的收拾：撤回显（只余额闸这一档）+ 把末尾带进视野。
+   *
    * 【被拦下的那一轮要连回显一起撤】(RV-1)
    * 闸在 runTurn 之前：服务端一个字都没写库——不调模型、不插用户消息、不记账。
    * 所以屏幕上那句问话是页面自己画的一条孤儿，F5 之后它就没了；
@@ -181,19 +194,28 @@ export function Workbench({ caseId }: { caseId: string }) {
    * **只对余额闸这一档**这么做。普通失败（模型连不上）服务端已经落了一条失败轮，
    * 那句问话在库里，撤掉它才是改历史；那一档照旧留回显 + 给重试。
    */
-  const rollbackRefusedTurn = useCallback((error: StreamError) => {
-    if (error.code !== GONGDAO_EXHAUSTED) return;
-    const pending = pendingEcho.current;
-    if (!pending) return;
-    pendingEcho.current = null;
-    setMessages((prev) => prev.filter((m) => m.id !== pending.id));
-    setDraft((prev) => ({ seq: prev.seq + 1, text: pending.content }));
-  }, []);
+  const settleFailedTurn = useCallback(
+    (error: StreamError) => {
+      if (error.code === GONGDAO_EXHAUSTED) {
+        const pending = pendingEcho.current;
+        if (pending) {
+          pendingEcho.current = null;
+          setMessages((prev) => prev.filter((m) => m.id !== pending.id));
+          setDraft((prev) => ({ seq: prev.seq + 1, text: pending.content }));
+        }
+      }
+      // 失败也是这一轮的收场：横幅/失败卡就长在流的末尾，跟落定走同一份跟随逻辑。
+      // 少了这一句，被拦下的人停在原地看着自己那句问话消失，横幅与那两个入口
+      // 在视口外——屏幕上「什么也没发生」，而他刚被拦下。
+      scrollToTurnEnd();
+    },
+    [scrollToTurnEnd],
+  );
 
   const stream = useChatStream({
     caseId,
     onSettled: settle,
-    onFailed: rollbackRefusedTurn,
+    onFailed: settleFailedTurn,
   });
 
   /**

@@ -10,7 +10,7 @@ import { requireIdentity, parseId } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 // 余额闸：**判定不在本文件**，只调 lib/billing 那一个入口（主理人 2026-09-03「拦」）。
 // 路由不许自己 SELECT gongdao——门槛与余额口径长在 lib/billing，抄第二份就会各自演化。
-import { canStartTurn, gongdaoExhaustedMessage } from '@/lib/billing';
+import { beginTurn, canStartTurn, gongdaoExhaustedMessage, turnInFlightMessage } from '@/lib/billing';
 // 会员档决定路由到哪个模型（routing.config.ts 的 Plan）。lib/billing 的 barrel 未导出
 // getMembership，故直取该文件——本路由只读不写，不碰账本。
 import { getMembership } from '@/lib/billing/fulfillment';
@@ -74,6 +74,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // 会员同规则：会员的额度是买来入账的公道值，不是绕闸的资格。
   const gate = canStartTurn(guard.identity.uid, db);
   if (!gate.ok) {
+    // 「这个人还有一轮在跑」是另一件事：等它答完就好，不是余额的问题（409 ≠ 402）。
+    // 归成同一个错误码，用户会照着「去兑换」的指引白跑一趟兑换页。
+    if (gate.reason === 'IN_FLIGHT') {
+      return NextResponse.json(
+        { ok: false, error_code: 'TURN_IN_FLIGHT', message: turnInFlightMessage() },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       {
         ok: false,
@@ -89,6 +97,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const plan = getMembership(db, guard.identity.uid).plan ?? 'entry';
   // 检索器无状态（lib/knowledge 自带进程级索引缓存），每次建一个即可，不必挂全局
   const searcher = createKnowledgeSearcher();
+
+  // 在飞占位：从这里到这一轮收场为止，这个人的下一次请求一律 409。
+  // **紧挨着上面那道闸**，中间不许有 await——让出一次事件循环，另一个请求就会在同一个
+  // 「没人占位」的快照上过闸，两轮一起跑（并发判据钉的就是这件事）。
+  // 释放在流的 finally 里：正常答完、模型抛错、客户端走人，都从那一条路出去。
+  const releaseTurn = beginTurn(guard.identity.uid);
 
   // 下发口。客户端一断开，controller 就是关的，再 enqueue 一律抛 Invalid state——
   // 而它从心跳的 setInterval 里抛出去时没有任何调用栈接得住（uncaughtException，
@@ -141,6 +155,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const u = toUserFacingError(e, { code: 'AGENT_FAILED', where: 'chat.runTurn' });
         emit({ event: 'error', data: { code: u.code, message: u.message } });
       } finally {
+        // 占位必须在这里还回去：漏了这一句，这个人此后每一次提问都是 409，
+        // 而他自己看到的只是「上一轮还在答」——上一轮明明已经答完了。
+        releaseTurn();
         heartbeat.stop();
         // 断开后流已经是关的，close() 同样抛 Invalid state——而这里是 async start 的
         // finally，抛出去就是一条没人接的 unhandledRejection。sink.close() 自己判。
