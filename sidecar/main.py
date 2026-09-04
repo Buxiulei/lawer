@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from rfc3161_timestamp import DEFAULT_TSA, TimestampError, request_timestamp
-from pades_sign import SignError, sign_pdf_file
+from pades_sign import SignError, load_signer_info, sign_pdf_file
 from gen_evidence_pdf import build_evidence_pdf
 from verify_evidence_pdf import verify_pdf
 from ocr import OcrError, ocr_image
@@ -95,6 +95,17 @@ def pades(
     return Response(content=signed, media_type="application/pdf", headers=headers)
 
 
+# ---------------- /signer ----------------
+
+@app.get("/signer")
+def signer():
+    """读签名证书持有人信息，供《存证证明》抬头印「签章主体」。"""
+    try:
+        return load_signer_info()
+    except SignError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
 # ---------------- /evidence-pdf ----------------
 
 @app.post("/evidence-pdf")
@@ -106,6 +117,10 @@ def evidence_pdf(payload: dict):
     # 兜一个写死的品牌名等于替调用方编一个"谁出的证"。理由详见 gen_evidence_pdf.REQUIRED_TOP_LEVEL。
     if not payload.get("issuer"):
         raise HTTPException(status_code=400, detail="缺少 issuer")
+    # signer_cn = 签章主体（签名证书 CN），同样**不兜底**：见 gen_evidence_pdf.REQUIRED_TOP_LEVEL。
+    # 调用方应先 GET /signer 从证书里取，写死一个名字等于替证书回答「谁盖的章」。
+    if not payload.get("signer_cn"):
+        raise HTTPException(status_code=400, detail="缺少 signer_cn")
     if not (payload.get("evidence") or {}).get("sha256"):
         raise HTTPException(status_code=400, detail="缺少 evidence.sha256")
 

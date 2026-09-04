@@ -1,5 +1,5 @@
 // app/src/lib/evidence/__tests__/sidecar-timeout.test.ts
-// sidecar 客户端的四个端点都必须带超时。
+// sidecar 客户端的五个端点都必须带超时。
 //
 // 钉死两件事：
 //   1. 每个端点报给 AbortSignal.timeout 的毫秒数就是常量表里那个数——
@@ -13,6 +13,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  fetchSignerCn,
   renderEvidencePdf,
   requestTimestamp,
   SidecarError,
@@ -66,6 +67,13 @@ const CASES: EndpointCase[] = [
     missing: '缺可信时间戳',
     chain: 'attest',
     call: () => requestTimestamp('a'.repeat(64)),
+  },
+  {
+    endpoint: '/signer',
+    expectedMs: 30_000,
+    missing: '缺签章主体名称',
+    chain: 'attest',
+    call: () => fetchSignerCn(),
   },
   {
     endpoint: '/evidence-pdf',
@@ -143,7 +151,7 @@ describe('sidecar 客户端超时', () => {
     expect(requestedMs[0]).toBeGreaterThan(70_000);
   });
 
-  it('正常路径不受影响：四个端点照常返回，且每次都带了 signal', async () => {
+  it('正常路径不受影响：五个端点照常返回，且每次都带了 signal', async () => {
     const seenSignals: (AbortSignal | null | undefined)[] = [];
     vi.stubGlobal(
       'fetch',
@@ -160,6 +168,12 @@ describe('sidecar 客户端超时', () => {
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           );
+        }
+        if (u.endsWith('/signer')) {
+          return new Response(JSON.stringify({ signer_cn: '北京某某有限公司' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
         if (u.endsWith('/verify')) {
           return new Response(
@@ -183,13 +197,14 @@ describe('sidecar 客户端超时', () => {
     expect(ts.serial).toBe('12822790593270748442097240347230746476');
     expect(ts.tsaUrl).toContain('globalsign');
 
+    expect(await fetchSignerCn()).toBe('北京某某有限公司');
     expect((await renderEvidencePdf({ order_no: 'X' })).toString()).toBe('%PDF-1.4 ok');
     expect((await signPdf(Buffer.from('%PDF'))).toString()).toBe('%PDF-1.4 ok');
 
     const verdict = await verifyPdf(Buffer.from('%PDF'));
     expect(verdict.passed).toBe(true);
 
-    expect(seenSignals).toHaveLength(4);
+    expect(seenSignals).toHaveLength(5);
     for (const s of seenSignals) expect(s).toBeInstanceOf(AbortSignal);
   });
 

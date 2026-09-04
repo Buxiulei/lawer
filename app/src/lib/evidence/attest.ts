@@ -193,6 +193,7 @@ function buildPdfPayload(
   db: Database,
   ev: store.EvidenceDetailRow,
   att: store.AttestationRow,
+  signerCn: string,
 ): unknown {
   const holder: HolderSnapshot = att.user_realname_snapshot_enc
     ? (JSON.parse(decryptField(att.user_realname_snapshot_enc)) as HolderSnapshot)
@@ -204,6 +205,7 @@ function buildPdfPayload(
     order_no: att.order_no,
     generated_at: new Date().toISOString(),
     issuer: 'lawer 土八鼠',
+    signer_cn: signerCn,
     verify_url: base ? `${base.replace(/\/+$/, '')}/verify/${att.order_no}` : '',
     status: att.tsa_gen_time ? 'stamped' : 'pending',
     holder: {
@@ -275,7 +277,11 @@ export async function attestEvidence(
   if (!att.cert_pdf_file_id) {
     let signed: Buffer;
     try {
-      const unsigned = await sidecar.renderEvidencePdf(buildPdfPayload(db, ev, att));
+      // 先问证书「你是谁」，再拿这个名字去渲染抬头的「签章主体」：
+      // 印在证上的和 Acrobat 里点开签名看到的必须是同一个名字。
+      // 取不到就整段不做——宁可这次不出证，也不出一份把签章主体写错的证。
+      const signerCn = await sidecar.fetchSignerCn();
+      const unsigned = await sidecar.renderEvidencePdf(buildPdfPayload(db, ev, att, signerCn));
       signed = await sidecar.signPdf(unsigned);
     } catch (err) {
       // 时间戳已经拿到并落库了，本次只是证明没出成；重发会从这一段续跑。

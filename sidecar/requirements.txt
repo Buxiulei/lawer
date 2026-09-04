@@ -26,3 +26,6 @@ requests>=2.31.0
 # 测试
 pytest>=8.0
 httpx>=0.27
+# 抽 PDF 正文文本，用于断言《存证证明》上真的印出了某几个字
+# （reportlab 的中文是 TTF 子集里的字形号，不解 ToUnicode 就在字节流里搜不到）
+pypdf>=5.0

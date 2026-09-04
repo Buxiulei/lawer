@@ -42,6 +42,17 @@ const ENDPOINT_SPEC = {
     advice: ATTEST_RETRY_ADVICE,
   },
   /**
+   * 30s：/signer 只在本地读一个 pfx 文件并解出证书主体，不外呼（sidecar/pades_sign.py
+   * load_signer_info），正常是毫秒级。这 30s 不是给读证书用的，是给 sidecar 被别的请求
+   * 排满时的排队时间——砍早了会在出证链路刚起步时就把它掐掉。
+   */
+  '/signer': {
+    timeoutMs: 30_000,
+    missing: '缺签章主体名称',
+    why: 'sidecar 只在本地读签名证书、不外呼，正常是毫秒级；超这么久通常是 sidecar 被别的请求排满或已假死',
+    advice: ATTEST_RETRY_ADVICE,
+  },
+  /**
    * 60s：/evidence-pdf 是纯本地渲染，不外呼（sidecar/main.py evidence_pdf → build_evidence_pdf）。
    * 正常是秒级；给到 60s 是留给 sidecar 被别的请求排满时的排队时间，不是给渲染本身的。
    */
@@ -174,6 +185,17 @@ export async function requestTimestamp(sha256: string): Promise<TimestampResult>
     serial: body.serial,
     tsaUrl: body.tsa_url,
   };
+}
+
+/**
+ * 取签章主体名称（签名证书的 CN）。
+ *
+ * 《存证证明》抬头印的「签章主体」必须与 Acrobat 签名面板里显示的持有人是同一个名字，
+ * 所以只能从证书里读、不能写死：换证之后写死的那个不会报错，只会开始骗人。
+ */
+export async function fetchSignerCn(): Promise<string> {
+  const bytes = await callSidecar('/signer', { method: 'GET' });
+  return parseJson<{ signer_cn: string }>(bytes).signer_cn;
 }
 
 /** 渲染《存证证明》PDF（未签名）。payload 形状见 sidecar/README.md。 */
