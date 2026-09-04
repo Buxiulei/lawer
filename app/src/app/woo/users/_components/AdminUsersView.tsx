@@ -115,6 +115,16 @@ export function newOpRef(operatorHint: number): string {
   return `admin-${operatorHint}-${Date.now()}-${rand}`;
 }
 
+/**
+ * 操作列**钉在视口右缘**。这张表有九列（手机号是全号、注册时间不折行），1100px 宽下
+ * 最后一列已经被横向滚出视口，而表头那一格原本还是空的——屏幕上没有任何东西暗示
+ * 右边还有内容，主理人 2026-09-04 在生产据此判断「发放公道值 / 调整会员没了」。
+ * 所以两件事一起做：表头写字（说明右边那格是干什么的），单元格与表头一起 sticky
+ * （任何宽度下都留在视口内）。底色必须给足——sticky 元素不吃 <tr> 的底，缺了它
+ * 滚动时下面的列会从操作按钮底下穿过去。判据见 __tests__/admin-users-action-col.test.tsx。
+ */
+const ACTION_COL = 'sticky right-0 z-10 border-l border-border bg-card';
+
 type Pending =
   | { kind: 'membership'; uid: number; plan: string; days: number; opRef: string }
   | { kind: 'gongdao'; uid: number; delta: number; note: string; opRef: string };
@@ -131,11 +141,26 @@ export function opRequestBody(p: Pending): Record<string, unknown> {
 }
 
 /**
+ * AdminUsersView 的入参。
+ *
  * @param refreshKey 每变一次就重取一遍列表与审计。上面的实名审核台审完一条会把它 +1
  *   （见 AdminUsersPanels）：不重取的话，刚被通过的那个人在这张表里还写着「待审」，
  *   「最近操作」里也看不到刚落的那行审计——操作者会以为自己那一下没生效。
+ * @param onAccess 接口放行没有的一声（true=放行，false=404）。**必须是稳定引用**
+ *   （它进了 load 的依赖），传内联箭头会让 load 每次渲染换新身份、useEffect 无限重取。
+ *   AdminUsersPanels 拿它决定后台导航条出不出——非白名单的人不该在一张与 404
+ *   同形的页面上看见「账号 / 兑换码」两个页签。
+ *
+ * refreshKey **排在解构的最后一位**：realname-queue-guard 扫的是源码里
+ * `refreshKey = 0 }:` 这个形状（它钉的是"这个组件确实收 refreshKey"）。
+ * 把新参数插到它后面，那把尺子会红在一处与它无关的改动上。
  */
-export function AdminUsersView({ refreshKey = 0 }: { refreshKey?: number } = {}) {
+interface AdminUsersViewProps {
+  refreshKey?: number;
+  onAccess?: (granted: boolean) => void;
+}
+
+export function AdminUsersView({ onAccess, refreshKey = 0 }: AdminUsersViewProps = {}) {
   const [field, setField] = useState<string>('uid');
   const [query, setQuery] = useState('');
   const [submitted, setSubmitted] = useState<{ field: string; query: string }>({
@@ -174,17 +199,19 @@ export function AdminUsersView({ refreshKey = 0 }: { refreshKey?: number } = {})
       ]);
       setData(users);
       setAudit(auditRes.rows);
+      onAccess?.(true);
     } catch (err) {
       // 404 = 不是白名单里的人（或这条路径根本不存在）。两者刻意同形，页面不解释。
       if (err instanceof ApiError && err.status === 404) {
         setGone(true);
+        onAccess?.(false);
         return;
       }
       setError(humanError(err));
     } finally {
       setLoading(false);
     }
-  }, [submitted, page]);
+  }, [submitted, page, onAccess]);
 
   useEffect(() => {
     void load();
@@ -309,63 +336,7 @@ export function AdminUsersView({ refreshKey = 0 }: { refreshKey?: number } = {})
       {error && <p className="mt-2 text-[14px] text-danger-ink">{error}</p>}
 
       <Card className="mt-4 overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>UID</TableHead>
-              <TableHead>邮箱</TableHead>
-              <TableHead>手机</TableHead>
-              <TableHead>注册时间</TableHead>
-              <TableHead>实名</TableHead>
-              <TableHead>会员</TableHead>
-              <TableHead>公道值</TableHead>
-              <TableHead>案件</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(data?.rows ?? []).map((u) => (
-              <TableRow key={u.uid}>
-                <TableCell className="num">{u.uid}</TableCell>
-                <TableCell className="max-w-[220px] truncate">{u.email ?? '—'}</TableCell>
-                {/* 全号。解不开时显示原因，不静默退化成 '—'——那会把"密钥配错了"
-                    伪装成"这些人都没绑手机"。 */}
-                <TableCell className="num">
-                  {u.phone ?? (u.phone_error ? (
-                    <span className="text-[13px] text-danger-ink">无法解密：{u.phone_error}</span>
-                  ) : (
-                    '—'
-                  ))}
-                </TableCell>
-                <TableCell className="num whitespace-nowrap">{fmtTime(u.created_at)}</TableCell>
-                <TableCell>
-                  <Badge tone={u.auth_status === '已实名' ? 'success' : 'neutral'}>
-                    {u.auth_status}
-                  </Badge>
-                </TableCell>
-                <TableCell className="whitespace-nowrap">
-                  {u.plan ? (
-                    <span>
-                      {PLAN_LABEL[u.plan] ?? u.plan}
-                      <span className="num ml-1 text-[13px] text-ink-2">
-                        至 {fmtTime(u.plan_expires_at)}
-                      </span>
-                    </span>
-                  ) : (
-                    '—'
-                  )}
-                </TableCell>
-                <TableCell className="num">{u.balance.toLocaleString('zh-CN')}</TableCell>
-                <TableCell className="num">{u.case_count}</TableCell>
-                <TableCell>
-                  <Button size="sm" variant="ghost" onClick={() => pick(u)}>
-                    操作
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <AdminUsersTable rows={data?.rows ?? []} onPick={pick} />
         {!loading && (data?.rows.length ?? 0) === 0 && (
           <p className="px-4 py-6 text-[14px] text-ink-2">没有匹配的账号。</p>
         )}
@@ -548,5 +519,78 @@ export function AdminUsersView({ refreshKey = 0 }: { refreshKey?: number } = {})
         onCancel={() => setPending(null)}
       />
     </div>
+  );
+}
+
+/**
+ * 账号表本体。**拆出来是为了能拿固定行渲染它**：上面那个组件的数据在 useEffect 里取，
+ * 而本仓 vitest 跑 node 环境（没有 DOM、effect 不执行），整组件静态渲染出来永远是空表，
+ * 判据够不着"每一行的操作格钉住了没有"。拆开之后那条判据量的是真产物，不是源码字符串。
+ */
+export function AdminUsersTable({
+  rows,
+  onPick,
+}: {
+  rows: AdminUser[];
+  onPick: (u: AdminUser) => void;
+}) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>UID</TableHead>
+          <TableHead>邮箱</TableHead>
+          <TableHead>手机</TableHead>
+          <TableHead>注册时间</TableHead>
+          <TableHead>实名</TableHead>
+          <TableHead>会员</TableHead>
+          <TableHead>公道值</TableHead>
+          <TableHead>案件</TableHead>
+          <TableHead className={ACTION_COL}>操作</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((u) => (
+          <TableRow key={u.uid}>
+            <TableCell className="num">{u.uid}</TableCell>
+            <TableCell className="max-w-[220px] truncate">{u.email ?? '—'}</TableCell>
+            {/* 全号。解不开时显示原因，不静默退化成 '—'——那会把"密钥配错了"
+                伪装成"这些人都没绑手机"。 */}
+            <TableCell className="num">
+              {u.phone ?? (u.phone_error ? (
+                <span className="text-[13px] text-danger-ink">无法解密：{u.phone_error}</span>
+              ) : (
+                '—'
+              ))}
+            </TableCell>
+            <TableCell className="num whitespace-nowrap">{fmtTime(u.created_at)}</TableCell>
+            <TableCell>
+              <Badge tone={u.auth_status === '已实名' ? 'success' : 'neutral'}>
+                {u.auth_status}
+              </Badge>
+            </TableCell>
+            <TableCell className="whitespace-nowrap">
+              {u.plan ? (
+                <span>
+                  {PLAN_LABEL[u.plan] ?? u.plan}
+                  <span className="num ml-1 text-[13px] text-ink-2">
+                    至 {fmtTime(u.plan_expires_at)}
+                  </span>
+                </span>
+              ) : (
+                '—'
+              )}
+            </TableCell>
+            <TableCell className="num">{u.balance.toLocaleString('zh-CN')}</TableCell>
+            <TableCell className="num">{u.case_count}</TableCell>
+            <TableCell className={ACTION_COL}>
+              <Button size="sm" variant="ghost" onClick={() => onPick(u)}>
+                操作
+              </Button>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

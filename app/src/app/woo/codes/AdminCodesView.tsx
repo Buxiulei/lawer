@@ -6,6 +6,7 @@ import { ApiError, apiFetch, humanError } from '@/app/_ui/api';
 import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
 import { Input } from '@/components/shadcn/input';
+import { WooNav } from '../_components/WooNav';
 
 interface CodeRow {
   id: number;
@@ -89,6 +90,9 @@ export function AdminCodesView() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
+      {/* 走到这里就是接口已放行（上面的 gone 分支已 notFound()），导航条挂在这儿
+          天然不会被非白名单的人看见。 */}
+      <WooNav />
       <h1 className="text-[20px] font-semibold text-ink">兑换码</h1>
 
       <Card className="mt-4 p-4">
