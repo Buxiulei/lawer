@@ -90,6 +90,20 @@ describe('UploadBar：未实名收起入口 + 提示卡', () => {
   });
 
   /**
+   * 已实名 DOM 与前移实名闸之前逐节点一致：顶层就是那张 grid，没有多包一层外层 div。
+   * 变异臂：把返回从 fragment 改回常驻 `<div className="flex flex-col gap-2">` 外层——
+   * 已实名用户就凭空多一层节点，本条翻红（顶层成了 flex 那个 div、且出现 flex-col）。
+   */
+  it('已实名：顶层元素就是 grid grid-cols-3，无外层 flex-col 包裹', () => {
+    const html = renderToStaticMarkup(<UploadBar onPick={noop} realname={OPEN} />);
+    // 顶层直接是 grid：前面没有任何外层节点
+    expect(html.startsWith('<div class="grid grid-cols-3 gap-2"')).toBe(true);
+    // 不含外层 `flex flex-col` 包裹——注意 PickButton 自身类名是 `flex min-h-[72px] flex-col`，
+    // 相邻的 `flex flex-col` 只会来自被删掉的那层外层 div，拿它当签名不会误伤按钮。
+    expect(html).not.toContain('flex flex-col');
+  });
+
+  /**
    * 变异臂（UI 条件改恒 false）：把 UploadBar 里 `{blocked && <RealnamePrompt.../>}`
    * 或 `const blocked = realname.blocked` 改成恒 false——上面「未认证」「待审」两条的
    * 提示卡与 disabled 断言一起翻红。
