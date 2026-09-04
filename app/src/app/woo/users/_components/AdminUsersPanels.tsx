@@ -15,17 +15,24 @@
 // 各自的 404 处置都留在原地，一块不通照旧不拖垮另一块。
 import { useState } from 'react';
 
+import { WooNav } from '../../_components/WooNav';
 import { AdminUsersView } from './AdminUsersView';
 import { RealnamePendingQueue } from './RealnamePendingQueue';
 
 export function AdminUsersPanels() {
   // 单调递增的一个数，不是布尔：连审两条时布尔翻不回去，第二次就不会触发重取。
   const [reviewed, setReviewed] = useState(0);
+  // 后台导航条只在接口放行之后出现。三态而不是布尔：null=还没问出结果（取数期间
+  // 也不出条），true=放行，false=404。非白名单的人停在 false，看到的仍然只有那一张
+  // 「这个地址上没有内容。」——两个页签的字会把"这里有个后台"说出去。
+  // setGranted 是 useState 给的稳定引用，直接传下去（传内联箭头会让下面那层无限重取）。
+  const [granted, setGranted] = useState<boolean | null>(null);
 
   return (
     <>
+      {granted === true && <WooNav />}
       <RealnamePendingQueue onReviewed={() => setReviewed((n) => n + 1)} />
-      <AdminUsersView refreshKey={reviewed} />
+      <AdminUsersView refreshKey={reviewed} onAccess={setGranted} />
     </>
   );
 }
