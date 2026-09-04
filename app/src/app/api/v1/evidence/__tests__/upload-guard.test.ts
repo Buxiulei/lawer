@@ -39,10 +39,13 @@ beforeEach(() => {
   for (const table of ['evidence', 'files', 'cases', 'users']) {
     db.prepare(`DELETE FROM ${table}`).run();
   }
+  // 体积/并发闸这几组要的是「文件真的走到读请求体那一步」，所以 userA 必须已实名——
+  // 上传前置的实名闸（见 route.ts）会把未实名的人在读请求体之前就挡掉。实名闸本身
+  // 由下面「实名闸」那一组单独钉。
   userA = Number(
     db
       .prepare(
-        "INSERT INTO users (phone_hash, auth_status, created_at) VALUES (?, '未认证', '2026-08-19T00:00:00.000Z')",
+        "INSERT INTO users (phone_hash, auth_status, created_at) VALUES (?, '已实名', '2026-08-19T00:00:00.000Z')",
       )
       .run(`a-${crypto.randomUUID()}`).lastInsertRowid,
   );
@@ -187,5 +190,80 @@ describe('并发闸', () => {
     extra!();
     for (const release of held) release?.();
     expect(activeUploadCount()).toBe(0);
+  });
+});
+
+/**
+ * 实名闸（前移到上传）。判据盯的不只是「返回了 403」，而是**未实名时一条记录、一个文件都不落**——
+ * 闸若被挪到落库之后，返回码可能还对，证据却已经进了库/进了盘。
+ *
+ * 变异臂：把 route.ts 里的 requireRealname 那三行删掉，「未认证 ⇒ 403」这条会翻红
+ *（未实名会一路走到 201 落库），这正是这道闸唯一的存在理由。
+ */
+describe('实名闸', () => {
+  /** 建一个指定实名态的用户 + 他名下一个案子，返回可直接上传的请求 */
+  function makeUserUpload(authStatus: '未认证' | '待审' | '已实名'): Request {
+    const uid = Number(
+      db
+        .prepare(
+          "INSERT INTO users (phone_hash, auth_status, created_at) VALUES (?, ?, '2026-08-19T00:00:00.000Z')",
+        )
+        .run(`r-${crypto.randomUUID()}`, authStatus).lastInsertRowid,
+    );
+    const cid = Number(
+      db
+        .prepare(
+          "INSERT INTO cases (user_id, title, stage, created_at) VALUES (?, '证据案子', '风声', '2026-08-19T00:00:00.000Z')",
+        )
+        .run(uid).lastInsertRowid,
+    );
+    const form = new FormData();
+    form.set('file', new File([new Uint8Array(16)], '解除通知.jpg', { type: 'image/jpeg' }));
+    form.set('case_id', String(cid));
+    return new Request('http://localhost/api/v1/evidence', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${signToken(uid)}` },
+      body: form,
+    });
+  }
+
+  /** 递归数一个目录下的文件数，验证「零落盘」——落盘可能落进按哈希分的子目录 */
+  function fileCount(dir: string): number {
+    let n = 0;
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      n += ent.isDirectory() ? fileCount(path.join(dir, ent.name)) : 1;
+    }
+    return n;
+  }
+
+  test('未认证上传：403 REALNAME_REQUIRED，且 evidence 零新增、文件零落盘', async () => {
+    const filesBefore = fileCount(process.env.FILES_DIR!);
+    const res = await post(makeUserUpload('未认证'));
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error_code).toBe('REALNAME_REQUIRED');
+    // 自述三段式：怎么了 / 为什么 / 怎么办
+    expect(body.message).toContain('实名认证');
+    expect(body.message).toContain('无法保存');
+    expect(body.message).toContain('设置');
+
+    expect(db.prepare('SELECT COUNT(*) AS n FROM evidence').get()).toEqual({ n: 0 });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM files').get()).toEqual({ n: 0 });
+    expect(fileCount(process.env.FILES_DIR!)).toBe(filesBefore);
+  });
+
+  test('待审与未认证同等对待：同样 403 REALNAME_REQUIRED，零落库', async () => {
+    const res = await post(makeUserUpload('待审'));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error_code).toBe('REALNAME_REQUIRED');
+    expect(db.prepare('SELECT COUNT(*) AS n FROM evidence').get()).toEqual({ n: 0 });
+  });
+
+  test('已实名上传：照常 201 落库', async () => {
+    const res = await post(makeUserUpload('已实名'));
+    expect(res.status).toBe(201);
+    expect((await res.json()).evidence.name).toBe('解除通知.jpg');
+    expect(db.prepare('SELECT COUNT(*) AS n FROM evidence').get()).toEqual({ n: 1 });
   });
 });

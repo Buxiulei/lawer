@@ -4,7 +4,7 @@
 // req.formData() 把整个请求体读进内存这一步，进不了 lib 就晚了。
 import { NextResponse } from 'next/server';
 
-import { domainFailure, requireIdentity } from '@/lib/auth/guard';
+import { domainFailure, requireIdentity, requireRealname } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
 import * as evidence from '@/lib/evidence';
 import {
@@ -55,6 +55,17 @@ function uploadBusy(): NextResponse {
 export async function POST(req: Request) {
   const guard = requireIdentity(getDb(), req, 'case:write');
   if (!guard.ok) return guard.response;
+
+  // 【实名闸】前移到上传：未实名的证据不落库、不落盘。放在体积/并发闸之前——这道判定
+  // 只查一行 users，不读请求体，理应最先拒；也让未实名的人拿到「去实名」这条自述文案，
+  // 而不是先撞上体积或并发的错。判定逻辑只在 guard.requireRealname 一处，这里只调它。
+  const realname = requireRealname(
+    getDb(),
+    guard.identity,
+    '上传证据前需先完成实名认证。证据要与本人身份绑定：未实名的证据无法保存，日后也无法用于出证。' +
+      '请先到「设置 → 实名认证」完成认证后再上传。',
+  );
+  if (!realname.ok) return realname.response;
 
   // 【闸一】只看 Content-Length，在 req.formData() 之前。formData() 会把整个请求体读进
   // 内存，读完再判大小已经晚了——内存已经占掉了，判断只能决定要不要再浪费后面几份副本。

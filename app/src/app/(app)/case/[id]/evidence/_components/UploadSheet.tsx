@@ -10,6 +10,7 @@ import {
 import { useDiscreet } from '@/app/_ui/discreet';
 import { formatBytes } from '@/app/_ui/format';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
+import { RealnamePrompt, REALNAME_GATE_OPEN, type RealnameGate } from '@/app/_ui/realname';
 import { AppSheet } from '@/components/shadcn/app-sheet';
 import { Button } from '@/components/shadcn/button';
 import { InputField, TextareaField } from '@/components/shadcn/field';
@@ -30,10 +31,17 @@ export interface PendingUpload {
  */
 export function UploadSheet({
   pending,
+  realname = REALNAME_GATE_OPEN,
   onCancel,
   onConfirm,
 }: {
   pending: PendingUpload | null;
+  /**
+   * 实名闸（防守层）。正常路径下未实名的人根本进不到这张 Sheet——UploadBar 的入口已禁用、
+   * 拖入也在 handleDropped 拦住了。这里再兜一道，只为覆盖「加载态没定下来时抢先选了文件」
+   * 那个窗口：真拦仍在服务端 requireRealname。
+   */
+  realname?: RealnameGate;
   onCancel: () => void;
   onConfirm: (input: {
     category: EvidenceCategory;
@@ -65,6 +73,7 @@ export function UploadSheet({
           </Button>
           <Button
             className="flex-1"
+            disabled={realname.blocked}
             onClick={() => onConfirm({ category, provePurpose, originalMedium })}
           >
             存进{discreet ? NEUTRAL_WORD.evidenceLib : '证据库'}
@@ -74,6 +83,7 @@ export function UploadSheet({
     >
       {pending && (
         <div className="flex flex-col gap-5">
+          {realname.blocked && <RealnamePrompt gate={realname} />}
           <div data-veil="" className="rounded-[10px] bg-surface-2 px-3.5 py-3">
             <p className="truncate fs-m font-medium text-ink">{pending.name}</p>
             <p className="num mt-0.5 fs-xs text-ink-2">
