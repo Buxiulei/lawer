@@ -366,6 +366,9 @@ export function useChatStream({
 
       const consume = async (transport: ChatTransport) => {
         for await (const frame of transport.send(req)) {
+          // 已被看门狗/停止接管（abort 过）：迟到的缓冲帧别再拿去改状态，
+          // 否则一帧 delta 就会把已经 reset/reconnecting 的 phase 又拽回 streaming。
+          if (controller.signal.aborted) break;
           // 任意一帧（含 ping）都算「连接还活着」：给看门狗续命
           watchdog.current?.touch();
           dispatch({ type: 'frame', frame });
