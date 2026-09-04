@@ -13,7 +13,13 @@ import { formatBytes, formatDate } from '@/app/_ui/format';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { ApiError, humanError } from '@/app/_ui/api';
 import { readToken, useSignedIn } from '@/app/_ui/auth';
-import { useRealnameGate } from '@/app/_ui/realname';
+import {
+  isRealnameVerified,
+  useRealnameGate,
+  useRealnameStatus,
+  REALNAME_PENDING,
+  type RealnameGate,
+} from '@/app/_ui/realname';
 import { Alert, AlertDescription, AlertTitle } from '@/components/shadcn/alert';
 import { Badge } from '@/components/shadcn/badge';
 import { Button } from '@/components/shadcn/button';
@@ -160,6 +166,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
   const toast = useToast();
   const signedIn = useSignedIn();
   const { guard, dialog: realnameDialog } = useRealnameGate();
+  const { status: rnStatus, loading: rnLoading } = useRealnameStatus();
   const { discreet } = useDiscreet();
   // 空状态标题与表格说明都不进糊层（一个是唯一的指路，一个是读屏用），低调下换中性词
   const libWord = discreet ? NEUTRAL_WORD.evidenceLib : '证据库';
@@ -167,6 +174,16 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
   // 只有 demo 这个假案件走演示数据。真实案件登录失效时给「重新登录」，
   // 绝不回落到演示证据——在真案件下摆一堆别人的材料，比空列表危险得多。
   const isDemo = caseId === 'demo';
+
+  // 实名闸（前移到上传，spec D1）：未实名的证据不落库、不落盘。真拦在服务端 requireRealname，
+  // 这里只提前把入口收起来、给一张「去实名」的提示卡。
+  //   · demo 走本地 mockUpload、不落真库，不卡；
+  //   · 实名态还没取回来（rnLoading）时按放行处理——已实名用户零闪动，抢跑的那一下服务端兜底。
+  const rnGate: RealnameGate = {
+    blocked: !isDemo && !rnLoading && !isRealnameVerified(rnStatus),
+    pending: !isDemo && !rnLoading && rnStatus === REALNAME_PENDING,
+    discreet,
+  };
 
   const [items, setItems] = useState<EvidenceView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -290,6 +307,15 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
         toast('登录后才能往这个案件里存材料', 'amber', '需要先登录');
         return;
       }
+      // 未实名：拖进来的一律不发请求、不开归类表——与 UploadBar 禁用入口同一道闸。
+      if (rnGate.blocked) {
+        toast(
+          discreet ? '未实名的资料无法保存，先完成实名认证' : '未实名的证据无法保存，先完成实名认证',
+          'amber',
+          '需要先实名',
+        );
+        return;
+      }
       if (files.length === 1) {
         const f = files[0];
         setPending({ source: 'file', file: f, name: f.name, sizeBytes: f.size });
@@ -297,7 +323,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
       }
       setDropped(files);
     },
-    [needSignIn, toast],
+    [needSignIn, rnGate.blocked, discreet, toast],
   );
 
   const { dragging, handlers } = useFileDrop(handleDropped);
@@ -382,7 +408,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
 
       {/* 列表没读出来时也把上传入口收起来：案件根本不存在的话，上传必然失败；
           就算只是这次没读出来，传进去的东西也会落在一个用户看不见的列表里。 */}
-      {!needSignIn && !loadError && <UploadBar onPick={handlePick} />}
+      {!needSignIn && !loadError && <UploadBar onPick={handlePick} realname={rnGate} />}
 
       {job && (
         <UploadProgress
@@ -495,6 +521,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
 
       <UploadSheet
         pending={pending}
+        realname={rnGate}
         onCancel={() => setPending(null)}
         onConfirm={handleUpload}
       />
