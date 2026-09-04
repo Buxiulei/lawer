@@ -147,14 +147,49 @@ export function insertTimelineEvent(
     kind: string;
     title: string;
     detail: string | null;
+    /** 调用方自带的幂等键；null = 不带（首诊批量写、站内 agent 都不带） */
+    clientRef?: string | null;
   },
 ): number {
   const info = db
     .prepare(
-      'INSERT INTO timeline_events (case_id, happened_at, kind, title, detail) VALUES (?, datetime(?), ?, ?, ?)',
+      'INSERT INTO timeline_events (case_id, happened_at, kind, title, detail, client_ref) VALUES (?, datetime(?), ?, ?, ?, ?)',
     )
-    .run(params.caseId, params.happenedAt, params.kind, params.title, params.detail);
+    .run(params.caseId, params.happenedAt, params.kind, params.title, params.detail, params.clientRef ?? null);
   return Number(info.lastInsertRowid);
+}
+
+/** 按 (case_id, client_ref) 找既有事件；重放同 ref 时回它、不再插第二条。 */
+export function findTimelineByClientRef(
+  db: Database,
+  caseId: number,
+  clientRef: string,
+): TimelineEventRow | undefined {
+  return db
+    .prepare(
+      'SELECT id, case_id, happened_at, kind, title, detail, milestone, created_at FROM timeline_events WHERE case_id = ? AND client_ref = ? LIMIT 1',
+    )
+    .get(caseId, clientRef) as TimelineEventRow | undefined;
+}
+
+/**
+ * 同案 + 同一自然日（date(happened_at)）+ 同 kind 的事件，供近重复守卫在应用层
+ * 按标题规范化键比对。**日期在 SQL 里比、标题在 JS 里比**：标题规范化要去中英文标点，
+ * SQLite 没有等价的规范化函数，硬用 SQL 会写出与 lib/db/dedup 不一致的第二份判等。
+ */
+export function listTimelineSameDayKind(
+  db: Database,
+  caseId: number,
+  happenedAt: string,
+  kind: string,
+): TimelineEventRow[] {
+  return db
+    .prepare(
+      `SELECT id, case_id, happened_at, kind, title, detail, milestone, created_at
+         FROM timeline_events
+        WHERE case_id = ? AND kind = ? AND date(happened_at) = date(?)`,
+    )
+    .all(caseId, kind, happenedAt) as TimelineEventRow[];
 }
 
 export function listTimelineEvents(db: Database, caseId: number, limit: number): TimelineEventRow[] {

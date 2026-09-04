@@ -951,7 +951,7 @@ const HANDLERS: Record<string, Handler> = {
 
     const priority = Number.isInteger(Number(args.priority)) ? Number(args.priority) : 0;
     const detail = `怎么做：${how}\n为什么：${why}`;
-    const id = store.insertActionItem(ctx.db, {
+    const res = store.insertActionItem(ctx.db, {
       caseId: ctx.caseId,
       title: what,
       detail,
@@ -959,12 +959,15 @@ const HANDLERS: Record<string, Handler> = {
       priority,
       sourceMessageId: ctx.sourceMessageId,
     });
+    // 同题待办已存在（多为本轮重试重放）：回既有卡，不重复计数、不再 emit 一张。
+    // 计数只算真正新建的卡——否则重放会把本轮上限（MAX_ACTION_CARDS）白白吃掉。
+    if (!res.created) return ok({ id: res.id, deduped: true });
     ctx.state.actionCards += 1;
     ctx.emit({
       event: 'action',
-      data: { id, title: what, detail, due_at: dueAt, priority, index: ctx.state.actionCards },
+      data: { id: res.id, title: what, detail, due_at: dueAt, priority, index: ctx.state.actionCards },
     });
-    return ok({ id, index: ctx.state.actionCards, remaining: MAX_ACTION_CARDS - ctx.state.actionCards });
+    return ok({ id: res.id, index: ctx.state.actionCards, remaining: MAX_ACTION_CARDS - ctx.state.actionCards });
   },
 
   emotion_log(args, ctx) {

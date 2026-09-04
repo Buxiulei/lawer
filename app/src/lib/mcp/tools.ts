@@ -58,6 +58,21 @@ function num(value: unknown): number {
   return typeof value === 'number' ? value : Number.NaN;
 }
 
+/**
+ * 元 → 分。对着人给的是「元」，落库口径全仓是「分」（*_fen）。
+ * 非数一律回 NaN，交给领域层的 INVALID_MONTHLY_WAGE 报字段级错，不在这里静默兜底成某个数。
+ * 有些客户端把入参一律序列化成字符串，故数字串也认。
+ */
+function yuanToFen(value: unknown): number {
+  const yuan =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim()
+        ? Number(value)
+        : Number.NaN;
+  return Number.isFinite(yuan) ? Math.round(yuan * 100) : Number.NaN;
+}
+
 export const TOOLS: ToolDefinition[] = [
   {
     name: 'case_get',
@@ -87,7 +102,9 @@ export const TOOLS: ToolDefinition[] = [
     name: 'case_update',
     title: '更新案件档案',
     description:
-      '更新案件的阶段 stage、目标 goal 或底线 bottom_line，三者至少传一个。stage 必须是法定枚举值之一。',
+      '更新案件档案：阶段 stage、目标 goal、底线 bottom_line，以及用工基本盘四项——' +
+      '入职时间 employed_from（YYYY-MM-DD）、月工资 monthly_wage_yuan（单位元）、岗位 position、' +
+      '合同签署次数 contract_count。**至少传一个**，用于零散补齐，不必重走首诊。stage 必须是法定枚举值之一。',
     scope: 'case:write',
     inputSchema: {
       type: 'object',
@@ -96,6 +113,10 @@ export const TOOLS: ToolDefinition[] = [
         stage: { type: 'string', enum: [...cases.CASE_STAGES], description: '案件所处阶段' },
         goal: { type: 'string', description: '用户自述的诉求目标' },
         bottom_line: { type: 'string', description: '用户自述的底线' },
+        employed_from: { type: 'string', description: '入职时间，YYYY-MM-DD，不能晚于今天；工龄年限的起点' },
+        monthly_wage_yuan: { type: 'number', description: '月工资，单位元（会换算成分落库）；所有赔偿金额的基数' },
+        position: { type: 'string', description: '岗位' },
+        contract_count: { type: 'string', description: '合同签署次数，用户自述原样记录，如「只签过一次」' },
       },
       required: ['case_id'],
     },
@@ -106,13 +127,19 @@ export const TOOLS: ToolDefinition[] = [
         stage: args.stage,
         goal: args.goal,
         bottomLine: args.bottom_line,
+        employedFrom: args.employed_from,
+        monthlyWageFen: args.monthly_wage_yuan === undefined ? undefined : yuanToFen(args.monthly_wage_yuan),
+        position: args.position,
+        contractCount: args.contract_count,
       }),
   },
   {
     name: 'timeline_add',
     title: '追加时间线事件',
     description:
-      '给案件时间线追加一条事件。时间线只追加不修改，记错了就再补一条更正事件。',
+      '给案件时间线追加一条事件。时间线只追加不修改，记错了就再补一条更正事件。' +
+      '写入自带幂等：传相同 client_ref 重放只落一条（返回 deduped:true）；' +
+      '不传 client_ref 时，同一天、同类别、标题去掉标点空白后相同的事件也不会重复落库。',
     scope: 'case:write',
     inputSchema: {
       type: 'object',
@@ -122,6 +149,10 @@ export const TOOLS: ToolDefinition[] = [
         kind: { type: 'string', enum: [...cases.TIMELINE_KINDS], description: '事件类别' },
         title: { type: 'string', description: '一句话概括发生了什么' },
         detail: { type: 'string', description: '细节补充，可省略' },
+        client_ref: {
+          type: 'string',
+          description: '幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库',
+        },
       },
       required: ['case_id', 'happened_at', 'kind', 'title'],
     },
@@ -133,6 +164,7 @@ export const TOOLS: ToolDefinition[] = [
         kind: args.kind,
         title: args.title,
         detail: args.detail,
+        clientRef: args.client_ref,
       }),
   },
   {
@@ -342,6 +374,78 @@ export const TOOLS: ToolDefinition[] = [
     },
     // 归属天然由 userId 兜底：查询条件就是本人 id，列不出别人的案件（lib/cases 讲了为什么无需 assertOwned）
     run: (db, identity) => cases.listCases(db, { userId: identity.uid }),
+  },
+  // ──────── intake_submit 同样追加在末尾（不插在中间，理由见 case_facts 上方）。────────
+  {
+    name: 'intake_submit',
+    title: '首诊建档',
+    description:
+      '把首诊问下来的内容一次性写进这个案件：阶段、公司名、入职时间、月工资、岗位、合同次数、' +
+      '经过（时间线）、诉求、底线。**新用户或用工基本盘还空着时用它一次建档**，问齐了再调，' +
+      '不要让用户回网页填。金额传元（monthly_wage_yuan），服务端换算成分。' +
+      '校验不过会逐字段回原因（如 INVALID_MONTHLY_WAGE），照着补齐再提交即可。',
+    scope: 'case:write',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...caseIdProp,
+        stage: { type: 'string', enum: [...cases.CASE_STAGES], description: '案件所处阶段' },
+        company_name: { type: 'string', description: '公司名称，就是仲裁里的被申请人' },
+        employed_from: { type: 'string', description: '入职时间，YYYY-MM-DD，不能晚于今天' },
+        monthly_wage_yuan: { type: 'number', description: '月工资，单位元（会换算成分落库）' },
+        position: { type: 'string', description: '岗位，可省略' },
+        contract_count: { type: 'string', description: '合同签署次数，用户自述原样记录，可省略' },
+        events: {
+          type: 'array',
+          description: '用户记得的事件，每条含 date（YYYY-MM-DD，可留空）与 text',
+          items: {
+            type: 'object',
+            properties: {
+              date: { type: 'string', description: 'YYYY-MM-DD，记不清就留空' },
+              text: { type: 'string', description: '发生了什么' },
+            },
+            required: ['text'],
+          },
+        },
+        free_text: { type: 'string', description: '用户整段自述的经过，可省略' },
+        company_docs: {
+          type: 'object',
+          description: '公司给过哪些文件（键 terminationNotice / settlementAgreement / otherPaper）',
+          properties: {
+            terminationNotice: { type: 'string', description: '《解除劳动合同通知书》' },
+            settlementAgreement: { type: 'string', description: '《协商解除协议》' },
+            otherPaper: { type: 'string', description: '调岗通知 / 绩效改进（PIP）/ 警告信' },
+          },
+        },
+        company_wording: { type: 'string', description: '公司口头给的说法，可省略' },
+        goals: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '诉求，至少一项',
+        },
+        bottom_line: { type: 'string', description: '用户的底线，可省略' },
+      },
+      required: ['case_id', 'stage', 'company_name', 'employed_from', 'monthly_wage_yuan', 'goals'],
+    },
+    // 归属校验、枚举校验、落库事务全在 cases.submitIntake（与网页 POST /cases/{id}/intake 同一函数）。
+    // 本壳只做元→分换算，其余入参原样透传；校验失败结构（ok:false + errorCode + message）由路由渲染成 isError。
+    run: (db, identity, args) =>
+      cases.submitIntake(db, {
+        caseId: num(args.case_id),
+        userId: identity.uid,
+        stage: args.stage,
+        companyName: args.company_name,
+        employedFrom: args.employed_from,
+        monthlyWageFen: yuanToFen(args.monthly_wage_yuan),
+        position: args.position,
+        contractCount: args.contract_count,
+        events: args.events,
+        freeText: args.free_text,
+        companyDocs: (args.company_docs ?? {}) as Record<string, unknown>,
+        companyWording: args.company_wording,
+        goals: args.goals,
+        bottomLine: args.bottom_line,
+      }),
   },
 ];
 

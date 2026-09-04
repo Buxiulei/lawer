@@ -1097,6 +1097,22 @@ export function runMigrations(db: Database.Database): void {
   // 值域由 lib/cases 的 confirmMilestone 把关 + 测试钉死；CHECK 并进 WS1 那笔递延。
   addColumnIfMissing(db, 'timeline_events', 'milestone', 'TEXT');
 
+  // timeline_events.client_ref：调用方自带的幂等键（一次业务操作一个 ref）。
+  //
+  // 【为什么要它】写接口无幂等，agent 重试即双写——生产 case2 实测同一次调岗落成两条
+  // 时间线。调用方给同一个 client_ref 重放时，lib/cases 的 addTimelineEvent 先查后写、
+  // 命中即回既有行，不再插第二条。**唯一性必须落在库上**：只靠应用层"查完再写"两步，
+  // 中间那一瞬没有东西挡得住同 ref 插进来两行。
+  //
+  // 部分索引只盖 client_ref 非空的行：站内 agent 与网页多数写入不带 ref（走的是
+  // 同案+同日+同类+标题规范化的近重复守卫，那条不进库、纯应用层），多行 NULL 不算冲突，
+  // 与 uq_users_google_sub 同形。可空 TEXT，存量行一律 NULL，建索引不撞已有数据、可反复重跑。
+  addColumnIfMissing(db, 'timeline_events', 'client_ref', 'TEXT');
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_timeline_client_ref
+      ON timeline_events (case_id, client_ref) WHERE client_ref IS NOT NULL;
+  `);
+
   // cases 的首诊四列：**首诊填的那几个数字要有地方落**。
   //
   // 【为什么非加不可】首诊六步里，入职日期与月工资是 N/2N/N+1 的**计算输入**，

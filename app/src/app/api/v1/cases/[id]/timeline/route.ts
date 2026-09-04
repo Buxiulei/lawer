@@ -34,8 +34,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     kind: body.kind,
     title: body.title,
     detail: body.detail,
+    clientRef: body.client_ref,
   });
   if (!result.ok) return domainFailure(result);
 
-  return NextResponse.json({ ok: true, event: result.event }, { status: 201 });
+  // deduped=true 时这条是既有行（同 client_ref 重放或近重复），没有新插入——回 200；
+  // 真新增回 201。调用方据此知道「这条已经记过了」，不必再向用户复述一遍。
+  return NextResponse.json(
+    { ok: true, event: result.event, deduped: result.deduped },
+    { status: result.deduped ? 200 : 201 },
+  );
 }

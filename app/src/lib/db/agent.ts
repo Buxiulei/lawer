@@ -12,6 +12,8 @@
 // 外部传入的 ISO8601 用 SQLite 的 datetime() 就地归一，应用层不拼时间串。
 import type { Database } from 'better-sqlite3';
 
+import { dedupTitleKey } from './dedup';
+
 export interface ThreadRow {
   id: number;
   case_id: number;
@@ -326,6 +328,17 @@ export function finalizeMessage(
 
 // ========== action_items ==========
 
+/**
+ * 建一张行动卡，**同题待办去重**（先查后写，同 insertDeadline / upsertClaim 的范式）。
+ *
+ * 【为什么去重】写接口无幂等，agent 重试即重放——生产 case2 实测三张卡各写两遍
+ * （action_items 6 行 3 个标题）。去重条件：同案 + 标题规范化相等（lib/db/dedup 的口径，
+ * 与时间线近重复守卫共用一把尺）+ **状态为待办**。命中即回既有卡（created:false），不插第二张。
+ *
+ * 【为什么只在待办态去重】办完一件事之后同名的事又冒出来，是一件**新**的待办
+ * （例如「导出考勤记录」这月做过、下月又要做），该允许再建——把已完成/已放弃的同题卡
+ * 也算进去会让它永远建不了第二张。去重的对象是「还没做的重复卡」，不是「这辈子建过的同名卡」。
+ */
 export function insertActionItem(
   db: Database,
   params: {
@@ -337,8 +350,15 @@ export function insertActionItem(
     priority: number;
     sourceMessageId: number | null;
   },
-): number {
-  return Number(
+): { id: number; created: boolean } {
+  const key = dedupTitleKey(params.title);
+  const pending = db
+    .prepare("SELECT id, title FROM action_items WHERE case_id = ? AND status = '待办'")
+    .all(params.caseId) as { id: number; title: string }[];
+  const hit = pending.find((r) => dedupTitleKey(r.title) === key);
+  if (hit) return { id: hit.id, created: false };
+
+  const id = Number(
     db
       .prepare(
         `INSERT INTO action_items (case_id, title, detail, due_at, priority, source_message_id)
@@ -353,6 +373,7 @@ export function insertActionItem(
         params.sourceMessageId,
       ).lastInsertRowid,
   );
+  return { id, created: true };
 }
 
 // ========== deadlines ==========
