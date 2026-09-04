@@ -6,7 +6,7 @@
 // lib 函数，两条入口的行为必须逐字一致，否则 agent 走 MCP 能干的事和用户在网页上能干的
 // 事就会悄悄分叉。
 //
-// inputSchema 手写 JSON Schema 字面量：工具只有九个、参数都很浅，
+// inputSchema 手写 JSON Schema 字面量：工具只有十个、参数都很浅，
 // 引 zod + zod-to-json-schema 换来的是两个依赖和一层转换，不划算。
 import type { Database } from 'better-sqlite3';
 
@@ -325,6 +325,23 @@ export const TOOLS: ToolDefinition[] = [
           'confidence 为「待核实」的必须如实带上这个状态。检索不到就说查不到，不要编。',
       };
     },
+  },
+  // ──────── case_list 同样追加在末尾（不插在中间，理由见上）。它不隶属任何案件，
+  //          所以像 knowledge_search 一样**不带 case_id**、也不在 CASE_SCOPED 判据里。 ────────
+  {
+    name: 'case_list',
+    title: '列出我的案件',
+    description:
+      '列出当前 api key 所属用户自己的全部案件（case_id、抬头 title、阶段 stage、建档时间），新的在前。' +
+      '**连上后先调它认领案件**：只有一个案件（绝大多数人）就直接用它的 case_id，不要开口问用户要编号；' +
+      '有多个就把抬头列出来让用户挑；一个都没有就请用户去网页端建档（首诊）。无需任何入参。',
+    scope: 'case:read',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+    // 归属天然由 userId 兜底：查询条件就是本人 id，列不出别人的案件（lib/cases 讲了为什么无需 assertOwned）
+    run: (db, identity) => cases.listCases(db, { userId: identity.uid }),
   },
 ];
 

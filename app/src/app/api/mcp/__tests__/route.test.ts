@@ -25,6 +25,7 @@ let keyAReadOnly: string;
 let keyB: string;
 let caseA: number;
 let ownerA: number;
+let ownerB: number;
 
 function rpc(body: unknown, key?: string, extraHeaders: Record<string, string> = {}): Request {
   const headers: Record<string, string> = { 'content-type': 'application/json', ...extraHeaders };
@@ -77,6 +78,7 @@ beforeEach(() => {
   keyAReadOnly = issueKey(userA, ['case:read']);
   keyB = issueKey(userB, ['case:read', 'case:write']);
   ownerA = userA;
+  ownerB = userB;
 });
 
 describe('鉴权', () => {
@@ -230,12 +232,14 @@ describe('tools/list', () => {
     'case_facts',
   ];
 
-  test('九个工具，每个都有 name / description / inputSchema', async () => {
+  test('十个工具，每个都有 name / description / inputSchema', async () => {
     const res = await POST(rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, keyA));
     const { result } = await res.json();
+    // case_list 与 knowledge_search 一样不隶属案件，追加在末尾（顺序也钉死，见上）
     expect(result.tools.map((t: { name: string }) => t.name)).toEqual([
       ...CASE_SCOPED,
       'knowledge_search',
+      'case_list',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();
@@ -489,6 +493,43 @@ describe('tools/call', () => {
         const pack = searcher.get!(p.id)!;
         expect(p.citation_guide, p.id).toBe(packCitationGuide(pack));
       }
+    });
+  });
+
+  describe('case_list', () => {
+    test('列出本人全部案件（case_id/抬头/阶段/建档时间），无需入参', async () => {
+      const { body } = await call('case_list', {}, keyA);
+      expect(body.result.isError).toBe(false);
+      const { cases } = JSON.parse(body.result.content[0].text) as {
+        cases: { case_id: number; title: string; stage: string; created_at: string }[];
+      };
+      expect(cases).toHaveLength(1);
+      expect(cases[0]).toMatchObject({ case_id: caseA, title: '甲的案子', stage: '风声' });
+      expect(cases[0].created_at).toBeTruthy();
+    });
+
+    /**
+     * 【变异臂】case_list 若忘了按 userId 过滤（列全库案件），这两条红：
+     * 甲只该看见甲的案件、乙只该看见乙的，谁都看不见对方的抬头。
+     */
+    test('【红线】只列本人案件，看不见别人的', async () => {
+      db.prepare(
+        "INSERT INTO cases (user_id, title, stage, created_at) VALUES (?, '乙的案子', '风声', '2026-08-19T00:00:00.000Z')",
+      ).run(ownerB);
+
+      const listOf = async (key: string) => {
+        const { body } = await call('case_list', {}, key);
+        expect(body.result.isError).toBe(false);
+        return JSON.parse(body.result.content[0].text) as {
+          cases: { title: string }[];
+        };
+      };
+
+      const a = await listOf(keyA);
+      expect(a.cases.map((c) => c.title)).toEqual(['甲的案子']);
+
+      const b = await listOf(keyB);
+      expect(b.cases.map((c) => c.title)).toEqual(['乙的案子']);
     });
   });
 });

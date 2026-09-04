@@ -37,6 +37,21 @@ describe('公开取 skill 包', () => {
     expect(text).toContain('case_facts');
   });
 
+  /**
+   * 开场指令：先 `case_list` 认领案件（单案直接用、不开口问用户要编号），再 `case_facts`。
+   * 守两头——新指令在、旧毛病不在。旧毛病是「不知道 case_id 就问用户」，它让绝大多数
+   * 只有一个案件的用户被无端问一句编号（主理人真机测试里 GPT 就这么反问了）。
+   * 【注意】不能笼统地禁「问用户」——「缺哪一项就问用户」讲的是缺字段，那句要保留。
+   */
+  test('总纲先教 case_list 认领案件，不再一上来就问用户要 case_id', async () => {
+    const text = await (await get('SKILL.md')).text();
+    expect(text).toContain('case_list');
+    // 单案直接用它的 id、不必问编号——这条新指令必须在
+    expect(text).toContain('不要再问用户要编号');
+    // 旧毛病：不知道 case_id 就回头问用户要编号——不许再出现
+    expect(text).not.toMatch(/不知道\s*`?case_id`?\s*就问/);
+  });
+
   test('无鉴权也能取——话术里的第一步跑在"还没有密钥"的时候', async () => {
     // 请求里一个 Authorization 头都没有（上面 get() 就没带），照样 200
     expect((await get('SKILL.md')).status).toBe(200);

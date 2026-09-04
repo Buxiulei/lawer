@@ -163,6 +163,31 @@ export function ensureDefaultCase(
 
 // ========== 读 ==========
 
+/**
+ * 用户名下的案件清单，新的在前。给 agent 用来**先认领案件**：绝大多数人只有一个案件，
+ * 列出来直接用它的 case_id，不必开口问用户要编号。
+ *
+ * 【没有归属门，和 GET /api/v1/cases 同理】assertOwned 把的是「这个 case_id 是不是本人的」；
+ * 这条查询的条件本身就是 userId，调用方递不进别人的 id，没有可把的关。复用 GET /cases
+ * 走的同一个 store.listCasesByUser，不另写第二份查询——写两份必然在某天加列时漏一处。
+ *
+ * 字段与 GET /cases 对齐：id（这里改名 case_id，方便 agent 直接拿去喂别的工具）、
+ * title、stage、created_at。**表里没有 updated_at 这一列**，所以给的是建档时间 created_at。
+ */
+export function listCases(
+  db: Database,
+  input: { userId: number },
+): { cases: { case_id: number; title: string; stage: string; created_at: string }[] } {
+  return {
+    cases: store.listCasesByUser(db, input.userId).map((row) => ({
+      case_id: row.id,
+      title: row.title,
+      stage: row.stage,
+      created_at: row.created_at,
+    })),
+  };
+}
+
 /** 案件详情 + 最近若干条时间线（时间线没有独立的读工具，档案本身就该带着它） */
 export function getCase(
   db: Database,
