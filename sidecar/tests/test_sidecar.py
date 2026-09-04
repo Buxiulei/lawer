@@ -357,3 +357,16 @@ def test_ocr_model_is_pinned_to_dated_version():
     m = ocr.DEFAULT_OCR_MODEL
     assert not m.endswith("-latest"), f"OCR 模型不得用浮动别名: {m}"
     assert re.search(r"-\d{4}-\d{2}-\d{2}$", m), f"OCR 模型须锁 dated 版本号: {m}"
+
+
+def test_cjk_font_actually_loads():
+    """中文字体必须真能被 reportlab 加载，否则整份 PDF 的中文渲成黑块。
+    这条先于抽文本判据失败，把「缺哪种字体」说出来，而不是让三条判据一起报 ■。
+    Noto Sans CJK 是 CFF 集合，reportlab 不吃；能用的是 wqy-zenhei / uming 这类 TrueType。"""
+    import gen_evidence_pdf as g
+    got = g.register_font()
+    assert got == "CJK", (
+        "没有可加载的 TrueType 中文字体，模板将退到 Helvetica（中文渲成黑块）。候选清单："
+        + ", ".join(g._candidate_font_paths())
+    )
+
