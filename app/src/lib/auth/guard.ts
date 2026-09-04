@@ -55,26 +55,27 @@ export function requireWebSession(db: Database, req: Request): GuardResult {
 /**
  * 实名闸门（spec D1 / §7 users.auth_status）。
  *
- * 【范围】只卡三个**对外产生法律效力**的出口，别往外扩：
- *   1. 证据固化出证  POST /api/v1/evidence/{id}/attest        —— 已挂
- *   2. 文书导出 PDF  （drafts 导出路由尚未实现）              —— 待该路由落地时挂上
- *   3. 分享链接创建  （share_links 创建路由尚未实现）          —— 同上
- * 聊天、问诊、上传材料一律不卡：目标用户在最慌的时候进来，先让他把事说出来、把材料存下来，
- * 实名留到"要出一份能拿去仲裁的东西"那一刻再要（spec §1 非目标：不给劳动者加门槛）。
+ * 【范围】卡住会**对外产生法律效力**、或必须与本人身份绑定的出口，别往外扩：
+ *   1. 证据上传      POST /api/v1/evidence                    —— 已挂（未实名的证据无法保存、无法出证）
+ *   2. 证据固化出证  POST /api/v1/evidence/{id}/attest        —— 已挂
+ *   3. 文书导出 PDF  （drafts 导出路由尚未实现）              —— 待该路由落地时挂上
+ *   4. 分享链接创建  （share_links 创建路由尚未实现）          —— 同上
+ * 聊天、问诊不卡：目标用户在最慌的时候进来，先让他把事说出来。到了把材料存进证据库这一步
+ * 才要实名——存进来的每一份都要能与本人身份绑定，未实名的证据既无法保存、日后也无法出证。
  *
  * 待审（H5 认证发起了但人没做完）与未认证同等对待——只有落定的「已实名」才放行。
+ *
+ * message 可按调用档位定制（上传档给的是「上传前先实名」那条自述三段式）；
+ * 不传就用出证/对外文书那条通用文案。判定逻辑只有这一份，别在路由里复制第二份。
  */
-export function requireRealname(db: Database, identity: Identity): GateResult {
+export function requireRealname(
+  db: Database,
+  identity: Identity,
+  message = '这一步需要先完成实名认证：出证与对外文书要与本人身份绑定',
+): GateResult {
   const user = users.findUserById(db, identity.uid);
   if (user?.auth_status === AUTH_STATUS.verified) return { ok: true };
-  return {
-    ok: false,
-    response: deny(
-      403,
-      'REALNAME_REQUIRED',
-      '这一步需要先完成实名认证：出证与对外文书要与本人身份绑定',
-    ),
-  };
+  return { ok: false, response: deny(403, 'REALNAME_REQUIRED', message) };
 }
 
 /** 领域层失败（lib/cases 的 DomainFailure）转 HTTP 响应，形状与 auth 面保持一致 */
