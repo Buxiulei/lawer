@@ -253,7 +253,6 @@ def build_howto(p, styles):
 
 def build_tail(p, styles):
     """五、效力与局限声明 + TST 附录。"""
-    signer_entity = p.get("signer_entity")
     story = [
         Paragraph("五、效力与局限声明", styles["h2"]),
         Paragraph(
@@ -271,13 +270,16 @@ def build_tail(p, styles):
             "还原或比对。建议同时保留原始载体（手机、邮箱、聊天记录导出件等）。",
             styles["note"]),
     ]
-    if signer_entity:
-        story.append(Paragraph(
-            f"④ 本 PDF 由 <b>{esc(signer_entity)}</b> 持有的机构实名证书施加 PAdES-B-LT 数字签名。"
-            "该证书由经国家许可的第三方电子认证服务机构签发，依《中华人民共和国电子签名法》具备法律效力。"
-            "若 Adobe 首次打开显示「签署者身份未知」，属信任列表同步延迟，待其后台更新后即显示受信任，"
-            "<b>不代表签名无效或文档被篡改</b>；文档完整性与可信时间戳始终可离线校验、与信任列表无关。",
-            styles["note"]))
+    # ④ 无条件渲染：主体名取必填的 signer_cn。
+    # 这段曾挂在一个可选字段 signer_entity 上，而唯一的调用方从来没传过它，
+    # 于是「Adobe 显示『签署者身份未知』不代表签名无效」这句话四个月没印出来过——
+    # 恰恰是读者第一次打开这份 PDF 时最需要的一段。
+    story.append(Paragraph(
+        f"④ 本 PDF 由 <b>{esc(p['signer_cn'])}</b> 持有的机构实名证书施加 PAdES-B-LT 数字签名。"
+        "该证书由经国家许可的第三方电子认证服务机构签发，依《中华人民共和国电子签名法》具备法律效力。"
+        "若 Adobe 首次打开显示「签署者身份未知」，属信任列表同步延迟，待其后台更新后即显示受信任，"
+        "<b>不代表签名无效或文档被篡改</b>；文档完整性与可信时间戳始终可离线校验、与信任列表无关。",
+        styles["note"]))
 
     tst_b64 = (p.get("timestamp", {}) or {}).get("tst_b64")
     if tst_b64:

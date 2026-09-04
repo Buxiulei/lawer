@@ -218,6 +218,18 @@ def test_evidence_pdf_prints_signer_line():
     assert "出证平台：lawer土八鼠" in text
 
 
+def test_evidence_pdf_prints_signature_law_note():
+    """第五节声明④ 必须印出来，且主体名与抬头是同一个。
+
+    这段告诉读者「Adobe 显示『签署者身份未知』属信任列表延迟、不代表签名无效」——
+    它此前挂在一个调用方从没传过的可选字段上，四个月一次都没渲染出来过。
+    """
+    text = _pdf_text(client.post("/evidence-pdf", json=_payload()).content)
+    assert f"④本PDF由{SIGNER_CN}持有的机构实名证书施加PAdES-B-LT数字签名" in text
+    assert "签署者身份未知" in text
+    assert "不代表签名无效或文档被篡改" in text
+
+
 def test_signer_cn_flows_from_cert_into_pdf(fake_pfx):
     """接起来跑一遍：证书里的 CN → /signer → payload → 印在证上。
 

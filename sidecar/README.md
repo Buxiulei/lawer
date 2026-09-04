@@ -88,7 +88,8 @@ app 侧要给用户看具体原因，按 `error_code` 做白名单投影，不�
 字段对齐 spec §7 的 `attestations` / `evidence` / `files` 三张表：
 
 **必填四项，缺任一项 400，不兜底**：`order_no`、`issuer`、`signer_cn`、`evidence.sha256`。
-> `signer_cn` 是**签章主体**（签名证书的 CN），抬头印成「签章主体：<CN>（出证平台运营主体）」。
+> `signer_cn` 是**签章主体**（签名证书的 CN），抬头印成「签章主体：<CN>（出证平台运营主体）」，
+> 第五节声明④「本 PDF 由 <CN> 持有的机构实名证书施加 PAdES-B-LT 数字签名」也用它。
 > 调用方应先 `GET /signer` 从证书里取，**不许写死**：读者在 Acrobat 里点开签名看到的就是证书 CN，
 > 换证之后写死的那个不会报错，只会开始和签名面板对不上——而发现的人是拿着这份证去仲裁的劳动者。
 > `issuer` 曾经有过一个写死的兜底品牌名（2026-08-27 移除）。它回答的是**「这张证是谁出的」**，
@@ -106,7 +107,6 @@ app 侧要给用户看具体原因，按 `error_code` 做白名单投影，不�
   "signer_cn": "<签名证书的 CN，由 GET /signer 取>",
   "verify_url": "https://<域名>/verify/LAWER-ATT-20260819-000042",
   "status": "stamped",
-  "signer_entity": "（可选）出证主体机构名，用于证书信任说明段",
   "holder": {
     "real_name": "张三",
     "id_card_masked": "1101**********1234",
