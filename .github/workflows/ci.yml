@@ -81,5 +81,6 @@ jobs:
         working-directory: sidecar
       # 存证 PDF 模板走 Noto CJK（gen_evidence_pdf.FONT_PATHS）；runner 无中文字体会退到 Helvetica 渲成黑块，抽文本判据全红
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
+      - run: fc-list | grep -i 'CJK' | head -3 || echo 'no CJK font found'
       - run: python -m pytest tests -q
         working-directory: sidecar

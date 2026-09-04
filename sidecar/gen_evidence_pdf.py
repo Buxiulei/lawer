@@ -46,8 +46,23 @@ FONT_PATHS = [
 DOC_TITLE = "证据存证证明"
 
 
-def register_font() -> str:
+def _candidate_font_paths():
+    """固定清单优先；再在 /usr/share/fonts 下搜同名字体——发行版不同版本会把 Noto CJK
+    放在 opentype/ 或 truetype/ 下不同子目录（CI runner 装 fonts-noto-cjk 后就不在清单里），
+    清单落空就退到 Helvetica、中文整片渲成黑块，而这种失败在本机与生产都复现不出来。"""
+    seen = []
     for fp in FONT_PATHS:
+        if fp not in seen:
+            seen.append(fp)
+    for pattern in ("NotoSansCJK-Regular.ttc", "NotoSansCJK*.ttc", "wqy-zenhei.ttc", "uming.ttc"):
+        for hit in sorted(Path("/usr/share/fonts").rglob(pattern)):
+            if str(hit) not in seen:
+                seen.append(str(hit))
+    return seen
+
+
+def register_font() -> str:
+    for fp in _candidate_font_paths():
         if Path(fp).exists():
             try:
                 pdfmetrics.registerFont(TTFont("CJK", fp, subfontIndex=0))
