@@ -146,6 +146,9 @@ def build_header(p, styles):
         rule(),
         kv(styles["meta"], "存证订单号", p.get("order_no", "")),
         kv(styles["meta"], "出证平台", p["issuer"]),
+        # 签章主体 = 签名证书的 CN。读者在 Acrobat 里点开签名看到的就是这个名字，
+        # 它必须在正文里出现过一次，否则「文件里从没提过的一家公司签了这份证」。
+        kv(styles["meta"], "签章主体", f'{p["signer_cn"]}（出证平台运营主体）'),
         kv(styles["meta"], "出证时间", p.get("generated_at", "")),
         kv(styles["meta"], "验证入口", p.get("verify_url", "")),
         rule(),
@@ -321,7 +324,12 @@ def build_story(p, styles):
 #
 # 【为什么守在这里而不只守在 main.py】`build_evidence_pdf` 是可被直接 import 的公开入口
 #（模块 docstring 里就写着 CLI 用法）。**只守在 HTTP 层，等于让这条保证依赖"调用方走了哪条路"。**
-REQUIRED_TOP_LEVEL = ("order_no", "issuer")
+#
+# 【signer_cn 同理（2026-09-04）】它回答的是"这份 PDF 上的数字签名是谁盖的"，
+# 值只有一个正确来源：签名证书本身（`GET /signer` 从 SIGNING_CERT_PATH 读 CN）。
+# 兜一个写死的公司名，换证之后抬头印的和 Acrobat 签名面板里显示的就是两个名字，
+# **而且没有任何报错**——只有拿这份证去仲裁的人会当场发现对不上。
+REQUIRED_TOP_LEVEL = ("order_no", "issuer", "signer_cn")
 
 
 def build_evidence_pdf(payload: dict, output_path: str) -> str:

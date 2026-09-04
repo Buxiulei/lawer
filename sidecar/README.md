@@ -50,7 +50,10 @@ set -a && . ./.env && set +a  # 加载环境变量
 
 单测全离线（TSA 调用打桩），覆盖：`/tsa` 哈希入参校验与上游失败映射、
 `/evidence-pdf` → `/verify` 回环（未签名件必须判不通过）、哈希不符检测、
-未配 key/证书时的 503 降级。
+未配 key/证书时的 503 降级、`/signer` 读证书主体（用例内现造自签 pfx，**不碰真实证书**）。
+
+`/evidence-pdf` 那条断言会用 `pypdf` 把生成的 PDF 抽成文本再核对字面
+（reportlab 的中文在 PDF 里是 TTF 子集的字形号，不解 ToUnicode 就搜不到）。
 
 ## 端点
 
@@ -59,6 +62,7 @@ set -a && . ./.env && set +a  # 加载环境变量
 | GET | `/health` | — | `{"ok":true}` |
 | POST | `/tsa` | JSON `{sha256, tsa_url?, timeout?}` | `{tst_b64, gen_time, serial, tsa_url}` |
 | POST | `/pades` | multipart `file`(PDF), `reason?`, `location?` | 签名后 PDF（头 `X-Source-Sha256`） |
+| GET | `/signer` | — | `{signer_cn, signer_org, not_before, not_after, serial}` |
 | POST | `/evidence-pdf` | JSON 存证元数据（见下） | 《存证证明》PDF（未签名） |
 | POST | `/verify` | multipart `file`(PDF), `expect_hash?` | 裁决 JSON |
 | POST | `/ocr` | multipart `file`(图片), `prompt?` | `{text, model, request_id}` |
@@ -83,7 +87,10 @@ app 侧要给用户看具体原因，按 `error_code` 做白名单投影，不�
 
 字段对齐 spec §7 的 `attestations` / `evidence` / `files` 三张表：
 
-**必填三项，缺任一项 400，不兜底**：`order_no`、`issuer`、`evidence.sha256`。
+**必填四项，缺任一项 400，不兜底**：`order_no`、`issuer`、`signer_cn`、`evidence.sha256`。
+> `signer_cn` 是**签章主体**（签名证书的 CN），抬头印成「签章主体：<CN>（出证平台运营主体）」。
+> 调用方应先 `GET /signer` 从证书里取，**不许写死**：读者在 Acrobat 里点开签名看到的就是证书 CN，
+> 换证之后写死的那个不会报错，只会开始和签名面板对不上——而发现的人是拿着这份证去仲裁的劳动者。
 > `issuer` 曾经有过一个写死的兜底品牌名（2026-08-27 移除）。它回答的是**「这张证是谁出的」**，
 > 而这份 PDF 用户可能拿去仲裁庭——**兜底不是"少显示一点信息"，是替调用方编了一个答案，
 > 而且编得像真的。** 唯一调用方 `lib/evidence/attest.ts` 无条件传它，
@@ -96,6 +103,7 @@ app 侧要给用户看具体原因，按 `error_code` 做白名单投影，不�
   "order_no": "LAWER-ATT-20260819-000042",
   "generated_at": "2026-08-19T11:45:00+08:00",
   "issuer": "lawer 土八鼠",
+  "signer_cn": "<签名证书的 CN，由 GET /signer 取>",
   "verify_url": "https://<域名>/verify/LAWER-ATT-20260819-000042",
   "status": "stamped",
   "signer_entity": "（可选）出证主体机构名，用于证书信任说明段",

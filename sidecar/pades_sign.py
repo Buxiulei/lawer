@@ -23,6 +23,8 @@ import os
 import sys
 import traceback
 
+from cryptography.hazmat.primitives.serialization import pkcs12
+from cryptography.x509.oid import NameOID
 from pyhanko.sign import signers, timestamps
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign.signers.pdf_signer import PdfSignatureMetadata
@@ -38,6 +40,61 @@ DEFAULT_CONTACT = os.environ.get("SIGN_CONTACT", "")
 
 class SignError(Exception):
     """PAdES 签名失败。"""
+
+
+def _resolve_cert(pfx_path: str = None, password: str = None) -> tuple:
+    """解析证书路径与口令（缺省读 env），缺任一项抛 SignError。
+
+    /pades 与 /signer 共用这一段：两个端点报的「没配好」必须是同一句话，
+    否则运维照 /signer 的提示配完，/pades 还可能用另一套说法再拦一次。
+    """
+    pfx_path = pfx_path or os.environ.get("SIGNING_CERT_PATH")
+    password = password if password is not None else os.environ.get("SIGNING_CERT_PASSWORD")
+    if not pfx_path:
+        raise SignError("未配置签名证书：SIGNING_CERT_PATH 为空")
+    if not os.path.isfile(pfx_path):
+        raise SignError(f"签名证书不存在: {pfx_path}")
+    if password is None:
+        raise SignError("未配置签名证书密码：SIGNING_CERT_PASSWORD 为空")
+    return pfx_path, password
+
+
+def load_signer_info(pfx_path: str = None, password: str = None) -> dict:
+    """读签名证书持有人信息（只读，不签名、不落盘）。
+
+    返回 {signer_cn, signer_org, not_before, not_after, serial}。
+
+    【为什么要有这个函数】《存证证明》抬头要印「签章主体」，而这个名字**必须来自证书本身**：
+    读者在 Acrobat 里点开签名看到的是证书里的 CN，抬头写死一个字符串的话，换证之后
+    两处会变成两个名字，**而且不会有任何报错**——只有拿着这份 PDF 的人会发现对不上。
+    """
+    pfx_path, password = _resolve_cert(pfx_path, password)
+    try:
+        with open(pfx_path, "rb") as f:
+            _, cert, _ = pkcs12.load_key_and_certificates(f.read(), password.encode())
+    except Exception as e:
+        # 不回显异常原文：口令错时 cryptography 的报错里可能带上尝试过的密钥材料
+        raise SignError(f"签名证书无法加载（路径或口令不对）: {type(e).__name__}") from e
+    if cert is None:
+        raise SignError(f"签名证书内没有终端实体证书: {pfx_path}")
+
+    def attr(oid):
+        found = cert.subject.get_attributes_for_oid(oid)
+        return found[0].value if found else None
+
+    cn = attr(NameOID.COMMON_NAME)
+    if not cn:
+        # 在这里报，而不是把 None 交给调用方：让 /evidence-pdf 用「缺少 signer_cn」
+        # 去回答一个「证书里没写主体名」的问题，排障的人会去查错的那一头。
+        raise SignError("签名证书主体里没有 CN（Common Name），无法确定签章主体")
+
+    return {
+        "signer_cn": cn,
+        "signer_org": attr(NameOID.ORGANIZATION_NAME),
+        "not_before": cert.not_valid_before_utc.isoformat(),
+        "not_after": cert.not_valid_after_utc.isoformat(),
+        "serial": format(cert.serial_number, "x"),
+    }
 
 
 def sign_pdf_file(
@@ -56,14 +113,7 @@ def sign_pdf_file(
     pfx_path/password 缺省时从 env SIGNING_CERT_PATH / SIGNING_CERT_PASSWORD 读。
     返回 {source_sha256, ltv_warning}；ltv_warning 非空表示 LTV 嵌入未成功（签名本身仍有效）。
     """
-    pfx_path = pfx_path or os.environ.get("SIGNING_CERT_PATH")
-    password = password if password is not None else os.environ.get("SIGNING_CERT_PASSWORD")
-    if not pfx_path:
-        raise SignError("未配置签名证书：SIGNING_CERT_PATH 为空")
-    if not os.path.isfile(pfx_path):
-        raise SignError(f"签名证书不存在: {pfx_path}")
-    if password is None:
-        raise SignError("未配置签名证书密码：SIGNING_CERT_PASSWORD 为空")
+    pfx_path, password = _resolve_cert(pfx_path, password)
 
     tsa_url = tsa_url or DEFAULT_TSA
     ltv_warning = None
