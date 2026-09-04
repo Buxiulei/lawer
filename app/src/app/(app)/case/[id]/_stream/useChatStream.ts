@@ -75,6 +75,12 @@ export interface SettledTurn {
   servedMismatch: boolean;
   /** 收到 done 帧才算完整；中途停止/断流为 false */
   complete: boolean;
+  /**
+   * 这一轮是用户中途**点了停止**而就地落定的半截回答。
+   * 停止只是「停止接收」——服务端在客户端断开后照常答完、落库、计费（chat 路由的 finally
+   * 才释放占位），所以半截也要留成一条回答，末尾标「已停止接收；服务端会答完，刷新可见完整回答」。
+   */
+  stopped: boolean;
 }
 
 interface State {
@@ -183,6 +189,7 @@ function emptyTurn(): SettledTurn {
     servedModel: null,
     servedMismatch: false,
     complete: false,
+    stopped: false,
   };
 }
 
@@ -241,6 +248,12 @@ export function useChatStream({
 
   /** 本轮那条 assistant 行的库主键（meta 帧带回来）。对账拿它去历史里认领这一轮的回答。 */
   const metaMessageId = useRef<string | null>(null);
+  /**
+   * 本轮正在累积的那条回答（run 边收帧边往里塞）。抬成 ref 是为了 stop() 也够得着它：
+   * 用户点停止时，把这半截就地落定为回答。落定的一刻置回 null——run 正常收尾与 stop 各查一次，
+   * 谁先落定谁置空，另一方看见 null 就跳过，绝不落两条。
+   */
+  const liveTurn = useRef<SettledTurn | null>(null);
   /** 看门狗实例（挂载时建，卸载时拆）。收帧时 touch 它，把静默计时清零。 */
   const watchdog = useRef<Watchdog | null>(null);
   /** 对账「再等一窗」的定时器。 */
@@ -361,7 +374,9 @@ export function useChatStream({
       watchdog.current?.touch();
       dispatch({ type: 'start' });
 
+      // turn 与 liveTurn.current 是同一个对象：往 turn 里累积就等于 stop() 看得见的那份半截
       const turn = emptyTurn();
+      liveTurn.current = turn;
       const req = { caseId, message, signal: controller.signal, retryOf };
 
       const consume = async (transport: ChatTransport) => {
@@ -445,8 +460,11 @@ export function useChatStream({
       }
 
       if (!ok) return; // 错误卡留在流里，等用户点重试
-      if (turn.text.trim() || turn.records.length || turn.actions.length) {
-        settledRef.current(turn);
+      // stop() 可能已抢先把这半截落定并置空 liveTurn；那时这里 done 为 null，不再落第二条
+      const done = liveTurn.current;
+      liveTurn.current = null;
+      if (done && (done.text.trim() || done.records.length || done.actions.length)) {
+        settledRef.current(done);
       }
       dispatch({ type: 'reset' });
     },
@@ -469,15 +487,26 @@ export function useChatStream({
     if (lastMessage.current) void run(lastMessage.current);
   }, [run]);
   /**
-   * 停止这一轮。**不只是 abort**：单 abort 会让收帧循环走进「已中止」分支后原地返回，
-   * phase 停在 streaming——Composer 于是永远锁在停止键上、发送键回不来（2026-09-04 症状之一）。
-   * 所以停止要连对账一起收掉、并 reset 回 idle，把输入框交还给用户。
+   * 停止这一轮。**停止 = 停止接收，不是取消这一轮**：服务端在客户端断开后照常答完、落库、
+   * 计费（chat 路由的 finally 才释放占位），所以已经收到的半截要**就地落定成回答**、留在档案里，
+   * 而不是丢掉——丢掉等于「花了钱、答案也生成了，屏幕上却什么都没留下」。
+   *
+   * 于是 stop = abort（停止接收）+ 把半截落定（本地 settle，标 stopped，不发 STALLED、不对账）
+   * + 收掉对账 + reset 解锁输入框。半截为空（还没开口就停）就只解锁，不落一条空回答。
+   * 单 abort 会让收帧循环走进「已中止」分支后原地返回、phase 停死在 streaming，输入框再也回不来
+   * （2026-09-04 症状之一），所以 reset 这一步不能省。
    */
   const stop = useCallback(() => {
+    // 先取走半截并置空：run 正常收尾那边会看见 null 而不再落第二条
+    const partial = liveTurn.current;
+    liveTurn.current = null;
     abort.current?.abort();
     reconciling.current = false;
     reconcileAttempt.current = 0;
     clearReconcileTimer();
+    if (partial && (partial.text.trim() || partial.records.length || partial.actions.length)) {
+      settledRef.current({ ...partial, stopped: true });
+    }
     dispatch({ type: 'reset' });
   }, []);
 

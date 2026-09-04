@@ -180,6 +180,8 @@ export function Workbench({ caseId }: { caseId: string }) {
           notices: turn.notices,
           drafts: turn.drafts,
           degraded: turn.meta?.degraded,
+          // 用户中途点停止而就地落定的半截：末尾要标「已停止接收，服务端会答完」
+          stopped: turn.stopped,
         },
       ]);
       if (items.length) setActions((prev) => [...prev, ...items]);
