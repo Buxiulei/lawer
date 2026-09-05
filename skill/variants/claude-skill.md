@@ -4,82 +4,245 @@ description: 通过 MCP 连接「土八鼠」的案件档案库，读写案件�
 ---
 
 <!--
-  这是通用《接入说明》（../接入说明.md）的 Claude skill 变体：内容同源，只是套上
-  Claude skill 的 frontmatter 与目录约定。接入面本身与客户端无关（MCP + REST 两个标准），
-  别的客户端不需要这个文件。
-  改动请先改 ../接入说明.md，再把变化同步过来——那份是正本。
+  ⚠️ 生成文件，勿手改。由 scripts/gen-agent-docs.ts 从 ../接入说明.md 生成。
+  要改内容请改那份正本，再到 app/ 下跑 `npm run gen:docs`；直接改这里，下次生成会被覆盖。
+  接入面本身与客户端无关（MCP + REST 两个标准），别的客户端不需要这个文件。
 -->
 
 # 裁员应对档案
+
+这份说明给**任何** AI 助手看：Claude、Codex、豆包、Trae、Cursor、自己写的 agent 都一样。
+本服务只依赖两个标准——MCP（Streamable HTTP）与普通 HTTP REST，没有任何客户端专属要求。
 
 ## 这是什么
 
 「土八鼠」是一个陪劳动者走完劳动仲裁全程的平台。用户在上面有一份**案件档案**：
 案件走到哪一步、发生过什么事、下一步该做什么、哪些法定期限在逼近、手上有哪些证据。
 
-这个 skill 让你直连那份档案。用户跟你说的事情可以直接记进去，你给的建议也能落成行动卡，
-下次换台设备、换个对话，档案还在。
+接进来之后，用户跟你说的事情可以直接记进那份档案，你给的建议也能落成行动卡。
+换台设备、换个助手、换个对话，档案都还在。
 
 档案是长期记忆，也是仲裁时的陈述骨架——**时间线只追加不修改**，记错了补一条更正事件，
 不要试图改写历史。
 
-## 工具清单
+## 凭据
 
-| 工具 | 用途 | 输入要点 |
-|---|---|---|
-| `case_list` | 列出你名下的全部案件（case_id、抬头、阶段），新的在前。**连上先调它认领案件**：只有一个就直接用它的 case_id、不必问编号；多个让用户挑；一个都没有或基本盘空着就用 `intake_submit` 建档，别支用户去网页填 | 无 |
-| `intake_submit` | 首诊建档：一次性写入用工基本盘 + 时间线 + 诉求。新用户或基本盘还空着时用它，问齐首诊清单再调 | `case_id`、`stage`、`company_name`、`employed_from`、`monthly_wage_yuan`（单位元）、`goals` 必填；校验不过逐字段回原因 |
-| `case_get` | 读案件档案 + 最近的时间线 | `case_id`；`timeline_limit` 默认 50、最多 200 |
-| `case_update` | 改案件阶段 / 诉求目标 / 底线，或零散补齐用工基本盘（入职时间/月薪/岗位/合同次数） | `case_id`；`stage` 必须是法定枚举值；`monthly_wage_yuan` 单位元；至少传一个字段 |
-| `timeline_add` | 追加一条时间线事件。写入幂等：同 `client_ref` 重放或同日同类同标题不重复落库 | `case_id`、`happened_at`（ISO8601）、`kind`（公司动作/我方动作/系统动作/期限）、`title`，`detail`、`client_ref` 可选 |
-| `action_list` | 列出行动卡 | `case_id`；`status` 可过滤（待办/完成/放弃） |
-| `action_complete` | 把行动卡标为完成或放弃 | `case_id`、`action_id`；`status` 默认「完成」 |
-| `deadline_list` | 列出法定期限 | `case_id`；`include_resolved` 默认只列生效中的 |
-| `evidence_list` | 列出已登记的证据条目 | `case_id` |
-| `case_facts` | 读「案件事实卡」全文：当事人、期限、用工基本盘、公司主体、行动卡、诉求、时间线、证据一次给全 | `case_id` |
-| `knowledge_search` | 检索知识库（法条卡/判例卡/计算规则/流程SOP/文书模板/话术卡/情绪指南/数据卡），带可直接照抄的 `citation_guide` 与可信度 | `query`；`limit`、`type` 可选 |
+在网页端「设置 → API keys」创建一把 key。明文当场就能复制走；**忘了也不要紧**——
+密钥是加密留存的，随时可以回设置页再看一次，或者轮换换一把新的（轮换后旧密钥立即失效，
+名称与权限不变）。两种带法都认，用你的客户端支持的那种：
 
-只能读写用户自己的案件。传了别人的 `case_id`，服务端一律回「案件不存在」。
+```
+Authorization: Bearer <你的 api key>
+X-API-Key: <你的 api key>
+```
+
+## 计费
+
+- 在你自己的 agent 上处理的对话与案件分析，本服务不收费：下面这些工具与 REST 端点
+  读写的是档案数据，**服务端一次模型都不调**，扣费自然无从谈起。
+- 网页端（土八鼠站内）的对话仍按轮计公道值——那是我们这边真的替用户调模型。
+- 后台的守望订阅按用量按月计费，下单前一定先报价、用户确认才扣。
+- ⚠️ 例外一：`POST /api/v1/cases/{id}/chat` 是「让土八鼠这边的模型跑一轮」的端点，
+  **调一次扣一轮公道值**。你自己会思考，不要调它；它不在下面的能力清单里。
+- ⚠️ 例外二：`POST /api/v1/company/dossiers/confirm` 是公司档案的**下单确认**端点，
+  **调一次就按报价把钱扣掉**（有会员赠送券的先核销券）。价钱由报价端点
+  `POST /api/v1/company/dossiers/quote` 给出，报价只给数字、不动余额——
+  先把报价原样念给用户、等他明确说买，再调 confirm，**不要替他下单**。
+  这两条同样不在下面的能力清单里。
+
+## 接入方式一：MCP
+
+标准 Streamable HTTP transport，端点是 `<mcp_url>`（具体地址见 `GET /api/v1/agent-setup`
+的 `mcp_url` 字段，或网页端设置页）。
+
+多数客户端的配置文件长这样：
+
+```json
+{
+  "mcpServers": {
+    "lawer": {
+      "type": "http",
+      "url": "<mcp_url>",
+      "headers": { "Authorization": "Bearer <你的 api key>" }
+    }
+  }
+}
+```
+
+字段名各家不一：有的叫 `servers` 而不是 `mcpServers`，有的把 transport 写成 `transport: "http"`
+或 `"streamable-http"`，有的在图形界面里填而不是写文件。以你所用客户端的文档为准——
+本服务这边只要求：HTTP 传输 + 上面那个鉴权头。
+
+握手用标准 `initialize`，支持的协议版本在 `GET /api/manifest` 的 `mcp.protocol_version` 里。
+
+## 接入方式二：REST
+
+客户端不支持 MCP 时走这条，能力完全一样（MCP 工具和 REST 端点调的是同一批服务端函数）。
+
+- 接口基址：`<api_base>`
+- 自描述清单：`GET /api/manifest`，**无需鉴权**，列出全部端点、鉴权方式、权限项与错误形状。
+  不确定某个能力怎么调时先读它，不要猜。
+
+## 能力清单
+
+<!-- 本节与下面的错误码表由能力注册表生成，勿手改；改动请改 app/src/lib/capabilities/ 再跑 `npm run gen:docs`。 -->
+
+**档案与事实**
+
+| 工具 | REST | scope | 读写 | 用途 | 入参要点 |
+|---|---|---|---|---|---|
+| `case_get` | `GET /cases/{id}` | `case:read` | 读 | 读取一个案件的档案（阶段、目标、底线）以及最近的时间线事件。只能读自己的案件。 | `case_id` 案件 id；`timeline_limit`? 带回多少条时间线事件，默认 50，最多 200 |
+| `case_update` | `PATCH /cases/{id}` | `case:write` | 写 | 更新案件档案：阶段 stage、目标 goal、底线 bottom_line，以及用工基本盘四项——入职时间 employed_from（YYYY-MM-DD）、月工资 monthly_wage_yuan（单位元）、岗位 position、合同签署次数 contract_count。**至少传一个**，用于零散补齐，不必重走首诊。stage 必须是法定枚举值之一。 | `case_id` 案件 id；`stage`? 案件所处阶段；`goal`? 用户自述的诉求目标；`bottom_line`? 用户自述的底线；`employed_from`? 入职时间，YYYY-MM-DD，不能晚于今天；工龄年限的起点；`monthly_wage_yuan`? 月工资，单位元（会换算成分落库）；所有赔偿金额的基数；`position`? 岗位；`contract_count`? 合同签署次数，用户自述原样记录，如「只签过一次」 |
+| `case_facts` | — | `case:read` | 读 | 一次拿全这个案子的当前事实：当事人、案件抬头、法定期限、用工基本盘（入职时间/月薪/岗位）、公司主体、行动卡、诉求金额、时间线、证据清单。**回答任何与案情有关的问题之前先调它**。档案里没有的项会明写「未记录」——那是「档案里没有这一项」，不是「不存在」，不要自己脑补一个值。 | `case_id` 案件 id |
+| `case_list` | `GET /cases` | `case:read` | 读 | 列出当前 api key 所属用户自己的全部案件（case_id、抬头 title、阶段 stage、建档时间），新的在前。**连上后先调它认领案件**：只有一个案件（绝大多数人）就直接用它的 case_id，不要开口问用户要编号；有多个就把抬头列出来让用户挑；一个都没有就请用户去网页端建档（首诊）。无需任何入参。 | 无入参 |
+| `intake_submit` | `POST /cases/{id}/intake` | `case:write` | 写 | 把首诊问下来的内容一次性写进这个案件：阶段、公司名、入职时间、月工资、岗位、合同次数、经过（时间线）、诉求、底线。**新用户或用工基本盘还空着时用它一次建档**，问齐了再调，不要让用户回网页填。金额传元（monthly_wage_yuan），服务端换算成分。校验不过会逐字段回原因（如 INVALID_MONTHLY_WAGE），照着补齐再提交即可。 | `case_id` 案件 id；`stage` 案件所处阶段；`company_name` 公司名称，就是仲裁里的被申请人；`employed_from` 入职时间，YYYY-MM-DD，不能晚于今天；`monthly_wage_yuan` 月工资，单位元（会换算成分落库）；`goals` 诉求，至少一项；`position`? 岗位，可省略；`contract_count`? 合同签署次数，用户自述原样记录，可省略；`events`? 用户记得的事件，每条含 date（YYYY-MM-DD，可留空）与 text；`free_text`? 用户整段自述的经过，可省略；`company_docs`? 公司给过哪些文件（键 terminationNotice / settlementAgreement / otherPaper）；`company_wording`? 公司口头给的说法，可省略；`bottom_line`? 用户的底线，可省略 |
+
+**时间线**
+
+| 工具 | REST | scope | 读写 | 用途 | 入参要点 |
+|---|---|---|---|---|---|
+| `timeline_add` | `POST /cases/{id}/timeline` | `case:write` | 写 | 给案件时间线追加一条事件。时间线只追加不修改，记错了就再补一条更正事件。写入自带幂等：传相同 client_ref 重放只落一条（返回 deduped:true）；不传 client_ref 时，同一天、同类别、标题去掉标点空白后相同的事件也不会重复落库。 | `case_id` 案件 id；`happened_at` 事件发生时间，ISO8601 时间串；`kind` 事件类别；`title` 一句话概括发生了什么；`detail`? 细节补充，可省略；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
+| `timeline_list` | `GET /cases/{id}/timeline` | `case:read` | 读 | 按时间倒序读案件时间线，可按发生时间下界 since 与类别 kind 过滤，limit 默认 50、最多 200。返回里带 total（过滤后的真总数）与 next_offset（没有下一页时为 null）——**别把一页当成全部**：case_get 只带最近若干条，早期事件（入职、第一次约谈）要靠翻页才拿得到。 | `case_id` 案件 id；`since`? 只要这个时刻之后发生的事件，ISO8601 时间串；`kind`? 只要这一类事件；`limit`? 本页最多几条，默认 50，最多 200；`offset`? 从第几条开始，默认 0；续页用上一页回的 next_offset |
+| `timeline_milestone` | `POST /cases/{id}/timeline/{eventId}/milestone` | `case:write` | 写 | 给一条已存在的时间线事件盖上里程碑。**必须先拿到用户的明确确认再调**，user_confirmed 传 true 就是在代用户签字：里程碑是只追加、没有撤销语义的事实断言，盖错一次就永久留在案件史里。你只负责提议，落笔的是用户。 | `case_id` 案件 id；`event_id` 要盖章的时间线事件 id（本案内）；`milestone` 达成的里程碑；`user_confirmed` 用户已明确确认这一格达成。没问过用户就不要传 true |
+
+**行动**
+
+| 工具 | REST | scope | 读写 | 用途 | 入参要点 |
+|---|---|---|---|---|---|
+| `action_list` | `GET /cases/{id}/actions` | `case:read` | 读 | 列出案件下的行动项，可按状态过滤（待办 / 完成 / 放弃）。 | `case_id` 案件 id；`status`? 只看某个状态 |
+| `action_complete` | `PATCH /cases/{id}/actions/{actionId}` | `case:write` | 写 | 把一条行动项标记为完成；也可以传 status 标记为放弃。 | `case_id` 案件 id；`action_id` 行动项 id；`status`? 目标状态，默认「完成」 |
+| `action_create` | — | `case:write` | 写 | 给案件加行动卡，一次最多 3 张。超过这个数就不是「现在做什么」，是又一份待办清单——用户看完照样不知道先干哪件。每张必须齐三样：what（做什么）、how（怎么做）、why（为什么），外加 due_at（什么时候之前做完，ISO8601 时刻；「今天下班前」也要换算成具体时刻）。同案下已有同题待办不会重复落库，回 created:false。 | `case_id` 案件 id；`items` 要新建的行动卡，1~3 张；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
+
+**期限**
+
+| 工具 | REST | scope | 读写 | 用途 | 入参要点 |
+|---|---|---|---|---|---|
+| `deadline_list` | `GET /cases/{id}/deadlines` | `case:read` | 读 | 列出案件的法定期限（仲裁时效、起诉 15 日、开庭等），默认只列生效中的，按到期时间升序。 | `case_id` 案件 id；`include_resolved`? 是否连已履行/作废的一起列出 |
+| `deadline_set` | — | `case:write` | 写 | 给一个锚点日期（收到某份文书的日子、解除的日子……），服务端**按规则推算**到期日并登记。日期不由你算：返回里带 derived_from（一步步的推算过程）与 basis（条号与逐字原文），把到期日、推算依据和全部 caveats（尤其「未含法定节假日顺延」）一起讲给用户，别只报一个日子。天数由办案机构在通知书上指定的那类期限必须传 days——缺了会明确告诉你缺哪一项。同案同 kind 同锚点重复调用不会多出一条。 | `case_id` 案件 id；`kind` 期限种类；`anchor_date` 起算锚点，YYYY-MM-DD（如文书签收日、解除日）；`days`? 天数由办案机构指定的期限才要传，照通知书上写的填，不要猜；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
+| `deadline_resolve` | — | `case:write` | 写 | 把一条期限标记为已履行/作废，停止提醒。**幂等**：已经标记过的再调不报错、也不刷新时间戳，只回 already_resolved:true——「什么时候办完的」不该被后来的重复调用改掉。不属于本案的 id 一律当作不存在。 | `case_id` 案件 id；`deadline_id` 期限 id（从 deadline_list 取）；`client_ref`? 幂等键，一次业务操作给一个稳定值 |
+
+**证据**
+
+| 工具 | REST | scope | 读写 | 用途 | 入参要点 |
+|---|---|---|---|---|---|
+| `evidence_list` | `GET /cases/{id}/evidence` | `case:read` | 读 | 列出案件下已登记的证据条目（名称、分类、证明目的、固化状态）。 | `case_id` 案件 id |
+
+**法律依据**
+
+| 工具 | REST | scope | 读写 | 用途 | 入参要点 |
+|---|---|---|---|---|---|
+| `knowledge_search` | — | `case:read` | 读 | 按自然语言检索法条卡/判例卡/计算规则/流程SOP/文书模板/话术卡/情绪指南/数据卡/审查规则/方法卡。任何涉法断言、任何数字、任何文书起草之前都先调它——你记忆里的条号和数字一律不可用。每张卡带 citation_guide（可直接照抄的引用块）与 confidence；confidence 是「待核实」的必须如实转达给用户。默认给摘要，要整张正文时传 full_text=true，或用 knowledge_get 单取一张。检索不到就说查不到，不要编条号和案号。 | `query` 检索词，用案情关键词而非整句话，如「客观情况重大变化 北京口径」；`type`? 只要某一类卡时传，一般不传；`court`? 只要某个法院的判例时传，子串即可（如「朝阳」）。传了就只回判例卡——没有审理机构的卡会被滤掉；`full_text`? 传 true 回整张正文（单卡上限 8000 字，超出截断并标 truncated）；默认只回 1200 字摘要；`limit`? 最多几张，默认与上限都是 6；超出这个范围会被夹回 1~6 |
+| `knowledge_get` | — | `case:read` | 读 | 按 id 取一张知识卡的正文与结构化事实（facts）。id 从 knowledge_search 的结果里拿。要逐字引用条文、要取一个数、要照着审查规则逐条核对时用它——facts 里的 statute_quotes / values / review_rules 是**结构化原文**，比正文散文更该被照抄；正文上限 8000 字，超出会截断并标 truncated。 | `id` 知识卡 id，形如 `<域单数>-<slug>`，从 knowledge_search 结果里取 |
+
+**金额主张**
+
+| 工具 | REST | scope | 读写 | 用途 | 入参要点 |
+|---|---|---|---|---|---|
+| `claim_calc` | — | `case:write` | 写 | 按案情算一笔金额并直接落库（同案同 kind 只留一条，再算一次是修正）。返回金额、算式 formula、逐步骤 steps、依据 basis（条号 + 逐字原文 + 来源卡 id）与封顶提示。**任何要写进文书、说给用户听或拿去谈的金额都必须经它算**，不要自己心算、也不要转述记忆里的数。入参缺什么会逐条回一句人话告诉你缺什么（七种算法的必填项互不相同），照着补齐再调一次即可。金额单位一律是**分**，且是「应得」不是「到手」。 | `case_id` 案件 id；`kind` 算哪一项；`inputs`? 这一项算法要的输入，键名照服务端回的错误提示填（如 avg_monthly_wage_fen / employed_from / terminated_at / months / anchor_date …）。也可以把它们平铺在顶层。；`evidence_backed`? 哪些输入字段是有证据支撑的（不列的一律标「用户自述」，展示时要说明待核实）；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
+| `claims_upsert` | — | `case:write` | 写 | 登记或修正案件下的一条诉求项（同案同 kind 只有一条，再调是覆盖不是追加）。**算得出来的项不要在这里填金额**——它们必须走 claim_calc（那条会带算式、输入快照与依据一起落库）；这里只用于登记「用户陈述的数额」一类的项，以及给已有的项补依据 basis。金额单位是分。 | `case_id` 案件 id；`kind` 诉求种类；`amount_fen`? 金额，单位分，非负；还没算出来就给 0；`basis`? 依据（条号、来源卡 id 等），可省略；`calc_json`? 这个数从哪来、待证状态，JSON 串，可省略；`status`? 默认 draft；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
+| `claims_list` | — | `case:read` | 读 | 列出案件下的全部诉求项与**合计金额**（合计由服务端算，不要自己把各项加起来——这个总数正是拿去跟对方谈的那个数）。每项带 calc_json：那是算这笔钱时的完整快照，可复算。 | `case_id` 案件 id |
+
+**文书**
+
+| 工具 | REST | scope | 读写 | 用途 | 入参要点 |
+|---|---|---|---|---|---|
+| `draft_list` | `GET /cases/{id}/drafts` | `case:read` | 读 | 列出案件名下已有的文书（类型、标题、版本、状态、时间），**不含正文**——正文用 draft_get 按 draft_id 单取。仲裁材料一般会改好几稿，同一题的多版都在这里。 | `case_id` 案件 id |
+| `draft_get` | — | `case:read` | 读 | 按 draft_id 取一份文书的正文、版本号与发出后果说明。**改稿前先读它**：拿到的正文就是用户手上那一份，凭记忆重写会把上一稿里用户自己改过的措辞抹掉。 | `draft_id` 文书 id，从 draft_list 取 |
+| `draft_write` | — | `case:write` | 写 | 把一份文书存进案件档案。同一个案子里 kind 与 title 都相同的再写一次是**新版本**，旧稿留着可回看。发给公司的文书（异议函/被迫解除通知/仲裁申请书/答辩状/上诉状）**必须**同时给 send_consequences 说清发出后果，缺了服务端直接拒收、一个字都不写库。改稿时把上一稿的 id 填进 based_on_draft_id。存下来的永远是草稿：发不发、什么时候发、怎么送达都由用户决定，系统不会代发。 | `case_id` 案件 id；`kind` 文书类型；`title` 文书标题。同案同 kind 同 title 即视为同一份的新一稿；`body` 文书全文。填空位保留【】并附填写说明；`send_consequences`? 发出后果说明：发出后法律关系会怎么变、对方可能怎么应对、哪些是不可逆的。发给公司的文书（异议函/被迫解除通知/仲裁申请书/答辩状/上诉状）必填，缺了会被拒收。；`based_on_draft_id`? 这一稿是在哪一稿基础上改的（本案内的 draft_id），从零起草则不传；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
+
+**公司主体**
+
+| 工具 | REST | scope | 读写 | 用途 | 入参要点 |
+|---|---|---|---|---|---|
+| `company_profile_upsert` | — | `case:write` | 写 | 登记或补充公司主体档案。签约主体、发工资主体、实际用工主体可能是三家公司，仲裁列谁为被申请人由此判定，所以只要用户提到公司名就要落档。同案同名只有一条，反复补充即更新。 | `case_id` 案件 id；`name` 公司全称，尽量与营业执照一致；`role`? 默认签约主体；`uscc`? 统一社会信用代码，不知道就不传；`legal_rep`? 法定代表人；`note`? 风险点：注册资本、经营异常、关联公司等；`sources`? 结论出处（用户自述 / 企业信息平台 / 用户回传截图），必须可溯源；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
+
+**情绪**
+
+| 工具 | REST | scope | 读写 | 用途 | 入参要点 |
+|---|---|---|---|---|---|
+| `emotion_log` | — | `case:write` | 写 | 记一笔用户当前的情绪档位。识别到低落/焦虑/严重痛苦时都要记——这是长期陪跑看走向的依据，不是评价。refer_nbdpsy 只在符合持续焦虑抑郁表现时置 true：档位没到「焦虑」以上、或这个案子此前已经转介过一次，服务端都会把它降回 false 并在返回里说明原因（记录照常落库）。 | `case_id` 案件 id；`level` 情绪档位；`note`? 判断依据：用户说了什么（引原话片段）；`refer_nbdpsy`? 本次是否转介心理咨询，默认 false；一个案子最多一次；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
+
+只能读写用户自己的案件。传了别人的 `case_id`，服务端一律回「案件不存在」——
+不区分"不存在"和"不是你的"，别据此推断案件号的有效性。
 
 ## 边界红线
 
-- **对外的东西由本人拍板。** 异议函、被迫解除通知、仲裁申请书、给 HR 的回复——你可以起草，
+- **对外的东西由本人拍板。** 异议函、被迫解除通知、仲裁申请书、给 HR 的回复——可以起草，
   但发出去之前必须由用户本人逐字确认。任何情况下都不要代替用户发送。
 - **档案数据只用于本案。** 里面是解除通知、工资流水、身份信息、谈话录音。
   不要把这些内容带到与本案无关的对话、工具或外部服务里去。
 - **不可逆的决定留给用户。** 签字、不签字、接受方案、放弃某项诉求、撤回仲裁——
-  这些你可以分析利弊，但不要替他做，也不要用"建议你现在就签"这类推着走的说法。
+  可以分析利弊，但不要替他做，也不要用"建议你现在就签"这类推着走的说法。
 - **不冒充律师。** 你提供的是法律信息与行动建议，不是律师意见，也不构成委托代理关系。
   同样地，不必反复劝用户去找律师——用得上这个平台的人，多半正是请不起律师的那些人。
 - **人比案子重要。** 用户表现出持续的严重情绪痛苦时，先接住人，再谈案子。
 
 ## 接入步骤
 
-1. 在网页端「设置 → API keys」创建一把 key。忘了可以回设置页再看一次，或者轮换换一把新的。
-2. 把 MCP server 配进来（标准 Streamable HTTP）。地址与这份说明都能从
-   `GET /api/v1/agent-setup` 拿到（用同一把 key 鉴权）：
+1. 网页端创建 api key（忘了可以回去再看，见「凭据」节）。
+2. 按上面任一方式接上（MCP 优先；不支持就走 REST）。
+3. 连上后先调 `case_list`（走 REST 就 `GET /cases`）认领案件：只有一个案件就直接用它的
+   case_id、**不要问用户要编号**；有多个就让用户挑；一个都没有（或基本盘还空着）就按首诊清单
+   问齐后用 `intake_submit` 建档，**别把用户支回网页填**。
+4. 拿到 case_id 后再调一次 `case_facts`（走 REST 就 `GET /cases/{id}`），把当前事实拿到手再开始对话。
+   事实卡里写着「未记录」的项是**档案里没有这一项**，不是"不存在"——缺哪一项就问用户，
+   不要拿默认值替它。
+5. 陪跑时的对话纪律、引用规则与危机处理见 `GET /skill/陪跑指南.md`（免鉴权）；
+   总纲入口是 `GET /skill/SKILL.md`。
 
-   ```json
-   {
-     "mcpServers": {
-       "lawer": {
-         "type": "http",
-         "url": "<mcp_url>",
-         "headers": { "Authorization": "Bearer <你的 api key>" }
-       }
-     }
-   }
-   ```
+## 错误约定
 
-3. 连上后先调 `case_list` 认领案件：只有一个案件就直接用它的 `case_id`、**不要问用户要编号**；
-   有多个就让用户挑；一个都没有（或基本盘还空着）就按首诊清单问齐后用 `intake_submit` 建档，
-   **别把用户支回网页填**。拿到 id 再调一次 `case_facts`，把当前事实读进来，再开始对话。
-   事实卡里写着「未记录」的项是**档案里没有这一项**，
-   不是"不存在"——缺哪一项就问用户，不要拿默认值替它。
-4. 引用法条与案例一律只从 `knowledge_search` 的结果里引，照抄它给的 `citation_guide`，
-   并带上 `confidence`；检索不到就说查不到，**不要编条号和案号**。
-   完整的陪跑纪律见 `GET /skill/陪跑指南.md`（免鉴权）。
+响应统一是这个形状：
 
-接口的完整形状（REST 端点、错误码、权限项）在 `GET /api/manifest`，无需鉴权即可读。
-错误响应统一是 `{"ok": false, "error_code": "...", "message": "..."}`，
-**按 `error_code` 分支，不要按 HTTP 状态码分支**。
+```json
+{ "ok": false, "error_code": "CASE_NOT_FOUND", "message": "案件不存在" }
+```
+
+**按 `error_code` 分支，不要按 HTTP 状态码分支。** 对方会碰上的码：
+
+**凭据与权限**
+
+| error_code | HTTP | 什么时候拿到它 | 拿到之后怎么办 |
+|---|---|---|---|
+| `UNAUTHORIZED` | 401 | 没带凭据，或凭据无效／已吊销（两种不区分） | 让用户回网页设置页取一把新 key |
+| `FORBIDDEN_SCOPE` | 403 | 凭据有效，但这把 key 没被授予该端点要的权限 | 换一把带该 scope 的 key，或让用户在设置页给它补权限 |
+| `WEB_SESSION_REQUIRED` | 403 | 这条端点只认网页登录态；api key 一律拒（key 不能自我增殖） | 请用户在网页上做，不要试图用 key 绕 |
+
+**服务端闸门**
+
+| error_code | HTTP | 什么时候拿到它 | 拿到之后怎么办 |
+|---|---|---|---|
+| `REALNAME_REQUIRED` | 403 | 该动作要求用户已完成实名（证据上传、固化出证）；「待审」不算已实名 | 把这一步是干什么的说清楚，请用户在网页上完成实名后再来 |
+
+**找不到对象**
+
+| error_code | HTTP | 什么时候拿到它 | 拿到之后怎么办 |
+|---|---|---|---|
+| `CASE_NOT_FOUND` | 404 | 案件不存在，**或不属于本人**——两者刻意不区分 | 先调 case_list 拿本人名下真实的 case_id，不要据此推断编号有效性 |
+| `ACTION_NOT_FOUND` | 404 | 行动卡 id 不在本案下 | — |
+| `EVENT_NOT_FOUND` | 404 | 时间线事件 id 不在本案下 | — |
+| `EVIDENCE_NOT_FOUND` | 404 | 证据 id 不存在或不属于本人 | — |
+| `ORDER_NOT_FOUND` | 404 | 存证订单号查不到 | — |
+| `DOSSIER_NOT_FOUND` | 404 | 公司档案 id 查不到 | — |
+| `KEY_NOT_FOUND` | 404 | api key id 不在本人名下 | — |
+
+**入参不合法**
+
+| error_code | HTTP | 什么时候拿到它 | 拿到之后怎么办 |
+|---|---|---|---|
+| `INVALID_BODY` | 400 | 请求体不是合法 JSON，或缺必填字段 | 照 manifest 里该端点的入参重发；不要重试同一份体 |
+| `INVALID_CASE_ID` | 400 | case_id 不是正整数 | — |
+| `INVALID_STAGE` | 400 | stage 不在法定枚举里 | 取值见 case_get 回包里的当前 stage 与工具入参说明 |
+| `INVALID_HAPPENED_AT` | 400 | 时间不是 ISO8601，或落在合理区间之外 | — |
+| `INVALID_KIND` | 400 | kind 不在该表的法定枚举里 | — |
+| `INVALID_MONTHLY_WAGE` | 400 | 月薪不是正数（单位是**元**，不是分） | — |
+| `NO_FIELDS` | 400 | 更新类调用一个字段都没传 | — |
+| `FILE_TOO_LARGE` | 413 | 上传文件超过单文件上限 | — |
+
+**余额与并发**
+
+| error_code | HTTP | 什么时候拿到它 | 拿到之后怎么办 |
+|---|---|---|---|
+| `GONGDAO_EXHAUSTED` | 402 | 余额不足以完成这次扣费动作 | 把差额如实告诉用户，不要改小参数重试 |
+| `UPLOAD_BUSY` | 429 | 同时进行的上传过多（内存闸门） | 退避后重试 |
+| `TURN_IN_FLIGHT` | 409 | 本案已有一轮站内对话在跑 | 等上一轮结束，不要并发发起 |

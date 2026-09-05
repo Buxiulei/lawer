@@ -1,15 +1,28 @@
 // app/src/app/api/manifest/route.ts
 // 自描述清单（spec §8 MCP/API 行）。公开无鉴权：用户的 agent 要先读到这里才知道
 // 往哪儿连、怎么鉴权。因此**只描述接口形状，不含任何账号或案件数据**。
+//
+// 【本文件不再手打任何清单】tools 段来自能力注册表（lib/capabilities），rest 段来自
+// 端点索引（lib/capabilities/rest-index），错误码段来自 lib/capabilities/error-codes。
+// 此前 rest 段是这里手打的 25 条字面量，而实际端点有六十余条——漏掉的那些，对方 agent
+// 无从知道能调，且清单看起来完整（设计稿缺口 4）。判据对着磁盘上的 route.ts 双向核对。
 import { ALL_SCOPES } from '@/lib/auth/api-key';
+import { ERROR_CODES } from '@/lib/capabilities/error-codes';
+import { REST_CATEGORIES, REST_INDEX, type RestCategory } from '@/lib/capabilities/rest-index';
+import { toolsVersion } from '@/lib/capabilities/version';
 import { PROTOCOL_VERSION, SERVER_INFO } from '@/lib/mcp/jsonrpc';
 import { TOOLS } from '@/lib/mcp/tools';
+
+/** rest 段的输出顺序：公开 → agent 面 → 网页会话 → 管理员 */
+const CATEGORY_ORDER: readonly RestCategory[] = ['public', 'agent', 'web', 'admin'];
 
 export async function GET() {
   return Response.json({
     name: SERVER_INFO.name,
     title: SERVER_INFO.title,
     version: SERVER_INFO.version,
+    // 注册表内容指纹。存下它，下次发现变了就重读本清单与接入说明。
+    tools_version: toolsVersion(),
     description:
       '北京朝阳劳动仲裁陪跑：案件档案、时间线、行动卡、法定期限与证据清单的读写接口。',
     auth: {
@@ -26,7 +39,14 @@ export async function GET() {
       endpoint: '/api/mcp',
       transport: 'streamable-http',
       protocol_version: PROTOCOL_VERSION,
-      tools: TOOLS.map((t) => ({ name: t.name, title: t.title, scope: t.scope })),
+      tools: TOOLS.map((t) => ({
+        name: t.name,
+        title: t.title,
+        scope: t.scope,
+        kind: t.kind,
+        // 同一能力的 REST 映射；没有对应端点的（如事实卡、知识检索）为 null
+        rest: t.rest ?? null,
+      })),
     },
     skill: {
       // 接进来之前先读这个：总纲 SKILL.md 会指路到《接入说明》与《陪跑指南》。
@@ -36,38 +56,28 @@ export async function GET() {
     },
     rest: {
       base: '/api/v1',
-      endpoints: [
-        { method: 'POST', path: '/api/v1/auth/sms/send', auth: 'none', description: '发送手机验证码' },
-        { method: 'POST', path: '/api/v1/auth/sms/verify', auth: 'none', description: '校验手机验证码，签发 token' },
-        { method: 'POST', path: '/api/v1/auth/email/send', auth: 'jwt', description: '发送邮箱验证码（已登录账号补绑邮箱）' },
-        { method: 'POST', path: '/api/v1/auth/email/verify', auth: 'jwt', description: '校验邮箱验证码（已登录账号补绑邮箱）' },
-        { method: 'POST', path: '/api/v1/auth/email/register/send', auth: 'none', description: '发送邮箱注册验证码（无手机号开户）' },
-        { method: 'POST', path: '/api/v1/auth/email/register/verify', auth: 'none', description: '校验邮箱注册验证码，建号并签发 token' },
-        { method: 'POST', path: '/api/v1/realname/init', auth: 'jwt', description: '发起实人认证，返回 H5 认证页 URL' },
-        { method: 'GET', path: '/api/v1/realname/status', auth: 'jwt', description: '查实人认证结果' },
-        { method: 'GET', path: '/api/v1/agent-setup', auth: 'jwt|api_key', description: '一键接入信息：mcp_url / api_base、工具清单、接入说明全文' },
-        { method: 'GET', path: '/api/v1/keys', auth: 'jwt', description: '列出自己的 api key' },
-        { method: 'POST', path: '/api/v1/keys', auth: 'jwt', description: '创建 api key，明文只返回这一次' },
-        { method: 'GET', path: '/api/v1/keys/{id}/secret', auth: 'jwt', description: '取回这把 key 的明文（本列上线前签发的旧密钥没有密文，回 KEY_NOT_VIEWABLE）' },
-        { method: 'POST', path: '/api/v1/keys/{id}/rotate', auth: 'jwt', description: '轮换：换发新明文，旧明文立即失效；id / name / scopes / client_name 不变' },
-        { method: 'DELETE', path: '/api/v1/keys/{id}', auth: 'jwt', description: '吊销 api key' },
-        { method: 'GET', path: '/api/v1/cases', auth: 'jwt|api_key', scope: 'case:read', description: '列出自己名下的全部案件（对应 MCP case_list）' },
-        { method: 'GET', path: '/api/v1/cases/{id}', auth: 'jwt|api_key', scope: 'case:read', description: '案件档案 + 时间线' },
-        { method: 'PATCH', path: '/api/v1/cases/{id}', auth: 'jwt|api_key', scope: 'case:write', description: '更新 stage / goal / bottom_line 及用工基本盘（入职时间/月薪/岗位/合同次数）' },
-        { method: 'POST', path: '/api/v1/cases/{id}/intake', auth: 'jwt|api_key', scope: 'case:write', description: '首诊建档：一次性写入四项基本盘 + 时间线 + 诉求（对应 MCP intake_submit）' },
-        { method: 'POST', path: '/api/v1/cases/{id}/timeline', auth: 'jwt|api_key', scope: 'case:write', description: '追加时间线事件，支持 client_ref 幂等' },
-        { method: 'GET', path: '/api/v1/cases/{id}/actions', auth: 'jwt|api_key', scope: 'case:read', description: '列出行动卡' },
-        { method: 'PATCH', path: '/api/v1/cases/{id}/actions/{actionId}', auth: 'jwt|api_key', scope: 'case:write', description: '完成/放弃行动卡' },
-        { method: 'GET', path: '/api/v1/cases/{id}/deadlines', auth: 'jwt|api_key', scope: 'case:read', description: '列出法定期限' },
-        { method: 'GET', path: '/api/v1/cases/{id}/evidence', auth: 'jwt|api_key', scope: 'case:read', description: '列出证据条目' },
-        { method: 'POST', path: '/api/v1/evidence/{id}/attest', auth: 'jwt|api_key', scope: 'case:write', description: '证据固化出证（需已实名，否则 REALNAME_REQUIRED）' },
-        { method: 'GET', path: '/api/v1/verify/{orderNo}', auth: 'none', description: '按存证订单号公开查询（轻量读库）' },
-        { method: 'POST', path: '/api/v1/verify/{orderNo}/recheck', auth: 'none', description: '服务端实时复核：重算原件哈希 + 重新验签，按 IP 限流' },
-      ],
+      categories: REST_CATEGORIES,
+      endpoints: CATEGORY_ORDER.flatMap((category) =>
+        REST_INDEX.filter((e) => e.category === category).map((e) => ({
+          category: e.category,
+          method: e.method,
+          path: e.path,
+          auth: e.auth,
+          // 不校 scope 的端点不写这个字段（此前的手写清单也是这个约定）
+          ...(e.scope ? { scope: e.scope } : {}),
+          description: e.description,
+        })),
+      ),
     },
     errors: {
       shape: { ok: false, error_code: 'string', message: 'string' },
       note: '按 error_code 分支，不要按 HTTP status 分支。',
+      codes: ERROR_CODES.map((e) => ({
+        code: e.code,
+        status: e.status,
+        when: e.when,
+        ...(e.recovery ? { recovery: e.recovery } : {}),
+      })),
     },
   });
 }

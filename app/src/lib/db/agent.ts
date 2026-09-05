@@ -63,6 +63,10 @@ export interface DraftRow {
   kind: string;
   title: string;
   content: string | null;
+  /** 发出后果说明的结构化原文；对内文书与历史行为 null */
+  send_consequences: string | null;
+  /** 这一稿基于哪一稿改的（弱引用 drafts.id）；从零起草为 null */
+  based_on: number | null;
   version: number;
   status: string;
   created_at: string;
@@ -626,21 +630,56 @@ export function listCompanyProfiles(db: Database, caseId: number): CompanyProfil
 
 // ========== drafts ==========
 
-/** 同 kind 每写一次就是新一版（version = 现有最大值 + 1），旧版留着让用户回看上一稿措辞。 */
+/**
+ * 写一稿文书。**同案 + 同 kind + 同 title 再写一次就是新一版**（version = 该题现有最大值 + 1），
+ * 旧版留着让用户回看上一稿措辞。
+ *
+ * 【为什么版本按题（kind + title）算，不按 kind 算】一个案子里同一类文书可以有好几份不同的题
+ *（两次调岗就有两封针对不同事的异议函）。只按 kind 算的话，第二封一落库就成了「第 2 版」——
+ * 屏幕上它看起来是第一封的改稿，用户回看「上一版措辞」翻到的是另一件事的文书。
+ */
 export function insertDraft(
   db: Database,
-  params: { caseId: number; kind: string; title: string; content: string; status: string },
+  params: {
+    caseId: number;
+    kind: string;
+    title: string;
+    content: string;
+    status: string;
+    sendConsequences?: string | null;
+    basedOn?: number | null;
+  },
 ): DraftRow {
   const max = db
-    .prepare('SELECT MAX(version) AS v FROM drafts WHERE case_id = ? AND kind = ?')
-    .get(params.caseId, params.kind) as { v: number | null };
+    .prepare('SELECT MAX(version) AS v FROM drafts WHERE case_id = ? AND kind = ? AND title = ?')
+    .get(params.caseId, params.kind, params.title) as { v: number | null };
   const version = (max.v ?? 0) + 1;
   const id = Number(
     db
-      .prepare('INSERT INTO drafts (case_id, kind, title, content, version, status) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(params.caseId, params.kind, params.title, params.content, version, params.status).lastInsertRowid,
+      .prepare(
+        'INSERT INTO drafts (case_id, kind, title, content, send_consequences, based_on, version, status)' +
+          ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        params.caseId,
+        params.kind,
+        params.title,
+        params.content,
+        params.sendConsequences ?? null,
+        params.basedOn ?? null,
+        version,
+        params.status,
+      ).lastInsertRowid,
   );
   return db.prepare('SELECT * FROM drafts WHERE id = ?').get(id) as DraftRow;
+}
+
+/**
+ * 按 id 取一稿文书。**不做归属校验**——调用方（lib/cases.getDraft）拿到行之后
+ * 用行上的 case_id 去过 assertOwned，取不到与不属于本人回同一个"不存在"。
+ */
+export function findDraftById(db: Database, draftId: number): DraftRow | undefined {
+  return db.prepare('SELECT * FROM drafts WHERE id = ?').get(draftId) as DraftRow | undefined;
 }
 
 /**

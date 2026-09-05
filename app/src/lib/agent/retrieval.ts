@@ -10,7 +10,7 @@
 export interface KnowledgePack {
   /** `<域单数>-<slug>`，全库唯一（README §1） */
   id: string;
-  /** 法条卡|判例卡|计算规则|流程SOP|文书模板|话术卡|情绪指南|数据卡 */
+  /** 取值见 lib/knowledge/types.ts 的 KNOWLEDGE_TYPES（十类，唯一真源） */
   type: string;
   title: string;
   keywords: string[];
@@ -49,6 +49,12 @@ export interface KnowledgePack {
     case_facts?: { case_no?: string; court?: string; judged_at?: string; gist?: string; issue?: string; holding?: string; reasoning?: string };
     /** ⭐核心条的 S3 档：场景 → 核心依据条映射（见 method-core-article-map 卡） */
     core_article_map?: Array<{ scene: string; claim_kind?: string; articles: string[] }>;
+    /**
+     * 审查规则卡的结构化条目：一条一条「该挑什么毛病、依据是什么、怎么改」。
+     * 形状同 lib/knowledge 的 PackFacts.review_rules——适配层原样透传，
+     * 此前只是**类型上没声明**，于是消费方拿得到值却读不到字段。
+     */
+    review_rules?: Array<{ id: string; severity: 'must' | 'strong' | 'suggest'; title: string; pattern_hint: string; basis: string; suggestion: string; negotiation_tip?: string }>;
   };
 }
 
@@ -64,7 +70,7 @@ export interface KnowledgeSearcher {
    * 按自然语言查询取 pack。README §6 定的检索逻辑是 keywords + applies_to + title 分词匹配。
    * 检索不到返回空数组（不是抛错）——「没有依据」是一种正常且必须被上层看见的结果。
    */
-  search(query: string, options?: { limit?: number; type?: string }): KnowledgePack[];
+  search(query: string, options?: { limit?: number; type?: string; court?: string }): KnowledgePack[];
   /** 按 id 精确取卡（模型引用了某张卡的 related 时用） */
   get?(id: string): KnowledgePack | undefined;
   /**

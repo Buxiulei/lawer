@@ -11,11 +11,25 @@ import type { Database } from 'better-sqlite3';
 
 import * as store from '@/lib/db/cases';
 import { dedupTitleKey } from '@/lib/db/dedup';
+import { getDomainPack } from '@/lib/domains/registry';
 import { normalizeDateOnly, submitIntakeInto, type IntakeInput, type IntakeResult } from './intake';
+// 只剩 MILESTONE_OF_STAGE 的键类型还引它（`typeof CASE_STAGES`）。**stage 校验不再走它**，
+// 一律经 stagesForCase 从领域包取词表。
 import { CASE_STAGES } from './stages';
 // drafts 的 SQL 早已在 lib/db/agent.ts 的 drafts 段（与 insertDraft 同处）。读侧不另起
 // 一份表访问：同一张表两处 SELECT，将来加一列就会漏一处。归属校验仍在本文件把关。
-import { listDrafts as listDraftRows, listCaseMessages, type DraftRow } from '@/lib/db/agent';
+import {
+  findDraftById,
+  hasReferredNbdpsy,
+  insertDraft,
+  insertEmotionLog,
+  listDrafts as listDraftRows,
+  listCaseMessages,
+  upsertCompanyProfile,
+  type DraftRow,
+} from '@/lib/db/agent';
+// 文书种类、对外清单与那段固定尾注：与站内对话共用同一份（见 ./drafts 文件头）
+import { DRAFT_KINDS, OUTBOUND_DRAFT_KINDS, draftBody } from './drafts';
 import { nowSql } from '@/lib/db/time';
 // 历史消息要标「这一轮实际是谁答的」，判「实际 ≠ 请求」的口径只有记账那一处
 // （billing/served-model）。在这儿另写一个 `a !== b` 就是同一个问题两个答案：
@@ -77,6 +91,12 @@ export const MILESTONE_OF_STAGE: Record<(typeof CASE_STAGES)[number], CaseMilest
 /** 与 migrate.ts action_items.status 注释逐字对齐 */
 export const ACTION_STATUSES = ['待办', '完成', '放弃'] as const;
 
+/** 与 migrate.ts emotion_log.level 注释逐字对齐 */
+export const EMOTION_LEVELS = ['平稳', '低落', '焦虑', '严重'] as const;
+
+/** 与 migrate.ts company_profiles.role 注释逐字对齐 */
+export const COMPANY_ROLES = ['签约主体', '用工主体', '关联'] as const;
+
 /** case_get 一次最多带回多少条时间线事件（spec §3.5 列表全部分页） */
 const TIMELINE_DEFAULT_LIMIT = 50;
 const TIMELINE_MAX_LIMIT = 200;
@@ -95,6 +115,26 @@ function fail(status: number, errorCode: string, message: string): DomainFailure
 }
 
 const NOT_FOUND = () => fail(404, 'CASE_NOT_FOUND', '案件不存在');
+
+/**
+ * 这个案子该按哪套阶段枚举校验。**stage 校验的唯一词表入口**：
+ * 谁都不要再直接引 CASE_STAGES 去校验——引死词表的形态是，第二个领域接进来时
+ * 它的案子被按上一个领域的阶段校验，而报错信息看起来完全正常。
+ * （CASE_STAGES 本身仍然存在，它是 labor 领域包 stages 的正本，见 lib/domains/labor.ts。）
+ */
+function stagesForCase(row: store.CaseRow): Result<{ stages: readonly string[] }> {
+  const pack = getDomainPack(row.domain);
+  if (!pack) {
+    return fail(
+      500,
+      'UNKNOWN_DOMAIN',
+      `这个案件的领域是「${row.domain}」，但 lib/domains 里没有对应的领域包，` +
+        '所以取不到它的阶段枚举，校验不了 stage。' +
+        '请核对 cases.domain 的取值，或补上这个领域包再试。',
+    );
+  }
+  return { ok: true, stages: pack.stages };
+}
 
 /**
  * 归属校验。不是自己的案件与不存在的案件返回**同一个**错误，调用方无从分辨。
@@ -173,17 +213,21 @@ export function ensureDefaultCase(
  * 走的同一个 store.listCasesByUser，不另写第二份查询——写两份必然在某天加列时漏一处。
  *
  * 字段与 GET /cases 对齐：id（这里改名 case_id，方便 agent 直接拿去喂别的工具）、
- * title、stage、created_at。**表里没有 updated_at 这一列**，所以给的是建档时间 created_at。
+ * title、stage、domain、created_at。**表里没有 updated_at 这一列**，所以给的是建档时间 created_at。
+ *
+ * domain 一起给出去：调用方（含用户自己的 agent）据它才知道这个案子的阶段枚举、
+ * 期限种类、文书种类该按哪个领域包读——不给的话它只能假设是某一个领域。
  */
 export function listCases(
   db: Database,
   input: { userId: number },
-): { cases: { case_id: number; title: string; stage: string; created_at: string }[] } {
+): { cases: { case_id: number; title: string; stage: string; domain: string; created_at: string }[] } {
   return {
     cases: store.listCasesByUser(db, input.userId).map((row) => ({
       case_id: row.id,
       title: row.title,
       stage: row.stage,
+      domain: row.domain,
       created_at: row.created_at,
     })),
   };
@@ -369,8 +413,10 @@ export function updateCase(
     contract_count?: string;
   } = {};
   if (input.stage !== undefined) {
-    if (typeof input.stage !== 'string' || !(CASE_STAGES as readonly string[]).includes(input.stage)) {
-      return fail(400, 'INVALID_STAGE', `stage 只能是 ${CASE_STAGES.join(' / ')}`);
+    const stages = stagesForCase(found);
+    if (isFailure(stages)) return stages;
+    if (typeof input.stage !== 'string' || !stages.stages.includes(input.stage)) {
+      return fail(400, 'INVALID_STAGE', `stage 只能是 ${stages.stages.join(' / ')}`);
     }
     fields.stage = input.stage;
   }
@@ -433,7 +479,10 @@ export function submitIntake(
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
 
-  const done = submitIntakeInto(db, input.caseId, input);
+  const stages = stagesForCase(found);
+  if (isFailure(stages)) return stages;
+
+  const done = submitIntakeInto(db, input.caseId, input, stages.stages);
   if (!done.ok) return done;
   return { ok: true, result: done.result };
 }
@@ -572,4 +621,219 @@ export function setActionStatus(
 
   store.updateActionStatus(db, input.actionId, status);
   return { ok: true, action: { ...action, status } };
+}
+
+// ========== 以下由 P1 MCP 写能力接入（时间线分页 / 文书 / 公司主体 / 情绪） ==========
+
+/**
+ * 分页读时间线。`case_get` 只带最近 N 条，长案（几十上百条）翻不到早期事件——
+ * 而早期事件恰恰是工龄起点、第一次约谈这些最要紧的。
+ *
+ * `since` 与 `kind` 是过滤，不是校验入口：kind 传了库里没有的值就是零条，
+ * 不报错——读接口把「没有这一类」和「你写错了」混成同一个 400 反而更难查。
+ */
+export function listTimeline(
+  db: Database,
+  input: {
+    caseId: number;
+    userId: number;
+    since?: unknown;
+    kind?: unknown;
+    limit?: unknown;
+    offset?: unknown;
+  },
+): Result<{ events: store.TimelineEventRow[]; total: number; offset: number; next_offset: number | null }> {
+  const found = assertOwned(db, input.caseId, input.userId);
+  if (isFailure(found)) return found;
+
+  const since = normalizeIsoTime(input.since);
+  if (input.since !== undefined && input.since !== null && !since) {
+    return fail(400, 'INVALID_SINCE', 'since 必须是 ISO8601 时间串');
+  }
+  const requested = typeof input.limit === 'number' ? input.limit : Number.NaN;
+  const limit = Number.isFinite(requested) && requested > 0
+    ? Math.min(Math.floor(requested), TIMELINE_MAX_LIMIT)
+    : 50;
+  const rawOffset = typeof input.offset === 'number' ? input.offset : 0;
+  const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? Math.floor(rawOffset) : 0;
+
+  const page = store.listTimelinePage(db, {
+    caseId: input.caseId,
+    since,
+    kind: trimmedOrNull(input.kind),
+    limit,
+    offset,
+  });
+  const consumed = offset + page.events.length;
+  return {
+    ok: true,
+    events: page.events,
+    total: page.total,
+    offset,
+    // 没有下一页时明写 null，不回一个"再翻一次就知道了"的数字
+    next_offset: consumed < page.total ? consumed : null,
+  };
+}
+
+/**
+ * 读一稿文书全文。入参只有 draft_id：文书 id 是全局唯一的，不必让调用方再报一遍案件号
+ * （报错了反而多一种"两个 id 对不上"的失败）。归属由这一行自己的 case_id 兜。
+ */
+export function getDraft(
+  db: Database,
+  input: { userId: number; draftId: number },
+): Result<{ draft: DraftRow }> {
+  if (!Number.isInteger(input.draftId) || input.draftId <= 0) {
+    return fail(404, 'DRAFT_NOT_FOUND', '文书不存在');
+  }
+  const draft = findDraftById(db, input.draftId);
+  // 不存在与不属于本人回同一个错误：403 等于承认"这份文书是有效的、只是不归你"
+  if (!draft) return fail(404, 'DRAFT_NOT_FOUND', '文书不存在');
+  const found = assertOwned(db, draft.case_id, input.userId);
+  if (isFailure(found)) return fail(404, 'DRAFT_NOT_FOUND', '文书不存在');
+  return { ok: true, draft };
+}
+
+/**
+ * 写一稿文书。**对外文书缺 send_consequences 一律拒收**（charter 红线 5）：
+ * 这不是提示而是闸门——服务端不落库，也不替调用方编一段后果说明。
+ * 判断哪几类算对外，读的是 lib/cases/drafts 那一份清单（站内对话用的是同一份）。
+ *
+ * 【与站内 draft_write 的分工】案号闸门与伪逐字引用闸门留在站内那条路上：
+ * 它们要用「本轮检索到了哪些卡」才判得了，而 MCP 这条路没有"本轮"这个概念。
+ */
+export function writeDraft(
+  db: Database,
+  input: {
+    caseId: number;
+    userId: number;
+    kind: unknown;
+    title: unknown;
+    body: unknown;
+    sendConsequences?: unknown;
+    basedOnDraftId?: unknown;
+  },
+): Result<{ draft: DraftRow }> {
+  const found = assertOwned(db, input.caseId, input.userId);
+  if (isFailure(found)) return found;
+
+  if (typeof input.kind !== 'string' || !(DRAFT_KINDS as readonly string[]).includes(input.kind)) {
+    return fail(400, 'INVALID_DRAFT_KIND', `kind 只能是 ${DRAFT_KINDS.join(' / ')}`);
+  }
+  const kind = input.kind;
+  const title = trimmedOrNull(input.title);
+  const body = trimmedOrNull(input.body);
+  if (!title) return fail(400, 'INVALID_TITLE', 'title 不能为空');
+  if (!body) return fail(400, 'INVALID_BODY', 'body 不能为空');
+
+  const consequences = trimmedOrNull(input.sendConsequences);
+  if (OUTBOUND_DRAFT_KINDS.has(kind) && !consequences) {
+    return fail(
+      400,
+      'SEND_CONSEQUENCES_REQUIRED',
+      `《${kind}》是要发给公司的文书，必须同时给出 send_consequences（发出后果说明）：` +
+        '发出后法律关系怎么变、对方可能怎么应对、哪一步是不可逆的。补齐后重新提交，本次没有写入任何内容。',
+    );
+  }
+
+  let basedOn: number | null = null;
+  if (input.basedOnDraftId !== undefined && input.basedOnDraftId !== null) {
+    const raw = typeof input.basedOnDraftId === 'number' ? input.basedOnDraftId : Number.NaN;
+    const parent = Number.isInteger(raw) ? findDraftById(db, raw) : undefined;
+    // 引一份不属于本案的旧稿 → 按"不存在"拒，不泄漏它在别的案件下存在
+    if (!parent || parent.case_id !== input.caseId) {
+      return fail(404, 'DRAFT_NOT_FOUND', 'based_on_draft_id 指向的文书不在本案里');
+    }
+    basedOn = parent.id;
+  }
+
+  // status 恒 draft：本系统不存在「已发出」状态——发不发、什么时候发，只有用户能决定
+  const draft = insertDraft(db, {
+    caseId: input.caseId,
+    kind,
+    title,
+    content: draftBody(kind, body, consequences),
+    status: 'draft',
+    sendConsequences: consequences,
+    basedOn,
+  });
+  return { ok: true, draft };
+}
+
+/**
+ * 登记或补充公司主体。同案同 name 收敛成一条（store.upsertCompanyProfile 的既有语义），
+ * 补充字段用 COALESCE 合并：先只知道公司名、后来查到统一社会信用代码是常态。
+ */
+export function upsertCompany(
+  db: Database,
+  input: {
+    caseId: number;
+    userId: number;
+    name: unknown;
+    role?: unknown;
+    uscc?: unknown;
+    legalRep?: unknown;
+    note?: unknown;
+    sources?: unknown;
+  },
+): Result<{ id: number; created: boolean }> {
+  const found = assertOwned(db, input.caseId, input.userId);
+  if (isFailure(found)) return found;
+
+  const name = trimmedOrNull(input.name);
+  if (!name) return fail(400, 'INVALID_COMPANY_NAME', 'name 不能为空');
+  const role = input.role === undefined || input.role === null ? '签约主体' : input.role;
+  if (typeof role !== 'string' || !(COMPANY_ROLES as readonly string[]).includes(role)) {
+    return fail(400, 'INVALID_COMPANY_ROLE', `role 只能是 ${COMPANY_ROLES.join(' / ')}`);
+  }
+
+  const sources = trimmedOrNull(input.sources);
+  const res = upsertCompanyProfile(db, {
+    caseId: input.caseId,
+    name,
+    uscc: trimmedOrNull(input.uscc),
+    role,
+    legalRep: trimmedOrNull(input.legalRep),
+    riskNotes: trimmedOrNull(input.note),
+    sourcesJson: sources ? JSON.stringify([sources]) : null,
+  });
+  return { ok: true, id: res.id, created: res.created };
+}
+
+/**
+ * 记一笔情绪。**转介心理咨询的两道频控与站内对话逐字同一套**（spec §10 引流红线）：
+ *  · 情绪档位没到「焦虑」以上不转介——情绪一般时提就是趁人之危；
+ *  · 一个案子最多转介一次。
+ * 两道都不满足时**情绪照记**（那是长期陪跑看走向的依据），只是 referred 回 false 并说明原因：
+ * 把整条记录一起拒掉，等于用户这一刻的状态因为一个附带参数没记上。
+ */
+export function logEmotion(
+  db: Database,
+  input: { caseId: number; userId: number; level: unknown; note?: unknown; referNbdpsy?: unknown },
+): Result<{ id: number; referred: boolean; refuse_reason?: string }> {
+  const found = assertOwned(db, input.caseId, input.userId);
+  if (isFailure(found)) return found;
+
+  if (typeof input.level !== 'string' || !(EMOTION_LEVELS as readonly string[]).includes(input.level)) {
+    return fail(400, 'INVALID_EMOTION_LEVEL', `level 只能是 ${EMOTION_LEVELS.join(' / ')}`);
+  }
+
+  let refer = input.referNbdpsy === true;
+  let reason: string | undefined;
+  if (refer && (input.level === '平稳' || input.level === '低落')) {
+    refer = false;
+    reason = '情绪档位未达「焦虑」以上，本次不转介（spec §10 引流红线）。';
+  }
+  if (refer && hasReferredNbdpsy(db, input.caseId)) {
+    refer = false;
+    reason = '本案此前已转介过一次，不再重复提示（spec §10：一案最多一次）。';
+  }
+
+  const id = insertEmotionLog(db, {
+    caseId: input.caseId,
+    level: input.level,
+    note: trimmedOrNull(input.note),
+    referredNbdpsy: refer,
+  });
+  return { ok: true, id, referred: refer, ...(reason ? { refuse_reason: reason } : {}) };
 }
