@@ -7,10 +7,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { runTurn } from '../orchestrator';
-import { detectCrisisPaidContent, detectNbdpsyPitch } from '../crisis';
+import { CRISIS_NBDPSY_LINE, CRISIS_RESOURCE_PACK_ID, detectCrisisPaidContent, detectNbdpsyPitch } from '../crisis';
 import { decideOffer, looksLikeDecline, referralScenesOf } from '../referral';
 import * as referralOffers from '@/lib/db/referral-offers';
-import { makeAgentFixture, makeSink, scriptedProvider, fixtureSearcher, type AgentFixture } from './fixtures';
+import * as store from '@/lib/db/agent';
+import { FIXTURE_PACK, makeAgentFixture, makeSink, scriptedProvider, fixtureSearcher, type AgentFixture } from './fixtures';
 import type { CaseSnapshot } from '../snapshot';
 
 const CARD = {
@@ -18,6 +19,44 @@ const CARD = {
   args: { what: '把解除通知转发到个人邮箱', how: '公司邮箱 → 私人邮箱并截图', why: '权限随时可能被停', due_at: '2026-08-27T18:00:00+08:00' },
 };
 const CRISIS_INPUT = '有时候半夜想，要是人没了是不是就不用还房贷了。就是想想。';
+
+/** 危机资源卡（facts.hotlines 带 crisis 类号码），供危机轮首段取号码 + 那句 NBDpsy 引导语。 */
+const CRISIS_PACK = {
+  ...FIXTURE_PACK,
+  id: CRISIS_RESOURCE_PACK_ID,
+  type: '数据卡' as const,
+  title: '北京免费求助资源卡',
+  body: '## 心理热线\n\n- 12356 全国统一心理援助热线（24 小时）\n- 座机 800-810-1117 / 手机 010-82951332（回龙观医院）',
+  facts: {
+    hotlines: [
+      { name: '全国统一心理援助热线', phone: '12356', category: 'crisis' as const, status: 'usable' as const, hours: '24小时' },
+      { name: '北京心理援助热线·座机线（回龙观医院）', phone: '800-810-1117', category: 'crisis' as const, status: 'usable' as const },
+      { name: '北京心理援助热线·手机线（回龙观医院）', phone: '010-82951332', category: 'crisis' as const, status: 'usable' as const },
+    ],
+  },
+};
+
+/** 危机轮专用 turn：searcher 带上危机资源卡，首段才会真的给出号码与 NBDpsy 引导语。 */
+async function crisisTurn(f: AgentFixture, message: string, script = [{ text: '好的。', tools: [CARD] }]) {
+  const sink = makeSink();
+  const result = await runTurn({
+    db: f.db, caseId: f.caseId, userId: f.userId, message,
+    provider: scriptedProvider(script), searcher: fixtureSearcher([FIXTURE_PACK, CRISIS_PACK]), emit: sink.emit,
+    now: new Date('2026-08-26T12:00:00Z'),
+  });
+  if (!('ok' in result) || !result.ok) throw new Error(`本轮未成功：${JSON.stringify(result)}`);
+  return { sink, result };
+}
+
+/**
+ * 危机轮下发正文的付费残留检查（2026-09-05 规则改版后的口径）：
+ * 允许出现那句随卡给出的 NBDpsy 引导语，但**绝不能有价格数字、http 链接、「预约」二字**。
+ */
+function expectNoPaidResidue(text: string) {
+  expect(text, 'http 链接残留').not.toMatch(/https?:\/\//);
+  expect(text, '「预约」二字残留').not.toContain('预约');
+  expect(text, '价格数字残留（¥/元/块）').not.toMatch(/[¥￥]\s*\d|\d+\s*元|\d+\s*块/);
+}
 
 /** 把案子推过问诊 A 档（公司 + 3 条时间线 + 目标底线），否则 SKIP_AT_INTAKE_OPENING 会挡住推荐 */
 function pastIntakeOpening(f: AgentFixture) {
@@ -137,42 +176,76 @@ describe('D15 危机轮付费禁令（**新 L1 红线**，一票否决）', () =
     expect(detectCrisisPaidContent('我们这边一次 600 元。你的补偿另算。')).not.toBeNull();
   });
 
-  it('★端到端：D15 把模型段剥空时必须回落，不能让用户只剩首段', async () => {
+  it('★端到端：D15 把模型段剥空时必须回落，首段（含 NBDpsy 引导语）仍在', async () => {
     // 评测官指出这道闸原本"剥完就走"——杠杆闸早有剥空兜底，它没有。
     // 危机轮里正文被整段掏空、只剩确定性首段，正是级联放大器最坏的形态。
+    // 2026-09-05 改规则后首段带一句 NBDpsy 引导语；那句是合法系统文案，剥空回落后仍应在场。
     const f = makeAgentFixture();
     pastIntakeOpening(f);
-    const { sink, result } = await turn(f, CRISIS_INPUT, [
+    const { sink, result } = await crisisTurn(f, CRISIS_INPUT, [
       { text: '心理咨询一次 600 元。扫码就能约上。', tools: [CARD] },
     ]);
-    expect(detectCrisisPaidContent(result.text)).toBeNull();
+    // 模型自写的付费被剥光 → 回落兜底；但号码 + NBDpsy 引导语（首段）都还在，且无价格/链接/预约残留
     expect(result.text, '剥空后必须回落到确定性安全回复').toContain('今晚我不跟你讲案子');
+    expect(result.text).toMatch(/12356|800-810-1117/);
+    expect(result.text).toContain(CRISIS_NBDPSY_LINE);
+    expectNoPaidResidue(result.text);
     const n = sink.events.find(
       (e) => e.event === 'notice' && (e as { data: { code: string } }).data.code === 'CRISIS_PAID_CONTENT_BLOCKED',
     ) as { data: { message: string } };
     expect(n.data.message).toContain('剥后模型段为空');
   });
 
-  it('★端到端：危机轮里模型自己写了付费内容 → 一个字都不到用户手里', async () => {
+  it('★端到端：危机轮里模型自己另写付费内容 → 一个字都不到用户手里（首段那句合法保留）', async () => {
+    // 「模型输出若自行添加第二段付费咨询内容，事后剥句仍生效」——既有机制不动。
     const f = makeAgentFixture();
     pastIntakeOpening(f);
-    const { sink, result } = await turn(f, CRISIS_INPUT, [
+    const { sink, result } = await crisisTurn(f, CRISIS_INPUT, [
       { text: '我在。你现在在哪儿？如果想找人聊聊，一次 600 元，一般 50 分钟。点这里预约：https://booking.example.cn/appt', tools: [CARD] },
     ]);
-    expect(detectCrisisPaidContent(result.text), `付费内容漏到用户面前：${result.text}`).toBeNull();
+    // 模型另写的价格/链接/预约全被剥；系统随卡给的那句 NBDpsy 引导语保留
+    expectNoPaidResidue(result.text);
     expect(result.text).not.toContain('600 元');
     expect(result.text).not.toContain('booking.example.cn');
+    expect(result.text, '首段那句合法的 NBDpsy 引导语不该被误剥').toContain(CRISIS_NBDPSY_LINE);
     const codes = sink.events.filter((e) => e.event === 'notice').map((e) => (e as { data: { code: string } }).data.code);
     expect(codes).toContain('CRISIS_PAID_CONTENT_BLOCKED');
   });
 
-  it('★危机轮绝不生成推荐段，哪怕位点成立（D15 优先于 D14）', async () => {
+  it('★危机轮：确定性首段给热线 + NBDpsy 工作室那句（2026-09-05 改规则），但不走产品推荐段、不占台账', async () => {
+    // 旧规则：危机轮不得出现任何 NBDpsy/付费。2026-09-05 主理人改规则：危机轮**要**推 NBDpsy
+    //（热线只能应急，持续的情绪问题得找工作室），那句随危机资源卡确定性下发。
     const f = makeAgentFixture();
     pastIntakeOpening(f);
-    const { result } = await turn(f, CRISIS_INPUT);
+    const { result } = await crisisTurn(f, CRISIS_INPUT);
+    // 热线号码 + NBDpsy 工作室那句在同一张卡里
+    expect(result.text).toMatch(/12356|800-810-1117/);
+    expect(result.text).toContain('NBDpsy 心理咨询工作室');
+    expect(result.text).toContain(CRISIS_NBDPSY_LINE);
+    // 但不含价格数字 / http 链接 / 「预约」二字
+    expectNoPaidResidue(result.text);
+    // 仍不走产品的确定性推荐段、不占 referral_offers 台账
     expect(result.referralScene).toBeNull();
-    expect(result.text).not.toContain('NBDpsy');
     expect(referralOffers.listByUser(f.db, f.userId)).toHaveLength(0);
+  });
+
+  it('★危机轮那句不消耗一案一次名额：事后非危机、位点成立的轮次仍能正常转介一次', async () => {
+    // 变异臂：让危机那句去消耗 referred_nbdpsy 标记 / 写 referral_offers ⇒ 本条红。
+    // 两标记必须分开：出过一次危机不该烧掉日后正常转介的那一次（见 CRISIS_CARD_MARKER 注释）。
+    const f = makeAgentFixture();
+    pastIntakeOpening(f);
+    const c = await crisisTurn(f, CRISIS_INPUT);
+    expect(c.result.text).toContain('NBDpsy 心理咨询工作室');
+    // 危机那句既不占商业转介标记，也不占台账
+    expect(store.hasReferredNbdpsy(f.db, f.caseId), '危机轮那句消耗了 referred_nbdpsy 标记').toBe(false);
+    expect(referralOffers.listByUser(f.db, f.userId), '危机轮那句占了 referral_offers 台账').toHaveLength(0);
+
+    // 事后一轮非危机、位点成立（已立案）——转介名额应当仍在
+    f.db.prepare("UPDATE cases SET stage = '已立案' WHERE id = ?").run(f.caseId);
+    const later = await turn(f, '案子立上了，接下来干嘛？');
+    expect(later.result.referralScene, '危机轮把一案一次的转介名额烧掉了').toBe('立案后');
+    expect(later.result.text).toContain('NBDpsy');
+    expect(referralOffers.listByUser(f.db, f.userId)).toHaveLength(1);
   });
 });
 

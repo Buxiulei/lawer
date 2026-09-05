@@ -1044,27 +1044,36 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   // 模型自己在正文里提一句，**不占位、不落行、不受频控** ——
   // 那样这张台账就不再是证据，而是一份**看起来完整的**残缺记录。
   // 所以：模型说的一律剥，我们说的一律落账。**唯一通道 = 唯一真源。**
-  if (detectNbdpsyPitch(text)) {
-    text = stripNbdpsyPitch(text);
-    emit({
-      event: 'notice',
-      data: {
-        code: 'NBDPSY_PITCH_BLOCKED',
-        message: '模型段自行提及付费心理咨询，已剥除（spec D14：推荐只走产品的推荐段，须占位并落台账）。',
-      },
-    });
+  // 【危机轮：确定性首段里那句 NBDpsy 引导语是合法的系统文案，不参与剥除】(2026-09-05 规则改版)
+  // 首段现在带一句随卡下发的 CRISIS_NBDPSY_LINE，它含「NBDpsy」，直接对全文判会把它当模型推销剥掉。
+  // 与 D15 兜底同一处理：先劈掉首段，只在**模型段**上判/剥；非危机轮没有首段，行为不变。
+  {
+    const { opener, body } = crisis.triggered ? splitCrisisOpener(text) : { opener: '', body: text };
+    if (detectNbdpsyPitch(body)) {
+      const kept = stripNbdpsyPitch(body);
+      text = opener ? `${opener}\n\n${kept}` : kept;
+      emit({
+        event: 'notice',
+        data: {
+          code: 'NBDPSY_PITCH_BLOCKED',
+          message: '模型段自行提及付费心理咨询，已剥除（spec D14：推荐只走产品的推荐段，须占位并落台账）。',
+        },
+      });
+    }
   }
 
   // 【D15 兜底 · L1】危机轮：付费入口 / 价格 / 预约链接一个都不许留。
   // 它一旦开火就是事故信号——推荐段在危机轮根本不生成，只可能是模型绕过工具直接在正文里说。
   if (crisis.triggered) {
-    const paid = detectCrisisPaidContent(text);
+    // 【只判/剥模型段，且必须有剥空兜底】(评测官 2026-08-26 指出：这道闸原本剥完就走)
+    // 杠杆闸早就有兜底（剥空 → CRISIS_SAFE_FALLBACK），这道没有——于是危机轮里
+    // **正文可能被整段掏空，用户只剩确定性首段**，而那正是级联放大器最坏的形态。
+    // 确定性首段不参与剥除：它是我们自己的固定文本，是危机轮里唯一保证在场的号码来源，
+    // 且 2026-09-05 起还带一句合法的 NBDpsy 引导语（含「NBDpsy」）——**判定也必须只看模型段**，
+    // 否则 detectCrisisPaidContent 会命中首段那句，每轮凭空开火、报一条假的付费内容。
+    const { opener, body } = splitCrisisOpener(text);
+    const paid = detectCrisisPaidContent(body);
     if (paid) {
-      // 【只剥模型段，且必须有剥空兜底】(评测官 2026-08-26 指出：这道闸原本剥完就走)
-      // 杠杆闸早就有兜底（剥空 → CRISIS_SAFE_FALLBACK），这道没有——于是危机轮里
-      // **正文可能被整段掏空，用户只剩确定性首段**，而那正是级联放大器最坏的形态。
-      // 确定性首段不参与剥除：它是我们自己的固定文本，且是危机轮里唯一保证在场的号码来源。
-      const { opener, body } = splitCrisisOpener(text);
       const kept = stripCrisisPaidContent(body);
       const emptied = !kept.trim();
       text = opener ? `${opener}\n\n${emptied ? CRISIS_SAFE_FALLBACK : kept}` : (emptied ? CRISIS_SAFE_FALLBACK : kept);

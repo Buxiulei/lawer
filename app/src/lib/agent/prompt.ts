@@ -214,7 +214,12 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
     // 【前置禁令 > 事后剥句】不够格时**在生成前就禁掉**，而不是等它说完再剥——
     // 普通轮是流式的，剥句只能清掉入库正文，用户早看见了。
     // 事后剥句仍保留作兜底，但真正管用的是这条前置约束。
-    input.nbdpsyEligible === false
+    //
+    // 【危机轮让位于资源卡那句】(2026-09-05 规则改版) 危机轮里 CRISIS_DIRECTIVE 已经说清
+    // 「NBDpsy 那句由系统随资源卡给出，模型不得再自行添加或扩写付费咨询内容」——
+    // 这里的通用禁令若再说一遍「不得以任何形式提及 NBDpsy」，就与随卡给出的那句合法文案
+    // 直接打架（指令自相矛盾会稀释约束力）。所以危机轮不下发本块，由危机指令一处说清。
+    input.nbdpsyEligible === false && !input.crisis
       ? [
           '## 本轮禁止提及付费心理咨询（硬性）',
           '',
