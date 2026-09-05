@@ -114,7 +114,7 @@ async function realDocRows() {
   if (!quoted.ok || quoted.stage !== 'quote') throw new Error('报价没出来');
   const done = await submitDoc(
     db,
-    { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quoteId },
+    { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quote_id },
     { llm },
   );
   if (!done.ok || done.stage !== 'done') throw new Error('解读没做成');

@@ -109,6 +109,11 @@ describe('① 报价这一步不动钱也不调模型', () => {
 
     expect(r.stage).toBe('quote');
     expect(r.quote.amount).toBe(PER_DOC);
+    // 报价回包字段名一律下划线，与 evidence_extract 对齐（变异：改回 quoteId/expiresAt ⇒ 红）
+    expect(r.quote.quote_id).toBeGreaterThan(0);
+    expect(typeof r.quote.expires_at).toBe('string');
+    expect(r.quote).not.toHaveProperty('quoteId');
+    expect(r.quote).not.toHaveProperty('expiresAt');
     expect(getGongdao(uid, db)).toBe(before.balance);
     expect(count(db, 'gongdao_ledger')).toBe(before.ledger);
     expect(count(db, 'company_docs')).toBe(0);
@@ -146,7 +151,7 @@ describe('② / ③ / ④ 确认之后：三张表从零到有，规则库说了
     const done = mustOk(
       await submitDoc(
         db,
-        { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quoteId },
+        { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quote_id },
         { llm },
       ),
     ) as DocReviewResult & { ok: true };
@@ -195,7 +200,7 @@ describe('② / ③ / ④ 确认之后：三张表从零到有，规则库说了
     const done = mustOk(
       await submitDoc(
         db,
-        { userId: uid, caseId, text: NOTICE, docKind: '其他', quoteId: quoted.quote.quoteId },
+        { userId: uid, caseId, text: NOTICE, docKind: '其他', quoteId: quoted.quote.quote_id },
         { llm },
       ),
     ) as DocReviewResult & { ok: true };
@@ -256,7 +261,7 @@ describe('⑤ 没有提取文本的材料先过一次 OCR（假 sidecar）', () 
     const done = mustOk(
       await submitDoc(
         db,
-        { userId: uid, caseId, evidenceId: evId, docKind: '解除通知', quoteId: quoted.quote.quoteId },
+        { userId: uid, caseId, evidenceId: evId, docKind: '解除通知', quoteId: quoted.quote.quote_id },
         { llm },
       ),
     ) as DocReviewResult & { ok: true };
@@ -281,7 +286,7 @@ describe('⑥ 重放：同一张报价不二扣、不二写、不再调模型', 
     const first = mustOk(
       await submitDoc(
         db,
-        { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quoteId },
+        { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quote_id },
         { llm },
       ),
     ) as DocReviewResult & { ok: true };
@@ -290,7 +295,7 @@ describe('⑥ 重放：同一张报价不二扣、不二写、不再调模型', 
     const again = mustOk(
       await submitDoc(
         db,
-        { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quoteId },
+        { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quote_id },
         { llm },
       ),
     ) as DocReviewResult & { ok: true };
@@ -314,7 +319,7 @@ describe('⑦ 别人的解读一律「不存在」', () => {
     const done = mustOk(
       await submitDoc(
         db,
-        { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quoteId },
+        { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quote_id },
         { llm },
       ),
     ) as DocReviewResult & { ok: true };
@@ -358,7 +363,7 @@ describe('⑧ 报价对不上这次请求：已扣的钱原路退回', () => {
 
     const r = await submitDoc(
       db,
-      { userId: uid, caseId: caseB, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quoteId },
+      { userId: uid, caseId: caseB, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quote_id },
       { llm },
     );
 
@@ -438,7 +443,7 @@ describe('⑨ 已确认过的报价不能再用：QUOTE_ALREADY_USED', () => {
     const quoted = mustOk(
       await submitDoc(db, { userId: uid, caseId, text: NOTICE, docKind: '解除通知' }, { llm: boomLlm() }),
     ) as DocQuoteResult & { ok: true };
-    const quoteId = quoted.quote.quoteId;
+    const quoteId = quoted.quote.quote_id;
 
     // 第一次：扣了 20 → 模型炸 → 原路退回。正对照：这一步确实走到了扣费与退款。
     const failed = await submitDoc(
@@ -474,7 +479,7 @@ describe('⑨ 已确认过的报价不能再用：QUOTE_ALREADY_USED', () => {
     const quoted = mustOk(
       await submitDoc(db, { userId: uid, caseId, text: NOTICE, docKind: '解除通知' }, { llm }),
     ) as DocQuoteResult & { ok: true };
-    const quoteId = quoted.quote.quoteId;
+    const quoteId = quoted.quote.quote_id;
 
     const first = mustOk(
       await submitDoc(
@@ -541,7 +546,7 @@ describe('⑩ 落库抛异常：钱照样原路退回', () => {
 
     const r = await submitDoc(
       db,
-      { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quoteId },
+      { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quote_id },
       { llm },
     );
 

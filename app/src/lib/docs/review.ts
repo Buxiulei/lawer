@@ -20,7 +20,6 @@ import {
   confirmService,
   quoteService,
   type PricedService,
-  type ServiceQuote,
 } from '@/lib/billing/service-quotes';
 import { gongdaoRefund } from '@/lib/billing';
 import type { DomainFailure, Result } from '@/lib/cases';
@@ -223,9 +222,25 @@ export interface SubmitDocInput {
   clientRef?: string;
 }
 
+/**
+ * 报价回包的对外形态：字段名一律下划线，与 evidence_extract 的报价回包（ExtractionQuoteView）
+ * 及 MCP 全部入参对齐。ServiceQuote 是仓内 camelCase 风格，转换在这一层做——
+ * 直接把 ServiceQuote 抛出去会让 doc_submit 回 quoteId/expiresAt、与 evidence_extract 打架。
+ */
+export interface DocQuoteView {
+  quote_id: number;
+  amount: number;
+  expires_at: string;
+  units: number;
+  unit_label: string;
+  unit_price: number;
+  price_key: string;
+  label: string;
+}
+
 export interface DocQuoteResult {
   stage: 'quote';
-  quote: ServiceQuote;
+  quote: DocQuoteView;
   /** 这次解读要不要先做一次文字识别（价钱已经含在这张报价里，不另收） */
   needs_ocr: boolean;
   next: string;
@@ -367,13 +382,23 @@ export async function submitDoc(
       payload: { units: 1, evidenceId: source.evidenceId ?? undefined },
     });
     if (!quoted.ok) return quoted;
+    const q = quoted.quote;
     return {
       ok: true,
       stage: 'quote',
-      quote: quoted.quote,
+      quote: {
+        quote_id: q.quoteId,
+        amount: q.amount,
+        expires_at: q.expiresAt,
+        units: q.breakdown.units,
+        unit_label: q.breakdown.unitLabel,
+        unit_price: q.breakdown.unitPrice,
+        price_key: q.breakdown.priceKey,
+        label: q.breakdown.label,
+      },
       needs_ocr: source.text === null,
       next:
-        `带上 quote_id=${quoted.quote.quoteId} 再调一次 doc_submit 才开始解读并扣费。` +
+        `带上 quote_id=${q.quoteId} 再调一次 doc_submit 才开始解读并扣费。` +
         '报价免费，不确认就一分钱都不扣；报价过期了重新报一次即可。',
     };
   }
