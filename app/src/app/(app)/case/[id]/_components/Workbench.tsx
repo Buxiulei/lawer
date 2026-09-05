@@ -57,6 +57,7 @@ import {
   DemoDataBanner,
   DraftConfirmDialog,
   GongdaoExhaustedBanner,
+  ReconnectingNotice,
   StreamErrorCard,
   TurnInFlightNotice,
   WaitingCard,
@@ -179,6 +180,8 @@ export function Workbench({ caseId }: { caseId: string }) {
           notices: turn.notices,
           drafts: turn.drafts,
           degraded: turn.meta?.degraded,
+          // 用户中途点停止而就地落定的半截：末尾要标「已停止接收，服务端会答完」
+          stopped: turn.stopped,
         },
       ]);
       if (items.length) setActions((prev) => [...prev, ...items]);
@@ -221,10 +224,27 @@ export function Workbench({ caseId }: { caseId: string }) {
     [scrollToTurnEnd],
   );
 
+  /**
+   * 对账把「断了连接、但服务端已答完落库」的那条回答从库里取回来了：把它补进流里。
+   * 那条本地问话回显留着（它对应的用户消息服务端也落了库，这里不重复补，只补回答），
+   * 所以清掉 pendingEcho（这一轮已成立，不再撤）、只追加这条 assistant 回答。
+   */
+  const settleRecovered = useCallback(
+    (message: StreamedMessage) => {
+      pendingEcho.current = null;
+      setMessages((prev) =>
+        prev.some((m) => m.id === message.id) ? prev : [...prev, message],
+      );
+      scrollToTurnEnd();
+    },
+    [scrollToTurnEnd],
+  );
+
   const stream = useChatStream({
     caseId,
     onSettled: settle,
     onFailed: settleFailedTurn,
+    onRecovered: settleRecovered,
   });
 
   /**
@@ -514,6 +534,9 @@ export function Workbench({ caseId }: { caseId: string }) {
               onLongWait={keepAtBottom}
             />
           )}
+
+          {/* 看门狗判定连接静默死亡、正在去库里对账取回答：安抚条，不是错误卡 */}
+          {stream.phase === 'reconnecting' && <ReconnectingNotice />}
 
           {/* 余额用尽自成一屏内容：那不是「这一轮没说完」，重试再多次也不会有回答，
               出路在兑换 / 充值两个入口上。所以换横幅、且不给重试按钮。 */}

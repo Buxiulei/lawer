@@ -493,6 +493,24 @@ export function TurnInFlightNotice() {
   );
 }
 
+/**
+ * 对账进行中的提示条（phase=reconnecting）：连接断了一下，正在把这一轮的回答找回来。
+ * 出现在等答途中——安抚而非报错：多半几秒内答案就补回来了，不该先甩一张错误卡吓人。
+ */
+export function ReconnectingNotice() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="prose-measure my-2 rounded-[12px] border border-line bg-surface-2 p-3.5"
+    >
+      <p className="text-[15px] leading-7 text-ink-2">
+        连接断了一下，正在把这一轮的回答找回来…
+      </p>
+    </div>
+  );
+}
+
 /** 没有登录态时的兜底说明：让人知道看到的不是自己的档案 */
 export function DemoDataBanner() {
   return (

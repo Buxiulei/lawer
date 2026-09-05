@@ -11,15 +11,34 @@ import type {
   RecordFrame,
   StreamFrame,
 } from './frames';
+import type { StreamedMessage } from '../_components/Messages';
+import { fetchCaseMessages } from './caseHistory';
 import { createHttpTransport, readToken } from './httpTransport';
 import { createMockTransport } from './mockTransport';
+import {
+  findReconciledAnswer,
+  reconcileVerdict,
+  stalledError,
+} from './reconcile';
 import {
   NeedsDemoFallbackError,
   SessionExpiredError,
   type ChatTransport,
 } from './transport';
+import { createWatchdog, HEARTBEAT_MS, type Watchdog } from './watchdog';
 
-export type StreamPhase = 'idle' | 'connecting' | 'waiting' | 'streaming' | 'error';
+/**
+ * `reconnecting` = 看门狗判定连接静默死亡后，正在去库里把这一轮的答案取回来（对账）。
+ * 它仍算「忙」（Composer 显示停止键、不接收发送），但**不再**算「会静默死亡的活跃态」——
+ * 所以看门狗的 isActive 不含它，对账进行中不会被自己重复触发（见 watchdog.ts）。
+ */
+export type StreamPhase =
+  | 'idle'
+  | 'connecting'
+  | 'waiting'
+  | 'streaming'
+  | 'reconnecting'
+  | 'error';
 
 export interface StreamError {
   code: string;
@@ -56,6 +75,12 @@ export interface SettledTurn {
   servedMismatch: boolean;
   /** 收到 done 帧才算完整；中途停止/断流为 false */
   complete: boolean;
+  /**
+   * 这一轮是用户中途**点了停止**而就地落定的半截回答。
+   * 停止只是「停止接收」——服务端在客户端断开后照常答完、落库、计费（chat 路由的 finally
+   * 才释放占位），所以半截也要留成一条回答，末尾标「已停止接收；服务端会答完，刷新可见完整回答」。
+   */
+  stopped: boolean;
 }
 
 interface State {
@@ -86,11 +111,18 @@ export const INITIAL: State = {
   waitBaseAt: null,
 };
 
-type Action = { type: 'start' } | { type: 'reset' } | { type: 'frame'; frame: StreamFrame };
+type Action =
+  | { type: 'start' }
+  | { type: 'reset' }
+  | { type: 'reconnecting' }
+  | { type: 'frame'; frame: StreamFrame };
 
 export function reduce(state: State, action: Action): State {
   if (action.type === 'start') return { ...INITIAL, phase: 'connecting' };
   if (action.type === 'reset') return INITIAL;
+  // 看门狗触发：离开 streaming/waiting/connecting，但保住已经流出来的正文与 meta
+  // （对账若把答案补上，那段正文随 reset 让位给库里的整段；对账落 STALLED 则 error 卡接手）。
+  if (action.type === 'reconnecting') return { ...state, phase: 'reconnecting' };
 
   const frame = action.frame;
   switch (frame.type) {
@@ -157,6 +189,7 @@ function emptyTurn(): SettledTurn {
     servedModel: null,
     servedMismatch: false,
     complete: false,
+    stopped: false,
   };
 }
 
@@ -170,6 +203,8 @@ export function useChatStream({
   caseId,
   onSettled,
   onFailed,
+  onRecovered,
+  fetchHistory = fetchCaseMessages,
 }: {
   caseId: string;
   onSettled: (turn: SettledTurn) => void;
@@ -179,6 +214,14 @@ export function useChatStream({
    * 屏幕上那句问话得撤回去。错误本身照旧进 state.error，这个回调只报「发生了」。
    */
   onFailed?: (error: StreamError) => void;
+  /**
+   * 对账把一轮**丢了连接、但服务端已答完落库**的回答从库里取回来时叫一声，
+   * 把那条 assistant 消息（已带 recovered 标记）交给页面补进流里。走单独一条路而不是
+   * onSettled：这条消息来自历史行、字段齐全（含实际型号），不必再拼一个 SettledTurn。
+   */
+  onRecovered?: (message: StreamedMessage) => void;
+  /** 对账取历史的数据层。默认就是历史那一套 fetchCaseMessages（不另起第二套）；注入仅供测试。 */
+  fetchHistory?: (caseId: string) => Promise<StreamedMessage[]>;
 }) {
   const [state, dispatch] = useReducer(reduce, INITIAL);
   /** 真端点回落到演示数据：要在页面上说明白，不能让人以为看的是自己的档案 */
@@ -200,6 +243,118 @@ export function useChatStream({
   settledRef.current = onSettled;
   const failedRef = useRef(onFailed);
   failedRef.current = onFailed;
+  const recoveredRef = useRef(onRecovered);
+  recoveredRef.current = onRecovered;
+
+  /** 本轮那条 assistant 行的库主键（meta 帧带回来）。对账拿它去历史里认领这一轮的回答。 */
+  const metaMessageId = useRef<string | null>(null);
+  /**
+   * 本轮正在累积的那条回答（run 边收帧边往里塞）。抬成 ref 是为了 stop() 也够得着它：
+   * 用户点停止时，把这半截就地落定为回答。落定的一刻置回 null——run 正常收尾与 stop 各查一次，
+   * 谁先落定谁置空，另一方看见 null 就跳过，绝不落两条。
+   */
+  const liveTurn = useRef<SettledTurn | null>(null);
+  /** 看门狗实例（挂载时建，卸载时拆）。收帧时 touch 它，把静默计时清零。 */
+  const watchdog = useRef<Watchdog | null>(null);
+  /** 对账「再等一窗」的定时器。 */
+  const reconcileTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 对账试到第几次（reconcileVerdict 用它决定「再等」还是「认栽」）。 */
+  const reconcileAttempt = useRef(0);
+  /** 对账进行中：挡住看门狗与可见性同时来两下时的重入。 */
+  const reconciling = useRef(false);
+
+  const clearReconcileTimer = () => {
+    if (reconcileTimer.current !== null) {
+      clearTimeout(reconcileTimer.current);
+      reconcileTimer.current = null;
+    }
+  };
+
+  /**
+   * 一次对账：重取本案历史，看这一轮的回答在库里了没有。
+   *  · 有 ⇒ 当 done 落定，交给页面补进流里（末尾会标「连接中断过，已把回答补上」）；
+   *  · 还没有、且没试满 ⇒ 保持 reconnecting，过一个心跳窗口再来一次；
+   *  · 试满还没有 ⇒ 落 STALLED 错误卡（带重试，retry_of 用已知的 message_id）。
+   * 取历史本身失败也按「还没有」处理——宁可多等一窗/最终给重试，也不把失败当成「没答」。
+   */
+  const reconcile = useCallback(async () => {
+    // 被 stop() 或新一轮接管后，遗留的定时器回调可能还会打进来：这时别再动状态
+    if (!reconciling.current) return;
+    reconcileAttempt.current += 1;
+    const attempt = reconcileAttempt.current;
+
+    let answer: StreamedMessage | null = null;
+    try {
+      const rows = await fetchHistory(caseId);
+      answer = findReconciledAnswer(rows, metaMessageId.current);
+    } catch {
+      answer = null;
+    }
+
+    // 取历史这一段 await 期间用户可能已经停止 / 又发了一句：那就交出去，别拿旧意图改状态
+    if (!reconciling.current) return;
+
+    const verdict = reconcileVerdict(answer, attempt);
+    if (verdict.kind === 'pending') {
+      reconcileTimer.current = setTimeout(() => void reconcile(), HEARTBEAT_MS);
+      return;
+    }
+
+    // 终态：对账收工
+    reconciling.current = false;
+    reconcileAttempt.current = 0;
+    clearReconcileTimer();
+
+    if (verdict.kind === 'recovered') {
+      recoveredRef.current?.({ ...verdict.message, recovered: true });
+      dispatch({ type: 'reset' });
+      return;
+    }
+
+    // stalled：错误卡进流（重试靠 message_id），并叫 onFailed 一声让页面把末尾带进视野
+    lastFailedId.current = metaMessageId.current ?? undefined;
+    const err = stalledError(metaMessageId.current);
+    dispatch({ type: 'frame', frame: err });
+    failedRef.current?.(toStreamError(err));
+  }, [caseId, fetchHistory]);
+
+  /**
+   * 看门狗/可见性叫醒后进对账：掐掉可能还挂着的僵尸 fetch，phase 离开 streaming/waiting，
+   * 进入 reconnecting，然后去库里取答案。已经在对账就不再重入。
+   */
+  const triggerReconcile = useCallback(() => {
+    if (reconciling.current) return;
+    reconciling.current = true;
+    reconcileAttempt.current = 0;
+    clearReconcileTimer();
+    abort.current?.abort();
+    dispatch({ type: 'reconnecting' });
+    void reconcile();
+  }, [reconcile]);
+
+  // 看门狗只在这几态才该触发：真正「会静默死亡」的等答态。reconnecting/error/idle 不含在内，
+  // 所以对账进行中、已落错误卡、或空闲时，看门狗都不会（再）触发。
+  const isActiveRef = useRef(false);
+  isActiveRef.current =
+    state.phase === 'connecting' ||
+    state.phase === 'waiting' ||
+    state.phase === 'streaming';
+  const triggerRef = useRef(triggerReconcile);
+  triggerRef.current = triggerReconcile;
+
+  useEffect(() => {
+    const wd = createWatchdog({
+      isActive: () => isActiveRef.current,
+      onStall: () => triggerRef.current(),
+      onReturnToVisible: () => triggerRef.current(),
+    });
+    watchdog.current = wd;
+    return () => {
+      wd.stop();
+      watchdog.current = null;
+      clearReconcileTimer();
+    };
+  }, []);
 
   useEffect(() => () => abort.current?.abort(), []);
 
@@ -211,18 +366,32 @@ export function useChatStream({
       // 重试走 retryOf（正文由服务端从库里取），别拿空串把上一句问话冲掉
       if (message) lastMessage.current = message;
       lastFailedId.current = undefined;
+      // 新一轮开跑：清掉上一轮遗留的对账状态与锚点，看门狗计时也从此刻起算
+      metaMessageId.current = null;
+      reconciling.current = false;
+      reconcileAttempt.current = 0;
+      clearReconcileTimer();
+      watchdog.current?.touch();
       dispatch({ type: 'start' });
 
+      // turn 与 liveTurn.current 是同一个对象：往 turn 里累积就等于 stop() 看得见的那份半截
       const turn = emptyTurn();
+      liveTurn.current = turn;
       const req = { caseId, message, signal: controller.signal, retryOf };
 
       const consume = async (transport: ChatTransport) => {
         for await (const frame of transport.send(req)) {
+          // 已被看门狗/停止接管（abort 过）：迟到的缓冲帧别再拿去改状态，
+          // 否则一帧 delta 就会把已经 reset/reconnecting 的 phase 又拽回 streaming。
+          if (controller.signal.aborted) break;
+          // 任意一帧（含 ping）都算「连接还活着」：给看门狗续命
+          watchdog.current?.touch();
           dispatch({ type: 'frame', frame });
           switch (frame.type) {
             case 'meta':
               turn.meta = frame;
               turn.messageId = frame.message_id;
+              metaMessageId.current = frame.message_id;
               break;
             case 'delta':
               turn.text += frame.text;
@@ -291,8 +460,11 @@ export function useChatStream({
       }
 
       if (!ok) return; // 错误卡留在流里，等用户点重试
-      if (turn.text.trim() || turn.records.length || turn.actions.length) {
-        settledRef.current(turn);
+      // stop() 可能已抢先把这半截落定并置空 liveTurn；那时这里 done 为 null，不再落第二条
+      const done = liveTurn.current;
+      liveTurn.current = null;
+      if (done && (done.text.trim() || done.records.length || done.actions.length)) {
+        settledRef.current(done);
       }
       dispatch({ type: 'reset' });
     },
@@ -314,14 +486,37 @@ export function useChatStream({
     }
     if (lastMessage.current) void run(lastMessage.current);
   }, [run]);
-  const stop = useCallback(() => abort.current?.abort(), []);
+  /**
+   * 停止这一轮。**停止 = 停止接收，不是取消这一轮**：服务端在客户端断开后照常答完、落库、
+   * 计费（chat 路由的 finally 才释放占位），所以已经收到的半截要**就地落定成回答**、留在档案里，
+   * 而不是丢掉——丢掉等于「花了钱、答案也生成了，屏幕上却什么都没留下」。
+   *
+   * 于是 stop = abort（停止接收）+ 把半截落定（本地 settle，标 stopped，不发 STALLED、不对账）
+   * + 收掉对账 + reset 解锁输入框。半截为空（还没开口就停）就只解锁，不落一条空回答。
+   * 单 abort 会让收帧循环走进「已中止」分支后原地返回、phase 停死在 streaming，输入框再也回不来
+   * （2026-09-04 症状之一），所以 reset 这一步不能省。
+   */
+  const stop = useCallback(() => {
+    // 先取走半截并置空：run 正常收尾那边会看见 null 而不再落第二条
+    const partial = liveTurn.current;
+    liveTurn.current = null;
+    abort.current?.abort();
+    reconciling.current = false;
+    reconcileAttempt.current = 0;
+    clearReconcileTimer();
+    if (partial && (partial.text.trim() || partial.records.length || partial.actions.length)) {
+      settledRef.current({ ...partial, stopped: true });
+    }
+    dispatch({ type: 'reset' });
+  }, []);
 
   return {
     ...state,
     busy:
       state.phase === 'connecting' ||
       state.phase === 'waiting' ||
-      state.phase === 'streaming',
+      state.phase === 'streaming' ||
+      state.phase === 'reconnecting',
     demoFallback,
     send,
     retry,

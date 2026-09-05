@@ -51,6 +51,16 @@ export interface StreamedMessage extends Message {
    * 反解就会静默地把重试指向一个不存在的行。
    */
   failedMessageId?: string;
+  /**
+   * 这条回答是**对账补回来的**：连接中途断了、服务端已答完落库，看门狗对账把它从库里取回。
+   * 为真时末尾加一行小字说明——好让用户明白刚才那阵「卡住」发生了什么、这答案是补上的。
+   */
+  recovered?: boolean;
+  /**
+   * 这条回答是用户**中途点停止**而就地落定的半截。停止只是停止接收，服务端仍会答完落库，
+   * 为真时末尾加一行小字：已停止接收，服务端会答完这一轮，刷新可见完整回答。
+   */
+  stopped?: boolean;
 }
 
 /** 日期分隔：跨天时插一条细线，案件对话往往横跨几周。 */
@@ -171,6 +181,18 @@ export function AssistantMessage({
             ))}
           </div>
         </section>
+      )}
+
+      {/* 对账补回来的那一轮：说明白刚才那阵「卡住」发生了什么，这答案是从库里补上的。 */}
+      {message.recovered && (
+        <p className="mt-3 text-[13px] leading-6 text-ink-2">连接中断过，已把回答补上。</p>
+      )}
+
+      {/* 用户中途停止而就地落定的半截：停止只是停止接收，服务端仍会答完。 */}
+      {message.stopped && (
+        <p className="mt-3 text-[13px] leading-6 text-ink-2">
+          已停止接收；服务端会答完这一轮，刷新可见完整回答。
+        </p>
       )}
 
       {/* 型号落款：极淡、极小，压在这一轮**所有产出的最下面**（含依据卡）。
