@@ -86,6 +86,22 @@ export const PRICE_FALLBACK = {
    */
   'dossier.probe_free_per_day': 2,
 
+  // ── 耗算力的内容提取与解读（设计稿 §6；报价→确认→扣费走 lib/billing/service-quotes）──
+  // 单位都写在键名里（per_page / per_minute / per_doc / per_item），不靠调用方记得换算：
+  // 一个叫 `asr.price` 的键在两个调用点被当成「每分钟」和「每次」是查不出来的账。
+  /** 图片/PDF 每页 OCR。 */
+  'ocr.per_page': 5,
+  /** 录音每分钟转写（含说话人分离）。不足一分钟按一分钟，取整口径只在 unitsFromSeconds 一处。 */
+  'asr.per_minute': 8,
+  /** 视频每分钟（抽音轨转写 + 关键帧识别）。 */
+  'video.per_minute': 12,
+  /** 来文解读每份（含 OCR 与审查规则命中）。 */
+  'doc_review.per_doc': 20,
+  /** 证据简报每件（含在提取价里，单独重生成时才收）。 */
+  'brief.per_item': 3,
+  /** 报价有效期（分钟）。过了这个点确认一律 QUOTE_EXPIRED，须重新报价。 */
+  'quote.ttl_minutes': 30,
+
   // ── 守望订阅档位（M7；本表登记为价目事实源，计费流由守望工单消费，不在本模块）──
   /** 守望·圈1（每日巡检）月费/主体。 */
   'watch.tier.daily': 199,

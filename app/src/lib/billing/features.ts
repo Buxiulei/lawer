@@ -28,6 +28,11 @@ export const FEATURE_LABELS: Record<string, string> = {
   // 为一个产品叫法把它放宽，等于把这类漏出的唯一机检口子拆了。改叫法只需改这一行与
   // company/dossier-billing.ts 的 DOSSIER_MODULE_LABEL（两处同名同物，别只改一处）。
   dossier_patterns: '人事套路归纳',  // M6 起价+每篇（保留条目不足自动退款）
+  // 耗算力的内容提取与解读（计价键与报价流见 lib/billing/service-quotes.ts）。
+  // ocr / asr 两键上面已登记（文件解读 / 录音分析），此处只补新增的三个。
+  video: '视频提取',                  // 每分钟：抽音轨转写 + 关键帧识别
+  doc_review: '来文解读',             // 每份：公司发来的文件逐条解读 + 审查规则命中
+  brief: '证据简报',                  // 每件：这件证据能证明什么（含在提取价里，单独重生成才收）
 };
 
 /**

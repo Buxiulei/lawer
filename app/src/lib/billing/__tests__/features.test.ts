@@ -3,6 +3,7 @@
 import { describe, expect, test } from 'vitest';
 import { FEATURE_LABELS, KNOWN_FEATURE_KEYS, featureLabel, UNKNOWN_FEATURE_LABEL } from '../features';
 import { DOSSIER_MODULE_FEATURE, DOSSIER_MODULE_LABEL, DOSSIER_MODULES } from '@/lib/company/dossier-billing';
+import { PRICED_SERVICES, SERVICE_FEATURE } from '../service-quotes';
 
 /** 生产在用的 feature 键全集（新增计费功能须同步补此表与 FEATURE_LABELS）。
  *  companywatch 目前只记量不扣费（扣费口径待 M3），但用量明细同样要出中文标签，故一并登记。
@@ -14,6 +15,9 @@ const PRODUCTION_FEATURE_KEYS = [
   'intake', 'companion', 'draft', 'ocr', 'asr', 'attest', 'export', 'knowledge', 'companywatch',
   'contract_review',
   ...DOSSIER_MODULES.map((m) => DOSSIER_MODULE_FEATURE[m]),
+  // 报价流服务（lib/billing/service-quotes）：同样取生产映射表，不手抄字符串。
+  // 与上面两组有交集（ocr / asr 两键三处共用），故下面按集合比，不按数组比。
+  ...PRICED_SERVICES.map((s) => SERVICE_FEATURE[s]),
 ];
 
 describe('用量功能标签单一事实源', () => {
@@ -27,7 +31,7 @@ describe('用量功能标签单一事实源', () => {
   });
 
   test('生产实际使用的每个 feature 键都已登记中文标签（不落「其他」）', () => {
-    expect([...KNOWN_FEATURE_KEYS].sort()).toEqual([...PRODUCTION_FEATURE_KEYS].sort());
+    expect([...KNOWN_FEATURE_KEYS].sort()).toEqual([...new Set(PRODUCTION_FEATURE_KEYS)].sort());
     for (const key of PRODUCTION_FEATURE_KEYS) {
       expect(FEATURE_LABELS[key], `生产键「${key}」未登记`).toBeDefined();
       expect(featureLabel(key)).not.toBe(UNKNOWN_FEATURE_LABEL);
