@@ -15,7 +15,13 @@
 // ───────────────────────────────────────────────────────────────────────
 import type { Database } from 'better-sqlite3';
 
-import { confirmService, quoteService, type ServiceQuote } from '@/lib/billing/service-quotes';
+import {
+  SERVICE_FEATURE,
+  confirmService,
+  quoteService,
+  type PricedService,
+  type ServiceQuote,
+} from '@/lib/billing/service-quotes';
 import { gongdaoRefund } from '@/lib/billing';
 import type { DomainFailure, Result } from '@/lib/cases';
 import { writeOnce } from '@/lib/capabilities/shared';
@@ -394,22 +400,49 @@ export async function submitDoc(
 
   const confirmed = confirmService(db, input.userId, input.quoteId);
   if (!confirmed.ok) return confirmed;
-  if (confirmed.caseId !== input.caseId) {
-    return fail(
-      400,
-      'QUOTE_CASE_MISMATCH',
-      `报价 ${input.quoteId} 是给案件 ${confirmed.caseId} 报的，不能用来解读案件 ${input.caseId} 的文件。` +
-        '怎么办：对这个案件重新报一次价（报价免费）。',
-    );
-  }
 
-  /** 扣费之后的任何失败都走这里：原路退款，再把原因如实抛回去。 */
+  /**
+   * 扣费之后的任何失败都走这里：原路退款，再把原因如实抛回去。
+   *
+   * 【为什么这个闭包必须紧跟 confirmService，中间一行判断都不许插】confirmService 一返回，
+   * 钱就已经扣了。在它与本闭包之间写任何 `return fail(...)`，那条分支就是「扣了钱、什么都没给、
+   * 也不退」——而回包看起来只是一条参数校验错误，用户照着错误提示重新报一次价，再付一次。
+   * 退款的 feature 照**这次真扣的那张报价的服务**算（与 confirmService 记账时同一个表达式），
+   * 不写死 'doc_review'：下面那条服务不符的分支扣的可能是一张文字识别的报价，
+   * 写死的形态是账上「文件解读 -5」旁边挂一笔「来文解读 +5」，两笔功能名对不上、月账差一行。
+   */
+  const refundFeature =
+    SERVICE_FEATURE[confirmed.service as PricedService] ?? confirmed.service;
   const refundAnd = (failure: DomainFailure): DomainFailure => {
     if (confirmed.charged > 0) {
-      gongdaoRefund(input.userId, confirmed.charged, confirmed.orderRef, 'doc_review', db);
+      gongdaoRefund(input.userId, confirmed.charged, confirmed.orderRef, refundFeature, db);
     }
     return failure;
   };
+
+  // 报价的服务必须就是来文解读。不校验的形态是：拿一张 5 公道值的文字识别报价来确认，
+  // 扣 5、解读照做——同一件事按两个价卖，而两条路径都不报错。
+  if (confirmed.service !== 'doc_review') {
+    return refundAnd(
+      fail(
+        400,
+        'QUOTE_SERVICE_MISMATCH',
+        `报价 ${input.quoteId} 是给「${confirmed.service}」报的，不能用来解读来文。` +
+          '怎么办：本次费用已原路退回；不带 quote_id 调一次本工具重新取报价号。',
+      ),
+    );
+  }
+
+  if (confirmed.caseId !== input.caseId) {
+    return refundAnd(
+      fail(
+        400,
+        'QUOTE_CASE_MISMATCH',
+        `报价 ${input.quoteId} 是给案件 ${confirmed.caseId} 报的，不能用来解读案件 ${input.caseId} 的文件。` +
+          '怎么办：本次费用已原路退回；对这个案件重新报一次价，再带新的 quote_id 来确认。',
+      ),
+    );
+  }
 
   // ── 取文本：已有提取文本直接用；没有就现做一次 OCR（价钱含在这张报价里）──
   let text = source.text;
@@ -547,7 +580,8 @@ export async function submitDoc(
     },
     (r) => ({ table: 'company_docs', id: r.docId }),
   );
-  if (written.ok !== true) return written;
+  // 落库失败同样在扣费之后：不退的话就是「钱扣了、库里一行没有、页面上什么都看不到」。
+  if (written.ok !== true) return refundAnd(written);
 
   const docId = 'docId' in written ? written.docId : written.id;
   const doc = getDoc(db, docId, input.userId);

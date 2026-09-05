@@ -3,7 +3,8 @@
 //   ① **一条时间线都不写**（变异臂：把建议改成自动 timeline_add → 红）
 //   ② 建议的事件字段与 timeline_add 的入参逐字对齐，agent 确认后可原样转发
 //   ③ 日期不成形、类别不在词表里的候选一律丢掉并计数（不替模型补默认值）
-//   ④ 还没有转写稿时明说没有，且区分「正在转写」与「压根没转」
+//   ④ 没有**可用的**转写稿（状态不是 done、或没文本）一律回 EXTRACTION_REQUIRED 并指路 evidence_extract
+//      （变异臂：只判文本不判状态 → 红，半截稿会被当完整稿归纳）
 import { describe, expect, test } from 'vitest';
 import Database from 'better-sqlite3';
 
@@ -124,8 +125,9 @@ describe('④ 没有转写稿时明说没有', () => {
     const r = await submitTranscript(db, { userId: uid, evidenceId: evId }, { llm: fakeLlm() });
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.errorCode).toBe('TRANSCRIPT_NOT_READY');
-    expect(r.message).toContain('先对这件录音做转写');
+    expect(r.errorCode).toBe('EXTRACTION_REQUIRED');
+    // 指路必须点名那条真能做转写的路（带 mode），只说「去做转写」等于让 agent 自己找。
+    expect(r.message).toContain('evidence_extract mode=asr');
   });
 
   test('正在转写 → 说清是在排队，别让人再排一条', async () => {
@@ -134,8 +136,31 @@ describe('④ 没有转写稿时明说没有', () => {
     const r = await submitTranscript(db, { userId: uid, evidenceId: evId }, { llm: fakeLlm() });
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.message).toContain('正在转写');
+    expect(r.errorCode).toBe('EXTRACTION_REQUIRED');
+    expect(r.message).toContain('已经在跑');
     expect(r.message).toContain('不必重新排队');
+  });
+
+  // 负例：提取半途而废的行——**有文本、但状态不是 done**。
+  // 只判文本就会把半截稿子当完整稿归纳：用户读到一份看起来结论完整的要点，
+  // 而后半段谈话（往往是真正定调的那几句）从没进过模型。
+  test('有半截文本但状态不是 done → 照样回 EXTRACTION_REQUIRED，一次模型都不调', async () => {
+    const { db, uid, caseId, fileId } = makeDb();
+    const evId = mkAudio(db, uid, caseId, fileId, 'HR：9 月 12 号那天我们跟你谈过一次，', 'running');
+    const llm = fakeLlm();
+    const r = await submitTranscript(db, { userId: uid, evidenceId: evId }, { llm });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errorCode).toBe('EXTRACTION_REQUIRED');
+    expect(llm.calls.length).toBe(0);
+  });
+
+  // 正对照：同一件材料状态转成 done 就该放行，免得上面几条其实是落在「谁都不放行」上。
+  test('状态 done 且有稿 → 放行', async () => {
+    const { db, uid, caseId, fileId } = makeDb();
+    const evId = mkAudio(db, uid, caseId, fileId, TRANSCRIPT, 'done');
+    const r = await submitTranscript(db, { userId: uid, evidenceId: evId }, { llm: fakeLlm() });
+    expect(r.ok).toBe(true);
   });
 
   test('别人的录音一律「不存在」', async () => {

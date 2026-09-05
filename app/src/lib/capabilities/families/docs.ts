@@ -154,9 +154,10 @@ export const transcriptSubmit: Capability = {
   title: '归纳录音要点并建议事件',
   description:
     '读一件**已经转写好**的录音的文字稿，给出要点，并挑出稿子里说到的事整理成候选事件' +
-    '（发生时间 / 类别 / 一句话 / 细节）。' +
-    '**这些候选事件不会自动写进档案**：逐条与用户核对（尤其是日期）之后，' +
-    '再对确认过的那几条调 timeline_add。还没有转写稿的会明说没有，本工具自己不做转写。',
+    '（发生时间 / 类别 / 一句话 / 细节）。**本工具只读不写、不收费、也不做转写**：' +
+    '要求这件材料的提取状态已经是 done 且有转写文本，否则回 EXTRACTION_REQUIRED——' +
+    '这时先调 evidence_extract mode=asr 做转写（那一步走报价确认、按分钟计价），完成后再调本工具。' +
+    '**候选事件不会自动写进档案**：逐条与用户核对（尤其是日期）之后，再对确认过的那几条调 timeline_add。',
   inputSchema: {
     type: 'object',
     properties: { evidence_id: { type: 'integer', description: '录音材料的 id' } },

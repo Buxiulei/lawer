@@ -20,6 +20,7 @@ const FILES_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-review-'));
 process.env.FILES_DIR = FILES_DIR;
 
 import { getGongdao, gongdaoGrant } from '../../billing';
+import { quoteService } from '../../billing/service-quotes';
 import { GONGDAO_LEDGER_TYPE } from '../../billing/pricing';
 import { PRICE_FALLBACK } from '../../billing/pricing-config';
 import { runMigrations } from '../../db/migrate';
@@ -323,5 +324,89 @@ describe('⑦ 别人的解读一律「不存在」', () => {
     expect(listDocs(db, caseId, other)).toEqual([]);
     // 正对照：本人读得到，断言不是落在「谁都读不到」上
     expect(listDocs(db, caseId, uid)).toHaveLength(1);
+  });
+});
+
+// ⑧ 报价与这次请求对不上：钱必须原路退回，且账上两笔挂同一个功能名。
+//
+// 这两条判据钉的是同一类事故：确认扣费发生在校验之前，于是「参数不对」这种最普通的错误
+// 变成了「扣了 N 公道值、一个字都没解读、也不退」——而回包看起来只是一条 400，
+// 用户照着提示重新报一次价再确认，第二次又付一次。
+describe('⑧ 报价对不上这次请求：已扣的钱原路退回', () => {
+  /** 账上这个 ref 的扣费与退款两笔（退款 ref 是 `refund-<扣费 ref>`）。 */
+  function ledgerPair(db: Database.Database, uid: number) {
+    return db
+      .prepare(
+        "SELECT delta, type, ref_id, feature FROM gongdao_ledger" +
+          " WHERE user_id=? AND (ref_id LIKE 'svc-%' OR ref_id LIKE 'refund-svc-%') ORDER BY id",
+      )
+      .all(uid) as { delta: number; type: string; ref_id: string; feature: string }[];
+  }
+
+  test('B2 拿甲案件的报价去解读乙案件：回 QUOTE_CASE_MISMATCH，余额分毫不动', async () => {
+    const { db, uid, caseId } = makeDb();
+    const caseB = Number(
+      db.prepare('INSERT INTO cases (user_id, title) VALUES (?,?)').run(uid, '同一人的第二个案件')
+        .lastInsertRowid,
+    );
+    const llm = fakeLlm();
+    const before = getGongdao(uid, db);
+
+    const quoted = mustOk(
+      await submitDoc(db, { userId: uid, caseId, text: NOTICE, docKind: '解除通知' }, { llm }),
+    ) as DocQuoteResult & { ok: true };
+
+    const r = await submitDoc(
+      db,
+      { userId: uid, caseId: caseB, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quoteId },
+      { llm },
+    );
+
+    expect(r.ok).toBe(false);
+    expect((r as { errorCode: string }).errorCode).toBe('QUOTE_CASE_MISMATCH');
+    // 要害就是这一行：报错本身不是事故，扣了不退才是。
+    expect(getGongdao(uid, db)).toBe(before);
+    expect(count(db, 'company_docs')).toBe(0);
+    expect(llm.calls.length).toBe(0);
+    // 退款不是靠「没扣」蒙对的：账上必须一扣一退两笔，且挂同一个功能名。
+    const rows = ledgerPair(db, uid);
+    expect(rows.map((x) => x.delta)).toEqual([-PER_DOC, PER_DOC]);
+    expect(rows[1].ref_id).toBe(`refund-${rows[0].ref_id}`);
+    expect(rows[0].feature).toBe('doc_review');
+    expect(rows[1].feature).toBe(rows[0].feature);
+  });
+
+  test('B1 拿一张文字识别的报价来解读：回 QUOTE_SERVICE_MISMATCH，不按 5 块钱做 20 块的事', async () => {
+    const { db, uid, caseId } = makeDb();
+    const llm = fakeLlm();
+    const before = getGongdao(uid, db);
+    const perPage = PRICE_FALLBACK['ocr.per_page'];
+    expect(perPage).not.toBe(PER_DOC); // 正对照：两个价不同，否则这条判据什么都没测
+
+    const cheap = quoteService(db, {
+      userId: uid,
+      caseId,
+      service: 'ocr',
+      payload: { units: 1 },
+    });
+    expect(cheap.ok).toBe(true);
+    const quoteId = (cheap as { quote: { quoteId: number } }).quote.quoteId;
+
+    const r = await submitDoc(
+      db,
+      { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId },
+      { llm },
+    );
+
+    expect(r.ok).toBe(false);
+    expect((r as { errorCode: string }).errorCode).toBe('QUOTE_SERVICE_MISMATCH');
+    expect(count(db, 'company_docs')).toBe(0);
+    expect(llm.calls.length).toBe(0);
+    expect(getGongdao(uid, db)).toBe(before);
+    // 退的那笔挂的是**真扣的那个服务**的功能名（ocr），不是写死的 doc_review。
+    const rows = ledgerPair(db, uid);
+    expect(rows.map((x) => x.delta)).toEqual([-perPage, perPage]);
+    expect(rows[0].feature).toBe('ocr');
+    expect(rows[1].feature).toBe(rows[0].feature);
   });
 });

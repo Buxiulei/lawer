@@ -420,6 +420,19 @@ describe('tools/call', () => {
     expect(JSON.parse(body.result.content[0].text).error_code).toBe('INVALID_STAGE');
   });
 
+  // 上一条走的是同步能力：run 直接返回对象，漏掉 await 也照样对。异步能力（要外呼模型或 sidecar）
+  // 回的是 Promise，`outcome.ok === false` 判在 Promise 上永远不成立 ⇒ 失败被当成成功，
+  // 正文变成「[object Promise]」——回包 isError:false、内容一个字看不懂，模型无从纠正。
+  // 所以这条判据必须挑一个 run 是 async 的工具（transcript_submit），且把正文也钉住。
+  test('异步能力回 ok:false 同样走 isError，正文不是 [object Promise]', async () => {
+    const { body } = await call('transcript_submit', { evidence_id: 999999 }, keyA);
+    expect(body.error).toBeUndefined();
+    expect(body.result.isError).toBe(true);
+    const text = body.result.content[0].text as string;
+    expect(text).not.toContain('Promise');
+    expect(typeof JSON.parse(text).error_code).toBe('string');
+  });
+
   describe('case_facts', () => {
     test('返回渲染好的事实卡，且不超预算', async () => {
       const { body } = await call('case_facts', { case_id: caseA }, keyA);

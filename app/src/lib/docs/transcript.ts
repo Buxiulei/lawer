@@ -129,18 +129,24 @@ export async function submitTranscript(
     );
   }
 
+  // 两个条件缺一不可：状态必须是 done，且真有转写文本。
+  // 【为什么不能只看文本】提取中途失败/被打断的行会留下半截文本而状态还停在 running 或 failed，
+  // 只判文本就会拿半份稿子当完整稿归纳，用户看到的是一份「结论完整」的要点，而后半段谈话从没读过。
+  // 【为什么不能只看状态】done 而文本为空的行同样存在（识别出零个字）；只判状态就会把空稿喂给模型，
+  // 模型照样能编出一份要点。
   const text = str(row.extracted_text);
-  if (!text) {
+  if (row.extraction_status !== 'done' || !text) {
     const running = row.extraction_status === 'queued' || row.extraction_status === 'running';
     return fail(
       409,
-      'TRANSCRIPT_NOT_READY',
-      running
-        ? `《${row.name}》正在转写（当前状态 ${row.extraction_status}）。` +
-          '为什么：要点归纳读的是转写稿，稿子还没出来。怎么办：等转写完成后再调一次本工具，不必重新排队。'
-        : `《${row.name}》还没有转写稿（当前状态 ${row.extraction_status}）。` +
-          '为什么：本工具只做要点归纳与事件建议，读的是转写结果，它自己不做转写。' +
-          '怎么办：先对这件录音做转写（走内容提取的报价确认流），完成后再调一次本工具。',
+      'EXTRACTION_REQUIRED',
+      `《${row.name}》还没有可用的转写稿（当前提取状态 ${row.extraction_status}` +
+        `${text ? '，已有文本但提取尚未完成' : ''}）。` +
+        '为什么：本工具只做要点归纳与事件建议，读的是转写结果，它自己不做转写、也不收费。' +
+        (running
+          ? '怎么办：这件材料的提取已经在跑了，等它跑完再调一次本工具，不必重新排队。'
+          : '怎么办：先调 evidence_extract mode=asr 做转写（那一步走报价确认、按分钟计价），' +
+            '提取状态变成 done 之后再调一次本工具。'),
     );
   }
 
