@@ -418,6 +418,11 @@ function evidenceSection(s: CaseSnapshot): FactSection {
 
   const briefed = rows.filter((r) => parseBrief(r.brief_json) !== null).length;
   const extracted = rows.filter((r) => r.extraction_status === EXTRACTION_DONE).length;
+  // 出证后自动补的简报让「未提取」的条目也带上了简报——三个数各自独立数，谁都不是谁的子集：
+  // 旧写法「已提取 N、其中 M 有简报」把 briefed 当成 extracted 的子集，M>N 时算术自相矛盾。
+  const briefedNotExtracted = rows.filter(
+    (r) => parseBrief(r.brief_json) !== null && r.extraction_status !== EXTRACTION_DONE,
+  ).length;
 
   // 明细按**最近更新**排序（提取过的以提取时间为准，没提取过的以入库时间为准）：
   // 预算压不下时被裁掉的应该是最旧的那些，而不是碰巧 id 小的那些。
@@ -449,7 +454,7 @@ function evidenceSection(s: CaseSnapshot): FactSection {
       `- 证据共 ${rows.length} 条〔文件名/类别已核验；证明目的是用户自述待核实〕`,
       `- 分类计数（0 条的类别也列出来——"合同 0" 正是最容易被脑补成"有"的那种事实）：${counts}` +
         (unknown > 0 ? ` / 枚举外分类 ${unknown}` : ''),
-      `- 已提取内容 ${extracted} 条、其中 ${briefed} 条有简报；余下 ${rows.length - extracted} 条**没读过内容**`,
+      `- 已提取内容 ${extracted} 条；有简报 ${briefed} 条（含 ${briefedNotExtracted} 条未提取、按元数据写成）；未提取 ${rows.length - extracted} 条**没读过内容**`,
       EVIDENCE_DISCLAIMER,
     ].join('\n'),
     detail: [

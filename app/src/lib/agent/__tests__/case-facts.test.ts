@@ -698,7 +698,40 @@ describe('G-F6 证据区：带简报的按简报说，没提取的明说没读�
     const text = render({ evidence: rows });
     expect(text).toContain('简报：证明公司在 8 月 20 日口头通知解除');
     expect(text).toContain('未提取（没读过内容）');
-    expect(text).toContain('已提取内容 1 条、其中 1 条有简报；余下 1 条**没读过内容**');
+    expect(text).toContain('已提取内容 1 条；有简报 1 条（含 0 条未提取、按元数据写成）；未提取 1 条**没读过内容**');
+  });
+
+  it('★统计三数各自独立、不用「其中/余下」蕴含包含关系（变异：改回旧算法 → 红）', () => {
+    // 出证后自动补的简报让「未提取」的条目也有简报，briefed 不再是 extracted 的子集。
+    const rows = [
+      // 未提取但有简报：按元数据（文件名/类别）写的，没做内容提取
+      ...evidence(1, '沟通记录', {
+        extraction_status: 'none',
+        brief_json: briefJson('出证时按文件名与类别补的简报'),
+        brief_version: 1,
+      }),
+      // 已提取有简报
+      ...evidence(1, '合同', {
+        extraction_status: 'done',
+        extracted_at: '2026-09-01 10:00:00',
+        brief_json: briefJson('读过合同正文后写下的简报'),
+        brief_version: 1,
+      }),
+      // 未提取无简报
+      ...evidence(1, '考勤', { extraction_status: 'none' }),
+    ];
+    rows[1].id = 201;
+    rows[2].id = 202;
+    const text = render({ evidence: rows });
+    const statLine = text.split('\n').find((l) => l.includes('已提取内容'))!;
+    // 三数各自独立且正确：已提取 1、有简报 2（其中 1 条未提取）、未提取 2
+    expect(statLine).toContain('已提取内容 1 条');
+    expect(statLine).toContain('有简报 2 条');
+    expect(statLine).toContain('1 条未提取');
+    expect(statLine).toContain('未提取 2 条');
+    // 旧算法把 briefed 当成 extracted 的子集，用「其中/余下」蕴含包含关系 ⇒ 变异臂在此变红
+    expect(statLine).not.toContain('其中');
+    expect(statLine).not.toContain('余下');
   });
 
   it('提取完成但还没有简报 ⇒ 明说「已提取、简报未生成」，不冒充有简报', () => {
