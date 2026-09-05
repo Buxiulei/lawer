@@ -347,3 +347,23 @@
 - 文案纪律：任何提到对方的地方用「我们」「同一家公司」，不用「平台属于」「引流」「合作方」。
 
 **不做的**：不做「一个案件多领域」；不做领域间案情数据互通（互接只传用户授权的摘要）。
+
+---
+
+## 14. 与 NBDpsy 的账号打通、实名互认与转介数据包（主理人 09-05；依据 `rd-mcp-design/nbdpsy-identity.md`）
+
+**事实（盘点结论）**：NBDpsy 用户以微信 openid/unionid 为主登录，跨触点去重真源是 `identities`（含 phone_hash/email/customer_code）；实名有三条不相通的链路，人级终态是 `users.auth_status=approved`（姓名与证件号在应用层 AES 加密，密钥只在其 Rust 服务）；来访登记的运营落点是 `leads`（不要求已注册，自带新线索通知钩子）；机器间鉴权惯例是 `/api/internal/*` + HMAC 签名（现仅三条微信通知路由）；库为单 root 账号、无只读视图、142 张表。
+
+**四条决定**：
+1. **不直连对方库、不共享密钥**。所有读写经 NBDpsy 新增的两条内部接口（同机 localhost、HMAC）：`GET /api/internal/identity/status`（入参手机号明文，出参 verified / real_name / id_type / id_masked / verified_at / customer_code）与 `POST /api/internal/leads/referral`。接口由 NBDpsy 工程实现（跨仓，P3 开工时经理向其派单），土八鼠侧只做调用与降级（对方不可用 ⇒ 按未实名处理、转介进重试队列）。
+2. **身份匹配键 = 已验证手机号**（土八鼠侧验证过的手机号 → 对方按自己的 phone_hash 匹配），邮箱兜底；`users.linked_nbdpsy_customer_code` 记关联，不合并主键。
+3. **实名互认口径 = 人级终态**：对方 `auth_status=approved` 即视为已实名，写入 `realname_verifications`（provider=`nbdpsy`，snapshot：姓名、证件类型、证件号掩码、对方 verified_at、customer_code），**不存证件号明文**；出证所需的 holder 快照从这条读。对方那张 24h 新鲜期的事件表不作为门槛（它只服务其自签合同场景）。反向：土八鼠护照人工审核结果也可经对方接口回写（P4）。
+4. **转介数据包**（用户在页面点「同意并转介」后生成，同意文案逐项列出要传什么）：
+   - 身份：姓名、手机号、实名状态与来源；
+   - 情绪状态摘要：由 `emotion_log` 近 30 天记录 + 最近对话由模型总结成 ≤200 字（不含案情细节、不含对方公司名）；
+   - 可能的需求：勾选/自由文本（情绪疏导、睡眠、焦虑、决策支持等）；
+   - 案件阶段一句话（如「约谈中，仲裁前」）与紧迫度（危机标记有无）；
+   - 同意时间、来源案件哈希（不可反查案情）。
+   落对方 `leads`（channel=`tubashu`，新增 `referral_source_system`/`referral_payload_json` 两列由对方加），触发其新线索通知；土八鼠侧 `referrals` 表记状态（sent / accepted / declined）。
+
+**工具**：`referral_create`（P3）；`me_get` 增 `nbdpsy_linked`；`crisis_check` 回包带「可转介」标记。**后台**：转介清单与状态。**不做**：不同步咨询记录、不读对方咨询内容、不在 MCP 暴露对方数据。
