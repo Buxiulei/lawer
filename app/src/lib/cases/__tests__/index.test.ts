@@ -226,3 +226,124 @@ describe('正常流程', () => {
     expect((cases.getCase(db, { caseId: caseA, userId: userA, timelineLimit: 99999 }) as { timeline: unknown[] }).timeline).toHaveLength(3);
   });
 });
+
+/**
+ * 写入幂等：写接口无幂等，agent 重试即双写（生产 case2 实测同一次调岗落两条）。
+ * 两道去重都在 addTimelineEvent 这一个入口上。
+ */
+describe('时间线写入去重', () => {
+  const rows = (db: import('better-sqlite3').Database, caseId: number) =>
+    db.prepare('SELECT id, title FROM timeline_events WHERE case_id = ? ORDER BY id').all(caseId) as {
+      id: number;
+      title: string;
+    }[];
+
+  test('同 client_ref 重放：只落一行，第二次回既有行 + deduped', () => {
+    const { db, userA, caseA } = makeFixture();
+    const base = {
+      caseId: caseA,
+      userId: userA,
+      happenedAt: '2026-08-15T09:30:00+08:00',
+      kind: '公司动作' as const,
+      title: 'HR 约谈',
+      clientRef: 'op-abc-1',
+    };
+    const first = cases.addTimelineEvent(db, base);
+    // 重放时连 happened_at 都换一下：client_ref 一致就该认成同一次操作，不看别的字段
+    const again = cases.addTimelineEvent(db, { ...base, happenedAt: '2026-08-16T10:00:00+08:00' });
+    expect(first.ok).toBe(true);
+    expect(again.ok).toBe(true);
+    if (!first.ok || !again.ok) return;
+    expect(first.deduped).toBe(false);
+    expect(again.deduped).toBe(true);
+    expect(again.event.id).toBe(first.event.id);
+    expect(rows(db, caseA)).toHaveLength(1);
+  });
+
+  test('无 client_ref 近重复（同日+同 kind+标题去标点空白相等）：只落一行', () => {
+    const { db, userA, caseA } = makeFixture();
+    const first = cases.addTimelineEvent(db, {
+      caseId: caseA,
+      userId: userA,
+      happenedAt: '2026-08-15T09:30:00+08:00',
+      kind: '公司动作',
+      title: 'HR 约谈，口头通知裁员',
+    });
+    // 同一天、同 kind，标题只差空白与标点 —— 塌缩成同一条
+    const dup = cases.addTimelineEvent(db, {
+      caseId: caseA,
+      userId: userA,
+      happenedAt: '2026-08-15T18:00:00+08:00',
+      kind: '公司动作',
+      title: 'HR约谈，口头通知裁员。',
+    });
+    expect(first.ok).toBe(true);
+    expect(dup.ok).toBe(true);
+    if (!first.ok || !dup.ok) return;
+    expect(dup.deduped).toBe(true);
+    expect(dup.event.id).toBe(first.event.id);
+    expect(rows(db, caseA)).toHaveLength(1);
+  });
+
+  test('真不同的事件照常各落一行：换标题、换天、换 kind 都不算重复', () => {
+    const { db, userA, caseA } = makeFixture();
+    const add = (over: Record<string, unknown>) =>
+      cases.addTimelineEvent(db, {
+        caseId: caseA,
+        userId: userA,
+        happenedAt: '2026-08-15T09:30:00+08:00',
+        kind: '公司动作',
+        title: 'HR 约谈',
+        ...over,
+      });
+    add({});
+    add({ title: '收到解除通知' }); // 同日同 kind，标题不同 → 新事件
+    add({ happenedAt: '2026-08-16T09:30:00+08:00' }); // 同标题同 kind，不同天 → 新事件
+    add({ kind: '我方动作' }); // 同标题同日，不同 kind → 新事件
+    expect(rows(db, caseA)).toHaveLength(4);
+  });
+});
+
+/** case_update 扩了用工基本盘四项：让 agent 能零散补齐，不必重走首诊。 */
+describe('case_update 用工基本盘', () => {
+  const NOW = new Date('2026-09-02T00:00:00Z');
+  const caseRow = (db: import('better-sqlite3').Database, id: number) =>
+    db.prepare('SELECT * FROM cases WHERE id = ?').get(id) as Record<string, unknown>;
+
+  test('四项可各自单独更新，不碰其它列', () => {
+    const { db, userA, caseA } = makeFixture();
+    expect(
+      cases.updateCase(db, { caseId: caseA, userId: userA, employedFrom: '2021-04-12', now: NOW }),
+    ).toMatchObject({ ok: true });
+    expect(caseRow(db, caseA)).toMatchObject({ employed_from: '2021-04-12', monthly_wage_fen: null, position: null });
+
+    expect(cases.updateCase(db, { caseId: caseA, userId: userA, monthlyWageFen: 2_200_000 })).toMatchObject({ ok: true });
+    expect(cases.updateCase(db, { caseId: caseA, userId: userA, position: '仓储主管' })).toMatchObject({ ok: true });
+    expect(cases.updateCase(db, { caseId: caseA, userId: userA, contractCount: '只签过一次' })).toMatchObject({ ok: true });
+
+    expect(caseRow(db, caseA)).toMatchObject({
+      employed_from: '2021-04-12',
+      monthly_wage_fen: 2_200_000,
+      position: '仓储主管',
+      contract_count: '只签过一次',
+    });
+  });
+
+  test('校验与首诊同口径：入职不晚于今天、月薪正整数分、字段不空', () => {
+    const { db, userA, caseA } = makeFixture();
+    expect(
+      cases.updateCase(db, { caseId: caseA, userId: userA, employedFrom: '2027-01-01', now: NOW }),
+    ).toMatchObject({ errorCode: 'INVALID_EMPLOYED_FROM' });
+    expect(
+      cases.updateCase(db, { caseId: caseA, userId: userA, employedFrom: '2026-02-31', now: NOW }),
+    ).toMatchObject({ errorCode: 'INVALID_EMPLOYED_FROM' });
+    expect(cases.updateCase(db, { caseId: caseA, userId: userA, monthlyWageFen: 0 })).toMatchObject({
+      errorCode: 'INVALID_MONTHLY_WAGE',
+    });
+    expect(cases.updateCase(db, { caseId: caseA, userId: userA, position: '   ' })).toMatchObject({
+      errorCode: 'INVALID_POSITION',
+    });
+    // 一列都没落
+    expect(caseRow(db, caseA)).toMatchObject({ employed_from: null, monthly_wage_fen: null });
+  });
+});

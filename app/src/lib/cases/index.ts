@@ -10,7 +10,8 @@
 import type { Database } from 'better-sqlite3';
 
 import * as store from '@/lib/db/cases';
-import { submitIntakeInto, type IntakeInput, type IntakeResult } from './intake';
+import { dedupTitleKey } from '@/lib/db/dedup';
+import { normalizeDateOnly, submitIntakeInto, type IntakeInput, type IntakeResult } from './intake';
 import { CASE_STAGES } from './stages';
 // drafts 的 SQL 早已在 lib/db/agent.ts 的 drafts 段（与 insertDraft 同处）。读侧不另起
 // 一份表访问：同一张表两处 SELECT，将来加一列就会漏一处。归属校验仍在本文件把关。
@@ -331,8 +332,13 @@ export function listMessages(
 // ========== 写 ==========
 
 /**
- * 改案件的 stage / goal / bottom_line。
- * 只开放这三个字段：title/district/status 的改动牵扯期限重算与档案一致性，等相应窗口定。
+ * 改案件档案：stage / goal / bottom_line 三个自述项 + 用工基本盘四项
+ * （employed_from / monthly_wage_fen / position / contract_count）。传哪个改哪个，至少传一个。
+ *
+ * 【为什么把首诊四项也接进这条路径】首诊是一次性写全，但用户常常是零散补的：
+ * 今天想起月薪、明天记起入职日。让 agent 能逐项写回，就不必逼用户重走一遍首诊。
+ * 与首诊 submitIntake 落的是同一批 cases 列、同一套校验口径（金额存分、日期不晚于今天），
+ * 不另写一份。month_wage 的元↔分换算在调用侧（MCP 工具）做，本层只认分。
  */
 export function updateCase(
   db: Database,
@@ -342,12 +348,26 @@ export function updateCase(
     stage?: unknown;
     goal?: unknown;
     bottomLine?: unknown;
+    employedFrom?: unknown;
+    monthlyWageFen?: unknown;
+    position?: unknown;
+    contractCount?: unknown;
+    /** 「入职不晚于今天」的今天基准，测试可注入 */
+    now?: Date;
   },
 ): Result<{ case: store.CaseRow }> {
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
 
-  const fields: { stage?: string; goal?: string; bottom_line?: string } = {};
+  const fields: {
+    stage?: string;
+    goal?: string;
+    bottom_line?: string;
+    employed_from?: string;
+    monthly_wage_fen?: number;
+    position?: string;
+    contract_count?: string;
+  } = {};
   if (input.stage !== undefined) {
     if (typeof input.stage !== 'string' || !(CASE_STAGES as readonly string[]).includes(input.stage)) {
       return fail(400, 'INVALID_STAGE', `stage 只能是 ${CASE_STAGES.join(' / ')}`);
@@ -364,8 +384,38 @@ export function updateCase(
     if (bottomLine === null) return fail(400, 'INVALID_BOTTOM_LINE', 'bottom_line 不能为空字符串');
     fields.bottom_line = bottomLine;
   }
+  if (input.employedFrom !== undefined) {
+    const employedFrom = normalizeDateOnly(input.employedFrom);
+    if (!employedFrom) {
+      return fail(400, 'INVALID_EMPLOYED_FROM', '入职时间要填成 YYYY-MM-DD 的真实日期，它是工龄年限的起点');
+    }
+    const today = (input.now ?? new Date()).toISOString().slice(0, 10);
+    if (employedFrom > today) return fail(400, 'INVALID_EMPLOYED_FROM', '入职时间不能晚于今天');
+    fields.employed_from = employedFrom;
+  }
+  if (input.monthlyWageFen !== undefined) {
+    const wage = input.monthlyWageFen;
+    if (typeof wage !== 'number' || !Number.isInteger(wage) || wage <= 0) {
+      return fail(400, 'INVALID_MONTHLY_WAGE', '月工资要填一个大于 0 的整数（单位：分），它是所有金额的基数');
+    }
+    fields.monthly_wage_fen = wage;
+  }
+  if (input.position !== undefined) {
+    const position = trimmedOrNull(input.position);
+    if (position === null) return fail(400, 'INVALID_POSITION', 'position 不能为空字符串');
+    fields.position = position;
+  }
+  if (input.contractCount !== undefined) {
+    const contractCount = trimmedOrNull(input.contractCount);
+    if (contractCount === null) return fail(400, 'INVALID_CONTRACT_COUNT', 'contract_count 不能为空字符串');
+    fields.contract_count = contractCount;
+  }
   if (Object.keys(fields).length === 0) {
-    return fail(400, 'NO_FIELDS', '至少要改一个字段：stage / goal / bottom_line');
+    return fail(
+      400,
+      'NO_FIELDS',
+      '至少要改一个字段：stage / goal / bottom_line / employed_from / monthly_wage / position / contract_count',
+    );
   }
 
   store.updateCaseFields(db, input.caseId, fields);
@@ -388,7 +438,15 @@ export function submitIntake(
   return { ok: true, result: done.result };
 }
 
-/** 加一条时间线事件。只追加，写错了补一条新的（spec §7），本模块不提供改/删。 */
+/**
+ * 加一条时间线事件。只追加，写错了补一条新的（spec §7），本模块不提供改/删。
+ *
+ * 【幂等】写接口无幂等、agent 重试即双写（生产 case2 实测）。两道去重都在这一个写入口上，
+ * MCP、REST、站内 agent 三条路共用：
+ *  · 带 `clientRef` —— 同案同 ref 已存在直接回既有行（deduped:true），一个业务操作对一个 ref；
+ *  · 不带 ref —— 近重复守卫：同案 + 同一自然日 + 同 kind + 标题规范化相等 ⇒ 回既有行，不插。
+ * 两者都命中不了才真插入。`deduped` 一并返回，调用方要如实告诉用户「这条已经记过了」。
+ */
 export function addTimelineEvent(
   db: Database,
   input: {
@@ -398,8 +456,9 @@ export function addTimelineEvent(
     kind: unknown;
     title: unknown;
     detail?: unknown;
+    clientRef?: unknown;
   },
-): Result<{ event: store.TimelineEventRow }> {
+): Result<{ event: store.TimelineEventRow; deduped: boolean }> {
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
 
@@ -412,6 +471,19 @@ export function addTimelineEvent(
   }
   const title = trimmedOrNull(input.title);
   if (!title) return fail(400, 'INVALID_TITLE', 'title 不能为空');
+  const clientRef = trimmedOrNull(input.clientRef);
+
+  if (clientRef) {
+    const existing = store.findTimelineByClientRef(db, input.caseId, clientRef);
+    if (existing) return { ok: true, event: existing, deduped: true };
+  } else {
+    // 标题在 JS 里按 dedupTitleKey 比对；日期与 kind 交给 SQL 先筛出同日同类的候选。
+    const key = dedupTitleKey(title);
+    const dup = store
+      .listTimelineSameDayKind(db, input.caseId, happenedAt, input.kind)
+      .find((e) => dedupTitleKey(e.title) === key);
+    if (dup) return { ok: true, event: dup, deduped: true };
+  }
 
   const id = store.insertTimelineEvent(db, {
     caseId: input.caseId,
@@ -419,9 +491,10 @@ export function addTimelineEvent(
     kind: input.kind,
     title,
     detail: trimmedOrNull(input.detail),
+    clientRef,
   });
   const event = store.listTimelineEvents(db, input.caseId, TIMELINE_MAX_LIMIT).find((e) => e.id === id)!;
-  return { ok: true, event };
+  return { ok: true, event, deduped: false };
 }
 
 /**

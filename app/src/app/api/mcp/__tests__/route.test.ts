@@ -232,14 +232,15 @@ describe('tools/list', () => {
     'case_facts',
   ];
 
-  test('十个工具，每个都有 name / description / inputSchema', async () => {
+  test('十一个工具，每个都有 name / description / inputSchema', async () => {
     const res = await POST(rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, keyA));
     const { result } = await res.json();
-    // case_list 与 knowledge_search 一样不隶属案件，追加在末尾（顺序也钉死，见上）
+    // knowledge_search / case_list 不隶属案件；intake_submit 后加，一律**追加在末尾**（顺序钉死，见上）
     expect(result.tools.map((t: { name: string }) => t.name)).toEqual([
       ...CASE_SCOPED,
       'knowledge_search',
       'case_list',
+      'intake_submit',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();
@@ -247,13 +248,14 @@ describe('tools/list', () => {
     }
   });
 
-  test('操作案件的那八个都必填 case_id——少一个就是能不指名道姓地读写档案', async () => {
+  test('操作案件的工具都必填 case_id——少一个就是能不指名道姓地读写档案', async () => {
     const res = await POST(rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, keyA));
     const { result } = await res.json();
     const byName = new Map<string, { inputSchema: { required?: string[] } }>(
       result.tools.map((t: { name: string }) => [t.name, t]),
     );
-    for (const name of CASE_SCOPED) {
+    // intake_submit 也隶属某个案件（往哪个案子建档），同样必须点名 case_id
+    for (const name of [...CASE_SCOPED, 'intake_submit']) {
       expect(byName.get(name)!.inputSchema.required, name).toContain('case_id');
     }
   });
@@ -530,6 +532,100 @@ describe('tools/call', () => {
 
       const b = await listOf(keyB);
       expect(b.cases.map((c) => c.title)).toEqual(['乙的案子']);
+    });
+  });
+
+  describe('intake_submit', () => {
+    const INTAKE = {
+      stage: '已收通知',
+      company_name: '华衡永泰供应链管理有限公司',
+      employed_from: '2021-04-12',
+      monthly_wage_yuan: 22000,
+      position: '仓储主管',
+      contract_count: '只签过一次',
+      events: [{ date: '2026-08-28', text: '部门开会说要优化' }],
+      goals: ['违法解除赔偿金（2N）'],
+      bottom_line: '低于 2N 不签。',
+    };
+
+    test('写入后事实卡里用工基本盘不再「未记录」，金额按元换算成分', async () => {
+      const submit = await call('intake_submit', { case_id: caseA, ...INTAKE }, keyA);
+      expect(submit.body.result.isError).toBe(false);
+
+      const { body } = await call('case_facts', { case_id: caseA }, keyA);
+      const { case_facts } = JSON.parse(body.result.content[0].text) as { case_facts: string };
+      expect(case_facts).toContain('入职日期：2021-04-12');
+      expect(case_facts).toContain('岗位：仓储主管');
+      // 22000 元 → 2_200_000 分 → 渲染 22000.00 元
+      expect(case_facts).toContain('月工资：22000.00 元');
+    });
+
+    /**
+     * 【红线 / 变异臂】intake_submit 若漏了 lib/cases 那道 assertOwned，
+     * 会往别人的案子建档且返回正常——这条钉住它走的是 cases.submitIntake（含归属门）。
+     */
+    test('【红线】拿乙的 key 往甲的案子建档 → isError CASE_NOT_FOUND，且不留痕', async () => {
+      const { body } = await call('intake_submit', { case_id: caseA, ...INTAKE }, keyB);
+      expect(body.result.isError).toBe(true);
+      expect(JSON.parse(body.result.content[0].text).error_code).toBe('CASE_NOT_FOUND');
+
+      // 甲的案子一个字段都没被动
+      const facts = await call('case_facts', { case_id: caseA }, keyA);
+      expect(JSON.parse(facts.body.result.content[0].text).case_facts).toContain('入职日期：未记录');
+    });
+
+    test('校验失败回字段级原因（金额非法）走 isError，让模型能自己补', async () => {
+      const { body } = await call(
+        'intake_submit',
+        { case_id: caseA, ...INTAKE, monthly_wage_yuan: 0 },
+        keyA,
+      );
+      expect(body.error).toBeUndefined();
+      expect(body.result.isError).toBe(true);
+      expect(JSON.parse(body.result.content[0].text).error_code).toBe('INVALID_MONTHLY_WAGE');
+    });
+  });
+
+  describe('case_update 用工基本盘', () => {
+    test('四项基本盘可经 MCP 单独更新（元换算成分），读回来对得上', async () => {
+      const upd = async (args: Record<string, unknown>) => {
+        const { body } = await call('case_update', { case_id: caseA, ...args }, keyA);
+        expect(body.result.isError, JSON.stringify(args)).toBe(false);
+      };
+      await upd({ employed_from: '2020-01-06' });
+      await upd({ monthly_wage_yuan: 18000 });
+      await upd({ position: '后端工程师' });
+      await upd({ contract_count: '续签过一次' });
+
+      const { body } = await call('case_facts', { case_id: caseA }, keyA);
+      const { case_facts } = JSON.parse(body.result.content[0].text) as { case_facts: string };
+      expect(case_facts).toContain('入职日期：2020-01-06');
+      expect(case_facts).toContain('月工资：18000.00 元');
+      expect(case_facts).toContain('岗位：后端工程师');
+    });
+  });
+
+  describe('timeline_add 幂等', () => {
+    const rows = () =>
+      db.prepare('SELECT id, title FROM timeline_events WHERE case_id = ?').all(caseA) as {
+        id: number;
+        title: string;
+      }[];
+
+    test('同 client_ref 重放只落一行，deduped:true', async () => {
+      const ev = { case_id: caseA, happened_at: '2026-08-15T09:30:00+08:00', kind: '公司动作', title: 'HR 约谈', client_ref: 'op-1' };
+      await call('timeline_add', ev, keyA);
+      const again = await call('timeline_add', { ...ev, happened_at: '2026-08-16T09:30:00+08:00' }, keyA);
+      expect(JSON.parse(again.body.result.content[0].text).deduped).toBe(true);
+      expect(rows()).toHaveLength(1);
+    });
+
+    test('无 client_ref 近重复（同日同类标题去标点相等）只落一行；真不同的照落', async () => {
+      const base = { case_id: caseA, happened_at: '2026-08-20T09:00:00+08:00', kind: '公司动作' };
+      await call('timeline_add', { ...base, title: 'HR 约谈，宣布裁员' }, keyA);
+      await call('timeline_add', { ...base, title: 'HR约谈，宣布裁员。' }, keyA); // 近重复 → 不落
+      await call('timeline_add', { ...base, title: '收到解除通知' }, keyA); // 真不同 → 落
+      expect(rows()).toHaveLength(2);
     });
   });
 });
