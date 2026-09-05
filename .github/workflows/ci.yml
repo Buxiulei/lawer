@@ -60,6 +60,8 @@ jobs:
       # npm ci 而不是 npm install：锁文件是唯一真源，CI 不该有解析出别的版本的余地
       - run: npm ci
         working-directory: app
+      # 音视频报价用 ffprobe 量时长（lib/evidence 计费）；生产机已装 ffmpeg，runner 缺它两条报价判据必红
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - run: npx tsc --noEmit -p tsconfig.json
         working-directory: app
       # vitest 的 include 覆盖 app/src、app/scripts 与仓根 ../scripts
