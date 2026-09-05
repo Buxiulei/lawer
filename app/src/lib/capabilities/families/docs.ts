@@ -39,7 +39,8 @@ export const docSubmit: Capability = {
   description:
     '把对方发来的文件逐条读一遍：命中的审查规则、有风险的条款（原文引用 + 轻重 + 一句话说明）、' +
     '该怎么改，以及一个总结论（签 / 不签 / 改签 / 待定）。' +
-    '**两步**：先不带 quote_id 调一次拿报价（免费，不扣任何费用），确认价钱后带上 quote_id 再调一次才开始解读并扣费。' +
+    '**两步**：先不带 quote_id 调一次，回一张写明价钱与算式的报价单，这一步只出价、不动账；' +
+    '确认价钱之后带上 quote_id 再调一次，才开始解读并按报价扣费。' +
     '来源二选一：evidence_id（已登记的材料，没有文字的会先做一次文字识别，费用已含在同一张报价里）或 text（直接粘原文）。',
   inputSchema: {
     type: 'object',
@@ -54,7 +55,7 @@ export const docSubmit: Capability = {
       },
       quote_id: {
         type: 'integer',
-        description: '上一步拿到的报价号。不给 = 只报价不扣费；给了 = 确认扣费并开始解读',
+        description: '上一步拿到的报价号。不给 = 只出价、不动账；给了 = 按这张报价确认并开始解读',
       },
       client_ref: {
         type: 'string',
