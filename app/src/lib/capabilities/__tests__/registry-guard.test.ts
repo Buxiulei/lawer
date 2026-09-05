@@ -25,6 +25,7 @@ const FAMILIES = [
   'drafts',
   'company',
   'emotion',
+  'docs',
 ];
 const SCOPES = ['case:read', 'case:write'];
 const KINDS = ['read', 'write', 'spend'];
