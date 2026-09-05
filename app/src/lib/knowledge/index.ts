@@ -6,6 +6,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { typeRank } from './types';
+
 /**
  * 结构化事实（规范 §2.1）：被代码消费的数据的唯一读取面——代码只读 facts，禁啃正文散文。
  *
@@ -72,6 +74,17 @@ export interface SearchOptions {
   type?: string;
   region?: string;
   limit?: number;
+  /**
+   * 判例的审理机构。匹配的是**结构化字段** `facts.case_facts.court`，给的是子串
+   *（「朝阳」能匹到「北京市朝阳区人民法院」——用户不会记全称）。
+   *
+   * 【为什么不去 title 或正文里找法院名】title 是给人读的展示字段，随时会被润色；
+   * 按展示字段分流的代码在有人把「朝阳法院」改成全称的那天静默走错分支，且不报错
+   *（规范 §2.1 的三条纪律之一，见 PackFacts 头注释）。
+   * 【为什么带 court 时不带 case_facts 的卡一律滤掉】问「某某法院怎么判的」就是只要判例；
+   * 把没有审理机构的卡也放行，等于用一个过滤条件换回一批与该法院无关的卡。
+   */
+  court?: string;
 }
 
 const DEFAULT_LIMIT = 5;
@@ -320,18 +333,8 @@ function passesFilters(meta: PackMeta, opts: SearchOptions): boolean {
   if (opts.type && meta.type !== opts.type) return false;
   if (opts.applies_to && !meta.applies_to.includes(opts.applies_to)) return false;
   if (opts.region && meta.region !== opts.region && meta.region !== REGION_NATIONWIDE) return false;
+  if (opts.court && !(meta.facts?.case_facts?.court ?? '').includes(opts.court)) return false;
   return true;
-}
-
-/**
- * 同分时的类型优先序（依据优先）：agent 的重要结论必须引法条/算法依据（charter §3），
- * 所以法条卡、计算规则先于案例与话术出现；判例是佐证不是依据，排最后。
- */
-const TYPE_TIEBREAK = ['法条卡', '计算规则', '数据卡', '审查规则', '流程SOP', '文书模板', '话术卡', '判例卡', '情绪指南'];
-
-function typeRank(type: string): number {
-  const i = TYPE_TIEBREAK.indexOf(type);
-  return i < 0 ? TYPE_TIEBREAK.length : i;
 }
 
 /**
@@ -387,6 +390,8 @@ export function loadedPackCount(): number {
 export function listPacks(): PackMeta[] {
   return loadIndex().map((meta) => ({ ...meta }));
 }
+
+export { KNOWLEDGE_TYPES, TYPE_TIEBREAK, typeRank, type KnowledgeType } from './types';
 
 /** 仅供测试：清掉进程级缓存，让改 env LAWER_KNOWLEDGE_DIR 后的调用重新解析目录 */
 export function __resetForTest(): void {

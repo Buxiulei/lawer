@@ -219,7 +219,7 @@ describe('协议握手', () => {
 describe('tools/list', () => {
   /**
    * 顺序也钉死：客户端把这份清单原样展示给用户，往中间插一个工具等于面板重排。
-   * 后加的两个（case_facts / knowledge_search）追加在末尾。
+   * 后加的几个（case_facts / knowledge_search / case_list / intake_submit / knowledge_get）一律追加在末尾。
    */
   const CASE_SCOPED = [
     'case_get',
@@ -256,6 +256,7 @@ describe('tools/list', () => {
       'draft_write',
       'company_profile_upsert',
       'emotion_log',
+      'knowledge_get',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();

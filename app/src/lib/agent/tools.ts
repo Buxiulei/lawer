@@ -24,6 +24,8 @@ import { compactCrisisCard, CRISIS_RESOURCE_PACK_ID } from './crisis';
 import { unsupportedVerbatimQuotes } from './citation-block';
 import { coreArticleKeys, packCitationGuide, type CoreArticleSources } from './citation-block';
 import * as deadline from '@/lib/deadline';
+import { KNOWLEDGE_TYPES } from '@/lib/knowledge/types';
+import type { InputSource } from './calc';
 import {
   KNOWLEDGE_MISS_DIRECTIVE,
   MAX_INJECTED_PACKS,
@@ -186,7 +188,7 @@ export const AGENT_TOOLS: ToolDef[] = [
     function: {
       name: 'knowledge_search',
       description:
-        '检索知识库，拿到法条/判例/计算规则/流程SOP/文书模板/话术/数据卡的**逐字原文**。' +
+        `检索知识库，拿到${KNOWLEDGE_TYPES.join('/')}的**逐字原文**。` +
         '任何涉法断言、任何数字、任何文书起草之前都必须先调它——你自己记忆里的条号和数字一律不可用。',
       parameters: {
         type: 'object',
@@ -194,7 +196,10 @@ export const AGENT_TOOLS: ToolDef[] = [
           query: { type: 'string', description: '检索词，用案情关键词而非整句话，如「客观情况重大变化 北京口径」' },
           type: {
             type: 'string',
-            enum: ['法条卡', '判例卡', '计算规则', '流程SOP', '文书模板', '话术卡', '情绪指南', '数据卡'],
+            // 枚举唯一真源：lib/knowledge/types.ts。**放的是同一个数组本身，不是它的副本**——
+            // MCP 那侧同样直接放它，于是「两处枚举分叉」在类型与运行时都不可能发生
+            //（判据按 `toBe` 断言同一引用；抄一份副本会红）。
+            enum: KNOWLEDGE_TYPES,
             description: '只要某一类卡时传，一般不传',
           },
           limit: { type: 'integer', description: `最多几张，默认 ${MAX_INJECTED_PACKS}` },
