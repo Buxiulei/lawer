@@ -219,7 +219,7 @@ describe('协议握手', () => {
 describe('tools/list', () => {
   /**
    * 顺序也钉死：客户端把这份清单原样展示给用户，往中间插一个工具等于面板重排。
-   * 后加的两个（case_facts / knowledge_search）追加在末尾。
+   * 后加的几个（case_facts / knowledge_search / case_list / intake_submit / knowledge_get）一律追加在末尾。
    */
   const CASE_SCOPED = [
     'case_get',
@@ -232,7 +232,7 @@ describe('tools/list', () => {
     'case_facts',
   ];
 
-  test('十一个工具，每个都有 name / description / inputSchema', async () => {
+  test('十二个工具，每个都有 name / description / inputSchema', async () => {
     const res = await POST(rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, keyA));
     const { result } = await res.json();
     // knowledge_search / case_list 不隶属案件；intake_submit 后加，一律**追加在末尾**（顺序钉死，见上）
@@ -241,6 +241,7 @@ describe('tools/list', () => {
       'knowledge_search',
       'case_list',
       'intake_submit',
+      'knowledge_get',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();

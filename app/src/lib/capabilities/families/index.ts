@@ -9,7 +9,7 @@ import { actionComplete, actionList } from './actions';
 import { caseFacts, caseGet, caseList, caseUpdate, intakeSubmit } from './case';
 import { deadlineList } from './deadlines';
 import { evidenceList } from './evidence';
-import { knowledgeSearch } from './knowledge';
+import { knowledgeGet, knowledgeSearch } from './knowledge';
 import { timelineAdd } from './timeline';
 
 import type { Capability } from '../registry';
@@ -27,4 +27,5 @@ export const CAPABILITIES: Capability[] = [
   knowledgeSearch,
   caseList,
   intakeSubmit,
+  knowledgeGet,
 ];
