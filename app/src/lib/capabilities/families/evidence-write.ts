@@ -54,7 +54,7 @@ export const evidenceUploadUrl: Capability = {
     `拿到之后把**文件字节本身**作为 body PUT 到那条地址（不是表单、不是 JSON、不是 base64），` +
     `再用同一个 upload_token 调 evidence_register 填名称、分类与证明目的。` +
     `地址只收一次文件、${TTL_MINUTES} 分钟内有效，过期或用过都要重新签一条。` +
-    '体积上限按 mime 分档：图片与 PDF 25 MB、音频 100 MB、视频 200 MB；' +
+    '体积上限按 mime 分档：图片与 PDF 25 MB、音频 100 MB、视频 100 MB；' +
     'size 报得超档会在这一步就被拒，不必先把文件传一遍才知道。' +
     '需已完成实名认证。',
   inputSchema: {
@@ -93,7 +93,7 @@ export const evidenceUploadUrl: Capability = {
         'FILE_TOO_LARGE',
         `声明的 size 约 ${(size / 1024 / 1024).toFixed(1)} MB，超过 ${mime ?? '该类型'} 单次 ` +
           `${limit / 1024 / 1024} MB 的上限，没有签发上传地址。` +
-          '上限按类型分档：图片与 PDF 25 MB、音频 100 MB、视频 200 MB。' +
+          '上限按类型分档：图片与 PDF 25 MB、音频 100 MB、视频 100 MB。' +
           '请把文件压小（录音先剪成分段、视频降到 720p）或拆成几份分别上传——拆开传不影响后续出证。',
       );
     }

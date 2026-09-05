@@ -52,7 +52,7 @@ function tooLarge(actualBytes: number, limitBytes: number, mime: string | null):
     'FILE_TOO_LARGE',
     `这次上传约 ${actualMb} MB，超过 ${mime ?? '该类型'} 单次 ${limitMb} MB 的上限，文件没有被保存，` +
       '这条上传地址也还没被用掉（可以直接换个更小的文件再 PUT 一次）。' +
-      '上限按类型分档：图片与 PDF 25 MB、录音 100 MB、视频 200 MB——' +
+      '上限按类型分档：图片与 PDF 25 MB、录音 100 MB、视频 100 MB——' +
       '服务器要把整份文件读进内存做哈希和加密，占用是文件本身的好几倍，放行超大文件会把进程撑爆。' +
       '请把文件压小（录音先剪成分段、视频降到 720p）或拆成几份分别上传——拆开传不影响后续出证。',
   );

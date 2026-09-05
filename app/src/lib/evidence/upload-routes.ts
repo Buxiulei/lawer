@@ -28,9 +28,9 @@ export const UPLOAD_ROUTE_PREFIXES = ['/api/v1/evidence', '/api/v1/realname/pass
 /**
  * 请求体上限分档。**这份常量是 Caddyfile 那几行的真源**，守卫测试对着它咬原文。
  *
- * 【为什么要分两档，不能一档到底】证据路径要收视频（应用侧 200 MiB 档），
- * 护照实名一次两份材料合计 16 MiB 出头。把两条并成一档 200MB，等于给护照那条
- * 也开了 200MB 的口子——那条路的应用侧上限是 8 MiB/份，多出来的 190 多 MB
+ * 【为什么要分两档，不能一档到底】证据路径要收视频（应用侧 100 MiB 档），
+ * 护照实名一次两份材料合计 16 MiB 出头。把两条并成一档 100MB，等于给护照那条
+ * 也开了 100MB 的口子——那条路的应用侧上限是 8 MiB/份，多出来的 90 多 MB
  * 纯粹是白白让人往进程内存里灌字节的余地。
  *
  * 【为什么不靠"更具体的匹配器覆盖更宽的"】Caddy 同名指令叠加时以**更严的**为准，
@@ -44,8 +44,8 @@ export const CADDY_BODY_TIERS = [
   {
     matcher: '@media_uploads',
     prefixes: ['/api/v1/evidence'] as const,
-    maxSize: '200MB',
-    why: '证据路径要收录音（应用侧 100 MiB）与视频（200 MiB）',
+    maxSize: '100MB',
+    why: '证据路径要收录音与视频（应用侧各 100 MiB）',
   },
   {
     matcher: '@uploads',

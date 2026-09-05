@@ -34,15 +34,17 @@ export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 export const MAX_AUDIO_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 /**
- * 视频档：200 MiB。手机拍的一段谈话录像（1080p 约 10 MB/分钟）大致对应二十分钟。
+ * 视频档：100 MiB。手机拍的一段谈话录像（1080p 约 10 MB/分钟）大致对应十分钟。
  *
- * ⚠️ **这一档超出了上面那个内存算式**：200 × 6 ≈ 1.2 GB，已经吃满整个 cgroup。
- * 所以并发预算（下方 tryAcquireUploadSlot）对大文件是「独占」语义——一个视频在传的时候
- * 别的上传一律排不进来。即便如此，单个 200 MiB 视频仍逼近 MemoryMax，真要稳当地收
- * 这一档，得把上传链路改成边收边写盘（不缓冲整份）或把 MemoryMax 抬上去。
- * 在那之前，这一档是「能收，但同时只能收一个，且贴着上限跑」。
+ * ⚠️ **这一档正好占满整份并发预算**：100 × 6 = 600 MB，恰等于下方
+ * UPLOAD_MEMORY_BUDGET_BYTES（25 × 6 × 4）。所以并发预算（tryAcquireUploadSlot）对它
+ * 仍是「独占」语义——一个视频在传的时候别的上传一律排不进来。
+ *
+ * 原本这一档是 200 MiB（200 × 6 ≈ 1.2 GB，贴着 cgroup MemoryMax=1280M 的上限跑）；
+ * manager 裁决收到 100 MiB，把峰值从「贴上限」降到「预算之内」。真要重新抬回 200 MiB，
+ * 得先把上传链路改成边收边写盘（不缓冲整份）——那是另开的单。
  */
-export const MAX_VIDEO_UPLOAD_BYTES = 200 * 1024 * 1024;
+export const MAX_VIDEO_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 /** 所有档里最大的那个。mime 未知时（multipart 读到 file 之前）只能按它预判。 */
 export const MAX_UPLOAD_BYTES_ANY = MAX_VIDEO_UPLOAD_BYTES;

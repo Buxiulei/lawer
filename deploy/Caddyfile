@@ -39,7 +39,7 @@
 	# 密文 → 写缓冲），进程跑在 cgroup MemoryMax=1280M 里，原先站点级 100MB 对全路由
 	# 生效，两个并发的大上传就能把进程顶到 OOM kill，挂的是整站所有人的会话。
 	# 所以按路由分开卡。**上传路径是一个集合，不是一条**：
-	#   · /api/v1/evidence*                 证据上传（应用侧按 mime 分档：图片/PDF 25MiB、音频 100MiB、视频 200MiB）
+	#   · /api/v1/evidence*                 证据上传（应用侧按 mime 分档：图片/PDF 25MiB、音频 100MiB、视频 100MiB）
 	#   · /api/v1/realname/passport*        护照实名：两份必填材料各上限 8MiB，
 	#     一次提交合起来能到 16MiB+。漏掉它、让它落进默认 2MB，等于**每一次护照实名提交都被掐死**
 	#     ——而护照通道存在的全部理由就是"只有护照的人根本没有阿里云那扇门"，
@@ -47,17 +47,18 @@
 	# 上限分两档，各自比应用侧对应的上限略宽（留给 multipart 边界与字段头，
 	# 好让「超限」由应用回一条说得清原因的 413，而不是 Caddy 直接掐断连接
 	# ——那样用户只看到「上传失败」，不知道为什么、也不知道该怎么办）：
-	#   · /api/v1/evidence*          200MB —— 证据要收录音（应用侧 100MiB）与视频（200MiB）
+	#   · /api/v1/evidence*          100MB —— 证据要收录音与视频（应用侧各 100MiB）
 	#   · /api/v1/realname/passport*  30MB —— 两份材料各 8MiB，合计 16MiB 出头
 	# 其余路由 2MB —— 聊天与 REST 都是 JSON，最大的请求体也就几十 KB。
 	#
-	# ⚠️ 证据这一档的 200MB 已经超出 cgroup MemoryMax=1280M 下的安全算式
-	# （200 × 6 份内存副本 ≈ 1.2G）。应用侧因此对大文件采用「独占」的并发预算——
-	# 一个视频在传时别的上传一律排不进来（见 app/src/lib/evidence/upload-guard.ts）。
-	# 要稳当地收这一档，得把上传链路改成边收边写盘，或把 MemoryMax 抬上去。
+	# ⚠️ 证据这一档的 100MB 正好占满 cgroup MemoryMax=1280M 下的并发预算
+	# （100 × 6 份内存副本 = 600M，等于应用侧 25MiB×6×4 的预算）。应用侧因此对大文件
+	# 采用「独占」的并发预算——一个视频在传时别的上传一律排不进来
+	#（见 app/src/lib/evidence/upload-guard.ts）。原为 200MB（≈1.2G，贴 MemoryMax 上限），
+	# manager 裁决收到 100MB；要重新抬回去得先把上传链路改成边收边写盘（另开单）。
 	#
 	# 三个匹配器写成**互斥**的，不靠 request_body 的先后覆盖关系
-	#（同名指令叠加时以更严的为准，靠顺序会把 200MB 那档也收成 30MB）。
+	#（同名指令叠加时以更严的为准，靠顺序会把 100MB 那档也收成 30MB）。
 	# ⇒ 以后新增上传路由，对应档位的 path 与 @non_uploads 的 not path 必须同时加，
 	#   少加一处就是"默认 2MB 静默掐断"。真源在 app/src/lib/evidence/upload-routes.ts。
 	@media_uploads path /api/v1/evidence*
@@ -66,7 +67,7 @@
 		not path /api/v1/evidence* /api/v1/realname/passport*
 	}
 	request_body @media_uploads {
-		max_size 200MB
+		max_size 100MB
 	}
 	request_body @uploads {
 		max_size 30MB

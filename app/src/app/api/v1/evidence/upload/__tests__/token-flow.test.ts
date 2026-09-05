@@ -254,7 +254,7 @@ describe('体积闸按 mime 分档', () => {
    * 🔴 变异臂「video 走 25MB 闸」：把 maxUploadBytesFor 里 video 那一档删掉
    * （或改成返回 MAX_UPLOAD_BYTES），这一组会翻红。
    */
-  test('分档函数：图片/PDF 25MB、音频 100MB、视频 200MB，认不出的走最严那档', () => {
+  test('分档函数：图片/PDF 25MB、音频 100MB、视频 100MB，认不出的走最严那档', () => {
     expect(maxUploadBytesFor('image/jpeg')).toBe(MAX_UPLOAD_BYTES);
     expect(maxUploadBytesFor('application/pdf')).toBe(MAX_UPLOAD_BYTES);
     expect(maxUploadBytesFor('audio/m4a')).toBe(MAX_AUDIO_UPLOAD_BYTES);
@@ -263,8 +263,10 @@ describe('体积闸按 mime 分档', () => {
     expect(maxUploadBytesFor('VIDEO/QUICKTIME; codecs=avc1')).toBe(MAX_VIDEO_UPLOAD_BYTES);
     expect(maxUploadBytesFor(null)).toBe(MAX_UPLOAD_BYTES);
     expect(maxUploadBytesFor('application/octet-stream')).toBe(MAX_UPLOAD_BYTES);
-    // 三档必须真的两两不同，否则上面几条在"全都是 25MB"时也会绿
-    expect(new Set([MAX_UPLOAD_BYTES, MAX_AUDIO_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES]).size).toBe(3);
+    // 媒体两档（音频、视频）现在同为 100 MiB（视频从 200 收到 100），但都必须严格大于
+    // 25 MiB 的基础档，否则上面几条在"全都是 25MB"时也会绿。
+    expect(MAX_UPLOAD_BYTES).toBeLessThan(MAX_AUDIO_UPLOAD_BYTES);
+    expect(MAX_UPLOAD_BYTES).toBeLessThan(MAX_VIDEO_UPLOAD_BYTES);
   });
 
   test('签发这一步就按档位拒：图片报 30MB 被拒，视频报 100MB 放行', async () => {
@@ -324,10 +326,59 @@ describe('体积闸按 mime 分档', () => {
     expect(row.consumed_at).toBeNull();
   });
 
+  test('video token：字面 101MB PUT ⇒ 413（体积闸），字面 100MB 放行落盘', async () => {
+    // ⚠️ 用**字面字节数**而非 MAX_VIDEO_UPLOAD_BYTES±1：后者随常量浮动，把常量改回 200MB 也照样绿，
+    // 等于没咬住「视频档 = 100MB」这件事。变异臂：常量改回 200MB ⇒ 字面 101MB 落进限内 ⇒ 第一段不再 413 ⇒ 红；
+    // 常量收到 100MB 以下 ⇒ 字面 100MB 那次 ⇒ 413 ⇒ 第二段红。
+    const MB = 1024 * 1024;
+    const overIssued = await call('evidence_upload_url', userA, {
+      case_id: caseA,
+      filename: '谈话录像.mp4',
+      mime: 'video/mp4',
+      size: 1024,
+    });
+    const overToken = overIssued.upload_token as string;
+    const explode = vi.fn(async () => {
+      throw new Error('arrayBuffer() 不该被调用——体积闸必须在读请求体之前生效');
+    });
+    const overReq = new Request(`http://localhost/api/v1/evidence/upload/${overToken}`, {
+      method: 'PUT',
+      headers: {
+        authorization: `Bearer ${signToken(userA)}`,
+        'content-length': String(101 * MB),
+      },
+      body: 'x',
+    });
+    Object.defineProperty(overReq, 'arrayBuffer', { value: explode });
+    const overRes = await put(overReq, { params: Promise.resolve({ token: overToken }) });
+    expect(overRes.status).toBe(413);
+    expect((await overRes.json()).error_code).toBe('FILE_TOO_LARGE');
+    expect(explode).not.toHaveBeenCalled();
+
+    // 字面 100MB（= 视频档上限）：体积闸放行，字节真正落盘、返回 201
+    const okIssued = await call('evidence_upload_url', userA, {
+      case_id: caseA,
+      filename: '谈话录像2.mp4',
+      mime: 'video/mp4',
+      size: 1024,
+    });
+    const okToken = okIssued.upload_token as string;
+    const okReq = new Request(`http://localhost/api/v1/evidence/upload/${okToken}`, {
+      method: 'PUT',
+      headers: {
+        authorization: `Bearer ${signToken(userA)}`,
+        'content-length': String(100 * MB),
+      },
+      body: 'video-bytes',
+    });
+    const okRes = await put(okReq, { params: Promise.resolve({ token: okToken }) });
+    expect(okRes.status).toBe(201);
+  });
+
   test('内存预算：大文件独占，队列非空时挤不进来', () => {
     const small = tryAcquireUploadSlot(MAX_UPLOAD_BYTES);
     expect(small).not.toBeNull();
-    // 一个 200MB 视频要的副本远超整份预算，队列非空时必须被拒
+    // 一个 100MB 视频要的副本占满整份预算（100×6=600MB），队列非空时必须被拒
     expect(tryAcquireUploadSlot(MAX_VIDEO_UPLOAD_BYTES)).toBeNull();
     small!();
     // 队列空了则放行（否则这一档等于没开）
@@ -336,7 +387,9 @@ describe('体积闸按 mime 分档', () => {
     // 它在跑的时候，别人一律排不进来
     expect(tryAcquireUploadSlot(1024)).toBeNull();
     big!();
-    expect(UPLOAD_MEMORY_BUDGET_BYTES).toBeLessThan(MAX_VIDEO_UPLOAD_BYTES * 6);
+    // 一个满档视频的副本（video×6）至少占满整份预算 ⇒ 它一进来别人就挤不动。
+    // 视频收到 100MiB 后二者恰好相等（100×6 = 25×6×4 = 600MB），故用 ≤。
+    expect(UPLOAD_MEMORY_BUDGET_BYTES).toBeLessThanOrEqual(MAX_VIDEO_UPLOAD_BYTES * 6);
   });
 });
 
