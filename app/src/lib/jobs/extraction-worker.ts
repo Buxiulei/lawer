@@ -24,6 +24,9 @@
 // 【本文件是共用层，不写死任何具体业务领域的字面量】面向的是「一件材料 + 一种提取方式」。
 import type Database from 'better-sqlite3';
 
+import { gongdaoRefund } from '../billing';
+import { restoreEntitlement } from '../billing/entitlements';
+import { SERVICE_FEATURE, serviceChargeRef, type PricedService } from '../billing/service-quotes';
 import { generateBrief } from '../evidence/brief';
 import { defaultBriefLlm } from '../evidence/brief-llm';
 import {
@@ -68,11 +71,13 @@ export interface ExtractionJob {
   error: string | null;
   started_at: string | null;
   finished_at: string | null;
+  /** 最终失败后原路退款的时刻；NULL=没退过（未失败，或这单没扣钱/无可退报价）。 */
+  refunded_at: string | null;
 }
 
 const JOB_COLUMNS =
   `id, evidence_id, case_id, user_id, mode, status, quote_id, cost,
-   lease_until, heartbeat_at, attempts, error, started_at, finished_at`;
+   lease_until, heartbeat_at, attempts, error, started_at, finished_at, refunded_at`;
 
 // ───────────────────────────── 入队与查询 ─────────────────────────────
 
@@ -189,10 +194,68 @@ function finishOk(db: Database.Database, job: ExtractionJob, out: ExtractionOutp
   })();
 }
 
+/** refundFailedJob 要读的报价字段（付款方式、原价、退款幂等键）。 */
+interface RefundQuoteRow {
+  amount: number;
+  order_ref: string | null;
+  service: string;
+  entitlement_id: number | null;
+  confirmed_at: string | null;
+}
+
+/**
+ * 一条任务**最终失败**后原路退款：券付的把额度还回去，公道值付的原路退款。
+ * 只在 finishFailed 的 exhausted 分支、且在同一个事务内调用——退款流水、券归还与
+ * status='failed' 同增同减，中途崩一下不会留下「标了失败却没退钱」的单。
+ *
+ * 【为什么钱没退是本工单要修的病】生产实测：报价 5 → 确认扣 5 → sidecar 上游 503 →
+ * 三次都失败置 failed，而钱**没退**。用户为一次没做成的提取付了费，账面上却是一笔正常消费。
+ *
+ * 【幂等两道，方向一致（同账本那套）】
+ *   ① 任务维度：refunded_at 抢占位（UPDATE ... WHERE refunded_at IS NULL），抢输就退出，
+ *      不再往下走——「重启回收后又失败」把收尾又走一遍时，第二遍当场 changes=0。
+ *   ② 钱维度：gongdaoRefund 按 refund-<order_ref> 幂等、restoreEntitlement 按 consumed_ref 幂等，
+ *      即便有别的路径也来退这张报价，也只退一次。
+ */
+function refundFailedJob(db: Database.Database, job: ExtractionJob, now: string): void {
+  if (job.quote_id === null) return; // 内部重跑，从没走过计费，无可退
+
+  const quote = db
+    .prepare(
+      `SELECT amount, order_ref, service, entitlement_id, confirmed_at
+         FROM service_quotes WHERE id=?`,
+    )
+    .get(job.quote_id) as RefundQuoteRow | undefined;
+  if (!quote || quote.confirmed_at === null) return; // 没确认过=没扣过费
+
+  const paidByEntitlement = quote.entitlement_id !== null;
+  // 券付一律可退（把额度还回去）；钱付只在真扣过钱（原价>0）时才有可退的东西。
+  if (!paidByEntitlement && quote.amount <= 0) return;
+
+  // ① 任务维度抢占退款位：只有第一次把 NULL 改成 now，再来的 changes=0 直接退出。
+  const claimed = db
+    .prepare('UPDATE extraction_jobs SET refunded_at=? WHERE id=? AND refunded_at IS NULL')
+    .run(now, job.id);
+  if (claimed.changes === 0) return;
+
+  const orderRef = quote.order_ref ?? serviceChargeRef(job.quote_id, job.user_id);
+  if (paidByEntitlement) {
+    // 券付：把这次核销掉的赠送额度退回可用（不动公道值账本——券不是钱）。
+    restoreEntitlement(db, quote.entitlement_id as number, orderRef);
+  } else {
+    // 钱付：原路退款，feature 照这张报价的服务算（与 confirmService 记账同一个表达式）。
+    const feature = SERVICE_FEATURE[quote.service as PricedService] ?? quote.service;
+    gongdaoRefund(job.user_id, quote.amount, orderRef, feature, db);
+  }
+}
+
 /**
  * 收尾一次失败。还没用完领取次数就退回 queued 等下一轮重试；用完了置 failed。
  * 两种情形材料上的状态不同：queued（还会再试）与 failed（不会再试了）——
  * 合成一档的话，用户看到「失败」却过一会儿又自己好了，或看到「排队中」却永远不动。
+ *
+ * **用完次数置 failed 的同一个事务里原路退款**：钱没退这件事本身就是本工单要修的缺陷，
+ * 退款与判失败必须同增同减，中途崩一下不会留下「标了失败却没退钱」的单（见 refundFailedJob）。
  */
 function finishFailed(db: Database.Database, job: ExtractionJob, err: unknown): void {
   const message = err instanceof Error ? err.message : String(err);
@@ -206,6 +269,7 @@ function finishFailed(db: Database.Database, job: ExtractionJob, err: unknown): 
       exhausted ? 'failed' : 'queued',
       job.evidence_id,
     );
+    if (exhausted) refundFailedJob(db, job, now);
   })();
 }
 

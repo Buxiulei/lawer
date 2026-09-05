@@ -340,6 +340,11 @@ export interface EvidenceExtractionView {
   extraction_status: string;
   extracted_at: string | null;
   extracted_meta: unknown;
+  /**
+   * 提取失败时的说明，含退款信息（「本次费用已退款 N 公道值」/「已退还 1 次提取额度」）；
+   * 非失败态恒 null。失败原文存在 extraction_jobs.error，不在 evidence 行上，故读侧现取。
+   */
+  extraction_failure: string | null;
   /** include_text 未开时恒 null（省上下文），开了才带正文 */
   extracted_text: string | null;
   /** true = 正文被截到 EXTRACTED_TEXT_LIMIT 字；要全文去网页详情页 */
@@ -351,7 +356,49 @@ export interface EvidenceExtractionView {
   brief_summary: string;
 }
 
-function view(row: EvidenceOwnedRow, includeText: boolean): EvidenceExtractionView {
+/** 最近一条已失败任务及其报价的退款事实（读侧据此拼失败说明）。 */
+interface FailedJobRefund {
+  error: string | null;
+  refunded_at: string | null;
+  /** job.cost：这次实扣的公道值（钱付=原价；券付/免费=0） */
+  charged: number;
+  entitlement_id: number | null;
+}
+
+function latestFailedRefund(db: Database, evidenceId: number): FailedJobRefund | null {
+  const row = db
+    .prepare(
+      `SELECT j.error AS error, j.refunded_at AS refunded_at, j.cost AS charged,
+              q.entitlement_id AS entitlement_id
+         FROM extraction_jobs j
+         LEFT JOIN service_quotes q ON q.id = j.quote_id
+        WHERE j.evidence_id = ? AND j.status = 'failed'
+        ORDER BY j.id DESC LIMIT 1`,
+    )
+    .get(evidenceId) as FailedJobRefund | undefined;
+  return row ?? null;
+}
+
+/**
+ * 失败态的对外说明：失败原文 + 退款结果。退了才说退了——refunded_at 为空（还没退、
+ * 或这单本来没扣钱）时只给原文，不能凭空说「已退款」让用户去等一笔不存在的退款。
+ */
+function failureNote(f: FailedJobRefund | null): string | null {
+  if (!f) return null;
+  const base = f.error ?? '这件材料的内容提取失败了。';
+  if (f.refunded_at === null) return base;
+  const refund =
+    f.entitlement_id !== null
+      ? '本次为会员赠送额度，已退还 1 次提取额度。'
+      : `本次费用已退款 ${f.charged} 公道值。`;
+  return `${base}${refund}`;
+}
+
+function view(
+  row: EvidenceOwnedRow,
+  includeText: boolean,
+  extractionFailure: string | null,
+): EvidenceExtractionView {
   const brief = parseBrief(row.brief_json);
   const full = row.extracted_text ?? '';
   let meta: unknown = null;
@@ -376,6 +423,7 @@ function view(row: EvidenceOwnedRow, includeText: boolean): EvidenceExtractionVi
     extraction_status: row.extraction_status,
     extracted_at: row.extracted_at,
     extracted_meta: meta,
+    extraction_failure: extractionFailure,
     extracted_text: includeText ? full.slice(0, EXTRACTED_TEXT_LIMIT) : null,
     truncated: includeText && full.length > EXTRACTED_TEXT_LIMIT,
     extracted_text_chars: full.length,
@@ -392,7 +440,10 @@ export function getEvidenceExtraction(
 ): Result<{ evidence: EvidenceExtractionView }> {
   const row = ownedEvidence(db, input.evidenceId, input.userId);
   if (!row) return NOT_FOUND();
-  return { ok: true, evidence: view(row, input.includeText === true) };
+  // 失败原文与退款信息只在失败态才现取一次——非失败态的读是热路径，不多一次 join。
+  const failure =
+    row.extraction_status === 'failed' ? failureNote(latestFailedRefund(db, row.id)) : null;
+  return { ok: true, evidence: view(row, input.includeText === true, failure) };
 }
 
 export interface BriefView {
