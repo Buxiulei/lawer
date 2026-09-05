@@ -37,9 +37,13 @@ const FAMILY_LABELS: Record<CapabilityFamily, string> = {
   case: '档案与事实',
   timeline: '时间线',
   actions: '行动',
+  claims: '金额主张',
   deadlines: '期限',
   evidence: '证据',
   knowledge: '法律依据',
+  drafts: '文书',
+  company: '公司主体',
+  emotion: '情绪',
 };
 
 const KIND_LABELS = { read: '读', write: '写', spend: '写·耗算力' } as const;
