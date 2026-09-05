@@ -36,6 +36,17 @@ export interface DocListItem {
   advice: string | null;
   advice_detail: string | null;
   risk_flags: RiskFlag[];
+  /**
+   * 原文第一行（截断）。**不是全文**：列表要有个能认出「这是哪一份」的标题，
+   * 而这张表没有 title 列——文件的第一行通常就是它的名字（《解除劳动合同协议书》）。
+   * 拿 doc_type 当标题的形态是：三份解除通知在列表里长得一模一样。
+   */
+  title_line: string | null;
+  /**
+   * 这份文件在证据库里的名字（同案同 file_id 的证据条目）；直接粘进来的原文没有，为 null。
+   * 用户找的是「我传上去的那个文件」，认的是文件名。
+   */
+  source_name: string | null;
   created_at: string;
 }
 
@@ -57,7 +68,18 @@ interface DocRow {
   risk_flags_json: string | null;
   advice: string | null;
   advice_detail: string | null;
+  source_name: string | null;
   created_at: string;
+}
+
+/** 标题行的长度上限：卡片一行放得下，多了会把列表撑成一堵字墙。 */
+const TITLE_LINE_MAX = 40;
+
+function firstLine(text: string | null): string | null {
+  if (!text) return null;
+  const line = text.split('\n').map((l) => l.trim()).find((l) => l.length > 0);
+  if (!line) return null;
+  return line.length > TITLE_LINE_MAX ? `${line.slice(0, TITLE_LINE_MAX)}…` : line;
 }
 
 /**
@@ -75,7 +97,11 @@ function parseFlags(json: string | null): RiskFlag[] {
 }
 
 const DOC_COLUMNS =
-  'id, case_id, file_id, doc_type, ocr_text, risk_flags_json, advice, advice_detail, created_at';
+  `d.id AS id, d.case_id AS case_id, d.file_id AS file_id, d.doc_type AS doc_type,
+   d.ocr_text AS ocr_text, d.risk_flags_json AS risk_flags_json, d.advice AS advice,
+   d.advice_detail AS advice_detail, d.created_at AS created_at,
+   (SELECT name FROM evidence WHERE file_id = d.file_id AND case_id = d.case_id ORDER BY id LIMIT 1)
+     AS source_name`;
 
 function toListItem(row: DocRow): DocListItem {
   return {
@@ -86,6 +112,8 @@ function toListItem(row: DocRow): DocListItem {
     advice: row.advice,
     advice_detail: row.advice_detail,
     risk_flags: parseFlags(row.risk_flags_json),
+    title_line: firstLine(row.ocr_text),
+    source_name: row.source_name,
     created_at: row.created_at,
   };
 }
@@ -99,9 +127,9 @@ function toListItem(row: DocRow): DocListItem {
 export function listDocs(db: Database, caseId: number, userId: number): DocListItem[] {
   const rows = db
     .prepare(
-      `SELECT ${DOC_COLUMNS} FROM company_docs
-        WHERE case_id = ? AND case_id IN (SELECT id FROM cases WHERE user_id = ?)
-        ORDER BY id DESC`,
+      `SELECT ${DOC_COLUMNS} FROM company_docs d
+        WHERE d.case_id = ? AND d.case_id IN (SELECT id FROM cases WHERE user_id = ?)
+        ORDER BY d.id DESC`,
     )
     .all(caseId, userId) as DocRow[];
   return rows.map(toListItem);
@@ -115,8 +143,8 @@ export function getDoc(db: Database, docId: number, userId: number): DocDetail |
   if (!Number.isInteger(docId) || docId <= 0) return null;
   const row = db
     .prepare(
-      `SELECT ${DOC_COLUMNS} FROM company_docs
-        WHERE id = ? AND case_id IN (SELECT id FROM cases WHERE user_id = ?)`,
+      `SELECT ${DOC_COLUMNS} FROM company_docs d
+        WHERE d.id = ? AND d.case_id IN (SELECT id FROM cases WHERE user_id = ?)`,
     )
     .get(docId, userId) as DocRow | undefined;
   if (!row) return null;
