@@ -1,7 +1,8 @@
 # sidecar —— lawer 的 Python 侧服务（FastAPI）
 
-承担 Next.js 侧不便做的四类活：**RFC3161 可信时间戳**、**PAdES 电子签名与验签**、
-**《存证证明》PDF 渲染**、**OCR / 录音转写**。仅内网监听，只由 app 调用，不对公网暴露。
+承担 Next.js 侧不便做的五类活：**RFC3161 可信时间戳**、**PAdES 电子签名与验签**、
+**《存证证明》PDF 渲染**、**OCR / 录音转写**、**视频抽音轨与关键帧**。
+仅内网监听，只由 app 调用，不对公网暴露。
 
 脚本主体从 NBDpsy 移植（`rfc3161_timestamp.py` / `pades_sign.py` / `gen_evidence_pdf.py` /
 `verify_evidence_pdf.py` / `trust_anchors/`），改名不改逻辑；每个脚本都保留原 CLI 入口，
@@ -18,6 +19,7 @@ sidecar/
   verify_evidence_pdf.py   独立 PAdES 密码学验签（verify_pdf）
   ocr.py                   DashScope Qwen-VL OCR
   asr.py                   DashScope Paraformer 转写 + 说话人分离
+  video.py                 ffmpeg 抽音轨（16k 单声道 wav）与关键帧 JPEG
   trust_anchors/           离线验签信任锚（CFCA 签名根 / GlobalSign 时间戳根）
   tests/                   端点单测（全离线）
 ```
@@ -48,6 +50,11 @@ set -a && . ./.env && set +a  # 加载环境变量
 .venv/bin/python -m pytest tests -q
 ```
 
+`tests/test_video.py` 会用 ffmpeg 现场合成一段 5 秒测试视频（`testsrc` 彩条 + 440Hz 正弦音，
+编码器用内置的 `mpeg4`/`aac`，不依赖发行版有没有编进 libx264）跑 `/video`，
+断言时长、帧数上限、wav 的 16k 单声道。**没装 ffmpeg 的机器上这些用例 skip 并说明原因**；
+纯函数（抽帧时间点）与「缺 ffmpeg 应 503」两条不依赖 ffmpeg，任何机器都跑。
+
 单测全离线（TSA 调用打桩），覆盖：`/tsa` 哈希入参校验与上游失败映射、
 `/evidence-pdf` → `/verify` 回环（未签名件必须判不通过）、哈希不符检测、
 未配 key/证书时的 503 降级、`/signer` 读证书主体（用例内现造自签 pfx，**不碰真实证书**）。
@@ -67,9 +74,10 @@ set -a && . ./.env && set +a  # 加载环境变量
 | POST | `/verify` | multipart `file`(PDF), `expect_hash?` | 裁决 JSON |
 | POST | `/ocr` | multipart `file`(图片), `prompt?` | `{text, model, request_id}` |
 | POST | `/asr` | multipart `file`(音频), `speaker_count?` | `{text, sentences[], model, task_id}` |
+| POST | `/video` | multipart `file`(视频), `max_frames?`, `frame_interval_s?` | `{duration_s, audio_wav_b64, frames[], probe}` |
 
-状态码约定：入参不合法 `400/422`；依赖未配置（无 key、无签名证书）`503`；
-上游（TSA / DashScope）报错 `502`。
+状态码约定：入参不合法 `400/422`；依赖未配置（无 key、无签名证书、无 ffmpeg）`503`；
+上游（TSA / DashScope）报错 `502`；超体积/时长上限 `413`。
 
 **`/verify` 例外**：验签不通过不算 HTTP 错误，一律 `200` 返回裁决，
 调用方读 `overall_ok`。这是刻意设计——「没验成功」与「验了但不通过」必须可区分。
@@ -139,6 +147,55 @@ app 侧要给用户看具体原因，按 `error_code` 做白名单投影，不�
 
 生成的是未签名 base PDF，上层应接着调 `/pades` 施加签名，再落 `files` 表。
 
+### `/video` 抽音轨与关键帧
+
+一段录像先在这里拆开，再分别喂给已有的两个端点：**wav → `/asr` 转写，帧 → `/ocr` 认字**。
+本端点自己不调任何云服务，只 `subprocess` 调系统 `ffmpeg` / `ffprobe`
+（**不装 av / moviepy / opencv**：ffmpeg 本来就是部署环境要装的系统包，
+多一层 Python 绑定只是多一份要跟着 ffmpeg 版本走的编译依赖）。
+
+入参（multipart）：
+
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `file` | 必填 | 视频文件 |
+| `max_frames` | 12 | 关键帧张数**上限**（1–120） |
+| `frame_interval_s` | 10 | 抽帧间隔秒数（>0，≤3600） |
+
+出参：
+
+```json
+{
+  "duration_s": 5.0,
+  "size_bytes": 123456,
+  "audio_wav_b64": "<16k 单声道 16bit PCM wav 的 base64；无音轨时 null>",
+  "audio_sample_rate": 16000,
+  "audio_channels": 1,
+  "frames": [{"t_s": 0.0, "jpeg_b64": "<base64>"}],
+  "probe": {"width": 320, "height": 240, "codec": "mpeg4"}
+}
+```
+
+**16k 单声道是硬约束不是偏好**：DashScope Paraformer 的说话人分离只支持单声道
+（见文末「`/asr` 的已知约束」），16k 是 paraformer-v2 的目标采样率。
+在这里转好，上层就不必再判断「这段音是不是分不了人」。
+
+**抽帧策略**：间隔够稀（按 `frame_interval_s` 算出的帧数不超 `max_frames`）就按间隔走；
+长视频改为在**全片上均匀**采样 `max_frames` 个点——否则一小时的录像按 10 秒一帧
+只会取到开头两分钟，等于把「这段视频讲了什么」误答成「这段视频开头讲了什么」。
+`-ss` 放在 `-i` 之前是输入侧快速定位，落到该时刻之前最近的关键帧。
+（**当前不做场景切换检测**，只按时间取点。）
+
+**上限与错误码**：体积默认 200MB（env `VIDEO_MAX_BYTES`）、时长默认 60 分钟
+（env `VIDEO_MAX_SECONDS`），超任一项 `413`；上传流是**边写临时文件边数字节**，
+超限当场中止，不会先把整个文件读进内存。坏文件（ffprobe 认不出、无音视频轨、读不出时长）
+一律 `400`，**不是 500**；缺 ffmpeg/ffprobe `503`，文案自述缺什么、为什么缺、怎么装。
+单次 ffmpeg 调用超时默认 600 秒（env `VIDEO_FFMPEG_TIMEOUT_S`），超时 `502`。
+
+> ⚠️ **音轨是内联 base64 回的**，60 分钟 16k 单声道 wav ≈ 115MB、转 base64 ≈ 154MB。
+> 默认上限允许的最坏情况会让单次响应到这个量级。上层若要跑长录像，
+> 应自己把 `VIDEO_MAX_SECONDS` 调到实际需要的量级，或另行设计临时文件交接。
+
 ## 出证 → 验证的完整链路
 
 ```
@@ -167,6 +224,9 @@ PDF 本身的签名用 Adobe 或 `verify_evidence_pdf.py` 验。
   换版走 env `OCR_MODEL`，并同步核对 `research/raw/C01-模型定价核定.md §二` 的费率表。
 - **中文字体**：PDF 渲染需要 CJK 字体，镜像里装的是 `fonts-noto-cjk`。
   裸机缺字体会回退 Helvetica，中文渲染成方块。
+- **ffmpeg / ffprobe（系统包）**：`/video` 唯一的外部依赖，`requirements.txt` 里没有对应条目。
+  镜像已在 `Dockerfile` 装上；**裸 systemd 部署的机器要自己
+  `apt-get install -y ffmpeg`**，否则 `/video` 恒 `503`（其余端点不受影响）。
 
 ### `/asr` 的已知约束（待裁决）
 
