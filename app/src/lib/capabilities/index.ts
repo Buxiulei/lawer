@@ -11,3 +11,4 @@ export {
   type CapabilitySurface,
 } from './registry';
 export { withClientRef, type AgentWriteTarget } from './idempotent';
+export { writeOnce, DEDUPED_NOTE } from './shared';

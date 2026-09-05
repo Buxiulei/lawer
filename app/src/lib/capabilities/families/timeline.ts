@@ -52,3 +52,79 @@ export const timelineAdd: Capability = {
       clientRef: args.client_ref,
     }),
 };
+
+export const timelineList: Capability = {
+  name: 'timeline_list',
+  family: 'timeline',
+  scope: 'case:read',
+  kind: 'read',
+  domains: ['*'],
+  exposeTo: ['mcp'],
+  precondition: [],
+  rest: { method: 'GET', path: '/api/v1/cases/{id}/timeline' },
+  title: '分页读时间线',
+  description:
+    '按时间倒序读案件时间线，可按发生时间下界 since 与类别 kind 过滤，limit 默认 50、最多 200。' +
+    '返回里带 total（过滤后的真总数）与 next_offset（没有下一页时为 null）——' +
+    '**别把一页当成全部**：case_get 只带最近若干条，早期事件（入职、第一次约谈）要靠翻页才拿得到。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      ...caseIdProp,
+      since: { type: 'string', description: '只要这个时刻之后发生的事件，ISO8601 时间串' },
+      kind: { type: 'string', enum: [...cases.TIMELINE_KINDS], description: '只要这一类事件' },
+      limit: { type: 'integer', description: '本页最多几条，默认 50，最多 200' },
+      offset: { type: 'integer', description: '从第几条开始，默认 0；续页用上一页回的 next_offset' },
+    },
+    required: ['case_id'],
+  },
+  run: (db, identity, args) =>
+    cases.listTimeline(db, {
+      caseId: num(args.case_id),
+      userId: identity.uid,
+      since: args.since,
+      kind: args.kind,
+      limit: args.limit === undefined ? undefined : num(args.limit),
+      offset: args.offset === undefined ? undefined : num(args.offset),
+    }),
+};
+
+export const timelineMilestone: Capability = {
+  name: 'timeline_milestone',
+  family: 'timeline',
+  scope: 'case:write',
+  kind: 'write',
+  domains: ['*'],
+  exposeTo: ['mcp'],
+  precondition: [],
+  // 幂等靠自然键而非 client_ref：盖章是把一行的 milestone 列设成某个值，
+  // 同一事件同一里程碑再盖一次结果完全一样（不新增行、不改别的列）。
+  idempotency: { naturalKey: '同一 event_id 盖同一 milestone ⇒ 结果不变' },
+  rest: { method: 'POST', path: '/api/v1/cases/{id}/timeline/{eventId}/milestone' },
+  title: '确认里程碑',
+  description:
+    '给一条已存在的时间线事件盖上里程碑。**必须先拿到用户的明确确认再调**，' +
+    'user_confirmed 传 true 就是在代用户签字：里程碑是只追加、没有撤销语义的事实断言，' +
+    '盖错一次就永久留在案件史里。你只负责提议，落笔的是用户。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      ...caseIdProp,
+      event_id: { type: 'integer', description: '要盖章的时间线事件 id（本案内）' },
+      milestone: { type: 'string', enum: [...cases.CASE_MILESTONES], description: '达成的里程碑' },
+      user_confirmed: {
+        type: 'boolean',
+        description: '用户已明确确认这一格达成。没问过用户就不要传 true',
+      },
+    },
+    required: ['case_id', 'event_id', 'milestone', 'user_confirmed'],
+  },
+  run: (db, identity, args) =>
+    cases.confirmMilestone(db, {
+      caseId: num(args.case_id),
+      userId: identity.uid,
+      eventId: num(args.event_id),
+      milestone: args.milestone,
+      userConfirmed: args.user_confirmed,
+    }),
+};

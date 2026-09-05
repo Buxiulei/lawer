@@ -14,7 +14,7 @@ import { CAPABILITIES, getCapability, listCapabilities } from '..';
 const CAP_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SRC_ROOT = path.resolve(CAP_ROOT, '..', '..');
 
-const FAMILIES = ['case', 'timeline', 'actions', 'deadlines', 'evidence', 'knowledge'];
+const FAMILIES = ['case', 'timeline', 'actions', 'deadlines', 'evidence', 'knowledge', 'drafts', 'company', 'emotion'];
 const SCOPES = ['case:read', 'case:write'];
 const KINDS = ['read', 'write', 'spend'];
 const SURFACES = ['mcp', 'site'];

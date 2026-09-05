@@ -7,10 +7,13 @@
 // 【加新能力的规矩】追加在**末尾**，不插在中间。想按族分组读，看各自的 families/*.ts。
 import { actionComplete, actionList } from './actions';
 import { caseFacts, caseGet, caseList, caseUpdate, intakeSubmit } from './case';
+import { companyProfileUpsert } from './company';
+import { draftGet, draftList, draftWrite } from './drafts';
+import { emotionLog } from './emotion';
 import { deadlineList } from './deadlines';
 import { evidenceList } from './evidence';
 import { knowledgeSearch } from './knowledge';
-import { timelineAdd } from './timeline';
+import { timelineAdd, timelineList, timelineMilestone } from './timeline';
 
 import type { Capability } from '../registry';
 
@@ -27,4 +30,11 @@ export const CAPABILITIES: Capability[] = [
   knowledgeSearch,
   caseList,
   intakeSubmit,
+  timelineList,
+  timelineMilestone,
+  draftList,
+  draftGet,
+  draftWrite,
+  companyProfileUpsert,
+  emotionLog,
 ];

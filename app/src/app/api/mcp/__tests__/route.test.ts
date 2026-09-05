@@ -232,15 +232,22 @@ describe('tools/list', () => {
     'case_facts',
   ];
 
-  test('十一个工具，每个都有 name / description / inputSchema', async () => {
+  test('十八个工具，每个都有 name / description / inputSchema', async () => {
     const res = await POST(rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, keyA));
     const { result } = await res.json();
-    // knowledge_search / case_list 不隶属案件；intake_submit 后加，一律**追加在末尾**（顺序钉死，见上）
+    // knowledge_search / case_list 不隶属案件；其余后加的一律**追加在末尾**（顺序钉死，见上）
     expect(result.tools.map((t: { name: string }) => t.name)).toEqual([
       ...CASE_SCOPED,
       'knowledge_search',
       'case_list',
       'intake_submit',
+      'timeline_list',
+      'timeline_milestone',
+      'draft_list',
+      'draft_get',
+      'draft_write',
+      'company_profile_upsert',
+      'emotion_log',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();
@@ -280,10 +287,16 @@ describe('tools/list', () => {
    * 不在我们这边调模型。名单留着它的形态是：一条永远红的守卫钉着一件已经做完的事，
    * 下一个人要么删判据要么删功能，而两条路都没有台账可依。其余四项原样禁止。
    */
-  test('暂不交付的工具（计算器/文书/上传/OCR）一个都不许出现', async () => {
+  /*
+   * 【draft_write 同样已从名单里删掉】设计稿 §11 把 draft_list/get/write 排在 P1，
+   * 本单交付：它走的是 lib/cases.writeDraft，与站内对话同一道「对外文书缺发出后果就拒收」
+   * 的闸门（lib/cases/drafts 那一份清单）。留着它的形态与上面 knowledge_search 那条一样——
+   * 一条永远红的守卫钉着一件已经做完的事。其余三项原样禁止。
+   */
+  test('暂不交付的工具（计算器/上传/OCR）一个都不许出现', async () => {
     const res = await POST(rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, keyA));
     const names: string[] = (await res.json()).result.tools.map((t: { name: string }) => t.name);
-    for (const notYet of ['claim_calc', 'draft_write', 'evidence_upload', 'docs_ocr']) {
+    for (const notYet of ['claim_calc', 'evidence_upload', 'docs_ocr']) {
       expect(names).not.toContain(notYet);
     }
   });
