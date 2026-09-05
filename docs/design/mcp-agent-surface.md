@@ -1,6 +1,6 @@
 # MCP 工具面重设计 · 设计稿 v1
 
-状态：**待主理人评审**（PR）。批准后按 §11 分期拆票。
+状态：**v1.1，主理人 2026-09-05 已拍板六项（见 §9）并追加两条要求：内容提取与证据简报并入第一期；预留多领域架构（§13）。** 按 §11 分期开工。
 起因：主理人 2026-09-05 指令——「mcp 工具需要你进行重新的设计，需要思考到 agent 在于客户进行法律咨询的交互中，所有需要用到的东西。在网页上沟通时，所有需要用到的东西，都需要具备……先做设计，写 pr，尽可能的不重不漏，再做 mcp、api、后台系统、表格、配置、skill 的完善」。
 依据：现状盘点 `rd-mcp-design/inventory.md`（九块 + 十条缺口，全部带文件:行）。本文只引用结论，不重复盘点。
 
@@ -16,8 +16,9 @@
 | P2 | **写入幂等** | 每个写工具带 `client_ref`；没带时按领域自然键去重；重放返回既有对象 + `deduped:true` | case 2 事件双写、行动卡双写 |
 | P3 | **闸门在服务端** | 归属（案件必须本人）、实名（证据/出证/文书导出/分享）、余额与报价确认（耗算力动作）、危机词表（确定性首段）——一律服务端判定，不靠 agent 自觉 | 危机拦截只在站内 chat 生效（缺口 9） |
 | P4 | **时间线只追加** | 更正走追加一条 `kind=更正` 事件并引用原事件 id | 已有约束，保持 |
-| P5 | **计费三段式** | 读写档案免费；耗算力或外部资源的动作（背调、OCR/ASR、出证 TSA+签名、文书 PDF 导出）走 **报价→确认→扣费**，报价永远免费、确认才扣 | 出证全链路无计费（缺口 8），OCR/ASR 未接线（缺口 7） |
+| P5 | **计费三段式** | 读写档案免费；**出证免费（主理人 09-05 拍板）**；耗算力的内容提取（OCR / 录音转写 / 视频提取 / 来文解读）与背调、守望走 **报价→确认→扣费**，报价永远免费、确认才扣 | OCR/ASR 未接线（缺口 7），视频提取无 |
 | P6 | **长期记忆由 agent 维护、过期由服务端管** | 个案报告（case report）是每案一份的结构化长期记忆；写入即置 stale，事实卡首行提示 | 无叙事层，档案=五张扁平表 |
+| P8 | **领域即配置** | 案件带 `domain`；知识库、首诊表、阶段枚举、算钱器、文书模板、危机词表、说明书按领域打包（§13）；工具名与 MCP 面跨领域不变，只是回答的内容换包 | 全站写死劳动争议 |
 | P7 | **一个注册表生成一切** | 工具注册表是唯一真源，`/api/manifest`、接入说明能力表、Claude skill 变体全部由它生成，禁止手写第二份 | manifest 漏 25 条（缺口 4），knowledge 类型枚举漏两类（缺口 5），claude-skill.md 手动同步 |
 
 ---
@@ -68,9 +69,10 @@
 | `evidence_get` ★ | read | 读 | evidence_id, include_text? | 元数据 + 已提取文本（OCR/ASR 结果，若有）+ 证明目的 | — | 文件二进制不经 MCP；文本进对话 |
 | `evidence_register` ★ | write | 写 | case_id, name, category, prove_purpose, original_medium, **upload_token** | 条目 | client_ref | 二进制走 REST `POST /evidence`（multipart）；MCP 给 `evidence_upload_url` 返回一次性上传地址与 token，agent 或用户端上传后再 register。**上传与登记都受实名闸** 🪪 |
 | `evidence_upload_url` ★ 🪪 | write | — | case_id, filename, mime, size | 一次性 PUT 地址 + token（10 分钟） | 实名 | 解决 MCP 传不了大文件 |
-| `evidence_extract` ★ 💰 | write | 写 | evidence_id, mode: ocr/asr | 报价 或 提取结果（见 §4.2 两步） | 实名；余额 | 走 sidecar /ocr /asr；结果落 `evidence.extracted_text` |
-| `evidence_attest_quote` ★ | read | 读 | evidence_ids[] | 报价（每件 X 公道值，含 TSA+签名） | — | 出证是否计费待拍板（§9-①）；若免费，报价恒 0 但流程保留 |
-| `evidence_attest` ★ 🪪 💰 | write | 写 | evidence_ids[], quote_id | 订单与状态 | 实名；余额 | 幂等（同证据不二次下单，中途失败续跑，与 REST 一致） |
+| `evidence_extract` ★ 💰 | write | 写 | evidence_id, mode: ocr / asr / **video** | 报价 或 提取结果（见 §4.2 两步） | 实名；余额 | ocr 走 sidecar /ocr；asr 走 /asr（含说话人分离）；**video = ffmpeg 抽音轨→asr + 关键帧→ocr/画面描述**（sidecar 新增 /video）；结果落 `evidence.extracted_text` + `extracted_meta`（时间轴、说话人、帧号） |
+| `evidence_brief_get` ★ | read | 读 | evidence_id | 简报：这件证据能证明什么、关键事实（时间/人物/金额/原话）、与诉求的关系、弱点与补强建议、引用位置 | — | **主理人 09-05：存证后每件证据都要有简报，让后续 agent 知道它能用来做什么** |
+| `evidence_brief_update` ★ | write | 写 | evidence_id, brief（分节）, reason, base_version | 新版本 | 乐观锁 | 提取完成后服务端生成初稿（计费含在提取里），agent 可改；简报进 evidence_list 摘要与个案报告「证据地图」 |
+| `evidence_attest` ★ 🪪 | write | 写 | evidence_ids[] | 订单与状态 | 实名 | **免费（拍板①）**，无报价步；幂等（同证据不二次下单，中途失败续跑，与 REST 一致） |
 | `attest_verify` ★ | read | 读 | order_no | 验签裁决 JSON | 公开 | 对应 `GET /verify/{orderNo}` |
 
 ### C. 法律依据
@@ -136,7 +138,7 @@
 | `emotion_log` ★ | write | 写 | case_id, level, note, refer_nbdpsy? | 记录；refer 一案一次 | 与站内同频控 |
 | `crisis_check` ★ | read | 读 | text | `{hit:bool, first_segment, hotlines[]}` | **服务端确定性词表**（`crisis.ts` 同一函数），命中即返回必须原样先说的首段与可用热线（forbidden 号码永不出现）。陪跑指南规定：用户每条消息先过它，命中则首段照抄 |
 
-### J. 来文与录音（二期，依赖 OCR/ASR 接线）
+### J. 来文与录音（**第一期**，主理人 09-05：取证核验的核心能力）
 
 | 工具 | scope | 读/写 | 入参 | 出参 | 前置 | 备注 |
 |---|---|---|---|---|---|---|
@@ -174,7 +176,7 @@
 
 ### 4.2 报价→确认→扣费（P5）
 - 所有 💰 工具两步：先 `xxx_quote`（免费，返回 quote_id、金额、算式、有效期 30 分钟、退款承诺）；再 `xxx`/`xxx_confirm`（带 quote_id）。确认时余额不足 ⇒ `402 GONGDAO_EXHAUSTED`（与网页同码同文案）；报价过期 ⇒ `409 QUOTE_EXPIRED`。
-- 统一表 `service_quotes`（今日 dossier 的报价逻辑泛化），`pricing_config` 增键（§6）。
+- 统一表 `service_quotes`（今日 dossier 的报价逻辑泛化），`pricing_config` 增键（§6）。出证不在其列（免费）。
 - 会员赠送额度（`entitlements`）在确认时自动抵扣，回包写明抵扣了什么。
 
 ### 4.3 个案报告（P6，主理人 09-04 要求）
@@ -201,12 +203,13 @@
 | `case_reports` ★ | 新表（§4.3） | 长期记忆 |
 | `agent_writes` ★ | 新表：id, case_id, key_id?, tool, client_ref?, target_table, target_id, deduped, created_at；唯一 (case_id, tool, client_ref) | 幂等 + 审计 |
 | `service_quotes` ★ | 新表：id, user_id, case_id, service（attest/ocr/asr/dossier/export/watch）, payload_json, amount, entitlement_id?, expires_at, confirmed_at, order_ref | 报价确认统一 |
-| `evidence` ↑ | 加 `extraction_status`（none/queued/done/failed）、`extracted_text`、`extracted_at` | OCR/ASR 结果 |
+| `evidence` ↑ | 加 `extraction_status`（none/queued/done/failed）、`extracted_text`、`extracted_meta_json`、`extracted_at`、**`brief_json`、`brief_version`、`brief_updated_by`** | 提取结果与简报 |
+| `extraction_jobs` ★ | 新表：evidence_id, mode, status, quote_id, cost, started_at, finished_at, error | 提取任务留痕与重试 |
 | `timeline_events` ↑ | 加 `client_ref`、`corrects_event_id` | 幂等、更正链 |
 | `action_items` ↑ | 加 `client_ref` | 幂等 |
 | `drafts` ↑ | 加 `version`、`based_on`、`send_consequences`（若尚未有列）、`exported_at` | 版本与导出 |
 | `crisis_hits` ★ | 新表：case_id, source（site/mcp）, matched_terms_hash, at | 事实卡「近 72h 危机标记」来源 |
-| `api_keys` ↑ | scope 集合扩为 read / write / spend | 💰 动作需 spend |
+| `api_keys` | **不变**（拍板③：不细分 spend，💰 动作沿用 case:write） | — |
 
 迁移全部 additive；`ensure*` 风格幂等；无回填任务（报告首稿由 bootstrap 惰性生成）。
 
@@ -216,9 +219,11 @@
 
 | 键 | 含义 | 建议初值（待拍板 §9） |
 |---|---|---|
-| `attest.per_item` | 每件证据出证（TSA+签名） | 0 或 30 公道值 |
+| `attest.per_item` | 每件证据出证 | **0（拍板①）** |
 | `ocr.per_page` | 图片/PDF 每页 OCR | 5 |
 | `asr.per_minute` | 录音每分钟转写 | 8 |
+| `video.per_minute` | 视频每分钟（抽音轨转写 + 关键帧 OCR/描述） | 12 |
+| `brief.per_item` | 证据简报生成（含在提取价里，单独重生成时收） | 3 |
 | `doc_review.per_doc` | 来文解读（含 OCR 与审查规则） | 20 |
 | `draft_export.per_pdf` | 文书导出 PDF | 0 |
 | `quote.ttl_minutes` | 报价有效期 | 30 |
@@ -247,16 +252,17 @@
 
 ---
 
-## 9. 待主理人拍板
+## 9. 主理人拍板（2026-09-05）
 
-| # | 问题 | 我的建议 |
+| # | 问题 | 裁决 |
 |---|---|---|
-| ① | 证据出证要不要收公道值 | 收，每件 30（覆盖 TSA 与签名算力），会员赠送额度可抵；保持「报价免费、确认才扣」 |
-| ② | OCR / ASR / 来文解读单价 | §6 初值，上线后按成本表校准 |
-| ③ | api key 是否细分 `spend` 权限 | 分。用户可发一把只读只写的 key 给不那么信任的 agent |
-| ④ | 个案报告按案件一份（非按用户） | 按案件；现一人一案两者等价 |
-| ⑤ | MCP 侧危机处理强制到什么程度 | 服务端只做「能确定性判定的」：crisis_check、事实卡首行标记、forbidden 号码永不出现、对外文书必带后果；agent 的措辞不硬拦 |
-| ⑥ | 来文解读/录音转写是否本期 | 二期（Phase 3），先把免费能力面与报告做扎实 |
+| ① | 证据出证要不要收公道值 | **不收** |
+| ② | OCR / ASR / 来文解读单价 | **按 §6 初值** |
+| ③ | api key 是否细分 `spend` 权限 | **不细分** |
+| ④ | 个案报告按案件一份 | **按案件** |
+| ⑤ | MCP 侧危机处理强制到什么程度 | 经理按建议执行：crisis_check 工具 + 事实卡首行危机标记 + forbidden 号码永不出现 + 对外文书必带后果；agent 措辞不硬拦（主理人若要更硬的「握手」——案件有危机标记时 agent 未过词表不许写回——回「硬」即加） |
+| ⑥ | 来文解读/录音转写是否本期 | **本期，且加视频提取；存证后每件证据必有简报** |
+| ⑦ | 新要求 | **预留多领域架构**：劳动纠纷之后紧接着做心理咨询纠纷土八鼠（§13） |
 
 ---
 
@@ -283,10 +289,10 @@
 
 | 期 | 内容 | 级别 | 交付判据 |
 |---|---|---|---|
-| **P1 对齐与幂等**（本周） | 注册表骨架；MCP 补 claims/claim_calc、action_create、emotion_log、company_profile_upsert、draft_list/get/write、deadline_set/resolve、intake_submit、case_update 基本盘、timeline_list/milestone；`agent_writes` + client_ref + 自然键去重；knowledge 十类；manifest 与 skill 由注册表生成 | L（注册表）+ 若干 M | 站内 10 工具在 MCP 逐一可调且同表同函数；重放零双写；生成物快照守卫 |
-| **P2 记忆与守则**（下周） | `case_reports` + stale + bootstrap + 事实卡首行 + 网页档案页渲染；`crisis_check` + `crisis_hits`；`me_get`、`quote_list`；`citation_check`、`knowledge_get`；公司情报只读面（probe/dossier_get/graph_get） | L + M | 报告过期机制真机可见；危机词表 MCP/站内同函数判据 |
-| **P3 计费动作**（再下周） | `service_quotes` 泛化；`evidence_attest_quote/attest`（按 §9-①）；`dossier_quote/confirm`、`company_watch_set` 走统一报价；`evidence_upload_url/register`、`share_create`；`spend` scope | L | 报价→确认→扣费三步在四种服务上判据一致 |
-| **P4 内容提取**（排期待定） | sidecar OCR/ASR 接线；`evidence_extract`、`doc_submit`、`transcript_submit`；文件解读页真数据；`draft_export` | L | 空表落地；计费按 §6 |
+| **P1 骨架与对齐**（本周） | 能力注册表（含 `domain` 适用声明，§13）；`cases.domain` 与领域配置骨架（labor 为唯一实现）；MCP 补 claims/claim_calc、action_create、emotion_log、company_profile_upsert、draft_list/get/write、deadline_set/resolve、timeline_list/milestone（intake_submit、case_update 基本盘、幂等去重已上产）；`agent_writes`；knowledge 十类；manifest 与 skill 由注册表生成 | L（注册表）+ 若干 M | 站内 10 工具在 MCP 逐一可调且同表同函数；生成物快照守卫；domain 字段落库且全站读它 |
+| **P2 取证核验**（紧接） | sidecar OCR/ASR 接线 + 新增 /video（ffmpeg 抽音轨、关键帧）；`extraction_jobs`；`evidence_extract`（ocr/asr/video）+ `service_quotes` 报价确认；**证据简报**（提取后服务端生成初稿、`evidence_brief_get/update`、进 evidence_list 与事实卡）；`evidence_get`、`evidence_upload_url/register`；`doc_submit/doc_list/doc_get`、`transcript_submit`；文件解读页真数据；`evidence_attest` 免费化并入 MCP | L | 三种媒介各一真机样本：提取文本落库、简报可读、计费一笔不多不少 |
+| **P3 记忆与守则** | `case_reports` + stale + bootstrap + 事实卡首行 + 网页档案页渲染（证据地图读简报）；`crisis_check` + `crisis_hits`；`me_get`、`quote_list`；`citation_check`、`knowledge_get`；公司情报面（probe/dossier_quote/confirm/get/graph/watch 走统一报价）；`share_create`、`draft_export` | L + M | 报告过期机制真机可见；危机词表 MCP/站内同函数判据 |
+| **P4 第二领域**（劳动纠纷收口后立即） | 心理咨询纠纷领域包：知识库、首诊表、阶段、算钱器、模板、危机词表、说明书；全站按 `domain` 切包验证 | L | 同一套工具面在两个领域各跑通一条完整旅程 |
 
 每期按分级规则派单（S/M 单 Agent，L 执行 + 复核），上产前 CI 绿 + 真机核对，台账逐单记。
 
@@ -298,3 +304,33 @@
 - 不做跨案件检索与跨用户任何读取。
 - 不把聊天接口暴露为 MCP 工具。
 - 不在 MCP 侧做密钥自我管理。
+
+---
+
+## 13. 多领域架构（主理人 09-05 新要求：为心理咨询纠纷等后续土八鼠预留）
+
+**结论**：工具面、表结构、MCP/REST 协议**跨领域不变**；变的是「领域包」。一个领域 = 一份配置 + 一组内容，而不是一套新代码。
+
+| 层 | 跨领域共用（不变） | 按领域打包（`domains/<key>/`） |
+|---|---|---|
+| 案件 | `cases` 表结构、`cases.domain` 列（★新增，默认 `labor`）、归属/实名/计费/幂等机制 | 阶段枚举（`stages`）、案件抬头模板、默认目标/底线提示 |
+| 首诊 | `intake_submit` 工具与校验框架 | 首诊表 schema（字段、必填、校验规则、问法） |
+| 事实卡/报告 | 渲染器、stale 机制、分节骨架 | 分节定义与措辞（劳动：用工基本盘；心理咨询：咨询关系与服务事实） |
+| 金额 | `claim_calc` 框架、`claims` 表 | 算钱器集合（劳动：N/2N/年假…；心理咨询：退费/损害赔偿/精神损害抚慰金口径） |
+| 知识库 | 检索器、卡片类型、facts 结构、引用纪律 | packs 目录按领域分（`knowledge/packs/labor/`、`knowledge/packs/counseling/`），index 带 domain |
+| 文书 | `draft_*` 工具、对外必带后果 | 模板卡与「对外文书种类」清单 |
+| 期限 | `deadline_*` 工具、到期计算 | 期限种类与起算规则（劳动：仲裁时效/起诉 15 日；心理咨询：诉讼时效/投诉时限） |
+| 公司情报 | probe/dossier/graph/watch 机制 | 对方主体类型（用人单位 vs 咨询机构/平台/咨询师执业资质）、辖区卡 |
+| 危机 | `crisis_check` 函数、热线表机制 | 词表与热线（心理咨询领域词表更宽、与 NBDpsy 转介规则不同） |
+| 说明书 | 注册表生成器、SKILL 骨架 | `陪跑指南` 领域章节、话术卡 |
+| 网页 | 页面与组件 | 文案词典（NEUTRAL_WORD 同理，按领域一份） |
+
+**落法**：
+1. `domains/registry.ts`：`DOMAINS = { labor: {...}, counseling: {...} }`，每个领域实现同一个 `DomainPack` 接口（stages、intakeSchema、factsSections、calculators、deadlineKinds、crisisLexicon、docKinds、copy）。P1 只实现 `labor`，接口与 `cases.domain` 先落地。
+2. 能力注册表每条可声明 `domains: ['*'] | ['labor']`；`tools/list` 按案件领域过滤（无案件上下文时给并集）。
+3. 知识库 index 增 `domain` 字段；`knowledge_search` 默认限当前案件领域，可显式跨域。
+4. 事实卡/报告渲染器从 `DomainPack.factsSections` 取分节，不写死。
+5. 后台账号表加「领域」列；注册时按入口站点/参数落 `domain`。
+6. 守卫：任何新增「劳动」字样的硬编码若出现在共用层（`lib/` 非 `domains/labor/`）测试红——防再把领域内容写回共用代码。
+
+**不做的**：不做「一个案件多领域」；不做领域间数据互通。
