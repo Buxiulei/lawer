@@ -16,7 +16,7 @@ import type { Database } from 'better-sqlite3';
 import { findCaseById } from '@/lib/db/cases';
 import * as store from '@/lib/db/evidence';
 
-import { fail, type Result } from './attest';
+import { fail, type DomainFailure as DomainFailureShape, type Result } from './attest';
 import { EVIDENCE_CATEGORIES } from './categories';
 import { storeBytes } from './files';
 
@@ -45,6 +45,34 @@ export {
 /** spec §7 evidence.category 枚举。定义在零依赖的叶子模块里（见 ./categories 文件头），此处只转出。 */
 export { EVIDENCE_CATEGORIES } from './categories';
 
+/**
+ * 建条目前的三道领域校验：案件归属、名称、分类。**上传与登记共用这一份。**
+ *
+ * 【为什么抽出来】证据条目现在有两条入口：multipart 一步到位的 uploadEvidence，
+ * 与「先 PUT 字节、再 evidence_register 登记」的两步式。校验独立写两份就会分叉一份，
+ * 分叉之后的形态是：走 MCP 那条能建出一条分类不在词表里的证据，网页那条不能，
+ * 而两边看起来都正常工作。
+ */
+function validateEntry(
+  db: Database,
+  input: { caseId: number; userId: number; name: string; category?: string },
+): Result<{ name: string; category: string }> {
+  const caseRow = findCaseById(db, input.caseId);
+  // 案件不存在与不是自己的案件同一个错误，与 lib/cases 同口径
+  if (!caseRow || caseRow.user_id !== input.userId) {
+    return fail(404, 'CASE_NOT_FOUND', '案件不存在');
+  }
+  const name = input.name.trim();
+  if (!name) {
+    return fail(400, 'INVALID_NAME', '证据名称不能为空');
+  }
+  const category = input.category ?? '其他';
+  if (!(EVIDENCE_CATEGORIES as readonly string[]).includes(category)) {
+    return fail(400, 'INVALID_CATEGORY', `category 只能是 ${EVIDENCE_CATEGORIES.join(' / ')}`);
+  }
+  return { ok: true, name, category };
+}
+
 /** 上传单个文件建证据条目。文件本身按哈希去重，重复上传不重复占盘。 */
 export function uploadEvidence(
   db: Database,
@@ -59,34 +87,57 @@ export function uploadEvidence(
     originalMedium?: string | null;
   },
 ): Result<{ evidence: store.EvidenceDetailRow; deduped: boolean }> {
-  const caseRow = findCaseById(db, input.caseId);
-  // 案件不存在与不是自己的案件同一个错误，与 lib/cases 同口径
-  if (!caseRow || caseRow.user_id !== input.userId) {
-    return fail(404, 'CASE_NOT_FOUND', '案件不存在');
-  }
+  const checked = validateEntry(db, input);
+  if (!checked.ok) return checked;
   if (input.bytes.length === 0) {
     return fail(400, 'EMPTY_FILE', '上传文件为空');
   }
-  const name = input.name.trim();
-  if (!name) {
-    return fail(400, 'INVALID_NAME', '证据名称不能为空');
-  }
-  const category = input.category ?? '其他';
-  if (!(EVIDENCE_CATEGORIES as readonly string[]).includes(category)) {
-    return fail(400, 'INVALID_CATEGORY', `category 只能是 ${EVIDENCE_CATEGORIES.join(' / ')}`);
-  }
 
   const stored = storeBytes(db, input.bytes, input.mime);
-  const evidenceId = store.insertEvidence(db, {
+  const entry = registerUploadedFile(db, {
     caseId: input.caseId,
     userId: input.userId,
     fileId: stored.fileId,
-    name,
-    category,
+    name: checked.name,
+    category: checked.category,
+    provePurpose: input.provePurpose,
+    originalMedium: input.originalMedium,
+  });
+  // 校验已经在上面走过一遍，这里落空只可能是并发把案件删了；照原样把失败抛回调用方
+  if (!entry.ok) return entry;
+  return { ok: true, evidence: entry.evidence, deduped: stored.deduped };
+}
+
+/**
+ * 给一份**已经落库的文件**建证据条目（两步式上传的第二步）。
+ *
+ * 字节已经在 files 表里（由 PUT /api/v1/evidence/upload/{token} 经 storeBytes 落的），
+ * 这里只建 evidence 那一行。不再碰盘、不再算哈希。
+ */
+export function registerUploadedFile(
+  db: Database,
+  input: {
+    caseId: number;
+    userId: number;
+    fileId: number;
+    name: string;
+    category?: string;
+    provePurpose?: string | null;
+    originalMedium?: string | null;
+  },
+): { ok: true; evidence: store.EvidenceDetailRow } | DomainFailureShape {
+  const checked = validateEntry(db, input);
+  if (!checked.ok) return checked;
+  const evidenceId = store.insertEvidence(db, {
+    caseId: input.caseId,
+    userId: input.userId,
+    fileId: input.fileId,
+    name: checked.name,
+    category: checked.category,
     provePurpose: input.provePurpose?.trim() || null,
     originalMedium: input.originalMedium?.trim() || null,
   });
   const evidence = store.findEvidenceDetail(db, evidenceId);
   if (!evidence) throw new Error(`evidence 落库后读不回来: id=${evidenceId}`);
-  return { ok: true, evidence, deduped: stored.deduped };
+  return { ok: true, evidence };
 }

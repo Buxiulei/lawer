@@ -12,6 +12,7 @@ import { decryptField, encryptField } from '@/lib/crypto';
 import { findCaseById } from '@/lib/db/cases';
 import * as store from '@/lib/db/evidence';
 
+import { ensureBrief } from './brief';
 import { storeBytes } from './files';
 import * as sidecar from './sidecar-client';
 import { SidecarError } from './sidecar-client';
@@ -250,7 +251,7 @@ export async function attestEvidence(
 
   let att = reserveAttestation(db, ev);
   if (att.status === ATT_CERTIFIED && att.cert_pdf_file_id) {
-    return { ok: true, attestation: view(att) };
+    return await certified(db, ev.id, att);
   }
 
   // ── 第一段：可信时间戳 ──
@@ -297,6 +298,29 @@ export async function attestEvidence(
     att = reload(db, att.id);
   }
 
+  return await certified(db, ev.id, att);
+}
+
+/**
+ * 出证成功的收尾：**顺手把这件证据的简报补上**（设计稿 §2 B：存证后每件证据都要有简报，
+ * 让后续 agent 知道它能用来做什么）。已有简报的不动，没提取过正文的按元数据写。
+ *
+ * 【为什么补简报的失败不能改变这里的返回值】时间戳与《存证证明》都已经落库了，
+ * 这次调用在业务上就是成功的。让附赠品的异常把它变成失败，用户会以为存证没成、再点一次，
+ * 而幂等会把他领回同一个订单号——「失败」与「成功」在他眼里长得一样。
+ * ensureBrief 内部已经吞掉生成器的异常；这里再兜一层，是因为它还会碰库
+ * （读 evidence、写 brief_json），库这一层的异常不该从这条缝里漏出去。
+ */
+async function certified(
+  db: Database,
+  evidenceId: number,
+  att: store.AttestationRow,
+): Promise<Result<{ attestation: AttestationView }>> {
+  try {
+    await ensureBrief(db, evidenceId);
+  } catch {
+    // 故意吞掉：见上方注释。
+  }
   return { ok: true, attestation: view(att) };
 }
 

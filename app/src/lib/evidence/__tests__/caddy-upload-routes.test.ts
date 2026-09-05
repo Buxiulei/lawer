@@ -13,18 +13,28 @@
 // 【咬的是双向，缺一个方向就白立】
 //   正向：清单里有、Caddyfile 缺 → 红（新增上传路由忘了同步 Caddy，就是首轮那个 bug）
 //   反向：Caddyfile 有、清单里缺 → 红（只往 Caddyfile 加不进清单，真源就又散回两处）
+//
+// 【分档之后多咬一件事：档位本身】证据路径要收视频（200MB），护照实名仍是 30MB。
+// 只咬"路由在不在名单里"的话，有人把两档合成一档、或把 200MB 那行改回 30MB，
+// 全部断言照绿——而线上的形态是每一次视频上传都被 Caddy 掐断。所以 max_size 也钉。
 import fs from 'node:fs';
 import path from 'node:path';
 
 import { describe, expect, test } from 'vitest';
 
-import { UPLOAD_ROUTE_PREFIXES } from '../upload-routes';
+import { CADDY_BODY_TIERS, UPLOAD_ROUTE_PREFIXES } from '../upload-routes';
 
 const REPO_ROOT = path.resolve(__dirname, '../../../../..');
 const CADDYFILE = path.join(REPO_ROOT, 'deploy/Caddyfile');
 
 /** Caddyfile 里的通配形态：清单存前缀，配置里带 `*` */
 const WANTED = UPLOAD_ROUTE_PREFIXES.map((p) => `${p}*`);
+
+/** 每一档在 Caddyfile 里的通配形态 */
+const TIER_WANTED = CADDY_BODY_TIERS.map((t) => ({
+  ...t,
+  want: t.prefixes.map((p) => `${p}*`),
+}));
 
 /** 夹具找不到时的说明。**只写这一份**：自检断言与惰性读文件共用它，不许两处各写各的。 */
 const MISSING_FIXTURE =
@@ -59,22 +69,22 @@ function caddyLines(): string[] {
   return cachedLines;
 }
 
-/** 两行的名字提到常量：test 名在收集阶段就要定下来，而那时还不许读文件 */
-const LABEL = { uploads: '@uploads path', nonUploads: '@non_uploads 的 not path' } as const;
-type LineKey = keyof typeof LABEL;
+/** 每一档匹配器的名字提到常量：test 名在收集阶段就要定下来，而那时还不许读文件 */
+type Tier = (typeof TIER_WANTED)[number];
 
 type PathLine = { lineNo: number; label: string; tokens: string[] };
 
 function parsePathList(lineNo: number, label: string, text: string): PathLine {
-  const m = /^\s*(?:@uploads\s+path|not\s+path)\s+(.+?)\s*$/.exec(text);
+  const m = /^\s*(?:@\w+\s+path|not\s+path)\s+(.+?)\s*$/.exec(text);
   return { lineNo, label, tokens: m ? m[1].split(/\s+/).filter(Boolean) : [] };
 }
 
-/** `@uploads path ...` 那一行 */
-function findUploadsLine(): PathLine | null {
+/** `@<匹配器> path ...` 那一行 */
+function findMatcherLine(matcher: string): PathLine | null {
   const lines = caddyLines();
-  const i = lines.findIndex((l) => /^\s*@uploads\s+path\s+/.test(l));
-  return i < 0 ? null : parsePathList(i + 1, LABEL.uploads, lines[i]);
+  const re = new RegExp(`^\\s*${matcher}\\s+path\\s+`);
+  const i = lines.findIndex((l) => re.test(l));
+  return i < 0 ? null : parsePathList(i + 1, `${matcher} path`, lines[i]);
 }
 
 /** `@non_uploads { ... }` 块里的 `not path ...` 那一行（只认块内的，不认别处同名指令） */
@@ -85,32 +95,42 @@ function findNonUploadsLine(): PathLine | null {
   for (let i = start + 1; i < lines.length; i += 1) {
     if (/^\s*\}/.test(lines[i])) return null; // 块读完了也没见到 not path
     if (/^\s*not\s+path\s+/.test(lines[i])) {
-      return parsePathList(i + 1, LABEL.nonUploads, lines[i]);
+      return parsePathList(i + 1, '@non_uploads 的 not path', lines[i]);
     }
   }
   return null;
 }
 
-const findLine: Record<LineKey, () => PathLine | null> = {
-  uploads: findUploadsLine,
-  nonUploads: findNonUploadsLine,
-};
-const LINE_KEYS = ['uploads', 'nonUploads'] as const;
+/** `request_body @<匹配器> { max_size X }` 里的那个 X；读不到回 null */
+function findMaxSize(matcher: string): string | null {
+  const lines = caddyLines();
+  const re = new RegExp(`^\\s*request_body\\s+${matcher}\\s*\\{`);
+  const start = lines.findIndex((l) => re.test(l));
+  if (start < 0) return null;
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (/^\s*\}/.test(lines[i])) return null;
+    const m = /^\s*max_size\s+(\S+)\s*$/.exec(lines[i]);
+    if (m) return m[1];
+  }
+  return null;
+}
 
-describe('deploy/Caddyfile 的两行 path 列表必须被解析到', () => {
+describe('deploy/Caddyfile 的匹配器行必须被解析到', () => {
   // 解析不到时，下面"某条路由不在列表里"的断言会以空列表全红，
   // 那种红指向的是配置而不是这里的正则 —— 所以先把"读没读懂"单独判掉。
-  test('@uploads path 行存在且能解析出路径列表', () => {
-    const uploads = findUploadsLine();
-    expect(
-      uploads !== null && uploads.tokens.length > 0,
-      `缺什么：deploy/Caddyfile 里找不到可解析的 \`@uploads path ...\` 行。\n` +
-        `为什么缺：匹配器被改名（不叫 @uploads 了）、被拆成多行、或改用了 path_regexp 等别的写法，` +
-        `本测试的行级正则就读不到它。\n` +
-        `怎么办：若确实改了写法，同步改本文件的 findUploadsLine()；` +
-        `若是误删，把 \`@uploads path ${WANTED.join(' ')}\` 加回去。`,
-    ).toBe(true);
-  });
+  for (const tier of TIER_WANTED) {
+    test(`${tier.matcher} path 行存在且能解析出路径列表`, () => {
+      const line = findMatcherLine(tier.matcher);
+      expect(
+        line !== null && line.tokens.length > 0,
+        `缺什么：deploy/Caddyfile 里找不到可解析的 \`${tier.matcher} path ...\` 行。\n` +
+          `为什么缺：匹配器被改名、被拆成多行、被并进别的档，或改用了 path_regexp 等别的写法，` +
+          `本测试的行级正则就读不到它。${tier.matcher} 这一档的理由是：${tier.why}。\n` +
+          `怎么办：若确实改了写法，同步改 app/src/lib/evidence/upload-routes.ts 的 CADDY_BODY_TIERS ` +
+          `与本文件的 findMatcherLine()；若是误删，把 \`${tier.matcher} path ${tier.want.join(' ')}\` 加回去。`,
+      ).toBe(true);
+    });
+  }
 
   test('@non_uploads 块里的 not path 行存在且能解析出路径列表', () => {
     const nonUploads = findNonUploadsLine();
@@ -118,59 +138,90 @@ describe('deploy/Caddyfile 的两行 path 列表必须被解析到', () => {
       nonUploads !== null && nonUploads.tokens.length > 0,
       `缺什么：deploy/Caddyfile 的 \`@non_uploads { ... }\` 块里找不到可解析的 \`not path ...\` 行。\n` +
         `为什么缺：块被改名/删除，或 not path 挪出了这个块。` +
-        `两个匹配器是互斥对，少了这一半，非上传路由要么不受 2MB 约束、要么把上传路由也收进 2MB。\n` +
+        `几个匹配器是互斥组，少了这一半，非上传路由要么不受 2MB 约束、要么把上传路由也收进 2MB。\n` +
         `怎么办：恢复 \`@non_uploads { not path ${WANTED.join(' ')} }\`，` +
         `或在改了写法后同步改本文件的 findNonUploadsLine()。`,
     ).toBe(true);
   });
 });
 
-describe('🔴 正向：清单里的每条上传路由都必须同时出现在两行里', () => {
-  for (const prefix of UPLOAD_ROUTE_PREFIXES) {
-    const want = `${prefix}*`;
-    for (const key of LINE_KEYS) {
-      test(`${want} 出现在 ${LABEL[key]}`, () => {
-        const line = findLine[key]();
-        const uploads = findUploadsLine();
-        const nonUploads = findNonUploadsLine();
+describe('🔴 正向：清单里的每条上传路由都必须出现在它那一档与 not path 行里', () => {
+  for (const tier of TIER_WANTED) {
+    for (const want of tier.want) {
+      test(`${want} 出现在 ${tier.matcher} path`, () => {
+        const line = findMatcherLine(tier.matcher);
         expect(
           line !== null && line.tokens.includes(want),
-          `缺什么：deploy/Caddyfile 第 ${line?.lineNo ?? '?'} 行 \`${line?.label ?? '?'}\` 里没有 ${want}` +
+          `缺什么：deploy/Caddyfile 第 ${line?.lineNo ?? '?'} 行 \`${tier.matcher} path\` 里没有 ${want}` +
             `（该行现有：${line?.tokens.join(' ') || '(空)'}）。\n` +
-            `为什么缺：${prefix} 在 app/src/lib/evidence/upload-routes.ts 的 UPLOAD_ROUTE_PREFIXES 里` +
-            `登记为上传路由，但 Caddy 的上传白名单没收录它。两个匹配器是互斥对，漏掉任意一行，` +
-            `该路由都会落进 @non_uploads 的 2MB —— 每一次上传都被 Caddy 直接掐断，` +
-            `用户只看到"上传失败"。caddy adapt / caddy validate 对这种漏写退出码都是 0，指望不上。\n` +
-            `怎么办：把 ${want} 同时加进第 ${uploads?.lineNo ?? '?'} 行的 \`@uploads path\` ` +
-            `与第 ${nonUploads?.lineNo ?? '?'} 行的 \`not path\`（两行都要），再重跑本测试。` +
-            `另：deploy/Caddyfile 只是模板，上产还要把 request_body 段同步进服务器的` +
-            ` /etc/caddy/conf.d/lawer.caddy 并 reload，否则线上一个字节都不会变。`,
+            `为什么缺：该前缀在 upload-routes.ts 的 CADDY_BODY_TIERS 里登记在 ${tier.matcher} 这一档` +
+            `（${tier.why}），但 Caddy 那一行没收录它。几个匹配器互斥，漏掉就落进 @non_uploads 的 2MB` +
+            ` —— 每一次上传都被 Caddy 直接掐断，用户只看到"上传失败"。` +
+            `caddy adapt / caddy validate 对这种漏写退出码都是 0，指望不上。\n` +
+            `怎么办：把 ${want} 加进 \`${tier.matcher} path\` 那一行，再重跑本测试。`,
+        ).toBe(true);
+      });
+
+      test(`${want} 出现在 @non_uploads 的 not path`, () => {
+        const line = findNonUploadsLine();
+        expect(
+          line !== null && line.tokens.includes(want),
+          `缺什么：deploy/Caddyfile 第 ${line?.lineNo ?? '?'} 行 \`not path\` 里没有 ${want}` +
+            `（该行现有：${line?.tokens.join(' ') || '(空)'}）。\n` +
+            `为什么缺：not path 那一行必须列出**全部**上传路由，它是其余路由 2MB 的补集。` +
+            `漏掉一条，这条路由会同时匹配它自己那一档与 @non_uploads —— ` +
+            `同名指令叠加以更严的为准，于是它被收成 2MB，每一次上传都被掐断。\n` +
+            `怎么办：把 ${want} 加进 \`@non_uploads { not path ... }\` 那一行。`,
         ).toBe(true);
       });
     }
   }
 });
 
-describe('🔴 反向：两行的 path 集合必须与清单精确相等（不许只往 Caddyfile 加）', () => {
-  for (const key of LINE_KEYS) {
-    test(`${LABEL[key]} 的集合与 UPLOAD_ROUTE_PREFIXES 一一对应`, () => {
-      const line = findLine[key]();
+describe('🔴 反向：每行的 path 集合必须与清单精确相等（不许只往 Caddyfile 加）', () => {
+  const cases: { label: string; wanted: string[]; find: () => PathLine | null }[] = [
+    ...TIER_WANTED.map((t: Tier) => ({
+      label: `${t.matcher} path`,
+      wanted: [...t.want],
+      find: () => findMatcherLine(t.matcher),
+    })),
+    { label: '@non_uploads 的 not path', wanted: [...WANTED], find: findNonUploadsLine },
+  ];
+  for (const c of cases) {
+    test(`${c.label} 的集合与清单一一对应`, () => {
+      const line = c.find();
       const got = line?.tokens ?? [];
-      const onlyInCaddy = got.filter((t) => !WANTED.includes(t));
-      const onlyInList = WANTED.filter((t) => !got.includes(t));
+      const onlyInCaddy = got.filter((t) => !c.wanted.includes(t));
+      const onlyInList = c.wanted.filter((t) => !got.includes(t));
       expect(
         [...got].sort(),
-        `缺什么：deploy/Caddyfile 第 ${line?.lineNo ?? '?'} 行 \`${line?.label ?? '?'}\` 的路径集合` +
-          `与 UPLOAD_ROUTE_PREFIXES 不相等。\n` +
+        `缺什么：deploy/Caddyfile 第 ${line?.lineNo ?? '?'} 行 \`${c.label}\` 的路径集合与清单不相等。\n` +
           `　　Caddyfile 有、清单没有：${onlyInCaddy.join(' ') || '(无)'}\n` +
           `　　清单有、Caddyfile 没有：${onlyInList.join(' ') || '(无)'}\n` +
           `为什么缺：前一组说明有人只改了 Caddyfile 没进清单 —— 上传路由集合又变回"独立写两处"，` +
           `下一个改动者照样会漏；后一组是 Caddy 白名单真漏了一条路由（上面"正向"那组会点名是哪条、` +
           `漏在哪一行），首轮 passport 被 2MB 掐死就是这么来的。\n` +
-          `怎么办：前一组按"Caddyfile 有、清单没有"的路由（去掉末尾 \`*\`）补进 ` +
-          `app/src/lib/evidence/upload-routes.ts 的 UPLOAD_ROUTE_PREFIXES；` +
-          `若它其实不是上传路由，就把它从 Caddyfile 这两行里删掉。后一组按上面正向断言的指引补 Caddyfile。`,
-      ).toEqual([...WANTED].sort());
+          `怎么办：按 app/src/lib/evidence/upload-routes.ts 的 UPLOAD_ROUTE_PREFIXES / CADDY_BODY_TIERS ` +
+          `补齐或删除；若某条其实不是上传路由，三处一起删。`,
+      ).toEqual([...c.wanted].sort());
+    });
+  }
+});
+
+describe('🔴 档位本身：每一档的 max_size 必须与清单相等', () => {
+  // 【为什么单钉这一条】路由名单全对、档位被人从 200MB 改回 30MB，上面每条断言都绿，
+  // 而线上的形态是每一次视频上传都被 Caddy 掐断 —— 应用侧那条说得清原因的 413 根本没机会发出来。
+  for (const tier of TIER_WANTED) {
+    test(`request_body ${tier.matcher} 的 max_size 是 ${tier.maxSize}`, () => {
+      const got = findMaxSize(tier.matcher);
+      expect(
+        got,
+        `缺什么：deploy/Caddyfile 的 \`request_body ${tier.matcher} { max_size ... }\` 读到的是 ` +
+          `${got ?? '(读不到)'}，清单要求 ${tier.maxSize}。\n` +
+          `为什么缺：这一档存在的理由是「${tier.why}」；调小了，超过新上限的上传会被 Caddy 掐断连接，` +
+          `用户只看到"上传失败"；调大了，超出应用侧内存预算的字节会白白灌进进程。\n` +
+          `怎么办：改回 ${tier.maxSize}，或者在 upload-routes.ts 的 CADDY_BODY_TIERS 里连同理由一起改。`,
+      ).toBe(tier.maxSize);
     });
   }
 });
@@ -186,7 +237,7 @@ describe('清单里的前缀必须对得上真实存在的路由文件', () => {
         `缺什么：清单里的 ${prefix} 找不到对应的路由文件 ${routeFile}。\n` +
           `为什么缺：前缀拼错了，或该路由被删/挪走。前缀拼错时 Caddyfile 只要拼成同样的错，` +
           `文本断言会全绿，而 Caddy 守的是一条不存在的路，真路由仍落在 2MB 里。\n` +
-          `怎么办：核对真实路由路径，改正 UPLOAD_ROUTE_PREFIXES 与 deploy/Caddyfile 两行；` +
+          `怎么办：核对真实路由路径，改正 UPLOAD_ROUTE_PREFIXES 与 deploy/Caddyfile 各行；` +
           `若该上传路由已下线，三处一起删。`,
       ).toBe(true);
     });

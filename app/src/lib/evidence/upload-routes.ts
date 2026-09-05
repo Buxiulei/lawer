@@ -17,11 +17,40 @@
 // 纯 JSON 的 REST/聊天路由不属于，它们留在 2MB 里。
 
 /**
- * 会收 multipart 上传的路由前缀（不带通配符）。
+ * 会把整个请求体读进内存的路由前缀（不带通配符）。**全集**，两档合起来就是它。
  *
- * Caddyfile 里以 `${前缀}*` 的通配形态出现，且必须**同时**出现在两行：
- *   @uploads path <前缀*...>          → request_body max_size 30MB
- *   @non_uploads { not path <同一组> } → request_body max_size 2MB
- * 两个匹配器写成互斥的，所以少加一处就等于该路由被 2MB 掐死。
+ * Caddyfile 里以 `${前缀}*` 的通配形态出现：每条各自出现在它那一档的匹配器行里，
+ * 且全集必须原样出现在 `@non_uploads { not path ... }` 那一行——三个匹配器写成互斥的，
+ * 少加一处就等于该路由落回默认 2MB 被静默掐死。
  */
 export const UPLOAD_ROUTE_PREFIXES = ['/api/v1/evidence', '/api/v1/realname/passport'] as const;
+
+/**
+ * 请求体上限分档。**这份常量是 Caddyfile 那几行的真源**，守卫测试对着它咬原文。
+ *
+ * 【为什么要分两档，不能一档到底】证据路径要收视频（应用侧 200 MiB 档），
+ * 护照实名一次两份材料合计 16 MiB 出头。把两条并成一档 200MB，等于给护照那条
+ * 也开了 200MB 的口子——那条路的应用侧上限是 8 MiB/份，多出来的 190 多 MB
+ * 纯粹是白白让人往进程内存里灌字节的余地。
+ *
+ * 【为什么不靠"更具体的匹配器覆盖更宽的"】Caddy 同名指令叠加时以**更严的**为准，
+ * 靠重叠+顺序会把证据路由也收回 30MB，而配置语法完全合法、adapt 退出码是 0。
+ * 所以三个匹配器必须互斥，每条路由只落进一档。
+ *
+ * 上限都比应用侧对应的上限略宽：留给 multipart 边界与字段头，
+ * 好让「超限」由应用回一条说得清原因的 413，而不是 Caddy 直接掐断连接。
+ */
+export const CADDY_BODY_TIERS = [
+  {
+    matcher: '@media_uploads',
+    prefixes: ['/api/v1/evidence'] as const,
+    maxSize: '200MB',
+    why: '证据路径要收录音（应用侧 100 MiB）与视频（200 MiB）',
+  },
+  {
+    matcher: '@uploads',
+    prefixes: ['/api/v1/realname/passport'] as const,
+    maxSize: '30MB',
+    why: '护照实名一次两份材料，各 8 MiB 上限，合计 16 MiB 出头',
+  },
+] as const;
