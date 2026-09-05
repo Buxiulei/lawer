@@ -118,6 +118,33 @@ export function consumeEntitlement(
 }
 
 /**
+ * 归还一张**已核销**的券（消费后的履约失败时把额度还回去）。
+ *
+ * 与 revokeUnconsumedBySource 方向相反、场景也不同：那个作废**尚未核销**的券（整单退款，
+ * 货没交付）；本函数把**已核销**的一张退回可用（券覆盖的那次服务失败了，货没交成）。
+ *
+ * 按 (id, consumed_ref) 定位：consumed_ref 是核销去向（confirmService 传的 orderRef），
+ * 一次消费只核销一张、consumed_ref 唯一，据它退回不会误伤同一个人的别的券。
+ * 幂等：退回后 consumed_at/consumed_ref 归 NULL，同 ref 再调时 `consumed_at IS NOT NULL`
+ * 与 `consumed_ref=?` 都不再匹配（changes=0）——「重启回收后再失败」不会把额度退第二次。
+ * @returns true=本次真退回一张；false=没有匹配的已核销券（已退过，或从没核销到这个去向）。
+ */
+export function restoreEntitlement(
+  db: Database.Database,
+  entitlementId: number,
+  consumedRef: string,
+): boolean {
+  const res = db
+    .prepare(
+      `UPDATE entitlements
+          SET consumed_at = NULL, consumed_ref = NULL
+        WHERE id = ? AND consumed_ref = ? AND consumed_at IS NOT NULL AND revoked_at IS NULL`,
+    )
+    .run(entitlementId, consumedRef);
+  return res.changes > 0;
+}
+
+/**
  * 作废某来源发出的、**尚未核销**的券（订单退款时调用）。
  * 已核销的不追回——货已经交付了，把券收回来只会让「用过的券」凭空消失，
  * 那条已交付的档案就再也解释不了自己为什么没扣钱。

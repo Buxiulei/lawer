@@ -1454,6 +1454,17 @@ export function runMigrations(db: Database.Database): void {
   addColumnIfMissing(db, 'evidence', 'brief_updated_by', 'TEXT');
   addColumnIfMissing(db, 'evidence', 'brief_updated_at', 'TEXT');
 
+  // extraction_jobs.refunded_at：这条提取任务最终失败后**原路退款的时刻**。
+  // NULL = 没退过（还没失败，或这单本来就没扣钱/没找到可退的报价）。
+  //
+  // 【为什么要一列，不从账本推】退款幂等由 gongdaoRefund 的 refund-<order_ref> 兜底，
+  // 但「这条任务退过没有」若靠去账本里找那笔 refund 行来判，就得在 worker 收尾的事务里
+  // 反查 ledger——而 worker 手里只有 job 和它的 quote_id。落一列 refunded_at 作**任务维度**
+  // 的抢占键（UPDATE ... WHERE id=? AND refunded_at IS NULL，按 changes 判抢到），
+  // 「重启回收后再失败」这类把收尾路径又走一遍的形态，第二遍当场 changes=0 直接退出，
+  // 既不重复退款、也不重复调券归还。可空、不回填：存量任务没退过款，NULL 即语义正确。
+  addColumnIfMissing(db, 'extraction_jobs', 'refunded_at', 'TEXT');
+
   // ───────────────── 费率种子 ─────────────────
   // C01 核定的模型费率必须**在建表之后立刻播下去**：缺行时 getRatesForModel 会回落
   // DEFAULT_RATES（最便宜的 Flash 档），于是每一笔账都按兜底价少收——而账面看起来完全正常。

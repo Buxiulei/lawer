@@ -32,8 +32,14 @@ process.env.FILES_DIR = FILES_DIR;
 
 import { runMigrations } from '../../db/migrate';
 import { getGongdao, gongdaoGrant } from '../../billing';
+import {
+  ENTITLEMENT_KIND,
+  grantEntitlement,
+  listUnconsumed,
+} from '../../billing/entitlements';
 import { GONGDAO_LEDGER_TYPE } from '../../billing/pricing';
-import { runOnce } from '../../jobs/extraction-worker';
+import { serviceChargeRef } from '../../billing/service-quotes';
+import { MAX_ATTEMPTS, getJob, runOnce, type ExtractionHandler } from '../../jobs/extraction-worker';
 import { generateBrief, saveBrief, validateBrief, type BriefLlm } from '../brief';
 import {
   getEvidenceBrief,
@@ -613,5 +619,153 @@ describe('读侧：正文截断与 include_text', () => {
     ).evidence;
     expect(opened.extracted_text).toHaveLength(8000);
     expect(opened.truncated).toBe(true);
+  });
+});
+
+// ───────────────────────────── ⑨ 提取失败原路退款 ─────────────────────────────
+// 生产实测缺陷（2026-09-05 真上游验收）：报价 5 → 确认扣 5 → sidecar 上游 503 →
+// 三次 attempts 用尽置 failed，而钱**没退**。用户为一次没做成的提取付了费。
+// 本组判据钉住：作业最终失败 ⇒ 原路退款、余额恢复、refunded_at 有值、成功不退、券路径归还，
+// 且退款幂等（重启回收后再失败不二退）。
+
+/** 恒抛错的 ocr handler：立在这里代替「sidecar 上游 503」，让失败可复现、不依赖网络。 */
+const boom503: ExtractionHandler = async () => {
+  throw new Error('sidecar 上游 503：DashScope 未开通模型');
+};
+
+/** 领取并失败，直到用尽领取次数置 failed（afterExtraction:null，失败路径不牵扯写简报）。 */
+async function failUntilExhausted(db: Database.Database): Promise<void> {
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    expect(await runOnce(db, { handlers: { ocr: boom503 }, afterExtraction: null })).toBe('failed');
+  }
+}
+
+/** 某人某类型的退款流水（type='退款'）。 */
+function refundRows(db: Database.Database, uid: number) {
+  return db
+    .prepare(
+      "SELECT delta, ref_id, feature FROM gongdao_ledger WHERE user_id=? AND type=? ORDER BY id",
+    )
+    .all(uid, GONGDAO_LEDGER_TYPE.refund) as { delta: number; ref_id: string; feature: string }[];
+}
+
+describe('⑨ 提取失败原路退款', () => {
+  test('★公道值付：最终失败 ⇒ 余额恢复、一条退款流水 ref 同 order_ref、refunded_at 有值（变异：删退款调用 → 红）', async () => {
+    const { db, uid, caseId } = makeDb();
+    const evId = mkEvidence(db, uid, caseId, Buffer.from('假图片字节'), 'image/png', 'a.png');
+
+    const q = mustOk(quoteExtraction(db, { evidenceId: evId, userId: uid, mode: 'ocr' }));
+    const started = mustOk(
+      startExtraction(db, { evidenceId: evId, userId: uid, mode: 'ocr', quoteId: q.quote.quote_id }),
+    );
+    expect(started.charged).toBe(q.quote.amount);
+    expect(getGongdao(uid, db)).toBe(10_000 - q.quote.amount); // 确认时真扣了钱
+
+    await failUntilExhausted(db);
+
+    const job = getJob(db, started.job_id)!;
+    expect(job.status).toBe('failed');
+    expect(job.refunded_at).not.toBeNull();
+
+    // 余额恢复到扣费之前
+    expect(getGongdao(uid, db)).toBe(10_000);
+
+    // 恰有一条退款流水，ref = refund-<order_ref>，feature 同这张报价的服务
+    const orderRef = serviceChargeRef(q.quote.quote_id, uid);
+    const refunds = refundRows(db, uid);
+    expect(refunds).toHaveLength(1);
+    expect(refunds[0].delta).toBe(q.quote.amount);
+    expect(refunds[0].ref_id).toBe(`refund-${orderRef}`);
+    expect(refunds[0].feature).toBe('ocr');
+
+    // evidence 仍是 failed；失败说明带「已退款 N 公道值」
+    const view = mustOk(getEvidenceExtraction(db, { evidenceId: evId, userId: uid })).evidence;
+    expect(view.extraction_status).toBe('failed');
+    expect(view.extraction_failure).toContain('已退款');
+    expect(view.extraction_failure).toContain(String(q.quote.amount));
+  });
+
+  test('★退款幂等：失败并退款后被回收再失败，仍只有一条退款、余额不二增（变异：退款不幂等 → 红）', async () => {
+    const { db, uid, caseId } = makeDb();
+    const evId = mkEvidence(db, uid, caseId, Buffer.from('假图片字节'), 'image/png', 'a.png');
+    const q = mustOk(quoteExtraction(db, { evidenceId: evId, userId: uid, mode: 'ocr' }));
+    const started = mustOk(
+      startExtraction(db, { evidenceId: evId, userId: uid, mode: 'ocr', quoteId: q.quote.quote_id }),
+    );
+
+    await failUntilExhausted(db);
+    expect(getGongdao(uid, db)).toBe(10_000);
+    expect(refundRows(db, uid)).toHaveLength(1);
+    const firstRefundedAt = getJob(db, started.job_id)!.refunded_at;
+
+    // 等价于「进程在 attempts 用尽那次崩在收尾之后重启」：状态留在 running、租约过期，
+    // refunded_at 照旧带着上一次退款的痕。下一轮扫描把它当可回收的重新捞起、再判失败。
+    db.prepare(
+      "UPDATE extraction_jobs SET status='running', lease_until='2000-01-01 00:00:00' WHERE id=?",
+    ).run(started.job_id);
+    expect(await runOnce(db, { afterExtraction: null })).toBe('failed'); // attempts 已过上限，直接置 failed
+
+    const job = getJob(db, started.job_id)!;
+    expect(job.status).toBe('failed');
+    // 退款位没被二次抢占：refunded_at 还是第一次那个时刻
+    expect(job.refunded_at).toBe(firstRefundedAt);
+    // 仍只有一条退款、余额没被二次退高
+    expect(refundRows(db, uid)).toHaveLength(1);
+    expect(getGongdao(uid, db)).toBe(10_000);
+  });
+
+  test('★成功的作业不退款（变异：成功也退 → 红）', async () => {
+    const { db, uid, caseId } = makeDb();
+    const evId = mkEvidence(db, uid, caseId, Buffer.from('假图片字节'), 'image/png', 'a.png');
+    const q = mustOk(quoteExtraction(db, { evidenceId: evId, userId: uid, mode: 'ocr' }));
+    const started = mustOk(
+      startExtraction(db, { evidenceId: evId, userId: uid, mode: 'ocr', quoteId: q.quote.quote_id }),
+    );
+
+    // 一次就成功（afterExtraction:null 免掉写简报，本判据只看退款）
+    expect(
+      await runOnce(db, {
+        handlers: { ocr: async () => ({ text: '识别成功的文字', meta: { mode: 'ocr' } }) },
+        afterExtraction: null,
+      }),
+    ).toBe('done');
+
+    const job = getJob(db, started.job_id)!;
+    expect(job.status).toBe('done');
+    expect(job.refunded_at).toBeNull(); // 成功不退
+    expect(getGongdao(uid, db)).toBe(10_000 - q.quote.amount); // 钱照扣不退
+    expect(refundRows(db, uid)).toHaveLength(0);
+  });
+
+  test('会员赠送额度付款：最终失败 ⇒ 额度归还、不动公道值账本', async () => {
+    const { db, uid, caseId } = makeDb();
+    // 发一张「一次提取」赠送券（今天生产没有发券路径，这里直接落库模拟会员权益）
+    grantEntitlement(db, uid, ENTITLEMENT_KIND.serviceExtract, 'gift-1');
+    const balBefore = getGongdao(uid, db);
+
+    const evId = mkEvidence(db, uid, caseId, Buffer.from('假图片字节'), 'image/png', 'a.png');
+    const q = mustOk(quoteExtraction(db, { evidenceId: evId, userId: uid, mode: 'ocr' }));
+    const started = mustOk(
+      startExtraction(db, { evidenceId: evId, userId: uid, mode: 'ocr', quoteId: q.quote.quote_id }),
+    );
+    expect(started.paid_by).toBe('entitlement');
+    expect(started.charged).toBe(0);
+    expect(getGongdao(uid, db)).toBe(balBefore); // 券付不扣钱
+    expect(listUnconsumed(db, uid, ENTITLEMENT_KIND.serviceExtract)).toHaveLength(0); // 券已核销
+
+    await failUntilExhausted(db);
+
+    const job = getJob(db, started.job_id)!;
+    expect(job.status).toBe('failed');
+    expect(job.refunded_at).not.toBeNull();
+    // 额度退回可用
+    expect(listUnconsumed(db, uid, ENTITLEMENT_KIND.serviceExtract)).toHaveLength(1);
+    // 券不是钱：不产生退款流水、余额不变
+    expect(refundRows(db, uid)).toHaveLength(0);
+    expect(getGongdao(uid, db)).toBe(balBefore);
+
+    const view = mustOk(getEvidenceExtraction(db, { evidenceId: evId, userId: uid })).evidence;
+    expect(view.extraction_status).toBe('failed');
+    expect(view.extraction_failure).toContain('额度');
   });
 });
