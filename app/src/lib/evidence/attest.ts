@@ -12,6 +12,8 @@ import { decryptField, encryptField } from '@/lib/crypto';
 import { findCaseById } from '@/lib/db/cases';
 import * as store from '@/lib/db/evidence';
 
+import { generateBrief } from './brief';
+import { defaultBriefLlm } from './brief-llm';
 import { storeBytes } from './files';
 import * as sidecar from './sidecar-client';
 import { SidecarError } from './sidecar-client';
@@ -297,7 +299,37 @@ export async function attestEvidence(
     att = reload(db, att.id);
   }
 
+  await ensureBriefAfterAttest(db, ev.id);
   return { ok: true, attestation: view(att) };
+}
+
+/**
+ * 出证后补一份简报（免费）。
+ *
+ * 【为什么出证也要有简报】主理人 09-05 的要求是「存证后每件证据都要有简报」——出证是
+ * 这件材料被正式拿出去用的时刻，而它的内容**可能从没提取过**（用户没买提取，或者它是
+ * 一份提取不出文字的照片）。这时的简报只依据登记信息（文件名、分类、证明目的、载体）作判断，
+ * 并在 weaknesses 里写明这一点；没有这份卡，后续的 agent 手上只有一个文件名。
+ *
+ * 【为什么免费】出证本身是免费的（主理人 09-05 拍板），出证附带的这份简报跟着免费。
+ * 收钱的是内容提取，那一笔在报价里已经含了简报。
+ *
+ * 【已有简报就不动】提取时生成过、或用户/agent 自己改写过的简报，出证不该把它盖掉。
+ */
+async function ensureBriefAfterAttest(db: Database, evidenceId: number): Promise<void> {
+  const row = db.prepare('SELECT brief_version AS v FROM evidence WHERE id=?').get(evidenceId) as
+    | { v: number }
+    | undefined;
+  if (!row || row.v > 0) return;
+  const llm = defaultBriefLlm();
+  // 没有可用模型时什么都不做：出证已经成功了，缺一张卡片不该让它回滚。
+  if (!llm) return;
+  try {
+    const r = await generateBrief(db, evidenceId, llm);
+    if (!r.ok) console.warn(`[attest] 证据 ${evidenceId} 的简报没写成：${r.error}`);
+  } catch (err) {
+    console.warn(`[attest] 证据 ${evidenceId} 的简报生成抛错（不影响出证）：`, err);
+  }
 }
 
 /** 证据详情（含其存证订单，如果有） */

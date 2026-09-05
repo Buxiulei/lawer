@@ -257,6 +257,11 @@ describe('tools/list', () => {
       'company_profile_upsert',
       'emotion_log',
       'knowledge_get',
+      // 证据的详情 / 提取 / 简报，同样**追加在末尾**
+      'evidence_get',
+      'evidence_extract',
+      'evidence_brief_get',
+      'evidence_brief_update',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();

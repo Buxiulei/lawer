@@ -239,6 +239,31 @@ const SELECT_QUOTE =
   `SELECT id, user_id, case_id, service, amount, entitlement_id, expires_at, confirmed_at, order_ref
      FROM service_quotes WHERE id=?`;
 
+/**
+ * 只读一张报价（不动钱、不改状态）。给调用方在**确认之前**核对「这张报价买的是不是这件事」——
+ * 核对放在 confirmService 之后就晚了：钱已经扣走，才发现这张报价买的是另一份材料。
+ * 不是本人的报价回 null，与不存在同码（同 confirmService 的口径）。
+ */
+export function peekServiceQuote(
+  db: Database.Database,
+  userId: number,
+  quoteId: number,
+): { service: ServiceKind; caseId: number; amount: number; payload: ServiceQuotePayload } | null {
+  const row = db
+    .prepare('SELECT user_id, case_id, service, amount, payload_json FROM service_quotes WHERE id=?')
+    .get(quoteId) as
+    | { user_id: number; case_id: number; service: string; amount: number; payload_json: string }
+    | undefined;
+  if (!row || row.user_id !== userId) return null;
+  let payload: ServiceQuotePayload = { units: 0 };
+  try {
+    payload = JSON.parse(row.payload_json) as ServiceQuotePayload;
+  } catch {
+    // 报价的载荷解不动不该让确认路径崩：金额以 amount 列为准，载荷只用于核对与对账
+  }
+  return { service: row.service as ServiceKind, caseId: row.case_id, amount: row.amount, payload };
+}
+
 export interface ServiceConfirmed {
   quoteId: number;
   service: ServiceKind;

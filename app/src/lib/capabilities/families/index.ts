@@ -14,7 +14,13 @@ import { deadlineList } from './deadlines';
 import { deadlineResolve, deadlineSet } from './deadlines-write';
 import { draftGet, draftList, draftWrite } from './drafts';
 import { emotionLog } from './emotion';
-import { evidenceList } from './evidence';
+import {
+  evidenceBriefGet,
+  evidenceBriefUpdate,
+  evidenceExtract,
+  evidenceGet,
+  evidenceList,
+} from './evidence';
 import { knowledgeGet, knowledgeSearch } from './knowledge';
 import { timelineAdd, timelineList, timelineMilestone } from './timeline';
 
@@ -47,4 +53,8 @@ export const CAPABILITIES: Capability[] = [
   companyProfileUpsert,
   emotionLog,
   knowledgeGet,
+  evidenceGet,
+  evidenceExtract,
+  evidenceBriefGet,
+  evidenceBriefUpdate,
 ];

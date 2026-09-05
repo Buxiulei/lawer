@@ -347,3 +347,40 @@ export async function transcribeAudio(
   if (speakerCount !== undefined) form.append('speaker_count', String(speakerCount));
   return parseJson<AsrResult>(await callSidecar('/asr', { method: 'POST', body: form }));
 }
+
+/** sidecar /video 抽出来的一张关键帧。jpeg_b64 是 base64 的 JPEG 字节。 */
+export interface VideoFrame {
+  t_s: number;
+  jpeg_b64: string;
+}
+
+/** sidecar /video 的结果。字段名保持 sidecar 原样，便于逐字对照排障。 */
+export interface VideoExtractResult {
+  duration_s: number;
+  size_bytes: number;
+  /** 16k 单声道 wav 的 base64；无音轨时为 null */
+  audio_wav_b64: string | null;
+  audio_sample_rate: number | null;
+  audio_channels: number | null;
+  frames: VideoFrame[];
+  probe: { width: number | null; height: number | null; codec: string | null };
+}
+
+/**
+ * 视频拆解：抽 16k 单声道音轨与关键帧。同 ocrImage：app 解密后传明文字节。
+ *
+ * **本函数只负责拆**，音轨与帧分别交给 /asr 与 /ocr——拆解在 sidecar（那里有 ffmpeg），
+ * 认字与转写在各自的端点，三段各自可重试。合成一个「一步到位」的端点会让任何一段失败
+ * 都要从头再跑一遍，而最贵的那段（转写）通常是最后一段。
+ */
+export async function extractVideo(
+  bytes: Buffer,
+  filename: string,
+  opts: { maxFrames?: number; frameIntervalS?: number } = {},
+): Promise<VideoExtractResult> {
+  const form = new FormData();
+  form.append('file', new Blob([new Uint8Array(bytes)]), filename);
+  if (opts.maxFrames !== undefined) form.append('max_frames', String(opts.maxFrames));
+  if (opts.frameIntervalS !== undefined) form.append('frame_interval_s', String(opts.frameIntervalS));
+  return parseJson<VideoExtractResult>(await callSidecar('/video', { method: 'POST', body: form }));
+}
