@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import { runMigrations } from '../migrate';
 
 /**
- * 全部表名单（50 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。
+ * 全部表名单（52 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。
  *
  * 【张数怎么来的】不照抄任何一支的自报数：48 = 实跑 runMigrations 之后数 sqlite_master 里的用户表。
  * 合并时两支分别报过 47 与 42，两个数在各自基线上都对，加起来却不是并集——
@@ -38,6 +38,8 @@ const ALL_TABLES = [
   'job_runs',
   // 管理后台审计
   'admin_audit',
+  // 服务报价与内容提取任务
+  'service_quotes', 'extraction_jobs',
 ];
 
 function newDb(): Database.Database {
@@ -104,10 +106,10 @@ describe('runMigrations', () => {
 
   it('幂等：连跑两遍不抛错', () => {
     expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(50);
+    expect(ALL_TABLES.length).toBe(52);
   });
 
-  it('50 张表全部建成', () => {
+  it('52 张表全部建成', () => {
     const rows = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[];
@@ -118,6 +120,37 @@ describe('runMigrations', () => {
     expect(dup, `ALL_TABLES 里有重复表名：${dup.join(', ')}`).toEqual([]);
     for (const t of ALL_TABLES) expect(got.has(t), `缺表 ${t}`).toBe(true);
     expect(got.size).toBe(ALL_TABLES.length);
+  });
+
+  /**
+   * 提取相关的加法迁移**可重入**：evidence 补的八列在第二遍不重复加（SQLite 的
+   * ADD COLUMN 没有 IF NOT EXISTS，裸写第二遍就 duplicate column name ⇒ 应用起不来），
+   * 且第二遍不碰已有数据——「重跑一次迁移把用户已提取的文本抹回 NULL」是这类迁移
+   * 最坏的失败形态：库能起来、页面正常、内容没了。
+   */
+  it('evidence 提取八列：连跑两遍不抛错，且不改已写入的值', () => {
+    const uid = mkUser(db);
+    const caseId = mkCase(db, uid);
+    const fileId = Number(
+      db.prepare('INSERT INTO files (sha256, size, enc_path) VALUES (?,?,?)')
+        .run('e'.repeat(64), 10, 'ee/e.enc').lastInsertRowid,
+    );
+    const evId = Number(
+      db.prepare('INSERT INTO evidence (case_id, user_id, file_id, name) VALUES (?,?,?,?)')
+        .run(caseId, uid, fileId, '解除通知.jpg').lastInsertRowid,
+    );
+    // 新行取 DDL 默认：从没排过队 = none，简报版本 0（不是 1，见 migrate.ts 注释）
+    expect(
+      db.prepare('SELECT extraction_status, brief_version, extracted_text FROM evidence WHERE id=?').get(evId),
+    ).toEqual({ extraction_status: 'none', brief_version: 0, extracted_text: null });
+
+    db.prepare("UPDATE evidence SET extraction_status='done', extracted_text=? WHERE id=?")
+      .run('甲方决定与乙方解除劳动关系', evId);
+
+    expect(() => runMigrations(db)).not.toThrow();
+    expect(
+      db.prepare('SELECT extraction_status, extracted_text FROM evidence WHERE id=?').get(evId),
+    ).toEqual({ extraction_status: 'done', extracted_text: '甲方决定与乙方解除劳动关系' });
   });
 
   it('foreign_keys=ON 生效：悬空 case_id 被拒', () => {
