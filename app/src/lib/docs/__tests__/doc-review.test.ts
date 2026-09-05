@@ -410,3 +410,146 @@ describe('⑧ 报价对不上这次请求：已扣的钱原路退回', () => {
     expect(rows[1].feature).toBe(rows[0].feature);
   });
 });
+
+// ⑨ 一张报价只买一份解读：确认过的报价不能再换个花样用第二次。
+//
+// 这条钉的是「退了款还照发货」与「换个 client_ref 就再来一份」。两者同源：
+// confirmService 对已确认的报价走重放、charged=0，调用方若只看 charged 不看 deduped，
+// 就会把一次「没扣到钱」的确认当成正常付费，照常调模型、照常落库——
+// 账面上余额一分不动，用户白拿一份解读，而两条通路都不报错、日志里看不出异常。
+describe('⑨ 已确认过的报价不能再用：QUOTE_ALREADY_USED', () => {
+  /** 模型调用必炸的假模型：用来制造「扣费之后失败 → 原路退款」那个局面。 */
+  function boomLlm() {
+    const calls: string[] = [];
+    return {
+      calls,
+      billingModel: 'boom',
+      chatJSON: async (messages: { role: string; content: string }[]) => {
+        calls.push(messages[messages.length - 1].content);
+        throw new Error('模型这次没通');
+      },
+    };
+  }
+
+  test('R1 扣费后失败已退款，拿同一个 quote_id 重试：拒绝，且不白发一份解读', async () => {
+    const { db, uid, caseId } = makeDb();
+    const before = getGongdao(uid, db);
+
+    const quoted = mustOk(
+      await submitDoc(db, { userId: uid, caseId, text: NOTICE, docKind: '解除通知' }, { llm: boomLlm() }),
+    ) as DocQuoteResult & { ok: true };
+    const quoteId = quoted.quote.quoteId;
+
+    // 第一次：扣了 20 → 模型炸 → 原路退回。正对照：这一步确实走到了扣费与退款。
+    const failed = await submitDoc(
+      db,
+      { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId },
+      { llm: boomLlm() },
+    );
+    expect(failed.ok).toBe(false);
+    expect((failed as { errorCode: string }).errorCode).toBe('DOC_REVIEW_FAILED');
+    expect(getGongdao(uid, db)).toBe(before);
+
+    // 第二次：同一个 quote_id，换一个能跑通的模型。这是「退了款再白拿一份」的口子。
+    const good = fakeLlm();
+    const retry = await submitDoc(
+      db,
+      { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId },
+      { llm: good },
+    );
+
+    expect(retry.ok).toBe(false);
+    expect((retry as { errorCode: string }).errorCode).toBe('QUOTE_ALREADY_USED');
+    expect((retry as { status: number }).status).toBe(409);
+    // 要害三行：没落库、没调模型、余额仍是退款之后那个数（没有第二次扣、也没有第二次退）。
+    expect(count(db, 'company_docs')).toBe(0);
+    expect(good.calls.length).toBe(0);
+    expect(getGongdao(uid, db)).toBe(before);
+  });
+
+  test('R2 同一张报价换个 client_ref 再解读一份别的文件：拒绝，库里仍只有第一份', async () => {
+    const { db, uid, caseId } = makeDb();
+    const llm = fakeLlm();
+
+    const quoted = mustOk(
+      await submitDoc(db, { userId: uid, caseId, text: NOTICE, docKind: '解除通知' }, { llm }),
+    ) as DocQuoteResult & { ok: true };
+    const quoteId = quoted.quote.quoteId;
+
+    const first = mustOk(
+      await submitDoc(
+        db,
+        { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId, clientRef: 'a' },
+        { llm },
+      ),
+    ) as DocReviewResult & { ok: true };
+    expect(first.charged).toBe(PER_DOC);
+    const afterFirst = { balance: getGongdao(uid, db), calls: llm.calls.length };
+
+    // 换 ref、换文件、换种类——按自然键这就是「第二份来文」，而钱只付过一份。
+    const second = await submitDoc(
+      db,
+      {
+        userId: uid,
+        caseId,
+        text: '调岗通知：即日起调你去仓库理货，薪资结构另行通知。',
+        docKind: '调岗通知',
+        quoteId,
+        clientRef: 'b',
+      },
+      { llm },
+    );
+
+    expect(second.ok).toBe(false);
+    expect((second as { errorCode: string }).errorCode).toBe('QUOTE_ALREADY_USED');
+    expect(count(db, 'company_docs')).toBe(1);
+    expect(count(db, 'contract_reviews')).toBe(1);
+    expect(llm.calls.length).toBe(afterFirst.calls);
+    expect(getGongdao(uid, db)).toBe(afterFirst.balance);
+    // 正对照：合法重放（同 ref）照旧回得到第一份，别把这条口子堵成「一次之后全废」。
+    const replay = mustOk(
+      await submitDoc(
+        db,
+        { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId, clientRef: 'a' },
+        { llm },
+      ),
+    ) as DocReviewResult & { ok: true };
+    expect(replay.doc.id).toBe(first.doc.id);
+    expect(replay.charged).toBe(0);
+    expect(replay.deduped).toBe(true);
+  });
+});
+
+// ⑩ 落库这一步**抛异常**（不是回一条失败）同样在扣费之后。
+//
+// 原来的写法只接住了 writeOnce 回的 DomainFailure；数据库自己抛的异常（约束冲突、库锁死、
+// 磁盘满）一路冒到 handler，那条路径上钱扣了、库里一行没有、也没人退，
+// 而回给用户的是一条 500——看起来像「系统抽风」，不像「你付的钱不见了」。
+describe('⑩ 落库抛异常：钱照样原路退回', () => {
+  test('W1 contract_reviews 写不进去：回 DOC_WRITE_FAILED，余额分毫不动', async () => {
+    const { db, uid, caseId } = makeDb();
+    const llm = fakeLlm();
+    const before = getGongdao(uid, db);
+
+    const quoted = mustOk(
+      await submitDoc(db, { userId: uid, caseId, text: NOTICE, docKind: '解除通知' }, { llm }),
+    ) as DocQuoteResult & { ok: true };
+
+    // 制造一次真的数据库异常：把解读要写的第二张表拆掉。
+    db.exec('DROP TABLE review_findings');
+    db.exec('DROP TABLE contract_reviews');
+
+    const r = await submitDoc(
+      db,
+      { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quoteId },
+      { llm },
+    );
+
+    expect(r.ok).toBe(false);
+    expect((r as { errorCode: string }).errorCode).toBe('DOC_WRITE_FAILED');
+    // 要害：模型这次是真跑过的（钱花在了算力上），但用户什么都没拿到，所以必须退。
+    expect(llm.calls.length).toBe(1);
+    expect(getGongdao(uid, db)).toBe(before);
+    expect(count(db, 'company_docs')).toBe(0);
+  });
+});

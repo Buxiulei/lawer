@@ -420,6 +420,28 @@ export async function submitDoc(
     return failure;
   };
 
+  /**
+   * 这张报价此前已经确认过，而上面按 client_ref 查旧结果那一步没查到东西。
+   * 只有两种来路，两种都不能白发一份解读：
+   *   ① 上次扣费之后失败、已原路退款——账上这张报价仍是「已确认」，重放 charged=0，
+   *      再走下去就是「退了款还照样解读一次」，一张报价买两份；
+   *   ② 换了个 client_ref 再确认——「一张报价只解读一份来文」这条自然键被绕开，
+   *      同一张报价可以换着 ref 无限次解读不同的 text / doc_kind。
+   * 合法的重放（同 client_ref、结果还在库里）在上面就返回旧结果了，走不到这里。
+   */
+  if (confirmed.deduped) {
+    return refundAnd(
+      fail(
+        409,
+        'QUOTE_ALREADY_USED',
+        `报价 ${input.quoteId} 已经确认过了，不能再用来解读一份新的来文。` +
+          '为什么：一张报价对应一份解读；上一次要么已经出结果（用同一个 client_ref 再调即可取回），' +
+          '要么已失败并原路退款。' +
+          '怎么办：不带 quote_id 调一次本工具重新取报价号，再带新的 quote_id 来确认。',
+      ),
+    );
+  }
+
   // 报价的服务必须就是来文解读。不校验的形态是：拿一张 5 公道值的文字识别报价来确认，
   // 扣 5、解读照做——同一件事按两个价卖，而两条路径都不报错。
   if (confirmed.service !== 'doc_review') {
@@ -547,39 +569,56 @@ export async function submitDoc(
   const fileId =
     source.fileId ?? storeBytes(db, Buffer.from(source.pastedText ?? '', 'utf-8'), 'text/plain').fileId;
 
-  const written = writeOnce(
-    db,
-    { caseId: input.caseId, tool: 'doc_submit', clientRef, keyId: input.keyId },
-    () => {
-      const docId = Number(
-        db
-          .prepare(
-            `INSERT INTO company_docs (case_id, file_id, ocr_text, doc_type, risk_flags_json, advice, advice_detail)
-             VALUES (?,?,?,?,?,?,?)`,
-          )
-          .run(input.caseId, fileId, text, docKind, JSON.stringify(flags), advice, adviceDetail)
-          .lastInsertRowid,
-      );
-      const reviewId = Number(
-        db
-          .prepare(
-            `INSERT INTO contract_reviews (company_doc_id, case_id, contract_type, model, reviewed_at, summary)
-             VALUES (?,?,?,?,?,?)`,
-          )
-          .run(docId, input.caseId, docKind, deps.llm.billingModel ?? null, nowSql(), summary)
-          .lastInsertRowid,
-      );
-      const ins = db.prepare(
-        `INSERT INTO review_findings (review_id, clause_ref, severity, issue, basis, suggestion, negotiation_tip, rule_id)
-         VALUES (?,?,?,?,?,?,?,?)`,
-      );
-      for (const f of verified.findings) {
-        ins.run(reviewId, f.clause_ref, f.severity, f.issue, f.basis, f.suggestion, f.negotiation_tip, f.rule_id);
-      }
-      return { ok: true as const, docId };
-    },
-    (r) => ({ table: 'company_docs', id: r.docId }),
-  );
+  // writeOnce 抛异常（数据库锁死、约束冲突、磁盘满）同样在扣费之后：
+  // 不接住就是异常一路冒到 handler，钱扣了、库里一行没有、也没人退。
+  let written:
+    | { ok: true; docId: number; deduped: false }
+    | { ok: true; deduped: true; id: number; note: string }
+    | DomainFailure;
+  try {
+    written = writeOnce(
+      db,
+      { caseId: input.caseId, tool: 'doc_submit', clientRef, keyId: input.keyId },
+      () => {
+        const docId = Number(
+          db
+            .prepare(
+              `INSERT INTO company_docs (case_id, file_id, ocr_text, doc_type, risk_flags_json, advice, advice_detail)
+               VALUES (?,?,?,?,?,?,?)`,
+            )
+            .run(input.caseId, fileId, text, docKind, JSON.stringify(flags), advice, adviceDetail)
+            .lastInsertRowid,
+        );
+        const reviewId = Number(
+          db
+            .prepare(
+              `INSERT INTO contract_reviews (company_doc_id, case_id, contract_type, model, reviewed_at, summary)
+               VALUES (?,?,?,?,?,?)`,
+            )
+            .run(docId, input.caseId, docKind, deps.llm.billingModel ?? null, nowSql(), summary)
+            .lastInsertRowid,
+        );
+        const ins = db.prepare(
+          `INSERT INTO review_findings (review_id, clause_ref, severity, issue, basis, suggestion, negotiation_tip, rule_id)
+           VALUES (?,?,?,?,?,?,?,?)`,
+        );
+        for (const f of verified.findings) {
+          ins.run(reviewId, f.clause_ref, f.severity, f.issue, f.basis, f.suggestion, f.negotiation_tip, f.rule_id);
+        }
+        return { ok: true as const, docId };
+      },
+      (r) => ({ table: 'company_docs', id: r.docId }),
+    );
+  } catch (err) {
+    return refundAnd(
+      fail(
+        500,
+        'DOC_WRITE_FAILED',
+        `解读结果没能存下来：${(err as Error).message}。` +
+          '怎么办：本次费用已原路退回，稍后重新报价再试一次。',
+      ),
+    );
+  }
   // 落库失败同样在扣费之后：不退的话就是「钱扣了、库里一行没有、页面上什么都看不到」。
   if (written.ok !== true) return refundAnd(written);
 
