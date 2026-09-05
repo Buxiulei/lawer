@@ -11,6 +11,8 @@ export interface CaseRow {
   user_id: number;
   title: string;
   stage: string;
+  /** 案件领域（MCP 设计稿 §13）。取值即 lib/domains 的领域包 key；存量行由迁移默认值补齐 */
+  domain: string;
   district: string;
   goal: string | null;
   bottom_line: string | null;

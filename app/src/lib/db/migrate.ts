@@ -1,7 +1,7 @@
 // app/src/lib/db/migrate.ts
 //
 // ───────────────── ⚠️ 改本文件之前先读这一段 ⚠️ ─────────────────
-// **本迁移框架没有事务。** runMigrations() 的 49 个 db.exec() 是一串裸调用，
+// **本迁移框架没有事务。** runMigrations() 的 50 个 db.exec() 是一串裸调用，
 // 中途失败不回滚——2026-08-26 实测：人为中断，库里留下 22/38 张表，重跑既不前进也不后退。
 // 现在之所以能安全滚更，是因为迁移**全是纯加法**、靠 IF NOT EXISTS 与 addColumnIfMissing
 // 能重跑自愈：**安全是「改动足够简单」给的，不是框架给的。**
@@ -183,6 +183,41 @@ export function runMigrations(db: Database.Database): void {
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_cases_user ON cases (user_id, id);
+  `);
+
+  // agent 写入台账：既是**幂等索引**也是**审计**（MCP 设计稿 §4.1 / §5）。
+  //
+  // 【为什么幂等要有一张独立的表】此前只有 timeline_events 自己带 client_ref 列，
+  // 每加一个写工具就得给它那张目标表再加一列 + 一条部分唯一索引——独立写 N 次就会忘 N 次，
+  // 而忘掉的形态是「重试一次，档案里多一条」，返回 200、格式完全正常。
+  // 这张表把「同案 + 同工具 + 同 client_ref 只算一次」收成**一个入口**（lib/capabilities/idempotent）。
+  //
+  // target_table / target_id 是**弱引用**（不设外键）：目标可能是任意一张业务表，
+  // 而 SQLite 的外键只能指一张。读回来时按 target_table 分派，取不到就是取不到——
+  // 不给它编一个存在的目标。
+  //
+  // key_id 可空：走网页登录态（JWT）的写入没有 key。指向 api_keys(id) 不带级联，
+  // 因为吊销 key 走的是 `enabled = 0` 软删（lib/db/api-keys.ts），表里那行不会消失；
+  // 真删了行就该拦住——审计记录不能因为吊销一把钥匙而凭空少掉。
+  //
+  // deduped 记的是**这一次调用**有没有命中既有记录（1 = 命中重放）。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_writes (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id      INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+      key_id       INTEGER REFERENCES api_keys(id),
+      tool         TEXT NOT NULL,
+      client_ref   TEXT,
+      target_table TEXT NOT NULL,
+      target_id    INTEGER NOT NULL,
+      deduped      INTEGER NOT NULL DEFAULT 0,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    -- 部分唯一索引：只约束带 client_ref 的行。不带 ref 的写入靠各自的自然键去重，
+    -- 若这里连 NULL 一起约束，同案同工具的第二次无 ref 写入会被误判成重复。
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_writes_client_ref
+      ON agent_writes (case_id, tool, client_ref) WHERE client_ref IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_agent_writes_case ON agent_writes (case_id, id);
   `);
 
   // 公司背调档案：一案可挂多个主体（签约主体 ≠ 用工主体 ≠ 关联公司，仲裁列谁为被申请人由此判定）。
@@ -1181,6 +1216,14 @@ export function runMigrations(db: Database.Database): void {
   addColumnIfMissing(db, 'company_watches', 'paid_through', 'TEXT');
   addColumnIfMissing(db, 'company_watches', 'arrears_rounds', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing(db, 'company_watches', 'billed_month', 'TEXT');
+
+  // cases.domain：这个案子属于哪个领域（MCP 设计稿 §13）。领域包挂在 lib/domains/<key>.ts，
+  // 阶段枚举、事实卡分节、期限/文书/算钱器种类都从包里取，共用层不再写死某一个领域。
+  //
+  // NOT NULL DEFAULT：SQLite 的 ADD COLUMN 加**有默认值**的 NOT NULL 列是允许的
+  //（存量行当场按默认值补齐），加无默认值的 NOT NULL 才会炸——本条属于前者，可重跑。
+  // 默认值就是今天全站唯一在跑的那个领域：存量案件本来就都是它，这不是编出来的值。
+  addColumnIfMissing(db, 'cases', 'domain', "TEXT NOT NULL DEFAULT 'labor'");
 
   // company_profiles.dossier_id：案件维度的主体 → 公司维度的档案（多对一）。
   // 可空：手建的背调档不一定买过档案，且档案是后来才有的东西，老行一律 NULL。

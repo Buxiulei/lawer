@@ -27,6 +27,7 @@ const CASE_BASE: CaseRow = {
   user_id: 2,
   title: '李哲诉宜信体系违法解除',
   stage: '已收通知',
+  domain: 'labor',
   district: '朝阳',
   goal: null,
   bottom_line: null,
@@ -219,13 +220,14 @@ describe('G-F0 单一入口：事实卡是纯函数，且只在一处注入', ()
   /**
    * 事实卡有**两个出口**，一个都不许多：
    *   ① 站内 agent 的 system prompt（lib/agent/prompt.ts）
-   *   ② 用户自己的 agent 走 MCP 的 case_facts 工具（lib/mcp/tools.ts）
+   *   ② 用户自己的 agent 走 MCP 的 case_facts 能力（lib/capabilities/families/case.ts；
+   *      lib/mcp/tools.ts 已退成注册表的薄视图，本身不再渲染任何东西）
    * 出口可以有两个，**口径只能有一个**——所以下面不只点名文件，还要求每一处都写成
    * `renderCaseFacts(buildCaseFacts(…))`：谁想自己拼一份事实卡（跳过 buildCaseFacts、
    * 或绕过 renderCaseFacts 的预算裁剪直接 JSON 化 snapshot），这条就红。
    * 那种分叉的形态是：同一个案子在网页里和在用户助手里，「当前事实」不是同一份。
    */
-  const RENDER_SITES = ['lib/agent/prompt.ts', 'lib/mcp/tools.ts'];
+  const RENDER_SITES = ['lib/agent/prompt.ts', 'lib/capabilities/families/case.ts'];
 
   it('renderCaseFacts 只有两处出口，且两处都经 buildCaseFacts（变异：别处再调一次 → 红）', () => {
     const callers: string[] = [];

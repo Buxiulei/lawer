@@ -11,7 +11,10 @@ import type { Database } from 'better-sqlite3';
 
 import * as store from '@/lib/db/cases';
 import { dedupTitleKey } from '@/lib/db/dedup';
+import { getDomainPack } from '@/lib/domains/registry';
 import { normalizeDateOnly, submitIntakeInto, type IntakeInput, type IntakeResult } from './intake';
+// 只剩 MILESTONE_OF_STAGE 的键类型还引它（`typeof CASE_STAGES`）。**stage 校验不再走它**，
+// 一律经 stagesForCase 从领域包取词表。
 import { CASE_STAGES } from './stages';
 // drafts 的 SQL 早已在 lib/db/agent.ts 的 drafts 段（与 insertDraft 同处）。读侧不另起
 // 一份表访问：同一张表两处 SELECT，将来加一列就会漏一处。归属校验仍在本文件把关。
@@ -97,6 +100,26 @@ function fail(status: number, errorCode: string, message: string): DomainFailure
 const NOT_FOUND = () => fail(404, 'CASE_NOT_FOUND', '案件不存在');
 
 /**
+ * 这个案子该按哪套阶段枚举校验。**stage 校验的唯一词表入口**：
+ * 谁都不要再直接引 CASE_STAGES 去校验——引死词表的形态是，第二个领域接进来时
+ * 它的案子被按上一个领域的阶段校验，而报错信息看起来完全正常。
+ * （CASE_STAGES 本身仍然存在，它是 labor 领域包 stages 的正本，见 lib/domains/labor.ts。）
+ */
+function stagesForCase(row: store.CaseRow): Result<{ stages: readonly string[] }> {
+  const pack = getDomainPack(row.domain);
+  if (!pack) {
+    return fail(
+      500,
+      'UNKNOWN_DOMAIN',
+      `这个案件的领域是「${row.domain}」，但 lib/domains 里没有对应的领域包，` +
+        '所以取不到它的阶段枚举，校验不了 stage。' +
+        '请核对 cases.domain 的取值，或补上这个领域包再试。',
+    );
+  }
+  return { ok: true, stages: pack.stages };
+}
+
+/**
  * 归属校验。不是自己的案件与不存在的案件返回**同一个**错误，调用方无从分辨。
  * 所有对外入口都必须先过这里。
  */
@@ -173,17 +196,21 @@ export function ensureDefaultCase(
  * 走的同一个 store.listCasesByUser，不另写第二份查询——写两份必然在某天加列时漏一处。
  *
  * 字段与 GET /cases 对齐：id（这里改名 case_id，方便 agent 直接拿去喂别的工具）、
- * title、stage、created_at。**表里没有 updated_at 这一列**，所以给的是建档时间 created_at。
+ * title、stage、domain、created_at。**表里没有 updated_at 这一列**，所以给的是建档时间 created_at。
+ *
+ * domain 一起给出去：调用方（含用户自己的 agent）据它才知道这个案子的阶段枚举、
+ * 期限种类、文书种类该按哪个领域包读——不给的话它只能假设是某一个领域。
  */
 export function listCases(
   db: Database,
   input: { userId: number },
-): { cases: { case_id: number; title: string; stage: string; created_at: string }[] } {
+): { cases: { case_id: number; title: string; stage: string; domain: string; created_at: string }[] } {
   return {
     cases: store.listCasesByUser(db, input.userId).map((row) => ({
       case_id: row.id,
       title: row.title,
       stage: row.stage,
+      domain: row.domain,
       created_at: row.created_at,
     })),
   };
@@ -369,8 +396,10 @@ export function updateCase(
     contract_count?: string;
   } = {};
   if (input.stage !== undefined) {
-    if (typeof input.stage !== 'string' || !(CASE_STAGES as readonly string[]).includes(input.stage)) {
-      return fail(400, 'INVALID_STAGE', `stage 只能是 ${CASE_STAGES.join(' / ')}`);
+    const stages = stagesForCase(found);
+    if (isFailure(stages)) return stages;
+    if (typeof input.stage !== 'string' || !stages.stages.includes(input.stage)) {
+      return fail(400, 'INVALID_STAGE', `stage 只能是 ${stages.stages.join(' / ')}`);
     }
     fields.stage = input.stage;
   }
@@ -433,7 +462,10 @@ export function submitIntake(
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
 
-  const done = submitIntakeInto(db, input.caseId, input);
+  const stages = stagesForCase(found);
+  if (isFailure(stages)) return stages;
+
+  const done = submitIntakeInto(db, input.caseId, input, stages.stages);
   if (!done.ok) return done;
   return { ok: true, result: done.result };
 }

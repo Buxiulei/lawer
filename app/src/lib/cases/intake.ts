@@ -20,7 +20,7 @@ import { insertActionItem, insertDeadline, upsertCompanyProfileByRole } from '@/
 import * as store from '@/lib/db/cases';
 import { nowSql } from '@/lib/db/time';
 import { INTAKE_STAGE_ACTIONS, intakeActionDueAt, intakeActionPriority } from './intake-actions';
-import { CASE_STAGES, type CaseStage } from './stages';
+import type { CaseStage } from './stages';
 
 /** 首诊里公司给过哪些文件的三问，键与前端 draft 同名 */
 export interface IntakeCompanyDocs {
@@ -132,9 +132,11 @@ function fail(errorCode: string, message: string): IntakeFailure {
 export function validateIntake(
   input: Pick<IntakeInput, 'stage' | 'companyName' | 'employedFrom' | 'monthlyWageFen' | 'goals'>,
   today: string,
+  /** 案件领域包给的阶段枚举（lib/cases/index.ts 的 stagesForCase）——本层不写死词表 */
+  stages: readonly string[],
 ): { ok: true; value: { stage: CaseStage; companyName: string; employedFrom: string; monthlyWageFen: number; goals: string[] } } | IntakeFailure {
-  if (typeof input.stage !== 'string' || !(CASE_STAGES as readonly string[]).includes(input.stage)) {
-    return fail('INVALID_STAGE', `stage 只能是 ${CASE_STAGES.join(' / ')}`);
+  if (typeof input.stage !== 'string' || !stages.includes(input.stage)) {
+    return fail('INVALID_STAGE', `stage 只能是 ${stages.join(' / ')}`);
   }
   const companyName = trimmed(input.companyName);
   if (!companyName) {
@@ -300,9 +302,15 @@ function persist(
 /**
  * 首诊提交的对外入口。归属校验在 lib/cases/index.ts 那层做完再调这里。
  */
-export function submitIntakeInto(db: Database, caseId: number, input: IntakeInput): { ok: true; result: IntakeResult } | IntakeFailure {
+export function submitIntakeInto(
+  db: Database,
+  caseId: number,
+  input: IntakeInput,
+  /** 这个案子该按哪套阶段枚举校验。由调用方从案件的领域包取，本层不认识任何具体领域 */
+  stages: readonly string[],
+): { ok: true; result: IntakeResult } | IntakeFailure {
   const now = input.now ?? new Date();
-  const checked = validateIntake(input, now.toISOString().slice(0, 10));
+  const checked = validateIntake(input, now.toISOString().slice(0, 10), stages);
   if (!checked.ok) return checked;
   return { ok: true, result: persist(db, caseId, checked.value, input, now) };
 }

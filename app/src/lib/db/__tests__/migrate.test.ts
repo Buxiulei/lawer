@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import { runMigrations } from '../migrate';
 
 /**
- * 全部表名单（48 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。
+ * 全部表名单（50 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。
  *
  * 【张数怎么来的】不照抄任何一支的自报数：48 = 实跑 runMigrations 之后数 sqlite_master 里的用户表。
  * 合并时两支分别报过 47 与 42，两个数在各自基线上都对，加起来却不是并集——
@@ -17,6 +17,8 @@ const ALL_TABLES = [
   'cases', 'company_profiles', 'timeline_events', 'files', 'evidence', 'attestations',
   'company_docs', 'contract_reviews', 'review_findings', 'claims', 'action_items',
   'deadlines', 'threads', 'messages', 'emotion_log', 'referral_offers', 'share_links', 'drafts',
+  // agent 写入台账（幂等 + 审计）
+  'agent_writes',
   // 公道值
   'gongdao', 'gongdao_ledger', 'memberships', 'skus', 'orders', 'redemption_codes',
   'token_usage', 'model_rates',
@@ -102,10 +104,10 @@ describe('runMigrations', () => {
 
   it('幂等：连跑两遍不抛错', () => {
     expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(49);
+    expect(ALL_TABLES.length).toBe(50);
   });
 
-  it('49 张表全部建成', () => {
+  it('50 张表全部建成', () => {
     const rows = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[];
