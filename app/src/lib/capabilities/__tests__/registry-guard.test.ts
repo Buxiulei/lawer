@@ -127,9 +127,12 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
   const SHARED_FILES = [
     ...walk(CAP_ROOT),
     path.join(SRC_ROOT, 'lib/domains/registry.ts'),
+    // lib/jobs/** 同属共用层：后台任务面向的是「一件材料 + 一种处理方式」，
+    // 一旦有人在里面写死了某个领域的词，第二个领域接进来时就得回到任务代码里逐条翻找。
+    ...walk(path.join(SRC_ROOT, 'lib/jobs')),
   ];
 
-  it('lib/capabilities/** 与 lib/domains/registry.ts 里没有领域字面量（变异：往 registry.ts 写一句带「仲裁」的注释 → 红）', () => {
+  it('lib/capabilities/**、lib/domains/registry.ts 与 lib/jobs/** 里没有领域字面量（变异：往 registry.ts 写一句带「仲裁」的注释 → 红）', () => {
     const hits: string[] = [];
     for (const file of SHARED_FILES) {
       const text = fs.readFileSync(file, 'utf-8');
