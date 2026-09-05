@@ -267,6 +267,11 @@ describe('tools/list', () => {
       'doc_list',
       'doc_get',
       'transcript_submit',
+      // 证据的上传→登记→出证→核验四条，同样**追加在末尾**
+      'evidence_upload_url',
+      'evidence_register',
+      'evidence_attest',
+      'attest_verify',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();

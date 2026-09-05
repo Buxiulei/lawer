@@ -1,7 +1,7 @@
 // app/src/lib/db/migrate.ts
 //
 // ───────────────── ⚠️ 改本文件之前先读这一段 ⚠️ ─────────────────
-// **本迁移框架没有事务。** runMigrations() 的 52 个 db.exec() 是一串裸调用，
+// **本迁移框架没有事务。** runMigrations() 的 53 个 db.exec() 是一串裸调用，
 // 中途失败不回滚——2026-08-26 实测：人为中断，库里留下 22/38 张表，重跑既不前进也不后退。
 // 现在之所以能安全滚更，是因为迁移**全是纯加法**、靠 IF NOT EXISTS 与 addColumnIfMissing
 // 能重跑自愈：**安全是「改动足够简单」给的，不是框架给的。**
@@ -1185,6 +1185,41 @@ export function runMigrations(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_extraction_jobs_claim ON extraction_jobs (status, id);
     CREATE INDEX IF NOT EXISTS idx_extraction_jobs_evidence ON extraction_jobs (evidence_id, id DESC);
+  `);
+
+  // 一次性上传地址的 token（设计稿 §2 B evidence_upload_url）。
+  //
+  // 【为什么要一张表，不能只签个 JWT】token 必须是**一次性**的：签发出去的是一条无鉴权
+  // 就能写字节的地址，可重放的话，任何拿到过这条 URL 的人（日志、剪贴板、聊天记录里
+  // 都可能留着）都能反复往用户案卷里塞文件。「用过了」是状态，无状态令牌记不住它。
+  //
+  // 【存哈希不存明文】与 api_keys 同口径：库被读走时，token 明文一条都不该在里面。
+  //
+  // 【consumed_at 兼作一次性的抢占键】消费那句写成
+  //   UPDATE ... SET consumed_at=? WHERE token_hash=? AND consumed_at IS NULL
+  // 按 changes===1 判定抢到，两个并发 PUT 只有一个能抢到——不靠「先查再写」，
+  // 那中间隔着一次 await 读请求体，足够第二个请求把同一个 token 也查成「没用过」。
+  //
+  // size 是签发时**声明**的字节数（拿来在签发一刻就按 mime 分档拒掉超大的，见 upload-guard），
+  // 真正的把关仍在 PUT 收到字节之后；两个数不要求相等，agent 事先不一定数得准。
+  // file_id 在字节落库后回填，evidence_id 在 evidence_register 建条目后回填——
+  // 两列都为空 = 地址签了但没人传；有 file_id 无 evidence_id = 传了但还没登记。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS evidence_upload_tokens (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash  TEXT NOT NULL UNIQUE,                      -- sha256(token 明文)，明文不入库
+      case_id     INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      filename    TEXT NOT NULL,                             -- 签发时声明的文件名，登记时可被 name 覆盖
+      mime        TEXT,                                      -- 签发时声明的 mime，决定体积档位
+      size        INTEGER NOT NULL DEFAULT 0,                -- 签发时声明的字节数（非权威）
+      expires_at  TEXT NOT NULL,                             -- 过期点；过期后即使没用过也不再受理
+      consumed_at TEXT,                                      -- 抢占键：非空 = 这个 token 已经用掉
+      file_id     INTEGER REFERENCES files(id),              -- 字节落库后回填
+      evidence_id INTEGER REFERENCES evidence(id) ON DELETE SET NULL, -- 登记后回填
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_evidence_upload_tokens_case ON evidence_upload_tokens (case_id, id DESC);
   `);
 
   // ───────────────── 存量迁移区 ─────────────────

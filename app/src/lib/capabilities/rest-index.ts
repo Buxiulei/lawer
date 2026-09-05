@@ -89,6 +89,7 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/company-graph', auth: 'jwt|api_key', scope: 'case:read', description: '本案的公司关系图谱；没做过调查时 graph 为 null（不是错误）' },
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/watch', auth: 'jwt|api_key', scope: 'case:write', description: '给对方主体加守望。本次不扣钱，扣费在月度巡检；同案同主体去重' },
   { category: 'agent', method: 'POST', path: '/api/v1/evidence', auth: 'jwt|api_key', scope: 'case:write', description: '上传证据文件（multipart）。**需已实名**，未实名回 REALNAME_REQUIRED' },
+  { category: 'agent', method: 'PUT', path: '/api/v1/evidence/upload/{token}', auth: 'jwt|api_key', scope: 'case:write', description: '用一次性 token 上传字节（body 就是文件本身）。**需已实名**；地址只收一次文件、10 分钟内有效；传完再用同一个 token 调工具 evidence_register 登记条目' },
   { category: 'agent', method: 'GET', path: '/api/v1/evidence/{id}', auth: 'jwt|api_key', scope: 'case:read', description: '单条证据详情（含其存证订单，如果已发起过固化）' },
   { category: 'agent', method: 'GET', path: '/api/v1/docs/{id}', auth: 'jwt|api_key', scope: 'case:read', description: '单份来文解读的全文：原文、总结论与逐条发现（对应工具 doc_get）' },
   { category: 'agent', method: 'POST', path: '/api/v1/evidence/{id}/attest', auth: 'jwt|api_key', scope: 'case:write', description: '发起证据固化出证（时间戳 + 证明 PDF + 签名）。**需已实名**；重复 POST 幂等' },

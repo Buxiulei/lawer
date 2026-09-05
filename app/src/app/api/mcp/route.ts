@@ -3,6 +3,7 @@
 // 协议细节与"为什么手写不引 SDK"见 lib/mcp/jsonrpc.ts 顶部。
 //
 // 路由照例是薄的：鉴权 → 解析 JSON-RPC → 分发到 lib/mcp/tools 的注册表 → 包壳返回。
+import { isRealnameVerified } from '@/lib/auth/guard';
 import { hasScope, resolveIdentity } from '@/lib/auth/identity';
 import { recordClientName } from '@/lib/db/api-keys';
 import { getDb } from '@/lib/db/client';
@@ -114,10 +115,28 @@ export async function POST(req: Request) {
         );
       }
 
-      // 业务失败（案件不存在、枚举非法）走 isError=true，让模型能读到原因自行纠正。
-      // **必须 await**：耗算力的能力（要外呼模型或 sidecar）回的是 Promise，不 await 的话
-      // 下面那句 `.ok === false` 判的是一个 Promise 对象——它永远不等于 false，于是失败被当成成功，
-      // 回给对方的正文是「[object Promise]」。同步能力 await 一个非 Promise 值原样返回，不受影响。
+      // 【前置闸由注册表驱动，不由各工具自觉】precondition 是能力条目上的一个字段，
+      // 拦在这里就等于"凡是声明了实名的工具，一条也漏不掉"。让各工具在自己的 run 里
+      // 各写一句的形态是：新加一条写能力时忘了抄那一句——它照常工作、照常返回 200，
+      // 只是未实名的人也能往案卷里写东西，没有任何一处会报错。
+      if (tool.precondition.includes('realname') && !isRealnameVerified(getDb(), identity.uid)) {
+        return json(
+          rpcResult(
+            id,
+            toolErrorResult(
+              'REALNAME_REQUIRED',
+              `${tool.name} 需要账号先完成实名认证，本次调用没有产生任何写入。` +
+                '原因是这一步的产物要与本人身份绑定（材料要能证明是谁存的，出证上要印实名快照）。' +
+                '请让用户到网页「设置 → 实名认证」完成认证后再调一次；' +
+                '认证前不要改用别的工具绕开这一步，绕过去的记录日后不能用于出证。',
+            ),
+          ),
+        );
+      }
+
+      // 业务失败（案件不存在、枚举非法）走 isError=true，让模型能读到原因自行纠正
+      // 【为什么 await】出证一类能力要调外部服务，run 返回的是 Promise。
+      // 不 await 的形态是：回包里是一个 {} （序列化后的 Promise），HTTP 200，没有任何报错。
       const outcome = (await tool.run(getDb(), identity, (args ?? {}) as Record<string, unknown>)) as
         | { ok: false; errorCode: string; message: string }
         | Record<string, unknown>;
