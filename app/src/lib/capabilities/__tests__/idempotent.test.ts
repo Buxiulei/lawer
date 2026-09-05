@@ -95,6 +95,35 @@ describe('withClientRef', () => {
     expect(agentWrites()).toHaveLength(0);
   });
 
+  /**
+   * 唯一索引是**跨进程的兜底**，不是助手里那次 SELECT 的重复品：两个进程同时抢一个
+   * client_ref 时，先查后写之间没有锁，靠的就是它把后到那笔顶回去（整笔事务回滚，
+   * 助手再重查一次回先到那笔的 target）。所以这里直接绕开助手验索引本身——
+   * 索引没了的话，助手的快路径看起来照样对，只有并发时才双写。
+   */
+  it('唯一索引把同 (案件, 工具, ref) 的第二条台账挡在库外（变异：删掉该索引 → 红）', () => {
+    withClientRef(db, { caseId, tool: 't', clientRef: 'ref-1' }, insertEvent('甲'));
+    expect(() =>
+      db
+        .prepare(
+          'INSERT INTO agent_writes (case_id, tool, client_ref, target_table, target_id) VALUES (?,?,?,?,?)',
+        )
+        .run(caseId, 't', 'ref-1', 'timeline_events', 999),
+    ).toThrow(/UNIQUE/);
+
+    // client_ref 为 NULL 的行不受这把键约束（部分索引），同案同工具可以有很多条
+    const insertNull = () =>
+      db
+        .prepare(
+          'INSERT INTO agent_writes (case_id, tool, client_ref, target_table, target_id) VALUES (?,?,NULL,?,?)',
+        )
+        .run(caseId, 't', 'timeline_events', 999);
+    expect(() => {
+      insertNull();
+      insertNull();
+    }).not.toThrow();
+  });
+
   it('key_id 记得住（走 api key 的写入可追到是哪把钥匙干的）', () => {
     const uid = (db.prepare('SELECT user_id AS u FROM cases WHERE id = ?').get(caseId) as { u: number }).u;
     const keyId = Number(
