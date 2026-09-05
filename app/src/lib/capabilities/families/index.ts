@@ -6,8 +6,11 @@
 //
 // 【加新能力的规矩】追加在**末尾**，不插在中间。想按族分组读，看各自的 families/*.ts。
 import { actionComplete, actionList } from './actions';
+import { actionCreate } from './actions-write';
 import { caseFacts, caseGet, caseList, caseUpdate, intakeSubmit } from './case';
+import { claimCalc, claimsList, claimsUpsert } from './claims';
 import { deadlineList } from './deadlines';
+import { deadlineResolve, deadlineSet } from './deadlines-write';
 import { evidenceList } from './evidence';
 import { knowledgeSearch } from './knowledge';
 import { timelineAdd } from './timeline';
@@ -27,4 +30,10 @@ export const CAPABILITIES: Capability[] = [
   knowledgeSearch,
   caseList,
   intakeSubmit,
+  claimCalc,
+  claimsUpsert,
+  claimsList,
+  deadlineSet,
+  deadlineResolve,
+  actionCreate,
 ];
