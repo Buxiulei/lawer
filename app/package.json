@@ -10,7 +10,8 @@
     "reconcile": "tsx ../scripts/reconcile.ts",
     "gc:files": "tsx ../scripts/gc-files.ts",
     "audit:storage": "tsx ../scripts/storage-audit.ts",
-    "gen:codes": "tsx ../scripts/gen-redeem-codes.ts"
+    "gen:codes": "tsx ../scripts/gen-redeem-codes.ts",
+    "gen:docs": "tsx ../scripts/gen-agent-docs.ts"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
