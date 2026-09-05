@@ -235,7 +235,7 @@ describe('tools/list', () => {
   test('清单与顺序钉死，每个都有 name / description / inputSchema', async () => {
     const res = await POST(rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, keyA));
     const { result } = await res.json();
-    // knowledge_search / case_list 不隶属案件；intake_submit 后加，一律**追加在末尾**（顺序钉死，见上）
+    // knowledge_search / case_list 不隶属案件；其余后加的一律**追加在末尾**（顺序钉死，见上）
     expect(result.tools.map((t: { name: string }) => t.name)).toEqual([
       ...CASE_SCOPED,
       'knowledge_search',
@@ -248,6 +248,14 @@ describe('tools/list', () => {
       'deadline_set',
       'deadline_resolve',
       'action_create',
+      // 时间线 / 文书 / 公司主体 / 情绪，同样**追加在末尾**
+      'timeline_list',
+      'timeline_milestone',
+      'draft_list',
+      'draft_get',
+      'draft_write',
+      'company_profile_upsert',
+      'emotion_log',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();
@@ -299,11 +307,17 @@ describe('tools/list', () => {
   /* 【claim_calc 也从名单里出去了】它随金额/期限/行动写能力一起交付，走的是
    * lib/cases/claims 里站内 agent 用的同一个 runClaimCalc，没有第二份公式。
    * 理由与上面 knowledge_search 那条一样：名单留着一件已经做完的事，只会逼下一个人
-   * 在「删判据」和「删功能」之间选一个。其余三项原样禁止。 */
-  test('暂不交付的工具（文书/上传/OCR）一个都不许出现', async () => {
+   * 在「删判据」和「删功能」之间选一个。 */
+  /*
+   * 【draft_write 同样已从名单里删掉】设计稿 §11 把 draft_list/get/write 排在 P1，
+   * 本单交付：它走的是 lib/cases.writeDraft，与站内对话同一道「对外文书缺发出后果就拒收」
+   * 的闸门（lib/cases/drafts 那一份清单）。留着它的形态与上面 knowledge_search 那条一样——
+   * 一条永远红的守卫钉着一件已经做完的事。其余两项原样禁止。
+   */
+  test('暂不交付的工具（上传/OCR）一个都不许出现', async () => {
     const res = await POST(rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, keyA));
     const names: string[] = (await res.json()).result.tools.map((t: { name: string }) => t.name);
-    for (const notYet of ['draft_write', 'evidence_upload', 'docs_ocr']) {
+    for (const notYet of ['evidence_upload', 'docs_ocr']) {
       expect(names).not.toContain(notYet);
     }
   });

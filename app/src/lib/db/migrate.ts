@@ -534,18 +534,24 @@ export function runMigrations(db: Database.Database): void {
     );
   `);
 
-  // 文书草稿：version 随每次改稿递增（同 kind 多版并存，用户可回看上一版措辞）。
+  // 文书草稿：version 随每次改稿递增（同 kind 同 title 多版并存，用户可回看上一版措辞）。
+  // send_consequences = 发出后果说明（对外文书必填，charter 红线 5）。正文里那段固定尾注是
+  // 给用户看的渲染结果，这一列是给读接口用的结构化原文——只留尾注的话，draft_get 想单独把
+  // 「发出后会怎样」取出来就只能去正文里做字符串切割，而尾注措辞是会改的。
+  // based_on = 这一稿是在哪一稿基础上改的（弱引用，被引的旧稿删了不牵动本行）。
   db.exec(`
     CREATE TABLE IF NOT EXISTS drafts (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      case_id    INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
-      kind       TEXT NOT NULL,                             -- 异议函|被迫解除通知|仲裁申请书|证据清单|答辩状|上诉状|谈判话术|其他
-      title      TEXT NOT NULL,
-      content    TEXT,
-      version    INTEGER NOT NULL DEFAULT 1,
-      status     TEXT NOT NULL DEFAULT 'draft',
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id           INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+      kind              TEXT NOT NULL,                      -- 异议函|被迫解除通知|仲裁申请书|证据清单|答辩状|上诉状|谈判话术|其他
+      title             TEXT NOT NULL,
+      content           TEXT,
+      send_consequences TEXT,
+      based_on          INTEGER,
+      version           INTEGER NOT NULL DEFAULT 1,
+      status            TEXT NOT NULL DEFAULT 'draft',
+      created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_drafts_case ON drafts (case_id, id);
   `);
@@ -1306,6 +1312,10 @@ export function runMigrations(db: Database.Database): void {
   // 可空 TEXT、不回填、无 DB 级 CHECK：同 intake_stage / milestone 的既定裁决
   //（SQLite 加无默认 NOT NULL 列会半途炸，改 CHECK 要重建表，本迁移框架无事务）。
   addColumnIfMissing(db, 'messages', 'failed_code', 'TEXT');
+
+  // 存量库的 drafts 补两列（新建库已在建表段带上）。纯加法、可重跑。
+  addColumnIfMissing(db, 'drafts', 'send_consequences', 'TEXT');
+  addColumnIfMissing(db, 'drafts', 'based_on', 'INTEGER');
 
   // 档案维度的去重键。**必须与 uq_company_litigation（案件维度）并存，不能替代它**：
   // 一个档案可以被多个案件的 company_profiles 指向，同一份 JSONL 若先后挂在两个 profile 下导入，

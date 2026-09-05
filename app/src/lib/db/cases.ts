@@ -203,6 +203,47 @@ export function listTimelineEvents(db: Database, caseId: number, limit: number):
 }
 
 /**
+ * 分页取时间线：可按发生时间下界（since）与类别（kind）过滤，按 happened_at 降序、
+ * 同刻按 id 降序（与 listTimelineEvents 同一口径，否则两个接口对同一批数据给出两种顺序）。
+ *
+ * 【为什么连 total 一起回】只回一页的话，调用方无从知道"后面还有没有"，
+ * 于是要么每次都翻到空页才收手，要么把一页当成全部——后者会让 agent 断言
+ * 「你的案子一共就这 N 件事」，而那句话正是用户最没法自己核对的。
+ * total 是**过滤后**的总数，与本页用同一套 WHERE。
+ */
+export function listTimelinePage(
+  db: Database,
+  params: { caseId: number; since?: string | null; kind?: string | null; limit: number; offset: number },
+): { events: TimelineEventRow[]; total: number } {
+  const where = ['case_id = ?'];
+  const args: unknown[] = [params.caseId];
+  if (params.since) {
+    // 【必须过 datetime()】happened_at 落库时就是 datetime(?) 归一后的
+    // 'YYYY-MM-DD HH:MM:SS'（见 insertTimelineEvent），而入参是 ISO 串带 'T' 和毫秒。
+    // 直接拿 ISO 串比大小是字符串比较：'T' > ' '，于是**恰好等于下界那一刻的事件会被漏掉**，
+    // 而结果看起来完全正常——少的那条正是"从这天起"最该看到的第一条。
+    where.push('happened_at >= datetime(?)');
+    args.push(params.since);
+  }
+  if (params.kind) {
+    where.push('kind = ?');
+    args.push(params.kind);
+  }
+  const clause = where.join(' AND ');
+  const total = Number(
+    (db.prepare(`SELECT COUNT(*) AS n FROM timeline_events WHERE ${clause}`).get(...args) as { n: number }).n,
+  );
+  const events = db
+    .prepare(
+      `SELECT id, case_id, happened_at, kind, title, detail, milestone, created_at
+         FROM timeline_events WHERE ${clause}
+        ORDER BY happened_at DESC, id DESC LIMIT ? OFFSET ?`,
+    )
+    .all(...args, params.limit, params.offset) as TimelineEventRow[];
+  return { events, total };
+}
+
+/**
  * 时间线的**真总数**与**真最早 1 条**。listTimelineEvents 取的是窗口内最近 N 条，
  * 事实卡的「共 N 条」留痕与「起点锚点」都不能用那个窗口的长度和末行冒充：
  * 45 条事件、窗口 30 时，窗口末行是第 16 条，拿它当入职锚点算工龄会少算一大截，

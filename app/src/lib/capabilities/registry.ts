@@ -25,7 +25,10 @@ export type CapabilityFamily =
   | 'claims'
   | 'deadlines'
   | 'evidence'
-  | 'knowledge';
+  | 'knowledge'
+  | 'drafts'
+  | 'company'
+  | 'emotion';
 
 /** 暴露面：站内 agent / 用户自己的 agent（MCP + REST 同一条） */
 export type CapabilitySurface = 'mcp' | 'site';

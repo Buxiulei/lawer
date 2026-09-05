@@ -31,6 +31,8 @@ import {
   type KnowledgeSearcher,
 } from './retrieval';
 
+import { DRAFT_KINDS, OUTBOUND_DRAFT_KINDS, draftBody } from '@/lib/cases/drafts';
+
 /** charter §2：每次回复 ≤3 张行动卡。超过就不是「现在做什么」，是又一份待办清单。 */
 export const MAX_ACTION_CARDS = 3;
 
@@ -39,10 +41,9 @@ export const CLAIM_KINDS = [
   '2N', 'N', 'N+1', '欠薪', '年假', '加班费', '双倍工资', '年终奖', '竞业补偿', '其他',
 ] as const;
 
-/** 与 migrate.ts drafts.kind 注释逐字对齐 */
-export const DRAFT_KINDS = [
-  '异议函', '被迫解除通知', '仲裁申请书', '证据清单', '答辩状', '上诉状', '谈判话术', '其他',
-] as const;
+/** 文书种类与「哪些会发给公司」的正本在 lib/cases/drafts（站内与 MCP 共用一份）；
+ *  这里原样再导出，好让既有的 `tools.DRAFT_KINDS` 引用不必逐处改。 */
+export { DRAFT_KINDS };
 
 /** claim_calc 目前实装的公式与它用到的数据卡键：正本已搬到 lib/cases/claims
  *（站内 agent 与 MCP 共用同一份算钱逻辑）。此处原样再导出，既有引用不必逐处改。 */
@@ -71,17 +72,13 @@ export {
 export const PERIOD_RULE_PACK_ID = deadline.PERIOD_RULE_PACK_ID;
 
 
-/** 与 migrate.ts emotion_log.level 注释逐字对齐 */
-export const EMOTION_LEVELS = ['平稳', '低落', '焦虑', '严重'] as const;
+/** 情绪档位的正本在 lib/cases（站内与 MCP 共用一份校验），这里原样再导出 */
+export const EMOTION_LEVELS = cases.EMOTION_LEVELS;
 
 /** 与 migrate.ts company_profiles.role 注释逐字对齐 */
-export const COMPANY_ROLES = ['签约主体', '用工主体', '关联'] as const;
+/** 公司主体角色的正本同样在 lib/cases */
+export const COMPANY_ROLES = cases.COMPANY_ROLES;
 
-/**
- * 「会发给公司」的文书类型。charter 红线 5 只对这几类生效——
- * 谈判话术、证据清单是给用户自己用的，附一段「发出前请确认」纯属噪音。
- */
-const OUTBOUND_DRAFT_KINDS: ReadonlySet<string> = new Set(['异议函', '被迫解除通知', '仲裁申请书', '答辩状', '上诉状']);
 
 /** 本轮编排的可变状态。orchestrator 建一份，逐个工具调用累加。 */
 export interface TurnState {
@@ -805,9 +802,16 @@ const HANDLERS: Record<string, Handler> = {
       );
     }
 
-    const body = OUTBOUND_DRAFT_KINDS.has(kind) ? `${content}\n\n${confirmationFooter(consequences!)}` : content;
+    const body = draftBody(kind, content, consequences);
     // status 恒 draft：本系统不存在「已发出」状态——发不发、什么时候发，只有用户能决定
-    const row = store.insertDraft(ctx.db, { caseId: ctx.caseId, kind, title, content: body, status: 'draft' });
+    const row = store.insertDraft(ctx.db, {
+      caseId: ctx.caseId,
+      kind,
+      title,
+      content: body,
+      status: 'draft',
+      sendConsequences: consequences,
+    });
     ctx.state.drafts += 1;
     ctx.emit({
       event: 'draft',
@@ -886,19 +890,6 @@ const HANDLERS: Record<string, Handler> = {
     return res.ok ? ok(res.payload) : reject(res.error);
   },
 };
-
-/** charter §7.5 的固定尾注。措辞写死在代码里，不交给模型每次即兴发挥——
- *  这段话是用户按下「发送」之前看到的最后一道提醒，不能有的轮次强有的轮次弱。 */
-function confirmationFooter(consequences: string): string {
-  return [
-    '────────────────',
-    '【发出前必读】',
-    `1. 发出后果：${consequences}`,
-    '2. 这份文书一旦发出即无法撤回，对方会据此形成书面记录并可能作为证据使用。',
-    '3. 发出前请再读一遍全文：核对每个日期、金额与事实描述，删掉任何你并不打算承认的表述。',
-    '4. 发不发、什么时候发、用什么方式送达，由**你自己**决定。本系统不会替你发出。',
-  ].join('\n');
-}
 
 /**
  * 执行一次模型发起的工具调用。

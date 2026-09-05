@@ -54,4 +54,10 @@ export const LABOR_CAPABILITY_COPY = {
     '列出案件的法定期限（仲裁时效、起诉 15 日、开庭等），默认只列生效中的，按到期时间升序。',
   intakeCompanyName: '公司名称，就是仲裁里的被申请人',
   intakeTerminationNotice: '《解除劳动合同通知书》',
+  companyProfileUpsertDescription:
+    '登记或补充公司主体档案。签约主体、发工资主体、实际用工主体可能是三家公司，' +
+    '仲裁列谁为被申请人由此判定，所以只要用户提到公司名就要落档。同案同名只有一条，反复补充即更新。',
+  draftListDescription:
+    '列出案件名下已有的文书（类型、标题、版本、状态、时间），**不含正文**——' +
+    '正文用 draft_get 按 draft_id 单取。仲裁材料一般会改好几稿，同一题的多版都在这里。',
 } as const;

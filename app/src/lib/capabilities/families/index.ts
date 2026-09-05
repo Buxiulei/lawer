@@ -9,11 +9,14 @@ import { actionComplete, actionList } from './actions';
 import { actionCreate } from './actions-write';
 import { caseFacts, caseGet, caseList, caseUpdate, intakeSubmit } from './case';
 import { claimCalc, claimsList, claimsUpsert } from './claims';
+import { companyProfileUpsert } from './company';
 import { deadlineList } from './deadlines';
 import { deadlineResolve, deadlineSet } from './deadlines-write';
+import { draftGet, draftList, draftWrite } from './drafts';
+import { emotionLog } from './emotion';
 import { evidenceList } from './evidence';
 import { knowledgeSearch } from './knowledge';
-import { timelineAdd } from './timeline';
+import { timelineAdd, timelineList, timelineMilestone } from './timeline';
 
 import type { Capability } from '../registry';
 
@@ -36,4 +39,11 @@ export const CAPABILITIES: Capability[] = [
   deadlineSet,
   deadlineResolve,
   actionCreate,
+  timelineList,
+  timelineMilestone,
+  draftList,
+  draftGet,
+  draftWrite,
+  companyProfileUpsert,
+  emotionLog,
 ];
