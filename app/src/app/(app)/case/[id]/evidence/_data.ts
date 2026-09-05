@@ -26,6 +26,45 @@ export interface AttestationInfo {
   certPdfFileId: number | null;
 }
 
+/** 一件材料的内容提取与简报（详情接口的 extraction 段）。列表阶段拿不到，为 null。 */
+export interface ExtractionInfo {
+  /** none / queued / running / done / failed */
+  status: string;
+  extractedAt: string | null;
+  /** 已提取的正文（后端已截到 8000 字，truncated 为真时说明还有后文） */
+  text: string;
+  truncated: boolean;
+  textChars: number;
+  brief: EvidenceBriefView | null;
+  briefVersion: number;
+  mime: string | null;
+}
+
+/** 简报的固定 schema，与后端 lib/evidence/brief.ts 逐字同形。 */
+export interface EvidenceBriefView {
+  proves: string;
+  key_facts: { when: string; who: string; what: string; quote: string; where: string }[];
+  relation_to_claims: string;
+  weaknesses: string[];
+  suggested_followups: string[];
+  citations: string[];
+}
+
+/** 提取方式。与后端 extraction_jobs.mode 同名同物。 */
+export type ExtractMode = 'ocr' | 'asr' | 'video';
+
+/** 一张提取报价。**拿到它没有扣任何钱**，确认才扣。 */
+export interface ExtractQuote {
+  quoteId: number;
+  amount: number;
+  units: number;
+  unitLabel: string;
+  unitPrice: number;
+  basis: string;
+  label: string;
+  expiresAt: string;
+}
+
 /** 页面用的证据视图。列表阶段拿不到的字段为 null，打开详情时才补齐。 */
 export interface EvidenceView {
   id: string;
@@ -38,6 +77,8 @@ export interface EvidenceView {
   sha256: string | null;
   createdAt: string;
   attestation: AttestationInfo | null;
+  /** 提取状态与简报；列表阶段为 null，打开详情时补齐 */
+  extraction: ExtractionInfo | null;
   /** 详情（大小/哈希/订单）是否已经取回 */
   detailed: boolean;
 }
@@ -116,13 +157,40 @@ function fromListRow(row: ApiEvidenceRow): EvidenceView {
     sha256: null,
     createdAt: row.created_at,
     attestation: null,
+    extraction: null,
     detailed: false,
+  };
+}
+
+interface ApiExtraction {
+  extraction_status: string;
+  extracted_at: string | null;
+  extracted_text: string | null;
+  truncated: boolean;
+  extracted_text_chars: number;
+  brief: EvidenceBriefView | null;
+  brief_version: number;
+  mime: string | null;
+}
+
+function toExtraction(raw: ApiExtraction | null | undefined): ExtractionInfo | null {
+  if (!raw) return null;
+  return {
+    status: raw.extraction_status,
+    extractedAt: raw.extracted_at,
+    text: raw.extracted_text ?? '',
+    truncated: raw.truncated,
+    textChars: raw.extracted_text_chars,
+    brief: raw.brief,
+    briefVersion: raw.brief_version,
+    mime: raw.mime,
   };
 }
 
 function fromDetailRow(
   row: ApiEvidenceDetailRow,
   attestation: ApiAttestation | null,
+  extraction: ApiExtraction | null = null,
 ): EvidenceView {
   return {
     id: String(row.id),
@@ -135,6 +203,7 @@ function fromDetailRow(
     sha256: row.sha256,
     createdAt: row.created_at,
     attestation: toAttestation(attestation),
+    extraction: toExtraction(extraction),
     detailed: true,
   };
 }
@@ -152,8 +221,9 @@ export async function fetchEvidenceDetail(evidenceId: string): Promise<EvidenceV
   const res = await apiFetch<{
     evidence: ApiEvidenceDetailRow;
     attestation: ApiAttestation | null;
+    extraction: ApiExtraction | null;
   }>(`/evidence/${encodeURIComponent(evidenceId)}`);
-  return fromDetailRow(res.evidence, res.attestation);
+  return fromDetailRow(res.evidence, res.attestation, res.extraction);
 }
 
 export interface UploadInput {
@@ -197,6 +267,55 @@ export async function attestEvidence(evidenceId: string): Promise<AttestationInf
   return toAttestation(res.attestation)!;
 }
 
+/**
+ * 问一次提取的价。**这一步不扣任何费用**，也不会开始提取——
+ * 拿到 quoteId 再调 startExtraction 才确认扣费。
+ */
+export async function quoteExtraction(
+  evidenceId: string,
+  mode: ExtractMode,
+): Promise<ExtractQuote> {
+  const res = await apiFetch<{
+    quote: {
+      quote_id: number;
+      amount: number;
+      units: number;
+      unit_label: string;
+      unit_price: number;
+      basis: string;
+      label: string;
+      expires_at: string;
+    };
+  }>(`/evidence/${encodeURIComponent(evidenceId)}/extract`, {
+    method: 'POST',
+    body: { mode },
+  });
+  const q = res.quote;
+  return {
+    quoteId: q.quote_id,
+    amount: q.amount,
+    units: q.units,
+    unitLabel: q.unit_label,
+    unitPrice: q.unit_price,
+    basis: q.basis,
+    label: q.label,
+    expiresAt: q.expires_at,
+  };
+}
+
+/** 确认这张报价：扣费并把提取排进队列。同一张报价重复确认不会扣第二笔、也不会排第二条队。 */
+export async function startExtraction(
+  evidenceId: string,
+  mode: ExtractMode,
+  quoteId: number,
+): Promise<{ jobId: number; status: string; charged: number }> {
+  const res = await apiFetch<{ job: { job_id: number; status: string; charged: number } }>(
+    `/evidence/${encodeURIComponent(evidenceId)}/extract`,
+    { method: 'POST', body: { mode, quote_id: quoteId } },
+  );
+  return { jobId: res.job.job_id, status: res.job.status, charged: res.job.charged };
+}
+
 /* ── demo 数据源（未登录或 demo 案件）───────────────────── */
 
 /** demo 的存证编号就是 mock 里那串，验证页照样能点开看它的「无法验证」中性态 */
@@ -221,6 +340,7 @@ export function demoView(item: EvidenceItem): EvidenceView {
           certPdfFileId: 0,
         }
       : null,
+    extraction: null,
     detailed: true,
   };
 }

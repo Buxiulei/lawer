@@ -28,7 +28,8 @@ export type CapabilityFamily =
   | 'knowledge'
   | 'drafts'
   | 'company'
-  | 'emotion';
+  | 'emotion'
+  | 'docs';
 
 /** 暴露面：站内 agent / 用户自己的 agent（MCP + REST 同一条） */
 export type CapabilitySurface = 'mcp' | 'site';
@@ -62,7 +63,15 @@ export interface Capability {
   inputSchema: Record<string, unknown>;
   /** 同一能力的 REST 映射；没有对应端点的能力省略 */
   rest?: { method: string; path: string };
-  run(db: Database, identity: Identity, args: Record<string, unknown>): unknown | DomainFailure;
+  /**
+   * 执行。**允许返回 Promise**：要调外部服务的能力（出证）天然是异步的。
+   * 调用方一律 await——同步的返回值 await 一下也还是它自己。
+   */
+  run(
+    db: Database,
+    identity: Identity,
+    args: Record<string, unknown>,
+  ): unknown | DomainFailure | Promise<unknown | DomainFailure>;
 }
 
 /**

@@ -39,7 +39,7 @@ const CASE_BASE: CaseRow = {
   created_at: '2026-08-19 10:00:00',
 };
 
-function evidence(n: number, category = '考勤'): EvidenceRow[] {
+function evidence(n: number, category = '考勤', extra: Partial<EvidenceRow> = {}): EvidenceRow[] {
   return Array.from({ length: n }, (_, i) => ({
     id: 100 + i,
     case_id: 2,
@@ -48,6 +48,11 @@ function evidence(n: number, category = '考勤'): EvidenceRow[] {
     prove_purpose: `第 ${i} 条的证明目的：7月考勤异常申诉获批，驳回 0`,
     status: '已上传',
     created_at: '2026-08-20 09:00:00',
+    extraction_status: 'none',
+    extracted_at: null,
+    brief_json: null,
+    brief_version: 0,
+    ...extra,
   }));
 }
 
@@ -657,26 +662,129 @@ describe('G-F5 首诊四列进卡', () => {
   });
 });
 
-// ========== G-F6 证据只给元数据 ==========
+// ========== G-F6 证据区按「读没读过内容」分岔 ==========
 
-describe('G-F6 证据只给元数据：免责句常驻', () => {
-  it('★免责句一字不改地在场（变异：删掉免责句 → 红）', () => {
+describe('G-F6 证据区：带简报的按简报说，没提取的明说没读过', () => {
+  /** 一份能通过 validateBrief 的简报（只有 proves 是必填的）。 */
+  const briefJson = (proves: string) => JSON.stringify({ proves });
+
+  it('★免责句一字不改地在场，且**不是**接线前那句（变异：改回旧句 → 红）', () => {
     const text = renderCaseFacts(buildCaseFacts(uid2Snapshot()));
     expect(text).toContain(EVIDENCE_DISCLAIMER.replace(/^- /, ''));
-    expect(EVIDENCE_DISCLAIMER).toContain('我**没有读过这些文件的内容**');
-    expect(EVIDENCE_DISCLAIMER).toContain('必须先问用户');
+    // 新口径的两条分岔都要写明
+    expect(EVIDENCE_DISCLAIMER).toContain('「简报」是系统读过文件内容之后写下的结论');
+    expect(EVIDENCE_DISCLAIMER).toContain('必须先问用户，或先做内容提取');
+    // 旧句是"系统目前不做文件文本提取"时代的产物；接线之后再说这句就是在骗人
+    expect(EVIDENCE_DISCLAIMER).not.toContain('我**没有读过这些文件的内容**');
+    expect(EVIDENCE_DISCLAIMER).not.toContain('系统目前不做文件文本提取');
   });
 
   it('证据明细被预算压掉时，免责句仍在（它属于统计行，不属于明细）', () => {
     const text = render({ evidence: evidence(100), timeline: timeline(200), openActions: actions(50) });
-    expect(text).toContain('我**没有读过这些文件的内容**');
+    expect(text).toContain('「简报」是系统读过文件内容之后写下的结论');
   });
 
-  it('渲染器不读任何"文件内容"字段（evidence 表压根没有这种列）', () => {
-    const source = fs.readFileSync(path.join(SRC_ROOT, 'lib/agent/case-facts.ts'), 'utf-8');
-    for (const forbidden of ['ocr_text', 'e.text', 'e.content', 'extract']) {
-      expect(source).not.toContain(forbidden);
+  it('★有简报的条目印出简报摘要，没提取的印「未提取」（变异：简报摘要不进事实卡 → 红）', () => {
+    const rows = [
+      ...evidence(1, '沟通记录', {
+        extraction_status: 'done',
+        extracted_at: '2026-09-01 10:00:00',
+        brief_json: briefJson('证明公司在 8 月 20 日口头通知解除'),
+        brief_version: 1,
+      }),
+      ...evidence(1, '考勤'),
+    ];
+    rows[1].id = 200;
+    const text = render({ evidence: rows });
+    expect(text).toContain('简报：证明公司在 8 月 20 日口头通知解除');
+    expect(text).toContain('未提取（没读过内容）');
+    expect(text).toContain('已提取内容 1 条；有简报 1 条（含 0 条未提取、按元数据写成）；未提取 1 条**没读过内容**');
+  });
+
+  it('★统计三数各自独立、不用「其中/余下」蕴含包含关系（变异：改回旧算法 → 红）', () => {
+    // 出证后自动补的简报让「未提取」的条目也有简报，briefed 不再是 extracted 的子集。
+    const rows = [
+      // 未提取但有简报：按元数据（文件名/类别）写的，没做内容提取
+      ...evidence(1, '沟通记录', {
+        extraction_status: 'none',
+        brief_json: briefJson('出证时按文件名与类别补的简报'),
+        brief_version: 1,
+      }),
+      // 已提取有简报
+      ...evidence(1, '合同', {
+        extraction_status: 'done',
+        extracted_at: '2026-09-01 10:00:00',
+        brief_json: briefJson('读过合同正文后写下的简报'),
+        brief_version: 1,
+      }),
+      // 未提取无简报
+      ...evidence(1, '考勤', { extraction_status: 'none' }),
+    ];
+    rows[1].id = 201;
+    rows[2].id = 202;
+    const text = render({ evidence: rows });
+    const statLine = text.split('\n').find((l) => l.includes('已提取内容'))!;
+    // 三数各自独立且正确：已提取 1、有简报 2（其中 1 条未提取）、未提取 2
+    expect(statLine).toContain('已提取内容 1 条');
+    expect(statLine).toContain('有简报 2 条');
+    expect(statLine).toContain('1 条未提取');
+    expect(statLine).toContain('未提取 2 条');
+    // 旧算法把 briefed 当成 extracted 的子集，用「其中/余下」蕴含包含关系 ⇒ 变异臂在此变红
+    expect(statLine).not.toContain('其中');
+    expect(statLine).not.toContain('余下');
+  });
+
+  it('提取完成但还没有简报 ⇒ 明说「已提取、简报未生成」，不冒充有简报', () => {
+    const text = render({
+      evidence: evidence(1, '录音', { extraction_status: 'done', extracted_at: '2026-09-01 10:00:00' }),
+    });
+    expect(text).toContain('已提取内容、简报未生成');
+    expect(text).not.toContain('未提取（没读过内容）');
+  });
+
+  it('排队中与失败都算「未提取」：对"能不能引用内容"这个问题，它们与从没提过同解', () => {
+    for (const st of ['queued', 'running', 'failed']) {
+      const text = render({ evidence: evidence(1, '合同', { extraction_status: st }) });
+      expect(text, st).toContain('未提取（没读过内容）');
     }
+  });
+
+  it('★简报摘要每条不超 60 字（变异：把摘要整段塞进事实卡 → 红）', () => {
+    const long = '这份材料能证明的事情非常多'.repeat(20);
+    const text = render({
+      evidence: evidence(1, '合同', {
+        extraction_status: 'done',
+        brief_json: briefJson(long),
+        brief_version: 1,
+      }),
+    });
+    const line = text.split('\n').find((l) => l.includes('简报：'))!;
+    const summary = line.slice(line.indexOf('简报：') + 3);
+    expect(summary.length).toBeLessThanOrEqual(60);
+    expect(summary.endsWith('…')).toBe(true);
+  });
+
+  it('★证据明细区不超 EVIDENCE_BUDGET，且裁剪从最旧的裁起（变异：改成按 id 裁 → 红）', () => {
+    const rows = [
+      ...evidence(30, '考勤', { extraction_status: 'done', extracted_at: '2026-08-01 00:00:00' }),
+      ...evidence(1, '合同', {
+        extraction_status: 'done',
+        extracted_at: '2026-09-05 00:00:00',
+        brief_json: briefJson('最近刚提取的这一条必须留在事实卡里'),
+        brief_version: 1,
+      }),
+    ];
+    // 最新那条的 id 故意最小：按 id 裁的实现会把它裁掉，按更新时间裁的不会
+    rows[30].id = 1;
+    rows[30].name = '最新提取的材料.pdf';
+    const text = render({ evidence: rows });
+    expect(text).toContain('最近刚提取的这一条必须留在事实卡里');
+
+    const detail = text
+      .split('\n')
+      .filter((l) => l.startsWith('- 《'))
+      .join('\n');
+    expect(detail.length).toBeLessThanOrEqual(900);
   });
 });
 

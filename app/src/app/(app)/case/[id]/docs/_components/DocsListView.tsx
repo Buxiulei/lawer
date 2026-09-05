@@ -12,12 +12,19 @@ import { ADVICE_INK, DocTypeBadge, RiskCountBadge } from './badges';
 import { SensitiveText } from './SensitiveText';
 import { UploadSheet } from './UploadSheet';
 
+/**
+ * 【canUpload 是干什么的】同目录的 UploadSheet 是**演示件**：跑四步假进度、不落文件，
+ * 最后把人送到样张 cd_2。演示案件里这样没问题（本来就是演示），挂在真实案件上就是一个
+ * 走完全程、拿别家公司的协议冒充「你的解读结果」的按钮。所以真数据那条路径传 false。
+ */
 export function DocsListView({
   caseId,
   docs,
+  canUpload = true,
 }: {
   caseId: string;
   docs: AnnotatedDoc[];
+  canUpload?: boolean;
 }) {
   const [uploadOpen, setUploadOpen] = useState(false);
   const closeUpload = useCallback(() => setUploadOpen(false), []);
@@ -31,14 +38,16 @@ export function DocsListView({
             公司让你签的东西，先传上来看清楚再决定。
           </p>
         </div>
-        <Button onClick={() => setUploadOpen(true)}>上传文件</Button>
+        {canUpload && <Button onClick={() => setUploadOpen(true)}>上传文件</Button>}
       </header>
 
       {docs.length === 0 ? (
         <EmptyState
           title="还没有解读过的文件"
           description="把解除通知、协商协议或者调岗通知拍下来传上去，几十秒后你会拿到标红的原文和签不签的结论。"
-          action={<Button onClick={() => setUploadOpen(true)}>上传第一份文件</Button>}
+          action={
+            canUpload ? <Button onClick={() => setUploadOpen(true)}>上传第一份文件</Button> : undefined
+          }
         />
       ) : (
         <ul className="flex flex-col gap-3">
@@ -78,7 +87,7 @@ export function DocsListView({
         </ul>
       )}
 
-      <UploadSheet open={uploadOpen} onClose={closeUpload} caseId={caseId} />
+      {canUpload && <UploadSheet open={uploadOpen} onClose={closeUpload} caseId={caseId} />}
     </div>
   );
 }

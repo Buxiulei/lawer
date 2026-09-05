@@ -332,6 +332,52 @@ def test_asr_without_key_returns_503(monkeypatch):
     assert "DASHSCOPE_API_KEY" in r.json()["detail"]
 
 
+def test_asr_times_out_with_504_instead_of_hanging(monkeypatch):
+    """/asr 卡住时必须自己中止并回 504，不能一直挂着占住工作线程。
+
+    这条端点是全 sidecar 唯一一个「提交异步任务后同步阻塞等结果」的调用（asr.py 的
+    Transcription.wait 无时限）。没有这道保护时，上游一卡，请求就永远挂着——
+    对调用方而言与「服务器还在算」完全无法区分。
+    """
+    import threading
+
+    started = threading.Event()
+
+    def never_returns(*args, **kwargs):
+        started.set()
+        threading.Event().wait(30)  # 装作上游卡住
+        return {"text": "不该被读到"}
+
+    monkeypatch.setattr(main, "transcribe_audio", never_returns)
+    monkeypatch.setattr(main, "ASR_TIMEOUT_SECONDS", 0.3)
+
+    r = client.post("/asr", files={"file": ("a.wav", b"RIFFfake", "audio/wav")})
+    assert started.is_set()          # 确实进到了转写那一步，不是被前面的校验挡下的
+    assert r.status_code == 504      # 我方主动中止；502 会把人引去上游日志找不存在的记录
+    detail = r.json()["detail"]
+    # 自述三段式：缺什么 / 为什么 / 怎么办
+    assert "转写超时" in detail and "为什么" in detail and "怎么办" in detail
+
+
+def test_asr_timeout_matches_app_client_spec():
+    """服务端超时与 app 客户端 ENDPOINT_SPEC['/asr'] 同值。
+
+    两边不一致时，先到的那个先中止、另一边留下一个没人在等的任务，而排障的人只会看到
+    一边说超时、另一边说成功。这里直接读 TS 源文件里的那个数，不手抄。
+    """
+    import re
+
+    spec_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "app", "src", "lib", "evidence", "sidecar-client.ts",
+    )
+    with open(spec_path, encoding="utf-8") as fh:
+        ts = fh.read()
+    block = ts.split("'/asr': {", 1)[1].split("}", 1)[0]
+    ms = int(re.search(r"timeoutMs:\s*([\d_]+)", block).group(1).replace("_", ""))
+    assert ms / 1000 == main.ASR_TIMEOUT_SECONDS
+
+
 def test_pades_without_cert_returns_503(monkeypatch):
     monkeypatch.delenv("SIGNING_CERT_PATH", raising=False)
     pdf = client.post("/evidence-pdf", json=_payload()).content

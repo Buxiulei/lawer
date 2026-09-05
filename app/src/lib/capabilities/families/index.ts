@@ -12,9 +12,17 @@ import { claimCalc, claimsList, claimsUpsert } from './claims';
 import { companyProfileUpsert } from './company';
 import { deadlineList } from './deadlines';
 import { deadlineResolve, deadlineSet } from './deadlines-write';
+import { docGet, docList, docSubmit, transcriptSubmit } from './docs';
 import { draftGet, draftList, draftWrite } from './drafts';
 import { emotionLog } from './emotion';
-import { evidenceList } from './evidence';
+import {
+  evidenceBriefGet,
+  evidenceBriefUpdate,
+  evidenceExtract,
+  evidenceGet,
+  evidenceList,
+} from './evidence';
+import { attestVerify, evidenceAttest, evidenceRegister, evidenceUploadUrl } from './evidence-write';
 import { knowledgeGet, knowledgeSearch } from './knowledge';
 import { timelineAdd, timelineList, timelineMilestone } from './timeline';
 
@@ -47,4 +55,16 @@ export const CAPABILITIES: Capability[] = [
   companyProfileUpsert,
   emotionLog,
   knowledgeGet,
+  evidenceGet,
+  evidenceExtract,
+  evidenceBriefGet,
+  evidenceBriefUpdate,
+  docSubmit,
+  docList,
+  docGet,
+  transcriptSubmit,
+  evidenceUploadUrl,
+  evidenceRegister,
+  evidenceAttest,
+  attestVerify,
 ];

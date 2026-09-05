@@ -18,6 +18,7 @@
 // 【预算】渲染结果硬上限 CASE_FACTS_BUDGET 字符，由 renderCaseFacts 后置保证：
 // 先区内裁（条数上限 + 单条截断），再按 P3→P2→P1 把整区压成统计行，P0 永不降级。
 // 每一次裁剪都留痕——被裁掉的东西必须让模型知道「有但没给你」，否则它会当成「不存在」。
+import { BRIEF_SUMMARY_MAX, briefSummary, parseBrief } from '@/lib/evidence/brief';
 import { EVIDENCE_CATEGORIES } from '@/lib/evidence/categories';
 
 import type { CaseSnapshot } from './snapshot';
@@ -45,13 +46,19 @@ const EVIDENCE_ITEMS_MAX = 20;
 /**
  * 证据区免责句，常驻、一字不改。
  *
- * 【为什么是硬文本而不是"看情况说"】evidence 表没有任何文本列，全站也没有 OCR 接线——
- * 「我读过这些文件」在今天**永远**是假的。把这句写死在 prompt 里，编造的成本才高于如实说。
- * 它直接对着那次事故：模型拿着文件名推测文件内容，用户当场发现对不上。
+ * 【为什么这句话改过一次】它原本写的是「我没有读过这些文件的内容（系统目前不做文件文本提取）」——
+ * 那在内容提取接线之前是真的。接线之后照旧说这句，就会出现「提取都做完了、简报也写好了，
+ * agent 还在说自己没读过」的**新版本的同一类事故**：免责声明本身过期了，而它看起来仍然很谨慎。
+ *
+ * 所以现在这句话按条分岔：**带简报的**条目，内容是真读过的，简报里的判断可以直接用；
+ * **标「未提取」的**条目，手上仍然只有文件名与用户自述，一个字都不许从文件名推测。
+ * 两种状态在下面逐条标出来，模型不必猜自己到底读过没有。
  */
 export const EVIDENCE_DISCLAIMER =
-  '- 以下只有证据的**文件名、类别和用户自己填写的证明目的**。我**没有读过这些文件的内容**（系统目前不做文件文本提取）。' +
-  '需要引用文件里的具体内容（合同条款、流水金额、录音原话）时，**必须先问用户**，不许根据文件名推测。';
+  '- 每条后面的**「简报」是系统读过文件内容之后写下的结论**，可以直接用它判断这份材料能干什么；' +
+  '但要在对外文书里引用文件中的具体原话（合同条款、流水金额、录音原话）之前，先用 evidence_get 读回原文逐字核对。' +
+  '- 标着**「未提取」**的条目，我手上只有文件名、类别和用户自己填的证明目的，**没有读过内容**。' +
+  '需要里面的信息时**必须先问用户，或先做内容提取**，不许根据文件名推测。';
 
 /** 整区明细被预算压掉时的留痕。压掉的是明细，统计行仍在——模型必须知道「有但没给」。 */
 const DETAIL_DROPPED = '- （明细因预算未注入——需要时直接问用户，不要假设不存在）';
@@ -409,13 +416,27 @@ function evidenceSection(s: CaseSnapshot): FactSection {
   const known = rows.filter((r) => (EVIDENCE_CATEGORIES as readonly string[]).includes(r.category)).length;
   const unknown = rows.length - known;
 
-  const lines = rows
+  const briefed = rows.filter((r) => parseBrief(r.brief_json) !== null).length;
+  const extracted = rows.filter((r) => r.extraction_status === EXTRACTION_DONE).length;
+  // 出证后自动补的简报让「未提取」的条目也带上了简报——三个数各自独立数，谁都不是谁的子集：
+  // 旧写法「已提取 N、其中 M 有简报」把 briefed 当成 extracted 的子集，M>N 时算术自相矛盾。
+  const briefedNotExtracted = rows.filter(
+    (r) => parseBrief(r.brief_json) !== null && r.extraction_status !== EXTRACTION_DONE,
+  ).length;
+
+  // 明细按**最近更新**排序（提取过的以提取时间为准，没提取过的以入库时间为准）：
+  // 预算压不下时被裁掉的应该是最旧的那些，而不是碰巧 id 小的那些。
+  const ordered = [...rows].sort((a, b) =>
+    (b.extracted_at ?? b.created_at).localeCompare(a.extracted_at ?? a.created_at),
+  );
+
+  const lines = ordered
     .slice(0, EVIDENCE_ITEMS_MAX)
     .map(
       (e) =>
         `- 《${trunc(e.name, EVIDENCE_NAME_MAX)}》｜${e.category}｜${e.status}｜证明目的：${
           e.prove_purpose ? trunc(e.prove_purpose, EVIDENCE_PURPOSE_MAX) : '用户未填'
-        }`,
+        }｜${evidenceContentNote(e)}`,
     );
   const kept: string[] = [];
   let used = 0;
@@ -433,6 +454,7 @@ function evidenceSection(s: CaseSnapshot): FactSection {
       `- 证据共 ${rows.length} 条〔文件名/类别已核验；证明目的是用户自述待核实〕`,
       `- 分类计数（0 条的类别也列出来——"合同 0" 正是最容易被脑补成"有"的那种事实）：${counts}` +
         (unknown > 0 ? ` / 枚举外分类 ${unknown}` : ''),
+      `- 已提取内容 ${extracted} 条；有简报 ${briefed} 条（含 ${briefedNotExtracted} 条未提取、按元数据写成）；未提取 ${rows.length - extracted} 条**没读过内容**`,
       EVIDENCE_DISCLAIMER,
     ].join('\n'),
     detail: [
@@ -440,6 +462,24 @@ function evidenceSection(s: CaseSnapshot): FactSection {
       ...(rows.length > kept.length ? [trimmedNote(rows.length, kept.length)] : []),
     ],
   };
+}
+
+/** extraction_status 的「已完成」档，与 lib/jobs/extraction-worker 的状态机同名同物。 */
+const EXTRACTION_DONE = 'done';
+
+/**
+ * 一条证据的「内容读没读过」那一格。三态分得开：
+ *   · 有简报 ⇒ 印简报摘要（≤60 字，超了截断）——这是模型真正能拿去用的那句话；
+ *   · 提取完成但还没有简报 ⇒ 明说"已提取、简报未生成"，让它知道去 evidence_get 拿全文；
+ *   · 其余（从没提过、排队中、失败）⇒ 一律「未提取」。
+ *     排队中与失败不单独成档：对"能不能引用里面的内容"这个问题，它们的答案与"没提过"完全一样，
+ *     多一档只会让模型以为等一等就有了，然后按"快有了"去组织回答。
+ */
+function evidenceContentNote(e: CaseSnapshot['evidence'][number]): string {
+  const brief = parseBrief(e.brief_json);
+  if (brief) return `简报：${briefSummary(brief, BRIEF_SUMMARY_MAX)}`;
+  if (e.extraction_status === EXTRACTION_DONE) return '已提取内容、简报未生成（要用内容先 evidence_get 读全文）';
+  return '未提取（没读过内容）';
 }
 
 // ========== 组装与预算 ==========

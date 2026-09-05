@@ -1,7 +1,7 @@
 // app/src/lib/db/migrate.ts
 //
 // ───────────────── ⚠️ 改本文件之前先读这一段 ⚠️ ─────────────────
-// **本迁移框架没有事务。** runMigrations() 的 50 个 db.exec() 是一串裸调用，
+// **本迁移框架没有事务。** runMigrations() 的 53 个 db.exec() 是一串裸调用，
 // 中途失败不回滚——2026-08-26 实测：人为中断，库里留下 22/38 张表，重跑既不前进也不后退。
 // 现在之所以能安全滚更，是因为迁移**全是纯加法**、靠 IF NOT EXISTS 与 addColumnIfMissing
 // 能重跑自愈：**安全是「改动足够简单」给的，不是框架给的。**
@@ -1115,6 +1115,113 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_admin_audit_target ON admin_audit (target_uid, id DESC);
   `);
 
+  // ───────────────── 服务报价与内容提取任务 ─────────────────
+  // 报价→确认→扣费的统一台账（设计稿 §4.2）。今日 lib/company/dossier-billing 那套三段式
+  // 只服务公司档案；耗算力的内容提取（OCR / 录音转写 / 视频提取 / 来文解读 / 证据简报）
+  // 共用本表，读写函数在 lib/billing/service-quotes.ts。
+  //
+  // 【为什么报价要落库，而不是签一个自证的 token】报价里写的价必须与确认时扣的价是同一个数：
+  // 中途有人改了 pricing_config，token 里那个数就成了「用户看到的价」与「实际扣的价」的分歧点，
+  // 而两边都不会报错。落一行、确认时按 id 取回，价就只有一处。
+  //
+  // 【confirmed_at 是幂等键，不是状态标记】确认走 `UPDATE ... WHERE id=? AND confirmed_at IS NULL`
+  // 抢占：抢输的那次 changes=0，直接判重放、不再扣第二笔（同 entitlements 核销那条判据的写法）。
+  // order_ref 记这一单的扣费幂等键（svc-<报价id>-u<用户id>），退款按它原路退。
+  // amount 是**确认时应扣**的公道值；券抵扣的单 amount 照记原价、entitlement_id 非空，
+  // 「为什么没扣钱」两处都查得到（同 dossier 那条：只留一处事后分不清送的还是漏扣的）。
+  // service 值域只在注释与 lib/billing/service-quotes.ts 锁，不加 DB 级 CHECK（沿 intake_stage 裁决）。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS service_quotes (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      case_id        INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+      service        TEXT NOT NULL,                          -- ocr|asr|video|doc_review|brief|dossier|watch，值域见 lib/billing/service-quotes.ts
+      payload_json   TEXT,                                   -- 计价入参原样留存（单位数量、证据 id 等），对账时要能复算这个价
+      amount         INTEGER NOT NULL,                       -- 应扣公道值（非负整数）；券抵扣时照记原价
+      entitlement_id INTEGER REFERENCES entitlements(id),    -- 非空=这单由会员券抵掉，没走公道值
+      expires_at     TEXT NOT NULL,                          -- 过了这个点确认一律 QUOTE_EXPIRED，须重新报价
+      confirmed_at   TEXT,                                   -- NULL=未确认（未扣费）；非空=已确认，二次确认判重放
+      order_ref      TEXT,                                   -- 扣费幂等键 svc-<报价id>-u<用户id>，退款按它原路退
+      created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_service_quotes_user ON service_quotes (user_id, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_service_quotes_case ON service_quotes (case_id, id DESC);
+  `);
+
+  // 内容提取任务队列（设计稿 §5 extraction_jobs）。全站第一张**逐条排队认领**的表：
+  // 此前唯一的异步范式是 cron 轮询状态列（company_dossiers.status），分钟到小时级延迟，
+  // 而用户提交一段录音之后是等在页面上的。
+  //
+  // 【租约而不是锁】lease_until = 领取者承诺在这个点之前干完或续租；worker 每 30 秒心跳续租。
+  // 进程被 kill / 机器重启，租约到点自然过期，下一轮扫描把它当可领取的重新捞起——
+  // **不需要任何「清理僵尸任务」的收尾代码**，那种代码只在崩溃时才跑，也就永远没被跑过。
+  // heartbeat_at 与 lease_until 分开记：前者答「它还活着吗」，后者答「谁能来抢」，
+  // 合成一列的话「刚续过租」与「租约本来就长」在读侧长得一样。
+  //
+  // 【attempts 记的是领取次数，不是失败次数】每次领取 +1，超过上限直接置 failed。
+  // 记失败次数的话，「跑到一半进程没了」这种既没成功也没写失败的形态永远不计数，
+  // 一条毒任务会被无限重领。
+  //
+  // status 值域 queued|running|done|failed；mode 值域 ocr|asr|video——
+  // 两者都只在注释与 lib/jobs/extraction-worker.ts 锁，不加 DB 级 CHECK（沿 intake_stage 裁决）。
+  // cost 是这次提取实际扣掉的公道值（0 = 免费或券抵），quote_id 指回是哪一张报价买的。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS extraction_jobs (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      evidence_id  INTEGER NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+      case_id      INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+      user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      mode         TEXT NOT NULL,                            -- ocr | asr | video
+      status       TEXT NOT NULL DEFAULT 'queued',           -- queued | running | done | failed
+      quote_id     INTEGER REFERENCES service_quotes(id),    -- 这次提取是哪张报价买的；NULL=未走计费（内部重跑）
+      cost         INTEGER NOT NULL DEFAULT 0,               -- 实扣公道值（券抵/免费为 0）
+      lease_until  TEXT,                                     -- 租约到期点；过期即可被重新领取
+      heartbeat_at TEXT,                                     -- 最近一次心跳；答「它还活着吗」
+      attempts     INTEGER NOT NULL DEFAULT 0,               -- 被领取的次数（不是失败次数），超上限置 failed
+      error        TEXT,                                     -- 最近一次失败原文，禁止只写「失败」
+      started_at   TEXT,                                     -- 首次被领取的时刻
+      finished_at  TEXT,                                     -- 进入 done/failed 的时刻
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_extraction_jobs_claim ON extraction_jobs (status, id);
+    CREATE INDEX IF NOT EXISTS idx_extraction_jobs_evidence ON extraction_jobs (evidence_id, id DESC);
+  `);
+
+  // 一次性上传地址的 token（设计稿 §2 B evidence_upload_url）。
+  //
+  // 【为什么要一张表，不能只签个 JWT】token 必须是**一次性**的：签发出去的是一条无鉴权
+  // 就能写字节的地址，可重放的话，任何拿到过这条 URL 的人（日志、剪贴板、聊天记录里
+  // 都可能留着）都能反复往用户案卷里塞文件。「用过了」是状态，无状态令牌记不住它。
+  //
+  // 【存哈希不存明文】与 api_keys 同口径：库被读走时，token 明文一条都不该在里面。
+  //
+  // 【consumed_at 兼作一次性的抢占键】消费那句写成
+  //   UPDATE ... SET consumed_at=? WHERE token_hash=? AND consumed_at IS NULL
+  // 按 changes===1 判定抢到，两个并发 PUT 只有一个能抢到——不靠「先查再写」，
+  // 那中间隔着一次 await 读请求体，足够第二个请求把同一个 token 也查成「没用过」。
+  //
+  // size 是签发时**声明**的字节数（拿来在签发一刻就按 mime 分档拒掉超大的，见 upload-guard），
+  // 真正的把关仍在 PUT 收到字节之后；两个数不要求相等，agent 事先不一定数得准。
+  // file_id 在字节落库后回填，evidence_id 在 evidence_register 建条目后回填——
+  // 两列都为空 = 地址签了但没人传；有 file_id 无 evidence_id = 传了但还没登记。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS evidence_upload_tokens (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash  TEXT NOT NULL UNIQUE,                      -- sha256(token 明文)，明文不入库
+      case_id     INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      filename    TEXT NOT NULL,                             -- 签发时声明的文件名，登记时可被 name 覆盖
+      mime        TEXT,                                      -- 签发时声明的 mime，决定体积档位
+      size        INTEGER NOT NULL DEFAULT 0,                -- 签发时声明的字节数（非权威）
+      expires_at  TEXT NOT NULL,                             -- 过期点；过期后即使没用过也不再受理
+      consumed_at TEXT,                                      -- 抢占键：非空 = 这个 token 已经用掉
+      file_id     INTEGER REFERENCES files(id),              -- 字节落库后回填
+      evidence_id INTEGER REFERENCES evidence(id) ON DELETE SET NULL, -- 登记后回填
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_evidence_upload_tokens_case ON evidence_upload_tokens (case_id, id DESC);
+  `);
+
   // ───────────────── 存量迁移区 ─────────────────
   // 上面的建表段只对新库生效（IF NOT EXISTS 不改已存在的表），已上线的库补列一律走这里。
   // 只加列、不回填、不改语义：老行的新列取 NULL / DDL 默认值，读侧必须容得下这个缺省。
@@ -1326,6 +1433,26 @@ export function runMigrations(db: Database.Database): void {
     CREATE UNIQUE INDEX IF NOT EXISTS uq_company_litigation_dossier
       ON company_litigation (dossier_id, case_no) WHERE dossier_id IS NOT NULL;
   `);
+
+  // evidence 的提取结果与证据简报（设计稿 §5）。全部可空、不回填：存量证据没被提取过，
+  // 给 extracted_text 塞空串会让「提取出来是空的」（扫描件全黑）与「没提取过」在读侧长得一样。
+  //
+  // 【为什么 extraction_status 有默认值而其余没有】它是状态机的起点，必须有个确定的初值，
+  // 否则每个读点都得自己决定 NULL 算 none 还是算未知——那就是五个读点五种算法。
+  // 值域 none|queued|running|done|failed，与 extraction_jobs.status 同名同物（多一档 none=从没排过队）。
+  //
+  // 【brief_version 从 0 起，不从 1 起】0 = 还没有简报。乐观锁的 base_version 拿 0 去更新，
+  // 与「拿着第 1 版去更新第 1 版」是两件事；起点设成 1 会让「从没写过」冒充「写过一版」。
+  // brief_updated_by 记 web | agent:<key_id> | system——简报是给后续 agent 看的判断依据，
+  // 「这句话是谁写的」必须能查，否则模型自己写的推测过两轮就被当成了用户确认过的事实。
+  addColumnIfMissing(db, 'evidence', 'extraction_status', "TEXT NOT NULL DEFAULT 'none'");
+  addColumnIfMissing(db, 'evidence', 'extracted_text', 'TEXT');
+  addColumnIfMissing(db, 'evidence', 'extracted_meta_json', 'TEXT');
+  addColumnIfMissing(db, 'evidence', 'extracted_at', 'TEXT');
+  addColumnIfMissing(db, 'evidence', 'brief_json', 'TEXT');
+  addColumnIfMissing(db, 'evidence', 'brief_version', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(db, 'evidence', 'brief_updated_by', 'TEXT');
+  addColumnIfMissing(db, 'evidence', 'brief_updated_at', 'TEXT');
 
   // ───────────────── 费率种子 ─────────────────
   // C01 核定的模型费率必须**在建表之后立刻播下去**：缺行时 getRatesForModel 会回落

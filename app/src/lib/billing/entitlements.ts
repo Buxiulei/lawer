@@ -23,6 +23,15 @@ import type Database from 'better-sqlite3';
 export const ENTITLEMENT_KIND = {
   /** 一次核心四项建档（仲裁地实操 + 主体体检 + 关联谱系 + 涉诉清单，值固定 340）。深度模块不覆盖。 */
   dossierCore: 'dossier_core',
+  /**
+   * 一次耗算力的内容提取或解读（OCR / 录音转写 / 视频提取 / 来文解读 / 证据简报任一）。
+   * 消费侧是 lib/billing/service-quotes.ts 的 confirmService：确认时有券即核销、不扣公道值。
+   *
+   * ⚠ **今天没有任何发券路径**——会员送几张、送给哪一档，归会员权益那张工单。
+   * 先落消费侧是因为计费流只有一处入口（confirmService），发券工单落地时不必再回来改它；
+   * 在那之前 listUnconsumed 永远返回空数组，这条分支在生产上不会被走到。
+   */
+  serviceExtract: 'service_extract',
 } as const;
 
 export type EntitlementKind = (typeof ENTITLEMENT_KIND)[keyof typeof ENTITLEMENT_KIND];

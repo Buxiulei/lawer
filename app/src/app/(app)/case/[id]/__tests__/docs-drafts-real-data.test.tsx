@@ -282,10 +282,12 @@ describe('状态提要的首帧', () => {
 /* ── 三、路由分叉：真实 caseId 走的到底是哪一条 ────────────────── */
 
 describe('页面按 caseId 分叉', () => {
-  it('文件解读页：真实案件走空态，一个 mock 字段都不渲染', async () => {
+  it('文件解读页：真实案件走取数（此刻是骨架），不是 mock 列表', async () => {
+    // 这条原来断言的是「真实案件恒空态」——那是 company_docs 还没有任何写入路径时的实情。
+    // doc_submit 落地后这一页改成现查接口，首帧是骨架；「确实一份都没有」时才画空态
+    // （由 RealDocs 判空，见 real-docs-branches 那组把三条岔路逐条推过去）。
     const html = ssr(await DocsPage({ params: Promise.resolve({ id: '1' }) }));
     expect(html).not.toContain('星曜网络');
-    expect(text(html)).toContain('还没有解读过的文件');
     expect(text(html)).not.toContain('协商解除劳动合同协议书');
   });
 

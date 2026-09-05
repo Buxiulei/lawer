@@ -37,8 +37,11 @@ function ledgerRows(db: Database.Database): number {
 }
 
 describe('券种值域', () => {
-  test('当前只有一种券 dossier_core（买会员送核心四项一次，深度模块不覆盖）', () => {
-    expect(Object.values(ENTITLEMENT_KIND)).toEqual(['dossier_core']);
+  // 断的是**集合相等**而不是「包含」：多出一种没人发的券，与少了一种正在用的券，
+  // 两件事都得报红。service_extract 今天没有任何发券路径（见 entitlements.ts 的说明），
+  // 消费侧在 lib/billing/service-quotes.confirmService。
+  test('当前两种券：dossier_core（会员送核心四项一次）与 service_extract（一次内容提取/解读）', () => {
+    expect(Object.values(ENTITLEMENT_KIND)).toEqual(['dossier_core', 'service_extract']);
     expect(CORE).toBe('dossier_core');
   });
 });

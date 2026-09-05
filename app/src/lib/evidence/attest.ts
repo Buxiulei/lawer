@@ -12,6 +12,8 @@ import { decryptField, encryptField } from '@/lib/crypto';
 import { findCaseById } from '@/lib/db/cases';
 import * as store from '@/lib/db/evidence';
 
+import { ensureBrief, generateBrief } from './brief';
+import { defaultBriefLlm } from './brief-llm';
 import { storeBytes } from './files';
 import * as sidecar from './sidecar-client';
 import { SidecarError } from './sidecar-client';
@@ -250,7 +252,7 @@ export async function attestEvidence(
 
   let att = reserveAttestation(db, ev);
   if (att.status === ATT_CERTIFIED && att.cert_pdf_file_id) {
-    return { ok: true, attestation: view(att) };
+    return await certified(db, ev.id, att);
   }
 
   // ── 第一段：可信时间戳 ──
@@ -297,7 +299,65 @@ export async function attestEvidence(
     att = reload(db, att.id);
   }
 
+  return await certified(db, ev.id, att);
+}
+
+/**
+ * 出证成功的收尾：**顺手把这件证据的简报补上**（设计稿 §2 B：存证后每件证据都要有简报，
+ * 让后续 agent 知道它能用来做什么）。已有简报的不动，没提取过正文的按元数据写。
+ *
+ * 【为什么补简报的失败不能改变这里的返回值】时间戳与《存证证明》都已经落库了，
+ * 这次调用在业务上就是成功的。让附赠品的异常把它变成失败，用户会以为存证没成、再点一次，
+ * 而幂等会把他领回同一个订单号——「失败」与「成功」在他眼里长得一样。
+ * ensureBrief 内部已经吞掉生成器的异常；这里再兜一层，是因为它还会碰库
+ * （读 evidence、写 brief_json），库这一层的异常不该从这条缝里漏出去。
+ *
+ * 【为什么先问插座再退回真模型】brief.ts 的插座是给测试与别条线插假生成器用的；
+ * 生产上没人往里插，ensureBrief 会回 'no_generator' 而一个字都不写——这时才走
+ * ensureBriefAfterAttest（真模型那条）。两条都自带「已有简报不覆盖」的判断。
+ */
+async function certified(
+  db: Database,
+  evidenceId: number,
+  att: store.AttestationRow,
+): Promise<Result<{ attestation: AttestationView }>> {
+  try {
+    if ((await ensureBrief(db, evidenceId)) === 'no_generator') {
+      await ensureBriefAfterAttest(db, evidenceId);
+    }
+  } catch {
+    // 故意吞掉：见上方注释。
+  }
   return { ok: true, attestation: view(att) };
+}
+
+/**
+ * 出证后补一份简报（免费）。
+ *
+ * 【为什么出证也要有简报】主理人 09-05 的要求是「存证后每件证据都要有简报」——出证是
+ * 这件材料被正式拿出去用的时刻，而它的内容**可能从没提取过**（用户没买提取，或者它是
+ * 一份提取不出文字的照片）。这时的简报只依据登记信息（文件名、分类、证明目的、载体）作判断，
+ * 并在 weaknesses 里写明这一点；没有这份卡，后续的 agent 手上只有一个文件名。
+ *
+ * 【为什么免费】出证本身是免费的（主理人 09-05 拍板），出证附带的这份简报跟着免费。
+ * 收钱的是内容提取，那一笔在报价里已经含了简报。
+ *
+ * 【已有简报就不动】提取时生成过、或用户/agent 自己改写过的简报，出证不该把它盖掉。
+ */
+async function ensureBriefAfterAttest(db: Database, evidenceId: number): Promise<void> {
+  const row = db.prepare('SELECT brief_version AS v FROM evidence WHERE id=?').get(evidenceId) as
+    | { v: number }
+    | undefined;
+  if (!row || row.v > 0) return;
+  const llm = defaultBriefLlm();
+  // 没有可用模型时什么都不做：出证已经成功了，缺一张卡片不该让它回滚。
+  if (!llm) return;
+  try {
+    const r = await generateBrief(db, evidenceId, llm);
+    if (!r.ok) console.warn(`[attest] 证据 ${evidenceId} 的简报没写成：${r.error}`);
+  } catch (err) {
+    console.warn(`[attest] 证据 ${evidenceId} 的简报生成抛错（不影响出证）：`, err);
+  }
 }
 
 /** 证据详情（含其存证订单，如果有） */

@@ -73,9 +73,20 @@ export function requireRealname(
   identity: Identity,
   message = '这一步需要先完成实名认证：出证与对外文书要与本人身份绑定',
 ): GateResult {
-  const user = users.findUserById(db, identity.uid);
-  if (user?.auth_status === AUTH_STATUS.verified) return { ok: true };
+  if (isRealnameVerified(db, identity.uid)) return { ok: true };
   return { ok: false, response: deny(403, 'REALNAME_REQUIRED', message) };
+}
+
+/**
+ * 同一道闸的判定本身，不带 HTTP 外壳。
+ *
+ * 【为什么要把它单独露出来】MCP 那条路回的是 JSON-RPC 的 toolError，不是 NextResponse，
+ * 拿不了上面那个 GateResult。若在 MCP 路由里另写一句 `auth_status === '已实名'`，
+ * 判定就有了第二份——哪天口径变了（比如多一档"已实名但已冻结"），
+ * 改一处漏一处的形态是：网页拦住了，agent 那条还放行，而两边都不报错。
+ */
+export function isRealnameVerified(db: Database, uid: number): boolean {
+  return users.findUserById(db, uid)?.auth_status === AUTH_STATUS.verified;
 }
 
 /** 领域层失败（lib/cases 的 DomainFailure）转 HTTP 响应，形状与 auth 面保持一致 */

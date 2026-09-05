@@ -8,6 +8,7 @@ import { AdviceCard } from '../_components/AdviceCard';
 import { DocActions } from '../_components/DocActions';
 import { DocTypeBadge } from '../_components/badges';
 import { OcrView } from '../_components/OcrView';
+import { RealDocView } from '../_components/RealDocView';
 
 export const metadata: Metadata = { title: '文件解读' };
 
@@ -19,7 +20,12 @@ export default async function DocDetailPage({
   const { id, docId } = await params;
   // 样张只属于演示案件。真实案件下 cd_* 一律 404，而不是把别家公司的解除通知
   // 摆到用户自己的档案里——那正是「上传文件」那条演示流水线会把人送到的地址。
-  const doc = id === demoCase.id ? getDoc(docId) : undefined;
+  if (id !== demoCase.id) {
+    // 真实解读的 id 是库里的自增整数；`cd_2` 这类演示 id 在真实案件下仍然 404。
+    if (!/^\d+$/.test(docId)) notFound();
+    return <RealDocView caseId={id} docId={docId} />;
+  }
+  const doc = getDoc(docId);
   if (!doc) notFound();
 
   return (
