@@ -209,6 +209,8 @@ describe('G-F10 证据与历史接线：库里有什么，卡上就得数出什�
     expect(text).toContain('考勤 1');
     expect(text).toContain('社保 0'); // 0 的类别照列
     expect(text).toContain('《劳动合同.pdf》｜合同｜已上传｜证明目的：证明劳动关系');
+    // 没提取过的条目要在同一行明说「没读过内容」，别让模型以为文件名之外还有别的
+    expect(text).toContain('未提取（没读过内容）');
   });
 
   it('★库里没有证据 → 卡上写「证据共 0 条」，免责句仍在（变异：0 条时省略免责句 → 红）', () => {
@@ -216,7 +218,7 @@ describe('G-F10 证据与历史接线：库里有什么，卡上就得数出什�
     expect(loadCaseSnapshot(f.db, f.caseId).evidence).toHaveLength(0);
     const text = card(f.db, f.caseId);
     expect(text).toContain('证据共 0 条');
-    expect(text).toContain('我**没有读过这些文件的内容**');
+    expect(text).toContain('「简报」是系统读过文件内容之后写下的结论');
   });
 
   it('★historyStats 数的是本案跨线程的真实条数（变异：countCaseMessages 换成按线程数 → 红）', async () => {

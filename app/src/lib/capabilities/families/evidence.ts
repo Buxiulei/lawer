@@ -110,9 +110,9 @@ export const evidenceExtract: Capability = {
   title: '提取证据内容',
   description:
     '把一件材料的内容提取成文字：ocr（图片/PDF 认字）、asr（录音转写，带说话人与时间轴）、' +
-    'video（抽音轨转写 + 关键帧识别）。**两步**：不带 quote_id 调一次得到报价（免费，不扣任何费用）；' +
+    'video（抽音轨转写 + 关键帧识别）。**两步**：不带 quote_id 调一次先拿报价（这一步只看价，不产生任何扣费）；' +
     '把报价里的 quote_id 带回来再调一次才确认扣费并排队。完成后 evidence_get 能读到文本，' +
-    '并自动附一份简报（不额外收费）。',
+    '并自动附一份简报（价已含在提取里，不另计）。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -124,7 +124,7 @@ export const evidenceExtract: Capability = {
       },
       quote_id: {
         type: 'integer',
-        description: '不填 = 只报价不扣费；填上一次报价回的 quote_id = 确认扣费并开始提取',
+        description: '不填 = 只看价，这一步不产生扣费；填上一次报价回的 quote_id = 确认扣费并开始提取',
       },
     },
     required: ['evidence_id', 'mode'],
