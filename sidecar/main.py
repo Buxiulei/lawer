@@ -10,6 +10,7 @@ lawer sidecar —— FastAPI 服务（仅内网监听，供 Next.js app 调用�
 
 import os
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, Response
@@ -174,6 +175,26 @@ def ocr(
 
 # ---------------- /asr ----------------
 
+# /asr 的服务端超时（秒）。**必须与 app 侧 sidecar-client.ts 的 ENDPOINT_SPEC['/asr'] 同值**：
+# 两边不一致时先到的那个先中止，另一边留下一个没人在等的任务——而排障的人只会看到
+# 一边说超时、另一边说成功。
+#
+# 【为什么这条端点非要有服务端超时，别的没有】transcribe_audio 里是
+# `Transcription.wait(...)`：提交一个异步转写任务，然后**同步阻塞轮询到它结束**，
+# 没有任何时限。上游卡住时这个请求就永远挂着，占着一个 uvicorn 工作线程不放。
+# 别的端点最坏也就是外呼那一次的超时（各模块自带 timeout），只有这条是无限等。
+ASR_TIMEOUT_SECONDS = float(os.environ.get("ASR_TIMEOUT_SECONDS", "600"))
+
+# 【为什么用线程池而不是 signal.alarm】signal 只能在主线程装，而 FastAPI 的同步端点
+# 跑在工作线程里，装不上。
+#
+# ⚠ **超时不会杀掉那个线程**：Python 没有安全的强杀线程手段。超时只是让请求侧不再等，
+# 那条线程会自己跑完（上游任务本来也在服务端继续跑）。max_workers 因此是一道闸：
+# 最多同时挂 4 条僵住的转写，第 5 个请求会排队等位（等待时间同样计入本超时，
+# 于是它照样会在 ASR_TIMEOUT_SECONDS 后拿到 504，而不是无声无息地挂着）。
+_asr_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="asr")
+
+
 @app.post("/asr")
 def asr(
     file: UploadFile = File(..., description="待转写音频（单声道）"),
@@ -181,8 +202,26 @@ def asr(
 ):
     """录音转写 + 说话人分离（DashScope Paraformer），返回逐句结果。"""
     audio_bytes = file.file.read()
+    future = _asr_pool.submit(
+        transcribe_audio, audio_bytes, file.filename or "audio.wav", speaker_count
+    )
     try:
-        return transcribe_audio(audio_bytes, file.filename or "audio.wav", speaker_count)
+        return future.result(timeout=ASR_TIMEOUT_SECONDS)
+    except FutureTimeoutError:
+        # 还没开跑的（在池子里排队）能取消掉，别让它过一会儿又去跑一遍没人要的转写；
+        # 已经开跑的取消不了，只能等它自己结束（见上面的说明）。
+        future.cancel()
+        # 504 而不是 502：我方主动中止，上游并没有回过任何东西——
+        # 报 502 会让排障的人去上游日志里找一条根本不存在的错误记录。
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                f"转写超时：等了 {ASR_TIMEOUT_SECONDS:.0f} 秒仍未拿到结果，已主动中止。"
+                "为什么：录音转写是提交异步任务后同步等结果，耗时随录音长度走，"
+                "上游排队或音频过长都会超过这个时限。"
+                "怎么办：确认录音时长在合理范围内后重试；反复超时请把这条错误连同录音时长报上来。"
+            ),
+        )
     except AsrError as e:
         raise HTTPException(status_code=_ERR_STATUS.get(e.code, 502), detail=str(e))
 

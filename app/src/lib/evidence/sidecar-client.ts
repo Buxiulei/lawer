@@ -29,6 +29,16 @@ const ATTEST_RETRY_ADVICE =
 /** 公开复核（/verify）的重试建议——只读，重试无副作用 */
 const RECHECK_RETRY_ADVICE = '稍后重试即可。复核是只读操作，不改动任何存证记录，重试没有副作用。';
 
+/**
+ * 内容提取（/ocr、/asr、/video）的重试建议——**不要手工重发**。
+ * 提取跑在任务队列里（lib/jobs/extraction-worker），一次超时只是这一次领取失败：
+ * 租约到期后同一条任务会被重新领取，最多三次。手工再发一遍等于给同一份材料再排一条队，
+ * 而报价确认时的钱已经扣过了。
+ */
+const EXTRACTION_RETRY_ADVICE =
+  '不必手工重发：这条提取任务会在租约到期后被自动重新领取（最多三次），' +
+  '三次都失败会把失败原因写在这件证据上。';
+
 const ENDPOINT_SPEC = {
   /**
    * 30s：sidecar /tsa 只向 RFC3161 TSA 外呼一次，其自身 timeout=15s
@@ -83,6 +93,40 @@ const ENDPOINT_SPEC = {
     missing: '缺验签裁决',
     why: 'sidecar 离线验签（不外呼、信任锚内置），正常是秒级；超这么久通常是 sidecar 被别的请求排满或已假死',
     advice: RECHECK_RETRY_ADVICE,
+  },
+  /**
+   * 60s：/ocr 向 DashScope 的多模态模型外呼一次（sidecar/ocr.py，图片转 base64 内联提交、
+   * 不落对象存储），单图推理是秒级。60s 里绝大部分是留给 sidecar 被别的请求排满时的排队，
+   * 以及大图上行的时间——上传闸上限 25MB（lib/evidence/upload-guard），窄带下光传就要几十秒。
+   */
+  '/ocr': {
+    timeoutMs: 60_000,
+    missing: '缺这张图片的文字',
+    why: 'sidecar 向多模态模型外呼一次做单图识别，正常是秒级；60 秒里主要是排队与大图上行的余量',
+    advice: EXTRACTION_RETRY_ADVICE,
+  },
+  /**
+   * 600s：/asr 是**同步等一个异步任务**——sidecar 先把音频传到上游临时空间，再提交转写任务并
+   * 阻塞等它跑完（sidecar/asr.py 的 Transcription.wait）。转写耗时随录音长度走，一段一小时的
+   * 谈话录音是分钟级的事。这个数与 sidecar 侧 /asr 自己的超时保护取同一个值（sidecar/main.py
+   * 的 ASR_TIMEOUT_SECONDS）：两边不一致的话，先到的那个先中止，另一边留下一个没人等的任务。
+   */
+  '/asr': {
+    timeoutMs: 600_000,
+    missing: '缺这段录音的文字稿',
+    why: 'sidecar 要把音频传上去、提交转写任务并等它跑完，耗时随录音长度走（一小时的录音是分钟级）',
+    advice: EXTRACTION_RETRY_ADVICE,
+  },
+  /**
+   * 900s：/video 要先抽音轨走转写、再抽关键帧走识别，是 /asr 的耗时再加一段本地解码与逐帧识别。
+   * ⚠ 该端点由内容提取工单（T1）在 sidecar 侧落地；在它上线前本仓没有调用方，
+   * 这里先把超时口径与另外两条写在同一处，免得届时又在别的文件里另立一个数。
+   */
+  '/video': {
+    timeoutMs: 900_000,
+    missing: '缺这段视频的文字与画面要点',
+    why: 'sidecar 要抽音轨转写、再抽关键帧逐帧识别，比单纯转写多一段本地解码与识别时间',
+    advice: EXTRACTION_RETRY_ADVICE,
   },
 } as const;
 
@@ -244,4 +288,62 @@ export async function verifyPdf(
   // 200 以外才是「没验成」，与「验了但不通过」是两回事，必须区分（callSidecar 负责抛）
   const verdict = parseJson<VerifyVerdict>(await callSidecar('/verify', { method: 'POST', body: form }));
   return { passed: verdict.overall_ok === true, verdict };
+}
+
+/** sidecar /ocr 的结果。字段名保持 sidecar 的下划线原样，便于逐字对照排障。 */
+export interface OcrResult {
+  text: string;
+  model: string;
+  request_id: string | null;
+}
+
+/**
+ * 图片 OCR。沿用 /pades 那条已验证的路径：**app 侧解密、把明文字节以 multipart 发过去**。
+ *
+ * 不走「sidecar 同机直读密文路径」的近道：解密密钥只在 app.env，sidecar 进程没有它，
+ * 照路径读到的是一份读不懂的密文。这条不是性能取舍，是它根本做不到。
+ */
+export async function ocrImage(
+  bytes: Buffer,
+  mime: string,
+  filename: string,
+  prompt?: string,
+): Promise<OcrResult> {
+  const form = new FormData();
+  form.append('file', new Blob([new Uint8Array(bytes)], { type: mime }), filename);
+  if (prompt) form.append('prompt', prompt);
+  return parseJson<OcrResult>(await callSidecar('/ocr', { method: 'POST', body: form }));
+}
+
+/** sidecar /asr 的逐句结果（含时间轴与说话人分离）。字段名保持 sidecar 原样。 */
+export interface AsrSentence {
+  text: string;
+  begin_time: number;
+  end_time: number;
+  speaker_id: number | null;
+  sentence_id: number | null;
+}
+
+export interface AsrResult {
+  text: string;
+  sentences: AsrSentence[];
+  model: string;
+  task_id: string | null;
+}
+
+/**
+ * 录音转写 + 说话人分离。同 ocrImage：app 解密后传明文字节。
+ *
+ * speakerCount 是**已知说话人数**（谈话录音通常是 2），传了能提升分离效果；
+ * 不知道就别传——猜一个错的比不传更坏，它会把两个人的话切成三个人的。
+ */
+export async function transcribeAudio(
+  bytes: Buffer,
+  filename: string,
+  speakerCount?: number,
+): Promise<AsrResult> {
+  const form = new FormData();
+  form.append('file', new Blob([new Uint8Array(bytes)]), filename);
+  if (speakerCount !== undefined) form.append('speaker_count', String(speakerCount));
+  return parseJson<AsrResult>(await callSidecar('/asr', { method: 'POST', body: form }));
 }
