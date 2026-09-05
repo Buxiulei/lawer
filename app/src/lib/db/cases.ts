@@ -218,7 +218,11 @@ export function listTimelinePage(
   const where = ['case_id = ?'];
   const args: unknown[] = [params.caseId];
   if (params.since) {
-    where.push('happened_at >= ?');
+    // 【必须过 datetime()】happened_at 落库时就是 datetime(?) 归一后的
+    // 'YYYY-MM-DD HH:MM:SS'（见 insertTimelineEvent），而入参是 ISO 串带 'T' 和毫秒。
+    // 直接拿 ISO 串比大小是字符串比较：'T' > ' '，于是**恰好等于下界那一刻的事件会被漏掉**，
+    // 而结果看起来完全正常——少的那条正是"从这天起"最该看到的第一条。
+    where.push('happened_at >= datetime(?)');
     args.push(params.since);
   }
   if (params.kind) {
