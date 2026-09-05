@@ -18,7 +18,6 @@
  * 不需要 jsdom。
  */
 
-import { HEARTBEAT_INTERVAL_MS } from '@/lib/agent/events';
 
 /**
  * 服务端心跳间隔的**镜像**。真值在 lib/agent/events.ts 的 HEARTBEAT_INTERVAL_MS，
