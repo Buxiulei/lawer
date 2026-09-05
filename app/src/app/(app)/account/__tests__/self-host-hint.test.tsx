@@ -165,10 +165,15 @@ describe('文案所依据的事实：扣费只发生在模型轮次里', () => {
     // 把「最像扣费的新代码会落在哪」的那个目录整个排除在外，等于不看最该看的地方。
     const EXEMPT = ['lib/billing/index.ts', 'lib/billing/backfill.ts'];
     const found = callers('gongdaoSettle').filter((p) => !EXEMPT.includes(p));
-    // 三处具名合法扣费点系 manager 2026-08-31 挂尾裁决：模型轮次(orchestrator) + 两处主动下单
-    // (公司档案购买 dossier-billing / 盯守订阅 watch-billing)。**扩到第四处须再裁，别无据自扩**。
+    // 四处具名合法扣费点：模型轮次(orchestrator) + 三处**用户主动下单**
+    // (公司档案购买 dossier-billing / 盯守订阅 watch-billing / 报价确认 service-quotes)。
+    // 三处下单同一个形状：先出一张免费报价，用户拿着报价号回来确认，确认才扣——
+    // 页面那句「不扣」说的是数据读写工具，不是用户自己按下的购买。
+    // **扩到第五处须有依据，别无据自扩**：新的扣费点必须同样是「报价在前、确认在后」，
+    // 否则它就是一条能在用户没点头的情况下花钱的路径。
     expect([...found].sort()).toEqual([
       'lib/agent/orchestrator.ts',
+      'lib/billing/service-quotes.ts',
       'lib/company/dossier-billing.ts',
       'lib/company/watch-billing.ts',
     ]);
