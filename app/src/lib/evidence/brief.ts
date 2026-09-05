@@ -89,9 +89,11 @@ export async function ensureBrief(
 ): Promise<BriefOutcome> {
   const row = db
     .prepare(
-      `SELECT id, case_id, user_id, name, category, prove_purpose, original_medium, mime,
-              extracted_text, extracted_meta_json, brief_version
-         FROM evidence WHERE id = ?`,
+      // mime 在 files 上，不在 evidence 上（文件按哈希去重，元数据跟着文件走）
+      `SELECT e.id, e.case_id, e.user_id, e.name, e.category, e.prove_purpose, e.original_medium,
+              f.mime, e.extracted_text, e.extracted_meta_json, e.brief_version
+         FROM evidence e JOIN files f ON f.id = e.file_id
+        WHERE e.id = ?`,
     )
     .get(evidenceId) as BriefRow | undefined;
   if (!row) return 'not_found';

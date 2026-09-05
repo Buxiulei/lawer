@@ -31,7 +31,7 @@ import {
   tryAcquireUploadSlot,
   UPLOAD_MEMORY_BUDGET_BYTES,
 } from '@/lib/evidence/upload-guard';
-import { UPLOAD_TOKEN_TTL_MS } from '@/lib/evidence/upload-token';
+import { claimUploadToken, UPLOAD_TOKEN_TTL_MS } from '@/lib/evidence/upload-token';
 
 let put: (req: Request, ctx: { params: Promise<{ token: string }> }) => Promise<Response>;
 let db: Database;
@@ -165,6 +165,42 @@ describe('一次性上传地址：一次性与 10 分钟有效期', () => {
     // 零落盘：被拒的那一份不该留下文件，也不该多一行 files
     expect(countFilesOnDisk()).toBe(1);
     expect(db.prepare('SELECT COUNT(*) AS n FROM files').get()).toEqual({ n: 1 });
+  });
+
+  /**
+   * 🔴 变异臂「token 可重用」的正主：把 claimUploadToken 里的 `AND consumed_at IS NULL`
+   * 删掉（或改成先查再写），这两条会翻红——上面那条 409 由**抢占之前**的只读预检拦下，
+   * 删掉抢占条件它照样绿，所以一次性不能只靠那一条钉。
+   */
+  test('抢占本身是一次性的：同一个 token 抢第二次必须落空', async () => {
+    const issued = await call('evidence_upload_url', userA, {
+      case_id: caseA,
+      filename: 'a.jpg',
+      mime: 'image/jpeg',
+      size: 8,
+    });
+    const token = issued.upload_token as string;
+    expect(claimUploadToken(db, token)).not.toBeNull();
+    expect(claimUploadToken(db, token)).toBeNull();
+  });
+
+  test('两个 PUT 同时到：只有一个成功，盘上只有一份', async () => {
+    const issued = await call('evidence_upload_url', userA, {
+      case_id: caseA,
+      filename: 'a.jpg',
+      mime: 'image/jpeg',
+      size: 64,
+    });
+    const token = issued.upload_token as string;
+    // 两份内容不同，落盘两次就是两个哈希、两个文件——数得出来
+    const [r1, r2] = await Promise.all([
+      put(...putRequest(token, Buffer.from('并发的第一份'))),
+      put(...putRequest(token, Buffer.from('并发的第二份'))),
+    ]);
+    const codes = [r1.status, r2.status].sort();
+    expect(codes).toEqual([201, 409]);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM files').get()).toEqual({ n: 1 });
+    expect(countFilesOnDisk()).toBe(1);
   });
 
   test('过期的 token 一律 410，且零落盘', async () => {
