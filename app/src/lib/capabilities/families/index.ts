@@ -12,6 +12,7 @@ import { claimCalc, claimsList, claimsUpsert } from './claims';
 import { companyProfileUpsert } from './company';
 import { deadlineList } from './deadlines';
 import { deadlineResolve, deadlineSet } from './deadlines-write';
+import { docGet, docList, docSubmit, transcriptSubmit } from './docs';
 import { draftGet, draftList, draftWrite } from './drafts';
 import { emotionLog } from './emotion';
 import { evidenceList } from './evidence';
@@ -47,4 +48,8 @@ export const CAPABILITIES: Capability[] = [
   companyProfileUpsert,
   emotionLog,
   knowledgeGet,
+  docSubmit,
+  docList,
+  docGet,
+  transcriptSubmit,
 ];

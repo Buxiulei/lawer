@@ -114,8 +114,11 @@ export async function POST(req: Request) {
         );
       }
 
-      // 业务失败（案件不存在、枚举非法）走 isError=true，让模型能读到原因自行纠正
-      const outcome = tool.run(getDb(), identity, (args ?? {}) as Record<string, unknown>) as
+      // 业务失败（案件不存在、枚举非法）走 isError=true，让模型能读到原因自行纠正。
+      // **必须 await**：耗算力的能力（要外呼模型或 sidecar）回的是 Promise，不 await 的话
+      // 下面那句 `.ok === false` 判的是一个 Promise 对象——它永远不等于 false，于是失败被当成成功，
+      // 回给对方的正文是「[object Promise]」。同步能力 await 一个非 Promise 值原样返回，不受影响。
+      const outcome = (await tool.run(getDb(), identity, (args ?? {}) as Record<string, unknown>)) as
         | { ok: false; errorCode: string; message: string }
         | Record<string, unknown>;
       if (outcome && (outcome as { ok?: boolean }).ok === false) {

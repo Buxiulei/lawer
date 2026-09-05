@@ -257,6 +257,11 @@ describe('tools/list', () => {
       'company_profile_upsert',
       'emotion_log',
       'knowledge_get',
+      // 来文与录音，同样**追加在末尾**
+      'doc_submit',
+      'doc_list',
+      'doc_get',
+      'transcript_submit',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();
