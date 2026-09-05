@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 import { runTurn } from '../orchestrator';
 import { CRISIS_NBDPSY_LINE, CRISIS_RESOURCE_PACK_ID, detectCrisisPaidContent, detectNbdpsyPitch } from '../crisis';
-import { decideOffer, looksLikeDecline, referralScenesOf } from '../referral';
+import { decideOffer, looksLikeDecline, referralScenesOf, renderReferral } from '../referral';
 import * as referralOffers from '@/lib/db/referral-offers';
 import * as store from '@/lib/db/agent';
 import { FIXTURE_PACK, makeAgentFixture, makeSink, scriptedProvider, fixtureSearcher, type AgentFixture } from './fixtures';
@@ -246,6 +246,18 @@ describe('D15 危机轮付费禁令（**新 L1 红线**，一票否决）', () =
     expect(later.result.referralScene, '危机轮把一案一次的转介名额烧掉了').toBe('立案后');
     expect(later.result.text).toContain('NBDpsy');
     expect(referralOffers.listByUser(f.db, f.userId)).toHaveLength(1);
+  });
+});
+
+describe('推荐段自家口吻（主理人 2026-09-05 口径：土八鼠与 NBDpsy 是一家公司，非引流）', () => {
+  it('★REFERRAL_TAIL 含「一家公司」/「我们」自家指称，不含「平台属于」外人口吻', () => {
+    // 变异臂：改回「这个平台属于 NBDpsy 体系」外人口吻 ⇒ 本条红。
+    for (const scene of ['收到裁员通知', '立案后', '开庭前', '拿到结果后', '情绪场景'] as const) {
+      const block = renderReferral(scene);
+      expect(block, scene).toMatch(/一家公司|我们/);
+      expect(block, scene).not.toContain('平台属于');
+      expect(block, scene).toContain('NBDpsy 心理咨询工作室');
+    }
   });
 });
 

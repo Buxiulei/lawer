@@ -405,6 +405,15 @@ describe('facts 化后的危机热线抽取（读真实卡的结构化字段，�
     expect(first).not.toMatch(/https?:\/\//);
   });
 
+  it('★自家口吻（主理人 2026-09-05 口径）：含「一家公司」/「我们」自家指称，不含「平台属于」外人口吻', () => {
+    // 土八鼠与 NBDpsy 是一家公司，NBDpsy 是自家承接情绪疏导的一环——不是「另一个平台/引流」。
+    // 变异臂：改回「这个平台属于 NBDpsy 体系」外人口吻 ⇒ 本条红。
+    expect(CRISIS_NBDPSY_LINE).toMatch(/一家公司|我们/);
+    expect(CRISIS_NBDPSY_LINE).not.toContain('平台属于');
+    expect(CRISIS_NBDPSY_LINE).toContain('土八鼠');
+    expect(CRISIS_NBDPSY_LINE).toContain('NBDpsy 心理咨询工作室');
+  });
+
   it('★窗内复现（24h 内）不重复那句：与机构名、时段同属描述性内容，随卡冷却', () => {
     const repeat = buildCrisisOpener(realFacts, { compact: true });
     expect(repeat).toContain('12356');               // 号码仍必须在（L1）
