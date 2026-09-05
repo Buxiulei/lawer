@@ -205,6 +205,8 @@ export const deadlineResolve: Capability = {
         deadline_id: deadlineId,
         resolved: true,
         already_resolved: true,
+        // 与其余写能力的重放回包同形：调用方统一按 deduped 判重放，不用再认第二个字段
+        deduped: true as const,
         resolved_at: row.resolved_at,
       };
     }

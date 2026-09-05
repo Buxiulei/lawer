@@ -280,6 +280,13 @@ describe('tools/list', () => {
       'deadline_set',
       'deadline_resolve',
       'action_create',
+      // W2 七条里除 draft_get（按 draft_id 取，归属在草稿上判）外都隶属案件
+      'timeline_list',
+      'timeline_milestone',
+      'draft_list',
+      'draft_write',
+      'company_profile_upsert',
+      'emotion_log',
     ]) {
       expect(byName.get(name)!.inputSchema.required, name).toContain('case_id');
     }
