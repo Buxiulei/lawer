@@ -735,6 +735,34 @@ describe('存量迁移区', () => {
     ]);
   });
 
+  it('cases.domain：老库补列可重入，存量案件按默认值补成 labor', () => {
+    // 模拟一个 domain 落地之前的老库：建全量表后把该列摘掉，再灌一条存量案件
+    const db = newDb();
+    db.exec('ALTER TABLE cases DROP COLUMN domain');
+    const caseId = mkCase(db, mkUser(db));
+
+    const domainCols = () =>
+      (db.prepare('PRAGMA table_info(cases)').all() as { name: string }[]).filter(
+        (c) => c.name === 'domain',
+      ).length;
+    expect(domainCols()).toBe(0);
+
+    runMigrations(db);
+    expect(domainCols()).toBe(1);
+    runMigrations(db); // 二次幂等：裸 ALTER 会在这里报 duplicate column name
+    expect(domainCols()).toBe(1);
+
+    // 存量行当场按默认值补齐——不是 NULL：这一列是 NOT NULL，
+    // 而"这个案子属于哪个领域"对存量行本来就有唯一正确答案（全站当时只有一个领域）。
+    expect(db.prepare('SELECT domain FROM cases WHERE id = ?').get(caseId)).toEqual({
+      domain: 'labor',
+    });
+    // 新建的案件同样吃 DDL 默认值，不需要调用方显式传
+    expect(
+      db.prepare('SELECT domain FROM cases WHERE id = ?').get(mkCase(db, mkUser(db, 'h2'))),
+    ).toEqual({ domain: 'labor' });
+  });
+
   it('老库补列幂等：跑两遍只补一次，原有行数据不丢', () => {
     // 模拟一个 intake_stage 落地之前的老库：建全量表后把该列摘掉，再灌一条存量线程
     const db = newDb();
