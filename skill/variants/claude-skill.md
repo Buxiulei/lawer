@@ -27,10 +27,11 @@ description: 通过 MCP 连接「土八鼠」的案件档案库，读写案件�
 
 | 工具 | 用途 | 输入要点 |
 |---|---|---|
-| `case_list` | 列出你名下的全部案件（case_id、抬头、阶段），新的在前。**连上先调它认领案件**：只有一个就直接用它的 case_id、不必问编号；多个让用户挑；一个都没有请去网页端建档 | 无 |
+| `case_list` | 列出你名下的全部案件（case_id、抬头、阶段），新的在前。**连上先调它认领案件**：只有一个就直接用它的 case_id、不必问编号；多个让用户挑；一个都没有或基本盘空着就用 `intake_submit` 建档，别支用户去网页填 | 无 |
+| `intake_submit` | 首诊建档：一次性写入用工基本盘 + 时间线 + 诉求。新用户或基本盘还空着时用它，问齐首诊清单再调 | `case_id`、`stage`、`company_name`、`employed_from`、`monthly_wage_yuan`（单位元）、`goals` 必填；校验不过逐字段回原因 |
 | `case_get` | 读案件档案 + 最近的时间线 | `case_id`；`timeline_limit` 默认 50、最多 200 |
-| `case_update` | 改案件阶段 / 诉求目标 / 底线 | `case_id`；`stage` 必须是法定枚举值；`goal`、`bottom_line` 至少传一个 |
-| `timeline_add` | 追加一条时间线事件 | `case_id`、`happened_at`（ISO8601）、`kind`（公司动作/我方动作/系统动作/期限）、`title`，`detail` 可选 |
+| `case_update` | 改案件阶段 / 诉求目标 / 底线，或零散补齐用工基本盘（入职时间/月薪/岗位/合同次数） | `case_id`；`stage` 必须是法定枚举值；`monthly_wage_yuan` 单位元；至少传一个字段 |
+| `timeline_add` | 追加一条时间线事件。写入幂等：同 `client_ref` 重放或同日同类同标题不重复落库 | `case_id`、`happened_at`（ISO8601）、`kind`（公司动作/我方动作/系统动作/期限）、`title`，`detail`、`client_ref` 可选 |
 | `action_list` | 列出行动卡 | `case_id`；`status` 可过滤（待办/完成/放弃） |
 | `action_complete` | 把行动卡标为完成或放弃 | `case_id`、`action_id`；`status` 默认「完成」 |
 | `deadline_list` | 列出法定期限 | `case_id`；`include_resolved` 默认只列生效中的 |
@@ -71,8 +72,9 @@ description: 通过 MCP 连接「土八鼠」的案件档案库，读写案件�
    ```
 
 3. 连上后先调 `case_list` 认领案件：只有一个案件就直接用它的 `case_id`、**不要问用户要编号**；
-   有多个就让用户挑；一个都没有请他先去网页端建档（首诊）。拿到 id 再调一次 `case_facts`，
-   把当前事实读进来，再开始对话。事实卡里写着「未记录」的项是**档案里没有这一项**，
+   有多个就让用户挑；一个都没有（或基本盘还空着）就按首诊清单问齐后用 `intake_submit` 建档，
+   **别把用户支回网页填**。拿到 id 再调一次 `case_facts`，把当前事实读进来，再开始对话。
+   事实卡里写着「未记录」的项是**档案里没有这一项**，
    不是"不存在"——缺哪一项就问用户，不要拿默认值替它。
 4. 引用法条与案例一律只从 `knowledge_search` 的结果里引，照抄它给的 `citation_guide`，
    并带上 `confidence`；检索不到就说查不到，**不要编条号和案号**。

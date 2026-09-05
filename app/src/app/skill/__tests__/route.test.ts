@@ -58,6 +58,17 @@ describe('公开取 skill 包', () => {
   });
 
   /**
+   * 新用户/基本盘缺项时，总纲要教 agent 用 `intake_submit` 建档，**不再把用户支回网页填**。
+   * 守两头：新指令在（intake_submit）、旧毛病不在（去网页端建档）。
+   * 旧毛病让新用户在对话里被打断、跑去网页走一遍首诊——正是这次要修的症状。
+   */
+  test('总纲教新用户用 intake_submit 建档，不再支去网页端建档', async () => {
+    const text = await (await get('SKILL.md')).text();
+    expect(text).toContain('intake_submit');
+    expect(text).not.toContain('网页端建档');
+  });
+
+  /**
    * 白名单之外一律 404。**尤其是路径穿越**：把白名单去掉、直接拿 URL 段拼路径读文件，
    * 下面这几条就会开始返回 200 或抛出带绝对路径的异常。
    */
