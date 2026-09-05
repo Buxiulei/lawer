@@ -259,13 +259,21 @@ describe('④⑤ 失败与领取次数上限', () => {
     expect(evidenceRow(db, evId).extraction_status).toBe('failed');
   });
 
-  test('未接线的提取方式明说没做，不退化成「提取出来是空的」', async () => {
+  test('handler 连不上依赖时，材料上不留半份结果（不退化成「提取出来是空的」）', async () => {
     const { db, uid, caseId } = makeDb();
     const evId = mkEvidence(db, uid, caseId, Buffer.from('x'), 'audio/wav', '录音.wav');
-    const job = enqueueExtraction(db, { evidenceId: evId, caseId, userId: uid, mode: 'asr' });
-    expect(await runOnce(db)).toBe('failed');
-    expect(getJob(db, job.id)!.error).toContain('还没接线');
-    expect(evidenceRow(db, evId).extracted_text).toBeNull();
+    // SIDECAR_URL 指到一个没人监听的端口：等价于 sidecar 挂了
+    const saved = process.env.SIDECAR_URL;
+    process.env.SIDECAR_URL = 'http://127.0.0.1:1';
+    try {
+      const job = enqueueExtraction(db, { evidenceId: evId, caseId, userId: uid, mode: 'asr' });
+      expect(await runOnce(db, { afterExtraction: null })).toBe('failed');
+      expect(getJob(db, job.id)!.error).toBeTruthy();
+      expect(evidenceRow(db, evId).extracted_text).toBeNull();
+    } finally {
+      if (saved === undefined) delete process.env.SIDECAR_URL;
+      else process.env.SIDECAR_URL = saved;
+    }
   });
 });
 

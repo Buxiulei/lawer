@@ -24,7 +24,14 @@
 // 【本文件是共用层，不写死任何具体业务领域的字面量】面向的是「一件材料 + 一种提取方式」。
 import type Database from 'better-sqlite3';
 
-import { ocrImage } from '../evidence/sidecar-client';
+import { generateBrief } from '../evidence/brief';
+import { defaultBriefLlm } from '../evidence/brief-llm';
+import {
+  extractVideo,
+  ocrImage,
+  transcribeAudio,
+  type AsrSentence,
+} from '../evidence/sidecar-client';
 import { readBytes } from '../evidence/files';
 import { nowSql, toSql } from '../db/time';
 
@@ -248,31 +255,195 @@ const ocrHandler: ExtractionHandler = async (db, job) => {
   };
 };
 
-/** 尚未落地的提取方式：**明说没做**，不要退化成「提取出来是空的」。 */
-const notImplemented =
-  (mode: ExtractionMode): ExtractionHandler =>
-  async () => {
-    throw new Error(
-      `提取方式「${mode}」还没接线。` +
-        '为什么：这一期只落了 ocr 的 handler，其余两种的 handler 由内容提取接线工单补。' +
-        '怎么办：这条任务不必重试，等对应能力上线后重新发起。',
-    );
+/** 秒 → `时:分:秒`（毫秒进来先除 1000）。时间轴是给人回原件核对用的，必须能直接对上播放器。 */
+function stamp(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const h = String(Math.floor(total / 3600)).padStart(2, '0');
+  const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
+  const s = String(total % 60).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
+
+/**
+ * 把逐句结果排成带时间轴与说话人的正文。
+ *
+ * 【为什么正文里要带时间轴，而不是只在 meta 里】用户拿这段文字去核对时，手上只有正文；
+ * 时间点只存在结构化附注里，等于要他自己把两份东西对起来看。说话人也一样：
+ * 一段两个人的对话拉平成一大段，读的人分不出哪句是谁说的——而"谁说的"往往就是要害。
+ */
+function renderTranscript(sentences: AsrSentence[], fallback: string): string {
+  if (sentences.length === 0) return fallback;
+  return sentences
+    .map((s) => {
+      const speaker = s.speaker_id === null ? '说话人未分离' : `说话人${s.speaker_id}`;
+      return `[${stamp(s.begin_time / 1000)}-${stamp(s.end_time / 1000)}] ${speaker}：${s.text}`;
+    })
+    .join('\n');
+}
+
+/** 逐句结果压成可落库的附注（时间轴以毫秒原样保留，不做取整——取整过的时间对不回播放器）。 */
+function timelineMeta(sentences: AsrSentence[]): Record<string, unknown>[] {
+  return sentences.map((s) => ({
+    begin_ms: s.begin_time,
+    end_ms: s.end_time,
+    speaker_id: s.speaker_id,
+    text: s.text,
+  }));
+}
+
+/** 录音转写。同 ocr：app 侧解密、把明文字节传给 sidecar（解密密钥只在 app 这边）。 */
+const asrHandler: ExtractionHandler = async (db, job) => {
+  const material = loadMaterial(db, job);
+  const bytes = readBytes(db, material.file_id);
+  const result = await transcribeAudio(bytes, material.name);
+  return {
+    text: renderTranscript(result.sentences, result.text),
+    meta: {
+      mode: 'asr',
+      model: result.model,
+      task_id: result.task_id,
+      mime: material.mime,
+      speakers: [...new Set(result.sentences.map((s) => s.speaker_id).filter((x) => x !== null))],
+      timeline: timelineMeta(result.sentences),
+    },
   };
+};
+
+/**
+ * 每张关键帧问一次：**一句画面描述 + 逐字抄画面上的字**。
+ *
+ * 【为什么合成一次问，而不是描述一次、认字一次】同一张图问两遍要付两遍钱，
+ * 而两个答案的依据是同一张图。合成一问的代价是格式要靠模型配合——所以第一行固定是描述，
+ * 拿不到就整段当描述用（下面 splitFrameAnswer），不会因为格式没对上就把认出来的字丢掉。
+ */
+const FRAME_PROMPT =
+  '先用一句话描述这张画面里发生了什么（谁、在哪、在做什么），单独成第一行；' +
+  '再从第二行开始，把画面上出现的所有文字逐字抄下来，一个字都不要改写或补全；' +
+  '画面上没有文字就只写第一行。';
+
+function splitFrameAnswer(answer: string): { caption: string; text: string } {
+  const lines = answer.split(/\r?\n/).map((l) => l.trim());
+  const first = lines.findIndex((l) => l !== '');
+  if (first < 0) return { caption: '', text: '' };
+  return {
+    caption: lines[first],
+    text: lines.slice(first + 1).join('\n').trim(),
+  };
+}
+
+/**
+ * 视频提取：sidecar 拆出音轨与关键帧 → 音轨走转写、每帧走识别 → 合成一份正文。
+ *
+ * 【为什么一帧失败不算整条失败】十二张帧里有一张识别不出来（模糊、纯黑），
+ * 把整次提取判失败等于让用户为已经跑完的转写与其余十一张白付一次钱。失败的帧在正文里
+ * 明写「这一帧没认出来」——**留一个看得见的洞，而不是一个看不见的空白**。
+ */
+const videoHandler: ExtractionHandler = async (db, job) => {
+  const material = loadMaterial(db, job);
+  const bytes = readBytes(db, material.file_id);
+  const cut = await extractVideo(bytes, material.name);
+
+  let transcript = '';
+  let asrMeta: Record<string, unknown> | null = null;
+  if (cut.audio_wav_b64) {
+    const audio = Buffer.from(cut.audio_wav_b64, 'base64');
+    const heard = await transcribeAudio(audio, `${material.name}.wav`);
+    transcript = renderTranscript(heard.sentences, heard.text);
+    asrMeta = {
+      model: heard.model,
+      task_id: heard.task_id,
+      speakers: [...new Set(heard.sentences.map((s) => s.speaker_id).filter((x) => x !== null))],
+      timeline: timelineMeta(heard.sentences),
+    };
+  }
+
+  const frames: Record<string, unknown>[] = [];
+  const frameLines: string[] = [];
+  for (const f of cut.frames) {
+    try {
+      const shot = await ocrImage(
+        Buffer.from(f.jpeg_b64, 'base64'),
+        'image/jpeg',
+        `${material.name}-${f.t_s}s.jpg`,
+        FRAME_PROMPT,
+      );
+      const { caption, text } = splitFrameAnswer(shot.text);
+      frames.push({ t_s: f.t_s, caption, text, model: shot.model });
+      frameLines.push(
+        `[${stamp(f.t_s)}] ${caption || '（没给出画面描述）'}${text ? `\n  画面文字：${text}` : ''}`,
+      );
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      frames.push({ t_s: f.t_s, caption: '', text: '', error: why });
+      frameLines.push(`[${stamp(f.t_s)}] （这一帧没能识别：${why}）`);
+    }
+  }
+
+  const sections: string[] = [];
+  sections.push(
+    cut.audio_wav_b64
+      ? `【音轨转写】\n${transcript || '（音轨里没有识别出话音）'}`
+      : '【音轨转写】（这段影像没有音轨）',
+  );
+  sections.push(
+    cut.frames.length > 0
+      ? `【画面关键帧】\n${frameLines.join('\n')}`
+      : '【画面关键帧】（这个文件里没有可抽帧的画面轨）',
+  );
+
+  return {
+    text: sections.join('\n\n'),
+    meta: {
+      mode: 'video',
+      mime: material.mime,
+      duration_s: cut.duration_s,
+      probe: cut.probe,
+      frames,
+      asr: asrMeta,
+    },
+  };
+};
 
 export const HANDLERS: Record<ExtractionMode, ExtractionHandler> = {
   ocr: ocrHandler,
-  asr: notImplemented('asr'),
-  video: notImplemented('video'),
+  asr: asrHandler,
+  video: videoHandler,
 };
 
 // ───────────────────────────── 主循环 ─────────────────────────────
 
+/**
+ * 提取跑完之后的收尾动作。默认是给这份材料写一份摘要卡（见下方 writeSummary）。
+ * 测试可以注入一个假的观察它有没有被调；**传 null 明确表示不做**，
+ * 而不是"忘了传就悄悄不做"——判据「摘要生成跳过 ⇒ 红」钉的就是这个默认值。
+ */
+export type AfterExtraction = (db: Database.Database, job: ExtractionJob) => Promise<void>;
+
 export interface WorkerOptions {
   /** 覆盖 handler 表（测试用假 handler 观察状态机；生产不传）。 */
   handlers?: Partial<Record<ExtractionMode, ExtractionHandler>>;
+  /** 覆盖收尾动作；显式传 null = 这一轮不做收尾。 */
+  afterExtraction?: AfterExtraction | null;
   leaseMs?: number;
   heartbeatMs?: number;
 }
+
+/**
+ * 默认收尾：提取完成后给这份材料自动写一份摘要卡（不额外收费，价含在提取里）。
+ *
+ * 【为什么失败只吞不抛】正文已经落库了，那才是用户付钱买的东西。摘要写不出来
+ * （模型没连上、返回的不合 schema）时把整条任务判失败，会让它被重领、重跑一遍提取——
+ * 为一张卡片再烧一次转写的钱。所以这里只吞掉并留一行日志，材料仍是 done。
+ */
+export const writeSummary: AfterExtraction = async (db, job) => {
+  const llm = defaultBriefLlm();
+  if (!llm) {
+    console.warn(`[extraction] 任务 ${job.id}：没有可用的模型，这份材料暂时没有摘要卡`);
+    return;
+  }
+  const r = await generateBrief(db, job.evidence_id, llm);
+  if (!r.ok) console.warn(`[extraction] 任务 ${job.id} 的摘要卡没写成：${r.error}`);
+};
 
 /** 这一轮做了什么。'idle' = 没有可领的任务（不是错误）。 */
 export type TickResult = 'idle' | 'done' | 'failed';
@@ -288,6 +459,7 @@ export async function runOnce(
   const leaseMs = options.leaseMs ?? LEASE_MS;
   const heartbeatMs = options.heartbeatMs ?? HEARTBEAT_MS;
   const handlers = { ...HANDLERS, ...options.handlers };
+  const after = options.afterExtraction === undefined ? writeSummary : options.afterExtraction;
 
   const job = claimNext(db, leaseMs);
   if (!job) return 'idle';
@@ -310,6 +482,16 @@ export async function runOnce(
   try {
     const out = await handlers[job.mode](db, job);
     finishOk(db, job, out);
+    // 收尾在 finishOk 之后，且**它抛错也不改判**：正文已经落库，那是用户付钱买的东西。
+    // 让收尾的失败冒到下面的 catch 里，会把一条已经 done 的任务改写成 failed 并重排一次——
+    // 为一张卡片再烧一次提取的钱。
+    if (after) {
+      try {
+        await after(db, job);
+      } catch (err) {
+        console.warn(`[extraction] 任务 ${job.id} 的收尾动作抛错（不影响提取结果）：`, err);
+      }
+    }
     return 'done';
   } catch (err) {
     finishFailed(db, job, err);

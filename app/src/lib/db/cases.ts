@@ -68,6 +68,12 @@ export interface EvidenceRow {
   prove_purpose: string | null;
   status: string;
   created_at: string;
+  /** none / queued / running / done / failed（见 lib/jobs/extraction-worker） */
+  extraction_status: string;
+  extracted_at: string | null;
+  /** 简报原文（JSON 串）。读侧一律经 lib/evidence/brief.parseBrief 解，别自己 JSON.parse */
+  brief_json: string | null;
+  brief_version: number;
 }
 
 // ========== cases ==========
@@ -330,7 +336,9 @@ export function listDeadlines(db: Database, caseId: number, includeResolved: boo
 export function listEvidence(db: Database, caseId: number): EvidenceRow[] {
   return db
     .prepare(
-      'SELECT id, case_id, name, category, prove_purpose, status, created_at FROM evidence WHERE case_id = ? ORDER BY id DESC',
+      `SELECT id, case_id, name, category, prove_purpose, status, created_at,
+              extraction_status, extracted_at, brief_json, brief_version
+         FROM evidence WHERE case_id = ? ORDER BY id DESC`,
     )
     .all(caseId) as EvidenceRow[];
 }

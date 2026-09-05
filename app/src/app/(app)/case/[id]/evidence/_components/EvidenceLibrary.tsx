@@ -38,8 +38,12 @@ import {
   demoView,
   fetchEvidenceDetail,
   fetchEvidenceList,
+  quoteExtraction,
+  startExtraction,
   uploadEvidence,
   type EvidenceView,
+  type ExtractMode,
+  type ExtractQuote,
   type UploadInput,
 } from '../_data';
 import {
@@ -198,6 +202,11 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
   const [dropped, setDropped] = useState<File[]>([]);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [batchFreeze, setBatchFreeze] = useState(false);
+  /** 手上这张提取报价（拿到它没有扣钱）。null = 没在报价流程里。 */
+  const [extractQuote, setExtractQuote] = useState<
+    { item: EvidenceView; mode: ExtractMode; quote: ExtractQuote } | null
+  >(null);
+  const [quoting, setQuoting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -391,6 +400,52 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
     }
   };
 
+  /**
+   * 第一步：问价。**这一步不扣任何费用**，也不开始提取——
+   * 拿到价之后弹确认框，用户点了「确认」才走 runExtract 扣费。
+   */
+  const askExtractQuote = async (target: EvidenceView, mode: ExtractMode) => {
+    if (isDemo) {
+      toast('演示案件不做真实提取，换成自己的案件再试', 'amber', '这里是演示数据');
+      return;
+    }
+    setQuoting(true);
+    try {
+      const quote = await guard(() => quoteExtraction(target.id, mode));
+      if (quote === null) return; // 被实名拦截，弹窗已经接手
+      setExtractQuote({ item: target, mode, quote });
+    } catch (err) {
+      toast(humanError(err), 'amber', '没能报出价');
+    } finally {
+      setQuoting(false);
+    }
+  };
+
+  /** 第二步：带着报价确认。到这一步才扣费、才排队。 */
+  const runExtract = async () => {
+    const pendingQuote = extractQuote;
+    setExtractQuote(null);
+    if (!pendingQuote) return;
+    const { item: target, mode, quote } = pendingQuote;
+    setBusyId(target.id);
+    try {
+      const job = await startExtraction(target.id, mode, quote.quoteId);
+      const fresh = await fetchEvidenceDetail(target.id);
+      setItems((prev) => prev.map((i) => (i.id === fresh.id ? fresh : i)));
+      toast(
+        job.charged > 0
+          ? `已扣 ${job.charged}，正在处理，处理完这里会出现文字和简报`
+          : '已排队，处理完这里会出现文字和简报',
+        'success',
+        '已开始',
+      );
+    } catch (err) {
+      toast(humanError(err), 'amber', '这一步没成功');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   /** 批量固化：逐件走同一个幂等接口，中途失败的那几件再点一次从断处续跑 */
   const runBatchAttest = async () => {
     setBatchFreeze(false);
@@ -534,6 +589,8 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
         onClose={() => setOpenId(null)}
         onRequestFreeze={setFreezeTarget}
         onIssue={(item) => void runAttest(item)}
+        extractBusy={quoting}
+        onRequestExtract={(item, mode) => void askExtractQuote(item, mode)}
         onSavePurpose={(id, provePurpose) => {
           setItems((prev) => prev.map((i) => (i.id === id ? { ...i, provePurpose } : i)));
           toast('说明已更新', 'success', '已保存');
@@ -567,6 +624,29 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
         cancelLabel="再检查一下"
         onConfirm={() => freezeTarget && void runAttest(freezeTarget)}
         onCancel={() => setFreezeTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={extractQuote !== null}
+        title={extractQuote ? `这次提取要 ${extractQuote.quote.amount} ${NEUTRAL_WORD.credits}` : ''}
+        description={
+          // 价逐项列出来：只给一个总数，用户没法判断贵在哪，也核不出来对不对
+          <div data-veil="" className="flex flex-col gap-1.5">
+            <div>
+              {extractQuote?.quote.label}：{extractQuote?.quote.unitPrice} ×{' '}
+              {extractQuote?.quote.units} {extractQuote?.quote.unitLabel} ={' '}
+              <strong className="font-semibold text-ink">{extractQuote?.quote.amount}</strong>
+            </div>
+            <div className="fs-s text-ink-2">{extractQuote?.quote.basis}</div>
+            <div className="fs-s text-ink-2">
+              到这一步为止还没扣任何费用。点「确认」才扣、才开始跑；不确认就什么都不会发生。
+            </div>
+          </div>
+        }
+        confirmLabel="确认并开始"
+        cancelLabel="先不提取"
+        onConfirm={() => void runExtract()}
+        onCancel={() => setExtractQuote(null)}
       />
 
       <BatchCategorizeDialog
