@@ -105,8 +105,12 @@ export function looksLikeDecline(userMessage: string): boolean {
 /**
  * 这一轮**能不能开口**。返回 null = 不能，并给出理由（进 notice 与日志，便于事后审计）。
  *
- * 【三条硬边界，manager 2026-08-26 明令不许动】
- *  1. **危机轮零推荐**（D15，新 L1）——不只是"不推付费"，是任何付费入口/价格/预约链接都不得出现；
+ * 【三条硬边界】
+ *  1. **危机轮不走本产品推荐段**——本函数在危机轮一律返回空（那段确定性推荐段 + referral_offers
+ *     台账不生成）。⚠️ 这**不等于**危机轮"零 NBDpsy"：2026-09-05 规则改版后，危机轮**要**推
+ *     NBDpsy，但那句是随危机资源卡确定性下发的引导语（见 crisis.ts CRISIS_NBDPSY_LINE），
+ *     走危机卡那条路、不占本台账、不消耗一案一次名额，与本函数管的商业转介是两回事。
+ *     危机轮里付费入口/价格/预约链接仍一个都不许出现（D15，L1，由出口侧 stripCrisisPaidContent 兜底）；
  *  2. 同一位点只推一次（由 `tryOffer` 的唯一索引兜底，本函数不重复实现）；
  *  3. 用户拒绝后全局不再推（`shouldStopOffering`）。
  *
@@ -164,7 +168,12 @@ export function decideOffer(args: {
   intakeStage: string;
 }): OfferDecision {
   if (args.crisisTurn) {
-    return { scenes: [], blockedBy: '危机轮零推荐（spec D15，L1 红线）——此刻只给免费公益热线' };
+    return {
+      scenes: [],
+      blockedBy:
+        '危机轮不走产品推荐段（spec D15，L1 红线）——那段确定性推荐段与台账本轮不生成；' +
+        'NBDpsy 引导语另随危机资源卡确定性下发（crisis.ts），不占台账',
+    };
   }
   if (args.stopOffering) {
     return { scenes: [], blockedBy: '该用户已拒绝或已在咨询，全局停止主动推荐（spec D14 频控）' };
@@ -199,9 +208,11 @@ const SCENE_OPENING: Record<ReferralScene, string> = {
   情绪场景: '这段时间你说过好几次撑不住了，我记着。',
 };
 
+// 自家口吻：土八鼠与 NBDpsy 心理咨询工作室**是一家公司**，NBDpsy 是我们承接情绪疏导的一环，
+// 不是「另一个平台」或对外引流——所以用「我们自己」「一家公司」的说法，不用「这个平台属于…体系」。
 const REFERRAL_TAIL =
-  '这个平台属于 NBDpsy 体系，那边有专业的心理咨询。**要不要用、什么时候用都由你定**，' +
-  '你说一声我再细讲；不想聊就当我没说，我不会再提第二次。';
+  '其实我们是一家公司——土八鼠陪你走法律流程，情绪这块由我们自己的 NBDpsy 心理咨询工作室来接。' +
+  '**要不要用、什么时候用都由你定**，你说一声我再细讲；不想聊就当我没说，我不会再提第二次。';
 
 /** 拼推荐段。**永远作为独立段落追加在正文之后**（调用方保证），不插进正文中间。 */
 export function renderReferral(scene: ReferralScene): string {

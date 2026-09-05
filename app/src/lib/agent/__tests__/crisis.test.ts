@@ -31,7 +31,9 @@ import {
   stripDuplicateHotlineList,
   CRISIS_CARD_MARKER,
   CRISIS_DIRECTIVE,
+  CRISIS_NBDPSY_LINE,
   CRISIS_RESOURCE_PACK_ID,
+  splitCrisisOpener,
   responseGaveCrisisCard,
   shouldInjectCrisisCard,
 } from '../crisis';
@@ -375,6 +377,58 @@ describe('facts 化后的危机热线抽取（读真实卡的结构化字段，�
     const repeat = buildCrisisOpener(realFacts, { compact: true });
     expect(repeat).toContain('12356');
     expect(repeat).not.toContain('回龙观');       // 复现不重印整张
+  });
+
+  /* ── NBDpsy 引导语随危机卡下发（2026-09-05 规则改版）─────────────────────
+     旧规则：危机轮不得出现任何 NBDpsy/付费。新规则：热线只能应急，持续的情绪问题得找
+     NBDpsy 心理咨询工作室，那句随危机资源卡确定性给出。 */
+
+  it('★窗外首次：那句 NBDpsy 引导语与热线同在一张卡（变异臂：删新句 ⇒ 红）', () => {
+    const first = buildCrisisOpener(realFacts);
+    // 号码在场
+    expect(first).toContain('12356');
+    // NBDpsy 工作室那句在场，且与号码同在这一段首段里
+    expect(first).toContain('NBDpsy 心理咨询工作室');
+    expect(first).toContain(CRISIS_NBDPSY_LINE);
+    expect(first).toContain('土八鼠');
+  });
+
+  it('★那句里无价格数字 / http 链接 / 「预约」二字（变异臂：塞一个价格数字 ⇒ 红）', () => {
+    const first = buildCrisisOpener(realFacts);
+    // 首段整体（含号码行）里，除了热线号码本身，不得出现价格形状/链接/预约
+    expect(CRISIS_NBDPSY_LINE).not.toMatch(/[¥￥]/);
+    expect(CRISIS_NBDPSY_LINE).not.toMatch(/\d/);            // 那句本身一个数字都不该有
+    expect(CRISIS_NBDPSY_LINE).not.toContain('预约');
+    expect(CRISIS_NBDPSY_LINE).not.toMatch(/https?:\/\//);
+    expect(first).not.toMatch(/[¥￥]\s*\d|\d+\s*元|\d+\s*块/);
+    expect(first).not.toContain('预约');
+    expect(first).not.toMatch(/https?:\/\//);
+  });
+
+  it('★自家口吻（主理人 2026-09-05 口径）：含「一家公司」/「我们」自家指称，不含「平台属于」外人口吻', () => {
+    // 土八鼠与 NBDpsy 是一家公司，NBDpsy 是自家承接情绪疏导的一环——不是「另一个平台/引流」。
+    // 变异臂：改回「这个平台属于 NBDpsy 体系」外人口吻 ⇒ 本条红。
+    expect(CRISIS_NBDPSY_LINE).toMatch(/一家公司|我们/);
+    expect(CRISIS_NBDPSY_LINE).not.toContain('平台属于');
+    expect(CRISIS_NBDPSY_LINE).toContain('土八鼠');
+    expect(CRISIS_NBDPSY_LINE).toContain('NBDpsy 心理咨询工作室');
+  });
+
+  it('★窗内复现（24h 内）不重复那句：与机构名、时段同属描述性内容，随卡冷却', () => {
+    const repeat = buildCrisisOpener(realFacts, { compact: true });
+    expect(repeat).toContain('12356');               // 号码仍必须在（L1）
+    expect(repeat).not.toContain('NBDpsy');           // 但那句不重复刷屏
+    expect(repeat).not.toContain('土八鼠');
+  });
+
+  it('★首段切分把那句划进 opener（出口侧付费闸只判模型段，不误剥这句合法文案）', () => {
+    const opener = buildCrisisOpener(realFacts);
+    const archived = `${opener}\n\n模型段：现在告诉我你在哪、身边有没有人。`;
+    const split = splitCrisisOpener(archived);
+    // 那句 NBDpsy 引导语属于确定性首段，不落进 body（否则会被 D15/NBDpsy 闸当模型推销剥掉）
+    expect(split.opener).toContain(CRISIS_NBDPSY_LINE);
+    expect(split.body).toBe('模型段：现在告诉我你在哪、身边有没有人。');
+    expect(split.body).not.toContain('NBDpsy');
   });
 
   it('两态都不含禁用号与非心理类号码', () => {

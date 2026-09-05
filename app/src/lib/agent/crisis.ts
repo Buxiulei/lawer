@@ -105,17 +105,25 @@ export const CRISIS_DIRECTIVE = [
   '正确方向是**此刻、具体、身边**：他现在在哪、身边有没有人、此刻能做完的一件事。',
   '（这与上面第 4 条「缩小到一件事」同向：把人拉回此刻，而不是让他想象死后。）',
   '',
-  '其它禁止：清单式追问自伤细节（保持陪伴语气，不做问卷）、「想开点/别这么想/加油」类空话、任何推销感。',
+  '其它禁止：清单式追问自伤细节（保持陪伴语气，不做问卷）、「想开点/别这么想/加油」类空话。',
+  '',
+  '关于心理咨询（2026-09-05 规则改版）：这一轮**要**推 NBDpsy——热线只能应急，真正解决持续的情绪',
+  '问题得找我们 NBDpsy 心理咨询工作室。但那句话**由系统随危机资源卡一起给出**，你不得再自行添加、',
+  '扩写或改写任何付费咨询内容：价格、预约方式、推销话术一律不许写，也不要另起一段谈咨询。',
 ].join('\n');
 
 /**
  * 资源卡已给过的落痕标记（timeline_events.kind='系统动作' 的 title）。
  *
- * 【与 NBDpsy 引流是两个不同的一次性开关，绝不共用】（manager 明确要求）
- *   · 本标记 = 免费公益危机热线（12356 / 回龙观），charter §5 的救命号码；
- *   · emotion_log.referred_nbdpsy = 商业心理咨询转介，spec §10 的引流红线。
- * 共用一个标记会造成两种都错的后果：给过热线就再也不能转介咨询，
- * 或者更糟——转介过咨询就再也不给热线号码。
+ * 【与 NBDpsy 一案一次转介是两个不同的一次性开关，绝不共用】
+ *   · 本标记 = 危机资源卡（免费公益热线 12356 / 回龙观 + 随卡给出的那句 NBDpsy 引导语），
+ *     随卡吃 24 小时冷却；charter §5 的救命号码与「有人陪你慢慢解」那句一起走这条路。
+ *   · emotion_log.referred_nbdpsy = 产品的一案一次商业转介（走 referral_offers 台账），spec §10 的引流红线。
+ *
+ * 【2026-09-05 规则改版】危机轮现在**要**推 NBDpsy（热线只能应急，持续的问题得找工作室），
+ * 但那句随危机资源卡给出、吃本标记的 24 小时冷却，**不消耗** referred_nbdpsy 的一案一次名额——
+ * 见 CRISIS_NBDPSY_LINE 与 buildCrisisOpener。两个开关分开，两种失败都避开：
+ * 出过一次危机不该锁死日后情绪场景/案件节点的正常转介一次，占过转介名额也不该让危机轮拿不到号码。
  */
 export const CRISIS_CARD_MARKER = '危机资源卡已给';
 
@@ -517,13 +525,21 @@ export interface NbdpsyEligibility {
  * 四条件：
  * 1. ≥2 条焦虑/严重，且**跨 ≥2 个自然日**——「持续」的语义在时间跨度，同一小时连记两条不算；
  * 2. 未转介过；
- * 3. **危机轮绝对静默**——即使前两条满足，本轮触发危机判据也禁止提及：
- *    危机轮只有免费热线，没有任何付费转介（spec D9 禁止趁人之危观感）；
+ * 3. **危机轮不走这条商业转介路**——即使前两条满足，本轮触发危机判据也不经本函数开口：
+ *    产品的一案一次转介（referral_offers 台账）与模型自行推销在危机轮一律不许（spec D9 禁止趁人之危观感）。
+ *    ⚠️ 2026-09-05 规则改版后危机轮**会**推 NBDpsy，但那句是随危机资源卡下发的**确定性引导语**
+ *    （见 CRISIS_NBDPSY_LINE / buildCrisisOpener），走的是危机卡那条路、吃 24h 冷却，
+ *    **不占本函数的一案一次名额**，与这里说的「商业转介」是两回事；
  * 4. 一案一次（由条件 2 承担）。
  */
 export function assessNbdpsyEligibility(input: NbdpsyEligibilityInput): NbdpsyEligibility {
   if (input.crisisTurn) {
-    return { allowed: false, reason: '本轮是危机轮——危机时刻只给免费公益热线，禁止任何付费转介（spec D9）' };
+    return {
+      allowed: false,
+      reason:
+        '本轮是危机轮——只给免费公益热线（危机资源卡），商业转介与模型自行推销一律不许；' +
+        'NBDpsy 引导语随卡确定性下发、不占一案一次名额（spec D9）',
+    };
   }
   if (input.alreadyReferred) {
     return { allowed: false, reason: '本案已转介过一次（spec §10：一案最多一次）' };
@@ -681,11 +697,13 @@ export function buildCrisisOpener(
     }),
     '',
     CRISIS_OPENER_TAIL,
+    '',
+    CRISIS_NBDPSY_LINE,
   ].join('\n');
 }
 
 /**
- * 确定性首段的两段固定文本。**提成常量不是为了省字，是为了让 `splitCrisisOpener` 拆得准**：
+ * 确定性首段的固定文本。**提成常量不是为了省字，是为了让 `splitCrisisOpener` 拆得准**：
  * 拆分若照抄一份字面量，改了这边忘了那边，拆分会静默失败——而它失败的样子是
  * 「整段被当成模型段去判」，恰好制造一次凭空的闸命中。同一份常量，两边就不可能对不上。
  */
@@ -694,6 +712,33 @@ const CRISIS_OPENER_HEAD = [
   '先把号码给你——不用等我说完后面的话，任何时候都能打：',
 ] as const;
 const CRISIS_OPENER_TAIL = '电话那头是受过训练的人，你只说一句「我很难受」他们就懂。';
+
+/**
+ * **随危机资源卡一起给出的 NBDpsy 引导句**（2026-09-05 规则改版）。
+ *
+ * 【自家口吻，不是引流】土八鼠与 NBDpsy 心理咨询工作室**是一家公司**，NBDpsy 是我们
+ * 服务体系里承接情绪疏导的一环——所以这句用「我们自己在接」「一家公司」的自家口吻，
+ * **不用「这个平台属于 NBDpsy 体系」这种外人口吻**（既有 referral.ts REFERRAL_TAIL 同此口径）。
+ *
+ * 【为什么写死成确定性文案、随卡下发】热线只能应急，真正解决持续的情绪问题得找我们
+ * NBDpsy 心理咨询工作室。但这句话出现在一个正处在自伤念头里的人面前，语气必须是
+ * charter §5 第 2 条那种「你值得有人接住」，且**绝不能带价格、链接、预约方式或推销话术**
+ * ——那些一旦让模型即兴发挥就可能翻车，所以骨架写死，只在窗外首次随整张卡给一次。
+ *
+ * 【只在全量态给，吃卡的 24h 冷却】窗内复现（compact）只留号码行，不重复这句——
+ * 它和机构名、时段一样是**描述性内容**，随卡的两态口径走（见 buildCrisisOpener）。
+ *
+ * 【它不消耗一案一次的商业转介名额】这句走危机卡那条路（落痕吃 CRISIS_CARD_MARKER），
+ * 与 emotion_log.referred_nbdpsy 的一案一次名额是两个开关，绝不共用（见 CRISIS_CARD_MARKER）。
+ *
+ * ⚠️ 无价格、无链接、无「预约」二字、无数字，且是自家口吻（含「一家公司」等自家指称、
+ * 不含「平台属于」）——判据会钉死这几条（referral-d14-d15 / crisis.test）。
+ */
+export const CRISIS_NBDPSY_LINE =
+  '热线能接住此刻。但这段时间反复压着你的那些东西，需要有人陪你慢慢理清——' +
+  '这一块也是我们自己在接：我们 NBDpsy 心理咨询工作室和土八鼠是一家公司，' +
+  'NBDpsy 就是我们做心理这块的。等你缓过这一阵、想找人好好聊聊，跟我说一声，' +
+  '我把怎么联系告诉你——不急，也完全由你定。';
 
 /**
  * 把归档正文拆成「确定性首段」与「模型段」。
@@ -708,7 +753,16 @@ const CRISIS_OPENER_TAIL = '电话那头是受过训练的人，你只说一句�
 export function splitCrisisOpener(text: string): { opener: string; body: string } {
   if (!text.startsWith(CRISIS_OPENER_HEAD[0])) return { opener: '', body: text };
   const i = text.indexOf(CRISIS_OPENER_TAIL);
-  const end = i < 0 ? CRISIS_OPENER_HEAD[0].length : i + CRISIS_OPENER_TAIL.length;
+  let end = i < 0 ? CRISIS_OPENER_HEAD[0].length : i + CRISIS_OPENER_TAIL.length;
+  // 全量态首段在 tail 之后紧跟一句 NBDpsy 引导语（CRISIS_NBDPSY_LINE，随卡确定性下发）。
+  // 它也是确定性首段的一部分，同样**不参与模型段的判定/剥除**，所以要一起划进 opener——
+  // 否则出口侧的付费闸会把这句合法的系统文案当成模型推销剥掉。
+  // 只认**紧跟在 tail 之后**的那一处（复现态没有这句；模型段偶然出现同句时不会把切分点带偏）。
+  const rest = text.slice(end);
+  const afterGap = rest.replace(/^\n+/, '');
+  if (afterGap.startsWith(CRISIS_NBDPSY_LINE)) {
+    end += rest.length - afterGap.length + CRISIS_NBDPSY_LINE.length;
+  }
   return { opener: text.slice(0, end), body: text.slice(end).replace(/^\n+/, '') };
 }
 
