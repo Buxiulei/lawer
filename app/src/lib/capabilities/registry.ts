@@ -22,6 +22,7 @@ export type CapabilityFamily =
   | 'case'
   | 'timeline'
   | 'actions'
+  | 'claims'
   | 'deadlines'
   | 'evidence'
   | 'knowledge';
