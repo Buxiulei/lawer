@@ -5,8 +5,9 @@ WORKDIR /app
 
 # fonts-noto-cjk：《存证证明》PDF 的中文字形（缺了整片渲染成黑块）
 # curl：容器健康检查
+# ffmpeg：/video 抽音轨与关键帧（缺了该端点恒 503）
 RUN apt-get update \
- && apt-get install -y --no-install-recommends fonts-noto-cjk curl \
+ && apt-get install -y --no-install-recommends fonts-noto-cjk curl ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./

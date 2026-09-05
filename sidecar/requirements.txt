@@ -17,6 +17,9 @@ asn1crypto>=1.5.1
 # 《存证证明》PDF 渲染（中文字体）
 reportlab>=4.0
 
+# /video 抽音轨与关键帧只用系统 ffmpeg/ffprobe（subprocess 调），
+# 故意不装 av / moviepy / opencv：多一层 Python 绑定只是多一份要跟着 ffmpeg 版本走的编译依赖。
+
 # OCR / ASR（阿里云百炼）
 dashscope>=1.20.0
 

@@ -21,11 +21,17 @@ from gen_evidence_pdf import build_evidence_pdf
 from verify_evidence_pdf import verify_pdf
 from ocr import OcrError, ocr_image
 from asr import AsrError, transcribe_audio
+from video import (
+    DEFAULT_FRAME_INTERVAL_S,
+    DEFAULT_MAX_FRAMES,
+    VideoError,
+    extract_video,
+)
 
 app = FastAPI(title="lawer sidecar", version="0.1.0")
 
-# 依赖不可用（未配 key / 未装 SDK）→ 503；上游报错 → 502；入参问题 → 400
-_ERR_STATUS = {"config": 503, "input": 400, "upstream": 502}
+# 依赖不可用（未配 key / 未装 SDK）→ 503；上游报错 → 502；入参问题 → 400；超上限 → 413
+_ERR_STATUS = {"config": 503, "input": 400, "limit": 413, "upstream": 502}
 
 
 @app.get("/health")
@@ -184,6 +190,22 @@ def asr(
     try:
         return transcribe_audio(audio_bytes, file.filename or "audio.wav", speaker_count)
     except AsrError as e:
+        raise HTTPException(status_code=_ERR_STATUS.get(e.code, 502), detail=str(e))
+
+
+# ---------------- /video ----------------
+
+@app.post("/video")
+def video(
+    file: UploadFile = File(..., description="待提取的视频"),
+    max_frames: int = Form(DEFAULT_MAX_FRAMES, ge=1, le=120, description="关键帧张数上限"),
+    frame_interval_s: float = Form(DEFAULT_FRAME_INTERVAL_S, gt=0, le=3600,
+                                   description="抽帧间隔（秒）"),
+):
+    """视频抽音轨（16k 单声道 wav，供 /asr）与关键帧（JPEG，供 /ocr）。"""
+    try:
+        return extract_video(file.file, max_frames, frame_interval_s)
+    except VideoError as e:
         raise HTTPException(status_code=_ERR_STATUS.get(e.code, 502), detail=str(e))
 
 
