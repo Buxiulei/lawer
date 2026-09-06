@@ -134,7 +134,10 @@ export async function POST(req: Request) {
       // 【前置闸由注册表驱动，不由各工具自觉】precondition 是能力条目上的一个字段，
       // 判定本身在 lib/capabilities/invoke.ts，**REST 通用桥调的是同一份**——
       // 两条入口各写一句的形态是：一边拦住了、另一边放行，而两边都不报错。
-      const gate = checkPreconditions(getDb(), tool, identity);
+      // 【为什么 await】realname 闸走 realnameVerifiedOrLinked，本地没实名时会去问一次
+      // NBDpsy（实名互认）——那一步是异步的。不 await 的形态是：gate 恒为一个 truthy 的
+      // Promise，于是每一条带 realname 前置的工具都被这条 403 拦死，而没有任何一处报错。
+      const gate = await checkPreconditions(getDb(), tool, identity);
       if (gate) {
         return json(rpcResult(id, toolErrorResult({ ...gate })));
       }

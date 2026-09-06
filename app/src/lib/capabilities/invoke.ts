@@ -14,7 +14,7 @@
 // ─────────────────────────────────────────────────────
 import type { Database } from 'better-sqlite3';
 
-import { isRealnameVerified } from '@/lib/auth/guard';
+import { realnameVerifiedOrLinked } from '@/lib/auth/guard';
 import { hasScope, type Identity } from '@/lib/auth/identity';
 
 import { ERROR_CODES } from './error-codes';
@@ -76,13 +76,23 @@ export function statusForFailure(failure: { status?: unknown; errorCode: string 
  * （报价 → 确认）算得出来。在这里拦只能拦「余额 ≤ 0」，既漏掉余额不足以支付本次的情形，
  * 又会把只看价、不扣费的调用一并挡掉。所以扣费类能力的余额判定留在 run 内部，
  * 失败时回 GONGDAO_EXHAUSTED，由 statusForFailure 映到 402。
+ *
+ * 【realname 闸为什么 async】实名判定走 lib/auth/guard.realnameVerifiedOrLinked 这**唯一
+ * 判定入口**：本地没实名时会去问一次 NBDpsy（实名互认，设计稿 §14），对方 approved 就采信
+ * 并落一条 provider=nbdpsy 的掩码快照，对方未接通/不可用则按未实名。这一步天然要发网络请求，
+ * 所以本函数是 async。证据 REST 那面（requireRealname）与这里调的是同一个判定——
+ * 各写一份的形态是：一个已在对面实名过的人，在证据 REST 侧放行、在 MCP/通用桥侧被 403，
+ * 而两边都不报错。判定只留这一份，两条入口自动同口径。
  */
-export function checkPreconditions(
+export async function checkPreconditions(
   db: Database,
   capability: Capability,
   identity: Identity,
-): CapabilityFailure | null {
-  if (capability.precondition.includes('realname') && !isRealnameVerified(db, identity.uid)) {
+): Promise<CapabilityFailure | null> {
+  if (
+    capability.precondition.includes('realname') &&
+    !(await realnameVerifiedOrLinked(db, identity.uid))
+  ) {
     return fail(
       403,
       'REALNAME_REQUIRED',
@@ -122,7 +132,7 @@ export async function invokeCapability(
   if (!hasScope(identity, capability.scope)) {
     return fail(403, 'FORBIDDEN_SCOPE', `当前凭据缺少 ${capability.scope} 权限`);
   }
-  const gate = checkPreconditions(db, capability, identity);
+  const gate = await checkPreconditions(db, capability, identity);
   if (gate) return gate;
 
   const outcome = await capability.run(db, identity, args);
