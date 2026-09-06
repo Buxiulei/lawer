@@ -63,6 +63,14 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'public', method: 'GET', path: '/api/v1/auth/google/callback', auth: 'none', description: 'Google 授权回调：校 state、换 token、归并或建号，302 回登录页' },
   { category: 'public', method: 'GET', path: '/api/v1/verify/{orderNo}', auth: 'none', description: '按存证订单号公开查询（刻意无鉴权：对方拿到订单号就该能核）' },
   { category: 'public', method: 'POST', path: '/api/v1/verify/{orderNo}/recheck', auth: 'none', description: '服务端实时复核：重算原件哈希 + 重新验签，按 IP 限流' },
+  // OAuth 2.1 授权服务器。四条全部无鉴权，凭据是 PKCE 与令牌本身；唯一由本人确认的一步
+  // 是同意页的 POST /api/oauth/authorize（在下面的「网页会话专用」里）。
+  { category: 'public', method: 'GET', path: '/api/oauth/metadata/authorization-server', auth: 'none', description: '授权服务器元数据；对外地址是 /.well-known/oauth-authorization-server（next.config 的 rewrite）' },
+  { category: 'public', method: 'GET', path: '/api/oauth/metadata/protected-resource', auth: 'none', description: '受保护资源元数据；对外地址是 /.well-known/oauth-protected-resource' },
+  { category: 'public', method: 'POST', path: '/api/oauth/register', auth: 'none', description: '动态客户端注册：登记客户端名与回调地址白名单，发一个 client_id（public client，无 secret）' },
+  { category: 'public', method: 'GET', path: '/api/oauth/authorize', auth: 'none', description: '校验一次授权请求并回「谁在申请、要什么权限」给同意页显示；不签发任何凭据' },
+  { category: 'public', method: 'POST', path: '/api/oauth/token', auth: 'none', description: '换令牌：authorization_code（校 PKCE、一次性）与 refresh_token（旋转）' },
+  { category: 'public', method: 'POST', path: '/api/oauth/revoke', auth: 'none', description: '交还令牌，吊销整条授权链；认不出的令牌同样回 200（不做令牌探测器）' },
 
   // ──────── agent 面（jwt 或 api key）────────
   { category: 'agent', method: 'POST', path: '/api/mcp', auth: 'jwt|api_key', description: 'MCP JSON-RPC 2.0 入口（Streamable HTTP），工具面见本清单 mcp.tools' },
@@ -102,6 +110,7 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'agent', method: 'GET', path: '/api/v1/company/dossiers/{id}', auth: 'jwt|api_key', scope: 'case:read', description: '一条公司档案的当前状态与计费实况' },
 
   // ──────── 网页会话专用（api key 不认）────────
+  { category: 'web', method: 'POST', path: '/api/oauth/authorize', auth: 'jwt', description: 'OAuth 同意页点「同意」：签发一次性授权码；只认网页登录态（不能用令牌换新授权）' },
   { category: 'web', method: 'GET', path: '/api/v1/keys', auth: 'jwt', description: '列出自己的 api key（永不回显明文或 hash）' },
   { category: 'web', method: 'POST', path: '/api/v1/keys', auth: 'jwt', description: '创建 api key，明文在本次响应里给出，同时以密文落库' },
   { category: 'web', method: 'GET', path: '/api/v1/keys/{id}/secret', auth: 'jwt', description: '取回这把 key 的明文（本能力上线前签发的旧密钥无密文，回 KEY_NOT_VIEWABLE）' },

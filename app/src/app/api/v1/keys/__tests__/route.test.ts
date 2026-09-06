@@ -395,6 +395,64 @@ describe('轮换', () => {
   });
 
   /*
+   * 【为什么必须挡】授权行没有给用户看的明文——真凭据是客户端手里的令牌。放它过去，
+   * 这一行就被写进一串 secret_enc：API key 卡照旧说「来自某客户端的授权，没有可复制的
+   * 明文」，而接入卡把那串新明文摆出来让人复制，两张卡对同一行说相反的话；更糟的是
+   * 客户端手里的令牌照旧能用——用户以为自己换掉了凭据，其实什么都没断。
+   */
+  test('【自述】授权换来的行不给轮换 → 409 KEY_FROM_OAUTH，出路是吊销或重新授权', async () => {
+    const { insertOauthApiKey } = await import('@/lib/db/api-keys');
+    const id = insertOauthApiKey(db, {
+      userId: userA,
+      name: '某助手',
+      keyHash: hashApiKey(generateApiKey()),
+      scopesJson: JSON.stringify(['case:read']),
+      clientName: '某助手',
+    });
+    const before = db
+      .prepare('SELECT key_hash, secret_enc, rotated_at, source FROM api_keys WHERE id = ?')
+      .get(id);
+
+    const res = await withId(rotateKey, id, signToken(userA), 'POST');
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error_code).toBe('KEY_FROM_OAUTH');
+    // 自述三段式，且出路说的是「吊销 / 重新授权」，不是「轮换」也不是「新建一把 key」
+    for (const part of ['缺什么', '为什么缺', '怎么办']) expect(body.message).toContain(part);
+    expect(body.message).toContain('吊销');
+    expect(body.message).toContain('重新授权');
+    // 响应里不许带明文
+    expect(body.key).toBeUndefined();
+    // 库里那一行纹丝不动：尤其 secret_enc 仍是 NULL（挡在写之前，不是写完再报错）——
+    // 一旦写进去，这一行就同时是「授权」又是「可复制明文的密钥」
+    expect(
+      db.prepare('SELECT key_hash, secret_enc, rotated_at, source FROM api_keys WHERE id = ?').get(id),
+    ).toEqual(before);
+    expect((before as { secret_enc: string | null }).secret_enc).toBeNull();
+  });
+
+  /*
+   * 变异臂：同一段代码路径，只把 source 从 'oauth' 换成 'self'（其余一模一样，
+   * 同样是 secret_enc 为 NULL 的不可查看行），轮换就该照常 200——
+   * 否则上面那条可能落在「secret_enc 为空的都挡」这类空集上，换个原因照样通过。
+   */
+  test('【变异臂】同样 secret_enc 为空的行，source=self 时照常轮换出新明文', async () => {
+    const { insertOauthApiKey } = await import('@/lib/db/api-keys');
+    const id = insertOauthApiKey(db, {
+      userId: userA,
+      name: '存量旧密钥',
+      keyHash: hashApiKey(generateApiKey()),
+      scopesJson: JSON.stringify(['case:read']),
+      clientName: '存量旧密钥',
+    });
+    db.prepare("UPDATE api_keys SET source = 'self' WHERE id = ?").run(id);
+
+    const res = await withId(rotateKey, id, signToken(userA), 'POST');
+    expect(res.status).toBe(200);
+    expect((await res.json()).key).toBeTruthy();
+  });
+
+  /*
    * 【查看仍然给看】吊销挡的是「轮换」这一个动作，不是「看一眼当年配进去的是哪一把」。
    * 一并钉住，免得下一个人顺手把 enabled 检查搬进 _secret 的公共段，
    * 于是 GET /secret 也跟着 409——那条路径的注释里写着它故意让看。

@@ -30,6 +30,8 @@ export interface KeyBrief {
   last_used_at: string | null;
   /** 这把能不能取回明文。存量旧密钥（签发时还没留密文）恒 false */
   viewable: boolean;
+  /** 'self' = 用户自己建的；'oauth' = 某客户端走授权流换来的（见下方挑选规则） */
+  source: string;
 }
 
 /** 有 key 时的三种去向，页面按 kind 分支，不靠 `key ? … : …` 猜 */
@@ -64,9 +66,17 @@ export interface AgentKeySecret {
   revoked: (id: number) => void;
 }
 
-/** 启用中的里面挑一把：用过的优先，都没用过就取最近创建的（列表已按 id DESC） */
+/**
+ * 启用中的、自己那些里面挑一把：用过的优先，都没用过就取最近创建的（列表已按 id DESC）。
+ *
+ * 【为什么必须排掉 source==='oauth'】这一屏问的是「你手上那把密钥的明文是什么」，
+ * 而授权行压根没有给用户看的明文（凭据在客户端手里）。不排掉的形态最坏：连接器一用过，
+ * 它那行 last_used_at 就是最新的，于是「用过的优先」正好挑中它；它 viewable=false，
+ * 这一屏便按存量旧密钥说「换一把新的就能看见了」并递上轮换按钮——而同屏的 API key 卡
+ * 对同一行写着「来自某客户端的授权，没有可复制的明文」。两张卡对同一行说相反的话。
+ */
 export function pickManageable(keys: KeyBrief[]): KeyBrief | null {
-  const live = keys.filter((k) => k.enabled);
+  const live = keys.filter((k) => k.enabled && k.source !== 'oauth');
   if (live.length === 0) return null;
   const used = live
     .filter((k) => k.last_used_at)

@@ -32,6 +32,12 @@ export interface ApiKeyRow {
   secret_enc: string | null;
   /** 最近一次轮换时间。NULL = 从没轮换过（不是「很久以前轮换过」）。 */
   rotated_at: string | null;
+  /**
+   * 这把凭据是怎么来的：'self' = 用户自己在设置页建的；'oauth' = 某客户端走授权流换来的。
+   * 【不由 secret_enc 是否为空推断】那一列为空还有另一个意思（本列上线前的存量密钥），
+   * 两件事挤在同一个 NULL 上，页面就只能猜一个，而猜错的那半屏看起来完全正常。
+   */
+  source: string;
 }
 
 /** 列表行：不回显 key_hash，也不回显密文本身——只回「这把能不能查看明文」。 */
@@ -48,7 +54,7 @@ export interface ApiKeyListRow extends Omit<ApiKeyRow, 'key_hash' | 'secret_enc'
 export function listApiKeys(db: Database, userId: number): ApiKeyListRow[] {
   return db
     .prepare(
-      'SELECT id, user_id, name, scopes, last_used_at, enabled, created_at, client_name, rotated_at,' +
+      'SELECT id, user_id, name, scopes, last_used_at, enabled, created_at, client_name, rotated_at, source,' +
         ' (secret_enc IS NOT NULL) AS viewable' +
         ' FROM api_keys WHERE user_id = ? ORDER BY id DESC',
     )
@@ -71,6 +77,37 @@ export function insertApiKey(
       'INSERT INTO api_keys (user_id, name, key_hash, scopes, enabled, secret_enc) VALUES (?, ?, ?, ?, 1, ?)',
     )
     .run(params.userId, params.name, params.keyHash, params.scopesJson, params.secretEnc);
+  return Number(info.lastInsertRowid);
+}
+
+/**
+ * OAuth 授权换来的凭据行。与上面 insertApiKey 分开写，是因为两者的约束**恰好相反**：
+ *   · 自助签发：必须留 secret_enc，否则用户下次回来看到的是「旧密钥不可查看」。
+ *   · OAuth：**没有可给用户看的明文**——真正的凭据是 access token，由客户端保管、
+ *     还会每小时换一次。硬塞一份密文进来，等于在设置页给用户一个「查看密钥」按钮，
+ *     而他复制走的那串对任何客户端都没用。
+ * 所以这里 secret_enc 恒为 NULL，viewable 恒 false，页面照实说这是一次授权、不是一把钥匙。
+ *
+ * keyHash 传的是一串**永远没有原像会被出示**的随机值：这一行不参与 Bearer api key 的
+ * 等值查找（那条路要求请求里带得出明文），只作为 OAuth 令牌挂靠的权限与吊销载体。
+ * key_hash 有 NOT NULL UNIQUE 约束，不能留空。
+ */
+export function insertOauthApiKey(
+  db: Database,
+  params: {
+    userId: number;
+    name: string;
+    keyHash: string;
+    scopesJson: string;
+    clientName: string;
+  },
+): number {
+  const info = db
+    .prepare(
+      "INSERT INTO api_keys (user_id, name, key_hash, scopes, enabled, secret_enc, client_name, source)" +
+        " VALUES (?, ?, ?, ?, 1, NULL, ?, 'oauth')",
+    )
+    .run(params.userId, params.name, params.keyHash, params.scopesJson, params.clientName);
   return Number(info.lastInsertRowid);
 }
 

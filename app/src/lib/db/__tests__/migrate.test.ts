@@ -42,6 +42,8 @@ const ALL_TABLES = [
   'service_quotes', 'extraction_jobs',
   // 一次性上传地址
   'evidence_upload_tokens',
+  // OAuth 2.1 授权服务器
+  'oauth_clients', 'oauth_codes', 'oauth_tokens',
 ];
 
 function newDb(): Database.Database {
@@ -108,10 +110,10 @@ describe('runMigrations', () => {
 
   it('幂等：连跑两遍不抛错', () => {
     expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(53);
+    expect(ALL_TABLES.length).toBe(56);
   });
 
-  it('53 张表全部建成', () => {
+  it('56 张表全部建成', () => {
     const rows = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[];
