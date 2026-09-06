@@ -276,10 +276,20 @@ export const DOMAINS: Record<string, DomainPack> = {
 };
 
 /**
- * 缺省领域：没有别的信息时新案件落哪个 key，以及旧数据（没有 domain 字段的知识卡）
- * 算作哪个领域。取注册表里**第一个**领域，不另写一份字面量。
+ * 缺省领域键：一条数据没说自己属于哪个领域时，按它算。
+ *
+ * 【为什么要有缺省，而不是要求处处显式声明】领域字段是**后加**的：库里既有的案件行、
+ * 既有的知识卡都没有它（cases.domain 由迁移按默认值补齐；知识卡的 domain 只在卡片
+ * 自己声明时才写进 index.json）。没有缺省就只能把"没声明"读成"不属于任何领域"，
+ * 而那会让全部既有内容在按领域过滤的那一刻整批消失——返回 200、一条卡都不给。
+ *
+ * 【取值同源】写死取 LABOR.key，与 lib/db/migrate.ts 给 cases.domain 的 DDL 默认值同值。
+ * 两处不一致的形态是：同一个存量案件按 A 包校验阶段、按 B 域检索知识，而两边都返回
+ * 200、都不报错。**不取 `Object.keys(DOMAINS)[0]`**：注册第二个包之后，那个写法把
+ * "缺省领域是哪个"绑在了对象字面量的书写顺序上——挪一下 counseling 的位置，
+ * 全部存量案件与存量知识卡的归属当场易主，而 TypeScript 与既有判据都看不见。
  */
-export const DEFAULT_DOMAIN = Object.keys(DOMAINS)[0];
+export const DEFAULT_DOMAIN: string = LABOR.key;
 
 /**
  * 取领域包。取不到回 undefined 而不是回落到某个包——回落的形态是：

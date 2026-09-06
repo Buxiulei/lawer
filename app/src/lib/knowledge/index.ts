@@ -66,6 +66,10 @@ export interface PackMeta {
    * 它们的 domain 就是缺省领域。加载时补齐（见 loadIndex），所以下游读到的恒有值——
    * 让下游各自 `?? '缺省'` 的形态是：某一处忘了补，那批卡就在按领域过滤时凭空消失，
    * 而检索照常返回 200 和一个更短的列表。
+   *
+   * 【为什么这个字段必须在类型上出现】它在 index.json 里已经是**检索的过滤依据**，
+   * 而类型上不存在的字段没有任何一处会去对齐：生成器写它、检索读它、类型不认识它，
+   * 于是"卡上删掉 domain 而不重跑生成器"这类两面分叉在编译期与类型面都无人看见。
    */
   domain: string;
   /** 规范化法条引用（如 劳动合同法§47）；仅 frontmatter 声明了 law_refs 的卡带此字段 */
@@ -86,6 +90,11 @@ export interface SearchOptions {
   region?: string;
   limit?: number;
   /**
+   * 只在这一个领域里检索（设计稿 §13「知识库按领域独立成包、**跨域检索默认关闭**」）。
+   * 不传就是缺省领域，**不是"全库"**——跨域是要显式要的，不是忘了传就发生的。
+   */
+  domain?: string;
+  /**
    * 判例的审理机构。匹配的是**结构化字段** `facts.case_facts.court`，给的是子串
    *（「朝阳」能匹到「北京市朝阳区人民法院」——用户不会记全称）。
    *
@@ -96,14 +105,6 @@ export interface SearchOptions {
    * 把没有审理机构的卡也放行，等于用一个过滤条件换回一批与该法院无关的卡。
    */
   court?: string;
-  /**
-   * 只要某个领域的卡。**缺省不过滤**（跨域检索），由调用方按案件领域显式传。
-   *
-   * 【为什么默认不滤】这一层是检索器，它不知道调用方手上有没有案件。
-   * 在这里默认滤成缺省领域的形态是：第二个领域的调用方明明传了 domain 之外的东西
-   * 也拿不到自己的卡，而它拿到的那几张看起来完全正常。
-   */
-  domain?: string;
 }
 
 const DEFAULT_LIMIT = 5;
@@ -365,8 +366,25 @@ function scoreOf(meta: PackMeta, query: string, queryBigrams: Set<string>): numb
   return score;
 }
 
+/**
+ * 这张卡属于哪个领域。卡上没声明 = 缺省领域（既有那批卡一张都没声明，见 PackMeta.domain）。
+ *
+ * 【为什么"没声明"不能读成"哪个域都算"】那等于给每个新领域包发一张跨域通行证：
+ * 第二个包一进库，它的卡就出现在第一个领域用户的检索结果里，而回包一切正常。
+ */
+export function packDomain(meta: Pick<PackMeta, 'domain'>): string {
+  return meta.domain ?? DEFAULT_DOMAIN;
+}
+
 function passesFilters(meta: PackMeta, opts: SearchOptions): boolean {
-  if (opts.domain && meta.domain !== opts.domain) return false;
+  // 【领域闸，默认关】跨域检索必须显式要（设计稿 §13）。
+  //
+  // 【它防的是什么——实测形态，不是推理】第二个领域包（咨询纠纷卡）进库后，
+  // 未过闸时：query「诉讼时效」第一名是民法典 188 条那张卡（诉讼时效 3 年），
+  // 而本域用户问时效要的是本域时效口径；query「投诉」「退费」「知情同意」的前 5 名
+  // 整屏都是另一个领域的卡。**既有条目一条没改**——改的是召回集合，
+  // 而召回集合的改动不会让任何一条既有判据变红。所以闸要写在过滤器里，不写在文档里。
+  if (packDomain(meta) !== (opts.domain ?? DEFAULT_DOMAIN)) return false;
   if (opts.type && meta.type !== opts.type) return false;
   if (opts.applies_to && !meta.applies_to.includes(opts.applies_to)) return false;
   if (opts.region && meta.region !== opts.region && meta.region !== REGION_NATIONWIDE) return false;
