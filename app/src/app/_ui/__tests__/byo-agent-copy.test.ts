@@ -172,6 +172,32 @@ const EXEMPT: { file: string; line: string; why: string }[] = [
     line: '这家公司被仲裁过几次、赔没赔、有没有关联主体——免费的那部分先看着。',
     why: '同上，DossierEntry 段内的副标题',
   },
+  // ─── 《接入说明》能力表里对方主体情报那四行（由 npm run gen:docs 生成，手改会被覆盖）───
+  // 与上面 DossierEntry 两条同一个理由：说的是**这几条工具本身收不收费**（探测免费、
+  // 报价不动钱、同一张报价不二次扣、加守望当下不扣），与「在你自己的 agent 上处理不收费」
+  // 是两笔账——它们在网页上按同样的口径，不因为换了个界面就开始收。
+  // 豁免键取表格行首那段（工具名），文案重生成也不会变；正文口径的正本在
+  // lib/domains/labor.ts 的 LABOR_CAPABILITY_COPY 里。
+  {
+    file: '../skill/接入说明.md',
+    line: '| `company_probe` |',
+    why: '免费前置探测：这条端点不动钱、不建档，网页与 agent 同一条实现（lib/company/probe）',
+  },
+  {
+    file: '../skill/接入说明.md',
+    line: '| `dossier_quote` |',
+    why: '报价绝不动钱，判据钉着「quote 前后余额与账本行数逐字相等」',
+  },
+  {
+    file: '../skill/接入说明.md',
+    line: '| `dossier_confirm` |',
+    why: '说的是「同一张报价重复确认只扣一次」，讲的是幂等不是免费',
+  },
+  {
+    file: '../skill/接入说明.md',
+    line: '| `company_watch_set` |',
+    why: '加守望这一次调用不扣钱（月费在月度巡检里按档收），这句正是为了不让人说成「已扣」',
+  },
 ];
 
 /** 那两条 SelfHostHint 豁免的附带条件：它们必须仍与自己的条件从句同段 */
