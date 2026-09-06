@@ -463,18 +463,32 @@ describe('draft_export 两步报价', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM file_download_tokens').get()).toEqual({ n: 0 });
   });
 
-  test('一张报价只导出一份：同一个 quote_id 再确认一次 409，且不多签一条下载地址', async () => {
-    const draftId = makeDraft(caseA);
-    const q = await call('draft_export', userA, { draft_id: draftId });
-    const first = await call('draft_export', userA, { draft_id: draftId, quote_id: q.quote_id });
-    expect(first.ok).toBe(true);
+  test(
+    '一张报价只导出一份：换一个 client_ref 拿同一张报价再确认 ⇒ 409，且不多渲染、不多落文件' +
+      '（变异：去掉 confirmed.deduped 那道 409 ⇒ 红）',
+    async () => {
+      const draftId = makeDraft(caseA);
+      const q = await call('draft_export', userA, { draft_id: draftId });
+      const first = await call('draft_export', userA, {
+        draft_id: draftId,
+        quote_id: q.quote_id,
+        client_ref: 'ref-1',
+      });
+      expect(first.ok).toBe(true);
 
-    const second = await call('draft_export', userA, { draft_id: draftId, quote_id: q.quote_id });
-    expect(second.ok).toBe(false);
-    expect(second.errorCode).toBe('QUOTE_ALREADY_USED');
-    // 放行的形态是：付一次、之后拿同一张报价无限次导出，每次 charged=0
-    expect(db.prepare('SELECT COUNT(*) AS n FROM file_download_tokens').get()).toEqual({ n: 1 });
-  });
+      // 换个幂等键就能再导一份的话，一张报价就能导无数份——而且渲的是**当下**的正文，
+      // 未必还是当初付钱那一版。
+      const second = await call('draft_export', userA, {
+        draft_id: draftId,
+        quote_id: q.quote_id,
+        client_ref: 'ref-2',
+      });
+      expect(second.ok).toBe(false);
+      expect(second.errorCode).toBe('QUOTE_ALREADY_USED');
+      expect(db.prepare('SELECT COUNT(*) AS n FROM files').get()).toEqual({ n: 1 });
+      expect(db.prepare('SELECT COUNT(*) AS n FROM file_download_tokens').get()).toEqual({ n: 1 });
+    },
+  );
 
   test('别人的报价号：QUOTE_NOT_FOUND（与"不存在"同码），不渲染不扣费', async () => {
     const otherDraft = makeDraft(caseB, '乙的异议函');
@@ -556,6 +570,136 @@ describe('draft_export 两步报价', () => {
     // 报价那步是免费的，quote_id 不能必填
     expect(cap?.inputSchema.required).not.toContain('quote_id');
     expect(String(cap?.description)).toContain('quote_id');
+  });
+});
+
+// ---------- 5b. 确认那一步可重放（设计稿 §4.1）----------
+//
+// 【这组判据在防什么】确认成功、响应在回程丢了，客户端照说明书原样重试同一次调用。
+// 挡回去（"这张报价用过了，重新报价再确认"）在单价 0 时看不出损失；
+// 单价非零那天就是「付了钱、没拿到回包、再付一次」。所以**关键几条都在 withExportPrice(30) 里跑**：
+// 单价是 0 时余额判据在两种实现下都是绿的。
+describe('draft_export 确认可重放', () => {
+  test(
+    '不带 client_ref 原样重发同一次确认：回上次那一份、charged=0、deduped=true，不重渲不重扣' +
+      '（变异：去掉重放查表 ⇒ 红，回 409 QUOTE_ALREADY_USED）',
+    async () => {
+      await withExportPrice(30, async () => {
+        gongdaoGrant(userA, 100, '管理员调整', 'test-grant-replay', null, db);
+        const draftId = makeDraft(caseA, '关于解除决定的异议函');
+        const q = await call('draft_export', userA, { draft_id: draftId });
+        const first = await call('draft_export', userA, { draft_id: draftId, quote_id: q.quote_id });
+        expect(first.ok).toBe(true);
+        expect(first.charged).toBe(30);
+        expect(first.deduped).toBe(false);
+        expect(balanceOf(userA)).toBe(70);
+        const renders = vi.mocked(fetch).mock.calls.length;
+
+        const again = await call('draft_export', userA, { draft_id: draftId, quote_id: q.quote_id });
+        expect(again.ok).toBe(true);
+        expect(again.stage).toBe('done');
+        expect(again.deduped).toBe(true);
+        // 一分不再扣：这一条就是缺陷的正面
+        expect(again.charged).toBe(0);
+        expect(again.paid_by).toBeNull();
+        expect(balanceOf(userA)).toBe(70);
+        expect(
+          db.prepare("SELECT COUNT(*) AS n FROM gongdao_ledger WHERE type='消耗'").get(),
+        ).toEqual({ n: 1 });
+        // 不重渲：sidecar 一次都没再被调用，库里还是那一份文件
+        expect(vi.mocked(fetch).mock.calls.length).toBe(renders);
+        expect(again.sha256).toBe(first.sha256);
+        expect(db.prepare('SELECT COUNT(*) AS n FROM files').get()).toEqual({ n: 1 });
+        // 台账里始终只有那一行
+        expect(
+          db.prepare("SELECT COUNT(*) AS n FROM agent_writes WHERE tool='draft_export'").get(),
+        ).toEqual({ n: 1 });
+      });
+    },
+  );
+
+  test('重放重签一条新地址（原地址是一次性的，回它等于回一条打不开的链接），取回的是同一份字节', async () => {
+    const draftId = makeDraft(caseA);
+    const q = await call('draft_export', userA, { draft_id: draftId });
+    const first = await call('draft_export', userA, { draft_id: draftId, quote_id: q.quote_id });
+    const firstToken = (first.download_url as string).split('/').pop() as string;
+    expect((await getDownload(firstToken)).status).toBe(200); // 用掉它
+
+    const again = await call('draft_export', userA, { draft_id: draftId, quote_id: q.quote_id });
+    expect(again.deduped).toBe(true);
+    expect(again.download_url).not.toBe(first.download_url);
+    const res = await getDownload((again.download_url as string).split('/').pop() as string);
+    expect(res.status).toBe(200);
+    expect(Buffer.from(await res.arrayBuffer())).toEqual(PDF_BYTES);
+  });
+
+  test(
+    '带 client_ref 重放：同一个 ref 配一张**新**报价重试也不扣钱，新报价停在未确认' +
+      '（变异：重放分支改成走 confirmService ⇒ 红，新报价被真扣）',
+    async () => {
+      await withExportPrice(30, async () => {
+        gongdaoGrant(userA, 100, '管理员调整', 'test-grant-replay-2', null, db);
+        const draftId = makeDraft(caseA);
+        const q1 = await call('draft_export', userA, { draft_id: draftId });
+        const first = await call('draft_export', userA, {
+          draft_id: draftId,
+          quote_id: q1.quote_id,
+          client_ref: 'op-export-1',
+        });
+        expect(first.ok).toBe(true);
+        expect(balanceOf(userA)).toBe(70);
+
+        // 客户端重试时按自己的重试策略重新报了一次价，但业务上还是同一次操作 —— ref 没变
+        const q2 = await call('draft_export', userA, { draft_id: draftId });
+        const again = await call('draft_export', userA, {
+          draft_id: draftId,
+          quote_id: q2.quote_id,
+          client_ref: 'op-export-1',
+        });
+        expect(again.ok).toBe(true);
+        expect(again.deduped).toBe(true);
+        expect(again.charged).toBe(0);
+        expect(again.sha256).toBe(first.sha256);
+        expect(balanceOf(userA)).toBe(70);
+        expect(
+          db.prepare('SELECT confirmed_at FROM service_quotes WHERE id=?').get(q2.quote_id),
+        ).toEqual({ confirmed_at: null });
+      });
+    },
+  );
+
+  test(
+    '确认成功要在 agent_writes 留一行审计（case_id / tool / target 指向那份 files）' +
+      '（变异：落文件不走 writeOnce ⇒ 红）',
+    async () => {
+      const draftId = makeDraft(caseA);
+      const r = await exportTwoStep(userA, { draft_id: draftId, client_ref: 'op-audit-1' });
+      expect(r.ok).toBe(true);
+      const fileRow = db.prepare('SELECT id FROM files').get() as { id: number };
+      const row = db
+        .prepare(
+          "SELECT case_id, tool, client_ref, target_table, target_id FROM agent_writes WHERE tool='draft_export'",
+        )
+        .get() as Record<string, unknown>;
+      expect(row).toEqual({
+        case_id: caseA,
+        tool: 'draft_export',
+        client_ref: 'op-audit-1',
+        target_table: 'files',
+        target_id: fileRow.id,
+      });
+      // 报价这一步不写台账（它不是一次写入）
+      expect(db.prepare('SELECT COUNT(*) AS n FROM agent_writes').get()).toEqual({ n: 1 });
+    },
+  );
+
+  test('工具面上必须给得出 client_ref 这个入参，否则重放在 agent 那头根本表达不出来', () => {
+    const cap = getCapability('draft_export');
+    expect(cap?.kind).toBe('spend');
+    expect(cap?.inputSchema.properties).toHaveProperty('client_ref');
+    expect(cap?.inputSchema.required).not.toContain('client_ref');
+    // 写工具的幂等约定要在注册表里声明，文档与 skill 页照它生成
+    expect(cap?.idempotency?.clientRef).toBe(true);
   });
 });
 

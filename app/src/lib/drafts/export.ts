@@ -29,8 +29,10 @@ import {
   quoteService,
   type ServiceQuote,
 } from '@/lib/billing/service-quotes';
+import { writeOnce } from '@/lib/capabilities/shared';
 import * as cases from '@/lib/cases';
 import type { DomainFailure, Result } from '@/lib/cases';
+import { findFileById } from '@/lib/db/evidence';
 import { renderDraftPdf } from '@/lib/evidence/sidecar-client';
 import { storeBytes } from '@/lib/evidence/files';
 import { DOWNLOAD_TOKEN_TTL_MS, issueDownloadToken } from '@/lib/files/download-token';
@@ -98,14 +100,99 @@ export interface DraftExported {
   quote_id: number;
   amount: number;
   charged: number;
-  paid_by: string;
+  /** 本次没有发生扣费（重放）时是 null——写一个付款方式上去等于把上次那笔说成又付了一次 */
+  paid_by: string | null;
+  /** true = 这次是重放：同一个 client_ref（不给时同一张报价）此前已经导出过，回的是那一份 */
+  deduped: boolean;
   note: string;
+}
+
+/**
+ * 这次导出的幂等键：调用方给了 client_ref 就用它，没给就拿报价号当自然键
+ * （一张报价只导出一份）。与 doc_submit 的 refOf 同形（lib/docs/review.ts）。
+ */
+function refOf(clientRef: unknown, quoteId: number): string {
+  const trimmed = typeof clientRef === 'string' ? clientRef.trim() : '';
+  return trimmed || `quote:${quoteId}`;
+}
+
+/** 这个幂等键此前落过哪一份 files 行；没落过回 null。 */
+function existingExportFile(db: Database, caseId: number, clientRef: string): number | null {
+  const row = db
+    .prepare(
+      "SELECT target_id FROM agent_writes WHERE case_id=? AND tool='draft_export' AND client_ref=?",
+    )
+    .get(caseId, clientRef) as { target_id: number } | undefined;
+  return row ? row.target_id : null;
+}
+
+/**
+ * 已经有一份 files 行了 ⇒ 签一条新的一次性下载地址，拼出对外回包。
+ * 首次导出与重放走同一个出口：分成两段各拼一份的形态是，两边的字段哪天不一样，
+ * 而客户端只在其中一条路径上试过。
+ */
+function issueExported(
+  db: Database,
+  args: {
+    draftId: number;
+    title: string;
+    version: number;
+    userId: number;
+    fileId: number;
+    size: number;
+    sha256: string;
+    quoteId: number;
+    amount: number;
+    charged: number;
+    paidBy: string | null;
+    deduped: boolean;
+  },
+): { ok: true } & DraftExported {
+  const filename = safeFilename(args.title);
+  const issued = issueDownloadToken(db, {
+    fileId: args.fileId,
+    userId: args.userId,
+    filename,
+    mime: 'application/pdf',
+  });
+  return {
+    ok: true,
+    stage: 'done',
+    draft_id: args.draftId,
+    version: args.version,
+    format: 'pdf',
+    filename,
+    download_url: downloadUrlFor(issued.token),
+    expires_at: issued.expiresAt,
+    size: args.size,
+    sha256: args.sha256,
+    quote_id: args.quoteId,
+    amount: args.amount,
+    charged: args.charged,
+    paid_by: args.paidBy,
+    deduped: args.deduped,
+    note:
+      (args.deduped
+        ? '这次调用与之前某次用了同一个幂等键（client_ref，不给时是这张报价），' +
+          '服务端没有重新渲染、也没有再扣一次费，回的就是上次那一份 PDF，只是重签了一条新地址。'
+        : '') +
+      `下载地址只能取一次、${TTL_MINUTES} 分钟内有效，直接用浏览器打开即可（不必带凭据）。` +
+      '过期或已取过就重新报一次价、再确认一次，导出一份新的。' +
+      '导出的是正文原文，不含站内那段「发出前必读」提醒——那段是给你自己看的。',
+  };
 }
 
 /**
  * 导出一份文书。**两步**（设计稿 §4.2）：
  *   不带 quoteId ⇒ 只回一张报价单，一分不扣；
- *   带 quoteId  ⇒ 核对报价 → 渲染 → 按这张报价确认扣费 → 落文件、签下载地址。
+ *   带 quoteId  ⇒ 查幂等键 → 核对报价 → 渲染 → 按这张报价确认扣费 → 落文件、签下载地址。
+ *
+ * 【确认这一步必须可重放】设计稿 §4.1：写工具带 client_ref 重放，回既有对象 + deduped:true。
+ * 典型场景是「确认成功、响应在回程丢了」，客户端照说明书原样重试同一次调用。
+ * 挡回去（要求「重新报价再确认」）在今天单价 0 时看不出损失，
+ * 改价之后就是「付了钱、响应丢了、再付一次」。所以重放走的是幂等键查表（同 doc_submit）：
+ * 命中即拿上次那份 files 行重签一条下载地址，**不重渲、不重扣**。
+ * 重签而不是回原地址：下载地址本身是一次性的，把用过的那条回给用户等于回一条打不开的链接。
  *
  * 归属：借 cases.getDraft 的既有判定——别人的草稿在那里就是 404 DRAFT_NOT_FOUND，
  * 「不存在」与「不是你的」刻意不分（能分辨就成了枚举探针）。
@@ -114,7 +201,15 @@ export interface DraftExported {
  */
 export async function exportDraft(
   db: Database,
-  input: { userId: number; draftId: number; format?: unknown; quoteId?: number },
+  input: {
+    userId: number;
+    draftId: number;
+    format?: unknown;
+    quoteId?: number;
+    clientRef?: unknown;
+    /** 走 api key 的调用带它，网页登录态留空。只进台账，不参与去重。 */
+    keyId?: number | null;
+  },
 ): Promise<Result<DraftExportQuoted | DraftExported>> {
   const format = input.format === undefined || input.format === null ? 'pdf' : input.format;
   if (!(DRAFT_EXPORT_FORMATS as readonly unknown[]).includes(format)) {
@@ -201,6 +296,35 @@ export async function exportDraft(
     );
   }
 
+  // ── 重放：这个幂等键此前已经导出过 ⇒ 回那一份，不渲染、不扣费 ──
+  //
+  // 【为什么排在渲染与 confirmService 之前】排在后面就白渲一次（sidecar 一次真调用），
+  // 更要命的是 confirmService 已经跑过：调用方拿同一个 client_ref 配一张**新**报价重试时，
+  // 那张新报价会被真扣走，然后才发现"上次已经导出过了"。
+  // 【为什么不借 confirmService 取上次的金额与付款方式】同上：新报价那一路它会真扣。
+  // 重放这一路一分不扣，charged 记 0、paid_by 记 null，amount 按手上这张报价的面额如实报。
+  const clientRef = refOf(input.clientRef, input.quoteId);
+  const replayedFileId = existingExportFile(db, draft.case_id, clientRef);
+  if (replayedFileId !== null) {
+    const fileRow = findFileById(db, replayedFileId);
+    if (fileRow) {
+      return issueExported(db, {
+        draftId: draft.id,
+        title: draft.title,
+        version: draft.version,
+        userId: input.userId,
+        fileId: fileRow.id,
+        size: fileRow.size,
+        sha256: fileRow.sha256,
+        quoteId: input.quoteId,
+        amount: peeked.amount,
+        charged: 0,
+        paidBy: null,
+        deduped: true,
+      });
+    }
+  }
+
   // 渲染。失败到此为止：报价那一行留着（未确认 = 未扣费），到期自然作废。
   let pdf: Buffer;
   try {
@@ -225,48 +349,71 @@ export async function exportDraft(
   if (!confirmed.ok) return fail(confirmed.status, confirmed.errorCode, confirmed.message);
 
   /**
-   * 这张报价此前已经确认过。**一张报价只导出一份**：放行的形态是拿一张确认过的报价反复重调，
-   * 每次 charged=0 照样拿到一份新 PDF 与一条新下载地址——收费落地那天就是「付一次、永久免费导出」。
+   * 这张报价此前确认过，而上面那道幂等查表又没命中——只可能是**换了一个 client_ref
+   * 拿同一张报价再来一次**。这条路要挡：放行的形态是拿一张确认过的报价配无数个 client_ref
+   * 反复重调，每次 charged=0 照样渲一份新 PDF（渲的还是**当下**的正文，未必是当初付钱那一版）
+   * ——收费落地那天就是「付一次、永久免费导出」。
+   * 幂等键相同的那一路不会走到这里：它在渲染之前就已经拿上次那份回去了。
    * 这一步排在落文件与签地址之前：被挡住的调用不该在库里留下一份谁都取不走的文件。
    */
   if (confirmed.deduped) {
     return fail(
       409,
       'QUOTE_ALREADY_USED',
-      `报价 ${input.quoteId} 已经确认过了，不能再用来导出一份。` +
-        '为什么：一张报价对应一次导出；下载地址本身也是一次性的，要再取一份就要重新报价。' +
-        '怎么办：不带 quote_id 调一次 draft_export 重新取报价号，再带新的 quote_id 来确认。',
+      `报价 ${input.quoteId} 已经确认过了，而这次带的 client_ref 与当初那次不是同一个，` +
+        '不能再用来导出一份。' +
+        '为什么：一张报价对应一次导出；换个幂等键就能再导一份的话，一张报价就能导无数份。' +
+        '怎么办：只是重试上一次调用（比如没收到回包）就带**同一个** client_ref 原样重发，' +
+        '服务端会把上次那一份原样交回、一分不扣；' +
+        '真要再导一份就不带 quote_id 调一次 draft_export 重新取报价号。',
     );
   }
 
-  // 落 files 表（内容寻址 + 加密，与证据文件同一条管线），再签一次性限时下载地址。
-  const stored = storeBytes(db, pdf, 'application/pdf');
-  const filename = safeFilename(draft.title);
-  const issued = issueDownloadToken(db, {
-    fileId: stored.fileId,
-    userId: input.userId,
-    filename,
-    mime: 'application/pdf',
-  });
+  // 落 files 表（内容寻址 + 加密，与证据文件同一条管线）并记一行台账。
+  //
+  // 【为什么落文件要包在 writeOnce 里】台账那一行就是上面那道重放查表读的东西。
+  // 「先落文件、成了再补记一笔」在正常路径上看不出问题，出问题的是两步之间：
+  // 文件已经落库、记台账时进程被杀，于是这次导出在台账里不存在——用户带同一个 client_ref
+  // 重试，查不到那一行，就走到上面那条 409，被告知"重新报价"，而钱已经扣过了。
+  const recorded = writeOnce(
+    db,
+    { caseId: draft.case_id, tool: 'draft_export', clientRef, keyId: input.keyId ?? null },
+    () => {
+      // 只带出下面要用的三个字段：storeBytes 自己也有一个 deduped（按内容哈希去重，
+      // 与 client_ref 去重是两件事），原样摊平会和 writeOnce 的 deduped 撞名。
+      const s = storeBytes(db, pdf, 'application/pdf');
+      return { ok: true as const, fileId: s.fileId, size: s.size, sha256: s.sha256 };
+    },
+    (res) => ({ table: 'files', id: res.fileId }),
+  );
+  if (recorded.ok !== true) return recorded;
 
-  return {
-    ok: true,
-    stage: 'done',
-    draft_id: draft.id,
+  // deduped 分支只在并发抢同一个 client_ref 时出现（同进程串行，跨进程靠唯一索引）。
+  // 这一路本次是真扣了费的，charged 照实报，但交回的是先到那笔落下的文件。
+  const target = recorded.deduped
+    ? findFileById(db, recorded.id)
+    : { id: recorded.fileId, size: recorded.size, sha256: recorded.sha256 };
+  if (!target) {
+    return fail(
+      500,
+      'EXPORT_FILE_MISSING',
+      `导出已记账（报价 ${input.quoteId}），但台账指向的那一行文件读不回来。` +
+        '这是服务端的数据不一致，不是你的操作有问题。把这个报价号发给我们，本次费用会原路退回。',
+    );
+  }
+
+  return issueExported(db, {
+    draftId: draft.id,
+    title: draft.title,
     version: draft.version,
-    format: 'pdf',
-    filename,
-    download_url: downloadUrlFor(issued.token),
-    expires_at: issued.expiresAt,
-    size: stored.size,
-    sha256: stored.sha256,
-    quote_id: confirmed.quoteId,
+    userId: input.userId,
+    fileId: target.id,
+    size: target.size,
+    sha256: target.sha256,
+    quoteId: confirmed.quoteId,
     amount: confirmed.amount,
     charged: confirmed.charged,
-    paid_by: confirmed.paidBy,
-    note:
-      `下载地址只能取一次、${TTL_MINUTES} 分钟内有效，直接用浏览器打开即可（不必带凭据）。` +
-      '过期或已取过就重新报一次价、再确认一次，导出一份新的。' +
-      '导出的是正文原文，不含站内那段「发出前必读」提醒——那段是给你自己看的。',
-  };
+    paidBy: confirmed.paidBy,
+    deduped: recorded.deduped,
+  });
 }

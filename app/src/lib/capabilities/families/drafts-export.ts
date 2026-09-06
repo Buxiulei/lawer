@@ -117,7 +117,10 @@ export const draftExport: Capability = {
   domains: ['*'],
   exposeTo: ['mcp'],
   precondition: ['realname'],
-  idempotency: { naturalKey: '一张报价只导出一份（确认过的 quote_id 再用回 QUOTE_ALREADY_USED）' },
+  idempotency: {
+    clientRef: true,
+    naturalKey: '一张报价只导出一份（不传 client_ref 时按 quote_id 去重，重放回同一份、不重扣）',
+  },
   title: '导出文书 PDF',
   description:
     '把一份文书渲染成 PDF，回一条**一次性、限时**的下载地址（浏览器直接打开即可，不必带凭据）。' +
@@ -127,7 +130,9 @@ export const draftExport: Capability = {
     '导出的是正文原文，不含站内那段「发出前必读」提醒——那段是给起草人自己看的，' +
     '印在要递出去的件上等于把自己的顾虑一起交出去。' +
     '这一步的服务定额目前是 **0 公道值**，但报价这一步照走不误：' +
-    '价目哪天调整，用户看到的仍是确认前就报给他的那个数。需已完成实名认证。',
+    '价目哪天调整，用户看到的仍是确认前就报给他的那个数。' +
+    '**确认那一步可以原样重试**：没收到回包就带同一个 client_ref（不给时同一个 quote_id）' +
+    '再发一次，服务端回上次那一份 PDF、重签一条新地址，deduped=true 且一分不再扣。需已完成实名认证。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -141,6 +146,12 @@ export const draftExport: Capability = {
         type: 'integer',
         description: '上一步拿到的报价号。不给 = 只出价、不动账；给了 = 按这张报价确认并渲染导出',
       },
+      client_ref: {
+        type: 'string',
+        description:
+          '幂等键，重试用同一个值：确认那步没收到回包时原样重发，回上次那一份、不重扣。' +
+          '不给时按 quote_id 去重，同一张报价不会导出两份',
+      },
     },
     required: ['draft_id'],
   },
@@ -150,5 +161,7 @@ export const draftExport: Capability = {
       draftId: num(args.draft_id),
       format: args.format,
       quoteId: args.quote_id === undefined || args.quote_id === null ? undefined : num(args.quote_id),
+      clientRef: args.client_ref,
+      keyId: identity.keyId ?? null,
     }),
 };
