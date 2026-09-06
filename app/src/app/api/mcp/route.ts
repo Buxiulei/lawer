@@ -5,6 +5,7 @@
 // 路由照例是薄的：鉴权 → 解析 JSON-RPC → 分发到 lib/mcp/tools 的注册表 → 包壳返回。
 import { isRealnameVerified } from '@/lib/auth/guard';
 import { hasScope, resolveIdentity } from '@/lib/auth/identity';
+import { OAUTH_PATHS } from '@/lib/auth/oauth';
 import { recordClientName } from '@/lib/db/api-keys';
 import { getDb } from '@/lib/db/client';
 import { findTool, TOOLS } from '@/lib/mcp/tools';
@@ -21,6 +22,7 @@ import {
   toolTextResult,
   type JsonRpcRequest,
 } from '@/lib/mcp/jsonrpc';
+import { resolveBaseUrl } from '@/lib/mcp/setup';
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -31,12 +33,26 @@ function json(body: unknown, status = 200): Response {
 
 export async function POST(req: Request) {
   // 未鉴权一律 401，且带 WWW-Authenticate 让客户端知道该怎么补
+  //
+  // 【resource_metadata 那一段不是装饰】只认 OAuth 的客户端（网页版连接器）就是靠它
+  // 从这条 401 里找到授权服务器的（RFC 9728）。省掉它的形态是：客户端收到 401，
+  // 无从知道该去哪儿授权，界面上只显示一句"连接失败"，我们这边看不到任何异常。
   const identity = resolveIdentity(getDb(), req.headers);
   if (!identity) {
-    return new Response(JSON.stringify({ error: 'unauthorized', message: '需要有效的 api key' }), {
-      status: 401,
-      headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' },
-    });
+    const metadata = `${resolveBaseUrl(req)}${OAUTH_PATHS.protectedResourceMetadata}`;
+    return new Response(
+      JSON.stringify({
+        error: 'unauthorized',
+        message: '需要有效的 api key，或走 OAuth 授权拿到的 access token',
+      }),
+      {
+        status: 401,
+        headers: {
+          'content-type': 'application/json',
+          'www-authenticate': `Bearer resource_metadata="${metadata}"`,
+        },
+      },
+    );
   }
 
   const protocolCheck = checkProtocolHeader(req.headers);

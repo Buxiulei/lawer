@@ -11,6 +11,7 @@ import {
 } from '@/app/_mock/authpay';
 import { apiFetch } from '@/app/_ui/api';
 import { cn } from '@/app/_ui/cn';
+import { takeLoginRedirect } from '@/app/_ui/loginRedirect';
 import { beginSession } from '@/app/_ui/session';
 import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
@@ -18,8 +19,8 @@ import { Checkbox } from '@/components/shadcn/checkbox';
 import { ChannelStep } from './ChannelStep';
 import { clearLoginStep, loadLoginStep, NO_RESUME, type LoginResume } from './loginStep';
 
-/** 登录完成后落在这里：/welcome 会先问一句「你是新来的还是回来的」再决定说什么 */
-const AFTER_LOGIN = '/welcome';
+/** 登录完成后的默认落点：/welcome 会先问一句「你是新来的还是回来的」再决定说什么 */
+const DEFAULT_AFTER_LOGIN = '/welcome';
 
 /** 只在「新号补绑邮箱」这条路上显示的两格进度；单因素登录一步就完，没什么好指的 */
 const COMPLETION_STEPS = ['手机验证', '邮箱验证'];
@@ -220,6 +221,11 @@ function useEnterSite(): () => void {
   const router = useRouter();
   return () => {
     clearLoginStep();
+    // 被半路打断的人要回原处。目前唯一的来路是授权页（/oauth/authorize）——
+    // 它发现没登录态时把自己记下来再把人送来这儿，登完直接把授权走完。
+    // 丢回默认落点的形态是：用户登录成功了，却站在首页，不知道刚才那次「添加连接器」
+    // 到底成没成，只好回客户端从头再点一遍。
+    const AFTER_LOGIN = takeLoginRedirect() ?? DEFAULT_AFTER_LOGIN;
     router.push(AFTER_LOGIN);
   };
 }
