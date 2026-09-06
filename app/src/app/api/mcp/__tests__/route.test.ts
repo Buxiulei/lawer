@@ -274,6 +274,9 @@ describe('tools/list', () => {
       'attest_verify',
       'case_report_get',
       'case_report_update',
+      // 转介，同样**追加在末尾**
+      'referral_create',
+      'referral_list',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();

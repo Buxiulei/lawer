@@ -16,7 +16,7 @@ export interface ConsentItem {
 
 export const REFERRAL_CONSENT_ITEMS: readonly ConsentItem[] = [
   { field: 'identity', label: '你的姓名与手机号，以及你在本站是否已完成实名（含实名是在哪一侧完成的）' },
-  { field: 'emotion_summary', label: '一段不超过 200 字的情绪状态摘要，由近 30 天的情绪记录与最近的对话生成' },
+  { field: 'emotion_summary', label: '一段不超过 200 字的情绪状态摘要，由近 30 天的情绪记录与最近的对话生成（连同「其中被我们挡掉了几个词」这个数字）' },
   { field: 'referral_reason', label: '你为什么想找人聊聊，一句话（我们会先把其中的公司名与事件细节滤掉）' },
   { field: 'needs', label: '你勾选或写下的需求（例如情绪疏导、睡眠、焦虑、决策支持）' },
   { field: 'stage_sentence', label: '你的事情办到哪一步了，一句话（不含任何细节）' },

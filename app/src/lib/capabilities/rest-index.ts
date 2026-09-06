@@ -68,6 +68,7 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'agent', method: 'POST', path: '/api/mcp', auth: 'jwt|api_key', description: 'MCP JSON-RPC 2.0 入口（Streamable HTTP），工具面见本清单 mcp.tools' },
   { category: 'agent', method: 'GET', path: '/api/v1/agent-setup', auth: 'jwt|api_key', description: '一键接入信息：mcp_url / api_base、工具清单、接入说明全文（不校 scope）' },
   { category: 'agent', method: 'GET', path: '/api/v1/me', auth: 'jwt|api_key', scope: 'case:read', description: '本人身份摘要（手机号在服务端已掩码）' },
+  { category: 'agent', method: 'GET', path: '/api/v1/referrals', auth: 'jwt|api_key', scope: 'case:read', description: '本人名下的转介台账与状态，外加「转介会传什么、不会传什么」那份同意文案；不回数据包全文' },
   { category: 'agent', method: 'GET', path: '/api/v1/me/storage', auth: 'jwt|api_key', scope: 'case:read', description: '本人的存储用量；不接受任何指定用户的入参' },
   { category: 'agent', method: 'GET', path: '/api/v1/billing/ledger', auth: 'jwt|api_key', scope: 'case:read', description: '本人的公道值余额与流水（同时给 balance 与 ledger_sum）' },
   { category: 'agent', method: 'POST', path: '/api/v1/redeem', auth: 'jwt|api_key', scope: 'case:write', description: '兑换码入账（一码一兑，失败有锁）' },

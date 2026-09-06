@@ -44,6 +44,8 @@ const ALL_TABLES = [
   'evidence_upload_tokens',
   // 个案报告（长期记忆）
   'case_reports',
+  // 转介台账（设计稿 §14）
+  'referrals',
 ];
 
 function newDb(): Database.Database {
@@ -110,7 +112,7 @@ describe('runMigrations', () => {
 
   it('幂等：连跑两遍不抛错', () => {
     expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(54);
+    expect(ALL_TABLES.length).toBe(55);
   });
 
   it('54 张表全部建成', () => {

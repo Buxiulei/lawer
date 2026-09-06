@@ -43,8 +43,14 @@ export interface ReferralPacket {
   identity: ReferralIdentity;
   /** ≤200 字，已过中立化过滤 */
   emotion_summary: string;
-  /** 被过滤掉的词（只留在我们这份台账里，用于日后自证「我们挡过什么」） */
-  emotion_summary_redacted: string[];
+  /**
+   * 这次过滤挡下了几个词。**只记个数，不记是哪几个**。
+   *
+   * 【为什么不记词】本结构整份就是发出去的那份（payload_json 即请求体）。
+   * 把被挡的词列出来，等于在同一份数据里附上一张「我们本来要说但没说的东西」清单——
+   * 公司全名会原样躺在那里，而过滤器报告自己工作正常。2026-09-06 判据实测撞到过。
+   */
+  emotion_summary_redactions: number;
   /** 用户为什么想转介，一句话（同样过中立化过滤：这里最容易被写成一段案情） */
   referral_reason: string;
   needs: string[];
@@ -233,7 +239,7 @@ export async function buildPacket(
       realname_source: latest?.provider ?? null,
     },
     emotion_summary: clampSummary(filtered.text),
-    emotion_summary_redacted: [...new Set([...filtered.redacted, ...reason.redacted])],
+    emotion_summary_redactions: new Set([...filtered.redacted, ...reason.redacted]).size,
     referral_reason: clampSummary(reason.text),
     needs,
     stage_sentence: `他的事情目前处在「${input.stage}」这一步。`,
