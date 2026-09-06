@@ -250,6 +250,18 @@ export async function attestEvidence(
   const ev = store.findEvidenceDetail(db, input.evidenceId);
   if (!ev || ev.user_id !== input.userId) return NOT_FOUND();
 
+  // 【作废的材料一律不出证，且拦在预留订单号之前】拦晚一步就会留下一个空壳订单：
+  // attestations 里多一行 pending，用户在验证页上查得到、却永远等不到证明。
+  if (ev.voided_at !== null) {
+    return fail(
+      409,
+      'EVIDENCE_VOIDED',
+      `这件材料已经作废（理由：${ev.void_reason ?? '未记录'}），不能出证，本次没有产生任何订单。` +
+        '为什么：出证是把材料正式拿出去用的动作，而作废正是"这份不作数"的声明，两者互斥。' +
+        '怎么办：确实要用它就先撤销作废；只是想留个记录的话，材料本身仍在档案里。',
+    );
+  }
+
   let att = reserveAttestation(db, ev);
   if (att.status === ATT_CERTIFIED && att.cert_pdf_file_id) {
     return await certified(db, ev.id, att);

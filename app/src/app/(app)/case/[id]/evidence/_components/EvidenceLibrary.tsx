@@ -256,15 +256,23 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
     };
   }, [isDemo, open]);
 
+  /**
+   * 作废的材料从主列表里摘出去，收进下面那个折叠区。
+   * **不是从库里删**：文件还在、已出的证也还在，只是当事人声明这份不作数。
+   * 主列表若还混着它们，"共 N 份"这个数就把用户自己已经排除掉的材料算了进去。
+   */
+  const active = useMemo(() => items.filter((i) => i.voidedAt === null), [items]);
+  const voided = useMemo(() => items.filter((i) => i.voidedAt !== null), [items]);
+
   const groups = useMemo(() => {
     return EVIDENCE_CATEGORIES.map((category) => ({
       category,
-      list: items.filter((i) => i.category === category),
+      list: active.filter((i) => i.category === category),
     })).filter((g) => g.list.length > 0);
-  }, [items]);
+  }, [active]);
 
-  const frozen = items.filter((i) => i.status !== '已上传').length;
-  const issued = items.filter((i) => i.status === '已出证').length;
+  const frozen = active.filter((i) => i.status !== '已上传').length;
+  const issued = active.filter((i) => i.status === '已出证').length;
 
   const handlePick = (source: UploadSource, file: File) => {
     setPending({ source, file, name: file.name, sizeBytes: file.size });
@@ -498,7 +506,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
             </Button>
           )}
         </Alert>
-      ) : items.length === 0 ? (
+      ) : active.length === 0 && voided.length === 0 ? (
         <div className="flex flex-col gap-5">
           {/* 空态是指路的，糊掉就没人知道从哪下手，所以走换词不进糊层。
               低调下只摘掉「流水」「约谈」两个词，句子结构和指路照旧。
@@ -516,7 +524,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
       ) : (
         <>
           <p data-veil="" className="num fs-s text-ink-2">
-            共 {items.length} 份 · 已固化 {frozen} 份 · 已出证 {issued} 份
+            共 {active.length} 份 · 已固化 {frozen} 份 · 已出证 {issued} 份
           </p>
 
           {/* 批量条（批B，桌面）：只跟表格那副面孔一起出现，卡片面孔没有多选 */}
@@ -537,7 +545,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
             faces="table"
             caption={libWord}
             columns={COLUMNS}
-            rows={items}
+            rows={active}
             rowKey={(item) => item.id}
             rowLabel={(item) => item.name}
             selected={selected}
@@ -571,6 +579,33 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
           </div>
 
           <EvidenceChecklist collapsible />
+
+          {/* 已作废：默认折起来。**留在页面上而不是彻底隐藏**——用户日后要能查到
+              「那份东西去哪了」，以及当初写的作废理由；已出过证的还得看得见那张订单仍然有效。 */}
+          {voided.length > 0 && (
+            <details className="rounded-[10px] border border-line px-3.5 py-2.5">
+              <summary className="cursor-pointer fs-s text-ink-2">
+                已作废 <span className="num">{voided.length}</span> 份（不计入上面的份数，也不能再出证）
+              </summary>
+              <ul className="mt-2.5 flex flex-col gap-2">
+                {voided.map((item) => (
+                  <li key={item.id} className="fs-s text-ink-2">
+                    <button
+                      type="button"
+                      data-veil=""
+                      className="text-left font-medium text-ink line-through"
+                      onClick={() => setOpenId(item.id)}
+                    >
+                      {item.name}
+                    </button>
+                    <span data-veil="" className="ml-2">
+                      作废理由：{item.voidReason || '未记录'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </>
       )}
 

@@ -279,11 +279,14 @@ export function listDeadlines(
 
 export function listEvidence(
   db: Database,
-  input: { caseId: number; userId: number },
+  input: { caseId: number; userId: number; includeVoided?: boolean },
 ): Result<{ evidence: store.EvidenceRow[] }> {
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
-  return { ok: true, evidence: store.listEvidence(db, input.caseId) };
+  return {
+    ok: true,
+    evidence: store.listEvidence(db, input.caseId, input.includeVoided === true),
+  };
 }
 
 /**

@@ -45,14 +45,25 @@ export const evidenceList: Capability = {
   title: '列出证据',
   description:
     '列出案件下已登记的证据条目（名称、分类、证明目的、固化状态、提取状态，以及有简报时的一句话摘要）。' +
-    '要读全文或整份简报用 evidence_get / evidence_brief_get。',
+    '要读全文或整份简报用 evidence_get / evidence_brief_get。' +
+    '**已作废的条目默认不在清单里**（当事人声明"这份不作数"的那些）——要看得把 include_voided 传真。',
   inputSchema: {
     type: 'object',
-    properties: { ...caseIdProp },
+    properties: {
+      ...caseIdProp,
+      include_voided: {
+        type: 'boolean',
+        description: '是否把已作废的条目也列出来（默认不列）',
+      },
+    },
     required: ['case_id'],
   },
   run: (db, identity, args) => {
-    const result = cases.listEvidence(db, { caseId: num(args.case_id), userId: identity.uid });
+    const result = cases.listEvidence(db, {
+      caseId: num(args.case_id),
+      userId: identity.uid,
+      includeVoided: args.include_voided === true,
+    });
     if (!result.ok) return result;
     return {
       ok: true as const,

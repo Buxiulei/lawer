@@ -61,6 +61,8 @@ interface EvidenceOwnedRow {
   brief_json: string | null;
   brief_version: number;
   brief_updated_by: string | null;
+  void_reason: string | null;
+  voided_at: string | null;
   mime: string | null;
   size: number;
 }
@@ -80,7 +82,7 @@ function ownedEvidence(db: Database, evidenceId: number, userId: number): Eviden
       `SELECT e.id, e.case_id, e.user_id, e.file_id, e.name, e.category, e.prove_purpose,
               e.original_medium, e.status, e.created_at, e.extraction_status, e.extracted_text,
               e.extracted_meta_json, e.extracted_at, e.brief_json, e.brief_version,
-              e.brief_updated_by, f.mime, f.size
+              e.brief_updated_by, e.void_reason, e.voided_at, f.mime, f.size
          FROM evidence e JOIN files f ON f.id = e.file_id
         WHERE e.id = ?`,
     )
@@ -354,6 +356,9 @@ export interface EvidenceExtractionView {
   brief_version: number;
   brief_updated_by: string | null;
   brief_summary: string;
+  /** 非 null = 这件材料已作废（当事人声明不作数）；连同理由一起给，读到的人不必再查一次 */
+  voided_at: string | null;
+  void_reason: string | null;
 }
 
 /** 最近一条已失败任务及其报价的退款事实（读侧据此拼失败说明）。 */
@@ -431,6 +436,10 @@ function view(
     brief_version: row.brief_version,
     brief_updated_by: row.brief_updated_by,
     brief_summary: briefSummary(brief),
+    // 作废态原样带出：evidence_get 是按 id 单取，取到一件已作废的材料时，
+    // 调用方必须能一眼看出"这份当事人已经声明不作数"，而不是继续拿它去写文书。
+    voided_at: row.voided_at,
+    void_reason: row.void_reason,
   };
 }
 

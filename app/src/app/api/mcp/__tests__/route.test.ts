@@ -272,6 +272,8 @@ describe('tools/list', () => {
       'evidence_register',
       'evidence_attest',
       'attest_verify',
+      // 作废，同样**追加在末尾**
+      'evidence_void',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();

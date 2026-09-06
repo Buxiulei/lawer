@@ -22,7 +22,13 @@ import {
   evidenceGet,
   evidenceList,
 } from './evidence';
-import { attestVerify, evidenceAttest, evidenceRegister, evidenceUploadUrl } from './evidence-write';
+import {
+  attestVerify,
+  evidenceAttest,
+  evidenceRegister,
+  evidenceUploadUrl,
+  evidenceVoid,
+} from './evidence-write';
 import { knowledgeGet, knowledgeSearch } from './knowledge';
 import { timelineAdd, timelineList, timelineMilestone } from './timeline';
 
@@ -67,4 +73,5 @@ export const CAPABILITIES: Capability[] = [
   evidenceRegister,
   evidenceAttest,
   attestVerify,
+  evidenceVoid,
 ];

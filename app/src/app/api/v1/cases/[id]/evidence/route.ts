@@ -19,7 +19,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     );
   }
 
-  const result = cases.listEvidence(getDb(), { caseId, userId: guard.identity.uid });
+  // 已作废的默认不列（与 MCP 的 evidence_list 同一个开关、同一个默认值）：
+  // 网页证据库要展示那个折叠区时显式传 include_voided=1。
+  const includeVoided = new URL(req.url).searchParams.get('include_voided');
+  const result = cases.listEvidence(getDb(), {
+    caseId,
+    userId: guard.identity.uid,
+    includeVoided: includeVoided === '1' || includeVoided === 'true',
+  });
   if (!result.ok) return domainFailure(result);
 
   return NextResponse.json({ ok: true, evidence: result.evidence });

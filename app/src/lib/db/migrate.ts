@@ -1454,6 +1454,30 @@ export function runMigrations(db: Database.Database): void {
   addColumnIfMissing(db, 'evidence', 'brief_updated_by', 'TEXT');
   addColumnIfMissing(db, 'evidence', 'brief_updated_at', 'TEXT');
 
+  // brief_error：最近一次**自动生成简报失败**的原因原文（模型没连上 / 返回的不是 JSON /
+  // 不合 schema / 落库时被抢写）。NULL = 没失败过（从没生成过，或最近一次成功了）。
+  //
+  // 【为什么必须落一列，而不是只打日志】在此之前生成失败只有一行 console.warn：
+  // 容器日志滚掉之后，「这件材料没有简报」与「这件材料的简报生成失败过三次」在库里
+  // 长得一模一样——读侧只看得到 brief_version=0，于是没人知道该重试还是该等。
+  // 2026-09-06 生产实证：OCR 成功、简报没有、日志里一个字都没有。
+  //
+  // 【与 brief_version 的分工】brief_version>0 = 有简报（brief_error 是上一轮的旧账，
+  // 生成成功时一并清空）；brief_version=0 且 brief_error 非空 = 试过、失败了、原因在这。
+  addColumnIfMissing(db, 'evidence', 'brief_error', 'TEXT');
+
+  // 证据作废（援助律师 09-06 实测缺口④）。status 改写成「已作废」，理由与时刻单独两列。
+  //
+  // 【为什么理由必填、且单独一列】作废是**把一件材料从所有对外视图里摘出去**的动作：
+  // 事实卡不再列它、出证拒绝它、清单默认不回它。没有理由的作废在事后与「误删」无法分辨，
+  // 而这件材料多半仍在文件系统里、仍占着用户的存储配额。
+  //
+  // 【为什么不删行】已出证的条目背后有一张不可撤销的存证订单（时间戳已经打在链上/TSA 上）。
+  // 删行会让那个订单号指向一条不存在的材料，而订单本身仍能被对方核验——
+  // 那是比「作废」严重得多的一种不一致。所以作废只标记，不动 attestations 一个字节。
+  addColumnIfMissing(db, 'evidence', 'void_reason', 'TEXT');
+  addColumnIfMissing(db, 'evidence', 'voided_at', 'TEXT');
+
   // extraction_jobs.refunded_at：这条提取任务最终失败后**原路退款的时刻**。
   // NULL = 没退过（还没失败，或这单本来就没扣钱/没找到可退的报价）。
   //

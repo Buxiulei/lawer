@@ -26,6 +26,9 @@ export interface EvidenceDetailRow {
   original_medium: string | null;
   status: string;
   created_at: string;
+  /** 作废理由 / 作废时刻；voided_at 非空即已作废（见 lib/evidence/void） */
+  void_reason: string | null;
+  voided_at: string | null;
   sha256: string;
   size: number;
   mime: string | null;
