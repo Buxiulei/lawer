@@ -22,7 +22,7 @@ import type { Database } from 'better-sqlite3';
 import { parseBrief } from '@/lib/evidence/brief';
 import * as caseStore from '@/lib/db/cases';
 import * as agentStore from '@/lib/db/agent';
-import { getDomainPack, type ReportSectionSpec } from '@/lib/domains/registry';
+import { getDomainPack, type DomainPack, type ReportSectionSpec } from '@/lib/domains/registry';
 
 import {
   countStaleTally,
@@ -184,7 +184,12 @@ function trimmed<T>(rows: T[], render: (row: T) => string): string {
  * 一节的初稿正文。**每一句都来自库里的同值字段**，取不到就写「档案里还没有这一项」——
  * 报告是长期记忆，一个编出来的数字会被后面每一轮当成既有事实用。
  */
-function draftSection(source: ReportSectionSpec['source'], input: ReportInput, now: Date): string {
+function draftSection(
+  source: ReportSectionSpec['source'],
+  input: ReportInput,
+  now: Date,
+  pack: DomainPack,
+): string {
   const c = input.caseRow;
   switch (source) {
     case 'basics': {
@@ -192,6 +197,16 @@ function draftSection(source: ReportSectionSpec['source'], input: ReportInput, n
       return bullets([
         `抬头：${c.title}`,
         `当前阶段：${c.stage}`,
+        // 【当前轨】只有声明了并行轨的领域才有这一行（设计稿 §16）。没有并行轨的领域
+        // 印一行「当前轨：主线」是常驻噪音，而常驻噪音会被连同真信息一起跳过去。
+        // 与事实卡同一口径：轨**不覆盖**阶段，两行并排出现才说得清"主线没动"。
+        ...(pack.tracks.length > 0
+          ? [
+              c.track
+                ? `当前轨：${c.track}（与主线并行，主线阶段仍是「${c.stage}」）`
+                : `当前轨：主线（没有并行轨在走）；本领域的并行轨：${pack.tracks.join('、')}`,
+            ]
+          : []),
         `辖区：${c.district}`,
         `起算日：${c.employed_from ?? NONE}`,
         `月度金额基数：${wage}`,
@@ -239,6 +254,13 @@ function draftSection(source: ReportSectionSpec['source'], input: ReportInput, n
       return trimmed(open, (a) => `${a.title}${a.due_at ? `（${dateOnly(a.due_at)} 前）` : ''}`);
     }
     case 'risks': {
+      // 【领域的固定条目排在最前，且与"缺口"分开成两段】它们不是缺口——缺口补齐了就消失，
+      // 而这几条是这个行当里本来就没有定论的东西，只会由某位律师针对某个案子书面确认一次。
+      // 混进缺口列表的形态是：模型看见"风险 6 条"，于是逐条"解决"它们，
+      // 而解决其中四条的唯一方式就是给出一个结论——那正是这几条要拦的事。
+      const fixed = pack.lawyerReview
+        ? [`**${pack.lawyerReview.discipline}**`, ...pack.lawyerReview.items].map((x) => `- ${x}`).join('\n')
+        : '';
       const gaps: string[] = [];
       const missing = basicsMissing(c);
       if (missing.length) gaps.push(`基本盘缺 ${missing.length} 项：${missing.join('、')}`);
@@ -246,8 +268,10 @@ function draftSection(source: ReportSectionSpec['source'], input: ReportInput, n
       if (unextracted) gaps.push(`有 ${unextracted} 件材料没读过内容，里面写了什么还不知道`);
       if (!input.deadlines.some((d) => !d.resolved_at)) gaps.push('档案里没有生效中的期限，还没核过时限');
       if (!input.claims.length) gaps.push('还没有算过任何金额主张');
-      if (!gaps.length) return '（初稿阶段没发现明显缺口；风险要靠人判断，别把这一行当成"没有风险"）';
-      return bullets(gaps);
+      const gapText = gaps.length
+        ? bullets(gaps)
+        : '（初稿阶段没发现明显缺口；风险要靠人判断，别把这一行当成"没有风险"）';
+      return fixed ? `${fixed}\n\n${gapText}` : gapText;
     }
     case 'changelog':
       return bullets([`${dateOnly(now.toISOString())}　system：从档案生成初稿`]);
@@ -347,7 +371,8 @@ export function bootstrapReport(
 
   const input = loadInput(db, caseRow);
   const sections: ReportSections = {};
-  for (const s of spec.specs) sections[s.title] = draftSection(s.source, input, now);
+  const pack = getDomainPack(caseRow.domain)!; // specsFor 已经拦过取不到包的情况
+  for (const s of spec.specs) sections[s.title] = draftSection(s.source, input, now, pack);
 
   writeReport(db, caseId, {
     sections,

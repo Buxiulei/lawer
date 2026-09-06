@@ -108,6 +108,7 @@ const CASE_BASE: CaseRow = {
   title: '一个案子',
   stage: DOMAINS[DEFAULT_DOMAIN].stages[0],
   domain: DEFAULT_DOMAIN,
+  track: null,
   district: '朝阳',
   goal: null,
   bottom_line: null,

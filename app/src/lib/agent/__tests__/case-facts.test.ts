@@ -28,6 +28,7 @@ const CASE_BASE: CaseRow = {
   title: '李哲诉宜信体系违法解除',
   stage: '已收通知',
   domain: 'labor',
+  track: null,
   district: '朝阳',
   goal: null,
   bottom_line: null,

@@ -478,6 +478,11 @@ export function updateCase(
     monthlyWageFen?: unknown;
     position?: unknown;
     contractCount?: unknown;
+    /**
+     * 并行轨（设计稿 §16）。取值须在本案领域包的 tracks 里；传 `null` = **出轨回主线**。
+     * 「不传」与「传 null」是两件事：不传是这次不动它，传 null 是明确说处置结束了。
+     */
+    track?: unknown;
     /** 「入职不晚于今天」的今天基准，测试可注入 */
     now?: Date;
   },
@@ -493,7 +498,30 @@ export function updateCase(
     monthly_wage_fen?: number;
     position?: string;
     contract_count?: string;
+    track?: string | null;
   } = {};
+  if (input.track !== undefined) {
+    // null = 出轨回主线，任何领域都允许（哪怕这个领域根本没有并行轨——那时它本来就是 null）
+    if (input.track === null) {
+      fields.track = null;
+    } else {
+      const pack = packForCase(found);
+      if (isFailure(pack)) return pack;
+      if (typeof input.track !== 'string' || !pack.pack.tracks.includes(input.track)) {
+        // 【为什么"本领域没有并行轨"要单独说一句】回一句「track 只能是 」（后面空着）
+        // 的形态是：调用方以为自己填错了值，照着空清单再试一次，再收到同一句。
+        return fail(
+          400,
+          'INVALID_TRACK',
+          pack.pack.tracks.length === 0
+            ? `领域「${pack.pack.key}」没有并行轨，track 只能是 null（出轨/不在轨上）。` +
+              '并行轨是"主线不动、另一条线同时在走"的那种轨；本领域的主线是线性的，没有这种轨。'
+            : `track 只能是 ${pack.pack.tracks.join(' / ')}，或 null（出轨回主线）。`,
+        );
+      }
+      fields.track = input.track;
+    }
+  }
   if (input.stage !== undefined) {
     const stages = stagesForCase(found);
     if (isFailure(stages)) return stages;
@@ -542,7 +570,7 @@ export function updateCase(
     return fail(
       400,
       'NO_FIELDS',
-      '至少要改一个字段：stage / goal / bottom_line / employed_from / monthly_wage / position / contract_count',
+      '至少要改一个字段：stage / goal / bottom_line / employed_from / monthly_wage / position / contract_count / track',
     );
   }
 
