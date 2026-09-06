@@ -10,6 +10,14 @@
 // 逐文件点过名的豁免**：演示数据、缺省领域的手写首诊向导、那个行当的公司情报页与存证页。
 // 新文件默认在闸内——所以「不得新增领域字面量」这条不靠复审时有没有人注意到。
 //
+// 【只看代码与文案，不看注释】注释里出现「仲裁」多半是在讲一段往事（"此前这里读到
+// 「仲裁准备」和一个别人的到期日"）或一条排版实测（"「仲裁申请」折两行"）。
+// 把注释一起算进去的形态是：CaseStatusBar / CommandSearch / MilestoneTrack / motion.ts
+// 这些**真·共用组件**因为一句注释被写进白名单，从此往它们里面写多少领域文案闸都不响——
+// 白名单越长，这道闸挡住的东西越少。剥掉注释之后名单从 58 条缩到 30 条，
+// 剩下的每一条都是**真的在渲染或落库那一侧**带着领域内容的文件。
+// 剥法见 stripComments：`//` 前面是冒号的不剥（http:// 这种），免得把同一行后半截一起吃掉。
+//
 // 【三个方向都要红，少一个这份名单就会慢慢烂掉】
 //   · 闸内文件出现领域词        → 红（本来要挡的那件事）
 //   · 白名单里写了不存在的文件   → 红（文件改名/删了，名单还留着，看起来仍然完整）
@@ -34,45 +42,35 @@ const FORBIDDEN = ['劳动', '仲裁', '用人单位', '劳动者'];
  * 会打开的，字要搬进 lib/domains/<key>.ts，由 app/_ui/domain.ts 取。
  */
 const DOMAIN_SPECIFIC_FILES = [
+  // 站点门面：整站今天服务的就是这一个行当（标题、首屏、manifest、低调模式词表）
   'app/layout.tsx',
   'app/page.tsx',
-  'app/welcome/page.tsx',
-  'app/_ui/DiscreetCollapse.tsx',
-  'app/_ui/byoAgent.ts',
-  'app/_ui/motion.ts',
   'app/_ui/neutral.ts',
-  'app/woo/users/page.tsx',
-  'app/(app)/case/[id]/_components/CaseStatusBar.tsx',
-  'app/(app)/case/[id]/_components/CommandSearch.tsx',
+  'app/api/manifest/route.ts',
+  // 驾驶舱与它的数据层：期限排序、里程碑演示数据、公司档案入口的那两句
   'app/(app)/case/[id]/_components/Dashboard.tsx',
-  'app/(app)/case/[id]/_components/MilestoneTrack.tsx',
-  'app/(app)/case/[id]/_components/RichText.tsx',
   'app/(app)/case/[id]/_components/dashboardData.ts',
   'app/(app)/case/[id]/_components/milestones.ts',
+  // 证据 / 文书 / 公司情报：这几页整页是这个行当的产物（文书种类、辖区卡、背调口径）
   'app/(app)/case/[id]/evidence/_components/EvidenceDetailSheet.tsx',
-  'app/(app)/case/[id]/evidence/_components/UploadSheet.tsx',
-  'app/(app)/case/[id]/drafts/page.tsx',
   'app/(app)/case/[id]/drafts/_components/DraftsListView.tsx',
-  'app/(app)/case/[id]/drafts/_components/badges.tsx',
   'app/(app)/case/[id]/drafts/_components/draftsData.ts',
-  'app/(app)/case/[id]/_stream/caseHistory.ts',
   'app/(app)/case/[id]/docs/_components/DocActions.tsx',
   'app/(app)/case/[id]/docs/_components/UploadSheet.tsx',
-  'app/(app)/case/[id]/docs/_components/docsData.ts',
   'app/(app)/case/[id]/graph/_components/NodeSheet.tsx',
-  'app/(app)/case/[id]/dossier/page.tsx',
   'app/(app)/case/[id]/dossier/_components/DossierBody.tsx',
-  'app/(app)/case/[id]/dossier/_components/DossierLoader.tsx',
   'app/(app)/case/[id]/dossier/_components/StatsSection.tsx',
   'app/(app)/case/[id]/dossier/_components/VenueCards.tsx',
   'app/(app)/case/[id]/dossier/order/_components/OrderQuote.tsx',
+  // 缺省领域的**手写首诊向导**：它是这个行当的产品设计，不是字段元数据
+  //（没有手写稿的领域走 schema 排步，见 IntakeFlow.HANDWRITTEN_FLOWS）
   'app/(app)/intake/_components/StepBasics.tsx',
   'app/(app)/intake/_components/StepPreview.tsx',
   'app/(app)/intake/_components/validate.ts',
-  'app/(app)/account/_components/RechargePanel.tsx',
-  'app/(app)/settings/_components/AgentSetupCard.tsx',
+  // 接入说明与出证页：说明书正文与存证模板都是这个行当的话
   'app/(app)/settings/_components/agentSetup.ts',
-  'app/(app)/settings/agent/_components/ConnectGuide.tsx',
+  'app/verify/[no]/page.tsx',
+  // 演示数据：整套 demo 演的就是缺省领域那一套
   'app/_mock/authpay.ts',
   'app/_mock/company-dossier.ts',
   'app/_mock/company-graph.ts',
@@ -81,15 +79,6 @@ const DOMAIN_SPECIFIC_FILES = [
   'app/_mock/intake-evidence.ts',
   'app/_mock/types.ts',
   'app/_mock/workbench.ts',
-  'app/verify/[no]/_verification.ts',
-  'app/verify/[no]/page.tsx',
-  'app/verify/[no]/_components/RecheckPanel.tsx',
-  'app/verify/[no]/_components/VerifyResult.tsx',
-  'app/api/manifest/route.ts',
-  'app/api/v1/cases/[id]/messages/route.ts',
-  'app/api/v1/company/dossiers/quote/route.ts',
-  'app/api/v1/verify/[orderNo]/route.ts',
-  'app/api/v1/verify/[orderNo]/recheck/route.ts',
 ];
 
 /** 递归收集 .ts/.tsx，跳过 __tests__ */
@@ -109,8 +98,21 @@ function walk(dir: string, out: string[] = []): string[] {
 const SCANNED = [...walk(path.join(SRC_ROOT, 'app')), ...walk(path.join(SRC_ROOT, 'components'))];
 const rel = (file: string) => path.relative(SRC_ROOT, file);
 const allowed = new Set(DOMAIN_SPECIFIC_FILES);
+
+/**
+ * 剥掉块注释与行注释。**`//` 前面紧挨着冒号的不剥**（`http://`）——
+ * 一并剥掉的形态是：同一行冒号后面的内容被当成注释吃掉，那一行里真有领域文案也照样绿。
+ *
+ * 这不是一个完整的 TS 词法分析器：它读不懂字符串字面量里的注释起止符。那种写法今天仓里
+ * 没有；真出现时的后果是**把代码当注释剥掉 ⇒ 漏检**，所以下面第三条判据
+ *「白名单里的文件都还含着领域词」同时也是这段剥法的哨兵——剥法把谁剥空了，那条会点名。
+ */
+function stripComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/[^\n]*/g, '');
+}
+
 const wordsIn = (file: string) => {
-  const text = fs.readFileSync(file, 'utf-8');
+  const text = stripComments(fs.readFileSync(file, 'utf-8'));
   return FORBIDDEN.filter((w) => text.includes(w));
 };
 

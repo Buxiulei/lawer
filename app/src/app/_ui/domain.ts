@@ -16,7 +16,7 @@
 // 领域包只引 lib/cases/stages 与 lib/cases/milestones 这两个零 import 的词表文件
 // 与 lib/agent/crisis-opener 这个叶子模块——一个 lib/db 都不会被拖进浏览器包。
 
-import { domainPackOrDefault, journeyOfPack, type DomainPack } from '@/lib/domains/registry';
+import { domainPackOrDefault, journeyOfPack } from '@/lib/domains/registry';
 
 export { domainPackOrDefault as packOf };
 
@@ -41,9 +41,4 @@ export function journeyOf(domain: string | null | undefined): readonly string[] 
  */
 export function tracksOf(domain: string | null | undefined): readonly string[] {
   return domainPackOrDefault(domain).tracks;
-}
-
-/** 站内文案词典（建档标题、首诊落库那几条事件的标题…）。 */
-export function siteCopyOf(domain: string | null | undefined): DomainPack['copy']['site'] {
-  return domainPackOrDefault(domain).copy.site;
 }

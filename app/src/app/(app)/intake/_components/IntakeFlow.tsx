@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import type { SanbeiCap } from '@/lib/cap/sanbei';
-import { DEFAULT_DOMAIN, domainPackOrDefault, type DomainPack } from '@/lib/domains/registry';
+import { DEFAULT_DOMAIN, type DomainPack } from '@/lib/domains/registry';
+import { packOf } from '@/app/_ui/domain';
 import { useSignedIn } from '@/app/_ui/auth';
 import { scrollBehavior, useReducedMotion } from '@/app/_ui/motion';
 import { Button } from '@/components/shadcn/button';
@@ -200,7 +201,7 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
    * 这一份首诊按哪个领域问。**取的是名下那个案件的 domain**（首诊是往它里面提交的），
    * 查不到就退回缺省领域——查不到的常见形态是还没登录，那时问哪一套都还没有落点。
    */
-  const pack = domainPackOrDefault(caseProbe.domain || undefined);
+  const pack = packOf(caseProbe.domain || undefined);
   const steps = HANDWRITTEN_FLOWS[pack.key] ?? schemaSteps(pack);
   const [draft, setDraft] = useState<IntakeDraft>(EMPTY_DRAFT);
   const [restored, setRestored] = useState(false);
