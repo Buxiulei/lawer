@@ -247,6 +247,11 @@ describe('createReferralLead：拍平成契约 v1.3 §2 白名单体', () => {
     expect(res.ok).toBe(true);
     expect(sent).not.toBeNull();
     const body = sent as unknown as Record<string, unknown>;
+    // v1.4：十个标量键全为 JSON string（urgency 发整数会整包 400 invalid_body，2026-09-06 联调实测）
+    for (const k of ['channel','name','phone','realname_status','emotional_summary','case_stage','urgency','consent_at','source_case_hash','nonce']) {
+      expect(typeof (body as Record<string, unknown>)[k], k).toBe('string');
+    }
+    expect(Array.isArray((body as Record<string, unknown>).needs)).toBe(true);
     // 字段集恰好是白名单（含 postSigned 补的 nonce），一个不多一个不少
     expect(new Set(Object.keys(body))).toEqual(
       new Set([
