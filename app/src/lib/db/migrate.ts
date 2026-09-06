@@ -1252,6 +1252,34 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_evidence_upload_tokens_case ON evidence_upload_tokens (case_id, id DESC);
   `);
 
+  // 危机信号命中留痕（设计稿 §4.4 / §5 crisis_hits）。事实卡首行「近 72 小时有危机信号」只读它。
+  //
+  // 【为什么两条通路都必须落到这一张表】站内对话与用户自己的 agent 是同一个人的两条入口：
+  // 只记站内那条的形态是——用户白天在自己的助手里说了那句话、晚上回站内来，
+  // 事实卡首行干干净净，我们表现得像从没听见过。
+  //
+  // 【case_id 可空】crisis_check 允许无案调用（一个还没建档的人也可能正处在那一刻），
+  // 那时这一行仍要记下来——它的用处是审计与用量，不是只服务某个案子的首行标记。
+  // user_id 不可空：没有人的一条危机记录既没人能看见也没人能负责。
+  //
+  // 【存哈希不存原话】命中词与用户原话是这个库里最敏感的一段文本，而首行标记只需要
+  // 「有没有、几次」。terms_hash = sha256(命中词按首现序 join '|')，同一组词稳定同值，
+  // 可用来看"是不是同一句话反复触发"，但反推不回原话。
+  //
+  // 【at 由列默认给】同全仓时间口径（ADR-002：时间从 SQLite 取，不从 JS 落串）。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS crisis_hits (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id    INTEGER REFERENCES cases(id) ON DELETE CASCADE,   -- 可空：无案也能调 crisis_check
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      source     TEXT NOT NULL,                                    -- site | mcp
+      terms_hash TEXT NOT NULL,                                    -- sha256(命中词 join '|')，不存原话
+      at         TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_crisis_hits_case ON crisis_hits (case_id, at DESC);
+    CREATE INDEX IF NOT EXISTS idx_crisis_hits_user ON crisis_hits (user_id, at DESC);
+  `);
+
   // ───────────────── 存量迁移区 ─────────────────
   // 上面的建表段只对新库生效（IF NOT EXISTS 不改已存在的表），已上线的库补列一律走这里。
   // 只加列、不回填、不改语义：老行的新列取 NULL / DDL 默认值，读侧必须容得下这个缺省。
