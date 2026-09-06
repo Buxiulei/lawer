@@ -28,6 +28,7 @@ process.env.FILES_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'lawer-share-files
 import { generateApiKey, hashApiKey } from '@/lib/auth/api-key';
 import type { Identity } from '@/lib/auth/identity';
 import { getCapability } from '@/lib/capabilities';
+import { draftBody } from '@/lib/cases/drafts';
 import { gongdaoGrant } from '@/lib/billing';
 import { ENTITLEMENT_KIND, grantEntitlement, listUnconsumed } from '@/lib/billing/entitlements';
 import { quoteService } from '@/lib/billing/service-quotes';
@@ -267,6 +268,69 @@ describe('share_create', () => {
 });
 
 // ---------- 2. 到期与撤销 ----------
+
+// ---------- 发出去的两条出口都剥「发出前必读」尾注 ----------
+
+describe('「发出前必读」尾注不随文书外发', () => {
+  const CONSEQUENCE = '公司可能据此主张你已确认解除';
+  const BODY_TEXT = '致某某公司：本人对解除决定提出异议。';
+
+  /** 造一份库里带尾注的对外文书（同 draft_write 的落库口径 draftBody）。 */
+  function makeDraftWithFooter(caseId: number): number {
+    const draftId = makeDraft(caseId, '异议函', draftBody('异议函', BODY_TEXT, CONSEQUENCE));
+    // 前提：库里那份确实带着尾注，否则下面的判据是在验空气
+    const stored = db.prepare('SELECT content FROM drafts WHERE id=?').get(draftId) as {
+      content: string;
+    };
+    expect(stored.content).toContain('【发出前必读】');
+    return draftId;
+  }
+
+  test('分享/免登录读到的正文剥掉尾注（变异：share 不剥 ⇒ 红）', async () => {
+    const draftId = makeDraftWithFooter(caseA);
+    const created = await call('share_create', userA, { draft_id: draftId, expires_in: 24 });
+    const res = await getShare(created.token as string);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.share.body).toContain('本人对解除决定提出异议');
+    expect(body.share.body).not.toContain('【发出前必读】');
+    expect(body.share.body).not.toContain('发出后果');
+  });
+
+  test('导出 PDF 的正文剥掉尾注（变异：export 不剥 ⇒ 红）', async () => {
+    const draftId = makeDraftWithFooter(caseA);
+    let sentMarkdown: string | null = null;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (String(url).endsWith('/draft-pdf')) {
+          sentMarkdown = (JSON.parse(String(init?.body ?? '{}')) as { markdown?: string }).markdown ?? null;
+          return new Response(new Uint8Array(PDF_BYTES), { status: 200 });
+        }
+        throw new Error(`未预期的 sidecar 调用: ${url}`);
+      }),
+    );
+    const done = await exportTwoStep(userA, { draft_id: draftId });
+    expect(done.ok).toBe(true);
+    expect(sentMarkdown, '导出前必须已把正文发给 sidecar').toContain('本人对解除决定提出异议');
+    expect(sentMarkdown).not.toContain('【发出前必读】');
+  });
+
+  test('对内文书（无尾注）导出/分享时正文一字不动', async () => {
+    // 谈判话术不是对外文书，落库不带尾注；剥离函数必须原样返回
+    const draftId = Number(
+      db
+        .prepare(
+          `INSERT INTO drafts (case_id, kind, title, content, version, status, created_at, updated_at)
+           VALUES (?, '谈判话术', '话术', ?, 1, 'draft', '2026-08-19 00:00:00', '2026-08-19 00:00:00')`,
+        )
+        .run(caseA, '第一句这样说，第二句那样说。').lastInsertRowid,
+    );
+    const created = await call('share_create', userA, { draft_id: draftId, expires_in: 24 });
+    const body = await (await getShare(created.token as string)).json();
+    expect(body.share.body).toBe('第一句这样说，第二句那样说。');
+  });
+});
 
 describe('链接失效', () => {
   test('到期后 410 SHARE_EXPIRED，且正文一个字都不再回（变异：到期不拦 ⇒ 红）', async () => {

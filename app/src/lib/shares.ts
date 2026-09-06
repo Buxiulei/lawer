@@ -236,7 +236,8 @@ export function readShare(db: Database, token: string): ShareReadResult {
         kind: 'draft',
         title: draft.title,
         expires_at: row.expires_at,
-        body: draft.content ?? '',
+        // 免登录页交给对方看的是正文原文：剥掉「发出前必读」尾注（同 lib/drafts/export 的口径）
+        body: cases.stripConfirmationFooter(draft.content ?? ''),
         meta: null,
       },
     };

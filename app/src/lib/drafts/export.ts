@@ -224,7 +224,9 @@ export async function exportDraft(
   if (!found.ok) return found;
   const draft = found.draft;
 
-  const body = (draft.content ?? '').trim();
+  // 导出给对方的 PDF 只含正文原文：剥掉「发出前必读」尾注（那段是给起草人自己看的，见
+  // cases.stripConfirmationFooter）。空正文判定也用剥后的文本——只剩尾注不算有内容。
+  const body = cases.stripConfirmationFooter(draft.content ?? '').trim();
   if (!body) {
     return fail(
       422,

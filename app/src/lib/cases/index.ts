@@ -41,6 +41,8 @@ import { reconcileServedModel } from '@/lib/billing/served-model';
 // 而页面引 lib/cases 会把整个 lib/db 拖进浏览器包。此处原样再导出，引用方不必改。
 export { CASE_STAGES, type CaseStage } from './stages';
 export type { IntakeInput, IntakeResult } from './intake';
+// 发出去之前剥掉「发出前必读」尾注：导出（lib/drafts/export）与分享（lib/shares）都从这里取
+export { stripConfirmationFooter } from './drafts';
 
 /** 与 migrate.ts timeline_events.kind 注释逐字对齐 */
 export const TIMELINE_KINDS = ['公司动作', '我方动作', '系统动作', '期限'] as const;
