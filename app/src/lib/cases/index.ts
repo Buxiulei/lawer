@@ -498,10 +498,12 @@ export function submitIntake(
  * 加一条时间线事件。只追加，写错了补一条新的（spec §7），本模块不提供改/删。
  *
  * 【幂等】写接口无幂等、agent 重试即双写（生产 case2 实测）。两道去重都在这一个写入口上，
- * MCP、REST、站内 agent 三条路共用：
- *  · 带 `clientRef` —— 同案同 ref 已存在直接回既有行（deduped:true），一个业务操作对一个 ref；
- *  · 不带 ref —— 近重复守卫：同案 + 同一自然日 + 同 kind + 标题规范化相等 ⇒ 回既有行，不插。
- * 两者都命中不了才真插入。`deduped` 一并返回，调用方要如实告诉用户「这条已经记过了」。
+ * MCP、REST、站内 agent、粘贴回填四条路共用，预览（lib/paste forecast）与写入用同一把尺：
+ *  · 带 `clientRef` 且命中 —— 同案同 ref 已存在直接回既有行（deduped:true），一个业务操作对一个 ref；
+ *  · client_ref 未命中（或本就不带）—— 再过近重复守卫：同案 + 同一自然日 + 同 kind + 标题规范化
+ *    相等 ⇒ 回既有行，不插。跨批重贴同一件事时 client_ref 每批一换（paste-<batch>-<序号>），
+ *    只认 ref 会一批多落一条；补这道自然键兜底，预览按自然键预报、写入按自然键落库才对齐。
+ * 两道都命中不了才真插入。`deduped` 一并返回，调用方要如实告诉用户「这条已经记过了」。
  */
 export function addTimelineEvent(
   db: Database,
@@ -529,17 +531,19 @@ export function addTimelineEvent(
   if (!title) return fail(400, 'INVALID_TITLE', 'title 不能为空');
   const clientRef = trimmedOrNull(input.clientRef);
 
+  // ① 带 client_ref 且命中 ⇒ 直接回既有行（原有语义不变）。
   if (clientRef) {
     const existing = store.findTimelineByClientRef(db, input.caseId, clientRef);
     if (existing) return { ok: true, event: existing, deduped: true };
-  } else {
-    // 标题在 JS 里按 dedupTitleKey 比对；日期与 kind 交给 SQL 先筛出同日同类的候选。
-    const key = dedupTitleKey(title);
-    const dup = store
-      .listTimelineSameDayKind(db, input.caseId, happenedAt, input.kind)
-      .find((e) => dedupTitleKey(e.title) === key);
-    if (dup) return { ok: true, event: dup, deduped: true };
   }
+  // ② client_ref 未命中（或本就不带）都再过近重复守卫：跨批重贴同一件事时 client_ref 每批一换
+  // （paste-<batch>-<序号>），只认 ref 就会一批多落一条；预览用的正是这道自然键，写入也走它，
+  // 两处才是同一把尺。标题在 JS 里按 dedupTitleKey 比，日期与 kind 交给 SQL 先筛出同日同类的候选。
+  const key = dedupTitleKey(title);
+  const dup = store
+    .listTimelineSameDayKind(db, input.caseId, happenedAt, input.kind)
+    .find((e) => dedupTitleKey(e.title) === key);
+  if (dup) return { ok: true, event: dup, deduped: true };
 
   const id = store.insertTimelineEvent(db, {
     caseId: input.caseId,

@@ -1304,6 +1304,75 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_file_download_tokens_user ON file_download_tokens (user_id, id DESC);
   `);
 
+  // ───────────────── OAuth 2.1 授权服务器（设计稿 §15 路径 A）─────────────────
+  // 有些客户端（网页版连接器）**只认 OAuth，不接受裸 Bearer**：想接进来就得有授权码流。
+  // 三张表分别是「谁在申请」「这一次同意的凭证」「发出去的令牌」，不合并——
+  // 合成一张的形态是：一次同意与它派生出的整条令牌链共用一行，令牌旋转时就地改写那行，
+  // 于是「这条 refresh 是不是被重复用了」再也查不出来（旧值已被新值盖掉）。
+  //
+  // 【客户端是动态注册的，没有密钥】public client + PKCE 是 OAuth 2.1 对这类客户端的规定
+  // 形态：客户端跑在别人的服务器上，我们无从给它保管 secret，安全性全靠 code_challenge。
+  // 所以 oauth_clients 里没有 client_secret 列——不留一个永远为空的列去暗示还能有别的模式。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS oauth_clients (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id     TEXT NOT NULL UNIQUE,
+      client_name   TEXT NOT NULL,                        -- 注册时自报，同意页原样显示给用户看
+      redirect_uris TEXT NOT NULL,                        -- JSON 数组，回跳时**精确匹配**其中一项
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // 授权码。**存哈希不存明文**（与 api_keys / evidence_upload_tokens 同口径）。
+  //
+  // 【consumed_at 兼作一次性的抢占键】消费那句写成
+  //   UPDATE ... SET consumed_at=? WHERE code_hash=? AND consumed_at IS NULL
+  // 按 changes===1 判抢到。不靠「先查再写」：那中间隔着 PKCE 校验，足够第二个请求
+  // 把同一个 code 也查成「没用过」，于是一个 code 换出两条令牌链。
+  //
+  // 【code_challenge 与 redirect_uri 落在行上，不由换令牌时的入参说了算】
+  // 这两列是这一次授权当时钉死的事实；换令牌时拿入参去比对它们，比对不上即拒。
+  // 若改成信入参，PKCE 与白名单就都成了摆设——攻击者把两个入参一起换掉即可。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS oauth_codes (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      code_hash      TEXT NOT NULL UNIQUE,                -- sha256(code 明文)
+      client_id      TEXT NOT NULL,
+      user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      key_id         INTEGER NOT NULL REFERENCES api_keys(id),  -- 同意那一刻建好的凭据行
+      redirect_uri   TEXT NOT NULL,
+      code_challenge TEXT NOT NULL,                       -- 只收 S256，明文 verifier 不落库
+      scopes         TEXT NOT NULL,                       -- JSON 数组
+      expires_at     TEXT NOT NULL,
+      consumed_at    TEXT,                                -- 抢占键：非空 = 这个 code 已经换过令牌
+      created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // 令牌。access 与 refresh 同表一行一条，靠 kind 区分——两张表的形态是「吊销整条链」
+  // 要在两处各写一遍 UPDATE，而漏掉的那一半照常能用。
+  //
+  // 【code_id 就是「链」】一次授权码换出的第一对令牌、以及此后每一次旋转出的新令牌，
+  // code_id 全都指向同一条 code。「复用旧 refresh ⇒ 整链吊销」于是只是一句
+  // `UPDATE oauth_tokens SET revoked_at=? WHERE code_id=? AND revoked_at IS NULL`。
+  //
+  // 【revoked_at 同时表示「已旋转」】refresh 旋转时把旧的那条标 revoked_at。所以
+  // 「拿着一条 revoked_at 非空的 refresh 来换」= 复用，无需再加一列去记「转过没有」。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS oauth_tokens (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT NOT NULL UNIQUE,                    -- sha256(令牌明文)
+      kind       TEXT NOT NULL,                           -- access | refresh
+      code_id    INTEGER NOT NULL REFERENCES oauth_codes(id) ON DELETE CASCADE,
+      key_id     INTEGER NOT NULL REFERENCES api_keys(id),
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_oauth_tokens_chain ON oauth_tokens (code_id, kind);
+  `);
+
   // ───────────────── 存量迁移区 ─────────────────
   // 上面的建表段只对新库生效（IF NOT EXISTS 不改已存在的表），已上线的库补列一律走这里。
   // 只加列、不回填、不改语义：老行的新列取 NULL / DDL 默认值，读侧必须容得下这个缺省。
@@ -1599,6 +1668,15 @@ export function runMigrations(db: Database.Database): void {
   // 鉴权仍看本地 users.auth_status 与 realname_verifications。
   // 可空、不回填：绝大多数账号没有对面的关联，NULL 即语义正确。
   addColumnIfMissing(db, 'users', 'linked_nbdpsy_customer_code', 'TEXT');
+  // api_keys.source：这把凭据是**怎么来的**。'self' = 用户自己在设置页建的（默认，也是存量的语义），
+  // 'oauth' = 某个客户端走 OAuth 授权流换来的。
+  //
+  // 【为什么不靠 secret_enc 是否为空来推】那一列为空还有另一个意思——本列上线之前签发的
+  // 存量密钥（明文当年就没留）。两件事挤在同一个 NULL 上，页面就只能在
+  // 「旧密钥，看不到明文」和「来自某客户端的授权」之间猜一个，而猜错的那半屏看起来完全正常。
+  //
+  // 存量行取 DDL 默认值 'self'：它们确实都是用户自己建的，这不是编出来的默认值。
+  addColumnIfMissing(db, 'api_keys', 'source', "TEXT NOT NULL DEFAULT 'self'");
 
   // ───────────────── 费率种子 ─────────────────
   // C01 核定的模型费率必须**在建表之后立刻播下去**：缺行时 getRatesForModel 会回落

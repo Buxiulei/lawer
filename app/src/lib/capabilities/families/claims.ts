@@ -231,6 +231,7 @@ export const claimsList: Capability = {
   domains: ['*'],
   exposeTo: ['mcp'],
   precondition: [],
+  rest: { method: 'GET', path: '/api/v1/cases/{id}/claims' },
   title: '列出诉求清单',
   description:
     '列出案件下的全部诉求项与**合计金额**（合计由服务端算，不要自己把各项加起来——' +

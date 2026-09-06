@@ -50,6 +50,8 @@ const ALL_TABLES = [
   'crisis_hits',
   // 转介台账（设计稿 §14）
   'referrals',
+  // OAuth 2.1 授权服务器
+  'oauth_clients', 'oauth_codes', 'oauth_tokens',
 ];
 
 function newDb(): Database.Database {

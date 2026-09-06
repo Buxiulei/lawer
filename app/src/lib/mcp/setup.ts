@@ -45,6 +45,12 @@ export interface SetupUrls {
   api_base: string;
   manifest_url: string;
   /**
+   * OpenAPI 3.1 文档的公开地址。给只吃 OpenAPI、不吃 MCP 的客户端
+   *（自定义 GPT 的 Actions、各家「导入一个 API」的面板）一键导入用。
+   * 与其余几个一样是算出来的，本文件不写死任何域名。
+   */
+  openapi_url: string;
+  /**
    * skill 总纲的公开地址（免鉴权）。话术里让对方 agent **第一步**就 curl 它，
    * 由它再指路到《接入说明》与《陪跑指南》。
    *
@@ -61,6 +67,7 @@ export function setupUrls(req: Request): SetupUrls {
     mcp_url: `${base}/api/mcp`,
     api_base: `${base}/api/v1`,
     manifest_url: `${base}/api/manifest`,
+    openapi_url: `${base}/api/openapi.json`,
     skill_url: `${base}/skill/SKILL.md`,
   };
 }

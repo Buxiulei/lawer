@@ -19,7 +19,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { OAUTH_PATHS } from '../app/src/lib/auth/oauth';
 import { listCapabilities, type Capability, type CapabilityFamily } from '../app/src/lib/capabilities';
+import {
+  ACCESS_PATHS,
+  CLIENT_MATRIX,
+  type SnippetVars,
+} from '../app/src/lib/capabilities/client-matrix';
 import { ERROR_CODES, ERROR_GROUPS, type ErrorGroup } from '../app/src/lib/capabilities/error-codes';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -92,6 +98,49 @@ export function renderCapabilities(): string {
   return lines.join('\n').trimEnd();
 }
 
+/**
+ * 文档里填的那组地址：**一律是占位符**。
+ *
+ * 真地址由服务端按 env（LAWER_PUBLIC_URL）算出来，随环境不同。把某个环境算出来的串
+ * 冻进这份文档的形态是：预发上读到的说明书里写着生产的地址，而它看起来完全正常。
+ * 设置页那侧用同一批 snippet 函数，只是把这些占位符换成服务端真给的值。
+ */
+const DOC_VARS: SnippetVars = {
+  mcpUrl: '<mcp_url>',
+  apiBase: '<api_base>',
+  manifestUrl: '<manifest_url>',
+  openapiUrl: '<openapi_url>',
+  skillUrl: '<skill_url>',
+  apiKey: '<你的密钥>',
+};
+
+/** 这条路今天通不通，逐字写出来——写成「支持」的形态是用户照着做、连不上、以为是自己填错了 */
+const STATUS_LABELS = {
+  ready: '现在可用',
+  blocked: '待 OAuth 上线（步骤里给了替代路）',
+} as const;
+
+/**
+ * 客户端矩阵：一张表（谁走哪条路、今天通不通）+ 每个客户端的步骤与可复制片段。
+ * 与设置页那张选择器**同一份数据、同一批 snippet 函数**，不是同源抄写。
+ */
+export function renderClients(): string {
+  const lines: string[] = [];
+  lines.push('| 客户端 | 接入路径 | 现状 |');
+  lines.push('|---|---|---|');
+  for (const c of CLIENT_MATRIX) {
+    lines.push(`| ${cell(c.label)} | ${c.path}. ${ACCESS_PATHS[c.path]} | ${STATUS_LABELS[c.status]} |`);
+  }
+  lines.push('');
+  for (const c of CLIENT_MATRIX) {
+    lines.push(`### ${c.label}`, '');
+    lines.push(`路径 ${c.path}（${ACCESS_PATHS[c.path]}）·${STATUS_LABELS[c.status]}`, '');
+    for (const [i, step] of c.steps(DOC_VARS).entries()) lines.push(`${i + 1}. ${step}`);
+    lines.push('', `${c.snippetLabel}：`, '', '```', c.snippet(DOC_VARS), '```', '');
+  }
+  return lines.join('\n').trimEnd();
+}
+
 /** 错误码表：按组分节 */
 export function renderErrors(): string {
   const groups = [...new Set(ERROR_CODES.map((e) => e.group))] as ErrorGroup[];
@@ -109,6 +158,41 @@ export function renderErrors(): string {
 }
 
 /**
+ * OAuth 那一节。路径从 lib/auth/oauth 的 OAUTH_PATHS 现取，不手抄——
+ * 手抄的那份必然在某次改路径时忘了改，而说明书看起来完全正常，
+ * 只有照着它去填地址的用户接不上，且他无从判断是自己填错了还是文档旧了。
+ */
+export function renderOauth(): string {
+  return [
+    'ChatGPT 网页（Developer mode）与 Claude 网页/桌面的连接器**只认 OAuth**，不接受在配置里手填',
+    '`Authorization: Bearer`。这类客户端按下面这样接：',
+    '',
+    '1. 在客户端里选「添加连接器 / 添加 MCP 服务器」，地址填 `<mcp_url>`；',
+    '2. 鉴权方式选 **OAuth**（有的客户端会自己发现，不必手选）；',
+    '3. 客户端会跳到土八鼠的授权页。没登录的话先登录（手机号或邮箱验证码），登完自动跳回；',
+    '4. 授权页上写着是哪个客户端在申请、要哪些权限，点「同意并接入」即回到客户端，接入完成。',
+    '',
+    `客户端不需要预先申请任何 ID：它自己会去 \`${OAUTH_PATHS.register}\` 注册。`,
+    '要手工核对的话，这几个地址是公开的：',
+    '',
+    '| 用途 | 地址 |',
+    '|---|---|',
+    `| 授权服务器元数据 | \`${OAUTH_PATHS.authorizationServerMetadata}\` |`,
+    `| 受保护资源元数据 | \`${OAUTH_PATHS.protectedResourceMetadata}\` |`,
+    `| 授权页（用户看的那一屏） | \`${OAUTH_PATHS.authorize}\` |`,
+    `| 动态客户端注册 | \`${OAUTH_PATHS.register}\` |`,
+    `| 换取 / 续期令牌 | \`${OAUTH_PATHS.token}\` |`,
+    `| 交还令牌 | \`${OAUTH_PATHS.revoke}\` |`,
+    '',
+    '授权成功后，网页端「设置 → API key」里会多出一条记录，写着「来自 <客户端名> 的授权」。',
+    '它没有可复制的明文——凭据在客户端手里，每小时自动换一次。',
+    '**吊销那一行即断开该客户端的接入**，它手上的令牌当场失效。',
+    '',
+    '授权只影响你自己的档案；被授权的客户端与你自己的 api key 权限完全相同，别人的案件一样看不见。',
+  ].join('\n');
+}
+
+/**
  * 把 <!-- GEN:tag --> … <!-- /GEN:tag --> 之间换成 body。
  * 找不到标记就抛——**不静默追加到文末**：那样会生出第二份表，而两份都在文件里。
  */
@@ -123,9 +207,17 @@ export function applyBlock(text: string, tag: string, body: string): string {
   return `${text.slice(0, start + open.length)}\n\n${body}\n\n${text.slice(end)}`;
 }
 
-/** 接入说明：两段生成区换掉，其余逐字保留 */
+/** 接入说明：四段生成区换掉，其余逐字保留 */
 export function renderAccessDoc(current: string): string {
-  return applyBlock(applyBlock(current, 'capabilities', renderCapabilities()), 'errors', renderErrors());
+  return applyBlock(
+    applyBlock(
+      applyBlock(applyBlock(current, 'clients', renderClients()), 'oauth', renderOauth()),
+      'capabilities',
+      renderCapabilities(),
+    ),
+    'errors',
+    renderErrors(),
+  );
 }
 
 /**

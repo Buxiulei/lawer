@@ -54,6 +54,10 @@ interface ApiKeyRow {
   last_used_at: string | null;
   /** 这把能不能取回明文。存量旧密钥恒 false */
   viewable: boolean;
+  /** 'self' = 自己在这张卡上建的；'oauth' = 某客户端走授权流换来的 */
+  source: string;
+  /** OAuth 客户端注册时自报的名字；自助建的 key 走 MCP 握手时也会报 */
+  client_name: string | null;
 }
 
 /**
@@ -152,6 +156,9 @@ export function ApiKeysCard({ secret }: { secret: AgentKeySecret }) {
           last_used_at: null,
           // 刚签发的一定留了密文，否则 POST 会先 503（route.ts 先探再签）
           viewable: true,
+          // 这张卡建出来的永远是自助密钥；OAuth 那条路不经过这里
+          source: 'self',
+          client_name: null,
         },
         ...prev,
       ]);
@@ -257,11 +264,21 @@ export function ApiKeysCard({ secret }: { secret: AgentKeySecret }) {
                       ? `最近使用 ${formatDateTime(toIso(row.last_used_at))}`
                       : '还没被用过'}
                   </p>
-                  {row.enabled && !row.viewable && (
-                    /* 照实说。装作它也能取回，用户点进去只会撞上一条 409 */
+                  {/* OAuth 授权来的行同样没有明文可看，但原因完全不同：它压根就不是一把
+                      钥匙，而是一次授权，凭据在客户端手里、每小时自己换一次。跟"旧密钥"
+                      共用一句话的形态是——用户照着提示去轮换，而轮换对这一行毫无意义。 */}
+                  {row.source === 'oauth' ? (
                     <p className="mt-1 text-[13px] leading-5 text-ink-2">
-                      旧密钥，看不到明文——要看就轮换换一把新的。
+                      来自 {row.client_name ?? row.name} 的授权，没有可复制的明文；吊销即断开它的接入。
                     </p>
+                  ) : (
+                    row.enabled &&
+                    !row.viewable && (
+                      /* 照实说。装作它也能取回，用户点进去只会撞上一条 409 */
+                      <p className="mt-1 text-[13px] leading-5 text-ink-2">
+                        旧密钥，看不到明文——要看就轮换换一把新的。
+                      </p>
+                    )
                   )}
                 </div>
 

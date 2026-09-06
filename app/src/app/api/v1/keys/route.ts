@@ -35,6 +35,12 @@ export async function GET(req: Request) {
      */
     viewable: row.viewable === 1,
     rotated_at: row.rotated_at,
+    /**
+     * 'self' = 用户自己在这张卡上建的；'oauth' = 某客户端走授权流换来的。
+     * 页面据此换一句话说——两者能做的事一样，但「怎么来的」和「怎么断」不一样：
+     * 前者靠明文，后者靠客户端手里的令牌，而用户对后者根本没有明文可复制。
+     */
+    source: row.source,
   }));
   return NextResponse.json({ ok: true, keys });
 }

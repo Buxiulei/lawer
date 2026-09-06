@@ -1,0 +1,138 @@
+# 能力 → REST（注册表）
+case_get	GET /api/v1/cases/{id}
+case_update	PATCH /api/v1/cases/{id}
+timeline_add	POST /api/v1/cases/{id}/timeline
+action_list	GET /api/v1/cases/{id}/actions
+action_complete	PATCH /api/v1/cases/{id}/actions/{actionId}
+deadline_list	GET /api/v1/cases/{id}/deadlines
+evidence_list	GET /api/v1/cases/{id}/evidence
+case_facts	GET /api/v1/cases/{id}/facts
+knowledge_search	GET /api/v1/knowledge/search
+case_list	GET /api/v1/cases
+intake_submit	POST /api/v1/cases/{id}/intake
+claim_calc	—
+claims_upsert	—
+claims_list	GET /api/v1/cases/{id}/claims
+deadline_set	—
+deadline_resolve	—
+action_create	POST /api/v1/cases/{id}/actions
+timeline_list	GET /api/v1/cases/{id}/timeline
+timeline_milestone	POST /api/v1/cases/{id}/timeline/{eventId}/milestone
+draft_list	GET /api/v1/cases/{id}/drafts
+draft_get	—
+draft_write	—
+company_profile_upsert	—
+emotion_log	—
+knowledge_get	—
+evidence_get	GET /api/v1/evidence/{id}
+evidence_extract	POST /api/v1/evidence/{id}/extract
+evidence_brief_get	GET /api/v1/evidence/{id}/brief
+evidence_brief_update	PUT /api/v1/evidence/{id}/brief
+doc_submit	—
+doc_list	GET /api/v1/cases/{id}/docs
+doc_get	GET /api/v1/docs/{id}
+transcript_submit	—
+evidence_upload_url	—
+evidence_register	—
+evidence_attest	—
+attest_verify	GET /api/v1/verify/{orderNo}
+
+# 全量 operation
+GET /api/health	get_health	none	[]	{}
+GET /api/manifest	get_manifest	none	[]	{}
+GET /api/openapi.json	get_openapi_json	none	[]	{}
+GET /api/mcp	get_mcp	none	[]	{}
+POST /api/mcp	post_mcp	bearer	[]	{}
+GET /api/v1/version	get_v1_version	none	[]	{}
+POST /api/v1/auth/sms/send	post_v1_auth_sms_send	none	[]	{}
+POST /api/v1/auth/sms/verify	post_v1_auth_sms_verify	none	[]	{}
+POST /api/v1/auth/email/send	post_v1_auth_email_send	none	[]	{}
+POST /api/v1/auth/email/verify	post_v1_auth_email_verify	none	[]	{}
+POST /api/v1/auth/email/register/send	post_v1_auth_email_register_send	none	[]	{}
+POST /api/v1/auth/email/register/verify	post_v1_auth_email_register_verify	none	[]	{}
+GET /api/v1/auth/google/start	get_v1_auth_google_start	none	[]	{}
+GET /api/v1/auth/google/callback	get_v1_auth_google_callback	none	[]	{}
+GET /api/v1/verify/{orderNo}	attest_verify	none	[path:orderNo!]	{}
+POST /api/v1/verify/{orderNo}/recheck	post_v1_verify_by_order_no_recheck	none	[path:orderNo!]	{}
+GET /api/oauth/metadata/authorization-server	get_oauth_metadata_authorization_server	none	[]	{}
+GET /api/oauth/metadata/protected-resource	get_oauth_metadata_protected_resource	none	[]	{}
+POST /api/oauth/register	post_oauth_register	none	[]	{}
+GET /api/oauth/authorize	get_oauth_authorize	none	[]	{}
+POST /api/oauth/authorize	post_oauth_authorize	bearer	[]	{}
+POST /api/oauth/token	post_oauth_token	none	[]	{}
+POST /api/oauth/revoke	post_oauth_revoke	none	[]	{}
+GET /api/v1/agent-setup	get_v1_agent_setup	bearer	[]	{}
+GET /api/v1/me	get_v1_me	bearer	[]	{}
+GET /api/v1/me/storage	get_v1_me_storage	bearer	[]	{}
+GET /api/v1/billing/ledger	get_v1_billing_ledger	bearer	[]	{}
+POST /api/v1/redeem	post_v1_redeem	bearer	[]	{}
+GET /api/v1/cases	case_list	bearer	[]	{}
+GET /api/v1/cases/{id}	case_get	bearer	[path:id!,query:timeline_limit]	{}
+PATCH /api/v1/cases/{id}	case_update	bearer	[path:id!]	{stage,goal,bottom_line,employed_from,monthly_wage_yuan,position,contract_count}
+GET /api/v1/cases/{id}/facts	case_facts	bearer	[path:id!]	{}
+POST /api/v1/cases/{id}/intake	intake_submit	bearer	[path:id!]	{stage,company_name,employed_from,monthly_wage_yuan,position,contract_count,events,free_text,company_docs,company_wording,goals,bottom_line}
+GET /api/v1/cases/{id}/messages	get_v1_cases_by_id_messages	bearer	[path:id!]	{}
+POST /api/v1/cases/{id}/chat	post_v1_cases_by_id_chat	bearer	[path:id!]	{}
+GET /api/v1/cases/{id}/timeline	timeline_list	bearer	[path:id!,query:since,query:kind,query:limit,query:offset]	{}
+POST /api/v1/cases/{id}/timeline	timeline_add	bearer	[path:id!]	{happened_at,kind,title,detail,client_ref}
+POST /api/v1/cases/{id}/timeline/{eventId}/milestone	timeline_milestone	bearer	[path:id!,path:eventId!]	{milestone,user_confirmed}
+GET /api/v1/cases/{id}/actions	action_list	bearer	[path:id!,query:status]	{}
+POST /api/v1/cases/{id}/actions	action_create	bearer	[path:id!]	{items,client_ref}
+PATCH /api/v1/cases/{id}/actions/{actionId}	action_complete	bearer	[path:id!,path:actionId!]	{status}
+GET /api/v1/cases/{id}/deadlines	deadline_list	bearer	[path:id!,query:include_resolved]	{}
+GET /api/v1/cases/{id}/claims	claims_list	bearer	[path:id!]	{}
+GET /api/v1/cases/{id}/evidence	evidence_list	bearer	[path:id!]	{}
+GET /api/v1/cases/{id}/drafts	draft_list	bearer	[path:id!]	{}
+GET /api/v1/cases/{id}/docs	doc_list	bearer	[path:id!]	{}
+GET /api/v1/cases/{id}/opener	get_v1_cases_by_id_opener	bearer	[path:id!]	{}
+GET /api/v1/cases/{id}/dossier	get_v1_cases_by_id_dossier	bearer	[path:id!]	{}
+GET /api/v1/cases/{id}/company-graph	get_v1_cases_by_id_company_graph	bearer	[path:id!]	{}
+POST /api/v1/cases/{id}/watch	post_v1_cases_by_id_watch	bearer	[path:id!]	{}
+POST /api/v1/evidence	post_v1_evidence	bearer	[]	{}
+PUT /api/v1/evidence/upload/{token}	put_v1_evidence_upload_by_token	bearer	[path:token!]	{}
+GET /api/v1/evidence/{id}	evidence_get	bearer	[path:id!,query:include_text]	{}
+GET /api/v1/docs/{id}	doc_get	bearer	[path:id!]	{}
+POST /api/v1/evidence/{id}/attest	post_v1_evidence_by_id_attest	bearer	[path:id!]	{}
+POST /api/v1/evidence/{id}/extract	evidence_extract	bearer	[path:id!]	{mode,quote_id}
+GET /api/v1/evidence/{id}/brief	evidence_brief_get	bearer	[path:id!]	{}
+PUT /api/v1/evidence/{id}/brief	evidence_brief_update	bearer	[path:id!]	{brief,reason,base_version}
+POST /api/v1/company/probe	post_v1_company_probe	bearer	[]	{}
+GET /api/v1/knowledge/search	knowledge_search	bearer	[query:query!,query:type,query:court,query:full_text,query:limit]	{}
+POST /api/v1/company/dossiers/quote	post_v1_company_dossiers_quote	bearer	[]	{}
+POST /api/v1/company/dossiers/confirm	post_v1_company_dossiers_confirm	bearer	[]	{}
+GET /api/v1/company/dossiers/{id}	get_v1_company_dossiers_by_id	bearer	[path:id!]	{}
+POST /api/v1/cases/{id}/paste-back	post_v1_cases_by_id_paste_back	bearer	[path:id!]	{}
+POST /api/v1/cases/{id}/paste-back/confirm	post_v1_cases_by_id_paste_back_confirm	bearer	[path:id!]	{}
+GET /api/v1/keys	get_v1_keys	bearer	[]	{}
+POST /api/v1/keys	post_v1_keys	bearer	[]	{}
+GET /api/v1/keys/{id}/secret	get_v1_keys_by_id_secret	bearer	[path:id!]	{}
+POST /api/v1/keys/{id}/rotate	post_v1_keys_by_id_rotate	bearer	[path:id!]	{}
+DELETE /api/v1/keys/{id}	delete_v1_keys_by_id	bearer	[path:id!]	{}
+POST /api/v1/realname/init	post_v1_realname_init	bearer	[]	{}
+GET /api/v1/realname/status	get_v1_realname_status	bearer	[]	{}
+POST /api/v1/realname/passport	post_v1_realname_passport	bearer	[]	{}
+GET /api/v1/admin/audit	get_v1_admin_audit	bearer	[]	{}
+GET /api/v1/admin/users	get_v1_admin_users	bearer	[]	{}
+POST /api/v1/admin/users/{uid}/gongdao	post_v1_admin_users_by_uid_gongdao	bearer	[path:uid!]	{}
+POST /api/v1/admin/users/{uid}/membership	post_v1_admin_users_by_uid_membership	bearer	[path:uid!]	{}
+GET /api/v1/admin/codes	get_v1_admin_codes	bearer	[]	{}
+POST /api/v1/admin/codes	post_v1_admin_codes	bearer	[]	{}
+GET /api/v1/admin/realname/pending	get_v1_admin_realname_pending	bearer	[]	{}
+GET /api/v1/admin/realname/{id}	get_v1_admin_realname_by_id	bearer	[path:id!]	{}
+GET /api/v1/admin/realname/{id}/photo/{kind}	get_v1_admin_realname_by_id_photo_by_kind	bearer	[path:id!,path:kind!]	{}
+POST /api/v1/admin/realname/{id}/approve	post_v1_admin_realname_by_id_approve	bearer	[path:id!]	{}
+POST /api/v1/admin/realname/{id}/reject	post_v1_admin_realname_by_id_reject	bearer	[path:id!]	{}
+
+# 精简集 profile=actions
+GET /api/v1/cases	case_list
+GET /api/v1/cases/{id}/facts	case_facts
+POST /api/v1/cases/{id}/intake	intake_submit
+POST /api/v1/cases/{id}/timeline	timeline_add
+POST /api/v1/cases/{id}/actions	action_create
+GET /api/v1/cases/{id}/deadlines	deadline_list
+GET /api/v1/cases/{id}/claims	claims_list
+GET /api/v1/cases/{id}/evidence	evidence_list
+GET /api/v1/knowledge/search	knowledge_search
+
+# 精简集里尚无 REST 端点的能力
+case_report_get	个案报告（长期记忆）那一族尚未落地，注册表里还没有这条能力

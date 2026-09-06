@@ -100,6 +100,7 @@ export const knowledgeSearch: Capability = {
   domains: ['*'],
   exposeTo: ['mcp'],
   precondition: [],
+  rest: { method: 'GET', path: '/api/v1/knowledge/search' },
   // 知识库名字是领域内容，正本在 lib/domains/labor.ts（共用层不写领域字面量）
   title: LABOR_CAPABILITY_COPY.knowledgeSearchTitle,
   description:

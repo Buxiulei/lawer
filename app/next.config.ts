@@ -35,6 +35,31 @@ const nextConfig: NextConfig = {
     BUILD_SHA: buildSha() ?? '',
     BUILD_AT: new Date().toISOString(),
   },
+  /**
+   * OAuth 的两份元数据规范上必须挂在**根域**的 /.well-known/ 下（RFC 8414 / RFC 9728），
+   * 而路由文件按目录组织。这两条 rewrite 就是这个接缝，别把它当可有可无的美化——
+   * 少了它，客户端在「添加连接器」那一步读不到元数据，整条 OAuth 路走不通，
+   * 而我们这边的日志里只会看到一条 404。
+   *
+   * 第三条是 RFC 9728 的**路径插入**变体：资源在 /api/mcp 上时，客户端会去问
+   * /.well-known/oauth-protected-resource/api/mcp。两种问法都得答得上。
+   */
+  async rewrites() {
+    return [
+      {
+        source: '/.well-known/oauth-authorization-server',
+        destination: '/api/oauth/metadata/authorization-server',
+      },
+      {
+        source: '/.well-known/oauth-protected-resource',
+        destination: '/api/oauth/metadata/protected-resource',
+      },
+      {
+        source: '/.well-known/oauth-protected-resource/:path*',
+        destination: '/api/oauth/metadata/protected-resource',
+      },
+    ];
+  },
 };
 
 export default nextConfig;
