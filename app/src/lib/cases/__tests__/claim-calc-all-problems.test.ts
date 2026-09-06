@@ -64,6 +64,44 @@ describe('缺三参一次列三', () => {
   });
 });
 
+describe('日期格式错落 invalid 且一次列全', () => {
+  test('两处日期同时填错 ⇒ invalid 恰两项、两个字段名都在、没算出金额、无抛错', () => {
+    const res = calc({
+      kind: 'N',
+      avg_monthly_wage_fen: 1_900_000,
+      employed_from: '去年三月',
+      terminated_at: '还没定',
+    });
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('不该算成功');
+    // 变异臂「只报第一个」在这里只会给出 1 项 ⇒ 红
+    expect(res.invalid).toHaveLength(2);
+    const joined = res.invalid!.join(' ');
+    expect(joined).toContain('employed_from');
+    expect(joined).toContain('terminated_at');
+    // 收集阶段就拦下，没进 calc：没有金额（失败结果不带 payload），也没落 claims 行
+    expect('payload' in res).toBe(false);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM claims').get()).toEqual({ n: 0 });
+  });
+
+  test('一处日期填错、另一处没给 ⇒ 各归各栏（invalid 一项 + missing 一项）', () => {
+    const res = calc({ kind: 'N', avg_monthly_wage_fen: 1_900_000, employed_from: '去年三月' });
+    if (res.ok) throw new Error('不该算成功');
+    expect(res.invalid!.join(' ')).toContain('employed_from');
+    expect(res.missing!.join(' ')).toContain('terminated_at');
+  });
+
+  test('合法日期照旧算得出来：收集阶段的尺子不误伤正常输入', () => {
+    const res = calc({
+      kind: 'N',
+      avg_monthly_wage_fen: 1_900_000,
+      employed_from: '2019-03-01',
+      terminated_at: '2026-08-19',
+    });
+    expect(res.ok).toBe(true);
+  });
+});
+
 describe('「没给」与「给错了」分栏', () => {
   test('给了非法值进 invalid，没给的进 missing', () => {
     const res = calc({ kind: 'N', avg_monthly_wage_fen: -5 });
