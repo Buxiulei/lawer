@@ -1,7 +1,7 @@
 // app/src/lib/db/migrate.ts
 //
 // ───────────────── ⚠️ 改本文件之前先读这一段 ⚠️ ─────────────────
-// **本迁移框架没有事务。** runMigrations() 的 54 个 db.exec() 是一串裸调用，
+// **本迁移框架没有事务。** runMigrations() 的 55 个 db.exec() 是一串裸调用，
 // 中途失败不回滚——2026-08-26 实测：人为中断，库里留下 22/38 张表，重跑既不前进也不后退。
 // 现在之所以能安全滚更，是因为迁移**全是纯加法**、靠 IF NOT EXISTS 与 addColumnIfMissing
 // 能重跑自愈：**安全是「改动足够简单」给的，不是框架给的。**
@@ -1135,7 +1135,7 @@ export function runMigrations(db: Database.Database): void {
       id             INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       case_id        INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
-      service        TEXT NOT NULL,                          -- ocr|asr|video|doc_review|brief|dossier|watch，值域见 lib/billing/service-quotes.ts
+      service        TEXT NOT NULL,                          -- ocr|asr|video|doc_review|brief|export|dossier|watch，值域见 lib/billing/service-quotes.ts
       payload_json   TEXT,                                   -- 计价入参原样留存（单位数量、证据 id 等），对账时要能复算这个价
       amount         INTEGER NOT NULL,                       -- 应扣公道值（非负整数）；券抵扣时照记原价
       entitlement_id INTEGER REFERENCES entitlements(id),    -- 非空=这单由会员券抵掉，没走公道值
@@ -1250,6 +1250,30 @@ export function runMigrations(db: Database.Database): void {
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_evidence_upload_tokens_case ON evidence_upload_tokens (case_id, id DESC);
+  `);
+
+  // 一次性**下载**令牌（设计稿 §2 E draft_export）。与 evidence_upload_tokens 是同一套机制的反向：
+  // 那边签一条只收一次字节的 PUT 地址，这边签一条只发一次字节的 GET 地址。
+  //
+  // 【为什么下载也要一次性 + 短命】导出的文书 PDF 是这个案子最敏感的东西之一，而这条地址
+  // 不带鉴权头就能取回文件（否则用户没法把它丢进浏览器打开）。可重放的话，凡是这条 URL
+  // 出现过的地方——日志、剪贴板、聊天记录——都成了一个长期有效的取件口。
+  // 两条约束都由库里那一行管（consumed_at / expires_at），不由调用方自觉。
+  //
+  // file_id 指向已落 files 表的那份密文；filename 是给浏览器看的下载名（files 表不存文件名）。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS file_download_tokens (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash  TEXT NOT NULL UNIQUE,                      -- sha256(token 明文)，明文不入库
+      file_id     INTEGER NOT NULL REFERENCES files(id),
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      filename    TEXT NOT NULL,                             -- 下载时回给浏览器的文件名
+      mime        TEXT,
+      expires_at  TEXT NOT NULL,                             -- 过期点；过期后即使没用过也不再受理
+      consumed_at TEXT,                                      -- 抢占键：非空 = 这条地址已经取过件
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_file_download_tokens_user ON file_download_tokens (user_id, id DESC);
   `);
 
   // ───────────────── 存量迁移区 ─────────────────
@@ -1494,6 +1518,18 @@ export function runMigrations(db: Database.Database): void {
   // 「重启回收后再失败」这类把收尾路径又走一遍的形态，第二遍当场 changes=0 直接退出，
   // 既不重复退款、也不重复调券归还。可空、不回填：存量任务没退过款，NULL 即语义正确。
   addColumnIfMissing(db, 'extraction_jobs', 'refunded_at', 'TEXT');
+
+  // share_links 的分享标的（设计稿 §2 E share_create：draft_id 或 evidence_id）。
+  // 建表时这张表只有 case_id + scope，落地分享能力时才需要说清「分享的是哪一份东西」。
+  //
+  // 【为什么是 kind+id 两列，不是 draft_id / evidence_id 两个外键列】两个可空外键列的形态是
+  // 「两列都填了」与「两列都空」都能进库，读侧每处都得自己决定这时候算什么——那就是每处一种算法。
+  // 一列 kind 一列 id，读侧只有一条分支。不加 DB 级 CHECK：SQLite 改 CHECK 要重建表，
+  // 值域由 lib/db/share-links.ts 一处把关（同 intake_stage / milestone 的既定裁决）。
+  //
+  // 存量行（若有）两列皆 NULL = 整案档案只读，与本次新增的定向分享并存，读侧容得下这个缺省。
+  addColumnIfMissing(db, 'share_links', 'target_kind', 'TEXT');
+  addColumnIfMissing(db, 'share_links', 'target_id', 'INTEGER');
 
   // ───────────────── 费率种子 ─────────────────
   // C01 核定的模型费率必须**在建表之后立刻播下去**：缺行时 getRatesForModel 会回落

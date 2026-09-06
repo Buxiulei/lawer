@@ -63,6 +63,8 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'public', method: 'GET', path: '/api/v1/auth/google/callback', auth: 'none', description: 'Google 授权回调：校 state、换 token、归并或建号，302 回登录页' },
   { category: 'public', method: 'GET', path: '/api/v1/verify/{orderNo}', auth: 'none', description: '按存证订单号公开查询（刻意无鉴权：对方拿到订单号就该能核）' },
   { category: 'public', method: 'POST', path: '/api/v1/verify/{orderNo}/recheck', auth: 'none', description: '服务端实时复核：重算原件哈希 + 重新验签，按 IP 限流' },
+  { category: 'public', method: 'GET', path: '/api/v1/share/{token}', auth: 'none', description: '按分享 token 读一份文书正文或一件材料的说明（刻意无鉴权：分享给没有账号的人看的）。到期回 410 SHARE_EXPIRED、被收回回 410 SHARE_REVOKED，与 404 分开' },
+  { category: 'public', method: 'GET', path: '/api/v1/files/download/{token}', auth: 'none', description: '用一次性 token 取回一份导出件（浏览器直接打开即可）。只能取一次、10 分钟内有效；用过或过期回 410' },
 
   // ──────── agent 面（jwt 或 api key）────────
   { category: 'agent', method: 'POST', path: '/api/mcp', auth: 'jwt|api_key', description: 'MCP JSON-RPC 2.0 入口（Streamable HTTP），工具面见本清单 mcp.tools' },

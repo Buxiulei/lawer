@@ -15,10 +15,18 @@ export interface ShareLinkRow {
   case_id: number;
   token: string;
   scope: string;
+  /** 分享标的类别；NULL = 整案档案只读（本表最早的形态，读侧要容得下） */
+  target_kind: string | null;
+  /** 标的行 id，随 target_kind 走 */
+  target_id: number | null;
   expires_at: string;
   revoked_at: string | null;
   created_at: string;
 }
+
+/** 分享标的的值域。**只有这一份**：加第三种标的时这里加一个值，读侧的 switch 才会跟着报错。 */
+export const SHARE_TARGET_KINDS = ['draft', 'evidence'] as const;
+export type ShareTargetKind = (typeof SHARE_TARGET_KINDS)[number];
 
 /**
  * token 由调用方生成（随机性归 lib/crypto，本层不造 token）。
@@ -28,13 +36,28 @@ export interface ShareLinkRow {
  */
 export function create(
   db: Database,
-  params: { caseId: number; token: string; scope: string; expiresAt: string },
+  params: {
+    caseId: number;
+    token: string;
+    scope: string;
+    expiresAt: string;
+    targetKind?: ShareTargetKind;
+    targetId?: number;
+  },
 ): number {
   const info = db
     .prepare(
-      'INSERT INTO share_links (case_id, token, scope, expires_at) VALUES (?, ?, ?, datetime(?))',
+      `INSERT INTO share_links (case_id, token, scope, target_kind, target_id, expires_at)
+       VALUES (?, ?, ?, ?, ?, datetime(?))`,
     )
-    .run(params.caseId, params.token, params.scope, params.expiresAt);
+    .run(
+      params.caseId,
+      params.token,
+      params.scope,
+      params.targetKind ?? null,
+      params.targetId ?? null,
+      params.expiresAt,
+    );
   return Number(info.lastInsertRowid);
 }
 
@@ -60,4 +83,36 @@ export function listByCase(db: Database, caseId: number): ShareLinkRow[] {
   return db
     .prepare('SELECT * FROM share_links WHERE case_id = ? ORDER BY id DESC')
     .all(caseId) as ShareLinkRow[];
+}
+
+/**
+ * 这条链接现在是什么状态。findActive 那种「拿不到行就是不能用」的口径对访问者够用
+ * （不区分不存在 / 过期 / 已撤销是刻意的，防枚举），但对**打开链接的人**不够：
+ * 一条刚过期的链接和一条从来不存在的链接，对他要说的话完全不同——前者该说"这条链接已到期，
+ * 找分享给你的人再要一条"，后者只能说"没有这条链接"。所以分档回，由路由决定说到哪一层。
+ *
+ * 过期判定仍在 SQL 侧（datetime('now') 与列比较），与 findActive 同一把尺子。
+ */
+export type ShareLinkState = 'ok' | 'not_found' | 'expired' | 'revoked';
+
+export function inspect(db: Database, token: string): { state: ShareLinkState; row: ShareLinkRow | null } {
+  const trimmed = (token ?? '').trim();
+  if (!trimmed) return { state: 'not_found', row: null };
+  const row = db
+    .prepare(
+      `SELECT *, (expires_at <= datetime('now')) AS is_expired FROM share_links WHERE token = ?`,
+    )
+    .get(trimmed) as (ShareLinkRow & { is_expired: number }) | undefined;
+  if (!row) return { state: 'not_found', row: null };
+  // 【先判撤销、再判过期】一条被撤销的链接放到到期日之后同时满足两个条件，
+  // 那时更该说的是"分享人已经把它收回了"——说"过期了"会把人引去要一条新的，
+  // 而真正发生的事是对方不打算再给了。
+  if (row.revoked_at !== null) return { state: 'revoked', row };
+  if (row.is_expired) return { state: 'expired', row };
+  return { state: 'ok', row };
+}
+
+/** 按 id 取一行（撤销前核对归属用）。 */
+export function findById(db: Database, id: number): ShareLinkRow | undefined {
+  return db.prepare('SELECT * FROM share_links WHERE id = ?').get(id) as ShareLinkRow | undefined;
 }

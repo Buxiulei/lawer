@@ -14,6 +14,7 @@ import { deadlineList } from './deadlines';
 import { deadlineResolve, deadlineSet } from './deadlines-write';
 import { docGet, docList, docSubmit, transcriptSubmit } from './docs';
 import { draftGet, draftList, draftWrite } from './drafts';
+import { draftExport, shareCreate, shareRevoke } from './drafts-export';
 import { emotionLog } from './emotion';
 import {
   evidenceBriefGet,
@@ -70,4 +71,7 @@ export const CAPABILITIES: Capability[] = [
   attestVerify,
   caseReportGet,
   caseReportUpdate,
+  shareCreate,
+  shareRevoke,
+  draftExport,
 ];

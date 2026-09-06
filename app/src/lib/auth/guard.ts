@@ -58,8 +58,8 @@ export function requireWebSession(db: Database, req: Request): GuardResult {
  * 【范围】卡住会**对外产生法律效力**、或必须与本人身份绑定的出口，别往外扩：
  *   1. 证据上传      POST /api/v1/evidence                    —— 已挂（未实名的证据无法保存、无法出证）
  *   2. 证据固化出证  POST /api/v1/evidence/{id}/attest        —— 已挂
- *   3. 文书导出 PDF  （drafts 导出路由尚未实现）              —— 待该路由落地时挂上
- *   4. 分享链接创建  （share_links 创建路由尚未实现）          —— 同上
+ *   3. 文书导出 PDF  MCP draft_export                        —— 已挂（由能力注册表的 precondition 统一拦）
+ *   4. 分享链接创建  MCP share_create                         —— 同上；撤销不挂，理由见该条目注释
  * 聊天、问诊不卡：目标用户在最慌的时候进来，先让他把事说出来。到了把材料存进证据库这一步
  * 才要实名——存进来的每一份都要能与本人身份绑定，未实名的证据既无法保存、日后也无法出证。
  *

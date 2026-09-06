@@ -274,6 +274,10 @@ describe('tools/list', () => {
       'attest_verify',
       'case_report_get',
       'case_report_update',
+      // 分享与导出，同样**追加在末尾**
+      'share_create',
+      'share_revoke',
+      'draft_export',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();

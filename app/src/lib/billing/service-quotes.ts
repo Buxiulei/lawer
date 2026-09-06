@@ -37,11 +37,12 @@ export type ServiceKind =
   | 'video'
   | 'doc_review'
   | 'brief'
+  | 'export'
   | 'dossier'
   | 'watch';
 
 /** 本文件真能计价的服务。dossier / watch 见文件头说明。 */
-export type PricedService = 'ocr' | 'asr' | 'video' | 'doc_review' | 'brief';
+export type PricedService = 'ocr' | 'asr' | 'video' | 'doc_review' | 'brief' | 'export';
 
 export const PRICED_SERVICES: readonly PricedService[] = [
   'ocr',
@@ -49,6 +50,7 @@ export const PRICED_SERVICES: readonly PricedService[] = [
   'video',
   'doc_review',
   'brief',
+  'export',
 ];
 
 /**
@@ -62,6 +64,7 @@ export const SERVICE_FEATURE: Record<PricedService, string> = {
   video: 'video',
   doc_review: 'doc_review',
   brief: 'brief',
+  export: 'export',
 };
 
 /**
@@ -74,6 +77,10 @@ const SERVICE_PRICING: Record<PricedService, { priceKey: PriceKey; unitLabel: st
   video: { priceKey: 'video.per_minute', unitLabel: '分钟' },
   doc_review: { priceKey: 'doc_review.per_doc', unitLabel: '份' },
   brief: { priceKey: 'brief.per_item', unitLabel: '件' },
+  // 今天单价是 0（见 pricing-config 的 draft_export.per_pdf）。0 元的单照样落一行报价、
+  // 照样落一条 delta=0 的账本流水——「导出过几份」与「导出收了多少钱」是两个问题，
+  // 前者在免费期也要答得上来。
+  export: { priceKey: 'draft_export.per_pdf', unitLabel: '份' },
 };
 
 /**
@@ -355,7 +362,11 @@ export function confirmService(
 
       // ② 会员券：有就核销、这单不扣钱。没券与「券刚被并发抢走」在这里是同一件事
       //    （consumeEntitlement 返回 null），照常走公道值扣费。**不静默免单**。
-      const entitlementId = consumeEntitlement(
+      //
+      //    【0 元单不碰券】券是按次核销的，价目为 0 的服务（今天是文书导出）本来就不扣钱，
+      //    再核销一张券等于拿用户一张能抵真钱的券去抵 0——用户看不到、账面也完全正常。
+      //    这道判断跟着 amount 走、不跟着服务名走：哪天导出改成收费，它自己就不再命中。
+      const entitlementId = row.amount === 0 ? null : consumeEntitlement(
         db,
         userId,
         ENTITLEMENT_KIND.serviceExtract,
