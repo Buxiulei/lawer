@@ -62,4 +62,5 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
   { code: 'GONGDAO_EXHAUSTED', group: 'billing', status: 402, when: '余额不足以完成这次扣费动作', recovery: '把差额如实告诉用户，不要改小参数重试' },
   { code: 'UPLOAD_BUSY', group: 'billing', status: 429, when: '同时进行的上传过多（内存闸门）', recovery: '退避后重试' },
   { code: 'TURN_IN_FLIGHT', group: 'billing', status: 409, when: '本案已有一轮站内对话在跑', recovery: '等上一轮结束，不要并发发起' },
+  { code: 'REPORT_VERSION_CONFLICT', group: 'billing', status: 409, when: '改个案报告时 base_version 与服务端当前版本对不上（中间有人改过），本次未写入', recovery: '重新 case_report_get 读回最新版，把你的改动合到它上面，用新的 version 重试；不要重发同一份' },
 ];

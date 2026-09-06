@@ -13,6 +13,7 @@ import * as store from '@/lib/db/cases';
 import { dedupTitleKey } from '@/lib/db/dedup';
 import { getDomainPack } from '@/lib/domains/registry';
 import { normalizeDateOnly, submitIntakeInto, type IntakeInput, type IntakeResult } from './intake';
+import { markReportStale } from './report-stale';
 // 只剩 MILESTONE_OF_STAGE 的键类型还引它（`typeof CASE_STAGES`）。**stage 校验不再走它**，
 // 一律经 stagesForCase 从领域包取词表。
 import { CASE_STAGES } from './stages';
@@ -465,6 +466,10 @@ export function updateCase(
   }
 
   store.updateCaseFields(db, input.caseId, fields);
+  // 阶段变了，报告的「基本盘」与「下一步」都可能不再成立（过期唯一入口，见 ./report-stale）。
+  // 只认 stage：改一句 goal 的错别字不该把整份报告标成过期，那样它会一直是过期的，
+  // 而"一直过期"与"从来不过期"对读的人是同一个信息量。
+  if (fields.stage !== undefined) markReportStale(db, input.caseId, '阶段变更');
   return { ok: true, case: store.findCaseById(db, input.caseId)! };
 }
 
@@ -543,6 +548,8 @@ export function addTimelineEvent(
     clientRef,
   });
   const event = store.listTimelineEvents(db, input.caseId, TIMELINE_MAX_LIMIT).find((e) => e.id === id)!;
+  // 去重命中的两条分支都在上面 return 掉了，走到这里的一定是真新增的一条
+  markReportStale(db, input.caseId, '时间线');
   return { ok: true, event, deduped: false };
 }
 

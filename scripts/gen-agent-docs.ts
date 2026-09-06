@@ -45,6 +45,7 @@ const FAMILY_LABELS: Record<CapabilityFamily, string> = {
   company: '公司主体',
   emotion: '情绪',
   docs: '来文与录音',
+  report: '个案报告',
 };
 
 const KIND_LABELS = { read: '读', write: '写', spend: '写·耗算力' } as const;

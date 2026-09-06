@@ -25,6 +25,7 @@
 import type Database from 'better-sqlite3';
 
 import { gongdaoRefund } from '../billing';
+import { markReportStale } from '../cases/report-stale';
 import { restoreEntitlement } from '../billing/entitlements';
 import { SERVICE_FEATURE, serviceChargeRef, type PricedService } from '../billing/service-quotes';
 import { generateBrief } from '../evidence/brief';
@@ -191,6 +192,9 @@ function finishOk(db: Database.Database, job: ExtractionJob, out: ExtractionOutp
           SET extraction_status='done', extracted_text=?, extracted_meta_json=?, extracted_at=?
         WHERE id=?`,
     ).run(out.text, out.meta ? JSON.stringify(out.meta) : null, now, job.evidence_id);
+    // 这份材料的内容第一次被读出来，报告里对它的描述（"未提取、只有文件名"）就作废了。
+    // 过期唯一入口，见 lib/cases/report-stale；放在同一个事务里，跟结果同增同减。
+    markReportStale(db, job.case_id, '材料内容提取');
   })();
 }
 

@@ -26,6 +26,7 @@ const FAMILIES = [
   'company',
   'emotion',
   'docs',
+  'report',
 ];
 const SCOPES = ['case:read', 'case:write'];
 const KINDS = ['read', 'write', 'spend'];
@@ -131,9 +132,11 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
     // lib/jobs/** 同属共用层：后台任务面向的是「一件材料 + 一种处理方式」，
     // 一旦有人在里面写死了某个领域的词，第二个领域接进来时就得回到任务代码里逐条翻找。
     ...walk(path.join(SRC_ROOT, 'lib/jobs')),
+    // lib/cases/report* 同属共用层：个案报告的分节骨架由领域包给，生成器只认 source 键。
+    ...['lib/cases/report.ts', 'lib/cases/report-stale.ts'].map((f) => path.join(SRC_ROOT, f)),
   ];
 
-  it('lib/capabilities/**、lib/domains/registry.ts 与 lib/jobs/** 里没有领域字面量（变异：往 registry.ts 写一句带「仲裁」的注释 → 红）', () => {
+  it('lib/capabilities/**、lib/domains/registry.ts、lib/jobs/** 与 lib/cases/report* 里没有领域字面量（变异：往 registry.ts 写一句带「仲裁」的注释 → 红）', () => {
     const hits: string[] = [];
     for (const file of SHARED_FILES) {
       const text = fs.readFileSync(file, 'utf-8');

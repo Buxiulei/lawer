@@ -42,6 +42,8 @@ const ALL_TABLES = [
   'service_quotes', 'extraction_jobs',
   // 一次性上传地址
   'evidence_upload_tokens',
+  // 个案报告（长期记忆）
+  'case_reports',
 ];
 
 function newDb(): Database.Database {
@@ -108,10 +110,10 @@ describe('runMigrations', () => {
 
   it('幂等：连跑两遍不抛错', () => {
     expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(53);
+    expect(ALL_TABLES.length).toBe(54);
   });
 
-  it('53 张表全部建成', () => {
+  it('54 张表全部建成', () => {
     const rows = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[];

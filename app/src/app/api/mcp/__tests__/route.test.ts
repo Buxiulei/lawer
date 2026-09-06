@@ -272,6 +272,8 @@ describe('tools/list', () => {
       'evidence_register',
       'evidence_attest',
       'attest_verify',
+      'case_report_get',
+      'case_report_update',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();

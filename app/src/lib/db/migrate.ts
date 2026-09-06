@@ -1,7 +1,7 @@
 // app/src/lib/db/migrate.ts
 //
 // ───────────────── ⚠️ 改本文件之前先读这一段 ⚠️ ─────────────────
-// **本迁移框架没有事务。** runMigrations() 的 53 个 db.exec() 是一串裸调用，
+// **本迁移框架没有事务。** runMigrations() 的 54 个 db.exec() 是一串裸调用，
 // 中途失败不回滚——2026-08-26 实测：人为中断，库里留下 22/38 张表，重跑既不前进也不后退。
 // 现在之所以能安全滚更，是因为迁移**全是纯加法**、靠 IF NOT EXISTS 与 addColumnIfMissing
 // 能重跑自愈：**安全是「改动足够简单」给的，不是框架给的。**
@@ -1185,6 +1185,36 @@ export function runMigrations(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_extraction_jobs_claim ON extraction_jobs (status, id);
     CREATE INDEX IF NOT EXISTS idx_extraction_jobs_evidence ON extraction_jobs (evidence_id, id DESC);
+  `);
+
+  // 个案报告：一案一行的长期记忆（设计稿 §4.3）。
+  //
+  // 【为什么要有它】档案里的事实分散在六张表，每次对话都要从头拼一遍；拼出来的那份
+  // 没人存，下一轮又拼一次，而拼错的地方每轮都不一样。本表存的是**整理过的那一份**。
+  //
+  // 【version 的两个语义】0 = 占位行：只被 markReportStale 建过、还没有初稿
+  // （所以 get 时仍要跑 bootstrap）；≥1 = 已有正文，同时是乐观锁的那个数
+  // （updateSection 的 base_version 对不上即 REPORT_VERSION_CONFLICT）。
+  // 拿 sections_json 是否为空来判"有没有初稿"是不行的：一份**真的每节都空**的报告
+  // 与"从没生成过"在库里长得一模一样，于是每次 get 都会把用户改过的空节重新盖掉。
+  //
+  // 【stale_reason 存的是计数而不是一句话】事实卡首行要说「自 X 起 N 条变动（新证据 2、时间线 1）」，
+  // 一句话的 reason 只留得住最后一次触发，前面几条在外部看不出来——而"只动过 1 次"
+  // 与"动过 9 次只记住最后一次"对"要不要先整理"这个判断是两个答案。故存 JSON 计数表。
+  // updated_by 取值 web | agent:<key_id> | system。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS case_reports (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id       INTEGER NOT NULL UNIQUE REFERENCES cases(id) ON DELETE CASCADE,
+      sections_json TEXT NOT NULL DEFAULT '{}',              -- {分节标题: 正文}
+      rendered_md   TEXT NOT NULL DEFAULT '',                -- 渲染稿，网页档案页只读这一列
+      version       INTEGER NOT NULL DEFAULT 0,              -- 0=占位（无初稿）；≥1 兼作乐观锁
+      updated_at    TEXT,
+      updated_by    TEXT,                                    -- web | agent:<key_id> | system
+      stale_since   TEXT,                                    -- 非空=过期；第一条变动的时刻，后续变动不刷新它
+      stale_reason  TEXT,                                    -- JSON 计数表 {"新证据":2,"时间线":1}
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // 一次性上传地址的 token（设计稿 §2 B evidence_upload_url）。

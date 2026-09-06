@@ -29,6 +29,22 @@ export const LABOR: DomainPack = {
     '证据',
   ],
 
+  // 个案报告的分节（设计稿 §4.3）。标题是给人看的，source 是给生成器看的取数口径；
+  // 顺序即报告从上往下的顺序：先「我是谁、案子是什么」，再主线与争议，
+  // 再手上有什么（材料/时间线/期限/待办），最后是风险与变更日志。
+  reportSections: [
+    { title: '基本盘', source: 'basics' },
+    { title: '案情主线', source: 'narrative' },
+    { title: '争议焦点', source: 'disputes' },
+    { title: '各方立场与谈判纪律', source: 'positions' },
+    { title: '证据地图', source: 'evidence' },
+    { title: '时间线摘要', source: 'timeline' },
+    { title: '期限', source: 'deadlines' },
+    { title: '待办与下一步', source: 'actions' },
+    { title: '风险与未定项', source: 'risks' },
+    { title: '变更日志', source: 'changelog' },
+  ],
+
   // 下面三组取的是**已落库那份值集**（migrate.ts 里 deadlines.kind / drafts.kind /
   // claims.kind 三条 DDL 注释），不是设计稿 §2 D/E/F 的规划清单：写工具还没落地之前，
   // 列一批库里存不进去的种类等于给后来的人一份看着像真的假清单。

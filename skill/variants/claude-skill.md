@@ -179,6 +179,13 @@ X-API-Key: <你的 api key>
 | `doc_get` | `GET /docs/{id}` | `case:read` | 读 | 按 doc_id 取一份解读：识别出的原文、总结论与理由、逐条发现（引用原文、轻重、依据、怎么改、谈判怎么说）。别人的 doc_id 与不存在的 doc_id 同样回「不存在」。 | `doc_id` 解读结果的 id（doc_list 里的 id） |
 | `transcript_submit` | — | `case:read` | 读 | 读一件**已经转写好**的录音的文字稿，给出要点，并挑出稿子里说到的事整理成候选事件（发生时间 / 类别 / 一句话 / 细节）。**本工具只读不写、不走报价、也不做转写**：要求这件材料的提取状态已经是 done 且有转写文本，否则回 EXTRACTION_REQUIRED——这时先调 evidence_extract mode=asr 做转写（那一步走报价确认、按分钟计价），完成后再调本工具。**候选事件不会自动写进档案**：逐条与用户核对（尤其是日期）之后，再对确认过的那几条调 timeline_add。 | `evidence_id` 录音材料的 id |
 
+**个案报告**
+
+| 工具 | REST | scope | 读写 | 用途 | 入参要点 |
+|---|---|---|---|---|---|
+| `case_report_get` | `GET /cases/{id}/report` | `case:read` | 读 | 读这个案子的**长期记忆**：整理过的分节报告 + 渲染稿 + 最后由谁在什么时候更新 + 过期标记。开工先读它——它是历次整理的结论，比现拼一遍档案更完整。第一次读会自动从档案生成初稿。回包里的 version 是改写时要回传的那个版本号；stale 非空表示档案在报告之后又变过，**这时先整理报告再回答用户**，别拿一份过期的结论去下判断。 | `case_id` 案件 id；`section`? 只要某一节时传它的标题（取值见回包 section_order）；不传即整份 |
+| `case_report_update` | — | `case:write` | 写 | 把整理好的内容写进报告的某一节。**必须先 case_report_get 拿到 version，原样回传成 base_version**：中间有人改过就回 REPORT_VERSION_CONFLICT（409），这时读回最新版、把你的改动合上去再重试，不要重发同一份。reason 会自动记进「变更日志」那一节，所以写清楚这一改是为什么。改成功后报告的过期标记一并清掉。 | `case_id` 案件 id；`section` 要改哪一节，写它的标题（取值见 case_report_get 的 section_order）；`content` 这一节的**新全文**（Markdown 片段，不含标题行）；不是追加；`reason` 这一改是为什么，一句话，会原样进变更日志；`base_version` case_report_get 回包里的 version，原样回传；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
+
 只能读写用户自己的案件。传了别人的 `case_id`，服务端一律回「案件不存在」——
 不区分"不存在"和"不是你的"，别据此推断案件号的有效性。
 
@@ -263,3 +270,4 @@ X-API-Key: <你的 api key>
 | `GONGDAO_EXHAUSTED` | 402 | 余额不足以完成这次扣费动作 | 把差额如实告诉用户，不要改小参数重试 |
 | `UPLOAD_BUSY` | 429 | 同时进行的上传过多（内存闸门） | 退避后重试 |
 | `TURN_IN_FLIGHT` | 409 | 本案已有一轮站内对话在跑 | 等上一轮结束，不要并发发起 |
+| `REPORT_VERSION_CONFLICT` | 409 | 改个案报告时 base_version 与服务端当前版本对不上（中间有人改过），本次未写入 | 重新 case_report_get 读回最新版，把你的改动合到它上面，用新的 version 重试；不要重发同一份 |

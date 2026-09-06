@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 
 import type { Database } from 'better-sqlite3';
 
+import { markReportStale } from '@/lib/cases/report-stale';
 import { decryptField, encryptField } from '@/lib/crypto';
 import { findCaseById } from '@/lib/db/cases';
 import * as store from '@/lib/db/evidence';
@@ -296,6 +297,10 @@ export async function attestEvidence(
       status: ATT_CERTIFIED,
     });
     store.updateEvidenceStatus(db, ev.id, EV_CERTIFIED);
+    // 出证是这件材料被正式拿出去用的时刻，报告的「证据地图」要重记一遍
+    // （过期唯一入口，见 lib/cases/report-stale）。挂在这一段里而不是 certified()：
+    // 那个收尾函数在"早就出过证了"的重放路径上也会跑，标在那儿等于每查一次就过期一次。
+    markReportStale(db, ev.case_id, '证据出证');
     att = reload(db, att.id);
   }
 

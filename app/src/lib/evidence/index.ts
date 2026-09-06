@@ -13,6 +13,7 @@
 //   本模块的封装见 sidecar-client.verifyPdf()，它返回的 passed 已经读过 overall_ok。
 import type { Database } from 'better-sqlite3';
 
+import { markReportStale } from '@/lib/cases/report-stale';
 import { findCaseById } from '@/lib/db/cases';
 import * as store from '@/lib/db/evidence';
 
@@ -139,5 +140,8 @@ export function registerUploadedFile(
   });
   const evidence = store.findEvidenceDetail(db, evidenceId);
   if (!evidence) throw new Error(`evidence 落库后读不回来: id=${evidenceId}`);
+  // 新材料进档 ⇒ 报告的「证据地图」过期（过期唯一入口，见 lib/cases/report-stale）。
+  // 挂在这里而不是两个上传路由上：uploadEvidence 也从这条路走，路由层各写一遍就会漏掉一条。
+  markReportStale(db, input.caseId, '新证据');
   return { ok: true, evidence };
 }

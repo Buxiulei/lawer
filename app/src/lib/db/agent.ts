@@ -12,6 +12,8 @@
 // 外部传入的 ISO8601 用 SQLite 的 datetime() 就地归一，应用层不拼时间串。
 import type { Database } from 'better-sqlite3';
 
+import { markReportStale } from '@/lib/cases/report-stale';
+
 import { dedupTitleKey } from './dedup';
 
 export interface ThreadRow {
@@ -377,6 +379,8 @@ export function insertActionItem(
         params.sourceMessageId,
       ).lastInsertRowid,
   );
+  // 待办变了，报告里的「下一步」就不再是最新的（过期唯一入口，见 lib/cases/report-stale）
+  markReportStale(db, params.caseId, '待办');
   return { id, created: true };
 }
 
@@ -400,6 +404,7 @@ export function insertDeadline(
       .prepare('INSERT INTO deadlines (case_id, kind, due_at, derived_from) VALUES (?, ?, datetime(?), ?)')
       .run(params.caseId, params.kind, params.dueDate, params.derivedFrom).lastInsertRowid,
   );
+  markReportStale(db, params.caseId, '期限');
   return { id, created: true };
 }
 
@@ -412,6 +417,8 @@ export function resolveDeadline(db: Database, caseId: number, deadlineId: number
   const info = db
     .prepare("UPDATE deadlines SET resolved_at = datetime('now') WHERE id = ? AND case_id = ? AND resolved_at IS NULL")
     .run(deadlineId, caseId);
+  // 只有真的改了才算一条变动：已了结的再调一次不该在报告上记成"又变了一次"
+  if (info.changes > 0) markReportStale(db, caseId, '期限了结');
   return info.changes > 0;
 }
 
@@ -445,6 +452,7 @@ export function upsertClaim(
       params.status,
       found.id,
     );
+    markReportStale(db, params.caseId, '金额主张');
     return { id: found.id, created: false };
   }
   const id = Number(
@@ -453,6 +461,7 @@ export function upsertClaim(
       .run(params.caseId, params.kind, params.amountFen, params.calcJson, params.basis, params.status)
       .lastInsertRowid,
   );
+  markReportStale(db, params.caseId, '金额主张');
   return { id, created: true };
 }
 

@@ -103,6 +103,7 @@ function makeSnapshot(over: Partial<CaseSnapshot> = {}): CaseSnapshot {
     deadlines: [],
     storedIntakeStage: null,
     referredNbdpsy: false,
+    report: { state: null, since: null, changes: 0, detail: '' },
     ...over,
   };
   // 夹具默认「窗口即全部」：没显式给 timelineStats 时按 timeline 推。

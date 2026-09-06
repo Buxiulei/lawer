@@ -77,6 +77,7 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/intake', auth: 'jwt|api_key', scope: 'case:write', description: '首诊建档：一次原子写入基本盘 + 时间线 + 诉求（对应工具 intake_submit）' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/messages', auth: 'jwt|api_key', scope: 'case:read', description: '案件的历史对话（只读；写那一路在同级 chat）' },
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/chat', auth: 'jwt|api_key', scope: 'case:write', description: '让本服务的模型跑一轮并回 SSE。**调一次扣一轮公道值**，自带模型的 agent 不要调' },
+  { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/report', auth: 'jwt|api_key', scope: 'case:read', description: '读个案报告：整理过的分节长期记忆 + 渲染稿 + 过期标（对应工具 case_report_get；首次读会惰性生成初稿）' },
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/timeline', auth: 'jwt|api_key', scope: 'case:write', description: '追加一条时间线事件，只追加无改删（对应工具 timeline_add）' },
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/timeline/{eventId}/milestone', auth: 'jwt|api_key', scope: 'case:write', description: '给一条时间线事件盖里程碑' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/actions', auth: 'jwt|api_key', scope: 'case:read', description: '列出行动卡，可按状态过滤（对应工具 action_list）' },

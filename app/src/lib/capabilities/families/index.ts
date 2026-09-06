@@ -24,6 +24,7 @@ import {
 } from './evidence';
 import { attestVerify, evidenceAttest, evidenceRegister, evidenceUploadUrl } from './evidence-write';
 import { knowledgeGet, knowledgeSearch } from './knowledge';
+import { caseReportGet, caseReportUpdate } from './report';
 import { timelineAdd, timelineList, timelineMilestone } from './timeline';
 
 import type { Capability } from '../registry';
@@ -67,4 +68,6 @@ export const CAPABILITIES: Capability[] = [
   evidenceRegister,
   evidenceAttest,
   attestVerify,
+  caseReportGet,
+  caseReportUpdate,
 ];
