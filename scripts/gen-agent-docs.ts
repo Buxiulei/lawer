@@ -20,6 +20,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { listCapabilities, type Capability, type CapabilityFamily } from '../app/src/lib/capabilities';
+import {
+  ACCESS_PATHS,
+  CLIENT_MATRIX,
+  type SnippetVars,
+} from '../app/src/lib/capabilities/client-matrix';
 import { ERROR_CODES, ERROR_GROUPS, type ErrorGroup } from '../app/src/lib/capabilities/error-codes';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -89,6 +94,49 @@ export function renderCapabilities(): string {
   return lines.join('\n').trimEnd();
 }
 
+/**
+ * 文档里填的那组地址：**一律是占位符**。
+ *
+ * 真地址由服务端按 env（LAWER_PUBLIC_URL）算出来，随环境不同。把某个环境算出来的串
+ * 冻进这份文档的形态是：预发上读到的说明书里写着生产的地址，而它看起来完全正常。
+ * 设置页那侧用同一批 snippet 函数，只是把这些占位符换成服务端真给的值。
+ */
+const DOC_VARS: SnippetVars = {
+  mcpUrl: '<mcp_url>',
+  apiBase: '<api_base>',
+  manifestUrl: '<manifest_url>',
+  openapiUrl: '<openapi_url>',
+  skillUrl: '<skill_url>',
+  apiKey: '<你的密钥>',
+};
+
+/** 这条路今天通不通，逐字写出来——写成「支持」的形态是用户照着做、连不上、以为是自己填错了 */
+const STATUS_LABELS = {
+  ready: '现在可用',
+  blocked: '待 OAuth 上线（步骤里给了替代路）',
+} as const;
+
+/**
+ * 客户端矩阵：一张表（谁走哪条路、今天通不通）+ 每个客户端的步骤与可复制片段。
+ * 与设置页那张选择器**同一份数据、同一批 snippet 函数**，不是同源抄写。
+ */
+export function renderClients(): string {
+  const lines: string[] = [];
+  lines.push('| 客户端 | 接入路径 | 现状 |');
+  lines.push('|---|---|---|');
+  for (const c of CLIENT_MATRIX) {
+    lines.push(`| ${cell(c.label)} | ${c.path}. ${ACCESS_PATHS[c.path]} | ${STATUS_LABELS[c.status]} |`);
+  }
+  lines.push('');
+  for (const c of CLIENT_MATRIX) {
+    lines.push(`### ${c.label}`, '');
+    lines.push(`路径 ${c.path}（${ACCESS_PATHS[c.path]}）·${STATUS_LABELS[c.status]}`, '');
+    for (const [i, step] of c.steps(DOC_VARS).entries()) lines.push(`${i + 1}. ${step}`);
+    lines.push('', `${c.snippetLabel}：`, '', '```', c.snippet(DOC_VARS), '```', '');
+  }
+  return lines.join('\n').trimEnd();
+}
+
 /** 错误码表：按组分节 */
 export function renderErrors(): string {
   const groups = [...new Set(ERROR_CODES.map((e) => e.group))] as ErrorGroup[];
@@ -122,7 +170,11 @@ export function applyBlock(text: string, tag: string, body: string): string {
 
 /** 接入说明：两段生成区换掉，其余逐字保留 */
 export function renderAccessDoc(current: string): string {
-  return applyBlock(applyBlock(current, 'capabilities', renderCapabilities()), 'errors', renderErrors());
+  return applyBlock(
+    applyBlock(applyBlock(current, 'clients', renderClients()), 'capabilities', renderCapabilities()),
+    'errors',
+    renderErrors(),
+  );
 }
 
 /**

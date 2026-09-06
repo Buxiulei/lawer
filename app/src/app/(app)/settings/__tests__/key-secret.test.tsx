@@ -133,6 +133,7 @@ describe('话术里填的是真密钥', () => {
     mcp_url: 'https://example.test/api/mcp',
     api_base: 'https://example.test/api/v1',
     manifest_url: 'https://example.test/api/manifest',
+    openapi_url: 'https://example.test/api/openapi.json',
     skill_url: 'https://example.test/skill/SKILL.md',
   };
 
