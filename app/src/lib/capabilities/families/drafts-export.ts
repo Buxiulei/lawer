@@ -117,13 +117,17 @@ export const draftExport: Capability = {
   domains: ['*'],
   exposeTo: ['mcp'],
   precondition: ['realname'],
+  idempotency: { naturalKey: '一张报价只导出一份（确认过的 quote_id 再用回 QUOTE_ALREADY_USED）' },
   title: '导出文书 PDF',
   description:
     '把一份文书渲染成 PDF，回一条**一次性、限时**的下载地址（浏览器直接打开即可，不必带凭据）。' +
+    '**两步**：先不带 quote_id 调一次，回一张写明价钱与算式的报价单，这一步只出价、不动账；' +
+    '确认价钱之后带上 quote_id 再调一次，才渲染 PDF 并按报价扣费。' +
     `format 目前只支持 ${DRAFT_EXPORT_FORMATS.join(' / ')}。` +
     '导出的是正文原文，不含站内那段「发出前必读」提醒——那段是给起草人自己看的，' +
     '印在要递出去的件上等于把自己的顾虑一起交出去。' +
-    '这一步的服务定额目前是 **0 公道值**（回包里仍有报价与金额，便于对账）。需已完成实名认证。',
+    '这一步的服务定额目前是 **0 公道值**，但报价这一步照走不误：' +
+    '价目哪天调整，用户看到的仍是确认前就报给他的那个数。需已完成实名认证。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -133,9 +137,18 @@ export const draftExport: Capability = {
         enum: [...DRAFT_EXPORT_FORMATS],
         description: '导出格式，不给按 pdf',
       },
+      quote_id: {
+        type: 'integer',
+        description: '上一步拿到的报价号。不给 = 只出价、不动账；给了 = 按这张报价确认并渲染导出',
+      },
     },
     required: ['draft_id'],
   },
   run: (db, identity, args) =>
-    exportDraft(db, { userId: identity.uid, draftId: num(args.draft_id), format: args.format }),
+    exportDraft(db, {
+      userId: identity.uid,
+      draftId: num(args.draft_id),
+      format: args.format,
+      quoteId: args.quote_id === undefined || args.quote_id === null ? undefined : num(args.quote_id),
+    }),
 };

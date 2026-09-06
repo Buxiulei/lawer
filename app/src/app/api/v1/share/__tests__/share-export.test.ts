@@ -7,7 +7,10 @@
 //   · 未实名走完整条 MCP 路由 ⇒ REALNAME_REQUIRED，且库里一条链接/一份文件都不多；
 //   · 链接到期 ⇒ 410（不是 404，也不是照常展示内容）；
 //   · 别人的草稿 ⇒ 「不存在」，与「不是你的」不可分辨；
-//   · 下载地址只发一次 ⇒ 第二次 410。
+//   · 下载地址只发一次 ⇒ 第二次 410；
+//   · 💰 动作报价不扣钱 ⇒ 不带 quote_id 那一步余额与账本行数逐字不变。
+//     这一条**必须在非零单价下测**（见 withExportPrice）：单价是 0 时，
+//     「报价即扣费」与「报价不扣费」的余额、账本、回包完全一样，判据在 0 上永远是绿的。
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -25,7 +28,9 @@ process.env.FILES_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'lawer-share-files
 import { generateApiKey, hashApiKey } from '@/lib/auth/api-key';
 import type { Identity } from '@/lib/auth/identity';
 import { getCapability } from '@/lib/capabilities';
+import { gongdaoGrant } from '@/lib/billing';
 import { ENTITLEMENT_KIND, grantEntitlement, listUnconsumed } from '@/lib/billing/entitlements';
+import { quoteService } from '@/lib/billing/service-quotes';
 import { claimDownloadToken } from '@/lib/files/download-token';
 import { SHARE_MAX_HOURS } from '@/lib/shares';
 
@@ -160,6 +165,43 @@ function getDownload(token: string) {
 /** 把某条分享链接的到期点改到过去（不动别的列），造「已到期」这一态 */
 function expireShare(shareId: number) {
   db.prepare("UPDATE share_links SET expires_at='2000-01-01 00:00:00' WHERE id=?").run(shareId);
+}
+
+/** 把某张报价的到期点改到过去（不动别的列），造「报价过期」这一态 */
+function expireQuote(quoteId: number) {
+  db.prepare("UPDATE service_quotes SET expires_at='2000-01-01 00:00:00' WHERE id=?").run(quoteId);
+}
+
+/**
+ * 走完整两步导出：先报价，再带 quote_id 确认。
+ * 【为什么要有这个小工具】盯别的东西（下载地址、文件名、券）的判据也得先走完两步。
+ * 让每条判据各抄一遍两步的形态是：抄的那几份里哪天有人图省事只留了一步，
+ * 判据照样绿——而它本该拦的正是"少了一步"。第一步就失败时原样把失败抛回去。
+ */
+async function exportTwoStep(uid: number, args: Record<string, unknown>) {
+  const quoted = await call('draft_export', uid, args);
+  if (quoted.ok !== true) return quoted;
+  expect(quoted.stage).toBe('quote');
+  return call('draft_export', uid, { ...args, quote_id: quoted.quote_id });
+}
+
+/** 当前公道值余额（没有那一行就是 0） */
+function balanceOf(uid: number): number {
+  const row = db.prepare('SELECT balance FROM gongdao WHERE user_id=?').get(uid) as
+    | { balance: number }
+    | undefined;
+  return row?.balance ?? 0;
+}
+
+/** 把导出单价改成非零，跑完一段判据后恢复。0 元看不出差别的事，只有在这里面才看得见。 */
+function withExportPrice(price: number, body: () => Promise<void>): Promise<void> {
+  db.prepare('INSERT OR REPLACE INTO pricing_config (key, value_int) VALUES (?,?)').run(
+    'draft_export.per_pdf',
+    price,
+  );
+  return body().finally(() => {
+    db.prepare("DELETE FROM pricing_config WHERE key='draft_export.per_pdf'").run();
+  });
 }
 
 // ---------- 1. share_create ----------
@@ -342,13 +384,189 @@ describe('实名闸（变异：去掉 precondition 里的 realname ⇒ 红）', 
   });
 });
 
-// ---------- 5. draft_export 与一次性下载 ----------
+// ---------- 5. draft_export 的两步：报价 → 确认 ----------
+//
+// 这一组盯的不是返回码，是**钱在哪一步动**。今天单价是 0，一步式与两步式的回包长得一模一样，
+// 所以每条"不扣钱"的判据都在 withExportPrice 里跑——把单价调成非零，
+// 「报价那步动没动账」才第一次可见。设计稿 §4.2：所有 💰 工具两步。
+
+describe('draft_export 两步报价', () => {
+  test('不带 quote_id 只出价：不渲染、不落文件、不动账，那张报价停在未确认', async () => {
+    const draftId = makeDraft(caseA, '关于解除决定的异议函');
+    const q = await call('draft_export', userA, { draft_id: draftId });
+    expect(q.ok).toBe(true);
+    expect(q.stage).toBe('quote');
+    expect(q.quote_id).toEqual(expect.any(Number));
+    expect(q.price_key).toBe('draft_export.per_pdf');
+    expect(q.unit_label).toBe('份');
+    expect(q.units).toBe(1);
+    // 报价单必须自带下一步怎么走，否则 agent 只会把它当一次失败重试
+    expect(String(q.next)).toContain(`quote_id=${q.quote_id}`);
+    // 出价这一步一个字节都不该渲染
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+    expect(db.prepare('SELECT COUNT(*) AS n FROM files').get()).toEqual({ n: 0 });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM file_download_tokens').get()).toEqual({ n: 0 });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM gongdao_ledger').get()).toEqual({ n: 0 });
+    expect(db.prepare('SELECT confirmed_at FROM service_quotes').get()).toEqual({ confirmed_at: null });
+  });
+
+  test(
+    '单价非零时，只报价那一步余额一分不少' +
+      '（变异：报价后无条件 confirmService ⇒ 红）',
+    async () => {
+      await withExportPrice(30, async () => {
+        gongdaoGrant(userA, 100, '管理员调整', 'test-grant-price', null, db);
+        const before = balanceOf(userA);
+        const draftId = makeDraft(caseA);
+
+        const q = await call('draft_export', userA, { draft_id: draftId });
+        expect(q.ok).toBe(true);
+        expect(q.stage).toBe('quote');
+        expect(q.amount).toBe(30);
+        expect(q.unit_price).toBe(30);
+        // 用户还没看见过这个价、更没点过头——余额与账本行数必须逐字不变
+        expect(balanceOf(userA)).toBe(before);
+        expect(
+          db.prepare("SELECT COUNT(*) AS n FROM gongdao_ledger WHERE type='消耗'").get(),
+        ).toEqual({ n: 0 });
+        expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+      });
+    },
+  );
+
+  test('单价非零时，带 quote_id 确认才扣，扣的正是报价单上那个数', async () => {
+    await withExportPrice(30, async () => {
+      gongdaoGrant(userA, 100, '管理员调整', 'test-grant-price', null, db);
+      const draftId = makeDraft(caseA);
+      const q = await call('draft_export', userA, { draft_id: draftId });
+      const r = await call('draft_export', userA, { draft_id: draftId, quote_id: q.quote_id });
+
+      expect(r.ok).toBe(true);
+      expect(r.stage).toBe('done');
+      // 确认时扣的价必须就是报价时报的价（价目中途被改也认报价单上那个数）
+      expect(r.amount).toBe(q.amount);
+      expect(r.charged).toBe(30);
+      expect(balanceOf(userA)).toBe(70);
+      expect(r.download_url).toBeTruthy();
+    });
+  });
+
+  test('报价过期就不能再据它扣费：QUOTE_EXPIRED，不渲染、不落文件', async () => {
+    const draftId = makeDraft(caseA);
+    const q = await call('draft_export', userA, { draft_id: draftId });
+    expireQuote(q.quote_id as number);
+
+    const r = await call('draft_export', userA, { draft_id: draftId, quote_id: q.quote_id });
+    expect(r.ok).toBe(false);
+    expect(r.errorCode).toBe('QUOTE_EXPIRED');
+    expect(db.prepare('SELECT COUNT(*) AS n FROM files').get()).toEqual({ n: 0 });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM file_download_tokens').get()).toEqual({ n: 0 });
+  });
+
+  test('一张报价只导出一份：同一个 quote_id 再确认一次 409，且不多签一条下载地址', async () => {
+    const draftId = makeDraft(caseA);
+    const q = await call('draft_export', userA, { draft_id: draftId });
+    const first = await call('draft_export', userA, { draft_id: draftId, quote_id: q.quote_id });
+    expect(first.ok).toBe(true);
+
+    const second = await call('draft_export', userA, { draft_id: draftId, quote_id: q.quote_id });
+    expect(second.ok).toBe(false);
+    expect(second.errorCode).toBe('QUOTE_ALREADY_USED');
+    // 放行的形态是：付一次、之后拿同一张报价无限次导出，每次 charged=0
+    expect(db.prepare('SELECT COUNT(*) AS n FROM file_download_tokens').get()).toEqual({ n: 1 });
+  });
+
+  test('别人的报价号：QUOTE_NOT_FOUND（与"不存在"同码），不渲染不扣费', async () => {
+    const otherDraft = makeDraft(caseB, '乙的异议函');
+    const theirs = await call('draft_export', userB, { draft_id: otherDraft });
+    const mine = makeDraft(caseA);
+
+    const r = await call('draft_export', userA, { draft_id: mine, quote_id: theirs.quote_id });
+    expect(r.ok).toBe(false);
+    expect(r.errorCode).toBe('QUOTE_NOT_FOUND');
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+    expect(db.prepare('SELECT confirmed_at FROM service_quotes WHERE id=?').get(theirs.quote_id)).toEqual({
+      confirmed_at: null,
+    });
+  });
+
+  test('拿别的服务的报价来确认：QUOTE_SERVICE_MISMATCH，且那张报价不被扣掉', async () => {
+    const draftId = makeDraft(caseA);
+    // 一张文字识别的报价（价目比导出高）：不校验的形态是按它的价结账，同一件事两个价
+    const ocr = quoteService(db, {
+      userId: userA,
+      caseId: caseA,
+      service: 'ocr',
+      payload: { units: 1 },
+    });
+    expect(ocr.ok).toBe(true);
+    const ocrQuoteId = ocr.ok ? ocr.quote.quoteId : 0;
+
+    const r = await call('draft_export', userA, { draft_id: draftId, quote_id: ocrQuoteId });
+    expect(r.ok).toBe(false);
+    expect(r.errorCode).toBe('QUOTE_SERVICE_MISMATCH');
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+    // 校验在 confirmService 之前：这张报价必须原封不动（不是"先扣了再退"）
+    expect(db.prepare('SELECT confirmed_at FROM service_quotes WHERE id=?').get(ocrQuoteId)).toEqual({
+      confirmed_at: null,
+    });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM gongdao_ledger').get()).toEqual({ n: 0 });
+  });
+
+  test('拿同一个人另一个案子的报价来确认：QUOTE_CASE_MISMATCH，那张报价原封不动', async () => {
+    // 本人名下的第二个案子——归属这一关它过得去，所以「是不是这个案子的报价」必须另判
+    const caseA2 = Number(
+      db
+        .prepare(
+          "INSERT INTO cases (user_id, title, stage, created_at) VALUES (?, '甲的第二个案子', '风声', '2026-08-19T00:00:00.000Z')",
+        )
+        .run(userA).lastInsertRowid,
+    );
+    const other = quoteService(db, {
+      userId: userA,
+      caseId: caseA2,
+      service: 'export',
+      payload: { units: 1 },
+    });
+    expect(other.ok).toBe(true);
+    const otherQuoteId = other.ok ? other.quote.quoteId : 0;
+
+    const draftId = makeDraft(caseA);
+    const r = await call('draft_export', userA, { draft_id: draftId, quote_id: otherQuoteId });
+    expect(r.ok).toBe(false);
+    expect(r.errorCode).toBe('QUOTE_CASE_MISMATCH');
+    // 不校验的形态是：这份导出记到了 caseA2 的账上，两个案子的用量都对不上
+    expect(db.prepare('SELECT confirmed_at FROM service_quotes WHERE id=?').get(otherQuoteId)).toEqual({
+      confirmed_at: null,
+    });
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  test('两步都要过实名闸，不是只拦第一步', async () => {
+    const draftId = makeDraft(caseNoRealname);
+    const payload = await viaMcp(userNoRealname, 'draft_export', { draft_id: draftId, quote_id: 1 });
+    expect(payload.result.isError).toBe(true);
+    expect(JSON.stringify(payload.result)).toContain('REALNAME_REQUIRED');
+  });
+
+  test('工具面上必须给得出 quote_id 这个入参，否则两步在 agent 那头根本走不通', () => {
+    const cap = getCapability('draft_export');
+    expect(cap?.kind).toBe('spend');
+    expect(cap?.inputSchema.properties).toHaveProperty('quote_id');
+    // 报价那步是免费的，quote_id 不能必填
+    expect(cap?.inputSchema.required).not.toContain('quote_id');
+    expect(String(cap?.description)).toContain('quote_id');
+  });
+});
+
+// ---------- 6. draft_export 的产物与一次性下载 ----------
 
 describe('draft_export', () => {
   test('导出落 files 表，回一条能取回同一份字节的限时地址', async () => {
     const draftId = makeDraft(caseA, '关于解除决定的异议函');
-    const r = await call('draft_export', userA, { draft_id: draftId, format: 'pdf' });
+    const r = await exportTwoStep(userA, { draft_id: draftId, format: 'pdf' });
     expect(r.ok).toBe(true);
+    expect(r.stage).toBe('done');
     expect(r.filename).toBe('关于解除决定的异议函.pdf');
     expect(db.prepare('SELECT COUNT(*) AS n FROM files').get()).toEqual({ n: 1 });
 
@@ -365,7 +583,7 @@ describe('draft_export', () => {
 
   test('下载地址只发一次：第二次 410，且一个字节都不再给', async () => {
     const draftId = makeDraft(caseA);
-    const r = await call('draft_export', userA, { draft_id: draftId });
+    const r = await exportTwoStep(userA, { draft_id: draftId });
     const token = (r.download_url as string).split('/').pop() as string;
     expect((await getDownload(token)).status).toBe(200);
 
@@ -378,7 +596,7 @@ describe('draft_export', () => {
 
   test('过期的下载地址 410，且不消费那一行（说的是过期，不是"已经用过"）', async () => {
     const draftId = makeDraft(caseA);
-    const r = await call('draft_export', userA, { draft_id: draftId });
+    const r = await exportTwoStep(userA, { draft_id: draftId });
     const token = (r.download_url as string).split('/').pop() as string;
     db.prepare("UPDATE file_download_tokens SET expires_at='2000-01-01 00:00:00'").run();
 
@@ -390,7 +608,7 @@ describe('draft_export', () => {
 
   test('免费也要留下账：报价一行 + 账本一笔，金额 0', async () => {
     const draftId = makeDraft(caseA);
-    const r = await call('draft_export', userA, { draft_id: draftId });
+    const r = await exportTwoStep(userA, { draft_id: draftId });
     expect(r.amount).toBe(0);
     expect(r.charged).toBe(0);
     const quote = db
@@ -404,7 +622,7 @@ describe('draft_export', () => {
     ).toEqual({ n: 1 });
   });
 
-  test('正文为空 422，不生成一份打开是空白的 PDF', async () => {
+  test('正文为空 422，不生成一份打开是空白的 PDF，也不先报一次价', async () => {
     const draftId = makeDraft(caseA, '还没写的稿子', '   ');
     const r = await call('draft_export', userA, { draft_id: draftId });
     expect(r.ok).toBe(false);
@@ -414,12 +632,14 @@ describe('draft_export', () => {
   });
 
   test('渲染失败：502，不落文件、不签下载地址，那张报价停在未确认（未扣费）', async () => {
+    const draftId = makeDraft(caseA);
+    // 报价那步不碰 sidecar，所以先取报价号，再让渲染炸
+    const q = await call('draft_export', userA, { draft_id: draftId });
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response(JSON.stringify({ detail: '渲染炸了' }), { status: 500 })),
     );
-    const draftId = makeDraft(caseA);
-    const r = await call('draft_export', userA, { draft_id: draftId });
+    const r = await call('draft_export', userA, { draft_id: draftId, quote_id: q.quote_id });
     expect(r.ok).toBe(false);
     expect(r.errorCode).toBe('EXPORT_RENDER_FAILED');
     expect(db.prepare('SELECT COUNT(*) AS n FROM files').get()).toEqual({ n: 0 });
@@ -432,7 +652,7 @@ describe('draft_export', () => {
     // 410 上——于是「抢占本身是不是原子的」这件事，从路由那层根本测不出来。而真正会同时
     // 走到抢占那一句的是两个**并发**请求：inspect 时它们都还没用过。
     const draftId = makeDraft(caseA);
-    const r = await call('draft_export', userA, { draft_id: draftId });
+    const r = await exportTwoStep(userA, { draft_id: draftId });
     const token = (r.download_url as string).split('/').pop() as string;
 
     expect(claimDownloadToken(db, token)).not.toBeNull();
@@ -444,7 +664,7 @@ describe('draft_export', () => {
     expect(listUnconsumed(db, userA, ENTITLEMENT_KIND.serviceExtract)).toHaveLength(1);
 
     const draftId = makeDraft(caseA);
-    const r = await call('draft_export', userA, { draft_id: draftId });
+    const r = await exportTwoStep(userA, { draft_id: draftId });
     expect(r.ok).toBe(true);
     expect(r.paid_by).toBe('gongdao');
     // 券原封不动
@@ -454,11 +674,12 @@ describe('draft_export', () => {
     ).toEqual({ entitlement_id: null });
   });
 
-  test('format 只认 pdf，别的一律 400（不静默按 pdf 处理）', async () => {
+  test('format 只认 pdf，别的一律 400（不静默按 pdf 处理），报价那步就拦下', async () => {
     const draftId = makeDraft(caseA);
     const r = await call('draft_export', userA, { draft_id: draftId, format: 'docx' });
     expect(r.ok).toBe(false);
     expect(r.errorCode).toBe('INVALID_FORMAT');
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+    expect(db.prepare('SELECT COUNT(*) AS n FROM service_quotes').get()).toEqual({ n: 0 });
   });
 });
