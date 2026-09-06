@@ -13,7 +13,7 @@
  *   · 从 CLIENT_MATRIX 里删一档 ⇒「十档都在选择器里」红；
  *   · 把 setupUrls() 里的 openapi_url 改成写死的串 ⇒「基址由 env 决定」红。
  */
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -127,43 +127,65 @@ describe('选择器把十档都摆出来了', () => {
 });
 
 /**
- * 【这一组盯的是什么】矩阵文案里提到的**站内**入口必须真的存在。
+ * 【这一组盯的是什么】矩阵文案对某个能力「上线没有」的说法，必须与本 SHA 上的路由一致。
  *
- * 失败形态：说明书写着「复制回本站的『粘贴回填』」，用户照做，站上根本没这个页面——
- * 页面本身毫无异常，生成物（skill/接入说明.md 与 claude 变体）还会把这句话冻进去。
- * 判据要求二选一：要么路由已落地，要么这句话自己写明「还没上线」。
+ * 两个方向都会出事，且都毫无异常可见：
+ *   · 说有、其实没有：说明书写着「复制回本站的『粘贴回填』」，用户照做，站上根本没这个入口；
+ *   · 说没有、其实有：三支合流的那一天正是这个形态——OAuth 与粘贴回填都在同一个 SHA 上落地了，
+ *     而矩阵里四档仍写着「我们的 OAuth 授权还没上线，这条路现在接不通」，把已经能走的路劝退掉。
+ * 生成物（skill/接入说明.md 与 claude 变体）还会把这句话原样冻进去。
+ *
+ * 判据按路由文件的**确切路径**认「上线没有」，不按目录名模糊匹配：
+ * 名字对上而文件不在的目录（挪走一半的重构）在模糊匹配下会被判成已上线。
  *
  * 变异臂：
- *   · 去掉「还没上线」这半句 ⇒ 「站内入口不能空口承诺」红；
+ *   · 给已上线的 OAuth 那几档写回「还没上线」⇒ 「已上线就不许写成没上线」红；
+ *   · 把粘贴回填那句的对冲语删掉、同时删掉 paste-back 路由 ⇒ 「不能空口承诺」红；
  *   · 把开场白里的 report_updates 删掉 ⇒ 「结构块字段与设计稿一致」红。
  */
-describe('文案不承诺本 SHA 上不存在的站内入口', () => {
-  /** 站内入口名 → 落地后会出现的路由目录名（任一命中即视为已上线） */
-  const IN_SITE_ENTRIES = [{ name: '粘贴回填', routeDirs: ['backfill', 'paste-backfill'] }];
-  const HEDGES = ['还没上线', '还未上线', '未上线', '还在做', '上线之前', '上线前'];
+describe('文案对「上线没有」的说法与本 SHA 的路由一致', () => {
+  /** 站内能力名 → 落地后必然存在的那个路由文件（相对 src/app） */
+  const IN_SITE_ENTRIES = [
+    { name: '粘贴回填', route: 'api/v1/cases/[id]/paste-back/route.ts' },
+    { name: 'OAuth', route: 'api/oauth/token/route.ts' },
+  ];
+  const HEDGES = ['还没上线', '还未上线', '未上线', '还在做', '上线之前', '上线前', '等我们的 OAuth'];
 
-  function routeExists(dirs: readonly string[]): boolean {
-    const walk = (dir: string): boolean =>
-      readdirSync(dir, { withFileTypes: true }).some((e) => {
-        if (!e.isDirectory()) return false;
-        const full = join(dir, e.name);
-        if (dirs.includes(e.name) && existsSync(join(full, 'page.tsx'))) return true;
-        return walk(full);
-      });
-    return walk(join(process.cwd(), 'src/app'));
-  }
+  const landed = (entry: { route: string }): boolean =>
+    existsSync(join(process.cwd(), 'src/app', entry.route));
+
+  /** 每一档的全部文案：步骤 + 可复制片段 */
+  const textOf = (c: (typeof CLIENT_MATRIX)[number], vars: SnippetVars): string =>
+    [...c.steps(vars), c.snippet(vars)].join('\n');
 
   it('提到站内入口的那句话，要么路由已存在，要么写明还没上线', () => {
     const vars = urlsFromEnv();
     for (const c of CLIENT_MATRIX) {
-      const text = [...c.steps(vars), c.snippet(vars)].join('\n');
       for (const entry of IN_SITE_ENTRIES) {
-        for (const sentence of text.split(/[。\n]/)) {
+        if (landed(entry)) continue;
+        for (const sentence of textOf(c, vars).split(/[。\n]/)) {
           if (!sentence.includes(entry.name)) continue;
-          const ok = routeExists(entry.routeDirs) || HEDGES.some((h) => sentence.includes(h));
-          expect(ok, `${c.label} 提到「${entry.name}」却既无路由也无「还没上线」：${sentence}`).toBe(
-            true,
-          );
+          expect(
+            HEDGES.some((h) => sentence.includes(h)),
+            `${c.label} 提到「${entry.name}」却既无路由也无「还没上线」：${sentence}`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('路由已经落地的能力，文案里不许再写它没上线', () => {
+    const vars = urlsFromEnv();
+    for (const c of CLIENT_MATRIX) {
+      for (const entry of IN_SITE_ENTRIES) {
+        if (!landed(entry)) continue;
+        for (const sentence of textOf(c, vars).split(/[。\n]/)) {
+          if (!sentence.includes(entry.name)) continue;
+          const stale = HEDGES.filter((h) => sentence.includes(h));
+          expect(
+            stale,
+            `${c.label} 里「${entry.name}」已经上线了，这句话还写着「${stale.join('/')}」：${sentence}`,
+          ).toEqual([]);
         }
       }
     }

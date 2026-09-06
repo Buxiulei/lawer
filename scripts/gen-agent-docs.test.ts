@@ -146,8 +146,10 @@ describe('客户端矩阵（与设置页同一份数据、同一批片段函数�
       openapiUrl: 'https://m.example.test/api/openapi.json',
       skillUrl: 'https://m.example.test/skill/SKILL.md',
     };
+    // 【为什么这里不再要求「至少有一档 blocked」】OAuth 落地那天四档同时转 ready，
+    // 而那条断言会因此变红——它盯的其实是「当时恰好有几档没通」，不是任何不变量。
+    // 「已上线就不许写成没上线」由 settings/agent/__tests__/client-matrix.test.tsx 按路由钉住。
     const blocked = CLIENT_MATRIX.filter((c) => c.status === 'blocked');
-    expect(blocked.length, '至少有一档还在等 OAuth').toBeGreaterThan(0);
     for (const c of blocked) {
       const text = c.steps(vars).join('\n');
       expect(text, `${c.label} 没说清替代路`).toMatch(/改选|改用|用 |先走|等我们的 OAuth/);
