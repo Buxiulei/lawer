@@ -5,6 +5,7 @@ import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import * as cases from '@/lib/cases';
 import { pageParams, pageResponse } from '@/lib/cases/paging';
 import { getDb } from '@/lib/db/client';
+import { briefStatusOf } from '@/lib/evidence/brief';
 import { apiJson } from '@/lib/http/json';
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -35,5 +36,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   });
   if (!result.ok) return domainFailure(result);
 
-  return pageResponse('evidence', { items: result.evidence, ...result });
+  // 简报处境（none/ok/failed + 原因）由 lib/evidence 的 briefStatusOf 派生——与 MCP
+  // evidence_list 用的是**同一个符号**，两条入口不各写一份。各写一份的形态是某天分叉：
+  // 一条把 failed 归进 none（`brief_json ? 'ok' : 'none'`），另一条不会，而两边都返回 200。
+  const items = result.evidence.map((row) => ({
+    ...row,
+    ...briefStatusOf(row.brief_json, row.brief_error),
+  }));
+
+  return pageResponse('evidence', { ...result, items });
 }

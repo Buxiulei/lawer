@@ -129,6 +129,24 @@ function inEnum(v: unknown, allowed: readonly string[]): string | null {
 }
 
 /**
+ * 日期字段的格式校验：过 calc 自己的 parseDate 就算合法，否则不合法。
+ *
+ * 【为什么借 calc 的 parseDate 而不另写一把】这把尺和 calc 内部解析这两个日期用的是
+ * 同一个函数——收集阶段放过的日期 calc 一定收得下，收集阶段拦下的 calc 一定会抛。
+ * 另写一把（哪怕只认 YYYY-MM-DD）就会与 calc 分叉：calc 收 canonical/ISO 而这把不收，
+ * 于是同一个日期在收集阶段说不合法、真去算却算得出来，两条判断各说各话。
+ * 这里只要真假，不要解析结果；parseDate 抛错即「不是合法日期串或不是真实存在的一天」。
+ */
+function isCalcDate(value: string): boolean {
+  try {
+    calc.parseDate(value, 'date');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 四个非解除补偿类算法的分派：未休年假 / 未签合同双倍工资 / 加班费 / 待岗工资。
  *
  * 返回 null 表示「这个 kind 不归我管」，交回给 N/N+1/2N 那条路。
@@ -459,8 +477,13 @@ export function runClaimCalc(args: Record<string, unknown>, ctx: ClaimCalcEnv): 
   }
   const employedFrom = str(args.employed_from);
   const terminatedAt = str(args.terminated_at);
+  // 日期两查：先「给没给」（进 missing），再「给的是不是合法日期」（进 invalid）。
+  // 两处一起在收集阶段查掉，两个日期同时填错时**一次列全两项**——此前格式错要落到后面
+  // calc 里才抛，而 calc 只抛第一个碰上的，第二个日期永远等不到被指出来。
   if (!employedFrom) p.note('employed_from', '入职日期，格式 YYYY-MM-DD');
+  else if (!isCalcDate(employedFrom)) p.note('employed_from', '不是合法日期，格式 YYYY-MM-DD');
   if (!terminatedAt) p.note('terminated_at', '解除/终止日期，格式 YYYY-MM-DD');
+  else if (!isCalcDate(terminatedAt)) p.note('terminated_at', '不是合法日期，格式 YYYY-MM-DD');
   // N+1 的第四项也在这一轮查掉，别等到算的时候才第二次回绝
   const lastMonth = Number(args.last_month_wage_fen);
   if (kind === 'N+1' && (!Number.isInteger(lastMonth) || lastMonth <= 0)) {

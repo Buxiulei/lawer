@@ -11,6 +11,11 @@ export {
   type InputSource,
 } from './types';
 
+// 日期解析件也从这里转出：claim_calc 的入参校验要在收集阶段先过一遍日期格式，
+// 用的必须是算钱那条路自己解析日期的**同一个** parseDate（收集阶段放过的 calc 一定收得下、
+// 收集阶段拦下的 calc 一定会抛），否则两把尺一分叉就又出现「一处认另一处不认」。
+export { parseDate } from './date';
+
 export {
   MIN_WAGE_FEN_DEFAULT,
   SANBEI_CAP_FEN_DEFAULT,

@@ -207,6 +207,64 @@ describe('REST 与 MCP 两条入口行为一致', () => {
     expect(mcpPayload.case).toEqual(rest.case);
     expect(mcpPayload.timeline).toEqual(rest.timeline);
   });
+
+  test('同一件材料的 brief_status，REST 与 MCP evidence_list 逐条相同', async () => {
+    const key = issueKey(userA, ['case:read']);
+
+    // 三档各造一件：ok（有合法简报）/ failed（有失败原因、无简报）/ none（都没有）。
+    // 直接落 SQL（brief_json / brief_error 两列即三档的全部输入），不经上传盘链路。
+    const addEvidence = (name: string, briefJson: string | null, briefError: string | null): number => {
+      const fileId = Number(
+        db
+          .prepare("INSERT INTO files (sha256, size, enc_path) VALUES (?, 1, 'x')")
+          .run(crypto.randomUUID()).lastInsertRowid,
+      );
+      const id = Number(
+        db
+          .prepare(
+            "INSERT INTO evidence (case_id, user_id, file_id, name, category, created_at) VALUES (?, ?, ?, ?, '其他', '2026-08-19T00:00:00.000Z')",
+          )
+          .run(caseA, userA, fileId, name).lastInsertRowid,
+      );
+      db.prepare('UPDATE evidence SET brief_json = ?, brief_error = ? WHERE id = ?').run(
+        briefJson,
+        briefError,
+        id,
+      );
+      return id;
+    };
+    const okId = addEvidence('有简报.jpg', JSON.stringify({ proves: '证明公司单方解除' }), null);
+    const failedId = addEvidence('失败.jpg', null, '上游挂了');
+    const noneId = addEvidence('没简报.jpg', null, null);
+
+    const rest = await (await getEvidence(request('GET', key), ctx(caseA))).json();
+    const mcpRes = await mcpPost(
+      new Request('http://localhost/api/mcp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: 'evidence_list', arguments: { case_id: caseA } },
+        }),
+      }),
+    );
+    const mcp = JSON.parse((await mcpRes.json()).result.content[0].text);
+
+    type EvItem = { id: number; brief_status?: string };
+    const restById = new Map((rest.evidence as EvItem[]).map((e) => [e.id, e.brief_status]));
+    const mcpById = new Map((mcp.evidence as EvItem[]).map((e) => [e.id, e.brief_status]));
+
+    // 先钉死派生结果本身对，否则「两边都 undefined」也会两两相等而漏过变异臂
+    expect(mcpById.get(okId)).toBe('ok');
+    expect(mcpById.get(failedId)).toBe('failed');
+    expect(mcpById.get(noneId)).toBe('none');
+    // 逐条相同：REST 不带 brief_status（变异臂）时这里恒 undefined ≠ MCP 值 ⇒ 红
+    for (const id of [okId, failedId, noneId]) {
+      expect(restById.get(id)).toBe(mcpById.get(id));
+    }
+  });
 });
 
 describe('/api/manifest', () => {
