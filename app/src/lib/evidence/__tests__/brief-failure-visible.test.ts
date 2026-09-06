@@ -15,7 +15,7 @@ import type { Identity } from '@/lib/auth/identity';
 import { getCapability } from '@/lib/capabilities';
 import { runMigrations } from '@/lib/db/migrate';
 import * as evidence from '@/lib/evidence';
-import { briefStatusOf, generateBrief, type BriefLlm } from '@/lib/evidence/brief';
+import { BRIEF_LLM_TIMEOUT_MS, briefStatusOf, generateBrief, type BriefLlm } from '@/lib/evidence/brief';
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -96,6 +96,24 @@ afterEach(() => {
   vi.restoreAllMocks();
   fs.rmSync(tmpDir, { recursive: true, force: true });
   db.close();
+});
+
+describe('简报调用必须显式带长超时（provider 缺省 8s 在生产上一份简报都写不出来）', () => {
+  test('generateBrief 传给 chatJSON 的 timeoutMs ≥ 30s', async () => {
+    const seen: Array<{ timeoutMs?: number } | undefined> = [];
+    const llm: BriefLlm = {
+      chatJSON: async (_messages, opts) => {
+        seen.push(opts);
+        return GOOD_BRIEF;
+      },
+    };
+    const id = makeEvidence();
+    const r = await generateBrief(db, id, llm);
+    expect(r.ok).toBe(true);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.timeoutMs).toBe(BRIEF_LLM_TIMEOUT_MS);
+    expect(BRIEF_LLM_TIMEOUT_MS).toBeGreaterThanOrEqual(30_000);
+  });
 });
 
 describe('每一档失败都落 brief_error 并打日志', () => {

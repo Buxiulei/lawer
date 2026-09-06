@@ -305,9 +305,19 @@ export function saveBrief(
 
 /** 模型侧最小依赖面（同 company/patterns.ts：lib/llm 的 Provider 天然满足）。 */
 export interface BriefLlm {
-  chatJSON(messages: ChatMessage[]): Promise<string>;
+  chatJSON(messages: ChatMessage[], opts?: { timeoutMs?: number }): Promise<string>;
   readonly billingModel?: string;
 }
+
+/**
+ * 简报一次模型调用的总时长上限。
+ *
+ * provider 的 chatJSON 缺省 8s——那是给对话里的**分类小调用**定的；简报是后台任务、要产出
+ * 六个字段的 JSON、跑在入门档（境内便宜、吐字慢）模型上，8s 在生产上稳定超时：
+ * 2026-09-06 每一份 OCR 完成的材料 brief_error 都是「This operation was aborted」，
+ * 一份简报都没写出来。这里显式放到 60s；再长就该怀疑上游，让它落 brief_error 走重生成。
+ */
+export const BRIEF_LLM_TIMEOUT_MS = 60_000;
 
 const SYSTEM_PROMPT =
   '你是证据分析助手。依据用户给出的一份材料（元数据 + 可能有的提取文本），判断它在争议处理中能派什么用场。' +
@@ -446,10 +456,13 @@ export async function generateBrief(
 
   let raw: string;
   try {
-    raw = await llm.chatJSON([
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: buildMaterialPrompt(material) },
-    ]);
+    raw = await llm.chatJSON(
+      [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: buildMaterialPrompt(material) },
+      ],
+      { timeoutMs: BRIEF_LLM_TIMEOUT_MS },
+    );
   } catch (e) {
     return failed(`调用简报模型失败（上游/网络）：${(e as Error).message}`);
   }
