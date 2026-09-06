@@ -6,6 +6,8 @@
 // 传进来的 *Hash 参数一律是 sha256 hex（lib/auth/oauth 的 hashSecret）。
 import type { Database } from 'better-sqlite3';
 
+import { disableApiKey } from './api-keys';
+
 export interface OauthClientRow {
   id: number;
   client_id: string;
@@ -146,9 +148,19 @@ export function findTokenByHash(db: Database, tokenHash: string): OauthTokenRow 
  * @returns 本次实际改到的行数
  */
 export function revokeChain(db: Database, codeId: number, nowSql: string): number {
-  return db
+  const changed = db
     .prepare('UPDATE oauth_tokens SET revoked_at = ? WHERE code_id = ? AND revoked_at IS NULL')
     .run(nowSql, codeId).changes;
+  // 整链吊销 = 这份授权已判泄漏（或用户主动交还），映射的 api_keys 行也一并停用（enabled=0）。
+  // 不这么做的形态是：oauth_tokens.revoked_at 落了值，可 api_keys.enabled 仍是 1，
+  // 设置页照 enabled 把一份死授权显示成「已接入」。反向（设置页手动吊销 key）本就把 token
+  // 挡在门外（token 路由查 key.enabled），这里补上正向。api_keys 无 revoked_at 列，只落
+  // enabled=0（软删，见 api-keys.ts disableApiKey）。旋转用的 revokeChainKind 不在此列。
+  const code = db
+    .prepare('SELECT key_id FROM oauth_codes WHERE id = ?')
+    .get(codeId) as { key_id: number } | undefined;
+  if (code) disableApiKey(db, code.key_id);
+  return changed;
 }
 
 /** 吊销链上某一种令牌（旋转时用：先作废旧的 access 与 refresh，再发新的一对）。 */

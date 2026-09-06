@@ -609,6 +609,72 @@ describe('与 api key 等价', () => {
   });
 });
 
+describe('整链吊销连带停用 api_keys（设置页据此显示已失效）', () => {
+  /** 设置页读 key 列表用的正是这条（网页登录态）；返回某把 key 在页面上的 enabled */
+  async function keyEnabledInSettings(keyId: number): Promise<boolean | undefined> {
+    const res = await keysGet(
+      new Request('http://localhost/api/v1/keys', {
+        headers: { authorization: `Bearer ${jwtA}` },
+      }),
+    );
+    const body = (await res.json()) as { keys: { id: number; enabled: boolean }[] };
+    return body.keys.find((k) => k.id === keyId)?.enabled;
+  }
+  const enabledInDb = (keyId: number) =>
+    (db.prepare('SELECT enabled FROM api_keys WHERE id = ?').get(keyId) as { enabled: number })
+      .enabled;
+
+  test('授权码复用 ⇒ 对应 api_keys.enabled=0，设置页那一行标已失效', async () => {
+    const g = await fullGrant();
+    expect(enabledInDb(g.keyId)).toBe(1);
+    expect(await keyEnabledInSettings(g.keyId)).toBe(true);
+
+    const again = await postToken({
+      grant_type: 'authorization_code',
+      code: g.code,
+      client_id: g.clientId,
+      redirect_uri: REDIRECT,
+      code_verifier: g.verifier,
+    });
+    expect(again.status).toBe(400);
+
+    // 判据：整链吊销的同时，映射的 api_keys 行停用，设置页据 enabled 显示「已失效」
+    expect(enabledInDb(g.keyId)).toBe(0);
+    expect(await keyEnabledInSettings(g.keyId)).toBe(false);
+  });
+
+  test('refresh 复用 ⇒ 对应 api_keys.enabled=0，设置页那一行标已失效', async () => {
+    const g = await fullGrant();
+    // 先正常续期一次（旋转，不吊销）：旧 refresh 作废，key 仍启用
+    await postToken({ grant_type: 'refresh_token', refresh_token: g.refresh, client_id: g.clientId });
+    expect(enabledInDb(g.keyId)).toBe(1);
+
+    // 复用作废了的旧 refresh ⇒ 整链吊销 ⇒ key 一并停用
+    const replay = await postToken({
+      grant_type: 'refresh_token',
+      refresh_token: g.refresh,
+      client_id: g.clientId,
+    });
+    expect(replay.status).toBe(400);
+
+    expect(enabledInDb(g.keyId)).toBe(0);
+    expect(await keyEnabledInSettings(g.keyId)).toBe(false);
+  });
+
+  test('正常旋转（续期）不停用 key —— 只有 revokeChain 连带，revokeChainKind 不连带', async () => {
+    const g = await fullGrant();
+    const refreshed = await postToken({
+      grant_type: 'refresh_token',
+      refresh_token: g.refresh,
+      client_id: g.clientId,
+    });
+    expect(refreshed.status).toBe(200);
+    // 续期是旋转不是吊销：key 必须仍启用，否则新令牌下一次调用就被 key.enabled 挡掉
+    expect(enabledInDb(g.keyId)).toBe(1);
+    expect((await toolsList(refreshed.body.access_token)).status).toBe(200);
+  });
+});
+
 describe('交还令牌', () => {
   test('认不出的令牌也回 200 —— 这个口不能当令牌探测器用', async () => {
     const res = await revokePost(
