@@ -4577,6 +4577,1577 @@
     }
   },
   {
+    "id": "case-dongni-lisongwei-weizhongshen",
+    "type": "判例卡",
+    "title": "冬妮诉李松蔚名誉权互诉案（2024 年开庭·**未终审**，仅作风险场景，不作裁判倾向）",
+    "keywords": [
+      "冬妮",
+      "李松蔚",
+      "名誉权",
+      "互诉",
+      "双重关系指控",
+      "北京互联网法院",
+      "未终审",
+      "伦理调查暂停",
+      "永久除名"
+    ],
+    "applies_to": [
+      "名誉侵权",
+      "伦理申诉",
+      "来访投诉",
+      "诉讼与仲裁"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.thepaper.cn/newsDetail_forward_27375992"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/cases/dongni-lisongwei-weizhongshen.md",
+    "domain": "counseling",
+    "facts": {
+      "case_facts": {
+        "court": "北京互联网法院",
+        "gist": "来访者指控咨询师在咨询关系存续期间发生亲密行为，咨询师另行提起名誉权之诉，双方互诉。",
+        "issue": "咨询关系中是否存在越界的亲密关系，以及公开指控是否构成名誉侵权。"
+      }
+    }
+  },
+  {
+    "id": "case-guge-mingyu-quan",
+    "type": "判例卡",
+    "title": "顾歌诉来访者家属名誉权案（据报道为全国首例心理咨询师名誉维权案·案号待核实）",
+    "keywords": [
+      "顾歌案",
+      "名誉权",
+      "心理咨询师",
+      "私录录音",
+      "剪辑发布",
+      "基本内容失实",
+      "删除文章",
+      "公开道歉",
+      "精神抚慰金",
+      "公证费"
+    ],
+    "applies_to": [
+      "名誉侵权",
+      "隐私泄露",
+      "伦理申诉",
+      "证据固定"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.everbrightlaw.com/CN/07/36d57b8b9cb54172.aspx"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/cases/guge-mingyu-quan.md",
+    "domain": "counseling",
+    "facts": {
+      "case_facts": {
+        "gist": "来访者家属私自录制咨询过程录音并经剪辑后发布于网络平台，指控咨询师违背伦理、建立双重关系。",
+        "issue": "网络发布的指控内容是否构成名誉侵权，咨询师能否要求删除、道歉与赔偿。",
+        "holding": "据报道，法院认定发布内容基本内容失实、构成名誉侵权，判令删除文章、公开道歉、赔偿公证费与精神抚慰金。"
+      }
+    }
+  },
+  {
+    "id": "case-sichuan-tuifei-7500",
+    "type": "判例卡",
+    "title": "四川高院 2024 年消保典型案例·网络情感咨询服务退费（无书面合同，判退 7500 元）",
+    "keywords": [
+      "四川高院",
+      "消费者权益保护典型案例",
+      "网络情感咨询",
+      "退费",
+      "无书面合同",
+      "聊天记录",
+      "履约程度",
+      "双方过错",
+      "7500"
+    ],
+    "applies_to": [
+      "退费争议",
+      "疗效争议",
+      "监管投诉",
+      "诉讼与仲裁"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.thepaper.cn/newsDetail_forward_26699216"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/cases/sichuan-tuifei-7500.md",
+    "domain": "counseling",
+    "facts": {
+      "case_facts": {
+        "gist": "消费者购买网络情感咨询服务，双方未签订书面合同，以聊天记录确认服务合同关系成立；消费者当天即申请退款。",
+        "issue": "无书面合同时服务合同关系如何认定，以及合同无法继续履行时退费金额如何确定。",
+        "holding": "据报道，法院认定合同无法继续履行，综合履约程度与双方过错，判决退还 7500 元。"
+      }
+    }
+  },
+  {
+    "id": "data-counseling-shixiao-qixian",
+    "type": "数据卡",
+    "title": "心理咨询纠纷的时效与期限表（诉讼时效3年/最长20年、答辩期15日、其余待核实）",
+    "keywords": [
+      "诉讼时效",
+      "三年",
+      "二十年",
+      "答辩期",
+      "十五日",
+      "举证期限",
+      "伦理申诉时限",
+      "投诉答复期限",
+      "记录保存年限",
+      "期限表"
+    ],
+    "applies_to": [
+      "诉讼与仲裁",
+      "伦理申诉",
+      "监管投诉",
+      "退费争议",
+      "名誉侵权",
+      "记录留痕"
+    ],
+    "region": "全国",
+    "sources": [
+      "http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html",
+      "http://gongbao.court.gov.cn/Details/42a89051fa54947fa9d96bf7276b6a.html"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/data/shixiao-yu-qixian.md",
+    "domain": "counseling",
+    "law_refs": [
+      "民法典§188",
+      "民法典§191",
+      "民事诉讼法§125"
+    ],
+    "facts": {
+      "values": [
+        {
+          "key": "counseling_susong_shixiao_years",
+          "value": 3,
+          "unit": "年",
+          "effective_from": "2021-01-01",
+          "confidence": "原文核实",
+          "source_idx": 0
+        },
+        {
+          "key": "counseling_shixiao_zuichang_years",
+          "value": 20,
+          "unit": "年",
+          "effective_from": "2021-01-01",
+          "confidence": "原文核实",
+          "source_idx": 0
+        },
+        {
+          "key": "counseling_dabian_qi_days",
+          "value": 15,
+          "unit": "日",
+          "effective_from": "2013-01-01",
+          "confidence": "待核实",
+          "source_idx": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "data-counseling-weiji-rexian",
+    "type": "数据卡",
+    "title": "心理危机处置可用号码卡（只收官方发布：12356 / 110 / 120）",
+    "keywords": [
+      "心理援助热线",
+      "12356",
+      "110",
+      "120",
+      "危机处置",
+      "国卫医政函",
+      "259号",
+      "官方号码",
+      "希望24热线",
+      "不可用号码"
+    ],
+    "applies_to": [
+      "危机处置",
+      "自伤事件",
+      "转介与终止"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.gov.cn/zhengce/zhengceku/202412/content_6994470.htm"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/data/weiji-rexian.md",
+    "domain": "counseling",
+    "facts": {
+      "hotlines": [
+        {
+          "name": "全国统一心理援助热线",
+          "phone": "12356",
+          "category": "crisis",
+          "status": "usable",
+          "hours": "每日不少于18小时",
+          "dial_hint": "全国统一心理援助热线，手机座机均可直拨",
+          "agent_note": "官方号码，出处国卫医政函〔2024〕259号；给来访或家属的统一入口，我方不代拨、不代述案情"
+        },
+        {
+          "name": "公安报警",
+          "phone": "110",
+          "category": "crisis",
+          "status": "usable",
+          "hours": "24小时",
+          "dial_hint": "属地公安报警电话，人身安全紧急危险时拨打",
+          "agent_note": "精神卫生法§28第二款的法定主体之一；先联系近亲属/紧急联系人未果或情况紧急时才用"
+        },
+        {
+          "name": "医疗急救",
+          "phone": "120",
+          "category": "crisis",
+          "status": "usable",
+          "hours": "24小时",
+          "dial_hint": "医疗急救电话，已发生伤害行为或需立即医疗处置时拨打",
+          "agent_note": "送医诊断由医疗机构作出，我方不作诊断、不决定住院"
+        },
+        {
+          "name": "希望24热线（社会组织运营，非官方发布）",
+          "phone": "400-161-9995",
+          "category": "crisis",
+          "status": "forbidden",
+          "agent_note": "本包不输出——非政府官方发布号码，号码本身亦仅见于二手转载、未经官方源核实；需要热线时一律给 12356"
+        }
+      ]
+    }
+  },
+  {
+    "id": "ethic-lunli-1-8-1-10-shuangchong-guanxi",
+    "type": "法条卡",
+    "title": "伦理守则1.8—1.10：性与亲密关系禁令、三年禁期与非专业关系（待核实）",
+    "keywords": [
+      "伦理守则",
+      "1.8",
+      "1.9",
+      "1.10",
+      "双重关系",
+      "多重关系",
+      "性或亲密关系",
+      "三年",
+      "朋友和亲人",
+      "专业界限",
+      "除名"
+    ],
+    "applies_to": [
+      "伦理申诉",
+      "来访投诉",
+      "名誉侵权",
+      "日常合规"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/ethics/lunli-1-8-1-10-shuangchong-guanxi.md",
+    "domain": "counseling"
+  },
+  {
+    "id": "ethic-lunli-3-2-baomi-liwai",
+    "type": "法条卡",
+    "title": "伦理守则3.1—3.4：保密原则的三类例外与「最低限度披露」（待核实）",
+    "keywords": [
+      "伦理守则",
+      "中国心理学会",
+      "临床与咨询心理学工作伦理守则",
+      "3.1",
+      "3.2",
+      "3.3",
+      "3.4",
+      "保密例外",
+      "预警责任",
+      "最低限度披露",
+      "严重危险",
+      "性侵犯或虐待"
+    ],
+    "applies_to": [
+      "保密例外",
+      "危机处置",
+      "知情同意",
+      "伦理申诉",
+      "未成年人",
+      "记录留痕"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/ethics/lunli-3-2-baomi-liwai.md",
+    "domain": "counseling"
+  },
+  {
+    "id": "ethic-lunli-8-2-8-3-yuancheng-fuwu",
+    "type": "法条卡",
+    "title": "伦理守则8.2/8.3：远程服务的保密局限告知与身份、紧急联系人核实（待核实）",
+    "keywords": [
+      "伦理守则",
+      "8.1",
+      "8.2",
+      "8.3",
+      "远程咨询",
+      "线上咨询",
+      "网络传输",
+      "保密局限",
+      "真实身份",
+      "紧急联系人",
+      "地理位置",
+      "危机保护"
+    ],
+    "applies_to": [
+      "远程咨询",
+      "知情同意",
+      "危机处置",
+      "隐私泄露",
+      "日常合规"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/ethics/lunli-8-2-8-3-yuancheng-fuwu.md",
+    "domain": "counseling"
+  },
+  {
+    "id": "method-counseling-panli-heyan",
+    "type": "方法卡",
+    "title": "心理咨询纠纷判例的核验与引用纪律（四步法在本领域的落法）",
+    "keywords": [
+      "判例核验",
+      "四步法",
+      "引用判例",
+      "案号",
+      "未终审",
+      "典型案例",
+      "新闻转载",
+      "内部参考",
+      "不进书状"
+    ],
+    "applies_to": [
+      "诉讼与仲裁",
+      "名誉侵权",
+      "退费争议",
+      "伦理申诉",
+      "证据固定"
+    ],
+    "region": "全国",
+    "sources": [
+      "knowledge/packs/method/panli-heyan-sibufa.md"
+    ],
+    "confidence": "原文核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/method/panli-heyan-counseling.md",
+    "domain": "counseling"
+  },
+  {
+    "id": "risk-difang-xuke-beian",
+    "type": "方法卡",
+    "title": "【待律师复核·风险卡④】心理咨询机构的行政许可与地方备案要求",
+    "keywords": [
+      "行政许可",
+      "备案",
+      "工商注册",
+      "经营范围",
+      "心理咨询服务",
+      "地方规定",
+      "准入",
+      "待律师复核",
+      "不得作为结论"
+    ],
+    "applies_to": [
+      "日常合规",
+      "监管投诉",
+      "疗效争议"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/risk/difang-xuke-beian.md",
+    "domain": "counseling"
+  },
+  {
+    "id": "risk-hetong-dingxing",
+    "type": "方法卡",
+    "title": "【待律师复核·风险卡②】心理咨询服务合同的定性（委托合同 vs 服务合同）",
+    "keywords": [
+      "合同定性",
+      "委托合同",
+      "服务合同",
+      "人身属性",
+      "退费公式",
+      "第933条",
+      "待律师复核",
+      "不得作为结论"
+    ],
+    "applies_to": [
+      "退费争议",
+      "终止服务",
+      "诉讼与仲裁",
+      "日常合规"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/risk/hetong-dingxing.md",
+    "domain": "counseling"
+  },
+  {
+    "id": "risk-jilu-baocun-nianxian",
+    "type": "方法卡",
+    "title": "【待律师复核·风险卡③】咨询记录的保存年限（无明文，类推病历有风险）",
+    "keywords": [
+      "咨询记录",
+      "保存年限",
+      "病历保存",
+      "类推",
+      "最小必要",
+      "删除权",
+      "待律师复核",
+      "不得作为结论"
+    ],
+    "applies_to": [
+      "记录留痕",
+      "隐私泄露",
+      "日常合规",
+      "诉讼与仲裁"
+    ],
+    "region": "全国",
+    "sources": [
+      "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html",
+      "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/risk/jilu-baocun-nianxian.md",
+    "domain": "counseling"
+  },
+  {
+    "id": "risk-qiangzhi-baogao-zhuti",
+    "type": "方法卡",
+    "title": "【待律师复核·风险卡①】心理咨询机构是否属于强制报告制度的法定主体",
+    "keywords": [
+      "强制报告制度",
+      "法定主体",
+      "侵害未成年人案件",
+      "密切接触未成年人行业",
+      "心理咨询机构",
+      "待律师复核",
+      "不得作为结论"
+    ],
+    "applies_to": [
+      "未成年人",
+      "保密例外",
+      "危机处置",
+      "日常合规",
+      "伦理申诉"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.spp.gov.cn/xwfbh/wsfbt/202005/t20200529_463482.shtml"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/risk/qiangzhi-baogao-zhuti.md",
+    "domain": "counseling"
+  },
+  {
+    "id": "script-laifang-tousu-goutong",
+    "type": "话术卡",
+    "title": "来访/家属投诉当场沟通话术（8 句常见质问的照读回应与禁忌语）",
+    "keywords": [
+      "投诉话术",
+      "照读回应",
+      "禁忌语",
+      "退费",
+      "没有效果",
+      "我要曝光",
+      "我要投诉",
+      "你不专业",
+      "情绪安抚",
+      "不自认"
+    ],
+    "applies_to": [
+      "来访投诉",
+      "退费争议",
+      "疗效争议",
+      "名誉侵权",
+      "监管投诉",
+      "终止服务"
+    ],
+    "region": "全国",
+    "sources": [
+      "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm",
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/scripts/laifang-tousu-goutong.md",
+    "domain": "counseling"
+  },
+  {
+    "id": "script-weiji-tonghua-huashu",
+    "type": "话术卡",
+    "title": "危机场景话术（对来访、对监护人、对 110/120 各说什么）",
+    "keywords": [
+      "危机话术",
+      "自伤",
+      "自杀风险",
+      "评估提问",
+      "告知监护人",
+      "报警说什么",
+      "急救说什么",
+      "保密例外告知",
+      "随访"
+    ],
+    "applies_to": [
+      "危机处置",
+      "自伤事件",
+      "保密例外",
+      "未成年人",
+      "转介与终止"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm",
+      "https://www.gov.cn/zhengce/zhengceku/202412/content_6994470.htm"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/scripts/weiji-tonghua-huashu.md",
+    "domain": "counseling",
+    "law_refs": [
+      "精神卫生法§28",
+      "精神卫生法§23"
+    ]
+  },
+  {
+    "id": "sop-jianguan-xiehui-tousu",
+    "type": "流程SOP",
+    "title": "被投诉到监管/消协/协会的应对 SOP（多头投诉的分线处置）",
+    "keywords": [
+      "投诉",
+      "市场监管",
+      "消协",
+      "卫健热线",
+      "12315",
+      "行业协会",
+      "多头投诉",
+      "配合调查",
+      "答复函",
+      "合规证据"
+    ],
+    "applies_to": [
+      "监管投诉",
+      "来访投诉",
+      "退费争议",
+      "日常合规",
+      "伦理申诉"
+    ],
+    "region": "全国",
+    "sources": [
+      "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm",
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/sop/jianguan-xiehui-tousu.md",
+    "domain": "counseling",
+    "law_refs": [
+      "消费者权益保护法§26",
+      "消费者权益保护法§55",
+      "精神卫生法§23"
+    ]
+  },
+  {
+    "id": "sop-liaoxiao-zhengyi",
+    "type": "流程SOP",
+    "title": "疗效争议应对 SOP（「越咨询越严重」「一点用都没有」）",
+    "keywords": [
+      "疗效",
+      "无效",
+      "越咨询越严重",
+      "疗效承诺",
+      "不保证疗效",
+      "咨询记录",
+      "督导记录",
+      "专业操作合规",
+      "转介"
+    ],
+    "applies_to": [
+      "疗效争议",
+      "来访投诉",
+      "退费争议",
+      "转介与终止",
+      "监管投诉"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm",
+      "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/sop/liaoxiao-zhengyi.md",
+    "domain": "counseling",
+    "law_refs": [
+      "精神卫生法§23",
+      "消费者权益保护法§55",
+      "消费者权益保护法§26"
+    ]
+  },
+  {
+    "id": "sop-lunli-shensu-yingdui",
+    "type": "流程SOP",
+    "title": "行业协会伦理申诉的应对 SOP（注册系统伦理工作组来函之后）",
+    "keywords": [
+      "伦理申诉",
+      "中国心理学会",
+      "注册系统",
+      "伦理工作组",
+      "答辩",
+      "除名",
+      "自律处分",
+      "三条线并行",
+      "督导记录"
+    ],
+    "applies_to": [
+      "伦理申诉",
+      "来访投诉",
+      "名誉侵权",
+      "监管投诉",
+      "诉讼与仲裁"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml",
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/sop/lunli-shensu-yingdui.md",
+    "domain": "counseling",
+    "law_refs": [
+      "精神卫生法§23"
+    ]
+  },
+  {
+    "id": "sop-mingyu-qinquan-yingdui",
+    "type": "流程SOP",
+    "title": "网络曝光/差评/剪辑录音的名誉侵权应对 SOP",
+    "keywords": [
+      "名誉权",
+      "网络曝光",
+      "差评",
+      "录音剪辑",
+      "公证保全",
+      "通知删除",
+      "平台投诉",
+      "律师函",
+      "基本内容失实",
+      "舆论"
+    ],
+    "applies_to": [
+      "名誉侵权",
+      "隐私泄露",
+      "来访投诉",
+      "证据固定",
+      "诉讼与仲裁"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm",
+      "http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/sop/mingyu-qinquan-yingdui.md",
+    "domain": "counseling",
+    "law_refs": [
+      "民法典§1032",
+      "民法典§1033",
+      "民法典§188"
+    ]
+  },
+  {
+    "id": "sop-tuifei-zhengyi",
+    "type": "流程SOP",
+    "title": "退费争议应对 SOP（收到退费要求当天到签订退费协议）",
+    "keywords": [
+      "退费",
+      "退款",
+      "预付费",
+      "疗程包",
+      "未完成次数",
+      "履约程度",
+      "已提供服务",
+      "结算",
+      "协商",
+      "退费协议"
+    ],
+    "applies_to": [
+      "退费争议",
+      "来访投诉",
+      "终止服务",
+      "诉讼与仲裁"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml",
+      "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/sop/tuifei-zhengyi.md",
+    "domain": "counseling",
+    "law_refs": [
+      "民法典§933",
+      "民法典§928",
+      "消费者权益保护法§26"
+    ]
+  },
+  {
+    "id": "sop-yinsi-xielou-zhikong",
+    "type": "流程SOP",
+    "title": "隐私/个人信息泄露指控的应对 SOP（含内部溯源与整改）",
+    "keywords": [
+      "隐私泄露",
+      "个人信息",
+      "咨询记录外泄",
+      "督导未脱敏",
+      "录音管理",
+      "单独同意",
+      "访问日志",
+      "溯源",
+      "整改",
+      "致歉"
+    ],
+    "applies_to": [
+      "隐私泄露",
+      "记录留痕",
+      "来访投诉",
+      "监管投诉",
+      "日常合规"
+    ],
+    "region": "全国",
+    "sources": [
+      "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html",
+      "https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/sop/yinsi-xielou-zhikong.md",
+    "domain": "counseling",
+    "law_refs": [
+      "个人信息保护法§28",
+      "个人信息保护法§29",
+      "个人信息保护法§30",
+      "民法典§1032",
+      "民法典§1033",
+      "精神卫生法§23"
+    ]
+  },
+  {
+    "id": "sop-zhiqing-tongyi-quexian",
+    "type": "流程SOP",
+    "title": "知情同意书缺陷的自查与补正 SOP（未签、条款不全、未单独同意）",
+    "keywords": [
+      "知情同意书",
+      "未签署",
+      "条款缺陷",
+      "格式条款",
+      "单独同意",
+      "补正",
+      "电子签署",
+      "未成年人监护人",
+      "留痕"
+    ],
+    "applies_to": [
+      "知情同意",
+      "日常合规",
+      "来访投诉",
+      "退费争议",
+      "监管投诉",
+      "未成年人"
+    ],
+    "region": "全国",
+    "sources": [
+      "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm",
+      "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/sop/zhiqing-tongyi-quexian.md",
+    "domain": "counseling",
+    "law_refs": [
+      "消费者权益保护法§26",
+      "个人信息保护法§29",
+      "个人信息保护法§30",
+      "个人信息保护法§31"
+    ]
+  },
+  {
+    "id": "sop-zishang-shijian-zhuize",
+    "type": "流程SOP",
+    "title": "危机事件处置与自伤事件后家属追责应对 SOP（评估→联系→记录→随访）",
+    "keywords": [
+      "危机处置",
+      "自伤",
+      "自杀",
+      "伤害他人",
+      "评估",
+      "预警",
+      "紧急联系人",
+      "监护人",
+      "报警",
+      "送医",
+      "随访",
+      "家属追责",
+      "免责证据"
+    ],
+    "applies_to": [
+      "危机处置",
+      "自伤事件",
+      "保密例外",
+      "未成年人",
+      "诉讼与仲裁",
+      "转介与终止"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm",
+      "https://www.gov.cn/zhengce/zhengceku/202412/content_6994470.htm"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/sop/zishang-shijian-zhuize.md",
+    "domain": "counseling",
+    "law_refs": [
+      "精神卫生法§28",
+      "精神卫生法§30",
+      "精神卫生法§31",
+      "精神卫生法§23",
+      "民法典§188"
+    ]
+  },
+  {
+    "id": "statute-grxxbhf-28-31-mingan-xinxi",
+    "type": "法条卡",
+    "title": "个人信息保护法第28—31条：咨询记录属敏感个人信息，须单独同意",
+    "keywords": [
+      "个人信息保护法",
+      "第28条",
+      "第29条",
+      "第30条",
+      "第31条",
+      "敏感个人信息",
+      "医疗健康",
+      "单独同意",
+      "书面同意",
+      "未成年人",
+      "监护人同意",
+      "咨询记录"
+    ],
+    "applies_to": [
+      "知情同意",
+      "隐私泄露",
+      "记录留痕",
+      "未成年人",
+      "日常合规",
+      "远程咨询"
+    ],
+    "region": "全国",
+    "sources": [
+      "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html"
+    ],
+    "confidence": "原文核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/statutes/grxxbhf-28-31-mingan-xinxi.md",
+    "domain": "counseling",
+    "law_refs": [
+      "个人信息保护法§28",
+      "个人信息保护法§29",
+      "个人信息保护法§30",
+      "个人信息保护法§31",
+      "个人信息保护法§17"
+    ],
+    "facts": {
+      "statute_quotes": [
+        {
+          "law": "中华人民共和国个人信息保护法",
+          "article": "第二十八条",
+          "text": "敏感个人信息是一旦泄露或者非法使用，容易导致自然人的人格尊严受到侵害或者人身、财产安全受到危害的个人信息，包括生物识别、宗教信仰、特定身份、医疗健康、金融账户、行踪轨迹等信息，以及不满十四周岁未成年人的个人信息。\n只有在具有特定的目的和充分的必要性，并采取严格保护措施的情形下，个人信息处理者方可处理敏感个人信息。"
+        },
+        {
+          "law": "中华人民共和国个人信息保护法",
+          "article": "第二十九条",
+          "text": "处理敏感个人信息应当取得个人的单独同意；法律、行政法规规定处理敏感个人信息应当取得书面同意的，从其规定。"
+        },
+        {
+          "law": "中华人民共和国个人信息保护法",
+          "article": "第三十条",
+          "text": "个人信息处理者处理敏感个人信息的，除本法第十七条第一款规定的事项外，还应当向个人告知处理敏感个人信息的必要性以及对个人权益的影响；依照本法规定可以不向个人告知的除外。"
+        },
+        {
+          "law": "中华人民共和国个人信息保护法",
+          "article": "第三十一条",
+          "text": "个人信息处理者处理不满十四周岁未成年人个人信息的，应当取得未成年人的父母或者其他监护人的同意。\n个人信息处理者处理不满十四周岁未成年人个人信息的，应当制定专门的个人信息处理规则。"
+        }
+      ]
+    }
+  },
+  {
+    "id": "statute-jswsf-23-zixun-bianjie",
+    "type": "法条卡",
+    "title": "精神卫生法第23条：心理咨询人员的执业边界、转介义务与保密义务",
+    "keywords": [
+      "精神卫生法",
+      "第23条",
+      "心理咨询人员",
+      "执业边界",
+      "不得从事心理治疗",
+      "诊断治疗",
+      "转介义务",
+      "保密义务",
+      "越界执业"
+    ],
+    "applies_to": [
+      "日常合规",
+      "疗效争议",
+      "转介与终止",
+      "监管投诉",
+      "知情同意"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
+    ],
+    "confidence": "原文核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/statutes/jswsf-23-zixun-bianjie.md",
+    "domain": "counseling",
+    "law_refs": [
+      "精神卫生法§23",
+      "精神卫生法§4",
+      "精神卫生法§25"
+    ],
+    "facts": {
+      "statute_quotes": [
+        {
+          "law": "中华人民共和国精神卫生法",
+          "article": "第二十三条",
+          "text": "第二十三条　心理咨询人员应当提高业务素质，遵守执业规范，为社会公众提供专业化的心理咨询服务。\n心理咨询人员不得从事心理治疗或者精神障碍的诊断、治疗。\n心理咨询人员发现接受咨询的人员可能患有精神障碍的，应当建议其到符合本法规定的医疗机构就诊。\n心理咨询人员应当尊重接受咨询人员的隐私，并为其保守秘密。"
+        },
+        {
+          "law": "中华人民共和国精神卫生法",
+          "article": "第四条第三款",
+          "text": "有关单位和个人应当对精神障碍患者的姓名、肖像、住址、工作单位、病历资料以及其他可能推断出其身份的信息予以保密；但是，依法履行职责需要公开的除外。"
+        }
+      ]
+    }
+  },
+  {
+    "id": "statute-jswsf-28-30-31-weiji-songyi",
+    "type": "法条卡",
+    "title": "精神卫生法第28/30/31条：危机送医的法定主体与非自愿住院的法定事由",
+    "keywords": [
+      "精神卫生法",
+      "第28条",
+      "第30条",
+      "第31条",
+      "送医主体",
+      "近亲属",
+      "所在单位",
+      "公安机关",
+      "非自愿住院",
+      "监护人同意",
+      "伤害自身",
+      "危害他人"
+    ],
+    "applies_to": [
+      "危机处置",
+      "保密例外",
+      "自伤事件",
+      "转介与终止",
+      "日常合规"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
+    ],
+    "confidence": "原文核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/statutes/jswsf-28-30-31-weiji-songyi.md",
+    "domain": "counseling",
+    "law_refs": [
+      "精神卫生法§28",
+      "精神卫生法§30",
+      "精神卫生法§31",
+      "精神卫生法§29"
+    ],
+    "facts": {
+      "statute_quotes": [
+        {
+          "law": "中华人民共和国精神卫生法",
+          "article": "第二十八条第二款",
+          "text": "疑似精神障碍患者发生伤害自身、危害他人安全的行为，或者有伤害自身、危害他人安全的危险的，其近亲属、所在单位、当地公安机关应当立即采取措施予以制止，并将其送往医疗机构进行精神障碍诊断。"
+        },
+        {
+          "law": "中华人民共和国精神卫生法",
+          "article": "第三十条",
+          "text": "第三十条　精神障碍的住院治疗实行自愿原则。\n诊断结论、病情评估表明，就诊者为严重精神障碍患者并有下列情形之一的，应当对其实施住院治疗：\n（一）已经发生伤害自身的行为，或者有伤害自身的危险的；\n（二）已经发生危害他人安全的行为，或者有危害他人安全的危险的。"
+        },
+        {
+          "law": "中华人民共和国精神卫生法",
+          "article": "第三十一条",
+          "text": "第三十一条　精神障碍患者有本法第三十条第二款第一项情形的，经其监护人同意，医疗机构应当对患者实施住院治疗；监护人不同意的，医疗机构不得对患者实施住院治疗。监护人应当对在家居住的患者做好看护管理。"
+        }
+      ]
+    }
+  },
+  {
+    "id": "statute-mfd-1032-1033-yinsi",
+    "type": "法条卡",
+    "title": "民法典第1032/1033条：隐私权与六类侵害行为（录音外泄与曝光的攻防基准）",
+    "keywords": [
+      "民法典",
+      "第1032条",
+      "第1033条",
+      "隐私权",
+      "私密信息",
+      "私密活动",
+      "私密空间",
+      "录音曝光",
+      "咨询记录泄露",
+      "窃听"
+    ],
+    "applies_to": [
+      "隐私泄露",
+      "名誉侵权",
+      "记录留痕",
+      "日常合规",
+      "证据固定"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm"
+    ],
+    "confidence": "原文核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/statutes/mfd-1032-1033-yinsi.md",
+    "domain": "counseling",
+    "law_refs": [
+      "民法典§1032",
+      "民法典§1033",
+      "民法典§1034"
+    ],
+    "facts": {
+      "statute_quotes": [
+        {
+          "law": "中华人民共和国民法典",
+          "article": "第一千零三十二条",
+          "text": "第一千零三十二条　自然人享有隐私权。任何组织或者个人不得以刺探、侵扰、泄露、公开等方式侵害他人的隐私权。\n隐私是自然人的私人生活安宁和不愿为他人知晓的私密空间、私密活动、私密信息。"
+        },
+        {
+          "law": "中华人民共和国民法典",
+          "article": "第一千零三十三条",
+          "text": "第一千零三十三条　除法律另有规定或者权利人明确同意外，任何组织或者个人不得实施下列行为：\n（一）以电话、短信、即时通讯工具、电子邮件、传单等方式侵扰他人的私人生活安宁；\n（二）进入、拍摄、窥视他人的住宅、宾馆房间等私密空间；\n（三）拍摄、窥视、窃听、公开他人的私密活动；\n（四）拍摄、窥视他人身体的私密部位；\n（五）处理他人的私密信息；\n（六）以其他方式侵害他人的隐私权。"
+        }
+      ]
+    }
+  },
+  {
+    "id": "statute-mfd-188-susong-shixiao",
+    "type": "法条卡",
+    "title": "民法典第188条：诉讼时效三年、最长二十年（多年后被追责时的第一道抗辩）",
+    "keywords": [
+      "民法典",
+      "第188条",
+      "诉讼时效",
+      "三年",
+      "二十年",
+      "起算点",
+      "知道或者应当知道",
+      "时效抗辩",
+      "事后追责"
+    ],
+    "applies_to": [
+      "诉讼与仲裁",
+      "名誉侵权",
+      "隐私泄露",
+      "退费争议",
+      "自伤事件"
+    ],
+    "region": "全国",
+    "sources": [
+      "http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html"
+    ],
+    "confidence": "原文核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/statutes/mfd-188-susong-shixiao.md",
+    "domain": "counseling",
+    "law_refs": [
+      "民法典§188",
+      "民法典§191",
+      "民法典§192",
+      "民法典§193"
+    ],
+    "facts": {
+      "statute_quotes": [
+        {
+          "law": "中华人民共和国民法典",
+          "article": "第一百八十八条",
+          "text": "向人民法院请求保护民事权利的诉讼时效期间为三年。法律另有规定的，依照其规定。\n诉讼时效期间自权利人知道或者应当知道权利受到损害以及义务人之日起计算。法律另有规定的，依照其规定。但是，自权利受到损害之日起超过二十年的，人民法院不予保护，有特殊情况的，人民法院可以根据权利人的申请决定延长。"
+        },
+        {
+          "law": "中华人民共和国民法典",
+          "article": "第一百九十一条",
+          "text": "未成年人遭受性侵害的损害赔偿请求权的诉讼时效期间，自受害人年满十八周岁之日起计算。"
+        },
+        {
+          "law": "中华人民共和国民法典",
+          "article": "第一百九十三条",
+          "text": "人民法院不得主动适用诉讼时效的规定。"
+        }
+      ]
+    }
+  },
+  {
+    "id": "statute-mfd-933-weituo-jiechu",
+    "type": "法条卡",
+    "title": "民法典第933条：委托合同的任意解除权与赔偿范围（退费争议的算钱依据）",
+    "keywords": [
+      "民法典",
+      "第933条",
+      "委托合同",
+      "任意解除权",
+      "随时解除",
+      "有偿委托",
+      "直接损失",
+      "可得利益",
+      "退费",
+      "赔偿范围"
+    ],
+    "applies_to": [
+      "退费争议",
+      "终止服务",
+      "来访投诉",
+      "诉讼与仲裁"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml"
+    ],
+    "confidence": "原文核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/statutes/mfd-933-weituo-jiechu.md",
+    "domain": "counseling",
+    "law_refs": [
+      "民法典§933",
+      "民法典§928",
+      "民法典§929"
+    ],
+    "facts": {
+      "statute_quotes": [
+        {
+          "law": "中华人民共和国民法典",
+          "article": "第九百三十三条",
+          "text": "第九百三十三条　委托人或者受托人可以随时解除委托合同。因解除合同造成对方损失的，除不可归责于该当事人的事由外，无偿委托合同的解除方应当赔偿因解除时间不当造成的直接损失，有偿委托合同的解除方应当赔偿对方的直接损失和合同履行后可以获得的利益。"
+        },
+        {
+          "law": "中华人民共和国民法典",
+          "article": "第九百二十八条",
+          "text": "第九百二十八条　受托人完成委托事务的，委托人应当按照约定向其支付报酬。\n因不可归责于受托人的事由，委托合同解除或者委托事务不能完成的，委托人应当向受托人支付相应的报酬。当事人另有约定的，按照其约定。"
+        }
+      ]
+    }
+  },
+  {
+    "id": "statute-xbf-26-55-geshi-tiaokuan-chengfa",
+    "type": "法条卡",
+    "title": "消费者权益保护法第26/55条：格式条款的提示说明义务与三倍惩罚性赔偿",
+    "keywords": [
+      "消费者权益保护法",
+      "第26条",
+      "第55条",
+      "格式条款",
+      "提示说明义务",
+      "不退费条款",
+      "欺诈",
+      "三倍赔偿",
+      "五百元",
+      "疗效承诺",
+      "资质披露"
+    ],
+    "applies_to": [
+      "退费争议",
+      "疗效争议",
+      "监管投诉",
+      "知情同意",
+      "日常合规"
+    ],
+    "region": "全国",
+    "sources": [
+      "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm"
+    ],
+    "confidence": "原文核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/statutes/xbf-26-55-geshi-tiaokuan-chengfa.md",
+    "domain": "counseling",
+    "law_refs": [
+      "消费者权益保护法§26",
+      "消费者权益保护法§55"
+    ],
+    "facts": {
+      "statute_quotes": [
+        {
+          "law": "中华人民共和国消费者权益保护法",
+          "article": "第二十六条",
+          "text": "经营者在经营活动中使用格式条款的，应当以显著方式提请消费者注意商品或者服务的数量和质量、价款或者费用、履行期限和方式、安全注意事项和风险警示、售后服务、民事责任等与消费者有重大利害关系的内容，并按照消费者的要求予以说明。\n经营者不得以格式条款、通知、声明、店堂告示等方式，作出排除或者限制消费者权利、减轻或者免除经营者责任、加重消费者责任等对消费者不公平、不合理的规定，不得利用格式条款并借助技术手段强制交易。\n格式条款、通知、声明、店堂告示等含有前款所列内容的，其内容无效。"
+        },
+        {
+          "law": "中华人民共和国消费者权益保护法",
+          "article": "第五十五条第一款",
+          "text": "经营者提供商品或者服务有欺诈行为的，应当按照消费者的要求增加赔偿其受到的损失，增加赔偿的金额为消费者购买商品的价款或者接受服务的费用的三倍；增加赔偿的金额不足五百元的，为五百元。法律另有规定的，依照其规定。"
+        }
+      ]
+    }
+  },
+  {
+    "id": "template-baomi-gaozhi-liwai",
+    "type": "文书模板",
+    "title": "《保密告知与例外说明》模板（可作知情同意书附件）",
+    "keywords": [
+      "保密告知",
+      "保密例外",
+      "三类例外",
+      "预警",
+      "最低限度披露",
+      "正式文书",
+      "附件",
+      "单独签署"
+    ],
+    "applies_to": [
+      "知情同意",
+      "保密例外",
+      "危机处置",
+      "未成年人",
+      "日常合规"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm",
+      "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/templates/baomi-gaozhi-liwai.md",
+    "domain": "counseling",
+    "law_refs": [
+      "精神卫生法§4",
+      "精神卫生法§23",
+      "个人信息保护法§30"
+    ]
+  },
+  {
+    "id": "template-lunli-shensu-dabianshu",
+    "type": "文书模板",
+    "title": "《伦理申诉答辩书》模板（逐条答辩 + 最低限度披露 + 不评价申诉人）",
+    "keywords": [
+      "伦理申诉",
+      "答辩书",
+      "逐条答辩",
+      "时间线",
+      "已履行义务",
+      "证据清单",
+      "最低限度披露",
+      "不评价申诉人"
+    ],
+    "applies_to": [
+      "伦理申诉",
+      "来访投诉",
+      "名誉侵权",
+      "监管投诉"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/templates/lunli-shensu-dabianshu.md",
+    "domain": "counseling",
+    "law_refs": [
+      "精神卫生法§23"
+    ]
+  },
+  {
+    "id": "template-lvshihan-yingdui-yaodian",
+    "type": "文书模板",
+    "title": "《律师函应对要点》与回函骨架（收到对方律师函后 72 小时内做什么）",
+    "keywords": [
+      "律师函",
+      "应对要点",
+      "回函",
+      "核对主张",
+      "不仓促回应",
+      "碎片化信息",
+      "委托律师",
+      "时效抗辩",
+      "证据封存"
+    ],
+    "applies_to": [
+      "名誉侵权",
+      "来访投诉",
+      "退费争议",
+      "诉讼与仲裁",
+      "隐私泄露"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm",
+      "http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/templates/lvshihan-yingdui-yaodian.md",
+    "domain": "counseling",
+    "law_refs": [
+      "民法典§1032",
+      "民法典§1033",
+      "民法典§188"
+    ]
+  },
+  {
+    "id": "template-tingzhi-fuwu-tongzhi",
+    "type": "文书模板",
+    "title": "《停止服务通知》模板（终止咨询关系：理由、转介建议、资料安排）",
+    "keywords": [
+      "停止服务通知",
+      "终止咨询",
+      "单方终止",
+      "转介建议",
+      "资料移交",
+      "结算",
+      "负责任的终止",
+      "不随意中断"
+    ],
+    "applies_to": [
+      "终止服务",
+      "转介与终止",
+      "退费争议",
+      "危机处置",
+      "来访投诉"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml",
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/templates/tingzhi-fuwu-tongzhi.md",
+    "domain": "counseling",
+    "law_refs": [
+      "精神卫生法§23"
+    ]
+  },
+  {
+    "id": "template-tousu-dafu-han",
+    "type": "文书模板",
+    "title": "《投诉答复函》模板（对来访/监管/消协的书面答复骨架）",
+    "keywords": [
+      "投诉答复函",
+      "书面答复",
+      "事实说明",
+      "合规证据",
+      "处理方案",
+      "不承认侵权",
+      "措辞规范",
+      "送达回执"
+    ],
+    "applies_to": [
+      "来访投诉",
+      "监管投诉",
+      "退费争议",
+      "疗效争议",
+      "隐私泄露"
+    ],
+    "region": "全国",
+    "sources": [
+      "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/templates/tousu-dafu-han.md",
+    "domain": "counseling",
+    "law_refs": [
+      "消费者权益保护法§26",
+      "精神卫生法§23"
+    ]
+  },
+  {
+    "id": "template-tuifei-xieyi",
+    "type": "文书模板",
+    "title": "《退费协议》模板（一次性了结，不写死合同定性，不换撤诉）",
+    "keywords": [
+      "退费协议",
+      "一次性了结",
+      "已提供服务",
+      "退费金额",
+      "支付时间",
+      "定性中立",
+      "不换撤诉",
+      "保密条款"
+    ],
+    "applies_to": [
+      "退费争议",
+      "终止服务",
+      "来访投诉"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/templates/tuifei-xieyi.md",
+    "domain": "counseling",
+    "law_refs": [
+      "民法典§933",
+      "民法典§928",
+      "消费者权益保护法§26"
+    ]
+  },
+  {
+    "id": "template-weiji-chuzhi-jilu",
+    "type": "文书模板",
+    "title": "《危机处置记录》模板（内部记录·六项齐备是免责的关键证据）",
+    "keywords": [
+      "危机处置记录",
+      "风险评估",
+      "判断依据",
+      "风险等级",
+      "联系对象",
+      "响应时间",
+      "随访",
+      "留痕",
+      "免责证据"
+    ],
+    "applies_to": [
+      "危机处置",
+      "自伤事件",
+      "保密例外",
+      "记录留痕",
+      "未成年人"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/templates/weiji-chuzhi-jilu.md",
+    "domain": "counseling",
+    "law_refs": [
+      "精神卫生法§28",
+      "精神卫生法§23"
+    ]
+  },
+  {
+    "id": "template-zhiqing-tongyishu",
+    "type": "文书模板",
+    "title": "《心理咨询知情同意书》模板（含保密例外、录音政策、记录处理单独同意）",
+    "keywords": [
+      "知情同意书",
+      "保密例外",
+      "不承诺疗效",
+      "收费与退费",
+      "录音录像",
+      "远程咨询",
+      "单独同意",
+      "未成年人监护人",
+      "显著提示"
+    ],
+    "applies_to": [
+      "知情同意",
+      "日常合规",
+      "远程咨询",
+      "未成年人",
+      "记录留痕"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm",
+      "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html",
+      "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/templates/zhiqing-tongyishu.md",
+    "domain": "counseling",
+    "law_refs": [
+      "精神卫生法§23",
+      "个人信息保护法§29",
+      "个人信息保护法§30",
+      "个人信息保护法§31",
+      "消费者权益保护法§26"
+    ]
+  },
+  {
+    "id": "template-zhuanjie-han",
+    "type": "文书模板",
+    "title": "《转介函》模板（建议就医/转介其他专业人员，最低限度披露）",
+    "keywords": [
+      "转介函",
+      "建议就医",
+      "疑似精神障碍",
+      "转介义务",
+      "最低限度披露",
+      "接收方",
+      "咨询摘要",
+      "留痕"
+    ],
+    "applies_to": [
+      "转介与终止",
+      "危机处置",
+      "疗效争议",
+      "日常合规"
+    ],
+    "region": "全国",
+    "sources": [
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
+    ],
+    "confidence": "待核实",
+    "updated": "2026-09-06",
+    "path": "packs/counseling/templates/zhuanjie-han.md",
+    "domain": "counseling",
+    "law_refs": [
+      "精神卫生法§23"
+    ]
+  },
+  {
     "id": "data-beijing-lian-zuobiao",
     "type": "数据卡",
     "title": "北京劳动仲裁/法院立案坐标（朝阳·仲裁与法院两套，绝不混淆）",
