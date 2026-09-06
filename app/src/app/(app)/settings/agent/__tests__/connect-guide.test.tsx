@@ -29,6 +29,9 @@ vi.mock('@/app/_ui/api', () => ({
   apiFetch: () => Promise.reject(new Error('测试不发请求')),
   humanError: (err: unknown) => (err instanceof Error ? err.message : '出错了'),
 }));
+// 无工具接入那张卡里的「复制」用 toast 报结果，SSR 下没有 Provider——顶掉它。
+// （同 agent-page-discreet 那一组的同名 mock：两组都渲染整页，就都要有这一条。）
+vi.mock('@/components/ui/Toast', () => ({ useToast: () => () => {} }));
 // 地址取不到就不渲染话术那块（SetupPrompt 里的 CodeBlock 要 ToastProvider）。
 // 这一组测的是四步骨架与已接入态，不是话术——话术归 settings/__tests__/agentSetup.test.ts。
 vi.mock('../../_components/useAgentSetup', () => ({
