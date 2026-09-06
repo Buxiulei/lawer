@@ -12,7 +12,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, test } from 'vitest';
 
-import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
+import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
 
 import { __resetForTest, listPacks, get } from '../index';
 
@@ -220,6 +220,101 @@ describe('🔴 manager 2026-08-29 裁定新加的四道（此前全部放行）'
     const packs = listPacks();
     expect(packs.length).toBeGreaterThan(200);
     expect(new Set(packs.map((p) => p.domain))).toEqual(new Set([DEFAULT_DOMAIN]));
+  });
+});
+
+describe('⑦ domain 补齐（复审 P4-W2 二轮 minor④：此前这一步一条判据都没有）', () => {
+  test('条目没写 domain → 加载后那条 meta.domain 恒有值（变异：拿掉 loadIndex 的 domain 补齐 → 红）', () => {
+    // 【为什么读的是原始字段，不是 packDomain(meta)】packDomain 自带 `?? 缺省域`，
+    // 拿它来判等于判了个恒真：补齐这一步整段删掉也照样绿。
+    // 加载器补齐的价值恰恰在于"下游即使没写 ?? 也拿得到值"，那就得按下游那样读。
+    let victim = '';
+    brokenDir((d) => {
+      const p = path.join(d, 'index.json');
+      const idx = JSON.parse(fs.readFileSync(p, 'utf8')) as { id: string; domain?: string }[];
+      const target = idx.find((e) => e.domain !== undefined);
+      if (!target) throw new Error('真实索引里没有任何条目写了 domain ⇒ 本条判据无从构造');
+      victim = target.id;
+      delete target.domain;
+      fs.writeFileSync(p, JSON.stringify(idx));
+    });
+    const meta = listPacks().find((m) => m.id === victim);
+    expect(meta, `${victim} 没被加载进来 ⇒ 夹具没改对`).toBeTruthy();
+    expect(meta!.domain).toBe(DEFAULT_DOMAIN);
+  });
+});
+
+describe('🔴 索引里的域 × 加载器的严格度（复审 P4-W2 二轮 major②：合并顺序闸）', () => {
+  // 【这条守的不是本支的行为，是"两支合到一起"的那一刻】
+  // 另一支（ws/p4-w1）的加载器对**注册表里没有的 domain** 直接抛错；本支的索引里带着
+  // 尚未挂进 lib/domains 的域。两者单独看都对，合到一起而挂包的那一票还没到，形态是：
+  // 任何一次 knowledge_search / knowledge_get / 条文注入 → 加载器抛错 ⇒
+  // **全部用户的知识能力整体不可用**，而两支各自的判据都是绿的。
+  // 本条不替谁裁"该不该拒未注册域"——它只保证这件事发生时**当场变红**，而不是上线后才知道。
+  const PROBE_DOMAIN = '__probe-未注册的域__';
+
+  /** 往索引里塞一条带未注册域的条目，返回被塞的那条 id */
+  function plantUnregisteredDomain(): string {
+    let victim = '';
+    brokenDir((d) => {
+      const p = path.join(d, 'index.json');
+      const idx = JSON.parse(fs.readFileSync(p, 'utf8')) as { id: string; domain?: string }[];
+      idx[0].domain = PROBE_DOMAIN;
+      victim = idx[0].id;
+      fs.writeFileSync(p, JSON.stringify(idx));
+    });
+    return victim;
+  }
+
+  /** 探针：问加载器本身"你拒不拒注册表里没有的 domain"，而不是去读它的源码或版本号 */
+  function loaderRejectsUnregisteredDomain(): boolean {
+    plantUnregisteredDomain();
+    try {
+      listPacks();
+      return false;
+    } catch {
+      return true;
+    }
+  }
+
+  test('探针自身不空跑：那条被改过域的条目确实到达了加载器', () => {
+    // 【这条证明的是探针的路径是活的】若夹具没写对、或加载器把 domain 覆盖掉，
+    // 探针就会恒返回"不严格"，下面那条主判据从此永远绿——一个从不生效的闸。
+    const victim = plantUnregisteredDomain();
+    let threw = false;
+    let loaded: string | undefined;
+    try {
+      loaded = listPacks().find((m) => m.id === victim)?.domain;
+    } catch {
+      threw = true; // 严格加载器拒了它 —— 同样说明那条改动到达了加载器
+    }
+    expect(
+      threw || loaded === PROBE_DOMAIN,
+      '塞进去的未注册域既没被拒、也没被原样读到 ⇒ 探针在空跑',
+    ).toBe(true);
+  });
+
+  test('库里有未注册的域时，加载器不得是"未注册即抛"的那一版', () => {
+    const declared = [
+      ...new Set(
+        (JSON.parse(fs.readFileSync(path.join(REAL_DIR, 'index.json'), 'utf8')) as { domain?: string }[])
+          .map((e) => e.domain)
+          .filter((d): d is string => typeof d === 'string' && d.length > 0),
+      ),
+    ];
+    const registered = Object.keys(DOMAINS);
+    const unregistered = declared.filter((d) => !registered.includes(d));
+    // 短路：域都挂上了 ⇒ 加载器严不严都安全，不必再建一份夹具去问
+    const dangerous = unregistered.length > 0 && loaderRejectsUnregisteredDomain();
+    expect(
+      dangerous,
+      `knowledge/index.json 里有这些域：${unregistered.join('、')}，` +
+        `而 lib/domains/registry 的 DOMAINS 只注册了：${registered.join('、')}；` +
+        '同时加载器已变成「未注册域即抛」。这两件事同时成立 = 任何一次知识检索都会对**全部**用户抛错。' +
+        '出路只有两条（本判据不替谁选，选哪条由经手人裁）：把这些域的包挂进 DOMAINS，' +
+        '或把这些卡从 index.json 撤下——在其中之一落地之前，这份索引与这个加载器就不能同时在库里。' +
+        '第三条路（把加载器调宽）不算出路：那会让 domain 拼错的卡从此静默按缺省域算。',
+    ).toBe(false);
   });
 });
 

@@ -11,6 +11,7 @@
 // score 不透传：agent 侧对「第 3 名比第 4 名相关多少」没有任何用法，
 // 传了只会诱使日后有人拿它做阈值截断，而截断阈值是该由检索器负责的事。
 import * as knowledge from '@/lib/knowledge';
+import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
 import type { KnowledgePack, KnowledgeSearcher } from './retrieval';
 import { articleKey } from './citation-block';
 
@@ -56,7 +57,14 @@ export function createKnowledgeSearcher(): KnowledgeSearcher {
     },
     get(id) {
       try {
-        return toPack(knowledge.get(id));
+        const hit = knowledge.get(id);
+        // 【按 id 取也走领域闸】search 这一面已经不会把别的领域的卡的 id 交出去，
+        // 但 get 面本身没有守卫，而 id 是可猜的（`<域单数>-<slug>`）、knowledge_get 又是
+        // 暴露给 MCP 的只读能力。不闸的形态是：缺省域的会话取回另一个领域的整张卡
+        //（含 facts 里的口径），与本域同类卡的口径并排出现在同一个回包里，且一切正常。
+        // 【域为什么写死缺省】同 articleIndex：本层拿不到"这轮是哪个领域的案子"。
+        if (knowledge.packDomain(hit) !== DEFAULT_DOMAIN) return undefined;
+        return toPack(hit);
       } catch {
         // 只有「这张卡不存在」会走到这里（get 的唯一失败原因），属于正常的未命中
         return undefined;
@@ -78,12 +86,28 @@ export function createKnowledgeSearcher(): KnowledgeSearcher {
 /**
  * `法名|条号` → 收录该条逐字原文的卡 id。进程级建一次——
  * 每轮重扫全库是纯浪费，而库是只读的（同 lib/knowledge 的 index 缓存口径）。
+ *
+ * 【只收缺省领域的卡】这张表是**第二条召回通路**（search 是第一条）：条号对上就把整张卡
+ * 拉进上下文。跨域检索默认关闭（设计稿 §13）说的是召回，两条通路都算——只闸住 search
+ * 的形态是：检索面干干净净，而模型引一条通用法（如民法典诉讼时效）时，注入回来的是
+ * 另一个领域的卡，且回包一切正常、没有一处会报错。
+ *
+ * 【这一道与 get 面那一道是**冗余的两道**，谁单独在都够】findByArticleKeys 取卡走的是
+ * `this.get`，而 get 面自己也有领域闸。实测（P4-W2 三轮变异）：单删这一道 0 红、
+ * 单删 get 面那一道 0 红（红的是别的判据），两道同删才红。
+ * 所以**别照着"判据没红"去删其中任何一道**——那不代表它没在守，只代表另一道也在守。
+ * 真正只钉在 get 面上的判据是 knowledge-adapter.test.ts 里
+ *「这条通路的域闸来自 get」那一条：它盯的是"取卡必须经 this.get"这条结构。
+ *
+ * 【已知未完】这里写死缺省领域，是因为本层拿不到"这轮是哪个领域的案子"。
+ * 第二个领域真正接上工具面时，要把域从案件传到这里，不要在这里再加一个默认值。
  */
 let articleIndexCache: Map<string, string> | null = null;
 function articleIndex(): Map<string, string> {
   if (articleIndexCache) return articleIndexCache;
   const out = new Map<string, string>();
   for (const meta of knowledge.listPacks()) {
+    if (knowledge.packDomain(meta) !== DEFAULT_DOMAIN) continue;
     for (const q of meta.facts?.statute_quotes ?? []) {
       if (!q?.article || !q.text?.trim()) continue;
       const key = articleKey(q.law, q.article);

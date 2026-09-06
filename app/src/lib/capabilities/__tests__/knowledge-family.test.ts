@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AGENT_TOOLS } from '@/lib/agent/tools';
 import type { Identity } from '@/lib/auth/identity';
+import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
 import { KNOWLEDGE_TYPES } from '@/lib/knowledge/types';
 
 import { knowledgeGet, knowledgeSearch } from '../families/knowledge';
@@ -49,6 +50,8 @@ interface IndexEntry {
   id: string;
   type: string;
   keywords: string[];
+  /** 领域键；只有声明了的卡才有，其余按缺省域算（lib/knowledge 的 packDomain 同口径） */
+  domain?: string;
 }
 const KNOWLEDGE_DIR = process.env.LAWER_KNOWLEDGE_DIR ?? path.resolve(process.cwd(), '..', 'knowledge');
 const INDEX: IndexEntry[] = JSON.parse(
@@ -93,9 +96,13 @@ describe('十类都能按 type 检索到卡（用 index.json 实测）', () => {
    */
   for (const type of KNOWLEDGE_TYPES) {
     it(`type=${type} 至少回一张，且回的全是这一类（变异：把该类从 KNOWLEDGE_TYPES 删掉 → 红）`, () => {
-      const sample = INDEX.filter((e) => e.type === type).find((e) =>
-        e.keywords.some((k) => k.length >= 2),
-      );
+      // 样本必须取**缺省域**的卡：knowledge_search 不带 domain 时只在缺省域里检索
+      //（跨域默认关闭，设计稿 §13）。不筛域的形态是——第二个领域包的卡按 index 顺序
+      // 排在前面被抽成样本，于是这条判据红在"另一个领域的卡搜不到"，
+      // 而它本来要问的是"这一类卡在工具面上存不存在"。
+      const sample = INDEX.filter(
+        (e) => e.type === type && (e.domain ?? DEFAULT_DOMAIN) === DEFAULT_DOMAIN,
+      ).find((e) => e.keywords.some((k) => k.length >= 2));
       expect(sample, `库里没有 ${type} 的卡，或它一个 ≥2 字的 keyword 都没有`).toBeTruthy();
       const query = sample!.keywords.find((k) => k.length >= 2)!;
 
@@ -186,6 +193,24 @@ describe('knowledge_get', () => {
     expect(sample, '库里没有带 review_rules 的审查规则卡').toBeTruthy();
     const out = get({ id: sample!.id });
     expect(out.facts.review_rules!.length).toBeGreaterThan(0);
+  });
+
+  // 【为什么 get 这一面也要闸】knowledge_search 已经不会把别的领域的卡的 id 交出去，
+  // 但 id 是可猜的（`<域单数>-<slug>`），而 knowledge_get 是暴露给 MCP 的只读能力。
+  // 不闸的形态是：缺省域的会话按 id 取回另一个领域的整张卡（含 facts 里的口径），
+  // 与本域同类卡的口径并排出现在同一个回包里，而回包一切正常。
+  it('按 id 取别的领域的卡：走 PACK_NOT_FOUND，不交正文（变异：拿掉 knowledge-adapter get 里的领域闸 → 红）', () => {
+    const other = INDEX.find((e) => (e.domain ?? DEFAULT_DOMAIN) !== DEFAULT_DOMAIN);
+    expect(other, '库里一张非缺省域的卡都没有 ⇒ 这条判据在空跑').toBeTruthy();
+    const out = knowledgeGet.run(DB, ID, { id: other!.id }) as unknown as Failure;
+    expect(out.ok, `${other!.id} 的正文被交给了缺省域的会话`).toBe(false);
+    expect(out.errorCode).toBe('PACK_NOT_FOUND');
+  });
+
+  it('本域的卡按 id 照常取得到（闸不能关过头）', () => {
+    const own = INDEX.find((e) => (e.domain ?? DEFAULT_DOMAIN) === DEFAULT_DOMAIN);
+    expect(own, '库里一张缺省域的卡都没有 ⇒ 这条判据在空跑').toBeTruthy();
+    expect(get({ id: own!.id }).id).toBe(own!.id);
   });
 
   it('空 id / 不存在的 id 走 isError 且说清怎么办，不回空壳', () => {
