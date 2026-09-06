@@ -5,14 +5,13 @@
 //
 // 只认网页登录态：不允许拿一把 api key 再造新 key，否则一把泄漏的 key 就能自我续命，
 // 吊销原 key 也止不住血。
-import { NextResponse } from 'next/server';
-
 import { generateApiKey, hashApiKey, normalizeRequestedScopes } from '@/lib/auth/api-key';
 import { requireWebSession } from '@/lib/auth/guard';
 import { readJsonBody, stringField } from '@/lib/auth/http';
 import { encryptField } from '@/lib/crypto';
 import { getDb } from '@/lib/db/client';
 import * as store from '@/lib/db/api-keys';
+import { apiJson } from '@/lib/http/json';
 import { issuedKeyBody } from './_issued';
 import { NO_STORE, masterKeyConfigured, secretUnavailable } from './_secret';
 
@@ -42,7 +41,7 @@ export async function GET(req: Request) {
      */
     source: row.source,
   }));
-  return NextResponse.json({ ok: true, keys });
+  return apiJson({ ok: true, keys });
 }
 
 export async function POST(req: Request) {
@@ -51,7 +50,7 @@ export async function POST(req: Request) {
 
   const body = await readJsonBody(req);
   if (!body) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'INVALID_BODY', message: '请求体格式不正确' },
       { status: 400 },
     );
@@ -59,7 +58,7 @@ export async function POST(req: Request) {
 
   const name = stringField(body, 'name').trim();
   if (!name) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'INVALID_NAME', message: 'name 不能为空，用来分辨这把 key 给谁用' },
       { status: 400 },
     );
@@ -67,7 +66,7 @@ export async function POST(req: Request) {
 
   const scopes = normalizeRequestedScopes(body.scopes);
   if (!scopes) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'INVALID_SCOPES', message: 'scopes 含未知权限项' },
       { status: 400 },
     );
@@ -88,7 +87,7 @@ export async function POST(req: Request) {
     secretEnc: encryptField(key),
   });
 
-  return NextResponse.json(
+  return apiJson(
     issuedKeyBody(req, { id, name, scopes, clientName: null, key }),
     // 正文里躺着明文：这一趟谁都不许缓存（NO_STORE 那段注释说了为什么）
     { status: 201, headers: NO_STORE },

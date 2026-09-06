@@ -5,12 +5,11 @@
 //
 // 请求体：{ name, uscc?, modules?: DossierModule[], doc_count?: number }
 //   modules 省略即六个模块都报；doc_count = 免费探测给的"有公开文书链接的劳动争议篇数"，M5/M6 计价用。
-import { NextResponse } from 'next/server';
-
 import { domainFailure, requireIdentity } from '@/lib/auth/guard';
 import { badRequest, readJsonBody, stringField } from '@/lib/auth/http';
 import { getDb } from '@/lib/db/client';
 import { quoteDossier } from '@/lib/company/dossier-billing';
+import { apiJson } from '@/lib/http/json';
 import { parseModules, parseDocCount } from '../modules';
 
 export async function POST(req: Request) {
@@ -43,5 +42,5 @@ export async function POST(req: Request) {
   });
   if (!result.ok) return domainFailure(result);
 
-  return NextResponse.json({ ok: true, quote: result.quote });
+  return apiJson({ ok: true, quote: result.quote });
 }

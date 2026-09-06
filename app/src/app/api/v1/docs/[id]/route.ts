@@ -1,15 +1,14 @@
 // app/src/app/api/v1/docs/[id]/route.ts
 // GET 取一份来文解读的全文（对应 MCP 工具 doc_get，同一个领域函数）。
-import { NextResponse } from 'next/server';
-
 import { parseId, requireIdentity } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
 import { getDoc } from '@/lib/docs';
+import { apiJson } from '@/lib/http/json';
 
 // 每次现造一个：Response 的 body 是一次性的流，模块级共用一个实例会在第二次请求时
 // 回一份空 body（且不报错）。
 const notFound = () =>
-  NextResponse.json(
+  apiJson(
     { ok: false, error_code: 'DOC_NOT_FOUND', message: '解读不存在' },
     { status: 404 },
   );
@@ -24,5 +23,5 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const doc = getDoc(getDb(), docId, guard.identity.uid);
   if (!doc) return notFound();
 
-  return NextResponse.json({ ok: true, doc });
+  return apiJson({ ok: true, doc });
 }

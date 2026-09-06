@@ -2,6 +2,8 @@
 // REST 路由的统一入口闸门：解析身份 → 校验 scope → 交出 Identity。
 // 让每条业务路由只剩「取参数 → 调 lib → 返回」，鉴权分支不在路由里重复写。
 import { NextResponse } from 'next/server';
+
+import { apiJson } from '@/lib/http/json';
 import type { Database } from 'better-sqlite3';
 
 import * as users from '@/lib/db/otp';
@@ -16,7 +18,7 @@ export type GuardResult = { ok: true; identity: Identity } | { ok: false; respon
 export type GateResult = { ok: true } | { ok: false; response: NextResponse };
 
 function deny(status: number, errorCode: string, message: string): NextResponse {
-  return NextResponse.json({ ok: false, error_code: errorCode, message }, { status });
+  return apiJson({ ok: false, error_code: errorCode, message }, { status });
 }
 
 /**
@@ -118,7 +120,7 @@ export function domainFailure(failure: {
   errorCode: string;
   message: string;
 }): NextResponse {
-  return NextResponse.json(
+  return apiJson(
     { ok: false, error_code: failure.errorCode, message: failure.message },
     { status: failure.status },
   );

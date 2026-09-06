@@ -13,13 +13,12 @@
 //
 // 鉴权用 case:write：它会让这个账号在下个月产生一笔月费，与"会花钱的动作"同级。
 // 归属校验走 lib/cases 的既有入口——「非本人案件一律当作不存在」是条红线，复制第二份就开始各自演化。
-import { NextResponse } from 'next/server';
-
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { badRequest, readJsonBody, stringField } from '@/lib/auth/http';
 import { WATCH_TIER_GONGDAO } from '@/lib/billing/pricing';
 import { parseWatchTier, setWatch } from '@/lib/company/watch';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 const NOT_FOUND = { ok: false, error_code: 'CASE_NOT_FOUND', message: '案件不存在' };
 
@@ -28,7 +27,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!guard.ok) return guard.response;
 
   const caseId = parseId((await params).id);
-  if (caseId === null) return NextResponse.json(NOT_FOUND, { status: 404 });
+  if (caseId === null) return apiJson(NOT_FOUND, { status: 404 });
 
   const body = await readJsonBody(req);
   if (!body) return badRequest('INVALID_BODY', '请求体格式不正确');
@@ -59,7 +58,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   });
   if (!result.ok) return domainFailure(result);
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     watch: {
       id: result.watch.id,

@@ -26,11 +26,10 @@
 // 它的档案形状由前端的 mock 直接给（DossierLoader 的 isDemo 分支）。
 // 让这条端点认 'demo' 就等于开一个免鉴权分支——为了演示在鉴权上开的口子，
 // 会被真实案件一起用上。
-import { NextResponse } from 'next/server';
-
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
 import { getCaseDossier } from '@/lib/dossier/case-dossier';
+import { apiJson } from '@/lib/http/json';
 
 const NOT_FOUND = { ok: false, error_code: 'CASE_NOT_FOUND', message: '案件不存在' };
 
@@ -39,12 +38,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!guard.ok) return guard.response;
 
   const caseId = parseId((await params).id);
-  if (caseId === null) return NextResponse.json(NOT_FOUND, { status: 404 });
+  if (caseId === null) return apiJson(NOT_FOUND, { status: 404 });
 
   const result = getCaseDossier(getDb(), { caseId, userId: guard.identity.uid });
   if (!result.ok) return domainFailure(result);
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     status: result.status,
     dossier: result.dossier,

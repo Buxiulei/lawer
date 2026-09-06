@@ -36,6 +36,25 @@ evidence_upload_url	—
 evidence_register	—
 evidence_attest	—
 attest_verify	GET /api/v1/verify/{orderNo}
+case_report_get	GET /api/v1/cases/{id}/report
+case_report_update	—
+crisis_check	—
+me_get	—
+quote_list	—
+citation_check	—
+company_probe	POST /api/v1/company/probe
+dossier_quote	—
+dossier_confirm	—
+dossier_get	GET /api/v1/cases/{id}/dossier
+company_graph_get	GET /api/v1/cases/{id}/company-graph
+company_watch_set	POST /api/v1/cases/{id}/watch
+share_create	—
+share_revoke	—
+draft_export	—
+referral_create	—
+referral_list	—
+evidence_void	POST /api/v1/evidence/{id}/void
+evidence_brief_regenerate	POST /api/v1/evidence/{id}/brief/regenerate
 
 # 全量 operation
 GET /api/health	get_health	none	[]	{}
@@ -54,6 +73,8 @@ GET /api/v1/auth/google/start	get_v1_auth_google_start	none	[]	{}
 GET /api/v1/auth/google/callback	get_v1_auth_google_callback	none	[]	{}
 GET /api/v1/verify/{orderNo}	attest_verify	none	[path:orderNo!]	{}
 POST /api/v1/verify/{orderNo}/recheck	post_v1_verify_by_order_no_recheck	none	[path:orderNo!]	{}
+GET /api/v1/share/{token}	get_v1_share_by_token	none	[path:token!]	{}
+GET /api/v1/files/download/{token}	get_v1_files_download_by_token	none	[path:token!]	{}
 GET /api/oauth/metadata/authorization-server	get_oauth_metadata_authorization_server	none	[]	{}
 GET /api/oauth/metadata/protected-resource	get_oauth_metadata_protected_resource	none	[]	{}
 POST /api/oauth/register	post_oauth_register	none	[]	{}
@@ -62,8 +83,12 @@ POST /api/oauth/authorize	post_oauth_authorize	bearer	[]	{}
 POST /api/oauth/token	post_oauth_token	none	[]	{}
 POST /api/oauth/revoke	post_oauth_revoke	none	[]	{}
 GET /api/v1/agent-setup	get_v1_agent_setup	bearer	[]	{}
+GET /api/v1/tools	get_v1_tools	bearer	[]	{}
+POST /api/v1/tools/{name}	post_v1_tools_by_name	bearer	[path:name!]	{}
 GET /api/v1/me	get_v1_me	bearer	[]	{}
+GET /api/v1/referrals	get_v1_referrals	bearer	[]	{}
 GET /api/v1/me/storage	get_v1_me_storage	bearer	[]	{}
+GET /api/v1/realname/status	get_v1_realname_status	bearer	[]	{}
 GET /api/v1/billing/ledger	get_v1_billing_ledger	bearer	[]	{}
 POST /api/v1/redeem	post_v1_redeem	bearer	[]	{}
 GET /api/v1/cases	case_list	bearer	[]	{}
@@ -73,6 +98,7 @@ GET /api/v1/cases/{id}/facts	case_facts	bearer	[path:id!]	{}
 POST /api/v1/cases/{id}/intake	intake_submit	bearer	[path:id!]	{stage,company_name,employed_from,monthly_wage_yuan,position,contract_count,events,free_text,company_docs,company_wording,goals,bottom_line}
 GET /api/v1/cases/{id}/messages	get_v1_cases_by_id_messages	bearer	[path:id!]	{}
 POST /api/v1/cases/{id}/chat	post_v1_cases_by_id_chat	bearer	[path:id!]	{}
+GET /api/v1/cases/{id}/report	case_report_get	bearer	[path:id!,query:section]	{}
 GET /api/v1/cases/{id}/timeline	timeline_list	bearer	[path:id!,query:since,query:kind,query:limit,query:offset]	{}
 POST /api/v1/cases/{id}/timeline	timeline_add	bearer	[path:id!]	{happened_at,kind,title,detail,client_ref}
 POST /api/v1/cases/{id}/timeline/{eventId}/milestone	timeline_milestone	bearer	[path:id!,path:eventId!]	{milestone,user_confirmed}
@@ -81,13 +107,13 @@ POST /api/v1/cases/{id}/actions	action_create	bearer	[path:id!]	{items,client_re
 PATCH /api/v1/cases/{id}/actions/{actionId}	action_complete	bearer	[path:id!,path:actionId!]	{status}
 GET /api/v1/cases/{id}/deadlines	deadline_list	bearer	[path:id!,query:include_resolved]	{}
 GET /api/v1/cases/{id}/claims	claims_list	bearer	[path:id!]	{}
-GET /api/v1/cases/{id}/evidence	evidence_list	bearer	[path:id!]	{}
+GET /api/v1/cases/{id}/evidence	evidence_list	bearer	[path:id!,query:include_voided]	{}
 GET /api/v1/cases/{id}/drafts	draft_list	bearer	[path:id!]	{}
 GET /api/v1/cases/{id}/docs	doc_list	bearer	[path:id!]	{}
 GET /api/v1/cases/{id}/opener	get_v1_cases_by_id_opener	bearer	[path:id!]	{}
-GET /api/v1/cases/{id}/dossier	get_v1_cases_by_id_dossier	bearer	[path:id!]	{}
-GET /api/v1/cases/{id}/company-graph	get_v1_cases_by_id_company_graph	bearer	[path:id!]	{}
-POST /api/v1/cases/{id}/watch	post_v1_cases_by_id_watch	bearer	[path:id!]	{}
+GET /api/v1/cases/{id}/dossier	dossier_get	bearer	[path:id!]	{}
+GET /api/v1/cases/{id}/company-graph	company_graph_get	bearer	[path:id!]	{}
+POST /api/v1/cases/{id}/watch	company_watch_set	bearer	[path:id!]	{name,uscc,tier,company_profile_id}
 POST /api/v1/evidence	post_v1_evidence	bearer	[]	{}
 PUT /api/v1/evidence/upload/{token}	put_v1_evidence_upload_by_token	bearer	[path:token!]	{}
 GET /api/v1/evidence/{id}	evidence_get	bearer	[path:id!,query:include_text]	{}
@@ -96,7 +122,9 @@ POST /api/v1/evidence/{id}/attest	post_v1_evidence_by_id_attest	bearer	[path:id!
 POST /api/v1/evidence/{id}/extract	evidence_extract	bearer	[path:id!]	{mode,quote_id}
 GET /api/v1/evidence/{id}/brief	evidence_brief_get	bearer	[path:id!]	{}
 PUT /api/v1/evidence/{id}/brief	evidence_brief_update	bearer	[path:id!]	{brief,reason,base_version}
-POST /api/v1/company/probe	post_v1_company_probe	bearer	[]	{}
+POST /api/v1/evidence/{id}/brief/regenerate	evidence_brief_regenerate	bearer	[path:id!]	{}
+POST /api/v1/evidence/{id}/void	evidence_void	bearer	[path:id!]	{reason}
+POST /api/v1/company/probe	company_probe	bearer	[]	{name,uscc}
 GET /api/v1/knowledge/search	knowledge_search	bearer	[query:query!,query:type,query:court,query:full_text,query:limit]	{}
 POST /api/v1/company/dossiers/quote	post_v1_company_dossiers_quote	bearer	[]	{}
 POST /api/v1/company/dossiers/confirm	post_v1_company_dossiers_confirm	bearer	[]	{}
@@ -109,7 +137,6 @@ GET /api/v1/keys/{id}/secret	get_v1_keys_by_id_secret	bearer	[path:id!]	{}
 POST /api/v1/keys/{id}/rotate	post_v1_keys_by_id_rotate	bearer	[path:id!]	{}
 DELETE /api/v1/keys/{id}	delete_v1_keys_by_id	bearer	[path:id!]	{}
 POST /api/v1/realname/init	post_v1_realname_init	bearer	[]	{}
-GET /api/v1/realname/status	get_v1_realname_status	bearer	[]	{}
 POST /api/v1/realname/passport	post_v1_realname_passport	bearer	[]	{}
 GET /api/v1/admin/audit	get_v1_admin_audit	bearer	[]	{}
 GET /api/v1/admin/users	get_v1_admin_users	bearer	[]	{}
@@ -127,6 +154,7 @@ POST /api/v1/admin/realname/{id}/reject	post_v1_admin_realname_by_id_reject	bear
 GET /api/v1/cases	case_list
 GET /api/v1/cases/{id}/facts	case_facts
 POST /api/v1/cases/{id}/intake	intake_submit
+GET /api/v1/cases/{id}/report	case_report_get
 POST /api/v1/cases/{id}/timeline	timeline_add
 POST /api/v1/cases/{id}/actions	action_create
 GET /api/v1/cases/{id}/deadlines	deadline_list
@@ -135,4 +163,3 @@ GET /api/v1/cases/{id}/evidence	evidence_list
 GET /api/v1/knowledge/search	knowledge_search
 
 # 精简集里尚无 REST 端点的能力
-case_report_get	个案报告（长期记忆）那一族尚未落地，注册表里还没有这条能力

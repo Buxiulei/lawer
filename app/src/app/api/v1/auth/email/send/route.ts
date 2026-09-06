@@ -7,8 +7,6 @@
 //                  与之完全同形**（照吃配额、照回 ok），接口不能被当成注册状态探针，
 //                  差别只在那封信的内容里，见 lib/auth/otp.ts resolveEmailTarget。
 // 带了但不作数（伪造 / 过期）一律 401，不降级成匿名——见 lib/auth/http.ts optionalUserId。
-import { NextResponse } from 'next/server';
-
 import { extractClientIp, sendEmailCode } from '@/lib/auth';
 import {
   badRequest,
@@ -19,6 +17,7 @@ import {
   unauthorized,
 } from '@/lib/auth/http';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 export async function POST(req: Request) {
   const userId = optionalUserId(req.headers.get('authorization'));
@@ -34,7 +33,7 @@ export async function POST(req: Request) {
   });
   if (!result.ok) return failureResponse(result);
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     ttl_seconds: result.ttlSeconds,
     retry_after: result.retryAfter,

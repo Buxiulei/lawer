@@ -8,13 +8,12 @@
 // 【为什么没有 nickname】users 表里根本没有这个字段（见 migrate.ts），
 // 全站也没有任何地方让用户起过名。**不编一个默认值顶上**——返回一个
 // 「土八鼠用户」之类的假名，页面就会看起来正常，而那正是 P0-2 的病灶形态。
-import { NextResponse } from 'next/server';
-
 import { requireIdentity } from '@/lib/auth/guard';
 import { maskPhone } from '@/lib/auth/phone';
 import { getMembership } from '@/lib/billing/fulfillment';
 import { decryptField } from '@/lib/crypto';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 export async function GET(req: Request) {
   const guard = requireIdentity(getDb(), req, 'case:read');
@@ -27,7 +26,7 @@ export async function GET(req: Request) {
     | { phone_enc: string | null; email: string | null; auth_status: string }
     | undefined;
   if (!row) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'USER_NOT_FOUND', message: '用户不存在' },
       { status: 404 },
     );
@@ -46,7 +45,7 @@ export async function GET(req: Request) {
 
   const membership = getMembership(db, guard.identity.uid);
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     phone_masked: phoneMasked,
     email: row.email ?? null,

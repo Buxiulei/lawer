@@ -29,7 +29,16 @@ import {
 } from '@/lib/jobs/extraction-worker';
 
 import { fail, type Result } from './attest';
-import { briefSummary, parseBrief, saveBrief, type EvidenceBrief } from './brief';
+import {
+  briefStatusOf,
+  briefSummary,
+  generateBrief,
+  parseBrief,
+  saveBrief,
+  type BriefStatus,
+  type EvidenceBrief,
+} from './brief';
+import { defaultBriefLlm } from './brief-llm';
 import { readBytes } from './files';
 import { countPdfPages, isPdf, MediaMetaError, probeDurationSeconds } from './media-meta';
 
@@ -61,6 +70,9 @@ interface EvidenceOwnedRow {
   brief_json: string | null;
   brief_version: number;
   brief_updated_by: string | null;
+  brief_error: string | null;
+  void_reason: string | null;
+  voided_at: string | null;
   mime: string | null;
   size: number;
 }
@@ -80,7 +92,7 @@ function ownedEvidence(db: Database, evidenceId: number, userId: number): Eviden
       `SELECT e.id, e.case_id, e.user_id, e.file_id, e.name, e.category, e.prove_purpose,
               e.original_medium, e.status, e.created_at, e.extraction_status, e.extracted_text,
               e.extracted_meta_json, e.extracted_at, e.brief_json, e.brief_version,
-              e.brief_updated_by, f.mime, f.size
+              e.brief_updated_by, e.brief_error, e.void_reason, e.voided_at, f.mime, f.size
          FROM evidence e JOIN files f ON f.id = e.file_id
         WHERE e.id = ?`,
     )
@@ -354,6 +366,12 @@ export interface EvidenceExtractionView {
   brief_version: number;
   brief_updated_by: string | null;
   brief_summary: string;
+  /** none = 没生成过；ok = 有；failed = 试过但失败了（brief_error 是原因原文） */
+  brief_status: BriefStatus;
+  brief_error: string | null;
+  /** 非 null = 这件材料已作废（当事人声明不作数）；连同理由一起给，读到的人不必再查一次 */
+  voided_at: string | null;
+  void_reason: string | null;
 }
 
 /** 最近一条已失败任务及其报价的退款事实（读侧据此拼失败说明）。 */
@@ -431,6 +449,11 @@ function view(
     brief_version: row.brief_version,
     brief_updated_by: row.brief_updated_by,
     brief_summary: briefSummary(brief),
+    ...briefStatusOf(row.brief_json, row.brief_error),
+    // 作废态原样带出：evidence_get 是按 id 单取，取到一件已作废的材料时，
+    // 调用方必须能一眼看出"这份当事人已经声明不作数"，而不是继续拿它去写文书。
+    voided_at: row.voided_at,
+    void_reason: row.void_reason,
   };
 }
 
@@ -516,4 +539,70 @@ export function updateEvidenceBrief(
     return NOT_FOUND();
   }
   return { ok: true, evidence_id: row.id, version: saved.version, reason: input.reason };
+}
+
+/**
+ * 重新生成一份简报。**按 0 公道值计价**（价已含在当初那次提取里），
+ * 且不排队——一次同步调用，成功就落库、失败就把原因原样回给调用方。
+ *
+ * 【为什么要有这条】自动生成会失败：模型没连上、返回的不是 JSON、不合 schema。
+ * 在此之前失败只留一行日志，用户与他的 agent 手上只有"这件材料没有简报"，
+ * 而**没有任何入口能再试一次**——只能再买一次内容提取，为一张卡片重付一次转写的钱。
+ *
+ * 【为什么不覆盖已有的简报】人手写过或改写过的那一版是用户的东西，重生成不该把它冲掉。
+ * 要重写就用 evidence_brief_update（带 base_version 的那条乐观锁路径）。
+ */
+export function regenerateBrief(
+  db: Database,
+  input: { evidenceId: number; userId: number },
+): Promise<Result<{ evidence_id: number; brief: EvidenceBrief; version: number; note: string }>> {
+  const row = ownedEvidence(db, input.evidenceId, input.userId);
+  if (!row) return Promise.resolve(NOT_FOUND());
+  if (row.brief_version > 0) {
+    return Promise.resolve(
+      fail(
+        409,
+        'BRIEF_ALREADY_EXISTS',
+        `这件材料已经有简报了（第 ${row.brief_version} 版），本次没有重新生成。` +
+          '为什么：重生成会整份覆盖，而现在这一版可能是人手写或改写过的。' +
+          '怎么办：要读就用 evidence_brief_get；确实要换一版，用 evidence_brief_update 带上 base_version 提交。',
+      ),
+    );
+  }
+  const llm = defaultBriefLlm();
+  if (!llm) {
+    return Promise.resolve(
+      fail(
+        503,
+        'BRIEF_MODEL_UNAVAILABLE',
+        '服务端现在没有可用的简报模型（缺 provider key，或那家不实现 chatJSON），本次没有生成。' +
+          '这是我们这边的配置问题，不是你的调用有错。怎么办：过一会儿再试一次；' +
+          '一直如此请把这条消息原样告诉运营。',
+      ),
+    );
+  }
+  return generateBrief(db, row.id, llm, 'system').then((r) => {
+    if (!r.ok) {
+      // 失败原文原样回（generateBrief 已经把它落进 brief_error）：**不翻译成一句「生成失败」**——
+      // 那句话读到的人还得再推一遍我们已经推过的那一遍。
+      return fail(
+        502,
+        'BRIEF_GENERATE_FAILED',
+        `这一次仍然没生成成功。原因原文：${r.error}` +
+          ' 怎么办：模型/上游那一档过一会儿再试；「不合 schema」那一档多试几次通常能过，' +
+          '一直不过就自己用 evidence_brief_update 手写一份（base_version 传 0）。',
+      );
+    }
+    return {
+      ok: true as const,
+      evidence_id: row.id,
+      brief: r.brief!,
+      version: r.version!,
+      note:
+        '已重新生成并落库（这一步按 0 公道值计价，不消耗额度）。' +
+        (r.strippedQuotes
+          ? `其中 ${r.strippedQuotes} 条关键事实的原话与提取文本对不上，已被抹成空串——那几条事实本身保留。`
+          : ''),
+    };
+  });
 }

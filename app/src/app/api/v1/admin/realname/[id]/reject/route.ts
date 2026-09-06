@@ -6,8 +6,6 @@
 //
 // 【为什么 reason 必填到 400】驳回而不说为什么，用户只能猜着重交，
 // 大概率原样再交一次、再被驳一次 —— 一个不说理由的驳回按钮制造的是死循环，不是审核。
-import { NextResponse } from 'next/server';
-
 import { adminRejectPassportRealname } from '@/lib/admin/actions';
 import {
   adminBadRequest,
@@ -22,6 +20,7 @@ import { parseId } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 import { getDb } from '@/lib/db/client';
 import { latestVerificationIdForUser } from '@/lib/db/realname';
+import { apiJson } from '@/lib/http/json';
 
 /** 驳回原因/备注的字数上限（与 approve 路由同一个数）。 */
 const MAX_REVIEW_TEXT = 500;
@@ -75,7 +74,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const notified = await notifyRealnameReviewed(db, result.userId);
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     user_id: result.userId,
     auth_status: result.authStatus,

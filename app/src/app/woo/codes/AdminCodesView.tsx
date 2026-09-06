@@ -196,7 +196,9 @@ export function AdminCodesView() {
 function statusOf(r: CodeRow): string {
   if (r.redeemed_by != null) return '已兑换';
   if (!r.enabled) return '已停用';
-  // 到期串是 UTC canonical（库里就这一种格式），补 T/Z 再比，别让本机时区插进来
-  if (r.expires_at && new Date(r.expires_at.replace(' ', 'T') + 'Z') < new Date()) return '已过期';
+  // 到期串由接口按 +08:00 的 ISO 8601 给（lib/http/json 统一转的），`new Date` 直接认得，
+  // 本机时区插不进来。**不要再手工补 'Z'**：那会把带偏移的串拼成双时区标记 ⇒ Invalid Date，
+  // 而 `Invalid Date < new Date()` 恒为 false，于是过期的码会一直显示「可用」。
+  if (r.expires_at && new Date(r.expires_at) < new Date()) return '已过期';
   return '可用';
 }

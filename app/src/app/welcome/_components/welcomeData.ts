@@ -12,7 +12,7 @@
  */
 
 import { latestOf } from '@/app/(app)/case/_components/resolve';
-import { apiFetch } from '@/app/_ui/api';
+import { apiFetch, apiFetchAll } from '@/app/_ui/api';
 import { fetchMyCases } from '@/app/_ui/currentCase';
 import { isFreshCase, type CaseSnapshot } from '@/lib/cases/freshness';
 
@@ -37,12 +37,12 @@ export async function fetchCaseSnapshot(caseId: number): Promise<CaseSnapshot> {
   const [detail, messages, evidence] = await Promise.all([
     apiFetch<{ case: ApiCaseRow; timeline: unknown[] }>(`/cases/${caseId}?timeline_limit=1`),
     apiFetch<{ messages: unknown[] }>(`/cases/${caseId}/messages`),
-    apiFetch<{ evidence: unknown[] }>(`/cases/${caseId}/evidence`),
+    apiFetchAll<unknown>(`/cases/${caseId}/evidence`),
   ]);
   return {
     timelineCount: detail.timeline.length,
     messageCount: messages.messages.length,
-    evidenceCount: evidence.evidence.length,
+    evidenceCount: evidence.length,
     intake: {
       employedFrom: detail.case.employed_from,
       monthlyWageFen: detail.case.monthly_wage_fen,

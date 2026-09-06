@@ -27,12 +27,19 @@ import { draftExport, shareCreate, shareRevoke } from './drafts-export';
 import { crisisCheck, emotionLog } from './emotion';
 import {
   evidenceBriefGet,
+  evidenceBriefRegenerate,
   evidenceBriefUpdate,
   evidenceExtract,
   evidenceGet,
   evidenceList,
 } from './evidence';
-import { attestVerify, evidenceAttest, evidenceRegister, evidenceUploadUrl } from './evidence-write';
+import {
+  attestVerify,
+  evidenceAttest,
+  evidenceRegister,
+  evidenceUploadUrl,
+  evidenceVoid,
+} from './evidence-write';
 import { citationCheck, knowledgeGet, knowledgeSearch } from './knowledge';
 import { referralCreate, referralList } from './referral';
 import { caseReportGet, caseReportUpdate } from './report';
@@ -96,4 +103,6 @@ export const CAPABILITIES: Capability[] = [
   draftExport,
   referralCreate,
   referralList,
+  evidenceVoid,
+  evidenceBriefRegenerate,
 ];

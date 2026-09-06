@@ -28,7 +28,7 @@ import { gongdaoRefund } from '../billing';
 import { markReportStale } from '../cases/report-stale';
 import { restoreEntitlement } from '../billing/entitlements';
 import { SERVICE_FEATURE, serviceChargeRef, type PricedService } from '../billing/service-quotes';
-import { generateBrief } from '../evidence/brief';
+import { generateBrief, recordBriefError } from '../evidence/brief';
 import { defaultBriefLlm } from '../evidence/brief-llm';
 import {
   extractVideo,
@@ -506,11 +506,18 @@ export interface WorkerOptions {
 export const writeSummary: AfterExtraction = async (db, job) => {
   const llm = defaultBriefLlm();
   if (!llm) {
-    console.warn(`[extraction] 任务 ${job.id}：没有可用的模型，这份材料暂时没有摘要卡`);
+    // 【「没有可用模型」也要落进 brief_error】只打日志的形态就是 09-06 生产缺口：
+    // OCR 成功、简报没有、日志滚掉之后没人知道这里发生过什么。
+    recordBriefError(
+      db,
+      job.evidence_id,
+      '没有可用的简报模型（缺 provider key，或那家不实现 chatJSON），本次提取没有附摘要卡。' +
+        '正文已经提取好了，配好模型后可用 evidence_brief_regenerate 补一份（按 0 公道值计价）。',
+    );
     return;
   }
-  const r = await generateBrief(db, job.evidence_id, llm);
-  if (!r.ok) console.warn(`[extraction] 任务 ${job.id} 的摘要卡没写成：${r.error}`);
+  // generateBrief 内部已经落 brief_error 并打日志（失败可见收在那一处，不在这里重复一遍）
+  await generateBrief(db, job.evidence_id, llm);
 };
 
 /** 这一轮做了什么。'idle' = 没有可领的任务（不是错误）。 */

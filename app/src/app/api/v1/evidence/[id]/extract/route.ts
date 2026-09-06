@@ -3,11 +3,10 @@
 // 网页与用户自己的 agent 走同一套闸门与同一套价，两个入口不该有两份实现。
 //
 // 两步同一个端点：body 不带 quote_id = 报价（免费、不扣任何费用）；带 quote_id = 确认扣费并排队。
-import { NextResponse } from 'next/server';
-
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
 import { EXTRACTION_MODES, quoteExtraction, startExtraction } from '@/lib/evidence/extraction';
+import { apiJson } from '@/lib/http/json';
 import type { ExtractionMode } from '@/lib/jobs/extraction-worker';
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -16,7 +15,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const evidenceId = parseId((await params).id);
   if (evidenceId === null) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'EVIDENCE_NOT_FOUND', message: '这件材料不存在' },
       { status: 404 },
     );
@@ -33,7 +32,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     ? (body.mode as ExtractionMode)
     : null;
   if (!mode) {
-    return NextResponse.json(
+    return apiJson(
       {
         ok: false,
         error_code: 'INVALID_MODE',
@@ -47,17 +46,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (body.quote_id === undefined || body.quote_id === null) {
     const quoted = quoteExtraction(getDb(), { evidenceId, userId, mode });
     if (!quoted.ok) return domainFailure(quoted);
-    return NextResponse.json({ ok: true, quote: quoted.quote });
+    return apiJson({ ok: true, quote: quoted.quote });
   }
 
   const quoteId = Number(body.quote_id);
   if (!Number.isInteger(quoteId) || quoteId <= 0) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'INVALID_QUOTE_ID', message: 'quote_id 必须是报价回包里的正整数编号' },
       { status: 400 },
     );
   }
   const started = startExtraction(getDb(), { evidenceId, userId, mode, quoteId });
   if (!started.ok) return domainFailure(started);
-  return NextResponse.json({ ok: true, job: started });
+  return apiJson({ ok: true, job: started });
 }

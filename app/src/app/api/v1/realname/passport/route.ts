@@ -22,6 +22,7 @@ import { badRequest } from '@/lib/auth/http';
 import { initPassportRealname } from '@/lib/auth/passport-realname';
 import { AUTH_STATUS, VERIFICATION_STATUS } from '@/lib/auth/realname';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 import {
   MAX_CONCURRENT_UPLOADS,
   MAX_UPLOAD_BYTES,
@@ -33,7 +34,7 @@ const MAX_UPLOAD_MB = MAX_UPLOAD_BYTES / 1024 / 1024;
 
 function tooLarge(actualBytes: number): NextResponse {
   const actualMb = (actualBytes / 1024 / 1024).toFixed(1);
-  return NextResponse.json(
+  return apiJson(
     {
       ok: false,
       error_code: 'FILE_TOO_LARGE',
@@ -49,7 +50,7 @@ function tooLarge(actualBytes: number): NextResponse {
 }
 
 function uploadBusy(): NextResponse {
-  return NextResponse.json(
+  return apiJson(
     {
       ok: false,
       error_code: 'UPLOAD_BUSY',
@@ -102,13 +103,13 @@ export async function POST(req: Request) {
       selfie: await material(form, 'selfie'),
     });
     if (!result.ok) {
-      return NextResponse.json(
+      return apiJson(
         { ok: false, error_code: result.errorCode, message: result.message },
         { status: result.status },
       );
     }
 
-    return NextResponse.json(
+    return apiJson(
       {
         ok: true,
         verification_id: result.verificationId,

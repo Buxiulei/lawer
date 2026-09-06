@@ -74,6 +74,12 @@ export interface EvidenceRow {
   /** 简报原文（JSON 串）。读侧一律经 lib/evidence/brief.parseBrief 解，别自己 JSON.parse */
   brief_json: string | null;
   brief_version: number;
+  /** 最近一次自动生成简报失败的原因；null = 没失败过 */
+  brief_error: string | null;
+  /** 作废理由；null = 没作废 */
+  void_reason: string | null;
+  /** 作废时刻（canonical 串）；null = 没作废 */
+  voided_at: string | null;
 }
 
 // ========== cases ==========
@@ -333,12 +339,26 @@ export function listDeadlines(db: Database, caseId: number, includeResolved: boo
 
 // ========== evidence ==========
 
-export function listEvidence(db: Database, caseId: number): EvidenceRow[] {
+/**
+ * 案件名下的证据。**默认不含已作废的条目**（includeVoided 才回）。
+ *
+ * 【为什么过滤写在这一层】事实卡、MCP 的 evidence_list、网页证据库读的都是这一个函数。
+ * 让三个读点各自 `filter(r => r.status !== 已作废)` 的形态是：漏掉一处，那一处就会把
+ * 用户已经声明「这份不作数」的材料继续当成证据用——而它看起来完全正常。
+ */
+export function listEvidence(
+  db: Database,
+  caseId: number,
+  includeVoided = false,
+): EvidenceRow[] {
+  const columns = `id, case_id, name, category, prove_purpose, status, created_at,
+              extraction_status, extracted_at, brief_json, brief_version, brief_error,
+              void_reason, voided_at`;
   return db
     .prepare(
-      `SELECT id, case_id, name, category, prove_purpose, status, created_at,
-              extraction_status, extracted_at, brief_json, brief_version
-         FROM evidence WHERE case_id = ? ORDER BY id DESC`,
+      `SELECT ${columns}
+         FROM evidence WHERE case_id = ?${includeVoided ? '' : ' AND voided_at IS NULL'}
+        ORDER BY id DESC`,
     )
     .all(caseId) as EvidenceRow[];
 }

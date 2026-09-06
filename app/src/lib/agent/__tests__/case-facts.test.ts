@@ -52,6 +52,9 @@ function evidence(n: number, category = '考勤', extra: Partial<EvidenceRow> = 
     extracted_at: null,
     brief_json: null,
     brief_version: 0,
+    brief_error: null,
+    void_reason: null,
+    voided_at: null,
     ...extra,
   }));
 }

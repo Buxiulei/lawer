@@ -7,8 +7,6 @@
 // 【为什么不做幂等键】会员与公道值那两条要 op_ref，是因为重试会**再发一份**（钱翻倍）。
 // 这条不会：approve 走 planPassportApproval，非「待审」的流水直接抛错 ⇒
 // 第二次点击拿到的是 400 BAD_STATE，而不是第二次落定。重复提交在这里天然是幂等的。
-import { NextResponse } from 'next/server';
-
 import { adminApprovePassportRealname } from '@/lib/admin/actions';
 import {
   adminBadRequest,
@@ -23,6 +21,7 @@ import { parseId } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 import { getDb } from '@/lib/db/client';
 import { latestVerificationIdForUser } from '@/lib/db/realname';
+import { apiJson } from '@/lib/http/json';
 
 /** 备注/驳回原因的字数上限（与 reject 路由同一个数）。 */
 const MAX_REVIEW_TEXT = 500;
@@ -77,7 +76,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // 发信在 DB 已提交之后，且吞掉一切失败：SMTP 没配好不该让一次已经生效的审核看起来失败了。
   const notified = await notifyRealnameReviewed(db, result.userId);
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     user_id: result.userId,
     cert_type: result.certType,

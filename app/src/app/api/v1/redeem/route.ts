@@ -10,6 +10,7 @@ import { requireIdentity } from '@/lib/auth/guard';
 import { badRequest, failureResponse, readJsonBody, stringField } from '@/lib/auth/http';
 import { isRedeemLocked, recordRedeemFailure, redeemCode } from '@/lib/billing/redeem';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 /**
  * 失败时对外的**唯一**一句话。
@@ -52,5 +53,5 @@ export async function POST(req: Request): Promise<NextResponse> {
     return failureResponse({ ok: false, status: 400, errorCode: 'REDEEM_INVALID', message: INVALID_MESSAGE });
   }
 
-  return NextResponse.json({ ok: true, gongdao: result.gongdao, balance: result.balance });
+  return apiJson({ ok: true, gongdao: result.gongdao, balance: result.balance });
 }

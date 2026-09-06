@@ -50,7 +50,8 @@ export const ACTIONS_PROFILE: readonly string[] = [
  * 有了端点还留在这儿就红），能力一落地就会被逼着把它从这份名单里划掉。
  */
 export const ACTIONS_PROFILE_PENDING: Readonly<Record<string, string>> = {
-  case_report_get: '个案报告（长期记忆）那一族尚未落地，注册表里还没有这条能力',
+  // 暂无：case_report_get 已由个案报告族落地并挂上 GET /cases/{id}/report，故从本名单划掉。
+  // 未来若有「进了精简集但还没端点」的能力，按上面的格式登记在此。
 };
 
 /** 精简集里已经能出成 operation 的那些 */

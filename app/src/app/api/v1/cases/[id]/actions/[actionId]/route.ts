@@ -1,11 +1,10 @@
 // app/src/app/api/v1/cases/[id]/actions/[actionId]/route.ts
 // PATCH 把行动卡标成「完成」（默认）或「放弃」（对应 MCP 工具 action_complete）。
-import { NextResponse } from 'next/server';
-
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 import * as cases from '@/lib/cases';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 export async function PATCH(
   req: Request,
@@ -18,13 +17,13 @@ export async function PATCH(
   const caseId = parseId(id);
   const actionId = parseId(rawActionId);
   if (caseId === null) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'CASE_NOT_FOUND', message: '案件不存在' },
       { status: 404 },
     );
   }
   if (actionId === null) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'ACTION_NOT_FOUND', message: '行动项不存在' },
       { status: 404 },
     );
@@ -40,5 +39,5 @@ export async function PATCH(
   });
   if (!result.ok) return domainFailure(result);
 
-  return NextResponse.json({ ok: true, action: result.action });
+  return apiJson({ ok: true, action: result.action });
 }

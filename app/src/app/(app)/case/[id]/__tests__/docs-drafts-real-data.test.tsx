@@ -48,8 +48,21 @@ vi.mock('@/app/_ui/api', () => ({
       ? Promise.reject(new Error(`测试没给 ${path} 预置响应`))
       : Promise.resolve(responses[key]);
   },
+  // 清单端点走这一条（页面用它翻完所有页）：替身直接把预置好的整页给出去
+  apiFetchAll: (path: string) => {
+    calls.push(path);
+    const key = Object.keys(responses).find((k) => path.startsWith(k));
+    return key === undefined
+      ? Promise.reject(new Error(`测试没给 ${path} 预置响应`))
+      : Promise.resolve((responses[key] as { items: unknown[] }).items);
+  },
   humanError: (err: unknown) => (err instanceof Error ? err.message : '出错了'),
 }));
+
+/** 清单端点的真实回包（lib/cases/paging 的 pageResponse）：分页外壳 + 老键，两个键同一个数组 */
+function page(legacyKey: string, rows: unknown[]): Record<string, unknown> {
+  return { items: rows, total: rows.length, offset: 0, next_offset: null, [legacyKey]: rows };
+}
 
 const { fetchDrafts, findDraft, toDraftView } = await import('../drafts/_components/draftsData');
 const { DraftsListView } = await import('../drafts/_components/DraftsListView');
@@ -109,12 +122,10 @@ beforeEach(() => {
   calls.length = 0;
   responses['/cases/1/drafts'] = { drafts: realDraftRows() };
   responses['/cases/1?'] = { case: { id: 1, title: '我的案件', stage: '已收通知' } };
-  responses['/cases/1/deadlines'] = {
-    deadlines: [
-      { id: 21, due_at: '2027-07-24T23:59:00+08:00' },
-      { id: 22, due_at: '2026-09-05T18:00:00+08:00' },
-    ],
-  };
+  responses['/cases/1/deadlines'] = page('deadlines', [
+    { id: 21, due_at: '2027-07-24T23:59:00+08:00' },
+    { id: 22, due_at: '2026-09-05T18:00:00+08:00' },
+  ]);
 });
 
 /* ── 零、正对照：演示数据确实带着那家公司的名字 ───────────────── */

@@ -27,6 +27,7 @@ import {
   type SnippetVars,
 } from '../app/src/lib/capabilities/client-matrix';
 import { ERROR_CODES, ERROR_GROUPS, type ErrorGroup } from '../app/src/lib/capabilities/error-codes';
+import { OUTBOUND_OFFSET, OUTBOUND_TZ } from '../app/src/lib/time';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const ACCESS_DOC = path.join(REPO_ROOT, 'skill', '接入说明.md');
@@ -78,16 +79,44 @@ export function inputHints(schema: Record<string, unknown>): string {
     .join('；');
 }
 
+/**
+ * REST 列。没有专用端点的能力**不再写「—」**：那一格看起来像「这条走 REST 调不了」，
+ * 而它其实走通用桥调得了——对方 agent 据此绕开的是一条本来就开着的路。
+ */
 function capabilityRow(c: Capability): string {
-  const rest = c.rest ? `\`${c.rest.method} ${c.rest.path.replace(/^\/api\/v1/, '')}\`` : '—';
+  const rest = c.rest
+    ? `\`${c.rest.method} ${c.rest.path.replace(/^\/api\/v1/, '')}\``
+    : `\`POST /tools/${c.name}\``;
   return `| \`${c.name}\` | ${rest} | \`${c.scope}\` | ${KIND_LABELS[c.kind]} | ${cell(c.description)} | ${cell(inputHints(c.inputSchema))} |`;
+}
+
+/**
+ * 时区口径。**由 lib/time 的常量生成，不手写**：手写的那一句会在某次改口径时留在原地，
+ * 而它看起来仍然像是对的——对方 agent 照着它解析出来的时刻会整整差八小时、跨日差一天。
+ */
+export function renderTimezoneNote(): string {
+  return (
+    `> **时间一律是北京时间（${OUTBOUND_TZ}，${OUTBOUND_OFFSET}）**。` +
+    '所有接口回包里的 `*_at` / `*_time` 字段都是带偏移的 ISO 8601（形如 ' +
+    '`2026-09-06T00:30:00+08:00`），直接丢给 `new Date()` 即可，**不要再自己补时区**。' +
+    '**入参请务必自己带上偏移**（`…+08:00` 或 `…Z`）：不带偏移的串按服务端进程时区解析，' +
+    '那是部署环境的属性、不是接口约定，别赌它。' +
+    '服务端内部按 UTC 存储，这一层与调用方无关。\n'
+  );
 }
 
 /** 能力表：按族分节，族内保持注册表顺序（客户端原样展示，重排等于面板重排） */
 export function renderCapabilities(): string {
   const caps = listCapabilities({ exposeTo: 'mcp' });
   const families = [...new Set(caps.map((c) => c.family))];
-  const lines: string[] = [];
+  const lines: string[] = [
+    renderTimezoneNote(),
+    'REST = 专用端点 + `/tools/{name}` 通用桥。表里 REST 列给的是专用端点，' +
+      '没有专用端点的那些写成 `POST /tools/<name>`；**每一条能力都可以走通用桥**——' +
+      '`POST /api/v1/tools/{name}`，请求体就是该能力的入参 JSON，鉴权、scope、前置闸与 MCP 同一批判定。' +
+      '当前可调的清单随时可以 `GET /api/v1/tools` 取。',
+    '',
+  ];
   for (const family of families) {
     lines.push(`**${FAMILY_LABELS[family]}**`, '');
     lines.push('| 工具 | REST | scope | 读写 | 用途 | 入参要点 |');
