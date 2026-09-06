@@ -63,7 +63,13 @@ export {
 } from './citation-block';
 export { classifyTask, criticalReasons, type TaskClassInput } from './task-class';
 export { buildSystemPrompt, packsSection, beijingNow } from './prompt';
-export { buildCaseFacts, renderCaseFacts, CASE_FACTS_BUDGET, EVIDENCE_DISCLAIMER } from './case-facts';
+export {
+  buildCaseFacts,
+  buildFactsStatusLine,
+  renderCaseFacts,
+  CASE_FACTS_BUDGET,
+  EVIDENCE_DISCLAIMER,
+} from './case-facts';
 export {
   AGENT_TOOLS,
   executeTool,
