@@ -10,6 +10,7 @@ import {
   type CrisisOpenerText,
   type HotlineFact,
 } from '@/lib/agent/crisis-opener';
+import { CASE_MILESTONES } from '@/lib/cases/milestones';
 import { CASE_STAGES } from '@/lib/cases/stages';
 
 import type { DomainPack } from './registry';
@@ -376,6 +377,10 @@ export const LABOR: DomainPack = {
   // **空数组是结论不是待填**——真有并行轨的领域（如危机事件处置）把它填上，
   // 事实卡与报告会各多显示一行「当前轨」。
   tracks: [],
+
+  // 驾驶舱那条轨道的八格。**引用 CASE_MILESTONES，不在这里抄第二份**：
+  // 抄一份的形态是页面上的轨道与服务端认的里程碑各说各话，而两边各自看都正常。
+  journey: CASE_MILESTONES,
 
   intakeSchema: LABOR_INTAKE_SCHEMA,
   intakeLimitation: LABOR_INTAKE_LIMITATION,

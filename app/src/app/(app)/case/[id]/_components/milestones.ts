@@ -9,27 +9,24 @@
  */
 
 import { demoTimeline } from '@/app/_mock/demo';
+import { CASE_MILESTONES, type CaseMilestone } from '@/lib/cases/milestones';
 
-/** 与契约 §三 的 `CaseMilestone` 同集合。定稿后从 `_mock/types` 导入，删掉这行。 */
-export type Milestone =
-  | '协商'
-  | '仲裁申请'
-  | '立案'
-  | '开庭'
-  | '裁决'
-  | '一审'
-  | '二审'
-  | '执行';
+/**
+ * 与契约 §三 的 `CaseMilestone` **是同一个类型**，不是「同集合的另一份」。
+ * 原来这里抄了一份一模一样的联合，失效形态是：契约那份加一档，这份仍然绿着，
+ * 而 dashboardData 的 MILESTONE_SET 会把新那档当成「认不出的里程碑」静默丢掉。
+ */
+export type Milestone = CaseMilestone;
 
 export type TrackState = '完成' | '进行中' | '跳过' | '未到';
 
 export interface Attainment {
-  milestone: Milestone;
+  milestone: string;
   happenedAt: string;
 }
 
 export interface TrackCell {
-  milestone: Milestone;
+  milestone: string;
   state: TrackState;
   /** 完成才有日期；跳过与未到为 null */
   at: string | null;
@@ -43,10 +40,16 @@ export interface TrackCell {
  * 按「第一个没事件的格」会把进行中算到「开庭」，而案子其实回到了谈判桌。
  */
 export function deriveTrack(
-  track: readonly Milestone[],
+  /**
+   * 轨道格子。**收 string 而不是收缺省领域那个联合**：格子由案件所属领域的包给
+   * （DomainPack.journey，取不到退回 stages），第二个领域的格子根本不在那个联合里。
+   * 收窄成联合的形态是——第二个领域的用户打开驾驶舱，轨道要么编译不过，
+   * 要么被 `known.has` 全部判成「轨道之外」，于是整条轨道一格都不亮。
+   */
+  track: readonly string[],
   events: readonly Attainment[],
 ): TrackCell[] {
-  const known = new Set(track);
+  const known = new Set<string>(track);
   const valid = events.filter((e) => {
     if (known.has(e.milestone)) return true;
     // 静默丢弃会让「时间轴少一格」没有任何异常信号——同 CALC_FAILED 那次的教训
@@ -55,7 +58,7 @@ export function deriveTrack(
   });
   const sorted = [...valid].sort((a, b) => a.happenedAt.localeCompare(b.happenedAt));
 
-  const firstAt = new Map<Milestone, string>();
+  const firstAt = new Map<string, string>();
   for (const e of sorted) if (!firstAt.has(e.milestone)) firstAt.set(e.milestone, e.happenedAt);
 
   const current = currentOf(track, sorted);
@@ -80,9 +83,9 @@ export function deriveTrack(
 
 /** 「进行中」落在哪一格；全程走完时没有进行中，回 null */
 function currentOf(
-  track: readonly Milestone[],
+  track: readonly string[],
   sorted: readonly Attainment[],
-): Milestone | null {
+): string | null {
   if (sorted.length === 0) return track[0] ?? null;
   const last = sorted[sorted.length - 1];
   // 同一个里程碑出现第二次 ＝ 回退信号，进行中回到它本身
@@ -104,16 +107,7 @@ function currentOf(
  * 用户要的是「全程陪跑」的视觉承诺（2026-08-29 用户令：一审、二审、强制执行都要在流程里）。
  * **走到了才长出来** 与 **一开始就摆在那** 是两种承诺，他要的是后者。
  */
-export const FULL_JOURNEY: readonly Milestone[] = [
-  '协商',
-  '仲裁申请',
-  '立案',
-  '开庭',
-  '裁决',
-  '一审',
-  '二审',
-  '执行',
-];
+export const FULL_JOURNEY: readonly Milestone[] = CASE_MILESTONES;
 
 /** demo 案件**数据层**走的轨（仲裁轨五段）。显示仍走 FULL_JOURNEY。 */
 export const DEMO_TRACK: readonly Milestone[] = [

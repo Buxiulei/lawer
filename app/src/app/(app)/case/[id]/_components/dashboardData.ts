@@ -33,8 +33,10 @@ import type {
   DeadlineKind,
 } from '@/app/_mock/types';
 import { apiFetch, apiFetchAll, ApiError, humanError } from '@/app/_ui/api';
+import { journeyOf } from '@/app/_ui/domain';
+import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
 import type { BadgeTone } from '@/components/shadcn/badge';
-import { demoAttainments, type Attainment, type Milestone } from './milestones';
+import { demoAttainments, type Attainment } from './milestones';
 
 /** 「最近的材料」里的一行。证据与公司文件在这里已经拉平成同一种东西。 */
 export interface RecordRow {
@@ -47,6 +49,12 @@ export interface RecordRow {
 }
 
 export interface DashboardData {
+  /**
+   * 这个案件属于哪个领域（cases.domain）。轨道格子、并行轨那一行都按它取
+   * （app/_ui/domain）。**不给缺省值**：写死缺省领域的形态是，第二个领域的用户
+   * 打开自己的驾驶舱，轨道上每一格都在讲另一个行当的事，而没有一处会报错。
+   */
+  domain: string;
   actions: ActionItem[];
   deadlines: Deadline[];
   attainments: Attainment[];
@@ -122,21 +130,6 @@ const DEADLINE_KINDS: readonly DeadlineKind[] = [
   '自定义',
 ];
 
-/**
- * 轨道上的八段。**漏一个就编译不过**：下面那张全量表少一个键报 TS2741，
- * 多一个报 TS2353——`Milestone` 将来加一段时，这里不补就红，不会静默少一格。
- */
-const MILESTONE_SET: Record<Milestone, true> = {
-  协商: true,
-  仲裁申请: true,
-  立案: true,
-  开庭: true,
-  裁决: true,
-  一审: true,
-  二审: true,
-  执行: true,
-};
-
 const EVIDENCE_TONE: Record<string, BadgeTone> = {
   已上传: 'neutral',
   已固化: 'success',
@@ -166,6 +159,8 @@ interface ApiCaseRow {
   id: number;
   title: string;
   stage: string;
+  /** 案件领域（cases.domain）。GET /cases/{id} 回的是整行，这一列一直都在 */
+  domain: string;
 }
 
 interface ApiTimelineRow {
@@ -242,16 +237,21 @@ function toDeadline(row: ApiDeadlineRow): Deadline {
  * 时间线里带里程碑的事件＝轨道上的达成点。
  * 认不出的里程碑值丢掉但要出声：静默丢弃的后果是「轨道少一格」，
  * 而少一格在页面上跟「还没走到那一步」长得一模一样，没有任何异常信号。
+ *
+ * 【认不认得出，按**这个案子所属领域**的轨道判，不按一份写死的词表判】
+ * 写死的形态是：第二个领域的案子每一条里程碑事件都被判成「认不出」，
+ * 于是轨道一格都不亮，控制台里刷着一串警告，而页面看起来只是「还没开始走」。
  */
-function toAttainments(timeline: ApiTimelineRow[]): Attainment[] {
+function toAttainments(timeline: ApiTimelineRow[], journey: readonly string[]): Attainment[] {
+  const known = new Set<string>(journey);
   const out: Attainment[] = [];
   for (const row of timeline) {
     if (row.milestone === null) continue;
-    if (!(row.milestone in MILESTONE_SET)) {
+    if (!known.has(row.milestone)) {
       console.warn('[dashboard] 时间线上有认不出的里程碑，已忽略：', row.milestone);
       continue;
     }
-    out.push({ milestone: row.milestone as Milestone, happenedAt: row.happened_at });
+    out.push({ milestone: row.milestone, happenedAt: row.happened_at });
   }
   return out;
 }
@@ -292,10 +292,12 @@ export async function fetchDashboard(caseId: string): Promise<DashboardData> {
     apiFetchAll<ApiEvidenceRow>(`/cases/${caseId}/evidence`),
   ]);
 
+  const domain = detail.case.domain;
   return {
+    domain,
     actions: actions.map(toAction),
     deadlines: deadlines.map(toDeadline),
-    attainments: toAttainments(detail.timeline),
+    attainments: toAttainments(detail.timeline, journeyOf(domain)),
     timelineCount: detail.timeline.length,
     // 公司文件（「解读结论：不签」那一类）后端还没有列表接口，真实案件这一半先只有证据。
     // 不拿 demoCompanyDocs 填——那会把编的公司名混进用户自己的材料列表里。
@@ -306,6 +308,8 @@ export async function fetchDashboard(caseId: string): Promise<DashboardData> {
 /** 演示案件走这条，一次网络请求都不发 */
 export function demoDashboard(caseId: string): DashboardData {
   return {
+    // 演示案件没有 cases 行，领域取缺省——它演的就是缺省领域那套话
+    domain: DEFAULT_DOMAIN,
     actions: demoActions,
     deadlines: demoDeadlines,
     attainments: demoAttainments(),

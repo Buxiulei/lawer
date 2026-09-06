@@ -25,8 +25,10 @@ const { failureOf, isBlank, viewState } = await import('../dashboardData');
 type DashboardData = Awaited<ReturnType<typeof import('../dashboardData').fetchDashboard>>;
 const { CaseMissing, DashboardBody } = await import('../Dashboard');
 const { ApiError, NetworkError } = await import('@/app/_ui/api');
+const { DEFAULT_DOMAIN } = await import('@/lib/domains/registry');
 
 const EMPTY: DashboardData = {
+  domain: DEFAULT_DOMAIN,
   actions: [],
   deadlines: [],
   attainments: [],

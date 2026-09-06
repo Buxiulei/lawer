@@ -222,6 +222,19 @@ export interface DomainPack {
    * 不是「还没填」。
    */
   tracks: readonly string[];
+  /**
+   * 驾驶舱那条轨道的格子（页面上「案件进度」那一条）。
+   *
+   * 【与 stages 是两种东西，不许合并】stages 是**可变可回退的当前态**，
+   * 轨道格子是**只追加的既成事实**：案子从这一格退回上一格时，stage 变了，
+   * 而走过的格子仍然走过。拿 stages 当轨道画的形态是——谈崩退回上一步，
+   * 页面上已经点亮的后几格会被抹回未到，用户以为自己白走了一趟。
+   *
+   * **省略 = 本领域还没有单独的轨道词表**，页面退回按 `stages` 摆格子
+   * （见 app/_ui/domain.ts 的 journeyOf）。退回是有代价的：那条轨道会跟着 stage 回退，
+   * 所以这一项只是没填时的兜底，不是等价物。
+   */
+  journey?: readonly string[];
   /** 首诊表 schema：字段、必填、校验规则与问法 */
   intakeSchema: readonly IntakeFieldSpec[];
   /**
@@ -312,6 +325,16 @@ export function getDomainPack(key: string): DomainPack | undefined {
  */
 export function domainPackOrDefault(key: string | null | undefined): DomainPack {
   return (key ? DOMAINS[key] : undefined) ?? DOMAINS[DEFAULT_DOMAIN];
+}
+
+/**
+ * 这个领域的轨道格子。**读 journey / 退回 stages 这条规矩只写在这一处**：
+ * 散着写 `pack.journey ?? pack.stages` 的形态是——某一处忘了兜底，
+ * 没给 journey 的领域在那一处炸在属性访问上；或者将来要改这条规矩时，
+ * 得先把散落的每一处翻出来，而漏掉的那一处不会报错。
+ */
+export function journeyOfPack(pack: DomainPack): readonly string[] {
+  return pack.journey ?? pack.stages;
 }
 
 // ========== 灰度开关（设计稿 §16 分期：LAWER_DOMAINS_ENABLED=labor,counseling）==========
@@ -507,6 +530,14 @@ export function assertDomainPack(pack: DomainPack): void {
         }
       }
     }
+  }
+
+  // 轨道格子给了就不许是空数组：空数组画出来是一条**没有任何格子的进度条**，
+  // 页面照常渲染、一个报错都没有，只是这个领域的用户从此看不见自己走到哪一步。
+  // 「本领域没有单独的轨道词表」的表达方式是**不给这一项**（页面退回按 stages 摆），
+  // 不是给一个空数组。
+  if (pack.journey !== undefined && (!Array.isArray(pack.journey) || pack.journey.length === 0)) {
+    missing.push('journey 给了却是空的（不写这一项才是「本领域没有单独的轨道词表」）');
   }
 
   // 声明了并行轨却与主线阶段重名，说明这一项被当成阶段填了——两套词表混用时，

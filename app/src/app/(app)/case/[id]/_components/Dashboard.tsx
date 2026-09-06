@@ -6,6 +6,7 @@ import { demoCase } from '@/app/_mock/demo';
 import type { ActionItem } from '@/app/_mock/types';
 import { ByoAgentEntry } from '@/app/_ui/ByoAgentEntry';
 import { useDiscreet } from '@/app/_ui/discreet';
+import { journeyOf, tracksOf } from '@/app/_ui/domain';
 import { NeutralLabel } from '@/app/_ui/NeutralLabel';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Mascot } from '@/components/brand/Mascot';
@@ -17,7 +18,6 @@ import { useEnterStagger } from '@/hooks/useEnterStagger';
 import { DeadlineTiles } from './DeadlineTiles';
 import { MilestoneTrack } from './MilestoneTrack';
 import { RecentRecords } from './RecentRecords';
-import { FULL_JOURNEY } from './milestones';
 import {
   demoDashboard,
   failureOf,
@@ -132,8 +132,12 @@ export function DashboardBody({
           把这份 MilestoneTrack 收成 `lg:hidden`、桌面切到 `<CaseHeaderBar caseId={caseId} />`。
           CaseHeaderBar 组件与它的测试已合入本仓，只差挂回这一步。 */}
       <div data-mo-enter>
-        <MilestoneTrack track={FULL_JOURNEY} attainments={data.attainments} />
+        {/* 轨道格子按**这个案子所属领域**取（app/_ui/domain.journeyOf）。
+            写死一份的形态是：第二个领域的用户打开自己的驾驶舱，
+            八格里每一格都在讲另一个行当的事，而没有一处会报错。 */}
+        <MilestoneTrack track={journeyOf(data.domain)} attainments={data.attainments} />
       </div>
+      <TrackRow domain={data.domain} />
       {/* 只推一件事（产品方案叁）；计数仍是全量，不然「1/5」会缩成「0/1」。
           `collapseOnDone`：勾完这一件它让开，下一件才有地方站——
           「完成庆祝」的正确形态是下一件事出现，不是彩带。 */}
@@ -161,6 +165,33 @@ export function DashboardBody({
         <RecentRecords caseId={caseId} records={data.records} />
       </div>
     </div>
+  );
+}
+
+/**
+ * 并行轨那一行（设计稿 §16）：可在任一主线阶段进入、处置完回主线的那几条轨道。
+ *
+ * 【本领域没有并行轨时整行不渲染】`tracks` 是空数组就是「本领域没有并行轨」这个**结论**，
+ * 不是「还没填」。摆一行「当前轨：无」出来，是在告诉用户这里本该有点什么。
+ * 缺省领域的 tracks 就是空的，所以这一行在它的页面上一个字节都不多。
+ *
+ * 【为什么只列轨道、不说「当前在哪一轨」】cases 表**没有记当前轨的列**，
+ * 时间线也没有进出轨的事件类型——真源还不存在。这时印一句「当前轨：日常」
+ * 是编的，而它读起来跟真的一模一样。所以这一行只说得出「本案可能走到的并行轨有哪几条、
+ * 现在还没有记录」，等真源落地再把值填进来。
+ */
+function TrackRow({ domain }: { domain: string }) {
+  const tracks = tracksOf(domain);
+  if (tracks.length === 0) return null;
+  return (
+    <section data-mo-enter aria-label="并行轨" className="mt-3 rounded-[10px] bg-surface-2 px-3.5 py-2.5">
+      <p data-veil="" className="text-[14px] leading-6 text-ink">
+        当前轨：<span className="text-ink-2">还没有记录</span>
+      </p>
+      <p data-veil="" className="mt-0.5 text-[13px] leading-5 text-ink-2">
+        本案主线之外还有这几条轨可以走：{tracks.join('、')}。走进去主线不动，处置完回主线。
+      </p>
+    </section>
   );
 }
 
