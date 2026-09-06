@@ -766,12 +766,16 @@ function stripSentencesMatching(text: string, hit: (s: string) => string | null)
 }
 
 /** 命中位置往前看 NEGATION_WINDOW 个字，是否处在否定语境里 */
-function negatedAt(message: string, index: number): boolean {
+function negatedAt(
+  message: string,
+  index: number,
+  negations: readonly string[] = NEGATION_MARKERS,
+): boolean {
   const before = message.slice(Math.max(0, index - NEGATION_WINDOW), index);
   // 「是不是」是疑问句式，不是否定——但它里面含「不是」。
   // 不先摘掉它，「是不是死了算了」这种**真危机表述**会被判成否认而漏掉。
   const normalized = before.replace(/是不是/g, '');
-  return NEGATION_MARKERS.some((n) => normalized.includes(n));
+  return negations.some((n) => normalized.includes(n));
 }
 
 /**
@@ -781,16 +785,21 @@ function negatedAt(message: string, index: number): boolean {
  * （「我不会想不开，但有时候真的活不下去」）——只要**存在一个未被否定的命中**就触发。
  * 方向明确：宁可多触发，不可漏。
  */
-export function assessCrisis(message: string): CrisisAssessment {
+export function assessCrisis(
+  message: string,
+  /** 按哪个领域的词表判。省略即缺省领域——**只有拿不到案件领域的调用方才该省略它**：
+   *  同一句「撑不下去」在两个领域里该不该触发、触发后说什么，完全不是一回事。 */
+  crisis: DomainCrisis = DEFAULT_CRISIS,
+): CrisisAssessment {
   const matched: string[] = [];
   const suppressed: string[] = [];
 
-  for (const term of CRISIS_TERMS) {
+  for (const term of crisis.lexicon) {
     let from = 0;
     for (;;) {
       const at = message.indexOf(term, from);
       if (at < 0) break;
-      const bucket = negatedAt(message, at) ? suppressed : matched;
+      const bucket = negatedAt(message, at, crisis.negations) ? suppressed : matched;
       if (!bucket.includes(term)) bucket.push(term);
       from = at + term.length;
     }
@@ -801,8 +810,8 @@ export function assessCrisis(message: string): CrisisAssessment {
     triggered,
     matched,
     suppressed,
-    directive: triggered ? CRISIS_DIRECTIVE : null,
-    resourcePackId: triggered ? CRISIS_RESOURCE_PACK_ID : null,
+    directive: triggered ? crisis.directive : null,
+    resourcePackId: triggered ? crisis.resourcePackId : null,
   };
 }
 

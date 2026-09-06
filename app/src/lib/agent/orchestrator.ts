@@ -27,6 +27,8 @@ import {
   type TokenUsage,
   type UsageReport,
 } from '@/lib/llm';
+import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
+
 import type { AgentEventSink } from './events';
 import { intakeStage, type IntakeStage } from './intake';
 import { buildSystemPrompt } from './prompt';
@@ -608,7 +610,11 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   // 危机轮：判据来自 lib/agent/crisis 那一层的纯函数，注入内容也由它给定；
   // 本处只负责把它说的那张卡取回来（IO）并插到最前——它是本轮唯一真正要紧的那张卡。
   // 不经检索排序：危机表述与资源卡用词天然没有词面交集，靠调权重治不好（见 crisis.ts 文件头）。
-  const crisis = assessCrisis(message);
+  // 危机判定按**这个案件所属领域**的词表与首段（设计稿 §13「危机」行）。
+  // 用缺省领域判别的领域的形态是：一个正在崩溃的人说的那句话不在缺省词表里，
+  // 于是这一轮什么都没发生——没有报错，只是号码没给出去。
+  const crisisPack = (DOMAINS[snapshot.case.domain] ?? DOMAINS[DEFAULT_DOMAIN]).crisis;
+  const crisis = assessCrisis(message, crisisPack);
   // 命中就留痕，走与 MCP crisis_check 同一个入口（见 lib/cases/crisis-hits.ts 抬头）。
   // 本轮这一条不会出现在本轮事实卡的首行里（快照在上面已经取过了）——本轮的危机由
   // 确定性首段与资源卡当场接住，首行标记讲的是**之前那些轮**，两件事不重叠。
@@ -880,7 +886,7 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   let openerPhones: string[] = [];
   if (crisis.triggered) {
     // 两态：窗外首次带机构名与时段（描述有安抚价值），窗内复现只给号码行
-    const opener = buildCrisisOpener(crisisCardFacts, { compact: alreadyGiven });
+    const opener = buildCrisisOpener(crisisCardFacts, { compact: alreadyGiven }, crisisPack);
     openerPhones = extractHotlines(crisisCardFacts).filter((p) => opener.includes(p));
     // deterministic:true —— 心跳不因它停（模型还没开始出字，那 2-4 分钟正是心跳的主场）
     emit({ event: 'delta', data: { text: opener, deterministic: true } });
