@@ -105,11 +105,15 @@ describe('逐字条文注入也走领域闸（设计稿 §13：跨域召回默�
     expect(holders.every((m) => knowledge.packDomain(m) !== DEFAULT_DOMAIN)).toBe(true);
   });
 
-  // 【标题改过，记在这】原标题写的是「变异：拿掉 articleIndex 里的领域过滤 → 红」，
-  // 复审实测**不红**：findByArticleKeys 是经 `this.get` 取卡的，而 get 面自己有领域闸，
-  // articleIndex 里那道过滤被它**完全遮蔽**（是第二层，不是这条判据的牙）。
-  // 把牙记错位置的代价：后人读标题以为 articleIndex 那层独立守着，于是删掉 get 面的闸。
-  it('别的领域收录的条文不会被注入进来（变异：拿掉 get 面的领域闸 → 红；单删 articleIndex 那道过滤不红，它被 get 面遮蔽）', () => {
+  // 【标题改过两次，把实测写在这里，别再靠推理】原标题写的是
+  //「变异：拿掉 articleIndex 里的领域过滤 → 红」——复审实测不红。改成「拿掉 get 面的领域闸 → 红」——
+  // 本轮实测**也不红**。真相是这条路上**两道闸串着**，各自都够用：
+  //   ① articleIndex 建表时就不收非缺省域的卡 ⇒ 那个 key 压根不在表里；
+  //   ② 取卡走 this.get，get 面自己有领域闸 ⇒ 就算 key 在表里也拿不回来。
+  // 实测（P4-W2 三轮）：单删 ① 0 红，单删 ② 0 红（另两条判据红，都不是这条），
+  // ①② 同删本条才红。所以这条判据护的是"结果对"，护不住任何**单独一道**闸——
+  // 谁想拆其中一道，红的不会是它。下一条判据补的就是这个缺口的一半（通路必须经 get）。
+  it('别的领域收录的条文不会被注入进来（两道闸串着：articleIndex 建表过滤 + get 面领域闸；单删任一道本条都还绿，同删才红——实测）', () => {
     expect(searcher.findByArticleKeys!([OTHER_DOMAIN_KEY])).toEqual([]);
   });
 
