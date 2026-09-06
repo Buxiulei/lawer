@@ -291,6 +291,9 @@ describe('tools/list', () => {
       'share_create',
       'share_revoke',
       'draft_export',
+      // 转介，同样**追加在末尾**
+      'referral_create',
+      'referral_list',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();

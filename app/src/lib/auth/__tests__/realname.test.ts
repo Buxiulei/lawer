@@ -376,7 +376,7 @@ describe('requireRealname 闸门', () => {
     const db = makeTestDb();
     const userId = seedUser(db);
 
-    const denied = requireRealname(db, identityOf(userId));
+    const denied = await requireRealname(db, identityOf(userId));
     expect(denied.ok).toBe(false);
     if (!denied.ok) {
       expect(denied.response.status).toBe(403);
@@ -388,9 +388,9 @@ describe('requireRealname 闸门', () => {
 
     // 待审 = 认证发起了但人没做完，同样不放行
     users.setUserAuthStatus(db, userId, AUTH_STATUS.pending);
-    expect(requireRealname(db, identityOf(userId)).ok).toBe(false);
+    expect((await requireRealname(db, identityOf(userId))).ok).toBe(false);
 
     users.setUserAuthStatus(db, userId, AUTH_STATUS.verified);
-    expect(requireRealname(db, identityOf(userId)).ok).toBe(true);
+    expect((await requireRealname(db, identityOf(userId))).ok).toBe(true);
   });
 });

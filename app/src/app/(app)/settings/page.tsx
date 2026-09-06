@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { AgentKeyCards } from './_components/AgentKeyCards';
 import { PreferencesCard } from './_components/PreferencesCard';
 import { RealnameCard } from './_components/RealnameCard';
+import { ReferralCard } from './_components/ReferralCard';
 
 export const metadata: Metadata = { title: '设置' };
 
@@ -16,6 +17,8 @@ export default function SettingsPage() {
         <RealnameCard />
         {/* API key 卡 + 接入卡：两张吃同一份密钥 state，见 AgentKeyCards */}
         <AgentKeyCards />
+        {/* 转介状态卡：**只在有转介记录时自己渲染**，没有记录整张卡不出现（见 ReferralCard） */}
+        <ReferralCard />
         <PreferencesCard />
       </div>
     </div>

@@ -28,6 +28,7 @@ const FAMILIES = [
   'docs',
   'report',
   'account',
+  'referral',
 ];
 const SCOPES = ['case:read', 'case:write'];
 const KINDS = ['read', 'write', 'spend'];

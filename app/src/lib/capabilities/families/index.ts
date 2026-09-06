@@ -34,6 +34,7 @@ import {
 } from './evidence';
 import { attestVerify, evidenceAttest, evidenceRegister, evidenceUploadUrl } from './evidence-write';
 import { citationCheck, knowledgeGet, knowledgeSearch } from './knowledge';
+import { referralCreate, referralList } from './referral';
 import { caseReportGet, caseReportUpdate } from './report';
 import { timelineAdd, timelineList, timelineMilestone } from './timeline';
 
@@ -93,4 +94,6 @@ export const CAPABILITIES: Capability[] = [
   shareCreate,
   shareRevoke,
   draftExport,
+  referralCreate,
+  referralList,
 ];

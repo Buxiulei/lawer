@@ -47,6 +47,7 @@ const FAMILY_LABELS: Record<CapabilityFamily, string> = {
   docs: '来文与录音',
   report: '个案报告',
   account: '身份与账户',
+  referral: '转介',
 };
 
 const KIND_LABELS = { read: '读', write: '写', spend: '写·耗算力' } as const;

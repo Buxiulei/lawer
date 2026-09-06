@@ -3,7 +3,7 @@
 // 协议细节与"为什么手写不引 SDK"见 lib/mcp/jsonrpc.ts 顶部。
 //
 // 路由照例是薄的：鉴权 → 解析 JSON-RPC → 分发到 lib/mcp/tools 的注册表 → 包壳返回。
-import { isRealnameVerified } from '@/lib/auth/guard';
+import { realnameVerifiedOrLinked } from '@/lib/auth/guard';
 import { hasScope, resolveIdentity } from '@/lib/auth/identity';
 import { recordClientName } from '@/lib/db/api-keys';
 import { getDb } from '@/lib/db/client';
@@ -119,7 +119,10 @@ export async function POST(req: Request) {
       // 拦在这里就等于"凡是声明了实名的工具，一条也漏不掉"。让各工具在自己的 run 里
       // 各写一句的形态是：新加一条写能力时忘了抄那一句——它照常工作、照常返回 200，
       // 只是未实名的人也能往案卷里写东西，没有任何一处会报错。
-      if (tool.precondition.includes('realname') && !isRealnameVerified(getDb(), identity.uid)) {
+      if (
+        tool.precondition.includes('realname') &&
+        !(await realnameVerifiedOrLinked(getDb(), identity.uid))
+      ) {
         return json(
           rpcResult(
             id,

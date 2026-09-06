@@ -46,6 +46,8 @@ const ALL_TABLES = [
   'case_reports',
   // 危机信号留痕（事实卡首行「近 72 小时」的来源）
   'crisis_hits',
+  // 转介台账（设计稿 §14）
+  'referrals',
 ];
 
 function newDb(): Database.Database {

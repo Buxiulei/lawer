@@ -17,4 +17,9 @@ export async function register(): Promise<void> {
   const { getDb } = await import('@/lib/db/client');
   const { startExtractionWorker } = await import('@/lib/jobs/extraction-worker');
   startExtractionWorker(getDb());
+
+  // 转介发送队列（设计稿 §14）：同理，没有它，一份已经取得同意的数据包会一直留在
+  // 待发送——而页面上看起来一切正常。
+  const { startReferralWorker } = await import('@/lib/jobs/referral-worker');
+  startReferralWorker(getDb());
 }
