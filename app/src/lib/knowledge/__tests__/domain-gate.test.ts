@@ -121,6 +121,39 @@ describe('跨域检索默认关闭（设计稿 §13）', () => {
     ).toBeGreaterThanOrEqual(min);
   });
 
+  // 【复审 P4-W2 二轮 minor⑤】此前查询侧对 opts.domain 一个字都不查：域名字拼错时
+  // 过滤器一条都匹不上，回的是空列表 + 200 + 无错误码，上层照着"没有相关卡"往下讲。
+  // 索引侧的闸管的是**条目**的 domain，管不到**调用方传进来**的那个。
+  describe('查询侧的域名字也要被认（拼错不静默空手）', () => {
+    /** 库里真有的那个非缺省域名字（现取，不在判据里抄死一个拼写） */
+    function otherDomain(): string {
+      const real = listPacks()
+        .map(packDomain)
+        .find((d) => d !== DEFAULT_DOMAIN);
+      expect(real, '库里没有非缺省域的卡 ⇒ 本组判据无从构造"拼错的域名字"').toBeTruthy();
+      return real!;
+    }
+    /** 把它改掉最后一个字母 = 一个谁也不认识的域名字 */
+    const typoOf = (d: string) => `${d.slice(0, -1)}x`;
+
+    it('判据自身不空跑：这个拼错的域名字确实不属于任何一张卡', () => {
+      const typo = typoOf(otherDomain());
+      expect(listPacks().some((m) => packDomain(m) === typo)).toBe(false);
+    });
+
+    it('传一个谁也不认识的 domain → 抛自述错误（变异：拿掉 search 里那道未知域闸 → 红）', () => {
+      const typo = typoOf(otherDomain());
+      expect(() => search('投诉', { domain: typo })).toThrow(/不认识/);
+      // 错误里要说清"现在认得哪些"，否则调用方只知道自己错了、不知道该传什么
+      expect(() => search('投诉', { domain: typo })).toThrow(new RegExp(DEFAULT_DOMAIN));
+    });
+
+    it('拼对的域名字照常可用（闸不能关过头：注册过的、以及库里卡声明过的，都算认识）', () => {
+      expect(() => search('投诉', { domain: DEFAULT_DOMAIN })).not.toThrow();
+      expect(() => search('投诉', { domain: otherDomain() })).not.toThrow();
+    });
+  });
+
   it('region 过滤替代不了领域闸（那批卡 region 是全国，北京用户照样吃得到）', () => {
     const others = listPacks().filter((m) => packDomain(m) !== DEFAULT_DOMAIN);
     expect(others.every((m) => m.region === '全国')).toBe(true);

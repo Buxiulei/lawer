@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
+import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
 
 import { typeRank } from './types';
 
@@ -93,6 +93,7 @@ export interface SearchOptions {
   /**
    * 只在这一个领域里检索（设计稿 §13「知识库按领域独立成包、**跨域检索默认关闭**」）。
    * 不传就是缺省领域，**不是"全库"**——跨域是要显式要的，不是忘了传就发生的。
+   * 传一个谁也不认识的域名（拼错）**抛错**，不回空列表：见 search 里那道闸。
    */
   domain?: string;
   /**
@@ -373,6 +374,20 @@ export function packDomain(meta: { domain?: string }): string {
   return meta.domain ?? DEFAULT_DOMAIN;
 }
 
+/**
+ * 这个域名字是不是**真有那么一个域**：要么 lib/domains 注册过，要么库里确有卡这么声明。
+ *
+ * 【为什么两个来源取并集，而不是只认注册表】两边各自会先有对方没有的东西：
+ * 内容包先入库、代码里还没挂（本支就是这个状态），或者包先挂上、卡还没写。
+ * 只认一边的形态是——另一边那半会在完全正常的用法上抛错。
+ */
+function isKnownDomain(domain: string): boolean {
+  // 【为什么不是 `domain in DOMAINS`】`in` 连原型链一起认：`'toString' in DOMAINS` 是 true，
+  // 于是一个叫 toString 的域会"认识"，而它一张卡都没有——回空列表，和拼错那条路一模一样。
+  if (Object.keys(DOMAINS).includes(domain)) return true;
+  return loadIndex().some((meta) => packDomain(meta) === domain);
+}
+
 function passesFilters(meta: PackMeta, opts: SearchOptions): boolean {
   // 【领域闸，默认关】跨域检索必须显式要（设计稿 §13）。
   //
@@ -398,6 +413,18 @@ export function search(query: string, opts: SearchOptions = {}): PackHit[] {
   const q = expandQuery(query.trim());
   if (!query.trim()) {
     throw new Error('knowledge.search 的 query 不能为空：调用方需先确认用户诉求关键词');
+  }
+  // 【域名字不认识就抛，不静默空手】拼错一个域名（`conseling`）此前的形态是：
+  // 过滤器一条都匹不上 ⇒ 回一个**空列表、200、无错误码**，上层把「没有相关卡」当成事实
+  // 讲给用户听。索引侧只在加载时管条目的 domain，查询侧此前无人管调用方传进来的那个。
+  if (opts.domain !== undefined && !isKnownDomain(opts.domain)) {
+    const known = [...new Set([...Object.keys(DOMAINS), ...loadIndex().map(packDomain)])];
+    throw new Error(
+      `knowledge.search 的 domain「${opts.domain}」不认识：` +
+        `现在认得的领域是 ${known.join('、')}（lib/domains 注册过的 + 库里的卡声明过的）。` +
+        '多半是拼错了；确实要新领域的话先把它的包挂进 lib/domains/registry 或把它的卡入库，' +
+        '不要靠调宽这道闸绕过——空列表与"这个域一张卡都没有"在回包里长得一模一样。',
+    );
   }
   const queryBigrams = bigrams(q);
   const limit = opts.limit ?? DEFAULT_LIMIT;

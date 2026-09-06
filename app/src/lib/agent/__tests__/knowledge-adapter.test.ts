@@ -105,8 +105,22 @@ describe('逐字条文注入也走领域闸（设计稿 §13：跨域召回默�
     expect(holders.every((m) => knowledge.packDomain(m) !== DEFAULT_DOMAIN)).toBe(true);
   });
 
-  it('别的领域收录的条文不会被注入进来（变异：拿掉 articleIndex 里的领域过滤 → 红）', () => {
+  // 【标题改过，记在这】原标题写的是「变异：拿掉 articleIndex 里的领域过滤 → 红」，
+  // 复审实测**不红**：findByArticleKeys 是经 `this.get` 取卡的，而 get 面自己有领域闸，
+  // articleIndex 里那道过滤被它**完全遮蔽**（是第二层，不是这条判据的牙）。
+  // 把牙记错位置的代价：后人读标题以为 articleIndex 那层独立守着，于是删掉 get 面的闸。
+  it('别的领域收录的条文不会被注入进来（变异：拿掉 get 面的领域闸 → 红；单删 articleIndex 那道过滤不红，它被 get 面遮蔽）', () => {
     expect(searcher.findByArticleKeys!([OTHER_DOMAIN_KEY])).toEqual([]);
+  });
+
+  it('这条通路的域闸来自 get：findByArticleKeys 必须经 this.get 取卡（变异：改成绕过 get 直接造包 → 红）', () => {
+    // 【为什么要钉这条结构】上一条判据的牙全在 get 面上。哪天有人为了省一次查找，
+    // 把 findByArticleKeys 改成直接从索引元数据造 KnowledgePack，域闸就整条通路地没了，
+    // 而上一条判据会因为 articleIndex 里那道遮蔽着的过滤**照样绿**。
+    const withoutGet = { ...searcher, get: () => undefined };
+    expect(withoutGet.findByArticleKeys!([OWN_DOMAIN_KEY])).toEqual([]);
+    // 对照：同一个 key 经真正的 get 是取得到的，上一行不是因为 key 本身没人收录
+    expect(searcher.findByArticleKeys!([OWN_DOMAIN_KEY]).length).toBeGreaterThan(0);
   });
 
   it('本域的条文照常取得到（闸不能关过头）', () => {
