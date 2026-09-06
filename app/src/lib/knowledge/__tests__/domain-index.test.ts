@@ -18,7 +18,9 @@ import { listPacks, search } from '..';
 const REPO_ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)), '..', '..', '..', '..');
 
 describe('知识索引带 domain', () => {
-  it('每一条都有 domain，且是注册过的领域（变异：往 index.json 塞一条 domain: "x" → 加载即抛）', () => {
+  // 「塞一条不认识的 domain → 加载即抛」那条**负对照**在 index-guard.test.ts（⑨ 两条）：
+  // 它有临时知识库夹具，能真的把 index.json 弄坏再看闸认不认。本条只查真实索引的现状。
+  it('每一条都有 domain，且是注册过的领域', () => {
     const packs = listPacks();
     expect(packs.length).toBeGreaterThan(0);
     const known = Object.keys(DOMAINS);
@@ -47,16 +49,29 @@ describe('知识索引带 domain', () => {
   });
 
   /**
-   * 生成器（python）里那份领域键是注册表的**影子**。两边分叉的形态是：
-   * 注册表加了一个领域，而生成器把那个领域的卡判成非法 domain——或者更糟，
-   * 生成器放行了一个注册表不认识的 domain，那批卡加载时全站抛错。
+   * 生成器（python）里那份领域键是注册表的**影子**，两边必须**严格相等**。
+   *
+   * 【为什么两个方向都要钉，且"多一个"那个方向更要紧】(复审 2026-09-06 点名，原来只钉了一向)
+   *   · 脚本**少**一个注册表有的领域 ⇒ 那批卡生成时即被判非法 domain，当场失败，有人看见；
+   *   · 脚本**多**一个注册表没有的领域 ⇒ 生成器放行、index.json 进仓库，
+   *     而 loadIndex 不认识那个 domain 会抛错**且不缓存**——**全站每一轮对话**
+   *     （预检索、knowledge_search、危机资源卡取卡）当场 500，连本来好好的那个领域一起。
+   *     那条路径的负对照在 index-guard.test.ts「domain 是注册表不认识的」一条。
    */
-  it('gen-knowledge-index.py 认的领域键覆盖注册表里的每一个（变异：往注册表加一个领域而不改脚本 → 红）', () => {
+  it('gen-knowledge-index.py 认的领域键与注册表**严格相等**（变异：脚本里多写/少写一个领域 → 红）', () => {
     const src = fs.readFileSync(path.join(REPO_ROOT, 'scripts/gen-knowledge-index.py'), 'utf-8');
     const m = /^DOMAINS = \{([^}]*)\}/m.exec(src);
     expect(m, 'gen-knowledge-index.py 里找不到 DOMAINS 集合').not.toBeNull();
     const inScript = [...m![1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
+    // 少一个：那个领域的卡生成不出来
     for (const key of Object.keys(DOMAINS)) expect(inScript, `脚本缺领域键 ${key}`).toContain(key);
+    // 多一个：生成器会放行一个加载器不认识的 domain，而那是全站 500
+    for (const key of inScript) {
+      expect(
+        Object.keys(DOMAINS),
+        `脚本认「${key}」而注册表没有它：生成器会放行这批卡，加载时全站抛错`,
+      ).toContain(key);
+    }
 
     const def = /^DEFAULT_DOMAIN = "([^"]+)"/m.exec(src);
     expect(def?.[1], '脚本的缺省领域与注册表不一致').toBe(DEFAULT_DOMAIN);

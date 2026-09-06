@@ -16,12 +16,12 @@ import type { Database } from 'better-sqlite3';
 import * as cases from '@/lib/cases';
 import * as claims from '@/lib/cases/claims';
 import { CALC_KINDS } from '@/lib/cases/claims';
-import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
+import { DEFAULT_DOMAIN, DOMAINS, domainPackOrDefault } from '@/lib/domains/registry';
 import * as store from '@/lib/db/agent';
 import type { ToolDef } from '@/lib/llm';
 import type { AgentEventSink } from './events';
 import { citationCorrectionDirective, type CitationGuard } from './citation-guard';
-import { compactCrisisCard, CRISIS_RESOURCE_PACK_ID } from './crisis';
+import { compactCrisisCard } from './crisis';
 import { unsupportedVerbatimQuotes } from './citation-block';
 import { coreArticleKeys, packCitationGuide, type CoreArticleSources } from './citation-block';
 import * as deadline from '@/lib/deadline';
@@ -52,7 +52,7 @@ export { DRAFT_KINDS };
  * 直接抛的形态是：一条 cases.domain 写坏的行会让整轮对话崩掉，而用户什么也做不了。
  */
 function packOfCtx(ctx: AgentToolContext) {
-  return DOMAINS[ctx.domain] ?? DOMAINS[DEFAULT_DOMAIN];
+  return domainPackOrDefault(ctx.domain);
 }
 
 /** claim_calc 目前实装的公式与它用到的数据卡键：正本已搬到 lib/cases/claims
@@ -604,7 +604,11 @@ const HANDLERS: Record<string, Handler> = {
     // 去重的对象是**用户看到了什么**，那就必须在每一个能把文本送进上下文的通道上执行同一套规则，
     // 少堵一个通道，模型就从那个通道绕过去。
     const applyPresentationRule = <T extends { id: string; body: string; title: string }>(p: T): T =>
-      p.id === CRISIS_RESOURCE_PACK_ID && ctx.crisisCardAlreadyGiven ? compactCrisisCard(p) : p;
+      // 「哪张是危机资源卡」按**这个案件所属领域**取：按缺省领域取的形态是，
+      // 另一个领域的窗内复现里，那张真正的资源卡整张重印，而这条规则报绿。
+      p.id === packOfCtx(ctx).crisis.resourcePackId && ctx.crisisCardAlreadyGiven
+        ? compactCrisisCard(p)
+        : p;
 
     // ⭐核心条：S1 恒优先，S1 空时由 S2（本轮已进上下文的带原文法条卡）与 S4（用户点名）撑起
     const core = coreArticleKeys({ ...ctx.coreSources, retrieved: ctx.state.retrieved });

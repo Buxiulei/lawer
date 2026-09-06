@@ -22,7 +22,7 @@ import { crisisStatusMark } from '@/lib/cases/crisis-hits';
 import { basicsMissing } from '@/lib/cases/report';
 import { BRIEF_SUMMARY_MAX, briefSummary, parseBrief } from '@/lib/evidence/brief';
 import { EVIDENCE_CATEGORIES } from '@/lib/evidence/categories';
-import { DEFAULT_DOMAIN, DOMAINS, type FactsSectionKey } from '@/lib/domains/registry';
+import { DEFAULT_DOMAIN, DOMAINS, domainPackOrDefault, type FactsSectionKey } from '@/lib/domains/registry';
 import { toDisplayDay, toDisplayTime } from '@/lib/time';
 
 import type { CaseSnapshot } from './snapshot';
@@ -176,7 +176,7 @@ function sumLen(lines: string[]): number {
  * 覆盖全部 FACTS_SECTION_KEYS，缺一个在装载时就点名了。
  */
 function heading(s: CaseSnapshot, key: FactsSectionKey): string {
-  const pack = DOMAINS[s.case.domain] ?? DOMAINS[DEFAULT_DOMAIN];
+  const pack = domainPackOrDefault(s.case.domain);
   return (pack.factsSections.find((x) => x.key === key) ??
     DOMAINS[DEFAULT_DOMAIN].factsSections.find((x) => x.key === key)!).title;
 }

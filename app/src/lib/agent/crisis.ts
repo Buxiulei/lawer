@@ -720,7 +720,13 @@ export type LeverageOutcome = 'clean' | 'stripped' | 'fallback';
  *
  * 剥除而不是重生成：重生成要再等 2-4 分钟，而危机轮最不该等；剥句是毫秒级的。
  */
-export function applyLeverageGate(subject: LeverageSubject): {
+export function applyLeverageGate(
+  subject: LeverageSubject,
+  /** 回落时用**哪个领域的**兜底正文。省略即缺省领域——拿得到案件领域的调用方必须传：
+   *  不传的形态是，另一个领域的用户在最坏的那一刻收到一段讲别的行当的固定文字，
+   *  而它格式正确、语气妥当、没有一处会报错。 */
+  crisis: DomainCrisis = DEFAULT_CRISIS,
+): {
   outcome: LeverageOutcome;
   text: string;
   stripped: string[];
@@ -729,7 +735,7 @@ export function applyLeverageGate(subject: LeverageSubject): {
   if (!detectEmotionalLeverage(modelBody, userSaid)) return { outcome: 'clean', text: modelBody, stripped: [] };
   const trail = stripLeverageWithTrail(modelBody, userSaid);
   if (detectEmotionalLeverage(trail.text, userSaid) || !trail.text.trim()) {
-    return { outcome: 'fallback', text: CRISIS_SAFE_FALLBACK, stripped: trail.stripped };
+    return { outcome: 'fallback', text: crisis.safeFallback, stripped: trail.stripped };
   }
   return { outcome: 'stripped', text: trail.text, stripped: trail.stripped };
 }

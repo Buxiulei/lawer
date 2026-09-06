@@ -63,7 +63,12 @@ const CRISIS_OUTPUT_GATES = [
     what: '🔴 剥完仍命中或剥空 → 模型段整段丢弃，回落确定性安全回复（仅危机轮）',
     enabled: true,
     impl: 'crisis.ts',
-    note: '影响最大的一道：模型的话一个字都不下发',
+    note:
+      '影响最大的一道：模型的话一个字都不下发。' +
+      '**2026-09-06 起兜底正文按领域取**（杠杆闸 applyLeverageGate(subject, crisisPack)、' +
+      'D15 剥空处 crisisPack.safeFallback）；本常量仍是**缺省领域**那份、是不传包时的取值。' +
+      '不按领域取的形态是：另一个领域的用户在最坏的那一刻收到一段讲别的行当的固定文字，' +
+      '而它格式正确、语气妥当、没有一处会报错。判据见 __tests__/domain-wiring.test.ts。',
     /**
      * 【触发条件与上游依赖 — 实测，manager 点名要这一栏】
      *

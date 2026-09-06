@@ -12,6 +12,8 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, test } from 'vitest';
 
+import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
+
 import { __resetForTest, listPacks, get } from '../index';
 
 const REAL_DIR = path.resolve(__dirname, '../../../../../knowledge');
@@ -177,6 +179,47 @@ describe('🔴 manager 2026-08-29 裁定新加的四道（此前全部放行）'
     });
     expect(() => get(victim)).toThrow(/指向知识库目录之外/);
     expect(() => get(victim)).not.toThrow(/缺少 frontmatter/);
+  });
+
+  /**
+   * ⑨ domain 是注册表不认识的 → 拒绝启动（复审 2026-09-06 点名补上的负对照）。
+   *
+   * 【为什么这条非有不可】这道闸 2026-09-06 立的时候，`domain-index.test.ts` 的抬头里
+   * 写着「变异：往 index.json 塞一条 domain: "x" → 加载即抛」——**而那句话从没被跑过**：
+   * 复审官把 loadIndex 里的抛错分支改成不抛，lib/knowledge 5 个文件 59 条全绿。
+   * 一个从没被负测过的闸，与一个不存在的闸，输出一模一样。
+   *
+   * 【它挡的那个后果有多大】loadIndex 抛错**且不缓存** ⇒ 之后每一次预检索、
+   * knowledge_search、危机资源卡取卡都重抛一次 ⇒ **全站每一轮对话 500**，
+   * 连 domain 正常的那批用户一起。所以宁可拒绝启动，也不能让它进到运行时。
+   */
+  test('⑨ domain 是注册表不认识的 → 拒绝启动，并指名是哪条卡、哪个 domain', () => {
+    let victim = '';
+    brokenDir((d) => {
+      const p2 = path.join(d, 'index.json');
+      const idx = JSON.parse(fs.readFileSync(p2, 'utf8')) as { id: string; domain?: string }[];
+      victim = idx[0].id;
+      idx[0].domain = '还没挂上包的领域';
+      fs.writeFileSync(p2, JSON.stringify(idx));
+    });
+    expect(() => listPacks()).toThrow(/还没挂上包的领域/);
+    expect(() => listPacks()).toThrow(new RegExp(victim));
+    // 报错要说**怎么办**（补 domain 或补领域包），不是只说"不认识"
+    expect(() => listPacks()).toThrow(/领域包/);
+  });
+
+  test('⑨ 没写 domain 的存量条目照常放行（补成缺省领域，不是拒绝）', () => {
+    // 【为什么这条是上一条的必要配套】只测"拒绝"的话，把闸改成"一律拒绝"也全绿，
+    // 而那会让整个存量知识库（一张卡都没写 domain）当场启动不了。
+    brokenDir((d) => {
+      const p2 = path.join(d, 'index.json');
+      const idx = JSON.parse(fs.readFileSync(p2, 'utf8')) as Record<string, unknown>[];
+      for (const e of idx) delete e.domain;
+      fs.writeFileSync(p2, JSON.stringify(idx));
+    });
+    const packs = listPacks();
+    expect(packs.length).toBeGreaterThan(200);
+    expect(new Set(packs.map((p) => p.domain))).toEqual(new Set([DEFAULT_DOMAIN]));
   });
 });
 

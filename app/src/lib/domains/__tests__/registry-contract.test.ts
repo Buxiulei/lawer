@@ -5,12 +5,13 @@
 // 【这两条为什么值得一份判据】它们的失效都是静默的：
 //   · 缺一项的包不会崩，只会让那一块从此不工作（空词表 = 那类判定永不触发）；
 //   · 灰度开关失灵不会报错，只会让一个还没验收过的领域悄悄开始接用户。
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { LABOR } from '../labor';
 import {
   assertDomainPack,
   DEFAULT_DOMAIN,
+  domainPackOrDefault,
   DOMAINS,
   DOMAINS_ENABLED_ENV,
   enabledDomainKeys,
@@ -126,6 +127,16 @@ describe('assertDomainPack：包必须实现全部字段', () => {
     expect(() => assertDomainPack(clone({ intakeSchema: bad }))).toThrow(/必填却没给 errorCode/);
   });
 
+  it('不必填的首诊字段却带了错误码 ⇒ 点名（说明书说可省略、服务端照样拒收）', () => {
+    // 【为什么反方向也要拦】(复审 2026-09-06) 守卫原来只拦「required 却无 errorCode」。
+    // 反过来那种（required:false + errorCode）不会崩、不会报错，只会让调用方
+    // **照着工具清单填齐了仍被拒**——两边各自看都是对的。
+    const bad = LABOR.intakeSchema.map((f, i) =>
+      i === 0 ? { ...f, required: false, errorCode: 'STILL_CHECKED', invalidMessage: '还是拦' } : f,
+    );
+    expect(() => assertDomainPack(clone({ intakeSchema: bad }))).toThrow(/不必填却给了 errorCode/);
+  });
+
   it('intakeLimitation 落一个词表里没有的期限种类 ⇒ 点名（那条期限存不进库而首诊照常成功）', () => {
     expect(() =>
       assertDomainPack(clone({ intakeLimitation: { ...LABOR.intakeLimitation!, kind: '没这种期限' } })),
@@ -186,5 +197,87 @@ describe(`灰度开关 ${DOMAINS_ENABLED_ENV}`, () => {
   it('getDomainPack 不受开关影响（变异：让它也过一遍开关 → 红）', () => {
     process.env[DOMAINS_ENABLED_ENV] = '一个不存在的领域';
     expect(getDomainPack(DEFAULT_DOMAIN)).toBe(DOMAINS[DEFAULT_DOMAIN]);
+  });
+});
+
+/**
+ * 灰度开关的两条判据——**缺省只开缺省领域**、**注册了但没开的领域回 DOMAIN_NOT_ENABLED**
+ * ——在「注册表里只有一个包」时**没有观察点**：
+ *   · 把缺省值改成全开（`Object.keys(DOMAINS)`）→ 只有一个包时它就等于 `[缺省领域]`；
+ *   · 把 `requireEnabledDomain` 改成只查 `key in DOMAINS`、完全无视开关 → 只有一个包时
+ *     它对每一个入参给出的答案与正确实现逐字相同。
+ * 两种改法上面那一组一条都不会红（复审官 2026-09-06 在 HEAD 副本上实跑两次变异，
+ * lib/domains + lib/cases 共 169 条全绿），**而 DOMAIN_NOT_ENABLED 这条路径整套测试从未走到**。
+ *
+ * ⇒ 所以这一组往注册表里**真的挂第二个包**，再问同样的问题。它是假的、内容照抄缺省领域，
+ * 但对开关来说「第二个 key」正是唯一缺失的那件东西。
+ */
+describe(`灰度开关 ${DOMAINS_ENABLED_ENV}：注册表里有第二个包时才看得见的那几条`, () => {
+  /** 假包只借 labor 的内容凑齐字段（本组问的是 key 与开关，不问内容） */
+  const FAKE_KEY = '假领域-灰度判据专用';
+  const FAKE_PACK: DomainPack = { ...LABOR, key: FAKE_KEY };
+
+  beforeAll(() => {
+    DOMAINS[FAKE_KEY] = FAKE_PACK;
+  });
+  afterAll(() => {
+    delete DOMAINS[FAKE_KEY];
+  });
+
+  it('自证假包真的挂上了（否则下面每一条都是"因为它根本不存在"而绿）', () => {
+    expect(Object.keys(DOMAINS)).toContain(FAKE_KEY);
+    expect(getDomainPack(FAKE_KEY)).toBe(FAKE_PACK);
+    // 挂了第二个包也不改缺省领域：缺省取的是注册表里**第一个**，不是"最后挂上的那个"
+    expect(DEFAULT_DOMAIN).not.toBe(FAKE_KEY);
+  });
+
+  it('不设开关 ⇒ 注册过≠开着，假包不在启用列表里（变异：缺省改成 Object.keys(DOMAINS) → 红）', () => {
+    delete process.env[DOMAINS_ENABLED_ENV];
+    expect(enabledDomainKeys()).toEqual([DEFAULT_DOMAIN]);
+    expect(enabledDomainKeys()).not.toContain(FAKE_KEY);
+    expect(isDomainEnabled(FAKE_KEY)).toBe(false);
+    expect(listDomains().map((p) => p.key)).toEqual([DEFAULT_DOMAIN]);
+  });
+
+  it('不设开关 ⇒ requireEnabledDomain(假包) 回 DOMAIN_NOT_ENABLED，不是 UNKNOWN_DOMAIN（变异：让它只查 key in DOMAINS → 红）', () => {
+    delete process.env[DOMAINS_ENABLED_ENV];
+    const got = requireEnabledDomain(FAKE_KEY);
+    expect('ok' in got && got.ok).toBe(false);
+    const fail = got as { errorCode: string; message: string };
+    // 两个错误码分的是**两种完全不同的处境**：没写这个包 vs 写了但这个环境没开。
+    // 混成一个的形态是：运维照着「补上这个领域包」去找一份已经在仓库里的代码。
+    expect(fail.errorCode).toBe('DOMAIN_NOT_ENABLED');
+    expect(fail.message).toContain(FAKE_KEY); // 缺什么
+    expect(fail.message).toContain('这套代码里有'); // 为什么缺
+    expect(fail.message).toContain(DOMAINS_ENABLED_ENV); // 怎么办：改哪个开关
+  });
+
+  it('把假包写进开关 ⇒ 它才开（自证上面两条不是"这个包永远开不了"）', () => {
+    process.env[DOMAINS_ENABLED_ENV] = `${DEFAULT_DOMAIN},${FAKE_KEY}`;
+    expect(enabledDomainKeys()).toEqual([DEFAULT_DOMAIN, FAKE_KEY]);
+    expect(isDomainEnabled(FAKE_KEY)).toBe(true);
+    expect(requireEnabledDomain(FAKE_KEY)).toBe(FAKE_PACK);
+  });
+
+  it('只开假包 ⇒ 连缺省领域都回 DOMAIN_NOT_ENABLED（开关说了算，不是"缺省领域永远开着"）', () => {
+    process.env[DOMAINS_ENABLED_ENV] = FAKE_KEY;
+    expect(enabledDomainKeys()).toEqual([FAKE_KEY]);
+    const got = requireEnabledDomain(DEFAULT_DOMAIN) as { ok?: boolean; errorCode?: string };
+    expect(got.ok).toBe(false);
+    expect(got.errorCode).toBe('DOMAIN_NOT_ENABLED');
+  });
+
+  it('getDomainPack 不看开关：没开的领域照样读得到（老用户的档案不因灰度被锁在外面）', () => {
+    delete process.env[DOMAINS_ENABLED_ENV];
+    expect(isDomainEnabled(FAKE_KEY)).toBe(false);
+    expect(getDomainPack(FAKE_KEY)).toBe(FAKE_PACK);
+    expect(domainPackOrDefault(FAKE_KEY)).toBe(FAKE_PACK);
+  });
+
+  it('domainPackOrDefault：认不出的 domain 退回缺省领域，认得出的原样给（读路径的唯一入口）', () => {
+    expect(domainPackOrDefault('一行写坏的 domain')).toBe(DOMAINS[DEFAULT_DOMAIN]);
+    expect(domainPackOrDefault('')).toBe(DOMAINS[DEFAULT_DOMAIN]);
+    expect(domainPackOrDefault(undefined)).toBe(DOMAINS[DEFAULT_DOMAIN]);
+    expect(domainPackOrDefault(FAKE_KEY)).toBe(FAKE_PACK);
   });
 });

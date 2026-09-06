@@ -13,7 +13,7 @@ import { buildCaseFacts, renderCaseFacts } from './case-facts';
 import { CHARTER } from './charter';
 import { intakeDirective, recapBrief, type IntakeStage } from './intake';
 import { MAX_ACTION_CARDS } from './tools';
-import { CRISIS_DIRECTIVE, CRISIS_RESOURCE_PACK_ID } from './crisis';
+import { domainPackOrDefault } from '@/lib/domains/registry';
 import { coreArticleKeys, packCitationGuide, type CoreArticleSources } from './citation-block';
 import type { KnowledgePack } from './retrieval';
 import type { CaseSnapshot } from './snapshot';
@@ -190,12 +190,17 @@ export interface BuildSystemPromptInput {
 
 export function buildSystemPrompt(input: BuildSystemPromptInput): string {
   const { readable, iso } = beijingNow(input.now);
+  // 危机指令与危机资源卡的 id 按**这个案件所属领域**取（设计稿 §13「危机」行）。
+  // 取缺省领域的形态是：第二个领域的用户触发危机时，模型收到的是给上一个行当的指令
+  // （连"必须给哪两个号码"都是别人的），而首段、词表、留痕全都按他自己的领域走了——
+  // 同一轮里两套口径并存，没有一处会报错。
+  const crisisPack = domainPackOrDefault(input.snapshot.case.domain).crisis;
   const parts = [
     CHARTER,
     // 危机指令紧跟 charter，排在案件事实卡与问诊指令**之前**：
     // 它要压过本轮其它一切安排（问诊清单、行动卡、依据纪律），放在后面会被前面的
     // 「每轮必须问 1-3 个问题」「必须给行动卡」稀释成又一条并列要求。
-    input.crisis ? CRISIS_DIRECTIVE : '',
+    input.crisis ? crisisPack.directive : '',
     // 空包指令排在依据纪律**之前**：它改写的是「这一轮能引什么」这个前提，
     // 放在后面会被「法条给条号 + 逐字原文」那套要求稀释成又一条并列建议
     //（与危机指令同款位置理由：越是压过其它安排的指令，越要靠前）。
@@ -236,7 +241,7 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
       // 实测放开头时模型照样把整张卡重印了两轮，指令离约束对象太远就被稀释了。
       input.crisis && input.crisisCardAlreadyGiven
         ? {
-            packId: CRISIS_RESOURCE_PACK_ID,
+            packId: crisisPack.resourcePackId,
             note:
               '本案 24 小时内已经给过一次这张卡，本轮**不要再整张重复**（spec §10 不刷屏）。' +
               '但三个号码本身**仍然必须出现在这一轮回复里**——用一句话重述即可，' +

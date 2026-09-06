@@ -14,7 +14,7 @@ import type { DomainFailure } from '@/lib/cases';
 import * as store from '@/lib/db/agent';
 import * as caseStore from '@/lib/db/cases';
 import { dedupTitleKey } from '@/lib/db/dedup';
-import { getDomainPack } from '@/lib/domains/registry';
+import { domainPackOrDefault, getDomainPack } from '@/lib/domains/registry';
 import type { Database } from 'better-sqlite3';
 
 import { applyBatch, type ApplyResult } from './apply';
@@ -40,15 +40,20 @@ export interface CrisisNotice {
  * 而约定归约定：模型可能没接住，也可能用户是在这一段里第一次说出那句话。
  * 这一层是确定性的——判据、号码都不经模型（同 lib/agent/crisis 的整层设计）。
  * 判据同源：与站内对话用的是**同一个** assessCrisis / buildCrisisOpener，不另写一份词表。
+ *
+ * `domain`：这段文字属于哪个案件的领域（词表与首段按它取）。拿不到案件时省略即缺省领域——
+ * 省略的形态在第二个领域上是：那个人粘回来的那句话不在缺省词表里，于是这一次预览
+ * 什么都没提示，而结构块照常解析、回包照常 200。
  */
-export function crisisNotice(text: string): CrisisNotice {
-  const crisis = assessCrisis(text);
+export function crisisNotice(text: string, domain?: string): CrisisNotice {
+  const crisisPack = domainPackOrDefault(domain).crisis;
+  const crisis = assessCrisis(text, crisisPack);
   if (!crisis.triggered) return { triggered: false, message: null };
   // 号码从资源卡里取，不写死在代码里（记错一个数字，用户拨过去就是空号）
   const card = crisis.resourcePackId
     ? createKnowledgeSearcher().get?.(crisis.resourcePackId)
     : undefined;
-  const hotline = buildCrisisOpener(card?.facts);
+  const hotline = buildCrisisOpener(card?.facts, {}, crisisPack);
   return {
     triggered: true,
     message: ['**这段对话里出现了危机信号。**先看这一段，档案的事等一等——', '', hotline].join('\n'),
@@ -162,7 +167,7 @@ export function previewPasteBack(
 
   // 危机判据先跑：解析失败也要把这一段带出去——一个人在最坏的那个夜里粘进来的文字，
   // 不该因为块格式不对就连号码都拿不到。
-  const crisis = crisisNotice(text);
+  const crisis = crisisNotice(text, owned.case.domain);
 
   const pack = getDomainPack(owned.case.domain);
   if (!pack) {

@@ -18,11 +18,19 @@ ROOT = Path(__file__).resolve().parent.parent / "knowledge"
 TYPES = {"法条卡", "判例卡", "计算规则", "流程SOP", "文书模板", "话术卡", "情绪指南", "数据卡", "审查规则", "方法卡"}
 # 领域键（设计稿 §13：知识库按领域独立成包但共用机制）。
 # **正本在 app/src/lib/domains/registry.ts 的 DOMAINS**；这里是它的影子，
-# 由 app/src/lib/knowledge/__tests__/domain-index.test.ts 逐个键比对——
-# 注册表加了一个领域而这里没加，生成器会把那批卡判成非法 domain 当场拒绝生成。
+# 由 app/src/lib/knowledge/__tests__/domain-index.test.ts **两向**逐键比对。
 # 影子而不是共享一份，是因为这个脚本是 python、注册表是 ts，中间没有便宜的共享方式；
 # 有判据点名就不会出现"两份悄悄分叉"。
-DOMAINS = {"labor", "counseling"}
+#
+# 【为什么必须严格相等，而不是"这里宽一点也没关系"】(复审 2026-09-06 点名)
+# 两个方向的分叉后果完全不同，而"宽一点"那个方向更坏：
+#   · 这里**少**一个注册表有的领域 ⇒ 那个领域的卡当场被判非法 domain，生成即失败，有人看见；
+#   · 这里**多**一个注册表没有的领域 ⇒ 生成器放行、index.json 提交进仓库，
+#     而加载器（lib/knowledge/index.ts loadIndex）不认识那个 domain 会**抛错且不缓存**——
+#     于是**全站每一轮对话的预检索、knowledge_search、危机资源卡取卡统统 500**，
+#     连本来好好的那个领域的用户一起。先写卡后挂包这个顺序本身是合理的工作方式，
+#     所以不能靠"记得按顺序合入"来防，只能让这里放行不了还没挂上的领域。
+DOMAINS = {"labor"}
 DEFAULT_DOMAIN = "labor"
 CONFIDENCES = {"原文核实", "二手转述", "待核实"}
 REQUIRED = ["id", "type", "title", "keywords", "applies_to", "sources", "confidence", "updated"]

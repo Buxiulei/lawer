@@ -107,6 +107,12 @@ export type IntakeFieldKind =
  * 【必填校验只认 errorCode 在场的字段】没有 errorCode 的字段是可选项：不填不拦。
  * 用「required 为 true 但没给错误码」表达必填的形态是：拦下来之后没有话可说，
  * 于是回一句通用的「参数错误」——调用方照原样重试一次，再收到同一句。
+ *
+ * ⇒ 所以 `required` 与 `errorCode` **必须同时在场或同时不在场**（assertDomainPack 两向机检）。
+ * 它们是同一件事的两个读者：对外说明书（intakeInputSchema）只看 `required`，
+ * 服务端校验（validateIntake）只看 `errorCode`。让两者分叉的形态是——
+ * 工具清单说这项可省略、服务端不填就拒收，**调用方照着说明书填齐了仍被拒**。
+ * 想要"可省略但填了就得合格"的字段时，先把这两个读者统一，别用这两个字段的错配去表达它。
  */
 export interface IntakeFieldSpec {
   /** 内部键（IntakeInput 上那个字段名） */
@@ -288,6 +294,26 @@ export function getDomainPack(key: string): DomainPack | undefined {
   return DOMAINS[key];
 }
 
+/**
+ * **读路径**的领域包：给一行 `cases.domain`，取它的包；取不到退回缺省领域。
+ *
+ * 【读写两条路径的政策不同，且都是刻意的】
+ *   · **写 / 选领域**（建案、首诊、stage 与文书种类校验）走 `getDomainPack` /
+ *     `requireEnabledDomain`：取不到就**拒绝**（UNKNOWN_DOMAIN）。按另一个领域的词表
+ *     把一行数据写进库之后，没有任何东西还能把它认出来。
+ *   · **读**（事实卡抬头、危机词表与首段、站内注入按领域过滤）走本函数：取不到
+ *     **退回缺省领域**。一行 domain 写坏的案件不该让用户连自己的档案都读不出来，
+ *     更不该在危机轮里因为一个配置错误而拿不到号码。
+ *
+ * 【为什么收成一个函数，而不是各处写 `DOMAINS[x] ?? DOMAINS[缺省]`】散着写的形态是：
+ * 某一处忘了 `??`，那一处就在未知 domain 上炸在属性访问上；或者反过来——将来要把
+ * 这条政策改成「读路径也拒绝」时，得先去把散落的每一处翻出来，而漏掉的那一处不会报错。
+ * **独立写 N 次就会忘掉其中某一次**，所以只留一个入口，改政策只改这里。
+ */
+export function domainPackOrDefault(key: string | null | undefined): DomainPack {
+  return (key ? DOMAINS[key] : undefined) ?? DOMAINS[DEFAULT_DOMAIN];
+}
+
 // ========== 灰度开关（设计稿 §16 分期：LAWER_DOMAINS_ENABLED=labor,counseling）==========
 
 /** 灰度开关的环境变量名。缺省只开缺省领域。 */
@@ -438,6 +464,17 @@ export function assertDomainPack(pack: DomainPack): void {
     str(`intakeSchema[${f.key}].description`, f.description);
     if (f.required && (!f.errorCode || !f.invalidMessage)) {
       missing.push(`intakeSchema[${f.key}] 必填却没给 errorCode/invalidMessage`);
+    }
+    // 反过来也要拦：`required` 与 `errorCode` 是**同一件事的两个读者**，不许各说各的。
+    //   · 对外说明书（intakeInputSchema → MCP inputSchema 的 required 列表）只看 `required`；
+    //   · 服务端校验（lib/cases/intake.validateIntake）只看 `errorCode` 在不在场。
+    // 写成「required:false + errorCode」的形态是：工具清单说这项可省略，服务端不填就拒收——
+    // 调用方**照着说明书填齐了仍被拒**，而两边各自看都是对的。
+    if (!f.required && (f.errorCode || f.invalidMessage)) {
+      missing.push(
+        `intakeSchema[${f.key}] 不必填却给了 errorCode/invalidMessage` +
+          '（对外说明书按 required 说可省略，服务端按 errorCode 照样拒收）',
+      );
     }
     if (f.kind === 'enum' && (!Array.isArray(f.values) || f.values.length === 0)) {
       missing.push(`intakeSchema[${f.key}] 是 enum 却没给 values`);

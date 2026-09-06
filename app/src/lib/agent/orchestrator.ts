@@ -27,7 +27,7 @@ import {
   type TokenUsage,
   type UsageReport,
 } from '@/lib/llm';
-import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
+import { domainPackOrDefault } from '@/lib/domains/registry';
 
 import type { AgentEventSink } from './events';
 import { intakeStage, type IntakeStage } from './intake';
@@ -39,7 +39,6 @@ import {
   CRISIS_CARD_MARKER,
   applyLeverageGate,
   assessNbdpsyEligibility,
-  CRISIS_SAFE_FALLBACK,
   detectCrisisPaidContent,
   detectNbdpsyPitch,
   leverageSubject,
@@ -613,7 +612,7 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   // 危机判定按**这个案件所属领域**的词表与首段（设计稿 §13「危机」行）。
   // 用缺省领域判别的领域的形态是：一个正在崩溃的人说的那句话不在缺省词表里，
   // 于是这一轮什么都没发生——没有报错，只是号码没给出去。
-  const crisisPack = (DOMAINS[snapshot.case.domain] ?? DOMAINS[DEFAULT_DOMAIN]).crisis;
+  const crisisPack = domainPackOrDefault(snapshot.case.domain).crisis;
   const crisis = assessCrisis(message, crisisPack);
   // 命中就留痕，走与 MCP crisis_check 同一个入口（见 lib/cases/crisis-hits.ts 抬头）。
   // 本轮这一条不会出现在本轮事实卡的首行里（快照在上面已经取过了）——本轮的危机由
@@ -996,6 +995,7 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
         modelBody,
         userTurns: [message, ...history.filter((h) => h.role === 'user').map((h) => h.content)],
       }),
+      crisisPack,
     );
     let body = gate.text;
     leverageOutcome = gate.outcome;
@@ -1070,7 +1070,7 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   // 首段现在带一句随卡下发的 CRISIS_NBDPSY_LINE，它含「NBDpsy」，直接对全文判会把它当模型推销剥掉。
   // 与 D15 兜底同一处理：先劈掉首段，只在**模型段**上判/剥；非危机轮没有首段，行为不变。
   {
-    const { opener, body } = crisis.triggered ? splitCrisisOpener(text) : { opener: '', body: text };
+    const { opener, body } = crisis.triggered ? splitCrisisOpener(text, crisisPack) : { opener: '', body: text };
     if (detectNbdpsyPitch(body)) {
       const kept = stripNbdpsyPitch(body);
       text = opener ? `${opener}\n\n${kept}` : kept;
@@ -1093,12 +1093,13 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
     // 确定性首段不参与剥除：它是我们自己的固定文本，是危机轮里唯一保证在场的号码来源，
     // 且 2026-09-05 起还带一句合法的 NBDpsy 引导语（含「NBDpsy」）——**判定也必须只看模型段**，
     // 否则 detectCrisisPaidContent 会命中首段那句，每轮凭空开火、报一条假的付费内容。
-    const { opener, body } = splitCrisisOpener(text);
+    const { opener, body } = splitCrisisOpener(text, crisisPack);
     const paid = detectCrisisPaidContent(body);
     if (paid) {
       const kept = stripCrisisPaidContent(body);
       const emptied = !kept.trim();
-      text = opener ? `${opener}\n\n${emptied ? CRISIS_SAFE_FALLBACK : kept}` : (emptied ? CRISIS_SAFE_FALLBACK : kept);
+      const fallback = crisisPack.safeFallback;
+      text = opener ? `${opener}\n\n${emptied ? fallback : kept}` : (emptied ? fallback : kept);
       emit({
         event: 'notice',
         data: {
