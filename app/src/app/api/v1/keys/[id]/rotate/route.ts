@@ -8,16 +8,16 @@
 //
 // 【鉴权同 POST /keys】只认网页登录态：能拿 api key 给自己换发新密钥，等于一把泄漏的
 // key 可以自我续命，吊销原 key 也止不住血。
-import { NextResponse } from 'next/server';
-
 import { generateApiKey, hashApiKey, parseScopes } from '@/lib/auth/api-key';
 import { parseId, requireWebSession } from '@/lib/auth/guard';
 import { encryptField } from '@/lib/crypto';
 import * as store from '@/lib/db/api-keys';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 import { issuedKeyBody } from '../../_issued';
 import {
   NO_STORE,
+  keyFromOauth,
   keyNotFound,
   keyRevoked,
   masterKeyConfigured,
@@ -31,6 +31,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const row = ownedKey(parseId((await params).id), guard.identity.uid);
   if (!row) return keyNotFound();
+
+  // 【授权换来的行不给轮换】那一行不是一把钥匙，用户手上从来就没有明文可换；给它写进
+  // 一串明文，同一行就同时成了「没有可复制的明文的授权」与「一把能复制的密钥」。
+  // 排在 enabled 之前：一条被吊销的授权行，该听见的仍是「这是授权、不是密钥」，
+  // 而不是下面那句「新建一把」——照那句做，他新建的是把跟原客户端毫无关系的 key。
+  if (row.source === 'oauth') return keyFromOauth();
 
   // 【吊销的不给轮换】enabled=0 之后 resolveIdentity 一律不认这一行，换多少次新明文
   // 都还是一把 401 的 key。放它过去的形态最坏：用户在设置页看着「已吊销」那枚标记，
@@ -48,7 +54,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     secretEnc: encryptField(key),
   });
 
-  return NextResponse.json(
+  return apiJson(
     issuedKeyBody(req, {
       id: row.id,
       name: row.name,

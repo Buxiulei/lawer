@@ -2,13 +2,16 @@
 // 手写的协议实现没有 SDK 兜底，形状错了要到真客户端连不上才发现，所以这里把
 // initialize / tools/list / tools/call / notification 四条链路和错误分档全部钉死。
 // 同时复验红线：换一把别人的 key，一个案件字段都不该看见。
-import { beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import type { Database } from 'better-sqlite3';
 
 import { generateApiKey, hashApiKey } from '@/lib/auth/api-key';
+import { decryptField, encryptField } from '@/lib/crypto';
+import * as realnameStore from '@/lib/db/realname';
+import type { NbdpsySnapshot } from '@/lib/referral/identity-link';
 import { getGongdao, gongdaoSettle } from '@/lib/billing';
 import {
   CASE_FACTS_BUDGET,
@@ -57,8 +60,9 @@ beforeAll(async () => {
 beforeEach(() => {
   for (const table of [
     'api_keys', 'timeline_events', 'action_items', 'cases',
-    // 余额闸那一轮之后，本组要造负余额；gongdao 两张表外键指向 users，得先于它清
-    'token_usage', 'gongdao_ledger', 'gongdao', 'users',
+    // 余额闸那一轮之后，本组要造负余额；gongdao 两张表外键指向 users，得先于它清。
+    // realname_verifications 同样外键指向 users 且无级联（互认那组会往里落行），也得先于 users 清。
+    'token_usage', 'gongdao_ledger', 'gongdao', 'realname_verifications', 'users',
   ]) {
     db.prepare(`DELETE FROM ${table}`).run();
   }
@@ -85,7 +89,9 @@ describe('鉴权', () => {
   test('没带 key → 401 且带 WWW-Authenticate', async () => {
     const res = await POST(rpc({ jsonrpc: '2.0', id: 1, method: 'initialize' }));
     expect(res.status).toBe(401);
-    expect(res.headers.get('www-authenticate')).toBe('Bearer');
+    // resource_metadata 那一段是只认 OAuth 的客户端找到授权服务器的唯一线索（RFC 9728）；
+    // 具体内容由 api/oauth 那组判据钉，这里只确认 401 仍然带着 Bearer 挑战。
+    expect(res.headers.get('www-authenticate')).toMatch(/^Bearer\b/);
   });
 
   test('伪造的 key → 401', async () => {
@@ -272,6 +278,31 @@ describe('tools/list', () => {
       'evidence_register',
       'evidence_attest',
       'attest_verify',
+      'case_report_get',
+      'case_report_update',
+      // 危机检查 / 身份与账户，同样**追加在末尾**
+      'crisis_check',
+      'me_get',
+      'quote_list',
+      // 引用核验，同样**追加在末尾**
+      'citation_check',
+      // 对方主体情报（免费探测 → 报价 → 确认 → 读档 / 关系图 / 守望），同样**追加在末尾**
+      'company_probe',
+      'dossier_quote',
+      'dossier_confirm',
+      'dossier_get',
+      'company_graph_get',
+      'company_watch_set',
+      // 分享与导出，同样**追加在末尾**
+      'share_create',
+      'share_revoke',
+      'draft_export',
+      // 转介，同样**追加在末尾**
+      'referral_create',
+      'referral_list',
+      // 作废与简报重生成，同样**追加在末尾**
+      'evidence_void',
+      'evidence_brief_regenerate',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();
@@ -302,6 +333,12 @@ describe('tools/list', () => {
       'draft_write',
       'company_profile_upsert',
       'emotion_log',
+      // 对方主体情报里隶属案件的四条（company_probe 是全库查主体、dossier_confirm 按报价号，
+      // 报价号自己带着 case_id，故这两条不在名单里）
+      'dossier_quote',
+      'dossier_get',
+      'company_graph_get',
+      'company_watch_set',
     ]) {
       expect(byName.get(name)!.inputSchema.required, name).toContain('case_id');
     }
@@ -441,6 +478,34 @@ describe('tools/call', () => {
     const text = body.result.content[0].text as string;
     expect(text).not.toContain('Promise');
     expect(typeof JSON.parse(text).error_code).toBe('string');
+  });
+
+  /*
+   * 【失败对象上的结构化字段必须过得了 MCP 这一层】claim_calc 的工具描述向对方 agent
+   * 承诺「回包里有 missing / invalid 两张表」，而 MCP 是它唯一的对外面（没有 REST 面）。
+   * 直调 runClaimCalc 的判据（lib/cases/__tests__/claim-calc-all-problems）钉的是算子那一层，
+   * 抓不到这一层：路由把失败对象收窄成 {errorCode,message} 时，isError 照样 true、
+   * 中文 message 照样列全三项，只有那两张表静默消失——照描述去读结构化字段的 agent
+   * 读到 undefined，只能回头解析中文，或一次只补一个问题。所以这条走真实回包。
+   */
+  test('claim_calc 缺参：missing / invalid 两张表要出现在 MCP 回包里', async () => {
+    const { body } = await call('claim_calc', { case_id: caseA, kind: 'N' }, keyA);
+    expect(body.error).toBeUndefined();
+    expect(body.result.isError).toBe(true);
+    const payload = JSON.parse(body.result.content[0].text);
+    expect(payload.error_code).toBe('INVALID_CALC_INPUT');
+    // 负例的核心：不是「有个 error_code 就算过」，而是两张表都在、且内容对得上
+    expect(Array.isArray(payload.missing)).toBe(true);
+    expect(payload.missing).toHaveLength(3);
+    for (const field of ['avg_monthly_wage_fen', 'employed_from', 'terminated_at']) {
+      expect(payload.missing.join(' ')).toContain(field);
+    }
+    expect(payload.invalid).toEqual([]);
+    // 人读的那份与两张表同源，一次列全
+    expect(payload.message).toContain('缺少 3 项');
+    // 内部分档字段不外泄：ok / status 是 HTTP 面的事，对方 agent 不该看到
+    expect(payload.ok).toBeUndefined();
+    expect(payload.status).toBeUndefined();
   });
 
   describe('case_facts', () => {
@@ -744,5 +809,157 @@ describe('MCP 不设余额闸', () => {
     // 读写数据不记账：余额还是那个 -100，账本没多出一行
     expect(getGongdao(ownerA, db)).toBe(-100);
     expect((db.prepare('SELECT COUNT(*) AS n FROM gongdao_ledger').get() as { n: number }).n).toBe(before);
+  });
+});
+
+// ───────────────── 实名互认：前置闸与证据 REST 同一道 OrLinked 判定 ─────────────────
+//
+// 互认判定（本地没实名 → 问一次 NBDpsy → approved 就采信并落掩码快照）此前只长在证据
+// REST 的 requireRealname 上；MCP 与通用桥的前置闸用的是纯本地的 isRealnameVerified。
+// 于是「已在 NBDpsy 实名、本地没实名」的人在证据 REST 侧放行、在 MCP 侧被 403——
+// 同一人同一条能力，两条入口两个答案，两边都不报错。闸改成 async 调 realnameVerifiedOrLinked
+// 后，这组在 MCP 这条路上钉住：approved 放行且落掩码快照；对方没通过/连不上一律 403；
+// 本地已实名不去问对方。
+//
+// 【变异臂】把 invoke.checkPreconditions 改回 isRealnameVerified ⇒ 第一条当场红
+// （本地未实名的人仍被 403，快照那一行也不出现）。互认落库存证件全号 ⇒ 第一条「快照不含明文」红。
+describe('实名互认：前置闸认同一口径（NBDpsy OrLinked）', () => {
+  const FULL_ID = '110101199001011234';
+  const envBackup = {
+    base: process.env.NBDPSY_INTERNAL_BASE,
+    secret: process.env.NBDPSY_INTERNAL_SECRET,
+  };
+  let fetchOriginal: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    process.env.NBDPSY_INTERNAL_BASE = 'http://127.0.0.1:9';
+    process.env.NBDPSY_INTERNAL_SECRET = 'test-shared-secret';
+    fetchOriginal = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = fetchOriginal;
+    if (envBackup.base === undefined) delete process.env.NBDPSY_INTERNAL_BASE;
+    else process.env.NBDPSY_INTERNAL_BASE = envBackup.base;
+    if (envBackup.secret === undefined) delete process.env.NBDPSY_INTERNAL_SECRET;
+    else process.env.NBDPSY_INTERNAL_SECRET = envBackup.secret;
+  });
+
+  /** 无论问什么手机号都回同一份对方回包；counter 记它被打了几次。 */
+  function identityFetch(body: Record<string, unknown>, counter?: { n: number }): typeof fetch {
+    return (async () => {
+      if (counter) counter.n += 1;
+      return new Response(JSON.stringify(body), { status: 200 });
+    }) as unknown as typeof fetch;
+  }
+
+  /** 带手机号（互认匹配键）的用户 + 一件案子 + 一把可写 key。 */
+  function makeLinkedUser(authStatus = '未认证'): { uid: number; key: string; caseId: number } {
+    const phone = `link-${crypto.randomUUID()}`;
+    const uid = Number(
+      db
+        .prepare(
+          'INSERT INTO users (phone_enc, phone_hash, auth_status, created_at) VALUES (?, ?, ?, ?)',
+        )
+        .run(encryptField(phone), phone, authStatus, '2026-08-19T00:00:00.000Z').lastInsertRowid,
+    );
+    const caseId = Number(
+      db
+        .prepare(
+          "INSERT INTO cases (user_id, title, stage, goal, created_at) VALUES (?, '互认者', '风声', '拿到 2N', '2026-08-19T00:00:00.000Z')",
+        )
+        .run(uid).lastInsertRowid,
+    );
+    const key = generateApiKey();
+    db.prepare(
+      "INSERT INTO api_keys (user_id, name, key_hash, scopes, enabled, created_at) VALUES (?, 'k', ?, ?, 1, '2026-08-19T00:00:00.000Z')",
+    ).run(uid, hashApiKey(key), JSON.stringify(['case:read', 'case:write']));
+    return { uid, key, caseId };
+  }
+
+  /** 调一次 MCP evidence_register，回 JSON-RPC 结果体。 */
+  async function register(key: string, caseId: number) {
+    const res = await POST(
+      rpc(
+        {
+          jsonrpc: '2.0',
+          id: 7,
+          method: 'tools/call',
+          params: {
+            name: 'evidence_register',
+            arguments: { case_id: caseId, upload_token: 'not-a-real-token', name: '工资条' },
+          },
+        },
+        key,
+      ),
+    );
+    return res.json();
+  }
+
+  test('本地未实名 + 对方 approved ⇒ 放行并落 provider=nbdpsy 掩码快照', async () => {
+    const u = makeLinkedUser();
+    const calls = { n: 0 };
+    globalThis.fetch = identityFetch(
+      {
+        verified: true,
+        real_name: '张三',
+        id_type: 'idcard',
+        id_number_masked: FULL_ID, // 对方即使往掩码键回了全号
+        id_no: FULL_ID, // 甚至另给一个明文键
+        verified_at: '2026-08-01T10:00:00Z',
+        customer_code: 'C-1',
+      },
+      calls,
+    );
+
+    const body = await register(u.key, u.caseId);
+
+    // 闸过了：run 因假 token 停在 UPLOAD_TOKEN_NOT_FOUND（isError=true 但不是实名闸）
+    const text = body.result.content[0].text as string;
+    expect(JSON.parse(text).error_code, text).not.toBe('REALNAME_REQUIRED');
+    expect(calls.n, '本地未实名必须去问一次对方').toBe(1);
+
+    const row = realnameStore.latestByUser(db, u.uid)!;
+    expect(row.provider).toBe('nbdpsy');
+    expect(row.status).toBe('已实名');
+    expect(row.cert_no, '那一列不放证件号').toBeNull();
+    const snapshot = JSON.parse(decryptField(row.raw_meta_enc!)) as NbdpsySnapshot;
+    expect(snapshot.id_masked).toContain('*');
+    expect(JSON.stringify(snapshot), '快照里不许有证件号明文（存全号 ⇒ 红）').not.toContain(FULL_ID);
+  });
+
+  test('本地未实名 + 对方 found=false ⇒ REALNAME_REQUIRED，零写入', async () => {
+    const u = makeLinkedUser();
+    globalThis.fetch = identityFetch({ verified: false });
+    const before = (db.prepare('SELECT COUNT(*) AS n FROM realname_verifications').get() as { n: number }).n;
+
+    const body = await register(u.key, u.caseId);
+
+    const text = body.result.content[0].text as string;
+    expect(JSON.parse(text).error_code).toBe('REALNAME_REQUIRED');
+    expect((db.prepare('SELECT COUNT(*) AS n FROM realname_verifications').get() as { n: number }).n).toBe(before);
+  });
+
+  test('本地未实名 + 对方连不上 ⇒ REALNAME_REQUIRED，不抛错', async () => {
+    const u = makeLinkedUser();
+    globalThis.fetch = (async () => {
+      throw new Error('ECONNREFUSED');
+    }) as unknown as typeof fetch;
+
+    const body = await register(u.key, u.caseId);
+
+    expect(JSON.parse(body.result.content[0].text as string).error_code).toBe('REALNAME_REQUIRED');
+  });
+
+  test('本地已实名 ⇒ 直接放行，一次都不问对方（假对方计数 0）', async () => {
+    const u = makeLinkedUser('已实名');
+    const calls = { n: 0 };
+    globalThis.fetch = identityFetch({ verified: true, id_number_masked: '1101**********1234' }, calls);
+
+    const body = await register(u.key, u.caseId);
+
+    const text = body.result.content[0].text as string;
+    expect(JSON.parse(text).error_code, text).not.toBe('REALNAME_REQUIRED');
+    expect(calls.n, '本地已实名不该去问对方').toBe(0);
   });
 });

@@ -33,8 +33,21 @@ vi.mock('@/app/_ui/api', () => ({
       ? Promise.reject(new Error(`测试没给 ${path} 预置响应`))
       : Promise.resolve(responses[key]);
   },
+  // 清单端点走这一条（页面用它翻完所有页）：替身直接把预置好的整页给出去
+  apiFetchAll: (path: string) => {
+    calls.push(path);
+    const key = Object.keys(responses).find((k) => path.startsWith(k));
+    return key === undefined
+      ? Promise.reject(new Error(`测试没给 ${path} 预置响应`))
+      : Promise.resolve((responses[key] as { items: unknown[] }).items);
+  },
   humanError: (err: unknown) => (err instanceof Error ? err.message : '出错了'),
 }));
+
+/** 清单端点的真实回包（lib/cases/paging 的 pageResponse）：分页外壳 + 老键，两个键同一个数组 */
+function page(legacyKey: string, rows: unknown[]): Record<string, unknown> {
+  return { items: rows, total: rows.length, offset: 0, next_offset: null, [legacyKey]: rows };
+}
 
 const { fetchDashboard, demoRecords, isBlank, viewState } = await import('../dashboardData');
 const { Dashboard, DashboardBody } = await import('../Dashboard');
@@ -71,8 +84,7 @@ function seedResponses() {
       },
     ],
   };
-  responses['/cases/1/actions'] = {
-    actions: [
+  responses['/cases/1/actions'] = page('actions', [
       {
         id: 11,
         case_id: 1,
@@ -93,10 +105,8 @@ function seedResponses() {
         status: '待办',
         created_at: '2026-08-02T00:00:00+08:00',
       },
-    ],
-  };
-  responses['/cases/1/deadlines'] = {
-    deadlines: [
+  ]);
+  responses['/cases/1/deadlines'] = page('deadlines', [
       {
         id: 21,
         case_id: 1,
@@ -104,13 +114,10 @@ function seedResponses() {
         due_at: '2027-07-24T23:59:00+08:00',
         derived_from: '自 2026-07-24 收到解除通知起算一年',
       },
-    ],
-  };
-  responses['/cases/1/evidence'] = {
-    evidence: [
+  ]);
+  responses['/cases/1/evidence'] = page('evidence', [
       { id: 31, name: '劳动合同扫描件.pdf', status: '已固化', created_at: '2026-08-03T00:00:00+08:00' },
-    ],
-  };
+  ]);
 }
 
 beforeEach(() => {
@@ -125,9 +132,9 @@ describe('取数与字段映射', () => {
   it('四条接口都查了，一条都不少', async () => {
     await fetchDashboard('1');
     expect(calls.some((p) => p.startsWith('/cases/1?'))).toBe(true);
-    expect(calls).toContain('/cases/1/actions');
-    expect(calls).toContain('/cases/1/deadlines');
-    expect(calls).toContain('/cases/1/evidence');
+    expect(calls.some((p) => p.startsWith('/cases/1/actions'))).toBe(true);
+    expect(calls.some((p) => p.startsWith('/cases/1/deadlines'))).toBe(true);
+    expect(calls.some((p) => p.startsWith('/cases/1/evidence'))).toBe(true);
   });
 
   it('时间线要满 200 条——里程碑压在很早的位置时，取少了会静默少一格', async () => {
@@ -184,9 +191,9 @@ describe('取数与字段映射', () => {
 
   it('四块全空才算空案件——刚建的档该出建档引导', async () => {
     responses['/cases/1?'] = { case: { id: 1, title: '我的案件', stage: '风声' }, timeline: [] };
-    responses['/cases/1/actions'] = { actions: [] };
-    responses['/cases/1/deadlines'] = { deadlines: [] };
-    responses['/cases/1/evidence'] = { evidence: [] };
+    responses['/cases/1/actions'] = page('actions', []);
+    responses['/cases/1/deadlines'] = page('deadlines', []);
+    responses['/cases/1/evidence'] = page('evidence', []);
     expect(isBlank(await fetchDashboard('1'))).toBe(true);
   });
 });

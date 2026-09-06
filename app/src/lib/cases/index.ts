@@ -13,6 +13,7 @@ import * as store from '@/lib/db/cases';
 import { dedupTitleKey } from '@/lib/db/dedup';
 import { getDomainPack } from '@/lib/domains/registry';
 import { normalizeDateOnly, submitIntakeInto, type IntakeInput, type IntakeResult } from './intake';
+import { markReportStale } from './report-stale';
 // 只剩 MILESTONE_OF_STAGE 的键类型还引它（`typeof CASE_STAGES`）。**stage 校验不再走它**，
 // 一律经 stagesForCase 从领域包取词表。
 import { CASE_STAGES } from './stages';
@@ -40,6 +41,8 @@ import { reconcileServedModel } from '@/lib/billing/served-model';
 // 而页面引 lib/cases 会把整个 lib/db 拖进浏览器包。此处原样再导出，引用方不必改。
 export { CASE_STAGES, type CaseStage } from './stages';
 export type { IntakeInput, IntakeResult } from './intake';
+// 发出去之前剥掉「发出前必读」尾注：导出（lib/drafts/export）与分享（lib/shares）都从这里取
+export { stripConfirmationFooter } from './drafts';
 
 /** 与 migrate.ts timeline_events.kind 注释逐字对齐 */
 export const TIMELINE_KINDS = ['公司动作', '我方动作', '系统动作', '期限'] as const;
@@ -100,6 +103,10 @@ export const COMPANY_ROLES = ['签约主体', '用工主体', '关联'] as const
 /** case_get 一次最多带回多少条时间线事件（spec §3.5 列表全部分页） */
 const TIMELINE_DEFAULT_LIMIT = 50;
 const TIMELINE_MAX_LIMIT = 200;
+
+/** 清单类端点的一页默认多少条 / 最多多少条（spec §3.5 列表全部分页） */
+export const LIST_DEFAULT_LIMIT = 50;
+export const LIST_MAX_LIMIT = 200;
 
 export interface DomainFailure {
   ok: false;
@@ -251,10 +258,46 @@ export function getCase(
   return { ok: true, case: found, timeline: store.listTimelineEvents(db, input.caseId, limit) };
 }
 
+/** 一页的窗口。total 是**过滤后的真总数**，不是本页条数——两者相等只是常见巧合。 */
+export interface Page<T> {
+  items: T[];
+  total: number;
+  offset: number;
+  /** 没有下一页时明写 null，不回一个「再翻一次就知道了」的数字 */
+  next_offset: number | null;
+}
+
+/**
+ * 在内存里切一页。
+ *
+ * 【为什么不下推到 SQL】这三张表都是「一个案子几十条」的量级，多取几十行的代价远小于
+ * 给每张表各写一条带 COUNT(*) 的分页查询；而 total 与本页取自同一次读，不会出现
+ * 「总数是刚才的、这一页是现在的」那种自相矛盾的回包。
+ *
+ * 【limit 省略 = 不截断】默认值由**调用方**给：REST 那面按约定给 50，
+ * 而 MCP 的清单类工具没有翻页入参，在这里替它截一刀就等于让它默默丢掉后面的条目，
+ * 且它无从知道丢了——回包看起来是一份完整清单。
+ */
+function paginate<T>(rows: T[], limit?: unknown, offset?: unknown): Page<T> {
+  const rawOffset = Math.trunc(Number(offset ?? 0));
+  const start = Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0;
+
+  const rawLimit = Math.trunc(Number(limit));
+  // 没传、传了垃圾值或非正数 → 不截断；传了合法值 → 封顶到 MAX
+  const size =
+    limit === undefined || limit === null || !Number.isFinite(rawLimit) || rawLimit < 1
+      ? rows.length
+      : Math.min(rawLimit, LIST_MAX_LIMIT);
+
+  const items = rows.slice(start, start + size);
+  const consumed = start + items.length;
+  return { items, total: rows.length, offset: start, next_offset: consumed < rows.length ? consumed : null };
+}
+
 export function listActions(
   db: Database,
-  input: { caseId: number; userId: number; status?: string },
-): Result<{ actions: store.ActionItemRow[] }> {
+  input: { caseId: number; userId: number; status?: string; limit?: unknown; offset?: unknown },
+): Result<{ actions: store.ActionItemRow[]; total: number; offset: number; next_offset: number | null }> {
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
 
@@ -262,28 +305,44 @@ export function listActions(
   if (status !== null && !(ACTION_STATUSES as readonly string[]).includes(status)) {
     return fail(400, 'INVALID_STATUS', `status 只能是 ${ACTION_STATUSES.join(' / ')}`);
   }
-  return { ok: true, actions: store.listActionItems(db, input.caseId, status) };
+  const { items, ...page } = paginate(
+    store.listActionItems(db, input.caseId, status),
+    input.limit,
+    input.offset,
+  );
+  return { ok: true, actions: items, ...page };
 }
 
 export function listDeadlines(
   db: Database,
-  input: { caseId: number; userId: number; includeResolved?: boolean },
-): Result<{ deadlines: store.DeadlineRow[] }> {
+  input: {
+    caseId: number;
+    userId: number;
+    includeResolved?: boolean;
+    limit?: unknown;
+    offset?: unknown;
+  },
+): Result<{ deadlines: store.DeadlineRow[]; total: number; offset: number; next_offset: number | null }> {
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
-  return {
-    ok: true,
-    deadlines: store.listDeadlines(db, input.caseId, input.includeResolved === true),
-  };
+  const { items, ...page } = paginate(
+    store.listDeadlines(db, input.caseId, input.includeResolved === true),
+    input.limit,
+    input.offset,
+  );
+  return { ok: true, deadlines: items, ...page };
 }
 
 export function listEvidence(
   db: Database,
-  input: { caseId: number; userId: number },
-): Result<{ evidence: store.EvidenceRow[] }> {
+  input: { caseId: number; userId: number; includeVoided?: boolean; limit?: unknown; offset?: unknown },
+): Result<{ evidence: store.EvidenceRow[]; total: number; offset: number; next_offset: number | null }> {
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
-  return { ok: true, evidence: store.listEvidence(db, input.caseId) };
+  // 作废过滤先于分页：total 数的是这一条清单**过滤后**的真总数。
+  const rows = store.listEvidence(db, input.caseId, input.includeVoided === true);
+  const { items, ...page } = paginate(rows, input.limit, input.offset);
+  return { ok: true, evidence: items, ...page };
 }
 
 /**
@@ -465,6 +524,10 @@ export function updateCase(
   }
 
   store.updateCaseFields(db, input.caseId, fields);
+  // 阶段变了，报告的「基本盘」与「下一步」都可能不再成立（过期唯一入口，见 ./report-stale）。
+  // 只认 stage：改一句 goal 的错别字不该把整份报告标成过期，那样它会一直是过期的，
+  // 而"一直过期"与"从来不过期"对读的人是同一个信息量。
+  if (fields.stage !== undefined) markReportStale(db, input.caseId, '阶段变更');
   return { ok: true, case: store.findCaseById(db, input.caseId)! };
 }
 
@@ -491,10 +554,12 @@ export function submitIntake(
  * 加一条时间线事件。只追加，写错了补一条新的（spec §7），本模块不提供改/删。
  *
  * 【幂等】写接口无幂等、agent 重试即双写（生产 case2 实测）。两道去重都在这一个写入口上，
- * MCP、REST、站内 agent 三条路共用：
- *  · 带 `clientRef` —— 同案同 ref 已存在直接回既有行（deduped:true），一个业务操作对一个 ref；
- *  · 不带 ref —— 近重复守卫：同案 + 同一自然日 + 同 kind + 标题规范化相等 ⇒ 回既有行，不插。
- * 两者都命中不了才真插入。`deduped` 一并返回，调用方要如实告诉用户「这条已经记过了」。
+ * MCP、REST、站内 agent、粘贴回填四条路共用，预览（lib/paste forecast）与写入用同一把尺：
+ *  · 带 `clientRef` 且命中 —— 同案同 ref 已存在直接回既有行（deduped:true），一个业务操作对一个 ref；
+ *  · client_ref 未命中（或本就不带）—— 再过近重复守卫：同案 + 同一自然日 + 同 kind + 标题规范化
+ *    相等 ⇒ 回既有行，不插。跨批重贴同一件事时 client_ref 每批一换（paste-<batch>-<序号>），
+ *    只认 ref 会一批多落一条；补这道自然键兜底，预览按自然键预报、写入按自然键落库才对齐。
+ * 两道都命中不了才真插入。`deduped` 一并返回，调用方要如实告诉用户「这条已经记过了」。
  */
 export function addTimelineEvent(
   db: Database,
@@ -522,17 +587,19 @@ export function addTimelineEvent(
   if (!title) return fail(400, 'INVALID_TITLE', 'title 不能为空');
   const clientRef = trimmedOrNull(input.clientRef);
 
+  // ① 带 client_ref 且命中 ⇒ 直接回既有行（原有语义不变）。
   if (clientRef) {
     const existing = store.findTimelineByClientRef(db, input.caseId, clientRef);
     if (existing) return { ok: true, event: existing, deduped: true };
-  } else {
-    // 标题在 JS 里按 dedupTitleKey 比对；日期与 kind 交给 SQL 先筛出同日同类的候选。
-    const key = dedupTitleKey(title);
-    const dup = store
-      .listTimelineSameDayKind(db, input.caseId, happenedAt, input.kind)
-      .find((e) => dedupTitleKey(e.title) === key);
-    if (dup) return { ok: true, event: dup, deduped: true };
   }
+  // ② client_ref 未命中（或本就不带）都再过近重复守卫：跨批重贴同一件事时 client_ref 每批一换
+  // （paste-<batch>-<序号>），只认 ref 就会一批多落一条；预览用的正是这道自然键，写入也走它，
+  // 两处才是同一把尺。标题在 JS 里按 dedupTitleKey 比，日期与 kind 交给 SQL 先筛出同日同类的候选。
+  const key = dedupTitleKey(title);
+  const dup = store
+    .listTimelineSameDayKind(db, input.caseId, happenedAt, input.kind)
+    .find((e) => dedupTitleKey(e.title) === key);
+  if (dup) return { ok: true, event: dup, deduped: true };
 
   const id = store.insertTimelineEvent(db, {
     caseId: input.caseId,
@@ -543,6 +610,8 @@ export function addTimelineEvent(
     clientRef,
   });
   const event = store.listTimelineEvents(db, input.caseId, TIMELINE_MAX_LIMIT).find((e) => e.id === id)!;
+  // 去重命中的两条分支都在上面 return 掉了，走到这里的一定是真新增的一条
+  markReportStale(db, input.caseId, '时间线');
   return { ok: true, event, deduped: false };
 }
 

@@ -8,14 +8,13 @@
 //
 // 队列每人至多一行：见 lib/db/realname.listPendingByProvider 的注释
 //（审到一条陈旧流水会造成"操作成功但用户状态没变"的静默不一致）。
-import { NextResponse } from 'next/server';
-
 import { requireAdmin } from '@/lib/admin/auth';
 import { decryptPhoneFull } from '@/lib/admin/users';
 import { PASSPORT_PROVIDER, readPassportEnvelope } from '@/lib/auth/passport-realname';
 import { VERIFICATION_STATUS } from '@/lib/auth/realname';
 import { getDb } from '@/lib/db/client';
 import { listPendingByProvider } from '@/lib/db/realname';
+import { apiJson } from '@/lib/http/json';
 
 export async function GET(req: Request) {
   const db = getDb();
@@ -56,5 +55,5 @@ export async function GET(req: Request) {
     };
   });
 
-  return NextResponse.json({ ok: true, count: rows.length, rows });
+  return apiJson({ ok: true, count: rows.length, rows });
 }

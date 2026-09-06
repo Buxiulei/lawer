@@ -285,6 +285,56 @@ describe('时间线写入去重', () => {
     expect(rows(db, caseA)).toHaveLength(1);
   });
 
+  test('跨批重贴：client_ref 每批一换但自然键相同 ⇒ 第二批也塌缩成一条（预览与写入同一把尺）', () => {
+    const { db, userA, caseA } = makeFixture();
+    const base = {
+      caseId: caseA,
+      userId: userA,
+      happenedAt: '2026-08-15T09:30:00+08:00',
+      kind: '公司动作' as const,
+      title: 'HR 约谈，口头通知裁员',
+    };
+    // 第一批：client_ref = paste-batch1-3
+    const b1 = cases.addTimelineEvent(db, { ...base, clientRef: 'paste-batch1-3' });
+    // 第二批重贴同一件事：新 batch_id ⇒ 新 client_ref（findTimelineByClientRef 必然未命中），
+    // 未命中后过自然键 ⇒ 认成同一件事，不再多落一条（同一天不同时刻，自然键仍相等）
+    const b2 = cases.addTimelineEvent(db, {
+      ...base,
+      happenedAt: '2026-08-15T18:00:00+08:00',
+      clientRef: 'paste-batch2-3',
+    });
+    expect(b1.ok && b2.ok).toBe(true);
+    if (!b1.ok || !b2.ok) return;
+    expect(b1.deduped).toBe(false);
+    expect(b2.deduped).toBe(true); // 判据：跨批重贴 ⇒ deduped=1
+    expect(b2.event.id).toBe(b1.event.id);
+    expect(rows(db, caseA)).toHaveLength(1); // 判据：时间线仍 1 条
+  });
+
+  test('跨批但真不同的事件（同日同 kind 不同标题、各带 client_ref）仍各落一条', () => {
+    const { db, userA, caseA } = makeFixture();
+    const first = cases.addTimelineEvent(db, {
+      caseId: caseA,
+      userId: userA,
+      happenedAt: '2026-08-15T09:30:00+08:00',
+      kind: '公司动作',
+      title: 'HR 约谈',
+      clientRef: 'paste-batch1-1',
+    });
+    const other = cases.addTimelineEvent(db, {
+      caseId: caseA,
+      userId: userA,
+      happenedAt: '2026-08-15T14:00:00+08:00',
+      kind: '公司动作',
+      title: '收到解除通知',
+      clientRef: 'paste-batch2-1',
+    });
+    expect(first.ok && other.ok).toBe(true);
+    if (!first.ok || !other.ok) return;
+    expect(other.deduped).toBe(false);
+    expect(rows(db, caseA)).toHaveLength(2);
+  });
+
   test('真不同的事件照常各落一行：换标题、换天、换 kind 都不算重复', () => {
     const { db, userA, caseA } = makeFixture();
     const add = (over: Record<string, unknown>) =>

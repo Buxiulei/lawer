@@ -4,11 +4,10 @@
 //
 // **匿名路由，不收 Authorization**：这一步才发出登录态。查无此邮箱即建号（无手机号，
 // 注册赠送与建号同事务），已有则直接登录；onboarding 告诉前端进站后落在哪个案件。
-import { NextResponse } from 'next/server';
-
 import { verifyEmailRegisterCode } from '@/lib/auth';
 import { badRequest, failureResponse, readJsonBody, stringField } from '@/lib/auth/http';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 export async function POST(req: Request) {
   const body = await readJsonBody(req);
@@ -20,7 +19,7 @@ export async function POST(req: Request) {
   });
   if (!result.ok) return failureResponse(result);
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     token: result.token,
     is_new_user: result.isNewUser,

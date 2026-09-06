@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server';
 import { domainFailure, requireIdentity, requireRealname } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
 import * as evidence from '@/lib/evidence';
+import { apiJson } from '@/lib/http/json';
 import {
   MAX_CONCURRENT_UPLOADS,
   MAX_UPLOAD_BYTES,
@@ -23,7 +24,7 @@ function formString(form: FormData, key: string): string | null {
 
 function tooLarge(actualBytes: number): NextResponse {
   const actualMb = (actualBytes / 1024 / 1024).toFixed(1);
-  return NextResponse.json(
+  return apiJson(
     {
       ok: false,
       error_code: 'FILE_TOO_LARGE',
@@ -39,7 +40,7 @@ function tooLarge(actualBytes: number): NextResponse {
 }
 
 function uploadBusy(): NextResponse {
-  return NextResponse.json(
+  return apiJson(
     {
       ok: false,
       error_code: 'UPLOAD_BUSY',
@@ -59,7 +60,7 @@ export async function POST(req: Request) {
   // 【实名闸】前移到上传：未实名的证据不落库、不落盘。放在体积/并发闸之前——这道判定
   // 只查一行 users，不读请求体，理应最先拒；也让未实名的人拿到「去实名」这条自述文案，
   // 而不是先撞上体积或并发的错。判定逻辑只在 guard.requireRealname 一处，这里只调它。
-  const realname = requireRealname(
+  const realname = await requireRealname(
     getDb(),
     guard.identity,
     '上传证据前需先完成实名认证。证据要与本人身份绑定：未实名的证据无法保存，日后也无法用于出证。' +
@@ -81,7 +82,7 @@ export async function POST(req: Request) {
     try {
       form = await req.formData();
     } catch {
-      return NextResponse.json(
+      return apiJson(
         { ok: false, error_code: 'INVALID_BODY', message: '请求体不是合法的 multipart 表单' },
         { status: 400 },
       );
@@ -89,7 +90,7 @@ export async function POST(req: Request) {
 
     const file = form.get('file');
     if (!(file instanceof File)) {
-      return NextResponse.json(
+      return apiJson(
         { ok: false, error_code: 'FILE_REQUIRED', message: '缺少 file 字段' },
         { status: 400 },
       );
@@ -102,7 +103,7 @@ export async function POST(req: Request) {
 
     const rawCaseId = formString(form, 'case_id') ?? '';
     if (!/^\d+$/.test(rawCaseId)) {
-      return NextResponse.json(
+      return apiJson(
         { ok: false, error_code: 'INVALID_CASE_ID', message: 'case_id 必须是正整数' },
         { status: 400 },
       );
@@ -121,7 +122,7 @@ export async function POST(req: Request) {
     });
     if (!result.ok) return domainFailure(result);
 
-    return NextResponse.json(
+    return apiJson(
       { ok: true, evidence: result.evidence, deduped: result.deduped },
       { status: 201 },
     );

@@ -1,7 +1,7 @@
 // app/src/lib/db/migrate.ts
 //
 // ───────────────── ⚠️ 改本文件之前先读这一段 ⚠️ ─────────────────
-// **本迁移框架没有事务。** runMigrations() 的 53 个 db.exec() 是一串裸调用，
+// **本迁移框架没有事务。** runMigrations() 是一串裸 db.exec() 调用，
 // 中途失败不回滚——2026-08-26 实测：人为中断，库里留下 22/38 张表，重跑既不前进也不后退。
 // 现在之所以能安全滚更，是因为迁移**全是纯加法**、靠 IF NOT EXISTS 与 addColumnIfMissing
 // 能重跑自愈：**安全是「改动足够简单」给的，不是框架给的。**
@@ -1135,7 +1135,7 @@ export function runMigrations(db: Database.Database): void {
       id             INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       case_id        INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
-      service        TEXT NOT NULL,                          -- ocr|asr|video|doc_review|brief|dossier|watch，值域见 lib/billing/service-quotes.ts
+      service        TEXT NOT NULL,                          -- ocr|asr|video|doc_review|brief|export|dossier|watch，值域见 lib/billing/service-quotes.ts
       payload_json   TEXT,                                   -- 计价入参原样留存（单位数量、证据 id 等），对账时要能复算这个价
       amount         INTEGER NOT NULL,                       -- 应扣公道值（非负整数）；券抵扣时照记原价
       entitlement_id INTEGER REFERENCES entitlements(id),    -- 非空=这单由会员券抵掉，没走公道值
@@ -1187,6 +1187,36 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_extraction_jobs_evidence ON extraction_jobs (evidence_id, id DESC);
   `);
 
+  // 个案报告：一案一行的长期记忆（设计稿 §4.3）。
+  //
+  // 【为什么要有它】档案里的事实分散在六张表，每次对话都要从头拼一遍；拼出来的那份
+  // 没人存，下一轮又拼一次，而拼错的地方每轮都不一样。本表存的是**整理过的那一份**。
+  //
+  // 【version 的两个语义】0 = 占位行：只被 markReportStale 建过、还没有初稿
+  // （所以 get 时仍要跑 bootstrap）；≥1 = 已有正文，同时是乐观锁的那个数
+  // （updateSection 的 base_version 对不上即 REPORT_VERSION_CONFLICT）。
+  // 拿 sections_json 是否为空来判"有没有初稿"是不行的：一份**真的每节都空**的报告
+  // 与"从没生成过"在库里长得一模一样，于是每次 get 都会把用户改过的空节重新盖掉。
+  //
+  // 【stale_reason 存的是计数而不是一句话】事实卡首行要说「自 X 起 N 条变动（新证据 2、时间线 1）」，
+  // 一句话的 reason 只留得住最后一次触发，前面几条在外部看不出来——而"只动过 1 次"
+  // 与"动过 9 次只记住最后一次"对"要不要先整理"这个判断是两个答案。故存 JSON 计数表。
+  // updated_by 取值 web | agent:<key_id> | system。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS case_reports (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id       INTEGER NOT NULL UNIQUE REFERENCES cases(id) ON DELETE CASCADE,
+      sections_json TEXT NOT NULL DEFAULT '{}',              -- {分节标题: 正文}
+      rendered_md   TEXT NOT NULL DEFAULT '',                -- 渲染稿，网页档案页只读这一列
+      version       INTEGER NOT NULL DEFAULT 0,              -- 0=占位（无初稿）；≥1 兼作乐观锁
+      updated_at    TEXT,
+      updated_by    TEXT,                                    -- web | agent:<key_id> | system
+      stale_since   TEXT,                                    -- 非空=过期；第一条变动的时刻，后续变动不刷新它
+      stale_reason  TEXT,                                    -- JSON 计数表 {"新证据":2,"时间线":1}
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
   // 一次性上传地址的 token（设计稿 §2 B evidence_upload_url）。
   //
   // 【为什么要一张表，不能只签个 JWT】token 必须是**一次性**的：签发出去的是一条无鉴权
@@ -1220,6 +1250,127 @@ export function runMigrations(db: Database.Database): void {
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_evidence_upload_tokens_case ON evidence_upload_tokens (case_id, id DESC);
+  `);
+
+  // 危机信号命中留痕（设计稿 §4.4 / §5 crisis_hits）。事实卡首行「近 72 小时有危机信号」只读它。
+  //
+  // 【为什么两条通路都必须落到这一张表】站内对话与用户自己的 agent 是同一个人的两条入口：
+  // 只记站内那条的形态是——用户白天在自己的助手里说了那句话、晚上回站内来，
+  // 事实卡首行干干净净，我们表现得像从没听见过。
+  //
+  // 【case_id 可空】crisis_check 允许无案调用（一个还没建档的人也可能正处在那一刻），
+  // 那时这一行仍要记下来——它的用处是审计与用量，不是只服务某个案子的首行标记。
+  // user_id 不可空：没有人的一条危机记录既没人能看见也没人能负责。
+  //
+  // 【存哈希不存原话】命中词与用户原话是这个库里最敏感的一段文本，而首行标记只需要
+  // 「有没有、几次」。terms_hash = sha256(命中词按首现序 join '|')，同一组词稳定同值，
+  // 可用来看"是不是同一句话反复触发"，但反推不回原话。
+  //
+  // 【at 由列默认给】同全仓时间口径（ADR-002：时间从 SQLite 取，不从 JS 落串）。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS crisis_hits (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id    INTEGER REFERENCES cases(id) ON DELETE CASCADE,   -- 可空：无案也能调 crisis_check
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      source     TEXT NOT NULL,                                    -- site | mcp
+      terms_hash TEXT NOT NULL,                                    -- sha256(命中词 join '|')，不存原话
+      at         TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_crisis_hits_case ON crisis_hits (case_id, at DESC);
+    CREATE INDEX IF NOT EXISTS idx_crisis_hits_user ON crisis_hits (user_id, at DESC);
+  `);
+
+  // 一次性**下载**令牌（设计稿 §2 E draft_export）。与 evidence_upload_tokens 是同一套机制的反向：
+  // 那边签一条只收一次字节的 PUT 地址，这边签一条只发一次字节的 GET 地址。
+  //
+  // 【为什么下载也要一次性 + 短命】导出的文书 PDF 是这个案子最敏感的东西之一，而这条地址
+  // 不带鉴权头就能取回文件（否则用户没法把它丢进浏览器打开）。可重放的话，凡是这条 URL
+  // 出现过的地方——日志、剪贴板、聊天记录——都成了一个长期有效的取件口。
+  // 两条约束都由库里那一行管（consumed_at / expires_at），不由调用方自觉。
+  //
+  // file_id 指向已落 files 表的那份密文；filename 是给浏览器看的下载名（files 表不存文件名）。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS file_download_tokens (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash  TEXT NOT NULL UNIQUE,                      -- sha256(token 明文)，明文不入库
+      file_id     INTEGER NOT NULL REFERENCES files(id),
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      filename    TEXT NOT NULL,                             -- 下载时回给浏览器的文件名
+      mime        TEXT,
+      expires_at  TEXT NOT NULL,                             -- 过期点；过期后即使没用过也不再受理
+      consumed_at TEXT,                                      -- 抢占键：非空 = 这条地址已经取过件
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_file_download_tokens_user ON file_download_tokens (user_id, id DESC);
+  `);
+
+  // ───────────────── OAuth 2.1 授权服务器（设计稿 §15 路径 A）─────────────────
+  // 有些客户端（网页版连接器）**只认 OAuth，不接受裸 Bearer**：想接进来就得有授权码流。
+  // 三张表分别是「谁在申请」「这一次同意的凭证」「发出去的令牌」，不合并——
+  // 合成一张的形态是：一次同意与它派生出的整条令牌链共用一行，令牌旋转时就地改写那行，
+  // 于是「这条 refresh 是不是被重复用了」再也查不出来（旧值已被新值盖掉）。
+  //
+  // 【客户端是动态注册的，没有密钥】public client + PKCE 是 OAuth 2.1 对这类客户端的规定
+  // 形态：客户端跑在别人的服务器上，我们无从给它保管 secret，安全性全靠 code_challenge。
+  // 所以 oauth_clients 里没有 client_secret 列——不留一个永远为空的列去暗示还能有别的模式。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS oauth_clients (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id     TEXT NOT NULL UNIQUE,
+      client_name   TEXT NOT NULL,                        -- 注册时自报，同意页原样显示给用户看
+      redirect_uris TEXT NOT NULL,                        -- JSON 数组，回跳时**精确匹配**其中一项
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // 授权码。**存哈希不存明文**（与 api_keys / evidence_upload_tokens 同口径）。
+  //
+  // 【consumed_at 兼作一次性的抢占键】消费那句写成
+  //   UPDATE ... SET consumed_at=? WHERE code_hash=? AND consumed_at IS NULL
+  // 按 changes===1 判抢到。不靠「先查再写」：那中间隔着 PKCE 校验，足够第二个请求
+  // 把同一个 code 也查成「没用过」，于是一个 code 换出两条令牌链。
+  //
+  // 【code_challenge 与 redirect_uri 落在行上，不由换令牌时的入参说了算】
+  // 这两列是这一次授权当时钉死的事实；换令牌时拿入参去比对它们，比对不上即拒。
+  // 若改成信入参，PKCE 与白名单就都成了摆设——攻击者把两个入参一起换掉即可。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS oauth_codes (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      code_hash      TEXT NOT NULL UNIQUE,                -- sha256(code 明文)
+      client_id      TEXT NOT NULL,
+      user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      key_id         INTEGER NOT NULL REFERENCES api_keys(id),  -- 同意那一刻建好的凭据行
+      redirect_uri   TEXT NOT NULL,
+      code_challenge TEXT NOT NULL,                       -- 只收 S256，明文 verifier 不落库
+      scopes         TEXT NOT NULL,                       -- JSON 数组
+      expires_at     TEXT NOT NULL,
+      consumed_at    TEXT,                                -- 抢占键：非空 = 这个 code 已经换过令牌
+      created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // 令牌。access 与 refresh 同表一行一条，靠 kind 区分——两张表的形态是「吊销整条链」
+  // 要在两处各写一遍 UPDATE，而漏掉的那一半照常能用。
+  //
+  // 【code_id 就是「链」】一次授权码换出的第一对令牌、以及此后每一次旋转出的新令牌，
+  // code_id 全都指向同一条 code。「复用旧 refresh ⇒ 整链吊销」于是只是一句
+  // `UPDATE oauth_tokens SET revoked_at=? WHERE code_id=? AND revoked_at IS NULL`。
+  //
+  // 【revoked_at 同时表示「已旋转」】refresh 旋转时把旧的那条标 revoked_at。所以
+  // 「拿着一条 revoked_at 非空的 refresh 来换」= 复用，无需再加一列去记「转过没有」。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS oauth_tokens (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT NOT NULL UNIQUE,                    -- sha256(令牌明文)
+      kind       TEXT NOT NULL,                           -- access | refresh
+      code_id    INTEGER NOT NULL REFERENCES oauth_codes(id) ON DELETE CASCADE,
+      key_id     INTEGER NOT NULL REFERENCES api_keys(id),
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_oauth_tokens_chain ON oauth_tokens (code_id, kind);
   `);
 
   // ───────────────── 存量迁移区 ─────────────────
@@ -1454,6 +1605,30 @@ export function runMigrations(db: Database.Database): void {
   addColumnIfMissing(db, 'evidence', 'brief_updated_by', 'TEXT');
   addColumnIfMissing(db, 'evidence', 'brief_updated_at', 'TEXT');
 
+  // brief_error：最近一次**自动生成简报失败**的原因原文（模型没连上 / 返回的不是 JSON /
+  // 不合 schema / 落库时被抢写）。NULL = 没失败过（从没生成过，或最近一次成功了）。
+  //
+  // 【为什么必须落一列，而不是只打日志】在此之前生成失败只有一行 console.warn：
+  // 容器日志滚掉之后，「这件材料没有简报」与「这件材料的简报生成失败过三次」在库里
+  // 长得一模一样——读侧只看得到 brief_version=0，于是没人知道该重试还是该等。
+  // 2026-09-06 生产实证：OCR 成功、简报没有、日志里一个字都没有。
+  //
+  // 【与 brief_version 的分工】brief_version>0 = 有简报（brief_error 是上一轮的旧账，
+  // 生成成功时一并清空）；brief_version=0 且 brief_error 非空 = 试过、失败了、原因在这。
+  addColumnIfMissing(db, 'evidence', 'brief_error', 'TEXT');
+
+  // 证据作废（援助律师 09-06 实测缺口④）。status 改写成「已作废」，理由与时刻单独两列。
+  //
+  // 【为什么理由必填、且单独一列】作废是**把一件材料从所有对外视图里摘出去**的动作：
+  // 事实卡不再列它、出证拒绝它、清单默认不回它。没有理由的作废在事后与「误删」无法分辨，
+  // 而这件材料多半仍在文件系统里、仍占着用户的存储配额。
+  //
+  // 【为什么不删行】已出证的条目背后有一张不可撤销的存证订单（时间戳已经打在链上/TSA 上）。
+  // 删行会让那个订单号指向一条不存在的材料，而订单本身仍能被对方核验——
+  // 那是比「作废」严重得多的一种不一致。所以作废只标记，不动 attestations 一个字节。
+  addColumnIfMissing(db, 'evidence', 'void_reason', 'TEXT');
+  addColumnIfMissing(db, 'evidence', 'voided_at', 'TEXT');
+
   // extraction_jobs.refunded_at：这条提取任务最终失败后**原路退款的时刻**。
   // NULL = 没退过（还没失败，或这单本来就没扣钱/没找到可退的报价）。
   //
@@ -1464,6 +1639,68 @@ export function runMigrations(db: Database.Database): void {
   // 「重启回收后再失败」这类把收尾路径又走一遍的形态，第二遍当场 changes=0 直接退出，
   // 既不重复退款、也不重复调券归还。可空、不回填：存量任务没退过款，NULL 即语义正确。
   addColumnIfMissing(db, 'extraction_jobs', 'refunded_at', 'TEXT');
+
+  // share_links 的分享标的（设计稿 §2 E share_create：draft_id 或 evidence_id）。
+  // 建表时这张表只有 case_id + scope，落地分享能力时才需要说清「分享的是哪一份东西」。
+  //
+  // 【为什么是 kind+id 两列，不是 draft_id / evidence_id 两个外键列】两个可空外键列的形态是
+  // 「两列都填了」与「两列都空」都能进库，读侧每处都得自己决定这时候算什么——那就是每处一种算法。
+  // 一列 kind 一列 id，读侧只有一条分支。不加 DB 级 CHECK：SQLite 改 CHECK 要重建表，
+  // 值域由 lib/db/share-links.ts 一处把关（同 intake_stage / milestone 的既定裁决）。
+  //
+  // 存量行（若有）两列皆 NULL = 整案档案只读，与本次新增的定向分享并存，读侧容得下这个缺省。
+  addColumnIfMissing(db, 'share_links', 'target_kind', 'TEXT');
+  addColumnIfMissing(db, 'share_links', 'target_id', 'INTEGER');
+  // 转介台账（设计稿 §14）：本站把用户转介到 NBDpsy 心理咨询这件事的**唯一状态真源**。
+  //
+  // 【与 referral_offers 是两张表，别合】referral_offers 记的是「我们开口推荐过没有」
+  // （频控台账，spec D14）；本表记的是「用户点了同意之后，那份数据包发出去了没有、对方收了没有」。
+  // 合成一张的形态是：一次没发出去的转介在频控里已经算「推过了」，于是永远不再提第二次。
+  //
+  // direction：out = 我们转给对方；in = 对方转过来（P4 反向，先留位不实现）。
+  // status：pending（还没发出去 / 等重试）| sent（对方已收，拿到 external_ref）
+  //       | accepted / declined（对方后续回执）| failed（重试用尽，不再自动发）。
+  // payload_json = 发出去的那份数据包全文（**已经过中立化过滤**，见 lib/referral/neutral）。
+  //   留全文是因为「我们到底传了什么」将来要能自证；同意文案逐项列的就是它的字段。
+  // consent_at = 用户点「同意并转介」的时刻。**没有它就不该有这一行**：本表每一行都对应
+  //   一次明示同意，NOT NULL 是产品红线不是数据洁癖。
+  // external_ref = 对方 leads 那条线索的 id；NULL = 还没发成功。
+  // attempts / last_error 与 extraction_jobs 同义：attempts 是**尝试发送的次数**，
+  //   last_error 存最近一次失败原文（自述三段式，禁止只写「失败」）。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS referrals (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id      INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+      user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      direction    TEXT NOT NULL DEFAULT 'out',              -- out | in
+      status       TEXT NOT NULL DEFAULT 'pending',          -- pending | sent | accepted | declined | failed
+      payload_json TEXT NOT NULL,
+      consent_at   TEXT NOT NULL,
+      external_ref TEXT,
+      attempts     INTEGER NOT NULL DEFAULT 0,
+      last_error   TEXT,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_referrals_case ON referrals (case_id, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_referrals_user ON referrals (user_id, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_referrals_queue ON referrals (status, id);
+  `);
+
+  // 与 NBDpsy 那侧的关联键（设计稿 §14 决定 2）：**只记关联，不合并主键**。
+  // 存的是对方的 customer_code（他们跨触点去重的真源之一），我们不据它做任何鉴权判断——
+  // 鉴权仍看本地 users.auth_status 与 realname_verifications。
+  // 可空、不回填：绝大多数账号没有对面的关联，NULL 即语义正确。
+  addColumnIfMissing(db, 'users', 'linked_nbdpsy_customer_code', 'TEXT');
+  // api_keys.source：这把凭据是**怎么来的**。'self' = 用户自己在设置页建的（默认，也是存量的语义），
+  // 'oauth' = 某个客户端走 OAuth 授权流换来的。
+  //
+  // 【为什么不靠 secret_enc 是否为空来推】那一列为空还有另一个意思——本列上线之前签发的
+  // 存量密钥（明文当年就没留）。两件事挤在同一个 NULL 上，页面就只能在
+  // 「旧密钥，看不到明文」和「来自某客户端的授权」之间猜一个，而猜错的那半屏看起来完全正常。
+  //
+  // 存量行取 DDL 默认值 'self'：它们确实都是用户自己建的，这不是编出来的默认值。
+  addColumnIfMissing(db, 'api_keys', 'source', "TEXT NOT NULL DEFAULT 'self'");
 
   // ───────────────── 费率种子 ─────────────────
   // C01 核定的模型费率必须**在建表之后立刻播下去**：缺行时 getRatesForModel 会回落

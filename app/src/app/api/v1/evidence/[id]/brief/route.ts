@@ -1,15 +1,14 @@
 // app/src/app/api/v1/evidence/[id]/brief/route.ts
 // GET 读证据简报 / PUT 整份改写（乐观锁）。与 MCP 的 evidence_brief_get / evidence_brief_update
 // 共用 lib/evidence/extraction 里的同一对函数。
-import { NextResponse } from 'next/server';
-
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
 import { validateBrief } from '@/lib/evidence/brief';
 import { getEvidenceBrief, updateEvidenceBrief } from '@/lib/evidence/extraction';
+import { apiJson } from '@/lib/http/json';
 
 const NOT_FOUND = () =>
-  NextResponse.json(
+  apiJson(
     { ok: false, error_code: 'EVIDENCE_NOT_FOUND', message: '这件材料不存在' },
     { status: 404 },
   );
@@ -23,7 +22,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const result = getEvidenceBrief(getDb(), { evidenceId, userId: guard.identity.uid });
   if (!result.ok) return domainFailure(result);
-  return NextResponse.json(result);
+  return apiJson(result);
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -42,14 +41,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const checked = validateBrief(body.brief);
   if (!checked.ok) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'INVALID_BRIEF', message: `简报不合 schema：${checked.problems.join('；')}` },
       { status: 400 },
     );
   }
   // base_version 不是可选项：缺了就没法判断中间有没有别人改过，写下去会静默盖掉那次改动
   if (!Number.isInteger(body.base_version)) {
-    return NextResponse.json(
+    return apiJson(
       {
         ok: false,
         error_code: 'INVALID_BASE_VERSION',
@@ -68,5 +67,5 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     updatedBy: 'web',
   });
   if (!result.ok) return domainFailure(result);
-  return NextResponse.json(result);
+  return apiJson(result);
 }

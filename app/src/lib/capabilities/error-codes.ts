@@ -42,6 +42,9 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
 
   { code: 'REALNAME_REQUIRED', group: 'gate', status: 403, when: '该动作要求用户已完成实名（证据上传、固化出证）；「待审」不算已实名', recovery: '把这一步是干什么的说清楚，请用户在网页上完成实名后再来' },
 
+  { code: 'CONSENT_REQUIRED', group: 'gate', status: 400, when: '要把用户资料交给站外机构的动作没带上本人的明示同意（consent 必须为 true）', recovery: '把「会传什么、不会传什么」逐项念给用户听，得到明确同意后带 consent:true 再调一次；不要替用户点头' },
+  { code: 'REFERRAL_UNAVAILABLE', group: 'gate', status: 500, when: '服务端这会儿生成不了要外发的数据包（本机加密配置缺失），本次零外发', recovery: '这是我们的运维问题，不是用户填错了；如实告诉用户稍后再试，不要改参数重试' },
+
   { code: 'CASE_NOT_FOUND', group: 'notfound', status: 404, when: '案件不存在，**或不属于本人**——两者刻意不区分', recovery: '先调 case_list 拿本人名下真实的 case_id，不要据此推断编号有效性' },
   { code: 'ACTION_NOT_FOUND', group: 'notfound', status: 404, when: '行动卡 id 不在本案下' },
   { code: 'EVENT_NOT_FOUND', group: 'notfound', status: 404, when: '时间线事件 id 不在本案下' },
@@ -49,6 +52,7 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
   { code: 'ORDER_NOT_FOUND', group: 'notfound', status: 404, when: '存证订单号查不到' },
   { code: 'DOSSIER_NOT_FOUND', group: 'notfound', status: 404, when: '公司档案 id 查不到' },
   { code: 'KEY_NOT_FOUND', group: 'notfound', status: 404, when: 'api key id 不在本人名下' },
+  { code: 'TOOL_NOT_FOUND', group: 'notfound', status: 404, when: '通用桥 POST /tools/{name} 里的 name 不是一条可调用的能力', recovery: '调 GET /tools 拿当前可用的能力名，不要按旧说明书里的名字重试' },
 
   { code: 'INVALID_BODY', group: 'input', status: 400, when: '请求体不是合法 JSON，或缺必填字段', recovery: '照 manifest 里该端点的入参重发；不要重试同一份体' },
   { code: 'INVALID_CASE_ID', group: 'input', status: 400, when: 'case_id 不是正整数' },
@@ -62,4 +66,5 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
   { code: 'GONGDAO_EXHAUSTED', group: 'billing', status: 402, when: '余额不足以完成这次扣费动作', recovery: '把差额如实告诉用户，不要改小参数重试' },
   { code: 'UPLOAD_BUSY', group: 'billing', status: 429, when: '同时进行的上传过多（内存闸门）', recovery: '退避后重试' },
   { code: 'TURN_IN_FLIGHT', group: 'billing', status: 409, when: '本案已有一轮站内对话在跑', recovery: '等上一轮结束，不要并发发起' },
+  { code: 'REPORT_VERSION_CONFLICT', group: 'billing', status: 409, when: '改个案报告时 base_version 与服务端当前版本对不上（中间有人改过），本次未写入', recovery: '重新 case_report_get 读回最新版，把你的改动合到它上面，用新的 version 重试；不要重发同一份' },
 ];

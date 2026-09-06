@@ -5,12 +5,11 @@
 // CLOUDAUTH_RETURN_URL_BASE/realname/callback，前端再打 GET /api/v1/realname/status 取结论。
 //
 // 只认网页登录态：实名是把真实身份绑到账号上的一次性动作，不该由用户的 agent 代劳。
-import { NextResponse } from 'next/server';
-
 import { requireWebSession } from '@/lib/auth/guard';
 import { badRequest, failureResponse, readJsonBody, stringField } from '@/lib/auth/http';
 import { startRealname } from '@/lib/auth/realname';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 export async function POST(req: Request) {
   const guard = requireWebSession(getDb(), req);
@@ -26,7 +25,7 @@ export async function POST(req: Request) {
   });
   if (!result.ok) return failureResponse(result);
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     certify_url: result.certifyUrl,
     certify_id: result.certifyId,

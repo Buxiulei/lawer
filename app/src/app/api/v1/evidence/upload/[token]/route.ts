@@ -14,6 +14,7 @@ import { NextResponse } from 'next/server';
 import { requireIdentity, requireRealname } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
 import { storeBytes } from '@/lib/evidence/files';
+import { apiJson } from '@/lib/http/json';
 import {
   MAX_UPLOAD_BYTES_ANY,
   maxUploadBytesFor,
@@ -31,7 +32,7 @@ import {
 const TTL_MINUTES = UPLOAD_TOKEN_TTL_MS / 60_000;
 
 function err(status: number, errorCode: string, message: string): NextResponse {
-  return NextResponse.json({ ok: false, error_code: errorCode, message }, { status });
+  return apiJson({ ok: false, error_code: errorCode, message }, { status });
 }
 
 /** token 不存在与不是自己的 token 回同一个错误：能分辨的话，这条地址就成了枚举别人案卷的探针。 */
@@ -65,7 +66,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ token: s
 
   // 【实名闸在最前】与 POST /api/v1/evidence 同口径：只查一行 users、不读请求体，
   // 未实名的证据一个字节都不该落盘。
-  const realname = requireRealname(
+  const realname = await requireRealname(
     db,
     guard.identity,
     '上传证据前需先完成实名认证。证据要与本人身份绑定：未实名的证据无法保存，日后也无法用于出证。' +
@@ -158,7 +159,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ token: s
     const stored = storeBytes(db, bytes, row.mime);
     attachFile(db, claimed.id, stored.fileId);
 
-    return NextResponse.json(
+    return apiJson(
       {
         ok: true,
         upload_token_consumed: true,

@@ -12,6 +12,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { CLIENT_MATRIX } from '../app/src/lib/capabilities/client-matrix';
 import {
   ACCESS_DOC,
   CLAUDE_SKILL,
@@ -19,6 +20,7 @@ import {
   generate,
   inputHints,
   renderCapabilities,
+  renderClients,
   renderErrors,
 } from './gen-agent-docs';
 
@@ -84,5 +86,87 @@ describe('入参要点的取法', () => {
 
   it('没有入参的能力如实说「无入参」，不给一张空壳', () => {
     expect(inputHints({ type: 'object', properties: {} })).toBe('无入参');
+  });
+});
+
+describe('客户端矩阵（与设置页同一份数据、同一批片段函数）', () => {
+  it('十个客户端每个都在表里，且各有步骤与可复制片段', () => {
+    const text = renderClients();
+    expect(CLIENT_MATRIX.length).toBe(10);
+    for (const c of CLIENT_MATRIX) {
+      expect(text, `矩阵表里缺 ${c.label}`).toContain(`### ${c.label}`);
+      expect(text, `${c.label} 缺片段小标题`).toContain(`${c.snippetLabel}：`);
+    }
+  });
+
+  it('每个客户端至少给了一条步骤与一段非空片段', () => {
+    const vars = {
+      mcpUrl: 'https://m.example.test/api/mcp',
+      apiBase: 'https://m.example.test/api/v1',
+      manifestUrl: 'https://m.example.test/api/manifest',
+      openapiUrl: 'https://m.example.test/api/openapi.json',
+      skillUrl: 'https://m.example.test/skill/SKILL.md',
+      apiKey: 'k-测试',
+    };
+    for (const c of CLIENT_MATRIX) {
+      expect(c.steps(vars).length, `${c.label} 的步骤`).toBeGreaterThan(0);
+      expect(c.snippet(vars).trim().length, `${c.label} 的片段`).toBeGreaterThan(0);
+    }
+  });
+
+  /**
+   * 变异臂：往任一片段里写死一个地址（比如把 mcpUrl 换成生产域名）——这条当场红。
+   * 写死的那份在预发环境上指向生产，而它看起来完全正常。
+   */
+  it('片段与步骤里的每一个 http(s) 地址都从入参派生（写死地址 ⇒ 红）', () => {
+    const base = 'https://mut.example.test';
+    const vars = {
+      mcpUrl: `${base}/api/mcp`,
+      apiBase: `${base}/api/v1`,
+      manifestUrl: `${base}/api/manifest`,
+      openapiUrl: `${base}/api/openapi.json`,
+      skillUrl: `${base}/skill/SKILL.md`,
+      apiKey: 'k-测试',
+    };
+    const foreign: string[] = [];
+    for (const c of CLIENT_MATRIX) {
+      const text = [...c.steps(vars), c.snippet(vars)].join('\n');
+      for (const hit of text.match(/https?:\/\/[^\s"'`]+/g) ?? []) {
+        if (!hit.startsWith(base)) foreign.push(`${c.label}: ${hit}`);
+      }
+    }
+    expect(foreign, `这些地址不是从入参派生的：\n  ${foreign.join('\n  ')}`).toEqual([]);
+  });
+
+  it('接不通的那几档必须在步骤里写清楚现在该走哪条（不许含糊成「支持」）', () => {
+    const vars = {
+      mcpUrl: 'https://m.example.test/api/mcp',
+      apiBase: 'https://m.example.test/api/v1',
+      manifestUrl: 'https://m.example.test/api/manifest',
+      openapiUrl: 'https://m.example.test/api/openapi.json',
+      skillUrl: 'https://m.example.test/skill/SKILL.md',
+    };
+    // 【为什么这里不再要求「至少有一档 blocked」】OAuth 落地那天四档同时转 ready，
+    // 而那条断言会因此变红——它盯的其实是「当时恰好有几档没通」，不是任何不变量。
+    // 「已上线就不许写成没上线」由 settings/agent/__tests__/client-matrix.test.tsx 按路由钉住。
+    const blocked = CLIENT_MATRIX.filter((c) => c.status === 'blocked');
+    for (const c of blocked) {
+      const text = c.steps(vars).join('\n');
+      expect(text, `${c.label} 没说清替代路`).toMatch(/改选|改用|用 |先走|等我们的 OAuth/);
+    }
+  });
+
+  it('片段里没有明文密钥的第二种占位符（两种并存会让人以为要填两个东西）', () => {
+    const withKey = CLIENT_MATRIX.map((c) =>
+      c.snippet({
+        mcpUrl: 'https://m.example.test/api/mcp',
+        apiBase: 'https://m.example.test/api/v1',
+        manifestUrl: 'https://m.example.test/api/manifest',
+        openapiUrl: 'https://m.example.test/api/openapi.json',
+        skillUrl: 'https://m.example.test/skill/SKILL.md',
+        apiKey: 'k-真密钥',
+      }),
+    ).join('\n');
+    expect(withKey).not.toContain('<粘贴你生成时保存的密钥>');
   });
 });

@@ -52,6 +52,9 @@ function evidence(n: number, category = '考勤', extra: Partial<EvidenceRow> = 
     extracted_at: null,
     brief_json: null,
     brief_version: 0,
+    brief_error: null,
+    void_reason: null,
+    voided_at: null,
     ...extra,
   }));
 }
@@ -103,6 +106,8 @@ function makeSnapshot(over: Partial<CaseSnapshot> = {}): CaseSnapshot {
     deadlines: [],
     storedIntakeStage: null,
     referredNbdpsy: false,
+    report: { state: null, since: null, changes: 0, detail: '' },
+    crisisHits72h: 0,
     ...over,
   };
   // 夹具默认「窗口即全部」：没显式给 timelineStats 时按 timeline 推。

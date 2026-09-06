@@ -44,7 +44,8 @@ export const claimCalc: Capability = {
     '按案情算一笔金额并直接落库（同案同 kind 只留一条，再算一次是修正）。' +
     '返回金额、算式 formula、逐步骤 steps、依据 basis（条号 + 逐字原文 + 来源卡 id）与封顶提示。' +
     '**任何要写进文书、说给用户听或拿去谈的金额都必须经它算**，不要自己心算、也不要转述记忆里的数。' +
-    '入参缺什么会逐条回一句人话告诉你缺什么（七种算法的必填项互不相同），照着补齐再调一次即可。' +
+    '入参不齐时**一次把缺的和填错的全部列出来**（回包里有 missing / invalid 两张表，' +
+    '七种算法的必填项互不相同）——那就是本次全部的问题，一次补齐再调一次，不要一次只补一个。' +
     '金额单位一律是**分**，且是「应得」不是「到手」。',
   inputSchema: {
     type: 'object',
@@ -87,7 +88,15 @@ export const claimCalc: Capability = {
     // 【为什么把计算也裹进事务】失败时不能留下台账行：留了的话同一个 client_ref
     // 第二次进来会被当成「已经算过了」，回一个根本不存在的 target。
     // 抛出去让 withClientRef 的事务整段回滚，在外面接住转成 isError。
-    class CalcRejected extends Error {}
+    class CalcRejected extends Error {
+      constructor(
+        message: string,
+        readonly missing: string[],
+        readonly invalid: string[],
+      ) {
+        super(message);
+      }
+    }
     let payload: Record<string, unknown> = {};
     let created = false;
     try {
@@ -96,7 +105,7 @@ export const claimCalc: Capability = {
         { caseId, tool: 'claim_calc', clientRef: args.client_ref, keyId: identity.keyId ?? null },
         () => {
           const res = runClaimCalc(merged, env);
-          if (!res.ok) throw new CalcRejected(res.error);
+          if (!res.ok) throw new CalcRejected(res.error, res.missing ?? [], res.invalid ?? []);
           payload = res.payload;
           created = res.created;
           return { table: 'claims', id: res.claimId };
@@ -114,11 +123,15 @@ export const claimCalc: Capability = {
         : { ok: true as const, claim_id: done.target.id, created, deduped: false, ...payload };
     } catch (err) {
       if (err instanceof CalcRejected) {
+        // missing / invalid 两张表原样回：回包里有结构化清单，调用方不必去解析那段中文，
+        // 也不会只挑第一条补。message 是给人读的那一份，两者同源（都由 rejectInputs 产出）。
         return {
           ok: false as const,
           status: 400,
           errorCode: 'INVALID_CALC_INPUT',
           message: err.message,
+          missing: err.missing,
+          invalid: err.invalid,
         };
       }
       throw err;
@@ -231,6 +244,7 @@ export const claimsList: Capability = {
   domains: ['*'],
   exposeTo: ['mcp'],
   precondition: [],
+  rest: { method: 'GET', path: '/api/v1/cases/{id}/claims' },
   title: '列出诉求清单',
   description:
     '列出案件下的全部诉求项与**合计金额**（合计由服务端算，不要自己把各项加起来——' +

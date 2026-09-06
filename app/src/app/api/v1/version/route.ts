@@ -7,8 +7,7 @@
 // 【sha 可能是 null】构建时取不到 HEAD 就如实给 null——见 next.config.ts 的说明：
 // 一个假的 SHA 会让坏滚更看起来已核验，比没有这个端点更坏。
 // 核验方读到 null 应当判「无法核验」，**不是**判「通过」。
-import { NextResponse } from 'next/server';
-
+import { apiJson } from '@/lib/http/json';
 import { loadedPackCount } from '@/lib/knowledge';
 
 /**
@@ -40,7 +39,7 @@ function kbCards(): number | null {
 
 export async function GET() {
   const sha = process.env.BUILD_SHA || null;
-  return NextResponse.json(
+  return apiJson(
     { ok: true, sha, built_at: process.env.BUILD_AT || null, kb_cards: kbCards() },
     { headers: { 'cache-control': 'no-store' } },
   );

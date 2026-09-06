@@ -143,7 +143,9 @@ describe('写接口', () => {
       ctx(caseA),
     );
     expect(added.status).toBe(201);
-    expect((await added.json()).event.happened_at).toBe('2026-08-15 01:30:00');
+    // 存的是 UTC canonical（'2026-08-15 01:30:00'），**回显带 +08:00**：
+    // 入参给的什么时刻，回包读出来就是同一个时刻，中间不需要收到它的人自己猜时区。
+    expect((await added.json()).event.happened_at).toBe('2026-08-15T09:30:00+08:00');
 
     const done = await patchAction(request('PATCH', token), {
       params: Promise.resolve({ id: String(caseA), actionId: String(actionA) }),

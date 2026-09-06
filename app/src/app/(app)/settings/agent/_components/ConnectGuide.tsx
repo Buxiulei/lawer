@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/shadcn/skeleton';
 import { CodeBlock } from '../../_components/CodeBlock';
 import { CurrentKey } from '../../_components/CurrentKey';
 import { SetupPrompt } from '../../_components/SetupPrompt';
+import { NoToolCard } from './NoToolCard';
 import { SignInHint } from '../../_components/SignInHint';
 import type { SetupUrls } from '../../_components/agentSetup';
 import { useAgentSetup } from '../../_components/useAgentSetup';
@@ -33,6 +34,7 @@ import {
   type AgentKeySecret,
   type IssuedKey,
 } from '../../_components/useAgentKeySecret';
+import { ClientMatrix } from './ClientMatrix';
 
 /**
  * 生成那一次的响应里，这一页还用得上的部分：接入地址（省一次 agent-setup 往返）
@@ -139,11 +141,24 @@ export function ConnectGuide() {
             {urls && (
               <>
                 <p className="text-[14px] leading-6 text-ink-2">
-                  选你手里那个客户端；不确定就用「通用」，让它自己判断走 MCP 还是 REST。
+                  选你手里那个客户端，下面会给这一家的步骤与一段可直接复制的配置。
+                  名单里没有的，用「自建 agent（REST）」那一档。
                 </p>
                 <div className="mt-2">
                   <DiscreetCollapse label="接入配置（点开查看）">
-                    <SetupPrompt info={urls} apiKey={apiKey} />
+                    <ClientMatrix info={urls} apiKey={apiKey} />
+                    {/*
+                      整段话术仍留在这里：矩阵给的是「怎么连」，话术给的是「连上之后
+                      让它先读什么、守什么规矩」。两件事都需要，且各有各的复制按钮。
+                    */}
+                    <div className="mt-5 border-t border-line pt-4">
+                      <p className="text-[13px] leading-5 font-semibold text-ink">
+                        连上之后，把这段话术也发给它
+                      </p>
+                      <div className="mt-1.5">
+                        <SetupPrompt info={urls} apiKey={apiKey} />
+                      </div>
+                    </div>
                   </DiscreetCollapse>
                 </div>
               </>
@@ -161,6 +176,13 @@ export function ConnectGuide() {
           <Step no="四" title="验一下接上没有">
             <VerifyStep issuedId={issued?.id ?? null} />
           </Step>
+
+          {/*
+            上面四步是给能接工具的客户端的。接不了的（DeepSeek / 豆包 / 国内 Gemini 网页版）
+            走这张卡：复制开场白 → 聊 → 把回复粘回来。放在四步之后而不是并列成第五步，
+            是因为它不是这条路上的一环，而是另一条路——摆成第五步会让所有人都以为还得做它。
+          */}
+          <NoToolCard />
         </div>
       )}
 
@@ -272,6 +294,7 @@ function IssueKey({
         mcp_url: body.mcp_url,
         api_base: body.api_base,
         manifest_url: body.manifest_url,
+        openapi_url: body.openapi_url,
         skill_url: body.skill_url,
       });
       // 顶掉 hook 的 'none' 态：刚生成的这把就是当前那把，不必再往返一趟去问

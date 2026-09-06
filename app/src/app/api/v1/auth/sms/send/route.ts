@@ -1,10 +1,9 @@
 // app/src/app/api/v1/auth/sms/send/route.ts
 // POST /api/v1/auth/sms/send  {phone} → {ok, ttl_seconds, retry_after}
-import { NextResponse } from 'next/server';
-
 import { extractClientIp, sendPhoneCode } from '@/lib/auth';
 import { badRequest, failureResponse, readJsonBody, stringField } from '@/lib/auth/http';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 export async function POST(req: Request) {
   const body = await readJsonBody(req);
@@ -16,7 +15,7 @@ export async function POST(req: Request) {
   });
   if (!result.ok) return failureResponse(result);
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     ttl_seconds: result.ttlSeconds,
     retry_after: result.retryAfter,

@@ -3,8 +3,9 @@
 // 协议细节与"为什么手写不引 SDK"见 lib/mcp/jsonrpc.ts 顶部。
 //
 // 路由照例是薄的：鉴权 → 解析 JSON-RPC → 分发到 lib/mcp/tools 的注册表 → 包壳返回。
-import { isRealnameVerified } from '@/lib/auth/guard';
 import { hasScope, resolveIdentity } from '@/lib/auth/identity';
+import { OAUTH_PATHS } from '@/lib/auth/oauth';
+import { checkPreconditions } from '@/lib/capabilities/invoke';
 import { recordClientName } from '@/lib/db/api-keys';
 import { getDb } from '@/lib/db/client';
 import { findTool, TOOLS } from '@/lib/mcp/tools';
@@ -21,6 +22,7 @@ import {
   toolTextResult,
   type JsonRpcRequest,
 } from '@/lib/mcp/jsonrpc';
+import { resolveBaseUrl } from '@/lib/mcp/setup';
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -31,12 +33,26 @@ function json(body: unknown, status = 200): Response {
 
 export async function POST(req: Request) {
   // 未鉴权一律 401，且带 WWW-Authenticate 让客户端知道该怎么补
+  //
+  // 【resource_metadata 那一段不是装饰】只认 OAuth 的客户端（网页版连接器）就是靠它
+  // 从这条 401 里找到授权服务器的（RFC 9728）。省掉它的形态是：客户端收到 401，
+  // 无从知道该去哪儿授权，界面上只显示一句"连接失败"，我们这边看不到任何异常。
   const identity = resolveIdentity(getDb(), req.headers);
   if (!identity) {
-    return new Response(JSON.stringify({ error: 'unauthorized', message: '需要有效的 api key' }), {
-      status: 401,
-      headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' },
-    });
+    const metadata = `${resolveBaseUrl(req)}${OAUTH_PATHS.protectedResourceMetadata}`;
+    return new Response(
+      JSON.stringify({
+        error: 'unauthorized',
+        message: '需要有效的 api key，或走 OAuth 授权拿到的 access token',
+      }),
+      {
+        status: 401,
+        headers: {
+          'content-type': 'application/json',
+          'www-authenticate': `Bearer resource_metadata="${metadata}"`,
+        },
+      },
+    );
   }
 
   const protocolCheck = checkProtocolHeader(req.headers);
@@ -116,22 +132,14 @@ export async function POST(req: Request) {
       }
 
       // 【前置闸由注册表驱动，不由各工具自觉】precondition 是能力条目上的一个字段，
-      // 拦在这里就等于"凡是声明了实名的工具，一条也漏不掉"。让各工具在自己的 run 里
-      // 各写一句的形态是：新加一条写能力时忘了抄那一句——它照常工作、照常返回 200，
-      // 只是未实名的人也能往案卷里写东西，没有任何一处会报错。
-      if (tool.precondition.includes('realname') && !isRealnameVerified(getDb(), identity.uid)) {
-        return json(
-          rpcResult(
-            id,
-            toolErrorResult(
-              'REALNAME_REQUIRED',
-              `${tool.name} 需要账号先完成实名认证，本次调用没有产生任何写入。` +
-                '原因是这一步的产物要与本人身份绑定（材料要能证明是谁存的，出证上要印实名快照）。' +
-                '请让用户到网页「设置 → 实名认证」完成认证后再调一次；' +
-                '认证前不要改用别的工具绕开这一步，绕过去的记录日后不能用于出证。',
-            ),
-          ),
-        );
+      // 判定本身在 lib/capabilities/invoke.ts，**REST 通用桥调的是同一份**——
+      // 两条入口各写一句的形态是：一边拦住了、另一边放行，而两边都不报错。
+      // 【为什么 await】realname 闸走 realnameVerifiedOrLinked，本地没实名时会去问一次
+      // NBDpsy（实名互认）——那一步是异步的。不 await 的形态是：gate 恒为一个 truthy 的
+      // Promise，于是每一条带 realname 前置的工具都被这条 403 拦死，而没有任何一处报错。
+      const gate = await checkPreconditions(getDb(), tool, identity);
+      if (gate) {
+        return json(rpcResult(id, toolErrorResult({ ...gate })));
       }
 
       // 业务失败（案件不存在、枚举非法）走 isError=true，让模型能读到原因自行纠正
@@ -141,8 +149,10 @@ export async function POST(req: Request) {
         | { ok: false; errorCode: string; message: string }
         | Record<string, unknown>;
       if (outcome && (outcome as { ok?: boolean }).ok === false) {
-        const failure = outcome as { errorCode: string; message: string };
-        return json(rpcResult(id, toolErrorResult(failure.errorCode, failure.message)));
+        // 【整个失败对象交给 toolErrorResult】能力挂在失败对象上的结构化清单要跟着出去，
+        // 挑字段转交的形态是：新加一张表的那个能力在描述里承诺了它，回包却少那几个键。
+        const failure = outcome as { errorCode: string; message: string } & Record<string, unknown>;
+        return json(rpcResult(id, toolErrorResult(failure)));
       }
       return json(rpcResult(id, toolTextResult(outcome)));
     }

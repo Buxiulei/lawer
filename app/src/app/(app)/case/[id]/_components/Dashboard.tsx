@@ -151,6 +151,7 @@ export function DashboardBody({
         </p>
       )}
       <DeadlineTiles deadlines={deadlines} />
+      <ReportEntry caseId={caseId} />
       <DossierEntry caseId={caseId} />
       {/* 「用你自己的 agent」的常驻入口。排在期限与公司档案之后、最近材料之前：
           它是入口不是内容，不该挤在"该做什么 / 什么时候之前"前面；
@@ -160,6 +161,37 @@ export function DashboardBody({
         <RecentRecords caseId={caseId} records={data.records} />
       </div>
     </div>
+  );
+}
+
+/**
+ * 个案报告的入口。这一页是**整理过的那一份**：驾驶舱回答「现在该做什么」，
+ * 报告回答「这案子到底是怎么回事」——后者在换 agent、隔了两周回来、
+ * 或者要把事情讲给别人听的时候才是用得上的那份。
+ *
+ * 【低调模式换词】它是壳层（一行入口卡的标题），走 NEUTRAL_WORD.report，
+ * 与侧栏、面包屑同一个词——四处各写一个三元，漏一处就是一次泄漏。
+ */
+function ReportEntry({ caseId }: { caseId: string }) {
+  const { discreet } = useDiscreet();
+  return (
+    <Link
+      href={`/case/${caseId}/report`}
+      data-mo-enter
+      className="mt-4 flex min-h-11 items-center gap-3 rounded-[10px] border border-line bg-surface px-3.5 py-3 no-underline"
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] leading-6 font-medium text-ink">
+          {discreet ? NEUTRAL_WORD.report : '个案报告'}
+        </span>
+        <span className="mt-0.5 block text-[13px] leading-5 text-ink-2">
+          整理过的那一份：从头到尾发生了什么、争在哪、手上有什么、下一步是什么。
+        </span>
+      </span>
+      <span aria-hidden className="shrink-0 text-[15px] text-ink-2">
+        ›
+      </span>
+    </Link>
   );
 }
 

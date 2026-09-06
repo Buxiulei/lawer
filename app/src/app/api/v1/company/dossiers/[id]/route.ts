@@ -7,17 +7,16 @@
 //
 // 归属：档案是公司维度的平台资产（同一家公司全站一条），不是案件私有资产。
 // 没权限与不存在返回**同一个** 404——否则这个端点就成了「这家公司有没有人建过档」的探针。
-import { NextResponse } from 'next/server';
-
 import { parseId, requireIdentity } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
 import { getDossierBillingView } from '@/lib/company/dossier-billing';
+import { apiJson } from '@/lib/http/json';
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const guard = requireIdentity(getDb(), req, 'case:read');
   if (!guard.ok) return guard.response;
 
-  const notFound = NextResponse.json(
+  const notFound = apiJson(
     {
       ok: false,
       error_code: 'DOSSIER_NOT_FOUND',
@@ -35,7 +34,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const view = getDossierBillingView(getDb(), dossierId, guard.identity.uid);
   if (!view) return notFound;
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     dossier: {
       id: view.dossier.id,

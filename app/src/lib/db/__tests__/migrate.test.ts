@@ -3,11 +3,13 @@ import Database from 'better-sqlite3';
 import { runMigrations } from '../migrate';
 
 /**
- * 全部表名单（53 张）。新增表必须同步本列表——漏改即测试失败，防迁移文件与预期悄悄分叉。
+ * 迁移**必须建成的表清单**（下方测试断言 sqlite_master ⊇ 本清单）。这是一份「至少要有这些」
+ * 的核对单，**不是全量总数**：新增表时想让它进核对单就往下面加一行，不想加也不会红。
  *
- * 【张数怎么来的】不照抄任何一支的自报数：48 = 实跑 runMigrations 之后数 sqlite_master 里的用户表。
- * 合并时两支分别报过 47 与 42，两个数在各自基线上都对，加起来却不是并集——
- * 三张表（pricing_config / entitlements / company_dossiers）两支都建，去重后才是真值。
+ * 【为什么不再断言「张数恰好等于 N」】那种写死总数的判据在合并时最容易错：五支各自在自己
+ * 基线上数出一个数（47 / 42 / 48…），合并后没有一支的数是并集的真值，得有人手工对齐一次。
+ * 改成「实测表集合 ⊇ 本清单」后，任一分支再加一张表都不必回来改任何常数即绿；
+ * 清单只负责钉住「这些关键表一个都不能漏建」，多出来的表不算错。
  */
 const ALL_TABLES = [
   // 用户与实名
@@ -40,8 +42,16 @@ const ALL_TABLES = [
   'admin_audit',
   // 服务报价与内容提取任务
   'service_quotes', 'extraction_jobs',
-  // 一次性上传地址
-  'evidence_upload_tokens',
+  // 一次性上传地址 / 一次性下载地址
+  'evidence_upload_tokens', 'file_download_tokens',
+  // 个案报告（长期记忆）
+  'case_reports',
+  // 危机信号留痕（事实卡首行「近 72 小时」的来源）
+  'crisis_hits',
+  // 转介台账（设计稿 §14）
+  'referrals',
+  // OAuth 2.1 授权服务器
+  'oauth_clients', 'oauth_codes', 'oauth_tokens',
 ];
 
 function newDb(): Database.Database {
@@ -106,22 +116,27 @@ describe('runMigrations', () => {
     db = newDb();
   });
 
-  it('幂等：连跑两遍不抛错', () => {
-    expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(53);
-  });
-
-  it('53 张表全部建成', () => {
+  /** 当前 sqlite_master 里的用户表名集合。 */
+  function userTables(): Set<string> {
     const rows = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[];
-    const got = new Set(rows.map((r) => r.name));
-    // 先查名单自身没有重名：两支各自往名单尾巴上追加同一张表时，下面那条数量断言只会报
-    // 「47 不等于 50」，不会说是哪张表重了——这条把重复的表名直接点出来。
+    return new Set(rows.map((r) => r.name));
+  }
+
+  it('可重入：连跑第二遍不抛错，且表集合一字不变', () => {
+    // beforeEach 已经跑过一遍，这里再跑一遍——中断自愈靠的就是「纯加法 + IF NOT EXISTS」重跑无副作用。
+    const before = userTables();
+    expect(() => runMigrations(db)).not.toThrow();
+    expect(userTables()).toEqual(before);
+  });
+
+  it('清单里的表全部建成（实测表集合 ⊇ 清单；多出来的表不算错）', () => {
+    const got = userTables();
+    // 先查清单自身没有重名：漏看会让「缺表」判据把一张实际建了的表误报成缺（同名去重后 has 仍为真）。
     const dup = ALL_TABLES.filter((t, i) => ALL_TABLES.indexOf(t) !== i);
     expect(dup, `ALL_TABLES 里有重复表名：${dup.join(', ')}`).toEqual([]);
     for (const t of ALL_TABLES) expect(got.has(t), `缺表 ${t}`).toBe(true);
-    expect(got.size).toBe(ALL_TABLES.length);
   });
 
   /**

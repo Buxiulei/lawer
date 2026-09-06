@@ -8,11 +8,12 @@ import crypto from 'node:crypto';
 
 import type { Database } from 'better-sqlite3';
 
+import { markReportStale } from '@/lib/cases/report-stale';
 import { decryptField, encryptField } from '@/lib/crypto';
 import { findCaseById } from '@/lib/db/cases';
 import * as store from '@/lib/db/evidence';
 
-import { ensureBrief, generateBrief } from './brief';
+import { ensureBrief, generateBrief, recordBriefError } from './brief';
 import { defaultBriefLlm } from './brief-llm';
 import { storeBytes } from './files';
 import * as sidecar from './sidecar-client';
@@ -250,6 +251,18 @@ export async function attestEvidence(
   const ev = store.findEvidenceDetail(db, input.evidenceId);
   if (!ev || ev.user_id !== input.userId) return NOT_FOUND();
 
+  // 【作废的材料一律不出证，且拦在预留订单号之前】拦晚一步就会留下一个空壳订单：
+  // attestations 里多一行 pending，用户在验证页上查得到、却永远等不到证明。
+  if (ev.voided_at !== null) {
+    return fail(
+      409,
+      'EVIDENCE_VOIDED',
+      `这件材料已经作废（理由：${ev.void_reason ?? '未记录'}），不能出证，本次没有产生任何订单。` +
+        '为什么：出证是把材料正式拿出去用的动作，而作废正是"这份不作数"的声明，两者互斥。' +
+        '怎么办：确实要用它就先撤销作废；只是想留个记录的话，材料本身仍在档案里。',
+    );
+  }
+
   let att = reserveAttestation(db, ev);
   if (att.status === ATT_CERTIFIED && att.cert_pdf_file_id) {
     return await certified(db, ev.id, att);
@@ -296,6 +309,10 @@ export async function attestEvidence(
       status: ATT_CERTIFIED,
     });
     store.updateEvidenceStatus(db, ev.id, EV_CERTIFIED);
+    // 出证是这件材料被正式拿出去用的时刻，报告的「证据地图」要重记一遍
+    // （过期唯一入口，见 lib/cases/report-stale）。挂在这一段里而不是 certified()：
+    // 那个收尾函数在"早就出过证了"的重放路径上也会跑，标在那儿等于每查一次就过期一次。
+    markReportStale(db, ev.case_id, '证据出证');
     att = reload(db, att.id);
   }
 
@@ -350,13 +367,22 @@ async function ensureBriefAfterAttest(db: Database, evidenceId: number): Promise
     | undefined;
   if (!row || row.v > 0) return;
   const llm = defaultBriefLlm();
-  // 没有可用模型时什么都不做：出证已经成功了，缺一张卡片不该让它回滚。
-  if (!llm) return;
+  // 没有可用模型时出证照旧成功（缺一张卡片不该让它回滚），但**要留痕**：
+  // 只 return 的话，这件材料在库里与"从没试过"同形（09-06 生产缺口）。
+  if (!llm) {
+    recordBriefError(
+      db,
+      evidenceId,
+      '没有可用的简报模型（缺 provider key，或那家不实现 chatJSON），出证时没能附上简报。' +
+        '存证本身已经完成，配好模型后可用 evidence_brief_regenerate 补一份（按 0 公道值计价）。',
+    );
+    return;
+  }
   try {
-    const r = await generateBrief(db, evidenceId, llm);
-    if (!r.ok) console.warn(`[attest] 证据 ${evidenceId} 的简报没写成：${r.error}`);
+    // generateBrief 内部已经落 brief_error 并打日志
+    await generateBrief(db, evidenceId, llm);
   } catch (err) {
-    console.warn(`[attest] 证据 ${evidenceId} 的简报生成抛错（不影响出证）：`, err);
+    recordBriefError(db, evidenceId, `简报生成抛错（不影响出证）：${(err as Error).message}`);
   }
 }
 

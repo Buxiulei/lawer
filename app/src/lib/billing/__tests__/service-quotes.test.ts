@@ -69,7 +69,7 @@ function expire(db: Database.Database, quoteId: number) {
 const OCR_PER_PAGE = PRICE_FALLBACK['ocr.per_page'];
 
 describe('计价口径', () => {
-  test('五个可计价服务各自读自己的键，单价×数量即报价额', () => {
+  test('每个可计价服务各自读自己的键，单价×数量即报价额', () => {
     const { db, uid, caseId } = makeDb();
     const expected: Record<PricedService, number> = {
       ocr: PRICE_FALLBACK['ocr.per_page'],
@@ -77,6 +77,7 @@ describe('计价口径', () => {
       video: PRICE_FALLBACK['video.per_minute'],
       doc_review: PRICE_FALLBACK['doc_review.per_doc'],
       brief: PRICE_FALLBACK['brief.per_item'],
+      export: PRICE_FALLBACK['draft_export.per_pdf'],
     };
     for (const service of PRICED_SERVICES) {
       const r = mustOk(quoteService(db, { userId: uid, caseId, service, payload: { units: 3 } }));

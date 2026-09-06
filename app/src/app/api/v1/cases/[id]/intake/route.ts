@@ -5,12 +5,11 @@
 // 阶段、公司、金额输入、时间线、诉求、三件事要么一起进去，要么一件都别进。
 // 拆成五六个请求时，中间任何一条断了都会留下半截档案，而用户在屏幕上看不出断在哪儿——
 // 他只会觉得「我明明填了公司名」。事务在领域层（lib/cases/intake），这里只做壳。
-import { NextResponse } from 'next/server';
-
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 import * as cases from '@/lib/cases';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 const NOT_FOUND = { ok: false, error_code: 'CASE_NOT_FOUND', message: '案件不存在' };
 
@@ -19,11 +18,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!guard.ok) return guard.response;
 
   const caseId = parseId((await params).id);
-  if (caseId === null) return NextResponse.json(NOT_FOUND, { status: 404 });
+  if (caseId === null) return apiJson(NOT_FOUND, { status: 404 });
 
   const body = await readJsonBody(req);
   if (!body) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'INVALID_BODY', message: '请求体格式不正确' },
       { status: 400 },
     );
@@ -47,5 +46,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   });
   if (!result.ok) return domainFailure(result);
 
-  return NextResponse.json({ ok: true, case_id: caseId, saved: result.result }, { status: 201 });
+  return apiJson({ ok: true, case_id: caseId, saved: result.result }, { status: 201 });
 }

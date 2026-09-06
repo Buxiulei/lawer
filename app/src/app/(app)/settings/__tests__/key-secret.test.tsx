@@ -34,6 +34,7 @@ const brief = (over: Partial<KeyBrief>): KeyBrief => ({
   enabled: true,
   last_used_at: null,
   viewable: true,
+  source: 'self',
   ...over,
 });
 
@@ -74,6 +75,38 @@ describe('挑哪一把填进话术', () => {
   it('都没用过就取列表第一条（GET /keys 按 id DESC，即最近创建的那把）', () => {
     const got = pickManageable([brief({ id: 9, name: '最近建的' }), brief({ id: 2, name: '早先建的' })]);
     expect(got!.name).toBe('最近建的');
+  });
+
+  /*
+   * 【要害】授权行不是这一屏能管的东西。它 viewable=false，被挑中就走 legacy 那一档，
+   * 于是接入卡对着一条 OAuth 授权说「这是一把旧密钥……换一把新的就能看见了」并递上
+   * 轮换按钮，而同屏的 API key 卡对同一行写着「没有可复制的明文」。
+   * 「用过的优先」这条规则恰好让它最容易被选中：连接器一用，它的 last_used_at 就是最新的。
+   */
+  it('【要害】授权行不参选，哪怕它是最近用过的那一行', () => {
+    const got = pickManageable([
+      brief({ id: 9, name: 'ChatGPT', source: 'oauth', viewable: false, last_used_at: '2026-09-06 10:00:00' }),
+      brief({ id: 3, name: '我自己建的', last_used_at: '2026-08-01 10:00:00' }),
+    ]);
+    expect(got!.name).toBe('我自己建的');
+  });
+
+  it('只有授权行 → null（走「还没有密钥」，不是摆一把没法管的）', () => {
+    expect(
+      pickManageable([
+        brief({ id: 9, name: 'ChatGPT', source: 'oauth', viewable: false, last_used_at: '2026-09-06 10:00:00' }),
+      ]),
+    ).toBeNull();
+  });
+
+  /* 变异臂：同一组行，只把 source 改回 'self'，它就该被选中——
+     否则上面两条落在「viewable=false 的一律不选」之类的空集上，换个原因照样过。 */
+  it('【变异臂】同一行 source 换成 self 就照选不误（证明挡的是 source 而不是别的）', () => {
+    const got = pickManageable([
+      brief({ id: 9, name: 'ChatGPT', source: 'self', viewable: false, last_used_at: '2026-09-06 10:00:00' }),
+      brief({ id: 3, name: '我自己建的', last_used_at: '2026-08-01 10:00:00' }),
+    ]);
+    expect(got!.name).toBe('ChatGPT');
   });
 });
 
@@ -133,6 +166,7 @@ describe('话术里填的是真密钥', () => {
     mcp_url: 'https://example.test/api/mcp',
     api_base: 'https://example.test/api/v1',
     manifest_url: 'https://example.test/api/manifest',
+    openapi_url: 'https://example.test/api/openapi.json',
     skill_url: 'https://example.test/skill/SKILL.md',
   };
 

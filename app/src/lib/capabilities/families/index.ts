@@ -5,25 +5,44 @@
 // 的 tools/list 一条）钉着这个顺序与个数。
 //
 // 【加新能力的规矩】追加在**末尾**，不插在中间。想按族分组读，看各自的 families/*.ts。
+import { meGet, quoteList } from './account';
 import { actionComplete, actionList } from './actions';
 import { actionCreate } from './actions-write';
 import { caseFacts, caseGet, caseList, caseUpdate, intakeSubmit } from './case';
 import { claimCalc, claimsList, claimsUpsert } from './claims';
-import { companyProfileUpsert } from './company';
+import {
+  companyGraphGet,
+  companyProbe,
+  companyProfileUpsert,
+  companyWatchSet,
+  dossierConfirm,
+  dossierGet,
+  dossierQuote,
+} from './company';
 import { deadlineList } from './deadlines';
 import { deadlineResolve, deadlineSet } from './deadlines-write';
 import { docGet, docList, docSubmit, transcriptSubmit } from './docs';
 import { draftGet, draftList, draftWrite } from './drafts';
-import { emotionLog } from './emotion';
+import { draftExport, shareCreate, shareRevoke } from './drafts-export';
+import { crisisCheck, emotionLog } from './emotion';
 import {
   evidenceBriefGet,
+  evidenceBriefRegenerate,
   evidenceBriefUpdate,
   evidenceExtract,
   evidenceGet,
   evidenceList,
 } from './evidence';
-import { attestVerify, evidenceAttest, evidenceRegister, evidenceUploadUrl } from './evidence-write';
-import { knowledgeGet, knowledgeSearch } from './knowledge';
+import {
+  attestVerify,
+  evidenceAttest,
+  evidenceRegister,
+  evidenceUploadUrl,
+  evidenceVoid,
+} from './evidence-write';
+import { citationCheck, knowledgeGet, knowledgeSearch } from './knowledge';
+import { referralCreate, referralList } from './referral';
+import { caseReportGet, caseReportUpdate } from './report';
 import { timelineAdd, timelineList, timelineMilestone } from './timeline';
 
 import type { Capability } from '../registry';
@@ -67,4 +86,23 @@ export const CAPABILITIES: Capability[] = [
   evidenceRegister,
   evidenceAttest,
   attestVerify,
+  caseReportGet,
+  caseReportUpdate,
+  crisisCheck,
+  meGet,
+  quoteList,
+  citationCheck,
+  companyProbe,
+  dossierQuote,
+  dossierConfirm,
+  dossierGet,
+  companyGraphGet,
+  companyWatchSet,
+  shareCreate,
+  shareRevoke,
+  draftExport,
+  referralCreate,
+  referralList,
+  evidenceVoid,
+  evidenceBriefRegenerate,
 ];
