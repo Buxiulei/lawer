@@ -157,3 +157,90 @@ describe.each(Object.keys(DOMAINS))('%s 包的每个首诊字段都有人接', (
     db.close();
   });
 });
+
+/* ── 选填的日期与金额：填了要落，填坏了不许落 ────────────────── */
+
+describe('选填格的落库口径（persist 在 validateIntake 够不着的那一半）', () => {
+  /** 造一个「这两格是选填」的领域包用不上——直接拿注册表里真有这种声明的那个包 */
+  const optionalPack = Object.entries(DOMAINS).find(([, p]) =>
+    p.intakeSchema.some((f) => f.key === 'employedFrom' && !f.required),
+  );
+
+  function freshCase(packKey: string, stage: string) {
+    const db = new BetterSqlite3(':memory:');
+    db.pragma('foreign_keys = ON');
+    runMigrations(db);
+    const userId = Number(
+      db
+        .prepare("INSERT INTO users (phone_hash, auth_status, created_at) VALUES ('h', '未认证', '2026-09-01T00:00:00.000Z')")
+        .run().lastInsertRowid,
+    );
+    const caseId = Number(
+      db
+        .prepare('INSERT INTO cases (user_id, title, stage, domain, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(userId, '案子', stage, packKey, '2026-09-01T00:00:00.000Z').lastInsertRowid,
+    );
+    return { db, userId, caseId };
+  }
+
+  /** 把这个包的必填项填齐（只填必填，选填由各条自己给） */
+  function requiredBody(pack: (typeof DOMAINS)[string]): Record<string, unknown> {
+    const body: Record<string, unknown> = {};
+    for (const f of pack.intakeSchema) {
+      if (!f.required) continue;
+      const param = INTAKE_PARAM_OF_KEY[f.key];
+      body[param] =
+        f.kind === 'enum'
+          ? (f.values ?? [])[0]
+          : f.kind === 'stringList'
+            ? ['第一项']
+            : f.kind === 'money'
+              ? 80000
+              : f.kind === 'date'
+                ? '2025-03-04'
+                : `填了字-${f.key}`;
+    }
+    return body;
+  }
+
+  it('注册表里确有把这两格声明成选填的包（没有的话下面几条恒真）', () => {
+    expect(optionalPack, '没有任何包把 employedFrom 声明成选填 ⇒ 本组无从构造').toBeTruthy();
+  });
+
+  it('选填的日期与金额，**填了就落库**（变异：把 persist 里那两行条件展开改回 value.xxx → 红）', () => {
+    if (!optionalPack) return;
+    const [key, pack] = optionalPack;
+    const { db, userId, caseId } = freshCase(key, pack.stages[0]);
+    const body = { ...requiredBody(pack), employed_from: '2025-03-04', monthly_wage_fen: 80000 };
+    const res = submitIntake(db, { caseId, userId, ...intakeInputFromBody(body) });
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    const row = db.prepare('SELECT employed_from, monthly_wage_fen FROM cases WHERE id = ?').get(caseId) as {
+      employed_from: string | null;
+      monthly_wage_fen: number | null;
+    };
+    expect(row.employed_from).toBe('2025-03-04');
+    expect(row.monthly_wage_fen).toBe(80000);
+    db.close();
+  });
+
+  it('选填格填坏了（格式不对 / 指向将来 / 金额非正）不写这个键，而不是写一个坏值进去', () => {
+    if (!optionalPack) return;
+    const [key, pack] = optionalPack;
+    for (const bad of [
+      { employed_from: '2025/03/04', monthly_wage_fen: 0 },
+      { employed_from: '2999-01-01', monthly_wage_fen: -1 },
+      { employed_from: '2025-02-31', monthly_wage_fen: 1.5 },
+    ]) {
+      const { db, userId, caseId } = freshCase(key, pack.stages[0]);
+      const res = submitIntake(db, { caseId, userId, ...intakeInputFromBody({ ...requiredBody(pack), ...bad }) });
+      expect(res.ok, JSON.stringify(res)).toBe(true);
+      const row = db.prepare('SELECT employed_from, monthly_wage_fen FROM cases WHERE id = ?').get(caseId) as {
+        employed_from: string | null;
+        monthly_wage_fen: number | null;
+      };
+      expect(row.employed_from, `${bad.employed_from} 不该落库`).toBeNull();
+      expect(row.monthly_wage_fen, `${bad.monthly_wage_fen} 不该落库`).toBeNull();
+      db.close();
+    }
+  });
+});

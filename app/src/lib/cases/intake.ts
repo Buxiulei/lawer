@@ -312,7 +312,12 @@ function persist(
   // 不是落库层的判断；落库层该做的是"包声明要问的、用户填了的，就得存下来"。
   // 【填了但格式不对的那一格】选填字段没有 errorCode，说不出话来，只能不写这个键
   //（与下面「只改不删」同一条口径）。这条缺口记在本票的 openQuestions 里。
-  const employedFrom = value.employedFrom ?? normalizeDateOnly(input.employedFrom) ?? undefined;
+  const today = nowIso.slice(0, 10);
+  const optionalDay = normalizeDateOnly(input.employedFrom);
+  // 【指向将来的那一天也不写】选填格没有 errorCode，说不出话来；但把一个还没到的日子写进
+  // 起算列，比不写更坏——时效会按它往后推，屏幕上显示的每一句都很正常。
+  const employedFrom =
+    value.employedFrom ?? (optionalDay !== null && optionalDay <= today ? optionalDay : undefined);
   const wageRaw = input.monthlyWageFen;
   const monthlyWageFen =
     value.monthlyWageFen ??
