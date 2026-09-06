@@ -43,3 +43,32 @@ export function draftBody(kind: string, content: string, consequences: string | 
     ? `${content}\n\n${confirmationFooter(consequences)}`
     : content;
 }
+
+/** 尾注的稳定锚点：confirmationFooter 恒以这一行起头，1~4 条的措辞怎么变它都不动。 */
+const CONFIRMATION_FOOTER_MARKER = '【发出前必读】';
+
+/**
+ * 剥掉 confirmationFooter 拼进正文的那段尾注（**导出 / 分享给对方之前**调）。
+ *
+ * 【为什么单独一个函数、要发出去的两条出口都调】尾注是写给起草人自己的提醒
+ * （发出后果、能不能撤回、发不发由你定），落进 drafts.content 只为站内展示时提醒本人；
+ * 它一旦随文书交到对方手里，就等于把自己的顾虑连同文书一起递了出去。各出口各写一段
+ * 剥离逻辑的形态是：某天尾注措辞改了，只有其中一条出口跟着改，另一条把整段原样发出去。
+ *
+ * 认的是 `【发出前必读】` 那一行（连同它上面那行分隔线），措辞怎么变都剥得掉；
+ * **没有尾注的正文一字不动地原样返回**（导出/展示对内文书时不能动它）。
+ */
+export function stripConfirmationFooter(content: string): string {
+  const marker = content.indexOf(CONFIRMATION_FOOTER_MARKER);
+  if (marker < 0) return content;
+  // 回到标记所在行的行首
+  const lineStart = content.lastIndexOf('\n', marker - 1);
+  let cut = lineStart < 0 ? 0 : lineStart;
+  // 行首之前若正好是一整行分隔线（只由 ─ 组成），连它一起去掉
+  const prevLineStart = cut <= 0 ? -1 : content.lastIndexOf('\n', cut - 1);
+  const prevLine = content.slice(prevLineStart < 0 ? 0 : prevLineStart + 1, cut).trim();
+  if (prevLine.length > 0 && /^─+$/.test(prevLine)) {
+    cut = prevLineStart < 0 ? 0 : prevLineStart;
+  }
+  return content.slice(0, cut).replace(/\s+$/, '');
+}

@@ -179,10 +179,17 @@ describe('结构守卫一：company_key 只有一个产地', () => {
     'lib/company/dossier.ts', // 采集侧消费方（查/写 company_dossiers）
     'lib/company/probe.ts', // 免费前置探测：按 companyKey 读/写 company_probe_cache（§2.3）
     'lib/company/dossier-billing.ts', // 计费侧消费方（报价/确认走同一把键，见文件头 import 别名）
+    // 统一报价流那层壳：**只调 companyKey() 这一处产地**，用算出来的键去读探测缓存
+    // （深度两块的篇数只认服务端缓存里那个数），自己不另立一套归一化。
+    'lib/company/dossier-order.ts',
+    // 案件 → 档案的那一次解析（网页路由与 dossier_get 共用）。**自己不算键**：
+    // 走 lib/company/dossier.findDossierBySubject，出现在这里是因为注释里写了这把键的名字。
+    'lib/dossier/case-dossier.ts',
     // 只把已经算好的 company_key 原样透出给前端，不参与计算——出现在这里是因为它提到了列名。
     'app/api/v1/company/dossiers/[id]/route.ts',
-    // 案件 → 档案适配端点。**自己不算键**：解析走 lib/company/dossier.findDossierBySubject，
-    // 出现在这里同样是因为文件头的注释里写了这把键的名字（那段注释讲的正是"键不在这儿算"）。
+    // 案件 → 档案适配端点。**自己不算键、如今连解析都不做**：整段解析在
+    // lib/dossier/case-dossier.ts 里，本文件只剩 HTTP 皮；出现在这里是因为文件头的注释
+    // 里写了这把键的名字（那段注释讲的正是"键不在这儿算"）。
     'app/api/v1/cases/[id]/dossier/route.ts',
     // 演示件：探测/报价 mock 里各有一个**写死的**键值，不参与任何查或写（demo 案件不落库）。
     // 出现在这里同样是因为它提到了字段名，不是因为它自己算了一把键。

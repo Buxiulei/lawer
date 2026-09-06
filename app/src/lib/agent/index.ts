@@ -27,6 +27,7 @@ export {
   isLandlineOnly,
   LANDLINE_MARK,
   buildCrisisOpener,
+  CRISIS_NBDPSY_LINE,
   compactCrisisCard,
   extractHotlines,
   cardOccurrences,
@@ -48,6 +49,9 @@ export {
 // G4 依据纪律：注入侧的引用块拼装 + 出口侧的光秃条号检测。
 // 评测侧断言直接复用 bareArticleCitations，保证「产品认为哪几处光秃，评测就判哪几处」。
 export {
+  articleKey,
+  normLaw,
+  normalizeArticle,
   bareArticleCitations,
   bareArticleSpans,
   citationSite,
@@ -63,7 +67,13 @@ export {
 } from './citation-block';
 export { classifyTask, criticalReasons, type TaskClassInput } from './task-class';
 export { buildSystemPrompt, packsSection, beijingNow } from './prompt';
-export { buildCaseFacts, renderCaseFacts, CASE_FACTS_BUDGET, EVIDENCE_DISCLAIMER } from './case-facts';
+export {
+  buildCaseFacts,
+  buildFactsStatusLine,
+  renderCaseFacts,
+  CASE_FACTS_BUDGET,
+  EVIDENCE_DISCLAIMER,
+} from './case-facts';
 export {
   AGENT_TOOLS,
   executeTool,

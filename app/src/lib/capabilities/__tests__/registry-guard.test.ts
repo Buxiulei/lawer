@@ -26,6 +26,9 @@ const FAMILIES = [
   'company',
   'emotion',
   'docs',
+  'report',
+  'account',
+  'referral',
 ];
 const SCOPES = ['case:read', 'case:write'];
 const KINDS = ['read', 'write', 'spend'];
@@ -123,7 +126,11 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
    *
    * 领域文案的正本在 lib/domains/<key>.ts；能力条目引用它，对外那几句话逐字不变。
    */
-  const FORBIDDEN = ['劳动', '仲裁'];
+  // 「用人单位」是**对方主体在某一个领域里的称呼**（领域包的 parties.counterparts[0]）。
+  // 它比前两个词更容易被顺手写进共用层——工具描述里总要有个词指代"对面那家"，
+  // 而写死它的形态是：第二个领域接进来时，它的用户在工具清单里读到的仍是上一个领域的称呼，
+  // 工具照常可用、回包照常正确，只是每句话都在跟他讲另一个行当的事，没有一处会报错。
+  const FORBIDDEN = ['劳动', '仲裁', '用人单位'];
 
   const SHARED_FILES = [
     ...walk(CAP_ROOT),
@@ -131,9 +138,11 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
     // lib/jobs/** 同属共用层：后台任务面向的是「一件材料 + 一种处理方式」，
     // 一旦有人在里面写死了某个领域的词，第二个领域接进来时就得回到任务代码里逐条翻找。
     ...walk(path.join(SRC_ROOT, 'lib/jobs')),
+    // lib/cases/report* 同属共用层：个案报告的分节骨架由领域包给，生成器只认 source 键。
+    ...['lib/cases/report.ts', 'lib/cases/report-stale.ts'].map((f) => path.join(SRC_ROOT, f)),
   ];
 
-  it('lib/capabilities/**、lib/domains/registry.ts 与 lib/jobs/** 里没有领域字面量（变异：往 registry.ts 写一句带「仲裁」的注释 → 红）', () => {
+  it('lib/capabilities/**、lib/domains/registry.ts、lib/jobs/** 与 lib/cases/report* 里没有领域字面量（变异：往 registry.ts 写一句带「仲裁」的注释、或把工具描述里的「对方主体」写死成某个领域的称呼 → 红）', () => {
     const hits: string[] = [];
     for (const file of SHARED_FILES) {
       const text = fs.readFileSync(file, 'utf-8');

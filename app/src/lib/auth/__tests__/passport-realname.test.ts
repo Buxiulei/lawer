@@ -109,17 +109,19 @@ describe('发起', () => {
 });
 
 describe('🔴 ④ 待审不得解锁 attest（manager 要的负向样本）', () => {
-  test('提交材料之后、审核之前，requireRealname 仍然拒绝', () => {
+  // requireRealname 是 async（本地没实名时会去问一次 NBDpsy，见 guard.realnameVerifiedOrLinked）。
+  // 这两条没有配 NBDPSY_INTERNAL_* 两个 env，所以互认那一支直接回 false ＝ 按未实名处理。
+  test('提交材料之后、审核之前，requireRealname 仍然拒绝', async () => {
     init();
-    const gate = requireRealname(db, { uid, via: 'web' } as never);
+    const gate = await requireRealname(db, { uid, via: 'web' } as never);
     expect(gate.ok).toBe(false);
   });
 
-  test('审核通过之后才放行', () => {
+  test('审核通过之后才放行', async () => {
     const r = init();
     if (!r.ok) throw new Error('前置失败');
     approvePassportRealname(db, { verificationId: r.verificationId, operator: '审核员甲' });
-    expect(requireRealname(db, { uid, via: 'web' } as never).ok).toBe(true);
+    expect((await requireRealname(db, { uid, via: 'web' } as never)).ok).toBe(true);
   });
 });
 

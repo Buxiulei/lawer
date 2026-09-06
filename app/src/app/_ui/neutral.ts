@@ -34,6 +34,8 @@ export const NEUTRAL_WORD = {
   freeze: '锁定',
   /** 「存证证明」：出证拿到的那份文件 */
   cert: '凭证',
+  /** 「个案报告」：整理过的那一份长期记忆。中性说法就是概要 */
+  report: '概要',
 } as const;
 
 /**

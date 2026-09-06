@@ -63,11 +63,14 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'public', method: 'GET', path: '/api/v1/auth/google/callback', auth: 'none', description: 'Google 授权回调：校 state、换 token、归并或建号，302 回登录页' },
   { category: 'public', method: 'GET', path: '/api/v1/verify/{orderNo}', auth: 'none', description: '按存证订单号公开查询（刻意无鉴权：对方拿到订单号就该能核）' },
   { category: 'public', method: 'POST', path: '/api/v1/verify/{orderNo}/recheck', auth: 'none', description: '服务端实时复核：重算原件哈希 + 重新验签，按 IP 限流' },
+  { category: 'public', method: 'GET', path: '/api/v1/share/{token}', auth: 'none', description: '按分享 token 读一份文书正文或一件材料的说明（刻意无鉴权：分享给没有账号的人看的）。到期回 410 SHARE_EXPIRED、被收回回 410 SHARE_REVOKED，与 404 分开' },
+  { category: 'public', method: 'GET', path: '/api/v1/files/download/{token}', auth: 'none', description: '用一次性 token 取回一份导出件（浏览器直接打开即可）。只能取一次、10 分钟内有效；用过或过期回 410' },
 
   // ──────── agent 面（jwt 或 api key）────────
   { category: 'agent', method: 'POST', path: '/api/mcp', auth: 'jwt|api_key', description: 'MCP JSON-RPC 2.0 入口（Streamable HTTP），工具面见本清单 mcp.tools' },
   { category: 'agent', method: 'GET', path: '/api/v1/agent-setup', auth: 'jwt|api_key', description: '一键接入信息：mcp_url / api_base、工具清单、接入说明全文（不校 scope）' },
   { category: 'agent', method: 'GET', path: '/api/v1/me', auth: 'jwt|api_key', scope: 'case:read', description: '本人身份摘要（手机号在服务端已掩码）' },
+  { category: 'agent', method: 'GET', path: '/api/v1/referrals', auth: 'jwt|api_key', scope: 'case:read', description: '本人名下的转介台账与状态，外加「转介会传什么、不会传什么」那份同意文案；不回数据包全文' },
   { category: 'agent', method: 'GET', path: '/api/v1/me/storage', auth: 'jwt|api_key', scope: 'case:read', description: '本人的存储用量；不接受任何指定用户的入参' },
   { category: 'agent', method: 'GET', path: '/api/v1/billing/ledger', auth: 'jwt|api_key', scope: 'case:read', description: '本人的公道值余额与流水（同时给 balance 与 ledger_sum）' },
   { category: 'agent', method: 'POST', path: '/api/v1/redeem', auth: 'jwt|api_key', scope: 'case:write', description: '兑换码入账（一码一兑，失败有锁）' },
@@ -77,6 +80,7 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/intake', auth: 'jwt|api_key', scope: 'case:write', description: '首诊建档：一次原子写入基本盘 + 时间线 + 诉求（对应工具 intake_submit）' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/messages', auth: 'jwt|api_key', scope: 'case:read', description: '案件的历史对话（只读；写那一路在同级 chat）' },
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/chat', auth: 'jwt|api_key', scope: 'case:write', description: '让本服务的模型跑一轮并回 SSE。**调一次扣一轮公道值**，自带模型的 agent 不要调' },
+  { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/report', auth: 'jwt|api_key', scope: 'case:read', description: '读个案报告：整理过的分节长期记忆 + 渲染稿 + 过期标（对应工具 case_report_get；首次读会惰性生成初稿）' },
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/timeline', auth: 'jwt|api_key', scope: 'case:write', description: '追加一条时间线事件，只追加无改删（对应工具 timeline_add）' },
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/timeline/{eventId}/milestone', auth: 'jwt|api_key', scope: 'case:write', description: '给一条时间线事件盖里程碑' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/actions', auth: 'jwt|api_key', scope: 'case:read', description: '列出行动卡，可按状态过滤（对应工具 action_list）' },

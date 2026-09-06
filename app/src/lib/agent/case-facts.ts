@@ -18,6 +18,8 @@
 // 【预算】渲染结果硬上限 CASE_FACTS_BUDGET 字符，由 renderCaseFacts 后置保证：
 // 先区内裁（条数上限 + 单条截断），再按 P3→P2→P1 把整区压成统计行，P0 永不降级。
 // 每一次裁剪都留痕——被裁掉的东西必须让模型知道「有但没给你」，否则它会当成「不存在」。
+import { crisisStatusMark } from '@/lib/cases/crisis-hits';
+import { basicsMissing } from '@/lib/cases/report';
 import { BRIEF_SUMMARY_MAX, briefSummary, parseBrief } from '@/lib/evidence/brief';
 import { EVIDENCE_CATEGORIES } from '@/lib/evidence/categories';
 
@@ -62,6 +64,40 @@ export const EVIDENCE_DISCLAIMER =
 
 /** 整区明细被预算压掉时的留痕。压掉的是明细，统计行仍在——模型必须知道「有但没给」。 */
 const DETAIL_DROPPED = '- （明细因预算未注入——需要时直接问用户，不要假设不存在）';
+
+/**
+ * 事实卡**首行状态区**（设计稿 §4.3）：这一轮开口之前，先说清"手上这份东西还能不能直接用"。
+ *
+ * 【为什么必须是唯一一个函数】首行会陆续挂上好几种标记（报告过期、基本盘缺项、
+ * R2 的近 72h 危机标记……）。每加一种就在渲染处多写一个三元的形态是：
+ * 四处判断各有各的"什么时候不显示"，于是某种组合下整行消失，而每一处看起来都没错。
+ * 追加标记一律往 `extra` 里塞，这里统一决定顺序与"全空就整行省略"。
+ *
+ * 【正常时省略整行，不写"一切正常"】常驻的"正常"提示会被当成模板噪音跳过去，
+ * 于是真出状况那次也一起被跳过去了。没有这一行，就是没事。
+ *
+ * @returns 状态行；无话可说时 null（调用方据此整行不渲染）
+ */
+export function buildFactsStatusLine(input: {
+  report: CaseSnapshot['report'];
+  /** 基本盘缺几项（口径与个案报告的风险节同一份，见 lib/cases/report.basicsMissing） */
+  basicsMissing: number;
+  /** 预留给后续标记（R2 的危机标记等）；原样按序追加在后面 */
+  extra?: readonly string[];
+}): string | null {
+  const parts: string[] = [];
+  const r = input.report;
+  if (r.state === 'changed') {
+    parts.push(
+      `报告过期：自 ${r.since} 起 ${r.changes} 条变动（${r.detail}）——先整理再回答`,
+    );
+  } else if (r.state === 'idle') {
+    parts.push(`报告过期：${r.detail}（最后整理于 ${r.since}）——先整理再回答`);
+  }
+  if (input.basicsMissing > 0) parts.push(`基本盘缺 ${input.basicsMissing} 项`);
+  for (const e of input.extra ?? []) if (e.trim()) parts.push(e.trim());
+  return parts.length ? `> **状态**：${parts.join('；')}` : null;
+}
 
 const HEADER = [
   '## 案件事实卡（服务端从档案读出的当前事实，以此为准；用户说法与此矛盾时先核对再改档）',
@@ -486,8 +522,17 @@ function evidenceContentNote(e: CaseSnapshot['evidence'][number]): string {
 
 /** 取值 + 标注来源，不做裁剪（裁剪归 renderCaseFacts）。 */
 export function buildCaseFacts(s: CaseSnapshot): FactCard {
+  const status = buildFactsStatusLine({
+    report: s.report,
+    basicsMissing: basicsMissing(s.case).length,
+    // 危机标记排在报告过期与基本盘缺项之后（extra 原样按序追加）：前两项讲的是
+    // "手上这份东西还能不能用"，这一项讲的是"跟你说话的这个人最近怎么样"——
+    // 后者不该被前者挤掉，也不该把前者顶开，两句都在同一行里说完。
+    extra: [crisisStatusMark(s.crisisHits72h) ?? ''],
+  });
   return {
-    header: HEADER,
+    // 状态区在抬头之上：它是"先别急着答"的那句话，排在使用说明后面就没人先读到了
+    header: status ? `${status}\n\n${HEADER}` : HEADER,
     sections: [
       identitySection(s),
       caseHeadSection(s),

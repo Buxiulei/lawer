@@ -298,6 +298,34 @@ export function setUserRealname(
   );
 }
 
+/**
+ * 取手机号密文。**本层不解密**（lib/db 是 SQL 层，明文归领域层），
+ * 所以返回的是 `*_enc` 列原文，调用方自己过 lib/crypto。
+ *
+ * 单独一个函数而不是把 phone_enc 加进 USER_COLUMNS：那一串被十几处 SELECT 共用，
+ * 多带一列密文出来，等于让每个不需要它的地方都拿着一份敏感数据。
+ */
+export function findUserPhoneEnc(db: Database, id: number): string | null {
+  const row = db.prepare('SELECT phone_enc FROM users WHERE id = ?').get(id) as
+    | { phone_enc: string | null }
+    | undefined;
+  return row?.phone_enc ?? null;
+}
+
+/**
+ * 只回填姓名（密文）。与 setUserRealname 的区别是**不碰证件号那一列**：
+ * 互认过来的实名手上只有掩码，往 id_card_enc 里塞掩码会让出证时被再掩一次，
+ * 印出来的是一串全是星号的东西，而没有任何一处会报错。
+ */
+export function setUserRealNameOnly(db: Database, id: number, realNameEnc: string): void {
+  db.prepare('UPDATE users SET real_name_enc = ? WHERE id = ?').run(realNameEnc, id);
+}
+
+/** 记与 NBDpsy 的关联（对方 customer_code）。**只记关联，不合并主键**（设计稿 §14 决定 2）。 */
+export function setLinkedNbdpsyCustomerCode(db: Database, id: number, code: string): void {
+  db.prepare('UPDATE users SET linked_nbdpsy_customer_code = ? WHERE id = ?').run(code, id);
+}
+
 // ========== users：Google 线（lib/auth/google.ts 的 SQL 面）==========
 
 /** 按 google_sub 查账号。归并第一顺位——sub 命中就是同一个人，别的线索都不用看。 */

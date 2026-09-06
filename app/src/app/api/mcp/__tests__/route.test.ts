@@ -272,6 +272,28 @@ describe('tools/list', () => {
       'evidence_register',
       'evidence_attest',
       'attest_verify',
+      'case_report_get',
+      'case_report_update',
+      // 危机检查 / 身份与账户，同样**追加在末尾**
+      'crisis_check',
+      'me_get',
+      'quote_list',
+      // 引用核验，同样**追加在末尾**
+      'citation_check',
+      // 对方主体情报（免费探测 → 报价 → 确认 → 读档 / 关系图 / 守望），同样**追加在末尾**
+      'company_probe',
+      'dossier_quote',
+      'dossier_confirm',
+      'dossier_get',
+      'company_graph_get',
+      'company_watch_set',
+      // 分享与导出，同样**追加在末尾**
+      'share_create',
+      'share_revoke',
+      'draft_export',
+      // 转介，同样**追加在末尾**
+      'referral_create',
+      'referral_list',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();
@@ -302,6 +324,12 @@ describe('tools/list', () => {
       'draft_write',
       'company_profile_upsert',
       'emotion_log',
+      // 对方主体情报里隶属案件的四条（company_probe 是全库查主体、dossier_confirm 按报价号，
+      // 报价号自己带着 case_id，故这两条不在名单里）
+      'dossier_quote',
+      'dossier_get',
+      'company_graph_get',
+      'company_watch_set',
     ]) {
       expect(byName.get(name)!.inputSchema.required, name).toContain('case_id');
     }

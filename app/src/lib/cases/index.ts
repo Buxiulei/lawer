@@ -13,6 +13,7 @@ import * as store from '@/lib/db/cases';
 import { dedupTitleKey } from '@/lib/db/dedup';
 import { getDomainPack } from '@/lib/domains/registry';
 import { normalizeDateOnly, submitIntakeInto, type IntakeInput, type IntakeResult } from './intake';
+import { markReportStale } from './report-stale';
 // 只剩 MILESTONE_OF_STAGE 的键类型还引它（`typeof CASE_STAGES`）。**stage 校验不再走它**，
 // 一律经 stagesForCase 从领域包取词表。
 import { CASE_STAGES } from './stages';
@@ -40,6 +41,8 @@ import { reconcileServedModel } from '@/lib/billing/served-model';
 // 而页面引 lib/cases 会把整个 lib/db 拖进浏览器包。此处原样再导出，引用方不必改。
 export { CASE_STAGES, type CaseStage } from './stages';
 export type { IntakeInput, IntakeResult } from './intake';
+// 发出去之前剥掉「发出前必读」尾注：导出（lib/drafts/export）与分享（lib/shares）都从这里取
+export { stripConfirmationFooter } from './drafts';
 
 /** 与 migrate.ts timeline_events.kind 注释逐字对齐 */
 export const TIMELINE_KINDS = ['公司动作', '我方动作', '系统动作', '期限'] as const;
@@ -465,6 +468,10 @@ export function updateCase(
   }
 
   store.updateCaseFields(db, input.caseId, fields);
+  // 阶段变了，报告的「基本盘」与「下一步」都可能不再成立（过期唯一入口，见 ./report-stale）。
+  // 只认 stage：改一句 goal 的错别字不该把整份报告标成过期，那样它会一直是过期的，
+  // 而"一直过期"与"从来不过期"对读的人是同一个信息量。
+  if (fields.stage !== undefined) markReportStale(db, input.caseId, '阶段变更');
   return { ok: true, case: store.findCaseById(db, input.caseId)! };
 }
 
@@ -543,6 +550,8 @@ export function addTimelineEvent(
     clientRef,
   });
   const event = store.listTimelineEvents(db, input.caseId, TIMELINE_MAX_LIMIT).find((e) => e.id === id)!;
+  // 去重命中的两条分支都在上面 return 掉了，走到这里的一定是真新增的一条
+  markReportStale(db, input.caseId, '时间线');
   return { ok: true, event, deduped: false };
 }
 

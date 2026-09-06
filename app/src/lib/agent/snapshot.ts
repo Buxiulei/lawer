@@ -4,6 +4,8 @@
 // 不再各自查库。这样状态机是纯函数、可单测，也不会出现「prompt 里写的和状态机以为的不一致」。
 import type { Database } from 'better-sqlite3';
 
+import { countRecentCrisisHits } from '@/lib/cases/crisis-hits';
+import { findReportRow, reportStaleState, type ReportStaleState } from '@/lib/cases/report';
 import { decryptField } from '@/lib/crypto';
 import * as agentStore from '@/lib/db/agent';
 import * as caseStore from '@/lib/db/cases';
@@ -60,6 +62,18 @@ export interface CaseSnapshot {
   storedIntakeStage: string | null;
   /** 本案是否已转介过 NBDpsy。spec §10：一案最多一次 */
   referredNbdpsy: boolean;
+  /**
+   * 个案报告的过期状态（设计稿 §4.3），事实卡首行状态区要它。
+   * **只读不生成**：快照是每轮对话的必经之路，在这里惰性生成初稿等于每个案子第一次说话
+   * 就顺手写一份没人要过的报告。没有报告行时 state=null，首行就不说这件事。
+   */
+  report: ReportStaleState;
+  /**
+   * 近 72 小时内的危机信号命中次数（设计稿 §4.4），事实卡首行状态区要它。
+   * 两条通路（站内对话、用户自己的 agent 调 crisis_check）都落在同一张表上，
+   * 所以这个数是"这个人最近怎么样"，不是"他在网页上怎么样"。
+   */
+  crisisHits72h: number;
 }
 
 export function loadCaseSnapshot(db: Database, caseId: number): CaseSnapshot {
@@ -83,6 +97,8 @@ export function loadCaseSnapshot(db: Database, caseId: number): CaseSnapshot {
     deadlines: caseStore.listDeadlines(db, caseId, false),
     storedIntakeStage: agentStore.readIntakeStage(db, caseId),
     referredNbdpsy: agentStore.hasReferredNbdpsy(db, caseId),
+    report: reportStaleState(findReportRow(db, caseId)),
+    crisisHits72h: countRecentCrisisHits(db, caseId),
   };
 }
 
