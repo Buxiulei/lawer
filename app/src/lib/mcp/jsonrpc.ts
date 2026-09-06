@@ -16,6 +16,8 @@
 // 参考：https://modelcontextprotocol.io/specification/2025-06-18/basic/transports
 //       https://modelcontextprotocol.io/specification/2025-06-18/server/tools
 
+import { withDisplayTimes } from '@/lib/time';
+
 /** 我们实现并声明支持的协议版本 */
 export const PROTOCOL_VERSION = '2025-06-18';
 /**
@@ -86,7 +88,10 @@ export function negotiateVersion(requested: unknown): string {
 /** tools/call 的成功结果：内容按 text 回，结构化数据序列化成 JSON 文本 */
 export function toolTextResult(payload: unknown) {
   return {
-    content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+    // 【时间字段在这里统一带上 +08:00】这是 MCP 面回包的唯一序列化点，与 REST 的
+    // lib/http/json.apiJson 调的是同一个 withDisplayTimes。让各工具自己转的形态是：
+    // 忘掉的那个工具照常返回 200，串看起来也正常，只是对方 agent 会按自己的本地时区解析。
+    content: [{ type: 'text', text: JSON.stringify(withDisplayTimes(payload), null, 2) }],
     isError: false,
   };
 }

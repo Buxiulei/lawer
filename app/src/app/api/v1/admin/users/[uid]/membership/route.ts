@@ -8,8 +8,6 @@
 // 前端在**弹确认框那一刻**生成一个 op_ref 并在重试中复用，服务端拿它当 order_no，重复提交才真被挡下。
 // 形状受 isAdminGrantRef 约束（必须是本操作者的操作痕，与发公道值同构），冒充他人→400。
 // 缺省（非前端直连、无 op_ref）退回服务端 stamp，不改既有非幂等调用方的行为。
-import { NextResponse } from 'next/server';
-
 import {
   ADMIN_MEMBERSHIP_DAYS,
   adminOpStamp,
@@ -21,6 +19,7 @@ import { readJsonBody } from '@/lib/auth/http';
 import { parseId } from '@/lib/auth/guard';
 import { MEMBERSHIP, type MembershipPlan } from '@/lib/billing/pricing';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 export async function POST(req: Request, { params }: { params: Promise<{ uid: string }> }) {
   const db = getDb();
@@ -62,7 +61,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ uid: st
     return adminBadRequest('BAD_DAYS', `时长只能是 ${ADMIN_MEMBERSHIP_DAYS.join(' / ')} 天`);
   }
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     order_no: result.orderNo,
     plan: result.plan,

@@ -5,8 +5,6 @@
 // 那"同 refId 只发一次"就只在 lib 的单测里成立，生产上一次网络重试照样发两笔。
 // 前端在**弹出确认框那一刻**生成一个 ref 并在重试中复用，重复提交才真的被挡下。
 // 形状受 isAdminGrantRef 约束（必须是本操作者的操作痕），一个管理员无法把动作记到别人头上。
-import { NextResponse } from 'next/server';
-
 import {
   adminGrantGongdao,
   isAdminGrantRef,
@@ -16,6 +14,7 @@ import { adminBadRequest, adminNotFound, requireAdmin } from '@/lib/admin/auth';
 import { parseId } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 export async function POST(req: Request, { params }: { params: Promise<{ uid: string }> }) {
   const db = getDb();
@@ -52,7 +51,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ uid: st
   });
   if (!result.ok) return adminBadRequest('BAD_AMOUNT', '数额要填正整数');
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     ref_id: result.refId,
     delta: result.delta,

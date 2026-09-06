@@ -7,18 +7,17 @@
 // 【空清单是答案，不是错】名下确实没有案件的账号存在（注册中途断了、数据迁移过来的），
 // 回 200 + cases: [] 让前端能区分「查不到」和「查了，是空的」——
 // 前者该重试，后者该去建档。混成一种，页面就只能猜，猜的结果就是拿演示数据顶。
-import { NextResponse } from 'next/server';
-
 import { requireIdentity } from '@/lib/auth/guard';
 import { listCasesByUser } from '@/lib/db/cases';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 export async function GET(req: Request) {
   const guard = requireIdentity(getDb(), req, 'case:read');
   if (!guard.ok) return guard.response;
 
   const rows = listCasesByUser(getDb(), guard.identity.uid);
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     cases: rows.map((row) => ({
       id: row.id,

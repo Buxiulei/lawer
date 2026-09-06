@@ -20,6 +20,7 @@
 // 每一次裁剪都留痕——被裁掉的东西必须让模型知道「有但没给你」，否则它会当成「不存在」。
 import { BRIEF_SUMMARY_MAX, briefSummary, parseBrief } from '@/lib/evidence/brief';
 import { EVIDENCE_CATEGORIES } from '@/lib/evidence/categories';
+import { toDisplayDay, toDisplayTime } from '@/lib/time';
 
 import type { CaseSnapshot } from './snapshot';
 
@@ -70,6 +71,11 @@ const HEADER = [
     '〔用户自述待核实〕= 用户口述落档、没有第三方证据支撑，引用时要标出来；' +
     '〔未记录〕= **档案里没有这一项，不是"事实上没有"**——需要就直接问用户，' +
     '不许拿它当"不存在"来推理，更不许自己补一个值。',
+  '',
+  // 【时间一律北京时间】不写这句的形态是：模型看到一串没有时区标记的时间，按它自己
+  // 训练时的默认（多半是 UTC）去算"还剩几天"，跨日那一段整整错一天。
+  // 与 REST / MCP 回包同源（都经 lib/time 的 +08:00 口径）。
+  '本卡里的日期与时刻**一律是北京时间（UTC+08:00）**，与接口回包同一口径。',
 ].join('\n');
 
 type Priority = 0 | 1 | 2 | 3;
@@ -207,7 +213,7 @@ function historySection(s: CaseSnapshot): FactSection {
     stat:
       total === 0
         ? '- 本案还没有已落库的历史消息〔已核验〕'
-        : `- 本案历史消息共 ${total} 条（最早 ${firstAt ? firstAt.slice(0, 10) : '时间未记录'}）〔已核验〕`,
+        : `- 本案历史消息共 ${total} 条（最早 ${firstAt ? toDisplayDay(firstAt) : '时间未记录'}）〔已核验〕`,
     detail: [
       '- 你在本轮上下文里看到的对话历史**只是其中最近的一段，不是全部**；' +
         '更早的内容我看不到，涉及时让用户复述，不要凭印象补。',
@@ -230,7 +236,7 @@ function deadlineSection(s: CaseSnapshot): FactSection {
       : '- 生效中的法定期限：0 条〔未记录〕——档案里没登记，**不等于没有期限**，别据此说"时效没问题"。',
     detail: [
       ...shown.map(
-        (d) => `- ${d.kind}：${d.due_at}${d.derived_from ? `（推算依据：${trunc(d.derived_from, 40)}）` : ''}`,
+        (d) => `- ${d.kind}：${toDisplayDay(d.due_at)}${d.derived_from ? `（推算依据：${trunc(d.derived_from, 40)}）` : ''}`,
       ),
       ...(rows.length > shown.length ? [trimmedNote(rows.length, shown.length)] : []),
     ],
@@ -310,7 +316,7 @@ function actionSection(s: CaseSnapshot): FactSection {
     stat: `- 未完成的行动卡：${rows.length} 张〔已核验〕（charter §9 要求本轮逐张跟踪）`,
     detail: [
       ...shown.map(
-        (a) => `- #${a.id}《${trunc(a.title, ACTION_TITLE_MAX)}》${a.due_at ? ` 截止 ${a.due_at}` : ''}`,
+        (a) => `- #${a.id}《${trunc(a.title, ACTION_TITLE_MAX)}》${a.due_at ? ` 截止 ${toDisplayDay(a.due_at)}` : ''}`,
       ),
       ...(rows.length > shown.length ? [trimmedNote(rows.length, shown.length)] : []),
     ],
@@ -383,7 +389,7 @@ function timelineDetail(lines: string[], room: number, total: number, anchor: st
 
 function timelineSection(s: CaseSnapshot): FactSection {
   const fmt = (e: CaseSnapshot['timeline'][number]) =>
-    `- ${e.happened_at}｜${e.kind}｜${e.title}${e.detail ? `：${trunc(e.detail, TIMELINE_DETAIL_MAX)}` : ''}`;
+    `- ${toDisplayTime(e.happened_at)}｜${e.kind}｜${e.title}${e.detail ? `：${trunc(e.detail, TIMELINE_DETAIL_MAX)}` : ''}`;
   const lines = s.timeline.map(fmt);
   // 真总数 / 真最早 1 条来自 timelineStats（独立取数），不从被窗口截过的 timeline 推。
   // 窗口已经含住最早那条时传 null：重复印一遍会让模型以为同一件事发生了两次。

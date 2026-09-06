@@ -1,11 +1,10 @@
 // app/src/app/api/v1/evidence/[id]/brief/regenerate/route.ts
 // POST 重新生成一件材料的简报（对应 MCP 工具 evidence_brief_regenerate）。
 // 免费、同步、不排队；判断全在 lib/evidence/extraction.regenerateBrief。
-import { NextResponse } from 'next/server';
-
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
 import { regenerateBrief } from '@/lib/evidence/extraction';
+import { apiJson } from '@/lib/http/json';
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const guard = requireIdentity(getDb(), req, 'case:write');
@@ -13,7 +12,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const evidenceId = parseId((await params).id);
   if (evidenceId === null) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'EVIDENCE_NOT_FOUND', message: '这件材料不存在，或不属于本人' },
       { status: 404 },
     );
@@ -21,5 +20,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const result = await regenerateBrief(getDb(), { evidenceId, userId: guard.identity.uid });
   if (!result.ok) return domainFailure(result);
-  return NextResponse.json(result);
+  return apiJson(result);
 }

@@ -7,12 +7,11 @@
 // 请求体：{ name, uscc?, modules?: DossierModule[], doc_count?: number } 与报价端点逐字同形，
 // 前端把报价用的那个对象原样发过来即可——两边字段不同名会让「报的价」与「买的东西」错位。
 // ⚠️ doc_count 权威来源应是服务端探测缓存（采集工单）；该表落地前由本路由透传，见 DossierOrderInput 注释。
-import { NextResponse } from 'next/server';
-
 import { domainFailure, requireIdentity } from '@/lib/auth/guard';
 import { badRequest, readJsonBody, stringField } from '@/lib/auth/http';
 import { getDb } from '@/lib/db/client';
 import { confirmDossier } from '@/lib/company/dossier-billing';
+import { apiJson } from '@/lib/http/json';
 import { parseModules, parseDocCount } from '../modules';
 
 export async function POST(req: Request) {
@@ -45,7 +44,7 @@ export async function POST(req: Request) {
   });
   if (!result.ok) return domainFailure(result);
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     dossier_id: result.dossierId,
     paid_by: result.paidBy,
