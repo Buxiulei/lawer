@@ -6,9 +6,10 @@
  * 没有报错、没有空白，只是那不是他的案件。这组的每一条都在钉死"什么时候才准去 demo"。
  */
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
 import { destinationFor, latestOf } from '../_components/resolve';
 
-const CASE = (id: number, title = '我的案件') => ({ id, title });
+const CASE = (id: number, title = '我的案件') => ({ id, title, domain: DEFAULT_DOMAIN });
 
 describe('登录 + 名下有案件', () => {
   const dest = destinationFor({ kind: 'cases', cases: [CASE(2)] });

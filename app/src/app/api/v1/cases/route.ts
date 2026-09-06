@@ -23,6 +23,11 @@ export async function GET(req: Request) {
       id: row.id,
       title: row.title,
       stage: row.stage,
+      // 领域一起给：首诊页据它才知道该按哪个领域包的 intakeSchema 问问题、
+      // 按哪套阶段词表画那一步。不给的话页面只能假设是缺省领域，
+      // 而第二个领域的用户会被问一遍另一个行当的问题，没有一处会报错。
+      // 与 lib/cases.listCases（MCP 的 case_list）同一份字段。
+      domain: row.domain,
       created_at: row.created_at,
     })),
   });

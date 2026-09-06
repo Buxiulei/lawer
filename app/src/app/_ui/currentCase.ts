@@ -29,10 +29,18 @@ export const DEMO_CASE_PATH = '/case/demo';
 export interface CaseSummary {
   id: number;
   title: string;
+  /**
+   * 案件领域（cases.domain）。首诊页按它决定问哪几个问题、用哪套阶段词表。
+   *
+   * **接口没给就是空串**，不在这里补一个缺省领域：补了的形态是——
+   * 后端某天漏发这一列，首诊页会安安静静地按缺省领域那份 schema 问下去，
+   * 而第二个领域的用户填的每一格都在答另一个行当的问题。空串让调用方看得见「不知道」。
+   */
+  domain: string;
 }
 
 interface CasesResponse {
-  cases: { id: number; title: string }[];
+  cases: { id: number; title: string; domain?: string }[];
 }
 
 /**
@@ -83,7 +91,11 @@ export function clearCachedCaseId(): void {
 /** 名下案件清单，新的在前（后端 ORDER BY id DESC）。 */
 export async function fetchMyCases(): Promise<CaseSummary[]> {
   const res = await apiFetch<CasesResponse>('/cases');
-  return res.cases.map((c) => ({ id: c.id, title: c.title }));
+  return res.cases.map((c) => ({
+    id: c.id,
+    title: c.title,
+    domain: typeof c.domain === 'string' ? c.domain : '',
+  }));
 }
 
 /**

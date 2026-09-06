@@ -247,10 +247,31 @@ function caseHeadSection(s: CaseSnapshot): FactSection {
     heading: heading(s, 'header'),
     stat: `- 案件：#${c.id}《${trunc(c.title, TITLE_MAX)}》 阶段：${c.stage} 地区：${c.district}区〔已核验〕`,
     detail: [
+      ...trackLines(s),
       `- 用户目标：${c.goal ? truncField(c.goal, GOAL_MAX) : '未记录'}〔用户自述待核实〕`,
       `- 用户底线：${c.bottom_line ? truncField(c.bottom_line, GOAL_MAX) : '未记录'}〔用户自述待核实〕`,
     ],
   };
+}
+
+/**
+ * 「当前轨」那一行（设计稿 §16：事实卡与报告各显示一行）。
+ *
+ * 【本领域没有并行轨时一行都不出】`tracks` 是空数组就是「本领域没有并行轨」这个**结论**。
+ * 恒出一行「当前轨：无」的形态是：缺省领域每一轮都白花几十个字符去说一件不存在的事，
+ * 而模型会把它当成一个待填的槽，开始追问用户现在在哪一轨。
+ *
+ * 【为什么只说得出「还没有记录」】cases 表**没有记当前轨的列**，时间线也没有进出轨的
+ * 事件类型——真源还不存在。这时印一个具体的轨名是编的，而模型会拿它当已核验事实往下用。
+ * 所以这一行如实说清「有哪几条轨、现在还没有记录、要判就得问用户」。
+ */
+function trackLines(s: CaseSnapshot): string[] {
+  const tracks = domainPackOrDefault(s.case.domain).tracks;
+  if (tracks.length === 0) return [];
+  return [
+    `- 当前轨：未记录（本领域的并行轨有 ${tracks.join(' / ')}）〔未记录〕——` +
+      '库里没有这一列，要用到就问用户，不许自己挑一条当成事实。',
+  ];
 }
 
 /**

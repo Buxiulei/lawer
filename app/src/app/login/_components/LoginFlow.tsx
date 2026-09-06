@@ -11,6 +11,7 @@ import {
 } from '@/app/_mock/authpay';
 import { apiFetch } from '@/app/_ui/api';
 import { cn } from '@/app/_ui/cn';
+import { DomainChoice, useEnabledDomains, type DomainOption } from '@/app/_ui/DomainChoice';
 import { takeLoginRedirect } from '@/app/_ui/loginRedirect';
 import { beginSession } from '@/app/_ui/session';
 import { Button } from '@/components/shadcn/button';
@@ -111,6 +112,12 @@ export function LoginForm({ resume }: { resume: LoginResume }) {
   const [completing, setCompleting] = useState(resumed?.channel === 'completion');
   const [agreed, setAgreed] = useState(false);
   const [phone, setPhone] = useState(resumed?.channel === 'phone' ? resumed.target : '');
+  /**
+   * 新号要建哪个领域的案子。空串＝没选（灰度只开着一个领域时控件根本不出现），
+   * 提交时不带这个字段，服务端落缺省领域。
+   */
+  const [domain, setDomain] = useState('');
+  const domains = useEnabledDomains();
   const [email, setEmail] = useState(
     resumed && resumed.channel !== 'phone' ? resumed.target : '',
   );
@@ -122,6 +129,9 @@ export function LoginForm({ resume }: { resume: LoginResume }) {
         onEmailChange={setEmail}
         agreed={agreed}
         resume={resume}
+        domains={domains}
+        domain={domain}
+        onDomainChange={setDomain}
         onBack={() => setCompleting(false)}
       />
     );
@@ -301,18 +311,33 @@ export function CompletionPane({
   onEmailChange,
   agreed,
   resume = NO_RESUME,
+  domains = [],
+  domain = '',
+  onDomainChange,
   onBack,
 }: {
   email: string;
   onEmailChange: (next: string) => void;
   agreed: boolean;
   resume?: LoginResume;
+  /** 当前开着的领域；**只有一个（或还没问到）时选择控件整块不渲染** */
+  domains?: readonly DomainOption[];
+  domain?: string;
+  onDomainChange?: (next: string) => void;
   /** 退回手机号那一步 */
   onBack: () => void;
 }) {
   return (
     <div className="flex flex-col gap-5">
       <Steps current={1} />
+      {/* 领域选择摆在**建案发生之前**的这一格：案件的 domain 是邮箱验完那一刻
+          由 ensureDefaultCase 落下的，之后没有改这一列的入口。摆在建好之后再问，
+          问到的答案就没地方去了。 */}
+      <DomainChoice
+        domains={domains}
+        value={domain}
+        onChange={(next) => onDomainChange?.(next)}
+      />
       <Card className="p-5">
         <EmailChannel
           completing
@@ -320,6 +345,7 @@ export function CompletionPane({
           onEmailChange={onEmailChange}
           agreed={agreed}
           resume={resume}
+          domain={domain}
         />
       </Card>
       <p className="text-[13px] leading-5 text-ink-2">
@@ -350,6 +376,7 @@ export function EmailChannel({
   onEmailChange,
   agreed,
   resume = NO_RESUME,
+  domain = '',
 }: {
   /** true = 新号补绑那一步（带 token）；false = 邮箱通道登录（匿名） */
   completing: boolean;
@@ -357,6 +384,11 @@ export function EmailChannel({
   onEmailChange: (next: string) => void;
   agreed: boolean;
   resume?: LoginResume;
+  /**
+   * 新号要建哪个领域的案子；空串＝没选。**只在补绑那一路带上**：
+   * 邮箱通道登录的人早就有案件了，那时递一个领域进去只会让人以为它能改档案的类目。
+   */
+  domain?: string;
 }) {
   const enterSite = useEnterSite();
   return (
@@ -399,7 +431,13 @@ export function EmailChannel({
       onVerify={async (code) => {
         const res = await apiFetch<{ token: string }>('/auth/email/verify', {
           method: 'POST',
-          body: { email: email.trim(), code },
+          body: {
+            email: email.trim(),
+            code,
+            // 空串不发：服务端把「没给」当作缺省领域，把空串也当没给（见路由注释），
+            // 两边同一条口径，谁都不必猜另一边怎么理解一个空字符串。
+            ...(completing && domain ? { domain } : {}),
+          },
           auth: completing,
         });
         // 后端换发了新 token（补绑那一路此时双验证已齐），要覆盖旧的

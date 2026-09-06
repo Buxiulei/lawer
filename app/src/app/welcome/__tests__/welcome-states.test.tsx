@@ -32,6 +32,7 @@ const { welcomeStateFor, loadWelcomeState } = await import('../_components/welco
 const { FreshWelcome, ReturningWelcome } = await import('../_components/WelcomeScreens');
 const { WelcomeGate, screenFor } = await import('../_components/WelcomeGate');
 const { fetchMyCases } = await import('@/app/_ui/currentCase');
+const { DEFAULT_DOMAIN } = await import('@/lib/domains/registry');
 const { apiFetch, apiFetchAll } = await import('@/app/_ui/api');
 const { SessionGate } = await import('@/app/_ui/session');
 const welcomePageModule = await import('../page');
@@ -312,8 +313,8 @@ describe('loadWelcomeState：取数接线', () => {
 
   it('名下有案件且聊过话 → 欢迎回来，CTA 指向名下最新那个案件', async () => {
     vi.mocked(fetchMyCases).mockResolvedValue([
-      { id: 5, title: '被裁' },
-      { id: 2, title: '旧的' },
+      { id: 5, title: '被裁', domain: DEFAULT_DOMAIN },
+      { id: 2, title: '旧的', domain: DEFAULT_DOMAIN },
     ]);
     serveCase({ timeline: [], messages: [{}, {}, {}, {}], evidence: [] });
 
@@ -329,13 +330,13 @@ describe('loadWelcomeState：取数接线', () => {
   it('名下有案件但四个维度全空 → 新人那一屏', async () => {
     // 反向对照：少了这条，把接线写成「查到案件就算老用户」也全绿，
     // 那时刚注册完的人一落地就被问「要不要回到你的案件」，而里面什么都没有。
-    vi.mocked(fetchMyCases).mockResolvedValue([{ id: 9, title: '刚建的' }]);
+    vi.mocked(fetchMyCases).mockResolvedValue([{ id: 9, title: '刚建的', domain: DEFAULT_DOMAIN }]);
     serveCase({ timeline: [], messages: [], evidence: [] });
     expect(await loadWelcomeState()).toEqual({ kind: 'fresh' });
   });
 
   it('四个维度这次没读出来、但清单查到了案件 → 仍按「回来了」渲染', async () => {
-    vi.mocked(fetchMyCases).mockResolvedValue([{ id: 5, title: '被裁' }]);
+    vi.mocked(fetchMyCases).mockResolvedValue([{ id: 5, title: '被裁', domain: DEFAULT_DOMAIN }]);
     vi.mocked(apiFetch).mockRejectedValue(new Error('后端抖了'));
     vi.mocked(apiFetchAll).mockRejectedValue(new Error('后端抖了'));
     expect(await loadWelcomeState()).toEqual({ kind: 'returning', caseId: 5 });

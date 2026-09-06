@@ -28,6 +28,9 @@ export async function POST(req: Request) {
     userId,
     email: stringField(body, 'email'),
     code: stringField(body, 'code'),
+    // 建哪个领域的案子。**空串当没给**（落缺省领域）：页面在只有一个领域可选时
+    // 根本不摆那个控件，此时不该硬塞一个 key 进来。开着没开由服务端复核。
+    domain: stringField(body, 'domain') || undefined,
   });
   if (!result.ok) return failureResponse(result);
 

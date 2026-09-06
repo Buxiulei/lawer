@@ -63,6 +63,7 @@ GET /api/openapi.json	get_openapi_json	none	[]	{}
 GET /api/mcp	get_mcp	none	[]	{}
 POST /api/mcp	post_mcp	bearer	[]	{}
 GET /api/v1/version	get_v1_version	none	[]	{}
+GET /api/v1/domains	get_v1_domains	none	[]	{}
 POST /api/v1/auth/sms/send	post_v1_auth_sms_send	none	[]	{}
 POST /api/v1/auth/sms/verify	post_v1_auth_sms_verify	none	[]	{}
 POST /api/v1/auth/email/send	post_v1_auth_email_send	none	[]	{}

@@ -54,6 +54,7 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'public', method: 'GET', path: '/api/openapi.json', auth: 'none', description: 'OpenAPI 3.1 文档，由能力注册表与本索引生成；`?profile=actions` 出精简集（供只吃 OpenAPI 的客户端一键导入）' },
   { category: 'public', method: 'GET', path: '/api/mcp', auth: 'none', description: 'MCP 端点的自述（传输方式与协议版本）；真正的调用走同路径的 POST' },
   { category: 'public', method: 'GET', path: '/api/v1/version', auth: 'none', description: '当前产物的构建信息（commit sha 可能为 null，读到 null 应判「无法核验」）' },
+  { category: 'public', method: 'GET', path: '/api/v1/domains', auth: 'none', description: '当前环境开着哪几类纠纷（key 即案件的 domain，label 是给人看的名字）。注册页在建号之前要摆选择控件，那一刻还没有凭据，所以免鉴权' },
   { category: 'public', method: 'POST', path: '/api/v1/auth/sms/send', auth: 'none', description: '发送手机验证码' },
   { category: 'public', method: 'POST', path: '/api/v1/auth/sms/verify', auth: 'none', description: '校验手机验证码，签发 token' },
   { category: 'public', method: 'POST', path: '/api/v1/auth/email/send', auth: 'none', description: '发送邮箱验证码；带上登录态即为「已登录账号补绑邮箱」' },
