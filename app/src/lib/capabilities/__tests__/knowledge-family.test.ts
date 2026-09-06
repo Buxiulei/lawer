@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AGENT_TOOLS } from '@/lib/agent/tools';
 import type { Identity } from '@/lib/auth/identity';
+import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
 import { KNOWLEDGE_TYPES } from '@/lib/knowledge/types';
 
 import { knowledgeGet, knowledgeSearch } from '../families/knowledge';
@@ -49,6 +50,8 @@ interface IndexEntry {
   id: string;
   type: string;
   keywords: string[];
+  /** 领域键；只有声明了的卡才有，其余按缺省域算（lib/knowledge 的 packDomain 同口径） */
+  domain?: string;
 }
 const KNOWLEDGE_DIR = process.env.LAWER_KNOWLEDGE_DIR ?? path.resolve(process.cwd(), '..', 'knowledge');
 const INDEX: IndexEntry[] = JSON.parse(
@@ -93,9 +96,13 @@ describe('十类都能按 type 检索到卡（用 index.json 实测）', () => {
    */
   for (const type of KNOWLEDGE_TYPES) {
     it(`type=${type} 至少回一张，且回的全是这一类（变异：把该类从 KNOWLEDGE_TYPES 删掉 → 红）`, () => {
-      const sample = INDEX.filter((e) => e.type === type).find((e) =>
-        e.keywords.some((k) => k.length >= 2),
-      );
+      // 样本必须取**缺省域**的卡：knowledge_search 不带 domain 时只在缺省域里检索
+      //（跨域默认关闭，设计稿 §13）。不筛域的形态是——第二个领域包的卡按 index 顺序
+      // 排在前面被抽成样本，于是这条判据红在"另一个领域的卡搜不到"，
+      // 而它本来要问的是"这一类卡在工具面上存不存在"。
+      const sample = INDEX.filter(
+        (e) => e.type === type && (e.domain ?? DEFAULT_DOMAIN) === DEFAULT_DOMAIN,
+      ).find((e) => e.keywords.some((k) => k.length >= 2));
       expect(sample, `库里没有 ${type} 的卡，或它一个 ≥2 字的 keyword 都没有`).toBeTruthy();
       const query = sample!.keywords.find((k) => k.length >= 2)!;
 

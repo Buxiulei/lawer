@@ -90,3 +90,11 @@ updated: 2026-09-06
 - 民法典第 1032/1033 条（[[statute-mfd-1032-1033-yinsi]]）
 - 伦理守则 8.2（[[ethic-lunli-8-2-8-3-yuancheng-fuwu]]，**整卡待核实**）
 - 记录保存年限：[[risk-jilu-baocun-nianxian]]（**未经律师书面确认不得作为结论输出**）
+
+## 待核实
+
+- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
+  下列未决项：
+  - [[ethic-lunli-8-2-8-3-yuancheng-fuwu]]（伦理守则条文待人工核对官方 PDF，§H1）
+  - [[risk-jilu-baocun-nianxian]]（待律师书面确认，§H2）
+  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。

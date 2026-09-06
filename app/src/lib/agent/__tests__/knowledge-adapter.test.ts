@@ -4,6 +4,8 @@
 import { describe, expect, it } from 'vitest';
 
 import * as knowledge from '@/lib/knowledge';
+import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
+import { articleKey } from '../citation-block';
 import { createKnowledgeSearcher } from '../knowledge-adapter';
 
 const searcher = createKnowledgeSearcher();
@@ -72,5 +74,49 @@ describe('检索质量：C04 剧本关心的那几类卡确实调得出来', () 
     ['经济补偿 计算 基数 封顶', 'S14'],
   ])('「%s」有命中（%s 依赖它）', (query) => {
     expect(searcher.search(query, { limit: 6 }).length).toBeGreaterThan(0);
+  });
+});
+
+describe('逐字条文注入也走领域闸（设计稿 §13：跨域召回默认关闭）', () => {
+  // findByArticleKeys 是 search 之外的**第二条召回通路**：条号对上就把整张卡拉进上下文。
+  // 只闸住 search 的形态是——检索面干干净净，而模型引一条通用法时注入回来的是别的领域的卡。
+  /** 条号从真实索引里现取，不在判据里抄一份法名——抄的那份会在卡片改法名的那天变成空跑 */
+  function firstQuoteKey(inDefaultDomain: boolean): string {
+    const meta = knowledge
+      .listPacks()
+      .find(
+        (m) =>
+          (knowledge.packDomain(m) === DEFAULT_DOMAIN) === inDefaultDomain &&
+          (m.facts?.statute_quotes?.length ?? 0) > 0,
+      );
+    const q = meta!.facts!.statute_quotes![0];
+    return articleKey(q.law, q.article);
+  }
+  const OTHER_DOMAIN_KEY = firstQuoteKey(false);
+  const OWN_DOMAIN_KEY = firstQuoteKey(true);
+
+  it('判据自身不空跑：这条通用法确实被别的领域的卡逐字收录着', () => {
+    const holders = knowledge
+      .listPacks()
+      .filter((m) =>
+        (m.facts?.statute_quotes ?? []).some((q) => articleKey(q.law, q.article) === OTHER_DOMAIN_KEY),
+      );
+    expect(holders.length, '没有任何卡收录这一条 ⇒ 下面那条判据在空跑').toBeGreaterThan(0);
+    expect(holders.every((m) => knowledge.packDomain(m) !== DEFAULT_DOMAIN)).toBe(true);
+  });
+
+  it('别的领域收录的条文不会被注入进来（变异：拿掉 articleIndex 里的领域过滤 → 红）', () => {
+    expect(searcher.findByArticleKeys!([OTHER_DOMAIN_KEY])).toEqual([]);
+  });
+
+  it('本域的条文照常取得到（闸不能关过头）', () => {
+    const packs = searcher.findByArticleKeys!([OWN_DOMAIN_KEY]);
+    expect(packs.length).toBeGreaterThan(0);
+    // 域看 index 里那条元数据，不看回包——KnowledgePack 本来就不带 domain 字段，
+    // 拿回包去判等于判了个恒真（undefined ?? 缺省域）。
+    for (const p of packs) {
+      const meta = knowledge.listPacks().find((m) => m.id === p.id)!;
+      expect(knowledge.packDomain(meta), p.id).toBe(DEFAULT_DOMAIN);
+    }
   });
 });

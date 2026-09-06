@@ -37,6 +37,7 @@ applies_to: [逼迫离职, 欠薪, 社保断缴, 协商解除]   # 场景标签�
 law_refs: [劳动合同法§38, 劳动合同法§46]           # 规范化法条引用，可选
 related: [calc-jingji-buchang-n, sop-tiaogang-yingdui]  # 关联 pack id，可选
 region: 北京          # 北京|全国；北京口径与全国规则并存时标「北京」
+domain: counseling    # 领域键，可选。**不写 = 缺省领域 labor**；见 §2.2
 sources:
   - https://flk.npc.gov.cn/...
 confidence: 原文核实   # 原文核实|二手转述|待核实（取全 pack 最低档）
@@ -97,6 +98,16 @@ facts:
   hotlines 的 phone 必须出现在本卡正文，statute_quotes.text 必须是正文子串；
   全库唯一性：key 不重复；status=forbidden 的号码不得出现在其他任何卡正文。
 - facts 随 index.json 透传给 loader（PackMeta.facts），WS2 adapter 只读它。
+
+## 2.2 domain（领域键，设计稿 §13）
+
+一张卡属于哪个领域，**只在卡片自己声明时才算数**（生成器不给未声明的卡填默认值，填了就等于把既有那批卡一起改写）。消费侧口径：
+
+- 检索 `search()` 不传 `domain` 时**只回缺省领域（labor）的卡**——跨域检索默认关闭；
+- 逐字条文注入（`findByArticleKeys`）同闸：别的领域收录的法条不会被注入进缺省领域的对话；
+- 因此**新领域包的每张卡都必须写 `domain:`**。漏写的形态不是「这张卡搜不到」，而是「它出现在另一个领域用户的检索结果里」，且回包一切正常。
+
+改完卡必须重跑 `python3 scripts/gen-knowledge-index.py`：检索读的是 index.json，卡上写什么都不算数；两面分叉有判据盯着（`app/src/lib/knowledge/__tests__/domain-gate.test.ts`）。
 
 ## 3. 各 type 正文骨架
 

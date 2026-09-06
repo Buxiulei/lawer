@@ -28,7 +28,7 @@ interface IndexEntry {
   sources: string[];
   domain?: string;
   facts?: {
-    hotlines?: Array<{ phone: string; status: string }>;
+    hotlines?: Array<{ phone: string; status: string; hours?: string }>;
     case_facts?: Record<string, unknown>;
   };
 }
@@ -244,10 +244,49 @@ describe('🔴 危机热线口径：只认 12356 及其官方出处', () => {
   it('12356 的官方出处（国卫医政函〔2024〕259号）逐字进了热线卡正文', () => {
     const t = body('data-counseling-weiji-rexian');
     expect(t).toContain('国卫医政函〔2024〕259 号');
-    expect(t).toContain('我委协调工业和信息化部设置"12356"作为全国统一心理援助热线电话号码。');
+    // 引号用官方页面的**弯引号**（gov.cn 原文如此）。判据钉直引号的形态是：
+    // 后人照官方原文把引号改回去，判据反而红——把一个非逐字的形态钉成了标准。
+    expect(t).toContain('我委协调工业和信息化部设置“12356”作为全国统一心理援助热线电话号码。');
+    expect(t).toContain('实现拨打“12356”电话号码接通心理援助热线的功能。');
     // 官方给的是「每日不少于18小时」，不是 24 小时——升级成 24 小时就是编数字
     expect(t).toContain('每日提供不少于18小时心理援助服务');
     expect(t).not.toMatch(/12356[^\n]*24\s*小时/);
+  });
+});
+
+describe('🔴 热线服务时间：盯的是 facts.hours（代码读的那一面），不是正文散文', () => {
+  // 【为什么正文判据不够】README §2.1：代码只读 facts，禁啃正文。
+  // knowledge_search 的可用热线表、危机路径输出的服务时间，取的都是 facts.hotlines[].hours。
+  // 只盯正文的形态是——把 facts 的 hours 从「每日不少于18小时」改成「24小时」、正文一个字不动，
+  // 生成器过、上面那条正文判据全绿，而 agent 转给来访的服务时间已经是编出来的 24 小时。
+  const CARD = 'data-counseling-weiji-rexian';
+  const hotlines = () => COUNSELING.find((e) => e.id === CARD)!.facts!.hotlines!;
+  /** 空白/加粗符归一，与生成器 normalize 同口径（正文写「18 小时」、facts 写「18小时」） */
+  const norm = (t: string) => t.replace(/[\s>＞*　]/g, '');
+
+  it('12356 的 facts.hours 就是官方口径「每日不少于18小时」（变异：改成 24小时 → 红）', () => {
+    const h = hotlines().find((x) => x.phone === '12356')!;
+    expect(h.hours, '12356 的服务时间被改动了：官方 259 号文给的是最低要求「每日不少于18小时」').toBe(
+      '每日不少于18小时',
+    );
+    expect(h.hours).not.toMatch(/24\s*小时/);
+  });
+
+  it('每条 usable 热线的 facts.hours 都能在正文号码表**它自己那一行**里逐字找到', () => {
+    const t = body(CARD);
+    const rows = t.split('\n').filter((line) => line.trim().startsWith('|'));
+    for (const h of hotlines()) {
+      if (h.status !== 'usable') continue;
+      expect(h.hours, `${h.phone} 是 usable 却没有 hours（代码要拿它显示服务时间）`).toBeTruthy();
+      const own = rows.filter((line) => norm(line).includes(norm(h.phone)));
+      expect(own.length, `正文号码表里找不到 ${h.phone} 那一行，两面无从比对`).toBe(1);
+      const cells = own[0].split('|').map(norm);
+      expect(
+        cells,
+        `${h.phone}：facts 写「${h.hours}」，而正文那一行里没有这个服务时间——` +
+          '两面分叉时代码用的是 facts，用户看到的是 facts，正文只是没人读的说明',
+      ).toContain(norm(h.hours!));
+    }
   });
 });
 
@@ -293,6 +332,37 @@ describe('🔴 判例纪律：无真实案号绝不编造；未终审要标出�
     const t = body('case-dongni-lisongwei-weizhongshen');
     expect(t).toContain('未终审');
     expect(t).toContain('不可用（仅内部参考）');
+  });
+});
+
+describe('🔴 待核实卡：卡内可 grep 定位，且逐卡登记在 TODO核实清单', () => {
+  // 【为什么这两条要机检】清单里写着「卡内均有精确【待核实】标记，可 grep 定位」——
+  // 而实测有 9 张卡正文里一个「待核实」都没有，只有 frontmatter 一行 confidence。
+  // 维护者按那句话去 grep 定位"这张卡为什么待核实"，得到的是空结果：
+  // **一句关于自己的、不成立的说明，比没有说明更贵**——它让人以为找不到就是自己搜错了。
+  // 登记同理：H1—H5 是按未决项分组的，而升档是按卡做的，没有逐卡表就答不出"这张能不能升"。
+  const PENDING = COUNSELING.filter((e) => e.confidence === '待核实');
+  const TODO_DOC = fs.readFileSync(path.join(KNOWLEDGE_DIR, 'TODO核实清单.md'), 'utf-8');
+  /** 两种写法都算：【待核实】与【待核实：需核对…】 */
+  const MARK = /【待核实[】：]/;
+
+  it('判据自身不空跑：待核实卡有 30 张以上', () => {
+    expect(PENDING.length).toBeGreaterThan(30);
+  });
+
+  it.each(PENDING.map((e) => e.id))('%s 正文里有【待核实】标记（变异：删掉该段 → 红）', (id) => {
+    expect(body(id), `${id} 标了 confidence=待核实，正文却一个标记都没有——grep 不到就等于没登记`).toMatch(
+      MARK,
+    );
+  });
+
+  it('每张待核实卡都在 knowledge/TODO核实清单.md 里被 id 点名（变异：删掉 §H6 任一行 → 红）', () => {
+    const missing = PENDING.map((e) => e.id).filter((id) => !TODO_DOC.includes(id));
+    expect(
+      missing,
+      `这些待核实卡没在清单里登记：${missing.join('、')}；` +
+        '按 README §4.2 逐卡登记（pack id · 待核实点 · 途径），否则升档时无人知道它卡在哪一项。',
+    ).toEqual([]);
   });
 });
 

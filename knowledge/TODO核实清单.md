@@ -81,8 +81,11 @@
 ## H. 心理咨询纠纷领域包（P4-W2 新增，2026-09-06；`domain: counseling`）
 
 > 本领域包 39 张卡中，**7 张法条卡为官方原始 HTML 逐字核实**（精神卫生法、个保法、民法典、
-> 消保法），其余 32 张因引用了下列未决项，整卡取最低档 `待核实`。
-> 卡内均有精确【待核实】标记，可 `grep -rn 待核实 knowledge/packs/counseling/` 定位原文。
+> 消保法），另 1 张方法卡（method-counseling-panli-heyan，引用库内方法本体）同为 `原文核实`；
+> **其余 31 张**因引用了下列未决项，整卡取最低档 `待核实`。
+> 这 31 张卡**每张正文里都有 `【待核实` 标记**，可 `grep -rn 待核实 knowledge/packs/counseling/`
+> 定位；每张也在下面 §H6 里逐卡登记（为什么待核实、什么解除了才能单独升档）。
+> 两条都有判据盯着（counseling-pack.test.ts），漏一张即红。
 
 ### H1. 伦理守则第二版（**只能人工核对 PDF，不得机器抽取后标已核实**）
 
@@ -130,6 +133,46 @@
 | `applies_to` 受控词表增补 | 本领域新增场景标签：`日常合规` `知情同意` `保密例外` `危机处置` `来访投诉` `退费争议` `疗效争议` `隐私泄露` `名誉侵权` `伦理申诉` `监管投诉` `诉讼与仲裁` `未成年人` `远程咨询` `转介与终止` `自伤事件` `记录留痕`（另复用劳动词表的 `证据固定`）。按 README §5「增补需报 manager」，**待批**。 |
 | 热线卡的 12356 与劳动包重复收录 | README §6 单点事实源要求被 ≥2 pack 引用的数据建专卡。本领域包按设计稿 §13「知识库按领域独立成包、跨域检索默认关闭」自建 data-counseling-weiji-rexian，与 data-beijing-qiuzhu-ziyuan 各持一份 12356。**是否合并为跨域单点事实源，待 manager 裁。** |
 | `status: forbidden` 的语义 | 现枚举只有 usable/forbidden，本领域用 forbidden 承载「非官方发布、本包不输出」（希望24热线），与劳动包的「已证伪/危险号码」语义不同。**是否拆分枚举，待 manager 裁。** |
+
+### H6. 逐卡登记（31 张 `待核实` 卡，README §4.2：pack id · 待核实点 · 途径）
+
+> 上面 H1—H5 按**未决项**分组，本表按**卡**逐张登记：卡内均有 `【待核实` 标记可 grep 定位，
+> 本表回答的是另一个问题——**这张卡为什么是待核实、什么解除了才能单独升档**。
+> 判据：`app/src/lib/knowledge/__tests__/counseling-pack.test.ts` 逐卡比对（漏登记即红）。
+
+| pack id | 待核实点 | 升档条件 / 途径 |
+|---|---|---|
+| case-dongni-lisongwei-weizhongshen | 是否已有生效判决；案号与审级（查证时未终审） | §H4（裁判文书原件） |
+| case-guge-mingyu-quan | 案号、审理法院、裁判年份、「本院认为」段原文 | §H4（裁判文书原件） |
+| case-sichuan-tuifei-7500 | 案号、审理法院、合同定性与退费计算的判决原文 | §H4（裁判文书原件） |
+| data-counseling-shixiao-qixian | 民诉法现行答辩期条号；举证期限/伦理申诉/监管投诉的答复期限 | §H3（官方原文） |
+| data-counseling-weiji-rexian | 机构所在城市是否另有官方地方热线；12356 各省实际接通情况 | §H3（属地卫健部门） |
+| ethic-lunli-1-8-1-10-shuangchong-guanxi | 条号与逐字文本为期刊网页版转述，未经官方 PDF 人工核对 | §H1（人工核对官方 PDF） |
+| ethic-lunli-3-2-baomi-liwai | 条号与逐字文本为期刊网页版转述，未经官方 PDF 人工核对 | §H1（人工核对官方 PDF） |
+| ethic-lunli-8-2-8-3-yuancheng-fuwu | 条号与逐字文本为期刊网页版转述，未经官方 PDF 人工核对 | §H1（人工核对官方 PDF） |
+| risk-difang-xuke-beian | 行政许可/地方备案要求；「2017 年退出国家职业资格目录」待核官方公告 | §H2（执业律师书面意见）+ §H3 |
+| risk-hetong-dingxing | 咨询服务合同定性（委托 vs 服务）及其退费公式后果 | §H2（执业律师书面意见） |
+| risk-jilu-baocun-nianxian | 咨询记录保存年限无明文，类推病历缺依据 | §H2（执业律师书面意见） |
+| risk-qiangzhi-baogao-zhuti | 强制报告制度是否涵盖心理咨询机构，官方文件未明文 | §H2（执业律师书面意见） |
+| script-laifang-tousu-goutong | 「心理咨询师 2017 年退出国家职业资格目录」官方公告原文 | §H3（mohrss.gov.cn 原始公告） |
+| script-weiji-tonghua-huashu | 无独立未决事实项；随所引未决项解除后复核：data-counseling-weiji-rexian、ethic-lunli-3-2-baomi-liwai、sop-zishang-shijian-zhuize | 上列各项解除后逐条复核本卡 |
+| sop-jianguan-xiehui-tousu | 监管/消协投诉的答复期限；同上职业资格公告原文 | §H3（官方原文） |
+| sop-liaoxiao-zhengyi | 无独立未决事实项；随所引未决项解除后复核：sop-lunli-shensu-yingdui | 上列各项解除后逐条复核本卡 |
+| sop-lunli-shensu-yingdui | 协会伦理申诉的受理与答复时限；伦理守则条文本身待核 | §H1 + §H3 |
+| sop-mingyu-qinquan-yingdui | 无独立未决事实项；随所引未决项解除后复核：case-dongni-lisongwei-weizhongshen、case-guge-mingyu-quan | 上列各项解除后逐条复核本卡 |
+| sop-tuifei-zhengyi | 无独立未决事实项；随所引未决项解除后复核：case-sichuan-tuifei-7500、data-counseling-shixiao-qixian、risk-hetong-dingxing、script-laifang-tousu-goutong、sop-jianguan-xiehui-tousu、sop-lunli-shensu-yingdui | 上列各项解除后逐条复核本卡 |
+| sop-yinsi-xielou-zhikong | 无独立未决事实项；随所引未决项解除后复核：ethic-lunli-8-2-8-3-yuancheng-fuwu、risk-jilu-baocun-nianxian、sop-jianguan-xiehui-tousu | 上列各项解除后逐条复核本卡 |
+| sop-zhiqing-tongyi-quexian | 无独立未决事实项；随所引未决项解除后复核：case-sichuan-tuifei-7500、ethic-lunli-3-2-baomi-liwai | 上列各项解除后逐条复核本卡 |
+| sop-zishang-shijian-zhuize | 自伤事件后家属追责的可公开引用裁判文书（本次未查到） | §H4（裁判文书检索） |
+| template-baomi-gaozhi-liwai | 无独立未决事实项；随所引未决项解除后复核：ethic-lunli-3-2-baomi-liwai | 上列各项解除后逐条复核本卡 |
+| template-lunli-shensu-dabianshu | 无独立未决事实项；随所引未决项解除后复核：case-dongni-lisongwei-weizhongshen、ethic-lunli-1-8-1-10-shuangchong-guanxi、ethic-lunli-3-2-baomi-liwai、sop-lunli-shensu-yingdui | 上列各项解除后逐条复核本卡 |
+| template-lvshihan-yingdui-yaodian | 无独立未决事实项；随所引未决项解除后复核：case-guge-mingyu-quan | 上列各项解除后逐条复核本卡 |
+| template-tingzhi-fuwu-tongzhi | 无独立未决事实项；随所引未决项解除后复核：ethic-lunli-1-8-1-10-shuangchong-guanxi、sop-zishang-shijian-zhuize | 上列各项解除后逐条复核本卡 |
+| template-tousu-dafu-han | 无独立未决事实项；随所引未决项解除后复核：sop-jianguan-xiehui-tousu | 上列各项解除后逐条复核本卡 |
+| template-tuifei-xieyi | 无独立未决事实项；随所引未决项解除后复核：risk-hetong-dingxing | 上列各项解除后逐条复核本卡 |
+| template-weiji-chuzhi-jilu | 无独立未决事实项；随所引未决项解除后复核：data-counseling-weiji-rexian | 上列各项解除后逐条复核本卡 |
+| template-zhiqing-tongyishu | 无独立未决事实项；随所引未决项解除后复核：ethic-lunli-3-2-baomi-liwai | 上列各项解除后逐条复核本卡 |
+| template-zhuanjie-han | 无独立未决事实项；随所引未决项解除后复核：script-laifang-tousu-goutong | 上列各项解除后逐条复核本卡 |
 
 ## 已核实归档
 

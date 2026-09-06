@@ -104,3 +104,12 @@ updated: 2026-09-06
 - 涉及同一事实已进入诉讼的，据报道曾有协会因诉讼在案暂停调查的情形
   （[[case-dongni-lisongwei-weizhongshen]]，未终审、仅内部参考）——
   **不得据此推迟准备**，两条线各自按期推进。
+
+## 待核实
+
+- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
+  下列未决项：
+  - [[case-dongni-lisongwei-weizhongshen]]（未终审、无裁判文书全文，§H4）
+  - [[ethic-lunli-1-8-1-10-shuangchong-guanxi]]（伦理守则条文待人工核对官方 PDF，§H1）
+  - [[ethic-lunli-3-2-baomi-liwai]]（伦理守则条文待人工核对官方 PDF，§H1）
+  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。

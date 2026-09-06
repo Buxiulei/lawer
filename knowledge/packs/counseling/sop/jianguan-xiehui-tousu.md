@@ -93,3 +93,11 @@ updated: 2026-09-06
 - 消费者权益保护法第 26/55 条（[[statute-xbf-26-55-geshi-tiaokuan-chengfa]]）
 - 精神卫生法第 23 条（[[statute-jswsf-23-zixun-bianjie]]）
 - 个人信息保护法第 28—31 条（[[statute-grxxbhf-28-31-mingan-xinxi]]）
+
+## 待核实
+
+- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
+  下列未决项：
+  - [[data-counseling-shixiao-qixian]]（现行条号与各类答复期限待核，§H3）
+  - [[risk-difang-xuke-beian]]（待律师书面确认，§H2）
+  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。

@@ -96,3 +96,11 @@ updated: 2026-09-06
 - 民法典第 1032/1033 条（[[statute-mfd-1032-1033-yinsi]]）
 - 民法典第 188 条（[[statute-mfd-188-susong-shixiao]]）
 - 参考案例（仅内部参考）：[[case-guge-mingyu-quan]]、[[case-dongni-lisongwei-weizhongshen]]
+
+## 待核实
+
+- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
+  下列未决项：
+  - [[case-dongni-lisongwei-weizhongshen]]（未终审、无裁判文书全文，§H4）
+  - [[case-guge-mingyu-quan]]（无裁判文书全文，§H4）
+  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。

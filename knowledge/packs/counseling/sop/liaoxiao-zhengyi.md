@@ -83,3 +83,12 @@ updated: 2026-09-06
 - 精神卫生法第 23 条（[[statute-jswsf-23-zixun-bianjie]]）
 - 消保法第 26/55 条（[[statute-xbf-26-55-geshi-tiaokuan-chengfa]]）
 - 知情同意缺陷的补正：[[sop-zhiqing-tongyi-quexian]]
+
+## 待核实
+
+- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
+  下列未决项：
+  - [[sop-lunli-shensu-yingdui]]（同为待核实卡，§H6）
+  - [[sop-tuifei-zhengyi]]（同为待核实卡，§H6）
+  - [[sop-zhiqing-tongyi-quexian]]（同为待核实卡，§H6）
+  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。
