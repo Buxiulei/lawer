@@ -104,4 +104,27 @@ export function keyRevoked(): NextResponse {
   );
 }
 
+/**
+ * 授权换来的那一行不能轮换：它不是一把钥匙，是一次授权，用户手上从来就没有明文。
+ *
+ * 【放它过去会发生什么】轮换会给这一行写进 secret_enc，于是同一行同时成了
+ * 「没有可复制的明文的授权」（API key 卡）与「一把可复制的明文密钥」（接入卡），
+ * 两张卡对同一行说相反的话；而客户端手里的令牌照旧能用——用户以为自己换掉了凭据，
+ * 实际什么都没断。
+ */
+export function keyFromOauth(): NextResponse {
+  return NextResponse.json(
+    {
+      ok: false,
+      error_code: 'KEY_FROM_OAUTH',
+      message:
+        '缺什么：这一行是某个客户端走授权接上的，没有可轮换的明文。' +
+        '为什么缺：轮换换的是那串你自己复制粘贴的密钥；这条授权的凭据在客户端手里、' +
+        '还会自己定期换，你这边从头到尾就没有一串明文可换。' +
+        '怎么办：想断开就吊销这一行；想换一台设备接，去那个客户端里重新授权一次。',
+    },
+    { status: 409 },
+  );
+}
+
 export { masterKeyConfigured };
