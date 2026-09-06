@@ -93,7 +93,7 @@ X-API-Key: <你的 api key>
 |---|---|---|---|---|---|
 | `case_get` | `GET /cases/{id}` | `case:read` | 读 | 读取一个案件的档案（阶段、目标、底线）以及最近的时间线事件。只能读自己的案件。 | `case_id` 案件 id；`timeline_limit`? 带回多少条时间线事件，默认 50，最多 200 |
 | `case_update` | `PATCH /cases/{id}` | `case:write` | 写 | 更新案件档案：阶段 stage、目标 goal、底线 bottom_line，以及用工基本盘四项——入职时间 employed_from（YYYY-MM-DD）、月工资 monthly_wage_yuan（单位元）、岗位 position、合同签署次数 contract_count。**至少传一个**，用于零散补齐，不必重走首诊。stage 必须是法定枚举值之一。 | `case_id` 案件 id；`stage`? 案件所处阶段；`goal`? 用户自述的诉求目标；`bottom_line`? 用户自述的底线；`employed_from`? 入职时间，YYYY-MM-DD，不能晚于今天；工龄年限的起点；`monthly_wage_yuan`? 月工资，单位元（会换算成分落库）；所有赔偿金额的基数；`position`? 岗位；`contract_count`? 合同签署次数，用户自述原样记录，如「只签过一次」 |
-| `case_facts` | — | `case:read` | 读 | 一次拿全这个案子的当前事实：当事人、案件抬头、法定期限、用工基本盘（入职时间/月薪/岗位）、公司主体、行动卡、诉求金额、时间线、证据清单。**回答任何与案情有关的问题之前先调它**。档案里没有的项会明写「未记录」——那是「档案里没有这一项」，不是「不存在」，不要自己脑补一个值。 | `case_id` 案件 id |
+| `case_facts` | `GET /cases/{id}/facts` | `case:read` | 读 | 一次拿全这个案子的当前事实：当事人、案件抬头、法定期限、用工基本盘（入职时间/月薪/岗位）、公司主体、行动卡、诉求金额、时间线、证据清单。**回答任何与案情有关的问题之前先调它**。档案里没有的项会明写「未记录」——那是「档案里没有这一项」，不是「不存在」，不要自己脑补一个值。 | `case_id` 案件 id |
 | `case_list` | `GET /cases` | `case:read` | 读 | 列出当前 api key 所属用户自己的全部案件（case_id、抬头 title、阶段 stage、建档时间），新的在前。**连上后先调它认领案件**：只有一个案件（绝大多数人）就直接用它的 case_id，不要开口问用户要编号；有多个就把抬头列出来让用户挑；一个都没有就请用户去网页端建档（首诊）。无需任何入参。 | 无入参 |
 | `intake_submit` | `POST /cases/{id}/intake` | `case:write` | 写 | 把首诊问下来的内容一次性写进这个案件：阶段、公司名、入职时间、月工资、岗位、合同次数、经过（时间线）、诉求、底线。**新用户或用工基本盘还空着时用它一次建档**，问齐了再调，不要让用户回网页填。金额传元（monthly_wage_yuan），服务端换算成分。校验不过会逐字段回原因（如 INVALID_MONTHLY_WAGE），照着补齐再提交即可。 | `case_id` 案件 id；`stage` 案件所处阶段；`company_name` 公司名称，就是仲裁里的被申请人；`employed_from` 入职时间，YYYY-MM-DD，不能晚于今天；`monthly_wage_yuan` 月工资，单位元（会换算成分落库）；`goals` 诉求，至少一项；`position`? 岗位，可省略；`contract_count`? 合同签署次数，用户自述原样记录，可省略；`events`? 用户记得的事件，每条含 date（YYYY-MM-DD，可留空）与 text；`free_text`? 用户整段自述的经过，可省略；`company_docs`? 公司给过哪些文件（键 terminationNotice / settlementAgreement / otherPaper）；`company_wording`? 公司口头给的说法，可省略；`bottom_line`? 用户的底线，可省略 |
 
@@ -111,7 +111,7 @@ X-API-Key: <你的 api key>
 |---|---|---|---|---|---|
 | `action_list` | `GET /cases/{id}/actions` | `case:read` | 读 | 列出案件下的行动项，可按状态过滤（待办 / 完成 / 放弃）。 | `case_id` 案件 id；`status`? 只看某个状态 |
 | `action_complete` | `PATCH /cases/{id}/actions/{actionId}` | `case:write` | 写 | 把一条行动项标记为完成；也可以传 status 标记为放弃。 | `case_id` 案件 id；`action_id` 行动项 id；`status`? 目标状态，默认「完成」 |
-| `action_create` | — | `case:write` | 写 | 给案件加行动卡，一次最多 3 张。超过这个数就不是「现在做什么」，是又一份待办清单——用户看完照样不知道先干哪件。每张必须齐三样：what（做什么）、how（怎么做）、why（为什么），外加 due_at（什么时候之前做完，ISO8601 时刻；「今天下班前」也要换算成具体时刻）。同案下已有同题待办不会重复落库，回 created:false。 | `case_id` 案件 id；`items` 要新建的行动卡，1~3 张；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
+| `action_create` | `POST /cases/{id}/actions` | `case:write` | 写 | 给案件加行动卡，一次最多 3 张。超过这个数就不是「现在做什么」，是又一份待办清单——用户看完照样不知道先干哪件。每张必须齐三样：what（做什么）、how（怎么做）、why（为什么），外加 due_at（什么时候之前做完，ISO8601 时刻；「今天下班前」也要换算成具体时刻）。同案下已有同题待办不会重复落库，回 created:false。 | `case_id` 案件 id；`items` 要新建的行动卡，1~3 张；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
 
 **期限**
 
@@ -139,7 +139,7 @@ X-API-Key: <你的 api key>
 
 | 工具 | REST | scope | 读写 | 用途 | 入参要点 |
 |---|---|---|---|---|---|
-| `knowledge_search` | — | `case:read` | 读 | 按自然语言检索法条卡/判例卡/计算规则/流程SOP/文书模板/话术卡/情绪指南/数据卡/审查规则/方法卡。任何涉法断言、任何数字、任何文书起草之前都先调它——你记忆里的条号和数字一律不可用。每张卡带 citation_guide（可直接照抄的引用块）与 confidence；confidence 是「待核实」的必须如实转达给用户。默认给摘要，要整张正文时传 full_text=true，或用 knowledge_get 单取一张。检索不到就说查不到，不要编条号和案号。 | `query` 检索词，用案情关键词而非整句话，如「客观情况重大变化 北京口径」；`type`? 只要某一类卡时传，一般不传；`court`? 只要某个法院的判例时传，子串即可（如「朝阳」）。传了就只回判例卡——没有审理机构的卡会被滤掉；`full_text`? 传 true 回整张正文（单卡上限 8000 字，超出截断并标 truncated）；默认只回 1200 字摘要；`limit`? 最多几张，默认与上限都是 6；超出这个范围会被夹回 1~6 |
+| `knowledge_search` | `GET /knowledge/search` | `case:read` | 读 | 按自然语言检索法条卡/判例卡/计算规则/流程SOP/文书模板/话术卡/情绪指南/数据卡/审查规则/方法卡。任何涉法断言、任何数字、任何文书起草之前都先调它——你记忆里的条号和数字一律不可用。每张卡带 citation_guide（可直接照抄的引用块）与 confidence；confidence 是「待核实」的必须如实转达给用户。默认给摘要，要整张正文时传 full_text=true，或用 knowledge_get 单取一张。检索不到就说查不到，不要编条号和案号。 | `query` 检索词，用案情关键词而非整句话，如「客观情况重大变化 北京口径」；`type`? 只要某一类卡时传，一般不传；`court`? 只要某个法院的判例时传，子串即可（如「朝阳」）。传了就只回判例卡——没有审理机构的卡会被滤掉；`full_text`? 传 true 回整张正文（单卡上限 8000 字，超出截断并标 truncated）；默认只回 1200 字摘要；`limit`? 最多几张，默认与上限都是 6；超出这个范围会被夹回 1~6 |
 | `knowledge_get` | — | `case:read` | 读 | 按 id 取一张知识卡的正文与结构化事实（facts）。id 从 knowledge_search 的结果里拿。要逐字引用条文、要取一个数、要照着审查规则逐条核对时用它——facts 里的 statute_quotes / values / review_rules 是**结构化原文**，比正文散文更该被照抄；正文上限 8000 字，超出会截断并标 truncated。 | `id` 知识卡 id，形如 `<域单数>-<slug>`，从 knowledge_search 结果里取 |
 
 **金额主张**
@@ -148,7 +148,7 @@ X-API-Key: <你的 api key>
 |---|---|---|---|---|---|
 | `claim_calc` | — | `case:write` | 写 | 按案情算一笔金额并直接落库（同案同 kind 只留一条，再算一次是修正）。返回金额、算式 formula、逐步骤 steps、依据 basis（条号 + 逐字原文 + 来源卡 id）与封顶提示。**任何要写进文书、说给用户听或拿去谈的金额都必须经它算**，不要自己心算、也不要转述记忆里的数。入参缺什么会逐条回一句人话告诉你缺什么（七种算法的必填项互不相同），照着补齐再调一次即可。金额单位一律是**分**，且是「应得」不是「到手」。 | `case_id` 案件 id；`kind` 算哪一项；`inputs`? 这一项算法要的输入，键名照服务端回的错误提示填（如 avg_monthly_wage_fen / employed_from / terminated_at / months / anchor_date …）。也可以把它们平铺在顶层。；`evidence_backed`? 哪些输入字段是有证据支撑的（不列的一律标「用户自述」，展示时要说明待核实）；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
 | `claims_upsert` | — | `case:write` | 写 | 登记或修正案件下的一条诉求项（同案同 kind 只有一条，再调是覆盖不是追加）。**算得出来的项不要在这里填金额**——它们必须走 claim_calc（那条会带算式、输入快照与依据一起落库）；这里只用于登记「用户陈述的数额」一类的项，以及给已有的项补依据 basis。金额单位是分。 | `case_id` 案件 id；`kind` 诉求种类；`amount_fen`? 金额，单位分，非负；还没算出来就给 0；`basis`? 依据（条号、来源卡 id 等），可省略；`calc_json`? 这个数从哪来、待证状态，JSON 串，可省略；`status`? 默认 draft；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
-| `claims_list` | — | `case:read` | 读 | 列出案件下的全部诉求项与**合计金额**（合计由服务端算，不要自己把各项加起来——这个总数正是拿去跟对方谈的那个数）。每项带 calc_json：那是算这笔钱时的完整快照，可复算。 | `case_id` 案件 id |
+| `claims_list` | `GET /cases/{id}/claims` | `case:read` | 读 | 列出案件下的全部诉求项与**合计金额**（合计由服务端算，不要自己把各项加起来——这个总数正是拿去跟对方谈的那个数）。每项带 calc_json：那是算这笔钱时的完整快照，可复算。 | `case_id` 案件 id |
 
 **文书**
 

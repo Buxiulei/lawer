@@ -32,6 +32,7 @@ export const actionCreate: Capability = {
   domains: ['*'],
   exposeTo: ['mcp'],
   precondition: [],
+  rest: { method: 'POST', path: '/api/v1/cases/{id}/actions' },
   idempotency: { clientRef: true, naturalKey: '同案 + 待办中标题去掉标点空白后相等' },
   title: '新建行动卡',
   description:

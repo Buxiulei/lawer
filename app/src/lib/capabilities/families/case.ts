@@ -93,6 +93,7 @@ export const caseFacts: Capability = {
   domains: ['*'],
   exposeTo: ['mcp'],
   precondition: [],
+  rest: { method: 'GET', path: '/api/v1/cases/{id}/facts' },
   title: '读案件事实卡',
   description:
     '一次拿全这个案子的当前事实：当事人、案件抬头、法定期限、用工基本盘（入职时间/月薪/岗位）、' +
