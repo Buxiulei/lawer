@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/shadcn/skeleton';
 import { CodeBlock } from '../../_components/CodeBlock';
 import { CurrentKey } from '../../_components/CurrentKey';
 import { SetupPrompt } from '../../_components/SetupPrompt';
+import { NoToolCard } from './NoToolCard';
 import { SignInHint } from '../../_components/SignInHint';
 import type { SetupUrls } from '../../_components/agentSetup';
 import { useAgentSetup } from '../../_components/useAgentSetup';
@@ -175,6 +176,13 @@ export function ConnectGuide() {
           <Step no="四" title="验一下接上没有">
             <VerifyStep issuedId={issued?.id ?? null} />
           </Step>
+
+          {/*
+            上面四步是给能接工具的客户端的。接不了的（DeepSeek / 豆包 / 国内 Gemini 网页版）
+            走这张卡：复制开场白 → 聊 → 把回复粘回来。放在四步之后而不是并列成第五步，
+            是因为它不是这条路上的一环，而是另一条路——摆成第五步会让所有人都以为还得做它。
+          */}
+          <NoToolCard />
         </div>
       )}
 

@@ -98,6 +98,7 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/evidence', auth: 'jwt|api_key', scope: 'case:read', description: '列出案件下的证据条目，只给元数据（对应工具 evidence_list）' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/drafts', auth: 'jwt|api_key', scope: 'case:read', description: '列出案件下的文书，正文一并返回' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/docs', auth: 'jwt|api_key', scope: 'case:read', description: '列出案件下已解读的对方来文，不含原文与逐条发现（对应工具 doc_list）' },
+  { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/opener', auth: 'jwt|api_key', scope: 'case:read', description: '「无工具模式」的开场白纯文本：陪跑纪律 + 回填约定 + 事实卡 + 简报摘要，?tier=long|medium|short 决定篇幅' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/dossier', auth: 'jwt|api_key', scope: 'case:read', description: '本案对方主体的公司档案（页面手上只有 case_id 时走这条）' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/company-graph', auth: 'jwt|api_key', scope: 'case:read', description: '本案的公司关系图谱；没做过调查时 graph 为 null（不是错误）' },
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/watch', auth: 'jwt|api_key', scope: 'case:write', description: '给对方主体加守望。本次不扣钱，扣费在月度巡检；同案同主体去重' },
@@ -117,6 +118,8 @@ export const REST_INDEX: readonly RestEndpoint[] = [
 
   // ──────── 网页会话专用（api key 不认）────────
   { category: 'web', method: 'POST', path: '/api/oauth/authorize', auth: 'jwt', description: 'OAuth 同意页点「同意」：签发一次性授权码；只认网页登录态（不能用令牌换新授权）' },
+  { category: 'web', method: 'POST', path: '/api/v1/cases/{id}/paste-back', auth: 'jwt', description: '把助手回复里的结构块解析成待写入条目并回预览，**一行都不写库**' },
+  { category: 'web', method: 'POST', path: '/api/v1/cases/{id}/paste-back/confirm', auth: 'jwt', description: '写入上一步预览里勾中的条目，走与 MCP 同一批能力；同批重放零双写' },
   { category: 'web', method: 'GET', path: '/api/v1/keys', auth: 'jwt', description: '列出自己的 api key（永不回显明文或 hash）' },
   { category: 'web', method: 'POST', path: '/api/v1/keys', auth: 'jwt', description: '创建 api key，明文在本次响应里给出，同时以密文落库' },
   { category: 'web', method: 'GET', path: '/api/v1/keys/{id}/secret', auth: 'jwt', description: '取回这把 key 的明文（本能力上线前签发的旧密钥无密文，回 KEY_NOT_VIEWABLE）' },
