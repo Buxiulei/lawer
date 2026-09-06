@@ -102,9 +102,22 @@ export function toolTextResult(payload: unknown) {
  * 工具跑起来了但业务失败（案件不存在、枚举值非法）走 result.isError=true——
  * 这样模型能读到失败原因并自己调整下一步，而不是整个请求炸掉。
  */
-export function toolErrorResult(errorCode: string, message: string) {
+export function toolErrorResult(
+  failure: { errorCode: string; message: string } & Record<string, unknown>,
+) {
+  // 【收整个失败对象，不收两个字符串】能力自己在失败对象上挂的结构化清单
+  // （如 claim_calc 的 missing / invalid 两张表）从这里原样透传出去。
+  // 只收 errorCode + message 的形态是：工具描述向对方 agent 承诺了这些字段，
+  // 回包 isError 与人读的 message 都正常，只有那几个结构化字段静默消失——
+  // 对方按描述去读会读到 undefined，只能退回去解析中文，或一次只补一个问题。
+  // ok / status 是内部路由分档用的（HTTP 面才需要），不进 MCP 回包。
+  const { ok: _ok, status: _status, errorCode, message, ...rest } = failure;
+  void _ok;
+  void _status;
   return {
-    content: [{ type: 'text', text: JSON.stringify({ error_code: errorCode, message }) }],
+    content: [
+      { type: 'text', text: JSON.stringify({ error_code: errorCode, message, ...rest }) },
+    ],
     isError: true,
   };
 }

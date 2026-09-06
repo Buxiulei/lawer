@@ -123,13 +123,14 @@ export async function POST(req: Request) {
         return json(
           rpcResult(
             id,
-            toolErrorResult(
-              'REALNAME_REQUIRED',
-              `${tool.name} 需要账号先完成实名认证，本次调用没有产生任何写入。` +
+            toolErrorResult({
+              errorCode: 'REALNAME_REQUIRED',
+              message:
+                `${tool.name} 需要账号先完成实名认证，本次调用没有产生任何写入。` +
                 '原因是这一步的产物要与本人身份绑定（材料要能证明是谁存的，出证上要印实名快照）。' +
                 '请让用户到网页「设置 → 实名认证」完成认证后再调一次；' +
                 '认证前不要改用别的工具绕开这一步，绕过去的记录日后不能用于出证。',
-            ),
+            }),
           ),
         );
       }
@@ -141,8 +142,10 @@ export async function POST(req: Request) {
         | { ok: false; errorCode: string; message: string }
         | Record<string, unknown>;
       if (outcome && (outcome as { ok?: boolean }).ok === false) {
-        const failure = outcome as { errorCode: string; message: string };
-        return json(rpcResult(id, toolErrorResult(failure.errorCode, failure.message)));
+        // 【整个失败对象交给 toolErrorResult】能力挂在失败对象上的结构化清单要跟着出去，
+        // 挑字段转交的形态是：新加一张表的那个能力在描述里承诺了它，回包却少那几个键。
+        const failure = outcome as { errorCode: string; message: string } & Record<string, unknown>;
+        return json(rpcResult(id, toolErrorResult(failure)));
       }
       return json(rpcResult(id, toolTextResult(outcome)));
     }
