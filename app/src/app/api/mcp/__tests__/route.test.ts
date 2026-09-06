@@ -85,7 +85,9 @@ describe('鉴权', () => {
   test('没带 key → 401 且带 WWW-Authenticate', async () => {
     const res = await POST(rpc({ jsonrpc: '2.0', id: 1, method: 'initialize' }));
     expect(res.status).toBe(401);
-    expect(res.headers.get('www-authenticate')).toBe('Bearer');
+    // resource_metadata 那一段是只认 OAuth 的客户端找到授权服务器的唯一线索（RFC 9728）；
+    // 具体内容由 api/oauth 那组判据钉，这里只确认 401 仍然带着 Bearer 挑战。
+    expect(res.headers.get('www-authenticate')).toMatch(/^Bearer\b/);
   });
 
   test('伪造的 key → 401', async () => {
