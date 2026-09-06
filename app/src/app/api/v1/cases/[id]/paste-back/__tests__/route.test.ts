@@ -4,6 +4,8 @@
 //  ① lib/paste/apply.ts 里去掉 client_ref ⇒「重放同一批零双写」当场红（时间线多一条、行动卡多一张）。
 //  ② lib/paste/index.ts 里把 crisisNotice 换成恒 {triggered:false} ⇒「危机命中带提示与号码」红。
 //  ③ 预览里加一次写库 ⇒「预览零新增」红。
+//  ④ lib/cases/index.ts 里把「client_ref 未命中走自然键」去掉（只在无 ref 时去重）
+//     ⇒「跨批重贴 written=0/deduped=1」当场红（时间线 1→2）。
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
@@ -205,6 +207,37 @@ describe('确认写入', () => {
     expect(body.written).toBe(0);
     expect(body.deduped).toBe(4);
     expect(counts()).toEqual(after1);
+  });
+
+  test('跨批重贴同一事件 ⇒ 第二批 written=0/deduped=1，时间线仍 1 条（新 batch_id 换了 client_ref 也认得出）', async () => {
+    const TL = { timeline: BLOCK.timeline };
+    // 第一批：预览 → 确认，落 1 条
+    const p1 = (await (
+      await preview(post(signToken(userA), { text: reply(TL) }), ctx(caseA))
+    ).json()) as { batch_id: string; items: { index: number }[] };
+    await confirm(
+      post(signToken(userA), { batch_id: p1.batch_id, accept: p1.items.map((i) => i.index) }),
+      ctx(caseA),
+    );
+    expect(counts().timeline_events).toBe(1);
+
+    // 第二批：同一段重贴（重新预览 ⇒ 新 batch_id ⇒ client_ref 从 paste-<b1>-* 换成 paste-<b2>-*）
+    const p2 = (await (
+      await preview(post(signToken(userA), { text: reply(TL) }), ctx(caseA))
+    ).json()) as { batch_id: string; items: { index: number; dedup: string }[] };
+    expect(p2.batch_id).not.toBe(p1.batch_id);
+    // 预览按自然键早就预报了「已有」——此前写入不认这把尺，才 1→2
+    expect(p2.items[0].dedup).toBe('duplicate');
+
+    const second = await confirm(
+      post(signToken(userA), { batch_id: p2.batch_id, accept: p2.items.map((i) => i.index) }),
+      ctx(caseA),
+    );
+    const body = await second.json();
+    expect(body.ok).toBe(true);
+    expect(body.written).toBe(0);
+    expect(body.deduped).toBe(1);
+    expect(counts().timeline_events).toBe(1);
   });
 
   test('只写勾中的那几条', async () => {
