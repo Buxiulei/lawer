@@ -4,11 +4,13 @@
 // 前端按 error_code 分支，不按 HTTP status 分支（NBDpsy 的既定约定）。
 import { NextResponse } from 'next/server';
 
+import { apiJson } from '@/lib/http/json';
+
 import { verifyAuthHeader } from './jwt';
 import type { AuthFailure } from './otp';
 
 export function failureResponse(failure: AuthFailure): NextResponse {
-  return NextResponse.json(
+  return apiJson(
     {
       ok: false,
       error_code: failure.errorCode,

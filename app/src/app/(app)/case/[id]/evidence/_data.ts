@@ -76,6 +76,9 @@ export interface EvidenceView {
   sizeBytes: number | null;
   sha256: string | null;
   createdAt: string;
+  /** 非 null = 已作废（当事人声明这份不作数）。作废的条目在证据库里收进折叠区，不进主列表 */
+  voidedAt: string | null;
+  voidReason: string;
   attestation: AttestationInfo | null;
   /** 提取状态与简报；列表阶段为 null，打开详情时补齐 */
   extraction: ExtractionInfo | null;
@@ -115,6 +118,8 @@ interface ApiEvidenceRow {
   prove_purpose: string | null;
   status: string;
   created_at: string;
+  voided_at?: string | null;
+  void_reason?: string | null;
 }
 
 interface ApiEvidenceDetailRow extends ApiEvidenceRow {
@@ -156,6 +161,8 @@ function fromListRow(row: ApiEvidenceRow): EvidenceView {
     sizeBytes: null,
     sha256: null,
     createdAt: row.created_at,
+    voidedAt: row.voided_at ?? null,
+    voidReason: row.void_reason ?? '',
     attestation: null,
     extraction: null,
     detailed: false,
@@ -202,6 +209,8 @@ function fromDetailRow(
     sizeBytes: row.size,
     sha256: row.sha256,
     createdAt: row.created_at,
+    voidedAt: row.voided_at ?? null,
+    voidReason: row.void_reason ?? '',
     attestation: toAttestation(attestation),
     extraction: toExtraction(extraction),
     detailed: true,
@@ -210,9 +219,16 @@ function fromDetailRow(
 
 /* ── 真接口 ─────────────────────────────────────────────── */
 
+/**
+ * 列表。**带 include_voided=1 取全量**，作废与否交给页面分区——
+ * 页面要显示「已作废」折叠区，而后端默认不回作废条目；不带这个参数的话，
+ * 那个折叠区永远是空的，而它看起来只是"这个案子没有作废过材料"。
+ */
 export async function fetchEvidenceList(caseId: string): Promise<EvidenceView[]> {
+  // 两件事都要：走 apiFetchAll 才不会在 > 50 条时静默丢；带 include_voided=1 才看得见折叠区里
+  // 已作废的那些。只留一件的形态都是「页面照常渲染、少一批条目」，没有任何一处报错。
   const rows = await apiFetchAll<ApiEvidenceRow>(
-    `/cases/${encodeURIComponent(caseId)}/evidence`,
+    `/cases/${encodeURIComponent(caseId)}/evidence?include_voided=1`,
   );
   return rows.map(fromListRow);
 }
@@ -330,6 +346,8 @@ export function demoView(item: EvidenceItem): EvidenceView {
     sizeBytes: item.sizeBytes,
     sha256: item.sha256,
     createdAt: item.createdAt,
+    voidedAt: null,
+    voidReason: '',
     attestation: item.attestationNo
       ? {
           orderNo: item.attestationNo,

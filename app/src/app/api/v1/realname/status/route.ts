@@ -12,25 +12,24 @@
 // 而且要它的恰恰是只有 case:write 的那种 key（写之前先看闸门过不过）。
 // 【为什么 key 这条不打上游】拉取会写回 users、消耗上游配额，还可能把「待审」推进成落定结论。
 // 那是用户在网页上做认证时该发生的事，不该由一次只读查询触发。
-import { NextResponse } from 'next/server';
-
 import { resolveIdentity } from '@/lib/auth/identity';
 import { failureResponse } from '@/lib/auth/http';
 import { AUTH_STATUS, refreshRealnameStatus } from '@/lib/auth/realname';
 import { getDb } from '@/lib/db/client';
 import { findUserById } from '@/lib/db/otp';
+import { apiJson } from '@/lib/http/json';
 
 export async function GET(req: Request) {
   const identity = resolveIdentity(getDb(), req.headers);
   if (!identity) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'UNAUTHORIZED', message: '缺少或无效的凭据' },
       { status: 401 },
     );
   }
 
   if (identity.via === 'api_key') {
-    return NextResponse.json({
+    return apiJson({
       ok: true,
       auth_status: findUserById(getDb(), identity.uid)?.auth_status ?? AUTH_STATUS.none,
     });
@@ -39,7 +38,7 @@ export async function GET(req: Request) {
   const result = await refreshRealnameStatus(getDb(), { userId: identity.uid });
   if (!result.ok) return failureResponse(result);
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     auth_status: result.authStatus,
     verification_status: result.verificationStatus,

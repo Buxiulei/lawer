@@ -11,11 +11,10 @@
 // 【绝不 touch last_used_at】那一列是「接没接上」的唯一判据（_ui/useConnectedAgent）。
 // 在网页上看一眼密钥不是「你的助手连进来了」，写这一列会把判据污染成假阳性：
 // 页面从此说「已接入」，而用户其实一个字都还没粘进客户端。
-import { NextResponse } from 'next/server';
-
 import { parseId, requireWebSession } from '@/lib/auth/guard';
 import { decryptField } from '@/lib/crypto';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 import {
   NO_STORE,
   keyNotFound,
@@ -45,7 +44,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return secretDecryptFailed();
   }
 
-  return NextResponse.json(
+  return apiJson(
     { ok: true, id: row.id, name: row.name, key },
     // 正文里躺着明文：这一趟谁都不许缓存
     { headers: NO_STORE },

@@ -20,16 +20,32 @@ import { hasScope, type Identity } from '@/lib/auth/identity';
 import { ERROR_CODES } from './error-codes';
 import { getCapability, type Capability, type CapabilitySurface } from './registry';
 
-/** 失败结构与 lib/cases 的 DomainFailure 同形，路由可以原样喂给 domainFailure() */
+/**
+ * 失败结构与 lib/cases 的 DomainFailure 同形，路由可以原样喂给 domainFailure()。
+ *
+ * 【为什么带 extra】能力自己在失败对象上挂的结构化清单（如 claim_calc 的 missing / invalid
+ * 两张表）要跟着出去。只搬 errorCode + message 的形态是：MCP 那条路（toolErrorResult 收整个
+ * 失败对象）读得到那几张表，REST 通用桥读到的是 undefined —— 同一条能力、同一个错，
+ * 两条入口给出的回包不一样，而两边都是正常的 4xx，没有任何一处报错。
+ */
 export interface CapabilityFailure {
   ok: false;
   status: number;
   errorCode: string;
   message: string;
+  /** 能力自报的结构化字段，原样透传（键名由该能力的描述向调用方承诺） */
+  extra?: Record<string, unknown>;
 }
 
-function fail(status: number, errorCode: string, message: string): CapabilityFailure {
-  return { ok: false, status, errorCode, message };
+function fail(
+  status: number,
+  errorCode: string,
+  message: string,
+  extra?: Record<string, unknown>,
+): CapabilityFailure {
+  return extra && Object.keys(extra).length > 0
+    ? { ok: false, status, errorCode, message, extra }
+    : { ok: false, status, errorCode, message };
 }
 
 /** error_code → HTTP 状态的正本就是对外错误码表，别在路由里各记一份 */
@@ -111,8 +127,17 @@ export async function invokeCapability(
 
   const outcome = await capability.run(db, identity, args);
   if (outcome && typeof outcome === 'object' && (outcome as { ok?: unknown }).ok === false) {
-    const failure = outcome as { status?: unknown; errorCode: string; message: string };
-    return fail(statusForFailure(failure), failure.errorCode, failure.message);
+    const failure = outcome as { status?: unknown; errorCode: string; message: string } & Record<
+      string,
+      unknown
+    >;
+    // ok / status / errorCode / message 是路由分档与人读的部分，其余键一律原样带走
+    const { ok: _ok, status: _status, errorCode: _code, message: _msg, ...extra } = failure;
+    void _ok;
+    void _status;
+    void _code;
+    void _msg;
+    return fail(statusForFailure(failure), failure.errorCode, failure.message, extra);
   }
   return { ok: true, value: (outcome ?? {}) as Record<string, unknown> };
 }

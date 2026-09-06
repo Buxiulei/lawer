@@ -332,11 +332,13 @@ export function listDeadlines(
 
 export function listEvidence(
   db: Database,
-  input: { caseId: number; userId: number; limit?: unknown; offset?: unknown },
+  input: { caseId: number; userId: number; includeVoided?: boolean; limit?: unknown; offset?: unknown },
 ): Result<{ evidence: store.EvidenceRow[]; total: number; offset: number; next_offset: number | null }> {
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
-  const { items, ...page } = paginate(store.listEvidence(db, input.caseId), input.limit, input.offset);
+  // 作废过滤先于分页：total 数的是这一条清单**过滤后**的真总数。
+  const rows = store.listEvidence(db, input.caseId, input.includeVoided === true);
+  const { items, ...page } = paginate(rows, input.limit, input.offset);
   return { ok: true, evidence: items, ...page };
 }
 

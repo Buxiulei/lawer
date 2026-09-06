@@ -17,10 +17,17 @@ import {
   UPLOAD_TOKEN_TTL_MS,
 } from '@/lib/evidence/upload-token';
 
+import { voidEvidence } from '@/lib/evidence/void';
+
 import { caseIdProp, num, writeOnce } from '../shared';
 import type { Capability } from '../registry';
 
 const TTL_MINUTES = UPLOAD_TOKEN_TTL_MS / 60_000;
+
+/** 与 families/evidence.ts 同名同义的入参片段（两个文件各自持有，不互相 import）。 */
+const evidenceIdProp = {
+  evidence_id: { type: 'integer', description: '证据 id（取自 evidence_list）' },
+} as const;
 
 /** 一次 attest 最多几件。见 evidenceAttest 的说明。 */
 export const MAX_ATTEST_PER_CALL = 10;
@@ -323,5 +330,55 @@ export const attestVerify: Capability = {
     const orderNo = str(args.order_no);
     if (!orderNo) return fail(404, 'ORDER_NOT_FOUND', '存证订单不存在');
     return evidence.getVerification(db, orderNo);
+  },
+};
+
+export const evidenceVoid: Capability = {
+  name: 'evidence_void',
+  family: 'evidence',
+  scope: 'case:write',
+  kind: 'write',
+  domains: ['*'],
+  exposeTo: ['mcp'],
+  precondition: [],
+  idempotency: { naturalKey: '证据 id（已作废的再调一次不改写理由与时刻）' },
+  rest: { method: 'POST', path: '/api/v1/evidence/{id}/void' },
+  title: '作废一件材料',
+  description:
+    '把一件材料标成「已作废」：当事人确认它不作数（重复上传、拿错版本、内容与本案无关）。' +
+    '作废之后它**不再出现在 evidence_list 默认清单里**（要看得传 include_voided）、' +
+    '不再进案件事实卡，也不能再发起出证。' +
+    '文件本身不删除，仍占用户的存储配额；已经出过证的条目，**那张存证订单不撤销**——' +
+    '订单号照旧可被对方核验，作废只表示当事人不再拿这份材料当证据用。' +
+    'reason 必填：没有理由的作废，日后与"手滑点错了"分不开。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      ...evidenceIdProp,
+      reason: {
+        type: 'string',
+        description: '为什么作废，例如「与条目 12 重复」「当事人确认这是草稿版」',
+      },
+    },
+    required: ['evidence_id', 'reason'],
+  },
+  run: (db, identity, args) => {
+    const evidenceId = num(args.evidence_id);
+    const reason = str(args.reason) ?? '';
+    // 归属与理由都由领域层判（网页路由调的是同一个函数）；这里先读一次只为拿 case_id 记台账。
+    const owned = db
+      .prepare('SELECT case_id, user_id FROM evidence WHERE id = ?')
+      .get(Number.isInteger(evidenceId) ? evidenceId : -1) as
+      | { case_id: number; user_id: number }
+      | undefined;
+    if (!owned || owned.user_id !== identity.uid) {
+      return voidEvidence(db, { evidenceId, userId: identity.uid, reason });
+    }
+    return writeOnce(
+      db,
+      { caseId: owned.case_id, tool: 'evidence_void', keyId: identity.keyId ?? null },
+      () => voidEvidence(db, { evidenceId, userId: identity.uid, reason }),
+      (res) => ({ table: 'evidence', id: res.evidence_id }),
+    );
   },
 };

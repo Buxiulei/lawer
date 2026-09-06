@@ -5,12 +5,11 @@
 //（"当时是谁批的、为什么驳的"是事后唯一能查的东西）。
 // 材料只出哈希与大小，字节走 photo 子路由 —— 详情会被前端当成 JSON 缓存进内存，
 // 把两张证件照 base64 塞进来等于让它们跟着每一次列表刷新在内存里多躺一份。
-import { NextResponse } from 'next/server';
-
 import { adminNotFound, adminServerError, requireAdmin } from '@/lib/admin/auth';
 import { readPassportEnvelope } from '@/lib/auth/passport-realname';
 import { parseId } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const db = getDb();
@@ -32,7 +31,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   // 查无此行、或这条流水走的是刷脸通道：都回与"路径不存在"同形的空体 404。
   if (!record) return adminNotFound();
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     verification_id: record.verificationId,
     user_id: record.userId,

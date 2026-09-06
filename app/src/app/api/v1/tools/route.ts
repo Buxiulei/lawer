@@ -8,21 +8,20 @@
 //
 // 与 /api/v1/agent-setup 同一档鉴权：认凭据但**不校 scope**——回的全是接口自描述，
 // 没有一个字节的案件数据，一把只有 case:write 的 key 也该读得到自己能调什么。
-import { NextResponse } from 'next/server';
-
 import { resolveIdentity } from '@/lib/auth/identity';
 import { listCapabilities } from '@/lib/capabilities';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 export async function GET(req: Request) {
   if (!resolveIdentity(getDb(), req.headers)) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'UNAUTHORIZED', message: '缺少或无效的凭据' },
       { status: 401 },
     );
   }
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     // 顺序照注册表原样：客户端把清单原样展示给用户，重排等于面板重排
     tools: listCapabilities({ exposeTo: 'mcp' }).map((c) => ({

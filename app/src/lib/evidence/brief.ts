@@ -189,6 +189,49 @@ export function briefSummary(brief: EvidenceBrief | null, max = BRIEF_SUMMARY_MA
   return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
 }
 
+// ───────────────────────── 失败可见（生产 09-06 缺口）─────────────────────────
+// 【它修的是什么】在此之前，自动生成简报失败只有一行 console.warn。容器日志滚掉之后，
+// 「这件材料从没生成过简报」与「生成失败过三次」在库里长得**一模一样**——两者都只是
+// brief_version=0。2026-09-06 生产实证：OCR 成功、简报没有、日志里一个字都没有，
+// 于是没人能判断该重试还是该等。所以失败必须落一列，并且从读侧看得见。
+
+/** 一件材料的简报处境。**三档分得开**：没生成过 / 有 / 试过但失败了。 */
+export type BriefStatus = 'none' | 'ok' | 'failed';
+
+export interface BriefStatusView {
+  brief_status: BriefStatus;
+  /** 仅 failed 档非 null：最近一次失败的原因原文 */
+  brief_error: string | null;
+}
+
+/**
+ * 从库里那两列算出简报处境。**读侧一律经它**，不要各自写 `brief_json ? 'ok' : 'none'`——
+ * 那个写法把 failed 归进 none，而这两档要做的事完全不同（一个去发起提取，一个去重试生成）。
+ */
+export function briefStatusOf(
+  briefJson: string | null | undefined,
+  briefError: string | null | undefined,
+): BriefStatusView {
+  if (parseBrief(briefJson) !== null) return { brief_status: 'ok', brief_error: null };
+  return briefError
+    ? { brief_status: 'failed', brief_error: briefError }
+    : { brief_status: 'none', brief_error: null };
+}
+
+/**
+ * 记一次简报生成失败：落 evidence.brief_error + 打一行带原因的 warn。
+ * **两样都做**：库里那一列给读侧与重试用，日志那一行给当场排障用，谁都不能替代谁。
+ */
+export function recordBriefError(db: Database, evidenceId: number, error: string): void {
+  db.prepare('UPDATE evidence SET brief_error = ? WHERE id = ?').run(error, evidenceId);
+  console.warn(`[brief] 证据 ${evidenceId} 的简报没写成：${error}`);
+}
+
+/** 生成成功时清掉上一轮的旧账——留着它会让 failed 档永远退不出去。 */
+export function clearBriefError(db: Database, evidenceId: number): void {
+  db.prepare('UPDATE evidence SET brief_error = NULL WHERE id = ?').run(evidenceId);
+}
+
 /** 从一行 evidence 上把 brief_json 解出来。解不动回 null（脏行不该让读侧崩）。 */
 export function parseBrief(json: string | null | undefined): EvidenceBrief | null {
   if (!json) return null;
@@ -382,15 +425,23 @@ export async function generateBrief(
   llm: BriefLlm,
   updatedBy: BriefAuthor = 'system',
 ): Promise<GenerateBriefResult> {
+  // 【每条失败路径都经 failed()】它同时落 brief_error 与打日志。
+  // 只 return 不落库的那个写法正是 09-06 生产缺口本身：调用方各自决定要不要记，
+  // 于是三条调用路径里有两条什么都没留下。
+  const failed = (error: string): GenerateBriefResult => {
+    recordBriefError(db, evidenceId, error);
+    return { ok: false, error };
+  };
+
   const material = readBriefMaterial(db, evidenceId);
   if (!material) {
-    return {
-      ok: false,
-      error:
-        `找不到要写简报的材料（evidence_id=${evidenceId}）。` +
-        '为什么：这条材料在排队期间被删了，或它指向的文件登记行不在了。' +
-        '怎么办：材料还在的话重新发起一次提取；不在就不必处理。',
-    };
+    // 材料行都没了，brief_error 无处可落（UPDATE 落空），只留日志——如实说清。
+    const error =
+      `找不到要写简报的材料（evidence_id=${evidenceId}）。` +
+      '为什么：这条材料在排队期间被删了，或它指向的文件登记行不在了。' +
+      '怎么办：材料还在的话重新发起一次提取；不在就不必处理。';
+    console.warn(`[brief] ${error}`);
+    return { ok: false, error };
   }
 
   let raw: string;
@@ -400,26 +451,27 @@ export async function generateBrief(
       { role: 'user', content: buildMaterialPrompt(material) },
     ]);
   } catch (e) {
-    return { ok: false, error: `调用简报模型失败：${(e as Error).message}` };
+    return failed(`调用简报模型失败（上游/网络）：${(e as Error).message}`);
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(stripFence(raw));
   } catch {
-    return { ok: false, error: `简报模型返回的不是 JSON（前 200 字）：${raw.slice(0, 200)}` };
+    return failed(`简报模型返回的不是 JSON（前 200 字）：${raw.slice(0, 200)}`);
   }
 
   const check = validateBrief(parsed);
   if (!check.ok) {
-    return { ok: false, error: `简报不合 schema：${check.problems.join('；')}` };
+    return failed(`简报不合 schema（校验）：${check.problems.join('；')}`);
   }
 
   const { brief, stripped } = stripUnverifiedQuotes(check.brief!, material.extractedText);
   const saved = saveBrief(db, { evidenceId, brief, updatedBy });
   if (!saved.ok) {
-    return { ok: false, error: '简报落库失败：这件材料在写入前被改动或删除了，请重读后重试' };
+    return failed('简报落库失败：这件材料在写入前被改动或删除了，请重读后重试');
   }
+  clearBriefError(db, evidenceId);
   return { ok: true, brief, version: saved.version, strippedQuotes: stripped };
 }
 
@@ -527,9 +579,10 @@ export async function ensureBrief(
       extractedText: row.extracted_text,
       extractedMetaJson: row.extracted_meta_json,
     });
-  } catch {
-    // 吞掉：调用方（出证）不该因为附赠品出错而失败。原因不往上抛，但档位是 'error'，
-    // 调用方要记日志时分得清「没插生成器」与「生成器炸了」。
+  } catch (err) {
+    // 吞掉：调用方（出证）不该因为附赠品出错而失败。但**不再静默**——原因落进 brief_error，
+    // 否则「生成器炸了」在库里与「从没生成过」同形（09-06 生产缺口）。
+    recordBriefError(db, evidenceId, `简报生成器抛错：${(err as Error).message}`);
     return 'error';
   }
   if (!sections) return 'declined';
@@ -541,5 +594,6 @@ export async function ensureBrief(
         WHERE id = ? AND brief_version = 0`,
     )
     .run(JSON.stringify(sections), updatedBy, nowSql(), evidenceId).changes;
+  if (changed === 1) clearBriefError(db, evidenceId);
   return changed === 1 ? 'written' : 'already';
 }

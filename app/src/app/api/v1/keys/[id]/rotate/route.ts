@@ -8,13 +8,12 @@
 //
 // 【鉴权同 POST /keys】只认网页登录态：能拿 api key 给自己换发新密钥，等于一把泄漏的
 // key 可以自我续命，吊销原 key 也止不住血。
-import { NextResponse } from 'next/server';
-
 import { generateApiKey, hashApiKey, parseScopes } from '@/lib/auth/api-key';
 import { parseId, requireWebSession } from '@/lib/auth/guard';
 import { encryptField } from '@/lib/crypto';
 import * as store from '@/lib/db/api-keys';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 import { issuedKeyBody } from '../../_issued';
 import {
   NO_STORE,
@@ -48,7 +47,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     secretEnc: encryptField(key),
   });
 
-  return NextResponse.json(
+  return apiJson(
     issuedKeyBody(req, {
       id: row.id,
       name: row.name,

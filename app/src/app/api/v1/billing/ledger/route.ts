@@ -7,11 +7,10 @@
 //
 // 响应里同时给 balance 与 ledger_sum，见 lib/billing 的说明：只给一个数，
 // 物化余额与账本不符时页面会渲染出一个看起来完全正常的错数。
-import { NextResponse } from 'next/server';
-
 import { requireIdentity } from '@/lib/auth/guard';
 import { listGongdaoLedger } from '@/lib/billing';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 export async function GET(req: Request) {
   const guard = requireIdentity(getDb(), req, 'case:read');
@@ -20,5 +19,5 @@ export async function GET(req: Request) {
   const limit = Number(new URL(req.url).searchParams.get('limit') ?? 50);
   const view = listGongdaoLedger(guard.identity.uid, Number.isFinite(limit) ? limit : 50, getDb());
 
-  return NextResponse.json({ ok: true, ...view });
+  return apiJson({ ok: true, ...view });
 }

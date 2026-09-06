@@ -9,10 +9,11 @@ import {
   getEvidenceBrief,
   getEvidenceExtraction,
   quoteExtraction,
+  regenerateBrief,
   startExtraction,
   updateEvidenceBrief,
 } from '@/lib/evidence/extraction';
-import { briefSummary, parseBrief, validateBrief } from '@/lib/evidence/brief';
+import { briefStatusOf, briefSummary, parseBrief, validateBrief } from '@/lib/evidence/brief';
 import type { ExtractionMode } from '@/lib/jobs/extraction-worker';
 
 import { caseIdProp, num } from '../shared';
@@ -44,23 +45,38 @@ export const evidenceList: Capability = {
   rest: { method: 'GET', path: '/api/v1/cases/{id}/evidence' },
   title: '列出证据',
   description:
-    '列出案件下已登记的证据条目（名称、分类、证明目的、固化状态、提取状态，以及有简报时的一句话摘要）。' +
-    '要读全文或整份简报用 evidence_get / evidence_brief_get。',
+    '列出案件下已登记的证据条目（名称、分类、证明目的、固化状态、提取状态、简报状态，以及有简报时的一句话摘要）。' +
+    'brief_status=failed 说明自动生成失败过，brief_error 里是原因，可用 evidence_brief_regenerate 再试一次。' +
+    '要读全文或整份简报用 evidence_get / evidence_brief_get。' +
+    '**已作废的条目默认不在清单里**（当事人声明"这份不作数"的那些）——要看得把 include_voided 传真。',
   inputSchema: {
     type: 'object',
-    properties: { ...caseIdProp },
+    properties: {
+      ...caseIdProp,
+      include_voided: {
+        type: 'boolean',
+        description: '是否把已作废的条目也列出来（默认不列）',
+      },
+    },
     required: ['case_id'],
   },
   run: (db, identity, args) => {
-    const result = cases.listEvidence(db, { caseId: num(args.case_id), userId: identity.uid });
+    const result = cases.listEvidence(db, {
+      caseId: num(args.case_id),
+      userId: identity.uid,
+      includeVoided: args.include_voided === true,
+    });
     if (!result.ok) return result;
     return {
       ok: true as const,
       // brief_json 整份不进清单（一条几百字，二十条就把上下文占满了）：
       // 这里只给一句摘要，要整份的按 id 单取。
-      evidence: result.evidence.map(({ brief_json, ...row }) => ({
+      evidence: result.evidence.map(({ brief_json, brief_error, ...row }) => ({
         ...row,
         brief_summary: briefSummary(parseBrief(brief_json)),
+        // 简报处境三档（none / ok / failed + 原因）：failed 与 none 要做的事不一样，
+        // 一个去发起提取，一个去 evidence_brief_regenerate 免费重试。
+        ...briefStatusOf(brief_json, brief_error),
       })),
       total: result.total,
       next_offset: result.next_offset,
@@ -246,4 +262,32 @@ export const evidenceBriefUpdate: Capability = {
       updatedBy: author(identity.keyId),
     });
   },
+};
+
+export const evidenceBriefRegenerate: Capability = {
+  name: 'evidence_brief_regenerate',
+  family: 'evidence',
+  scope: 'case:write',
+  kind: 'write',
+  domains: ['*'],
+  exposeTo: ['mcp'],
+  precondition: [],
+  idempotency: { naturalKey: '证据 id（已有简报的一律拒，不覆盖）' },
+  rest: { method: 'POST', path: '/api/v1/evidence/{id}/brief/regenerate' },
+  title: '重新生成证据简报',
+  description:
+    '给一件**还没有简报**的材料重新生成一份（自动生成失败过的走这条）。' +
+    // 【与 evidence_attest 同一手法：只说这一步按 0 公道值计价，不写「免费」两个字】
+    // 裸一句「免费」会被 agent 原样复述成"接进来之后什么都不花钱"，而网页对话与内容提取都在扣。
+    '**这一步按 0 公道值计价**，没有报价步骤，也不消耗任何额度——' +
+    '价已经含在当初那次内容提取里。' +
+    '同步返回，不排队。已经有简报的一律拒绝（不覆盖人手写过的那一版，要换用 evidence_brief_update）。' +
+    '这一次再失败会把失败原文原样回给你，不翻译成一句"生成失败"。',
+  inputSchema: {
+    type: 'object',
+    properties: { ...evidenceIdProp },
+    required: ['evidence_id'],
+  },
+  run: (db, identity, args) =>
+    regenerateBrief(db, { evidenceId: num(args.evidence_id), userId: identity.uid }),
 };

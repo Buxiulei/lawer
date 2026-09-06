@@ -6,16 +6,15 @@
 // lib/capabilities/invoke.ts，与 MCP 那条路调的是同一份。这里只做 HTTP 外壳：
 // 取路径段、读 body、把结果渲染成 { ok, ... } / { ok:false, error_code, message }。
 // 在这里补写任何一句判定，就等于给同一条能力立了第二套规矩——而两套都不会报错。
-import { NextResponse } from 'next/server';
-
 import { resolveIdentity } from '@/lib/auth/identity';
 import { invokeCapability } from '@/lib/capabilities/invoke';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 export async function POST(req: Request, { params }: { params: Promise<{ name: string }> }) {
   const identity = resolveIdentity(getDb(), req.headers);
   if (!identity) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'UNAUTHORIZED', message: '缺少或无效的凭据' },
       { status: 401 },
     );
@@ -31,7 +30,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ name: s
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not object');
       args = parsed as Record<string, unknown>;
     } catch {
-      return NextResponse.json(
+      return apiJson(
         { ok: false, error_code: 'INVALID_BODY', message: '请求体要是该能力入参的 JSON 对象；无入参可以不发 body' },
         { status: 400 },
       );
@@ -40,11 +39,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ name: s
 
   const outcome = await invokeCapability(getDb(), identity, (await params).name, args);
   if (!outcome.ok) {
-    return NextResponse.json(
-      { ok: false, error_code: outcome.errorCode, message: outcome.message },
+    // extra 摊平在同一层，与 MCP 那条路 toolErrorResult 给出的键位逐字相同
+    return apiJson(
+      { ok: false, error_code: outcome.errorCode, message: outcome.message, ...outcome.extra },
       { status: outcome.status },
     );
   }
   // 能力回包原样摊平，与 MCP tools/call 拿到的那份逐字相同（那边只是多包了一层文本外壳）
-  return NextResponse.json({ ok: true, ...outcome.value });
+  return apiJson({ ok: true, ...outcome.value });
 }

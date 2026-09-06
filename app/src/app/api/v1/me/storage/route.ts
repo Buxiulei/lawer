@@ -6,15 +6,14 @@
 // 口径（含「一文件多主」「有引用无主」两个坑）见 lib/db/storageAudit.ts 抬头。
 // 这里只给本人视角的数：共享文件在自己名下按全额计，因为对用户说
 // 「你占 0 字节，因为别人也传过同一份」毫无意义。
-import { NextResponse } from 'next/server';
-
 import { requireIdentity } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
 import { getUserStorage } from '@/lib/db/storageAudit';
+import { apiJson } from '@/lib/http/json';
 
 export async function GET(req: Request) {
   const guard = requireIdentity(getDb(), req, 'case:read');
   if (!guard.ok) return guard.response;
 
-  return NextResponse.json({ ok: true, storage: getUserStorage(getDb(), guard.identity.uid) });
+  return apiJson({ ok: true, storage: getUserStorage(getDb(), guard.identity.uid) });
 }

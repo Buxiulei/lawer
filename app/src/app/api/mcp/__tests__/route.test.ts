@@ -272,6 +272,9 @@ describe('tools/list', () => {
       'evidence_register',
       'evidence_attest',
       'attest_verify',
+      // 作废与简报重生成，同样**追加在末尾**
+      'evidence_void',
+      'evidence_brief_regenerate',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();
@@ -441,6 +444,34 @@ describe('tools/call', () => {
     const text = body.result.content[0].text as string;
     expect(text).not.toContain('Promise');
     expect(typeof JSON.parse(text).error_code).toBe('string');
+  });
+
+  /*
+   * 【失败对象上的结构化字段必须过得了 MCP 这一层】claim_calc 的工具描述向对方 agent
+   * 承诺「回包里有 missing / invalid 两张表」，而 MCP 是它唯一的对外面（没有 REST 面）。
+   * 直调 runClaimCalc 的判据（lib/cases/__tests__/claim-calc-all-problems）钉的是算子那一层，
+   * 抓不到这一层：路由把失败对象收窄成 {errorCode,message} 时，isError 照样 true、
+   * 中文 message 照样列全三项，只有那两张表静默消失——照描述去读结构化字段的 agent
+   * 读到 undefined，只能回头解析中文，或一次只补一个问题。所以这条走真实回包。
+   */
+  test('claim_calc 缺参：missing / invalid 两张表要出现在 MCP 回包里', async () => {
+    const { body } = await call('claim_calc', { case_id: caseA, kind: 'N' }, keyA);
+    expect(body.error).toBeUndefined();
+    expect(body.result.isError).toBe(true);
+    const payload = JSON.parse(body.result.content[0].text);
+    expect(payload.error_code).toBe('INVALID_CALC_INPUT');
+    // 负例的核心：不是「有个 error_code 就算过」，而是两张表都在、且内容对得上
+    expect(Array.isArray(payload.missing)).toBe(true);
+    expect(payload.missing).toHaveLength(3);
+    for (const field of ['avg_monthly_wage_fen', 'employed_from', 'terminated_at']) {
+      expect(payload.missing.join(' ')).toContain(field);
+    }
+    expect(payload.invalid).toEqual([]);
+    // 人读的那份与两张表同源，一次列全
+    expect(payload.message).toContain('缺少 3 项');
+    // 内部分档字段不外泄：ok / status 是 HTTP 面的事，对方 agent 不该看到
+    expect(payload.ok).toBeUndefined();
+    expect(payload.status).toBeUndefined();
   });
 
   describe('case_facts', () => {

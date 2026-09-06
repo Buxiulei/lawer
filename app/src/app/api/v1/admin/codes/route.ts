@@ -14,6 +14,7 @@ import { badRequest, readJsonBody, stringField } from '@/lib/auth/http';
 import { issueRedeemCodes, listRedeemCodes } from '@/lib/billing/redeem';
 import { getDb } from '@/lib/db/client';
 import { toSql } from '@/lib/db/time';
+import { apiJson } from '@/lib/http/json';
 
 /** 本路由每次都要按当前 env 与当前凭据判权，绝不能被静态化成一份「谁来都一样」的响应。 */
 export const dynamic = 'force-dynamic';
@@ -22,7 +23,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   const guard = requireAdmin(getDb(), req);
   if (!guard.ok) return guard.response;
 
-  return NextResponse.json({ ok: true, codes: listRedeemCodes(getDb()) });
+  return apiJson({ ok: true, codes: listRedeemCodes(getDb()) });
 }
 
 /** 一次最多签发多少张。挡的是把 count 手滑打成 100000 —— 那是一次性造出的无对价余额。 */
@@ -63,5 +64,5 @@ export async function POST(req: Request): Promise<NextResponse> {
     expiresAt,
   });
 
-  return NextResponse.json({ ok: true, codes });
+  return apiJson({ ok: true, codes });
 }

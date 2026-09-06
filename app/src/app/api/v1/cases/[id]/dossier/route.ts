@@ -32,12 +32,13 @@ import { findDossierBySubject } from '@/lib/company/dossier';
 import { getDb } from '@/lib/db/client';
 import { listProfiles } from '@/lib/db/company-graph';
 import { buildDossierView, pickRespondent, venueOfDistrict } from '@/lib/dossier/build';
+import { apiJson } from '@/lib/http/json';
 
 const NOT_FOUND = { ok: false, error_code: 'CASE_NOT_FOUND', message: '案件不存在' };
 
 /** 还没建档：不是错误，是一个状态。带上下单入口，页面不必自己拼路径。 */
 function notOrdered(caseId: number): NextResponse {
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     status: 'none',
     dossier: null,
@@ -50,7 +51,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!guard.ok) return guard.response;
 
   const caseId = parseId((await params).id);
-  if (caseId === null) return NextResponse.json(NOT_FOUND, { status: 404 });
+  if (caseId === null) return apiJson(NOT_FOUND, { status: 404 });
 
   // 归属校验走 lib/cases 的既有入口，不在这里另写一遍 user_id 比对（同 company-graph 路由）：
   // 「非本人案件一律当作不存在」是条红线，红线复制第二份的那天，两份就开始各自演化了。
@@ -71,7 +72,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const billing = getDossierBillingView(db, dossier.id, guard.identity.uid);
   if (!billing) return notOrdered(caseId);
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     status: 'ready',
     dossier: buildDossierView(db, {

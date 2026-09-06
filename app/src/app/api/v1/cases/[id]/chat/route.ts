@@ -3,8 +3,6 @@
 //
 // 路由只做四件事：鉴权 → 取参数 → 开流 → 把 lib/agent 的事件写进流（spec §3.2：路由不写业务逻辑）。
 // 编排、状态机、工具、落库全在 lib/agent；事件帧形状在 lib/agent/events.ts。
-import { NextResponse } from 'next/server';
-
 import { createKnowledgeSearcher, createSseSink, runTurn, startHeartbeat, THREAD_MODES, type AgentEvent, type SseSink } from '@/lib/agent';
 import { requireIdentity, parseId } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
@@ -17,6 +15,7 @@ import { getMembership } from '@/lib/billing/fulfillment';
 import * as cases from '@/lib/cases';
 import { getDb } from '@/lib/db/client';
 import { toUserFacingError } from '@/lib/errors/user-facing';
+import { apiJson } from '@/lib/http/json';
 
 const NOT_FOUND = { ok: false, error_code: 'CASE_NOT_FOUND', message: '案件不存在' };
 
@@ -26,11 +25,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!guard.ok) return guard.response;
 
   const caseId = parseId((await params).id);
-  if (caseId === null) return NextResponse.json(NOT_FOUND, { status: 404 });
+  if (caseId === null) return apiJson(NOT_FOUND, { status: 404 });
 
   const body = await readJsonBody(req);
   if (!body) {
-    return NextResponse.json({ ok: false, error_code: 'INVALID_BODY', message: '请求体格式不正确' }, { status: 400 });
+    return apiJson({ ok: false, error_code: 'INVALID_BODY', message: '请求体格式不正确' }, { status: 400 });
   }
   // retry_of = 「重试这一轮」，值是失败那条 assistant 消息的 id（messages.failed_code 非空的那行）。
   // 带了它就不看 message：问题原文由编排层从库里那条用户行取（重试的定义是**重发上一条用户消息**，
@@ -38,7 +37,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const retryOf =
     body.retry_of === undefined || body.retry_of === null ? undefined : Number(body.retry_of);
   if (retryOf !== undefined && (!Number.isInteger(retryOf) || retryOf <= 0)) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'INVALID_RETRY_OF', message: 'retry_of 必须是消息 id' },
       { status: 400 },
     );
@@ -46,13 +45,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const message = typeof body.message === 'string' ? body.message.trim() : '';
   if (!message && retryOf === undefined) {
-    return NextResponse.json({ ok: false, error_code: 'EMPTY_MESSAGE', message: 'message 不能为空' }, { status: 400 });
+    return apiJson({ ok: false, error_code: 'EMPTY_MESSAGE', message: 'message 不能为空' }, { status: 400 });
   }
   // mode 是用户可控输入，且会直接写进 threads.mode。在开流之前校验，
   // 否则这个错误只能变成「200 + 流里一帧 error」，客户端拿不到 400。
   const mode = body.mode === undefined ? undefined : String(body.mode);
   if (mode !== undefined && !(THREAD_MODES as readonly string[]).includes(mode)) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'INVALID_MODE', message: `mode 只能是 ${THREAD_MODES.join(' / ')}` },
       { status: 400 },
     );
@@ -62,7 +61,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // 一旦开了流，HTTP 状态码就定死在 200 了，客户端再也拿不到正确的失败语义。
   const owned = cases.getCase(db, { caseId, userId: guard.identity.uid, timelineLimit: 1 });
   if (!owned.ok) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: owned.errorCode, message: owned.message },
       { status: owned.status },
     );
@@ -77,12 +76,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // 「这个人还有一轮在跑」是另一件事：等它答完就好，不是余额的问题（409 ≠ 402）。
     // 归成同一个错误码，用户会照着「去兑换」的指引白跑一趟兑换页。
     if (gate.reason === 'IN_FLIGHT') {
-      return NextResponse.json(
+      return apiJson(
         { ok: false, error_code: 'TURN_IN_FLIGHT', message: turnInFlightMessage() },
         { status: 409 },
       );
     }
-    return NextResponse.json(
+    return apiJson(
       {
         ok: false,
         error_code: 'GONGDAO_EXHAUSTED',

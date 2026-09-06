@@ -8,12 +8,11 @@
 // 返回 status=quota_exhausted / no_collector 并带上 reason 原话，由页面逐字渲染。
 // 返回一个空载荷会被读成「查无此公司」——那是这条端点最不能出的一种谎。
 // app 侧默认不注入采集器（采集在外勤工作站，不在服务器），故线上常态是 hit 或 no_collector。
-import { NextResponse } from 'next/server';
-
 import { requireIdentity } from '@/lib/auth/guard';
 import { badRequest, readJsonBody, stringField } from '@/lib/auth/http';
 import { probeCompany } from '@/lib/company/probe';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 
 export async function POST(req: Request) {
   const guard = requireIdentity(getDb(), req, 'case:read');
@@ -34,5 +33,5 @@ export async function POST(req: Request) {
     return badRequest('COMPANY_NAME_EMPTY', err instanceof Error ? err.message : String(err));
   }
 
-  return NextResponse.json({ ok: true, probe });
+  return apiJson({ ok: true, probe });
 }

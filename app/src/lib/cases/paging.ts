@@ -2,7 +2,9 @@
 // 清单类 REST 端点的翻页入参与回包外壳。四条清单端点共用，保证「一页多大、下一页从哪开始」
 // 只有一种写法——各写一份的形态是：一条端点的 limit 封顶到 200、另一条没封，
 // 而两条端点的文档写的是同一句话。
-import { NextResponse } from 'next/server';
+import type { NextResponse } from 'next/server';
+
+import { apiJson } from '@/lib/http/json';
 
 import { LIST_DEFAULT_LIMIT } from './index';
 
@@ -23,12 +25,16 @@ export function pageParams(url: URL): { limit: number; offset: number } {
  * 【为什么还留着 legacyKey】页面早就在读 `evidence` / `actions` / `deadlines` 这几个键。
  * 只换成 `items` 的形态是：端点回 200、结构合法，而页面上那一栏空了——没有任何一处报错。
  * 两个键指向同一个数组，不是两份数据。
+ *
+ * 【为什么这里也得走 apiJson】四条清单端点的时间字段全从这一个壳里出去。这里直接用
+ * NextResponse.json 的形态是：路由那边一个字没错、机检也点不到它（守卫只扫 route.ts），
+ * 而四条清单回的时间统统丢了 +08:00 —— 恰恰是条数最多的那四条。
  */
 export function pageResponse<T>(
   legacyKey: string,
   page: { items: T[]; total: number; offset: number; next_offset: number | null },
 ): NextResponse {
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     items: page.items,
     total: page.total,

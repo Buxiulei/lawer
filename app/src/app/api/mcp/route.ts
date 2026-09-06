@@ -130,8 +130,10 @@ export async function POST(req: Request) {
         | { ok: false; errorCode: string; message: string }
         | Record<string, unknown>;
       if (outcome && (outcome as { ok?: boolean }).ok === false) {
-        const failure = outcome as { errorCode: string; message: string };
-        return json(rpcResult(id, toolErrorResult(failure.errorCode, failure.message)));
+        // 【整个失败对象交给 toolErrorResult】能力挂在失败对象上的结构化清单要跟着出去，
+        // 挑字段转交的形态是：新加一张表的那个能力在描述里承诺了它，回包却少那几个键。
+        const failure = outcome as { errorCode: string; message: string } & Record<string, unknown>;
+        return json(rpcResult(id, toolErrorResult(failure)));
       }
       return json(rpcResult(id, toolTextResult(outcome)));
     }
