@@ -437,6 +437,21 @@ export const LABOR: DomainPack = {
     safeFallback: LABOR_CRISIS_SAFE_FALLBACK,
     firstSegment: (ctx: { facts?: { hotlines?: HotlineFact[] }; compact?: boolean }) =>
       assembleCrisisOpener(LABOR_CRISIS_OPENER, ctx.facts, { compact: ctx.compact }),
+    /**
+     * 危机窗内贴在资源卡后面的使用限制。**这段话原来写死在 lib/agent/prompt.ts 里**
+     *（共用层），第二个领域接进来之后，它的用户在危机窗内会读到这三个号码——
+     * 号码是对的，只是属于另一个行当。经理 2026-09-07 裁定它归本包，搬到这里。
+     *
+     * 【为什么这一版不用传进来的 numbers 渲染】搬家这一票只搬位置、不改一个字：
+     * 这句话是危机窗里逐字下发给模型的话，改措辞是行为变更，不该混在搬家里做。
+     * 号码不跟着卡走的风险由判据接住——labor-pack.test 有一条钉住
+     * 「本领域资源卡上每一个可用号码都必须出现在这句话里」，卡上换号而这里没跟着改即红。
+     */
+    repeatCardNote: () =>
+      '本案 24 小时内已经给过一次这张卡，本轮**不要再整张重复**（spec §10 不刷屏）。' +
+      '但三个号码本身**仍然必须出现在这一轮回复里**——用一句话重述即可，' +
+      '如「热线还是这三个，随时能打：12356 / 座机 800-810-1117 / 手机 010-82951332」。' +
+      '绝不能让用户在这种时刻回头翻聊天记录找号码。',
   },
 
   copy: {

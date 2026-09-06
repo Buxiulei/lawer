@@ -166,6 +166,20 @@ export interface DomainCrisis {
    * 而分支之间只有作者知道差别在哪。
    */
   firstSegment(ctx: { facts?: { hotlines?: HotlineFact[] }; compact?: boolean }): string;
+  /**
+   * 危机窗内（24 小时内已经给过一次整张资源卡）贴在**那张卡正文之后**的使用限制
+   *（lib/agent/prompt.ts 的 packsSection noteAfter）。
+   *
+   * 【为什么它必须由领域包给，而不是共用层写一句通用的】这句话里要带号码：不带号码的
+   * 「别重印整张卡」会让模型这一轮**一个号码都不给**，而用户正是在这种时刻最需要号码。
+   * 共用层写死号码的形态是——第二个领域的用户在危机窗内读到的是**上一个行当**的三个号码，
+   * 而这一轮的回复照常生成、格式完全正常、没有一处会报错。
+   *
+   * @param numbers 从本领域**自己那张资源卡**的结构化 facts 里抽出来、已带座机标记的号码。
+   *   抽不到（卡不在本轮注入包里、或卡上没有可用号码）时传空数组——
+   *   包要自己决定这时说什么，共用层不替它兜底。
+   */
+  repeatCardNote(numbers: readonly string[]): string;
 }
 
 /**
@@ -481,6 +495,12 @@ export function assertDomainPack(pack: DomainPack): void {
   arr('crisis.openerText.head', pack.crisis?.openerText?.head);
   str('crisis.openerText.tail', pack.crisis?.openerText?.tail);
   if (typeof pack.crisis?.firstSegment !== 'function') missing.push('crisis.firstSegment');
+  if (typeof pack.crisis?.repeatCardNote !== 'function') missing.push('crisis.repeatCardNote');
+  // 空数组也得说得出话：抽不到号码时回空串的形态是，危机窗内那张卡后面**什么限制都没有**，
+  // 模型于是把整张卡又重印一遍（spec §10 不刷屏那条从此失效），而没有一处会报错。
+  else if (typeof pack.crisis.repeatCardNote([]) !== 'string' || pack.crisis.repeatCardNote([]).trim() === '') {
+    missing.push('crisis.repeatCardNote([]) 返回空——一个号码都抽不到时也必须说得出话');
+  }
 
   // lawyerReview / sensitive 都是**可选**的（省略 = 本领域没有这回事）。但一旦声明，
   // 就不许半张：空的 items = 一节只有抬头没有内容；空的 discipline = 列了四件事却没说

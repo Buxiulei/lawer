@@ -28,6 +28,7 @@ const FAKE: DomainCrisis = {
   openerText: OPENER,
   safeFallback: '假领域的兜底正文。',
   firstSegment: (ctx) => assembleCrisisOpener(OPENER, ctx.facts, { compact: ctx.compact }),
+  repeatCardNote: (numbers) => `假领域的窗内限制句：${numbers.join(' / ')}`,
 };
 
 const FACTS = {

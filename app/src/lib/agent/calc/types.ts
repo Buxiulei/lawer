@@ -34,6 +34,7 @@ export type CalcKind =
   | '病假工资'
   | '竞业补偿'
   | '加付赔偿金'
+  | '退费'
   | (string & {});
 
 /**
@@ -166,6 +167,22 @@ export const CALC_FLAG = {
   bingjiaMedicalPeriodLengthUnknown: '医疗期档次表待核实，只能说3—24个月',
   /** 恒发·争议点 3：医疗期满后转按待岗生活费（70%）发放是否合法，实践有争议。 */
   bingjiaStandbyAfterMedicalDisputed: '医疗期满转待岗70%是否合法存争议',
+
+  // ── 预付费服务退费（calc/tuifei.ts；口径见 sop-tuifei-zhengyi 第 3/4 步） ──
+  /** 恒发：合同定性未定，只能给区间不给单一数字——给单一数字就是替律师下了定性结论。 */
+  tuifeiRangeNotSingle: '退费给区间不给单一数字（合同定性未定）',
+  /** 恒发：委托合同 vs 服务合同的定性直接决定用哪条公式，待律师书面确认。 */
+  tuifeiContractNatureUndecided: '合同定性（委托/服务）未经律师书面确认',
+  /** 合同里没有可算的退费条款 ⇒ 口径一不出数（「没约定」不等于「约定退 0」）。 */
+  tuifeiNoAgreedClause: '合同无可算退费条款，按约定那条口径不出数',
+  /** 「概不退费」是格式条款，踩中消保法§26 第二款即第三款直接无效（不是可撤销）。 */
+  tuifeiNoRefundClauseRisk: '「概不退费」条款有被认定无效的风险（消保法§26第三款）',
+  /** 已付 ÷ 总次数 ≠ 单次价（打包折扣），两条算法因此有差额——差额是谈判空间不是算错。 */
+  tuifeiPackageDiscount: '打包价与单次价不一致，两条算法有差额',
+  /** 恒发：三倍是风险测算不是结论，前提是认定欺诈，举证在对方；不计入退费金额。 */
+  tuifeiPunitiveIsRiskNotConclusion: '三倍赔偿是风险区间不是结论（须先认定欺诈，举证在对方）',
+  /** 消保法§55 第一款：增加赔偿不足五百元的按五百元。 */
+  tuifeiPunitiveFloor500: '三倍不足五百元按五百元（消保法§55第一款）',
 } as const;
 export type CalcFlag = (typeof CALC_FLAG)[keyof typeof CALC_FLAG];
 

@@ -523,6 +523,22 @@ export const COUNSELING: DomainPack = {
     safeFallback: COUNSELING_CRISIS_SAFE_FALLBACK,
     firstSegment: (ctx: { facts?: { hotlines?: HotlineFact[] }; compact?: boolean }) =>
       assembleCrisisOpener(COUNSELING_CRISIS_OPENER, ctx.facts, { compact: ctx.compact }),
+    /**
+     * 危机窗内贴在资源卡后面的使用限制。**号码由共用层从本领域自己那张卡里抽好传进来**，
+     * 本文件一个数字都不写——写在这里的形态是：卡上换了号（或某个号被标成 forbidden）
+     * 而这句话没跟着改，于是模型照着一个我们自己写下的过期号码重述，而卡与代码各自看都正常。
+     *
+     * 【为什么这句话与第一个领域那句不是同一种话】那边的号码是给**当事人自己**打的；
+     * 这边的收件人是咨询师，号码是**处置现场**用的，给号码就必须同时给顺序——
+     * 只给号码不给顺序，等于让一个正在慌的人自己去排先打哪个。
+     */
+    repeatCardNote: (numbers: readonly string[]) =>
+      '本案 24 小时内已经给过一次这张卡，本轮**不要再整张重复**。' +
+      (numbers.length > 0
+        ? `但号码本身**仍然必须出现在这一轮回复里**——用一句话重述即可，如「号码还是这几个：${numbers.join(' / ')}」。`
+        : '但号码本身**仍然必须出现在这一轮回复里**——照上面那张卡逐字重述，一个数字都不要改。') +
+      '重述号码时**必须带上拨打顺序**：先紧急联系人或监护人，联系不上或情况紧急再找公安/急救，' +
+      '非紧急的心理援助需求让对方自己拨全国统一热线。只给号码不给顺序，等于没给。',
   },
 
   /**
