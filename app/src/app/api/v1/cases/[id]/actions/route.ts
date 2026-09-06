@@ -3,7 +3,6 @@
 // POST 新建行动卡（对应 MCP 工具 action_create）：张数上限、三样必填、同题去重
 // 全在那条能力里，本路由只把 case_id 与请求体交上去——照抄一遍的形态是
 // 两条入口的去重口径悄悄分叉，而两边都返回 200。
-import { NextResponse } from 'next/server';
 
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
@@ -43,7 +42,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const caseId = parseId((await params).id);
   if (caseId === null) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'CASE_NOT_FOUND', message: '案件不存在' },
       { status: 404 },
     );
@@ -51,7 +50,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const body = await readJsonBody(req);
   if (!body) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'INVALID_BODY', message: '请求体格式不正确' },
       { status: 400 },
     );

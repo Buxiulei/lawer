@@ -3,10 +3,10 @@
 //
 // 【为什么两种凭据都收】网页要它（设置页那颗「复制开场白」），用户自己的脚本也可能要它
 // （把开场白喂给一个自建的 agent）。它只读、不写、不花钱，凭据够读档案就够拿它。
-import { NextResponse } from 'next/server';
 
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 import { buildOpener, isOpenerTier, OPENER_TIERS } from '@/lib/paste';
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -15,7 +15,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const caseId = parseId((await params).id);
   if (caseId === null) {
-    return NextResponse.json(
+    return apiJson(
       { ok: false, error_code: 'CASE_NOT_FOUND', message: '案件不存在' },
       { status: 404 },
     );
@@ -23,7 +23,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const raw = new URL(req.url).searchParams.get('tier') ?? 'medium';
   if (!isOpenerTier(raw)) {
-    return NextResponse.json(
+    return apiJson(
       {
         ok: false,
         error_code: 'INVALID_TIER',
@@ -36,7 +36,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const result = buildOpener(getDb(), { caseId, identity: guard.identity, tier: raw });
   if (!result.ok) return domainFailure(result);
 
-  return NextResponse.json({
+  return apiJson({
     ok: true,
     tier: result.tier,
     budget: result.budget,

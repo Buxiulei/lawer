@@ -223,6 +223,29 @@ const MINIMAL_ARGS: Record<string, Record<string, unknown>> = {
   doc_list: { case_id: '#case' },
   doc_get: { doc_id: 999_999 },
   transcript_submit: { evidence_id: '#evidence' },
+  // 个案报告（长期记忆）
+  case_report_get: { case_id: '#case' },
+  case_report_update: { case_id: '#case', section: '风险与未定项', content: '暂无补充。', reason: '补齐', base_version: 0 },
+  // 危机检查 / 身份与账户
+  crisis_check: { case_id: '#case', text: '最近睡不好，但还扛得住' },
+  me_get: {},
+  quote_list: { case_id: '#case' },
+  // 引用核验
+  citation_check: { assert_terms: ['经济补偿按 N 计算'] },
+  // 对方主体情报（探测 → 报价 → 确认 → 读档 / 关系图 / 守望）
+  company_probe: { name: '某某科技有限公司' },
+  dossier_quote: { case_id: '#case', name: '某某科技有限公司', blocks: ['venue'] },
+  dossier_confirm: { quote_id: 999_999 },
+  dossier_get: { case_id: '#case' },
+  company_graph_get: { case_id: '#case' },
+  company_watch_set: { case_id: '#case', name: '某某科技有限公司', tier: 'daily' },
+  // 分享与导出（前两条需实名，未实名 key 会先被闸挡回 403）
+  share_create: { evidence_id: '#evidence' },
+  draft_export: { draft_id: 999_999 },
+  share_revoke: { share_id: 999_999 },
+  // 转介
+  referral_create: { case_id: '#case', consent: true },
+  referral_list: { case_id: '#case' },
 };
 
 /** 把 '#case' / '#evidence' 换成本轮的真实 id */
@@ -349,10 +372,15 @@ describe('写能力走桥：同 client_ref 重放只落一条', () => {
 // ========== 归属 ==========
 
 describe('他人案件一律 CASE_NOT_FOUND 404', () => {
-  // doc_list 例外：它按 (case_id, user_id) 取行，别人的案子回的是空清单而不是 404。
-  // 不算泄露（一个字段都不给），但形状与其余不同，单独一条判据盯它不漏数据。
+  // 例外三条，都不回 404，但各有下面单独的判据盯着不漏数据：
+  //  · doc_list / quote_list：按 (case_id, user_id) 取行，别人的案子回空清单，一个字段都不给。
+  //  · crisis_check：case_id 只是可选标签，非本人案子被静默降级成"无案"（caseId=null），
+  //    记的是调用者自己的危机留痕，既不读也不写那个案子。
+  const CASE_SCOPED_EXCEPT = ['doc_list', 'quote_list', 'crisis_check'];
   const CASE_SCOPED = ALL_NAMES.filter(
-    (n) => (MINIMAL_ARGS[n] as Record<string, unknown>).case_id === '#case' && n !== 'doc_list',
+    (n) =>
+      (MINIMAL_ARGS[n] as Record<string, unknown>).case_id === '#case' &&
+      !CASE_SCOPED_EXCEPT.includes(n),
   );
 
   test('参与本组的确实是那一批（空名单会让下面那条永远绿）', () => {
@@ -377,6 +405,22 @@ describe('他人案件一律 CASE_NOT_FOUND 404', () => {
     const { status, body } = await bridge('doc_list', { case_id: caseA }, keyB);
     expect(status).toBe(200);
     expect(body.docs).toEqual([]);
+  });
+
+  test('quote_list 对他人案件回空清单，不回任何一行', async () => {
+    const { status, body } = await bridge('quote_list', { case_id: caseA }, keyB);
+    expect(status).toBe(200);
+    expect(body.quotes).toEqual([]);
+  });
+
+  test('crisis_check 带他人 case_id：静默降级为无案，不往那个案子记一笔', async () => {
+    const countForCaseA = () =>
+      (db.prepare('SELECT COUNT(*) AS n FROM crisis_hits WHERE case_id=?').get(caseA) as { n: number }).n;
+    const before = countForCaseA();
+    const { status } = await bridge('crisis_check', { case_id: caseA, text: '我没事，随口一说' }, keyB);
+    expect(status).toBe(200);
+    // 外人的这次命中记在 case_id=null 上，甲案里一条都不该多
+    expect(countForCaseA()).toBe(before);
   });
 
   test('乙看不到甲案里的任何一条时间线（读能力也走同一道归属）', async () => {

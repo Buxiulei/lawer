@@ -13,13 +13,14 @@
 import { NextResponse } from 'next/server';
 
 import { getDb } from '@/lib/db/client';
+import { apiJson } from '@/lib/http/json';
 import { readShare } from '@/lib/shares';
 
 // 链接可能在任何一刻被撤销：缓存住等于撤销失效。
 export const dynamic = 'force-dynamic';
 
 function err(status: number, errorCode: string, message: string): NextResponse {
-  return NextResponse.json({ ok: false, error_code: errorCode, message }, { status });
+  return apiJson({ ok: false, error_code: errorCode, message }, { status });
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
@@ -50,5 +51,5 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     );
   }
 
-  return NextResponse.json({ ok: true, share: result.view });
+  return apiJson({ ok: true, share: result.view });
 }
