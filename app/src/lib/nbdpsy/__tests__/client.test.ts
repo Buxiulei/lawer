@@ -267,7 +267,7 @@ describe('createReferralLead：拍平成契约 v1.3 §2 白名单体', () => {
     expect(body.emotional_summary).toBe('最近两周睡眠差、情绪低落，但愿意求助。');
     expect(body.needs).toEqual(['情绪支持', '睡眠']);
     expect(body.case_stage).toBe('已进入约谈阶段');
-    expect(body.urgency).toBe(2);
+    expect(body.urgency).toBe('2');
     expect(body.consent_at).toBe('2026-09-06T10:00:00Z'); // canonical → RFC3339
     expect(body.source_case_hash).toBe('abc123');
     // 不该外发的一律不在
