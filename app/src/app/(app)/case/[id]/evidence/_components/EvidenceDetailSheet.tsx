@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useCaseDomain } from '@/app/_ui/caseDomain';
 import { useDiscreet } from '@/app/_ui/discreet';
+import { packOf } from '@/app/_ui/domain';
 import { formatBytes, formatDateTime } from '@/app/_ui/format';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { AppSheet } from '@/components/shadcn/app-sheet';
@@ -56,6 +58,7 @@ function shortHash(sha256: string): string {
 }
 
 export function EvidenceDetailSheet({
+  caseId,
   item,
   busy = false,
   editablePurpose = true,
@@ -68,6 +71,8 @@ export function EvidenceDetailSheet({
   onDownload,
   onRequestExtract,
 }: {
+  /** 这一份材料属于哪个案子。只用来问「这个案子属于哪个领域」，不参与取数 */
+  caseId: string;
   item: EvidenceView | null;
   /** 固化/出证正在跑：按钮转成等待态，避免重复发起 */
   busy?: boolean;
@@ -87,6 +92,9 @@ export function EvidenceDetailSheet({
 }) {
   const toast = useToast();
   const { discreet } = useDiscreet();
+  // 「这份材料想证明什么」那一栏的提示按领域取：那句话点着的是**将来在哪儿逐条填**，
+  // 而各行当去的不是同一个地方。写死的形态是把人指向一个他不会去的场合。
+  const pages = packOf(useCaseDomain(caseId)).copy.pages;
   const [purpose, setPurpose] = useState('');
   const [mode, setMode] = useState<ExtractMode>('ocr');
   const [showText, setShowText] = useState(false);
@@ -182,7 +190,7 @@ export function EvidenceDetailSheet({
               onChange={(e) => setPurpose(e.target.value)}
               // 只读而不是 disabled：disabled 会把已填的内容压成灰色，读起来像占位符
               readOnly={!editablePurpose}
-              placeholder="一句话写明证明目的，仲裁的证据目录里要逐条填。"
+              placeholder={pages.evidencePurposePlaceholder}
               hint={
                 editablePurpose
                   ? '固化之后文件本身不能改，但这一栏随时可以改。'

@@ -344,3 +344,79 @@ describe('邮箱那一格', () => {
     }
   });
 });
+
+/**
+ * 注册那一步选的领域，**真的进了建号那一次请求的 body**（设计稿 §13 落法 5）。
+ *
+ * 【为什么这一组必须单独存在】领域选择这条链此前只有两头有判据：控件那一端
+ *（选项来自注册表、单领域时整块不渲染）与路由那一端（body 里带 domain 就落这个领域）。
+ * **中间那一段没有任何判据**——页面把选中的值拼进 /auth/email/verify 的 body 这一步。
+ * 复审当场量过：把 `...(completing && domain ? { domain } : {})` 整行删掉，
+ * domain-choice + domain-journey + intake 三组共 100 条判据一条都不红，
+ * 而真实用户在注册页选了第二个领域、案子却落成缺省领域——控件照常渲染、请求照常成功、
+ * 建号照常完成，没有一处会报错。
+ *
+ * 【为什么只能这么验】node 环境点不动，驱动不了 LoginForm 自己那个 useState；
+ * 所以照本文件既有的套路，把 ChannelStep 的 onVerify 抓出来直接调，看它对外发了什么。
+ */
+describe('注册那一步选的领域进不进请求体', () => {
+  const verifyBodyOf = async (node: React.ReactElement) => {
+    renderToStaticMarkup(node);
+    const props = captured['邮箱'];
+    expect(props, '这一屏没有邮箱那一格，下面全是在验空集').toBeDefined();
+    apiFetch.mockResolvedValueOnce({ token: 'tok-x' });
+    await props.onVerify('123456');
+    const [path, init] = apiFetch.mock.calls.at(-1) as [string, { body: Record<string, unknown> }];
+    expect(path).toBe('/auth/email/verify');
+    return init.body;
+  };
+
+  const completionPane = (domain: string) => (
+    <CompletionPane
+      email="xin@example.com"
+      onEmailChange={() => {}}
+      agreed
+      domains={[
+        { key: 'labor', label: '甲类' },
+        { key: 'counseling', label: '乙类' },
+      ]}
+      domain={domain}
+      onDomainChange={() => {}}
+      onBack={() => {}}
+    />
+  );
+
+  it('🔴 选了第二个领域：body 里带着它（变异：删掉往 body 拼 domain 那一行 → 红）', async () => {
+    const body = await verifyBodyOf(completionPane('counseling'));
+    expect(
+      body.domain,
+      '页面把用户选的领域丢了：他选了第二类，案子会落成缺省领域，而全流程一处报错都没有',
+    ).toBe('counseling');
+    // 顺带钉住这一趟确实是补绑那一路（登录那一路不带 domain，见下一条）
+    expect(body.email).toBe('xin@example.com');
+    expect(body.code).toBe('123456');
+  });
+
+  it('🔴 没选（灰度只开一个领域时控件根本不出现）：body 里**没有 domain 这个键**', async () => {
+    const body = await verifyBodyOf(completionPane(''));
+    // 空串与"没给"在服务端是同一条口径（见路由注释）；页面这一侧发的是"没给"，
+    // 两边同一条口径，谁都不必猜另一边怎么理解一个空字符串。
+    expect(Object.keys(body), 'body 里塞了一个空的 domain').not.toContain('domain');
+  });
+
+  it('🔴 邮箱通道登录那一路一个字都不带：老用户早就有案件了，那时递领域进去只会让人误会', async () => {
+    const body = await verifyBodyOf(
+      <EmailChannel
+        completing={false}
+        email="laoyuan@example.com"
+        onEmailChange={() => {}}
+        agreed
+        domain="counseling"
+      />,
+    );
+    expect(
+      Object.keys(body),
+      '登录那一路也把领域递了上去 = 看起来像"登录时能改档案的类目"',
+    ).not.toContain('domain');
+  });
+});

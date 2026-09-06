@@ -6,7 +6,7 @@ import { demoCase } from '@/app/_mock/demo';
 import type { ActionItem } from '@/app/_mock/types';
 import { ByoAgentEntry } from '@/app/_ui/ByoAgentEntry';
 import { useDiscreet } from '@/app/_ui/discreet';
-import { journeyOf, tracksOf } from '@/app/_ui/domain';
+import { packOf, journeyOf, tracksOf } from '@/app/_ui/domain';
 import { NeutralLabel } from '@/app/_ui/NeutralLabel';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Mascot } from '@/components/brand/Mascot';
@@ -111,7 +111,7 @@ export function DashboardBody({
   data: DashboardData;
   onToggle?: (id: string, done: boolean) => void;
 }) {
-  // 最急的排前面。仲裁时效虽然常驻，但它不该挡在两天后到期的事情前面
+  // 最急的排前面。常驻不动的那类期限不该挡在两天后到期的事情前面
   const deadlines = [...data.deadlines].sort((a, b) => a.dueAt.localeCompare(b.dueAt));
   const rest = data.actions.filter((a) => a.status === '待办').length - 1;
   /* 入场 stagger 只挂 `data-mo-enter` 点名的那几块（A7）。渲染层持有 root，取数层（Dashboard）不碰。
@@ -156,7 +156,7 @@ export function DashboardBody({
       )}
       <DeadlineTiles deadlines={deadlines} />
       <ReportEntry caseId={caseId} />
-      <DossierEntry caseId={caseId} />
+      <DossierEntry caseId={caseId} domain={data.domain} />
       {/* 「用你自己的 agent」的常驻入口。排在期限与公司档案之后、最近材料之前：
           它是入口不是内容，不该挤在"该做什么 / 什么时候之前"前面；
           但也不能只留在设置页——想省钱的念头是在办事的路上起的。 */}
@@ -236,14 +236,19 @@ function ReportEntry({ caseId }: { caseId: string }) {
 }
 
 /**
- * 公司档案的入口。**先免费查有没有货**：这家公司被仲裁过多少次、赔没赔、有没有关联主体，
- * 决定了谈判时敢不敢硬、以及把谁列成被申请人。
+ * 对方主体档案的入口。**先免费查有没有货**：对面以前被人告过几次、赔没赔、
+ * 有没有关联主体，决定了谈判时敢不敢硬、以及把谁列成对方当事人。
  *
  * 【为什么摆在驾驶舱而不是加一个底部 Tab】底部导航是全站最贵的四个位置，
  * 加第五个会把每一个都挤窄；而这件事是**案件里的一步**，不是一个常驻场所。
  * 在此之前它没有任何入口：功能整套做好了，用户找不到门。
+ *
+ * 【那两句话按领域取，不写死】这一格第二个领域的用户照样会看见，而对他来说
+ * 对面可能根本不是一家公司（自然人查不到工商信息，也不该去查）。写死的形态是：
+ * 卡片照常渲染、点进去也照常打开，只是这两行字在讲另一个行当的事。
  */
-function DossierEntry({ caseId }: { caseId: string }) {
+function DossierEntry({ caseId, domain }: { caseId: string; domain: string }) {
+  const copy = packOf(domain).copy.pages;
   return (
     <Link
       href={`/case/${caseId}/dossier`}
@@ -252,10 +257,10 @@ function DossierEntry({ caseId }: { caseId: string }) {
     >
       <span className="min-w-0 flex-1">
         <span className="block text-[15px] leading-6 font-medium text-ink">
-          公司档案：先免费查有没有货
+          {copy.dossierEntryTitle}
         </span>
         <span className="mt-0.5 block text-[13px] leading-5 text-ink-2">
-          这家公司被仲裁过几次、赔没赔、有没有关联主体——免费的那部分先看着。
+          {copy.dossierEntryDetail}
         </span>
       </span>
       <span aria-hidden className="shrink-0 text-[15px] text-ink-2">

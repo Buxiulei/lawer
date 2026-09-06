@@ -14,6 +14,9 @@
 // 写下的那句；下次有人加一句别的（一行灰字、一个 aria-live 空容器、一段 margin），
 // 那条判据照样绿。按字节比的意思是：**这一屏在单领域下的产物不许因为这个控件而改变**，
 // 不管改变的是哪一个字节。
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,6 +29,7 @@ const { DOMAINS, DOMAINS_ENABLED_ENV, DEFAULT_DOMAIN, listDomains } = await impo
 );
 
 const ssr = (node: React.ReactNode) => renderToStaticMarkup(<>{node}</>);
+const readSrc = (rel: string) => readFileSync(join(process.cwd(), 'src', rel), 'utf8');
 const optionsOf = (keys: string[]) => keys.map((k) => ({ key: k, label: DOMAINS[k].label }));
 
 afterEach(() => {
@@ -101,6 +105,32 @@ describe('只开着一个领域时（今天的生产缺省）', () => {
     expect(withOne).toBe(baseline);
     // 顺带钉住基线本身不是空的——两边都渲染失败时上面那句同样会绿
     expect(baseline.length).toBeGreaterThan(200);
+  });
+
+  /**
+   * **「逐字节一致」说的只是 HTML，不是"完全没变化"**（2026-09-07 复审点名）。
+   *
+   * 注册补绑那一屏挂载时照样会问一次 `GET /api/v1/domains`——清单只有一项，
+   * 于是控件不渲染、页面产物一个字节不差，但**请求日志与免鉴权端点面上多了一条**。
+   * 这一次问答躲不掉：灰度开关只有服务端读得到（客户端包里 process.env 恒为 undefined），
+   * 不问就永远只知道缺省领域，运维把第二个领域打开了页面也一个选项都不会多。
+   *
+   * 【为什么把它写成判据而不是写在交付说明里】写在说明里的那句话没人会再读第二遍，
+   * 而"对既有用户完全无变化"这句话正是因此被说出口的。钉在这里，
+   * 以后谁想把这次问答挪走或加一次，都会先撞见这段解释。
+   */
+  it('页面产物没变，但清单那一次问答照发不误——网络面不是零变化', () => {
+    const loginFlow = readSrc('app/login/_components/LoginFlow.tsx');
+    const domainChoice = readSrc('app/_ui/DomainChoice.tsx');
+    // 挂载即问：这一行是**无条件的**（没有 `if (多领域)` 可言——那正是要问才知道的事）
+    expect(loginFlow, '注册那一屏不再问领域清单了？那控件就永远只有缺省领域一项').toContain(
+      'useEnabledDomains()',
+    );
+    expect(domainChoice, '问的不再是 /domains 那条端点').toContain("'/domains'");
+    // 免鉴权：注册页要在建号之前就摆出选择，那一刻还没有任何凭据
+    expect(domainChoice, '这一问带上了鉴权 = 注册页在拿不到凭据时问不出清单').toContain(
+      'auth: false',
+    );
   });
 
   it('灰度开关缺省下服务端给页面的清单就只有缺省领域（页面据此不摆控件）', () => {

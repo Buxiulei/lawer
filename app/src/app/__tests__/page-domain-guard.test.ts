@@ -40,6 +40,20 @@ const FORBIDDEN = ['劳动', '仲裁', '用人单位', '劳动者'];
  * 逐文件豁免：这些页面/组件**只服务缺省领域**，里面的领域字面量是它们的正文，不是漏网。
  * 路径相对 app/src。加一行之前先问一句：这一页第二个领域的用户会不会打开？
  * 会打开的，字要搬进 lib/domains/<key>.ts，由 app/_ui/domain.ts 取。
+ *
+ * 【2026-09-07 复审点名的六处已经搬走，不在这份名单里了】驾驶舱 Dashboard.tsx、
+ * 接入话术 agentSetup.ts、证据 EvidenceDetailSheet、文书 DraftsListView、
+ * 关系图 NodeSheet、解读 DocActions——这六页第二个领域的用户照样会打开，
+ * 而它们当初是以「这一页本来就只服务缺省领域」的名义进的名单，那句理由对它们是假的。
+ * 现在这几句字在 DomainPack.copy.pages，页面按案件领域取
+ *（app/_ui/caseDomain.useCaseDomain → app/_ui/domain.packOf），
+ * 渲染产物那一侧另有 app/__tests__/page-copy-by-domain.test.tsx 逐句盯。
+ *
+ * 【还留在名单里、但同样不是"只服务缺省领域"的那几处】公司情报四页
+ *（DossierBody / StatsSection / VenueCards / OrderQuote）与存证页 verify/[no]。
+ * 它们照样是第二个领域的用户点得进去的（驾驶舱那张档案入口卡就通向前四页），
+ * 里面的字仍然只对缺省领域成立。**这不是豁免，是欠账**：本轮只清了复审点名的六处，
+ * 这几页留给后续票，不在这里假装它们没问题。
  */
 const DOMAIN_SPECIFIC_FILES = [
   // 站点门面：整站今天服务的就是这一个行当（标题、首屏、manifest、低调模式词表）
@@ -47,17 +61,12 @@ const DOMAIN_SPECIFIC_FILES = [
   'app/page.tsx',
   'app/_ui/neutral.ts',
   'app/api/manifest/route.ts',
-  // 驾驶舱与它的数据层：期限排序、里程碑演示数据、公司档案入口的那两句
-  'app/(app)/case/[id]/_components/Dashboard.tsx',
+  // 驾驶舱的数据层：期限词表与里程碑演示数据（渲染层 Dashboard.tsx 已出名单，见下）
   'app/(app)/case/[id]/_components/dashboardData.ts',
   'app/(app)/case/[id]/_components/milestones.ts',
   // 证据 / 文书 / 公司情报：这几页整页是这个行当的产物（文书种类、辖区卡、背调口径）
-  'app/(app)/case/[id]/evidence/_components/EvidenceDetailSheet.tsx',
-  'app/(app)/case/[id]/drafts/_components/DraftsListView.tsx',
   'app/(app)/case/[id]/drafts/_components/draftsData.ts',
-  'app/(app)/case/[id]/docs/_components/DocActions.tsx',
   'app/(app)/case/[id]/docs/_components/UploadSheet.tsx',
-  'app/(app)/case/[id]/graph/_components/NodeSheet.tsx',
   'app/(app)/case/[id]/dossier/_components/DossierBody.tsx',
   'app/(app)/case/[id]/dossier/_components/StatsSection.tsx',
   'app/(app)/case/[id]/dossier/_components/VenueCards.tsx',
@@ -67,8 +76,8 @@ const DOMAIN_SPECIFIC_FILES = [
   'app/(app)/intake/_components/StepBasics.tsx',
   'app/(app)/intake/_components/StepPreview.tsx',
   'app/(app)/intake/_components/validate.ts',
-  // 接入说明与出证页：说明书正文与存证模板都是这个行当的话
-  'app/(app)/settings/_components/agentSetup.ts',
+  // 出证页：存证模板与那句"给谁核验"都是这个行当的话
+  //（接入话术 agentSetup.ts 已出名单：那三段改由领域包给，见下）
   'app/verify/[no]/page.tsx',
   // 演示数据：整套 demo 演的就是缺省领域那一套
   'app/_mock/authpay.ts',

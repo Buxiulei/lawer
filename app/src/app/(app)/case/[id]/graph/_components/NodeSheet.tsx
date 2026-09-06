@@ -2,6 +2,8 @@
 
 import type { ReactNode } from 'react';
 import type { CompanyGraph, GraphNode, GraphTier } from '@/app/_mock/company-graph';
+import { useCaseDomain } from '@/app/_ui/caseDomain';
+import { packOf } from '@/app/_ui/domain';
 import { formatDate } from '@/app/_ui/format';
 import { AppSheet } from '@/components/shadcn/app-sheet';
 import { Badge } from '@/components/shadcn/badge';
@@ -28,6 +30,7 @@ export function NodeSheet({
   onClose: () => void;
   onSelect: (id: string) => void;
 }) {
+  const copy = packOf(useCaseDomain(caseId)).copy.pages;
   const links = node
     ? graph.edges
         .filter((e) => e.from === node.id || e.to === node.id)
@@ -51,8 +54,8 @@ export function NodeSheet({
             <Sensitive as="div">
               <h3 className="text-[18px] leading-7 font-semibold text-ink">{node.name}</h3>
             </Sensitive>
-            {/* 角色写的是「现用人单位/目标主体」「发薪主体」这类判断，
-                比公司名还直白，跟画布上的节点卡一样进糊层 */}
+            {/* 角色写的是「目标主体」「发薪主体」这类判断，
+                比主体名还直白，跟画布上的节点卡一样进糊层 */}
             <p data-veil="" className="mt-1 text-[14px] leading-6 text-ink-2">
               {node.role}
             </p>
@@ -61,7 +64,7 @@ export function NodeSheet({
               {events.some((e) => e.urgent) && <Badge tone="danger">有紧急动态</Badge>}
             </div>
 
-            {/* 工商信息整块进糊层：「涉诉 N 件 · 近 5 年劳动争议相关」这一行
+            {/* 工商信息整块进糊层：「涉诉 N 件 · 已入档的某某争议」这一行
                 单看就说得出用途，内层已有的 Sensitive 由外层接管 */}
             <dl data-veil="" className="mt-3 flex flex-col gap-1.5 text-[14px] leading-6">
               {node.creditCode && (
@@ -83,11 +86,13 @@ export function NodeSheet({
               )}
               {/* 口径写「已入档」而不是「近 5 年」：真数据里判决日期大量为空
                   （只有案号没有全文的条目照样入档），按 5 年截断会整批筛掉它们，
-                  把涉诉多的公司显示得比实际干净。数字不截断，措辞就得跟着改。
-                  取数口径见 lib/db/company-graph.ts 的 laborLitigationCounts。 */}
+                  把涉诉多的主体显示得比实际干净。数字不截断，措辞就得跟着改。
+                  取数口径见 lib/db/company-graph.ts 的 laborLitigationCounts。
+                  后半句「已入档的哪一类争议」按领域取：写死的形态是，第二个领域的用户
+                  读到的是另一个行当的案由，而那个数字本身是对的。 */}
               <Field label="涉诉">
                 <span className="num">{node.litigationCount} 件</span>
-                <span className="ml-1 text-[13px] text-ink-2">已入档的劳动争议</span>
+                <span className="ml-1 text-[13px] text-ink-2">{copy.graphLitigationNote}</span>
               </Field>
             </dl>
 

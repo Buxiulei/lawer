@@ -69,6 +69,8 @@ describe('assertDomainPack：包必须实现全部字段', () => {
     ],
     ['copy.site', { copy: { ...LABOR.copy, site: {} } }],
     ['copy.capabilities', { copy: { ...LABOR.copy, capabilities: {} } }],
+    // 共用页那几句：空着不会崩，只会让那几页退回缺省领域的话（P4-W4）
+    ['copy.pages', { copy: { ...LABOR.copy, pages: {} } }],
   ];
   for (const [name, over] of broken) {
     it(`缺 ${name} ⇒ 抛错并点名（变异：把 assertDomainPack 里那一行删掉 → 红）`, () => {

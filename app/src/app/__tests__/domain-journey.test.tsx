@@ -33,6 +33,7 @@ import { buildCaseFacts, renderCaseFacts } from '@/lib/agent/case-facts';
 import { loadCaseSnapshot } from '@/lib/agent/snapshot';
 import * as otp from '@/lib/auth/otp';
 import * as otpStore from '@/lib/db/otp';
+import { INTAKE_STAGE_ACTIONS } from '@/lib/cases/intake-actions';
 import {
   DOMAINS,
   DOMAINS_ENABLED_ENV,
@@ -278,6 +279,28 @@ describe.each(Object.keys(DOMAINS))('%s：首诊 → 事实卡走得通', (key) 
     // 首诊把「对方主张的说法」「手上有哪几份书面材料」落成事件，标题逐字来自这个包的 copy.site
     expect(titles).toContain(pack.copy.site.intakeCounterpartWordingTitle);
     expect(titles).toContain(pack.copy.site.intakeCounterpartDocsTitle);
+
+    /*
+     * 【行动卡也要数一遍，不只数时间线】原先这条只断言时间线落了几条。
+     * 漏掉行动卡的形态是：首诊照常返回 201、时间线照常有内容，而驾驶舱上
+     *「只推一件事」那一格是空的——那一格正是这个产品回答「我现在该做什么」的地方。
+     *
+     * 【为什么按种子表数，不写死一个数】种子表按阶段给（INTAKE_STAGE_ACTIONS），
+     * 数字写死的形态是：改了某一阶段的种子条数，这条判据要么误红要么被顺手改绿。
+     * 按种子表数之后，「页面填的这一步该长出几张卡」与「实际长了几张」两边必须对上——
+     * 落库那一侧把卡丢了（去重条件写错、insert 漏掉）就红。
+     */
+    const stage = (db.prepare('SELECT stage FROM cases WHERE id = ?').get(caseId) as {
+      stage: string;
+    }).stage;
+    const seeds = INTAKE_STAGE_ACTIONS[stage as keyof typeof INTAKE_STAGE_ACTIONS] ?? [];
+    const actions = db
+      .prepare('SELECT title FROM action_items WHERE case_id = ?')
+      .all(caseId) as { title: string }[];
+    expect(
+      actions.map((a) => a.title).sort(),
+      `落库的行动卡与这个阶段（${stage}）的种子表对不上`,
+    ).toEqual(seeds.map((x) => x.title).sort());
   });
 
   it('事实卡每一节的抬头是这个包的分节措辞，且不混进别的包的抬头', async () => {
@@ -353,3 +376,40 @@ function handwrittenPayload(pack: DomainPack): Record<string, unknown> {
   };
   return toIntakePayload(draft);
 }
+
+/**
+ * **首诊落不下任何行动卡的包**——已知清单，不是豁免（写法同 registry-guard 里
+ * crisis.ts 那份「待清理清单」）。
+ *
+ * 【为什么要把它写出来】INTAKE_STAGE_ACTIONS 是按**缺省领域的阶段名**建的表
+ *（lib/cases/intake.ts 取 `INTAKE_STAGE_ACTIONS[value.stage] ?? []`）。第二个领域的
+ * 阶段名一个都不在表里，于是 `?? []` 静默生效：首诊返回 201、时间线有内容、
+ * actionsAdded 恒为 0，而驾驶舱「只推一件事」那一格对这个领域的用户**永远是空的**。
+ * 这是 P4-W1 的遗留（种子表还没进领域包），不在本轮范围内。
+ *
+ * 【那这条判据在守什么】守「别再多，也别悄悄修好」：
+ *   · 第三个包挂进来同样落 0 张卡 ⇒ 红（清单变长了，得有人知道）；
+ *   · 有人给某个包补上了种子 ⇒ 也红，提示把它从这份清单里删掉——
+ *     悄悄修好而清单还留着，等于这份清单开始替一件已经不成立的事作证。
+ */
+describe('首诊落不下行动卡的领域（P4-W1 遗留，逐个点名）', () => {
+  it('只剩已知那几个包（变异：给第二个包的落点阶段补一份种子 → 红，提醒删这一行）', () => {
+    const zero = Object.entries(DOMAINS)
+      .filter(([, pack]) => {
+        // 页面在这个包上会落到哪一个阶段：schema 那条路取 stage 那一格的答案（同 answerFor）
+        const stageField = pack.intakeSchema.find((f) => f.key === 'stage');
+        const values = stageField?.values ?? [];
+        const stage = values[1] ?? values[0] ?? '';
+        return (INTAKE_STAGE_ACTIONS[stage as keyof typeof INTAKE_STAGE_ACTIONS] ?? []).length === 0;
+      })
+      .map(([key]) => key);
+    expect(
+      zero,
+      '「首诊之后一张行动卡都没有」的包清单变了。\n' +
+        '缺什么：这几个领域的用户交完首诊回到驾驶舱，「下一件事」那一格是空的。\n' +
+        '为什么缺：种子表 INTAKE_STAGE_ACTIONS 按缺省领域的阶段名建，别的阶段名一律 `?? []`。\n' +
+        '怎么办：把种子表搬进 DomainPack（与 intakeLimitation 同一条口径：省略＝本领域不落），' +
+        '补好之后把对应的 key 从本条的期望值里删掉。',
+    ).toEqual(['counseling']);
+  });
+});

@@ -7,6 +7,10 @@
  * 不是三种不同的接入方式。
  *
  * 字段一律来自 GET /api/v1/agent-setup（mcp_url / api_base / manifest_url），本文件不硬编码地址。
+ *
+ * 【话术里那三句"这是什么事"按领域取】开场白、能力清单、边界三段都逐字来自领域包的
+ * copy.pages（app/_ui/domain.packOf）。写死一份的形态是：第二个领域的用户复制这段话
+ * 发给自己的 agent，**接进来的第一句**就在说另一个行当——而话术照常能用、接入照常成功。
  */
 
 /**
@@ -54,10 +58,17 @@ export const SETUP_TABS: { key: SetupTabKey; label: string }[] = [
 export { KEY_PLACEHOLDER } from '@/lib/capabilities/client-matrix';
 
 import { KEY_PLACEHOLDER as PLACEHOLDER } from '@/lib/capabilities/client-matrix';
+import { packOf } from '@/app/_ui/domain';
 
 export interface PromptVars extends SetupUrls {
   /** 当前这把 key 的明文；取不到就传 undefined，落到 KEY_PLACEHOLDER */
   apiKey?: string;
+  /**
+   * 这份话术给哪个领域的案子用（cases.domain）。**空串＝还没问到**，退回缺省领域——
+   * 与页面别处同一条口径（app/_ui/caseDomain）。不给缺省值以外的兜底：
+   * 兜一个别的领域的形态是，用户读到的第一句话就在讲另一个行当。
+   */
+  domain?: string;
 }
 
 function key(vars: PromptVars): string {
@@ -77,13 +88,14 @@ export function clientJson(vars: PromptVars): string {
   });
 }
 
-const ABILITIES =
-  '【接入后你能替我做】读案件档案与时间线、上传并固化证据（可信时间戳）、OCR 解读公司文件、按北京口径计算赔偿、检索劳动法知识库、起草文书、管理待办与法定期限。';
+/** 话术里按领域换的那三段。逐字来自领域包，本文件一句都不写死。 */
+function copyOf(vars: PromptVars) {
+  return packOf(vars.domain || undefined).copy.pages;
+}
 
-const BOUNDARY =
-  '【边界】发给公司的文书必须经我本人确认；档案数据仅用于本案维权；此密钥是我的私人凭据，不要写进共享配置或转发他人。';
-
-const OPENING = '请帮我接入「土八鼠」法律陪跑平台（我的劳动仲裁案件档案库）。';
+const abilities = (vars: PromptVars) => copyOf(vars).agentSetupAbilities;
+const boundary = (vars: PromptVars) => copyOf(vars).agentSetupBoundary;
+const opening = (vars: PromptVars) => copyOf(vars).agentSetupOpening;
 
 /**
  * 「先取 skill」那一行。
@@ -103,13 +115,13 @@ function firstStep(vars: PromptVars): string {
 /** 通用话术：主文案，三个客户端变体都在它后面追加自己那段 */
 function general(vars: PromptVars): string {
   return [
-    OPENING,
+    opening(vars),
     firstStep(vars),
     `【若你支持 MCP（Model Context Protocol）】传输：Streamable HTTP；服务地址：${vars.mcp_url}；鉴权请求头：Authorization: Bearer ${key(vars)}。常见客户端 JSON 配置：`,
     clientJson(vars),
     `【若你不支持 MCP】直接调 REST：先读能力清单 GET ${vars.manifest_url}（免鉴权，含全部接口自描述）；业务基址 ${vars.api_base}，同样 Bearer 鉴权。`,
-    ABILITIES,
-    BOUNDARY,
+    abilities(vars),
+    boundary(vars),
   ].join('\n');
 }
 
@@ -213,15 +225,15 @@ export function restCurl(vars: PromptVars): string {
 /** 豆包这类不支持 MCP 的客户端：不提 MCP，只给 manifest 与带 Bearer 的 curl */
 function rest(vars: PromptVars): string {
   return [
-    `${OPENING}你不需要支持 MCP，直接调 REST 就行。`,
+    `${opening(vars)}你不需要支持 MCP，直接调 REST 就行。`,
     // 这一档同样从 skill 起步：不走 MCP 不等于不用守引用纪律与边界红线
     firstStep(vars),
     '第二步，读能力清单（免鉴权，全部接口都在里面自描述）：',
     `curl ${vars.manifest_url}`,
     `第三步，业务接口都在 ${vars.api_base} 下，每个请求都带上我的密钥。先用这条验一下通不通：`,
     restCurl(vars),
-    ABILITIES,
-    BOUNDARY,
+    abilities(vars),
+    boundary(vars),
   ].join('\n');
 }
 

@@ -1,4 +1,8 @@
+'use client';
+
 import Link from 'next/link';
+import { useCaseDomain } from '@/app/_ui/caseDomain';
+import { packOf } from '@/app/_ui/domain';
 import { formatDateTime } from '@/app/_ui/format';
 import { NeutralLabel } from '@/app/_ui/NeutralLabel';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
@@ -12,6 +16,10 @@ import type { DraftView } from './draftsData';
  * 文书列表的画法。**只吃传进来的 drafts**，自己不取数、不认 demo——
  * 演示案件传 mock、真实案件传接口取回的行，两条路走同一份版式。
  * 分出来也是为了让「这一页有没有渲染演示数据」在 node 环境里就验得出来。
+ *
+ * 【导语与空态那两句按领域取】文书递到谁手里，是这一页唯一按行当变的东西。
+ * 写死的形态是：第二个领域的用户在自己的文书页上读到一个跟他无关的收件人，
+ * 而页面照常渲染、列表照常是他的那几份。
  */
 export function DraftsListView({
   caseId,
@@ -20,26 +28,28 @@ export function DraftsListView({
   caseId: string;
   drafts: DraftView[];
 }) {
+  const copy = packOf(useCaseDomain(caseId)).copy.pages;
   return (
     <div className="pt-1">
       <header className="py-3">
         <h1 className="text-[20px] font-semibold text-ink">
           <NeutralLabel plain="文书" neutral={NEUTRAL_WORD.drafts} />
         </h1>
-        {/* 标题换了中性词，这句导语里还有「仲裁委」，得进糊层 */}
+        {/* 标题换了中性词，这句导语里还点着收件人（各领域各有各的），得进糊层。
+            拆成前后两截是因为中间夹着「问它」那条行内链接，见领域包 draftsIntroBefore。 */}
         <p data-veil="" className="mt-0.5 text-[15px] leading-7 text-ink-2">
-          写给公司和仲裁委的东西都在这儿。需要新的一份，去
+          {copy.draftsIntroBefore}
           <Link href={`/case/${caseId}/ask`} className="mx-1 text-primary-ink underline underline-offset-4">
             问它
           </Link>
-          说一句就行。
+          {copy.draftsIntroAfter}
         </p>
       </header>
 
       {drafts.length === 0 ? (
         <EmptyState
           title="还没有文书"
-          description="要递给公司或仲裁委的东西都会存在这一页。现在一份都还没有——去对话里说清楚你要写什么，它会起草并存进来；手里已有的材料先传进证据库。"
+          description={copy.draftsEmptyDescription}
           action={<DraftEntries caseId={caseId} />}
         />
       ) : (

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useMyDomain } from '@/app/_ui/caseDomain';
 import { Button } from '@/components/shadcn/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/shadcn/tabs';
 import { CodeBlock } from './CodeBlock';
@@ -17,6 +18,10 @@ import {
  *
  * 默认停在「通用」——我们不假设用户手里是哪家助手（spec D4 修订）。
  * 三个客户端 Tab 只是同一份字段的不同包装，复制按钮永远复制**当前 Tab 那一版**。
+ *
+ * 【领域在这里问一次，六档共用】开场白/能力清单/边界三段按案件领域取（agentSetup.copyOf）。
+ * 六个 Tab 各问一次的形态是：同一屏发六条一模一样的请求，而屏幕上看不出任何区别。
+ * 首帧问不到就是缺省领域那一版——设置页不在案件路由下，这一次问答躲不掉。
  */
 export function SetupPrompt({
   info,
@@ -27,7 +32,8 @@ export function SetupPrompt({
   apiKey?: string;
 }) {
   const [tab, setTab] = useState<SetupTabKey>('general');
-  const text = setupPrompt(tab, { ...info, apiKey });
+  const domain = useMyDomain();
+  const text = setupPrompt(tab, { ...info, apiKey, domain });
 
   return (
     <div>

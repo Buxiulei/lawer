@@ -103,4 +103,23 @@ describe('名下案件清单', () => {
     const body = await (await listCases(request(signToken(userA)))).json();
     expect(body.cases[0]).toMatchObject({ title: '我的案件', stage: '风声' });
   });
+
+  /**
+   * **这条回包不是"零变化"**：P4 之后每一行多了 `domain` 一列（加性变更）。
+   *
+   * 【为什么要单独判一条】这一列没有任何消费方**必须**有它才能活（首诊页取不到就退回
+   * 缺省领域），所以它掉了不会有任何东西报错——首诊页会安安静静地按缺省领域那份 schema
+   * 问下去，而第二个领域的用户填的每一格都在答另一个行当的问题。
+   *
+   * 【灰度关着时也照给】领域是**已建案件的属性**，不是"还能不能新建这个领域"。
+   * 跟着开关走的形态是：临时关掉某个领域，存量案件在清单里当场变成缺省领域。
+   */
+  test('每一行都带 domain（加性变更；灰度关着时同样带，值是缺省领域）', async () => {
+    delete process.env.LAWER_DOMAINS_ENABLED;
+    insertCase(userA, '我的案件');
+    const { DEFAULT_DOMAIN } = await import('@/lib/domains/registry');
+    const body = await (await listCases(request(signToken(userA)))).json();
+    expect(Object.keys(body.cases[0]), '回包里没有 domain 这一列').toContain('domain');
+    expect(body.cases[0].domain).toBe(DEFAULT_DOMAIN);
+  });
 });

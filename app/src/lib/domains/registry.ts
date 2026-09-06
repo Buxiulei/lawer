@@ -200,6 +200,20 @@ export interface DomainCopy {
   capabilities: Readonly<Record<string, string>>;
   /** 站内与落库文案（建档标题、首诊落下来的那几条事件的标题…） */
   site: Readonly<Record<string, string>>;
+  /**
+   * **共用页面上按领域换的那几句**（驾驶舱的档案入口、接入话术的开场与能力清单、
+   * 证据页的填写提示、文书页的导语与空态、关系图的涉诉口径、解读页的收尾建议）。
+   *
+   * 【它与 site 的分野】site 是**落库**的字（建档标题、事件标题），写下去就长在数据里；
+   * 这一份是**渲染**的字，只活在屏幕上。混成一份的形态是：改一句页面文案，
+   * 历史案件里已经落库的那条事件标题跟着"变了"——而库里那一行其实一个字都没动。
+   *
+   * 【为什么它必须存在】这些页第二个领域的用户照样会打开。把字写死在页面里的形态是：
+   * 页面照常渲染、一处报错都没有，只有那个行当的用户读到的每一句都在讲另一件事。
+   * 由 app/__tests__/page-domain-guard.test.ts 按文件拦、
+   * app/__tests__/page-copy-by-domain.test.tsx 按渲染产物拦。
+   */
+  pages: Readonly<Record<string, string>>;
 }
 
 /**
@@ -527,6 +541,9 @@ export function assertDomainPack(pack: DomainPack): void {
     missing.push('copy.capabilities');
   }
   if (!pack.copy?.site || Object.keys(pack.copy.site).length === 0) missing.push('copy.site');
+  // 空的 pages 不是"这个领域的页面没有文案"，是**页面会退回缺省领域那几句**——
+  // 而页面照常渲染、一处报错都没有（键取不到时 packOf 兜的是包，不是这一句话）。
+  if (!pack.copy?.pages || Object.keys(pack.copy.pages).length === 0) missing.push('copy.pages');
 
   // 分节**必须覆盖全部键**，且一个键只能出现一次。
   // 【为什么这条比"数组非空"更要紧】渲染器按键取抬头：缺一个键的形态不是崩溃，
