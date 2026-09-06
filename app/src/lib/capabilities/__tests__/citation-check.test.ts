@@ -11,6 +11,7 @@ import type { Database } from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 
 import type { Identity } from '@/lib/auth/identity';
+import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
 
 import { citationCheck } from '../families/knowledge';
 
@@ -63,6 +64,8 @@ interface IndexEntry {
   type: string;
   title: string;
   confidence: string;
+  /** 领域键；只有声明了的卡才有，其余按缺省域算（lib/knowledge 的 packDomain 同口径） */
+  domain?: string;
   facts?: {
     statute_quotes?: Array<{ law: string; article: string; text: string }>;
     case_facts?: { case_no?: string; court?: string; holding?: string; reasoning?: string };
@@ -244,7 +247,14 @@ describe('citation_check · 判例四步法', () => {
   });
 
   it('传的不是判例卡 ⇒ found:false 并说清它是哪一类，不硬套四步法', () => {
-    const statute = INDEX.find((e) => e.type === '法条卡')!;
+    // 【夹具必须限定缺省域】citation_check 走的是 knowledge searcher 的 get，
+    // 而 get 只交缺省域的卡（跨域召回默认关闭，设计稿 §13）。
+    // 不限定域的形态是：库里排在最前面的那张法条卡属于别的领域，于是这条判据测到的是
+    //「取不到这张卡」，而不是它要问的「取到了但类型不对，别硬套四步法」——
+    // 判据照样红/绿，红的原因却换了一个。同一处坑另见 knowledge-family.test.ts 的十类样本。
+    const statute = INDEX.find(
+      (e) => e.type === '法条卡' && (e.domain ?? DEFAULT_DOMAIN) === DEFAULT_DOMAIN,
+    )!;
     const out = check({ precedent_ids: [statute.id] });
     expect(out.precedents[0].found).toBe(false);
     expect(out.precedents[0].note).toContain('法条卡');

@@ -120,3 +120,23 @@ describe('逐字条文注入也走领域闸（设计稿 §13：跨域召回默�
     }
   });
 });
+
+describe('按 id 取卡也走领域闸（get 面没有守卫的话，search 闸干净了也没用）', () => {
+  /** 库里第一张（不）属于缺省域的卡的 id；现取，不在判据里抄一份 id */
+  function firstId(inDefaultDomain: boolean): string {
+    const meta = knowledge
+      .listPacks()
+      .find((m) => (knowledge.packDomain(m) === DEFAULT_DOMAIN) === inDefaultDomain);
+    expect(meta, `库里找不到${inDefaultDomain ? '缺省域' : '非缺省域'}的卡 ⇒ 这条判据在空跑`).toBeTruthy();
+    return meta!.id;
+  }
+
+  it('别的领域的卡按 id 取不到（变异：拿掉 get 里的领域闸 → 红）', () => {
+    expect(searcher.get!(firstId(false))).toBeUndefined();
+  });
+
+  it('本域的卡按 id 照常取得到（闸不能关过头）', () => {
+    const id = firstId(true);
+    expect(searcher.get!(id)?.id).toBe(id);
+  });
+});

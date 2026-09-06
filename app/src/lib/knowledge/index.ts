@@ -60,14 +60,19 @@ export interface PackMeta {
   updated: string;
   path: string;
   /**
-   * 领域键（设计稿 §13）。**只有卡片自己在 frontmatter 里声明了才有**——
-   * 既有的那批卡一张都没声明，它们按 `DEFAULT_DOMAIN` 算（见 packDomain）。
+   * 领域键（设计稿 §13）。**加载之后恒有值**：index.json 里没写 domain 的条目
+   * 在 loadIndex 补成 `DEFAULT_DOMAIN`（存量卡片写于只有一个领域的时候，一张都没声明）。
+   *
+   * 【为什么补齐放在加载器，而不是让每个下游各自 `?? 缺省`】少补一处的形态是：
+   * 那批卡在按领域过滤的那一刻整批消失，而检索照常返回 200 与一个更短的列表。
+   * 也因此，**index.json 里这个字段写不写、写成什么，下游都读到同一个值**——
+   * 生成器把存量卡显式写成缺省域，与留空，对检索是同一件事。
    *
    * 【为什么这个字段必须在类型上出现】它在 index.json 里已经是**检索的过滤依据**，
    * 而类型上不存在的字段没有任何一处会去对齐：生成器写它、检索读它、类型不认识它，
    * 于是"卡上删掉 domain 而不重跑生成器"这类两面分叉在编译期与类型面都无人看见。
    */
-  domain?: string;
+  domain: string;
   /** 规范化法条引用（如 劳动合同法§47）；仅 frontmatter 声明了 law_refs 的卡带此字段 */
   law_refs?: string[];
   /** 仅带结构化事实的卡存在；gen-knowledge-index.py 已做两面一致性校验 */
@@ -185,6 +190,14 @@ function loadIndex(): PackMeta[] {
       throw new Error(`knowledge 索引里 id 重复：${entry.id}（${indexPath}）；id 是主键，重复即歧义`);
     }
     seen.add(entry.id);
+  }
+
+  // ⑦【domain 补齐】没写 domain 的条目按缺省领域算，补在**加载器这一处**，
+  // 下游（检索过滤、条文注入表、判据）读到的恒有值。
+  // 【为什么不是让下游各自 `?? 缺省`】少补一处的形态是：那批卡在按领域过滤的那一刻
+  // 整批消失，而检索照常返回 200 与一个更短的列表——没有一处会报错。
+  for (const entry of parsed as PackMeta[]) {
+    if (!entry.domain) entry.domain = DEFAULT_DOMAIN;
   }
 
   packIndex = parsed as PackMeta[];
@@ -346,12 +359,17 @@ function scoreOf(meta: PackMeta, query: string, queryBigrams: Set<string>): numb
 }
 
 /**
- * 这张卡属于哪个领域。卡上没声明 = 缺省领域（既有那批卡一张都没声明，见 PackMeta.domain）。
+ * 这张卡属于哪个领域。没声明 = 缺省领域。
  *
  * 【为什么"没声明"不能读成"哪个域都算"】那等于给每个新领域包发一张跨域通行证：
  * 第二个包一进库，它的卡就出现在第一个领域用户的检索结果里，而回包一切正常。
+ *
+ * 【为什么入参放宽成 `{ domain?: string }`，而不是 PackMeta】loadIndex 之后的元数据恒有
+ * domain（见 PackMeta.domain），但**判据与工具面有直接读 index.json 原文的调用方**，
+ * 那份里存量条目可以没有这个字段。两种形状在这里收敛成同一个答案，
+ * 免得"读原文的那一处"自己再写一遍 `?? 缺省` 而哪天写漏。
  */
-export function packDomain(meta: Pick<PackMeta, 'domain'>): string {
+export function packDomain(meta: { domain?: string }): string {
   return meta.domain ?? DEFAULT_DOMAIN;
 }
 

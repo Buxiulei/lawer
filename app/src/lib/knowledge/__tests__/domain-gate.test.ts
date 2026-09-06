@@ -38,42 +38,42 @@ afterAll(() => {
 });
 
 /**
- * 缺省域的召回快照：**基线取自本支之前的库**（第二个领域包尚未入库的那一版 index.json，
- * 220 张卡），逐 query 跑出来的 top-5 id 原样钉在这里。
+ * 缺省域的召回**下限**：20 句 query 各配一个条数——前 8 条是复审实测泄漏的那 8 句，
+ * 后 12 条是本域的核心问法。数字取自**本支之前的库**（第二个领域包尚未入库的那一版
+ * index.json，220 张卡）逐 query 实测的 top-5 条数。
  *
- * 【怎么读这张表】它不是"检索应该返回什么"的理想答案，它是"上一版返回过什么"的实测留痕。
- * 改动让它变红，说明**召回集合变了**——这本身不一定是错，但必须有人看见并解释：
- * 是新加了一张本域的卡（那就更新这张表，并在提交信息里说明动了哪几条），
- * 还是别的领域的卡漏了进来（那就是闸破了）。
- *
- * 前 8 条正是复审实测泄漏的那 8 句；后 12 条是本域的核心问法，用来发现"闸关过头、
- * 把本域的卡也一起挡了"这种反方向的坏事。
+ * 【为什么钉的是条数，而不是 top-5 的 id】钉 id 的那一版顺带把"库长什么样"也钉住了：
+ * 别人的票往本域加一张卡、或调一个关键词，这 20 条就一起变红——而红的是**别人的票**；
+ * 更坏的是那一刻的判断只有两种（"更新基线"或"闸破了"），判据本身给不出区分。
+ * 条数下限只盯**反方向的坏事**：闸关过头，把本域的卡也一起挡了。加卡只会让条数上升，
+ * 不给任何人留维护税。泄漏方向由下面那条逐 query 的零泄漏判据盯，那一条才是这道闸的正题。
  */
-const RECALL_BASELINE: ReadonlyArray<readonly [string, readonly string[]]> = [
-  ['投诉', ['sop-jiancha-vs-zhongcai', 'sop-lengbaoli-guli', 'case-xujia-tijian-daijian-2023']],
-  ['退费', []],
-  ['诉讼时效', ['calc-weiqian-hetong-shuangbei', 'statute-dianzi-qianming-fa', 'statute-tjzcf-core', 'sop-yishen-ersheng-sop', 'sop-zhongcai-guanxia-shixiao']],
-  ['隐私泄露', ['case-jingye-baogao-zuixiao-biyao-bjzc25-8']],
-  ['知情同意', []],
-  ['未成年人', []],
-  ['危机 自杀', []],
-  ['心理热线', ['data-beijing-qiuzhu-ziyuan', 'script-tanpan-xinli-gongju', 'emotion-caiyuan-xinli-jieduan', 'emotion-kaiting-xinli-jianshe']],
-  ['经济补偿 计算', ['calc-jingji-buchang-n', 'statute-lhtf-jiechu-buchang-core', 'case-shebao-yueding-wuxiao-buchang-zgf25-6', 'case-huanqian-gongling-lianxu-bjzc25-1', 'case-xianjing-tiaokuan-bjzc25-3']],
-  ['违法解除 2N', ['sop-jixu-lvxing-vs-2n', 'statute-lhtf-jiechu-buchang-core', 'case-huanqian-jiangxin-gongling-11711', 'case-yunqi-tiqian-jiesan-hunton-sz2512', 'case-guandian-tiaogang-kuanggong-16940']],
-  ['竞业限制', ['statute-rsty-2025-40-jingye-zhiyin', 'calc-jingye-buchang-weiyuejin', 'review-jingye-xianzhi', 'case-jingye-baogao-zuixiao-biyao-bjzc25-8', 'case-jingye-fanhua-jianshen-jiaolian-bjzc24-9']],
-  ['加班费 举证', ['calc-jiabanfei', 'case-weiji-zhengju-buzu-jixiao-87802', 'case-weixin-youxing-jiaban-sz25-1', 'case-yinxing-jiaban-jing03-9602', 'calc-tuoqian-jiafu-peichang']],
-  ['被迫解除', ['statute-lhtf-38-beipo-jiechu', 'sop-shumian-songda-liucun', 'template-beipo-jiechu-tongzhishu', 'case-shengyu-jintie-tuoqian-bjzc25-4', 'case-zhichang-baling-38tiao-bjzc24-7']],
-  ['调岗降薪', ['sop-jiangxin-yingdui', 'sop-tiaogang-yingdui', 'case-huanqian-jiangxin-gongling-11711', 'case-jiangxin-30-geshui-zhengju-7478', 'statute-fashi-2020-26-jieshi-yi-43']],
-  ['年假', ['case-fuli-nianjia-anyue-sz25-4', 'case-xiaoji-daigong-minzhuchengxu-jing03-94', 'calc-nianjia-300', 'case-keguan-yiqing-yewuliang-jing03-15429', 'case-keguan-zhanlue-tiaozheng-jing03-20183']],
-  ['工伤', ['sop-gongshang-jiechu-xianzhi', 'case-zhuanbao-gongshang-daiyu-zgf25-1', 'case-gongshang-fuzhen-guodu-diaocha-2024']],
-  ['试用期', ['sop-shiyongqi-quanli', 'case-shiye-danwei-daigang-jiepin-bjzc25-10', 'case-shiyongqi-jiechu-minzhu-chengxu-101', 'case-shiyongqi-xiangshou-nianjia-sz25-3', 'review-laodong-hetong']],
-  ['社保', ['sop-shebao-tingjiao-jiangji', 'case-shebao-yueding-wuxiao-buchang-zgf25-6', 'sop-zhongcai-qijian-zijiu', 'data-beijing-shebao-jishu', 'sop-gongzi-shebao-geshui-beijing']],
-  ['双倍工资', ['calc-weiqian-hetong-shuangbei', 'case-buqian-tongzhi-shuangbei-8452', 'case-guyi-buqian-hetong-bjzc24-2', 'case-guyi-buqian-hetong-zgf25-3', 'case-hunton-wugu-shuangbei-43551']],
-  ['仲裁时效', ['statute-tjzcf-core', 'sop-zhongcai-guanxia-shixiao', 'calc-weiqian-hetong-shuangbei', 'sop-lengbaoli-guli', 'data-beijing-lian-zuobiao']],
+const RECALL_MIN_COUNT: ReadonlyArray<readonly [string, number]> = [
+  ['投诉', 3],
+  ['退费', 0],
+  ['诉讼时效', 5],
+  ['隐私泄露', 1],
+  ['知情同意', 0],
+  ['未成年人', 0],
+  ['危机 自杀', 0],
+  ['心理热线', 4],
+  ['经济补偿 计算', 5],
+  ['违法解除 2N', 5],
+  ['竞业限制', 5],
+  ['加班费 举证', 5],
+  ['被迫解除', 5],
+  ['调岗降薪', 5],
+  ['年假', 5],
+  ['工伤', 3],
+  ['试用期', 5],
+  ['社保', 5],
+  ['双倍工资', 5],
+  ['仲裁时效', 5],
 ];
 
-/** 复审实测泄漏的那 8 句（RECALL_BASELINE 的前 8 条），单拎出来做泄漏方向的判据 */
-const LEAK_QUERIES = RECALL_BASELINE.slice(0, 8).map(([q]) => q);
+const ALL_QUERIES = RECALL_MIN_COUNT.map(([q]) => q);
+/** 复审实测泄漏的那 8 句（表的前 8 条）。零泄漏判据对整张表都跑，这里单拎出来是为了点名它们 */
+const LEAK_QUERIES = ALL_QUERIES.slice(0, 8);
 
 describe('跨域检索默认关闭（设计稿 §13）', () => {
   it('判据自身不空跑：库里确实有非缺省域的卡（一张都没有的话，下面几条全是空转）', () => {
@@ -84,7 +84,7 @@ describe('跨域检索默认关闭（设计稿 §13）', () => {
     ).toBeGreaterThan(30);
   });
 
-  it.each(LEAK_QUERIES)('「%s」：不传 domain 时一张别的领域的卡都不回（变异：拿掉 passesFilters 的领域闸 → 红）', (query) => {
+  it.each(ALL_QUERIES)('「%s」：不传 domain 时一张别的领域的卡都不回（变异：拿掉 passesFilters 的领域闸 → 红）', (query) => {
     const hits = search(query, { limit: 10 });
     const leaked = hits.filter((h) => packDomain(h) !== DEFAULT_DOMAIN).map((h) => `${h.id}(${packDomain(h)})`);
     expect(leaked, `这句 query 把别的领域的卡召回到了缺省域用户手里：${leaked.join('、')}`).toEqual([]);
@@ -99,12 +99,26 @@ describe('跨域检索默认关闭（设计稿 §13）', () => {
     expect(hits.every((h) => packDomain(h) === 'counseling')).toBe(true);
   });
 
-  it.each(RECALL_BASELINE)('召回快照「%s」与上一版逐字一致（改了召回集合就要有人看见）', (query, expected) => {
+  // 【这一条钉的是"不传 domain 时闸什么"】本支按设计稿 §13 的字面实现：**不传 = 只回缺省域**，
+  // 跨域要显式要。这个口径与"不传 = 不过滤（全库）"是同一处代码的两种相反读法，
+  // 取舍尚无台账裁决——本判据不替谁决定，它只保证**口径被改的那一刻有人当场看见**：
+  // 改成"不传 = 全库"时，这 20 条会连同上面的零泄漏判据一起红，
+  // 而不是静默地多回一批别的领域的卡（回包 200、字段齐全、没有一处报错）。
+  it.each(ALL_QUERIES)('「%s」：不传 domain 与显式传缺省域，结果逐 id 一致', (query) => {
+    const implicit = search(query, { limit: 10 }).map((h) => h.id);
+    const explicit = search(query, { limit: 10, domain: DEFAULT_DOMAIN }).map((h) => h.id);
     expect(
-      search(query, { limit: 5 }).map((h) => h.id),
-      `「${query}」的召回变了。要么是本域新加/改了卡（更新 RECALL_BASELINE 并在提交信息里说明），` +
-        '要么是领域闸破了（那就不是更新基线的事）。',
-    ).toEqual([...expected]);
+      implicit,
+      '"不传 domain"与"显式传缺省域"给出了不同的召回 ⇒ 缺省语义被改过了（口径待裁，见本文件上方注释）',
+    ).toEqual(explicit);
+  });
+
+  it.each(RECALL_MIN_COUNT)('「%s」缺省域召回不少于 %i 条（闸不能关过头，把本域的卡也挡了）', (query, min) => {
+    expect(
+      search(query, { limit: 5 }).length,
+      `「${query}」的缺省域召回比上一版（220 张卡那一版）少了。往本域加卡只会让这个数变大，` +
+        '变小说明本域的卡被挡住了——那不是"更新基线"的事。',
+    ).toBeGreaterThanOrEqual(min);
   });
 
   it('region 过滤替代不了领域闸（那批卡 region 是全国，北京用户照样吃得到）', () => {
@@ -123,12 +137,18 @@ describe('index.json 的 domain 与卡片 frontmatter 同步（变异：卡上�
     return line ? line[1] : undefined;
   }
 
-  it('每一条索引条目的 domain 都与它指向的卡片写的一致', () => {
+  // 【为什么比的是"解析后的域"，而不是两边的字段原样相等】卡上不写 domain 与写成缺省域，
+  // 对检索是同一件事（加载器补齐，见 lib/knowledge 的 PackMeta.domain）。
+  // 要求两边字段原样相等的形态是：生成器哪天把缺省域也显式写进 index.json，
+  // 这条就在几百张一个字没动过的存量卡上整批变红，而库其实没变。
+  // 真正要拦的分叉——卡上写 counseling 而索引里是缺省域（那批卡会出现在缺省域用户的结果里）——
+  // 在解析后的比对里照样红。
+  it('每一条索引条目解析出的 domain，都与它指向的卡片解析出的一致', () => {
     const drift: string[] = [];
     for (const meta of listPacks()) {
-      const onCard = domainInCard(meta.path);
-      if (onCard !== meta.domain) {
-        drift.push(`${meta.id}：index 说 ${meta.domain ?? '（无）'}，卡里写的是 ${onCard ?? '（无）'}`);
+      const onCard = packDomain({ domain: domainInCard(meta.path) });
+      if (onCard !== packDomain(meta)) {
+        drift.push(`${meta.id}：index 算 ${packDomain(meta)}，卡里算 ${onCard}`);
       }
     }
     expect(
@@ -139,9 +159,11 @@ describe('index.json 的 domain 与卡片 frontmatter 同步（变异：卡上�
     ).toEqual([]);
   });
 
-  it('判据自身不空跑：确实有卡在 frontmatter 里声明了 domain', () => {
-    const declared = listPacks().filter((m) => m.domain !== undefined);
-    expect(declared.length).toBeGreaterThan(30);
-    for (const m of declared) expect(domainInCard(m.path)).toBe(m.domain);
+  it('判据自身不空跑：确实有卡在 frontmatter 里声明了非缺省域', () => {
+    // 【为什么数的是卡片、不是索引条目】索引条目加载后恒有 domain（缺省补齐），
+    // 拿它数"声明过的"等于数了全库，这条就恒真。
+    const declared = listPacks().filter((m) => domainInCard(m.path) !== undefined);
+    expect(declared.length, '一张卡都没在 frontmatter 里声明 domain ⇒ 上一条判据无从分叉').toBeGreaterThan(30);
+    for (const m of declared) expect(domainInCard(m.path)).toBe(packDomain(m));
   });
 });

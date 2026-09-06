@@ -52,7 +52,14 @@ export function createKnowledgeSearcher(): KnowledgeSearcher {
     },
     get(id) {
       try {
-        return toPack(knowledge.get(id));
+        const hit = knowledge.get(id);
+        // 【按 id 取也走领域闸】search 这一面已经不会把别的领域的卡的 id 交出去，
+        // 但 get 面本身没有守卫，而 id 是可猜的（`<域单数>-<slug>`）、knowledge_get 又是
+        // 暴露给 MCP 的只读能力。不闸的形态是：缺省域的会话取回另一个领域的整张卡
+        //（含 facts 里的口径），与本域同类卡的口径并排出现在同一个回包里，且一切正常。
+        // 【域为什么写死缺省】同 articleIndex：本层拿不到"这轮是哪个领域的案子"。
+        if (knowledge.packDomain(hit) !== DEFAULT_DOMAIN) return undefined;
+        return toPack(hit);
       } catch {
         // 只有「这张卡不存在」会走到这里（get 的唯一失败原因），属于正常的未命中
         return undefined;

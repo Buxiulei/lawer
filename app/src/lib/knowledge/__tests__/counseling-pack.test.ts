@@ -15,6 +15,8 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
+
 const KNOWLEDGE_DIR = path.resolve(__dirname, '../../../../../knowledge');
 const COUNSELING_DIR = path.join(KNOWLEDGE_DIR, 'packs', 'counseling');
 const DOMAIN = 'counseling';
@@ -83,9 +85,19 @@ describe('index ⇄ packs/counseling/ 双向一致（变异：删掉任一张卡
     }
   });
 
-  it('既有劳动卡一张都没有被打上 domain（本票只加不改）', () => {
-    const others = INDEX.filter((e) => e.domain !== undefined && e.domain !== DOMAIN);
-    expect(others.map((e) => e.id)).toEqual([]);
+  it('counseling 包之外的卡一张都没被打上非缺省域（本票只加不改）', () => {
+    // 【为什么判"解析后的域"，而不是"有没有 domain 这个字段"】存量条目把 domain 留空、
+    // 与显式写成缺省域，对检索是同一件事（加载器补齐，见 lib/knowledge 的 PackMeta.domain）。
+    // 判"字段必须不存在"的形态是：生成器哪天把缺省域也显式写进 index.json，
+    // 这条就在几百张一个字没动过的存量卡上整批变红，而库其实没变；
+    // 而真正要拦的坏事——存量卡被打上 counseling（它从此对缺省域用户消失）——两种写法下都红。
+    const strays = INDEX.filter(
+      (e) => (e.domain ?? DEFAULT_DOMAIN) !== DEFAULT_DOMAIN && !e.path.startsWith('packs/counseling/'),
+    );
+    expect(
+      strays.map((e) => `${e.id}(${e.domain})`),
+      'counseling 包之外的卡被打上了非缺省域 ⇒ 它会从缺省域用户的检索结果里消失，而检索照常 200',
+    ).toEqual([]);
   });
 });
 
