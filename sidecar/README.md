@@ -214,14 +214,17 @@ PDF 本身的签名用 Adobe 或 `verify_evidence_pdf.py` 验。
 ## 依赖与外部服务
 
 - **GlobalSign AATL TSA**（默认，`TSA_URL` 可换国内 TSA）：`/tsa` 与 `/pades` 都会打。
-- **阿里云百炼 DashScope**：`/ocr` 用 `qwen-vl-ocr-2025-11-20`（图片以 base64 内联提交，
-  不走「本地文件先传阿里云临时 OSS」那条路）；`/asr` 用 `paraformer-v2` 开
-  `diarization_enabled`。
+- **阿里云百炼 DashScope**：`/ocr` 用 Qwen3-VL，走 OpenAI 兼容端点
+  `compatible-mode/v1/chat/completions`（图片以 base64 `image_url` 内联提交，
+  不带 `ocr_options`，也不走「本地文件先传阿里云临时 OSS」那条路）；`/asr` 用
+  `paraformer-v2` 开 `diarization_enabled`。
 
-  **OCR 模型必须锁 dated 版本号，禁用 `-latest` 等浮动别名**：`qwen-vl-ocr-2025-11-20`
-  是 0.3/0.5 元每百万 token，而更早的 2025-08-28 / 2025-04-13 / 2024-10-28 是 5/5 元，
-  单价差 16 倍。浮动别名指向变更会在无人察觉的情况下把成本翻十几倍。
-  换版走 env `OCR_MODEL`，并同步核对 `research/raw/C01-模型定价核定.md §二` 的费率表。
+  **OCR 模型过渡态暂用浮动别名 `qwen3-vl-plus`**：生产这把 key（与 NBDpsy 同一把）
+  对 dated 名（`qwen3-vl-plus-2025-12-19`）与 `qwen-vl-ocr-*` 一律 403 `Model.AccessDenied`，
+  只有浮动别名 `qwen3-vl-plus` 能 200。锁 dated 版本号本是为价稳（浮动别名指向变更可能悄悄抬价），
+  但此刻 dated 名调不通，只能先用浮动别名把功能跑起来。主理人在百炼控制台为该 key 开通
+  `qwen3-vl-plus-2025-12-19` 后，把默认值改回 dated 名（`sidecar/ocr.py` 文件头有 TODO 与判据）。
+  换版走 env `OCR_MODEL`，并同步核对 `research/raw/C01-模型定价核定.md` 的费率表。
 - **中文字体**：PDF 渲染需要 CJK 字体，镜像里装的是 `fonts-noto-cjk`。
   裸机缺字体会回退 Helvetica，中文渲染成方块。
 - **ffmpeg / ffprobe（系统包）**：`/video` 唯一的外部依赖，`requirements.txt` 里没有对应条目。
