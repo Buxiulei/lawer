@@ -85,6 +85,17 @@ const ENDPOINT_SPEC = {
     advice: ATTEST_RETRY_ADVICE,
   },
   /**
+   * 60s：/draft-pdf 与 /evidence-pdf 同形——纯本地渲染、不外呼（sidecar/main.py draft_pdf →
+   * build_draft_pdf），正常是秒级。取同一个数不是省事：两个端点做的是同一类事、卡住的原因
+   * 也是同一个（sidecar 被排满或假死），给它们两个不同的超时只会让排障时多一个变量。
+   */
+  '/draft-pdf': {
+    timeoutMs: 60_000,
+    missing: '缺导出的文书 PDF',
+    why: 'sidecar 在本地渲染 PDF、不外呼，正常是秒级；超这么久通常是 sidecar 被别的请求排满或已假死',
+    advice: '稍后重新发起导出即可。导出不改动任何案卷数据，重试没有副作用。',
+  },
+  /**
    * 30s：/verify 是离线验签，allow_fetching=False、信任锚内置
    * （sidecar/verify_evidence_pdf.py），不外呼，纯 CPU，正常是秒级。
    */
@@ -245,6 +256,18 @@ export async function fetchSignerCn(): Promise<string> {
 /** 渲染《存证证明》PDF（未签名）。payload 形状见 sidecar/README.md。 */
 export async function renderEvidencePdf(payload: unknown): Promise<Buffer> {
   return callSidecar('/evidence-pdf', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * 渲染一份文书 PDF（markdown 正文 → PDF）。payload 形状见 sidecar/gen_draft_pdf.py。
+ * **不签名**：这是用户自己的文书，加上我方数字签名等于替他背书内容。
+ */
+export async function renderDraftPdf(payload: unknown): Promise<Buffer> {
+  return callSidecar('/draft-pdf', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

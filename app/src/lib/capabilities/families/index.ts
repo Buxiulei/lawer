@@ -23,6 +23,7 @@ import { deadlineList } from './deadlines';
 import { deadlineResolve, deadlineSet } from './deadlines-write';
 import { docGet, docList, docSubmit, transcriptSubmit } from './docs';
 import { draftGet, draftList, draftWrite } from './drafts';
+import { draftExport, shareCreate, shareRevoke } from './drafts-export';
 import { crisisCheck, emotionLog } from './emotion';
 import {
   evidenceBriefGet,
@@ -89,4 +90,7 @@ export const CAPABILITIES: Capability[] = [
   dossierGet,
   companyGraphGet,
   companyWatchSet,
+  shareCreate,
+  shareRevoke,
+  draftExport,
 ];

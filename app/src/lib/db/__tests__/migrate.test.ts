@@ -40,8 +40,8 @@ const ALL_TABLES = [
   'admin_audit',
   // 服务报价与内容提取任务
   'service_quotes', 'extraction_jobs',
-  // 一次性上传地址
-  'evidence_upload_tokens',
+  // 一次性上传地址 / 一次性下载地址
+  'evidence_upload_tokens', 'file_download_tokens',
   // 个案报告（长期记忆）
   'case_reports',
   // 危机信号留痕（事实卡首行「近 72 小时」的来源）

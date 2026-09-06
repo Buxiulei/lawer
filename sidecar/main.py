@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from rfc3161_timestamp import DEFAULT_TSA, TimestampError, request_timestamp
 from pades_sign import SignError, load_signer_info, sign_pdf_file
 from gen_evidence_pdf import build_evidence_pdf
+from gen_draft_pdf import build_draft_pdf
 from verify_evidence_pdf import verify_pdf
 from ocr import OcrError, ocr_image
 from asr import AsrError, transcribe_audio
@@ -144,6 +145,36 @@ def evidence_pdf(payload: dict):
         content=pdf,
         media_type="application/pdf",
         headers={"Content-Disposition": 'attachment; filename="evidence.pdf"'},
+    )
+
+
+# ---------------- /draft-pdf ----------------
+
+@app.post("/draft-pdf")
+def draft_pdf(payload: dict):
+    """把一份文书的 markdown 正文渲染成 PDF。payload 结构见 gen_draft_pdf.py。
+
+    与 /evidence-pdf 的分工：那份是《存证证明》（我方出具、随后要加数字签名），
+    这份是**用户自己的文书**，不签名、不盖章——签了就等于我方替他背书这份文书的内容。
+    """
+    if not (payload.get("markdown") or "").strip():
+        raise HTTPException(status_code=400, detail="缺少正文（markdown）")
+
+    with tempfile.TemporaryDirectory() as td:
+        out_path = os.path.join(td, "draft.pdf")
+        try:
+            build_draft_pdf(payload, out_path)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"生成 PDF 失败: {type(e).__name__}: {e}")
+        with open(out_path, "rb") as f:
+            pdf = f.read()
+
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="draft.pdf"'},
     )
 
 
