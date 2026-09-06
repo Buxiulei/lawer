@@ -255,6 +255,21 @@ describe.each(Object.keys(DOMAINS))('%s：首诊 → 事实卡走得通', (key) 
     expect(row.domain, '首诊不该改动案件领域').toBe(key);
     expect(pack.stages, '落库的阶段不在这个包的词表里').toContain(row.stage);
 
+    // 【页面填的那几格真的到了库里】只查 stage 的形态是：页面把 body 键拼错
+    // （拿了 intakeSchema.param 而不是 REST 对照表那一列）时，stage 恰好两边同名 ⇒ 照样绿，
+    // 而元/分那一格与日期那一格一路消失。这几列正是时效起算与退费基数的输入。
+    const full = db.prepare('SELECT * FROM cases WHERE id = ?').get(caseId) as Record<string, unknown>;
+    for (const [fieldKey, column] of Object.entries({
+      employedFrom: 'employed_from',
+      monthlyWageFen: 'monthly_wage_fen',
+      position: 'position',
+      contractCount: 'contract_count',
+      bottomLine: 'bottom_line',
+    })) {
+      if (!pack.intakeSchema.some((f) => f.key === fieldKey)) continue;
+      expect(full[column], `${fieldKey} 页面填了、库里却是空的`).not.toBeNull();
+    }
+
     const titles = (
       db
         .prepare('SELECT title FROM timeline_events WHERE case_id = ?')
