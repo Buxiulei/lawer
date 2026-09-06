@@ -287,7 +287,8 @@ function toReferralV13Body(payload: Record<string, unknown>): Record<string, unk
     emotional_summary: str(payload.emotion_summary) ?? '',
     needs: Array.isArray(payload.needs) ? payload.needs : [],
     case_stage: str(payload.stage_sentence) ?? '',
-    urgency: typeof urgency.crisis_hits_72h === 'number' ? urgency.crisis_hits_72h : 0,
+    // 对方 ReferralReq 的 urgency 是 JSON 字符串（2026-09-06 联调实测：发整数整包 400 invalid_body）
+    urgency: String(typeof urgency.crisis_hits_72h === 'number' ? urgency.crisis_hits_72h : 0),
     consent_at: toRfc3339(str(payload.consent_at) ?? ''),
     source_case_hash: str(payload.source_case_hash) ?? '',
   };
