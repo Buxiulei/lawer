@@ -12,7 +12,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const guard = requireIdentity(getDb(), req, 'case:write');
   if (!guard.ok) return guard.response;
 
-  const gate = requireRealname(getDb(), guard.identity);
+  const gate = await requireRealname(getDb(), guard.identity);
   if (!gate.ok) return gate.response;
 
   const evidenceId = parseId((await params).id);

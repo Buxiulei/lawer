@@ -65,7 +65,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ token: s
 
   // 【实名闸在最前】与 POST /api/v1/evidence 同口径：只查一行 users、不读请求体，
   // 未实名的证据一个字节都不该落盘。
-  const realname = requireRealname(
+  const realname = await requireRealname(
     db,
     guard.identity,
     '上传证据前需先完成实名认证。证据要与本人身份绑定：未实名的证据无法保存，日后也无法用于出证。' +

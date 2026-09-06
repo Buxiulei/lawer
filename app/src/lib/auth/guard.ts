@@ -53,7 +53,8 @@ export function requireWebSession(db: Database, req: Request): GuardResult {
 }
 
 /**
- * 实名闸门（spec D1 / §7 users.auth_status）。
+ * 实名闸门（spec D1 / §7 users.auth_status）。**异步**：本地没实名时会去问一次 NBDpsy
+ * （实名互认，设计稿 §14），对方不可用则按未实名处理。判定本身见 realnameVerifiedOrLinked。
  *
  * 【范围】卡住会**对外产生法律效力**、或必须与本人身份绑定的出口，别往外扩：
  *   1. 证据上传      POST /api/v1/evidence                    —— 已挂（未实名的证据无法保存、无法出证）
@@ -68,13 +69,35 @@ export function requireWebSession(db: Database, req: Request): GuardResult {
  * message 可按调用档位定制（上传档给的是「上传前先实名」那条自述三段式）；
  * 不传就用出证/对外文书那条通用文案。判定逻辑只有这一份，别在路由里复制第二份。
  */
-export function requireRealname(
+export async function requireRealname(
   db: Database,
   identity: Identity,
   message = '这一步需要先完成实名认证：出证与对外文书要与本人身份绑定',
-): GateResult {
-  if (isRealnameVerified(db, identity.uid)) return { ok: true };
+): Promise<GateResult> {
+  if (await realnameVerifiedOrLinked(db, identity.uid)) return { ok: true };
   return { ok: false, response: deny(403, 'REALNAME_REQUIRED', message) };
+}
+
+/**
+ * 实名闸的**唯一判定入口**：先看本地，本地没有再去问一次 NBDpsy（实名互认，设计稿 §14）。
+ *
+ * 【为什么它是 async、而 isRealnameVerified 仍是同步】互认要发一次网络请求，
+ * 这一步天然是异步的。把它塞进 isRealnameVerified 会让那个纯本地判定也变成 Promise，
+ * 而全站有若干处只想问「我们自己这边认没认」（比如页面上要不要显示实名入口）。
+ * 两个函数各答一个问题：本地认没认 / 这次调用放不放行。
+ *
+ * 【为什么互认写在这里而不是各个入口】三条 REST 与 MCP 那条各写一遍的形态是——
+ * 第五个入口忘了抄那一句，于是同一个已经在对面实名过的人，在四个地方畅通、在第五个
+ * 地方被拦，而两边都不报错。判定只有这一处，新入口只要调闸门就自动带上互认。
+ *
+ * 【为什么用动态 import】互认那一支要用到 lib/evidence（证件号掩码规则）与 lib/nbdpsy，
+ * 而本文件被**每一条路由**引着。静态引进来等于让所有路由都拖上这条链；
+ * 而绝大多数请求走的是「本地已实名」那一支，根本用不到它。
+ */
+export async function realnameVerifiedOrLinked(db: Database, uid: number): Promise<boolean> {
+  if (isRealnameVerified(db, uid)) return true;
+  const { adoptNbdpsyRealname } = await import('@/lib/referral/identity-link');
+  return adoptNbdpsyRealname(db, uid);
 }
 
 /**

@@ -42,6 +42,9 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
 
   { code: 'REALNAME_REQUIRED', group: 'gate', status: 403, when: '该动作要求用户已完成实名（证据上传、固化出证）；「待审」不算已实名', recovery: '把这一步是干什么的说清楚，请用户在网页上完成实名后再来' },
 
+  { code: 'CONSENT_REQUIRED', group: 'gate', status: 400, when: '要把用户资料交给站外机构的动作没带上本人的明示同意（consent 必须为 true）', recovery: '把「会传什么、不会传什么」逐项念给用户听，得到明确同意后带 consent:true 再调一次；不要替用户点头' },
+  { code: 'REFERRAL_UNAVAILABLE', group: 'gate', status: 500, when: '服务端这会儿生成不了要外发的数据包（本机加密配置缺失），本次零外发', recovery: '这是我们的运维问题，不是用户填错了；如实告诉用户稍后再试，不要改参数重试' },
+
   { code: 'CASE_NOT_FOUND', group: 'notfound', status: 404, when: '案件不存在，**或不属于本人**——两者刻意不区分', recovery: '先调 case_list 拿本人名下真实的 case_id，不要据此推断编号有效性' },
   { code: 'ACTION_NOT_FOUND', group: 'notfound', status: 404, when: '行动卡 id 不在本案下' },
   { code: 'EVENT_NOT_FOUND', group: 'notfound', status: 404, when: '时间线事件 id 不在本案下' },

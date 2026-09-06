@@ -24,6 +24,7 @@ import {
 } from './evidence';
 import { attestVerify, evidenceAttest, evidenceRegister, evidenceUploadUrl } from './evidence-write';
 import { knowledgeGet, knowledgeSearch } from './knowledge';
+import { referralCreate, referralList } from './referral';
 import { caseReportGet, caseReportUpdate } from './report';
 import { timelineAdd, timelineList, timelineMilestone } from './timeline';
 
@@ -70,4 +71,6 @@ export const CAPABILITIES: Capability[] = [
   attestVerify,
   caseReportGet,
   caseReportUpdate,
+  referralCreate,
+  referralList,
 ];

@@ -1495,6 +1495,48 @@ export function runMigrations(db: Database.Database): void {
   // 既不重复退款、也不重复调券归还。可空、不回填：存量任务没退过款，NULL 即语义正确。
   addColumnIfMissing(db, 'extraction_jobs', 'refunded_at', 'TEXT');
 
+  // 转介台账（设计稿 §14）：本站把用户转介到 NBDpsy 心理咨询这件事的**唯一状态真源**。
+  //
+  // 【与 referral_offers 是两张表，别合】referral_offers 记的是「我们开口推荐过没有」
+  // （频控台账，spec D14）；本表记的是「用户点了同意之后，那份数据包发出去了没有、对方收了没有」。
+  // 合成一张的形态是：一次没发出去的转介在频控里已经算「推过了」，于是永远不再提第二次。
+  //
+  // direction：out = 我们转给对方；in = 对方转过来（P4 反向，先留位不实现）。
+  // status：pending（还没发出去 / 等重试）| sent（对方已收，拿到 external_ref）
+  //       | accepted / declined（对方后续回执）| failed（重试用尽，不再自动发）。
+  // payload_json = 发出去的那份数据包全文（**已经过中立化过滤**，见 lib/referral/neutral）。
+  //   留全文是因为「我们到底传了什么」将来要能自证；同意文案逐项列的就是它的字段。
+  // consent_at = 用户点「同意并转介」的时刻。**没有它就不该有这一行**：本表每一行都对应
+  //   一次明示同意，NOT NULL 是产品红线不是数据洁癖。
+  // external_ref = 对方 leads 那条线索的 id；NULL = 还没发成功。
+  // attempts / last_error 与 extraction_jobs 同义：attempts 是**尝试发送的次数**，
+  //   last_error 存最近一次失败原文（自述三段式，禁止只写「失败」）。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS referrals (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id      INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+      user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      direction    TEXT NOT NULL DEFAULT 'out',              -- out | in
+      status       TEXT NOT NULL DEFAULT 'pending',          -- pending | sent | accepted | declined | failed
+      payload_json TEXT NOT NULL,
+      consent_at   TEXT NOT NULL,
+      external_ref TEXT,
+      attempts     INTEGER NOT NULL DEFAULT 0,
+      last_error   TEXT,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_referrals_case ON referrals (case_id, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_referrals_user ON referrals (user_id, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_referrals_queue ON referrals (status, id);
+  `);
+
+  // 与 NBDpsy 那侧的关联键（设计稿 §14 决定 2）：**只记关联，不合并主键**。
+  // 存的是对方的 customer_code（他们跨触点去重的真源之一），我们不据它做任何鉴权判断——
+  // 鉴权仍看本地 users.auth_status 与 realname_verifications。
+  // 可空、不回填：绝大多数账号没有对面的关联，NULL 即语义正确。
+  addColumnIfMissing(db, 'users', 'linked_nbdpsy_customer_code', 'TEXT');
+
   // ───────────────── 费率种子 ─────────────────
   // C01 核定的模型费率必须**在建表之后立刻播下去**：缺行时 getRatesForModel 会回落
   // DEFAULT_RATES（最便宜的 Flash 档），于是每一笔账都按兜底价少收——而账面看起来完全正常。

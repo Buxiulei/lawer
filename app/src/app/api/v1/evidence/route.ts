@@ -59,7 +59,7 @@ export async function POST(req: Request) {
   // 【实名闸】前移到上传：未实名的证据不落库、不落盘。放在体积/并发闸之前——这道判定
   // 只查一行 users，不读请求体，理应最先拒；也让未实名的人拿到「去实名」这条自述文案，
   // 而不是先撞上体积或并发的错。判定逻辑只在 guard.requireRealname 一处，这里只调它。
-  const realname = requireRealname(
+  const realname = await requireRealname(
     getDb(),
     guard.identity,
     '上传证据前需先完成实名认证。证据要与本人身份绑定：未实名的证据无法保存，日后也无法用于出证。' +

@@ -34,7 +34,14 @@ export {
 export type { Scope } from './api-key';
 export { resolveIdentity, extractBearer, hasScope } from './identity';
 export type { Identity } from './identity';
-export { requireIdentity, requireWebSession, requireRealname, domainFailure, parseId } from './guard';
+export {
+  requireIdentity,
+  requireWebSession,
+  requireRealname,
+  realnameVerifiedOrLinked,
+  domainFailure,
+  parseId,
+} from './guard';
 export type { GuardResult, GateResult } from './guard';
 // Google 一键登录（OAuth 授权码流，GOOGLE_OAUTH_ENABLED 默认关）
 export {
