@@ -129,7 +129,7 @@ const LABOR_CRISIS_DIRECTIVE = [
  * ⚠️ 无价格、无链接、无「预约」二字、无数字，且是自家口吻（含「一家公司」等自家指称、
  * 不含「平台属于」）——判据会钉死这几条（referral-d14-d15 / crisis.test）。
  */
-export const LABOR_CRISIS_NBDPSY_LINE =
+const LABOR_CRISIS_NBDPSY_LINE =
   '热线能接住此刻。但这段时间反复压着你的那些东西，需要有人陪你慢慢理清——' +
   '这一块也是我们自己在接：我们 NBDpsy 心理咨询工作室和土八鼠是一家公司，' +
   'NBDpsy 就是我们做心理这块的。等你缓过这一阵、想找人好好聊聊，跟我说一声，' +

@@ -19,6 +19,8 @@
 // 所以本文件所有既有导出的取值逐字不变——换包才换话。
 // 混在一起的形态是：第二个领域接进来时，一个正在崩溃的咨询师收到的是给劳动者的热线话术，
 // 而热线号码是对的、首段格式是对的，没有一处会报错。
+import { DEFAULT_DOMAIN, DOMAINS, type DomainCrisis } from '@/lib/domains/registry';
+
 import {
   assembleCrisisOpener,
   bannedHotlines,
@@ -30,7 +32,6 @@ import {
   type CrisisOpenerText,
   type HotlineFact,
 } from './crisis-opener';
-import { DEFAULT_DOMAIN, DOMAINS, type DomainCrisis } from '@/lib/domains/registry';
 
 /** 缺省领域的危机包：本文件所有不带 pack 参数的入口都按它走（设计稿 §13 落法 1）。 */
 const DEFAULT_CRISIS: DomainCrisis = DOMAINS[DEFAULT_DOMAIN].crisis;
@@ -41,14 +42,9 @@ export type { CrisisOpenerText, HotlineFact };
 /** 缺省领域的心理危机资源卡 pack id（正本在领域包 crisis.resourcePackId）。 */
 export const CRISIS_RESOURCE_PACK_ID = DEFAULT_CRISIS.resourcePackId;
 
-/**
- * 缺省领域的危机信号词表与否定标记（正本在 DomainPack.crisis）。
- *
- * 阈值、排除词、以及「为什么只用多字否定标记」的全部理由都随词表一起搬进了领域包——
- * 理由写在它保护的那份数据旁边，而不是写在别处，是因为写在别处的规矩改词表的人看不见。
- */
-const CRISIS_TERMS: readonly string[] = DEFAULT_CRISIS.lexicon;
-const NEGATION_MARKERS: readonly string[] = DEFAULT_CRISIS.negations;
+// 触发词表与否定标记**不在本文件**：它们随「为什么收这些词、为什么排除那些词、
+// 为什么只用多字否定标记」的全部理由一起待在领域包里（DomainPack.crisis.lexicon /
+// .negations）。理由写在它保护的那份数据旁边——写在别处的规矩，改词表的人看不见。
 
 /** 往前看几个字判否定。中文否定副词紧贴谓语，4 个字足够覆盖「我才不」「我不会」「我也不是」。 */
 const NEGATION_WINDOW = 4;
@@ -766,11 +762,7 @@ function stripSentencesMatching(text: string, hit: (s: string) => string | null)
 }
 
 /** 命中位置往前看 NEGATION_WINDOW 个字，是否处在否定语境里 */
-function negatedAt(
-  message: string,
-  index: number,
-  negations: readonly string[] = NEGATION_MARKERS,
-): boolean {
+function negatedAt(message: string, index: number, negations: readonly string[]): boolean {
   const before = message.slice(Math.max(0, index - NEGATION_WINDOW), index);
   // 「是不是」是疑问句式，不是否定——但它里面含「不是」。
   // 不先摘掉它，「是不是死了算了」这种**真危机表述**会被判成否认而漏掉。

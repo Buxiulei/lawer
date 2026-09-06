@@ -7,9 +7,10 @@
 // 因为它只问过缺省领域这一个包。
 import { describe, expect, it } from 'vitest';
 
-import { assembleCrisisOpener, type CrisisOpenerText } from '../crisis-opener';
-import { assessCrisis, buildCrisisOpener, splitCrisisOpener } from '../crisis';
 import { DEFAULT_DOMAIN, DOMAINS, type DomainCrisis } from '@/lib/domains/registry';
+
+import { assessCrisis, buildCrisisOpener, splitCrisisOpener } from '../crisis';
+import { assembleCrisisOpener, type CrisisOpenerText } from '../crisis-opener';
 
 const DEFAULT_CRISIS = DOMAINS[DEFAULT_DOMAIN].crisis;
 
