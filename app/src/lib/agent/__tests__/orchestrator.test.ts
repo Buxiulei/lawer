@@ -225,6 +225,30 @@ describe('危机响应：心理危机资源卡强制注入（charter §5）', ()
   });
 
   /**
+   * 【留痕：站内这条路必须落进 crisis_hits】(设计稿 §4.4)
+   *
+   * 站内与用户自己的 agent 是同一个人的两条入口，落痕只做一条的形态是：
+   * 用户白天在自己的助手里说了那句话、晚上回站内来，事实卡首行干干净净——
+   * 我们表现得像从没听见过，而两条通路各自看起来都在正常工作。
+   * 对照臂在下一条：非危机轮一行都不许落，否则这条可能只是在数别处顺手写的行。
+   */
+  it('★危机轮落一行 crisis_hits：source=site、绑本案、只存哈希不存原话', async () => {
+    const { f } = await turnCrisis('我在。你先给自己打个电话。');
+    const rows = f.db.prepare('SELECT * FROM crisis_hits').all() as Record<string, unknown>[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].source).toBe('site');
+    expect(rows[0].case_id).toBe(f.caseId);
+    expect(rows[0].user_id).toBe(f.userId);
+    expect(String(rows[0].terms_hash)).toMatch(/^[0-9a-f]{64}$/);
+    expect(JSON.stringify(rows[0])).not.toContain('人没了');
+  });
+
+  it('★对照：非危机轮一行都不落（变异：把 triggered 判据去掉、每轮都记 → 红）', async () => {
+    const { f } = await turn([{ text: '好的。', tools: [GOOD_CARD] }]);
+    expect(f.db.prepare('SELECT COUNT(*) AS n FROM crisis_hits').get()).toEqual({ n: 0 });
+  });
+
+  /**
    * 【危机轮豁免空包告知 · 端到端回归】(manager 2026-08-25)
    *
    * **空手感知的逻辑是"没把握就别给"，危机轮的逻辑是"必须给"；

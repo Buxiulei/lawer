@@ -8,6 +8,7 @@
 import type { Database } from 'better-sqlite3';
 
 import * as cases from '@/lib/cases';
+import { recordCrisisHit } from '@/lib/cases/crisis-hits';
 import { gongdaoSettle, recordTokenUsage, turnRefId } from '@/lib/billing';
 import { reconcileServedModel } from '@/lib/billing/served-model';
 import { featureOfMode } from '@/lib/billing/features';
@@ -603,6 +604,12 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   // 本处只负责把它说的那张卡取回来（IO）并插到最前——它是本轮唯一真正要紧的那张卡。
   // 不经检索排序：危机表述与资源卡用词天然没有词面交集，靠调权重治不好（见 crisis.ts 文件头）。
   const crisis = assessCrisis(message);
+  // 命中就留痕，走与 MCP crisis_check 同一个入口（见 lib/cases/crisis-hits.ts 抬头）。
+  // 本轮这一条不会出现在本轮事实卡的首行里（快照在上面已经取过了）——本轮的危机由
+  // 确定性首段与资源卡当场接住，首行标记讲的是**之前那些轮**，两件事不重叠。
+  if (crisis.triggered) {
+    recordCrisisHit(db, { userId, caseId, source: 'site', matched: crisis.matched });
+  }
   /** 危机资源卡的结构化事实，供确定性首段取号码与描述（只读 facts，不解析正文） */
   let crisisCardFacts: KnowledgePack['facts'];
 

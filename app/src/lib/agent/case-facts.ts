@@ -18,6 +18,7 @@
 // 【预算】渲染结果硬上限 CASE_FACTS_BUDGET 字符，由 renderCaseFacts 后置保证：
 // 先区内裁（条数上限 + 单条截断），再按 P3→P2→P1 把整区压成统计行，P0 永不降级。
 // 每一次裁剪都留痕——被裁掉的东西必须让模型知道「有但没给你」，否则它会当成「不存在」。
+import { crisisStatusMark } from '@/lib/cases/crisis-hits';
 import { basicsMissing } from '@/lib/cases/report';
 import { BRIEF_SUMMARY_MAX, briefSummary, parseBrief } from '@/lib/evidence/brief';
 import { EVIDENCE_CATEGORIES } from '@/lib/evidence/categories';
@@ -524,6 +525,10 @@ export function buildCaseFacts(s: CaseSnapshot): FactCard {
   const status = buildFactsStatusLine({
     report: s.report,
     basicsMissing: basicsMissing(s.case).length,
+    // 危机标记排在报告过期与基本盘缺项之后（extra 原样按序追加）：前两项讲的是
+    // "手上这份东西还能不能用"，这一项讲的是"跟你说话的这个人最近怎么样"——
+    // 后者不该被前者挤掉，也不该把前者顶开，两句都在同一行里说完。
+    extra: [crisisStatusMark(s.crisisHits72h) ?? ''],
   });
   return {
     // 状态区在抬头之上：它是"先别急着答"的那句话，排在使用说明后面就没人先读到了

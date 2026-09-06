@@ -274,6 +274,10 @@ describe('tools/list', () => {
       'attest_verify',
       'case_report_get',
       'case_report_update',
+      // 危机检查 / 身份与账户，同样**追加在末尾**
+      'crisis_check',
+      'me_get',
+      'quote_list',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();

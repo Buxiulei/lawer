@@ -5,6 +5,7 @@
 // 的 tools/list 一条）钉着这个顺序与个数。
 //
 // 【加新能力的规矩】追加在**末尾**，不插在中间。想按族分组读，看各自的 families/*.ts。
+import { meGet, quoteList } from './account';
 import { actionComplete, actionList } from './actions';
 import { actionCreate } from './actions-write';
 import { caseFacts, caseGet, caseList, caseUpdate, intakeSubmit } from './case';
@@ -14,7 +15,7 @@ import { deadlineList } from './deadlines';
 import { deadlineResolve, deadlineSet } from './deadlines-write';
 import { docGet, docList, docSubmit, transcriptSubmit } from './docs';
 import { draftGet, draftList, draftWrite } from './drafts';
-import { emotionLog } from './emotion';
+import { crisisCheck, emotionLog } from './emotion';
 import {
   evidenceBriefGet,
   evidenceBriefUpdate,
@@ -70,4 +71,7 @@ export const CAPABILITIES: Capability[] = [
   attestVerify,
   caseReportGet,
   caseReportUpdate,
+  crisisCheck,
+  meGet,
+  quoteList,
 ];

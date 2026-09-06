@@ -44,6 +44,8 @@ const ALL_TABLES = [
   'evidence_upload_tokens',
   // 个案报告（长期记忆）
   'case_reports',
+  // 危机信号留痕（事实卡首行「近 72 小时」的来源）
+  'crisis_hits',
 ];
 
 function newDb(): Database.Database {
@@ -110,10 +112,10 @@ describe('runMigrations', () => {
 
   it('幂等：连跑两遍不抛错', () => {
     expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(54);
+    expect(ALL_TABLES.length).toBe(55);
   });
 
-  it('54 张表全部建成', () => {
+  it('55 张表全部建成', () => {
     const rows = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .all() as { name: string }[];

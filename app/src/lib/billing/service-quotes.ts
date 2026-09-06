@@ -264,6 +264,92 @@ export function peekServiceQuote(
   return { service: row.service as ServiceKind, caseId: row.case_id, amount: row.amount, payload };
 }
 
+interface QuoteListRow {
+  id: number;
+  case_id: number;
+  service: string;
+  amount: number;
+  entitlement_id: number | null;
+  expires_at: string;
+  confirmed_at: string | null;
+  order_ref: string | null;
+  payload_json: string | null;
+}
+
+/** quote_list 回给用户 agent 的一行。字段名转 snake_case 在工具壳里做（同 ServiceQuote）。 */
+export interface ServiceQuoteView {
+  quoteId: number;
+  caseId: number;
+  service: ServiceKind;
+  amount: number;
+  /** open = 报好价还没确认，还能确认；confirmed = 已确认（已扣费或已用券） */
+  status: 'open' | 'confirmed';
+  expiresAt: string;
+  confirmedAt: string | null;
+  /** 已确认的单是怎么付的；未确认的为 null。券付与钱付分得开，见 service_quotes 列注释 */
+  paidBy: 'entitlement' | 'gongdao' | null;
+  orderRef: string | null;
+  /** 计费单位数量（从 payload_json 取；解不动时 null，不编一个数） */
+  units: number | null;
+}
+
+/** 一次最多回多少行。报价是流水，回全量会把对方一轮上下文占满。 */
+export const QUOTE_LIST_LIMIT = 50;
+
+/**
+ * 列本人的报价与订单（设计稿 §2 K quote_list）。
+ *
+ * 【为什么过期未确认的不回】它已经确认不了了（confirmService 一律 QUOTE_EXPIRED），
+ * 回给对方只会让它拿着一个死 quote_id 去试一次。已确认的不看过期时间照回——
+ * 那是订单状态，用户要问「我那笔转写付了多少」时看的就是它。
+ *
+ * 【为什么按 user_id 过滤而不是按 case_id】caseId 只是可选的收窄条件；
+ * 归属永远由 user_id 那一条决定。倒过来写（有 caseId 就只按 caseId 查）的形态是：
+ * 传一个别人的案件编号就能读到别人的账单，而查询本身完全正常。
+ */
+export function listServiceQuotes(
+  db: Database.Database,
+  userId: number,
+  opts: { caseId?: number | null; now?: Date } = {},
+): ServiceQuoteView[] {
+  const nowStr = opts.now ? toSql(opts.now) : nowSql();
+  const caseId = Number.isInteger(opts.caseId) && (opts.caseId as number) > 0 ? (opts.caseId as number) : null;
+  const columns =
+    'id, case_id, service, amount, entitlement_id, expires_at, confirmed_at, order_ref, payload_json';
+  const live = '(confirmed_at IS NOT NULL OR expires_at > ?)';
+  const tail = 'ORDER BY id DESC LIMIT ?';
+  // 两条 SQL 而不是一条带 `(? IS NULL OR case_id=?)`：那种写法要么混用匿名与编号占位符
+  // （绑定顺序会静默错位），要么把同一个值绑两遍，两种都是"跑得通但读不出对不对"。
+  const rows = (
+    caseId === null
+      ? db.prepare(`SELECT ${columns} FROM service_quotes WHERE user_id=? AND ${live} ${tail}`)
+          .all(userId, nowStr, QUOTE_LIST_LIMIT)
+      : db.prepare(`SELECT ${columns} FROM service_quotes WHERE user_id=? AND case_id=? AND ${live} ${tail}`)
+          .all(userId, caseId, nowStr, QUOTE_LIST_LIMIT)
+  ) as QuoteListRow[];
+  return rows.map((r) => {
+    let units: number | null = null;
+    try {
+      const payload = JSON.parse(r.payload_json ?? '') as ServiceQuotePayload;
+      if (Number.isFinite(payload?.units)) units = payload.units;
+    } catch {
+      // 载荷解不动就说 null。编一个 0 出来，对方会把它当成"这单一页都没有"
+    }
+    return {
+      quoteId: r.id,
+      caseId: r.case_id,
+      service: r.service as ServiceKind,
+      amount: r.amount,
+      status: r.confirmed_at ? ('confirmed' as const) : ('open' as const),
+      expiresAt: r.expires_at,
+      confirmedAt: r.confirmed_at,
+      paidBy: r.confirmed_at ? (r.entitlement_id ? ('entitlement' as const) : ('gongdao' as const)) : null,
+      orderRef: r.order_ref,
+      units,
+    };
+  });
+}
+
 export interface ServiceConfirmed {
   quoteId: number;
   service: ServiceKind;

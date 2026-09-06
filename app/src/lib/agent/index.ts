@@ -27,6 +27,7 @@ export {
   isLandlineOnly,
   LANDLINE_MARK,
   buildCrisisOpener,
+  CRISIS_NBDPSY_LINE,
   compactCrisisCard,
   extractHotlines,
   cardOccurrences,

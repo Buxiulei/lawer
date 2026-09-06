@@ -46,9 +46,13 @@ function clip(body: string, max: number): { text: string; truncated: boolean } {
  *
  * 判据同源：名单本身来自 agent.bannedHotlines（危机首段用的是同一个函数），
  * 这里不另写一套"哪些号码算禁用"的规则。
+ *
+ * 【为什么导出】crisis_check 的首段与热线表也要过同一道名单（设计稿 §4.4「forbidden 号码
+ * 在任何回包中不得出现」）。在那边再拼一份名单，就会出现「知识库这条路拦住了、
+ * 危机这条路没拦」——而危机那条正是号码错了代价最大的一条。
  */
 let bannedCache: string[] | null = null;
-function bannedPhones(): string[] {
+export function bannedPhones(): string[] {
   if (bannedCache) return bannedCache;
   const all = new Set<string>();
   for (const meta of listPacks()) {
@@ -67,7 +71,7 @@ function bannedPhones(): string[] {
  * 不是约束。号码只要出现在上下文里，就有被转述给用户的那条路径，
  * 而用户拨过去接的是公证处。所以在出口处按号码抹，不指望对方读懂那行字。
  */
-function redactBanned(text: string): string {
+export function redactBanned(text: string): string {
   let out = text;
   for (const phone of bannedPhones()) {
     if (out.includes(phone)) out = out.split(phone).join('（该号码已被官方核实为无效，不得输出）');
