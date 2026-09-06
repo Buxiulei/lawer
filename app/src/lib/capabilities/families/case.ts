@@ -107,9 +107,17 @@ export const caseUpdate: Capability = {
       monthlyWageFen: args.monthly_wage_yuan === undefined ? undefined : yuanToFen(args.monthly_wage_yuan),
       position: args.position,
       contractCount: args.contract_count,
-      // 【为什么用 'track' in args 而不是 args.track !== undefined】传 null 是**出轨**这个动作，
-      // 与"这次不动它"是两件事。用 !== undefined 判的形态是：null 与不传被折成同一件事，
-      // 于是"处置完了，回主线"这条指令静默地什么都没做，而回包 200、字段还是原来那条轨。
+      // 【这一行要守的是：`null` 必须原样传下去】传 null 是**出轨、回主线**这个动作，
+      // 与"这次不动它"是两件事；下游 updateCase 正是靠 `!== undefined` 分这两件事的。
+      // 任何把 null 折成 undefined 的写法（`args.track ?? undefined`、
+      // `args.track ? … : undefined` 这类真值判断）都会让"处置完了，回主线"**静默什么都没做**，
+      // 而回包 200、字段还是原来那条轨。
+      //
+      // 【前一版注释在这里写错了一句，更正在此】它说"用 args.track !== undefined 判会把 null
+      // 与不传折成同一件事"——不成立：`args.track !== undefined ? args.track : undefined`
+      // 与本行在三种入参（键不在、值为 null、值为 undefined）下**逐一同值**，那不是一个变异。
+      // P4-W3 照那句话做变异实测，全套 284 条一条没红，才发现描述的是一个不存在的差别。
+      // 真正会出事的是上面列的那两种折叠写法，判据在 __tests__/case-update-track.test.ts。
       track: 'track' in args ? args.track : undefined,
     }),
 };
