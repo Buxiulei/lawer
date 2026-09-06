@@ -195,6 +195,24 @@ describe('knowledge_get', () => {
     expect(out.facts.review_rules!.length).toBeGreaterThan(0);
   });
 
+  // 【为什么 get 这一面也要闸】knowledge_search 已经不会把别的领域的卡的 id 交出去，
+  // 但 id 是可猜的（`<域单数>-<slug>`），而 knowledge_get 是暴露给 MCP 的只读能力。
+  // 不闸的形态是：缺省域的会话按 id 取回另一个领域的整张卡（含 facts 里的口径），
+  // 与本域同类卡的口径并排出现在同一个回包里，而回包一切正常。
+  it('按 id 取别的领域的卡：走 PACK_NOT_FOUND，不交正文（变异：拿掉 knowledge-adapter get 里的领域闸 → 红）', () => {
+    const other = INDEX.find((e) => (e.domain ?? DEFAULT_DOMAIN) !== DEFAULT_DOMAIN);
+    expect(other, '库里一张非缺省域的卡都没有 ⇒ 这条判据在空跑').toBeTruthy();
+    const out = knowledgeGet.run(DB, ID, { id: other!.id }) as unknown as Failure;
+    expect(out.ok, `${other!.id} 的正文被交给了缺省域的会话`).toBe(false);
+    expect(out.errorCode).toBe('PACK_NOT_FOUND');
+  });
+
+  it('本域的卡按 id 照常取得到（闸不能关过头）', () => {
+    const own = INDEX.find((e) => (e.domain ?? DEFAULT_DOMAIN) === DEFAULT_DOMAIN);
+    expect(own, '库里一张缺省域的卡都没有 ⇒ 这条判据在空跑').toBeTruthy();
+    expect(get({ id: own!.id }).id).toBe(own!.id);
+  });
+
   it('空 id / 不存在的 id 走 isError 且说清怎么办，不回空壳', () => {
     const blank = knowledgeGet.run(DB, ID, {}) as unknown as Failure;
     expect(blank.ok).toBe(false);

@@ -58,14 +58,25 @@ describe('知识索引带 domain', () => {
     }
   });
 
-  it('search 带 domain ⇒ 只回该领域的卡；带一个没有卡的领域 ⇒ 空手（变异：把过滤条件删掉 → 红）', () => {
+  /**
+   * 【本条在 P4-W3 改过口径，原因写在这里】原来的后半句问的是「带一个还没有任何卡的领域
+   * ⇒ 空手」，用的是一个**编出来的**域名。W2 给 search 加了「域名不认识就抛」那道闸之后，
+   * 编出来的域名不再回空列表而是抛错——这一半于是从"过滤器在不在"变成了"那道闸在不在"，
+   * 两件事混进同一条里（闸本身的负对照在 domain-gate.test.ts，有它自己那条）。
+   * 换成拿**注册过的第二个领域**去问同一个词：问的仍是过滤器本身，且删掉过滤条件即红。
+   */
+  it('search 带 domain ⇒ 只回该领域的卡（变异：把过滤条件删掉 → 红）', () => {
+    const other = Object.keys(DOMAINS).find((k) => k !== DEFAULT_DOMAIN);
+    expect(other, '注册表里只有一个领域，本条恒真').toBeDefined();
     const q = '经济补偿';
     const all = search(q, { limit: 20 });
-    expect(all.length).toBeGreaterThan(0);
+    expect(all.length, '这个词一张卡都没命中，下面两句就都恒真了').toBeGreaterThan(0);
+    expect(all.every((p) => p.domain === DEFAULT_DOMAIN), '这个词命中的卡不全在缺省领域').toBe(true);
     expect(search(q, { limit: 20, domain: DEFAULT_DOMAIN }).map((p) => p.id)).toEqual(
       all.map((p) => p.id),
     );
-    expect(search(q, { limit: 20, domain: '一个还没有任何卡的领域' })).toEqual([]);
+    // 命中的卡全在缺省领域 ⇒ 换第二个领域来问必须一张都不回；过滤条件被删掉时这里会回满
+    expect(search(q, { limit: 20, domain: other }).map((p) => p.id)).toEqual([]);
   });
 
   /**

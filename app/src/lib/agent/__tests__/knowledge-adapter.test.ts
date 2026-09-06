@@ -105,8 +105,26 @@ describe('逐字条文注入也走领域闸（设计稿 §13：跨域召回默�
     expect(holders.every((m) => knowledge.packDomain(m) !== DEFAULT_DOMAIN)).toBe(true);
   });
 
-  it('别的领域收录的条文不会被注入进来（变异：拿掉 articleIndex 里的领域过滤 → 红）', () => {
+  // 【标题改过两次，把实测写在这里，别再靠推理】原标题写的是
+  //「变异：拿掉 articleIndex 里的领域过滤 → 红」——复审实测不红。改成「拿掉 get 面的领域闸 → 红」——
+  // 本轮实测**也不红**。真相是这条路上**两道闸串着**，各自都够用：
+  //   ① articleIndex 建表时就不收非缺省域的卡 ⇒ 那个 key 压根不在表里；
+  //   ② 取卡走 this.get，get 面自己有领域闸 ⇒ 就算 key 在表里也拿不回来。
+  // 实测（P4-W2 三轮）：单删 ① 0 红，单删 ② 0 红（另两条判据红，都不是这条），
+  // ①② 同删本条才红。所以这条判据护的是"结果对"，护不住任何**单独一道**闸——
+  // 谁想拆其中一道，红的不会是它。下一条判据补的就是这个缺口的一半（通路必须经 get）。
+  it('别的领域收录的条文不会被注入进来（两道闸串着：articleIndex 建表过滤 + get 面领域闸；单删任一道本条都还绿，同删才红——实测）', () => {
     expect(searcher.findByArticleKeys!([OTHER_DOMAIN_KEY])).toEqual([]);
+  });
+
+  it('这条通路的域闸来自 get：findByArticleKeys 必须经 this.get 取卡（变异：改成绕过 get 直接造包 → 红）', () => {
+    // 【为什么要钉这条结构】上一条判据的牙全在 get 面上。哪天有人为了省一次查找，
+    // 把 findByArticleKeys 改成直接从索引元数据造 KnowledgePack，域闸就整条通路地没了，
+    // 而上一条判据会因为 articleIndex 里那道遮蔽着的过滤**照样绿**。
+    const withoutGet = { ...searcher, get: () => undefined };
+    expect(withoutGet.findByArticleKeys!([OWN_DOMAIN_KEY])).toEqual([]);
+    // 对照：同一个 key 经真正的 get 是取得到的，上一行不是因为 key 本身没人收录
+    expect(searcher.findByArticleKeys!([OWN_DOMAIN_KEY]).length).toBeGreaterThan(0);
   });
 
   it('本域的条文照常取得到（闸不能关过头）', () => {
@@ -118,5 +136,25 @@ describe('逐字条文注入也走领域闸（设计稿 §13：跨域召回默�
       const meta = knowledge.listPacks().find((m) => m.id === p.id)!;
       expect(knowledge.packDomain(meta), p.id).toBe(DEFAULT_DOMAIN);
     }
+  });
+});
+
+describe('按 id 取卡也走领域闸（get 面没有守卫的话，search 闸干净了也没用）', () => {
+  /** 库里第一张（不）属于缺省域的卡的 id；现取，不在判据里抄一份 id */
+  function firstId(inDefaultDomain: boolean): string {
+    const meta = knowledge
+      .listPacks()
+      .find((m) => (knowledge.packDomain(m) === DEFAULT_DOMAIN) === inDefaultDomain);
+    expect(meta, `库里找不到${inDefaultDomain ? '缺省域' : '非缺省域'}的卡 ⇒ 这条判据在空跑`).toBeTruthy();
+    return meta!.id;
+  }
+
+  it('别的领域的卡按 id 取不到（变异：拿掉 get 里的领域闸 → 红）', () => {
+    expect(searcher.get!(firstId(false))).toBeUndefined();
+  });
+
+  it('本域的卡按 id 照常取得到（闸不能关过头）', () => {
+    const id = firstId(true);
+    expect(searcher.get!(id)?.id).toBe(id);
   });
 });

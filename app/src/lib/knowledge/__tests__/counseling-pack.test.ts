@@ -15,6 +15,8 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
+
 const KNOWLEDGE_DIR = path.resolve(__dirname, '../../../../../knowledge');
 const COUNSELING_DIR = path.join(KNOWLEDGE_DIR, 'packs', 'counseling');
 const DOMAIN = 'counseling';
