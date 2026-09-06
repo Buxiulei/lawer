@@ -170,4 +170,35 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
     expect(SHARED_FILES.length).toBeGreaterThanOrEqual(14);
     for (const f of SHARED_FILES) expect(fs.existsSync(f), f).toBe(true);
   });
+
+  /**
+   * **lib/agent/crisis.ts 的待清理清单**（不是豁免）。
+   *
+   * 危机层是共用层，但它现在还进不了上面那份名单：出口闸的 `LEGAL_MONEY_CONTEXT`
+   * 正则与解释它的那段注释里，写着一个领域的钱款词表——那份词表要搬进领域包才算清完，
+   * 而搬它会动到一条带否决权的红线，不该顺手做（本票 notDone 已点名，留给后续票）。
+   *
+   * 【那这条判据在守什么】守「**别再多**」。crisis.ts 不在扫描名单里意味着往它任何一处
+   * 写下领域字面量都不会红——这一票就在新加的一段头注释里写进过一个「劳动者」，
+   * 没有任何一条判据点它的名。所以这里把现存的那几处逐行钉住：多一处即红，
+   * 少一处（真搬走了）也红，提醒把 crisis.ts 挪进 SHARED_FILES。
+   */
+  it('lib/agent/crisis.ts 里的领域字面量只剩已知那几行（变异：往 crisis.ts 任一注释里写一个「劳动」 → 红）', () => {
+    const file = path.join(SRC_ROOT, 'lib/agent/crisis.ts');
+    const hits = fs
+      .readFileSync(file, 'utf-8')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => FORBIDDEN.some((w) => line.includes(w)));
+
+    // 只有两处，且都属于出口闸的「法律钱款语境」那一段（正则本身 + 解释它的注释）
+    expect(
+      hits,
+      'crisis.ts 的领域字面量清单变了。多出来的那行请搬进 DomainPack；' +
+        '真把 LEGAL_MONEY_CONTEXT 搬进领域包了，就把 crisis.ts 加进 SHARED_FILES 并删掉这条。',
+    ).toEqual([
+      '* 【为什么必须有这条（评测官 2026-08-26 造对抗样本查实）】劳动补偿的语言天生长成单价形状：',
+      String.raw`/补偿|赔偿|工资|薪资|加班费|年假|社保|公积金|双倍|违法解除|经济性裁员|裁员|离职|解除|仲裁|诉讼|律师费|开庭|协议|调解|折算|工龄|欠薪|拖欠|押金|罚款|代通知金|N\s*[+＋]\s*1|2\s*N|方案是\s*N/;`,
+    ]);
+  });
 });
