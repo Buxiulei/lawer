@@ -10,8 +10,8 @@
 // 反过来做的形态是：包里存明文、发送时再脱敏——那样库里已经躺着一份明文了。
 import type { Database } from 'better-sqlite3';
 
-import { CRISIS_CARD_MARKER } from '@/lib/agent/crisis';
 import { maskPhone } from '@/lib/auth/phone';
+import { countRecentCrisisHits } from '@/lib/cases/crisis-hits';
 import { decryptField, hashLookup, masterKeyConfigured } from '@/lib/crypto';
 import { listCaseMessages } from '@/lib/db/agent';
 import * as realnameStore from '@/lib/db/realname';
@@ -23,8 +23,6 @@ export const REFERRAL_CHANNEL = 'tubashu';
 
 /** 近 30 天：情绪记录的取数窗口。 */
 const EMOTION_WINDOW_DAYS = 30;
-/** 近 72 小时：紧迫度的取数窗口。 */
-const CRISIS_WINDOW_HOURS = 72;
 /** 拿最近多少条对话去让模型总结。太多没用——摘要只有 200 字。 */
 const MESSAGE_WINDOW = 20;
 
@@ -93,19 +91,15 @@ function recentEmotions(db: Database, caseId: number): EmotionRow[] {
 /**
  * 近 72 小时的危机命中数。
  *
- * 【为什么数的是时间线里那条留痕，不是另起一张表】危机响应发生时唯一落库的痕迹
- * 就是这条 `系统动作` 事件（lib/db/agent.recordCrisisCardGiven）。再建一张 crisis_hits
- * 表的形态是：两处各记各的，某天有人改了危机那条路径只改了其中一处，
- * 而转介包里的紧迫度会**永远显示 0**，看起来完全正常。
+ * 【为什么数的是 crisis_hits 表，不是时间线里那条卡留痕】危机命中的唯一计数真源是
+ * crisis_hits（设计稿 §4.4，站内与 MCP 两条通路都经 recordCrisisHit 落这一张表）。
+ * 时间线里那条 `危机资源卡已给`（CRISIS_CARD_MARKER）服务的是**卡的 24 小时冷却**，
+ * 且模型自己给出卡时也会追加一条——拿它当命中数会把「给过几次卡」当成「危机几次」，
+ * 两件事从此分叉。改回数时间线的形态是：MCP 那条命中不进时间线，紧迫度就永远漏掉它。
+ * 窗口与首行标记同一个真源，走 lib/cases/crisis-hits.countRecentCrisisHits。
  */
 export function crisisHits72h(db: Database, caseId: number): number {
-  const row = db
-    .prepare(
-      `SELECT COUNT(*) AS n FROM timeline_events
-        WHERE case_id = ? AND title = ? AND datetime(happened_at) >= datetime('now', ?)`,
-    )
-    .get(caseId, CRISIS_CARD_MARKER, `-${CRISIS_WINDOW_HOURS} hours`) as { n: number };
-  return row.n;
+  return countRecentCrisisHits(db, caseId);
 }
 
 /** 本案登记过的公司名（含关联主体）。它们是过滤器要拦的第一批词。 */

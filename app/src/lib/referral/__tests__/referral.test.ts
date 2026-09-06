@@ -258,13 +258,14 @@ describe('数据包不含公司名与案情', () => {
     expect(row.payload_json, '库里不许出现手机明文').not.toContain(PHONE);
   });
 
-  it('紧迫度数的是近 72 小时的危机留痕', async () => {
+  it('紧迫度数的是近 72 小时的 crisis_hits（变异：packet 改回数 timeline ⇒ 红）', async () => {
+    // 只落 crisis_hits、不落时间线卡留痕：若 packet 退回去数 timeline，这里会数出 0 ⇒ 红。
     db.prepare(
-      "INSERT INTO timeline_events (case_id, happened_at, kind, title) VALUES (?, datetime('now','-1 hours'), '系统动作', '危机资源卡已给')",
-    ).run(caseId);
+      "INSERT INTO crisis_hits (case_id, user_id, source, terms_hash, at) VALUES (?,?,?,?, datetime('now','-1 hours'))",
+    ).run(caseId, uid, 'site', 'x'.repeat(64));
     db.prepare(
-      "INSERT INTO timeline_events (case_id, happened_at, kind, title) VALUES (?, datetime('now','-10 days'), '系统动作', '危机资源卡已给')",
-    ).run(caseId);
+      "INSERT INTO crisis_hits (case_id, user_id, source, terms_hash, at) VALUES (?,?,?,?, datetime('now','-10 days'))",
+    ).run(caseId, uid, 'site', 'y'.repeat(64));
     const created = await createReferral(db, {
       caseId,
       userId: uid,
