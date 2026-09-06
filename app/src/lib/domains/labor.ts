@@ -67,6 +67,7 @@ export const LABOR: DomainPack = {
 export const LABOR_CAPABILITY_COPY = {
   knowledgeSearchTitle: '检索劳动法知识库',
   knowledgeGetTitle: '按 id 取一张劳动法知识卡',
+  citationCheckTitle: '核验劳动法条与判例引用',
   deadlineListDescription:
     '列出案件的法定期限（仲裁时效、起诉 15 日、开庭等），默认只列生效中的，按到期时间升序。',
   intakeCompanyName: '公司名称，就是仲裁里的被申请人',

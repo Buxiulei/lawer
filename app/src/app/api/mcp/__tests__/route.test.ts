@@ -278,6 +278,8 @@ describe('tools/list', () => {
       'crisis_check',
       'me_get',
       'quote_list',
+      // 引用核验，同样**追加在末尾**
+      'citation_check',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();

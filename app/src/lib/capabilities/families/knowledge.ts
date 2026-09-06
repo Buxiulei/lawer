@@ -268,3 +268,310 @@ export const knowledgeGet: Capability = {
     };
   },
 };
+
+// ─────────────────────────── citation_check（设计稿 §2 C 第三条）───────────────────────────
+//
+// 【它解决的是什么】模型手上没有原文时，条号与案号是它**最容易凭记忆写出来**的两样东西，
+// 而写出来的形态与真条号完全一样：读的人看不出差别，直到当庭被对方拿全文反驳。
+// 所以给一个**只回「库里有/没有」**的核验口——它不生成任何依据，只做存在性裁决与逐字回抄。
+
+/**
+ * 「判例核验四步法」方法卡的 id。下面四步的**名字与顺序照抄这张卡**，
+ * 出参里带上卡 id：要读方法本身，用 knowledge_get 取这张卡。
+ */
+const PRECEDENT_METHOD_CARD = 'method-panli-heyan-sibufa';
+
+/** 一次最多核几条。超了让对方分批，而不是回一坨吃掉它这一轮的上下文。 */
+const MAX_CITATIONS = 20;
+const MAX_PRECEDENTS = 10;
+/** 判例要旨（holding）摘要上限；要全文用 knowledge_get 取整张卡 */
+const HOLDING_MAX = 600;
+
+/** 找不到时统一给这句话——「查不到」必须长成一条指令，而不是一个空字段。 */
+const DO_NOT_CITE =
+  '库里没有这一条，**不要引用**：不要凭记忆补条号或原文。改用 knowledge_search 找真正的依据；' +
+  '找不到就如实告诉用户查不到，按保守做法给建议。';
+
+/** 判决里「法院独立认定」的措辞信号（方法卡第二步给的识别信号） */
+const COURT_FINDING_SIGNALS = [
+  '本院认为', '本院查明', '本院采信', '本院经审理', '经查明', '经审理查明',
+  '裁决', '判决', '应予支持', '不予支持', '予以支持', '未予支持',
+];
+/** 「当事人主张/自认」的措辞信号——这一类对第三案没有先例价值 */
+const PARTY_CLAIM_SIGNALS = [
+  '原告主张', '原告称', '被告答辩', '被告辩称', '被告称', '上诉人认为', '上诉人主张',
+  '申请人主张', '被申请人辩称', '自认', '答辩状',
+];
+
+type StepStatus = 'pass' | 'fail' | 'manual';
+interface CheckStep {
+  step: number;
+  name: string;
+  status: StepStatus;
+  detail: string;
+}
+
+/** 入参里的字符串数组：非数组、空串、非字符串项一律丢掉（宁可少核，不要拿垃圾去匹配） */
+function textList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((v) => (typeof v === 'string' ? v.trim() : '')).filter(Boolean);
+}
+
+/** 命中某条逐字原文的卡与那段原文；库里没有收录这一条时返回 undefined。 */
+function findQuote(law: string, article: string) {
+  const key = agent.articleKey(law, article);
+  const packs = agent.createKnowledgeSearcher().findByArticleKeys?.([key]) ?? [];
+  for (const p of packs) {
+    for (const q of p.facts?.statute_quotes ?? []) {
+      // 卡侧与引用侧走**同一个归一函数**取键：卡里存法名全称 + 汉字条号（「中华人民共和国某某法 / 第四十六条」），
+      // 对方惯写简称 + 阿拉伯数字 + 项（「《某某法》第46条第2项」）。不归一就对不上键，而对不上键的表现是
+      // 「库里明明有原文，却回 found:false」，读起来像修法生效。
+      if (agent.articleKey(q.law, q.article) !== key) continue;
+      return { quote: q, pack: p };
+    }
+  }
+  return undefined;
+}
+
+/** 判例卡可供「否定性核验」搜索的文本范围：结构化案情 + 卡正文 */
+function precedentSearchText(pack: agent.KnowledgePack): string {
+  const cf = pack.facts?.case_facts;
+  return [cf?.gist, cf?.issue, cf?.holding, cf?.reasoning, pack.body].filter(Boolean).join('\n');
+}
+
+/** 方法卡四步落成代码：能定的定死，定不了的如实标 manual 并说清要你补什么。 */
+function fourStepChecklist(pack: agent.KnowledgePack, terms: string[]): CheckStep[] {
+  const cf = pack.facts?.case_facts;
+  const reasoning = cf?.reasoning?.trim() ?? '';
+
+  // 第一步：读全文，不靠案号+摘要。
+  // 代码能定的那一半：这张卡本身是照原文录的（confidence=原文核实）还是二手转述，
+  // 以及卡里到底有没有裁判理由。两者缺一，这条判例按方法卡只能标「仅内部参考」。
+  const verbatim = pack.confidence === '原文核实';
+  const step1: CheckStep = {
+    step: 1,
+    name: '读全文，不靠案号+摘要',
+    status: verbatim && reasoning ? 'pass' : 'fail',
+    detail:
+      verbatim && reasoning
+        ? `本卡 confidence=原文核实，且录有裁判理由（${reasoning.length} 字）。仍需注意：卡是节录，要逐字引某句判词请回原始出处核对。`
+        : `本卡 confidence=${pack.confidence}${reasoning ? '' : '，且卡内没有裁判理由（reasoning 为空）'}——` +
+          '只有案号与摘要不足以支撑引用。本条判例只能标「仅内部参考，不得写入对外文书」。',
+  };
+
+  // 第二步：区分「当事人自认的事实前提」与「法院独立认定的裁判结论」。
+  // 代码只报**措辞信号**，不下结论：卡里的要旨常是转述，没有信号不等于不是裁判认定。
+  const scanned = [cf?.holding, reasoning].filter(Boolean).join('\n');
+  const courtHits = COURT_FINDING_SIGNALS.filter((s) => scanned.includes(s));
+  const partyHits = PARTY_CLAIM_SIGNALS.filter((s) => scanned.includes(s));
+  const step2: CheckStep = {
+    step: 2,
+    name: '区分当事人自认 vs 法院独立认定',
+    status: partyHits.length && !courtHits.length ? 'fail' : courtHits.length ? 'pass' : 'manual',
+    detail:
+      `法院认定措辞：${courtHits.length ? courtHits.join('、') : '未检出'}；` +
+      `当事人陈述措辞：${partyHits.length ? partyHits.join('、') : '未检出'}。` +
+      (partyHits.length && !courtHits.length
+        ? '卡内只检出当事人陈述措辞——你要引的那句很可能是自认而非裁判认定，先例价值为零甚至反向。'
+        : courtHits.length
+          ? '你打算引的**那一句**属于哪一类，仍要回卡内原文自己判：卡里同时有这两类话。'
+          : '卡内两类措辞都没检出（要旨是转述形态），代码分不出来——请取全文自行判断。'),
+  };
+
+  // 第三步：否定性核验——不只看它支持了什么，还看你要的那个词它有没有出现过。
+  const step3: CheckStep = terms.length
+    ? (() => {
+        const counts = terms.map((t) => ({ term: t, hits: precedentSearchText(pack).split(t).length - 1 }));
+        const missing = counts.filter((c) => c.hits === 0).map((c) => c.term);
+        return {
+          step: 3,
+          name: '否定性核验（你要的那个词，全文出现过吗）',
+          status: missing.length ? ('fail' as const) : ('pass' as const),
+          detail:
+            `${counts.map((c) => `「${c.term}」${c.hits} 次`).join('，')}。` +
+            (missing.length
+              ? `零出现的词：${missing.join('、')}——说明本案根本没走到这一步，不能作该论点的先例。`
+              : '检索范围是**本卡**（结构化案情 + 卡正文），不是判决书原件；卡是节录，零出现更硬、有出现只说明值得去原件核。'),
+        };
+      })()
+    : {
+        step: 3,
+        name: '否定性核验（你要的那个词，全文出现过吗）',
+        status: 'manual',
+        detail:
+          '先说清你打算用这条判例支持哪个主张，把主张里的关键词（如「连带」「二倍」）放进 assert_terms 再调一次，' +
+          '我会在本卡内逐词数出现次数。零出现即不能作该论点的先例。',
+      };
+
+  // 第四步：给出【可用 / 不可用 / 反向】结论字段。
+  // 代码只能定**下限**：前三步有硬伤就是不可用；没有硬伤不等于可用——「反向」只有读全文才看得出来。
+  const failed = [step1, step2, step3].filter((s) => s.status === 'fail');
+  const step4: CheckStep = {
+    step: 4,
+    name: '给出【可用 / 不可用 / 反向】结论',
+    status: failed.length ? 'fail' : 'manual',
+    detail: failed.length
+      ? `第 ${failed.map((s) => s.step).join('、')} 步不通过 ⇒ 结论：**不可用**（仅内部参考，不得写入对外文书）。`
+      : '前三步没有硬伤，但「可用 / 不可用 / 反向」是读全文才能下的结论，代码不替你选：' +
+        '请在三者中选一个并附一句依据（引哪段判词、用在哪个场景）。**没填这个字段的判例不进对外文书**。',
+  };
+
+  return [step1, step2, step3, step4];
+}
+
+export const citationCheck: Capability = {
+  name: 'citation_check',
+  family: 'knowledge',
+  scope: 'case:read',
+  kind: 'read',
+  domains: ['*'],
+  exposeTo: ['mcp'],
+  precondition: [],
+  title: LABOR_CAPABILITY_COPY.citationCheckTitle,
+  description:
+    '核验条号与判例：写进任何对外文书或确定结论之前，把你打算引的每一条法条（法名+条号）与每一个判例卡 id 交给它。' +
+    '法条回「库里有没有收录这一条」与逐字原文（法名全称、简称、带《》都认同一条）；' +
+    '判例回审理机构、案号、要旨，以及判例核验四步法的逐条结论。' +
+    '任何一条回 found:false 就是**不要引用**——不要凭记忆补条号、原文或案号。' +
+    '它只做核验，不产出依据：要找依据用 knowledge_search。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      citations: {
+        type: 'array',
+        description: `要核的条文，一次最多 ${MAX_CITATIONS} 条`,
+        items: {
+          type: 'object',
+          properties: {
+            law: { type: 'string', description: '法名，全称/简称/带不带《》都行' },
+            article: { type: 'string', description: '条号，如「第四十六条」「第46条」「第46条第2项」「第55问」' },
+          },
+          required: ['law', 'article'],
+        },
+      },
+      precedent_ids: {
+        type: 'array',
+        description: `要核的判例卡 id（从 knowledge_search 结果里取），一次最多 ${MAX_PRECEDENTS} 个`,
+        items: { type: 'string' },
+      },
+      assert_terms: {
+        type: 'array',
+        description:
+          '你打算用这些判例支持的主张里的关键词（如「连带」）。给了才能做四步法第三步的否定性核验：' +
+          '在卡内数这些词的出现次数，零出现即不能作该论点的先例。',
+        items: { type: 'string' },
+      },
+    },
+    required: [],
+  },
+  run: (_db, _identity, args) => {
+    const rawCitations = Array.isArray(args.citations) ? args.citations : [];
+    const precedentIds = textList(args.precedent_ids);
+    const terms = textList(args.assert_terms);
+
+    // 两个数组都空 = 这次调用什么都没要核。回一份空结果会被读成「全都没问题」，
+    // 所以走 isError 让对方看见它漏了入参。
+    if (!rawCitations.length && !precedentIds.length) {
+      return {
+        ok: false as const,
+        status: 400,
+        errorCode: 'NOTHING_TO_CHECK',
+        message: 'citations 与 precedent_ids 至少给一个：citations 传 [{law, article}]，precedent_ids 传卡 id 数组',
+      };
+    }
+    if (rawCitations.length > MAX_CITATIONS || precedentIds.length > MAX_PRECEDENTS) {
+      return {
+        ok: false as const,
+        status: 400,
+        errorCode: 'TOO_MANY',
+        message: `一次最多核 ${MAX_CITATIONS} 条条文与 ${MAX_PRECEDENTS} 个判例，分批调用`,
+      };
+    }
+
+    const citations = rawCitations.map((raw) => {
+      const item = (raw ?? {}) as Record<string, unknown>;
+      const law = optionalText(item.law);
+      const article = optionalText(item.article);
+      if (!law || !article) {
+        return {
+          law: law ?? null,
+          article: article ?? null,
+          found: false,
+          exact_text: null,
+          card_id: null,
+          note: 'law 与 article 都必须给（如 law="某某法", article="第四十六条"）；缺一条就无法核验，这一条按未核验处理，不要引用。',
+        };
+      }
+      const hit = findQuote(law, article);
+      if (!hit) {
+        return {
+          law,
+          article,
+          key: agent.articleKey(law, article),
+          found: false,
+          exact_text: null,
+          card_id: null,
+          note: DO_NOT_CITE,
+        };
+      }
+      const text = clip(redactBanned(hit.quote.text), KNOWLEDGE_FULL_TEXT_MAX);
+      return {
+        law,
+        article,
+        key: agent.articleKey(law, article),
+        found: true,
+        exact_text: text.text,
+        truncated: text.truncated,
+        card_id: hit.pack.id,
+        card_title: hit.pack.title,
+        card_confidence: hit.pack.confidence,
+        law_in_card: hit.quote.law,
+        article_in_card: hit.quote.article,
+        note:
+          '照抄 exact_text，不要改写、不要节选到变味；给条号时用卡里的写法（article_in_card）。' +
+          (hit.pack.confidence === '原文核实' ? '' : `本卡 confidence=${hit.pack.confidence}，引用时必须如实带上这个状态。`),
+      };
+    });
+
+    const searcher = agent.createKnowledgeSearcher();
+    const precedents = precedentIds.map((id) => {
+      const pack = searcher.get?.(id);
+      if (!pack) {
+        return { id, found: false, note: DO_NOT_CITE };
+      }
+      if (pack.type !== '判例卡') {
+        return {
+          id,
+          found: false,
+          note: `${id} 是「${pack.type}」，不是判例卡——判例四步法核不了它。要读这张卡用 knowledge_get。`,
+        };
+      }
+      const cf = pack.facts?.case_facts;
+      const holding = cf?.holding ? clip(redactBanned(cf.holding), HOLDING_MAX) : null;
+      return {
+        id,
+        found: true,
+        title: pack.title,
+        court: cf?.court ?? null,
+        case_no: cf?.case_no ?? null,
+        holding: holding?.text ?? null,
+        holding_truncated: holding?.truncated ?? false,
+        confidence: pack.confidence,
+        checklist: fourStepChecklist(pack, terms),
+        method_card: PRECEDENT_METHOD_CARD,
+        note:
+          (cf?.court ? '' : '本卡没有记录审理机构（court 为空），跨法院援引前请回原始出处核。') +
+          (cf?.case_no ? '' : '本卡没有公开案号，写进书状时不要编一个。'),
+      };
+    });
+
+    return {
+      citations,
+      precedents,
+      assert_terms: terms,
+      note:
+        'found:false 的一律不要引用，也不要凭记忆补条号、原文或案号——如实说查不到。' +
+        `判例四步法的原卡是 ${PRECEDENT_METHOD_CARD}（knowledge_get 可取全文）：四步缺一，判例不进对外文书。`,
+    };
+  },
+};
