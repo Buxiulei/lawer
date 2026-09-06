@@ -60,13 +60,12 @@ export interface PackMeta {
   updated: string;
   path: string;
   /**
-   * 领域键（设计稿 §13）。**加载之后恒有值**：index.json 里没写 domain 的条目
-   * 在 loadIndex 补成 `DEFAULT_DOMAIN`（存量卡片写于只有一个领域的时候，一张都没声明）。
+   * 这张卡属于哪个领域（设计稿 §13：知识库按领域独立成包但共用机制）。
    *
-   * 【为什么补齐放在加载器，而不是让每个下游各自 `?? 缺省`】少补一处的形态是：
-   * 那批卡在按领域过滤的那一刻整批消失，而检索照常返回 200 与一个更短的列表。
-   * 也因此，**index.json 里这个字段写不写、写成什么，下游都读到同一个值**——
-   * 生成器把存量卡显式写成缺省域，与留空，对检索是同一件事。
+   * **索引里可以没有这个字段**：存量卡片是在只有一个领域的时候写的，
+   * 它们的 domain 就是缺省领域。加载时补齐（见 loadIndex），所以下游读到的恒有值——
+   * 让下游各自 `?? '缺省'` 的形态是：某一处忘了补，那批卡就在按领域过滤时凭空消失，
+   * 而检索照常返回 200 和一个更短的列表。
    *
    * 【为什么这个字段必须在类型上出现】它在 index.json 里已经是**检索的过滤依据**，
    * 而类型上不存在的字段没有任何一处会去对齐：生成器写它、检索读它、类型不认识它，
@@ -193,12 +192,21 @@ function loadIndex(): PackMeta[] {
     seen.add(entry.id);
   }
 
-  // ⑦【domain 补齐】没写 domain 的条目按缺省领域算，补在**加载器这一处**，
-  // 下游（检索过滤、条文注入表、判据）读到的恒有值。
-  // 【为什么不是让下游各自 `?? 缺省`】少补一处的形态是：那批卡在按领域过滤的那一刻
-  // 整批消失，而检索照常返回 200 与一个更短的列表——没有一处会报错。
+  // domain 补齐：没写的算缺省领域（存量卡片写于只有一个领域的时候）。
+  // 补在**入口**而不是各消费点：漏补一处的形态是那批卡在按领域过滤时凭空消失。
+  // 写了但没人认识的 domain 直接拒绝启动——那批卡会静默地对谁都不可见。
+  const known = Object.keys(DOMAINS);
   for (const entry of parsed as PackMeta[]) {
-    if (!entry.domain) entry.domain = DEFAULT_DOMAIN;
+    if (entry.domain === undefined || entry.domain === '') {
+      entry.domain = DEFAULT_DOMAIN;
+    } else if (!known.includes(entry.domain)) {
+      throw new Error(
+        `knowledge 索引条目 ${entry.id} 的 domain 是「${entry.domain}」，` +
+          `而 lib/domains 里注册过的领域只有 ${known.join('、')}（${indexPath}）。` +
+          '这批卡按领域过滤时对谁都不可见，而检索会照常返回 200 与一个更短的列表。' +
+          '请核对卡片 frontmatter 的 domain，或补上这个领域包再重跑 scripts/gen-knowledge-index.py。',
+      );
+    }
   }
 
   packIndex = parsed as PackMeta[];
@@ -391,7 +399,7 @@ function isKnownDomain(domain: string): boolean {
 function passesFilters(meta: PackMeta, opts: SearchOptions): boolean {
   // 【领域闸，默认关】跨域检索必须显式要（设计稿 §13）。
   //
-  // 【它防的是什么——实测形态，不是推理】第二个领域包（39 张咨询纠纷卡）进库后，
+  // 【它防的是什么——实测形态，不是推理】第二个领域包（咨询纠纷卡）进库后，
   // 未过闸时：query「诉讼时效」第一名是民法典 188 条那张卡（诉讼时效 3 年），
   // 而本域用户问时效要的是本域时效口径；query「投诉」「退费」「知情同意」的前 5 名
   // 整屏都是另一个领域的卡。**既有条目一条没改**——改的是召回集合，

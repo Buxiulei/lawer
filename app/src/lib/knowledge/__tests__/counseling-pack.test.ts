@@ -85,18 +85,24 @@ describe('index ⇄ packs/counseling/ 双向一致（变异：删掉任一张卡
     }
   });
 
-  it('counseling 包之外的卡一张都没被打上非缺省域（本票只加不改）', () => {
-    // 【为什么判"解析后的域"，而不是"有没有 domain 这个字段"】存量条目把 domain 留空、
-    // 与显式写成缺省域，对检索是同一件事（加载器补齐，见 lib/knowledge 的 PackMeta.domain）。
-    // 判"字段必须不存在"的形态是：生成器哪天把缺省域也显式写进 index.json，
-    // 这条就在几百张一个字没动过的存量卡上整批变红，而库其实没变；
-    // 而真正要拦的坏事——存量卡被打上 counseling（它从此对缺省域用户消失）——两种写法下都红。
-    const strays = INDEX.filter(
-      (e) => (e.domain ?? DEFAULT_DOMAIN) !== DEFAULT_DOMAIN && !e.path.startsWith('packs/counseling/'),
-    );
+  /**
+   * 【本条在 P4-W3 改过口径，原因写在这里】W2 写它时生成器只给显式声明了 domain 的卡
+   * 导出这个字段，于是"既有卡一张都没有 domain"是可观测的。W1 把生成器改成
+   * **每一条都导出 domain**（没声明的补成缺省领域），这条按原样只能整条删掉。
+   *
+   * 它真正要守的是同一件事的另一面：**这一票只往里加，不把既有的卡挪进新领域**。
+   * 挪走一张的形态是——那张卡从此对缺省领域的用户不可见，而检索照常返回 200。
+   */
+  it('标 counseling 的卡与 packs/counseling/ 目录**互为充要**（变异：把一张既有卡的 domain 改成 counseling → 红）', () => {
+    const strayDomain = INDEX.filter((e) => e.domain === DOMAIN && !e.path.startsWith('packs/counseling/'));
+    const strayPath = INDEX.filter((e) => e.path.startsWith('packs/counseling/') && e.domain !== DOMAIN);
     expect(
-      strays.map((e) => `${e.id}(${e.domain})`),
-      'counseling 包之外的卡被打上了非缺省域 ⇒ 它会从缺省域用户的检索结果里消失，而检索照常 200',
+      strayDomain.map((e) => `${e.id}（${e.path}）`),
+      '这些卡不在 counseling 目录下却标了 counseling：既有卡被挪进了新领域',
+    ).toEqual([]);
+    expect(
+      strayPath.map((e) => `${e.id}（domain=${e.domain ?? '（无）'}）`),
+      '这些卡在 counseling 目录下却不标 counseling：它们对两边的用户都不可见',
     ).toEqual([]);
   });
 });

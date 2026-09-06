@@ -13,6 +13,11 @@ export interface CaseRow {
   stage: string;
   /** 案件领域（MCP 设计稿 §13）。取值即 lib/domains 的领域包 key；存量行由迁移默认值补齐 */
   domain: string;
+  /**
+   * 当前所在的**并行轨**（设计稿 §16），取值来自领域包的 tracks。
+   * NULL = 只在主线上——这是正确语义，不是"还没填"；没有并行轨的领域这一列恒为 NULL。
+   */
+  track: string | null;
   district: string;
   goal: string | null;
   bottom_line: string | null;
@@ -129,6 +134,8 @@ export function updateCaseFields(
     monthly_wage_fen?: number;
     position?: string;
     contract_count?: string;
+    /** 并行轨；显式传 null = 出轨回主线（与"这次没传"是两件事，见下面的 !== undefined） */
+    track?: string | null;
   },
 ): void {
   const sets: string[] = [];
@@ -141,6 +148,7 @@ export function updateCaseFields(
     'monthly_wage_fen',
     'position',
     'contract_count',
+    'track',
   ] as const) {
     if (fields[key] !== undefined) {
       sets.push(`${key} = ?`);

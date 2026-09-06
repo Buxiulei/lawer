@@ -37,7 +37,7 @@ applies_to: [逼迫离职, 欠薪, 社保断缴, 协商解除]   # 场景标签�
 law_refs: [劳动合同法§38, 劳动合同法§46]           # 规范化法条引用，可选
 related: [calc-jingji-buchang-n, sop-tiaogang-yingdui]  # 关联 pack id，可选
 region: 北京          # 北京|全国；北京口径与全国规则并存时标「北京」
-domain: counseling    # 领域键，可选。**不写 = 缺省领域 labor**；见 §2.2
+domain: counseling    # 领域键，可选。**不写 = 缺省领域 labor**；取值见 app/src/lib/domains/registry.ts 的 DOMAINS，口径见 §2.2
 sources:
   - https://flk.npc.gov.cn/...
 confidence: 原文核实   # 原文核实|二手转述|待核实（取全 pack 最低档）

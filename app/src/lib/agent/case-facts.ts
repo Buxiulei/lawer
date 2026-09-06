@@ -238,40 +238,38 @@ function identitySection(s: CaseSnapshot): FactSection {
   };
 }
 
+/**
+ * 「当前轨」那一行（设计稿 §16）。**只有声明了并行轨的领域才有这一行**——
+ * 没有并行轨的领域印一行「当前轨：主线」是纯噪音，而常驻噪音会被连同真信息一起跳过去。
+ *
+ * 【为什么它必须与阶段并排出现，而不是等模型去问】并行轨的语义是"主线不动、另一条线
+ * 同时在走"。不印这一行的形态是：模型只看见 stage，于是把一个正在危机处置里的案子
+ * 当成"还在协商阶段"，接着谈退费——而 stage 那一格自始至终都是对的。
+ */
+function trackLine(s: CaseSnapshot): string | null {
+  const pack = domainPackOrDefault(s.case.domain);
+  if (pack.tracks.length === 0) return null;
+  const on = s.case.track;
+  return on
+    ? `- 当前轨：**${on}**〔已核验〕——这是与主线**并行**的一条线，主线阶段仍是「${s.case.stage}」，没有被它覆盖。`
+    : `- 当前轨：主线（没有并行轨在走）〔已核验〕。本领域的并行轨：${pack.tracks.join(' / ')}。`;
+}
+
 /** P0 案件抬头 + 目标底线。goal/bottom_line 是用户自己说的，标注不能省。 */
 function caseHeadSection(s: CaseSnapshot): FactSection {
   const c = s.case;
+  const track = trackLine(s);
   return {
     key: 'header',
     priority: 0,
     heading: heading(s, 'header'),
     stat: `- 案件：#${c.id}《${trunc(c.title, TITLE_MAX)}》 阶段：${c.stage} 地区：${c.district}区〔已核验〕`,
     detail: [
-      ...trackLines(s),
+      ...(track ? [track] : []),
       `- 用户目标：${c.goal ? truncField(c.goal, GOAL_MAX) : '未记录'}〔用户自述待核实〕`,
       `- 用户底线：${c.bottom_line ? truncField(c.bottom_line, GOAL_MAX) : '未记录'}〔用户自述待核实〕`,
     ],
   };
-}
-
-/**
- * 「当前轨」那一行（设计稿 §16：事实卡与报告各显示一行）。
- *
- * 【本领域没有并行轨时一行都不出】`tracks` 是空数组就是「本领域没有并行轨」这个**结论**。
- * 恒出一行「当前轨：无」的形态是：缺省领域每一轮都白花几十个字符去说一件不存在的事，
- * 而模型会把它当成一个待填的槽，开始追问用户现在在哪一轨。
- *
- * 【为什么只说得出「还没有记录」】cases 表**没有记当前轨的列**，时间线也没有进出轨的
- * 事件类型——真源还不存在。这时印一个具体的轨名是编的，而模型会拿它当已核验事实往下用。
- * 所以这一行如实说清「有哪几条轨、现在还没有记录、要判就得问用户」。
- */
-function trackLines(s: CaseSnapshot): string[] {
-  const tracks = domainPackOrDefault(s.case.domain).tracks;
-  if (tracks.length === 0) return [];
-  return [
-    `- 当前轨：未记录（本领域的并行轨有 ${tracks.join(' / ')}）〔未记录〕——` +
-      '库里没有这一列，要用到就问用户，不许自己挑一条当成事实。',
-  ];
 }
 
 /**
@@ -510,13 +508,19 @@ function evidenceSection(s: CaseSnapshot): FactSection {
     (b.extracted_at ?? b.created_at).localeCompare(a.extracted_at ?? a.created_at),
   );
 
+  // 【敏感级：只给元数据，不给读过内容之后的结论】声明了 sensitive 的领域，档案里写的是
+  // **第三人**的健康与心理信息（个保法 §28 那一类）。简报是"系统读过文件内容之后写下的
+  // 结论"，逐条印进每一轮 prompt 的形态是：那个人最不愿被人知道的东西，在他从不知情、
+  // 也没有任何一次调用记录的情况下，被复制进了每一轮对话——而这一轮可能只是在问退费怎么算。
+  // 所以这里退回"读没读过"这一个比特，真要用内容时按 id 单取（那一次是有据可查的一次动作）。
+  const sensitive = domainPackOrDefault(s.case.domain).sensitive;
   const lines = ordered
     .slice(0, EVIDENCE_ITEMS_MAX)
     .map(
       (e) =>
         `- 《${trunc(e.name, EVIDENCE_NAME_MAX)}》｜${e.category}｜${e.status}｜证明目的：${
           e.prove_purpose ? trunc(e.prove_purpose, EVIDENCE_PURPOSE_MAX) : '用户未填'
-        }｜${evidenceContentNote(e)}`,
+        }｜${sensitive ? evidenceReadState(e) : evidenceContentNote(e)}`,
     );
   const kept: string[] = [];
   let used = 0;
@@ -535,6 +539,9 @@ function evidenceSection(s: CaseSnapshot): FactSection {
       `- 分类计数（0 条的类别也列出来——"合同 0" 正是最容易被脑补成"有"的那种事实）：${counts}` +
         (unknown > 0 ? ` / 枚举外分类 ${unknown}` : ''),
       `- 已提取内容 ${extracted} 条；有简报 ${briefed} 条（含 ${briefedNotExtracted} 条未提取、按元数据写成）；未提取 ${rows.length - extracted} 条**没读过内容**`,
+      // 敏感级的那句纪律由领域包给，且**紧挨着明细出现**——写在别处的形态是，
+      // 模型读到逐条明细时早已翻过那句话
+      ...(sensitive ? [sensitive.factsNotice] : []),
       EVIDENCE_DISCLAIMER,
     ].join('\n'),
     detail: [
@@ -546,6 +553,20 @@ function evidenceSection(s: CaseSnapshot): FactSection {
 
 /** extraction_status 的「已完成」档，与 lib/jobs/extraction-worker 的状态机同名同物。 */
 const EXTRACTION_DONE = 'done';
+
+/**
+ * 敏感级下的「内容读没读过」那一格：**只回状态，不回简报正文**。
+ *
+ * 与 evidenceContentNote 的差别只有一处——有简报时不印简报，改成告诉模型
+ * 「有简报，但按敏感级不在这里给；要用就 evidence_get 按 id 读」。
+ * 不说"有简报但不给你"而直接印成"未提取"的形态是：模型以为这份材料没人读过，
+ * 于是去催用户做提取，而提取早就做完了。
+ */
+function evidenceReadState(e: CaseSnapshot['evidence'][number]): string {
+  if (parseBrief(e.brief_json)) return '已有简报（敏感级：正文不在卡里给，要用先 evidence_get 按 id 读）';
+  if (e.extraction_status === EXTRACTION_DONE) return '已提取内容、简报未生成（要用内容先 evidence_get 读全文）';
+  return '未提取（没读过内容）';
+}
 
 /**
  * 一条证据的「内容读没读过」那一格。三态分得开：
@@ -563,6 +584,31 @@ function evidenceContentNote(e: CaseSnapshot['evidence'][number]): string {
 }
 
 // ========== 组装与预算 ==========
+
+/**
+ * 「未经律师书面确认不得作为结论输出」的那几条（设计稿 §16）。
+ * **没有声明 lawyerReview 的领域根本不出这一节**——所以第一个领域的事实卡逐字不变。
+ *
+ * 【为什么它是 P0（永不被预算降级）】它挡的是模型的默认行为：这几件事恰恰是它最容易
+ * 给出干脆答案的那几件。被预算压掉的形态是——档案越厚这一节越先消失，
+ * 而档案厚的案子正是最需要它的那些。
+ *
+ * 【为什么放在事实卡而不只放在个案报告里】报告是用户主动去整理时才生成的；事实卡是
+ * **每一轮**都在的。只放报告的形态是：模型在没读过报告的那一轮里，把"是不是强制报告主体"
+ * 直接答了——而那一轮看起来与其它轮没有任何区别。
+ */
+function lawyerReviewSection(s: CaseSnapshot): FactSection | null {
+  const review = domainPackOrDefault(s.case.domain).lawyerReview;
+  if (!review) return null;
+  return {
+    key: 'lawyerReview',
+    priority: 0,
+    heading: review.title,
+    // 纪律那句话进 stat：stat 是整区降级后唯一幸存的部分，而这一节里最不能丢的正是这句
+    stat: `- ${review.discipline}`,
+    detail: review.items.map((x) => `- ${x}`),
+  };
+}
 
 /** 取值 + 标注来源，不做裁剪（裁剪归 renderCaseFacts）。 */
 export function buildCaseFacts(s: CaseSnapshot): FactCard {
@@ -588,6 +634,9 @@ export function buildCaseFacts(s: CaseSnapshot): FactCard {
       claimSection(s),
       timelineSection(s),
       evidenceSection(s),
+      // 排在最后：前面每一节说的都是"手上有什么"，这一节说的是"哪几件事不许下结论"，
+      // 它该是读完全部事实之后的最后一句话。没有这类条目的领域这里是空数组。
+      ...([lawyerReviewSection(s)].filter((x): x is FactSection => x !== null)),
     ],
   };
 }
