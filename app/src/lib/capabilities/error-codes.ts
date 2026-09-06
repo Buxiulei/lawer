@@ -49,6 +49,7 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
   { code: 'ORDER_NOT_FOUND', group: 'notfound', status: 404, when: '存证订单号查不到' },
   { code: 'DOSSIER_NOT_FOUND', group: 'notfound', status: 404, when: '公司档案 id 查不到' },
   { code: 'KEY_NOT_FOUND', group: 'notfound', status: 404, when: 'api key id 不在本人名下' },
+  { code: 'TOOL_NOT_FOUND', group: 'notfound', status: 404, when: '通用桥 POST /tools/{name} 里的 name 不是一条可调用的能力', recovery: '调 GET /tools 拿当前可用的能力名，不要按旧说明书里的名字重试' },
 
   { code: 'INVALID_BODY', group: 'input', status: 400, when: '请求体不是合法 JSON，或缺必填字段', recovery: '照 manifest 里该端点的入参重发；不要重试同一份体' },
   { code: 'INVALID_CASE_ID', group: 'input', status: 400, when: 'case_id 不是正整数' },

@@ -62,6 +62,8 @@ export const evidenceList: Capability = {
         ...row,
         brief_summary: briefSummary(parseBrief(brief_json)),
       })),
+      total: result.total,
+      next_offset: result.next_offset,
     };
   },
 };

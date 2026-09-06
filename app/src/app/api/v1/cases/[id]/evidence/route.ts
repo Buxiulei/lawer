@@ -1,10 +1,11 @@
 // app/src/app/api/v1/cases/[id]/evidence/route.ts
-// GET 列出证据条目（对应 MCP 工具 evidence_list）。
+// GET 列出证据条目，分页（对应 MCP 工具 evidence_list）。
 // 只列元数据，不返回文件内容或落盘路径——取文件走证据窗口的下载接口（M2）。
 import { NextResponse } from 'next/server';
 
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import * as cases from '@/lib/cases';
+import { pageParams, pageResponse } from '@/lib/cases/paging';
 import { getDb } from '@/lib/db/client';
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -19,8 +20,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     );
   }
 
-  const result = cases.listEvidence(getDb(), { caseId, userId: guard.identity.uid });
+  const { limit, offset } = pageParams(new URL(req.url));
+  const result = cases.listEvidence(getDb(), { caseId, userId: guard.identity.uid, limit, offset });
   if (!result.ok) return domainFailure(result);
 
-  return NextResponse.json({ ok: true, evidence: result.evidence });
+  return pageResponse('evidence', { items: result.evidence, ...result });
 }

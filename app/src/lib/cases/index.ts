@@ -101,6 +101,10 @@ export const COMPANY_ROLES = ['签约主体', '用工主体', '关联'] as const
 const TIMELINE_DEFAULT_LIMIT = 50;
 const TIMELINE_MAX_LIMIT = 200;
 
+/** 清单类端点的一页默认多少条 / 最多多少条（spec §3.5 列表全部分页） */
+export const LIST_DEFAULT_LIMIT = 50;
+export const LIST_MAX_LIMIT = 200;
+
 export interface DomainFailure {
   ok: false;
   status: number;
@@ -251,10 +255,46 @@ export function getCase(
   return { ok: true, case: found, timeline: store.listTimelineEvents(db, input.caseId, limit) };
 }
 
+/** 一页的窗口。total 是**过滤后的真总数**，不是本页条数——两者相等只是常见巧合。 */
+export interface Page<T> {
+  items: T[];
+  total: number;
+  offset: number;
+  /** 没有下一页时明写 null，不回一个「再翻一次就知道了」的数字 */
+  next_offset: number | null;
+}
+
+/**
+ * 在内存里切一页。
+ *
+ * 【为什么不下推到 SQL】这三张表都是「一个案子几十条」的量级，多取几十行的代价远小于
+ * 给每张表各写一条带 COUNT(*) 的分页查询；而 total 与本页取自同一次读，不会出现
+ * 「总数是刚才的、这一页是现在的」那种自相矛盾的回包。
+ *
+ * 【limit 省略 = 不截断】默认值由**调用方**给：REST 那面按约定给 50，
+ * 而 MCP 的清单类工具没有翻页入参，在这里替它截一刀就等于让它默默丢掉后面的条目，
+ * 且它无从知道丢了——回包看起来是一份完整清单。
+ */
+function paginate<T>(rows: T[], limit?: unknown, offset?: unknown): Page<T> {
+  const rawOffset = Math.trunc(Number(offset ?? 0));
+  const start = Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0;
+
+  const rawLimit = Math.trunc(Number(limit));
+  // 没传、传了垃圾值或非正数 → 不截断；传了合法值 → 封顶到 MAX
+  const size =
+    limit === undefined || limit === null || !Number.isFinite(rawLimit) || rawLimit < 1
+      ? rows.length
+      : Math.min(rawLimit, LIST_MAX_LIMIT);
+
+  const items = rows.slice(start, start + size);
+  const consumed = start + items.length;
+  return { items, total: rows.length, offset: start, next_offset: consumed < rows.length ? consumed : null };
+}
+
 export function listActions(
   db: Database,
-  input: { caseId: number; userId: number; status?: string },
-): Result<{ actions: store.ActionItemRow[] }> {
+  input: { caseId: number; userId: number; status?: string; limit?: unknown; offset?: unknown },
+): Result<{ actions: store.ActionItemRow[]; total: number; offset: number; next_offset: number | null }> {
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
 
@@ -262,28 +302,42 @@ export function listActions(
   if (status !== null && !(ACTION_STATUSES as readonly string[]).includes(status)) {
     return fail(400, 'INVALID_STATUS', `status 只能是 ${ACTION_STATUSES.join(' / ')}`);
   }
-  return { ok: true, actions: store.listActionItems(db, input.caseId, status) };
+  const { items, ...page } = paginate(
+    store.listActionItems(db, input.caseId, status),
+    input.limit,
+    input.offset,
+  );
+  return { ok: true, actions: items, ...page };
 }
 
 export function listDeadlines(
   db: Database,
-  input: { caseId: number; userId: number; includeResolved?: boolean },
-): Result<{ deadlines: store.DeadlineRow[] }> {
+  input: {
+    caseId: number;
+    userId: number;
+    includeResolved?: boolean;
+    limit?: unknown;
+    offset?: unknown;
+  },
+): Result<{ deadlines: store.DeadlineRow[]; total: number; offset: number; next_offset: number | null }> {
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
-  return {
-    ok: true,
-    deadlines: store.listDeadlines(db, input.caseId, input.includeResolved === true),
-  };
+  const { items, ...page } = paginate(
+    store.listDeadlines(db, input.caseId, input.includeResolved === true),
+    input.limit,
+    input.offset,
+  );
+  return { ok: true, deadlines: items, ...page };
 }
 
 export function listEvidence(
   db: Database,
-  input: { caseId: number; userId: number },
-): Result<{ evidence: store.EvidenceRow[] }> {
+  input: { caseId: number; userId: number; limit?: unknown; offset?: unknown },
+): Result<{ evidence: store.EvidenceRow[]; total: number; offset: number; next_offset: number | null }> {
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
-  return { ok: true, evidence: store.listEvidence(db, input.caseId) };
+  const { items, ...page } = paginate(store.listEvidence(db, input.caseId), input.limit, input.offset);
+  return { ok: true, evidence: items, ...page };
 }
 
 /**

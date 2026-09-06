@@ -164,6 +164,40 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   return payload as T;
 }
 
+/**
+ * 一页取多少。**只影响跑几趟，不影响取不取得全**——取得全靠的是走完 next_offset。
+ * 后端 paginate 会把超出上限的值封回上限，所以这个数字写大了也不会取多。
+ */
+const PAGE_SIZE = 200;
+
+/**
+ * 清单端点的「全部取回」。**页面读清单只走这一处**。
+ *
+ * 【为什么要有它】清单端点不传 limit 时只回第一页（默认 50 条）。页面按老写法
+ * 读回包里的 `evidence` / `actions` / `deadlines` 那个键，拿到的就是这 50 条——
+ * 第 51 条起静默消失：HTTP 200、结构合法、列表画得整整齐齐，只是少了几件。
+ * 一个传了 60 份证据的人翻遍页面也找不到最后那 10 份，而屏幕上没有任何异常信号。
+ *
+ * 走 `items`（分页外壳的正本键）而不是各端点各自的老键：调用方连那个键叫什么
+ * 都不必知道，也就没有"这次读的是一页还是全部"的分辨题。
+ */
+export async function apiFetchAll<T>(path: string, options: RequestOptions = {}): Promise<T[]> {
+  const sep = path.includes('?') ? '&' : '?';
+  const all: T[] = [];
+  let offset = 0;
+  for (;;) {
+    const page = await apiFetch<{ items: T[]; next_offset: number | null }>(
+      `${path}${sep}limit=${PAGE_SIZE}&offset=${offset}`,
+      options,
+    );
+    all.push(...page.items);
+    const next = page.next_offset;
+    // next_offset 不前进就收工：那是死循环，比少几条严重得多
+    if (next === null || next <= offset) return all;
+    offset = next;
+  }
+}
+
 export interface UploadOptions {
   /** 0..1；fetch 拿不到上传进度，所以这条路走 XHR */
   onProgress?: (ratio: number) => void;
