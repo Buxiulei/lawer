@@ -16,8 +16,8 @@
 //
 // 【为什么裁剪要留痕】被裁掉的东西必须让模型知道「有但没给你」，否则它当成「不存在」，
 // 然后据此断言「你没有别的证据」。同 case-facts.ts 的同一条纪律。
-import { buildCaseFacts, renderCaseFacts } from '@/lib/agent/case-facts';
-import { loadCaseSnapshot } from '@/lib/agent/snapshot';
+import type { Identity } from '@/lib/auth/identity';
+import { getCapability } from '@/lib/capabilities';
 import * as cases from '@/lib/cases';
 import type { DomainFailure } from '@/lib/cases';
 import { getDomainPack } from '@/lib/domains/registry';
@@ -137,11 +137,11 @@ function reportSection(): string {
  */
 export function buildOpener(
   db: Database,
-  input: { caseId: number; userId: number; tier: OpenerTier },
+  input: { caseId: number; identity: Identity; tier: OpenerTier },
 ): OpenerResult | DomainFailure {
   const owned = cases.getCase(db, {
     caseId: input.caseId,
-    userId: input.userId,
+    userId: input.identity.uid,
     timelineLimit: 1,
   });
   if (!owned.ok) return owned;
@@ -157,7 +157,19 @@ export function buildOpener(
   }
 
   const budget = OPENER_TIERS[input.tier];
-  const snapshot = loadCaseSnapshot(db, input.caseId);
+
+  // 事实卡走 case_facts 能力，不在这里自己渲染一遍：那一层已经把归属校验、取快照、
+  // 预算裁剪串好了，而全站**只允许两处出口**调 renderCaseFacts（case-facts.test 的 G-F0
+  // 逐文件点名）。自己再渲一份的形态是：同一个案子在网页、在 MCP、在这条路上
+  // 各有一份「当前事实」，三份都长得很正常。
+  const factsCap = getCapability('case_facts');
+  const factsRes = factsCap ? (factsCap.run(db, input.identity, { case_id: input.caseId }) as
+    | { case_facts: string }
+    | DomainFailure) : undefined;
+  if (factsRes && 'ok' in factsRes && factsRes.ok === false) return factsRes;
+  const facts = factsRes && 'case_facts' in factsRes ? factsRes.case_facts : null;
+
+  const evidence = cases.listEvidence(db, { caseId: input.caseId, userId: input.identity.uid });
 
   const head = [
     '# 陪跑开场白（土八鼠）',
@@ -173,15 +185,11 @@ export function buildOpener(
 
   // P1 → P3：按重要度顺序填，填不下的整段换成一行留痕
   const optional: { heading: string; body: string | null; cut: string }[] = [
-    {
-      heading: FACTS_HEADING,
-      body: renderCaseFacts(buildCaseFacts(snapshot)),
-      cut: '事实卡尾部的部分内容',
-    },
+    { heading: FACTS_HEADING, body: facts, cut: '事实卡尾部的部分内容' },
     { heading: REPORT_HEADING, body: reportSection(), cut: '' },
     {
       heading: BRIEF_HEADING,
-      body: briefSection(snapshot.evidence, BRIEF_LEN[input.tier]),
+      body: evidence.ok ? briefSection(evidence.evidence, BRIEF_LEN[input.tier]) : null,
       cut: '其余证据的简报',
     },
   ];

@@ -7,6 +7,7 @@
 import Database from 'better-sqlite3';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import type { Identity } from '@/lib/auth/identity';
 import { runMigrations } from '@/lib/db/migrate';
 import { GUIDE_HEADING } from '../guide';
 import { buildOpener, OPENER_TIERS, type OpenerTier } from '../opener';
@@ -22,10 +23,16 @@ const GUIDE_ANCHORS = [
   '不劝他去找律师',
 ];
 
+/** 网页登录态的身份（api key 那一路只是多一个 keyId，与开场白无关） */
+const asUser = (uid: number): Identity => ({ uid, via: 'jwt', scopes: ['case:read', 'case:write'] });
+
 let db: Database.Database;
 let uid: number;
 let otherUid: number;
 let caseId: number;
+
+const me = () => asUser(uid);
+const other = () => asUser(otherUid);
 
 function insertEvidence(name: string, proves: string): void {
   const fileId = Number(
@@ -75,7 +82,7 @@ function fatten(): void {
 
 describe('三档预算', () => {
   it.each(TIERS)('%s 档不超上限（空案件）', (tier) => {
-    const res = buildOpener(db, { caseId, userId: uid, tier });
+    const res = buildOpener(db, { caseId, identity: me(), tier });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.text.length).toBeLessThanOrEqual(OPENER_TIERS[tier]);
@@ -83,7 +90,7 @@ describe('三档预算', () => {
 
   it.each(TIERS)('%s 档不超上限（数据量远超预算）', (tier) => {
     fatten();
-    const res = buildOpener(db, { caseId, userId: uid, tier });
+    const res = buildOpener(db, { caseId, identity: me(), tier });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.text.length).toBeLessThanOrEqual(OPENER_TIERS[tier]);
@@ -92,7 +99,7 @@ describe('三档预算', () => {
   it('档位越宽给得越多（否则三档等于只有一档）', () => {
     fatten();
     const len = (tier: OpenerTier) => {
-      const r = buildOpener(db, { caseId, userId: uid, tier });
+      const r = buildOpener(db, { caseId, identity: me(), tier });
       return r.ok ? r.text.length : 0;
     };
     expect(len('long')).toBeGreaterThan(len('medium'));
@@ -102,7 +109,7 @@ describe('三档预算', () => {
 
 describe('指南段永远在', () => {
   it.each(TIERS)('%s 档（空案件）带完整指南与回填约定', (tier) => {
-    const res = buildOpener(db, { caseId, userId: uid, tier });
+    const res = buildOpener(db, { caseId, identity: me(), tier });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.text).toContain(GUIDE_HEADING);
@@ -113,7 +120,7 @@ describe('指南段永远在', () => {
 
   it.each(TIERS)('%s 档（数据量远超预算，逼出裁剪）指南一个字都没少', (tier) => {
     fatten();
-    const res = buildOpener(db, { caseId, userId: uid, tier });
+    const res = buildOpener(db, { caseId, identity: me(), tier });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.text).toContain(GUIDE_HEADING);
@@ -123,7 +130,7 @@ describe('指南段永远在', () => {
 
   it('short 档真的被逼着裁了东西，且裁了有留痕（否则上一条是空过）', () => {
     fatten();
-    const res = buildOpener(db, { caseId, userId: uid, tier: 'short' });
+    const res = buildOpener(db, { caseId, identity: me(), tier: 'short' });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     // 裁剪确实发生：要么整段没放下（omitted 有名字），要么段内截断（留痕句在）
@@ -136,7 +143,7 @@ describe('指南段永远在', () => {
 
 describe('归属', () => {
   it('别人的案子回 CASE_NOT_FOUND（不区分不存在与不是你的）', () => {
-    const res = buildOpener(db, { caseId, userId: otherUid, tier: 'long' });
+    const res = buildOpener(db, { caseId, identity: other(), tier: 'long' });
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.errorCode).toBe('CASE_NOT_FOUND');

@@ -33,7 +33,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     );
   }
 
-  const result = buildOpener(getDb(), { caseId, userId: guard.identity.uid, tier: raw });
+  const result = buildOpener(getDb(), { caseId, identity: guard.identity, tier: raw });
   if (!result.ok) return domainFailure(result);
 
   return NextResponse.json({
