@@ -28,14 +28,13 @@ describe('列表接口带 include_voided', () => {
       'fetch',
       vi.fn(async (url: string) => {
         urls.push(String(url));
+        // 与 lib/cases/paging 的 pageResponse 同形：items 与 legacy 键指向同一个数组
+        const rows = [
+          { id: 1, case_id: 2, name: '留着的.jpg', category: '公司文件', prove_purpose: null, status: '已上传', created_at: '2026-09-06T09:00:00+08:00' },
+          { id: 2, case_id: 2, name: '重复的.jpg', category: '公司文件', prove_purpose: null, status: '已作废', created_at: '2026-09-06T09:00:00+08:00', voided_at: '2026-09-06T10:00:00+08:00', void_reason: '与条目 1 重复' },
+        ];
         return new Response(
-          JSON.stringify({
-            ok: true,
-            evidence: [
-              { id: 1, case_id: 2, name: '留着的.jpg', category: '公司文件', prove_purpose: null, status: '已上传', created_at: '2026-09-06T09:00:00+08:00' },
-              { id: 2, case_id: 2, name: '重复的.jpg', category: '公司文件', prove_purpose: null, status: '已作废', created_at: '2026-09-06T09:00:00+08:00', voided_at: '2026-09-06T10:00:00+08:00', void_reason: '与条目 1 重复' },
-            ],
-          }),
+          JSON.stringify({ ok: true, items: rows, evidence: rows, total: rows.length, offset: 0, next_offset: null }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }),
@@ -43,6 +42,10 @@ describe('列表接口带 include_voided', () => {
 
     const list = await fetchEvidenceList('2');
     expect(urls[0]).toContain('include_voided=1');
+    // 同一条 URL 上还得有翻页参数：不走 apiFetchAll 的形态是折叠区在第 51 条之后永远缺人，
+    // 而页面照常渲染。include_voided 与翻页两件事必须同时成立。
+    expect(urls[0]).toMatch(/[?&]limit=\d+/);
+    expect(urls[0]).toMatch(/[?&]offset=0/);
     expect(list[0].voidedAt).toBeNull();
     expect(list[1].voidedAt).toBe('2026-09-06T10:00:00+08:00');
     expect(list[1].voidReason).toBe('与条目 1 重复');

@@ -211,6 +211,8 @@ const MINIMAL_ARGS: Record<string, Record<string, unknown>> = {
   evidence_list: { case_id: '#case' },
   evidence_get: { evidence_id: '#evidence' },
   evidence_brief_get: { evidence_id: '#evidence' },
+  evidence_void: { evidence_id: 999_999, reason: '与条目 1 重复' },
+  evidence_brief_regenerate: { evidence_id: 999_999 },
   evidence_brief_update: { evidence_id: '#evidence', brief: {}, reason: '补齐', base_version: 0 },
   evidence_extract: { evidence_id: '#evidence', mode: 'ocr' },
   evidence_upload_url: { case_id: '#case', filename: '工资条.pdf' },

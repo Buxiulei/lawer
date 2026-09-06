@@ -120,7 +120,7 @@ export async function POST(req: Request) {
       // 两条入口各写一句的形态是：一边拦住了、另一边放行，而两边都不报错。
       const gate = checkPreconditions(getDb(), tool, identity);
       if (gate) {
-        return json(rpcResult(id, toolErrorResult(gate.errorCode, gate.message)));
+        return json(rpcResult(id, toolErrorResult({ ...gate })));
       }
 
       // 业务失败（案件不存在、枚举非法）走 isError=true，让模型能读到原因自行纠正
