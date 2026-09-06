@@ -14,6 +14,8 @@
  */
 
 import { apiFetch, humanError } from '@/app/_ui/api';
+import { DEFAULT_DOMAIN, type DomainPack } from '@/lib/domains/registry';
+import { schemaPayload } from './schemaFlow';
 import { fetchMyCases } from '@/app/_ui/currentCase';
 import { latestOf } from '@/app/(app)/case/_components/resolve';
 import { NO_CASE_GUIDE_LEAD } from './caseGuard';
@@ -122,8 +124,17 @@ export function wageFenOf(raw: string): number | null {
   return Math.round(yuan * 100);
 }
 
-/** 草稿 → 接口请求体。字段名照后端路由，前端不另起一套语义。 */
-export function toIntakePayload(draft: IntakeDraft): Record<string, unknown> {
+/**
+ * 草稿 → 接口请求体。字段名照后端路由（对照表在 lib/cases/intake-params.ts），
+ * 前端不另起一套语义。
+ *
+ * 【两条路】缺省领域走下面这份手写映射（六步向导各格逐字不变）；
+ * 没有手写向导的领域按它自己的 intakeSchema 拼（schemaPayload）。
+ * 让后者也走这份手写映射的形态是：它的答案存在 draft.fields 里，
+ * 这份映射一格都读不到，于是请求体里每一项都是空的，而回包照常 201。
+ */
+export function toIntakePayload(draft: IntakeDraft, pack?: DomainPack): Record<string, unknown> {
+  if (pack && pack.key !== DEFAULT_DOMAIN) return schemaPayload(pack, draft.fields);
   return {
     stage: draft.stage,
     company_name: draft.companyName,
@@ -153,13 +164,17 @@ export function toIntakePayload(draft: IntakeDraft): Record<string, unknown> {
  * 页面挂载时那次查（useCaseGuard）是**提前**告知，不能代替这一次：
  * 用户可能在另一个标签页刚把邮箱补完，也可能刚好相反。
  */
-export async function saveIntake(draft: IntakeDraft): Promise<FinishOutcome> {
+export async function saveIntake(
+  draft: IntakeDraft,
+  /** 这一份按哪个领域的 schema 拼请求体；省略即缺省领域那份手写映射 */
+  pack?: DomainPack,
+): Promise<FinishOutcome> {
   try {
     const target = latestOf(await fetchMyCases());
     if (!target) return { kind: 'no-case' };
     await apiFetch(`/cases/${target.id}/intake`, {
       method: 'POST',
-      body: toIntakePayload(draft),
+      body: toIntakePayload(draft, pack),
     });
     return { kind: 'saved', caseId: target.id };
   } catch (err) {

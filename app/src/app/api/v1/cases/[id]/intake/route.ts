@@ -28,21 +28,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     );
   }
 
+  // body 上「哪个键对哪个字段」只写在 lib/cases/intake-params.ts 那一份表里。
+  // 在这里再手抄一遍的形态是：领域包的 intakeSchema 多一个字段，页面老实填进请求体，
+  // 这里不读它也不报错——那一格一路消失，回包还是 201。
   const result = cases.submitIntake(getDb(), {
     caseId,
     userId: guard.identity.uid,
-    stage: body.stage,
-    companyName: body.company_name,
-    employedFrom: body.employed_from,
-    monthlyWageFen: body.monthly_wage_fen,
-    position: body.position,
-    contractCount: body.contract_count,
-    events: body.events,
-    freeText: body.free_text,
-    companyDocs: (body.company_docs ?? {}) as Record<string, unknown>,
-    companyWording: body.company_wording,
-    goals: body.goals,
-    bottomLine: body.bottom_line,
+    ...cases.intakeInputFromBody(body),
   });
   if (!result.ok) return domainFailure(result);
 

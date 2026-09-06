@@ -22,6 +22,7 @@ import { insertActionItem, insertDeadline, upsertCompanyProfileByRole } from '@/
 import * as store from '@/lib/db/cases';
 import { nowSql } from '@/lib/db/time';
 import { INTAKE_STAGE_ACTIONS, intakeActionDueAt, intakeActionPriority } from './intake-actions';
+import { INTAKE_BODY_PARAMS } from './intake-params';
 import type { CaseStage } from './stages';
 
 /** 首诊里公司给过哪些文件的三问，键与前端 draft 同名 */
@@ -54,6 +55,26 @@ export interface IntakeInput {
   bottomLine?: unknown;
   /** 落库时刻，测试可注入 */
   now?: Date;
+}
+
+/**
+ * 请求体 → 首诊入参。**REST 那条路上「body 上叫什么」只写在这一处**
+ * （对照表在 ./intake-params.ts，页面拼请求体走同一份）。
+ *
+ * 【为什么从路由里收上来】原先路由里是一段手抄清单，形态是：领域包的 intakeSchema
+ * 多一个字段、页面老实填进请求体、**路由不读它也不报错**——那一格一路消失，回包还是 201。
+ * 收成一处之后，判据能对着这份表核对「每个领域包的每个首诊字段都有人接」。
+ *
+ * `company_docs` 缺省成空对象是原样保留的既有行为：那一问整段没答与答了空，
+ * 在落库那侧走的是同一条路（拼不出 docLine 就不落那条事件）。
+ */
+export function intakeInputFromBody(
+  body: Record<string, unknown>,
+): Omit<IntakeInput, 'caseId' | 'userId'> {
+  const out: Record<string, unknown> = {};
+  for (const [param, key] of Object.entries(INTAKE_BODY_PARAMS)) out[key] = body[param];
+  out.companyDocs = (body.company_docs ?? {}) as Record<string, unknown>;
+  return out as Omit<IntakeInput, 'caseId' | 'userId'>;
 }
 
 export interface IntakeResult {

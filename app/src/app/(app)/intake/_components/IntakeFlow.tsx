@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import type { SanbeiCap } from '@/lib/cap/sanbei';
+import { DEFAULT_DOMAIN, domainPackOrDefault, type DomainPack } from '@/lib/domains/registry';
 import { useSignedIn } from '@/app/_ui/auth';
 import { scrollBehavior, useReducedMotion } from '@/app/_ui/motion';
 import { Button } from '@/components/shadcn/button';
@@ -31,6 +32,8 @@ import {
   seedStepHistory,
   stepFromHistoryState,
 } from './stepHistory';
+import { SchemaField } from './SchemaField';
+import { emptyValue, fieldBlock, isFilled, stepTitleOf, type FieldValue } from './schemaFlow';
 import { destinationForFinish, saveIntake } from './submit';
 import { advanceBlock } from './validate';
 
@@ -48,9 +51,14 @@ interface StepDef {
     patch: (p: Partial<IntakeDraft>) => void,
     cap: SanbeiCap | null,
   ) => ReactNode;
+  /**
+   * 这一步还不能往下走的理由；null = 可以走。
+   * 手写向导那条路省略它，由 validate.advanceBlock 按步序统一判（既有行为逐字不变）。
+   */
+  block?: (draft: IntakeDraft, today: string) => string | null;
 }
 
-const STEPS: StepDef[] = [
+const HANDWRITTEN_STEPS: StepDef[] = [
   {
     title: '现在到哪一步了',
     reassurance: '先定位，再想对策。每个阶段能做的事不一样，选错了随时能回来改。',
@@ -83,6 +91,86 @@ const STEPS: StepDef[] = [
   },
 ];
 
+/**
+ * **手写向导的登记处**。键即领域 key，值是那个领域一步步问下来的那份稿子。
+ *
+ * 【为什么是一张表，不是一句 `if (domain === 缺省)`】写成 if 的形态是：
+ * 第二个领域将来也有人为它手写了向导，得回来改那句判断，而漏改的后果是
+ * 它的用户仍然走通用表单——页面照常能用，只是那份手写稿从没被摆出来过。
+ * 表里没有的领域一律按 schema 排步（schemaSteps），**不退回别人的向导**。
+ */
+const HANDWRITTEN_FLOWS: Record<string, StepDef[]> = {
+  [DEFAULT_DOMAIN]: HANDWRITTEN_STEPS,
+};
+
+/**
+ * 没有手写向导的领域：按 `intakeSchema` 一格一步问下来，末步是「你的档案」。
+ *
+ * 【顺序即 schema 的顺序】先问什么由领域包定，不由页面定——页面自作主张排序的形态是：
+ * 领域包把最要紧的一问放在第一位，页面按自己的偏好挪到第五步，而两边都不报错。
+ */
+function schemaSteps(pack: DomainPack): StepDef[] {
+  const steps: StepDef[] = pack.intakeSchema.map((field) => ({
+    title: stepTitleOf(field),
+    // 说明用领域包**逐字对外**的那句话，不在页面上另编一句白话：
+    // 另编的形态是两处说法不一致，而工具清单那份是对外契约，改不得。
+    reassurance: field.description,
+    render: (d, p) => (
+      <SchemaField
+        field={field}
+        value={d.fields[field.key] ?? emptyValue(field)}
+        onChange={(next) => p({ fields: { ...d.fields, [field.key]: next } })}
+      />
+    ),
+    block: (d, today) => fieldBlock(field, d.fields[field.key] ?? emptyValue(field), today),
+  }));
+  steps.push({
+    title: '你的档案',
+    reassurance: '下面是这一份要存进档案的内容。点「进入驾驶舱」才会存进去，接下来一件一件来。',
+    render: (d) => <SchemaPreview pack={pack} draft={d} />,
+  });
+  return steps;
+}
+
+/**
+ * 通用末步：把填过的那几格原样列一遍。**只列填过的**——把空格子也摆出来，
+ * 等于在最后一屏再问一遍那些他已经决定不填的问题。
+ */
+function SchemaPreview({ pack, draft }: { pack: DomainPack; draft: IntakeDraft }) {
+  const filled = pack.intakeSchema.filter((f) => isFilled(draft.fields[f.key] ?? emptyValue(f)));
+  return (
+    <div data-veil="" className="flex flex-col gap-2.5">
+      {filled.length === 0 ? (
+        <p className="text-[15px] leading-7 text-ink-2">这一份还什么都没填。往回走几步补上再交。</p>
+      ) : (
+        filled.map((f) => (
+          <div key={f.key} className="rounded-[10px] bg-surface-2 px-3.5 py-2.5">
+            <p className="text-[13px] leading-5 text-ink-2">{stepTitleOf(f)}</p>
+            <p className="mt-0.5 text-[15px] leading-7 text-ink">
+              {summarize(draft.fields[f.key] ?? emptyValue(f))}
+            </p>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+/** 一格的值 → 末步那行摘要。只求认得出自己填过什么，不求好看。 */
+function summarize(value: FieldValue): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => (typeof v === 'string' ? v : [v.date, v.text].filter(Boolean).join(' ')))
+      .filter((v) => v.trim() !== '')
+      .join('；');
+  }
+  return Object.entries(value)
+    .filter(([, v]) => typeof v === 'string' && v.trim() !== '')
+    .map(([k, v]) => `${k}：${v}`)
+    .join('；');
+}
+
 export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
   const router = useRouter();
   const toast = useToast();
@@ -91,7 +179,14 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
    * 名下有没有案件可以存。挂载后现查一次（F-205）——只验了手机号还没补邮箱的人
    * 名下一个案件都没有，这件事必须在第 1 步就说，不能等他填完六步才撞墙。
    */
-  const [caseGuard, setCaseGuard] = useCaseGuard(signedIn);
+  const [caseProbe, setCaseGuard] = useCaseGuard(signedIn);
+  const caseGuard = caseProbe.guard;
+  /**
+   * 这一份首诊按哪个领域问。**取的是名下那个案件的 domain**（首诊是往它里面提交的），
+   * 查不到就退回缺省领域——查不到的常见形态是还没登录，那时问哪一套都还没有落点。
+   */
+  const pack = domainPackOrDefault(caseProbe.domain || undefined);
+  const steps = HANDWRITTEN_FLOWS[pack.key] ?? schemaSteps(pack);
   const [draft, setDraft] = useState<IntakeDraft>(EMPTY_DRAFT);
   const [restored, setRestored] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -109,6 +204,24 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
     setHydrated(true);
   }, []);
 
+  /**
+   * 草稿是**上一个领域**填的就整份作废。
+   *
+   * 【为什么不留着】各格的答案按字段键存，而键名跨领域同名（IntakeFieldSpec 的约定）——
+   * 留着的形态是：上一个领域的答案一格不落地被按这个领域的 schema 提交上去，
+   * 每一格都对得上某个键，服务端照收，没有一处会报错。
+   *
+   * 【domain 是空串时不动它】存量草稿都没有这一列，抹掉它们等于把老用户填了一半的东西删了。
+   */
+  useEffect(() => {
+    if (!hydrated) return;
+    setDraft((prev) => {
+      if (prev.domain === pack.key) return prev;
+      if (prev.domain === '') return { ...prev, domain: pack.key };
+      return { ...EMPTY_DRAFT, domain: pack.key };
+    });
+  }, [hydrated, pack.key]);
+
   useEffect(() => {
     if (!hydrated) return;
     saveDraft(draft);
@@ -120,16 +233,19 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
   }, []);
 
   const reduce = useReducedMotion();
-  const step = Math.min(draft.step, STEPS.length - 1);
+  const step = Math.min(draft.step, steps.length - 1);
   const stepRef = useRef(step);
   stepRef.current = step;
-  const current = STEPS[step];
-  const isLast = step === STEPS.length - 1;
+  const current = steps[step];
+  const isLast = step === steps.length - 1;
   // 「今天」现取：入职时间填在未来要当场拦下，不能等提交时才由后端说不行
-  const block = advanceBlock(step, draft, new Date().toISOString().slice(0, 10));
+  const today = new Date().toISOString().slice(0, 10);
+  // 手写向导按步序统一判（advanceBlock，逐字不变）；按 schema 排步的那条路
+  // 由每一步自己带的 block 判，说的是**领域包自己那句话**。
+  const block = current.block ? current.block(draft, today) : advanceBlock(step, draft, today);
   const canAdvance = block === null;
   // 引导条摆哪一步由 caseGuard 一处说了算；'unknown'（还没查到 / 查不到）一律不摆
-  const placement = guidePlacement({ guard: caseGuard, step, total: STEPS.length });
+  const placement = guidePlacement({ guard: caseGuard, step, total: steps.length });
 
   /** 落一步：改 state + 回到顶部。前进与「返回键弹回来」共用这一处，两边不许各写一遍。 */
   const applyStep = useCallback(
@@ -170,7 +286,7 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
       // （复核 MF-4），那一下只动栈、不该动屏幕。落一遍 applyStep 步数虽然不变，
       // 却会把「已恢复上次填的内容」那行提示按掉——只对齐栈的一下不算用户操作。
       if (back === stepRef.current) return;
-      applyStep(Math.min(back, STEPS.length - 1));
+      applyStep(Math.min(back, steps.length - 1));
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
@@ -222,7 +338,7 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
   const runSave = async () => {
     setSaving(true);
     try {
-      return await saveIntake(draft);
+      return await saveIntake(draft, pack);
     } finally {
       setSaving(false);
     }
@@ -230,7 +346,7 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
 
   return (
     <div className="pb-2">
-      <StepBar current={step} total={STEPS.length} title={current.title} />
+      <StepBar current={step} total={steps.length} title={current.title} />
 
       {placement === 'first-step' && <NoCaseGuide className="mt-3" />}
 
