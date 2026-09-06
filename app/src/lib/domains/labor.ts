@@ -5,9 +5,23 @@ import { CASE_STAGES } from '@/lib/cases/stages';
 
 import type { DomainPack } from './registry';
 
+/**
+ * 本领域的当事人称呼。**先于 LABOR 定义**，因为下面那些对外文案由它拼出来——
+ * 文案里再抄一遍称呼的形态是：改了这里、文案还是老称呼，两处都不报错。
+ */
+const LABOR_PARTIES = {
+  self: '劳动者',
+  counterparts: ['用人单位', '关联公司', '平台'],
+  multiParty: true,
+} as const;
+
 export const LABOR: DomainPack = {
   key: 'labor',
   label: '劳动争议',
+
+  // 我方与对方各是谁（设计稿 §14-1）。本领域对面**常态不止一家**：签约主体、实际用工主体、
+  // 关联公司、用工平台可能是几家不同的公司，被申请人列谁由此判定，故 multiParty 为 true。
+  parties: LABOR_PARTIES,
 
   // 阶段枚举**搬过来引用**，不在这里复制第二份：CASE_STAGES 还被首诊页（客户端）
   // 直接引着，抄一份的形态是两处枚举某天不一致，而 stage 校验只看得见其中一处。
@@ -64,6 +78,10 @@ export const LABOR: DomainPack = {
  * 领域，先由本包直供；第二个领域接进来时，「工具描述按领域变」还是「描述保持中性、
  * 领域细节退到 case_facts」需要单独裁决，不要在这里默默选一个。
  */
+const SELF = LABOR_PARTIES.self;
+const CP = LABOR_PARTIES.counterparts[0];
+const OTHERS = LABOR_PARTIES.counterparts.slice(1).join('、');
+
 export const LABOR_CAPABILITY_COPY = {
   knowledgeSearchTitle: '检索劳动法知识库',
   knowledgeGetTitle: '按 id 取一张劳动法知识卡',
@@ -75,6 +93,38 @@ export const LABOR_CAPABILITY_COPY = {
   companyProfileUpsertDescription:
     '登记或补充公司主体档案。签约主体、发工资主体、实际用工主体可能是三家公司，' +
     '仲裁列谁为被申请人由此判定，所以只要用户提到公司名就要落档。同案同名只有一条，反复补充即更新。',
+  // ───── 公司情报面（设计稿 §2 H）：以下六句里的「对方主体」称呼一律由 LABOR_PARTIES 拼，
+  //       不在这里也不在共用层再写死一个名词（§14-1 角色不写死）。
+  companyNameParam:
+    `对方主体全称（${CP}、${OTHERS}都算），尽量与营业执照一致；查得准不准全看这个名字`,
+  companyProbeDescription:
+    `先免费探一眼这家${CP}的公开概况：有没有命中主体、工商状态、关联主体数、涉诉记录数、` +
+    `其中与${SELF}相关的件数、有公开文书链接的篇数，以及这批数字采于哪一天。` +
+    '**不扣任何费用、也不建档**，它是下一步报价的底数——没有它，深度两块（涉诉深度统计 / 人事套路归纳）报不出价。' +
+    '缓存命中不占免费次数；未命中且今日免费次数用完、或采集侧暂时不可用时，回包会如实说是哪一种，' +
+    '**不会拿一个空结果冒充「查无此公司」**——照它的原话转告用户，别自己补一句「这家公司没查到」。',
+  dossierQuoteDescription:
+    `给这家${CP}的档案报价：买哪几块、每块多少公道值、算式是什么、余额够不够。` +
+    '**这一步绝不动钱**（不扣费、不建档、不占额度），所以可以放心先报一次给用户看。' +
+    '回包里的 quote_id 才是下单凭据，交给 dossier_confirm 才会真扣费；报价有有效期（expires_at），' +
+    '过期要重报——价目会被调整，拿过期报价确认等于按一个已经不作数的价收钱。' +
+    `同一场纠纷对面常常不止一家（${OTHERS}），一家一张报价、各买各的。`,
+  dossierConfirmDescription:
+    '按一张报价确认下单：扣公道值（有会员赠送券时核心几块自动抵扣）并建档。' +
+    '**同一张报价重复确认只扣一次**——回包 deduped=true 表示这次没有产生第二笔扣费，' +
+    '要如实说「之前那单已经付过了」，不要说成又买了一次。' +
+    '余额不够时整笔失败：不建档、不扣任何钱，把差额如实告诉用户，不要改小参数重试。',
+  dossierGetDescription:
+    `读这家${CP}的档案：辖区实操、主体体检、关联谱系、涉诉清单与统计、人事套路。` +
+    'status=none 表示这案还没建过档（**不是错误**，也不代表这家公司没问题），要买先 dossier_quote。',
+  companyGraphGetDescription:
+    `读本案的对方主体关系图：节点（${CP}与${OTHERS}各自的角色）、边（股权 / 同法代 / 同址等）、` +
+    '以及每个节点在守望里的档位。一个主体都还没登记时回 graph=null——那是「这案还没做过主体调查」，不是错误。',
+  companyWatchSetDescription:
+    `把一家对方主体挂进守望，之后按档持续盯它的工商与涉诉变化（${OTHERS}同样可以各挂一条）。` +
+    '**这一次调用不扣钱**：档位定的是下个月按哪档收月费，别对用户说成「已扣」。' +
+    '同案同主体只会有一条，重复调用命中已有那条、**不会改它的档位**；' +
+    '回包里的 tier 是库里真正生效的那一档，照它说，不要回显你传进去的那个。',
   draftListDescription:
     '列出案件名下已有的文书（类型、标题、版本、状态、时间），**不含正文**——' +
     '正文用 draft_get 按 draft_id 单取。仲裁材料一般会改好几稿，同一题的多版都在这里。',

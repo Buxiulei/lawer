@@ -8,6 +8,9 @@
 // 它是 /company/dossiers/{id} 的薄包装：**归属判据同一条**（getDossierBillingView，
 // 没买过就当没有），只是入口的钥匙从 dossier_id 换成了 case_id。
 //
+// 【解析本身在 lib/dossier/case-dossier.ts】本路由只做 HTTP 皮：鉴权 → 调它 → 包 JSON。
+// 用户自己的 agent 走 dossier_get 调的是同一个函数，两条路径不会各自演化。
+//
 // 【没有档案不是错误】三种情况在用户那里是同一件事——「这个案子还没建过档」：
 //   ① 案里还没落被申请人主体；② 这家公司全站没人建过档；③ 建过，但这个账号没买过。
 // 一律 200 + `{ status: 'none', dossier: null, orderPath }`，页面据此引导去报价页。
@@ -26,24 +29,10 @@
 import { NextResponse } from 'next/server';
 
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
-import * as cases from '@/lib/cases';
-import { getDossierBillingView } from '@/lib/company/dossier-billing';
-import { findDossierBySubject } from '@/lib/company/dossier';
 import { getDb } from '@/lib/db/client';
-import { listProfiles } from '@/lib/db/company-graph';
-import { buildDossierView, pickRespondent, venueOfDistrict } from '@/lib/dossier/build';
+import { getCaseDossier } from '@/lib/dossier/case-dossier';
 
 const NOT_FOUND = { ok: false, error_code: 'CASE_NOT_FOUND', message: '案件不存在' };
-
-/** 还没建档：不是错误，是一个状态。带上下单入口，页面不必自己拼路径。 */
-function notOrdered(caseId: number): NextResponse {
-  return NextResponse.json({
-    ok: true,
-    status: 'none',
-    dossier: null,
-    orderPath: `/case/${caseId}/dossier/order`,
-  });
-}
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const guard = requireIdentity(getDb(), req, 'case:read');
@@ -52,32 +41,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const caseId = parseId((await params).id);
   if (caseId === null) return NextResponse.json(NOT_FOUND, { status: 404 });
 
-  // 归属校验走 lib/cases 的既有入口，不在这里另写一遍 user_id 比对（同 company-graph 路由）：
-  // 「非本人案件一律当作不存在」是条红线，红线复制第二份的那天，两份就开始各自演化了。
-  const db = getDb();
-  const owned = cases.getCase(db, { caseId, userId: guard.identity.uid, timelineLimit: 1 });
-  if (!owned.ok) return domainFailure(owned);
-
-  const respondent = pickRespondent(listProfiles(db, caseId));
-  if (!respondent) return notOrdered(caseId);
-
-  // 键怎么算是 lib/company 的事（uscc 优先 + 命名空间前缀），这里不自己算一遍：
-  // 两处算出不同键时系统一句话都不报，只是命中不了、或者命中了别人家的档案。
-  const dossier = findDossierBySubject(db, { uscc: respondent.uscc, name: respondent.name });
-  if (!dossier) return notOrdered(caseId);
-
-  // 归属判据与 /company/dossiers/{id} 同一条：没下过单、也没为它付过费的账号看不到。
-  // 档案是跨案共享的付费资产——「我的案子的被申请人恰好是这家」不构成看它的理由。
-  const billing = getDossierBillingView(db, dossier.id, guard.identity.uid);
-  if (!billing) return notOrdered(caseId);
+  const result = getCaseDossier(getDb(), { caseId, userId: guard.identity.uid });
+  if (!result.ok) return domainFailure(result);
 
   return NextResponse.json({
     ok: true,
-    status: 'ready',
-    dossier: buildDossierView(db, {
-      dossier,
-      venue: venueOfDistrict(owned.case.district),
-      refundedGongdao: billing.modules.reduce((sum, m) => sum + m.refunded, 0),
-    }),
+    status: result.status,
+    dossier: result.dossier,
+    orderPath: result.orderPath,
   });
 }
