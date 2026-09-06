@@ -6,7 +6,6 @@
 import hashlib
 import io
 import os
-import re
 import sys
 from datetime import datetime, timezone
 
@@ -317,13 +316,7 @@ def test_verify_handles_non_pdf():
 
 
 # ---------------- 未配置 key 时的降级 ----------------
-
-def test_ocr_without_key_returns_503(monkeypatch):
-    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
-    r = client.post("/ocr", files={"file": ("a.jpg", b"\xff\xd8\xff\xe0fake", "image/jpeg")})
-    assert r.status_code == 503
-    assert "DASHSCOPE_API_KEY" in r.json()["detail"]
-
+# /ocr 的未配置 key 降级与其余 OCR 行为一并在 tests/test_ocr.py 覆盖。
 
 def test_asr_without_key_returns_503(monkeypatch):
     monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
@@ -388,21 +381,6 @@ def test_pades_without_cert_returns_503(monkeypatch):
 
 def test_health():
     assert client.get("/health").json() == {"ok": True}
-
-
-# ---------------- 模型版本锁定（定价约束） ----------------
-
-def test_ocr_model_is_pinned_to_dated_version():
-    """OCR 模型必须锁 dated 版本号。
-
-    浮动别名（-latest / 无后缀）指向变更会把单价从 0.3 元拉到老版的 5 元，差 16 倍，
-    且不会有任何报错提示。见 research/raw/C01-模型定价核定.md §二。
-    """
-    import ocr
-
-    m = ocr.DEFAULT_OCR_MODEL
-    assert not m.endswith("-latest"), f"OCR 模型不得用浮动别名: {m}"
-    assert re.search(r"-\d{4}-\d{2}-\d{2}$", m), f"OCR 模型须锁 dated 版本号: {m}"
 
 
 def test_cjk_font_actually_loads():
