@@ -343,10 +343,15 @@ describe('发送队列', () => {
     expect(seen[0].signature, '签名必须算在 ts\\n请求体 上').toBe(
       signRequest(SECRET, seen[0].ts!, seen[0].body),
     );
+    const outBody = JSON.parse(seen[0].body);
     // 防重放随机数进了体，16 字节 = 32 位 hex
-    expect(JSON.parse(seen[0].body).nonce).toMatch(/^[0-9a-f]{32}$/);
-    // 发出去的那份带手机明文（对方按手机号匹配），而库里那份没有
-    expect(JSON.parse(seen[0].body).identity.phone).toBe(PHONE);
+    expect(outBody.nonce).toMatch(/^[0-9a-f]{32}$/);
+    // 发出去的那份是契约 v1.3 拍平体：手机明文在顶层 phone（对方按手机号匹配），
+    // 且 packet 的嵌套/多余字段都不外发；而库里那份没有明文手机号。
+    expect(outBody.phone).toBe(PHONE);
+    expect(outBody.channel).toBe('tubashu');
+    expect(outBody.identity, 'identity 嵌套不该外发').toBeUndefined();
+    expect(outBody.source_system, 'source_system 不该外发').toBeUndefined();
     expect(referralStore.findReferralById(db, id)!.payload_json).not.toContain(PHONE);
   });
 

@@ -53,6 +53,8 @@ function fakeServer(opts: {
   identityBody?: Record<string, unknown>;
   referralStatus?: number;
   referralBody?: Record<string, unknown>;
+  /** 收到（且通过白名单校验的）转介体时回调，供判据核对拍平后的字段集与取值。 */
+  onReferralBody?: (body: Record<string, unknown>) => void;
 }): FetchImpl {
   const secret = opts.secret ?? SECRET;
   return (async (url: string | URL | Request, init?: RequestInit) => {
@@ -89,6 +91,14 @@ function fakeServer(opts: {
       return jsonRes(200, opts.identityBody ?? { ok: true, found: false });
     }
     if (u.endsWith('/api/internal/leads/v1/referral')) {
+      // deny_unknown_fields（契约 v1.3 §2）：字段集必须恰好是白名单，多一个就是 400。
+      const allowed = new Set([
+        'channel', 'name', 'phone', 'realname_status', 'emotional_summary', 'needs',
+        'case_stage', 'urgency', 'consent_at', 'source_case_hash', 'nonce',
+      ]);
+      const extra = Object.keys(parsed).filter((k) => !allowed.has(k));
+      if (extra.length > 0) return jsonRes(400, { ok: false, error: 'invalid_body' });
+      opts.onReferralBody?.(parsed);
       return jsonRes(
         opts.referralStatus ?? 201,
         opts.referralBody ?? { ok: true, lead_id: 4242, duplicate: false },
@@ -204,12 +214,66 @@ describe('identityStatus', () => {
   });
 });
 
-// ───────────────────────── 4. createReferralLead（201 / 200 duplicate） ─────────────────────────
+// ───────────────────────── 4. createReferralLead（拍平成 v1.3 §2 体 + 201/200） ─────────────────────────
 
-describe('createReferralLead', () => {
+/** withPlainPhone 产物形态的转介数据包；**故意带上不该外发的字段**（source_system / referral_reason…）。 */
+const PACKET: Record<string, unknown> = {
+  source_system: 'tubashu',
+  channel: 'tubashu',
+  identity: {
+    real_name: '张三',
+    phone_masked: '138****8000',
+    realname_status: '已实名',
+    realname_source: 'nbdpsy',
+    phone: '13800138000',
+  },
+  emotion_summary: '最近两周睡眠差、情绪低落，但愿意求助。',
+  emotion_summary_redactions: 0,
+  referral_reason: '想找人聊聊', // 不该外发
+  needs: ['情绪支持', '睡眠'],
+  stage_sentence: '已进入约谈阶段',
+  urgency: { crisis_recent: true, crisis_hits_72h: 2 },
+  consent_at: '2026-09-06 10:00:00',
+  source_case_hash: 'abc123',
+};
+
+describe('createReferralLead：拍平成契约 v1.3 §2 白名单体', () => {
+  it('只发白名单字段、字段名/取值都按契约拍平，deny_unknown_fields 严格比对通过', async () => {
+    let sent: Record<string, unknown> | null = null;
+    const res = await createReferralLead(
+      PACKET,
+      fakeServer({ onReferralBody: (b) => (sent = b) }),
+    );
+    expect(res.ok).toBe(true);
+    expect(sent).not.toBeNull();
+    const body = sent as unknown as Record<string, unknown>;
+    // 字段集恰好是白名单（含 postSigned 补的 nonce），一个不多一个不少
+    expect(new Set(Object.keys(body))).toEqual(
+      new Set([
+        'channel', 'name', 'phone', 'realname_status', 'emotional_summary', 'needs',
+        'case_stage', 'urgency', 'consent_at', 'source_case_hash', 'nonce',
+      ]),
+    );
+    // 拍平与改名
+    expect(body.channel).toBe('tubashu');
+    expect(body.name).toBe('张三');
+    expect(body.phone).toBe('13800138000');
+    expect(body.realname_status).toBe('已实名');
+    expect(body.emotional_summary).toBe('最近两周睡眠差、情绪低落，但愿意求助。');
+    expect(body.needs).toEqual(['情绪支持', '睡眠']);
+    expect(body.case_stage).toBe('已进入约谈阶段');
+    expect(body.urgency).toBe(2);
+    expect(body.consent_at).toBe('2026-09-06T10:00:00Z'); // canonical → RFC3339
+    expect(body.source_case_hash).toBe('abc123');
+    // 不该外发的一律不在
+    for (const leaked of ['source_system', 'referral_reason', 'identity', 'phone_masked', 'emotion_summary', 'stage_sentence', 'emotion_summary_redactions']) {
+      expect(body[leaked], `不该外发的字段泄漏了：${leaked}`).toBeUndefined();
+    }
+  });
+
   it('201 duplicate:false ⇒ 已送达，lead_id 数字归一成 external_ref', async () => {
     const res = await createReferralLead(
-      { channel: 'tubashu', phone: '13800138000' },
+      PACKET,
       fakeServer({ referralStatus: 201, referralBody: { ok: true, lead_id: 4242, duplicate: false } }),
     );
     expect(res.ok).toBe(true);
@@ -221,7 +285,7 @@ describe('createReferralLead', () => {
 
   it('200 duplicate:true ⇒ 同样算已送达', async () => {
     const res = await createReferralLead(
-      { channel: 'tubashu', phone: '13800138000' },
+      PACKET,
       fakeServer({ referralStatus: 200, referralBody: { ok: true, lead_id: 77, duplicate: true } }),
     );
     expect(res.ok).toBe(true);
@@ -229,6 +293,22 @@ describe('createReferralLead', () => {
       expect(res.externalRef).toBe('77');
       expect(res.duplicate).toBe(true);
     }
+  });
+
+  it('对照臂：体里多带一个字段 ⇒ 假对方 deny_unknown_fields 判 400（证明比对有牙）', async () => {
+    const ts = Math.floor(Date.now() / 1000);
+    const withExtra = '{"channel":"tubashu","source_case_hash":"x","nonce":"0123456789abcdef0123456789abcdef","referral_reason":"多带一个"}';
+    const res = await fakeServer({})(`${BASE}/api/internal/leads/v1/referral`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-source': 'tubashu',
+        'x-timestamp': String(ts),
+        'x-signature': signRequest(SECRET, ts, withExtra),
+      },
+      body: withExtra,
+    });
+    expect(res.status).toBe(400);
   });
 });
 

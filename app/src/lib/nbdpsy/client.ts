@@ -260,6 +260,39 @@ function refId(v: unknown): string | null {
   return null;
 }
 
+/** 本仓 canonical 串 'YYYY-MM-DD HH:MM:SS'(UTC, ADR-002) → 契约要的 RFC3339 秒级。 */
+function toRfc3339(sql: string): string {
+  const s = sql.trim();
+  if (!s || s.includes('T')) return s; // 空串或已是 ISO 就原样（对方再归一一次）
+  return `${s.replace(' ', 'T')}Z`;
+}
+
+/**
+ * 转介数据包 → 契约 v1.3 §2 请求体：**只发白名单里的字段，多一个都不发**。
+ *
+ * 对方请求结构体 deny_unknown_fields——多塞一个字段就是 400。所以 packet 里的
+ * source_system / referral_reason / emotion_summary_redactions / identity 嵌套 /
+ * phone_masked / realname_source 等一律不带，字段名也按契约拍平改名
+ * （emotion_summary→emotional_summary、stage_sentence→case_stage、urgency 取近 72h 命中数）。
+ * nonce 不在这里加——由 postSigned 统一补进体里再签。
+ */
+function toReferralV13Body(payload: Record<string, unknown>): Record<string, unknown> {
+  const identity = (payload.identity ?? {}) as Record<string, unknown>;
+  const urgency = (payload.urgency ?? {}) as Record<string, unknown>;
+  return {
+    channel: SOURCE,
+    name: str(identity.real_name),
+    phone: str(identity.phone),
+    realname_status: str(identity.realname_status) ?? '',
+    emotional_summary: str(payload.emotion_summary) ?? '',
+    needs: Array.isArray(payload.needs) ? payload.needs : [],
+    case_stage: str(payload.stage_sentence) ?? '',
+    urgency: typeof urgency.crisis_hits_72h === 'number' ? urgency.crisis_hits_72h : 0,
+    consent_at: toRfc3339(str(payload.consent_at) ?? ''),
+    source_case_hash: str(payload.source_case_hash) ?? '',
+  };
+}
+
 /**
  * 投一份转介数据包到对方的 leads（契约 v1.3 §2）。
  *
@@ -269,6 +302,9 @@ function refId(v: unknown): string | null {
  *
  * 【对方回 2xx 但没给 lead_id 也算失败】没有 external_ref 的 sent 是查不回去的：
  * 用户问「我那条转介到底有没有过去」时我们答不上来。宁可留在 pending 重试。
+ *
+ * @param payload 转介数据包（withPlainPhone 的产物）；本函数把它拍平成契约 v1.3 §2 白名单体，
+ *                多余字段一律不外发（见 toReferralV13Body）。
  */
 export async function createReferralLead(
   payload: Record<string, unknown>,
@@ -277,7 +313,7 @@ export async function createReferralLead(
   const cfg = nbdpsyConfig();
   if (!cfg) return NOT_CONNECTED;
 
-  const res = await postSigned(cfg, PATH_REFERRAL_LEAD, payload, fetchImpl);
+  const res = await postSigned(cfg, PATH_REFERRAL_LEAD, toReferralV13Body(payload), fetchImpl);
   if (!res.ok) return res;
 
   const ref = refId(res.body.lead_id) ?? refId(res.body.id) ?? refId(res.body.external_ref);
