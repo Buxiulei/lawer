@@ -12,8 +12,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildCaseFacts, renderCaseFacts } from '@/lib/agent/case-facts';
 import { bannedHotlines, crisisHotlines } from '@/lib/agent/crisis-opener';
+import { buildSystemPrompt } from '@/lib/agent/prompt';
+import type { KnowledgePack } from '@/lib/agent/retrieval';
 import type { CaseSnapshot } from '@/lib/agent/snapshot';
 import * as cases from '@/lib/cases';
+import { bootstrapReport, getReport } from '@/lib/cases/report';
 import { DEADLINE_RULES } from '@/lib/deadline';
 import type { CaseRow } from '@/lib/db/cases';
 import { runMigrations } from '@/lib/db/migrate';
@@ -650,5 +653,175 @@ describe('counseling 的事实卡：多一节「风险与待律师核」，证�
       buildCaseFacts(snapshotOf({ domain: DEFAULT_DOMAIN, stage: LABOR.stages[0] }, withBrief)),
     );
     expect(card).toContain(BRIEF_PROVES);
+  });
+});
+
+// ========== 个案报告：当前轨 + 待律师核那几条 ==========
+
+describe('counseling 的个案报告：多一行「当前轨」，风险节先给固定条目', () => {
+  let rdb: Database.Database;
+  let ruid: number;
+  const ORIG = process.env[DOMAINS_ENABLED_ENV];
+
+  beforeEach(() => {
+    rdb = new Database(':memory:');
+    rdb.pragma('foreign_keys = ON');
+    runMigrations(rdb);
+    ruid = Number(rdb.prepare('INSERT INTO users (phone_hash) VALUES (?)').run('rep').lastInsertRowid);
+    process.env[DOMAINS_ENABLED_ENV] = `${DEFAULT_DOMAIN},counseling`;
+  });
+
+  afterEach(() => {
+    rdb.close();
+    if (ORIG === undefined) delete process.env[DOMAINS_ENABLED_ENV];
+    else process.env[DOMAINS_ENABLED_ENV] = ORIG;
+  });
+
+  function reportOf(domain: string, track: string | null): Record<string, string> {
+    const made = cases.ensureDefaultCase(rdb, ruid, domain);
+    if ('ok' in made) throw new Error(JSON.stringify(made));
+    if (track !== null) {
+      const up = cases.updateCase(rdb, { caseId: made.caseId, userId: ruid, track });
+      if ('ok' in up && up.ok === false) throw new Error(JSON.stringify(up));
+    }
+    bootstrapReport(rdb, made.caseId);
+    const got = getReport(rdb, { caseId: made.caseId, userId: ruid });
+    if (!got.ok) throw new Error(JSON.stringify(got));
+    return got.report.sections as Record<string, string>;
+  }
+
+  it('在轨上：基本盘那一节印「当前轨」，并把主线阶段并排写出来', () => {
+    const sections = reportOf('counseling', COUNSELING.tracks[0]);
+    const basics = sections['机构与执业基本盘'];
+    expect(basics).toContain('当前轨');
+    expect(basics).toContain(COUNSELING.tracks[0]);
+    // 【关键】轨不覆盖阶段：两行并排出现才说得清"主线没动"
+    expect(basics).toContain('主线阶段仍是');
+  });
+
+  it('不在轨上：也印一行，并告诉读者本领域有哪些轨（不印的形态是模型不知道有这条轨）', () => {
+    const basics = reportOf('counseling', null)['机构与执业基本盘'];
+    expect(basics).toContain('当前轨：主线');
+    expect(basics).toContain(COUNSELING.tracks[0]);
+  });
+
+  it('缺省领域的报告里没有这一行（没有并行轨的领域印它是常驻噪音）', () => {
+    const sections = reportOf(DEFAULT_DOMAIN, null);
+    for (const text of Object.values(sections)) expect(text).not.toContain('当前轨');
+  });
+
+  it('风险节：四条固定条目 + 那句纪律排在「缺口」**之前**，两段分开', () => {
+    const risks = reportOf('counseling', null)['风险与待律师核'];
+    for (const item of COUNSELING.lawyerReview!.items) expect(risks).toContain(item);
+    expect(risks).toContain(COUNSELING.lawyerReview!.discipline);
+    // 【为什么必须分成两段】混进缺口列表的形态是：模型看见"风险 6 条"，逐条去"解决"它们，
+    // 而解决其中四条的唯一方式就是给出一个结论——那正是这几条要拦的事。
+    const disciplineAt = risks.indexOf(COUNSELING.lawyerReview!.discipline);
+    const gapAt = risks.indexOf('基本盘缺');
+    expect(disciplineAt).toBeGreaterThanOrEqual(0);
+    expect(gapAt, '这份报告里没有缺口，下面那句比较恒真').toBeGreaterThan(0);
+    expect(disciplineAt, '固定条目排到缺口后面去了').toBeLessThan(gapAt);
+  });
+
+  it('缺省领域的风险节里一条固定条目都没有（自证它来自包）', () => {
+    const risks = reportOf(DEFAULT_DOMAIN, null)['风险与未定项'] ?? '';
+    expect(Object.values(reportOf(DEFAULT_DOMAIN, null)).join('\n')).not.toContain(
+      '未经律师书面确认不得作为结论输出',
+    );
+    expect(typeof risks).toBe('string');
+  });
+});
+
+// ========== 危机窗内的贴附指令：号码按域，不串行当 ==========
+
+describe('counseling 危机窗内的贴附指令：号码来自本领域自己那张卡', () => {
+  /** 本领域资源卡的一份注入包副本（正文与 facts 都取真卡，不另造一份号码）。 */
+  function crisisCardPack(): KnowledgePack {
+    const card = knowledge.get(COUNSELING.crisis.resourcePackId)!;
+    return {
+      id: card.id,
+      type: card.type,
+      title: card.title,
+      keywords: card.keywords,
+      applies_to: card.applies_to,
+      region: card.region,
+      confidence: card.confidence,
+      updated: card.updated,
+      body: card.content,
+      facts: card.facts,
+    } as KnowledgePack;
+  }
+
+  const CASE_ROW: CaseRow = {
+    id: 9,
+    user_id: 9,
+    title: '一件危机处置',
+    stage: COUNSELING.stages[0],
+    domain: 'counseling',
+    track: COUNSELING.tracks[0],
+    district: '朝阳',
+    goal: null,
+    bottom_line: null,
+    status: '进行中',
+    employed_from: null,
+    monthly_wage_fen: null,
+    position: null,
+    contract_count: null,
+    created_at: '2026-09-01 10:00:00',
+  };
+
+  function promptOf(): string {
+    const snapshot: CaseSnapshot = {
+      case: CASE_ROW,
+      identity: { realName: null, authStatus: '未认证', nameUnreadable: false },
+      evidence: [],
+      historyStats: { total: 0, firstAt: null },
+      timeline: [],
+      timelineStats: { total: 0, earliest: null },
+      claims: [],
+      companies: [],
+      openActions: [],
+      closedActions: [],
+      deadlines: [],
+      storedIntakeStage: null,
+      referredNbdpsy: false,
+      report: { state: null, since: null, changes: 0, detail: '' },
+      crisisHits72h: 1,
+    };
+    return buildSystemPrompt({
+      snapshot,
+      mode: '陪跑',
+      stage: 'D',
+      packs: [crisisCardPack()],
+      now: new Date('2026-09-07T02:00:00Z'),
+      crisis: true,
+      crisisCardAlreadyGiven: true,
+    } as Parameters<typeof buildSystemPrompt>[0]);
+  }
+
+  it('贴的是本包那句话，号码是本领域卡上的 12356（变异：号码源改回共用层写死 → 红）', () => {
+    const p = promptOf();
+    const at = p.indexOf(`### [${COUNSELING.crisis.resourcePackId}]`);
+    expect(at, '本领域的资源卡没进 prompt').toBeGreaterThan(-1);
+    const attached = p.slice(at);
+    expect(attached).toContain('12356');
+    expect(attached).toContain('顺序');
+  });
+
+  it('缺省领域那三个号码一个都不出现在这一轮里（本票修掉的就是这件事）', () => {
+    const p = promptOf();
+    for (const phone of ['800-810-1117', '010-82951332']) {
+      expect(p, `counseling 的危机窗内出现了缺省领域的号码 ${phone}`).not.toContain(phone);
+    }
+  });
+
+  it('卡上标 forbidden 的号码也不出现（希望 24 热线）', () => {
+    const card = knowledge.get(COUNSELING.crisis.resourcePackId)!;
+    const banned = [...bannedHotlines(card.facts)];
+    expect(banned.length, '卡上没有 forbidden 号码，本条恒真').toBeGreaterThan(0);
+    const p = promptOf();
+    const at = p.indexOf('> ⚠️ **本卡使用限制**');
+    expect(at).toBeGreaterThan(-1);
+    for (const b of banned) expect(p.slice(at), `被禁的 ${b} 出现在贴附指令里`).not.toContain(b);
   });
 });
