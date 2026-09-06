@@ -27,7 +27,6 @@ let keyVerified: string;
 let uidA: number;
 let uidVerified: number;
 let caseA: number;
-let caseB: number;
 let caseVerified: number;
 let evidenceA: number;
 let evidenceVerified: number;
@@ -109,7 +108,7 @@ beforeEach(() => {
     "INSERT INTO cases (user_id, title, stage, goal, created_at) VALUES (?, ?, '风声', '拿到 2N', '2026-09-01T00:00:00.000Z')",
   );
   caseA = Number(insertCase.run(uidA, '甲的案子').lastInsertRowid);
-  caseB = Number(insertCase.run(uidB, '乙的案子').lastInsertRowid);
+  insertCase.run(uidB, '乙的案子');
   caseVerified = Number(insertCase.run(uidVerified, '已实名者的案子').lastInsertRowid);
 
   evidenceA = insertEvidence(caseA, uidA);
