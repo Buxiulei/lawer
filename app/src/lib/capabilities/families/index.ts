@@ -9,7 +9,15 @@ import { actionComplete, actionList } from './actions';
 import { actionCreate } from './actions-write';
 import { caseFacts, caseGet, caseList, caseUpdate, intakeSubmit } from './case';
 import { claimCalc, claimsList, claimsUpsert } from './claims';
-import { companyProfileUpsert } from './company';
+import {
+  companyGraphGet,
+  companyProbe,
+  companyProfileUpsert,
+  companyWatchSet,
+  dossierConfirm,
+  dossierGet,
+  dossierQuote,
+} from './company';
 import { deadlineList } from './deadlines';
 import { deadlineResolve, deadlineSet } from './deadlines-write';
 import { docGet, docList, docSubmit, transcriptSubmit } from './docs';
@@ -70,4 +78,10 @@ export const CAPABILITIES: Capability[] = [
   attestVerify,
   caseReportGet,
   caseReportUpdate,
+  companyProbe,
+  dossierQuote,
+  dossierConfirm,
+  dossierGet,
+  companyGraphGet,
+  companyWatchSet,
 ];
