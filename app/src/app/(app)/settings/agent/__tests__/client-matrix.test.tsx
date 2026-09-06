@@ -13,6 +13,9 @@
  *   · 从 CLIENT_MATRIX 里删一档 ⇒「十档都在选择器里」红；
  *   · 把 setupUrls() 里的 openapi_url 改成写死的串 ⇒「基址由 env 决定」红。
  */
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -120,5 +123,56 @@ describe('选择器把十档都摆出来了', () => {
     }
     // 首屏那一档的步骤与片段确实渲染出来了（落在空集上的守卫永远绿）
     expect(html).toContain(CLIENT_MATRIX[0].snippetLabel);
+  });
+});
+
+/**
+ * 【这一组盯的是什么】矩阵文案里提到的**站内**入口必须真的存在。
+ *
+ * 失败形态：说明书写着「复制回本站的『粘贴回填』」，用户照做，站上根本没这个页面——
+ * 页面本身毫无异常，生成物（skill/接入说明.md 与 claude 变体）还会把这句话冻进去。
+ * 判据要求二选一：要么路由已落地，要么这句话自己写明「还没上线」。
+ *
+ * 变异臂：
+ *   · 去掉「还没上线」这半句 ⇒ 「站内入口不能空口承诺」红；
+ *   · 把开场白里的 report_updates 删掉 ⇒ 「结构块字段与设计稿一致」红。
+ */
+describe('文案不承诺本 SHA 上不存在的站内入口', () => {
+  /** 站内入口名 → 落地后会出现的路由目录名（任一命中即视为已上线） */
+  const IN_SITE_ENTRIES = [{ name: '粘贴回填', routeDirs: ['backfill', 'paste-backfill'] }];
+  const HEDGES = ['还没上线', '还未上线', '未上线', '还在做', '上线之前', '上线前'];
+
+  function routeExists(dirs: readonly string[]): boolean {
+    const walk = (dir: string): boolean =>
+      readdirSync(dir, { withFileTypes: true }).some((e) => {
+        if (!e.isDirectory()) return false;
+        const full = join(dir, e.name);
+        if (dirs.includes(e.name) && existsSync(join(full, 'page.tsx'))) return true;
+        return walk(full);
+      });
+    return walk(join(process.cwd(), 'src/app'));
+  }
+
+  it('提到站内入口的那句话，要么路由已存在，要么写明还没上线', () => {
+    const vars = urlsFromEnv();
+    for (const c of CLIENT_MATRIX) {
+      const text = [...c.steps(vars), c.snippet(vars)].join('\n');
+      for (const entry of IN_SITE_ENTRIES) {
+        for (const sentence of text.split(/[。\n]/)) {
+          if (!sentence.includes(entry.name)) continue;
+          const ok = routeExists(entry.routeDirs) || HEDGES.some((h) => sentence.includes(h));
+          expect(ok, `${c.label} 提到「${entry.name}」却既无路由也无「还没上线」：${sentence}`).toBe(
+            true,
+          );
+        }
+      }
+    }
+  });
+
+  it('开场白里的结构块字段与设计稿 §15 路径 D-② 一致', () => {
+    const opening = CLIENT_MATRIX.find((c) => c.id === 'no-tools')!.snippet(urlsFromEnv());
+    for (const field of ['timeline', 'actions', 'claims', 'deadlines', 'report_updates']) {
+      expect(opening, `开场白缺字段 ${field}`).toContain(`"${field}"`);
+    }
   });
 });
