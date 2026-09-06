@@ -19,6 +19,7 @@ import { findDraftById } from '@/lib/db/agent';
 import * as store from '@/lib/db/share-links';
 import { findEvidenceDetail } from '@/lib/db/evidence';
 import { toSql } from '@/lib/db/time';
+import { redactForShare, redactRecordForShare } from '@/lib/sensitive';
 
 /** 默认有效期（小时）：三天。够对方看完、也够用户改主意。 */
 export const SHARE_DEFAULT_HOURS = 72;
@@ -204,6 +205,15 @@ export interface ShareView {
   body: string | null;
   /** 证据：分类 / 证明目的 / 原件形态 / 哈希；文书：null */
   meta: Record<string, string> | null;
+  /**
+   * 敏感级（设计稿 §16）的那句话：这一份**被脱敏过**，以及要核对真值该找谁。
+   * 没声明敏感级的领域恒为 null（那种案件的分享页逐字不变）。
+   *
+   * 【为什么脱敏之后还要印一句话】读的人看到一串〔已脱敏〕却没有任何说明时，
+   * 会以为是系统出错或对方在藏什么，于是回头找当事人索要真值——
+   * 脱敏挡住了数据，却把"索要真值"这件事推给了当事人本人。
+   */
+  redact_notice: string | null;
 }
 
 export type ShareReadResult =
@@ -211,6 +221,17 @@ export type ShareReadResult =
   | { state: 'not_found' }
   | { state: 'expired'; expires_at: string }
   | { state: 'revoked' };
+
+/**
+ * 这条分享指向的案件属于哪个领域。取不到行（案件被删）回 null——
+ * 由 lib/sensitive 决定那时按什么处理（现行政策：退回缺省领域，见那边的注释）。
+ */
+function caseDomain(db: Database, caseId: number): string | null {
+  const row = db.prepare('SELECT domain FROM cases WHERE id = ?').get(caseId) as
+    | { domain: string }
+    | undefined;
+  return row?.domain ?? null;
+}
 
 /**
  * 按 token 读一条分享。**无需登录**——这是这条链路存在的意义。
@@ -225,11 +246,17 @@ export function readShare(db: Database, token: string): ShareReadResult {
   if (seen.state === 'expired') return { state: 'expired', expires_at: seen.row.expires_at };
 
   const row = seen.row;
+  // 【敏感级按**案件所属领域**判，不按分享的是什么判】(设计稿 §16)
+  // 一条免登录链接是「谁拿到谁能看」的东西；这个领域的档案里写着第三人的健康与心理信息
+  // （个保法 §28）。按分享类型判的形态是：文书那条路记得脱敏、证据那条路忘了，
+  // 而两条路都返回 200、页面上什么都不缺。所以在这里取一次，两条路共用。
+  const domain = caseDomain(db, row.case_id);
   if (row.target_kind === 'draft' && row.target_id !== null) {
     const draft = findDraftById(db, row.target_id);
     // 标的行没了（案件被删、草稿被清）或被挪去了别的案子，链接本身还在：按「没有这条链接」处理，
     // 不回一个空壳页——空壳页会让拿到链接的人以为内容还没写完，其实是已经没有了。
     if (!draft || draft.case_id !== row.case_id) return { state: 'not_found' };
+    const redacted = redactForShare(domain, cases.stripConfirmationFooter(draft.content ?? ''));
     return {
       state: 'ok',
       view: {
@@ -237,8 +264,9 @@ export function readShare(db: Database, token: string): ShareReadResult {
         title: draft.title,
         expires_at: row.expires_at,
         // 免登录页交给对方看的是正文原文：剥掉「发出前必读」尾注（同 lib/drafts/export 的口径）
-        body: cases.stripConfirmationFooter(draft.content ?? ''),
+        body: redacted.text,
         meta: null,
+        redact_notice: redacted.notice,
       },
     };
   }
@@ -246,20 +274,24 @@ export function readShare(db: Database, token: string): ShareReadResult {
   if (row.target_kind === 'evidence' && row.target_id !== null) {
     const ev = findEvidenceDetail(db, row.target_id);
     if (!ev || ev.case_id !== row.case_id) return { state: 'not_found' };
+    const redacted = redactRecordForShare(domain, {
+      分类: ev.category,
+      证明目的: ev.prove_purpose ?? '（未填）',
+      原件形态: ev.original_medium ?? '（未填）',
+      状态: ev.status,
+      文件哈希: ev.sha256,
+    });
     return {
       state: 'ok',
       view: {
         kind: 'evidence',
-        title: ev.name,
+        // 标题就是材料名，材料名里带着联系方式的形态很常见（「与 138…… 的通话录音」），
+        // 所以标题与明细走同一道脱敏，不是只洗明细。
+        title: redactForShare(domain, ev.name).text ?? ev.name,
         expires_at: row.expires_at,
         body: null,
-        meta: {
-          分类: ev.category,
-          证明目的: ev.prove_purpose ?? '（未填）',
-          原件形态: ev.original_medium ?? '（未填）',
-          状态: ev.status,
-          文件哈希: ev.sha256,
-        },
+        meta: redacted.meta,
+        redact_notice: redacted.notice,
       },
     };
   }

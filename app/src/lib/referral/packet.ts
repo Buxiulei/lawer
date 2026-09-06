@@ -16,6 +16,8 @@ import { decryptField, hashLookup, masterKeyConfigured } from '@/lib/crypto';
 import { listCaseMessages } from '@/lib/db/agent';
 import * as realnameStore from '@/lib/db/realname';
 
+import { maskContacts, sensitivityOf } from '@/lib/sensitive';
+
 import { clampSummary, companyTerms, sanitizeNeutral } from './neutral';
 
 /** 对方 leads 里记的来源渠道（设计稿 §14：channel=tubashu）。 */
@@ -72,6 +74,23 @@ const SUMMARY_SYSTEM =
   '不超过 200 字，一段话，不要分点，不要下诊断结论。\n' +
   '只输出 JSON：{"summary":"……"}';
 
+/**
+ * 敏感级案件追加的那一句（设计稿 §16「转介包不含来访者信息」）。
+ *
+ * 【这里被转介的是谁】是**这个案子的当事人自己**（咨询师/机构负责人），不是他的来访者。
+ * 而这个案子的档案里同时躺着一个第三人的健康与心理信息——摘要的取材是近 30 天情绪记录
+ * 与最近 20 条对话，那些对话里几乎必然出现「来访说……」。不加这一句的形态是：
+ * 一份写着**另一个人**状态的摘要被发到站外另一家机构，从此不在我们手里，
+ * 而那个人从不知情、也没有任何一次同意记录。
+ *
+ * `{subject}` 由领域包给（不在共用层写死一个称呼）。
+ */
+const SENSITIVE_SUMMARY_RULE =
+  '\n【本案属敏感级】这份档案里同时写着**第三人（{subject}）**的健康与心理信息。' +
+  '摘要写的是**申请转介的这个人自己**的状态，绝不得出现{subject}的姓名、化名、编号、' +
+  '联系方式，也不得出现任何可以指认到{subject}的细节（年龄性别组合、单位、事件经过）。' +
+  '拿不准某一句是在写谁，就不要写那一句。'
+
 interface EmotionRow {
   level: string;
   note: string | null;
@@ -100,6 +119,14 @@ function recentEmotions(db: Database, caseId: number): EmotionRow[] {
  */
 export function crisisHits72h(db: Database, caseId: number): number {
   return countRecentCrisisHits(db, caseId);
+}
+
+/** 本案所属领域（敏感级按它判）。取不到回 null，由 lib/sensitive 决定那时怎么办。 */
+function caseDomain(db: Database, caseId: number): string | null {
+  const row = db.prepare('SELECT domain FROM cases WHERE id = ?').get(caseId) as
+    | { domain: string }
+    | undefined;
+  return row?.domain ?? null;
 }
 
 /** 本案登记过的公司名（含关联主体）。它们是过滤器要拦的第一批词。 */
@@ -146,6 +173,7 @@ async function draftSummary(
   llm: SummaryLlm | null,
   rows: EmotionRow[],
   recentTalk: string,
+  systemPrompt: string = SUMMARY_SYSTEM,
 ): Promise<string> {
   if (!llm) return fallbackSummary(rows);
   const material =
@@ -156,7 +184,7 @@ async function draftSummary(
     `\n\n【最近的对话片段】\n${recentTalk || '（没有对话）'}`;
   try {
     const raw = await llm.chatJSON([
-      { role: 'system', content: SUMMARY_SYSTEM },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: material },
     ]);
     const parsed = JSON.parse(stripFence(raw)) as { summary?: unknown };
@@ -194,10 +222,20 @@ export async function buildPacket(
   // agent）写的。人写的那两段更容易带案情——"因为被裁了很焦虑"这种句子几乎必然出现。
   // 只滤摘要的形态是：过滤器每次都报干净，而公司名从 needs 那一栏走了出去。
   const forbidden = companyTerms(companyNames(db, input.caseId));
-  const drafted = await draftSummary(input.llm ?? null, emotions, talk);
-  const filtered = sanitizeNeutral(drafted, forbidden);
-  const reason = sanitizeNeutral(input.reason, forbidden);
-  const needs = input.needs.map((n) => sanitizeNeutral(n, forbidden).text);
+  // 【敏感级：prompt 里多一句，出口再过一道联系方式脱敏】(设计稿 §16「转介包不含来访者信息」)
+  // 两层缺一不可，理由与 neutral.ts 文件头同一条：prompt 是**请求**不是闸，模型照做九次、
+  // 第十次把来访的手机号原样抄进摘要——而那一次的产物会被发到站外另一家机构。
+  // 已登记的来访化名/编号由上面那份 forbidden 拦（company_profiles 在本领域装的就是它）；
+  // 本轮对话里冒出来的联系方式由下面那道不可逆脱敏拦。
+  const sensitive = sensitivityOf(caseDomain(db, input.caseId));
+  const system = sensitive
+    ? SUMMARY_SYSTEM + SENSITIVE_SUMMARY_RULE.replaceAll('{subject}', sensitive.subject)
+    : SUMMARY_SYSTEM;
+  const drafted = await draftSummary(input.llm ?? null, emotions, talk, system);
+  const scrub = (t: string): string => (sensitive ? maskContacts(t).text : t);
+  const filtered = sanitizeNeutral(scrub(drafted), forbidden);
+  const reason = sanitizeNeutral(scrub(input.reason), forbidden);
+  const needs = input.needs.map((n) => sanitizeNeutral(scrub(n), forbidden).text);
 
   const user = db
     .prepare('SELECT phone_enc, real_name_enc, auth_status FROM users WHERE id = ?')
