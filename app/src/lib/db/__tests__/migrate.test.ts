@@ -114,7 +114,7 @@ describe('runMigrations', () => {
 
   it('幂等：连跑两遍不抛错', () => {
     expect(() => runMigrations(db)).not.toThrow();
-    expect(ALL_TABLES.length).toBe(55);
+    expect(ALL_TABLES.length).toBe(57);
   });
 
   it('55 张表全部建成', () => {
