@@ -8,6 +8,7 @@
 // 【工具说明里带着同意文案的正本】说明不是文档，是 agent 唯一读得到的东西。
 // 「会传什么」这张清单只写在网页上的形态是：agent 念的是它自己编的一版。
 import * as referral from '@/lib/referral';
+import { defaultSummaryLlm } from '@/lib/referral/summary-llm';
 
 import { caseIdProp, num, writeOnce } from '../shared';
 import type { Capability } from '../registry';
@@ -69,6 +70,11 @@ export const referralCreate: Capability = {
       reason: args.reason,
       needs: args.needs,
       consent: true,
+      // 【模型在这里注入，不在领域层里挑】领域层不 import lib/llm：packet.ts 的纯函数
+      // 会被判据与别处引用，让它自己去挑模型的形态是，任何一处引用都把整个模型层拖进来。
+      // 反过来，壳不传的形态更糟：buildPacket 恒走兜底摘要，「模型总结」这件事在生产上
+      // 从未发生过，而看起来一切正常（兜底那段话也是通顺的）。
+      llm: defaultSummaryLlm(),
     });
     if (prepared.ok !== true) return prepared;
 
