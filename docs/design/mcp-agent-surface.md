@@ -367,3 +367,26 @@
    落对方 `leads`（channel=`tubashu`，新增 `referral_source_system`/`referral_payload_json` 两列由对方加），触发其新线索通知；土八鼠侧 `referrals` 表记状态（sent / accepted / declined）。
 
 **工具**：`referral_create`（P3）；`me_get` 增 `nbdpsy_linked`；`crisis_check` 回包带「可转介」标记。**后台**：转介清单与状态。**不做**：不同步咨询记录、不读对方咨询内容、不在 MCP 暴露对方数据。
+
+---
+
+## 15. 客户端接入矩阵与「无工具模式」（主理人 09-06：除 GPT 外支持 DeepSeek 网页版、豆包网页版、Gemini；依据 `rd-mcp-design/agent-clients.md`，查证日 2026-09-06）
+
+**查证结论（决定架构的四条）**：
+1. **ChatGPT 网页（Developer mode 远程 MCP）与 Claude 网页连接器都只认 OAuth，不认裸 Bearer**——我们现在的 MCP 只有 Bearer api key，这两家的网页 MCP 路径接不进。ChatGPT 的 Custom GPT **Actions** 走 REST + API key 可用（主理人 09-05 实测「密钥验证通过」走的正是这条）。
+2. Gemini 网页 Connected Apps 限美国境内个人账号，国内用户不可用；**Gemini CLI 原生支持 Bearer**。
+3. **DeepSeek 网页版、豆包网页版没有任何工具/MCP/插件入口**，也没有常驻系统提示词位；豆包生态能接 MCP 的是**扣子空间**；DeepSeek API 支持 function calling（自建 agent 路线）。
+4. Kimi 网页/桌面/CLI 支持 MCP；通义仅桌面端；Cursor/Cline 支持远程 MCP + Bearer。
+
+**四条接入路径（设置页按客户端选，各给一键复制）**：
+
+| 路径 | 适用客户端 | 我们要做的 |
+|---|---|---|
+| A. MCP + **OAuth 2.1** | ChatGPT 网页 Developer mode、Claude 网页/桌面连接器、Kimi、扣子空间 | **新增**：授权服务器（`/.well-known/oauth-authorization-server`、`/oauth/register` 动态客户端注册、`/oauth/authorize` 走网页登录 + 同意页、`/oauth/token` 授权码 + PKCE + refresh）；access token 映射到一条 `api_keys`（client_name=OAuth 客户端名，可在设置页看到并吊销）；资源端同时接受 Bearer api key 与 OAuth access token |
+| B. MCP + Bearer | Gemini CLI、Claude Code、Cursor/Cline、自建 agent | 已有；补各客户端配置片段（由生成器出） |
+| C. REST + API key | ChatGPT Custom GPT Actions、自建脚本、DeepSeek API 自建 agent | 已有；**新增** `/api/openapi.json` 由注册表生成（Actions 一键导入），Actions 配置指引 |
+| D. **无工具模式**（复制粘贴） | DeepSeek 网页版、豆包网页版、Gemini 网页（国内）、任何纯聊天 | **新增**：①「陪跑开场白」= 精简陪跑指南 + 事实卡 + 个案报告 + 证据简报摘要，按客户端上下文档位裁剪（DeepSeek/豆包每次新对话需重贴，文案要明说）；②约定 AI 在回复末尾输出 ` ```tubashu ` 结构块（JSON：timeline[] / actions[] / claims[] / deadlines[] / report_updates[]）；③网页「粘贴回填」：粘回 AI 回复 → 服务端解析结构块 → 逐条预览确认 → 走同一领域函数写入（client_ref = 回填批次 id，天然去重）；④危机词表在开场白里以文字约定 + 回填时服务端再过一遍 crisis_check |
+
+**不做**：不为 DeepSeek/豆包网页版做浏览器插件；不做代发。
+
+**分期**：P3b（与 P3 并行）= A（OAuth）+ C（openapi）+ D（无工具模式）+ 设置页客户端矩阵与生成器；A 属安全敏感，复核加对抗臂（PKCE 绕过、code 重放、redirect_uri 白名单、token 与 api key 权限等价）。
