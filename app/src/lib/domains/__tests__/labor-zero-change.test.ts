@@ -39,6 +39,8 @@ import { CALC_KINDS } from '@/lib/cases/claims';
 import { confirmationFooter, DRAFT_KINDS, OUTBOUND_DRAFT_KINDS } from '@/lib/cases/drafts';
 import { validateIntake } from '@/lib/cases/intake';
 import { CASE_STAGES } from '@/lib/cases/stages';
+import { TIMELINE_KINDS } from '@/lib/cases';
+import { buildProtocolSection } from '@/lib/paste/protocol';
 import type { CaseRow } from '@/lib/db/cases';
 import * as knowledge from '@/lib/knowledge';
 
@@ -287,5 +289,18 @@ describe('labor 零变化守卫（基线取自 origin/main 4098805）', () => {
     expect(getCapability('intake_submit')?.inputSchema).toEqual(BASELINE.schemas.intake_submit);
     expect(getCapability('claim_register')?.inputSchema).toEqual(BASELINE.schemas.claim_register);
     expect(getCapability('draft_create')?.inputSchema).toEqual(BASELINE.schemas.draft_create);
+  });
+
+  /**
+   * 【为什么补这一条】上面⑧钉的是 `LABOR.claimKinds` 这个**字段**，⑨钉的是它**被谁读**。
+   * 这一票把领域包里那个字段改了义（原来的 `calculatorKinds` 装的就是诉求登记的值集，
+   * 拆成 claimKinds / calculatorKinds 两份之后含义变了），而回填约定那一行没跟着改：
+   * 字段名一个字没动、tsc 绿、上面八条全绿，**说给模型听的那句话却换了一份清单**。
+   * 钉产出而不是钉字段，才照得出这种「改的是别处、变的是这里」。
+   */
+  it('⑨ 回填约定里报给模型的 claims 种类不变（变异：把 protocol.ts 改回 pack.calculatorKinds → 红）', () => {
+    const section = buildProtocolSection({ pack: LABOR, timelineKinds: TIMELINE_KINDS });
+    expect(section).toContain(`\`kind\` 只能是 ${BASELINE.claimKinds.join(' / ')}`);
+    expect(section).not.toContain(BASELINE.calcKinds.join(' / '));
   });
 });

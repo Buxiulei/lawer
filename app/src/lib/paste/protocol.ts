@@ -60,7 +60,11 @@ export function buildProtocolSection(input: {
     '逐项的填法（填不出来的键整个省掉，不要编）：',
     `- \`timeline\`：\`happened_at\` 是事情**发生**的时刻（ISO8601，带时区），不是现在几点；\`kind\` 只能是 ${timelineKinds.join(' / ')}；\`title\` 一句话说清发生了什么。`,
     '- `actions`：四样齐了才算一张卡——`what` / `how`（具体到照着做）/ `why`（一句）/ `due_at`（ISO8601 时刻，「今天下班前」要换算成具体时刻）。',
-    `- \`claims\`：\`kind\` 只能是 ${pack.calculatorKinds.join(' / ')}；\`amount_yuan\` 单位是**元**（我这边换算成分）。**算得出来的项不要自己填金额**，填 0、把依据写进 \`basis\` 就行——金额由服务端的算钱器出，你心算的数会被拒收。`,
+    // claims 这一行报的是**诉求登记**能收的种类（claimKinds），不是算钱器那份（calculatorKinds）：
+    // 回填走的是 claim_register，校验器（parse.ts）认的就是 claimKinds。报算钱器那份的形态是——
+    // 说明书比服务端**更窄**，于是能记的名目模型永远不会写（连本段自己的示例「欠薪」都在被禁之列），
+    // 而两边都不报错：用户只是发现有些账一直记不进去。
+    `- \`claims\`：\`kind\` 只能是 ${pack.claimKinds.join(' / ')}；\`amount_yuan\` 单位是**元**（我这边换算成分）。**算得出来的项不要自己填金额**，填 0、把依据写进 \`basis\` 就行——金额由服务端的算钱器出，你心算的数会被拒收。`,
     `- \`deadlines\`：\`kind\` 只能是 ${pack.deadlineKinds.join(' / ')}；\`anchor_date\` 是起算那一天（YYYY-MM-DD）；到期日**由服务端按规则推算**，不要自己算；只有天数由办案机构在通知书上指定的那类才填 \`days\`，照通知书上写的填。`,
     '- `report_updates`：本站的个案报告还没上线，这一项先给空数组。',
     '',

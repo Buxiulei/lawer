@@ -136,3 +136,37 @@ export function intakeInputSchema(pack: DomainPack): Record<string, unknown> {
 
   return { type: 'object', properties, required };
 }
+
+/**
+ * 首诊入参：**对外 param 名 → 内部 key 名**，同样从 `intakeSchema` 派生。
+ *
+ * 【为什么这一份也不能手写】`intakeInputSchema` 只解决了「说明书从哪来」；工具壳里那份
+ * `company_name → companyName` 的对照表是**同一份定义的第二个手抄本**。手抄本的失败形态是：
+ * 领域包加了一个字段 ⇒ 说明书宣告了它、服务端也要它，只有壳不认识它，于是它被静默丢弃——
+ * 调用方照说明书填齐了仍被拒，而错误信息指名的那个字段它明明填了。
+ * 一处定义、三处消费（说明书 / 映射 / 校验），就没有这个缝。
+ *
+ * 【元→分在这里换】`kind: 'money'` 的字段对外收「元」、落库存「分」（param 名上写着 `_yuan`，
+ * key 名上写着 `Fen`）。换算只此一处：非数一律 NaN，交给领域层报字段级错，不在这里兜底成某个数。
+ *
+ * 【`record` 补空对象】没填时给 `{}` 而不是 `undefined`，与本壳原来的写法逐字一致。
+ *
+ * 归属那两项（caseId / userId）不在首诊表里——它们来自调用者身份，不是用户填的答案，
+ * 所以由调用方自己补上。
+ */
+export function intakeArgsToInput(
+  pack: DomainPack,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const input: Record<string, unknown> = {};
+  for (const f of pack.intakeSchema) {
+    const raw = args[f.param];
+    input[f.key] =
+      f.kind === 'money'
+        ? yuanToFen(raw)
+        : f.kind === 'record'
+          ? ((raw ?? {}) as Record<string, unknown>)
+          : raw;
+  }
+  return input;
+}
