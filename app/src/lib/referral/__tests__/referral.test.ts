@@ -32,7 +32,7 @@ import { runMigrations } from '@/lib/db/migrate';
 import * as referralStore from '@/lib/db/referrals';
 import * as realnameStore from '@/lib/db/realname';
 import { MAX_SEND_ATTEMPTS, runReferralQueue } from '@/lib/jobs/referral-worker';
-import { signBody } from '@/lib/nbdpsy/client';
+import { signRequest } from '@/lib/nbdpsy/client';
 
 import { adoptNbdpsyRealname, type NbdpsySnapshot } from '../identity-link';
 import { createReferral } from '..';
@@ -306,19 +306,22 @@ describe('发送队列', () => {
     expect(row.last_error).toContain('怎么办');
   });
 
-  it('假对方 200 ⇒ sent + external_ref，且签名与手机明文都对', async () => {
+  it('假对方 201 ⇒ sent + external_ref，且路径/签名串(ts\\nbody)/nonce/手机明文都对', async () => {
     connect();
     const id = await seedPending();
 
-    const seen: { url: string; signature: string | null; body: string }[] = [];
+    const seen: { url: string; source: string | null; ts: string | null; signature: string | null; body: string }[] = [];
     const fakeFetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      const h = new Headers(init?.headers);
       const body = String(init?.body ?? '');
       seen.push({
         url: String(url),
-        signature: new Headers(init?.headers).get('x-signature'),
+        source: h.get('x-source'),
+        ts: h.get('x-timestamp'),
+        signature: h.get('x-signature'),
         body,
       });
-      return new Response(JSON.stringify({ lead_id: 'LEAD-42' }), { status: 200 });
+      return new Response(JSON.stringify({ ok: true, lead_id: 4242, duplicate: false }), { status: 201 });
     }) as unknown as typeof fetch;
 
     const tick = await runReferralQueue(db, {
@@ -329,15 +332,56 @@ describe('发送队列', () => {
 
     const row = referralStore.findReferralById(db, id)!;
     expect(row.status).toBe('sent');
-    expect(row.external_ref).toBe('LEAD-42');
+    // lead_id 是数字，external_ref 归一成字符串
+    expect(row.external_ref).toBe('4242');
     expect(row.last_error).toBeNull();
 
     expect(seen).toHaveLength(1);
-    expect(seen[0].url).toBe('http://127.0.0.1:9999/api/internal/leads/referral');
-    expect(seen[0].signature, '签名必须算在逐字的请求体上').toBe(signBody(SECRET, seen[0].body));
+    expect(seen[0].url).toBe('http://127.0.0.1:9999/api/internal/leads/v1/referral');
+    expect(seen[0].source).toBe('tubashu');
+    // 签名串是「时间戳\n请求体」，不是只签体
+    expect(seen[0].signature, '签名必须算在 ts\\n请求体 上').toBe(
+      signRequest(SECRET, seen[0].ts!, seen[0].body),
+    );
+    // 防重放随机数进了体，16 字节 = 32 位 hex
+    expect(JSON.parse(seen[0].body).nonce).toMatch(/^[0-9a-f]{32}$/);
     // 发出去的那份带手机明文（对方按手机号匹配），而库里那份没有
     expect(JSON.parse(seen[0].body).identity.phone).toBe(PHONE);
     expect(referralStore.findReferralById(db, id)!.payload_json).not.toContain(PHONE);
+  });
+
+  it('对方回 200 duplicate:true ⇒ 视为已送达（sent，external_ref 用 lead_id）', async () => {
+    connect();
+    const id = await seedPending();
+    const fakeFetch = (async () =>
+      new Response(JSON.stringify({ ok: true, lead_id: 77, duplicate: true }), {
+        status: 200,
+      })) as unknown as typeof fetch;
+    const tick = await runReferralQueue(db, {
+      send: (p) => import('@/lib/nbdpsy/client').then((m) => m.createReferralLead(p, fakeFetch)),
+    });
+    expect(tick.sent).toBe(1);
+    const row = referralStore.findReferralById(db, id)!;
+    expect(row.status).toBe('sent');
+    expect(row.external_ref).toBe('77');
+  });
+
+  it('对方回 429 ⇒ 留 pending 且 attempts 不加（变异：把 429 也记一次尝试 ⇒ 红）', async () => {
+    connect();
+    const id = await seedPending();
+    const fakeFetch = (async () =>
+      new Response(JSON.stringify({ ok: false, error: 'rate_limited' }), {
+        status: 429,
+      })) as unknown as typeof fetch;
+    for (let i = 0; i < MAX_SEND_ATTEMPTS + 2; i += 1) {
+      await runReferralQueue(db, {
+        send: (p) => import('@/lib/nbdpsy/client').then((m) => m.createReferralLead(p, fakeFetch)),
+      });
+    }
+    const row = referralStore.findReferralById(db, id)!;
+    expect(row.status, '被限流不该把转介判死').toBe('pending');
+    expect(row.attempts).toBe(0);
+    expect(row.last_error).toContain('429');
   });
 
   it('对方回 200 但不给线索 id ⇒ 不记成已送达，留 pending 重试', async () => {
@@ -384,7 +428,11 @@ describe('发送队列', () => {
 
 // ───────────────────────── 5/6. 实名互认 ─────────────────────────
 
-/** 对方的回包：**故意同时给全号 id_masked 与一个明文键**，看我们收哪个、又掩没掩。 */
+/**
+ * 对方的回包：契约 v1.3 只回 id_number_masked（已掩码）。这里**故意往那个键塞全号、
+ * 另外再塞一个明文键**，验两件事：本侧只读 id_number_masked 这一个键，且即便对方哪天
+ * 回了全号也当场再掩一次（ensureMasked 兜底）。
+ */
 const FULL_ID = '110101199001011234';
 
 function identityFetch(body: Record<string, unknown>): typeof fetch {
@@ -402,7 +450,7 @@ describe('实名互认（读侧）', () => {
         verified: true,
         real_name: '张三',
         id_type: 'idcard',
-        id_masked: FULL_ID, // 对方即使回了全号
+        id_number_masked: FULL_ID, // 对方即使往掩码键里回了全号
         id_no: FULL_ID, // 甚至另给一个明文键
         verified_at: '2026-08-01T10:00:00Z',
         customer_code: 'C-8899',
@@ -457,7 +505,7 @@ describe('实名互认（读侧）', () => {
     globalThis.fetch = identityFetch({
       verified: true,
       real_name: '张三',
-      id_masked: '1101**********1234',
+      id_number_masked: '1101**********1234',
       customer_code: 'C-1',
     });
     try {

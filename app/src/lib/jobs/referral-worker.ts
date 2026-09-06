@@ -15,7 +15,7 @@
 // 一个外部收件方」。
 import type Database from 'better-sqlite3';
 
-import { createReferralLead, type NbdpsyFailure } from '../nbdpsy/client';
+import { createReferralLead, type NbdpsyFailure, type NbdpsyLeadAccepted } from '../nbdpsy/client';
 import { withPlainPhone, type ReferralPacket } from '../referral/packet';
 import * as store from '../db/referrals';
 
@@ -44,17 +44,15 @@ export interface ReferralTick {
 
 export interface ReferralWorkerOptions {
   /** 覆盖发送函数（判据注入假的对方）。生产不传。 */
-  send?: (payload: Record<string, unknown>) => Promise<
-    { ok: true; externalRef: string } | NbdpsyFailure
-  >;
+  send?: (payload: Record<string, unknown>) => Promise<NbdpsyLeadAccepted | NbdpsyFailure>;
   batch?: number;
 }
 
 /**
  * 跑一轮：把待发的转介逐条发出去。**不抛错**——一条发不出去不该让后面的都排不上。
  *
- * 发送成功 ⇒ status=sent + external_ref；
- * 没接通   ⇒ 留 pending，只写 last_error（attempts 不动，见 MAX_SEND_ATTEMPTS）；
+ * 发送成功（含对方判 duplicate 的幂等命中）⇒ status=sent + external_ref；
+ * 没接通 / 被限流(429) ⇒ 留 pending，只写 last_error（attempts 不动，稍后自动再发）；
  * 其它失败 ⇒ attempts+1，用完置 failed，否则留 pending 等下一轮。
  */
 export async function runReferralQueue(
@@ -91,7 +89,9 @@ export async function runReferralQueue(
       continue;
     }
 
-    const countsAsAttempt = result.reason !== 'NOT_CONNECTED';
+    // 没接通与被限流都不是「这一条本身发失败」：一个是我们没接线，一个是要稍后再来。
+    // 把它们记成一次尝试的形态是：跑满几轮后把一条本可送达的转介判成 failed。
+    const countsAsAttempt = result.reason !== 'NOT_CONNECTED' && result.reason !== 'RATE_LIMITED';
     const exhausted = countsAsAttempt && row.attempts + 1 >= MAX_SEND_ATTEMPTS;
     store.markAttemptFailed(db, row.id, result.message, { countsAsAttempt, exhausted });
     if (exhausted) tick.failed += 1;
