@@ -19,6 +19,7 @@ import { describe, expect, it } from 'vitest';
 process.env.LAWER_DATA_KEY = crypto.randomBytes(32).toString('base64');
 
 import { encryptField } from '@/lib/crypto';
+import { toDisplayDay } from '@/lib/time';
 
 import { buildCaseFacts, renderCaseFacts } from '../case-facts';
 import { runTurn } from '../orchestrator';
@@ -261,6 +262,9 @@ describe('G-F10 证据与历史接线：库里有什么，卡上就得数出什�
     expect(s.historyStats.total).toBe(4);
     expect(s.historyStats.firstAt).not.toBeNull();
     const text = renderCaseFacts(buildCaseFacts(s));
-    expect(text).toContain(`本案历史消息共 4 条（最早 ${s.historyStats.firstAt!.slice(0, 10)}）`);
+    // 期望值走 toDisplayDay（北京日），与事实卡渲染读的是同一把尺。
+    // 用 slice(0,10) 截 UTC 串的形态是：北京 00:00–08:00 之间跑，两边差一天，这条必红——
+    // 而红的不是被测代码，是判据自己换了时区。
+    expect(text).toContain(`本案历史消息共 4 条（最早 ${toDisplayDay(s.historyStats.firstAt!)}）`);
   });
 });

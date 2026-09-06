@@ -5,11 +5,11 @@
 // 期限种类、文书种类、危机词表全按它取。落错了不会有任何一处报错——那个案子只是
 // 一直按一份没人验收过的配置在跑，而它看起来和别的案件没有区别。
 import Database from 'better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import * as cases from '@/lib/cases';
 import { runMigrations } from '@/lib/db/migrate';
-import { DEFAULT_DOMAIN, DOMAINS, DOMAINS_ENABLED_ENV } from '@/lib/domains/registry';
+import { DEFAULT_DOMAIN, DOMAINS, DOMAINS_ENABLED_ENV, isDomainEnabled } from '@/lib/domains/registry';
 
 let db: Database.Database;
 let uid: number;
@@ -102,5 +102,51 @@ describe('首诊按案件领域取包', () => {
     if (res.ok) return;
     expect(res.errorCode).toBe('UNKNOWN_DOMAIN');
     expect(res.message).toContain('没有这个领域');
+  });
+});
+
+/**
+ * 灰度开关**只管新建，不锁老用户**（registry.ts getDomainPack 头注释里的那条政策）。
+ *
+ * 【为什么要挂第二个包才测得到】注册表里只有一个领域时，`enabledDomainKeys()` 无论开关
+ * 怎么写都回缺省领域（「一个都对不上就回缺省」——把全站置成没有可用领域不是灰度，是停业）。
+ * 于是「缺省领域被摘掉」这个前提在单包世界里根本构造不出来，闸放在幂等查询之前还是之后
+ * 一模一样，两种写法所有既有判据全绿。挂一个假的第二个包，前提才成立。
+ */
+describe(`${DOMAINS_ENABLED_ENV} 只管新建：已建档的人不该被开关挡在自己档案外面`, () => {
+  const FAKE_KEY = '假领域-建案幂等判据专用';
+
+  beforeAll(() => {
+    DOMAINS[FAKE_KEY] = { ...DOMAINS[DEFAULT_DOMAIN], key: FAKE_KEY };
+  });
+  afterAll(() => {
+    delete DOMAINS[FAKE_KEY];
+  });
+
+  it('缺省领域被摘出开关后，名下已有案件的人仍拿回既有 caseId（变异：把闸挪回幂等查询之前 → 红）', () => {
+    const first = cases.ensureDefaultCase(db, uid);
+    expect('ok' in first).toBe(false);
+    if ('ok' in first) return;
+
+    process.env[DOMAINS_ENABLED_ENV] = FAKE_KEY;
+    // 自证前提：缺省领域此刻真的不在开关里，否则下面这条是"因为闸根本没关"而绿
+    expect(isDomainEnabled(DEFAULT_DOMAIN)).toBe(false);
+
+    const again = cases.ensureDefaultCase(db, uid);
+    expect('ok' in again).toBe(false);
+    if ('ok' in again) return;
+    expect(again).toEqual({ caseId: first.caseId, isNew: false });
+  });
+
+  it('闸对新建仍然有效：同样的开关下，名下没有案件的人收到 DOMAIN_NOT_ENABLED 且零写入', () => {
+    process.env[DOMAINS_ENABLED_ENV] = FAKE_KEY;
+    const newcomer = Number(
+      db.prepare('INSERT INTO users (phone_hash) VALUES (?)').run('新人').lastInsertRowid,
+    );
+    const before = db.prepare('SELECT COUNT(*) n FROM cases').get() as { n: number };
+    const made = cases.ensureDefaultCase(db, newcomer);
+    expect('ok' in made && made.ok).toBe(false);
+    expect((made as { errorCode: string }).errorCode).toBe('DOMAIN_NOT_ENABLED');
+    expect(db.prepare('SELECT COUNT(*) n FROM cases').get()).toEqual(before);
   });
 });

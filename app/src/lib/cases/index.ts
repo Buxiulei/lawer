@@ -210,12 +210,17 @@ export function ensureDefaultCase(
    */
   domain?: string,
 ): { caseId: number; isNew: boolean } | DomainFailure {
+  // 【幂等先于灰度闸，顺序是刻意的】闸管的是「还能不能**新建**这个领域的案子」
+  // （registry.ts getDomainPack 头注释：开关只影响新用户，不锁老用户）。
+  // 反过来先过闸的形态是：运维把某个领域从 LAWER_DOMAINS_ENABLED 里摘掉，
+  // 已经建好档的人再走到这条路上收到的是 DOMAIN_NOT_ENABLED，
+  // 而他的案件好端端躺在库里——一个本该只影响新建的开关，把老用户挡在了自己的档案外面。
+  const existing = store.listCasesByUser(db, userId);
+  if (existing.length > 0) return { caseId: existing[0].id, isNew: false };
+
   const wanted = domain ?? DEFAULT_DOMAIN;
   const pack = requireEnabledDomain(wanted);
   if ('ok' in pack) return pack;
-
-  const existing = store.listCasesByUser(db, userId);
-  if (existing.length > 0) return { caseId: existing[0].id, isNew: false };
 
   const copy = siteCopy(pack);
   const create = db.transaction(() => {
