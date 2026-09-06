@@ -21,6 +21,7 @@ import { guidePlacement, NoCaseGuide, useCaseGuard } from './caseGuard';
 import {
   EMPTY_DRAFT,
   clearDraft,
+  draftForDomain,
   draftHasContent,
   loadDraft,
   saveDraft,
@@ -41,7 +42,7 @@ import { advanceBlock } from './validate';
 const DRAFT_REASSURANCE =
   '这份档案现在只在这台设备上。金额是按你填的信息初算的，注册之后并入你的案件档案，材料补齐会自动更新。';
 
-interface StepDef {
+export interface StepDef {
   title: string;
   /** 每步固定的一行安抚说明：给确定感，不煽情 */
   reassurance: string;
@@ -104,12 +105,26 @@ const HANDWRITTEN_FLOWS: Record<string, StepDef[]> = {
 };
 
 /**
+ * 这个领域有没有人为它手写过向导。**判据按它分流**：表里有＝那份手写稿逐字不变，
+ * 表里没有＝按 schema 排步。写成「等于缺省领域」的形态是——将来第二个领域也有了手写稿，
+ * 判据仍然按"是不是缺省领域"去问，于是它对那个领域问错了问题却照样绿。
+ */
+export function hasHandwrittenFlow(domainKey: string): boolean {
+  return domainKey in HANDWRITTEN_FLOWS;
+}
+
+/**
  * 没有手写向导的领域：按 `intakeSchema` 一格一步问下来，末步是「你的档案」。
  *
  * 【顺序即 schema 的顺序】先问什么由领域包定，不由页面定——页面自作主张排序的形态是：
  * 领域包把最要紧的一问放在第一位，页面按自己的偏好挪到第五步，而两边都不报错。
+ *
+ * 【为什么导出】这条路只在浏览器里跑（IntakeFlow 是客户端组件，排步发生在挂载之后），
+ * 判据够不着它的形态是：「第二个领域到底被问了哪几个问题」只能靠点页面才知道，
+ * 而它排错了顺序、少了一步、或者把拦人的话说成一句通用的「有必填项未填」，
+ * 页面照常能用、一处报错都没有。导出它，好让这几件事在 node 里逐条验得到。
  */
-function schemaSteps(pack: DomainPack): StepDef[] {
+export function schemaSteps(pack: DomainPack): StepDef[] {
   const steps: StepDef[] = pack.intakeSchema.map((field) => ({
     title: stepTitleOf(field),
     // 说明用领域包**逐字对外**的那句话，不在页面上另编一句白话：
@@ -204,22 +219,10 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
     setHydrated(true);
   }, []);
 
-  /**
-   * 草稿是**上一个领域**填的就整份作废。
-   *
-   * 【为什么不留着】各格的答案按字段键存，而键名跨领域同名（IntakeFieldSpec 的约定）——
-   * 留着的形态是：上一个领域的答案一格不落地被按这个领域的 schema 提交上去，
-   * 每一格都对得上某个键，服务端照收，没有一处会报错。
-   *
-   * 【domain 是空串时不动它】存量草稿都没有这一列，抹掉它们等于把老用户填了一半的东西删了。
-   */
+  // 草稿是**上一个领域**填的就整份作废；三态与理由都在 draft.draftForDomain。
   useEffect(() => {
     if (!hydrated) return;
-    setDraft((prev) => {
-      if (prev.domain === pack.key) return prev;
-      if (prev.domain === '') return { ...prev, domain: pack.key };
-      return { ...EMPTY_DRAFT, domain: pack.key };
-    });
+    setDraft((prev) => draftForDomain(prev, pack.key));
   }, [hydrated, pack.key]);
 
   useEffect(() => {

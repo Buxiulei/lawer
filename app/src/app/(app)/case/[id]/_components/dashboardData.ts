@@ -55,6 +55,15 @@ export interface DashboardData {
    * 打开自己的驾驶舱，轨道上每一格都在讲另一个行当的事，而没有一处会报错。
    */
   domain: string;
+  /**
+   * 当前所在的**并行轨**（cases.track）。null = 只在主线上，这是**结论不是缺项**——
+   * 没有并行轨的领域这一列恒为 null。
+   *
+   * 【为什么不在这一层折成一句话】折成 '主线' 之类的字符串，页面就再也分不清
+   * 「这个领域没有并行轨」与「有并行轨但现在没走进去」——前者整行不该出现，
+   * 后者该出现并写着主线。两件事在屏幕上不是同一回事。
+   */
+  track: string | null;
   actions: ActionItem[];
   deadlines: Deadline[];
   attainments: Attainment[];
@@ -161,6 +170,8 @@ interface ApiCaseRow {
   stage: string;
   /** 案件领域（cases.domain）。GET /cases/{id} 回的是整行，这一列一直都在 */
   domain: string;
+  /** 当前并行轨（cases.track）。同上，GET 回整行；旧后端没有这一列时读成 undefined */
+  track?: string | null;
 }
 
 interface ApiTimelineRow {
@@ -295,6 +306,8 @@ export async function fetchDashboard(caseId: string): Promise<DashboardData> {
   const domain = detail.case.domain;
   return {
     domain,
+    // `?? null` 只把 undefined（旧后端没这一列）折进 null，不替 null 编一个值
+    track: detail.case.track ?? null,
     actions: actions.map(toAction),
     deadlines: deadlines.map(toDeadline),
     attainments: toAttainments(detail.timeline, journeyOf(domain)),
@@ -310,6 +323,8 @@ export function demoDashboard(caseId: string): DashboardData {
   return {
     // 演示案件没有 cases 行，领域取缺省——它演的就是缺省领域那套话
     domain: DEFAULT_DOMAIN,
+    // 缺省领域没有并行轨，这一列恒 null（那一行本来就不渲染）
+    track: null,
     actions: demoActions,
     deadlines: demoDeadlines,
     attainments: demoAttainments(),

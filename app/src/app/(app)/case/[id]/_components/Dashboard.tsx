@@ -137,7 +137,7 @@ export function DashboardBody({
             八格里每一格都在讲另一个行当的事，而没有一处会报错。 */}
         <MilestoneTrack track={journeyOf(data.domain)} attainments={data.attainments} />
       </div>
-      <TrackRow domain={data.domain} />
+      <TrackRow domain={data.domain} track={data.track} />
       {/* 只推一件事（产品方案叁）；计数仍是全量，不然「1/5」会缩成「0/1」。
           `collapseOnDone`：勾完这一件它让开，下一件才有地方站——
           「完成庆祝」的正确形态是下一件事出现，不是彩带。 */}
@@ -175,21 +175,30 @@ export function DashboardBody({
  * 不是「还没填」。摆一行「当前轨：无」出来，是在告诉用户这里本该有点什么。
  * 缺省领域的 tracks 就是空的，所以这一行在它的页面上一个字节都不多。
  *
- * 【为什么只列轨道、不说「当前在哪一轨」】cases 表**没有记当前轨的列**，
- * 时间线也没有进出轨的事件类型——真源还不存在。这时印一句「当前轨：日常」
- * 是编的，而它读起来跟真的一模一样。所以这一行只说得出「本案可能走到的并行轨有哪几条、
- * 现在还没有记录」，等真源落地再把值填进来。
+ * 【在轨与主线是两句不同的话，不是同一句话填不同的值】在轨那一句必须把**主线阶段**
+ * 一并说出来：并行轨的语义是"主线不动、另一条线同时在走"，只印轨名的形态是——
+ * 用户以为自己的案子已经从协商挪到了危机处置，于是不再管协商那边的期限。
+ *
+ * 【为什么不认领域名】轨名逐字来自领域包的 tracks（app/_ui/domain.tracksOf），
+ * 当前在哪一轨来自 cases.track（W3 落的列）。本组件一个具体领域都不认识。
  */
-function TrackRow({ domain }: { domain: string }) {
+function TrackRow({ domain, track }: { domain: string; track: string | null }) {
   const tracks = tracksOf(domain);
   if (tracks.length === 0) return null;
   return (
     <section data-mo-enter aria-label="并行轨" className="mt-3 rounded-[10px] bg-surface-2 px-3.5 py-2.5">
       <p data-veil="" className="text-[14px] leading-6 text-ink">
-        当前轨：<span className="text-ink-2">还没有记录</span>
+        当前轨：
+        {track ? (
+          <span className="font-medium text-ink">{track}</span>
+        ) : (
+          <span className="text-ink-2">主线</span>
+        )}
       </p>
       <p data-veil="" className="mt-0.5 text-[13px] leading-5 text-ink-2">
-        本案主线之外还有这几条轨可以走：{tracks.join('、')}。走进去主线不动，处置完回主线。
+        {track
+          ? '这条线与主线并行：主线的阶段没有被它顶掉，那边该办的事照办。处置完了回主线。'
+          : `本案主线之外还有这几条轨可以走：${tracks.join('、')}。走进去主线不动，处置完回主线。`}
       </p>
     </section>
   );

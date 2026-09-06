@@ -29,6 +29,7 @@ const { DEFAULT_DOMAIN } = await import('@/lib/domains/registry');
 
 const EMPTY: DashboardData = {
   domain: DEFAULT_DOMAIN,
+  track: null,
   actions: [],
   deadlines: [],
   attainments: [],

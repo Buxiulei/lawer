@@ -209,6 +209,7 @@ describe('取数与字段映射', () => {
 describe('四种屏幕状态', () => {
   const full: Parameters<typeof viewState>[0]['data'] = {
     domain: DEFAULT_DOMAIN,
+    track: null,
     actions: [],
     deadlines: [],
     attainments: [{ milestone: '协商', happenedAt: '2026-07-24T10:00:00+08:00' }],
@@ -235,6 +236,7 @@ describe('四种屏幕状态', () => {
         error: null,
         data: {
           domain: DEFAULT_DOMAIN,
+          track: null,
           actions: [],
           deadlines: [],
           attainments: [],

@@ -96,6 +96,25 @@ export function draftHasContent(d: IntakeDraft): boolean {
   );
 }
 
+/**
+ * 这份草稿要不要给 `domain` 这个领域接着用。
+ *
+ * 【三态，且第三态是"整份作废"】
+ *   · 同一个领域 → 原样接着填（对象**原样返回**，好让 React 认得出没变）；
+ *   · 草稿没记领域（存量草稿都没有这一列）→ 只补上领域，答案一格不动；
+ *   · 换了领域 → **整份作废**。留着的形态是：上一个领域的答案按字段键一格不落地
+ *     被按这个领域的 schema 提交上去——键名跨领域同名（IntakeFieldSpec 的约定），
+ *     每一格都对得上某个键，服务端照收，回包 201，没有一处会报错。
+ *
+ * 【为什么是个纯函数，不留在那个 effect 里】留在 effect 里的形态是：这三态只能靠点页面
+ * 才验得到，而它错的时候页面照常能用——错的是**交上去的是谁的答案**。
+ */
+export function draftForDomain(prev: IntakeDraft, domain: string): IntakeDraft {
+  if (prev.domain === domain) return prev;
+  if (prev.domain === '') return { ...prev, domain };
+  return { ...EMPTY_DRAFT, domain };
+}
+
 export function loadDraft(): IntakeDraft | null {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);

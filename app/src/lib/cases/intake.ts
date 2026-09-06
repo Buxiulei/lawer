@@ -303,16 +303,31 @@ function persist(
       ? computeDeadline(lim.kind, anchor)
       : null;
 
+  // 【选填的日期与金额也要落库】validateIntake 只归一化**带 errorCode 的那几项**
+  // （必填校验那一批），选填的一格都不碰。而 employed_from / monthly_wage_fen 是 cases 上的
+  // 固定列，persist 从 value 里取——一个把这两格声明成选填的领域包，它的用户老老实实填了、
+  // 页面老老实实发了、服务端老老实实收了、回包 201，而这两格在库里恒为 NULL。
+  // 后果不是"少一格"：这两个值正是时效起算与退费基数的输入。
+  // 【为什么写在这里而不是把它们改成必填】必填与否是**领域包的产品判断**，
+  // 不是落库层的判断；落库层该做的是"包声明要问的、用户填了的，就得存下来"。
+  // 【填了但格式不对的那一格】选填字段没有 errorCode，说不出话来，只能不写这个键
+  //（与下面「只改不删」同一条口径）。这条缺口记在本票的 openQuestions 里。
+  const employedFrom = value.employedFrom ?? normalizeDateOnly(input.employedFrom) ?? undefined;
+  const wageRaw = input.monthlyWageFen;
+  const monthlyWageFen =
+    value.monthlyWageFen ??
+    (typeof wageRaw === 'number' && Number.isInteger(wageRaw) && wageRaw > 0 ? wageRaw : undefined);
+
   const write = db.transaction((): IntakeResult => {
-    // 【只改不删】下面三个字段用条件展开：这一次没填就**不写这个键**，库里原来的值原样留着。
+    // 【只改不删】下面几个字段用条件展开：这一次没填就**不写这个键**，库里原来的值原样留着。
     // 所以「上次填了底线、这次清空重提」不会把底线清掉——这是刻意的，不是漏了 else 分支。
     // 留着旧值最坏是过时，用户看得见也改得回；而替他删掉上一次亲手写下的底线是不可撤销的。
     // 真要清空得有一个明确的「删掉这条」动作，不能靠一个空输入框顺手完成。
     store.updateCaseFields(db, caseId, {
       stage: value.stage,
       goal: value.goals.join('、'),
-      employed_from: value.employedFrom,
-      monthly_wage_fen: value.monthlyWageFen,
+      ...(employedFrom === undefined ? {} : { employed_from: employedFrom }),
+      ...(monthlyWageFen === undefined ? {} : { monthly_wage_fen: monthlyWageFen }),
       ...(trimmed(input.bottomLine) === null ? {} : { bottom_line: trimmed(input.bottomLine)! }),
       ...(trimmed(input.position) === null ? {} : { position: trimmed(input.position)! }),
       ...(trimmed(input.contractCount) === null ? {} : { contract_count: trimmed(input.contractCount)! }),
