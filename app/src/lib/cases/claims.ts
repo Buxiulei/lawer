@@ -57,10 +57,66 @@ export interface ClaimCalcEnv {
  */
 export type ClaimCalcResult =
   | { ok: true; payload: Record<string, unknown>; claimId: number; created: boolean }
-  | { ok: false; error: string };
+  | ({ ok: false; error: string } & Partial<CalcInputProblems>);
 
 function reject(message: string): ClaimCalcResult {
   return { ok: false, error: message };
+}
+
+/**
+ * 一次调用里收集到的**全部**入参问题，缺失与非法分成两组。
+ *
+ * 【为什么不能只报第一条】七种算法的必填项互不相同，「待岗」要四项、「双倍工资」要四项。
+ * 只报第一条的形态是：模型补一个、再调一次、再被告知缺下一个——问齐四项要四个完整的
+ * 工具往返，而每一轮它都以为自己只差这一个。更坏的一种：模型补第二项时把第一项的值
+ * 顺手改了，两项永远凑不齐。所以校验一次跑完，一次把清单给全。
+ */
+export interface CalcInputProblems {
+  /** 根本没给的字段，形如 `field：这个字段是什么` */
+  missing: string[];
+  /** 给了但不合法的字段（类型不对、范围不对） */
+  invalid: string[];
+}
+
+/**
+ * 收集器。`note` 自己判「没给」还是「给错了」——这两件事对调用方是不同的动作
+ * （一个去问用户要，一个去改自己刚填的值），合并成一句「参数有误」两边都不知道该干嘛。
+ */
+class Problems implements CalcInputProblems {
+  readonly missing: string[] = [];
+  readonly invalid: string[] = [];
+  constructor(private readonly args: Record<string, unknown>) {}
+
+  note(field: string, hint: string): void {
+    const v = this.args[field];
+    const given = v !== undefined && v !== null && v !== '';
+    (given ? this.invalid : this.missing).push(`${field}：${hint}`);
+  }
+
+  /** 「这几个里至少给一个」这类组约束：一个都没给才算缺，记在 missing 上。 */
+  noteGroup(fields: readonly string[], hint: string): void {
+    this.missing.push(`${fields.join(' / ')}：${hint}`);
+  }
+
+  get any(): boolean {
+    return this.missing.length > 0 || this.invalid.length > 0;
+  }
+}
+
+/** 把收集到的问题渲染成一条回喂给模型的话。**明说这是全部**，否则它仍会一次补一个。 */
+function rejectInputs(label: string, p: CalcInputProblems): ClaimCalcResult {
+  const lines: string[] = [];
+  if (p.missing.length) lines.push(`缺少 ${p.missing.length} 项 —— ${p.missing.join('；')}`);
+  if (p.invalid.length) lines.push(`不合法 ${p.invalid.length} 项 —— ${p.invalid.join('；')}`);
+  return {
+    ok: false,
+    error:
+      `「${label}」的入参没齐，本次一个字都没有落库。` +
+      '**下面是这次全部的问题，一次补齐再调一次**（不是只差第一个）：\n' +
+      lines.join('\n'),
+    missing: p.missing,
+    invalid: p.invalid,
+  };
 }
 
 function str(v: unknown): string | null {
@@ -105,23 +161,25 @@ export function calcNonSeverance(
 
   try {
     if (kind === '年假') {
+      const p = new Problems(args);
       const years = num(args.cumulative_work_years);
       const wage = posInt(args.avg_monthly_wage_ex_overtime_fen);
       const through = str(args.through_date);
       const arranged = num(args.arranged_days_this_year);
-      if (years === null || years < 0) return reject('年假必须给 cumulative_work_years（累计工作年限，含跨单位；不满 1 年给小数）');
-      if (wage === null) return reject('年假必须给 avg_monthly_wage_ex_overtime_fen（前 12 个月**剔除加班工资**后的月均工资，单位分）');
-      if (!through) return reject('年假必须给 through_date（结算截止日：离职给离职日，在职按年度给该年 12-31）');
-      if (arranged === null || arranged < 0) return reject('年假必须给 arranged_days_this_year（本年度公司已安排休掉的天数，没休就给 0）');
+      if (years === null || years < 0) p.note('cumulative_work_years', '累计工作年限（含跨单位；不满 1 年给小数）');
+      if (wage === null) p.note('avg_monthly_wage_ex_overtime_fen', '前 12 个月**剔除加班工资**后的月均工资，单位分');
+      if (!through) p.note('through_date', '结算截止日：离职给离职日，在职按年度给该年 12-31');
+      if (arranged === null || arranged < 0) p.note('arranged_days_this_year', '本年度公司已安排休掉的天数，没休就给 0');
+      if (p.any) return rejectInputs('年假', p);
       inputSources.cumulativeWorkYears = sourceOf('cumulative_work_years');
       inputSources.avgMonthlyWageExOvertimeFen = sourceOf('avg_monthly_wage_ex_overtime_fen');
       inputSources.arrangedDaysThisYear = sourceOf('arranged_days_this_year');
       result = calc.calcAnnualLeavePay({
-        cumulativeWorkYears: years,
-        avgMonthlyWageExOvertimeFen: wage,
-        throughDate: through,
+        cumulativeWorkYears: years!,
+        avgMonthlyWageExOvertimeFen: wage!,
+        throughDate: through!,
         ...(str(args.employed_from) ? { employedFrom: str(args.employed_from)! } : {}),
-        arrangedDaysThisYear: arranged,
+        arrangedDaysThisYear: arranged!,
         ...(Array.isArray(args.prior_years) ? { priorYears: args.prior_years as calc.PriorYearUnused[] } : {}),
         ...(num(args.full_year_days_override) !== null ? { fullYearDaysOverride: num(args.full_year_days_override)! } : {}),
         ...minWageOpt,
@@ -133,24 +191,27 @@ export function calcNonSeverance(
       const anchor = str(args.anchor_date);
       const claimedAt = str(args.claimed_at);
       const months = Array.isArray(args.months) ? (args.months as calc.DoubleWageMonth[]) : null;
-      if (!scenario) return reject('双倍工资必须给 scenario：first-contract（首次未签）/ renewal-lapse（续签断档）/ openended-refusal（拒订无固定期限）');
-      if (!anchor) return reject('双倍工资必须给 anchor_date（首签=用工之日；断档=原合同期满之日；拒订=应订无固定期限之日）');
-      if (!claimedAt) return reject('双倍工资必须给 claimed_at（主张权利之日）——时效自该日向前一年倒算，这个日期直接决定能要回几个月');
-      if (!months || months.length === 0) return reject('双倍工资必须给 months 逐月明细，形如 [{"month":"2025-03","wageFen":1600000}]');
+      const p = new Problems(args);
+      if (!scenario) p.note('scenario', 'first-contract（首次未签）/ renewal-lapse（续签断档）/ openended-refusal（拒订无固定期限）三选一');
+      if (!anchor) p.note('anchor_date', '首签=用工之日；断档=原合同期满之日；拒订=应订无固定期限之日');
+      if (!claimedAt) p.note('claimed_at', '主张权利之日——时效自该日向前一年倒算，这个日期直接决定能要回几个月');
+      if (!months || months.length === 0) p.note('months', '逐月明细，形如 [{"month":"2025-03","wageFen":1600000}]');
+      if (p.any) return rejectInputs('双倍工资', p);
       inputSources.months = sourceOf('months');
       inputSources.anchorDate = sourceOf('anchor_date');
       result = calc.calcDoubleWage({
-        scenario,
-        anchorDate: anchor,
+        scenario: scenario!,
+        anchorDate: anchor!,
         ...(str(args.contract_signed_at) ? { contractSignedAt: str(args.contract_signed_at)! } : {}),
-        claimedAt,
-        months,
+        claimedAt: claimedAt!,
+        months: months!,
         ...minWageOpt,
         inputSources,
       });
     } else if (kind === '加班费') {
+      const p = new Problems(args);
       const base = posInt(args.monthly_base_fen);
-      if (base === null) return reject('加班费必须给 monthly_base_fen（加班费计算基数，月，单位分）');
+      if (base === null) p.note('monthly_base_fen', '加班费计算基数，月，单位分');
       const hours = {
         weekdayOvertimeHours: num(args.weekday_overtime_hours) ?? 0,
         restDayDays: num(args.rest_day_days) ?? 0,
@@ -159,25 +220,31 @@ export function calcNonSeverance(
         holidayHours: num(args.holiday_hours) ?? 0,
       };
       if (Object.values(hours).every((v) => !v)) {
-        return reject('加班费至少要给一项加班时长：weekday_overtime_hours / rest_day_days / rest_day_hours / holiday_days / holiday_hours');
+        p.noteGroup(
+          ['weekday_overtime_hours', 'rest_day_days', 'rest_day_hours', 'holiday_days', 'holiday_hours'],
+          '至少要给一项加班时长',
+        );
       }
+      if (p.any) return rejectInputs('加班费', p);
       inputSources.monthlyBaseFen = sourceOf('monthly_base_fen');
-      result = calc.calcOvertimePay({ monthlyBaseFen: base, ...hours, ...minWageOpt, inputSources });
+      result = calc.calcOvertimePay({ monthlyBaseFen: base!, ...hours, ...minWageOpt, inputSources });
     } else if (kind === '待岗') {
+      const p = new Problems(args);
       const normal = posInt(args.normal_monthly_wage_fen);
       const months = Array.isArray(args.months) ? (args.months as calc.StandbyMonth[]) : null;
-      if (normal === null) return reject('待岗必须给 normal_monthly_wage_fen（提供正常劳动时的全额月工资，单位分）');
-      if (!months || months.length === 0) return reject('待岗必须给 months 逐月明细，形如 [{"month":"2025-03","paidFen":254000}]，按月升序');
+      if (normal === null) p.note('normal_monthly_wage_fen', '提供正常劳动时的全额月工资，单位分');
+      if (!months || months.length === 0) p.note('months', '逐月明细，形如 [{"month":"2025-03","paidFen":254000}]，按月升序');
       if (typeof args.provides_labor !== 'boolean') {
-        return reject('待岗必须给 provides_labor（布尔）：超过第 1 个工资支付周期后单位是否仍安排劳动。true=情形A，false=纯待岗');
+        p.note('provides_labor', '布尔：超过第 1 个工资支付周期后单位是否仍安排劳动。true=情形A，false=纯待岗');
       }
+      if (p.any) return rejectInputs('待岗', p);
       // 生活费标准与最低工资同卡，一起现取
       const allowance = readCardValueFen(ctx.searcher?.get?.(MIN_WAGE_PACK_ID)?.facts, DAIGANG_ALLOWANCE_VALUE_KEY);
       inputSources.normalMonthlyWageFen = sourceOf('normal_monthly_wage_fen');
       inputSources.months = sourceOf('months');
       result = calc.calcStandbyWage({
-        normalMonthlyWageFen: normal,
-        months,
+        normalMonthlyWageFen: normal!,
+        months: months!,
         providesLabor: args.provides_labor,
         ...(posInt(args.agreed_monthly_wage_fen) !== null ? { agreedMonthlyWageFen: posInt(args.agreed_monthly_wage_fen)! } : {}),
         ...(typeof args.genuine_stoppage === 'boolean' ? { genuineStoppage: args.genuine_stoppage } : {}),
@@ -186,37 +253,42 @@ export function calcNonSeverance(
         inputSources,
       } as calc.StandbyWageInput);
     } else if (kind === '加付赔偿金') {
+      const p = new Problems(args);
       const items = Array.isArray(args.items) ? (args.items as calc.ArrearsItem[]) : null;
       if (!items || items.length === 0) {
-        return reject('加付赔偿金必须给 items 欠付明细，形如 [{"category":"工资","label":"2026-03 工资","amountFen":1500000}]');
+        p.note('items', '欠付明细，形如 [{"category":"工资","label":"2026-03 工资","amountFen":1500000}]');
       }
+      // 三个布尔一次全查：只报第一个的话，模型补齐三步前置要跑三轮
       for (const f of ['complaint_filed', 'order_issued', 'overdue_unpaid']) {
         if (typeof args[f] !== 'boolean') {
-          return reject(
-            `加付赔偿金必须给 ${f}（布尔）。三步行政前置缺一不可：` +
-              '①向劳动监察大队投诉 ②劳动行政部门下达限期支付指令书 ③用人单位逾期仍不支付。' +
+          p.note(
+            f,
+            '布尔。三步行政前置缺一不可：①向监察大队投诉 ②行政部门下达限期支付指令书 ③单位逾期仍不支付。' +
               '**仲裁委不受理这一项**，三步没走完就主张，用户会白跑一趟立案。',
           );
         }
       }
+      if (p.any) return rejectInputs('加付赔偿金', p);
       inputSources.items = sourceOf('items');
       result = calc.calcArrearsPenalty({
-        items,
+        items: items!,
         complaintFiled: args.complaint_filed as boolean,
         orderIssued: args.order_issued as boolean,
         overdueUnpaid: args.overdue_unpaid as boolean,
         inputSources,
       });
     } else if (kind === '竞业补偿') {
+      const p = new Problems(args);
       const avg = posInt(args.avg_monthly_wage_fen);
       const agreedMonths = num(args.agreed_months);
-      if (avg === null) return reject('竞业补偿必须给 avg_monthly_wage_fen（离职前 12 个月平均工资，单位分）');
-      if (agreedMonths === null || agreedMonths <= 0) return reject('竞业补偿必须给 agreed_months（约定的竞业限制月数）');
+      if (avg === null) p.note('avg_monthly_wage_fen', '离职前 12 个月平均工资，单位分');
+      if (agreedMonths === null || agreedMonths <= 0) p.note('agreed_months', '约定的竞业限制月数（正数）');
+      if (p.any) return rejectInputs('竞业补偿', p);
       inputSources.avgMonthlyWageFen = sourceOf('avg_monthly_wage_fen');
       inputSources.agreedMonths = sourceOf('agreed_months');
       result = calc.calcNonCompeteComp({
-        avgMonthlyWageFen: avg,
-        agreedMonths,
+        avgMonthlyWageFen: avg!,
+        agreedMonths: agreedMonths!,
         ...(num(args.actual_months) !== null ? { actualMonths: num(args.actual_months)! } : {}),
         ...(posInt(args.agreed_monthly_comp_fen) !== null ? { agreedMonthlyCompFen: posInt(args.agreed_monthly_comp_fen)! } : {}),
         ...(typeof args.clause_effective === 'boolean' ? { clauseEffective: args.clause_effective } : {}),
@@ -225,13 +297,15 @@ export function calcNonSeverance(
         inputSources,
       } as calc.NonCompeteInput);
     } else if (kind === '病假工资') {
+      const p = new Problems(args);
       const months = Array.isArray(args.months) ? (args.months as calc.SickLeaveMonth[]) : null;
       if (!months || months.length === 0) {
-        return reject('病假工资必须给 months 逐月明细，形如 [{"month":"2026-03","paidFen":150000}]');
+        p.note('months', '逐月明细，形如 [{"month":"2026-03","paidFen":150000}]');
       }
+      if (p.any) return rejectInputs('病假工资', p);
       inputSources.months = sourceOf('months');
       result = calc.calcSickPay({
-        months,
+        months: months!,
         ...(posInt(args.agreed_monthly_sick_pay_fen) !== null
           ? { agreedMonthlySickPayFen: posInt(args.agreed_monthly_sick_pay_fen)! }
           : {}),
@@ -342,7 +416,11 @@ export function persistCalc(
  */
 export function runClaimCalc(args: Record<string, unknown>, ctx: ClaimCalcEnv): ClaimCalcResult {
   const kind = inEnum(args.kind, CALC_KINDS);
-  if (!kind) return reject(`kind 只能是 ${CALC_KINDS.join(' / ')}`);
+  if (!kind) {
+    const p = new Problems(args);
+    p.note('kind', `只能是 ${CALC_KINDS.join(' / ')}`);
+    return rejectInputs('claim_calc', p);
+  }
 
   // 未被显式列为「有证据」的输入一律标 用户自述——charter §3 要求说明哪些输入待证，
   // 默认值往保守那边靠：宁可多标一个待证，也不能让没证据的数字看起来已经坐实。
@@ -371,13 +449,24 @@ export function runClaimCalc(args: Record<string, unknown>, ctx: ClaimCalcEnv): 
   const nonSeverance = calcNonSeverance(kind, args, { sourceOf, minWageOpt, ctx });
   if (nonSeverance) return nonSeverance;
 
+  // ── N / N+1 / 2N 的必填项：**一次查完再回**（判据「缺三参一次列三」钉的就是这里）──
+  // 三个字段此前是两条 return：先 avg、后 employed_from/terminated_at 合并成一句。
+  // 于是全都不给时模型只知道缺 avg，补完再调才知道还缺两个日期——两个完整往返换一条信息。
+  const p = new Problems(args);
   const avg = Number(args.avg_monthly_wage_fen);
   if (!Number.isInteger(avg) || avg <= 0) {
-    return reject('avg_monthly_wage_fen 必须是正整数（单位：分，且是**应得**工资不是到手工资）');
+    p.note('avg_monthly_wage_fen', '正整数（单位：分，且是**应得**工资不是到手工资）');
   }
   const employedFrom = str(args.employed_from);
   const terminatedAt = str(args.terminated_at);
-  if (!employedFrom || !terminatedAt) return reject('employed_from 与 terminated_at 都必填，格式 YYYY-MM-DD');
+  if (!employedFrom) p.note('employed_from', '入职日期，格式 YYYY-MM-DD');
+  if (!terminatedAt) p.note('terminated_at', '解除/终止日期，格式 YYYY-MM-DD');
+  // N+1 的第四项也在这一轮查掉，别等到算的时候才第二次回绝
+  const lastMonth = Number(args.last_month_wage_fen);
+  if (kind === 'N+1' && (!Number.isInteger(lastMonth) || lastMonth <= 0)) {
+    p.note('last_month_wage_fen', '解除前最后一个完整工资月的工资标准，单位分');
+  }
+  if (p.any) return rejectInputs(kind, p);
 
   const inputSources: Record<string, InputSource> = {
     avgMonthlyWageFen: sourceOf('avg_monthly_wage_fen'),
@@ -422,8 +511,8 @@ export function runClaimCalc(args: Record<string, unknown>, ctx: ClaimCalcEnv): 
   // minWageOpt 同理：卡取得到就注入当前值，取不到就留空走 calc 的内置缺省（上面已发 notice）。
   const common = {
     avgMonthlyWageFen: avg,
-    employedFrom,
-    terminatedAt,
+    employedFrom: employedFrom!,
+    terminatedAt: terminatedAt!,
     ...(sanbeiCapFen === null ? {} : { sanbeiCapFen }),
     ...minWageOpt,
   };
@@ -431,10 +520,6 @@ export function runClaimCalc(args: Record<string, unknown>, ctx: ClaimCalcEnv): 
   let result: calc.CalcResult<object>;
   try {
     if (kind === 'N+1') {
-      const lastMonth = Number(args.last_month_wage_fen);
-      if (!Number.isInteger(lastMonth) || lastMonth <= 0) {
-        return reject('算 N+1 必须给 last_month_wage_fen（解除前最后一个完整工资月的工资标准，单位分）');
-      }
       inputSources.lastMonthWageFen = sourceOf('last_month_wage_fen');
       result = calc.calcNPlus1({ ...common, lastMonthWageFen: lastMonth, inputSources });
     } else if (kind === '2N') {
