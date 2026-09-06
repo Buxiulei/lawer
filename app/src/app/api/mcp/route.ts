@@ -3,8 +3,8 @@
 // 协议细节与"为什么手写不引 SDK"见 lib/mcp/jsonrpc.ts 顶部。
 //
 // 路由照例是薄的：鉴权 → 解析 JSON-RPC → 分发到 lib/mcp/tools 的注册表 → 包壳返回。
-import { isRealnameVerified } from '@/lib/auth/guard';
 import { hasScope, resolveIdentity } from '@/lib/auth/identity';
+import { checkPreconditions } from '@/lib/capabilities/invoke';
 import { recordClientName } from '@/lib/db/api-keys';
 import { getDb } from '@/lib/db/client';
 import { findTool, TOOLS } from '@/lib/mcp/tools';
@@ -116,22 +116,11 @@ export async function POST(req: Request) {
       }
 
       // 【前置闸由注册表驱动，不由各工具自觉】precondition 是能力条目上的一个字段，
-      // 拦在这里就等于"凡是声明了实名的工具，一条也漏不掉"。让各工具在自己的 run 里
-      // 各写一句的形态是：新加一条写能力时忘了抄那一句——它照常工作、照常返回 200，
-      // 只是未实名的人也能往案卷里写东西，没有任何一处会报错。
-      if (tool.precondition.includes('realname') && !isRealnameVerified(getDb(), identity.uid)) {
-        return json(
-          rpcResult(
-            id,
-            toolErrorResult(
-              'REALNAME_REQUIRED',
-              `${tool.name} 需要账号先完成实名认证，本次调用没有产生任何写入。` +
-                '原因是这一步的产物要与本人身份绑定（材料要能证明是谁存的，出证上要印实名快照）。' +
-                '请让用户到网页「设置 → 实名认证」完成认证后再调一次；' +
-                '认证前不要改用别的工具绕开这一步，绕过去的记录日后不能用于出证。',
-            ),
-          ),
-        );
+      // 判定本身在 lib/capabilities/invoke.ts，**REST 通用桥调的是同一份**——
+      // 两条入口各写一句的形态是：一边拦住了、另一边放行，而两边都不报错。
+      const gate = checkPreconditions(getDb(), tool, identity);
+      if (gate) {
+        return json(rpcResult(id, toolErrorResult(gate.errorCode, gate.message)));
       }
 
       // 业务失败（案件不存在、枚举非法）走 isError=true，让模型能读到原因自行纠正

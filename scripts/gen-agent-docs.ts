@@ -69,8 +69,14 @@ export function inputHints(schema: Record<string, unknown>): string {
     .join('；');
 }
 
+/**
+ * REST 列。没有专用端点的能力**不再写「—」**：那一格看起来像「这条走 REST 调不了」，
+ * 而它其实走通用桥调得了——对方 agent 据此绕开的是一条本来就开着的路。
+ */
 function capabilityRow(c: Capability): string {
-  const rest = c.rest ? `\`${c.rest.method} ${c.rest.path.replace(/^\/api\/v1/, '')}\`` : '—';
+  const rest = c.rest
+    ? `\`${c.rest.method} ${c.rest.path.replace(/^\/api\/v1/, '')}\``
+    : `\`POST /tools/${c.name}\``;
   return `| \`${c.name}\` | ${rest} | \`${c.scope}\` | ${KIND_LABELS[c.kind]} | ${cell(c.description)} | ${cell(inputHints(c.inputSchema))} |`;
 }
 
@@ -78,7 +84,13 @@ function capabilityRow(c: Capability): string {
 export function renderCapabilities(): string {
   const caps = listCapabilities({ exposeTo: 'mcp' });
   const families = [...new Set(caps.map((c) => c.family))];
-  const lines: string[] = [];
+  const lines: string[] = [
+    'REST = 专用端点 + `/tools/{name}` 通用桥。表里 REST 列给的是专用端点，' +
+      '没有专用端点的那些写成 `POST /tools/<name>`；**每一条能力都可以走通用桥**——' +
+      '`POST /api/v1/tools/{name}`，请求体就是该能力的入参 JSON，鉴权、scope、前置闸与 MCP 同一批判定。' +
+      '当前可调的清单随时可以 `GET /api/v1/tools` 取。',
+    '',
+  ];
   for (const family of families) {
     lines.push(`**${FAMILY_LABELS[family]}**`, '');
     lines.push('| 工具 | REST | scope | 读写 | 用途 | 入参要点 |');

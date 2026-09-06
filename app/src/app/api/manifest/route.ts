@@ -57,6 +57,17 @@ export async function GET() {
     rest: {
       base: '/api/v1',
       categories: REST_CATEGORIES,
+      /**
+       * 通用工具桥：mcp.tools 里的每一条，不支持 MCP 的客户端都能从这里按同样的入参调。
+       * 【为什么单独说一句】只看 endpoints 表的话，`POST /api/v1/tools/{name}` 是一条
+       * 路径带占位符的普通端点，看不出「它覆盖全部工具」——于是没有专用端点的能力
+       * （事实卡、法律依据检索一类）在走 REST 的客户端眼里仍然等于不存在。
+       */
+      tools_bridge: {
+        list: '/api/v1/tools',
+        call: '/api/v1/tools/{name}',
+        note: 'name 取 mcp.tools[].name；请求体就是该工具 inputSchema 的入参 JSON。鉴权、scope、前置闸与 MCP 同一批判定，回包为 { ok, ... } 或 { ok:false, error_code, message }。',
+      },
       endpoints: CATEGORY_ORDER.flatMap((category) =>
         REST_INDEX.filter((e) => e.category === category).map((e) => ({
           category: e.category,

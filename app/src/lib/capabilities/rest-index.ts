@@ -67,8 +67,11 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   // ──────── agent 面（jwt 或 api key）────────
   { category: 'agent', method: 'POST', path: '/api/mcp', auth: 'jwt|api_key', description: 'MCP JSON-RPC 2.0 入口（Streamable HTTP），工具面见本清单 mcp.tools' },
   { category: 'agent', method: 'GET', path: '/api/v1/agent-setup', auth: 'jwt|api_key', description: '一键接入信息：mcp_url / api_base、工具清单、接入说明全文（不校 scope）' },
+  { category: 'agent', method: 'GET', path: '/api/v1/tools', auth: 'jwt|api_key', description: '通用桥能调的能力清单：名、scope、读写、前置闸、入参 schema（不校 scope）' },
+  { category: 'agent', method: 'POST', path: '/api/v1/tools/{name}', auth: 'jwt|api_key', description: '通用工具桥：按能力名调任意一条能力，body = 该能力 inputSchema 的入参 JSON。scope 按能力自身要求判，与 MCP 同一批判定' },
   { category: 'agent', method: 'GET', path: '/api/v1/me', auth: 'jwt|api_key', scope: 'case:read', description: '本人身份摘要（手机号在服务端已掩码）' },
   { category: 'agent', method: 'GET', path: '/api/v1/me/storage', auth: 'jwt|api_key', scope: 'case:read', description: '本人的存储用量；不接受任何指定用户的入参' },
+  { category: 'agent', method: 'GET', path: '/api/v1/realname/status', auth: 'jwt|api_key', description: '查本人实名状态。网页登录态会去上游拉一次结果；api key 只读三态（已实名/待审/未认证），不回姓名证件（不校 scope）' },
   { category: 'agent', method: 'GET', path: '/api/v1/billing/ledger', auth: 'jwt|api_key', scope: 'case:read', description: '本人的公道值余额与流水（同时给 balance 与 ledger_sum）' },
   { category: 'agent', method: 'POST', path: '/api/v1/redeem', auth: 'jwt|api_key', scope: 'case:write', description: '兑换码入账（一码一兑，失败有锁）' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases', auth: 'jwt|api_key', scope: 'case:read', description: '名下案件清单，新的在前（对应工具 case_list）' },
@@ -77,6 +80,7 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/intake', auth: 'jwt|api_key', scope: 'case:write', description: '首诊建档：一次原子写入基本盘 + 时间线 + 诉求（对应工具 intake_submit）' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/messages', auth: 'jwt|api_key', scope: 'case:read', description: '案件的历史对话（只读；写那一路在同级 chat）' },
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/chat', auth: 'jwt|api_key', scope: 'case:write', description: '让本服务的模型跑一轮并回 SSE。**调一次扣一轮公道值**，自带模型的 agent 不要调' },
+  { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/timeline', auth: 'jwt|api_key', scope: 'case:read', description: '分页读时间线，可按 since / kind 过滤（对应工具 timeline_list）' },
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/timeline', auth: 'jwt|api_key', scope: 'case:write', description: '追加一条时间线事件，只追加无改删（对应工具 timeline_add）' },
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/timeline/{eventId}/milestone', auth: 'jwt|api_key', scope: 'case:write', description: '给一条时间线事件盖里程碑' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/actions', auth: 'jwt|api_key', scope: 'case:read', description: '列出行动卡，可按状态过滤（对应工具 action_list）' },
@@ -108,7 +112,6 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'web', method: 'POST', path: '/api/v1/keys/{id}/rotate', auth: 'jwt', description: '轮换：换发新明文，旧明文立即失效；id / name / scopes 不变' },
   { category: 'web', method: 'DELETE', path: '/api/v1/keys/{id}', auth: 'jwt', description: '吊销 api key（置 enabled=0，留行保审计线索）' },
   { category: 'web', method: 'POST', path: '/api/v1/realname/init', auth: 'jwt', description: '发起实人认证，返回 H5 活体认证页 URL' },
-  { category: 'web', method: 'GET', path: '/api/v1/realname/status', auth: 'jwt', description: '查实人认证结果（落定后重复调用直接回存量结论）' },
   { category: 'web', method: 'POST', path: '/api/v1/realname/passport', auth: 'jwt', description: '护照实名提交（multipart），落「待审」等人工核；只有护照的人走这条' },
 
   // ──────── 管理员 ────────

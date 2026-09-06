@@ -1,11 +1,41 @@
 // app/src/app/api/v1/cases/[id]/timeline/route.ts
+// GET  分页读时间线，入参与 MCP 工具 timeline_list 一致（since / kind / limit / offset）。
 // POST 追加一条时间线事件（对应 MCP 工具 timeline_add）。只追加，无改无删。
 import { NextResponse } from 'next/server';
 
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 import * as cases from '@/lib/cases';
+import { pageParams, pageResponse } from '@/lib/cases/paging';
 import { getDb } from '@/lib/db/client';
+
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const guard = requireIdentity(getDb(), req, 'case:read');
+  if (!guard.ok) return guard.response;
+
+  const caseId = parseId((await params).id);
+  if (caseId === null) {
+    return NextResponse.json(
+      { ok: false, error_code: 'CASE_NOT_FOUND', message: '案件不存在' },
+      { status: 404 },
+    );
+  }
+
+  const url = new URL(req.url);
+  const { limit, offset } = pageParams(url);
+  // 分页与过滤全在 cases.listTimeline（与 timeline_list 同一函数），这里只解析 query
+  const result = cases.listTimeline(getDb(), {
+    caseId,
+    userId: guard.identity.uid,
+    since: url.searchParams.get('since') ?? undefined,
+    kind: url.searchParams.get('kind') ?? undefined,
+    limit,
+    offset,
+  });
+  if (!result.ok) return domainFailure(result);
+
+  return pageResponse('events', { items: result.events, ...result });
+}
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const guard = requireIdentity(getDb(), req, 'case:write');
