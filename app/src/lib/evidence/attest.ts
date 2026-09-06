@@ -12,7 +12,7 @@ import { decryptField, encryptField } from '@/lib/crypto';
 import { findCaseById } from '@/lib/db/cases';
 import * as store from '@/lib/db/evidence';
 
-import { ensureBrief, generateBrief } from './brief';
+import { ensureBrief, generateBrief, recordBriefError } from './brief';
 import { defaultBriefLlm } from './brief-llm';
 import { storeBytes } from './files';
 import * as sidecar from './sidecar-client';
@@ -362,13 +362,22 @@ async function ensureBriefAfterAttest(db: Database, evidenceId: number): Promise
     | undefined;
   if (!row || row.v > 0) return;
   const llm = defaultBriefLlm();
-  // 没有可用模型时什么都不做：出证已经成功了，缺一张卡片不该让它回滚。
-  if (!llm) return;
+  // 没有可用模型时出证照旧成功（缺一张卡片不该让它回滚），但**要留痕**：
+  // 只 return 的话，这件材料在库里与"从没试过"同形（09-06 生产缺口）。
+  if (!llm) {
+    recordBriefError(
+      db,
+      evidenceId,
+      '没有可用的简报模型（缺 provider key，或那家不实现 chatJSON），出证时没能附上简报。' +
+        '存证本身已经完成，配好模型后可用 evidence_brief_regenerate 补一份（按 0 公道值计价）。',
+    );
+    return;
+  }
   try {
-    const r = await generateBrief(db, evidenceId, llm);
-    if (!r.ok) console.warn(`[attest] 证据 ${evidenceId} 的简报没写成：${r.error}`);
+    // generateBrief 内部已经落 brief_error 并打日志
+    await generateBrief(db, evidenceId, llm);
   } catch (err) {
-    console.warn(`[attest] 证据 ${evidenceId} 的简报生成抛错（不影响出证）：`, err);
+    recordBriefError(db, evidenceId, `简报生成抛错（不影响出证）：${(err as Error).message}`);
   }
 }
 

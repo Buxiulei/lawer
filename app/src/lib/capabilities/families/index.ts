@@ -17,6 +17,7 @@ import { draftGet, draftList, draftWrite } from './drafts';
 import { emotionLog } from './emotion';
 import {
   evidenceBriefGet,
+  evidenceBriefRegenerate,
   evidenceBriefUpdate,
   evidenceExtract,
   evidenceGet,
@@ -74,4 +75,5 @@ export const CAPABILITIES: Capability[] = [
   evidenceAttest,
   attestVerify,
   evidenceVoid,
+  evidenceBriefRegenerate,
 ];

@@ -96,6 +96,7 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'agent', method: 'POST', path: '/api/v1/evidence/{id}/extract', auth: 'jwt|api_key', scope: 'case:write', description: '内容提取（对应工具 evidence_extract）。不带 quote_id = 只看价、这一步不产生扣费；带上 = 确认扣费并排队。**需已实名**' },
   { category: 'agent', method: 'GET', path: '/api/v1/evidence/{id}/brief', auth: 'jwt|api_key', scope: 'case:read', description: '读一件材料的简报与它的版本号（对应工具 evidence_brief_get）' },
   { category: 'agent', method: 'PUT', path: '/api/v1/evidence/{id}/brief', auth: 'jwt|api_key', scope: 'case:write', description: '整份改写简报（对应工具 evidence_brief_update）。base_version 对不上回 409，不覆盖' },
+  { category: 'agent', method: 'POST', path: '/api/v1/evidence/{id}/brief/regenerate', auth: 'jwt|api_key', scope: 'case:write', description: '重新生成简报（对应工具 evidence_brief_regenerate）。不计费；已有简报的一律拒，不覆盖' },
   { category: 'agent', method: 'POST', path: '/api/v1/evidence/{id}/void', auth: 'jwt|api_key', scope: 'case:write', description: '作废一件材料（对应工具 evidence_void）。reason 必填；作废后不进默认清单与事实卡、不能出证，已出的证不撤销' },
   { category: 'agent', method: 'POST', path: '/api/v1/company/probe', auth: 'jwt|api_key', scope: 'case:read', description: '免费前置探测：扣费前先给数字与工商状态，降级时如实回 reason' },
   { category: 'agent', method: 'POST', path: '/api/v1/company/dossiers/quote', auth: 'jwt|api_key', scope: 'case:read', description: '公司档案报价。**不动钱**：不扣费、不建档、不占额度' },

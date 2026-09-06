@@ -125,7 +125,7 @@ X-API-Key: <你的 api key>
 
 | 工具 | REST | scope | 读写 | 用途 | 入参要点 |
 |---|---|---|---|---|---|
-| `evidence_list` | `GET /cases/{id}/evidence` | `case:read` | 读 | 列出案件下已登记的证据条目（名称、分类、证明目的、固化状态、提取状态，以及有简报时的一句话摘要）。要读全文或整份简报用 evidence_get / evidence_brief_get。**已作废的条目默认不在清单里**（当事人声明"这份不作数"的那些）——要看得把 include_voided 传真。 | `case_id` 案件 id；`include_voided`? 是否把已作废的条目也列出来（默认不列） |
+| `evidence_list` | `GET /cases/{id}/evidence` | `case:read` | 读 | 列出案件下已登记的证据条目（名称、分类、证明目的、固化状态、提取状态、简报状态，以及有简报时的一句话摘要）。brief_status=failed 说明自动生成失败过，brief_error 里是原因，可用 evidence_brief_regenerate 再试一次。要读全文或整份简报用 evidence_get / evidence_brief_get。**已作废的条目默认不在清单里**（当事人声明"这份不作数"的那些）——要看得把 include_voided 传真。 | `case_id` 案件 id；`include_voided`? 是否把已作废的条目也列出来（默认不列） |
 | `evidence_get` | `GET /evidence/{id}` | `case:read` | 读 | 读一件证据的元数据、提取状态与简报；include_text 为真时附上已提取的文本（超 8000 字截断并标 truncated，要全文去网页详情页）。文件二进制不经本接口。 | `evidence_id` 证据 id（取自 evidence_list）；`include_text`? 是否带上已提取的文本正文（默认不带，省上下文） |
 | `evidence_extract` | `POST /evidence/{id}/extract` | `case:write` | 写·耗算力 | 把一件材料的内容提取成文字：ocr（图片/PDF 认字）、asr（录音转写，带说话人与时间轴）、video（抽音轨转写 + 关键帧识别）。**两步**：不带 quote_id 调一次先拿报价（这一步只看价，不产生任何扣费）；把报价里的 quote_id 带回来再调一次才确认扣费并排队。完成后 evidence_get 能读到文本，并自动附一份简报（价已含在提取里，不另计）。 | `evidence_id` 证据 id（取自 evidence_list）；`mode` ocr = 图片/PDF 认字；asr = 录音转写；video = 视频；`quote_id`? 不填 = 只看价，这一步不产生扣费；填上一次报价回的 quote_id = 确认扣费并开始提取 |
 | `evidence_brief_get` | `GET /evidence/{id}/brief` | `case:read` | 读 | 读一件证据的简报：能证明什么、关键事实（时间/人物/事项/原话/位置）、与诉求的关系、弱点与补强建议、引用位置。要改写就把回包里的 version 原样带给 evidence_brief_update。 | `evidence_id` 证据 id（取自 evidence_list） |
@@ -135,6 +135,7 @@ X-API-Key: <你的 api key>
 | `evidence_attest` | — | `case:write` | 写 | 给已登记的条目盖可信时间戳、渲染《存证证明》PDF 并签名，回订单号。**这一步按 0 公道值计价**，没有报价步骤，也不消耗任何额度。幂等：同一条反复发起只会有一个订单号，中途失败原地续跑，不会出第二份证明。一次最多 10 件——每件都要走三次外部调用，给多了这次请求会挂很久。逐件独立成败：某件失败不影响别件，回包里每件各有各的结果，请照结果逐件复述，不要笼统说"都办好了"。需已完成实名认证（证明上要印实名快照）。 | `evidence_ids` 要出证的条目 id，1~10 个 |
 | `attest_verify` | `GET /verify/{orderNo}` | `case:read` | 读 | 拿订单号查一份存证记录：哈希、时间戳（签发时刻、序列号、TSA 地址、原始 tst）与条目元数据。与公开页 /verify/{订单号} 同一份数据，**不含持证人姓名与证件号**——这个接口谁拿到订单号都能查，身份只在《存证证明》PDF 上，由持证人自己出示。任何人的订单号都能查，不限于本账号：核验方本来就该不注册账号也能核。 | `order_no` 存证订单号，形如 LAWER-ATT-20260905-<16位hex> |
 | `evidence_void` | `POST /evidence/{id}/void` | `case:write` | 写 | 把一件材料标成「已作废」：当事人确认它不作数（重复上传、拿错版本、内容与本案无关）。作废之后它**不再出现在 evidence_list 默认清单里**（要看得传 include_voided）、不再进案件事实卡，也不能再发起出证。文件本身不删除，仍占用户的存储配额；已经出过证的条目，**那张存证订单不撤销**——订单号照旧可被对方核验，作废只表示当事人不再拿这份材料当证据用。reason 必填：没有理由的作废，日后与"手滑点错了"分不开。 | `evidence_id` 证据 id（取自 evidence_list）；`reason` 为什么作废，例如「与条目 12 重复」「当事人确认这是草稿版」 |
+| `evidence_brief_regenerate` | `POST /evidence/{id}/brief/regenerate` | `case:write` | 写 | 给一件**还没有简报**的材料重新生成一份（自动生成失败过的走这条）。**这一步按 0 公道值计价**，没有报价步骤，也不消耗任何额度——价已经含在当初那次内容提取里。同步返回，不排队。已经有简报的一律拒绝（不覆盖人手写过的那一版，要换用 evidence_brief_update）。这一次再失败会把失败原文原样回给你，不翻译成一句"生成失败"。 | `evidence_id` 证据 id（取自 evidence_list） |
 
 **法律依据**
 
