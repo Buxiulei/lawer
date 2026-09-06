@@ -33,6 +33,7 @@ import {
   type AgentKeySecret,
   type IssuedKey,
 } from '../../_components/useAgentKeySecret';
+import { ClientMatrix } from './ClientMatrix';
 
 /**
  * 生成那一次的响应里，这一页还用得上的部分：接入地址（省一次 agent-setup 往返）
@@ -139,11 +140,24 @@ export function ConnectGuide() {
             {urls && (
               <>
                 <p className="text-[14px] leading-6 text-ink-2">
-                  选你手里那个客户端；不确定就用「通用」，让它自己判断走 MCP 还是 REST。
+                  选你手里那个客户端，下面会给这一家的步骤与一段可直接复制的配置。
+                  名单里没有的，用「自建 agent（REST）」那一档。
                 </p>
                 <div className="mt-2">
                   <DiscreetCollapse label="接入配置（点开查看）">
-                    <SetupPrompt info={urls} apiKey={apiKey} />
+                    <ClientMatrix info={urls} apiKey={apiKey} />
+                    {/*
+                      整段话术仍留在这里：矩阵给的是「怎么连」，话术给的是「连上之后
+                      让它先读什么、守什么规矩」。两件事都需要，且各有各的复制按钮。
+                    */}
+                    <div className="mt-5 border-t border-line pt-4">
+                      <p className="text-[13px] leading-5 font-semibold text-ink">
+                        连上之后，把这段话术也发给它
+                      </p>
+                      <div className="mt-1.5">
+                        <SetupPrompt info={urls} apiKey={apiKey} />
+                      </div>
+                    </div>
                   </DiscreetCollapse>
                 </div>
               </>
@@ -272,6 +286,7 @@ function IssueKey({
         mcp_url: body.mcp_url,
         api_base: body.api_base,
         manifest_url: body.manifest_url,
+        openapi_url: body.openapi_url,
         skill_url: body.skill_url,
       });
       // 顶掉 hook 的 'none' 态：刚生成的这把就是当前那把，不必再往返一趟去问

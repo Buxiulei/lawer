@@ -18,6 +18,8 @@ export interface SetupUrls {
   mcp_url: string;
   api_base: string;
   manifest_url: string;
+  /** OpenAPI 3.1 文档地址：只吃 OpenAPI 的客户端一键导入用 */
+  openapi_url: string;
   /**
    * skill 总纲的公开地址（免鉴权）。话术里让对方 agent **第一步**就取它，
    * 由它再指路到《接入说明》与《陪跑指南》。
@@ -42,13 +44,16 @@ export const SETUP_TABS: { key: SetupTabKey; label: string }[] = [
 ];
 
 /**
- * 没有明文密钥可填时的占位。
+ * 没有明文密钥可填时的占位。**正本在 lib/capabilities/client-matrix**，这里只是转出去：
+ * 两份占位符并存的形态是页面上两处提示写着不一样的串，用户以为要填两个东西。
  *
  * 【什么时候还会落到它】密钥本身现在是取得回来的（GET /keys/{id}/secret），
  * 所以占位符只剩三种场合：还一把 key 都没有、这把是拿不回明文的存量旧密钥、
  * 这一次取明文没取到。三种都不是「你自己去翻当初存的那串」，页面要各说各的出路。
  */
-export const KEY_PLACEHOLDER = '<粘贴你生成时保存的密钥>';
+export { KEY_PLACEHOLDER } from '@/lib/capabilities/client-matrix';
+
+import { KEY_PLACEHOLDER as PLACEHOLDER } from '@/lib/capabilities/client-matrix';
 
 export interface PromptVars extends SetupUrls {
   /** 当前这把 key 的明文；取不到就传 undefined，落到 KEY_PLACEHOLDER */
@@ -56,7 +61,7 @@ export interface PromptVars extends SetupUrls {
 }
 
 function key(vars: PromptVars): string {
-  return vars.apiKey || KEY_PLACEHOLDER;
+  return vars.apiKey || PLACEHOLDER;
 }
 
 /** MCP 客户端通用 JSON 配置，与通用话术里那一行是同一份 */

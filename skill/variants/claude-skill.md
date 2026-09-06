@@ -82,6 +82,196 @@ X-API-Key: <你的 api key>
 - 接口基址：`<api_base>`
 - 自描述清单：`GET /api/manifest`，**无需鉴权**，列出全部端点、鉴权方式、权限项与错误形状。
   不确定某个能力怎么调时先读它，不要猜。
+- OpenAPI 3.1 文档：`GET /api/openapi.json`，**无需鉴权**，可直接导入吃 OpenAPI 的客户端或代码生成器。
+  带 `?profile=actions` 出精简集——有些客户端对一份 schema 里的接口数量有上限，全量会被它自己截断，
+  而**截掉哪几条由它决定**。
+
+## 客户端矩阵
+
+<!-- 本节由 app/src/lib/capabilities/client-matrix.ts 生成，勿手改；改动请改那份再跑 `npm run gen:docs`。
+     地址一律写成占位符：真地址由服务端按 env 算出来，写死的那份在预发环境上指向的是生产。 -->
+
+| 客户端 | 接入路径 | 现状 |
+|---|---|---|
+| ChatGPT 网页 · 连接器 | A. MCP + OAuth | 待 OAuth 上线（步骤里给了替代路） |
+| ChatGPT · 自定义 GPT Actions | C. REST + API key | 现在可用 |
+| Claude 网页 · 连接器 | A. MCP + OAuth | 待 OAuth 上线（步骤里给了替代路） |
+| Claude Code | B. MCP + Bearer | 现在可用 |
+| Gemini CLI | B. MCP + Bearer | 现在可用 |
+| Cursor / Cline | B. MCP + Bearer | 现在可用 |
+| Kimi | A. MCP + OAuth | 待 OAuth 上线（步骤里给了替代路） |
+| 扣子空间 | A. MCP + OAuth | 待 OAuth 上线（步骤里给了替代路） |
+| 自建 agent（REST） | C. REST + API key | 现在可用 |
+| 无工具网页对话（DeepSeek / 豆包 / Gemini 网页） | D. 无工具模式（复制粘贴） | 现在可用 |
+
+### ChatGPT 网页 · 连接器
+
+路径 A（MCP + OAuth）·待 OAuth 上线（步骤里给了替代路）
+
+1. ChatGPT 的自定义连接器目前只接受 OAuth，不接受在界面里填 Bearer 密钥——我们的 OAuth 授权还没上线，这条路现在接不通。
+2. 现在要在 ChatGPT 里用，请改选下一档「ChatGPT · 自定义 GPT Actions」：那条走 REST + 密钥，是现在就能用的。
+3. （这一档等 OAuth 上线后会在本页直接给出地址，不用你做别的事。）
+
+连接器地址（OAuth 上线后可用）：
+
+```
+<mcp_url>
+```
+
+### ChatGPT · 自定义 GPT Actions
+
+路径 C（REST + API key）·现在可用
+
+1. 在 ChatGPT 里新建一个 GPT：右上角头像 → My GPTs → Create a GPT → Configure → 拉到底点 Create new action。
+2. 点 Import from URL，粘下面这个地址导入。它是精简集（只含最常用的那几条），因为 Actions 对一份 schema 里的接口数量有上限：<openapi_url>?profile=actions
+3. Authentication 选 API Key，Auth Type 选 Bearer，把你的密钥粘进 API Key 那一栏。
+4. 保存后在预览里问一句「读一下我的档案」，它会请求你授权调用，允许即可。
+5. 要全量接口（自己写脚本或用别的能吃 OpenAPI 的工具）就去掉 `?profile=actions`。
+
+OpenAPI 导入地址（精简集）：
+
+```
+<openapi_url>?profile=actions
+```
+
+### Claude 网页 · 连接器
+
+路径 A（MCP + OAuth）·待 OAuth 上线（步骤里给了替代路）
+
+1. Claude 网页端的自定义连接器标准配置只有 OAuth 字段，我们的 OAuth 授权还没上线。
+2. 如果你的账号是组织管理员、且后台有「静态请求头」这一项，可以填：地址 <mcp_url>，请求头名 authorization，值 Bearer <你的密钥>。这一项各账号不一定都有。
+3. 没有那一项的话，用 Claude Code（下一档）接同一个服务，能力完全一样。
+
+服务地址与请求头：
+
+```
+<mcp_url>
+authorization: Bearer <你的密钥>
+```
+
+### Claude Code
+
+路径 B（MCP + Bearer）·现在可用
+
+1. 在终端里跑下面这条命令，一条就接上了。
+2. 跑完 `claude mcp list` 能看到它，就是好了。
+
+一条命令：
+
+```
+claude mcp add --transport http lawer <mcp_url> --header "Authorization: Bearer <你的密钥>"
+```
+
+### Gemini CLI
+
+路径 B（MCP + Bearer）·现在可用
+
+1. 在终端里跑下面这条命令（Gemini CLI 原生支持自定义请求头）。
+2. 也可以把等价配置写进 `~/.gemini/settings.json` 的 mcpServers 段。
+3. 装好后用 `/mcp` 看一眼列表里有没有它。
+
+一条命令：
+
+```
+gemini mcp add --transport http lawer <mcp_url> --header "Authorization: Bearer <你的密钥>"
+```
+
+### Cursor / Cline
+
+路径 B（MCP + Bearer）·现在可用
+
+1. Cursor：Settings → MCP → Add new MCP server → 选 Raw JSON，把下面这段粘进去。
+2. Cline：MCP Servers 面板 → Configure MCP Servers → 同一段 JSON 粘进配置文件。
+3. 粘完重启一次客户端——多数客户端不重启不会重新读配置。
+
+MCP 配置（JSON）：
+
+```
+{
+  "mcpServers": {
+    "lawer": {
+      "type": "http",
+      "url": "<mcp_url>",
+      "headers": {
+        "Authorization": "Bearer <你的密钥>"
+      }
+    }
+  }
+}
+```
+
+### Kimi
+
+路径 A（MCP + OAuth）·待 OAuth 上线（步骤里给了替代路）
+
+1. Kimi 各端都能接 MCP，但网页端的连接器走的是 OAuth，我们的 OAuth 授权还没上线。
+2. Kimi 的命令行版（Kimi CLI）能填自定义请求头，把地址 <mcp_url> 与 Authorization 头按下面这段写进它的 MCP 配置即可。
+3. 只用网页版的话，先走最后一档「无工具网页对话」，等 OAuth 上线再回来接。
+
+MCP 配置（JSON，命令行版用）：
+
+```
+{
+  "mcpServers": {
+    "lawer": {
+      "type": "http",
+      "url": "<mcp_url>",
+      "headers": {
+        "Authorization": "Bearer <你的密钥>"
+      }
+    }
+  }
+}
+```
+
+### 扣子空间
+
+路径 A（MCP + OAuth）·待 OAuth 上线（步骤里给了替代路）
+
+1. 豆包的聊天框本身不能接外部工具；能接的是同一生态里的扣子空间。
+2. 在扣子空间里新建一个 MCP 连接，传输选 HTTP。
+3. 服务地址：<mcp_url>。鉴权那一栏若能自定义请求头，填 Authorization: Bearer <你的密钥>；若只给 OAuth 选项，则这条路要等我们的 OAuth 上线。
+4. 接不上的话，用最后一档「无工具网页对话」在豆包里照样能陪跑，只是每次要重贴开场白。
+
+服务地址与请求头：
+
+```
+<mcp_url>
+Authorization: Bearer <你的密钥>
+```
+
+### 自建 agent（REST）
+
+路径 C（REST + API key）·现在可用
+
+1. 先读能力清单（免鉴权，含全部接口自描述）：<manifest_url>
+2. 要生成客户端代码就用 OpenAPI 文档：<openapi_url>
+3. 业务基址 <api_base>，每个请求都带 Authorization: Bearer <你的密钥>。
+4. 下面这条 curl 用来验密钥通不通——它需要鉴权但不要求任何权限项，拿它试最干净。
+
+验一下通不通：
+
+```
+curl -H "Authorization: Bearer <你的密钥>" <api_base>/agent-setup
+```
+
+### 无工具网页对话（DeepSeek / 豆包 / Gemini 网页）
+
+路径 D（无工具模式（复制粘贴））·现在可用
+
+1. 这几家的网页聊天框都没有工具/插件入口，也没有常驻的系统提示词位——所以走「复制粘贴」这条路。
+2. 每开一个新对话，先把下面这段开场白贴进去，再把你的档案摘要贴在它后面。
+3. 对方回复末尾会带一个 ```tubashu 代码块，列出这一轮的新增。本站的「粘贴回填」入口还没上线，在它上线之前这个块只作对照清单，档案里的内容要你自己录。
+4. （ChatGPT 与 Claude 网页版有常驻自定义指令位，可以把这段一次性放进去，不用每次重贴。）
+
+开场白（每次新对话贴一遍）：
+
+```
+你接下来要陪我处理一件事。你没有工具可用，所以下面这些信息由我贴给你，不要自己去查。
+【背景资料】我会把我的档案摘要贴在这条消息后面。你也可以让我去取：<skill_url>（一份公开的使用说明，我可以复制粘贴给你）。
+【你要守的规矩】任何条号、任何数字、任何案例，都只能引用我贴给你的材料里逐字出现的内容；材料里没有的就说「材料里没有」，不要凭印象补。
+【回复格式】正常回答之后，如果这一轮产生了新的事实、待办、金额或期限，请在末尾附一个 ```tubashu 代码块，里面是 JSON：{"timeline":[],"actions":[],"claims":[],"deadlines":[],"report_updates":[]}。这是给我看的清单，我会照着它自己更新档案。没有新增就不要附。
+```
 
 ## 接入方式三：OAuth（网页版连接器）
 
@@ -123,7 +313,7 @@ ChatGPT 网页（Developer mode）与 Claude 网页/桌面的连接器**只认 O
 |---|---|---|---|---|---|
 | `case_get` | `GET /cases/{id}` | `case:read` | 读 | 读取一个案件的档案（阶段、目标、底线）以及最近的时间线事件。只能读自己的案件。 | `case_id` 案件 id；`timeline_limit`? 带回多少条时间线事件，默认 50，最多 200 |
 | `case_update` | `PATCH /cases/{id}` | `case:write` | 写 | 更新案件档案：阶段 stage、目标 goal、底线 bottom_line，以及用工基本盘四项——入职时间 employed_from（YYYY-MM-DD）、月工资 monthly_wage_yuan（单位元）、岗位 position、合同签署次数 contract_count。**至少传一个**，用于零散补齐，不必重走首诊。stage 必须是法定枚举值之一。 | `case_id` 案件 id；`stage`? 案件所处阶段；`goal`? 用户自述的诉求目标；`bottom_line`? 用户自述的底线；`employed_from`? 入职时间，YYYY-MM-DD，不能晚于今天；工龄年限的起点；`monthly_wage_yuan`? 月工资，单位元（会换算成分落库）；所有赔偿金额的基数；`position`? 岗位；`contract_count`? 合同签署次数，用户自述原样记录，如「只签过一次」 |
-| `case_facts` | — | `case:read` | 读 | 一次拿全这个案子的当前事实：当事人、案件抬头、法定期限、用工基本盘（入职时间/月薪/岗位）、公司主体、行动卡、诉求金额、时间线、证据清单。**回答任何与案情有关的问题之前先调它**。档案里没有的项会明写「未记录」——那是「档案里没有这一项」，不是「不存在」，不要自己脑补一个值。 | `case_id` 案件 id |
+| `case_facts` | `GET /cases/{id}/facts` | `case:read` | 读 | 一次拿全这个案子的当前事实：当事人、案件抬头、法定期限、用工基本盘（入职时间/月薪/岗位）、公司主体、行动卡、诉求金额、时间线、证据清单。**回答任何与案情有关的问题之前先调它**。档案里没有的项会明写「未记录」——那是「档案里没有这一项」，不是「不存在」，不要自己脑补一个值。 | `case_id` 案件 id |
 | `case_list` | `GET /cases` | `case:read` | 读 | 列出当前 api key 所属用户自己的全部案件（case_id、抬头 title、阶段 stage、建档时间），新的在前。**连上后先调它认领案件**：只有一个案件（绝大多数人）就直接用它的 case_id，不要开口问用户要编号；有多个就把抬头列出来让用户挑；一个都没有就请用户去网页端建档（首诊）。无需任何入参。 | 无入参 |
 | `intake_submit` | `POST /cases/{id}/intake` | `case:write` | 写 | 把首诊问下来的内容一次性写进这个案件：阶段、公司名、入职时间、月工资、岗位、合同次数、经过（时间线）、诉求、底线。**新用户或用工基本盘还空着时用它一次建档**，问齐了再调，不要让用户回网页填。金额传元（monthly_wage_yuan），服务端换算成分。校验不过会逐字段回原因（如 INVALID_MONTHLY_WAGE），照着补齐再提交即可。 | `case_id` 案件 id；`stage` 案件所处阶段；`company_name` 公司名称，就是仲裁里的被申请人；`employed_from` 入职时间，YYYY-MM-DD，不能晚于今天；`monthly_wage_yuan` 月工资，单位元（会换算成分落库）；`goals` 诉求，至少一项；`position`? 岗位，可省略；`contract_count`? 合同签署次数，用户自述原样记录，可省略；`events`? 用户记得的事件，每条含 date（YYYY-MM-DD，可留空）与 text；`free_text`? 用户整段自述的经过，可省略；`company_docs`? 公司给过哪些文件（键 terminationNotice / settlementAgreement / otherPaper）；`company_wording`? 公司口头给的说法，可省略；`bottom_line`? 用户的底线，可省略 |
 
@@ -141,7 +331,7 @@ ChatGPT 网页（Developer mode）与 Claude 网页/桌面的连接器**只认 O
 |---|---|---|---|---|---|
 | `action_list` | `GET /cases/{id}/actions` | `case:read` | 读 | 列出案件下的行动项，可按状态过滤（待办 / 完成 / 放弃）。 | `case_id` 案件 id；`status`? 只看某个状态 |
 | `action_complete` | `PATCH /cases/{id}/actions/{actionId}` | `case:write` | 写 | 把一条行动项标记为完成；也可以传 status 标记为放弃。 | `case_id` 案件 id；`action_id` 行动项 id；`status`? 目标状态，默认「完成」 |
-| `action_create` | — | `case:write` | 写 | 给案件加行动卡，一次最多 3 张。超过这个数就不是「现在做什么」，是又一份待办清单——用户看完照样不知道先干哪件。每张必须齐三样：what（做什么）、how（怎么做）、why（为什么），外加 due_at（什么时候之前做完，ISO8601 时刻；「今天下班前」也要换算成具体时刻）。同案下已有同题待办不会重复落库，回 created:false。 | `case_id` 案件 id；`items` 要新建的行动卡，1~3 张；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
+| `action_create` | `POST /cases/{id}/actions` | `case:write` | 写 | 给案件加行动卡，一次最多 3 张。超过这个数就不是「现在做什么」，是又一份待办清单——用户看完照样不知道先干哪件。每张必须齐三样：what（做什么）、how（怎么做）、why（为什么），外加 due_at（什么时候之前做完，ISO8601 时刻；「今天下班前」也要换算成具体时刻）。同案下已有同题待办不会重复落库，回 created:false。 | `case_id` 案件 id；`items` 要新建的行动卡，1~3 张；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
 
 **期限**
 
@@ -169,7 +359,7 @@ ChatGPT 网页（Developer mode）与 Claude 网页/桌面的连接器**只认 O
 
 | 工具 | REST | scope | 读写 | 用途 | 入参要点 |
 |---|---|---|---|---|---|
-| `knowledge_search` | — | `case:read` | 读 | 按自然语言检索法条卡/判例卡/计算规则/流程SOP/文书模板/话术卡/情绪指南/数据卡/审查规则/方法卡。任何涉法断言、任何数字、任何文书起草之前都先调它——你记忆里的条号和数字一律不可用。每张卡带 citation_guide（可直接照抄的引用块）与 confidence；confidence 是「待核实」的必须如实转达给用户。默认给摘要，要整张正文时传 full_text=true，或用 knowledge_get 单取一张。检索不到就说查不到，不要编条号和案号。 | `query` 检索词，用案情关键词而非整句话，如「客观情况重大变化 北京口径」；`type`? 只要某一类卡时传，一般不传；`court`? 只要某个法院的判例时传，子串即可（如「朝阳」）。传了就只回判例卡——没有审理机构的卡会被滤掉；`full_text`? 传 true 回整张正文（单卡上限 8000 字，超出截断并标 truncated）；默认只回 1200 字摘要；`limit`? 最多几张，默认与上限都是 6；超出这个范围会被夹回 1~6 |
+| `knowledge_search` | `GET /knowledge/search` | `case:read` | 读 | 按自然语言检索法条卡/判例卡/计算规则/流程SOP/文书模板/话术卡/情绪指南/数据卡/审查规则/方法卡。任何涉法断言、任何数字、任何文书起草之前都先调它——你记忆里的条号和数字一律不可用。每张卡带 citation_guide（可直接照抄的引用块）与 confidence；confidence 是「待核实」的必须如实转达给用户。默认给摘要，要整张正文时传 full_text=true，或用 knowledge_get 单取一张。检索不到就说查不到，不要编条号和案号。 | `query` 检索词，用案情关键词而非整句话，如「客观情况重大变化 北京口径」；`type`? 只要某一类卡时传，一般不传；`court`? 只要某个法院的判例时传，子串即可（如「朝阳」）。传了就只回判例卡——没有审理机构的卡会被滤掉；`full_text`? 传 true 回整张正文（单卡上限 8000 字，超出截断并标 truncated）；默认只回 1200 字摘要；`limit`? 最多几张，默认与上限都是 6；超出这个范围会被夹回 1~6 |
 | `knowledge_get` | — | `case:read` | 读 | 按 id 取一张知识卡的正文与结构化事实（facts）。id 从 knowledge_search 的结果里拿。要逐字引用条文、要取一个数、要照着审查规则逐条核对时用它——facts 里的 statute_quotes / values / review_rules 是**结构化原文**，比正文散文更该被照抄；正文上限 8000 字，超出会截断并标 truncated。 | `id` 知识卡 id，形如 `<域单数>-<slug>`，从 knowledge_search 结果里取 |
 
 **金额主张**
@@ -178,7 +368,7 @@ ChatGPT 网页（Developer mode）与 Claude 网页/桌面的连接器**只认 O
 |---|---|---|---|---|---|
 | `claim_calc` | — | `case:write` | 写 | 按案情算一笔金额并直接落库（同案同 kind 只留一条，再算一次是修正）。返回金额、算式 formula、逐步骤 steps、依据 basis（条号 + 逐字原文 + 来源卡 id）与封顶提示。**任何要写进文书、说给用户听或拿去谈的金额都必须经它算**，不要自己心算、也不要转述记忆里的数。入参缺什么会逐条回一句人话告诉你缺什么（七种算法的必填项互不相同），照着补齐再调一次即可。金额单位一律是**分**，且是「应得」不是「到手」。 | `case_id` 案件 id；`kind` 算哪一项；`inputs`? 这一项算法要的输入，键名照服务端回的错误提示填（如 avg_monthly_wage_fen / employed_from / terminated_at / months / anchor_date …）。也可以把它们平铺在顶层。；`evidence_backed`? 哪些输入字段是有证据支撑的（不列的一律标「用户自述」，展示时要说明待核实）；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
 | `claims_upsert` | — | `case:write` | 写 | 登记或修正案件下的一条诉求项（同案同 kind 只有一条，再调是覆盖不是追加）。**算得出来的项不要在这里填金额**——它们必须走 claim_calc（那条会带算式、输入快照与依据一起落库）；这里只用于登记「用户陈述的数额」一类的项，以及给已有的项补依据 basis。金额单位是分。 | `case_id` 案件 id；`kind` 诉求种类；`amount_fen`? 金额，单位分，非负；还没算出来就给 0；`basis`? 依据（条号、来源卡 id 等），可省略；`calc_json`? 这个数从哪来、待证状态，JSON 串，可省略；`status`? 默认 draft；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
-| `claims_list` | — | `case:read` | 读 | 列出案件下的全部诉求项与**合计金额**（合计由服务端算，不要自己把各项加起来——这个总数正是拿去跟对方谈的那个数）。每项带 calc_json：那是算这笔钱时的完整快照，可复算。 | `case_id` 案件 id |
+| `claims_list` | `GET /cases/{id}/claims` | `case:read` | 读 | 列出案件下的全部诉求项与**合计金额**（合计由服务端算，不要自己把各项加起来——这个总数正是拿去跟对方谈的那个数）。每项带 calc_json：那是算这笔钱时的完整快照，可复算。 | `case_id` 案件 id |
 
 **文书**
 
