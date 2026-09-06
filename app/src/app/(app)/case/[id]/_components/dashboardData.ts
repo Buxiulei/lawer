@@ -32,7 +32,7 @@ import type {
   Deadline,
   DeadlineKind,
 } from '@/app/_mock/types';
-import { apiFetch, ApiError, humanError } from '@/app/_ui/api';
+import { apiFetch, apiFetchAll, ApiError, humanError } from '@/app/_ui/api';
 import type { BadgeTone } from '@/components/shadcn/badge';
 import { demoAttainments, type Attainment, type Milestone } from './milestones';
 
@@ -287,19 +287,19 @@ export async function fetchDashboard(caseId: string): Promise<DashboardData> {
     apiFetch<{ case: ApiCaseRow; timeline: ApiTimelineRow[] }>(
       `/cases/${caseId}?timeline_limit=200`,
     ),
-    apiFetch<{ actions: ApiActionRow[] }>(`/cases/${caseId}/actions`),
-    apiFetch<{ deadlines: ApiDeadlineRow[] }>(`/cases/${caseId}/deadlines`),
-    apiFetch<{ evidence: ApiEvidenceRow[] }>(`/cases/${caseId}/evidence`),
+    apiFetchAll<ApiActionRow>(`/cases/${caseId}/actions`),
+    apiFetchAll<ApiDeadlineRow>(`/cases/${caseId}/deadlines`),
+    apiFetchAll<ApiEvidenceRow>(`/cases/${caseId}/evidence`),
   ]);
 
   return {
-    actions: actions.actions.map(toAction),
-    deadlines: deadlines.deadlines.map(toDeadline),
+    actions: actions.map(toAction),
+    deadlines: deadlines.map(toDeadline),
     attainments: toAttainments(detail.timeline),
     timelineCount: detail.timeline.length,
     // 公司文件（「解读结论：不签」那一类）后端还没有列表接口，真实案件这一半先只有证据。
     // 不拿 demoCompanyDocs 填——那会把编的公司名混进用户自己的材料列表里。
-    records: latestThree(evidence.evidence.map((row) => toRecord(row, caseId))),
+    records: latestThree(evidence.map((row) => toRecord(row, caseId))),
   };
 }
 

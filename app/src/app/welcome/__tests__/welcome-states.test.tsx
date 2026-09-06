@@ -24,7 +24,7 @@ vi.mock('next/link', () => ({
 
 /* 取数那两个门面在③里被驱动，②①两组都不碰它们（判定与两屏都是纯的） */
 vi.mock('@/app/_ui/currentCase', () => ({ fetchMyCases: vi.fn() }));
-vi.mock('@/app/_ui/api', () => ({ apiFetch: vi.fn() }));
+vi.mock('@/app/_ui/api', () => ({ apiFetch: vi.fn(), apiFetchAll: vi.fn() }));
 
 const { isFreshCase, intakeUntouched } = await import('@/lib/cases/freshness');
 type CaseSnapshot = Parameters<typeof isFreshCase>[0];
@@ -32,7 +32,7 @@ const { welcomeStateFor, loadWelcomeState } = await import('../_components/welco
 const { FreshWelcome, ReturningWelcome } = await import('../_components/WelcomeScreens');
 const { WelcomeGate, screenFor } = await import('../_components/WelcomeGate');
 const { fetchMyCases } = await import('@/app/_ui/currentCase');
-const { apiFetch } = await import('@/app/_ui/api');
+const { apiFetch, apiFetchAll } = await import('@/app/_ui/api');
 const { SessionGate } = await import('@/app/_ui/session');
 const welcomePageModule = await import('../page');
 const WelcomePage = welcomePageModule.default;
@@ -283,6 +283,7 @@ describe('loadWelcomeState：取数接线', () => {
   beforeEach(() => {
     vi.mocked(fetchMyCases).mockReset();
     vi.mocked(apiFetch).mockReset();
+    vi.mocked(apiFetchAll).mockReset();
   });
 
   /** 后端那三条的替身，按路径派活（照真实返回体的形状，逐字 snake_case） */
@@ -292,9 +293,10 @@ describe('loadWelcomeState：取数接线', () => {
     evidence: unknown[];
     intake?: Partial<Record<string, unknown>>;
   }) {
+    // 证据是分页清单，页面走 apiFetchAll 翻完所有页；其余两条不分页，仍走 apiFetch
+    vi.mocked(apiFetchAll).mockResolvedValue(snapshot.evidence);
     vi.mocked(apiFetch).mockImplementation((path: string) => {
       if (path.includes('/messages')) return Promise.resolve({ messages: snapshot.messages });
-      if (path.includes('/evidence')) return Promise.resolve({ evidence: snapshot.evidence });
       return Promise.resolve({
         case: {
           employed_from: null,
@@ -335,6 +337,7 @@ describe('loadWelcomeState：取数接线', () => {
   it('四个维度这次没读出来、但清单查到了案件 → 仍按「回来了」渲染', async () => {
     vi.mocked(fetchMyCases).mockResolvedValue([{ id: 5, title: '被裁' }]);
     vi.mocked(apiFetch).mockRejectedValue(new Error('后端抖了'));
+    vi.mocked(apiFetchAll).mockRejectedValue(new Error('后端抖了'));
     expect(await loadWelcomeState()).toEqual({ kind: 'returning', caseId: 5 });
   });
 

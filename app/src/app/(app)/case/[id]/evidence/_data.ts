@@ -13,7 +13,7 @@
 
 import { demoEvidence } from '@/app/_mock/demo';
 import type { EvidenceCategory, EvidenceItem, EvidenceStatus } from '@/app/_mock/types';
-import { apiFetch, apiUpload } from '@/app/_ui/api';
+import { apiFetch, apiFetchAll, apiUpload } from '@/app/_ui/api';
 
 /** 存证订单（后端 AttestationView 的可展示子集） */
 export interface AttestationInfo {
@@ -211,10 +211,10 @@ function fromDetailRow(
 /* ── 真接口 ─────────────────────────────────────────────── */
 
 export async function fetchEvidenceList(caseId: string): Promise<EvidenceView[]> {
-  const res = await apiFetch<{ evidence: ApiEvidenceRow[] }>(
+  const rows = await apiFetchAll<ApiEvidenceRow>(
     `/cases/${encodeURIComponent(caseId)}/evidence`,
   );
-  return res.evidence.map(fromListRow);
+  return rows.map(fromListRow);
 }
 
 export async function fetchEvidenceDetail(evidenceId: string): Promise<EvidenceView> {

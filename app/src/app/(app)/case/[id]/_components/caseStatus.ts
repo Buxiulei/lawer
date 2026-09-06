@@ -13,7 +13,7 @@
  */
 
 import { demoCase, demoDeadlines } from '@/app/_mock/demo';
-import { apiFetch } from '@/app/_ui/api';
+import { apiFetch, apiFetchAll } from '@/app/_ui/api';
 
 export interface CaseStatus {
   /** 取不到就是 null：这一格宁可不出现，也不写一个编的阶段 */
@@ -44,9 +44,9 @@ export function hasStatus(status: CaseStatus | null): status is CaseStatus {
 export async function fetchCaseStatus(caseId: string): Promise<CaseStatus> {
   const [detail, deadlines] = await Promise.all([
     apiFetch<{ case: ApiCaseRow }>(`/cases/${caseId}?timeline_limit=1`),
-    apiFetch<{ deadlines: ApiDeadlineRow[] }>(`/cases/${caseId}/deadlines`),
+    apiFetchAll<ApiDeadlineRow>(`/cases/${caseId}/deadlines`),
   ]);
-  const nearest = [...deadlines.deadlines].sort((a, b) => a.due_at.localeCompare(b.due_at))[0];
+  const nearest = [...deadlines].sort((a, b) => a.due_at.localeCompare(b.due_at))[0];
   const stage = typeof detail.case.stage === 'string' ? detail.case.stage.trim() : '';
   return { stage: stage === '' ? null : stage, nearestDueAt: nearest?.due_at ?? null };
 }
