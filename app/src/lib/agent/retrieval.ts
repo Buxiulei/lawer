@@ -70,7 +70,11 @@ export interface KnowledgeSearcher {
    * 按自然语言查询取 pack。README §6 定的检索逻辑是 keywords + applies_to + title 分词匹配。
    * 检索不到返回空数组（不是抛错）——「没有依据」是一种正常且必须被上层看见的结果。
    */
-  search(query: string, options?: { limit?: number; type?: string; court?: string }): KnowledgePack[];
+  search(
+    query: string,
+    /** `domain` 缺省不过滤：拿得到案件的调用方按 cases.domain 传，跨域检索留空 */
+    options?: { limit?: number; type?: string; court?: string; domain?: string },
+  ): KnowledgePack[];
   /** 按 id 精确取卡（模型引用了某张卡的 related 时用） */
   get?(id: string): KnowledgePack | undefined;
   /**

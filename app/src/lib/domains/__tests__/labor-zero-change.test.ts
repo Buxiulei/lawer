@@ -44,12 +44,30 @@ import * as knowledge from '@/lib/knowledge';
 
 import { LABOR } from '../labor';
 
+/** 基线文件的形状。写出来是为了让漏掉某一项时 tsc 就红，而不是等断言比出 undefined。 */
+interface Baseline {
+  intakeValidation: Record<string, unknown>;
+  caseFacts: string;
+  factsSections: string[];
+  reportSections: unknown;
+  stages: string[];
+  calcKinds: string[];
+  claimKinds: string[];
+  deadlineKinds: string[];
+  docKinds: string[];
+  outboundDocKinds: string[];
+  confirmationFooter: string;
+  schemas: Record<string, unknown>;
+  crisis: Record<string, unknown> & { assess: Record<string, unknown> };
+  neutral: unknown;
+}
+
 const BASELINE = JSON.parse(
   fs.readFileSync(
     path.join(fileURLToPath(new URL('.', import.meta.url)), 'labor-baseline.json'),
     'utf-8',
   ),
-) as Record<string, never>;
+) as Baseline;
 
 const CASE_BASE: CaseRow = {
   id: 2,
@@ -203,7 +221,7 @@ function intakeCases(): Record<string, unknown> {
 describe('labor 零变化守卫（基线取自 origin/main 4098805）', () => {
   it('基线文件本身有料（空基线会让下面每一条永远绿）', () => {
     expect(Object.keys(BASELINE).length).toBeGreaterThanOrEqual(14);
-    expect((BASELINE.caseFacts as unknown as string).length).toBeGreaterThan(500);
+    expect(BASELINE.caseFacts.length).toBeGreaterThan(500);
   });
 
   it('① 首诊校验：合法入参与九种非法入参，逐字段的 errorCode 与话都不变（变异：改 intakeSchema 里任一句 → 红）', () => {

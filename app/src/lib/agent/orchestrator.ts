@@ -598,7 +598,12 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   // 预检索：用用户原话当查询，把命中的 pack 逐字放进 system prompt。
   // 与工具里的 knowledge_search 并存而不是二选一——预检索省掉最常见那一次往返，
   // 工具则让模型在发现自己需要别的卡时能自己去拿。
-  const packs = input.searcher ? input.searcher.search(message, { limit: MAX_INJECTED_PACKS }) : [];
+  // 注入按**这个案件的领域**过滤（设计稿 §13-3：跨域检索默认关闭）。
+  // 不过滤的形态是：第二个领域的用户拿到一批另一个行当的法条卡，
+  // 而每一张卡本身都是真的、引用格式也对——错的只是它跟这个人的事无关。
+  const packs = input.searcher
+    ? input.searcher.search(message, { limit: MAX_INJECTED_PACKS, domain: snapshot.case.domain })
+    : [];
 
   // 危机轮：判据来自 lib/agent/crisis 那一层的纯函数，注入内容也由它给定；
   // 本处只负责把它说的那张卡取回来（IO）并插到最前——它是本轮唯一真正要紧的那张卡。

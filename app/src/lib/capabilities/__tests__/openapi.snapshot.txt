@@ -125,7 +125,7 @@ PUT /api/v1/evidence/{id}/brief	evidence_brief_update	bearer	[path:id!]	{brief,r
 POST /api/v1/evidence/{id}/brief/regenerate	evidence_brief_regenerate	bearer	[path:id!]	{}
 POST /api/v1/evidence/{id}/void	evidence_void	bearer	[path:id!]	{reason}
 POST /api/v1/company/probe	company_probe	bearer	[]	{name,uscc}
-GET /api/v1/knowledge/search	knowledge_search	bearer	[query:query!,query:type,query:court,query:full_text,query:limit]	{}
+GET /api/v1/knowledge/search	knowledge_search	bearer	[query:query!,query:type,query:court,query:full_text,query:limit,query:case_id]	{}
 POST /api/v1/company/dossiers/quote	post_v1_company_dossiers_quote	bearer	[]	{}
 POST /api/v1/company/dossiers/confirm	post_v1_company_dossiers_confirm	bearer	[]	{}
 GET /api/v1/company/dossiers/{id}	get_v1_company_dossiers_by_id	bearer	[path:id!]	{}

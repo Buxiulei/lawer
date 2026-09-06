@@ -1,6 +1,7 @@
 // app/src/lib/capabilities/families/knowledge.ts
 // C 族：法律依据（设计稿 §2 C）。
 import * as agent from '@/lib/agent';
+import * as cases from '@/lib/cases';
 import { listPacks } from '@/lib/knowledge';
 import { KNOWLEDGE_TYPES } from '@/lib/knowledge/types';
 import { LABOR_CAPABILITY_COPY } from '@/lib/domains/labor';
@@ -136,10 +137,15 @@ export const knowledgeSearch: Capability = {
         type: 'integer',
         description: `最多几张，默认与上限都是 ${agent.MAX_INJECTED_PACKS}；超出这个范围会被夹回 1~${agent.MAX_INJECTED_PACKS}`,
       },
+      case_id: {
+        type: 'integer',
+        description:
+          '给了就只检索这个案件所属领域的卡（推荐带上）；不给则跨领域检索，可能回来一批与本案无关的卡',
+      },
     },
     required: ['query'],
   },
-  run: (_db, _identity, args) => {
+  run: (db, identity, args) => {
     const query = typeof args.query === 'string' ? args.query.trim() : '';
     // 先拦空 query 再进检索器：lib/knowledge 对空 query 的约定是抛错
     //（它的「宁可炸也不静默返回空」），而对 MCP 调用方来说这是一个可以自己改正的
@@ -174,7 +180,15 @@ export const knowledgeSearch: Capability = {
     // 猜错成全文则是直接吃掉对方一轮上下文，而它当时看不出发生了什么。
     const fullText = args.full_text === true || args.full_text === 'true';
     const max = fullText ? KNOWLEDGE_FULL_TEXT_MAX : KNOWLEDGE_EXCERPT_MAX;
-    const packs = agent.createKnowledgeSearcher().search(query, { limit, type, court });
+    // 带了 case_id 就限本案领域（设计稿 §13-3：跨域检索默认关闭）。
+    // **不是自己的案件按"没给"处理，不报错**：这个工具读的是公共资料，
+    // 为一个可选的范围参数回 CASE_NOT_FOUND，等于让调用方以为知识库坏了。
+    const caseId = typeof args.case_id === 'number' ? args.case_id : Number.NaN;
+    const owned = Number.isInteger(caseId)
+      ? cases.getCase(db, { caseId, userId: identity.uid, timelineLimit: 1 })
+      : null;
+    const domain = owned?.ok ? owned.case.domain : undefined;
+    const packs = agent.createKnowledgeSearcher().search(query, { limit, type, court, domain });
     return {
       query,
       full_text: fullText,

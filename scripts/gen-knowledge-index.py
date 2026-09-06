@@ -16,12 +16,20 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent / "knowledge"
 TYPES = {"法条卡", "判例卡", "计算规则", "流程SOP", "文书模板", "话术卡", "情绪指南", "数据卡", "审查规则", "方法卡"}
+# 领域键（设计稿 §13：知识库按领域独立成包但共用机制）。
+# **正本在 app/src/lib/domains/registry.ts 的 DOMAINS**；这里是它的影子，
+# 由 app/src/lib/knowledge/__tests__/domain-index.test.ts 逐个键比对——
+# 注册表加了一个领域而这里没加，生成器会把那批卡判成非法 domain 当场拒绝生成。
+# 影子而不是共享一份，是因为这个脚本是 python、注册表是 ts，中间没有便宜的共享方式；
+# 有判据点名就不会出现"两份悄悄分叉"。
+DOMAINS = {"labor", "counseling"}
+DEFAULT_DOMAIN = "labor"
 CONFIDENCES = {"原文核实", "二手转述", "待核实"}
 REQUIRED = ["id", "type", "title", "keywords", "applies_to", "sources", "confidence", "updated"]
 # sources 必须导出：卡片正文里虽然常常也带着官方 URL，但那是散文，代码读不到。
 # 呈现层（VenueCard.sources）要把出处**结构化**地摆在卡片下方——一张说不出出处的
 # 「官方流程」卡与一段我们自己编的话，在用户那里长得一模一样。
-INDEX_FIELDS = ["id", "type", "title", "keywords", "applies_to", "region", "sources", "confidence", "updated"]
+INDEX_FIELDS = ["id", "type", "title", "keywords", "applies_to", "region", "domain", "sources", "confidence", "updated"]
 
 
 def die(msg: str) -> None:
@@ -127,6 +135,27 @@ def check_facts(path: Path, fm: dict, body_norm: str, seen_keys: dict) -> None:
             die(f"{path} statute_quotes {q['article']} 与正文不逐字一致")
 
 
+def domain_of(path: Path, fm: dict) -> str:
+    """这张卡属于哪个领域。
+
+    优先 frontmatter 的 domain；没写就看 packs/ 下的第一层目录是不是一个领域键
+    （允许 packs/<domain>/… 的分包布局，设计稿 §13）；都不是就算缺省领域
+    （存量卡片写于只有一个领域的时候）。
+
+    写了一个没人认识的 domain 一律当场拒绝：那批卡按领域过滤时对谁都不可见，
+    而检索会照常返回 200 与一个更短的列表——没有任何一处会报错。
+    """
+    declared = fm.get("domain")
+    if declared:
+        if declared not in DOMAINS:
+            die(f"{path} 的 domain 非法：{declared}（已注册：{sorted(DOMAINS)}）")
+        return declared
+    parts = path.relative_to(ROOT).parts  # ('packs', <第一层>, …)
+    if len(parts) >= 2 and parts[1] in DOMAINS:
+        return parts[1]
+    return DEFAULT_DOMAIN
+
+
 def main() -> None:
     entries, seen_ids, seen_keys, forbidden = [], {}, {}, []
     bodies = {}
@@ -162,6 +191,7 @@ def main() -> None:
             if h["status"] == "forbidden":
                 forbidden.append((normalize(h["phone"]), path))
         entry = {f: str(fm.get(f, "")) if f == "updated" else fm.get(f, "") for f in INDEX_FIELDS}
+        entry["domain"] = domain_of(path, fm)
         entry["path"] = str(path.relative_to(ROOT))
         if fm.get("law_refs"):
             entry["law_refs"] = fm["law_refs"]
@@ -175,7 +205,14 @@ def main() -> None:
                 die(f"禁用号码 {phone} 出现在 {path}（仅允许存在于 {home}）")
     out = ROOT / "index.json"
     out.write_text(json.dumps(entries, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
-    print(f"OK：{len(entries)} packs → {out}（facts 卡 {sum(1 for e in entries if 'facts' in e)} 张，facts 校验通过）")
+    by_domain = {}
+    for e in entries:
+        by_domain[e["domain"]] = by_domain.get(e["domain"], 0) + 1
+    spread = "，".join(f"{k} {v} 张" for k, v in sorted(by_domain.items()))
+    print(
+        f"OK：{len(entries)} packs → {out}"
+        f"（facts 卡 {sum(1 for e in entries if 'facts' in e)} 张，facts 校验通过；领域分布：{spread}）"
+    )
 
 
 if __name__ == "__main__":

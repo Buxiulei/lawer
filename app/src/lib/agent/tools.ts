@@ -577,7 +577,12 @@ const HANDLERS: Record<string, Handler> = {
     }
 
     const limit = Math.min(Number(args.limit) || MAX_INJECTED_PACKS, MAX_INJECTED_PACKS);
-    const packs = ctx.searcher.search(query, { limit, type: str(args.type) ?? undefined });
+    // 同上：工具通道也按案件领域过滤，两条通路一把尺
+    const packs = ctx.searcher.search(query, {
+      limit,
+      type: str(args.type) ?? undefined,
+      domain: ctx.domain,
+    });
     // 已经在本轮上下文里的卡只回一个指针，不再重发全文。
     // 预检索已经把最贴题的几张原样放进 system prompt，模型再搜一次往往命中同一批；
     // 把 12000 字的 534 号卡在一轮里发两遍，既拖慢首字也白烧钱，而模型手上并没多任何信息。

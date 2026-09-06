@@ -48,7 +48,7 @@ export const LANDLINE_MARK = '座机拨打，手机打不通';
  *
  * 两道过滤：
  *   ① `status !== 'forbidden'`——禁用与否由卡自己声明，代码不再去正文里找 ⛔；
- *   ② 只取**心理**类热线——资源卡的 hotlines 里同时装着法援/工会/劳动监察，
+ *   ② 只取**心理**类热线——资源卡的 hotlines 里同时装着法援、工会、监察这类线，
  *      它们不该出现在危机首段（那一刻要的是能接住人的线，不是投诉渠道）。
  */
 export function crisisHotlines(facts?: { hotlines?: HotlineFact[] }): HotlineFact[] {

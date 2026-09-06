@@ -6,6 +6,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
+
 import { typeRank } from './types';
 
 /**
@@ -57,6 +59,15 @@ export interface PackMeta {
   confidence: string;
   updated: string;
   path: string;
+  /**
+   * 这张卡属于哪个领域（设计稿 §13：知识库按领域独立成包但共用机制）。
+   *
+   * **索引里可以没有这个字段**：存量卡片是在只有一个领域的时候写的，
+   * 它们的 domain 就是缺省领域。加载时补齐（见 loadIndex），所以下游读到的恒有值——
+   * 让下游各自 `?? '缺省'` 的形态是：某一处忘了补，那批卡就在按领域过滤时凭空消失，
+   * 而检索照常返回 200 和一个更短的列表。
+   */
+  domain: string;
   /** 规范化法条引用（如 劳动合同法§47）；仅 frontmatter 声明了 law_refs 的卡带此字段 */
   law_refs?: string[];
   /** 仅带结构化事实的卡存在；gen-knowledge-index.py 已做两面一致性校验 */
@@ -85,6 +96,14 @@ export interface SearchOptions {
    * 把没有审理机构的卡也放行，等于用一个过滤条件换回一批与该法院无关的卡。
    */
   court?: string;
+  /**
+   * 只要某个领域的卡。**缺省不过滤**（跨域检索），由调用方按案件领域显式传。
+   *
+   * 【为什么默认不滤】这一层是检索器，它不知道调用方手上有没有案件。
+   * 在这里默认滤成缺省领域的形态是：第二个领域的调用方明明传了 domain 之外的东西
+   * 也拿不到自己的卡，而它拿到的那几张看起来完全正常。
+   */
+  domain?: string;
 }
 
 const DEFAULT_LIMIT = 5;
@@ -169,6 +188,23 @@ function loadIndex(): PackMeta[] {
       throw new Error(`knowledge 索引里 id 重复：${entry.id}（${indexPath}）；id 是主键，重复即歧义`);
     }
     seen.add(entry.id);
+  }
+
+  // domain 补齐：没写的算缺省领域（存量卡片写于只有一个领域的时候）。
+  // 补在**入口**而不是各消费点：漏补一处的形态是那批卡在按领域过滤时凭空消失。
+  // 写了但没人认识的 domain 直接拒绝启动——那批卡会静默地对谁都不可见。
+  const known = Object.keys(DOMAINS);
+  for (const entry of parsed as PackMeta[]) {
+    if (entry.domain === undefined || entry.domain === '') {
+      entry.domain = DEFAULT_DOMAIN;
+    } else if (!known.includes(entry.domain)) {
+      throw new Error(
+        `knowledge 索引条目 ${entry.id} 的 domain 是「${entry.domain}」，` +
+          `而 lib/domains 里注册过的领域只有 ${known.join('、')}（${indexPath}）。` +
+          '这批卡按领域过滤时对谁都不可见，而检索会照常返回 200 与一个更短的列表。' +
+          '请核对卡片 frontmatter 的 domain，或补上这个领域包再重跑 scripts/gen-knowledge-index.py。',
+      );
+    }
   }
 
   packIndex = parsed as PackMeta[];
@@ -330,6 +366,7 @@ function scoreOf(meta: PackMeta, query: string, queryBigrams: Set<string>): numb
 }
 
 function passesFilters(meta: PackMeta, opts: SearchOptions): boolean {
+  if (opts.domain && meta.domain !== opts.domain) return false;
   if (opts.type && meta.type !== opts.type) return false;
   if (opts.applies_to && !meta.applies_to.includes(opts.applies_to)) return false;
   if (opts.region && meta.region !== opts.region && meta.region !== REGION_NATIONWIDE) return false;

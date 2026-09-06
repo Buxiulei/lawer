@@ -140,9 +140,18 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
     ...walk(path.join(SRC_ROOT, 'lib/jobs')),
     // lib/cases/report* 同属共用层：个案报告的分节骨架由领域包给，生成器只认 source 键。
     ...['lib/cases/report.ts', 'lib/cases/report-stale.ts'].map((f) => path.join(SRC_ROOT, f)),
+    // ↓ P4-W1 清干净并纳入守卫的五处（设计稿 §13-6）。每一处都曾经写着领域字面量，
+    //   现在字都搬进了领域包，这里只留机制：
+    ...[
+      'lib/agent/crisis-opener.ts', // 危机首段的拼装/拆分骨架（话在 DomainPack.crisis）
+      'lib/cases/intake.ts', // 首诊校验与落库（字段与逐字回话在 DomainPack.intakeSchema）
+      'lib/cases/drafts.ts', // 文书种类与对外清单（在 DomainPack.docKinds / outboundDocKinds）
+      'lib/paste/parse.ts', // 粘贴回填的逐条校验（词表按案件领域取）
+      'app/_ui/bootstrap.ts', // 低调模式词典（在 DomainPack.copy.neutral）
+    ].map((f) => path.join(SRC_ROOT, f)),
   ];
 
-  it('lib/capabilities/**、lib/domains/registry.ts、lib/jobs/** 与 lib/cases/report* 里没有领域字面量（变异：往 registry.ts 写一句带「仲裁」的注释、或把工具描述里的「对方主体」写死成某个领域的称呼 → 红）', () => {
+  it('共用层（lib/capabilities/**、lib/domains/registry.ts、lib/jobs/**、lib/cases/report*、危机骨架、首诊、文书、粘贴、低调模式词典）里没有领域字面量（变异：往 registry.ts 写一句带「仲裁」的注释、或把工具描述里的「对方主体」写死成某个领域的称呼 → 红）', () => {
     const hits: string[] = [];
     for (const file of SHARED_FILES) {
       const text = fs.readFileSync(file, 'utf-8');
@@ -158,7 +167,7 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
   });
 
   it('守卫扫到的确实是那几个文件（空名单会让上面那条永远绿）', () => {
-    expect(SHARED_FILES.length).toBeGreaterThanOrEqual(9);
+    expect(SHARED_FILES.length).toBeGreaterThanOrEqual(14);
     for (const f of SHARED_FILES) expect(fs.existsSync(f), f).toBe(true);
   });
 });
