@@ -826,6 +826,10 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
     db,
     caseId,
     userId,
+    // 工具句柄的词表（诉求种类 / 算钱器 / 文书种类）按这个案子的领域取，
+    // 不按缺省领域——按缺省领域的形态是：另一个领域的案子在站内对话里
+    // 收下一批本领域没有的种类，而回包结构完全正常。
+    domain: snapshot.case.domain,
     threadId: thread.id,
     sourceMessageId: messageId,
     searcher: input.searcher,

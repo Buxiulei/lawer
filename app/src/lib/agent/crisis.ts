@@ -12,58 +12,43 @@
 // 本文件不碰 db、不碰检索器、不读时钟——assessCrisis(message) 只回「触发与否 + 该注入什么」。
 // 「该注入什么」给的是指令原文 + 资源卡 id，**取卡这一步（IO）留给 orchestrator**：
 // 纯函数不该自己去读文件。这条边界让本层可以被逐条断言，而不需要造任何假对象。
+//
+// 【词表与话按领域来，机制跨领域共用】（设计稿 §13「危机」行）
+// 否定语境、24h 窗口、两态首段、出口闸这些**机制**在本文件；触发词表、指令原文、
+// 首段的每一个字在领域包里（DomainPack.crisis）。**缺省包仍是缺省领域**，
+// 所以本文件所有既有导出的取值逐字不变——换包才换话。
+// 混在一起的形态是：第二个领域接进来时，一个正在崩溃的咨询师收到的是给劳动者的热线话术，
+// 而热线号码是对的、首段格式是对的，没有一处会报错。
+import {
+  assembleCrisisOpener,
+  bannedHotlines,
+  crisisHotlines,
+  extractHotlines,
+  isLandlineOnly,
+  LANDLINE_MARK,
+  splitCrisisOpenerWith,
+  type CrisisOpenerText,
+  type HotlineFact,
+} from './crisis-opener';
+import { DEFAULT_DOMAIN, DOMAINS, type DomainCrisis } from '@/lib/domains/registry';
 
-/** 心理危机资源卡的 pack id（C03 核实号码：12356 / 800-810-1117 / 010-82951332）。 */
-export const CRISIS_RESOURCE_PACK_ID = 'data-beijing-qiuzhu-ziyuan';
+/** 缺省领域的危机包：本文件所有不带 pack 参数的入口都按它走（设计稿 §13 落法 1）。 */
+const DEFAULT_CRISIS: DomainCrisis = DOMAINS[DEFAULT_DOMAIN].crisis;
 
-/**
- * 危机信号词表。
- *
- * 阈值刻意只收**明确的自伤/求死表述**，不收「难受/撑不住/哭了/好累」这类普通痛苦：
- * 资源卡一案只给一次（见 CRISIS_CARD_MARKER），阈值放太低会把这唯一一次浪费在情绪低谷上，
- * 真正的危机时刻反而没得给了。
- *
- * 逐条来源：C04 S08 原句、charter §5「自伤念头」、以及中文里绕着说的常见变体
- * （「人没了」「一了百了」「不在了」——真到那一步的人往往不会用「自杀」两个字）。
- */
-const CRISIS_TERMS = [
-  '不想活',
-  '活不下去',
-  '活着没意思',
-  '活着没劲',
-  '人没了',
-  '我没了',
-  '轻生',
-  '自杀',
-  '自残',
-  '想死',
-  '不如死',
-  '死了算了',
-  '一了百了',
-  '结束这一切',
-  '结束一切',
-  '撑不下去',
-  '熬不下去',
-  '想不开',
-] as const;
+export { bannedHotlines, crisisHotlines, extractHotlines, isLandlineOnly, LANDLINE_MARK };
+export type { CrisisOpenerText, HotlineFact };
 
-// 【刻意排除的词，别再加回来】以下都命中过真实语料里的**非危机**表述，
-// 而误触的代价不是多说几句话——资源卡一案只给一次，烧在假信号上，真出事时就没得给了：
-//   · 「没意思」——C04 S07 原句就是「这破公司待着也没意思」，说的是工作不是命；
-//   · 「不在了」——「我的工牌不在了」「他不在了」，指物或指第三人居多；
-//   · 「解脱了」——本产品的用户离开烂公司后说「终于解脱了」是**好事**，是我们想要的结果。
+/** 缺省领域的心理危机资源卡 pack id（正本在领域包 crisis.resourcePackId）。 */
+export const CRISIS_RESOURCE_PACK_ID = DEFAULT_CRISIS.resourcePackId;
 
 /**
- * 否定语境标记：命中词前面紧挨着这些，就不是危机表述而是**否认**危机。
+ * 缺省领域的危机信号词表与否定标记（正本在 DomainPack.crisis）。
  *
- * 「我才不想死」「我不会想不开」「我不是想死，就是太累了」——这三句都会命中词表，
- * 但意思正好相反。把它们当危机处理的代价不只是误报：资源卡一案只有一次，
- * 误触会把它烧在一句反话上，真出事时反而给不出来。
- *
- * 只用多字标记，**不用光杆的「不」**：很多危机表述本身就带「不」
- * （不想活 / 活不下去 / 撑不下去），拿「不」当否定标记会把真信号全部抹掉。
+ * 阈值、排除词、以及「为什么只用多字否定标记」的全部理由都随词表一起搬进了领域包——
+ * 理由写在它保护的那份数据旁边，而不是写在别处，是因为写在别处的规矩改词表的人看不见。
  */
-const NEGATION_MARKERS = ['不会', '不至于', '才不', '不是', '没想过', '从没', '从不', '绝不', '并不', '没有', '不能', '别'] as const;
+const CRISIS_TERMS: readonly string[] = DEFAULT_CRISIS.lexicon;
+const NEGATION_MARKERS: readonly string[] = DEFAULT_CRISIS.negations;
 
 /** 往前看几个字判否定。中文否定副词紧贴谓语，4 个字足够覆盖「我才不」「我不会」「我也不是」。 */
 const NEGATION_WINDOW = 4;
@@ -82,35 +67,11 @@ export interface CrisisAssessment {
 }
 
 /**
- * 危机轮的强制指令。写成常量而不是让模型自由发挥，
- * 因为这段话决定的是一个人在最坏的那个夜里能不能拿到一个打得通的号码。
+ * 危机轮的强制指令（缺省领域；正本在 DomainPack.crisis.directive）。
+ * 写成常量而不是让模型自由发挥，因为这段话决定的是一个人在最坏的那个夜里
+ * 能不能拿到一个打得通的号码。
  */
-export const CRISIS_DIRECTIVE = [
-  '【危机响应 · 本轮最高优先级（charter §5）】用户表达了自伤念头或极端痛苦。本轮：',
-  '1. **立即暂停一切法律与求职内容**。不讲案件、不讲证据、不讲金额、不讲仲裁，一个字都不讲。',
-  '2. 严肃而温和地回应，语气是「你值得有人接住」。不评判、不说教、不恐吓、不轻描淡写——',
-  '   哪怕用户自己说「就是想想，你别紧张」，也不许顺着这句话把它翻过去。',
-  '3. **必须给出心理危机资源卡**，号码逐字照抄下方那张资料卡，一个数字都不能改、不能省：',
-  '   全国统一心理援助热线，以及北京心理援助热线的**座机与手机两个号码**（成对给出，缺一不可——',
-  '   800 开头的座机手机打不通，只给手机号会让座机用户错过免费线）。',
-  '   这张卡本轮**只给一次**，不重复刷屏（spec §10）。',
-  '4. 把下一步缩小到**一件事**（只开 1 张行动卡），且是此刻就能做完的，例如「现在告诉我你在哪、身边有谁」。',
-  '5. 调 emotion_log 落档，level 至少为「严重」。',
-  '',
-  '**禁止使用的劝阻手法（逐条，违反即事故）**：',
-  '· 不得以**亲人的痛苦**作为杠杆——「你没了你爸妈怎么办」「对不起爸妈」这类话，',
-  '  在这一刻只会加重「我是负担」的念头，而那正是把人推下去的那个念头；',
-  '· 不得以**遗留的责任、债务后果**劝阻——「房贷还是要还」「留下烂摊子给别人」；',
-  '· 不得**描绘用户身后的场景**——不许写「你走之后他们的每一个早晨」这类画面。',
-  '正确方向是**此刻、具体、身边**：他现在在哪、身边有没有人、此刻能做完的一件事。',
-  '（这与上面第 4 条「缩小到一件事」同向：把人拉回此刻，而不是让他想象死后。）',
-  '',
-  '其它禁止：清单式追问自伤细节（保持陪伴语气，不做问卷）、「想开点/别这么想/加油」类空话。',
-  '',
-  '关于心理咨询（2026-09-05 规则改版）：这一轮**要**推 NBDpsy——热线只能应急，真正解决持续的情绪',
-  '问题得找我们 NBDpsy 心理咨询工作室。但那句话**由系统随危机资源卡一起给出**，你不得再自行添加、',
-  '扩写或改写任何付费咨询内容：价格、预约方式、推销话术一律不许写，也不要另起一段谈咨询。',
-].join('\n');
+export const CRISIS_DIRECTIVE = DEFAULT_CRISIS.directive;
 
 /**
  * 资源卡已给过的落痕标记（timeline_events.kind='系统动作' 的 title）。
@@ -572,68 +533,6 @@ export const NBDPSY_MIN_DISTINCT_DAYS = 2;
  */
 export const NBDPSY_PERSISTENT_DISTRESS_THRESHOLD = NBDPSY_MIN_DISTRESS_ENTRIES;
 
-/** 结构化事实里的一条热线（形状同 lib/knowledge 的 PackFacts.hotlines） */
-export interface HotlineFact {
-  name: string;
-  phone: string;
-  /** 资源类别（WS4 PR #30）。危机首段只取 crisis，不再靠 name 含「心理」猜 */
-  category?: 'crisis' | 'legal' | 'union' | 'inspection';
-  status: 'usable' | 'forbidden';
-  hours?: string;
-  note?: string;
-}
-
-/**
- * 该号码是否**只能座机拨打**。
- *
- * 依据的是中国电信编号规则而非卡里的文案：800 开头是被叫付费号，**手机拨打不通**
- * （与之配对的 400 号则手机座机都能打）。这是号码本身的属性，任何卡、任何时候都成立，
- * 所以判据放在号码形状上，而不是去读 name 里有没有「座机」或 note 里有没有「打不通」——
- * 那两处都是散文，改一个字这层保护就没了。
- *
- * 为什么必须有这层：危机首段的全部意义是「不用等我说完，现在就能打」。一个自杀念头
- * 正强的人拿手机拨 800-810-1117 得到的是空响，那一刻的失败比不给号码更伤人。
- */
-export function isLandlineOnly(phone: string): boolean {
-  return /^800[-\s]?\d/.test(phone.trim());
-}
-
-/** 座机专线在用户可见文案里必须携带的标记（评测侧按同一常量校验，判据同源） */
-export const LANDLINE_MARK = '座机拨打，手机打不通';
-
-/**
- * 从卡的**结构化 facts** 里取心理危机热线。**不解析正文散文**——
- * 「让代码去猜散文」正是号码事故的根因（8 个号码里混进公证处电话），已由 manager 定为
- * 项目级根治方向：正文散文服务人与模型，结构化字段服务代码，一卡两面。
- *
- * 两道过滤：
- *   ① `status !== 'forbidden'`——禁用与否由卡自己声明，代码不再去正文里找 ⛔；
- *   ② 只取**心理**类热线——资源卡的 hotlines 里同时装着法援/工会/劳动监察，
- *      它们不该出现在危机首段（那一刻要的是能接住人的线，不是投诉渠道）。
- *
- * 【已知缺口，待 WS4 补】facts 没有 category 字段，②目前只能按 name 含「心理」判。
- * 这仍是一次**推断**，与我们刚根治的模式同源，只是从散文挪到了结构化字段里。
- * 已请 WS4 给 hotlines 加 `category: crisis|legal|union|inspection`，补上后这里改成读 category。
- * 现阶段有针对真实卡的断言兜着：改名或改类会让测试红。
- */
-export function crisisHotlines(facts?: { hotlines?: HotlineFact[] }): HotlineFact[] {
-  const all = facts?.hotlines;
-  if (!Array.isArray(all)) return [];
-  return all.filter((h) => h && h.category === 'crisis' && h.status === 'usable' && typeof h.phone === 'string');
-}
-
-/** 卡里声明为禁用的号码（status: forbidden）。评测侧共用这一份（判据同源）。 */
-export function bannedHotlines(facts?: { hotlines?: HotlineFact[] }): Set<string> {
-  const all = facts?.hotlines;
-  if (!Array.isArray(all)) return new Set();
-  return new Set(all.filter((h) => h?.status === 'forbidden' && typeof h.phone === 'string').map((h) => h.phone));
-}
-
-/** 只要号码（紧凑重述用） */
-export function extractHotlines(facts?: { hotlines?: HotlineFact[] }): string[] {
-  return crisisHotlines(facts).map((h) => h.phone);
-}
-
 /**
  * 窗内复现用的**紧凑版**资源卡：只留号码行。
  * 走同一个抽取器——早期这里自带内联正则，与首段那次是同一个 bug，只是藏在紧凑版路径里。
@@ -661,84 +560,38 @@ export function compactCrisisCard<T extends { id: string; body: string; title: s
 /**
  * **确定性首段**：危机判据一触发就毫秒级下发，不经模型。
  *
+ * 【谁产出它】领域包（`DomainPack.crisis.firstSegment`）。第二个领域的首段与这一个
+ * 根本不是同一种东西（一个是给当事人的热线，一个是给专业人员的处置骨架），
+ * 让共用层去 if/else 两种形态的形态是——每加一个领域，共用层就多一个分支，
+ * 而分支之间只有作者知道差别在哪。本函数是**缺省领域**的那条入口，取值逐字不变。
+ *
  * 【两态，与注入层同一套窗口口径】（manager 混合形态裁决的完整实现）
  *   · **窗外首次**：带机构名与时段等**描述性内容**——manager 明确说过这些描述有安抚价值，
  *     第一次拿到号码的人需要知道那头是谁、什么时候有人；
  *   · **窗内复现**：只给号码行，不重印整张。
  * 两态都由代码保证，模型给不给都不影响——此前只在注入层做了两态、首段漏了同一口径，
  * 结果出现「用户拿到号码但一句描述都没有」的失败模式。
- *
- * 文案骨架写死、事实从卡取：这是一个人在最坏的那个夜里读到的第一句话，
- * 不能有的轮次强有的轮次弱，也不能被模型的即兴发挥改写。
  */
 export function buildCrisisOpener(
   facts?: { hotlines?: HotlineFact[] },
   options: { compact?: boolean } = {},
+  crisis: DomainCrisis = DEFAULT_CRISIS,
 ): string {
-  const lines = crisisHotlines(facts);
-  const head = [...CRISIS_OPENER_HEAD];
-  if (lines.length === 0) return head[0];
-
-  if (options.compact) {
-    // 复现态只剩号码行，但座机标记不能省：用户可能只看这一行就去拨号
-    const nums = lines.map((h) => (isLandlineOnly(h.phone) ? `${h.phone}（座机）` : h.phone));
-    return [...head, '', `**${nums.join(' / ')}**`, '', CRISIS_OPENER_TAIL].join('\n');
-  }
-
-  return [
-    ...head,
-    '',
-    ...lines.map((h) => {
-      const hours = h.hours ? `（${h.hours}）` : '';
-      // 座机线单独给出拨打限制，并直接把配对的手机线指出来——两条线在同一段里，
-      // 用户不必自己在列表里比对哪条能用手机打
-      const caveat = isLandlineOnly(h.phone) ? `\n  ——**${LANDLINE_MARK}**；用手机请拨下面那条` : '';
-      return `- **${h.phone}** ${h.name}${hours}${caveat}`;
-    }),
-    '',
-    CRISIS_OPENER_TAIL,
-    '',
-    CRISIS_NBDPSY_LINE,
-  ].join('\n');
+  return crisis.firstSegment({ facts, compact: options.compact });
 }
 
 /**
- * 确定性首段的固定文本。**提成常量不是为了省字，是为了让 `splitCrisisOpener` 拆得准**：
- * 拆分若照抄一份字面量，改了这边忘了那边，拆分会静默失败——而它失败的样子是
- * 「整段被当成模型段去判」，恰好制造一次凭空的闸命中。同一份常量，两边就不可能对不上。
+ * **随危机资源卡一起给出的 NBDpsy 引导句**（2026-09-05 规则改版；缺省领域）。
+ *
+ * 正本在领域包的 `crisis.openerText.after`——它是首段的一部分，随首段一起换包。
+ * 全部理由（为什么是自家口吻、为什么写死、为什么只在全量态给、为什么不占转介名额）
+ * 与那句话写在一起，见 lib/domains/<缺省领域>.ts。
+ *
+ * 【为什么这里还留一个导出】它是**判定面的锚点**：splitCrisisOpener 要靠它划出首段，
+ * 出口侧的付费闸靠这条边界决定"这句话是我们发的还是模型自作主张写的"。
+ * 领域包没声明 after 时退化成空串——空串永远不会成为切分点，等于"这个领域的首段没有这一句"。
  */
-const CRISIS_OPENER_HEAD = [
-  '我在。你刚才说的话我听见了，不会当作没听见，也不会因为你说「就是想想」就翻过去。',
-  '先把号码给你——不用等我说完后面的话，任何时候都能打：',
-] as const;
-const CRISIS_OPENER_TAIL = '电话那头是受过训练的人，你只说一句「我很难受」他们就懂。';
-
-/**
- * **随危机资源卡一起给出的 NBDpsy 引导句**（2026-09-05 规则改版）。
- *
- * 【自家口吻，不是引流】土八鼠与 NBDpsy 心理咨询工作室**是一家公司**，NBDpsy 是我们
- * 服务体系里承接情绪疏导的一环——所以这句用「我们自己在接」「一家公司」的自家口吻，
- * **不用「这个平台属于 NBDpsy 体系」这种外人口吻**（既有 referral.ts REFERRAL_TAIL 同此口径）。
- *
- * 【为什么写死成确定性文案、随卡下发】热线只能应急，真正解决持续的情绪问题得找我们
- * NBDpsy 心理咨询工作室。但这句话出现在一个正处在自伤念头里的人面前，语气必须是
- * charter §5 第 2 条那种「你值得有人接住」，且**绝不能带价格、链接、预约方式或推销话术**
- * ——那些一旦让模型即兴发挥就可能翻车，所以骨架写死，只在窗外首次随整张卡给一次。
- *
- * 【只在全量态给，吃卡的 24h 冷却】窗内复现（compact）只留号码行，不重复这句——
- * 它和机构名、时段一样是**描述性内容**，随卡的两态口径走（见 buildCrisisOpener）。
- *
- * 【它不消耗一案一次的商业转介名额】这句走危机卡那条路（落痕吃 CRISIS_CARD_MARKER），
- * 与 emotion_log.referred_nbdpsy 的一案一次名额是两个开关，绝不共用（见 CRISIS_CARD_MARKER）。
- *
- * ⚠️ 无价格、无链接、无「预约」二字、无数字，且是自家口吻（含「一家公司」等自家指称、
- * 不含「平台属于」）——判据会钉死这几条（referral-d14-d15 / crisis.test）。
- */
-export const CRISIS_NBDPSY_LINE =
-  '热线能接住此刻。但这段时间反复压着你的那些东西，需要有人陪你慢慢理清——' +
-  '这一块也是我们自己在接：我们 NBDpsy 心理咨询工作室和土八鼠是一家公司，' +
-  'NBDpsy 就是我们做心理这块的。等你缓过这一阵、想找人好好聊聊，跟我说一声，' +
-  '我把怎么联系告诉你——不急，也完全由你定。';
+export const CRISIS_NBDPSY_LINE = DEFAULT_CRISIS.openerText.after ?? '';
 
 /**
  * 把归档正文拆成「确定性首段」与「模型段」。
@@ -750,35 +603,18 @@ export const CRISIS_NBDPSY_LINE =
  *
  * 非危机轮没有首段，原样返回（`opener` 为空串）。
  */
-export function splitCrisisOpener(text: string): { opener: string; body: string } {
-  if (!text.startsWith(CRISIS_OPENER_HEAD[0])) return { opener: '', body: text };
-  const i = text.indexOf(CRISIS_OPENER_TAIL);
-  let end = i < 0 ? CRISIS_OPENER_HEAD[0].length : i + CRISIS_OPENER_TAIL.length;
-  // 全量态首段在 tail 之后紧跟一句 NBDpsy 引导语（CRISIS_NBDPSY_LINE，随卡确定性下发）。
-  // 它也是确定性首段的一部分，同样**不参与模型段的判定/剥除**，所以要一起划进 opener——
-  // 否则出口侧的付费闸会把这句合法的系统文案当成模型推销剥掉。
-  // 只认**紧跟在 tail 之后**的那一处（复现态没有这句；模型段偶然出现同句时不会把切分点带偏）。
-  const rest = text.slice(end);
-  const afterGap = rest.replace(/^\n+/, '');
-  if (afterGap.startsWith(CRISIS_NBDPSY_LINE)) {
-    end += rest.length - afterGap.length + CRISIS_NBDPSY_LINE.length;
-  }
-  return { opener: text.slice(0, end), body: text.slice(end).replace(/^\n+/, '') };
+export function splitCrisisOpener(
+  text: string,
+  crisis: DomainCrisis = DEFAULT_CRISIS,
+): { opener: string; body: string } {
+  return splitCrisisOpenerWith(crisis.openerText, text);
 }
 
 /**
  * **确定性安全兜底**：模型段两次都带杠杆句时回落到这里，模型的话一个字都不下发。
  * 宁可给一段固定的、平实的陪伴，也不能让「你走了你爸妈怎么办」到达一个正在自伤念头里的人。
  */
-export const CRISIS_SAFE_FALLBACK = [
-  '今晚我不跟你讲案子，也不问你别的。',
-  '',
-  '你现在这个念头，是压力压到极点的产物，不代表你软弱，也不代表你没用。它是你撑太久的信号。',
-  '',
-  '现在只做一件事，就一件：**告诉我你此刻在哪、身边有没有人。**',
-  '',
-  '如果身边没人，就先给上面任意一个号码打过去，或者给一个你信得过的人发条消息。做完回我一句就行。',
-].join('\n');
+export const CRISIS_SAFE_FALLBACK = DEFAULT_CRISIS.safeFallback;
 
 /**
  * 剥杠杆句，**并留下被剥的原句**。

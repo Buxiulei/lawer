@@ -7,7 +7,7 @@
 // 用户在网页里看到的金额和自己 agent 算出来的不一样，而没有任何一处报错。
 import * as agent from '@/lib/agent';
 import * as cases from '@/lib/cases';
-import { CALC_KINDS, listClaimsWithTotal, runClaimCalc } from '@/lib/cases/claims';
+import { listClaimsWithTotal, runClaimCalc } from '@/lib/cases/claims';
 import * as store from '@/lib/db/agent';
 import { DOMAINS } from '@/lib/domains/registry';
 
@@ -15,11 +15,28 @@ import { withClientRef } from '../idempotent';
 import { caseIdProp, num } from '../shared';
 import type { Capability } from '../registry';
 
-/** 诉求种类的对外枚举：各领域包 calculatorKinds 的并集（tools/list 拿不到案件上下文，
+/** 诉求种类的对外枚举：各领域包 claimKinds 的并集（tools/list 拿不到案件上下文，
  *  只能给并集；真正落库前按该案件所属领域的词表再校验一次）。 */
 const ALL_CLAIM_KINDS = [
+  ...new Set(Object.values(DOMAINS).flatMap((p) => p.claimKinds)),
+];
+
+/** 算钱器的对外枚举：各领域包 calculatorKinds 的并集，同理。 */
+const ALL_CALCULATOR_KINDS = [
   ...new Set(Object.values(DOMAINS).flatMap((p) => p.calculatorKinds)),
 ];
+
+/** 这个案件所属领域的包；取不到就是 cases.domain 落了个没人认识的值，是数据问题不是入参问题。 */
+function packOf(domain: string, what: string) {
+  const pack = DOMAINS[domain];
+  if (pack) return pack;
+  return {
+    ok: false as const,
+    status: 500,
+    errorCode: 'UNKNOWN_DOMAIN',
+    message: `这个案件的领域是「${domain}」，但没有对应的领域包，取不到${what}词表。`,
+  };
+}
 
 const CLAIM_STATUSES = ['draft', 'confirmed'] as const;
 
@@ -51,7 +68,7 @@ export const claimCalc: Capability = {
     type: 'object',
     properties: {
       ...caseIdProp,
-      kind: { type: 'string', enum: [...CALC_KINDS], description: '算哪一项' },
+      kind: { type: 'string', enum: ALL_CALCULATOR_KINDS, description: '算哪一项' },
       inputs: {
         type: 'object',
         description:
@@ -83,7 +100,16 @@ export const claimCalc: Capability = {
         : {};
     const merged: Record<string, unknown> = { ...inputs, ...args };
 
-    const env = { db, caseId, searcher: agent.createKnowledgeSearcher() };
+    // 算钱器词表按**这个案件所属领域**取（tools/list 里那份 enum 是并集，只用于展示）。
+    const calcPack = packOf(owned.case.domain, '算钱器');
+    if ('ok' in calcPack) return calcPack;
+
+    const env = {
+      db,
+      caseId,
+      searcher: agent.createKnowledgeSearcher(),
+      calculatorKinds: calcPack.calculatorKinds,
+    };
 
     // 【为什么把计算也裹进事务】失败时不能留下台账行：留了的话同一个 client_ref
     // 第二次进来会被当成「已经算过了」，回一个根本不存在的 target。
@@ -173,22 +199,15 @@ export const claimsUpsert: Capability = {
 
     // 词表按**这个案件所属领域**取，不按并集：并集是给 tools/list 看的，
     // 拿并集校验等于让一个领域的案子收下另一个领域的诉求种类。
-    const pack = DOMAINS[owned.case.domain];
-    if (!pack) {
-      return {
-        ok: false as const,
-        status: 500,
-        errorCode: 'UNKNOWN_DOMAIN',
-        message: `这个案件的领域是「${owned.case.domain}」，但没有对应的领域包，取不到诉求种类词表。`,
-      };
-    }
+    const pack = packOf(owned.case.domain, '诉求种类');
+    if ('ok' in pack) return pack;
     const kind = typeof args.kind === 'string' ? args.kind.trim() : '';
-    if (!pack.calculatorKinds.includes(kind)) {
+    if (!pack.claimKinds.includes(kind)) {
       return {
         ok: false as const,
         status: 400,
         errorCode: 'INVALID_KIND',
-        message: `kind 只能是 ${pack.calculatorKinds.join(' / ')}`,
+        message: `kind 只能是 ${pack.claimKinds.join(' / ')}`,
       };
     }
     const amountFen = Number(args.amount_fen ?? 0);
@@ -202,7 +221,7 @@ export const claimsUpsert: Capability = {
     }
     // 【资金数据不经调用方转述】算得出来的项在这里填数，等于给「要被对方复算的金额」
     // 开一条无算式、无输入快照、无法复算的旁路——填错一位没有任何东西拦得住。
-    if ((CALC_KINDS as readonly string[]).includes(kind) && amountFen > 0) {
+    if (pack.calculatorKinds.includes(kind) && amountFen > 0) {
       return {
         ok: false as const,
         status: 400,

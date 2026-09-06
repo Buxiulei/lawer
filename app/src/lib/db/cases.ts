@@ -85,13 +85,22 @@ export interface EvidenceRow {
 // ========== cases ==========
 
 /**
- * 建一个新案件。stage（风声）与 district（朝阳）取 DDL 默认值，不在这里再写一份——
+ * 建一个新案件。stage 与 district 取 DDL 默认值，不在这里再写一份——
  * 默认值只该有一个出处，两处各写一遍迟早会不一致。
+ *
+ * `domain` 同理：不给就走 DDL 默认值（缺省领域）。**本层不认识任何领域**，
+ * 该建哪个领域由 lib/cases 那层判（它要过灰度开关那道闸）。
  */
-export function insertCase(db: Database, params: { userId: number; title: string }): number {
-  const info = db
-    .prepare('INSERT INTO cases (user_id, title) VALUES (?, ?)')
-    .run(params.userId, params.title);
+export function insertCase(
+  db: Database,
+  params: { userId: number; title: string; domain?: string },
+): number {
+  const info =
+    params.domain === undefined
+      ? db.prepare('INSERT INTO cases (user_id, title) VALUES (?, ?)').run(params.userId, params.title)
+      : db
+          .prepare('INSERT INTO cases (user_id, title, domain) VALUES (?, ?, ?)')
+          .run(params.userId, params.title, params.domain);
   return Number(info.lastInsertRowid);
 }
 

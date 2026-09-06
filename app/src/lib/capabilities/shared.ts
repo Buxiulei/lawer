@@ -3,6 +3,7 @@
 import type { Database } from 'better-sqlite3';
 
 import type { DomainFailure } from '@/lib/cases';
+import type { DomainPack } from '@/lib/domains/registry';
 
 import { withClientRef, type AgentWriteTarget } from './idempotent';
 
@@ -77,4 +78,61 @@ export function writeOnce<T extends { ok: true }>(
     if (err instanceof DomainAbort) return err.failure;
     throw err;
   }
+}
+
+/**
+ * 首诊工具的入参 schema，**从领域包的 intakeSchema 生成**（设计稿 §13「首诊」行）。
+ *
+ * 【为什么不手写第二份】手写的形态是：领域包加了一个必填字段，服务端开始拒收，
+ * 而工具清单里根本没有这个参数——调用方照着说明书填齐了仍然被拒，且错误信息里
+ * 提到的那个字段它在 schema 里找不到。一处定义、两处消费（校验 + 说明书），就没有这个缝。
+ *
+ * `tools/list` 拿不到案件上下文，所以调用方给的是缺省领域的包（与其它 enum 同一口径）。
+ */
+export function intakeInputSchema(pack: DomainPack): Record<string, unknown> {
+  const properties: Record<string, unknown> = { ...caseIdProp };
+  const required: string[] = ['case_id'];
+
+  for (const f of pack.intakeSchema) {
+    switch (f.kind) {
+      case 'enum':
+        properties[f.param] = { type: 'string', enum: [...(f.values ?? [])], description: f.description };
+        break;
+      case 'money':
+        properties[f.param] = { type: 'number', description: f.description };
+        break;
+      case 'stringList':
+        properties[f.param] = { type: 'array', items: { type: 'string' }, description: f.description };
+        break;
+      case 'eventList':
+        properties[f.param] = {
+          type: 'array',
+          description: f.description,
+          items: {
+            type: 'object',
+            properties: {
+              date: { type: 'string', description: 'YYYY-MM-DD，记不清就留空' },
+              text: { type: 'string', description: '发生了什么' },
+            },
+            required: ['text'],
+          },
+        };
+        break;
+      case 'record':
+        properties[f.param] = {
+          type: 'object',
+          description: f.description,
+          properties: Object.fromEntries(
+            (f.fields ?? []).map((sub) => [sub.key, { type: 'string', description: sub.label }]),
+          ),
+        };
+        break;
+      default:
+        // text / date 都是一行字符串；日期的格式要求写在 description 里（对外逐字）
+        properties[f.param] = { type: 'string', description: f.description };
+    }
+    if (f.required) required.push(f.param);
+  }
+
+  return { type: 'object', properties, required };
 }

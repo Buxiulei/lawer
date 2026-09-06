@@ -16,6 +16,7 @@ import type { Database } from 'better-sqlite3';
 import * as cases from '@/lib/cases';
 import * as claims from '@/lib/cases/claims';
 import { CALC_KINDS } from '@/lib/cases/claims';
+import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
 import * as store from '@/lib/db/agent';
 import type { ToolDef } from '@/lib/llm';
 import type { AgentEventSink } from './events';
@@ -38,14 +39,21 @@ import { DRAFT_KINDS, OUTBOUND_DRAFT_KINDS, draftBody } from '@/lib/cases/drafts
 /** charter §2：每次回复 ≤3 张行动卡。超过就不是「现在做什么」，是又一份待办清单。 */
 export const MAX_ACTION_CARDS = 3;
 
-/** 与 migrate.ts claims.kind 注释逐字对齐 */
-export const CLAIM_KINDS = [
-  '2N', 'N', 'N+1', '欠薪', '年假', '加班费', '双倍工资', '年终奖', '竞业补偿', '其他',
-] as const;
+/** **缺省领域**的诉求种类（正本在 DomainPack.claimKinds）。工具面 enum 用它展示，
+ *  真正落库前按 ctx.domain 那个领域的词表再校验一次。 */
+export const CLAIM_KINDS: readonly string[] = DOMAINS[DEFAULT_DOMAIN].claimKinds;
 
-/** 文书种类与「哪些会发给公司」的正本在 lib/cases/drafts（站内与 MCP 共用一份）；
+/** 文书种类与「哪些会发给公司」的正本在领域包（站内与 MCP 共用同一份，经 lib/cases/drafts）；
  *  这里原样再导出，好让既有的 `tools.DRAFT_KINDS` 引用不必逐处改。 */
 export { DRAFT_KINDS };
+
+/**
+ * 这个案子该按哪套词表。取不到领域包时**退回缺省领域并如实标记**——
+ * 直接抛的形态是：一条 cases.domain 写坏的行会让整轮对话崩掉，而用户什么也做不了。
+ */
+function packOfCtx(ctx: AgentToolContext) {
+  return DOMAINS[ctx.domain] ?? DOMAINS[DEFAULT_DOMAIN];
+}
 
 /** claim_calc 目前实装的公式与它用到的数据卡键：正本已搬到 lib/cases/claims
  *（站内 agent 与 MCP 共用同一份算钱逻辑）。此处原样再导出，既有引用不必逐处改。 */
@@ -118,6 +126,15 @@ export interface AgentToolContext {
   caseId: number;
   /** 案件属主。归属校验在进编排循环前已由 lib/cases 做过，这里带着它是为了过 lib/cases 的门 */
   userId: number;
+  /**
+   * 这个案子的领域（cases.domain）。诉求种类、算钱器、文书种类三份词表按它取。
+   *
+   * **必填，不给缺省**：给了缺省的形态是——第二个领域的案子在站内对话里被按缺省领域
+   * 的词表校验，收下一批本领域没有的种类、拒掉本领域有的，而两边都返回正常结构。
+   * 拿不到案件行的调用方（测试夹具）显式写上缺省领域的 key，那是一次自觉的选择，
+   * 不是一个悄悄生效的兜底。
+   */
+  domain: string;
   /** 当前会话线程 id。intake_done 往 threads.intake_stage 落痕要用 */
   threadId: number;
   /** 本轮 assistant 消息的 id，行动卡按它回指「这条为什么要做」 */
@@ -633,8 +650,10 @@ const HANDLERS: Record<string, Handler> = {
   },
 
   claims_upsert(args, ctx) {
-    const kind = inEnum(args.kind, CLAIM_KINDS);
-    if (!kind) return reject(`kind 只能是 ${CLAIM_KINDS.join(' / ')}`);
+    // 词表按**这个案件所属领域**取，不按缺省领域（上面那份 enum 只用于工具面展示）
+    const pack = packOfCtx(ctx);
+    const kind = inEnum(args.kind, pack.claimKinds);
+    if (!kind) return reject(`kind 只能是 ${pack.claimKinds.join(' / ')}`);
     const amountRaw = Number(args.amount_fen ?? 0);
     if (!Number.isInteger(amountRaw) || amountRaw < 0) return reject('amount_fen 必须是非负整数（单位：分）');
 
@@ -644,7 +663,7 @@ const HANDLERS: Record<string, Handler> = {
     // 无输入快照、无法复算的旁路——而它填错一位没有任何东西拦得住。
     // 其它 kind（欠薪本金、年终奖数额…）是用户陈述的事实而非计算结果，照常允许，
     // 但要求在 calc_json 里写明来源与待证状态。
-    if ((CALC_KINDS as readonly string[]).includes(kind) && amountRaw > 0) {
+    if (pack.calculatorKinds.includes(kind) && amountRaw > 0) {
       return reject(
         `${kind} 的金额必须走 claim_calc 计算（它会带算式、输入快照与法条依据直接落库），不要在这里自己填数。` +
           '本工具只用于登记诉求项与补充依据；要改金额请调 claim_calc。',
@@ -760,8 +779,9 @@ const HANDLERS: Record<string, Handler> = {
   },
 
   draft_write(args, ctx) {
-    const kind = inEnum(args.kind, DRAFT_KINDS);
-    if (!kind) return reject(`kind 只能是 ${DRAFT_KINDS.join(' / ')}`);
+    const docKinds = packOfCtx(ctx).docKinds;
+    const kind = inEnum(args.kind, docKinds);
+    if (!kind) return reject(`kind 只能是 ${docKinds.join(' / ')}`);
     const title = str(args.title);
     const content = str(args.content);
     if (!title || !content) return reject('title 与 content 都不能为空');
@@ -800,14 +820,14 @@ const HANDLERS: Record<string, Handler> = {
     const consequences = str(args.send_consequences);
     // charter 红线 5：发给公司的文书**必须**附发送后果。缺了就不写库——
     // 这不是提示，是闸门：让模型补齐后重试，而不是我们替它编一段后果说明。
-    if (OUTBOUND_DRAFT_KINDS.has(kind) && !consequences) {
+    if (packOfCtx(ctx).outboundDocKinds.includes(kind) && !consequences) {
       return reject(
         `《${kind}》是要发给公司的文书，charter 红线 5 要求必须同时给出 send_consequences（发出后果说明）。` +
           '请说清：发出后法律关系怎么变、对方可能怎么应对、哪一步是不可逆的，然后重新调用本工具。',
       );
     }
 
-    const body = draftBody(kind, content, consequences);
+    const body = draftBody(kind, content, consequences, packOfCtx(ctx).outboundDocKinds);
     // status 恒 draft：本系统不存在「已发出」状态——发不发、什么时候发，只有用户能决定
     const row = store.insertDraft(ctx.db, {
       caseId: ctx.caseId,
@@ -891,7 +911,7 @@ const HANDLERS: Record<string, Handler> = {
   claim_calc(args, ctx) {
     // 算钱的全部逻辑在 lib/cases/claims：**MCP 那条路调的是同一个函数**，
     // 这里只把结构化结果翻译成回喂给模型的那段字符串。
-    const res = claims.runClaimCalc(args, ctx);
+    const res = claims.runClaimCalc(args, { ...ctx, calculatorKinds: packOfCtx(ctx).calculatorKinds });
     return res.ok ? ok(res.payload) : reject(res.error);
   },
 };

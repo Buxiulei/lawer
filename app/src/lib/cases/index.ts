@@ -11,7 +11,12 @@ import type { Database } from 'better-sqlite3';
 
 import * as store from '@/lib/db/cases';
 import { dedupTitleKey } from '@/lib/db/dedup';
-import { getDomainPack } from '@/lib/domains/registry';
+import {
+  DEFAULT_DOMAIN,
+  getDomainPack,
+  requireEnabledDomain,
+  type DomainPack,
+} from '@/lib/domains/registry';
 import { normalizeDateOnly, submitIntakeInto, type IntakeInput, type IntakeResult } from './intake';
 import { markReportStale } from './report-stale';
 // 只剩 MILESTONE_OF_STAGE 的键类型还引它（`typeof CASE_STAGES`）。**stage 校验不再走它**，
@@ -129,18 +134,24 @@ const NOT_FOUND = () => fail(404, 'CASE_NOT_FOUND', '案件不存在');
  * 它的案子被按上一个领域的阶段校验，而报错信息看起来完全正常。
  * （CASE_STAGES 本身仍然存在，它是 labor 领域包 stages 的正本，见 lib/domains/labor.ts。）
  */
-function stagesForCase(row: store.CaseRow): Result<{ stages: readonly string[] }> {
+function packForCase(row: store.CaseRow): Result<{ pack: DomainPack }> {
   const pack = getDomainPack(row.domain);
   if (!pack) {
     return fail(
       500,
       'UNKNOWN_DOMAIN',
       `这个案件的领域是「${row.domain}」，但 lib/domains 里没有对应的领域包，` +
-        '所以取不到它的阶段枚举，校验不了 stage。' +
+        '所以取不到它的阶段枚举、首诊表与文书种类，什么都校验不了。' +
         '请核对 cases.domain 的取值，或补上这个领域包再试。',
     );
   }
-  return { ok: true, stages: pack.stages };
+  return { ok: true, pack };
+}
+
+/** 这个案子该按哪套阶段枚举校验。**stage 校验的唯一词表入口**（其余词表同经 packForCase）。 */
+function stagesForCase(row: store.CaseRow): Result<{ stages: readonly string[] }> {
+  const got = packForCase(row);
+  return got.ok ? { ok: true, stages: got.pack.stages } : got;
 }
 
 /**
@@ -176,8 +187,10 @@ function normalizeIsoTime(value: unknown): string | null {
 
 // ========== 建档 ==========
 
-/** 注册后自动建的那个案件；用户想改名走 cases 的更新面，这里只管第一次 */
-const DEFAULT_CASE_TITLE = '我的案件';
+/** 注册后自动建的那个案件的抬头与欢迎事件：正本在领域包的 copy.site（本层不写死领域文案） */
+function siteCopy(pack: DomainPack) {
+  return pack.copy.site;
+}
 
 /**
  * 确保用户名下有案件，没有就建一个并写一条欢迎事件（注册完成时由 lib/auth 调用）。
@@ -189,20 +202,30 @@ const DEFAULT_CASE_TITLE = '我的案件';
 export function ensureDefaultCase(
   db: Database,
   userId: number,
-): { caseId: number; isNew: boolean } {
+  /**
+   * 建哪个领域的案子。省略即缺省领域。
+   *
+   * **只接受灰度开关里开着的领域**：一个还没上线的领域一旦落进 cases.domain，
+   * 那个案件从此按一份没人验收过的配置被校验，而它看起来和别的案件没有任何区别。
+   */
+  domain?: string,
+): { caseId: number; isNew: boolean } | DomainFailure {
+  const wanted = domain ?? DEFAULT_DOMAIN;
+  const pack = requireEnabledDomain(wanted);
+  if ('ok' in pack) return pack;
+
   const existing = store.listCasesByUser(db, userId);
   if (existing.length > 0) return { caseId: existing[0].id, isNew: false };
 
+  const copy = siteCopy(pack);
   const create = db.transaction(() => {
-    const caseId = store.insertCase(db, { userId, title: DEFAULT_CASE_TITLE });
+    const caseId = store.insertCase(db, { userId, title: copy.defaultCaseTitle, domain: pack.key });
     store.insertTimelineEvent(db, {
       caseId,
       happenedAt: nowSql(),
       kind: '系统动作',
-      title: '档案已建立',
-      detail:
-        '从现在起，公司说了什么、发了什么文件、你回了什么，都记到这条时间线上。' +
-        '拿不准下一步做什么，直接问我。',
+      title: copy.welcomeEventTitle,
+      detail: copy.welcomeEventDetail,
     });
     return caseId;
   });
@@ -542,10 +565,10 @@ export function submitIntake(
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
 
-  const stages = stagesForCase(found);
-  if (isFailure(stages)) return stages;
+  const pack = packForCase(found);
+  if (isFailure(pack)) return pack;
 
-  const done = submitIntakeInto(db, input.caseId, input, stages.stages);
+  const done = submitIntakeInto(db, input.caseId, input, pack.pack);
   if (!done.ok) return done;
   return { ok: true, result: done.result };
 }
@@ -786,8 +809,18 @@ export function writeDraft(
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
 
-  if (typeof input.kind !== 'string' || !(DRAFT_KINDS as readonly string[]).includes(input.kind)) {
-    return fail(400, 'INVALID_DRAFT_KIND', `kind 只能是 ${DRAFT_KINDS.join(' / ')}`);
+  // 文书种类按**这个案件所属领域**取（DRAFT_KINDS 是缺省领域那份，只用于工具面展示）
+  const docPack = getDomainPack(found.domain);
+  if (!docPack) {
+    return fail(
+      500,
+      'UNKNOWN_DOMAIN',
+      `这个案件的领域是「${found.domain}」，但 lib/domains 里没有对应的领域包，取不到文书种类词表。` +
+        '请核对 cases.domain 的取值，或补上这个领域包再试。',
+    );
+  }
+  if (typeof input.kind !== 'string' || !docPack.docKinds.includes(input.kind)) {
+    return fail(400, 'INVALID_DRAFT_KIND', `kind 只能是 ${docPack.docKinds.join(' / ')}`);
   }
   const kind = input.kind;
   const title = trimmedOrNull(input.title);
@@ -796,7 +829,7 @@ export function writeDraft(
   if (!body) return fail(400, 'INVALID_BODY', 'body 不能为空');
 
   const consequences = trimmedOrNull(input.sendConsequences);
-  if (OUTBOUND_DRAFT_KINDS.has(kind) && !consequences) {
+  if (docPack.outboundDocKinds.includes(kind) && !consequences) {
     return fail(
       400,
       'SEND_CONSEQUENCES_REQUIRED',
@@ -821,7 +854,7 @@ export function writeDraft(
     caseId: input.caseId,
     kind,
     title,
-    content: draftBody(kind, body, consequences),
+    content: draftBody(kind, body, consequences, docPack.outboundDocKinds),
     status: 'draft',
     sendConsequences: consequences,
     basedOn,

@@ -16,6 +16,7 @@
 import type { Database } from 'better-sqlite3';
 
 import { computeDeadline } from '@/lib/deadline';
+import type { DomainPack, IntakeFieldSpec } from '@/lib/domains/registry';
 import { insertActionItem, insertDeadline, upsertCompanyProfileByRole } from '@/lib/db/agent';
 import * as store from '@/lib/db/cases';
 import { nowSql } from '@/lib/db/time';
@@ -64,18 +65,13 @@ export interface IntakeResult {
   deadlinesAdded: number;
 }
 
-/** 公司给过哪些文件，三问一行记清楚。顺序与前端问的顺序一致。 */
-const COMPANY_DOC_LABELS: { key: keyof IntakeCompanyDocs; label: string }[] = [
-  { key: 'terminationNotice', label: '《解除劳动合同通知书》' },
-  { key: 'settlementAgreement', label: '《协商解除协议》' },
-  { key: 'otherPaper', label: '调岗通知 / 绩效改进（PIP）/ 警告信' },
-];
-
 /**
- * 这几个阶段说明劳动关系已经出事、时效多半已经在走，才谈得上落仲裁时效。
- * 「风声」「约谈中」还没有可指认的侵害日，落了就是编。
+ * 「对方给过哪些文件」那一问的子问清单，从领域包取（intakeSchema 里 kind==='record' 的那项）。
+ * 顺序与前端问的顺序一致，也是落库那条事件里的拼接顺序。
  */
-const STAGES_WITH_RUNNING_LIMITATION: readonly string[] = ['已收通知', '已解除', '仲裁准备'];
+function docFieldsOf(pack: DomainPack, key: string): readonly { key: string; label: string }[] {
+  return pack.intakeSchema.find((f) => f.key === key)?.fields ?? [];
+}
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -124,42 +120,87 @@ function fail(errorCode: string, message: string): IntakeFailure {
   return { ok: false, status: 400, errorCode, message };
 }
 
+/** 校验一个首诊字段：过了回归一后的值，没过回该字段那条自述错误。 */
+function checkField(
+  spec: IntakeFieldSpec,
+  raw: unknown,
+  today: string,
+): { ok: true; value: unknown } | IntakeFailure {
+  const bad = (message: string) => fail(spec.errorCode!, message);
+  const message = (spec.invalidMessage ?? '').replace(
+    '{values}',
+    (spec.values ?? []).join(' / '),
+  );
+
+  switch (spec.kind) {
+    case 'enum':
+      return typeof raw === 'string' && (spec.values ?? []).includes(raw)
+        ? { ok: true, value: raw }
+        : bad(message);
+    case 'text': {
+      const v = trimmed(raw);
+      return v ? { ok: true, value: v } : bad(message);
+    }
+    case 'date': {
+      const v = normalizeDateOnly(raw);
+      if (!v) return bad(message);
+      // 晚于今天的日子格式完全合法，错的是它指向将来——所以另说一句话，
+      // 回同一句「格式要写成 YYYY-MM-DD」的形态是：用户照着改格式，改完还是被拒。
+      if (v > today) return bad(spec.futureMessage ?? message);
+      return { ok: true, value: v };
+    }
+    case 'money':
+      return typeof raw === 'number' && Number.isInteger(raw) && raw > 0
+        ? { ok: true, value: raw }
+        : bad(message);
+    case 'stringList': {
+      const list = Array.isArray(raw)
+        ? raw.map((g) => trimmed(g)).filter((g): g is string => g !== null)
+        : [];
+      return list.length > 0 ? { ok: true, value: list } : bad(message);
+    }
+    default:
+      // eventList / record 这些没有必填校验（errorCode 不在场时根本走不到这里）
+      return { ok: true, value: raw };
+  }
+}
+
 /**
  * 校验首诊必填项。**服务端是权威**：前端的逐步校验只是别让人白填一场，
  * 它可以被绕过（改 localStorage、直接打接口），而这几项一旦落成空值，
  * 后面的金额与年限就会拿着空值往下算。
+ *
+ * 【校验哪几项、说哪句话，全由领域包的 intakeSchema 决定】本层不认识任何具体领域：
+ * 写死一份必填清单的形态是——第二个领域接进来时，它的用户被要求填一批本领域没有的字段，
+ * 而每一条错误信息读起来都很正常。
+ *
+ * 顺序即 intakeSchema 的顺序：同时填错两项时先报哪一条由领域包定，不由这里定。
  */
 export function validateIntake(
   input: Pick<IntakeInput, 'stage' | 'companyName' | 'employedFrom' | 'monthlyWageFen' | 'goals'>,
   today: string,
-  /** 案件领域包给的阶段枚举（lib/cases/index.ts 的 stagesForCase）——本层不写死词表 */
-  stages: readonly string[],
+  /** 案件所属领域的包（由 lib/cases/index.ts 的 packForCase 取），本层不写死词表 */
+  pack: DomainPack,
 ): { ok: true; value: { stage: CaseStage; companyName: string; employedFrom: string; monthlyWageFen: number; goals: string[] } } | IntakeFailure {
-  if (typeof input.stage !== 'string' || !stages.includes(input.stage)) {
-    return fail('INVALID_STAGE', `stage 只能是 ${stages.join(' / ')}`);
+  const raw = input as unknown as Record<string, unknown>;
+  const value: Record<string, unknown> = {};
+  for (const spec of pack.intakeSchema) {
+    // errorCode 不在场 = 这个字段不做必填校验（见 IntakeFieldSpec 头注释）
+    if (!spec.errorCode) continue;
+    const checked = checkField(spec, raw[spec.key], today);
+    if (!checked.ok) return checked;
+    value[spec.key] = checked.value;
   }
-  const companyName = trimmed(input.companyName);
-  if (!companyName) {
-    return fail('INVALID_COMPANY_NAME', '公司名称不能为空：它就是仲裁里的被申请人');
-  }
-  const employedFrom = normalizeDateOnly(input.employedFrom);
-  if (!employedFrom) {
-    return fail('INVALID_EMPLOYED_FROM', '入职时间要填成 YYYY-MM-DD 的真实日期，它是工龄年限的起点');
-  }
-  if (employedFrom > today) {
-    return fail('INVALID_EMPLOYED_FROM', '入职时间不能晚于今天');
-  }
-  const wage = input.monthlyWageFen;
-  if (typeof wage !== 'number' || !Number.isInteger(wage) || wage <= 0) {
-    return fail('INVALID_MONTHLY_WAGE', '月工资要填一个大于 0 的数字（单位：分），它是所有金额的基数');
-  }
-  const goals = Array.isArray(input.goals)
-    ? input.goals.map((g) => trimmed(g)).filter((g): g is string => g !== null)
-    : [];
-  if (goals.length === 0) {
-    return fail('INVALID_GOALS', '至少要选一项诉求：不写清要什么，谈判时容易被牵着走');
-  }
-  return { ok: true, value: { stage: input.stage as CaseStage, companyName, employedFrom, monthlyWageFen: wage, goals } };
+  return {
+    ok: true,
+    value: value as unknown as {
+      stage: CaseStage;
+      companyName: string;
+      employedFrom: string;
+      monthlyWageFen: number;
+      goals: string[];
+    },
+  };
 }
 
 /**
@@ -172,8 +213,10 @@ function persist(
   value: { stage: CaseStage; companyName: string; employedFrom: string; monthlyWageFen: number; goals: string[] },
   input: IntakeInput,
   now: Date,
+  pack: DomainPack,
 ): IntakeResult {
   const nowIso = now.toISOString();
+  const copy = pack.copy.site;
 
   // ── 事件：用户自己记的那几条 + 整段自述 + 公司说法 + 公司给过哪些文件 ──
   const rawEvents = Array.isArray(input.events) ? (input.events as IntakeEventInput[]) : [];
@@ -197,32 +240,45 @@ function persist(
   const freeText = trimmed(input.freeText);
   if (freeText) {
     // 「把经过写下来」是用户自己做的一件事，正文进 detail，不硬塞进标题里
-    events.push({ happenedAt: nowIso, kind: '我方动作', title: '我把经过整段记了下来', detail: freeText });
+    events.push({ happenedAt: nowIso, kind: '我方动作', title: copy.intakeFreeTextTitle, detail: freeText });
   }
 
   const companyWording = trimmed(input.companyWording);
   if (companyWording) {
-    events.push({ happenedAt: nowIso, kind: '公司动作', title: '公司口头给的说法', detail: companyWording });
+    events.push({
+      happenedAt: nowIso,
+      kind: '公司动作',
+      title: copy.intakeCounterpartWordingTitle,
+      detail: companyWording,
+    });
   }
 
-  const docLine = COMPANY_DOC_LABELS.map(({ key, label }) => {
-    const answer = trimmed(input.companyDocs?.[key]);
-    return answer ? `${label}：${answer}` : null;
-  })
+  const docs = (input.companyDocs ?? {}) as Record<string, unknown>;
+  const docLine = docFieldsOf(pack, 'companyDocs')
+    .map(({ key, label }) => {
+      const answer = trimmed(docs[key]);
+      return answer ? `${label}：${answer}` : null;
+    })
     .filter((x): x is string => x !== null)
     .join('；');
   if (docLine) {
-    events.push({ happenedAt: nowIso, kind: '公司动作', title: '公司已经给过哪些文件', detail: docLine });
+    events.push({
+      happenedAt: nowIso,
+      kind: '公司动作',
+      title: copy.intakeCounterpartDocsTitle,
+      detail: docLine,
+    });
   }
 
   // ── 三件事：种子表与首诊第 6 步画的是同一份 ──
   const seeds = INTAKE_STAGE_ACTIONS[value.stage] ?? [];
 
-  // ── 仲裁时效：只有拿得到真起算点才落 ──
+  // ── 法定期限：只有拿得到真起算点、且本领域声明了要落，才落 ──
   const anchor = datedDays.length > 0 ? datedDays.slice().sort()[0] : null;
+  const lim = pack.intakeLimitation;
   const limitation =
-    anchor !== null && STAGES_WITH_RUNNING_LIMITATION.includes(value.stage)
-      ? computeDeadline('仲裁时效', anchor)
+    lim && anchor !== null && lim.stages.includes(value.stage)
+      ? computeDeadline(lim.kind, anchor)
       : null;
 
   const write = db.transaction((): IntakeResult => {
@@ -252,7 +308,7 @@ function persist(
       role: '签约主体',
       legalRep: null,
       riskNotes: null,
-      sourcesJson: JSON.stringify([{ source: '用户首诊自述', at: nowSql() }]),
+      sourcesJson: JSON.stringify([{ source: copy.intakeCompanySource, at: nowSql() }]),
     });
 
     let timelineAdded = 0;
@@ -284,11 +340,7 @@ function persist(
         caseId,
         kind: limitation.rule.storedKind,
         dueDate: limitation.dueDate,
-        derivedFrom:
-          `${limitation.derivedFrom} ` +
-          `【起算点暂按你在首诊里记下的最早一件事（${anchor}）取，这是**偏早的保守估计**：` +
-          `真正的起算日是你知道权利被侵害那天（通常是收到解除通知或办完离职那天）。` +
-          `确认后到期限页改成那天，日子会往后挪。】`,
+        derivedFrom: `${limitation.derivedFrom} ${lim!.note.replace('{anchor}', anchor!)}`,
       });
       deadlinesAdded = created.created ? 1 : 0;
     }
@@ -306,11 +358,11 @@ export function submitIntakeInto(
   db: Database,
   caseId: number,
   input: IntakeInput,
-  /** 这个案子该按哪套阶段枚举校验。由调用方从案件的领域包取，本层不认识任何具体领域 */
-  stages: readonly string[],
+  /** 这个案子的领域包。由调用方按 cases.domain 取，本层不认识任何具体领域 */
+  pack: DomainPack,
 ): { ok: true; result: IntakeResult } | IntakeFailure {
   const now = input.now ?? new Date();
-  const checked = validateIntake(input, now.toISOString().slice(0, 10), stages);
+  const checked = validateIntake(input, now.toISOString().slice(0, 10), pack);
   if (!checked.ok) return checked;
-  return { ok: true, result: persist(db, caseId, checked.value, input, now) };
+  return { ok: true, result: persist(db, caseId, checked.value, input, now, pack) };
 }

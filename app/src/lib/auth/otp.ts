@@ -432,7 +432,19 @@ export function provisionOnRegistered(db: Database, userId: number): Onboarding 
 /** 上面那段「建案失败不许阻断登录」的实现体；邮箱注册那条路径也用它，判据不同、兜底相同。 */
 function provisionDefaultCase(db: Database, userId: number): Onboarding | undefined {
   try {
-    return ensureDefaultCase(db, userId);
+    const made = ensureDefaultCase(db, userId);
+    // 领域灰度把缺省领域关掉时 ensureDefaultCase 回的是自述错误而不是抛异常。
+    // 与下面那条 catch 同一口径：**建案失败不许阻断登录**，但要留一行日志——
+    // 静默返回 undefined 的形态是，一批用户手里没有案件，而谁都不知道为什么。
+    if ('ok' in made) {
+      console.error('[auth] 注册自动建案被领域开关拦下（不阻断登录）', {
+        userId,
+        errorCode: made.errorCode,
+        message: made.message,
+      });
+      return undefined;
+    }
+    return made;
   } catch (err) {
     console.error('[auth] 注册自动建案失败（不阻断登录）', { userId, err });
     return undefined;

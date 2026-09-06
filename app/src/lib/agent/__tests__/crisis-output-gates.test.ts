@@ -12,7 +12,7 @@
  * 【一处纠正】此前口头传的是"已知三道"，**实测是六道**（见下表）。
  * 少数的那三道里，`stripNbdpsyPitch` 与第五闸同样会动危机轮的正文。
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
@@ -220,6 +220,12 @@ function importedValuesFrom(src: string, moduleSpec: string): string[] {
   return names;
 }
 
+/** lib/domains 下的领域包文件（registry.ts 是接口不是包）。列目录而不是写死包名：
+ *  写死的形态是第二个领域接进来时这份清单漏掉它，而检测照常报绿。 */
+const DOMAIN_PACK_FILES = readdirSync(new URL('../../domains', import.meta.url))
+  .filter((f) => f.endsWith('.ts') && f !== 'registry.ts')
+  .map((f) => new URL(`../../domains/${f}`, import.meta.url));
+
 describe('危机轮输出流经的闸：登记册与漏登记检测', () => {
   const SRC = readFileSync(new URL('../orchestrator.ts', import.meta.url), 'utf8');
   const SRC_CRISIS = readFileSync(new URL('../crisis.ts', import.meta.url), 'utf8');
@@ -269,11 +275,23 @@ describe('危机轮输出流经的闸：登记册与漏登记检测', () => {
   });
 
   it('★首段与模型段的切分只有一份来源（判定面统一的前提）', () => {
-    // splitCrisisOpener 与 buildCrisisOpener 共用 CRISIS_OPENER_HEAD/TAIL 常量：
-    // 拆分若照抄字面量，改了一边忘了另一边会**静默拆错**，把整段当模型段判。
-    expect(SRC_CRISIS).toContain('const CRISIS_OPENER_HEAD');
-    expect(SRC_CRISIS).toContain('const CRISIS_OPENER_TAIL');
-    expect((SRC_CRISIS.match(/电话那头是受过训练的人/g) ?? []).length).toBe(1);
+    // 拼装（assembleCrisisOpener）与拆分（splitCrisisOpenerWith）吃**同一个** CrisisOpenerText，
+    // 两边都不许自带字面量：拆分若照抄一份，改了一边忘了另一边会**静默拆错**，把整段当模型段判。
+    //
+    // 【2026-09-06 扫描面跟着搬】P4-W1 把首段文案搬进领域包、骨架搬进 crisis-opener.ts。
+    // 扫描面不跟着搬的形态是——这条检测会安静地转绿，因为它要找的东西已经不在它看的文件里了。
+    const SRC_OPENER = readFileSync(new URL('../crisis-opener.ts', import.meta.url), 'utf8');
+    expect(SRC_OPENER).toContain('text.head[0]'); // 拆分认的是同一份 head
+    expect(SRC_OPENER).toContain('text.tail'); // 拼装与拆分认的是同一份 tail
+
+    // 那句收束句在**整条链路上只出现一次**（领域包里那一处），拼装侧与拆分侧都只引不抄。
+    const CHAIN = [
+      new URL('../crisis.ts', import.meta.url),
+      new URL('../crisis-opener.ts', import.meta.url),
+      ...DOMAIN_PACK_FILES,
+    ].map((u) => readFileSync(u, 'utf8'));
+    const hits = CHAIN.reduce((n, src) => n + (src.match(/电话那头是受过训练的人/g) ?? []).length, 0);
+    expect(hits, '首段收束句被抄成了第二份——拆分与拼装从此可以各改各的').toBe(1);
   });
 
   // ↓↓↓ 补 strip* 前缀扫不到的那一类（登记册六道里有两道不叫 strip）
