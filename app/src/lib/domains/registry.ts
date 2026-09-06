@@ -12,6 +12,7 @@
 
 import type { CrisisOpenerText, HotlineFact } from '@/lib/agent/crisis-opener';
 
+import { COUNSELING } from './counseling';
 import { LABOR } from './labor';
 
 /**
@@ -201,6 +202,45 @@ export interface DomainCopy {
   site: Readonly<Record<string, string>>;
 }
 
+/**
+ * 一组**恒常在场**的「这几件事没有律师书面确认之前不许下结论」。
+ *
+ * 【为什么它是包的一部分，而不是一条条待办】待办做完就消失，而这几项做不完——
+ * 它们是这个行当里本来就没有定论的东西，只会由某一位律师针对某一个案子书面确认一次。
+ * 做成待办的形态是：模型看见"待办 4 项"，于是替用户把它们逐条"办掉"（给出一个结论），
+ * 而每一条结论读起来都很像答案。
+ *
+ * 【为什么恒常在场而不是"命中才提"】它防的是**模型的默认行为**，不是某种输入。
+ * 只在用户问到时才提的形态是：用户没问、模型自己顺口断言了一句，没有任何东西会拦它。
+ */
+export interface DomainLawyerReview {
+  /** 这一节的抬头（事实卡与个案报告共用同一份措辞） */
+  title: string;
+  /** 逐条：**待核的是什么、为什么没定论**。一条一件事，不合并 */
+  items: readonly string[];
+  /** 统一纪律，逐字对外——这句话才是这一节的作用，条目只是它的适用范围 */
+  discipline: string;
+}
+
+/**
+ * 敏感级：本领域的档案里写着**第三人**的敏感个人信息（个保法 §28 那一类）。
+ *
+ * 【它约束的是三个出口】每轮喂给模型的事实卡、免登录分享页、转介数据包。
+ * 三处各写一遍"记得脱敏"的形态是——总有一个出口忘了，而它照常返回 200、页面上什么都不缺。
+ * 所以三处读同一份声明；要改口径只改这里。
+ */
+export interface DomainSensitivity {
+  /** 被保护的是谁（「来访者」）。脱敏提示与分享页的措辞取它，不在共用层写死一个称呼 */
+  subject: string;
+  /**
+   * 事实卡里逐字写给模型的那段纪律。写在卡里而不是 prompt 里，
+   * 因为它要与"这一条证据长什么样"挨着出现——隔开的形态是，模型读到明细时早忘了那句话。
+   */
+  factsNotice: string;
+  /** 分享 / 导出页上逐字给读者的那句话（说明这里被脱敏过、以及要核对该找谁） */
+  redactNotice: string;
+}
+
 /** 一个领域包要提供的东西。**每一项都必填**：缺项由 assertDomainPack 在启动时点名。 */
 export interface DomainPack {
   /** 领域键，与 cases.domain 落库值同一份取值 */
@@ -266,6 +306,13 @@ export interface DomainPack {
   calculatorKinds: readonly string[];
   /** 危机词表与首段 */
   crisis: DomainCrisis;
+  /**
+   * 「未经律师书面确认不得作为结论输出」的固定条目。**省略 = 本领域没有这类条目**，
+   * 是一个结论不是待填项。
+   */
+  lawyerReview?: DomainLawyerReview;
+  /** 敏感级。**省略 = 本领域不按敏感级处理**（同上，是结论不是待填项）。 */
+  sensitive?: DomainSensitivity;
   /** 对外文案（低调模式词典 + 能力文案 + 站内文案） */
   copy: DomainCopy;
 }
@@ -273,6 +320,7 @@ export interface DomainPack {
 /** key → 领域包。加一个领域 = 加一个包 + 在这里挂一行。 */
 export const DOMAINS: Record<string, DomainPack> = {
   [LABOR.key]: LABOR,
+  [COUNSELING.key]: COUNSELING,
 };
 
 /**
@@ -433,6 +481,20 @@ export function assertDomainPack(pack: DomainPack): void {
   arr('crisis.openerText.head', pack.crisis?.openerText?.head);
   str('crisis.openerText.tail', pack.crisis?.openerText?.tail);
   if (typeof pack.crisis?.firstSegment !== 'function') missing.push('crisis.firstSegment');
+
+  // lawyerReview / sensitive 都是**可选**的（省略 = 本领域没有这回事）。但一旦声明，
+  // 就不许半张：空的 items = 一节只有抬头没有内容；空的 discipline = 列了四件事却没说
+  // 「不许下结论」——而那句话才是这一节存在的理由，缺了它这一节读起来像四条待办。
+  if (pack.lawyerReview) {
+    str('lawyerReview.title', pack.lawyerReview.title);
+    arr('lawyerReview.items', pack.lawyerReview.items);
+    str('lawyerReview.discipline', pack.lawyerReview.discipline);
+  }
+  if (pack.sensitive) {
+    str('sensitive.subject', pack.sensitive.subject);
+    str('sensitive.factsNotice', pack.sensitive.factsNotice);
+    str('sensitive.redactNotice', pack.sensitive.redactNotice);
+  }
 
   str('copy.neutral.title', pack.copy?.neutral?.title);
   str('copy.neutral.appTitle', pack.copy?.neutral?.appTitle);

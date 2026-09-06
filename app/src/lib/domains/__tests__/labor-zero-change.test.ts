@@ -43,6 +43,7 @@ import type { CaseRow } from '@/lib/db/cases';
 import * as knowledge from '@/lib/knowledge';
 
 import { LABOR } from '../labor';
+import { DOMAINS, type DomainPack } from '../registry';
 
 /** 基线文件的形状。写出来是为了让漏掉某一项时 tsc 就红，而不是等断言比出 undefined。 */
 interface Baseline {
@@ -232,15 +233,58 @@ describe('labor 零变化守卫（基线取自 origin/main 4098805）', () => {
     expect(renderCaseFacts(buildCaseFacts(snapshot()))).toEqual(BASELINE.caseFacts);
   });
 
-  it('③ claim_calc 的 kind 列表不变（变异：往 calculatorKinds 加一项 → 红）', () => {
+  /**
+   * 工具 schema 里那个 kind 枚举是**各领域包该词表的并集**（tools/list 拿不到案件上下文，
+   * 见 families/claims.ts 与 families/deadlines-write.ts 的注释）。所以挂上第二个领域包之后，
+   * 它必然比基线长——那不是 labor 变了，是清单本来就是并集。
+   *
+   * 【为什么不能因此把这条判据删掉或改成"包含"】"包含"允许 labor 的项**被重排、被删掉一个再
+   * 补上别的**，而那正是搬家时最容易出的事。所以拆成三条各自有牙的断言：
+   *   ① labor 自己的词表逐字不变（顺序也不变）；
+   *   ② 并集的**前缀恰好是** labor 那一份（顺序与内容都不许动）；
+   *   ③ 多出来的那些**恰好等于**其它已注册领域包新带进来的项（不多不少、去重后按注册顺序）。
+   * 于是：往 labor 词表加一项 → ①红；把 labor 的项挪个位置 → ②红；
+   * 凭空往工具枚举里塞一个谁都没声明的值 → ③红。
+   *
+   * @param actual 工具的 inputSchema
+   * @param baseline 基线里那份 schema（改动前捕获，枚举即 labor 那一份）
+   * @param kindsOf 从领域包里取这一项对应的词表
+   */
+  function expectUnionSchema(
+    actual: unknown,
+    baseline: unknown,
+    kindsOf: (pack: DomainPack) => readonly string[],
+  ): void {
+    const laborKinds = kindsOf(LABOR);
+    const others = Object.values(DOMAINS).filter((p) => p.key !== LABOR.key);
+    expect(others.length, '注册表里只有 labor 时，本条退化成"并集 = labor"，仍然成立').toBeGreaterThanOrEqual(0);
+    const extras = [...new Set(others.flatMap((p) => kindsOf(p)))].filter((k) => !laborKinds.includes(k));
+
+    const pick = (schema: unknown): string[] =>
+      ((schema as { properties: { kind: { enum: string[] } } }).properties.kind.enum);
+    const base = pick(baseline);
+    const now = pick(actual);
+
+    // ② 前缀恰好是 labor 那一份
+    expect(now.slice(0, base.length), 'labor 的那几项在工具枚举里被改动或重排了').toEqual(base);
+    // ③ 多出来的恰好是其它领域带进来的
+    expect(now.slice(base.length), '工具枚举里多出来的项与已注册领域包对不上').toEqual(extras);
+
+    // schema 的其余部分逐字不变（把 kind 那一格换成基线的再整体比，别的字段改了照样红）
+    const normalized = JSON.parse(JSON.stringify(actual)) as { properties: { kind: { enum: string[] } } };
+    normalized.properties.kind.enum = base;
+    expect(normalized).toEqual(baseline);
+  }
+
+  it('③ claim_calc 的 kind 列表不变（变异：往 labor 的 calculatorKinds 加一项、或把它的项重排 → 红）', () => {
     expect(CALC_KINDS).toEqual(BASELINE.calcKinds);
     expect(LABOR.calculatorKinds).toEqual(BASELINE.calcKinds);
-    expect(getCapability('claim_calc')?.inputSchema).toEqual(BASELINE.schemas.claim_calc);
+    expectUnionSchema(getCapability('claim_calc')?.inputSchema, BASELINE.schemas.claim_calc, (p) => p.calculatorKinds);
   });
 
-  it('④ deadline 的 kind 列表不变（变异：往 deadlineKinds 加一项 → 红）', () => {
+  it('④ deadline 的 kind 列表不变（变异：往 labor 的 deadlineKinds 加一项、或把它的项重排 → 红）', () => {
     expect(LABOR.deadlineKinds).toEqual(BASELINE.deadlineKinds);
-    expect(getCapability('deadline_set')?.inputSchema).toEqual(BASELINE.schemas.deadline_set);
+    expectUnionSchema(getCapability('deadline_set')?.inputSchema, BASELINE.schemas.deadline_set, (p) => p.deadlineKinds);
   });
 
   it('⑤ 文书种类与那段发出前必读不变（变异：改 outboundDocKinds 或尾注措辞 → 红）', () => {

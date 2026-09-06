@@ -30,8 +30,32 @@ describe('知识索引带 domain', () => {
     }
   });
 
-  it('存量卡片全在缺省领域（本票只做管道与缺省领域的数据迁移，不写第二个领域的内容）', () => {
-    expect(new Set(listPacks().map((p) => p.domain))).toEqual(new Set([DEFAULT_DOMAIN]));
+  /**
+   * 【本条在 P4-W3 改过口径，原因写在这里】W1 写它时库里只有缺省领域一批卡，
+   * 判据是「domain 的取值集合 = {缺省领域}」。W2 落了第二个领域的 39 张卡之后，
+   * 那个写法只能整条删掉或改绿——两种都会把它守的东西一起丢掉。
+   *
+   * 它真正要守的是**布局与领域的对应**：一张卡在哪个目录下，决定它属于哪个领域。
+   * 对不上的形态是——一张写在缺省领域目录里的卡自称属于第二个领域（或反过来），
+   * 于是它对**两边**的用户都不可见，而检索照常返回 200 与一个更短的列表。
+   */
+  it('卡片所在目录与它的 domain 严格对应（变异：把一张卡的 domain 改成别的领域 → 红）', () => {
+    const drift: string[] = [];
+    for (const p of listPacks()) {
+      const inSubPack = /^packs\/([^/]+)\//.exec(p.path)?.[1];
+      // packs/<领域键>/ 下的卡必须属于那个领域；不在任何领域子目录下的（存量布局）属缺省领域
+      const expected = inSubPack && inSubPack in DOMAINS ? inSubPack : DEFAULT_DOMAIN;
+      if (p.domain !== expected) drift.push(`${p.id}（${p.path}）：domain=${p.domain}，按布局应是 ${expected}`);
+    }
+    expect(drift, `卡片布局与 domain 对不上：\n  ${drift.join('\n  ')}`).toEqual([]);
+  });
+
+  it('判据自身不空跑：两个领域的卡都真的在库里', () => {
+    const byDomain = new Map<string, number>();
+    for (const p of listPacks()) byDomain.set(p.domain, (byDomain.get(p.domain) ?? 0) + 1);
+    for (const key of Object.keys(DOMAINS)) {
+      expect(byDomain.get(key) ?? 0, `领域 ${key} 一张卡都没有，上面那条对它恒真`).toBeGreaterThan(0);
+    }
   });
 
   it('search 带 domain ⇒ 只回该领域的卡；带一个没有卡的领域 ⇒ 空手（变异：把过滤条件删掉 → 红）', () => {
@@ -44,8 +68,19 @@ describe('知识索引带 domain', () => {
     expect(search(q, { limit: 20, domain: '一个还没有任何卡的领域' })).toEqual([]);
   });
 
-  it('search 不带 domain ⇒ 不过滤（跨域检索是显式选择，不是默认拒绝）', () => {
-    expect(search('经济补偿', { limit: 20 }).length).toBeGreaterThan(0);
+  /**
+   * 【本条在 P4-W3 改过口径】W1 原本写的是「不带 domain ⇒ 不过滤」，而 W2 按设计稿 §13-3
+   * 「跨域检索**默认关闭**」把过滤器改成了「不传 = 只回缺省领域」。两支合到一起时，
+   * 原判据仍然是绿的——因为它只断言「结果非空」，而缺省领域的卡本来就非空。
+   * 也就是说它在**新语义下恒真**，守不住任何东西。改成直接钉住默认关闭这件事。
+   */
+  it('search 不带 domain ⇒ 只回缺省领域（跨域是显式要的，不是忘了传就发生的）', () => {
+    const other = Object.keys(DOMAINS).find((k) => k !== DEFAULT_DOMAIN);
+    expect(other, '注册表里只有一个领域，本条恒真').toBeDefined();
+    // 用第二个领域的卡一定命中、缺省领域一定不命中的词去问
+    const q = '知情同意';
+    expect(search(q, { limit: 20, domain: other }).length).toBeGreaterThan(0);
+    for (const hit of search(q, { limit: 20 })) expect(hit.domain).toBe(DEFAULT_DOMAIN);
   });
 
   /**

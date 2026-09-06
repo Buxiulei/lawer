@@ -126,9 +126,13 @@ describe('index.json 的 domain 与卡片 frontmatter 同步（变异：卡上�
   it('每一条索引条目的 domain 都与它指向的卡片写的一致', () => {
     const drift: string[] = [];
     for (const meta of listPacks()) {
-      const onCard = domainInCard(meta.path);
+      // 【卡上不写 = 缺省领域】存量那批卡是在只有一个领域的时候写的，frontmatter 里没有
+      // 这一行；加载器（loadIndex）按缺省领域补齐，所以 index 里读到的恒有值。
+      // 拿「卡上写的」直接跟「index 里的」比的形态是：存量 220 张全部报分叉，
+      // 而它们一张都没被改过——判据自己在制造噪音，真分叉那条会淹在里面。
+      const onCard = domainInCard(meta.path) ?? DEFAULT_DOMAIN;
       if (onCard !== meta.domain) {
-        drift.push(`${meta.id}：index 说 ${meta.domain ?? '（无）'}，卡里写的是 ${onCard ?? '（无）'}`);
+        drift.push(`${meta.id}：index 说 ${meta.domain ?? '（无）'}，卡里写的是 ${onCard}`);
       }
     }
     expect(
@@ -139,8 +143,10 @@ describe('index.json 的 domain 与卡片 frontmatter 同步（变异：卡上�
     ).toEqual([]);
   });
 
-  it('判据自身不空跑：确实有卡在 frontmatter 里声明了 domain', () => {
-    const declared = listPacks().filter((m) => m.domain !== undefined);
+  it('判据自身不空跑：确实有卡在 frontmatter 里**自己写了** domain', () => {
+    // 只数卡上真的写了那一行的（不是加载器补出来的）——上一条对补出来的那批恒真，
+    // 真正被比对的只有这批。这一条钉的就是"这批不是零"。
+    const declared = listPacks().filter((m) => domainInCard(m.path) !== undefined);
     expect(declared.length).toBeGreaterThan(30);
     for (const m of declared) expect(domainInCard(m.path)).toBe(m.domain);
   });

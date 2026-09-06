@@ -83,9 +83,25 @@ describe('index ⇄ packs/counseling/ 双向一致（变异：删掉任一张卡
     }
   });
 
-  it('既有劳动卡一张都没有被打上 domain（本票只加不改）', () => {
-    const others = INDEX.filter((e) => e.domain !== undefined && e.domain !== DOMAIN);
-    expect(others.map((e) => e.id)).toEqual([]);
+  /**
+   * 【本条在 P4-W3 改过口径，原因写在这里】W2 写它时生成器只给显式声明了 domain 的卡
+   * 导出这个字段，于是"既有卡一张都没有 domain"是可观测的。W1 把生成器改成
+   * **每一条都导出 domain**（没声明的补成缺省领域），这条按原样只能整条删掉。
+   *
+   * 它真正要守的是同一件事的另一面：**这一票只往里加，不把既有的卡挪进新领域**。
+   * 挪走一张的形态是——那张卡从此对缺省领域的用户不可见，而检索照常返回 200。
+   */
+  it('标 counseling 的卡与 packs/counseling/ 目录**互为充要**（变异：把一张既有卡的 domain 改成 counseling → 红）', () => {
+    const strayDomain = INDEX.filter((e) => e.domain === DOMAIN && !e.path.startsWith('packs/counseling/'));
+    const strayPath = INDEX.filter((e) => e.path.startsWith('packs/counseling/') && e.domain !== DOMAIN);
+    expect(
+      strayDomain.map((e) => `${e.id}（${e.path}）`),
+      '这些卡不在 counseling 目录下却标了 counseling：既有卡被挪进了新领域',
+    ).toEqual([]);
+    expect(
+      strayPath.map((e) => `${e.id}（domain=${e.domain ?? '（无）'}）`),
+      '这些卡在 counseling 目录下却不标 counseling：它们对两边的用户都不可见',
+    ).toEqual([]);
   });
 });
 

@@ -4712,13 +4712,13 @@
       "诉讼与仲裁"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.thepaper.cn/newsDetail_forward_27375992"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/cases/dongni-lisongwei-weizhongshen.md",
-    "domain": "counseling",
     "facts": {
       "case_facts": {
         "court": "北京互联网法院",
@@ -4750,13 +4750,13 @@
       "证据固定"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.everbrightlaw.com/CN/07/36d57b8b9cb54172.aspx"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/cases/guge-mingyu-quan.md",
-    "domain": "counseling",
     "facts": {
       "case_facts": {
         "gist": "来访者家属私自录制咨询过程录音并经剪辑后发布于网络平台，指控咨询师违背伦理、建立双重关系。",
@@ -4787,13 +4787,13 @@
       "诉讼与仲裁"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.thepaper.cn/newsDetail_forward_26699216"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/cases/sichuan-tuifei-7500.md",
-    "domain": "counseling",
     "facts": {
       "case_facts": {
         "gist": "消费者购买网络情感咨询服务，双方未签订书面合同，以聊天记录确认服务合同关系成立；消费者当天即申请退款。",
@@ -4827,6 +4827,7 @@
       "记录留痕"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html",
       "http://gongbao.court.gov.cn/Details/42a89051fa54947fa9d96bf7276b6a.html"
@@ -4834,7 +4835,6 @@
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/data/shixiao-yu-qixian.md",
-    "domain": "counseling",
     "law_refs": [
       "民法典§188",
       "民法典§191",
@@ -4891,13 +4891,13 @@
       "转介与终止"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.gov.cn/zhengce/zhengceku/202412/content_6994470.htm"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/data/weiji-rexian.md",
-    "domain": "counseling",
     "facts": {
       "hotlines": [
         {
@@ -4961,13 +4961,13 @@
       "日常合规"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
-    "path": "packs/counseling/ethics/lunli-1-8-1-10-shuangchong-guanxi.md",
-    "domain": "counseling"
+    "path": "packs/counseling/ethics/lunli-1-8-1-10-shuangchong-guanxi.md"
   },
   {
     "id": "ethic-lunli-3-2-baomi-liwai",
@@ -4996,13 +4996,13 @@
       "记录留痕"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
-    "path": "packs/counseling/ethics/lunli-3-2-baomi-liwai.md",
-    "domain": "counseling"
+    "path": "packs/counseling/ethics/lunli-3-2-baomi-liwai.md"
   },
   {
     "id": "ethic-lunli-8-2-8-3-yuancheng-fuwu",
@@ -5030,13 +5030,13 @@
       "日常合规"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
-    "path": "packs/counseling/ethics/lunli-8-2-8-3-yuancheng-fuwu.md",
-    "domain": "counseling"
+    "path": "packs/counseling/ethics/lunli-8-2-8-3-yuancheng-fuwu.md"
   },
   {
     "id": "method-counseling-panli-heyan",
@@ -5061,13 +5061,13 @@
       "证据固定"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "knowledge/packs/method/panli-heyan-sibufa.md"
     ],
     "confidence": "原文核实",
     "updated": "2026-09-06",
-    "path": "packs/counseling/method/panli-heyan-counseling.md",
-    "domain": "counseling"
+    "path": "packs/counseling/method/panli-heyan-counseling.md"
   },
   {
     "id": "risk-difang-xuke-beian",
@@ -5090,13 +5090,13 @@
       "疗效争议"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
-    "path": "packs/counseling/risk/difang-xuke-beian.md",
-    "domain": "counseling"
+    "path": "packs/counseling/risk/difang-xuke-beian.md"
   },
   {
     "id": "risk-hetong-dingxing",
@@ -5119,13 +5119,13 @@
       "日常合规"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
-    "path": "packs/counseling/risk/hetong-dingxing.md",
-    "domain": "counseling"
+    "path": "packs/counseling/risk/hetong-dingxing.md"
   },
   {
     "id": "risk-jilu-baocun-nianxian",
@@ -5148,14 +5148,14 @@
       "诉讼与仲裁"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html",
       "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
-    "path": "packs/counseling/risk/jilu-baocun-nianxian.md",
-    "domain": "counseling"
+    "path": "packs/counseling/risk/jilu-baocun-nianxian.md"
   },
   {
     "id": "risk-qiangzhi-baogao-zhuti",
@@ -5178,13 +5178,13 @@
       "伦理申诉"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.spp.gov.cn/xwfbh/wsfbt/202005/t20200529_463482.shtml"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
-    "path": "packs/counseling/risk/qiangzhi-baogao-zhuti.md",
-    "domain": "counseling"
+    "path": "packs/counseling/risk/qiangzhi-baogao-zhuti.md"
   },
   {
     "id": "script-laifang-tousu-goutong",
@@ -5211,14 +5211,14 @@
       "终止服务"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm",
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
-    "path": "packs/counseling/scripts/laifang-tousu-goutong.md",
-    "domain": "counseling"
+    "path": "packs/counseling/scripts/laifang-tousu-goutong.md"
   },
   {
     "id": "script-weiji-tonghua-huashu",
@@ -5243,6 +5243,7 @@
       "转介与终止"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm",
       "https://www.gov.cn/zhengce/zhengceku/202412/content_6994470.htm"
@@ -5250,7 +5251,6 @@
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/scripts/weiji-tonghua-huashu.md",
-    "domain": "counseling",
     "law_refs": [
       "精神卫生法§28",
       "精神卫生法§23"
@@ -5280,6 +5280,7 @@
       "伦理申诉"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm",
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
@@ -5287,7 +5288,6 @@
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/sop/jianguan-xiehui-tousu.md",
-    "domain": "counseling",
     "law_refs": [
       "消费者权益保护法§26",
       "消费者权益保护法§55",
@@ -5317,6 +5317,7 @@
       "监管投诉"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm",
       "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm"
@@ -5324,7 +5325,6 @@
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/sop/liaoxiao-zhengyi.md",
-    "domain": "counseling",
     "law_refs": [
       "精神卫生法§23",
       "消费者权益保护法§55",
@@ -5354,6 +5354,7 @@
       "诉讼与仲裁"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml",
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
@@ -5361,7 +5362,6 @@
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/sop/lunli-shensu-yingdui.md",
-    "domain": "counseling",
     "law_refs": [
       "精神卫生法§23"
     ]
@@ -5390,6 +5390,7 @@
       "诉讼与仲裁"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm",
       "http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html"
@@ -5397,7 +5398,6 @@
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/sop/mingyu-qinquan-yingdui.md",
-    "domain": "counseling",
     "law_refs": [
       "民法典§1032",
       "民法典§1033",
@@ -5427,6 +5427,7 @@
       "诉讼与仲裁"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml",
       "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm"
@@ -5434,7 +5435,6 @@
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/sop/tuifei-zhengyi.md",
-    "domain": "counseling",
     "law_refs": [
       "民法典§933",
       "民法典§928",
@@ -5465,6 +5465,7 @@
       "日常合规"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html",
       "https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm"
@@ -5472,7 +5473,6 @@
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/sop/yinsi-xielou-zhikong.md",
-    "domain": "counseling",
     "law_refs": [
       "个人信息保护法§28",
       "个人信息保护法§29",
@@ -5506,6 +5506,7 @@
       "未成年人"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm",
       "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html"
@@ -5513,7 +5514,6 @@
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/sop/zhiqing-tongyi-quexian.md",
-    "domain": "counseling",
     "law_refs": [
       "消费者权益保护法§26",
       "个人信息保护法§29",
@@ -5549,6 +5549,7 @@
       "转介与终止"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm",
       "https://www.gov.cn/zhengce/zhengceku/202412/content_6994470.htm"
@@ -5556,7 +5557,6 @@
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/sop/zishang-shijian-zhuize.md",
-    "domain": "counseling",
     "law_refs": [
       "精神卫生法§28",
       "精神卫生法§30",
@@ -5592,13 +5592,13 @@
       "远程咨询"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html"
     ],
     "confidence": "原文核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/statutes/grxxbhf-28-31-mingan-xinxi.md",
-    "domain": "counseling",
     "law_refs": [
       "个人信息保护法§28",
       "个人信息保护法§29",
@@ -5654,13 +5654,13 @@
       "知情同意"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
     ],
     "confidence": "原文核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/statutes/jswsf-23-zixun-bianjie.md",
-    "domain": "counseling",
     "law_refs": [
       "精神卫生法§23",
       "精神卫生法§4",
@@ -5707,13 +5707,13 @@
       "日常合规"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
     ],
     "confidence": "原文核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/statutes/jswsf-28-30-31-weiji-songyi.md",
-    "domain": "counseling",
     "law_refs": [
       "精神卫生法§28",
       "精神卫生法§30",
@@ -5764,13 +5764,13 @@
       "证据固定"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm"
     ],
     "confidence": "原文核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/statutes/mfd-1032-1033-yinsi.md",
-    "domain": "counseling",
     "law_refs": [
       "民法典§1032",
       "民法典§1033",
@@ -5814,13 +5814,13 @@
       "自伤事件"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html"
     ],
     "confidence": "原文核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/statutes/mfd-188-susong-shixiao.md",
-    "domain": "counseling",
     "law_refs": [
       "民法典§188",
       "民法典§191",
@@ -5870,13 +5870,13 @@
       "诉讼与仲裁"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml"
     ],
     "confidence": "原文核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/statutes/mfd-933-weituo-jiechu.md",
-    "domain": "counseling",
     "law_refs": [
       "民法典§933",
       "民法典§928",
@@ -5922,13 +5922,13 @@
       "日常合规"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm"
     ],
     "confidence": "原文核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/statutes/xbf-26-55-geshi-tiaokuan-chengfa.md",
-    "domain": "counseling",
     "law_refs": [
       "消费者权益保护法§26",
       "消费者权益保护法§55"
@@ -5970,6 +5970,7 @@
       "日常合规"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm",
       "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
@@ -5977,7 +5978,6 @@
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/templates/baomi-gaozhi-liwai.md",
-    "domain": "counseling",
     "law_refs": [
       "精神卫生法§4",
       "精神卫生法§23",
@@ -6005,13 +6005,13 @@
       "监管投诉"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/templates/lunli-shensu-dabianshu.md",
-    "domain": "counseling",
     "law_refs": [
       "精神卫生法§23"
     ]
@@ -6039,6 +6039,7 @@
       "隐私泄露"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm",
       "http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html"
@@ -6046,7 +6047,6 @@
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/templates/lvshihan-yingdui-yaodian.md",
-    "domain": "counseling",
     "law_refs": [
       "民法典§1032",
       "民法典§1033",
@@ -6075,6 +6075,7 @@
       "来访投诉"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml",
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
@@ -6082,7 +6083,6 @@
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/templates/tingzhi-fuwu-tongzhi.md",
-    "domain": "counseling",
     "law_refs": [
       "精神卫生法§23"
     ]
@@ -6109,13 +6109,13 @@
       "隐私泄露"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/templates/tousu-dafu-han.md",
-    "domain": "counseling",
     "law_refs": [
       "消费者权益保护法§26",
       "精神卫生法§23"
@@ -6141,13 +6141,13 @@
       "来访投诉"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/templates/tuifei-xieyi.md",
-    "domain": "counseling",
     "law_refs": [
       "民法典§933",
       "民法典§928",
@@ -6177,13 +6177,13 @@
       "未成年人"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/templates/weiji-chuzhi-jilu.md",
-    "domain": "counseling",
     "law_refs": [
       "精神卫生法§28",
       "精神卫生法§23"
@@ -6212,6 +6212,7 @@
       "记录留痕"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm",
       "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html",
@@ -6220,7 +6221,6 @@
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/templates/zhiqing-tongyishu.md",
-    "domain": "counseling",
     "law_refs": [
       "精神卫生法§23",
       "个人信息保护法§29",
@@ -6250,13 +6250,13 @@
       "日常合规"
     ],
     "region": "全国",
+    "domain": "counseling",
     "sources": [
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
     ],
     "confidence": "待核实",
     "updated": "2026-09-06",
     "path": "packs/counseling/templates/zhuanjie-han.md",
-    "domain": "counseling",
     "law_refs": [
       "精神卫生法§23"
     ]
