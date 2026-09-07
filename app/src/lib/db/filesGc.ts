@@ -4,13 +4,19 @@
 // 本模块找出无人引用的 files 行并回收；CLI 入口在仓库根 scripts/gc-files.ts
 // （那里只做「定位库 + dry-run/真删 + 退出码」，逻辑全在这里，可单测）。
 //
-// 引用者清单（2026-08-20 逐条核对 migrate.ts 全部 `REFERENCES files`，共 3 处）：
-//   ① evidence.file_id            NOT NULL REFERENCES files(id)
-//   ② attestations.cert_pdf_file_id      REFERENCES files(id)   —— 可空
-//   ③ company_docs.file_id        NOT NULL REFERENCES files(id)
+// 引用者清单（2026-09-07 逐条核对 migrate.ts 全部 `REFERENCES files`，共 5 处）：
+//   ① evidence.file_id                   NOT NULL REFERENCES files(id)
+//   ② attestations.cert_pdf_file_id               REFERENCES files(id)   —— 可空
+//   ③ company_docs.file_id               NOT NULL REFERENCES files(id)
+//   ④ evidence_upload_tokens.file_id              REFERENCES files(id)   —— 可空，字节落库后回填
+//   ⑤ file_download_tokens.file_id       NOT NULL REFERENCES files(id)
 // 漏一个引用者 = 误删用户证据的密文文件，且 files.sha256 唯一、盘上文件删了不可复原。
-// 本文件最大的风险点就在这份清单：**日后任何表新增 files 外键，必须同步加进 REFERENCERS**，
-// 加表时请再跑一次 `grep -n 'REFERENCES files' app/src/lib/db/migrate.ts` 核对。
+// **而在开着 foreign_keys 的进程里（lib/db/client 就是），漏一个的实际表现更坏**：
+// DELETE 撞外键 → 整个事务回滚 → 本轮已经 unlink 掉的那几份低 id 孤儿的库行原地复活，
+// 正是本文件抬头要避免的「有记录无密文」。④⑤ 就是这样漏掉的（2026-09-07 复审）。
+//
+// 【这份清单不靠人记】__tests__/filesGc.test.ts 的「结构守卫」直接从 migrate.ts 的建表语句里
+// 抽出全部 `REFERENCES files(id)`，与下面这份逐条比对，漏一张会当场点名是哪张表哪一列。
 import Database from 'better-sqlite3';
 
 import { openCliDb, rethrowIfSchemaStale } from './cli-open';
@@ -25,6 +31,8 @@ export const REFERENCERS: readonly [table: string, column: string][] = [
   ['evidence', 'file_id'],
   ['attestations', 'cert_pdf_file_id'],
   ['company_docs', 'file_id'],
+  ['evidence_upload_tokens', 'file_id'],
+  ['file_download_tokens', 'file_id'],
 ];
 
 /** 「无任何引用者引用 f.id」的条件式，供查孤儿与删前重验共用一套口径。 */

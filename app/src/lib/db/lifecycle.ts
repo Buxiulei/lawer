@@ -71,6 +71,47 @@ export function purgeCase(db: Database, caseId: number, cutoff: string): boolean
   );
 }
 
+// ───────────────────────────── 到期的一次性令牌 ─────────────────────────────
+
+/**
+ * 死令牌的宽限期：过期之后再留这么久，才把那一行删掉。
+ *
+ * 【为什么不是"过期即删"】两张令牌表都刻意把 not_found / expired / consumed 分三档回话
+ * （见 lib/files/download-token.inspectDownloadToken：说"过期了"会把人引去重签一条，
+ * 而真正发生的事可能是重复下载）。行一删，这三档就塌成一档——用户在过期后重试的那几分钟里
+ * 收到的是"这条地址不存在"，而他手上那条地址明明是我们十分钟前发给他的。
+ *
+ * 【为什么不是保留期那 30 天】取 30 天的话，「导出完立刻删档案」这条路上那份装着全部
+ * 材料原件的 zip 会比协议五.8 承诺的三十日多活十分钟（令牌自己的有效期）。
+ * 取 1 天：比任何一次真实重试都长，比三十日短得多，两头都不擦边。
+ */
+export const DEAD_TOKEN_GRACE_HOURS = 24;
+
+/**
+ * 删掉已经死透（过期满 DEAD_TOKEN_GRACE_HOURS）的一次性上传/下载令牌行，返回删了几行。
+ *
+ * 【为什么清理任务非删它们不可】这两张表的 file_id 是 files 的外键（见 lib/db/filesGc 的
+ * REFERENCERS），而它们**从来没有别处删行**：签一条整案副本的下载地址，那份 zip 就永远
+ * 有人引着，孤儿回收永远收不到它。于是协议五.8 承诺的「证据文件……在 30 日内彻底删除」
+ * 对那份装着全部原件的导出件就是假的——而页面上那个案子早就不见了，没人看得出来。
+ *
+ * 时间差在 SQLite 里算（ADR-002：时间从 SQLite 取），不在 JS 里拼串。
+ * 还活着的一行都不动：正在下载的那条地址必须还能用。
+ */
+export function purgeExpiredFileTokens(
+  db: Database,
+  now: string,
+  graceHours: number = DEAD_TOKEN_GRACE_HOURS,
+): number {
+  let removed = 0;
+  for (const table of ['evidence_upload_tokens', 'file_download_tokens']) {
+    removed += db
+      .prepare(`DELETE FROM ${table} WHERE expires_at <= datetime(?, ?)`)
+      .run(now, `-${graceHours} hours`).changes;
+  }
+  return removed;
+}
+
 // ───────────────────────────── 账号注销 / 清理 ─────────────────────────────
 
 export interface CancelledUserRow {

@@ -1,15 +1,23 @@
 // app/src/lib/db/__tests__/filesGc.test.ts
-// files 孤儿回收（scripts/gc-files.ts 的逻辑本体）：三类引用者各建一行 + 一个孤儿，
+// files 孤儿回收（scripts/gc-files.ts 的逻辑本体）：五类引用者各建一行 + 一个孤儿，
 // 只有孤儿被认领、被删、被回调删盘——漏认一个引用者就等于误删用户证据的密文文件。
+//
+// 【为什么本文件全程 foreign_keys = ON】生产的 Next 进程就是这么开库的（lib/db/client）。
+// 关着外键跑，漏认一个引用者只表现为"多删了一行"；开着外键跑，它表现为 DELETE 抛
+// FOREIGN KEY constraint failed、**整个事务回滚**，于是本轮已经 unlink 掉的低 id 孤儿
+// 库行原地复活成「有记录无密文」的坏行，而且一个孤儿都回收不掉。后者才是产线的形态。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../migrate';
-import { findOrphanFiles, gcOrphanFiles, gcFilesCli } from '../filesGc';
+import { findOrphanFiles, gcOrphanFiles, gcFilesCli, REFERENCERS } from '../filesGc';
 
 let db: Database.Database;
+
+const count = (sql: string, ...args: unknown[]) => (db.prepare(sql).get(...args) as { n: number }).n;
 
 /** 落一行 files，返回 id。enc_path 用 sha 编，便于断言回调收到的是哪一个。 */
 function mkFile(target: Database.Database, sha: string, size: number): number {
@@ -19,7 +27,7 @@ function mkFile(target: Database.Database, sha: string, size: number): number {
   );
 }
 
-/** 三类引用者各挂一个文件 + 一个无人引用的孤儿；返回各自的 file_id。 */
+/** 五类引用者各挂一个文件 + 一个无人引用的孤儿；返回各自的 file_id。 */
 function seed(target: Database.Database) {
   const uid = Number(
     target.prepare('INSERT INTO users (email) VALUES (?)').run('u@t.com').lastInsertRowid,
@@ -31,7 +39,11 @@ function seed(target: Database.Database) {
   const evFile = mkFile(target, 'aa11', 10);
   const docFile = mkFile(target, 'bb22', 20);
   const certFile = mkFile(target, 'cc33', 30);
+  // 孤儿的 id 刻意排在两张令牌表引着的文件**前面**：事务里逐行删，孤儿先被 unlink，
+  // 随后那两行才撞外键。漏认引用者时的坏行（有记录无密文）就是这样造出来的。
   const orphan = mkFile(target, 'dd44', 40);
+  const upFile = mkFile(target, 'ab55', 50);
+  const dlFile = mkFile(target, 'ac66', 60);
 
   target.prepare('INSERT INTO evidence (case_id, user_id, file_id, name) VALUES (?,?,?,?)')
     .run(caseId, uid, evFile, '劳动合同');
@@ -40,8 +52,18 @@ function seed(target: Database.Database) {
   // 出证证书 PDF：attestations.cert_pdf_file_id 可空，也是最容易在引用者清单里被漏掉的一处
   target.prepare('INSERT INTO attestations (order_no, sha256, cert_pdf_file_id) VALUES (?,?,?)')
     .run('att-1', 'cc33', certFile);
+  // 上传令牌：字节落库后回填 file_id，登记成 evidence 之前只有它引着那份密文
+  target.prepare(
+    `INSERT INTO evidence_upload_tokens (token_hash, case_id, user_id, filename, expires_at, file_id)
+     VALUES ('uh', ?, ?, '录音.m4a', '2030-01-01 00:00:00', ?)`,
+  ).run(caseId, uid, upFile);
+  // 下载令牌：整案导出与文书导出各签一条，**这张表从不删行**，所以它引着的文件长期不是孤儿
+  target.prepare(
+    `INSERT INTO file_download_tokens (token_hash, file_id, user_id, filename, expires_at)
+     VALUES ('dh', ?, ?, '整案副本.zip', '2030-01-01 00:00:00')`,
+  ).run(dlFile, uid);
 
-  return { uid, caseId, evFile, docFile, certFile, orphan };
+  return { uid, caseId, evFile, docFile, certFile, orphan, upFile, dlFile };
 }
 
 beforeEach(() => {
@@ -51,7 +73,7 @@ beforeEach(() => {
 });
 
 describe('findOrphanFiles', () => {
-  test('三类引用者各占一行时，只报无人引用的那一个', () => {
+  test('五类引用者各占一行时，只报无人引用的那一个', () => {
     const { orphan } = seed(db);
     const got = findOrphanFiles(db);
     expect(got.map((r) => r.id)).toEqual([orphan]);
@@ -60,9 +82,14 @@ describe('findOrphanFiles', () => {
   });
 
   test('引用行被删（如删案级联删证据）后，原被引用的文件变成孤儿', () => {
-    const { caseId, evFile, docFile, orphan } = seed(db);
-    db.prepare('DELETE FROM cases WHERE id=?').run(caseId); // evidence + company_docs 一起级联走
-    expect(findOrphanFiles(db).map((r) => r.id).sort()).toEqual([evFile, docFile, orphan].sort());
+    const { caseId, evFile, docFile, orphan, upFile, dlFile } = seed(db);
+    // evidence + company_docs + evidence_upload_tokens 都挂 case_id，一起级联走
+    db.prepare('DELETE FROM cases WHERE id=?').run(caseId);
+    expect(findOrphanFiles(db).map((r) => r.id).sort()).toEqual(
+      [evFile, docFile, orphan, upFile].sort(),
+    );
+    // 下载令牌挂的是 user_id 不是 case_id：删案带不走它，那份导出件仍然有人引着
+    expect(findOrphanFiles(db).map((r) => r.id)).not.toContain(dlFile);
   });
 
   test('空库无孤儿', () => {
@@ -71,8 +98,8 @@ describe('findOrphanFiles', () => {
 });
 
 describe('gcOrphanFiles', () => {
-  test('只删孤儿行，三类被引用文件全部存活；回调恰好收到孤儿的 enc_path', () => {
-    const { evFile, docFile, certFile, orphan } = seed(db);
+  test('只删孤儿行，五类被引用文件全部存活；回调恰好收到孤儿的 enc_path', () => {
+    const { evFile, docFile, certFile, orphan, upFile, dlFile } = seed(db);
     const deleted: string[] = [];
 
     const r = gcOrphanFiles(db, { deleteFromDisk: (p) => void deleted.push(p) });
@@ -80,8 +107,31 @@ describe('gcOrphanFiles', () => {
     expect(r).toEqual({ removed: 1, freedBytes: 40 });
     expect(deleted).toEqual(['dd/dd44.enc']);
     const left = (db.prepare('SELECT id FROM files ORDER BY id').all() as { id: number }[]).map((x) => x.id);
-    expect(left).toEqual([evFile, docFile, certFile]);
+    expect(left).toEqual([evFile, docFile, certFile, upFile, dlFile]);
     expect(left).not.toContain(orphan);
+  });
+
+  /**
+   * 复审 blocker 的回归判据（2026-09-07）。这一条与上一条不是同一件事：上一条问「有没有多删」，
+   * 这一条问「漏认一个引用者时会怎样」——在 foreign_keys=ON 的进程里答案不是"多删一行"，
+   * 而是**一个孤儿都收不掉，还留下一行有记录无密文的坏行**。
+   *
+   * 变异：把 REFERENCERS 里的 file_download_tokens（或 evidence_upload_tokens）那一行删掉 → 本条红。
+   */
+  test('两张令牌表引着的文件不是孤儿：开着外键跑不抛、孤儿照收、坏行不产生', () => {
+    const { orphan, upFile, dlFile } = seed(db);
+    expect(db.pragma('foreign_keys', { simple: true }), '本用例必须开着外键跑').toBe(1);
+    const deleted: string[] = [];
+
+    // ① 不抛：漏认引用者时这里是 SqliteError: FOREIGN KEY constraint failed
+    const r = gcOrphanFiles(db, { deleteFromDisk: (p) => void deleted.push(p) });
+
+    // ② 孤儿真被收掉了（回滚的形态下 removed=0、库里那一行还在）
+    expect(r.removed).toBe(1);
+    expect(count('SELECT COUNT(*) AS n FROM files WHERE id=?', orphan)).toBe(0);
+    // ③ 没有「盘上已删、库行还在」的坏行：删过盘的恰好就是库里已经没有的那一个
+    expect(deleted).toEqual(['dd/dd44.enc']);
+    expect(count('SELECT COUNT(*) AS n FROM files WHERE id IN (?,?)', upFile, dlFile)).toBe(2);
   });
 
   test('多个孤儿：逐个删并累加释放字节', () => {
@@ -114,7 +164,45 @@ describe('gcOrphanFiles', () => {
         },
       }),
     ).toThrow(/EACCES/);
-    expect((db.prepare('SELECT COUNT(*) c FROM files').get() as { c: number }).c).toBe(4);
+    expect((db.prepare('SELECT COUNT(*) c FROM files').get() as { c: number }).c).toBe(6);
+  });
+});
+
+// ───────────────────────────── 结构守卫 ─────────────────────────────
+//
+// 【为什么守卫读的是 migrate.ts 的源码，而不是再抄一份表名清单】这份清单已经漏过一次：
+// 抬头写着"日后任何表新增 files 外键必须同步加进 REFERENCERS"，然后两张令牌表各加了一列
+// 外键，谁都没回来改。**独立写 N 次就会忘 N 次**——所以判据不问人记没记得，
+// 直接从建表语句里把全部 `REFERENCES files(id)` 抽出来比对，漏哪张点名哪张。
+describe('结构守卫：REFERENCERS 覆盖 migrate.ts 里全部 files 外键', () => {
+  const MIGRATE = fs.readFileSync(
+    path.join(fileURLToPath(new URL('..', import.meta.url)), 'migrate.ts'),
+    'utf-8',
+  );
+
+  /** 从建表语句里抽 (表名, 指向 files.id 的列名)。 */
+  function declaredReferencers(src: string): string[] {
+    const out: string[] = [];
+    let table: string | null = null;
+    for (const line of src.split('\n')) {
+      const create = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)/i.exec(line);
+      if (create) table = create[1];
+      if (!/REFERENCES\s+files\s*\(/i.test(line)) continue;
+      const col = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s+/.exec(line);
+      // 认不出所在表或列名就抛：宁可让守卫自己坏掉，也不许它悄悄少数一条
+      if (!table || !col) throw new Error(`认不出这一行的表/列：${line.trim()}`);
+      out.push(`${table}.${col[1]}`);
+    }
+    return out.sort();
+  }
+
+  test('两份清单逐条相等（变异：往 migrate.ts 加一张引 files 的表而不改 REFERENCERS → 本条红）', () => {
+    const declared = declaredReferencers(MIGRATE);
+    // 正对照：抽取器真的抽到了东西，不是拿两个空数组互相印证
+    expect(declared.length).toBeGreaterThanOrEqual(5);
+    // 抽取器没有漏掉任何一处 `REFERENCES files`（例如日后写成 ALTER TABLE ADD COLUMN）
+    expect(declared).toHaveLength((MIGRATE.match(/REFERENCES\s+files\s*\(/gi) ?? []).length);
+    expect([...REFERENCERS].map(([t, c]) => `${t}.${c}`).sort()).toEqual(declared);
   });
 });
 
@@ -122,6 +210,10 @@ describe('gcOrphanFiles', () => {
 describe('gcFilesCli', () => {
   let dbPath: string;
 
+  // 超时给到 30 秒：这个 hook 要在**真文件**上跑一遍全量迁移（内存库那条路快得多），
+  // 全量套件并发跑时它逼近 vitest 默认的 10 秒 hook 上限，偶发红一次。
+  // 红的时候看起来像"回收逻辑坏了"，其实是这一句建库超时——把上限调到它真实需要的量级，
+  // 好过让人下次去查一个不存在的回收 bug。
   beforeEach(() => {
     dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lawer-gc-')), 'lawer.db');
     const file = new Database(dbPath);
@@ -129,7 +221,7 @@ describe('gcFilesCli', () => {
     runMigrations(file);
     seed(file);
     file.close();
-  });
+  }, 30_000);
 
   test('dry-run：只读打开、一行不删、不碰盘', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -139,7 +231,7 @@ describe('gcFilesCli', () => {
 
     expect(deleted).toEqual([]);
     const after = new Database(dbPath, { readonly: true });
-    expect((after.prepare('SELECT COUNT(*) c FROM files').get() as { c: number }).c).toBe(4);
+    expect((after.prepare('SELECT COUNT(*) c FROM files').get() as { c: number }).c).toBe(6);
     after.close();
   });
 
@@ -152,7 +244,7 @@ describe('gcFilesCli', () => {
     expect(deleted).toEqual(['dd/dd44.enc']);
     const after = new Database(dbPath, { readonly: true });
     expect((after.prepare('SELECT sha256 FROM files ORDER BY id').all() as { sha256: string }[])
-      .map((r) => r.sha256)).toEqual(['aa11', 'bb22', 'cc33']);
+      .map((r) => r.sha256)).toEqual(['aa11', 'bb22', 'cc33', 'ab55', 'ac66']);
     after.close();
   });
 });

@@ -5,7 +5,9 @@
 //   · 一步就注销了（没有第二因子）——回包与两步式的第二步同形；
 //   · 验证码走了登录那一桶（一条为登录发出的码能拿去注销）；
 //   · 注销了但登录态还能用（JWT 是纯 HMAC，签出去撤不回）；
-//   · 注销了但手机号/邮箱还留在库里（页面上那个账号已经"没了"）。
+//   · 注销了但手机号/邮箱还留在库里（页面上那个账号已经"没了"）；
+//   · 注销了但免登录分享链接照样打得开（确认单第 2 条明写「确认那一刻立即失效」，
+//     而回包上 shares_revoked=0 与「本来就没有链接」完全同形——2026-09-07 复审补位）。
 import crypto from 'node:crypto';
 
 import Database from 'better-sqlite3';
@@ -16,6 +18,7 @@ import { signToken } from '@/lib/auth/jwt';
 import { encryptField, hashLookup } from '@/lib/crypto';
 import * as store from '@/lib/db/cases';
 import { runMigrations } from '@/lib/db/migrate';
+import { createShare, readShare } from '@/lib/shares';
 
 import {
   CANCEL_BALANCE_COPY_ENV,
@@ -60,6 +63,18 @@ const deps = () => ({
   makeCode: () => CODE,
   now: new Date('2026-09-07T00:00:00Z'),
 });
+
+/** 在某个案子上建一条免登录分享链接（真走 createShare，不手插 share_links 行）。 */
+function shareOn(target: number, owner: number): string {
+  const draftId = Number(
+    db
+      .prepare("INSERT INTO drafts (case_id, kind, title, content) VALUES (?,'异议函','稿','正文若干')")
+      .run(target).lastInsertRowid,
+  );
+  const made = createShare(db, { userId: owner, draftId });
+  if (!made.ok) throw new Error(`建链接失败：${made.message}`);
+  return made.token;
+}
 
 async function challenge() {
   const res = await cancelAccount({ db, userId: uid }, deps());
@@ -175,6 +190,54 @@ describe('第二步：成功臂', () => {
     expect(db.prepare('SELECT enabled FROM api_keys WHERE id=?').get(keyId)).toEqual({ enabled: 0 });
     expect(
       (db.prepare('SELECT COUNT(*) AS n FROM oauth_tokens WHERE revoked_at IS NULL').get() as { n: number }).n,
+    ).toBe(0);
+  });
+
+  /**
+   * 确认单里 CANCEL_REMOVES 第 2 条对用户说的是「全部免登录分享链接（确认那一刻立即失效）」。
+   * 那句话不是由 30 日后的清理任务兑现的——**免登录链接是谁拿到谁能打开**，
+   * 从确认到硬删的这 30 天里，任何持有链接的人照样打得开，而用户以为门已经关上了。
+   *
+   * 判据断言的是**链接真的打不开了**（readShare 那条免登录读路），不是 share_links 上多了个时刻：
+   * 只看列的判据在「收了行但读路不认这一列」时同样会绿。
+   */
+  it('注销当场收回全部免登录分享链接（变异：把 shares += revokeCaseShares(...) 换成 shares += 0 → 本条红）', async () => {
+    const live = shareOn(caseId, uid);
+    // 第二个案子：用户注销前自己已经删过它。链接挂在软删的案子上照样打得开，也照样要收
+    const alreadyDeleted = Number(
+      db.prepare('INSERT INTO cases (user_id, title) VALUES (?,?)').run(uid, '先删掉的那个').lastInsertRowid,
+    );
+    const onDeleted = shareOn(alreadyDeleted, uid);
+    db.prepare("UPDATE cases SET deleted_at='2026-08-01 00:00:00' WHERE id=?").run(alreadyDeleted);
+    // 别人的链接：注销只收自己名下的，收宽了同样是错
+    const stranger = Number(
+      db.prepare("INSERT INTO users (email) VALUES ('b@t.com')").run().lastInsertRowid,
+    );
+    const strangerCase = Number(
+      db.prepare('INSERT INTO cases (user_id, title) VALUES (?,?)').run(stranger, '别人的档案').lastInsertRowid,
+    );
+    const others = shareOn(strangerCase, stranger);
+
+    // 正对照：注销之前这三条都打得开
+    for (const t of [live, onDeleted, others]) expect(readShare(db, t).state).toBe('ok');
+
+    const ch = await challenge();
+    const res = await cancelAccount(
+      { db, userId: uid, code: CODE, confirmToken: ch.confirm_token },
+      deps(),
+    );
+    if (!res.ok || res.stage !== 'cancelled') throw new Error('本该注销');
+
+    expect(res.shares_revoked).toBe(2);
+    expect(readShare(db, live).state, '还活着的案子那条链接没收回').toBe('revoked');
+    expect(readShare(db, onDeleted).state, '先删过的案子那条链接没收回').toBe('revoked');
+    expect(readShare(db, others).state, '把别人的链接也收了').toBe('ok');
+    expect(
+      (db
+        .prepare(
+          'SELECT COUNT(*) AS n FROM share_links WHERE revoked_at IS NULL AND case_id IN (SELECT id FROM cases WHERE user_id = ?)',
+        )
+        .get(uid) as { n: number }).n,
     ).toBe(0);
   });
 

@@ -4,7 +4,10 @@
 //   ② 边界：差一天不删、到点才删（30 日是对外承诺的那个数，不是「差不多一个月」）；
 //   ③ 硬删是级联的：证据条目、对话、情绪与危机记录、时间线、文书一起没；
 //   ④ **已出证的存证记录仍可读**：它脱离案件继续存在，公开核验那条路不受影响；
-//   ⑤ 密文文件被回收，且回收判据仍是「无人引用」——别的案件还引着的那一份不许删。
+//   ⑤ 密文文件被回收，且回收判据仍是「无人引用」——别的案件还引着的那一份不许删；
+//   ⑥ **这个账号导出过整案副本**时上面五条照旧成立。这条是复审 blocker 的回归位：
+//      导出会签一条下载令牌，那张表是 files 的外键引用者，签过之后这一轮清理的形态
+//      完全不同（要么整轮回滚、要么那份装着全部原件的 zip 永远留在盘上）。
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -20,6 +23,7 @@ process.env.FILES_DIR = FILES_DIR;
 import { lastRun } from '@/lib/db/job-runs';
 import { runMigrations } from '@/lib/db/migrate';
 import { storeBytes } from '@/lib/evidence/files';
+import { exportCase } from '@/lib/lifecycle/case-export';
 import { RETENTION_DAYS } from '@/lib/lifecycle/retention';
 
 import { RETENTION_JOB_NAME, runRetentionOnce } from '../retention-worker';
@@ -270,5 +274,113 @@ describe('幂等与留痕', () => {
     expect(run!.ok).toBe(0);
     expect(run!.error_text).toContain('盘挂了');
     expect(run!.finished_at).not.toBeNull();
+  });
+});
+
+
+// ───────────────────────── 导出过整案副本之后 ─────────────────────────
+//
+// 【为什么单独一组】上面每一组跑的都是一个从没导出过的账号，而**导出是免费的、页面上就一个
+// 按钮**：真实的库里从第一次导出起就有 file_download_tokens 行。那张表引着 files，
+// 于是这一轮清理面对的是完全不同的一张图。复审（2026-09-07）在这里抓到 blocker：
+// 引用者清单漏了这张表，整段事务撞外键回滚，密文一份都回收不掉。
+describe('导出过整案副本之后', () => {
+  const renderPdf = async () => Buffer.from('%PDF-1.4 假导出件\n%%EOF');
+
+  /** 走真导出（会落一份 zip 到 files、签一条下载令牌），返回那份 zip 的 file_id。 */
+  async function exportOnce(now: Date): Promise<number> {
+    const res = await exportCase({ db, caseId, userId: uid, renderPdf, now });
+    if (!res.ok) throw new Error(`导出失败：${res.message}`);
+    return (db.prepare('SELECT id FROM files WHERE sha256=?').get(res.sha256) as { id: number }).id;
+  }
+
+  it('清理整轮不出错，到期案件与它的原件照样被删（变异：REFERENCERS 去掉 file_download_tokens → 本条红）', async () => {
+    const { fileId } = seedAndAttest();
+    await exportOnce(new Date('2026-08-31T00:00:00Z'));
+    db.prepare('UPDATE cases SET deleted_at=? WHERE id=?').run(DELETED_AT, caseId);
+
+    const res = runRetentionOnce(db, opts(DUE));
+
+    // ① 整轮没炸：漏认引用者时这里是 ok=0 + FOREIGN KEY constraint failed
+    const run = lastRun(db, RETENTION_JOB_NAME);
+    expect(run!.error_text, '整轮报错了').toBeNull();
+    expect(run!.ok).toBe(1);
+    // ② 案件与证据原件真的被清掉了（回滚的形态下 files_removed=0、证据密文还在）
+    expect(res.cases_purged).toBe(1);
+    expect(res.files_removed).toBeGreaterThan(0);
+    expect(count('SELECT COUNT(*) AS n FROM files WHERE id=?', fileId)).toBe(0);
+    // ③ 没有留下「盘上已删、库行还在」的坏行：删过盘的每一条都不在库里了
+    for (const p of removedPaths) {
+      expect(count('SELECT COUNT(*) AS n FROM files WHERE enc_path=?', p), `坏行：${p}`).toBe(0);
+    }
+  });
+
+  it('导出件本身也被回收：过期的下载令牌先删，那份 zip 随即成为孤儿（变异：删掉 purgeExpiredFileTokens 那一句 → 本条红）', async () => {
+    seedAndAttest();
+    const zipFileId = await exportOnce(new Date('2026-08-31T00:00:00Z'));
+    db.prepare('UPDATE cases SET deleted_at=? WHERE id=?').run(DELETED_AT, caseId);
+
+    const res = runRetentionOnce(db, opts(DUE));
+
+    expect(res.tokens_purged).toBeGreaterThan(0);
+    expect(count('SELECT COUNT(*) AS n FROM file_download_tokens')).toBe(0);
+    // 那份 zip 装着这个案子的全部证据原件；它留在盘上，五.8 的三十日承诺就是假的
+    expect(count('SELECT COUNT(*) AS n FROM files WHERE id=?', zipFileId), '导出件没被回收').toBe(0);
+  });
+
+  /**
+   * 刚过期的那一行**不删**：两张令牌表把 not_found / expired / consumed 分三档回话，
+   * 行一删这三档就塌成一档，用户在过期后重试的那几分钟里收到的是"这条地址不存在"，
+   * 而那条地址是我们十分钟前发给他的。宽限期见 lib/db/lifecycle.DEAD_TOKEN_GRACE_HOURS。
+   *
+   * 变异：把 purgeExpiredFileTokens 的宽限期去掉（改成 expires_at <= now）→ 本条红。
+   */
+  it('过期不满一天的令牌行留着（「已过期」这句话要说得出来），满一天才删', async () => {
+    seedAndAttest();
+    // 到点前 2 小时导出：跑清理时它已经过期（10 分钟有效期），但死了还不到一天
+    const zipFileId = await exportOnce(new Date('2026-09-30T22:00:00Z'));
+
+    expect(runRetentionOnce(db, opts(DUE)).tokens_purged).toBe(0);
+    expect(count('SELECT COUNT(*) AS n FROM file_download_tokens')).toBe(1);
+    expect(count('SELECT COUNT(*) AS n FROM files WHERE id=?', zipFileId)).toBe(1);
+
+    // 再过一天：这一行死透了，跟着那份 zip 一起收掉
+    const nextDay = new Date('2026-10-02T00:00:00Z');
+    expect(runRetentionOnce(db, opts(nextDay)).tokens_purged).toBe(1);
+    expect(count('SELECT COUNT(*) AS n FROM files WHERE id=?', zipFileId)).toBe(0);
+  });
+
+  /**
+   * 【这一条才是 REFERENCERS 那份清单的判据位】上面两条走的是"令牌已过期"这条路，
+   * 而过期令牌在回收之前就被删掉了，于是清单漏没漏它都看不出来。**活着的令牌才看得出来**：
+   * 清单漏了它，那份 zip 会被当成孤儿去删，DELETE 撞外键 → 整轮回滚 → 同一轮里
+   * 本该收掉的真孤儿一个也收不掉，而回包上只表现为 files_removed=0。
+   *
+   * 变异：REFERENCERS 去掉 file_download_tokens → 本条红（真孤儿没被收、job_runs ok=0）。
+   */
+  it('还没过期的下载令牌一行都不动，它引着的文件不许删，同一轮的真孤儿照收', async () => {
+    seedAndAttest();
+    // 到点前 5 分钟才导出：令牌 10 分钟有效期，跑清理时它还活着
+    const zipFileId = await exportOnce(new Date('2026-09-30T23:55:00Z'));
+    // 同一轮里摆一个货真价实的孤儿：整轮回滚的话它会跟着幸存下来
+    const realOrphan = Number(
+      db
+        .prepare("INSERT INTO files (sha256, size, enc_path) VALUES ('0000orphan', 7, '00/orphan.enc')")
+        .run().lastInsertRowid,
+    );
+
+    const res = runRetentionOnce(db, opts(DUE));
+
+    // ① 活着的令牌与它引着的导出件都在
+    expect(res.tokens_purged).toBe(0);
+    expect(count('SELECT COUNT(*) AS n FROM file_download_tokens')).toBe(1);
+    expect(count('SELECT COUNT(*) AS n FROM files WHERE id=?', zipFileId), '把还能下载的导出件删了').toBe(1);
+    // ② 整轮没被一次外键冲突带走：真孤儿收掉了，留痕也是 ok
+    expect(res.files_removed).toBe(1);
+    expect(removedPaths).toEqual(['00/orphan.enc']);
+    expect(count('SELECT COUNT(*) AS n FROM files WHERE id=?', realOrphan)).toBe(0);
+    const run = lastRun(db, RETENTION_JOB_NAME);
+    expect(run!.error_text).toBeNull();
+    expect(run!.ok).toBe(1);
   });
 });

@@ -46,6 +46,8 @@ export interface RetentionResult {
   /** 顺带回收的无引用密文文件数 */
   files_removed: number;
   freed_bytes: number;
+  /** 顺带删掉的过期一次性令牌行数（它们是密文文件的引用者，不删就回收不到） */
+  tokens_purged: number;
   /** 逐行失败数（某一行删不掉不影响其余行） */
   failed: number;
 }
@@ -91,6 +93,7 @@ export function runRetentionOnce(
     users_purged: 0,
     files_removed: 0,
     freed_bytes: 0,
+    tokens_purged: 0,
     failed: 0,
   };
 
@@ -123,7 +126,13 @@ export function runRetentionOnce(
       }
     }
 
-    // ③ 回收无人引用的密文文件。
+    // ③ 删掉已经死透的一次性上传/下载令牌。**必须排在回收之前、且在同一轮里**：
+    //    它们是 files 的外键引用者，一条签给整案副本的下载地址会把那份装着全部证据原件的
+    //    zip 永远钉住（那张表没有任何一处删行）。不删它，下面那一步对这份密文永远无能为力，
+    //    协议五.8 的三十日承诺对它就是假的。判据口径见 lib/db/lifecycle.purgeExpiredFileTokens。
+    result.tokens_purged = lifecycle.purgeExpiredFileTokens(db, nowStr);
+
+    // ④ 回收无人引用的密文文件。
     //
     // 【为什么调全局回收，而不是「只删这个案子的那几份」】files 是内容寻址的裸资源，
     // 同一份文件可能被别的案件引用着（按 sha256 全局去重）。按案件删就会把别人的证据
@@ -144,6 +153,7 @@ export function runRetentionOnce(
         note:
           `到期删除：案件 ${result.cases_purged}、账号 ${result.users_purged}；` +
           `回收密文文件 ${result.files_removed} 个（${result.freed_bytes} 字节）；` +
+          `清掉过期一次性令牌 ${result.tokens_purged} 行；` +
           `逐行失败 ${result.failed}`,
       });
     }
