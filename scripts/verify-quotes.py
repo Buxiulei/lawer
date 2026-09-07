@@ -43,8 +43,17 @@ import knowledge_sources as ks  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent / "knowledge"
 
 
-def iter_cards(root: Path):
-    """遍历 packs/ 下的卡，产出 (id, 相对路径, statute_quotes, case_quotes)。跳过隔离区。"""
+def iter_cards(root: Path, broken: list[str] | None = None):
+    """遍历 packs/ 下的卡，产出 (id, 相对路径, statute_quotes, case_quotes)。跳过隔离区。
+
+    @param broken 前言 YAML 解析不了的卡，路径与错因追加到这个列表里。
+
+    【为什么解析不了不能静默跳过】这张卡的 facts 里可能写着十条引文。前言坏掉时
+    `continue` 的形态是：它一条都不核，而报告里**没有它的任何一行**——
+    "这张卡全绿"与"这张卡压根没被核过"在输出上一模一样，退出码还是 0。
+    改坏一个缩进就能让一整包卡悄悄退出核验，这正是本工具最该拦的那种失效。
+    所以坏卡算**错误**，由调用方计入退出码（不是警告：警告在 CI 里没人看）。
+    """
     for path in sorted(root.glob("packs/**/*.md")):
         rel = path.relative_to(root)
         if "quarantine" in rel.parts:
@@ -52,6 +61,7 @@ def iter_cards(root: Path):
         text = path.read_text(encoding="utf-8")
         m = re.match(r"\A---\n(.*?)\n---\n", text, re.DOTALL)
         if not m:
+            # 没有前言 = 这不是一张卡（README、说明文件都长这样），不是"卡坏了"
             continue
         fm_text = re.sub(
             r"^(title:\s*)(.+)$",
@@ -61,7 +71,14 @@ def iter_cards(root: Path):
         )
         try:
             fm = yaml.safe_load(fm_text) or {}
-        except yaml.YAMLError:
+        except yaml.YAMLError as e:
+            if broken is not None:
+                broken.append(f"  · {rel}：前言 YAML 解析失败（{type(e).__name__}: {e}）")
+            continue
+        if not isinstance(fm, dict):
+            # 前言解析成了字符串/列表：facts 一定取不到，与解析失败是同一种失效
+            if broken is not None:
+                broken.append(f"  · {rel}：前言不是一张 YAML 映射（解析成了 {type(fm).__name__}）")
             continue
         facts = fm.get("facts") or {}
         statutes = facts.get("statute_quotes") or []
@@ -86,7 +103,17 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     root = Path(args.knowledge_dir).resolve() if args.knowledge_dir else ROOT
-    cards = [c for c in iter_cards(root) if args.card is None or c[0] == args.card]
+    broken: list[str] = []
+    cards = [c for c in iter_cards(root, broken) if args.card is None or c[0] == args.card]
+    if broken:
+        print(
+            "\n".join(
+                ["错误：下列卡片的前言读不了，它们的引文一条都没有被核："]
+                + broken
+                + ["修好前言再跑；在此之前本轮的「一致」只覆盖读得了的那些卡。"]
+            ),
+            file=sys.stderr,
+        )
     if args.card and not cards:
         print(f"错误：没有 id={args.card} 的卡，或它既没有 statute_quotes 也没有 case_quotes", file=sys.stderr)
         return 2
@@ -136,6 +163,17 @@ def main(argv: list[str] | None = None) -> int:
     if mismatch:
         return 1
     if missing and not args.allow_missing:
+        return 1
+    # 【读不了的卡照样算失败】它们没有出现在上面任何一类里——不一致、找不到原件都轮不到它们，
+    # 因为它们根本没被核。不在这里返回非零的形态是：一包卡的前言全坏掉，报告照常印
+    # "一致 N 条"、退出码 0，而 N 里一条都不是那包卡的。
+    if broken:
+        return 1
+    # 【豁免过期无条件判红，与 gen-knowledge-index.py 同一口径】上面只是把这些行重新计入，
+    # 而"重新计入之后恰好全都一致"是常态（欠的是原件登记，不是引文对不上）。
+    # 于是过期那天报告里印着一行错误、退出码却是 0——CI 绿着，没有人会去读那一行。
+    # 到期即恢复全部守卫这件事，只有退出码说了才算数。
+    if expired:
         return 1
     return 0
 

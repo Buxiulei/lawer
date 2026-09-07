@@ -412,3 +412,137 @@ def test_fullwidth_and_halfwidth_are_not_equal_under_the_ruler():
     # 千分位逗号**不在**这把尺子里：那一层只属于数值那一面（gen 的 normalize），
     # 引文这一面把 1,000 与 1000 判成同一个，就等于在"逐字"里放进了一档"顺手抹平"。
     assert ks.normalize_quote("赔偿1,000元") != ks.normalize_quote("赔偿1000元")
+
+
+# ── ⑤ 读不了的卡与过期的豁免：两种"报告是绿的，而它没在核" ─────────────
+#
+# 【这一组补的是哪个缺口】上面每一条验的都是"核出来的结论对不对"。
+# 但这个工具还有两种失效不产生任何一行结论：
+#   · 卡的前言坏掉 ⇒ 那张卡一条引文都不核，报告里没有它的任何一行；
+#   · 豁免过期  ⇒ 错误打在 stderr 上，退出码却仍是 0（"重新计入之后恰好全一致"是常态）。
+# 两种都印着「一致 N 条」、退出码 0——而 CI 只看退出码。
+
+
+def _write_broken_front_matter(root, rel="packs/statutes/broken.md"):
+    """前言 YAML 坏掉的一张卡：`keywords:` 下面缩进错乱，safe_load 直接抛。"""
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "---\n"
+        "id: statute-broken\n"
+        "type: 法条卡\n"
+        "title: 前言坏掉的卡\n"
+        "keywords:\n"
+        "  - 测试\n"
+        " 缩进错了: 这一行让 yaml 直接抛\n"
+        "---\n\n"
+        "正文占位。\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_unparsable_front_matter_is_an_error_not_a_silent_skip(verify, kb, capsys):
+    """前言读不了的卡：必须**退出非零并点名**，不能静默跳过。
+
+    【变异臂】把 iter_cards 里那个 `except yaml.YAMLError` 分支改回 `continue`（不记账）
+    ⇒ 这条红。它此前正是那个形态：改坏一个缩进，那张卡（连同它 facts 里的十条引文）
+    悄悄退出核验，报告照常印「一致 N 条」、退出码 0。
+    """
+    write_card(
+        kb,
+        "packs/statutes/ok.md",
+        card_id="statute-ok",
+        quotes=[{"law": "中华人民共和国劳动合同法", "article": "第四十七条",
+                 "text": "第四十七条　经济补偿按劳动者在本单位工作的年限，每满一年支付一个月工资的标准向劳动者支付。"}],
+    )
+    _write_broken_front_matter(kb)
+    code = run(verify, kb)
+    err = capsys.readouterr().err
+    assert code == 1, "前言读不了的卡被静默跳过了：退出码仍是 0"
+    assert "broken.md" in err, f"报错里没点名是哪张卡：{err}"
+    assert "前言" in err
+
+
+def test_unparsable_front_matter_reds_even_when_every_readable_card_matches(verify, kb, capsys):
+    """自证上一条不是"因为别的卡不一致才红"：库里读得了的那张卡完全一致。"""
+    write_card(
+        kb,
+        "packs/statutes/ok.md",
+        card_id="statute-ok",
+        quotes=[{"law": "中华人民共和国劳动合同法", "article": "第四十七条",
+                 "text": "第四十七条　经济补偿按劳动者在本单位工作的年限，每满一年支付一个月工资的标准向劳动者支付。"}],
+    )
+    assert run(verify, kb) == 0, "没有坏卡时本来就该绿（否则下一句证不出东西）"
+    capsys.readouterr()
+    _write_broken_front_matter(kb)
+    assert run(verify, kb) == 1
+    out = capsys.readouterr().out
+    assert "一致 1" in out, "读得了的那张卡照常核、照常印——坏卡不该拖垮别人的结论"
+
+
+def test_front_matter_that_is_not_a_mapping_is_also_an_error(verify, kb, capsys):
+    """前言解析成了字符串/列表：facts 一定取不到，与解析失败是同一种失效。"""
+    path = kb / "packs/statutes/scalar.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("---\n就是一句话，不是映射\n---\n\n正文占位。\n", encoding="utf-8")
+    assert run(verify, kb) == 1
+    assert "scalar.md" in capsys.readouterr().err
+
+
+def test_markdown_without_front_matter_is_not_an_error(verify, kb, capsys):
+    """没有前言 = 这不是一张卡（README 就长这样），不许把它算成坏卡。
+
+    【为什么要单钉】把"没有前言"也计成错误的形态是：包目录里放一个 README
+    就让整个核验永远红，于是下一个人会把这道闸整个关掉。
+    """
+    path = kb / "packs/statutes/README.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("# 这一包是干什么的\n\n随便写点说明。\n", encoding="utf-8")
+    assert run(verify, kb) == 0
+    assert "README" not in capsys.readouterr().err
+
+
+def _pending_file(root, rel_dir, until):
+    d = root / rel_dir
+    d.mkdir(parents=True, exist_ok=True)
+    d.joinpath("GROUNDING_PENDING").write_text(
+        f"# 测试用豁免\n\n最迟: {until}\n\n欠账：判据夹具。\n", encoding="utf-8"
+    )
+
+
+def test_expired_pending_exits_nonzero_even_when_everything_matches(verify, kb, capsys):
+    """豁免过期 ⇒ 无条件非零，与 gen-knowledge-index.py 同一口径。
+
+    【变异臂】把 main 末尾 `if expired: return 1` 删掉 ⇒ 这条红。
+    此前正是那个形态：过期那天 stderr 印一行「豁免已过期」、退出码 0——
+    CI 绿着，而"到期即恢复全部守卫"这句话只有退出码说了才算数。
+    """
+    write_card(
+        kb,
+        "packs/pending/ok.md",
+        card_id="statute-pending-ok",
+        quotes=[{"law": "中华人民共和国劳动合同法", "article": "第四十七条",
+                 "text": "第四十七条　经济补偿按劳动者在本单位工作的年限，每满一年支付一个月工资的标准向劳动者支付。"}],
+    )
+    _pending_file(kb, "packs/pending", "2000-01-01")
+    code = run(verify, kb)
+    err = capsys.readouterr()
+    assert "一致 1" in err.out, "这张卡本来就是一致的（否则这条红的原因是别的）"
+    assert code == 1, "豁免过期了，退出码却是 0"
+    assert "过期" in err.err and "2000-01-01" in err.err
+
+
+def test_unexpired_pending_still_exits_zero(verify, kb, capsys):
+    """自证上一条红的是"过期"而不是"有豁免"：没到期的豁免照常绿。"""
+    write_card(
+        kb,
+        "packs/pending/bad.md",
+        card_id="statute-pending-bad",
+        quotes=[{"law": "中华人民共和国劳动合同法", "article": "第四十七条",
+                 "text": "本句完全不在这份原件里出现过。"}],
+    )
+    _pending_file(kb, "packs/pending", "2099-01-01")
+    assert run(verify, kb) == 0
+    err = capsys.readouterr().err
+    assert "2099-01-01" in err and "不计入退出码" in err

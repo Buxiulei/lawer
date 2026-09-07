@@ -19,6 +19,34 @@ export const GROUNDING_PENDING = 'GROUNDING_PENDING';
 /** 文件里那行到期日：`最迟: 2026-09-14` */
 const UNTIL = /^[ \t]*(?:最迟|until)[ \t]*[:：][ \t]*(\d{4}-\d{2}-\d{2})[ \t]*$/m;
 
+/**
+ * 判「今天」用的时区。python 侧是 `date.today()`——**服务器本地日期**，
+ * 而这套东西的服务器与写豁免的人都在 UTC+8。
+ *
+ * 【为什么不能用 toISOString()】那是 UTC 日期。2026-09-14T00:30+08:00 这一刻，
+ * UTC 还是 09-13：python 说「到期了」（今天 09-14 > 最迟 09-13），
+ * TS 说「还没到期」（今天 09-13 不大于 09-13）。于是 CI 里 pytest 红、vitest 绿，
+ * 两边说的其实是同一件事，而每天有八小时窗口它们必然不一致。
+ * 不一致的方向还特别差：TS 那侧偏向"豁免还在"，也就是偏向少报。
+ */
+const PENDING_TZ = 'Asia/Shanghai';
+
+/** 固定时区的 `YYYY-MM-DD`（en-CA 恰好就是这个排法，不用自己拼）。 */
+const DATE_IN_TZ = new Intl.DateTimeFormat('en-CA', {
+  timeZone: PENDING_TZ,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/**
+ * 那一刻在 {@link PENDING_TZ} 的日历日期。导出是为了让判据钉边界
+ *（`2026-09-14T00:30+08:00` 这类跨 UTC 日界的时刻）。
+ */
+export function localDateStamp(at: Date): string {
+  return DATE_IN_TZ.format(at);
+}
+
 export interface Pending {
   /** 相对 knowledge/ 的目录，如 `packs/counseling`，一律用 `/` 分隔 */
   dir: string;
@@ -36,7 +64,8 @@ export interface Pending {
  */
 export function loadPending(knowledgeDir: string, today = new Date()): Pending[] {
   const out: Pending[] = [];
-  const stamp = today.toISOString().slice(0, 10);
+  // 与 python 侧 date.today() 同口径：本地（Asia/Shanghai）日历日，不是 UTC 日
+  const stamp = localDateStamp(today);
   const walk = (rel: string) => {
     const abs = path.join(knowledgeDir, rel);
     if (!fs.existsSync(abs)) return;
