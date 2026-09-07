@@ -4,6 +4,7 @@ import {
   AI_LABELING_TERMS_HREF,
   AI_LABELING_TERMS_LINK_TEXT,
 } from '@/app/_ui/aiLabelingTerms';
+import { TERMS_HREF, TERMS_TITLE } from '@/app/_ui/termsLinks';
 import { TubashuMark } from '@/components/shell/TubashuMark';
 import { LoginFlow } from './_components/LoginFlow';
 
@@ -42,6 +43,15 @@ export default function LoginPage() {
           {AI_LABELING_TERMS_LINK_TEXT}
         </Link>
         。
+        {/* 注册在这一页发生，而协议是"勾选同意"的那一份：民法典 §496 第二款要的"合理方式
+            提示对方注意"，前提是他在按下按钮之前**读得到**它。只在注册完成后才给入口的
+            形态是：同意已经生效了，条款才第一次出现在他眼前。 */}
+        <br />
+        注册即表示你同意
+        <Link href={TERMS_HREF} className="mx-1 text-primary-ink underline underline-offset-4">
+          《{TERMS_TITLE}》
+        </Link>
+        ，其中与你有重大利害关系的条款已加粗。
       </footer>
     </div>
   );

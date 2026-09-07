@@ -1714,6 +1714,38 @@ export function runMigrations(db: Database.Database): void {
   // 存量行取 DDL 默认值 'self'：它们确实都是用户自己建的，这不是编出来的默认值。
   addColumnIfMissing(db, 'api_keys', 'source', "TEXT NOT NULL DEFAULT 'self'");
 
+  // 投诉、举报与个人信息权利请求的受理台账（协议第十二条第 1 款 /
+  // 《生成式人工智能服务管理暂行办法》第十五条「设置便捷的投诉、举报入口，公布处理流程和反馈时限」）。
+  //
+  // receipt_no = 受理编号，**给用户的凭据**：他日后追问「我那条投诉呢」时手上只有这一串。
+  //   唯一索引不是洁癖——编号撞车的形态是两个人拿着同一串来问，而我们答不出该翻哪一条。
+  // user_id 可空且 ON DELETE SET NULL：注销账号要删个人信息（协议五.8），
+  //   但受理记录本身属于「法律要求留存的日志」。挂 NOT NULL 的形态是——注销时要么删掉整条
+  //   受理记录（台账出现空洞，而我们对外承诺过它在），要么注销失败。
+  // contact_enc = 联系方式密文（lib/crypto 铁律：手机号这类字段不留明文列）。
+  //   它多半就是一个手机号，而这张表将来是后台每天要翻的——明文列等于把一张
+  //   「投诉人手机号清单」摆在库里。正文 body 不加密：它与案件档案里的事实同级，
+  //   全站没有一处对那种正文加密，单给这一张表加是**看起来更安全**而已。
+  // 不设 status 列：本票的后台是**只读**列表，没有任何一处会写它。
+  //   写了等于没写的列比没有更糟——读的人会以为「待受理」是真的在流转。
+  //   受理/答复的状态流转要做时，连同改状态的入口与审计一起加。
+  // 不存 ack_due_at / reply_due_at：协议承诺的是 3 / 15 个**工作日**，
+  //   而本仓没有法定节假日表，算出来的日期会是一个「看起来权威的错日期」。
+  //   时限以工作日数的形式印在页面上（lib/complaints 的两个常量），不落成日期。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS complaints (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      receipt_no  TEXT NOT NULL,
+      user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      kind        TEXT NOT NULL,                            -- 投诉 | 举报 | 个人信息权利请求
+      body        TEXT NOT NULL,
+      contact_enc TEXT NOT NULL,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_complaints_receipt_no ON complaints (receipt_no);
+    CREATE INDEX IF NOT EXISTS idx_complaints_user ON complaints (user_id, id DESC);
+  `);
+
   // ───────────────── 费率种子 ─────────────────
   // C01 核定的模型费率必须**在建表之后立刻播下去**：缺行时 getRatesForModel 会回落
   // DEFAULT_RATES（最便宜的 Flash 档），于是每一笔账都按兜底价少收——而账面看起来完全正常。

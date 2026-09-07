@@ -3,6 +3,7 @@ import Link from 'next/link';
 
 import { AiGeneratedNotice } from '@/app/_ui/AiGeneratedNotice';
 import { AI_LABELING_TERMS_TITLE } from '@/app/_ui/aiLabelingTerms';
+import { TERMS_HREF, TERMS_TITLE } from '@/app/_ui/termsLinks';
 import { AI_LABEL_ATTRIBUTE, AI_LABEL_PROVIDER } from '@/lib/ai-label';
 import { TubashuMark } from '@/components/shell/TubashuMark';
 
@@ -17,12 +18,12 @@ import { LAW_QUOTES, type LawQuote } from './quotes';
 // 所以这一页只说它的**构成**，样例只摆领域中立的前半截。
 // ─────────────────────────────────────────────────────
 //
-// 【它现在不自称"用户服务协议的一节"】§8 说的是"在用户服务协议中明确说明"。
-// 本平台的用户服务协议还没起草，这一页先独立存在——**先把该说的说清楚，
-// 比先摆一个协议的架子重要**。此前这一页开头写着"是用户服务协议里的那一节"，
-// 那是一句在协议本身不存在时无法成立的话：读的人会去找那份协议，
-// 而它一处都不在。所以自称改成「规范说明（用户服务协议起草后并入）」——
-// 缺什么（协议未起草）、为什么缺（还没写）、怎么办（起草后并入）三样都写在标题里。
+// 【它现在自称"用户服务协议第四条的组成部分"，2026-09-07 改】§8 说的是"在用户服务协议中
+// 明确说明"。此前这一页开头写着「本平台的用户服务协议尚未起草」——那时那是实话。
+// 现在 /terms 上线了，同一句话就变成了**一句过期的实话**：读的人据它以为没有协议，
+// 于是不会去找那一份，而 §8 要的"在协议中说明"这件事看起来仍然没有落地。
+// 所以这一页改口指过去：协议第四条第 6 款说"本页是本条的组成部分"，
+// 这一页说"本页是协议第四条的组成部分"，并给一条能点过去的链接——两头对上，才形成一份东西。
 //
 // 【为什么单起一页，不塞进登录页脚】§8 要的是"明确说明方法与样式"——那是几百字，
 // 塞在登录页脚的形态是：它在，但没有人读得下去，而"读不下去"与"没写"在合规上同形。
@@ -84,8 +85,11 @@ export default function AiLabelingTermsPage() {
         </h1>
         <p className="prose-measure mt-2 text-[14px] leading-7 text-ink-2">
           本说明依{BANFA}第八条写给你，说明本平台生成合成内容标识的方法、样式等规范内容。
-          请仔细阅读并理解下列标识管理要求。本平台的用户服务协议尚未起草；协议起草后，
-          这一节将整体并入其中，在此之前它独立生效。
+          请仔细阅读并理解下列标识管理要求。本页是
+          <Link href={TERMS_HREF} className="mx-1 text-primary-ink underline underline-offset-4">
+            《{TERMS_TITLE}》
+          </Link>
+          第四条的组成部分。
         </p>
       </header>
 
@@ -188,9 +192,12 @@ export default function AiLabelingTermsPage() {
         </Section>
       </main>
 
-      <footer className="mt-10 border-t border-line pt-5 text-[13px] leading-6 text-ink-2">
+      <footer className="mt-10 flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-5 text-[13px] leading-6 text-ink-2">
         <Link href="/" className="text-primary-ink underline underline-offset-4">
           回到首页
+        </Link>
+        <Link href={TERMS_HREF} className="text-primary-ink underline underline-offset-4">
+          《{TERMS_TITLE}》
         </Link>
       </footer>
     </div>

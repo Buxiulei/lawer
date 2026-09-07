@@ -137,12 +137,18 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'web', method: 'DELETE', path: '/api/v1/keys/{id}', auth: 'jwt', description: '吊销 api key（置 enabled=0，留行保审计线索）' },
   { category: 'web', method: 'POST', path: '/api/v1/realname/init', auth: 'jwt', description: '发起实人认证，返回 H5 活体认证页 URL' },
   { category: 'web', method: 'POST', path: '/api/v1/realname/passport', auth: 'jwt', description: '护照实名提交（multipart），落「待审」等人工核；只有护照的人走这条' },
+  // 【为什么这两条在 web 而不是 agent 面】提投诉/举报/个人信息权利请求是**本人的法律行为**，
+  // 一条「请删除我的个人信息」要在 15 个工作日内办结。让 api key 也能提的形态是：
+  // 用户接进来的某个助手替他提了一条，钟已经在走、答复寄往那条记录里留的联系方式，而本人不知情。
+  { category: 'web', method: 'POST', path: '/api/v1/complaints', auth: 'jwt', description: '提交投诉 / 举报 / 个人信息权利请求，回一串受理编号；受理与答复时限见协议第十二条' },
+  { category: 'web', method: 'GET', path: '/api/v1/complaints', auth: 'jwt', description: '自己提过的那几条（含受理编号与提交时间）' },
 
   // ──────── 管理员 ────────
   { category: 'admin', method: 'GET', path: '/api/v1/admin/audit', auth: 'admin', description: '最近的后台操作流水，只读（无删改端点）' },
   { category: 'admin', method: 'GET', path: '/api/v1/admin/users', auth: 'admin', description: '账号列表 + 检索 + 分页（手机号服务端已掩码）' },
   { category: 'admin', method: 'POST', path: '/api/v1/admin/users/{uid}/gongdao', auth: 'admin', description: '后台发公道值，op_ref 为幂等键' },
   { category: 'admin', method: 'POST', path: '/api/v1/admin/users/{uid}/membership', auth: 'admin', description: '后台调会员档（立即生效；降档 = 当前行提前到期 + 新行）' },
+  { category: 'admin', method: 'GET', path: '/api/v1/admin/complaints', auth: 'admin', description: '投诉 / 举报 / 个人信息权利请求的受理台账，**只读**（无改状态的端点：后台页也没有那个按钮）；响应含投诉人联系方式，刻意如此' },
   { category: 'admin', method: 'GET', path: '/api/v1/admin/codes', auth: 'admin', description: '兑换码列表' },
   { category: 'admin', method: 'POST', path: '/api/v1/admin/codes', auth: 'admin', description: '批量签发兑换码' },
   { category: 'admin', method: 'GET', path: '/api/v1/admin/realname/pending', auth: 'admin', description: '待人工审核的护照实名队列（响应含 PII，刻意如此）' },

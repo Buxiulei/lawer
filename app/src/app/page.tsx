@@ -9,6 +9,7 @@ import {
   AI_LABELING_TERMS_HREF,
   AI_LABELING_TERMS_LINK_TEXT,
 } from '@/app/_ui/aiLabelingTerms';
+import { TERMS_HREF, TERMS_TITLE } from '@/app/_ui/termsLinks';
 import { BYO, byoBillingLine } from '@/app/_ui/byoAgent';
 
 /** 卷一的三张文书卡。**全部是示例**，卡上带「示例」角标，不留可被误读成真实数据的余地。 */
@@ -384,6 +385,10 @@ export default function LandingPage() {
             className="ml-2 whitespace-nowrap underline underline-offset-4"
           >
             {AI_LABELING_TERMS_LINK_TEXT}
+          </Link>
+          {/* 协议本身同理：没登录的人也该读得到他将要同意的那一份 */}
+          <Link href={TERMS_HREF} className="ml-2 whitespace-nowrap underline underline-offset-4">
+            《{TERMS_TITLE}》
           </Link>
         </div>
       </footer>
