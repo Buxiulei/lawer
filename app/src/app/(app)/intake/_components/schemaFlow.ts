@@ -20,7 +20,32 @@
  */
 
 import { INTAKE_PARAM_OF_KEY } from '@/lib/cases/intake-params';
-import type { DomainPack, IntakeFieldSpec } from '@/lib/domains/registry';
+import { DEFAULT_DOMAIN, type DomainPack, type IntakeFieldSpec } from '@/lib/domains/registry';
+
+/**
+ * 有人为它**手写过**首诊向导的领域。
+ *
+ * 【为什么这份名单住在这里，而不是各处自己判一次】这条分流有两个隔着文件的读者：
+ * 排步那一侧（IntakeFlow 的 HANDWRITTEN_FLOWS：手写稿 vs schemaSteps）与
+ * 拼请求体那一侧（submit.toIntakePayload：手写映射 vs schemaPayload）。
+ * 两侧各判一次的形态是——将来第二个领域也有了手写稿，页面按那份稿子问、
+ * 请求体却按 schema 拼，于是**每一格都是空的**，而服务端照收、回包 201、
+ * 页面照常跳进驾驶舱，一处报错都没有。收成一份之后，改这条政策只改这一行。
+ *
+ * 【为什么不是直接读 HANDWRITTEN_FLOWS】那张表的值是 JSX 步骤，住在客户端组件里，
+ * 而 submit.ts 是 IntakeFlow 的**被引方**（IntakeFlow 引它取 saveIntake）——
+ * 反过来引就成了循环依赖。所以这里放的是那张表的**键**，
+ * 两份必须逐字相同由 schema-flow.test.tsx 钉住（多一个少一个都红）。
+ */
+export const HANDWRITTEN_DOMAINS: readonly string[] = [DEFAULT_DOMAIN];
+
+/**
+ * 这个领域有没有人为它手写过向导。有＝那份手写稿逐字不变（问法与请求体都走它），
+ * 没有＝按 schema 排步、按 schema 拼请求体。
+ */
+export function hasHandwrittenFlow(domainKey: string): boolean {
+  return HANDWRITTEN_DOMAINS.includes(domainKey);
+}
 
 /** 事件列表里的一条。id 只用于 React key 与增删，不进请求体。 */
 export interface EventValue {

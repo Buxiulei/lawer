@@ -101,18 +101,9 @@ const HANDWRITTEN_STEPS: StepDef[] = [
  * 它的用户仍然走通用表单——页面照常能用，只是那份手写稿从没被摆出来过。
  * 表里没有的领域一律按 schema 排步（schemaSteps），**不退回别人的向导**。
  */
-const HANDWRITTEN_FLOWS: Record<string, StepDef[]> = {
+export const HANDWRITTEN_FLOWS: Record<string, StepDef[]> = {
   [DEFAULT_DOMAIN]: HANDWRITTEN_STEPS,
 };
-
-/**
- * 这个领域有没有人为它手写过向导。**判据按它分流**：表里有＝那份手写稿逐字不变，
- * 表里没有＝按 schema 排步。写成「等于缺省领域」的形态是——将来第二个领域也有了手写稿，
- * 判据仍然按"是不是缺省领域"去问，于是它对那个领域问错了问题却照样绿。
- */
-export function hasHandwrittenFlow(domainKey: string): boolean {
-  return domainKey in HANDWRITTEN_FLOWS;
-}
 
 /**
  * 没有手写向导的领域：按 `intakeSchema` 一格一步问下来，末步是「你的档案」。
@@ -198,10 +189,17 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
   const [caseProbe, setCaseGuard] = useCaseGuard(signedIn);
   const caseGuard = caseProbe.guard;
   /**
+   * 问出来的那个领域，**空串＝还没问到**（首帧、未登录、查不到）。
+   * 单独起个名字是因为下面两个读者对空串的态度**必须不同**：
+   * 排步没得等（总要画点什么，于是退回缺省领域），而作废草稿等得起——
+   * 拿"还不知道"当缺省领域去比对草稿，等于每刷新一次就清一次档（见 draftForDomain）。
+   */
+  const probedDomain = caseProbe.domain;
+  /**
    * 这一份首诊按哪个领域问。**取的是名下那个案件的 domain**（首诊是往它里面提交的），
    * 查不到就退回缺省领域——查不到的常见形态是还没登录，那时问哪一套都还没有落点。
    */
-  const pack = packOf(caseProbe.domain || undefined);
+  const pack = packOf(probedDomain || undefined);
   const steps = HANDWRITTEN_FLOWS[pack.key] ?? schemaSteps(pack);
   const [draft, setDraft] = useState<IntakeDraft>(EMPTY_DRAFT);
   const [restored, setRestored] = useState(false);
@@ -220,11 +218,13 @@ export function IntakeFlow({ cap }: { cap: SanbeiCap | null }) {
     setHydrated(true);
   }, []);
 
-  // 草稿是**上一个领域**填的就整份作废；三态与理由都在 draft.draftForDomain。
+  // 草稿是**上一个领域**填的就整份作废；四态与理由都在 draft.draftForDomain。
+  // 递进去的是**问出来的那个值**，不是 pack.key：后者永远非空（问不到时退回缺省领域），
+  // 递它等于把"还不知道"说成"就是缺省领域"，于是第二个领域的草稿每刷新一次就被清一次。
   useEffect(() => {
     if (!hydrated) return;
-    setDraft((prev) => draftForDomain(prev, pack.key));
-  }, [hydrated, pack.key]);
+    setDraft((prev) => draftForDomain(prev, probedDomain));
+  }, [hydrated, probedDomain]);
 
   useEffect(() => {
     if (!hydrated) return;

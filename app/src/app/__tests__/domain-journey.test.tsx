@@ -25,9 +25,13 @@ import type { Database } from 'better-sqlite3';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { DomainChoice } from '@/app/_ui/DomainChoice';
-import { schemaSteps, hasHandwrittenFlow } from '@/app/(app)/intake/_components/IntakeFlow';
+import { schemaSteps } from '@/app/(app)/intake/_components/IntakeFlow';
 import { EMPTY_DRAFT, type IntakeDraft } from '@/app/(app)/intake/_components/draft';
-import { emptyValue, type FieldValue } from '@/app/(app)/intake/_components/schemaFlow';
+import {
+  emptyValue,
+  hasHandwrittenFlow,
+  type FieldValue,
+} from '@/app/(app)/intake/_components/schemaFlow';
 import { toIntakePayload } from '@/app/(app)/intake/_components/submit';
 import { buildCaseFacts, renderCaseFacts } from '@/lib/agent/case-facts';
 import { loadCaseSnapshot } from '@/lib/agent/snapshot';

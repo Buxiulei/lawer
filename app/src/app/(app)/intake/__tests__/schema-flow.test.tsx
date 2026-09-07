@@ -22,16 +22,18 @@ import { DEFAULT_DOMAIN, DOMAINS, type DomainPack, type IntakeFieldSpec } from '
 
 import { EMPTY_DRAFT, draftForDomain, type IntakeDraft } from '../_components/draft';
 import {
+  HANDWRITTEN_DOMAINS,
   emptyValue,
   fenOf,
   fieldBlock,
+  hasHandwrittenFlow,
   isFilled,
   isRealDate,
   schemaPayload,
   stepTitleOf,
   type FieldValue,
 } from '../_components/schemaFlow';
-import { hasHandwrittenFlow, schemaSteps } from '../_components/IntakeFlow';
+import { HANDWRITTEN_FLOWS, schemaSteps } from '../_components/IntakeFlow';
 import { toIntakePayload } from '../_components/submit';
 
 const TODAY = '2026-09-07';
@@ -301,6 +303,54 @@ describe('draftForDomain：换了领域整份作废（上一个领域的答案�
     expect(next.fields).toEqual({});
     expect(next.step).toBe(0);
     expect(next.domain).toBe('乙领域');
+  });
+
+  /*
+   * 【空串是"还不知道"，不是"某个领域"】首诊页问「我名下那个案子属于哪个领域」是挂载
+   * 之后的一次请求，在它回来之前这一页手里只有空串，而 packOf 在那一帧退回的是缺省领域。
+   * 少了这一支的形态是：第二个领域的用户**每刷新一次就被清一次档**——
+   * 第一帧按缺省领域比对判成"换了领域"整份作废，第二帧问到了自己的领域，
+   * 而那时上次填的每一格已经没了。屏幕上只是显示"从头开始"，一处报错都没有。
+   */
+  it('领域还没问出来（空串）→ 一格都不动（变异：删掉 `domain === "" ` 那一支 → 红）', () => {
+    expect(draftForDomain(filled, '')).toBe(filled);
+  });
+
+  it('刷新那两帧走完，第二个领域上次填的一格不少（先「还不知道」，后「就是它自己」）', () => {
+    const saved: IntakeDraft = {
+      ...EMPTY_DRAFT,
+      domain: '乙领域',
+      step: 3,
+      fields: { companyName: '上次填到一半' },
+    };
+    // 第一帧：probe 还没回来，页面手里是空串（packOf 那一帧退回的是缺省领域）
+    const frame1 = draftForDomain(saved, '');
+    // 第二帧：问到了，正是这份草稿自己的领域
+    const frame2 = draftForDomain(frame1, '乙领域');
+    expect(frame2.fields, '刷新一次就把上次填的清空了').toEqual(saved.fields);
+    expect(frame2.step, '步数也被打回第一步').toBe(3);
+  });
+});
+
+/* ── 五之二、「有没有手写稿」只有一份名单 ───────────────── */
+
+/*
+ * 这条分流有两个隔着文件的读者：排步（IntakeFlow 的 HANDWRITTEN_FLOWS）与拼请求体
+ *（submit.toIntakePayload）。它们分叉的形态是——第二个领域也有了手写稿之后，
+ * 页面按那份稿子问、请求体按 schema 拼，每一格都是空的而回包照常 201。
+ * 名单收在 schemaFlow.HANDWRITTEN_DOMAINS，这里钉住那张表的键与它逐字相同。
+ */
+describe('手写向导：登记表与名单是同一份', () => {
+  it('HANDWRITTEN_FLOWS 的键 = HANDWRITTEN_DOMAINS（变异：往表里加一个键不加进名单 → 红）', () => {
+    expect(Object.keys(HANDWRITTEN_FLOWS).sort()).toEqual([...HANDWRITTEN_DOMAINS].sort());
+  });
+
+  it('名单不是空的，也不是"人人有份"（空了 = 所有领域都走 schema，满了 = 都走手写）', () => {
+    expect(HANDWRITTEN_DOMAINS.length).toBeGreaterThan(0);
+    expect(HANDWRITTEN_DOMAINS.length).toBeLessThan(Object.keys(DOMAINS).length + 1);
+    for (const key of HANDWRITTEN_DOMAINS) {
+      expect(DOMAINS[key], `名单里的「${key}」不是注册表里的领域`).toBeTruthy();
+    }
   });
 });
 
