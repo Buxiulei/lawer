@@ -247,3 +247,38 @@ def test_real_registry_goes_red_when_one_raw_is_swapped(audit, tmp_path, capsys)
     assert run(audit, root) == 1
     printed = out(capsys)
     assert victim["source_id"] in printed and "SPA 空壳" in printed
+
+
+#: 现库里抽取器复算不动的四条（zip / xls / 两份 pdf，见 knowledge/README.md §7.5）。
+#: 它们的 text.txt 产自**旧路线**（fetch-source 还允许人工落 text 的年代），
+#: 正文与 raw 的对应关系在本仓里只是"断言"，没有任何一处复算过。
+UNDERIVED_PIN = {
+    "bjchy-banli-cailiao-baofuzhuang",
+    "data-beijing-shepin-fengding",
+    "statute-beijing-gongzi-zhifu-guiding-doc",
+    "statute-minsufa",
+}
+
+
+def test_real_registry_underived_set_is_pinned(audit, capsys):
+    """现库"未复算"名单钉死在这四条上——多一条就红。
+
+    【它防的是什么】审计对 pdf/zip/xls 只报"未复算"并**照常退 0**（§7.5：拿 pypdf 当判据
+    会让同一份库这台机器红、那台机器绿）。于是"登记一条 pdf + 自己写一份 text.txt"
+    这条路走完之后全库仍然全绿——正是本轮封掉的那个形态（`statute-gerensuodeshuifa`：
+    raw 是空壳、text 另有出处）的近亲，只是换了个抽不动的扩展名。
+
+    `fetch-source.py` 那一侧已经封死（抽不出正文就只落 raw 并标 `needs_text`，审计判红）；
+    这颗钉子管的是**绕开 fetch-source、手写登记簿**的那条路，以及"未复算"这个桶
+    悄悄变大——它是全库唯一一处"审计明说自己没审"的地方，变大必须有人看见。
+
+    多出来的条目只有两种正当结局：换成可复算的格式重抓，或者在这里显式记一笔。
+    "谁都没发现"与"看见了并认了"必须在判据里长得不一样。
+    """
+    assert audit.main(["--json"]) == 0
+    payload = json.loads(out(capsys))
+    underived = {r["source_id"] for r in payload["rows"] if r.get("derived") == "未复算"}
+    assert underived == UNDERIVED_PIN, (
+        "现库的「未复算」名单变了。新增的条目意味着又一份 text.txt 的来历无人复算过；"
+        "先确认它不是手写的，再决定是重抓成可复算格式，还是把它加进 UNDERIVED_PIN 并写明理由。"
+    )

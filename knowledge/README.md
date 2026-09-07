@@ -335,3 +335,21 @@ text 是从 raw 抽出来的、raw 是从 url 抓下来的。这个默认一旦�
 而**同一份库这台机器红、那台机器绿**时，人只会挑绿的那台。
 未复算的条目仍要过 ①②④⑤；新登记的条目若抽不出文本，会被 ④ 挡住（fetch-source 会给它
 标 `needs_text`），所以这个"量程之外"不会成为新的口子。
+
+**"未复算"这个桶是钉死的**：`scripts/tests/test_audit_sources.py::test_real_registry_underived_set_is_pinned`
+把现库的未复算名单钉在四条上（`bjchy-banli-cailiao-baofuzhuang` / `data-beijing-shepin-fengding` /
+`statute-beijing-gongzi-zhifu-guiding-doc` / `statute-minsufa`），多一条就红。
+上一段说的"不会成为新的口子"只覆盖**经 fetch-source 登记**的条目；
+手写一条 pdf 登记再自己写一份 text.txt，审计照样退 0——那条路由这颗钉子拦。
+
+> **这四条里已发现两处旧账（2026-09-07 实查，本轮未修）**，它们正是"复算不动"的代价：
+> · `bjchy-banli-cailiao-baofuzhuang`（朝阳区办理材料包 .zip）的 `text.txt` **正好 30720 字
+>   （30×1024）且停在半句话上**（"…第八十七条规定"，无句号）——是一份被截断的存档。
+>   现有两张 SOP 卡的引文都落在截断点之前，所以今天全绿；将来引到后半段的人会看到
+>   "找不到原件"，而真相是原件存档不全。报警方向是安全的，但结论会指错地方。
+> · `data-beijing-shepin-fengding`（统计年鉴表 3-14 .xls）的 `text.txt` 头三行是**人写的**
+>   出处说明（"本地经 LibreOffice 由 .xls 转 CSV 抽取正文…"），不是抽取器的输出——
+>   即"人工粘贴"这条已封的路留下的存量。表内数值本身另有旁证：188413÷12×3 = 47103.25，
+>   与 12333 口头确认的北京 2023 年度封顶基数一致（见 `data-beijing-*` 相关卡）。
+> 两处都要用 LibreOffice/antiword 一类外部工具重抽后重登记，属下一阶段作业；
+> 修完把它们从 `UNDERIVED_PIN` 里划掉。

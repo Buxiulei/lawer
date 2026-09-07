@@ -294,3 +294,34 @@ def test_both_quote_kinds_are_verified_in_one_run(verify, kb_case, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["total"] == 2 and payload["ok"] == 2
     assert {r["field"] for r in payload["rows"]} == {"statute_quotes", "case_quotes"}
+
+
+def test_case_quote_header_separates_source_id_from_note(verify, kb_case, capsys):
+    """判例引文那一行里，source_id 与 note 之间要有分隔——它是人去找原件的唯一线索。
+
+    法条引文的同两格连读就是条名（「劳动合同法第三十九条」），所以这里刻意只给判例引文加
+    分隔符；粘在一起的形态是「cases-bj3zy-2025-dxal案例九的裁判要旨」，
+    读的人得先猜哪儿是原件 id 才能去 sources.json 里找它。
+    """
+    write_card(
+        kb_case, "packs/cases/f.md", card_id="case-f", card_type="判例卡",
+        case_quotes=[{"source_id": "dxal", "note": "案例九的裁判要旨", "text": "本句完全不在那份通稿里出现过。"}],
+    )
+    assert run(verify, kb_case) == 1
+    printed = capsys.readouterr().out
+    assert "dxal · 案例九的裁判要旨" in printed
+    assert "dxal案例九" not in printed
+
+
+def test_statute_quote_header_stays_glued(verify, kb, capsys):
+    """反向对照：法条引文那一行不许被这次改动改成「劳动合同法 · 第三十九条」。
+
+    没有这一条，把分隔符无差别加到两种引文上也照样绿——而那会让全库 200 多行法条报告
+    的条名裂开，且没有任何一处报错。
+    """
+    write_card(
+        kb, "packs/statutes/g.md", card_id="statute-g",
+        quotes=[{"law": "中华人民共和国劳动合同法", "article": "第四十七条", "text": "本句完全不在这份原件里出现过。"}],
+    )
+    assert run(verify, kb) == 1
+    assert "中华人民共和国劳动合同法第四十七条" in capsys.readouterr().out

@@ -378,7 +378,13 @@ def format_rows(rows: list[dict[str, Any]]) -> str:
     out = []
     for r in bad:
         tag = "判例引文" if r.get("field") == CASE_QUOTE else "法条引文"
-        out.append(f"[{r['state']}]（{tag}）{r['card_id']} · {r['law']}{r['article']}（{r['path']}）")
+        # 法条引文的这两格连读就是条名（「劳动合同法」+「第三十九条」）；判例引文的两格装的却是
+        # source_id 与 note，连读会粘成「cases-bj3zy-2025-dxal案例九的裁判要旨」——
+        # 读的人分不清哪儿是原件 id、哪儿是写卡人的备注，而这一行正是他去找原件的唯一线索。
+        head = (" · " if r.get("field") == CASE_QUOTE else "").join(
+            x for x in (r["law"], r["article"]) if x
+        )
+        out.append(f"[{r['state']}]（{tag}）{r['card_id']} · {head}（{r['path']}）")
         out.append(f"    {r.get('detail', '')}")
         if r["state"] == _MISMATCH and "card_excerpt" in r:
             out.append(f"    卡内：{r['card_excerpt']}")
