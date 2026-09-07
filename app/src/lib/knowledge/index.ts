@@ -66,6 +66,10 @@ export interface PackMeta {
    * 它们的 domain 就是缺省领域。加载时补齐（见 loadIndex），所以下游读到的恒有值——
    * 让下游各自 `?? '缺省'` 的形态是：某一处忘了补，那批卡就在按领域过滤时凭空消失，
    * 而检索照常返回 200 和一个更短的列表。
+   *
+   * 【为什么这个字段必须在类型上出现】它在 index.json 里已经是**检索的过滤依据**，
+   * 而类型上不存在的字段没有任何一处会去对齐：生成器写它、检索读它、类型不认识它，
+   * 于是"卡上删掉 domain 而不重跑生成器"这类两面分叉在编译期与类型面都无人看见。
    */
   domain: string;
   /** 规范化法条引用（如 劳动合同法§47）；仅 frontmatter 声明了 law_refs 的卡带此字段 */
@@ -86,6 +90,12 @@ export interface SearchOptions {
   region?: string;
   limit?: number;
   /**
+   * 只在这一个领域里检索（设计稿 §13「知识库按领域独立成包、**跨域检索默认关闭**」）。
+   * 不传就是缺省领域，**不是"全库"**——跨域是要显式要的，不是忘了传就发生的。
+   * 传一个谁也不认识的域名（拼错）**抛错**，不回空列表：见 search 里那道闸。
+   */
+  domain?: string;
+  /**
    * 判例的审理机构。匹配的是**结构化字段** `facts.case_facts.court`，给的是子串
    *（「朝阳」能匹到「北京市朝阳区人民法院」——用户不会记全称）。
    *
@@ -96,14 +106,6 @@ export interface SearchOptions {
    * 把没有审理机构的卡也放行，等于用一个过滤条件换回一批与该法院无关的卡。
    */
   court?: string;
-  /**
-   * 只要某个领域的卡。**缺省不过滤**（跨域检索），由调用方按案件领域显式传。
-   *
-   * 【为什么默认不滤】这一层是检索器，它不知道调用方手上有没有案件。
-   * 在这里默认滤成缺省领域的形态是：第二个领域的调用方明明传了 domain 之外的东西
-   * 也拿不到自己的卡，而它拿到的那几张看起来完全正常。
-   */
-  domain?: string;
 }
 
 const DEFAULT_LIMIT = 5;
@@ -365,8 +367,44 @@ function scoreOf(meta: PackMeta, query: string, queryBigrams: Set<string>): numb
   return score;
 }
 
+/**
+ * 这张卡属于哪个领域。没声明 = 缺省领域。
+ *
+ * 【为什么"没声明"不能读成"哪个域都算"】那等于给每个新领域包发一张跨域通行证：
+ * 第二个包一进库，它的卡就出现在第一个领域用户的检索结果里，而回包一切正常。
+ *
+ * 【为什么入参放宽成 `{ domain?: string }`，而不是 PackMeta】loadIndex 之后的元数据恒有
+ * domain（见 PackMeta.domain），但**判据与工具面有直接读 index.json 原文的调用方**，
+ * 那份里存量条目可以没有这个字段。两种形状在这里收敛成同一个答案，
+ * 免得"读原文的那一处"自己再写一遍 `?? 缺省` 而哪天写漏。
+ */
+export function packDomain(meta: { domain?: string }): string {
+  return meta.domain ?? DEFAULT_DOMAIN;
+}
+
+/**
+ * 这个域名字是不是**真有那么一个域**：要么 lib/domains 注册过，要么库里确有卡这么声明。
+ *
+ * 【为什么两个来源取并集，而不是只认注册表】两边各自会先有对方没有的东西：
+ * 内容包先入库、代码里还没挂（本支就是这个状态），或者包先挂上、卡还没写。
+ * 只认一边的形态是——另一边那半会在完全正常的用法上抛错。
+ */
+function isKnownDomain(domain: string): boolean {
+  // 【为什么不是 `domain in DOMAINS`】`in` 连原型链一起认：`'toString' in DOMAINS` 是 true，
+  // 于是一个叫 toString 的域会"认识"，而它一张卡都没有——回空列表，和拼错那条路一模一样。
+  if (Object.keys(DOMAINS).includes(domain)) return true;
+  return loadIndex().some((meta) => packDomain(meta) === domain);
+}
+
 function passesFilters(meta: PackMeta, opts: SearchOptions): boolean {
-  if (opts.domain && meta.domain !== opts.domain) return false;
+  // 【领域闸，默认关】跨域检索必须显式要（设计稿 §13）。
+  //
+  // 【它防的是什么——实测形态，不是推理】第二个领域包（咨询纠纷卡）进库后，
+  // 未过闸时：query「诉讼时效」第一名是民法典 188 条那张卡（诉讼时效 3 年），
+  // 而本域用户问时效要的是本域时效口径；query「投诉」「退费」「知情同意」的前 5 名
+  // 整屏都是另一个领域的卡。**既有条目一条没改**——改的是召回集合，
+  // 而召回集合的改动不会让任何一条既有判据变红。所以闸要写在过滤器里，不写在文档里。
+  if (packDomain(meta) !== (opts.domain ?? DEFAULT_DOMAIN)) return false;
   if (opts.type && meta.type !== opts.type) return false;
   if (opts.applies_to && !meta.applies_to.includes(opts.applies_to)) return false;
   if (opts.region && meta.region !== opts.region && meta.region !== REGION_NATIONWIDE) return false;
@@ -383,6 +421,18 @@ export function search(query: string, opts: SearchOptions = {}): PackHit[] {
   const q = expandQuery(query.trim());
   if (!query.trim()) {
     throw new Error('knowledge.search 的 query 不能为空：调用方需先确认用户诉求关键词');
+  }
+  // 【域名字不认识就抛，不静默空手】拼错一个域名（`conseling`）此前的形态是：
+  // 过滤器一条都匹不上 ⇒ 回一个**空列表、200、无错误码**，上层把「没有相关卡」当成事实
+  // 讲给用户听。索引侧只在加载时管条目的 domain，查询侧此前无人管调用方传进来的那个。
+  if (opts.domain !== undefined && !isKnownDomain(opts.domain)) {
+    const known = [...new Set([...Object.keys(DOMAINS), ...loadIndex().map(packDomain)])];
+    throw new Error(
+      `knowledge.search 的 domain「${opts.domain}」不认识：` +
+        `现在认得的领域是 ${known.join('、')}（lib/domains 注册过的 + 库里的卡声明过的）。` +
+        '多半是拼错了；确实要新领域的话先把它的包挂进 lib/domains/registry 或把它的卡入库，' +
+        '不要靠调宽这道闸绕过——空列表与"这个域一张卡都没有"在回包里长得一模一样。',
+    );
   }
   const queryBigrams = bigrams(q);
   const limit = opts.limit ?? DEFAULT_LIMIT;

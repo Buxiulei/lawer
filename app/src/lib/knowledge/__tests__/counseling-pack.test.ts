@@ -1,0 +1,394 @@
+// app/src/lib/knowledge/__tests__/counseling-pack.test.ts
+// 心理咨询纠纷领域包（`domain: counseling`）的内容守卫（设计稿 §16 / P4-W2）。
+//
+// 【这道闸守的不是"卡写得好不好"，而是三类会静默发生的坏事】
+//  ① **索引与盘上不一致**：卡在盘上、index 里没有 domain（或反过来），
+//     于是"按领域检索"在上线那天返回一个正确的 200 与一批别的领域的卡；
+//  ② **核实状态被悄悄升档**：伦理守则条文只能人工核对 PDF，一旦有人把它标成"原文核实"，
+//     未经核对的条号就会被写进伦理申诉答辩书——而没有任何一处会报错；
+//  ③ **纪律条款被删掉**：四张待律师复核卡里的那句"未经律师书面确认不得作为结论输出"、
+//     热线卡里"只认 12356"的口径、对外文书的发出后果段——删掉之后卡片照常可读、照常被检索到。
+//
+// 判据一律读**真实的 knowledge/**（不是夹具），因为要防的正是"真实库与索引跑偏"。
+import fs from 'node:fs';
+import path from 'node:path';
+
+import { describe, expect, it } from 'vitest';
+
+import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
+
+const KNOWLEDGE_DIR = path.resolve(__dirname, '../../../../../knowledge');
+const COUNSELING_DIR = path.join(KNOWLEDGE_DIR, 'packs', 'counseling');
+const DOMAIN = 'counseling';
+
+interface IndexEntry {
+  id: string;
+  type: string;
+  title: string;
+  path: string;
+  confidence: string;
+  sources: string[];
+  domain?: string;
+  facts?: {
+    hotlines?: Array<{ phone: string; status: string; hours?: string }>;
+    case_facts?: Record<string, unknown>;
+  };
+}
+
+const INDEX: IndexEntry[] = JSON.parse(
+  fs.readFileSync(path.join(KNOWLEDGE_DIR, 'index.json'), 'utf-8'),
+);
+const COUNSELING = INDEX.filter((e) => e.domain === DOMAIN);
+
+/** 卡片正文（剥掉 frontmatter），按 id 取 */
+function body(id: string): string {
+  const entry = COUNSELING.find((e) => e.id === id);
+  if (!entry) throw new Error(`counseling 包里没有这张卡：${id}`);
+  const raw = fs.readFileSync(path.join(KNOWLEDGE_DIR, entry.path), 'utf-8');
+  const m = /^---\n[\s\S]*?\n---\n([\s\S]*)$/.exec(raw);
+  if (!m) throw new Error(`${entry.path} 缺少 frontmatter`);
+  return m[1];
+}
+
+/** 盘上 counseling 目录里的全部卡文件（相对 knowledge/） */
+function filesOnDisk(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const name of fs.readdirSync(dir)) {
+      const p = path.join(dir, name);
+      if (fs.statSync(p).isDirectory()) walk(p);
+      else if (name.endsWith('.md')) out.push(path.relative(KNOWLEDGE_DIR, p));
+    }
+  };
+  walk(COUNSELING_DIR);
+  return out.sort();
+}
+
+describe('index ⇄ packs/counseling/ 双向一致（变异：删掉任一张卡的 domain 字段 → 红）', () => {
+  it('判据自身不是空跑：counseling 包不是空的', () => {
+    expect(COUNSELING.length).toBeGreaterThan(30);
+  });
+
+  it('盘上的每张 counseling 卡都在 index 里、且带 domain=counseling', () => {
+    const disk = filesOnDisk();
+    const indexed = COUNSELING.map((e) => e.path).sort();
+    expect(
+      indexed,
+      '盘上有卡而 index 里没有（或 index 里那条缺 domain）⇒ 按领域检索会静默漏掉它',
+    ).toEqual(disk);
+  });
+
+  it('index 里标 counseling 的每一条，文件都在 packs/counseling/ 下且真实存在', () => {
+    for (const e of COUNSELING) {
+      expect(e.path.startsWith('packs/counseling/'), `${e.id} 的 path 不在 counseling 包内：${e.path}`).toBe(true);
+      expect(fs.existsSync(path.join(KNOWLEDGE_DIR, e.path)), `${e.id} 指向的文件不存在`).toBe(true);
+    }
+  });
+
+  it('counseling 包之外的卡一张都没被打上非缺省域（本票只加不改）', () => {
+    // 【为什么判"解析后的域"，而不是"有没有 domain 这个字段"】存量条目把 domain 留空、
+    // 与显式写成缺省域，对检索是同一件事（加载器补齐，见 lib/knowledge 的 PackMeta.domain）。
+    // 判"字段必须不存在"的形态是：生成器哪天把缺省域也显式写进 index.json，
+    // 这条就在几百张一个字没动过的存量卡上整批变红，而库其实没变；
+    // 而真正要拦的坏事——存量卡被打上 counseling（它从此对缺省域用户消失）——两种写法下都红。
+    const strays = INDEX.filter(
+      (e) => (e.domain ?? DEFAULT_DOMAIN) !== DEFAULT_DOMAIN && !e.path.startsWith('packs/counseling/'),
+    );
+    expect(
+      strays.map((e) => `${e.id}(${e.domain})`),
+      'counseling 包之外的卡被打上了非缺省域 ⇒ 它会从缺省域用户的检索结果里消失，而检索照常 200',
+    ).toEqual([]);
+  });
+});
+
+describe('设计稿 §16 的知识包清单齐备（变异：删掉任一张卡 → 红）', () => {
+  const REQUIRED_IDS: Record<string, string[]> = {
+    法条卡: [
+      'statute-jswsf-23-zixun-bianjie',
+      'statute-jswsf-28-30-31-weiji-songyi',
+      'statute-grxxbhf-28-31-mingan-xinxi',
+      'statute-mfd-1032-1033-yinsi',
+      'statute-mfd-933-weituo-jiechu',
+      'statute-mfd-188-susong-shixiao',
+      'statute-xbf-26-55-geshi-tiaokuan-chengfa',
+      // 伦理卡沿用「法条卡」这一类型（卡片类型体系跨领域不变，设计稿 §13）
+      'ethic-lunli-3-2-baomi-liwai',
+      'ethic-lunli-1-8-1-10-shuangchong-guanxi',
+      'ethic-lunli-8-2-8-3-yuancheng-fuwu',
+    ],
+    流程SOP: [
+      'sop-tuifei-zhengyi',
+      'sop-liaoxiao-zhengyi',
+      'sop-jianguan-xiehui-tousu',
+      'sop-mingyu-qinquan-yingdui',
+      'sop-yinsi-xielou-zhikong',
+      'sop-lunli-shensu-yingdui',
+      'sop-zishang-shijian-zhuize',
+      'sop-zhiqing-tongyi-quexian',
+    ],
+    文书模板: [
+      'template-zhiqing-tongyishu',
+      'template-baomi-gaozhi-liwai',
+      'template-weiji-chuzhi-jilu',
+      'template-zhuanjie-han',
+      'template-tousu-dafu-han',
+      'template-tuifei-xieyi',
+      'template-tingzhi-fuwu-tongzhi',
+      'template-lvshihan-yingdui-yaodian',
+      'template-lunli-shensu-dabianshu',
+    ],
+    数据卡: ['data-counseling-weiji-rexian', 'data-counseling-shixiao-qixian'],
+    判例卡: ['case-guge-mingyu-quan', 'case-dongni-lisongwei-weizhongshen', 'case-sichuan-tuifei-7500'],
+    方法卡: [
+      'method-counseling-panli-heyan',
+      'risk-qiangzhi-baogao-zhuti',
+      'risk-hetong-dingxing',
+      'risk-jilu-baocun-nianxian',
+      'risk-difang-xuke-beian',
+    ],
+    话术卡: ['script-laifang-tousu-goutong', 'script-weiji-tonghua-huashu'],
+  };
+
+  for (const [type, ids] of Object.entries(REQUIRED_IDS)) {
+    it(`${type}：${ids.length} 张都在，且 type 对得上`, () => {
+      for (const id of ids) {
+        const e = COUNSELING.find((x) => x.id === id);
+        expect(e, `counseling 包缺卡：${id}`).toBeDefined();
+        expect(e!.type, `${id} 的 type 不对`).toBe(type);
+      }
+    });
+  }
+
+  it('SOP 恰好覆盖 8 类纠纷，文书模板恰好 9 类（多写少写都要有人看见）', () => {
+    expect(COUNSELING.filter((e) => e.type === '流程SOP')).toHaveLength(8);
+    expect(COUNSELING.filter((e) => e.type === '文书模板')).toHaveLength(9);
+  });
+});
+
+describe('🔴 核实纪律：伦理守则只能人工核对 PDF，不得机器抽取后升档', () => {
+  const ETHIC_IDS = [
+    'ethic-lunli-3-2-baomi-liwai',
+    'ethic-lunli-1-8-1-10-shuangchong-guanxi',
+    'ethic-lunli-8-2-8-3-yuancheng-fuwu',
+  ];
+
+  it.each(ETHIC_IDS)('%s 必须标「待核实」且正文写明需人工核对 PDF（变异：改成原文核实 → 红）', (id) => {
+    const e = COUNSELING.find((x) => x.id === id)!;
+    expect(e.confidence, `${id} 被升档了——伦理守则官方 PDF 机器抽取不可靠，本票只能标待核实`).toBe('待核实');
+    expect(body(id)).toMatch(/待核实（需人工核对\s*PDF）/);
+  });
+
+  it('伦理卡不得把条文塞进 facts.statute_quotes（那是给代码当逐字依据用的面）', () => {
+    for (const id of ETHIC_IDS) {
+      const raw = fs.readFileSync(path.join(KNOWLEDGE_DIR, COUNSELING.find((x) => x.id === id)!.path), 'utf-8');
+      expect(raw.includes('statute_quotes'), `${id} 把未核实条文放进了 statute_quotes`).toBe(false);
+    }
+  });
+});
+
+describe('🔴 核实纪律：标「原文核实」的卡，来源必须是官方源', () => {
+  // 白名单只收官方域（国家法律法规数据库、人大、政府网、法院、检察院、网信办）。
+  // 变异：把某张法条卡的 source 换成期刊/新闻页而保留「原文核实」→ 红。
+  const OFFICIAL = /^https?:\/\/([a-z0-9-]+\.)*(npc\.gov\.cn|gov\.cn|court\.gov\.cn|spp\.gov\.cn)\//;
+
+  it('每张 confidence=原文核实 的 counseling 卡，其 sources 全部落在官方域', () => {
+    const verified = COUNSELING.filter((e) => e.confidence === '原文核实');
+    expect(verified.length, '一张原文核实的卡都没有 ⇒ 这条判据在空跑').toBeGreaterThan(6);
+    for (const e of verified) {
+      for (const s of e.sources) {
+        // 方法卡的 source 是库内相对路径（引用劳动包的方法本体），不是外部 URL
+        if (s.startsWith('knowledge/packs/')) continue;
+        expect(OFFICIAL.test(s), `${e.id} 标了原文核实，但来源不是官方源：${s}`).toBe(true);
+      }
+    }
+  });
+
+  it('七张法条卡（非伦理卡）全部是原文核实，且正文带取回日期', () => {
+    const ids = [
+      'statute-jswsf-23-zixun-bianjie',
+      'statute-jswsf-28-30-31-weiji-songyi',
+      'statute-grxxbhf-28-31-mingan-xinxi',
+      'statute-mfd-1032-1033-yinsi',
+      'statute-mfd-933-weituo-jiechu',
+      'statute-mfd-188-susong-shixiao',
+      'statute-xbf-26-55-geshi-tiaokuan-chengfa',
+    ];
+    for (const id of ids) {
+      expect(COUNSELING.find((e) => e.id === id)!.confidence, id).toBe('原文核实');
+      expect(body(id), `${id} 正文没写取回日期`).toMatch(/取回日期\s*2026-09-06/);
+    }
+  });
+});
+
+describe('🔴 四张待律师复核风险卡：那句输出闸不能被删', () => {
+  const RISK_IDS = [
+    'risk-qiangzhi-baogao-zhuti',
+    'risk-hetong-dingxing',
+    'risk-jilu-baocun-nianxian',
+    'risk-difang-xuke-beian',
+  ];
+
+  it.each(RISK_IDS)('%s 正文含「未经律师书面确认不得作为结论输出」（变异：删掉该句 → 红）', (id) => {
+    expect(body(id)).toContain('未经律师书面确认不得作为结论输出');
+  });
+
+  it('四张风险卡都标 待核实（拿不准的事不许标已核实）', () => {
+    for (const id of RISK_IDS) expect(COUNSELING.find((e) => e.id === id)!.confidence, id).toBe('待核实');
+  });
+});
+
+describe('🔴 危机热线口径：只认 12356 及其官方出处', () => {
+  it('counseling 域内 status=usable 的号码只有 12356 / 110 / 120', () => {
+    const usable = COUNSELING.flatMap((e) => e.facts?.hotlines ?? [])
+      .filter((h) => h.status === 'usable')
+      .map((h) => h.phone)
+      .sort();
+    expect(usable).toEqual(['110', '120', '12356']);
+  });
+
+  it('「希望24热线」记为 forbidden（非官方发布，本包不输出）', () => {
+    const forbidden = COUNSELING.flatMap((e) => e.facts?.hotlines ?? [])
+      .filter((h) => h.status === 'forbidden')
+      .map((h) => h.phone);
+    expect(forbidden).toContain('400-161-9995');
+  });
+
+  it('12356 的官方出处（国卫医政函〔2024〕259号）逐字进了热线卡正文', () => {
+    const t = body('data-counseling-weiji-rexian');
+    expect(t).toContain('国卫医政函〔2024〕259 号');
+    // 引号用官方页面的**弯引号**（gov.cn 原文如此）。判据钉直引号的形态是：
+    // 后人照官方原文把引号改回去，判据反而红——把一个非逐字的形态钉成了标准。
+    expect(t).toContain('我委协调工业和信息化部设置“12356”作为全国统一心理援助热线电话号码。');
+    expect(t).toContain('实现拨打“12356”电话号码接通心理援助热线的功能。');
+    // 官方给的是「每日不少于18小时」，不是 24 小时——升级成 24 小时就是编数字
+    expect(t).toContain('每日提供不少于18小时心理援助服务');
+    expect(t).not.toMatch(/12356[^\n]*24\s*小时/);
+  });
+});
+
+describe('🔴 热线服务时间：盯的是 facts.hours（代码读的那一面），不是正文散文', () => {
+  // 【为什么正文判据不够】README §2.1：代码只读 facts，禁啃正文。
+  // knowledge_search 的可用热线表、危机路径输出的服务时间，取的都是 facts.hotlines[].hours。
+  // 只盯正文的形态是——把 facts 的 hours 从「每日不少于18小时」改成「24小时」、正文一个字不动，
+  // 生成器过、上面那条正文判据全绿，而 agent 转给来访的服务时间已经是编出来的 24 小时。
+  const CARD = 'data-counseling-weiji-rexian';
+  const hotlines = () => COUNSELING.find((e) => e.id === CARD)!.facts!.hotlines!;
+  /** 空白/加粗符归一，与生成器 normalize 同口径（正文写「18 小时」、facts 写「18小时」） */
+  const norm = (t: string) => t.replace(/[\s>＞*　]/g, '');
+
+  it('12356 的 facts.hours 就是官方口径「每日不少于18小时」（变异：改成 24小时 → 红）', () => {
+    const h = hotlines().find((x) => x.phone === '12356')!;
+    expect(h.hours, '12356 的服务时间被改动了：官方 259 号文给的是最低要求「每日不少于18小时」').toBe(
+      '每日不少于18小时',
+    );
+    expect(h.hours).not.toMatch(/24\s*小时/);
+  });
+
+  it('每条 usable 热线的 facts.hours 都能在正文号码表**它自己那一行**里逐字找到', () => {
+    const t = body(CARD);
+    const rows = t.split('\n').filter((line) => line.trim().startsWith('|'));
+    for (const h of hotlines()) {
+      if (h.status !== 'usable') continue;
+      expect(h.hours, `${h.phone} 是 usable 却没有 hours（代码要拿它显示服务时间）`).toBeTruthy();
+      const own = rows.filter((line) => norm(line).includes(norm(h.phone)));
+      expect(own.length, `正文号码表里找不到 ${h.phone} 那一行，两面无从比对`).toBe(1);
+      const cells = own[0].split('|').map(norm);
+      expect(
+        cells,
+        `${h.phone}：facts 写「${h.hours}」，而正文那一行里没有这个服务时间——` +
+          '两面分叉时代码用的是 facts，用户看到的是 facts，正文只是没人读的说明',
+      ).toContain(norm(h.hours!));
+    }
+  });
+});
+
+describe('🔴 对外文书必带发出后果；内部记录不得带', () => {
+  const OUTBOUND = [
+    'template-zhiqing-tongyishu',
+    'template-baomi-gaozhi-liwai',
+    'template-zhuanjie-han',
+    'template-tousu-dafu-han',
+    'template-tuifei-xieyi',
+    'template-tingzhi-fuwu-tongzhi',
+    'template-lvshihan-yingdui-yaodian',
+    'template-lunli-shensu-dabianshu',
+  ];
+
+  it.each(OUTBOUND)('%s 有「发出后果（send_consequences）」段（变异：删掉该段 → 红）', (id) => {
+    expect(body(id)).toMatch(/##\s*发出后果（send_consequences）/);
+  });
+
+  it('危机处置记录是内部记录：不写发出后果，且明写不送达', () => {
+    const t = body('template-weiji-chuzhi-jilu');
+    expect(t).not.toMatch(/##\s*发出后果/);
+    expect(t).toContain('**不送达。**');
+  });
+});
+
+describe('🔴 判例纪律：无真实案号绝不编造；未终审要标出来', () => {
+  const CASE_IDS = ['case-guge-mingyu-quan', 'case-dongni-lisongwei-weizhongshen', 'case-sichuan-tuifei-7500'];
+
+  it.each(CASE_IDS)('%s 的 facts.case_facts 不含 case_no（没有就是没有，不填占位）', (id) => {
+    const e = COUNSELING.find((x) => x.id === id)!;
+    expect(e.facts?.case_facts).toBeDefined();
+    expect(Object.keys(e.facts!.case_facts!)).not.toContain('case_no');
+  });
+
+  it('三张判例卡都不出现形如 (2024)京0491民初1号 的案号（编造案号的典型形态）', () => {
+    for (const id of CASE_IDS) {
+      expect(body(id), `${id} 出现了案号样式的字符串`).not.toMatch(/[（(]\s*\d{4}\s*[)）]\s*[一-龥]/);
+    }
+  });
+
+  it('冬妮案必须标「未终审」，并禁止被当作裁判倾向', () => {
+    const t = body('case-dongni-lisongwei-weizhongshen');
+    expect(t).toContain('未终审');
+    expect(t).toContain('不可用（仅内部参考）');
+  });
+});
+
+describe('🔴 待核实卡：卡内可 grep 定位，且逐卡登记在 TODO核实清单', () => {
+  // 【为什么这两条要机检】清单里写着「卡内均有精确【待核实】标记，可 grep 定位」——
+  // 而实测有 9 张卡正文里一个「待核实」都没有，只有 frontmatter 一行 confidence。
+  // 维护者按那句话去 grep 定位"这张卡为什么待核实"，得到的是空结果：
+  // **一句关于自己的、不成立的说明，比没有说明更贵**——它让人以为找不到就是自己搜错了。
+  // 登记同理：H1—H5 是按未决项分组的，而升档是按卡做的，没有逐卡表就答不出"这张能不能升"。
+  const PENDING = COUNSELING.filter((e) => e.confidence === '待核实');
+  const TODO_DOC = fs.readFileSync(path.join(KNOWLEDGE_DIR, 'TODO核实清单.md'), 'utf-8');
+  /** 两种写法都算：【待核实】与【待核实：需核对…】 */
+  const MARK = /【待核实[】：]/;
+
+  it('判据自身不空跑：待核实卡有 30 张以上', () => {
+    expect(PENDING.length).toBeGreaterThan(30);
+  });
+
+  it.each(PENDING.map((e) => e.id))('%s 正文里有【待核实】标记（变异：删掉该段 → 红）', (id) => {
+    expect(body(id), `${id} 标了 confidence=待核实，正文却一个标记都没有——grep 不到就等于没登记`).toMatch(
+      MARK,
+    );
+  });
+
+  it('每张待核实卡都在 knowledge/TODO核实清单.md 里被 id 点名（变异：删掉 §H6 任一行 → 红）', () => {
+    const missing = PENDING.map((e) => e.id).filter((id) => !TODO_DOC.includes(id));
+    expect(
+      missing,
+      `这些待核实卡没在清单里登记：${missing.join('、')}；` +
+        '按 README §4.2 逐卡登记（pack id · 待核实点 · 途径），否则升档时无人知道它卡在哪一项。',
+    ).toEqual([]);
+  });
+});
+
+describe('🔴 来访者信息最小化：全包不得出现真实个人信息样式的串', () => {
+  it('没有一张 counseling 卡的正文出现 11 位手机号或 15/18 位证件号样式', () => {
+    for (const e of COUNSELING) {
+      const t = body(e.id);
+      expect(t, `${e.id} 疑似出现手机号`).not.toMatch(/(?<!\d)1[3-9]\d{9}(?!\d)/);
+      expect(t, `${e.id} 疑似出现身份证号`).not.toMatch(/(?<!\d)\d{17}[\dXx](?!\d)/);
+    }
+  });
+
+  it('模板里的来访一律以化名/编号出现（知情同意书与退费协议不收真实姓名字段）', () => {
+    expect(body('template-zhiqing-tongyishu')).toContain('本机构档案仅以化名/编号记载');
+    expect(body('template-weiji-chuzhi-jilu')).toContain('来访化名/编号');
+  });
+});

@@ -201,6 +201,11 @@ def main() -> None:
         entry = {f: str(fm.get(f, "")) if f == "updated" else fm.get(f, "") for f in INDEX_FIELDS}
         entry["domain"] = domain_of(path, fm)
         entry["path"] = str(path.relative_to(ROOT))
+        # domain：领域键（设计稿 §13「知识库 index 增 domain 字段」）。**只在卡片自己声明时导出**，
+        # 不给未声明的卡填默认值——填默认值会把 218 张既有卡一起改写，而"这张卡属于哪个领域"
+        # 的真源本就该在卡里，不在生成器里。消费方读不到该字段时按默认领域处理。
+        if fm.get("domain"):
+            entry["domain"] = fm["domain"]
         if fm.get("law_refs"):
             entry["law_refs"] = fm["law_refs"]
         if fm.get("facts"):
