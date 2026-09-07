@@ -150,10 +150,13 @@ POST /api/v1/realname/passport	post_v1_realname_passport	bearer	[]	{}
 GET /api/v1/me/consents	get_v1_me_consents	bearer	[]	{}
 POST /api/v1/me/consents	post_v1_me_consents	bearer	[]	{}
 POST /api/v1/me/cancel	post_v1_me_cancel	bearer	[]	{}
+POST /api/v1/complaints	post_v1_complaints	bearer	[]	{}
+GET /api/v1/complaints	get_v1_complaints	bearer	[]	{}
 GET /api/v1/admin/audit	get_v1_admin_audit	bearer	[]	{}
 GET /api/v1/admin/users	get_v1_admin_users	bearer	[]	{}
 POST /api/v1/admin/users/{uid}/gongdao	post_v1_admin_users_by_uid_gongdao	bearer	[path:uid!]	{}
 POST /api/v1/admin/users/{uid}/membership	post_v1_admin_users_by_uid_membership	bearer	[path:uid!]	{}
+GET /api/v1/admin/complaints	get_v1_admin_complaints	bearer	[]	{}
 GET /api/v1/admin/codes	get_v1_admin_codes	bearer	[]	{}
 POST /api/v1/admin/codes	post_v1_admin_codes	bearer	[]	{}
 GET /api/v1/admin/realname/pending	get_v1_admin_realname_pending	bearer	[]	{}

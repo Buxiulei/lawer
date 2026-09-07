@@ -113,6 +113,30 @@ const DOMAIN_SPECIFIC_FILES = [
   'app/_mock/workbench.ts',
 ];
 
+/**
+ * **第二张单子：法律文书。** 与上面那张的理由完全不同，所以不合并。
+ *
+ * DOMAIN_SPECIFIC_FILES 的理由是「这一页本来就只服务缺省领域」——那句话对协议正文页是**假的**：
+ * 每一个领域的用户都要读它，而且是在注册之前读。它含领域名不是漏网，是它的**体裁要求**：
+ * 一份合同要列举自己覆盖哪几类纠纷、每类的服务对象是谁、每类的显式标识后半句是什么。
+ * 把它塞进上面那张单子的形态是：单子上多一条理由为假的记录，而这份判据的头注释里
+ * 已经记着一次同样的教训（六处页面当初以那个名义进名单，那句理由对它们是假的）。
+ *
+ * 【代价，写在这里不遮掩】这张单子上的文件同样不受词表守卫保护：谁往协议正文里
+ * 再写一句只对某一个领域成立的话，这道闸不响。换来的是**另一条判据**——
+ * app/__tests__/terms-page.test.tsx 的「领域条数」那条：注册表里领域数一变，它就红，
+ * 逼着人回来逐条核协议里点名领域的那几款。这是"按词表拦"换成"按清单对账"，不是豁免。
+ *
+ * 【什么能进这张单子】只有**对外发生法律效力、且必须逐一列举适用范围**的文书。
+ * 说明页、同意页、清单页都不算（/terms/overseas、/terms/processors 都在闸内，
+ * 它们说的是跨领域同一套的事）。
+ */
+const LEGAL_INSTRUMENT_FILES = [
+  // 《用户服务协议》正文：第二条第 5 款列服务范围、第四条第 1 款逐个行当写标识后半句、
+  // 第五条第 4 款写两个行当的分享页脱敏差异——每一处都是"合同在列举自己覆盖什么"。
+  'app/terms/page.tsx',
+];
+
 /** 递归收集 .ts/.tsx，跳过 __tests__ */
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of fs.readdirSync(dir).sort()) {
@@ -129,7 +153,7 @@ function walk(dir: string, out: string[] = []): string[] {
 
 const SCANNED = [...walk(path.join(SRC_ROOT, 'app')), ...walk(path.join(SRC_ROOT, 'components'))];
 const rel = (file: string) => path.relative(SRC_ROOT, file);
-const allowed = new Set(DOMAIN_SPECIFIC_FILES);
+const allowed = new Set([...DOMAIN_SPECIFIC_FILES, ...LEGAL_INSTRUMENT_FILES]);
 
 /**
  * 剥掉块注释与行注释。**`//` 前面紧挨着冒号的不剥**（`http://`）——
@@ -167,7 +191,7 @@ describe('页面与共享组件里不许写死领域内容（设计稿 §13-6）
   });
 
   it('白名单里的每个文件都真的存在（改名或删掉之后名单还留着 → 红）', () => {
-    const missing = DOMAIN_SPECIFIC_FILES.filter(
+    const missing = [...DOMAIN_SPECIFIC_FILES, ...LEGAL_INSTRUMENT_FILES].filter(
       (f) => !fs.existsSync(path.join(SRC_ROOT, f)),
     );
     expect(missing, `白名单里这些文件已经不在了，删掉对应的行：\n  ${missing.join('\n  ')}`).toEqual(
@@ -176,12 +200,12 @@ describe('页面与共享组件里不许写死领域内容（设计稿 §13-6）
   });
 
   it('白名单里的每个文件都还含着领域词（清干净了就该出名单，别留一张通行证）', () => {
-    const clean = DOMAIN_SPECIFIC_FILES.filter(
+    const clean = [...DOMAIN_SPECIFIC_FILES, ...LEGAL_INSTRUMENT_FILES].filter(
       (f) => fs.existsSync(path.join(SRC_ROOT, f)) && wordsIn(path.join(SRC_ROOT, f)).length === 0,
     );
     expect(
       clean,
-      `这些文件已经不含领域字面量了，把它们从 DOMAIN_SPECIFIC_FILES 里删掉：\n  ${clean.join('\n  ')}\n` +
+      `这些文件已经不含领域字面量了，把它们从名单里删掉：\n  ${clean.join('\n  ')}\n` +
         '留着的形态是：以后有人往这里写回一句领域文案，闸不会响。',
     ).toEqual([]);
   });
@@ -196,6 +220,15 @@ describe('页面与共享组件里不许写死领域内容（设计稿 §13-6）
       'app/(app)/intake/_components/schemaFlow.ts',
       'app/(app)/intake/_components/SchemaField.tsx',
       'app/api/v1/domains/route.ts',
+      // 条款族里**只有协议正文**在单子上。这三张是说明/同意/清单页，
+      // 说的是跨领域同一套的事，必须留在闸内——它们一旦开始写某个行当的话，
+      // 这道闸就该响（那正是"境外模型说明页里出现只对某个行当成立的例子"这类事故）。
+      'app/terms/overseas/page.tsx',
+      'app/terms/overseas/OverseasDetails.tsx',
+      'app/terms/processors/page.tsx',
+      'app/terms/processors/processors.ts',
+      'app/(app)/settings/help/page.tsx',
+      'app/(app)/settings/help/_components/ComplaintForm.tsx',
     ]) {
       expect(SCANNED.map(rel), `${f} 不在扫描范围里`).toContain(f);
       expect(allowed.has(f), `${f} 不该在白名单里`).toBe(false);

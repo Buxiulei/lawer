@@ -1,4 +1,7 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
+import { HELP_COMPLAINTS_HREF, HELP_COMPLAINTS_TITLE } from '@/app/_ui/termsLinks';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/shadcn/card';
 import { AgentKeyCards } from './_components/AgentKeyCards';
 import { DataRightsCard } from './_components/DataRightsCard';
 import { PreferencesCard } from './_components/PreferencesCard';
@@ -28,6 +31,27 @@ export default function SettingsPage() {
             撤回同意后两条通路回给用户的那句话就是把人指到这儿的（见 DataRightsCard 抬头）。 */}
         <DataRightsCard />
         <PreferencesCard />
+        {/* 投诉/举报/个人信息权利请求的入口。**恒常在场**——它与别的卡不同，
+            要找它的人多半正在气头上或正要行使删除权，一张"有记录才显示"的卡等于没有入口
+            （《生成式人工智能服务管理暂行办法》第十五条要的是"便捷的投诉、举报入口"）。
+            正文与表单在 /settings/help，这里只留一条指过去的路。 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>{HELP_COMPLAINTS_TITLE}</CardTitle>
+          </CardHeader>
+          <CardContent className="text-[14px] leading-7 text-ink-2">
+            <p>
+              服务出了问题、看到违法或侵权的生成内容、或者要查阅、更正、删除自己的个人信息，
+              都从这里提；提交后会给你一个受理编号。
+            </p>
+            <Link
+              href={HELP_COMPLAINTS_HREF}
+              className="mt-2 inline-block text-primary-ink underline underline-offset-4"
+            >
+              去{HELP_COMPLAINTS_TITLE}
+            </Link>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

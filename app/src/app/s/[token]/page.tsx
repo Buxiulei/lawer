@@ -16,6 +16,22 @@ import { readShare } from '@/lib/shares';
 
 export const metadata: Metadata = { title: '分享内容' };
 
+/**
+ * **没有声明敏感级的领域**，分享页上正文之前的那一句（协议第五条第 4 款末句：
+ *「劳动争议领域的分享页不做替换，正文按原样展示。」）。
+ *
+ * 【为什么"不脱敏"也要说一句】此前这一页只在**脱敏过**的时候说话，不脱敏时什么也不说。
+ * 那个形态是：拿到链接的人读到一份看起来干干净净的正文，无从知道里面的手机号、
+ * 身份证号、公司名就是真的——他可能顺手转发到一个群里。
+ * 而分享的人这一侧同样读不到任何提示：他以为"平台大概会处理一下"。
+ * 沉默在这里不是中立，它让两边各自补上了一个对自己有利的假设。
+ *
+ * 【为什么措辞里不提领域名】这一页是共用层，第二个领域的用户也会打开它
+ *（app/__tests__/page-domain-guard.test.ts 按文件拦领域字面量）。
+ * "这一份有没有被替换过"是按案件所属领域的 sensitive 声明判的，不是按名字判的。
+ */
+export const NO_REDACTION_NOTICE = '本页内容未脱敏，按原样展示。';
+
 // 链接可能在任何一刻被撤销：缓存住等于撤销失效。
 export const dynamic = 'force-dynamic';
 
@@ -68,11 +84,15 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
           />
         )}
 
-        {/* 敏感级那句话排在正文与明细**之前**：排在后面的形态是，读的人先看见一串
-            〔已脱敏〕、以为出了故障，翻到底才读到解释——而多数人翻不到底就去问人了。 */}
-        {result.state === 'ok' && result.view.redact_notice !== null && (
+        {/* 「这一份被替换过没有」排在正文与明细**之前**，两条路都排。
+            排在后面的形态是，读的人先看见一串〔已脱敏〕、以为出了故障，
+            翻到底才读到解释——而多数人翻不到底就去问人了；
+            不脱敏那一路更甚：他读完整篇才知道刚才看的每个号码都是真的。
+            两个分支共用同一个位置与同一种画法，是为了让"这一页说过它有没有脱敏"
+            成为**恒真**的一件事，而不是取决于走到了哪一路。 */}
+        {result.state === 'ok' && (
           <p className="prose-measure mb-5 rounded-lg border border-line bg-surface p-4 text-[13px] leading-6 text-ink-2">
-            {result.view.redact_notice}
+            {result.view.redact_notice ?? NO_REDACTION_NOTICE}
           </p>
         )}
 

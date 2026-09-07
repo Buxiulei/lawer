@@ -22,6 +22,7 @@ import { cn } from '@/app/_ui/cn';
 export const WOO_TABS = [
   { href: '/woo/users', label: '账号' },
   { href: '/woo/codes', label: '兑换码' },
+  { href: '/woo/complaints', label: '投诉' },
 ] as const;
 
 export function WooNav() {

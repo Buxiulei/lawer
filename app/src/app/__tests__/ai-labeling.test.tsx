@@ -177,19 +177,36 @@ describe('生成合成内容标识规范说明那一页（标识办法 §8）', 
   });
 
   /**
-   * 【自称必须与事实一致】此前这一页开头写着"是用户服务协议里的那一节"，
-   * 而那份协议还没起草——读的人会去找它，一处都找不到。
-   * 一句无法兑现的自称比不写更糟：它把"还没写"包装成"写过了，在别处"。
+   * 【自称必须与事实一致】这条判据换过一次口径，换的理由本身就是它要守的东西：
    *
-   * 【变异臂】把标题改回「…标识说明」并删掉括号那半句 ⇒ 这条红。
+   * 2026-09-07 之前，协议还没起草，这一页写着「本平台的用户服务协议尚未起草」，
+   * 标题也带着「（用户服务协议起草后并入）」——那时那是实话，本条钉的就是那句实话。
+   * /terms 上线之后，同一句话变成**一句过期的实话**：读的人据它以为没有协议，
+   * 于是不会去找那一份，而 §8 要的"在用户服务协议中明确说明"看起来仍然没落地。
+   *
+   * 所以现在钉的是新的事实：这一页自称是协议第四条的组成部分，**且给得出一条能点过去的路**。
+   * 只改文案不给链接的形态是：页面上说"它是协议的一部分"，而那份协议在这一页上找不到。
+   *
+   * 【变异臂】把「第四条的组成部分」那句删掉 ⇒ 红；把指向 /terms 的链接删掉 ⇒ 红；
+   * 把标题改回带括号的旧自称 ⇒ 红（旧自称里那半句现在是假的）。
    */
-  it('自称说清了协议还没起草（变异：把括号那半句删掉 → 红）', async () => {
-    const body = await termsText();
+  it('自称是协议第四条的组成部分，且指得过去（变异：删掉那句或那条链接 → 红）', async () => {
+    const { TERMS_HREF, TERMS_TITLE } = await import('@/app/_ui/termsLinks');
+    const { default: TermsPage } = await import('@/app/terms/ai-labeling/page');
+    const html = ssr(<TermsPage />);
+    const body = text(html);
     expect(AI_LABELING_TERMS_TITLE).toContain('规范说明');
-    expect(AI_LABELING_TERMS_TITLE).toContain('用户服务协议起草后并入');
+    expect(AI_LABELING_TERMS_TITLE, '协议已经在线，标题里不该再说它"起草后并入"').not.toContain(
+      '起草后并入',
+    );
     expect(body, '页面标题没用那个自称').toContain(AI_LABELING_TERMS_TITLE);
-    expect(body, '正文里没交代协议还没起草').toContain('用户服务协议尚未起草');
-    // 链接文案是标题去掉括号那半句：两处对不上时，点进来的人会以为走错了页
+    expect(body, '正文里没说清它与协议的关系').toContain('第四条的组成部分');
+    expect(body, '正文里还留着"协议尚未起草"这句过期的话').not.toContain('用户服务协议尚未起草');
+    expect(html, '说是协议的一部分，却没有一条能点到协议的链接').toContain(
+      `href="${TERMS_HREF}"`,
+    );
+    expect(body).toContain(TERMS_TITLE);
+    // 链接文案与标题一致：两处对不上时，点进来的人会以为走错了页
     expect(AI_LABELING_TERMS_TITLE.startsWith(AI_LABELING_TERMS_LINK_TEXT)).toBe(true);
   });
 
