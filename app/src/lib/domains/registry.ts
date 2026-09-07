@@ -255,6 +255,20 @@ export interface DomainSensitivity {
   redactNotice: string;
 }
 
+/**
+ * 首诊结束时种下的一条自查提醒（「现在做这三件事」里的一件）。
+ *
+ * 【dueInDays 是自查提醒，不是法定期限】它算出来的是「几天内自己做完」，
+ * 与 lib/deadline 的法定期限不是一回事：落库时进 action_items.due_at，不进 deadlines。
+ * 两者混同的形态是——一条"三天内导出材料"的自查提醒被当成时效摆在期限栏里。
+ */
+export interface IntakeActionSeed {
+  title: string;
+  detail: string;
+  /** 距今天几天到期，null = 不设期限 */
+  dueInDays: number | null;
+}
+
 /** 一个领域包要提供的东西。**每一项都必填**：缺项由 assertDomainPack 在启动时点名。 */
 export interface DomainPack {
   /** 领域键，与 cases.domain 落库值同一份取值 */
@@ -278,6 +292,19 @@ export interface DomainPack {
   tracks: readonly string[];
   /** 首诊表 schema：字段、必填、校验规则与问法 */
   intakeSchema: readonly IntakeFieldSpec[];
+  /**
+   * 首诊做完给的**那三件事**，按阶段一份（键必须是本领域的 stage）。
+   *
+   * 【为什么它非得按领域打包】这三条是纯粹的行当知识——"下次约谈前打开手机录音"
+   * 这句话对另一个行当的用户毫无意义。而它此前是一张**按上一个领域的阶段名建键**的
+   * 共用层常量：第二个领域的 stage 在表里一个都对不上，`?? []` 于是给 0 条种子，
+   * 首诊回包 actionsAdded=0、没有任何一处报错——用户做完首诊，"现在做这三件事"
+   * 那一屏是空的，而他不会知道这是个故障还是"这个阶段本来就没事可做"。
+   *
+   * **每个 stage 都必须有一项**（没有种子的阶段给空数组）：空数组是"这个阶段确实不给"
+   * 这个结论，缺键是"忘了填"，两者在产出上同形（都是 0 条），只能在这里分开。
+   */
+  intakeStageActions: Readonly<Record<string, readonly IntakeActionSeed[]>>;
   /**
    * 首诊要不要顺手落一条法定期限，以及落哪一条。
    *
@@ -479,6 +506,20 @@ export function assertDomainPack(pack: DomainPack): void {
   // tracks 允许为空数组，但必须是数组——undefined 是"忘了填"，[] 是"没有并行轨"
   if (!Array.isArray(pack.tracks)) missing.push('tracks');
   arr('intakeSchema', pack.intakeSchema);
+  // 首诊种子表：键必须**恰好**是本领域的 stages。
+  // 缺一个键 = 那个阶段的用户做完首诊拿到 0 条待办且不报错；多一个键 = 那份文案永远画不出来，
+  // 两种都不会崩，只会静静地不工作，所以在装载时点名。
+  if (!pack.intakeStageActions || typeof pack.intakeStageActions !== 'object') {
+    missing.push('intakeStageActions');
+  } else if (Array.isArray(pack.stages)) {
+    const declared = new Set(Object.keys(pack.intakeStageActions));
+    for (const stage of pack.stages) {
+      if (!declared.has(stage)) missing.push(`intakeStageActions 缺阶段「${stage}」（没有种子就给空数组）`);
+    }
+    for (const key of declared) {
+      if (!pack.stages.includes(key)) missing.push(`intakeStageActions 多出「${key}」——它不是本领域的阶段`);
+    }
+  }
   arr('factsSections', pack.factsSections);
   arr('reportSections', pack.reportSections);
   arr('deadlineKinds', pack.deadlineKinds);

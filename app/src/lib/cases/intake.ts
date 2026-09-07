@@ -21,7 +21,7 @@ import type { DomainPack, IntakeFieldSpec } from '@/lib/domains/registry';
 import { insertActionItem, insertDeadline, upsertCompanyProfileByRole } from '@/lib/db/agent';
 import * as store from '@/lib/db/cases';
 import { nowSql } from '@/lib/db/time';
-import { INTAKE_STAGE_ACTIONS, intakeActionDueAt, intakeActionPriority } from './intake-actions';
+import { intakeActionDueAt, intakeActionPriority } from './intake-actions';
 import type { CaseStage } from './stages';
 
 /** 首诊里公司给过哪些文件的三问，键与前端 draft 同名 */
@@ -272,7 +272,7 @@ function persist(
   }
 
   // ── 三件事：种子表与首诊第 6 步画的是同一份 ──
-  const seeds = INTAKE_STAGE_ACTIONS[value.stage] ?? [];
+  const seeds = pack.intakeStageActions[value.stage] ?? [];
 
   // ── 法定期限：只有拿得到真起算点、且本领域声明了要落，才落 ──
   const anchor = datedDays.length > 0 ? datedDays.slice().sort()[0] : null;

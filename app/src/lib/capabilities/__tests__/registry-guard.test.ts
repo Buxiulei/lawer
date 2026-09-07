@@ -153,6 +153,12 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
       //   保护它的那句话怎么说"被写死在了共用层，而第二个声明敏感级的领域接进来时，
       //   它的分享页会印着上一个行当的措辞，且照常返回 200。
       'lib/sensitive.ts',
+      // ↓ P4-W3 清干净并纳入守卫：首诊「现在做这三件事」的种子表整份搬进了
+      //   DomainPack.intakeStageActions，本文件只剩到期时刻与轻重顺序两个换算。
+      //   它此前是这份名单外最大的一处敞口——一张**按某个领域的阶段名建键**、
+      //   写满那个行当做法的表，住在共用层；第二个领域接进来时 stage 一个都对不上，
+      //   `?? []` 给 0 条种子，首诊回包 actionsAdded=0 且不报错。
+      'lib/cases/intake-actions.ts',
     ].map((f) => path.join(SRC_ROOT, f)),
   ];
 
@@ -172,7 +178,7 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
   });
 
   it('守卫扫到的确实是那几个文件（空名单会让上面那条永远绿）', () => {
-    expect(SHARED_FILES.length).toBeGreaterThanOrEqual(14);
+    expect(SHARED_FILES.length).toBeGreaterThanOrEqual(15);
     for (const f of SHARED_FILES) expect(fs.existsSync(f), f).toBe(true);
   });
 

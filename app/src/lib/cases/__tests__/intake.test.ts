@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { submitIntake } from '@/lib/cases';
-import { INTAKE_STAGE_ACTIONS } from '@/lib/cases/intake-actions';
+import { LABOR } from '@/lib/domains/labor';
 // agent 侧的写法（按 name 收敛）——用它把「存量已有两行同角色」这个形态真造出来，
 // 而不是手写 INSERT 假装 agent 写过
 import { upsertCompanyProfile } from '@/lib/db/agent';
@@ -95,7 +95,7 @@ describe('首诊落库', () => {
       .prepare('SELECT title, due_at, priority FROM action_items WHERE case_id = ? AND title != ? ORDER BY priority DESC')
       .all(f.caseA, '去打社保记录') as { title: string; due_at: string | null; priority: number }[];
     expect(actions.map((a) => a.title)).toEqual(
-      INTAKE_STAGE_ACTIONS['已收通知'].map((s) => s.title),
+      LABOR.intakeStageActions['已收通知'].map((s) => s.title),
     );
     // 种子表里越靠前越急 → priority 越大；驾驶舱「只推一件事」推的就是它
     expect(actions[0].priority).toBeGreaterThan(actions[2].priority);
