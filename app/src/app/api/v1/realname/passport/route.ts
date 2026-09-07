@@ -17,8 +17,10 @@
 // 各开一个池等于把预算算两遍，两边各占满就是 8 个上传在同一个 1280M 的 cgroup 里。
 import { NextResponse } from 'next/server';
 
+import { REALNAME_CONSENT_FIELD, realnameConsentFailure } from '@/lib/auth/consent';
 import { requireWebSession } from '@/lib/auth/guard';
-import { badRequest } from '@/lib/auth/http';
+import { badRequest, failureResponse } from '@/lib/auth/http';
+import { extractClientIp } from '@/lib/auth/ip-quota';
 import { initPassportRealname } from '@/lib/auth/passport-realname';
 import { AUTH_STATUS, VERIFICATION_STATUS } from '@/lib/auth/realname';
 import { getDb } from '@/lib/db/client';
@@ -90,6 +92,16 @@ export async function POST(req: Request) {
     } catch {
       return badRequest('INVALID_BODY', '请以 multipart/form-data 提交');
     }
+
+    // 同意在**读材料之前**判（协议 五.2（1））：护照这条一次交的是姓名、护照号与
+    // 两张含人脸的照片，问必须在收之前。表单里的同意位是字符串，只认 'true'。
+    const consentFailure = realnameConsentFailure(
+      getDb(),
+      guard.identity.uid,
+      form.get(REALNAME_CONSENT_FIELD) === 'true',
+      extractClientIp(req.headers),
+    );
+    if (consentFailure) return failureResponse(consentFailure);
 
     // 这里不再补一道按文件大小的后备闸：领域层对**每份**材料已经卡死 8MiB
     // （passport-realname.ts 的 MATERIAL_TOO_LARGE），两份合起来 16MiB 本就低于上面的上限。

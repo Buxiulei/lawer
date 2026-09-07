@@ -42,7 +42,7 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
 
   { code: 'REALNAME_REQUIRED', group: 'gate', status: 403, when: '该动作要求用户已完成实名（证据上传、固化出证）；「待审」不算已实名', recovery: '把这一步是干什么的说清楚，请用户在网页上完成实名后再来' },
 
-  { code: 'CONSENT_REQUIRED', group: 'gate', status: 400, when: '要把用户资料交给站外机构的动作没带上本人的明示同意（consent 必须为 true）', recovery: '把「会传什么、不会传什么」逐项念给用户听，得到明确同意后带 consent:true 再调一次；不要替用户点头' },
+  { code: 'CONSENT_REQUIRED', group: 'gate', status: 400, when: '这次动作要收集/外发的东西需要用户的**单独同意**，而他还没给过：把资料交给站外机构（consent 必须为 true）、记录情绪与危机识别记录、采用 NBDpsy 那侧的实名结果，都在此列。本次调用零写入、零外发', recovery: '把「要做什么、为什么要、不同意会怎样」逐项念给用户听；同意由用户本人在网页上给（外发类带 consent:true 再调一次）。不要替用户点头，也不要改参数重试' },
   { code: 'REFERRAL_UNAVAILABLE', group: 'gate', status: 500, when: '服务端这会儿生成不了要外发的数据包（本机加密配置缺失），本次零外发', recovery: '这是我们的运维问题，不是用户填错了；如实告诉用户稍后再试，不要改参数重试' },
 
   { code: 'CASE_NOT_FOUND', group: 'notfound', status: 404, when: '案件不存在，**或不属于本人**——两者刻意不区分', recovery: '先调 case_list 拿本人名下真实的 case_id，不要据此推断编号有效性' },

@@ -10,6 +10,8 @@ import type { Database } from 'better-sqlite3';
 
 import { generateApiKey, hashApiKey } from '@/lib/auth/api-key';
 import { decryptField, encryptField } from '@/lib/crypto';
+import { CONSENT_KINDS } from '@/lib/consent';
+import { recordConsent } from '@/lib/db/consents';
 import * as realnameStore from '@/lib/db/realname';
 import type { NbdpsySnapshot } from '@/lib/referral/identity-link';
 import { getGongdao, gongdaoSettle } from '@/lib/billing';
@@ -898,6 +900,10 @@ describe('实名互认：前置闸认同一口径（NBDpsy OrLinked）', () => {
 
   test('本地未实名 + 对方 approved ⇒ 放行并落 provider=nbdpsy 掩码快照', async () => {
     const u = makeLinkedUser();
+    // 采用要先有单独同意（协议三.3）；本条测的是采用之后 MCP 这条路放不放行。
+    // 「没同意就不许采用」那一臂在 lib/referral/__tests__/referral.test.ts 与
+    // app/api/v1/tools/__tests__/route.test.ts 各有一条（三面同一道闸，判定只有一处）。
+    recordConsent(db, { userId: u.uid, kind: CONSENT_KINDS.realnameAdopt });
     const calls = { n: 0 };
     globalThis.fetch = identityFetch(
       {

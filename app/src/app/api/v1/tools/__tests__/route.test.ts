@@ -14,7 +14,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest
 
 import { generateApiKey, hashApiKey } from '@/lib/auth/api-key';
 import { getCapability, listCapabilities } from '@/lib/capabilities';
+import { CONSENT_KINDS } from '@/lib/consent';
 import { decryptField, encryptField } from '@/lib/crypto';
+import { recordConsent } from '@/lib/db/consents';
 import * as realnameStore from '@/lib/db/realname';
 import type { NbdpsySnapshot } from '@/lib/referral/identity-link';
 
@@ -118,6 +120,13 @@ beforeEach(() => {
 
   evidenceA = insertEvidence(caseA, uidA);
   evidenceVerified = insertEvidence(caseVerified, uidVerified);
+
+  // 情绪记录的单独同意（协议五.2（2））：本组用例测的是清单、幂等与归属，不是同意闸。
+  // 三个人都先同意过，emotion_log 才走得到它自己的判定；
+  // 同意闸本身的两臂另有专门用例（consent-gate.test.ts 与本文件末尾那条）。
+  for (const uid of [uidA, uidB, uidVerified]) {
+    recordConsent(db, { userId: uid, kind: CONSENT_KINDS.emotion });
+  }
 
   keyA = issueKey(uidA, ['case:read', 'case:write']);
   keyARead = issueKey(uidA, ['case:read']);
@@ -558,8 +567,29 @@ describe('实名互认：前置闸认同一口径（NBDpsy OrLinked）', () => {
 
   const REG = (caseId: number) => ({ case_id: caseId, upload_token: 'not-a-real-token', name: '工资条' });
 
+  test('本地未实名 + 对方 approved 但没同意采用 ⇒ 拒、零写入、码是 CONSENT_REQUIRED', async () => {
+    // 协议三.3 / 附一 #3：采用要先有单独同意。这一臂盯的是「问了对方、但一个字都不写」。
+    // 变异确认：把 realnameGate 里那句 hasConsent 判断删掉 ⇒ 本条红（放行且落了快照）。
+    const u = makeLinkedUser();
+    const calls = { n: 0 };
+    globalThis.fetch = identityFetch(
+      { verified: true, real_name: '张三', id_number_masked: '1101**********1234' },
+      calls,
+    );
+
+    const { body } = await bridge('evidence_register', REG(u.caseId), u.key);
+    expect(body.error_code).toBe('CONSENT_REQUIRED');
+    expect(String(body.message)).toContain('同意采用');
+    expect(realnameStore.latestByUser(db, u.uid), '没同意就一行都不该写').toBeUndefined();
+    expect(
+      (db.prepare('SELECT auth_status FROM users WHERE id=?').get(u.uid) as { auth_status: string })
+        .auth_status,
+    ).toBe('未认证');
+  });
+
   test('本地未实名 + 对方 approved ⇒ evidence_register 放行、落 provider=nbdpsy 掩码快照', async () => {
     const u = makeLinkedUser();
+    recordConsent(db, { userId: u.uid, kind: CONSENT_KINDS.realnameAdopt });
     const calls = { n: 0 };
     globalThis.fetch = identityFetch(
       {
@@ -629,5 +659,63 @@ describe('实名互认：前置闸认同一口径（NBDpsy OrLinked）', () => {
     expect(body.error_code, JSON.stringify(body).slice(0, 300)).not.toBe('REALNAME_REQUIRED');
     expect(status).not.toBe(403);
     expect(calls.n, '本地已实名不该去问对方').toBe(0);
+  });
+});
+
+/**
+ * 情绪记录的单独同意（协议 五.2（2）/ 附一 #4）在 **MCP/REST 这一面**的两臂。
+ *
+ * 【为什么这条要在这里再测一遍】站内对话那条路的判据在
+ * lib/agent/__tests__/consent-emotion.test.ts，走的是 orchestrator 的 runTool；
+ * 这条路走的是**能力注册表 + invoke 的 checkPreconditions**——两套完全不同的代码。
+ * 只测一面的形态是：网页上问得好好的，而用户的 agent 直接调 REST 就把情绪记进去了，
+ * 且回包一切正常。同一道闸有几个面，就要有几条判据。
+ *
+ * 【为什么本组要自己造人】文件开头的 beforeEach 给三个夹具用户都记了 emotion 同意
+ * （那些用例测的是清单、幂等与归属，不该被一道无关的闸挡住）。这一臂要的是
+ * **没同意过**的人——拿一个已经同意过的人来测"没同意会怎样"，闸拆了也照样绿。
+ *
+ * 【变异臂】2026-09-07 实跑：把 families/emotion.ts 的 `precondition: ['emotion_consent']`
+ * 改回 `[]` ⇒ 本组第一条红（没同意也照写，库里多了一行）。
+ */
+describe('情绪记录：MCP/REST 这一面同样要单独同意', () => {
+  const emotionRows = (caseId: number): number =>
+    (db.prepare('SELECT COUNT(*) AS n FROM emotion_log WHERE case_id=?').get(caseId) as { n: number }).n;
+
+  /** 造一个**没同意过任何东西**的人 + 一件案子 + 一把可写 key */
+  function makeFreshUser(): { uid: number; key: string; caseId: number } {
+    const uid = Number(
+      db
+        .prepare("INSERT INTO users (phone_hash, auth_status) VALUES (?, '未认证')")
+        .run(`fresh-${crypto.randomUUID()}`).lastInsertRowid,
+    );
+    const caseId = Number(
+      db
+        .prepare("INSERT INTO cases (user_id, title, stage) VALUES (?, '没同意过的人的案子', '风声')")
+        .run(uid).lastInsertRowid,
+    );
+    return { uid, key: issueKey(uid, ['case:read', 'case:write']), caseId };
+  }
+
+  test('没同意 ⇒ CONSENT_REQUIRED，且**零写入**', async () => {
+    const u = makeFreshUser();
+
+    const { body } = await bridge('emotion_log', { case_id: u.caseId, level: '焦虑' }, u.key);
+
+    expect(body.error_code).toBe('CONSENT_REQUIRED');
+    expect(emotionRows(u.caseId), '没同意就一行都不该写').toBe(0);
+    // 对方 agent 读的是这段话，它必须挡住"改个参数再试一次"那条路
+    expect(String(body.message)).toContain('没有写入任何东西');
+    expect(String(body.message), '同意要由用户本人在网页上给').toContain('网页');
+  });
+
+  test('同意之后 ⇒ 照常写入（同一份入参，只多了一行 consents）', async () => {
+    const u = makeFreshUser();
+    recordConsent(db, { userId: u.uid, kind: CONSENT_KINDS.emotion });
+
+    const { body } = await bridge('emotion_log', { case_id: u.caseId, level: '焦虑' }, u.key);
+
+    expect(body.error_code, `同意过了还被拦：${String(body.message)}`).toBeUndefined();
+    expect(emotionRows(u.caseId)).toBe(1);
   });
 });

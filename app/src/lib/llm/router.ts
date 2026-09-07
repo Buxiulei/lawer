@@ -4,7 +4,16 @@
 // 那是 manager 审批的契约文件，不许把型号或档位判断写死在函数里。
 
 import { createProvider, type CreateProviderOptions } from './providers';
-import { REQUIRED_ENV, degradeChain, routingTable, type Plan, type RouteTarget, type TaskClass } from './routing.config';
+import {
+  REQUIRED_ENV,
+  degradeChain,
+  domesticEquivalent,
+  isOverseasTarget,
+  routingTable,
+  type Plan,
+  type RouteTarget,
+  type TaskClass,
+} from './routing.config';
 import type { Provider, ProviderName } from './types';
 
 export interface RouteResult extends RouteTarget {
@@ -17,6 +26,15 @@ export interface RouteResult extends RouteTarget {
 export interface RouteOptions {
   /** 判断某 provider 的凭据是否可用。默认查环境变量；注入用于单测与「调用方自带 key」的场景。 */
   isAvailable?: (provider: ProviderName) => boolean;
+  /**
+   * 这个用户同意把对话交给**境外接收方**处理了没有（协议 五.5（2）/ 附一 #6）。
+   *
+   * **缺省 false，也就是不给就按没同意**。这个方向不能反：默认放行的形态是——
+   * 新加一个调用方忘了传这一位，那条路上所有人的对话都出境，而回包一切正常、
+   * 没有任何一处报错。默认拒绝时忘了传的代价只是"这条路上的人都用境内模型"，
+   * 功能不缺（协议五.5（2）原文：不同意的，你仍可使用仅境内模型的全部服务）。
+   */
+  overseasAllowed?: boolean;
 }
 
 /** 默认可用性判据：该 provider 所需的环境变量**全部**存在且非空串。
@@ -38,14 +56,19 @@ export function route(taskClass: TaskClass, plan: Plan, o: RouteOptions = {}): R
   const table = routingTable();
   const byClass = table[plan];
   if (!byClass) throw new Error(`未知套餐档 plan=${plan}，可选：${Object.keys(table).join('/')}`);
-  const preferred = byClass[taskClass];
-  if (!preferred) throw new Error(`未知任务档 task_class=${taskClass}，可选：${Object.keys(byClass).join('/')}`);
+  const tabled = byClass[taskClass];
+  if (!tabled) throw new Error(`未知任务档 task_class=${taskClass}，可选：${Object.keys(byClass).join('/')}`);
+
+  // 境外闸在**缺 key 降级之前**：先决定"这个人能用哪些模型"，再决定"这些里哪个有 key"。
+  // 顺序反过来的形态是：首选缺 key 时先降到链上的下一档，而那一档可能仍是境外的，
+  // 于是一个没同意出境的用户照样把对话发了出去——闸看起来在，只是被降级绕过去了。
+  const chain = degradeChain()[taskClass];
+  const preferred = o.overseasAllowed ? tabled : domesticEquivalent(taskClass, tabled, chain);
 
   const isAvailable = o.isAvailable ?? envHasCredentials;
   if (isAvailable(preferred.provider)) return { ...preferred, degraded: false };
 
   // 只向后走：链上排在首选之前的都比它贵，降级绝不能把用户升档（白送钱）
-  const chain = degradeChain()[taskClass];
   const from = chain.findIndex((t) => t.provider === preferred.provider && t.model === preferred.model);
   if (from < 0) {
     throw new Error(
@@ -53,6 +76,8 @@ export function route(taskClass: TaskClass, plan: Plan, o: RouteOptions = {}): R
     );
   }
   for (const target of chain.slice(from + 1)) {
+    // 降级同样不许越过境外闸：链后面还有 Claude 档时（未来若有），没同意的人跳过它。
+    if (!o.overseasAllowed && isOverseasTarget(target)) continue;
     if (isAvailable(target.provider)) return { ...target, degraded: true, degradedFrom: preferred };
   }
 
@@ -73,8 +98,13 @@ export function route(taskClass: TaskClass, plan: Plan, o: RouteOptions = {}): R
 export function getProvider(
   taskClass: TaskClass,
   plan: Plan,
-  o: Omit<CreateProviderOptions, 'model'> = {},
+  o: Omit<CreateProviderOptions, 'model'> & { overseasAllowed?: boolean } = {},
 ): { client: Provider; route: RouteResult } {
-  const result = route(taskClass, plan, o.apiKey ? { isAvailable: () => true } : {});
+  // 自带 key 只放宽"凭据可用性"，**不放宽境外闸**：那把 key 是谁的与
+  // "这个人同不同意把自己的对话交给境外接收方"是两件事。
+  const result = route(taskClass, plan, {
+    ...(o.apiKey ? { isAvailable: () => true } : {}),
+    overseasAllowed: o.overseasAllowed,
+  });
   return { client: createProvider(result, o), route: result };
 }

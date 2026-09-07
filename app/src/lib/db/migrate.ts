@@ -1280,6 +1280,37 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_crisis_hits_user ON crisis_hits (user_id, at DESC);
   `);
 
+  // 同意台账（用户服务协议 v0.2 附一 #1–#6）。一行 = 一个人对一类事的一次明示同意。
+  // 值域、版本与文案见 lib/consent.ts，读写只经 lib/db/consents.ts（单一入口，判据机检）。
+  //
+  // 【为什么单独一张表而不是 users 上加几个布尔列】布尔列只答得出「现在是开是关」，
+  // 答不出「什么时候同意的、同意的是哪一版、在哪儿点的头」。而同意恰恰是**日后要自证**
+  // 的东西：协议第一条说「你在注册页勾选后生效」，没有时刻与版本，这句话就无从证明。
+  // 境外模型与评测授权另有 users 上的开关列——那两列是**现在生效的状态**（可以关掉），
+  // 本表是**发生过的事实**（关掉不等于没发生过）。两件事分开记。
+  //
+  // 【为什么 (user_id, kind, version) 唯一】用户每次登录都会再勾一次协议。逐次落行的形态是
+  // 台账里全是重复行，而「他第一次是什么时候同意的」要翻到最底下才找得到。
+  // 写入侧用 INSERT OR IGNORE，重复点头不报错、也不产生新行。
+  //
+  // 【ip_digest 可空】带密钥的 HMAC 摘要，不存明文 IP（同 ip_quota_events 的理由）；
+  // 密钥没配好时留空——少一条辅证，好过因为它写不进去而让用户的点头不作数。
+  //
+  // 【at 由列默认给】同全仓时间口径（ADR-002：时间从 SQLite 取，不从 JS 落串）。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS consents (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind      TEXT NOT NULL,   -- terms | adult | realname | realname_adopt | emotion | overseas
+      version   TEXT NOT NULL,   -- 同意的是哪一版文案（lib/consent.ts CONSENT_VERSIONS）
+      ip_digest TEXT,            -- HMAC 摘要，不存明文 IP
+      at        TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_consents_user_kind_version
+      ON consents (user_id, kind, version);
+    CREATE INDEX IF NOT EXISTS idx_consents_user ON consents (user_id, id DESC);
+  `);
+
   // 一次性**下载**令牌（设计稿 §2 E draft_export）。与 evidence_upload_tokens 是同一套机制的反向：
   // 那边签一条只收一次字节的 PUT 地址，这边签一条只发一次字节的 GET 地址。
   //
@@ -1704,6 +1735,14 @@ export function runMigrations(db: Database.Database): void {
   // 鉴权仍看本地 users.auth_status 与 realname_verifications。
   // 可空、不回填：绝大多数账号没有对面的关联，NULL 即语义正确。
   addColumnIfMissing(db, 'users', 'linked_nbdpsy_customer_code', 'TEXT');
+  // 境外模型开关（协议 五.5（2）/ 附一 #6）。**0 = 关，且这是默认值**：
+  // 关着时路由把 Claude 那两档换成降级链上的境内最高档（见 lib/llm/router.ts）。
+  // 存量行取 DDL 默认值 0——他们从没被问过这个问题，未问即未同意，这不是编出来的默认值。
+  addColumnIfMissing(db, 'users', 'overseas_models', 'INTEGER NOT NULL DEFAULT 0');
+  // 评测授权开关（协议 五.3 / 附一 #5）。0 = 不把脱敏对话用于内部质量评测（默认）。
+  // 与 overseas_models 分成两列而不是一个「隐私偏好」JSON：这两件事各自可以单独开关，
+  // 也各自要能被单独查询（评测跑批要按这一列筛人）。
+  addColumnIfMissing(db, 'users', 'eval_optin', 'INTEGER NOT NULL DEFAULT 0');
   // api_keys.source：这把凭据是**怎么来的**。'self' = 用户自己在设置页建的（默认，也是存量的语义），
   // 'oauth' = 某个客户端走 OAuth 授权流换来的。
   //

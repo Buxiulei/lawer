@@ -90,7 +90,7 @@ describe('错误码文案', () => {
 
 describe('表单初始渲染', () => {
   const html = renderToStaticMarkup(
-    <PassportForm onSubmitted={() => {}} onCancel={() => {}} />,
+    <PassportForm consent onSubmitted={() => {}} onCancel={() => {}} />,
   );
   const t = text(html);
 
@@ -166,7 +166,7 @@ describe('待审文案按通道分支', () => {
  */
 describe('审核未通过', () => {
   const html = renderToStaticMarkup(
-    <PassportForm onSubmitted={() => {}} onCancel={() => {}} rejectedMessage="资料页反光看不清" />,
+    <PassportForm consent onSubmitted={() => {}} onCancel={() => {}} rejectedMessage="资料页反光看不清" />,
   );
   const t = text(html);
 
@@ -196,7 +196,7 @@ describe('审核未通过', () => {
 
   it('没被打回时不显示这块，不制造无谓的警报', () => {
     const clean = text(
-      renderToStaticMarkup(<PassportForm onSubmitted={() => {}} onCancel={() => {}} />),
+      renderToStaticMarkup(<PassportForm consent onSubmitted={() => {}} onCancel={() => {}} />),
     );
     expect(clean).not.toContain('上一次没通过');
   });

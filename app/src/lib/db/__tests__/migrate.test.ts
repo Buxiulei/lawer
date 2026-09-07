@@ -48,6 +48,8 @@ const ALL_TABLES = [
   'case_reports',
   // 危机信号留痕（事实卡首行「近 72 小时」的来源）
   'crisis_hits',
+  // 同意台账（协议 v0.2 附一 #1–#6）
+  'consents',
   // 转介台账（设计稿 §14）
   'referrals',
   // OAuth 2.1 授权服务器

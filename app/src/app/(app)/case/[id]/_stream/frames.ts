@@ -89,7 +89,8 @@ export type NoticeCode =
   | 'PRECEDENT_CONTAMINATED'
   | 'CALC_FAILED'
   | 'EMOTIONAL_LEVERAGE_DETECTED'
-  | 'NBDPSY_PITCH_BLOCKED';
+  | 'NBDPSY_PITCH_BLOCKED'
+  | 'CONSENT_RECORDED';
 
 export interface NoticeFrame {
   type: 'notice';
@@ -354,6 +355,9 @@ const NOTICE_COPY: Record<NoticeCode, string | null | typeof PASSTHROUGH> = {
   CALC_FAILED: PASSTHROUGH,
   EMOTIONAL_LEVERAGE_DETECTED: null,
   NBDPSY_PITCH_BLOCKED: null,
+  // 同意被记下来了，用户该看得见——这是**他自己刚做的一个决定**，
+  // 静默的形态是：他说了「同意记录」，屏幕上什么都没变，只能靠下一轮的行为去猜生没生效。
+  CONSENT_RECORDED: PASSTHROUGH,
 };
 
 export function noticeCopy(frame: NoticeFrame): string | null {

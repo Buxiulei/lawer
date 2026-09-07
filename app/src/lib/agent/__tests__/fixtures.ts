@@ -29,6 +29,13 @@ export function makeAgentFixture(): AgentFixture {
   const userId = Number(insertUser.run('hash-a').lastInsertRowid);
   const otherUserId = Number(insertUser.run('hash-b').lastInsertRowid);
 
+  // 情绪记录的单独同意（协议 五.2（2））：夹具里的人**默认已经同意过**。
+  // 【为什么在夹具里给】本仓大部分编排用例测的是别的事（落库、事件、闸门、计费），
+  // 而 emotion_log 缺同意时是零写入——不给的话那些用例全都会因为一个与它们无关的
+  // 闸而红。同意闸自己的两臂另有专门用例（consent-emotion.test.ts），
+  // 那里用的是一个**没同意过**的人。
+  db.prepare("INSERT INTO consents (user_id, kind, version) VALUES (?, 'emotion', 'v0.2')").run(userId);
+
   const insertCase = db.prepare("INSERT INTO cases (user_id, title, stage) VALUES (?, ?, '已收通知')");
   const caseId = Number(insertCase.run(userId, '李哲诉某安全公司违法解除').lastInsertRowid);
   const otherCaseId = Number(insertCase.run(otherUserId, '别人的案子').lastInsertRowid);

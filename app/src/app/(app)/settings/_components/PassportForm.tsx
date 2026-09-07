@@ -125,12 +125,18 @@ export function PassportForm({
   onSubmitted,
   onCancel,
   rejectedMessage,
+  consent,
 }: {
   /** 提交成功：外层去刷 status，卡片会切到「审核中」 */
   onSubmitted: () => void;
   onCancel: () => void;
   /** 上一次人工审核没通过时的原因。**打回的人最需要能执行的指引** */
   rejectedMessage?: string;
+  /**
+   * 收证件号前的单独同意勾没勾（协议五.2（1））。勾选框本身在卡片上、两条通道共用，
+   * 这里只负责「没勾就交不上去」与「随表单一起带上去」。
+   */
+  consent: boolean;
 }) {
   const [realName, setRealName] = useState('');
   const [passportNo, setPassportNo] = useState('');
@@ -181,6 +187,8 @@ export function PassportForm({
     hasIdPage: Boolean(files.id_page),
     hasSelfie: Boolean(files.selfie),
   });
+  // 这条通道一次交的是姓名、护照号与两张含人脸的照片：没同意就不该上传（服务端同样拦）。
+  if (!consent) missing.push('对收集证件信息的同意');
   const ready = missing.length === 0;
   const hint = missingHint(missing);
 
@@ -194,6 +202,8 @@ export function PassportForm({
       form.append('passport_no', passportNo.trim().toUpperCase());
       form.append('id_page', files.id_page!);
       form.append('selfie', files.selfie!);
+      // multipart 里没有布尔，只认字符串 'true'（服务端同口径）
+      form.append('consent', 'true');
       await apiUpload<PassportResponse>('/realname/passport', form, {
         onProgress: setProgress,
       });

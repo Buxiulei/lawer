@@ -14,7 +14,10 @@ import { reconcileServedModel } from '@/lib/billing/served-model';
 import { featureOfMode } from '@/lib/billing/features';
 import { costOfUsage, type UsageTokens } from '@/lib/billing/pricing';
 import { countSubstantiveHits } from '@/lib/knowledge';
+import { CONSENT_KINDS, EMOTION_CONSENT_ASK, EMOTION_CONSENT_TOOL_REJECT } from '@/lib/consent';
 import * as store from '@/lib/db/agent';
+import { hasConsent } from '@/lib/db/consents';
+import { getModelPreferences } from '@/lib/db/otp';
 import { getRatesForModel } from '@/lib/db/modelRates';
 import { fromSql } from '@/lib/db/time';
 import { toUserFacingError } from '@/lib/errors/user-facing';
@@ -67,7 +70,14 @@ import { bareArticleCitations, precedentContamination } from './citation-block';
 import { MAX_INJECTED_PACKS, type KnowledgePack, type KnowledgeSearcher } from './retrieval';
 import { loadCaseSnapshot } from './snapshot';
 import { classifyTask } from './task-class';
-import { AGENT_TOOLS, emitCalcFailureNotice, executeTool, newTurnState, type AgentToolContext } from './tools';
+import {
+  AGENT_TOOLS,
+  EMOTION_TOOL,
+  emitCalcFailureNotice,
+  executeTool,
+  newTurnState,
+  type AgentToolContext,
+} from './tools';
 
 /** 喂进模型的历史消息条数上限。再多不如让档案摘要说话——摘要是结构化的、消息是散的。 */
 const HISTORY_LIMIT = 20;
@@ -594,7 +604,11 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   const taskClass = classifyTask({ message, mode });
   const routed = input.provider
     ? { client: input.provider, route: { degraded: false } as const }
-    : getProvider(taskClass, input.plan ?? 'entry');
+    : getProvider(taskClass, input.plan ?? 'entry', {
+        // 境外模型默认关（协议 五.5（2））：没同意的人，路由把 Claude 那两档换成
+        // 降级链上的境内最高档。开关本身在设置页，落库在 users.overseas_models。
+        overseasAllowed: getModelPreferences(db, userId).overseasModels,
+      });
 
   // 预检索：用用户原话当查询，把命中的 pack 逐字放进 system prompt。
   // 与工具里的 knowledge_search 并存而不是二选一——预检索省掉最常见那一次往返，
@@ -832,6 +846,19 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   const state = newTurnState();
   state.retrieved.push(...packs);
 
+  /**
+   * 这会儿这个人对"记录情绪状态与危机识别记录"同意过没有（协议 五.2（2）/ 附一 #4）。
+   *
+   * 【为什么每次调用都现查，而不是本轮开头算一次存着】**同一轮里同意状态会变**：
+   * 用户上一轮被问过、这一轮回一句"同意记录"，模型先调 consent_grant 再调 emotion_log，
+   * 那正是 consent_grant 的工具说明里写着的用法（"记完之后可以再调一次 emotion_log"）。
+   * 本轮开头算死的形态是：同意刚刚落了库，紧接着那一笔仍然被拒——
+   * 而模型拿到的回喂说的是"用户还没同意"，于是它多半会再问一遍用户刚回答过的问题。
+   */
+  const emotionConsented = () => hasConsent(db, userId, CONSENT_KINDS.emotion);
+  /** 本轮有没有因为缺同意而挡下过情绪记录（挡下过、且到收尾时仍未同意，就要问一句） */
+  let emotionConsentAsked = false;
+
   // 案号运行时闸门：白名单来自本轮检索到的 pack 原文，随 knowledge_search 的结果增长。
   // 正文在流上过滤，文书在落库前拒收——两条出口都堵住（见 citation-guard.ts 文件头）。
   const citations = new CitationGuard();
@@ -934,6 +961,22 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
     }
   };
 
+  /**
+   * 执行一次工具调用。**同意闸在这里，不在各工具里**：本轮有两处调用点
+   * （主循环与收口补救轮），闸挂在其中一处的形态是——补救轮那次照常写进档案，
+   * 而用户从没被问过。挂在收敛点上，新加第三处调用点也自动带上。
+   *
+   * 情绪记录缺同意时**零写入**，并把"为什么没写、接下来怎么办"如实回喂给模型；
+   * 那句征求同意的话由本函数记下标记、在所有出口闸之后由代码确定性追加（见文末）。
+   */
+  const runTool = (name: string, rawArguments: string) => {
+    if (name === EMOTION_TOOL && !emotionConsented()) {
+      emotionConsentAsked = true;
+      return { ok: false as const, content: JSON.stringify({ ok: false, error: EMOTION_CONSENT_TOOL_REJECT }) };
+    }
+    return executeTool(name, rawArguments, toolCtx);
+  };
+
   // 危机轮把正文攒着不发（emitText=false），等过完闸再一次性下发
   const streamProse = !crisis.triggered;
   let modelBody = '';
@@ -946,7 +989,7 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
     // assistant 轮（含工具调用）与逐条 tool 结果回喂，形成下一轮的上下文
     messages.push({ role: 'assistant', content: chunk, tool_calls: toolCalls });
     for (const tc of toolCalls) {
-      const outcome = executeTool(tc.function.name, tc.function.arguments, toolCtx);
+      const outcome = runTool(tc.function.name, tc.function.arguments);
       messages.push({ role: 'tool', content: outcome.content, tool_call_id: tc.id });
     }
   }
@@ -964,7 +1007,7 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
     });
     const repair = await runOnce(false);
     for (const tc of repair.toolCalls) {
-      const outcome = executeTool(tc.function.name, tc.function.arguments, toolCtx);
+      const outcome = runTool(tc.function.name, tc.function.arguments);
       messages.push({ role: 'tool', content: outcome.content, tool_call_id: tc.id });
     }
     if (state.actionCards === 0) {
@@ -1337,6 +1380,27 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
       '你回我一句「把上面几件事记进档案」，我就补上。';
     emit({ event: 'delta', data: { text: correction } });
     text += correction;
+  }
+
+  // ── 情绪记录的单独同意：本轮挡下过就当场问一句（协议 五.2（2）/ 附一 #4）──
+  //
+  // 【为什么由代码确定性追加，而不是让模型自己问】模型可能不问、问得每轮不一样、
+  // 或者顺口说成"我已经记下了"——而这一轮恰恰一个字都没记。同意是要留档的东西，
+  // 问法必须稳定；工具那边回喂里也明写了"系统已经问过，你别再问一遍"。
+  //
+  // 【位置】与推荐段、纠正段同一条纪律：放在所有出口闸之后（它是我们自己的文案，
+  // 不该被判"模型在推销/杠杆"的那几道闸剥掉），且必须在 finalizeMessage 之前进 text——
+  // 否则归档里没有它，用户刷新一下就看不到我们问过什么。
+  //
+  // 【危机轮照样问】它不阻断任何东西，也不占首段：首段在最前面、号码已经给了。
+  // 危机轮里被挡下的那一笔情绪记录同样没写进去，不问的形态是"我们悄悄什么都没记"。
+  //
+  // 【为什么收尾时再查一次同意】本轮**先被拒、后又同意**是一条真实路径（用户回一句
+  // "同意记录"，模型先 consent_grant 再重记一次）。只看 asked 标记的形态是：
+  // 他刚点完头，末尾又收到一句"要不要同意"——那句话会被读成"我刚才那下没生效"。
+  if (emotionConsentAsked && !emotionConsented()) {
+    emit({ event: 'delta', data: { text: EMOTION_CONSENT_ASK, deterministic: true } });
+    text += EMOTION_CONSENT_ASK;
   }
 
   // ── D14 推荐段：**独立段落追加在正文之后，绝不插进正文中间** ──

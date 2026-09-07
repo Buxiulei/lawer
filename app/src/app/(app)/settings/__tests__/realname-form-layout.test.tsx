@@ -31,7 +31,7 @@ const src = (rel: string) =>
   readFileSync(path.resolve(__dirname, '..', rel), 'utf8');
 
 const passportHtml = renderToStaticMarkup(
-  <PassportForm onSubmitted={() => {}} onCancel={() => {}} />,
+  <PassportForm consent onSubmitted={() => {}} onCancel={() => {}} />,
 );
 const idCardHtml = renderToStaticMarkup(
   <IdCardForm

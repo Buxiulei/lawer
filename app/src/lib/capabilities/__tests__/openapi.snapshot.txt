@@ -137,6 +137,8 @@ POST /api/v1/keys	post_v1_keys	bearer	[]	{}
 GET /api/v1/keys/{id}/secret	get_v1_keys_by_id_secret	bearer	[path:id!]	{}
 POST /api/v1/keys/{id}/rotate	post_v1_keys_by_id_rotate	bearer	[path:id!]	{}
 DELETE /api/v1/keys/{id}	delete_v1_keys_by_id	bearer	[path:id!]	{}
+POST /api/v1/consents	post_v1_consents	bearer	[]	{}
+POST /api/v1/me/preferences	post_v1_me_preferences	bearer	[]	{}
 POST /api/v1/realname/init	post_v1_realname_init	bearer	[]	{}
 POST /api/v1/realname/passport	post_v1_realname_passport	bearer	[]	{}
 GET /api/v1/admin/audit	get_v1_admin_audit	bearer	[]	{}

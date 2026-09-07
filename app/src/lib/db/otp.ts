@@ -321,6 +321,44 @@ export function setUserRealNameOnly(db: Database, id: number, realNameEnc: strin
   db.prepare('UPDATE users SET real_name_enc = ? WHERE id = ?').run(realNameEnc, id);
 }
 
+/**
+ * 模型相关的两个开关（协议 五.3 / 五.5（2）；migrate.ts users.overseas_models / eval_optin）。
+ *
+ * 【为什么读不到行也要给出确定的值】查不到用户（被删、id 错）与"这个人没开"在路由那一层
+ * 必须是同一个结论：**默认关**。回 undefined 让调用方自己兜底的形态是——某个调用方
+ * 写了 `?? true`，于是一个不存在的账号反而拿到了境外模型。
+ */
+export interface ModelPreferences {
+  /** 允许把对话交给境外接收方（Claude 系列）处理。默认 false */
+  overseasModels: boolean;
+  /** 允许把脱敏对话用于内部质量评测。默认 false */
+  evalOptin: boolean;
+}
+
+export function getModelPreferences(db: Database, id: number): ModelPreferences {
+  const row = db.prepare('SELECT overseas_models, eval_optin FROM users WHERE id = ?').get(id) as
+    | { overseas_models: number; eval_optin: number }
+    | undefined;
+  return {
+    overseasModels: row?.overseas_models === 1,
+    evalOptin: row?.eval_optin === 1,
+  };
+}
+
+/** 只改传了的那一项（两个开关各自独立，见 migrate.ts 那两列的注释）。 */
+export function setModelPreferences(
+  db: Database,
+  id: number,
+  patch: { overseasModels?: boolean; evalOptin?: boolean },
+): void {
+  if (patch.overseasModels !== undefined) {
+    db.prepare('UPDATE users SET overseas_models = ? WHERE id = ?').run(patch.overseasModels ? 1 : 0, id);
+  }
+  if (patch.evalOptin !== undefined) {
+    db.prepare('UPDATE users SET eval_optin = ? WHERE id = ?').run(patch.evalOptin ? 1 : 0, id);
+  }
+}
+
 /** 记与 NBDpsy 的关联（对方 customer_code）。**只记关联，不合并主键**（设计稿 §14 决定 2）。 */
 export function setLinkedNbdpsyCustomerCode(db: Database, id: number, code: string): void {
   db.prepare('UPDATE users SET linked_nbdpsy_customer_code = ? WHERE id = ?').run(code, id);

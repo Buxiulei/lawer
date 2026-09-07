@@ -22,6 +22,7 @@ const ALL_CODES: Record<NoticeCode, true> = {
   CALC_FAILED: true,
   EMOTIONAL_LEVERAGE_DETECTED: true,
   NBDPSY_PITCH_BLOCKED: true,
+  CONSENT_RECORDED: true,
 };
 
 describe('CALC_FAILED：唯一一条用后端原文的用户可见提示', () => {

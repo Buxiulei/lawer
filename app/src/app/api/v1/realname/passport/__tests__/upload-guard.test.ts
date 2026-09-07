@@ -49,11 +49,15 @@ beforeEach(() => {
   );
 });
 
-/** 一份合法的护照实名表单：姓名 + 护照号 + 两件必填材料 */
+/**
+ * 一份合法的护照实名表单：姓名 + 护照号 + 两件必填材料 + 收证件信息的单独同意。
+ * 同意位是这条路由的前置（协议 五.2（1））；本文件测的是内存闸与槽位归还，所以一律带上。
+ */
 function passportForm(materialBytes = 64): FormData {
   const form = new FormData();
   form.set('real_name', '张三');
   form.set('passport_no', 'E12345678');
+  form.set('consent', 'true');
   form.set('id_page', new File([new Uint8Array(materialBytes)], 'page.jpg', { type: 'image/jpeg' }));
   form.set('selfie', new File([new Uint8Array(materialBytes)], 'selfie.jpg', { type: 'image/jpeg' }));
   return form;
@@ -185,6 +189,7 @@ describe('并发闸', () => {
     const form = new FormData();
     form.set('real_name', '张三');
     form.set('passport_no', 'E12345678');
+    form.set('consent', 'true');
     const res = await post(
       new Request('http://localhost/api/v1/realname/passport', {
         method: 'POST',

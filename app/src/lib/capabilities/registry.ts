@@ -44,8 +44,14 @@ export type CapabilitySurface = 'mcp' | 'site';
  */
 export type CapabilityKind = 'read' | 'write' | 'spend';
 
-/** 服务端闸门（P3）。空数组 = 无前置。 */
-export type CapabilityPrecondition = 'realname' | 'balance';
+/**
+ * 服务端闸门（P3）。空数组 = 无前置。
+ *
+ * emotion_consent：这条能力要写的是敏感个人信息，用户必须**单独同意过**才放行
+ * （协议 五.2（2）/ 附一 #4）。与 realname 同样由注册表驱动、在 invoke 一处拦——
+ * 让各能力在自己的 run 里各写一句的形态见 checkPreconditions 抬头。
+ */
+export type CapabilityPrecondition = 'realname' | 'balance' | 'emotion_consent';
 
 export interface Capability {
   name: string;
