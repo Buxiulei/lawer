@@ -5,7 +5,17 @@
 一份草稿（drafts 一行）出一份可打印、可发出的 PDF：标题 + 正文 + 页脚页码。
 
 供 sidecar 内 import 调用：build_draft_pdf(payload: dict, output_path: str) -> str
-payload: {"title": str, "markdown": str, "subtitle": str | None, "footer_note": str | None}
+payload: {"title": str, "markdown": str, "subtitle": str | None, "footer_note": str | None,
+          "ai_label": str | None, "ai_meta": {"producer": str, "subject": str, "keywords": str} | None}
+
+【ai_label / ai_meta 是《人工智能生成合成内容标识办法》要的两样东西，缺一不可】
+  · ai_label = 显式标识（§4 末款：导出的文件里必须含显式标识）。渲在正文**之前**，
+    自成一块并加边框——混排进正文首段的形态是：它读起来像文书自己的一句话，
+    而不是平台加的提示。
+  · ai_meta  = 隐式标识（§5：文件元数据里含生成合成属性、服务提供者名称、内容编号）。
+    只有它能在那句话被人从 PDF 里删掉之后仍然答出「这是谁生成的、哪一份」。
+    键名即 PDF 文档信息字典的字段（Producer / Subject / Keywords），由调用方组装
+    （app/src/lib/ai-label.ts 是**唯一**组装处），本模块不替它编内容。
 
 【字体解析复用 gen_evidence_pdf.register_font，不另写一份】
 中文字体找不到时 reportlab 会静默回落 Helvetica，整篇中文渲成黑块——而这种失败在本机
@@ -56,6 +66,12 @@ def build_styles(font: str):
         "list": ParagraphStyle("dList", parent=base, leftIndent=14, bulletIndent=4),
         "note": ParagraphStyle("dNote", parent=base, fontSize=8.5, leading=14,
                                textColor=colors.HexColor("#555555")),
+        # 显式标识：比正文小、但**比 note 深**，且带边框自成一块。
+        # 与 note 同款灰的形态是：它看上去与页脚免责声明同级，读的人会跳过去。
+        "ai": ParagraphStyle("dAI", parent=base, fontSize=9, leading=15,
+                             textColor=colors.HexColor("#1f2937"),
+                             borderWidth=0.7, borderColor=colors.HexColor("#9ca3af"),
+                             borderPadding=5, spaceAfter=8),
     }
 
 
@@ -84,6 +100,12 @@ def build_story(payload: dict, styles) -> list:
         story.append(Spacer(1, 6))
         story.append(HRFlowable(width="100%", thickness=0.6,
                                 color=colors.HexColor("#cbd5e1"), spaceAfter=8))
+
+    # 显式标识排在正文**起始**（办法 §4 第（一）项：「在文本的起始…添加文字提示」）。
+    # 排在末尾也合法，但一份文书常常只有第一页被看；起始是唯一"一定会被读到"的位置。
+    ai_label = (payload.get("ai_label") or "").strip()
+    if ai_label:
+        story.append(Paragraph(inline(ai_label), styles["ai"]))
 
     for raw in (payload.get("markdown") or "").replace("\r\n", "\n").split("\n"):
         line = raw.rstrip()
@@ -147,11 +169,22 @@ def build_draft_pdf(payload: dict, output_path: str) -> str:
         canvas.drawString(18 * mm, 12 * mm, title[:40])
         canvas.restoreState()
 
+    # 隐式标识（办法 §5）：三要素进 PDF 文档信息字典。
+    # **调用方不给就不写**——这里兜一份自己编的服务提供者名称，等于替调用方
+    # 回答「谁生成的」；而一份写着错主体的隐式标识比没有更糟（§10 禁伪造标识）。
+    meta = payload.get("ai_meta") or {}
+    doc_meta = {
+        k: str(meta[k]).strip()
+        for k in ("producer", "subject", "keywords")
+        if isinstance(meta, dict) and str(meta.get(k) or "").strip()
+    }
+
     doc = SimpleDocTemplate(
         output_path, pagesize=A4,
         leftMargin=20 * mm, rightMargin=20 * mm,
         topMargin=20 * mm, bottomMargin=20 * mm,
         title=title,
+        **doc_meta,
     )
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return output_path

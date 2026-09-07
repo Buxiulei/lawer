@@ -62,6 +62,9 @@ const { DashboardBody } = await import('@/app/(app)/case/[id]/_components/Dashbo
 const { DraftsListView } = await import(
   '@/app/(app)/case/[id]/drafts/_components/DraftsListView'
 );
+const { RealDraftBody } = await import(
+  '@/app/(app)/case/[id]/drafts/_components/RealDraftView'
+);
 const { DocActions } = await import('@/app/(app)/case/[id]/docs/_components/DocActions');
 const { NodeSheet } = await import('@/app/(app)/case/[id]/graph/_components/NodeSheet');
 const { EvidenceDetailSheet } = await import(
@@ -163,6 +166,15 @@ const SURFACES: {
     domainFrom: 'case',
     keys: ['draftsEmptyDescription'],
     render: () => ssr(<DraftsListView caseId={CASE_ID} drafts={[]} />),
+  },
+  {
+    // 生成合成内容的显式标识（标识办法 §4）。**后半截**「所以它不是什么」按行当走：
+    // 这个位置写死一句通用话的形态是，两个行当的用户读到同一句正确的废话
+    // ——而他们各自最容易误当成的那种专业意见，一个都没被点名（坏法③）。
+    name: '文书页·生成合成内容标识',
+    domainFrom: 'case',
+    keys: ['aiLabelDisclaimer'],
+    render: () => ssr(<RealDraftBody caseId={CASE_ID} draft={DRAFT} />),
   },
   {
     name: '解读页·接下来',
