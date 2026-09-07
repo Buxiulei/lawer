@@ -22,6 +22,7 @@ import { crisisStatusMark } from '@/lib/cases/crisis-hits';
 import { basicsMissing } from '@/lib/cases/report';
 import { BRIEF_SUMMARY_MAX, briefSummary, parseBrief } from '@/lib/evidence/brief';
 import { EVIDENCE_CATEGORIES } from '@/lib/evidence/categories';
+import { DEFAULT_DOMAIN, DOMAINS, domainPackOrDefault, type FactsSectionKey } from '@/lib/domains/registry';
 import { toDisplayDay, toDisplayTime } from '@/lib/time';
 
 import type { CaseSnapshot } from './snapshot';
@@ -164,14 +165,30 @@ function sumLen(lines: string[]): number {
 
 // ========== 分区 ==========
 
+/**
+ * 这一节的抬头，从**这个案件所属领域**的包里取（DomainPack.factsSections）。
+ *
+ * 【为什么不写死中文字面】写死的形态是：第二个领域接进来，事实卡每一节的抬头都还在
+ * 讲上一个行当的事——而每一行数据都是对的，模型照常作答，没有一处会报错。
+ *
+ * 领域包认不出来时退回缺省领域那一份：一条 cases.domain 写坏的行不该让整张事实卡失败
+ * （那一轮用户就彻底没有档案了）。**键一定取得到**——assertDomainPack 要求每个包
+ * 覆盖全部 FACTS_SECTION_KEYS，缺一个在装载时就点名了。
+ */
+function heading(s: CaseSnapshot, key: FactsSectionKey): string {
+  const pack = domainPackOrDefault(s.case.domain);
+  return (pack.factsSections.find((x) => x.key === key) ??
+    DOMAINS[DEFAULT_DOMAIN].factsSections.find((x) => x.key === key)!).title;
+}
+
 /** P0 当事人。姓名是这次事故的正中心，三条分支各说各的话，一条都不许含糊。 */
 function identitySection(s: CaseSnapshot): FactSection {
   const id = s.identity;
   if (id.nameUnreadable) {
     return {
-      key: 'identity',
+      key: 'parties',
       priority: 0,
-      heading: '当事人',
+      heading: heading(s, 'parties'),
       stat:
         '- 姓名：档案里有实名记录，但这一轮没能把姓名解出来（服务端解密失败）〔读取失败〕。' +
         '**按"我没有姓名"处理**：文书里我不会替他填，需要就问用户。',
@@ -183,9 +200,9 @@ function identitySection(s: CaseSnapshot): FactSection {
   // 上游哪天把 auth_status 条件删了（复审 RV-F2 的变异 A），这一行是最后一道门。
   if (id.realName && id.authStatus === '已实名') {
     return {
-      key: 'identity',
+      key: 'parties',
       priority: 0,
-      heading: '当事人',
+      heading: heading(s, 'parties'),
       stat: `- 姓名：${trunc(id.realName, 30)}〔已实名｜已核验〕`,
       detail: [
         '- 这个姓名只用于用户明确要求的文书填写（仲裁申请书、通知函、授权书等）；' +
@@ -198,9 +215,9 @@ function identitySection(s: CaseSnapshot): FactSection {
   // 两态各说各的话：这一态该做的是补一次姓名，不是再去实名一遍。
   if (id.authStatus === '已实名') {
     return {
-      key: 'identity',
+      key: 'parties',
       priority: 0,
-      heading: '当事人',
+      heading: heading(s, 'parties'),
       stat: '- 姓名：实名已通过，但档案里没有姓名记录，文书里我不会替你填〔未记录〕',
       detail: [
         '- 需要姓名的文书，先问用户要——' +
@@ -209,9 +226,9 @@ function identitySection(s: CaseSnapshot): FactSection {
     };
   }
   return {
-    key: 'identity',
+    key: 'parties',
     priority: 0,
-    heading: '当事人',
+    heading: heading(s, 'parties'),
     // 这一句是 manager 定的原文，不许改写成留白或占位符
     stat: '- 姓名：未实名，档案里没有你的姓名，文书里我不会替你填〔未记录〕',
     detail: [
@@ -225,9 +242,9 @@ function identitySection(s: CaseSnapshot): FactSection {
 function caseHeadSection(s: CaseSnapshot): FactSection {
   const c = s.case;
   return {
-    key: 'case',
+    key: 'header',
     priority: 0,
-    heading: '案件抬头',
+    heading: heading(s, 'header'),
     stat: `- 案件：#${c.id}《${trunc(c.title, TITLE_MAX)}》 阶段：${c.stage} 地区：${c.district}区〔已核验〕`,
     detail: [
       `- 用户目标：${c.goal ? truncField(c.goal, GOAL_MAX) : '未记录'}〔用户自述待核实〕`,
@@ -245,7 +262,7 @@ function historySection(s: CaseSnapshot): FactSection {
   return {
     key: 'history',
     priority: 0,
-    heading: '本案对话',
+    heading: heading(s, 'history'),
     stat:
       total === 0
         ? '- 本案还没有已落库的历史消息〔已核验〕'
@@ -266,7 +283,7 @@ function deadlineSection(s: CaseSnapshot): FactSection {
   return {
     key: 'deadlines',
     priority: 0,
-    heading: '法定期限',
+    heading: heading(s, 'deadlines'),
     stat: rows.length
       ? `- 生效中（未解决）的法定期限：${rows.length} 条〔已核验〕`
       : '- 生效中的法定期限：0 条〔未记录〕——档案里没登记，**不等于没有期限**，别据此说"时效没问题"。',
@@ -300,9 +317,9 @@ function employmentSection(s: CaseSnapshot): FactSection {
   const wage = hasValue(c.monthly_wage_fen) ? `${(c.monthly_wage_fen! / 100).toFixed(2)} 元` : '未记录';
   const filled = [c.employed_from, c.position, c.monthly_wage_fen, c.contract_count].filter(hasValue).length;
   return {
-    key: 'employment',
+    key: 'basics',
     priority: 1,
-    heading: '用工基本盘（首诊四项）',
+    heading: heading(s, 'basics'),
     stat: `- 首诊四项已记录 ${filled}/4〔用户自述待核实〕`,
     detail: [
       `- 入职日期：${hasValue(c.employed_from) ? c.employed_from : '未记录'}`,
@@ -318,9 +335,9 @@ function companySection(s: CaseSnapshot): FactSection {
   const rows = s.companies;
   const shown = rows.slice(0, COMPANIES_MAX);
   return {
-    key: 'companies',
+    key: 'counterparts',
     priority: 1,
-    heading: '公司主体',
+    heading: heading(s, 'counterparts'),
     stat: rows.length
       ? `- 已登记的公司主体：${rows.length} 个〔已核验〕`
       : '- 已登记的公司主体：0 个〔未记录〕——时间线的自由文本里可能提到过公司名，' +
@@ -348,7 +365,7 @@ function actionSection(s: CaseSnapshot): FactSection {
   return {
     key: 'actions',
     priority: 1,
-    heading: '未完成的行动卡',
+    heading: heading(s, 'actions'),
     stat: `- 未完成的行动卡：${rows.length} 张〔已核验〕（charter §9 要求本轮逐张跟踪）`,
     detail: [
       ...shown.map(
@@ -366,7 +383,7 @@ function claimSection(s: CaseSnapshot): FactSection {
   return {
     key: 'claims',
     priority: 2,
-    heading: '诉求（claims）',
+    heading: heading(s, 'claims'),
     stat: rows.length
       ? `- 已登记的金额诉求：${rows.length} 项〔已核验〕`
       : '- 已登记的金额诉求：0 项〔未记录〕——只是还没落库，不代表用户没有诉求。',
@@ -439,7 +456,7 @@ function timelineSection(s: CaseSnapshot): FactSection {
   return {
     key: 'timeline',
     priority: 2,
-    heading: '时间线',
+    heading: heading(s, 'timeline'),
     stat,
     detail: timelineDetail(lines, TIMELINE_BUDGET, total, anchor),
     refit: (room: number) => timelineDetail(lines, room, total, anchor),
@@ -491,7 +508,7 @@ function evidenceSection(s: CaseSnapshot): FactSection {
   return {
     key: 'evidence',
     priority: 3,
-    heading: '证据',
+    heading: heading(s, 'evidence'),
     stat: [
       `- 证据共 ${rows.length} 条〔文件名/类别已核验；证明目的是用户自述待核实〕`,
       `- 分类计数（0 条的类别也列出来——"合同 0" 正是最容易被脑补成"有"的那种事实）：${counts}` +

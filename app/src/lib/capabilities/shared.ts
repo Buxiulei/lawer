@@ -3,6 +3,7 @@
 import type { Database } from 'better-sqlite3';
 
 import type { DomainFailure } from '@/lib/cases';
+import type { DomainPack } from '@/lib/domains/registry';
 
 import { withClientRef, type AgentWriteTarget } from './idempotent';
 
@@ -77,4 +78,95 @@ export function writeOnce<T extends { ok: true }>(
     if (err instanceof DomainAbort) return err.failure;
     throw err;
   }
+}
+
+/**
+ * 首诊工具的入参 schema，**从领域包的 intakeSchema 生成**（设计稿 §13「首诊」行）。
+ *
+ * 【为什么不手写第二份】手写的形态是：领域包加了一个必填字段，服务端开始拒收，
+ * 而工具清单里根本没有这个参数——调用方照着说明书填齐了仍然被拒，且错误信息里
+ * 提到的那个字段它在 schema 里找不到。一处定义、两处消费（校验 + 说明书），就没有这个缝。
+ *
+ * `tools/list` 拿不到案件上下文，所以调用方给的是缺省领域的包（与其它 enum 同一口径）。
+ */
+export function intakeInputSchema(pack: DomainPack): Record<string, unknown> {
+  const properties: Record<string, unknown> = { ...caseIdProp };
+  const required: string[] = ['case_id'];
+
+  for (const f of pack.intakeSchema) {
+    switch (f.kind) {
+      case 'enum':
+        properties[f.param] = { type: 'string', enum: [...(f.values ?? [])], description: f.description };
+        break;
+      case 'money':
+        properties[f.param] = { type: 'number', description: f.description };
+        break;
+      case 'stringList':
+        properties[f.param] = { type: 'array', items: { type: 'string' }, description: f.description };
+        break;
+      case 'eventList':
+        properties[f.param] = {
+          type: 'array',
+          description: f.description,
+          items: {
+            type: 'object',
+            properties: {
+              date: { type: 'string', description: 'YYYY-MM-DD，记不清就留空' },
+              text: { type: 'string', description: '发生了什么' },
+            },
+            required: ['text'],
+          },
+        };
+        break;
+      case 'record':
+        properties[f.param] = {
+          type: 'object',
+          description: f.description,
+          properties: Object.fromEntries(
+            (f.fields ?? []).map((sub) => [sub.key, { type: 'string', description: sub.label }]),
+          ),
+        };
+        break;
+      default:
+        // text / date 都是一行字符串；日期的格式要求写在 description 里（对外逐字）
+        properties[f.param] = { type: 'string', description: f.description };
+    }
+    if (f.required) required.push(f.param);
+  }
+
+  return { type: 'object', properties, required };
+}
+
+/**
+ * 首诊入参：**对外 param 名 → 内部 key 名**，同样从 `intakeSchema` 派生。
+ *
+ * 【为什么这一份也不能手写】`intakeInputSchema` 只解决了「说明书从哪来」；工具壳里那份
+ * `company_name → companyName` 的对照表是**同一份定义的第二个手抄本**。手抄本的失败形态是：
+ * 领域包加了一个字段 ⇒ 说明书宣告了它、服务端也要它，只有壳不认识它，于是它被静默丢弃——
+ * 调用方照说明书填齐了仍被拒，而错误信息指名的那个字段它明明填了。
+ * 一处定义、三处消费（说明书 / 映射 / 校验），就没有这个缝。
+ *
+ * 【元→分在这里换】`kind: 'money'` 的字段对外收「元」、落库存「分」（param 名上写着 `_yuan`，
+ * key 名上写着 `Fen`）。换算只此一处：非数一律 NaN，交给领域层报字段级错，不在这里兜底成某个数。
+ *
+ * 【`record` 补空对象】没填时给 `{}` 而不是 `undefined`，与本壳原来的写法逐字一致。
+ *
+ * 归属那两项（caseId / userId）不在首诊表里——它们来自调用者身份，不是用户填的答案，
+ * 所以由调用方自己补上。
+ */
+export function intakeArgsToInput(
+  pack: DomainPack,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const input: Record<string, unknown> = {};
+  for (const f of pack.intakeSchema) {
+    const raw = args[f.param];
+    input[f.key] =
+      f.kind === 'money'
+        ? yuanToFen(raw)
+        : f.kind === 'record'
+          ? ((raw ?? {}) as Record<string, unknown>)
+          : raw;
+  }
+  return input;
 }

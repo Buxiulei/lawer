@@ -6,20 +6,20 @@
 // 于是 MCP 那条入口要么抄一份（两份清单某天不一致，而闸门只认其中一份），
 // 要么根本没有闸门——后一种的形态是：同一份《被迫解除通知》，用户在网页上写必须
 // 附后果说明，用自己的 agent 写就不必，而两者最后都会被原样发给公司。
-/** 与 migrate.ts drafts.kind 注释逐字对齐 */
-export const DRAFT_KINDS = [
-  '异议函', '被迫解除通知', '仲裁申请书', '证据清单', '答辩状', '上诉状', '谈判话术', '其他',
-] as const;
+import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
 
-export type DraftKind = (typeof DRAFT_KINDS)[number];
+/** **缺省领域**的文书种类（正本在 DomainPack.docKinds）。拿得到案件的调用方按案件领域取。 */
+export const DRAFT_KINDS: readonly string[] = DOMAINS[DEFAULT_DOMAIN].docKinds;
+
+export type DraftKind = string;
 
 /**
- * 「会发给公司」的文书类型。charter 红线 5 只对这几类生效——
- * 谈判话术、证据清单是给用户自己用的，附一段「发出前请确认」纯属噪音。
+ * 「会交到对方手里」的文书类型（缺省领域；正本在 DomainPack.outboundDocKinds）。
+ * charter 红线 5 只对这几类生效——给用户自己用的那几类附一段「发出前请确认」纯属噪音。
  */
-export const OUTBOUND_DRAFT_KINDS: ReadonlySet<string> = new Set([
-  '异议函', '被迫解除通知', '仲裁申请书', '答辩状', '上诉状',
-]);
+export const OUTBOUND_DRAFT_KINDS: ReadonlySet<string> = new Set(
+  DOMAINS[DEFAULT_DOMAIN].outboundDocKinds,
+);
 
 /** charter §7.5 的固定尾注。措辞写死在代码里，不交给模型每次即兴发挥——
  *  这段话是用户按下「发送」之前看到的最后一道提醒，不能有的轮次强有的轮次弱。 */
@@ -37,9 +37,16 @@ export function confirmationFooter(consequences: string): string {
 /**
  * 一份对外文书的正文该长什么样：正文 + 固定尾注。对内文书原样返回。
  * 两条入口都调它，省得「站内带尾注、MCP 不带」这种只在某一条路上看得见的分叉。
+ *
+ * `outboundKinds` 是这个案子所属领域的对外文书清单；省略时按缺省领域走。
  */
-export function draftBody(kind: string, content: string, consequences: string | null): string {
-  return OUTBOUND_DRAFT_KINDS.has(kind) && consequences
+export function draftBody(
+  kind: string,
+  content: string,
+  consequences: string | null,
+  outboundKinds: readonly string[] = [...OUTBOUND_DRAFT_KINDS],
+): string {
+  return outboundKinds.includes(kind) && consequences
     ? `${content}\n\n${confirmationFooter(consequences)}`
     : content;
 }

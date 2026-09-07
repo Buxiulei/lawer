@@ -13,6 +13,7 @@ import Database from 'better-sqlite3';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import * as agent from '@/lib/agent';
+import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
 import { runMigrations } from '@/lib/db/migrate';
 import type { Identity } from '@/lib/auth/identity';
 
@@ -138,6 +139,7 @@ describe('claim_calc 与站内 agent 是同一份算钱逻辑', () => {
         db,
         caseId: mine,
         userId: me.uid,
+        domain: DEFAULT_DOMAIN,
         threadId: 0,
         sourceMessageId: null,
         searcher: agent.createKnowledgeSearcher(),

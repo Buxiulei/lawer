@@ -15,6 +15,8 @@ import {
   type AgentToolContext,
 } from '../tools';
 import { KNOWLEDGE_MISS_DIRECTIVE } from '../retrieval';
+import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
+
 import { FIXTURE_PACK, fixtureSearcher, makeAgentFixture, makeSink } from './fixtures';
 
 function makeCtx(over: Partial<AgentToolContext> = {}) {
@@ -24,6 +26,7 @@ function makeCtx(over: Partial<AgentToolContext> = {}) {
     db: f.db,
     caseId: f.caseId,
     userId: f.userId,
+    domain: DEFAULT_DOMAIN,
     threadId: 1,
     sourceMessageId: null,
     citations: new CitationGuard(),

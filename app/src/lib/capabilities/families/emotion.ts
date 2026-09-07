@@ -7,6 +7,7 @@
 import * as agent from '@/lib/agent';
 import * as cases from '@/lib/cases';
 import { recordCrisisHit } from '@/lib/cases/crisis-hits';
+import { domainPackOrDefault } from '@/lib/domains/registry';
 
 import { bannedPhones, redactBanned } from './knowledge';
 import { caseIdProp, num, writeOnce } from '../shared';
@@ -108,7 +109,22 @@ export const crisisCheck: Capability = {
       };
     }
 
-    const assessment = agent.assessCrisis(text);
+    // 【归属查询挪到判定之前，2026-09-06】危机词表与首段按**这个案件所属领域**取，
+    // 而词表在判定那一刻就要用上——判完再查等于用缺省领域的词表判了一个别的领域的人：
+    // 那句话不在缺省词表里，于是这一次调用什么都没发生，回包结构完全正常。
+    // 归属对不上仍按无案处理（不报错、不追问，按缺省领域判）：
+    // **安全关键路径上不能因为一个填错的编号就不给号码。**
+    const asked = num(args.case_id);
+    const owned =
+      Number.isInteger(asked) && asked > 0
+        ? (db.prepare('SELECT id, domain FROM cases WHERE id=? AND user_id=?').get(asked, identity.uid) as
+            | { id: number; domain: string }
+            | undefined)
+        : undefined;
+    const caseId = owned ? owned.id : null;
+    const crisisPack = domainPackOrDefault(owned?.domain).crisis;
+
+    const assessment = agent.assessCrisis(text, crisisPack);
     if (!assessment.triggered) {
       return {
         hit: false,
@@ -121,25 +137,16 @@ export const crisisCheck: Capability = {
     }
 
     // 命中即留痕，走与站内对话同一个入口（lib/cases/crisis-hits.ts）。
-    // 归属对不上就按无案记：不报错、不追问，先把号码给出去。
-    const asked = num(args.case_id);
-    const owned =
-      Number.isInteger(asked) && asked > 0
-        ? (db.prepare('SELECT id FROM cases WHERE id=? AND user_id=?').get(asked, identity.uid) as
-            | { id: number }
-            | undefined)
-        : undefined;
-    const caseId = owned ? owned.id : null;
     recordCrisisHit(db, { userId: identity.uid, caseId, source: 'mcp', matched: assessment.matched });
 
-    const card = agent.createKnowledgeSearcher().get?.(agent.CRISIS_RESOURCE_PACK_ID);
+    const card = agent.createKnowledgeSearcher().get?.(crisisPack.resourcePackId);
     // 跨库禁用名单再过一道：卡自己声明的 forbidden 由 crisisHotlines 滤掉，
     // 别处声明为禁用的同一个号码由这一道滤掉（设计稿 §4.4：任何回包里都不得出现）。
     const banned = new Set(bannedPhones());
     const usable = agent.crisisHotlines(card?.facts).filter((h) => !banned.has(h.phone));
     // buildCrisisOpener 读的是卡的 facts；这里把已被跨库名单滤掉的那些也从 facts 里拿掉，
     // 免得首段与 hotlines 两处给的号码不是同一批（两处各算一次就会分叉）。
-    const firstSegment = redactBanned(agent.buildCrisisOpener({ hotlines: usable }));
+    const firstSegment = redactBanned(agent.buildCrisisOpener({ hotlines: usable }, {}, crisisPack));
 
     return {
       hit: true,

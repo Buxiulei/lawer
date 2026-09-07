@@ -4,6 +4,8 @@
  * 从客户端模块取字符串会拿到 client reference 存根而不是脚本本体。
  */
 
+import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
+
 import { faviconBootstrapSnippet } from './favicon';
 
 export const THEME_STORAGE_KEY = 'lawer.theme';
@@ -22,18 +24,30 @@ export const CASE_ID_STORAGE_KEY = 'lawer.caseId';
 /** 「我的案件」在缓存缺失时的去处：这一页现查接口再跳。 */
 export const CASE_RESOLVER_PATH = '/case';
 
-/** 低调模式开启后对外显示的中性标题（DESIGN.md RISK 1）。 */
-export const NEUTRAL_TITLE = '工作台';
+/**
+ * 低调模式词典（DESIGN.md RISK 1）。**正本在领域包**（DomainPack.copy.neutral）——
+ * 兜底措辞的全部作用是「看一眼看不出这是什么事」，而什么词会暴露完全取决于领域。
+ *
+ * 【为什么这里取的是缺省领域那一份】首屏防闪脚本在任何案件之前执行，
+ * 那一刻服务端还不知道这个人是哪个领域的用户。按案件领域换词是登录之后的事
+ * （案件页拿得到 cases.domain），P4-W1 只把正本挪进领域包、取值逐字不变。
+ *
+ * 硬规则「这类文案里不得出现本领域的显眼词」现在是**机检**的：
+ * 领域包声明 forbiddenWords，assertDomainPack 在装载时逐词比对（写进去就抛）。
+ */
+const NEUTRAL = DOMAINS[DEFAULT_DOMAIN].copy.neutral;
+
+/** 低调模式开启后对外显示的中性标题。 */
+export const NEUTRAL_TITLE = NEUTRAL.title;
 
 /** 非低调模式下路由切换瞬间的兜底标题（避免上一页的案件标题残留）。 */
-export const APP_TITLE = '土八鼠';
+export const APP_TITLE = NEUTRAL.appTitle;
 
 /**
  * 低调模式下任何可能被旁人瞥见的文案的兜底措辞。
  * 适用范围：document.title、Toast、以及将来接入的系统通知/横幅。
- * 硬规则：这类文案里不得出现「裁员」「仲裁」「赔偿」「解除」「劳动」等字样。
  */
-export const NEUTRAL_NOTICE = '有一条新的更新';
+export const NEUTRAL_NOTICE = NEUTRAL.notice;
 
 /** 在 body 渲染前把主题 class 写到 <html>，逻辑须与 theme.tsx 的 applyMode 一致。 */
 export const themeBootstrapScript = `(function(){try{var m=localStorage.getItem('${THEME_STORAGE_KEY}');if(m==='light'||m==='dark'){document.documentElement.classList.add(m)}}catch(e){}})();`;

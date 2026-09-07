@@ -7,10 +7,21 @@
 // 事就会悄悄分叉。
 import * as agent from '@/lib/agent';
 import * as cases from '@/lib/cases';
-import { LABOR_CAPABILITY_COPY } from '@/lib/domains/labor';
+import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
 
-import { caseIdProp, num, yuanToFen } from '../shared';
+import { caseIdProp, intakeArgsToInput, intakeInputSchema, num, yuanToFen } from '../shared';
 import type { Capability } from '../registry';
+
+/** 阶段枚举的对外并集（tools/list 拿不到案件上下文）；落库前按案件领域的词表再校验一次。 */
+const ALL_STAGES = [...new Set(Object.values(DOMAINS).flatMap((p) => p.stages))];
+
+/**
+ * 首诊工具的说明书与入参映射读的那个包。
+ *
+ * tools/list 拿不到案件上下文，所以两处都按缺省领域来——但它是**同一个常量**：
+ * 将来改成按案件取包时，说明书与映射一起改，不会出现「说明书换了领域、映射还停在上一个」。
+ */
+const INTAKE_PACK = DOMAINS[DEFAULT_DOMAIN];
 
 export const caseGet: Capability = {
   name: 'case_get',
@@ -61,7 +72,7 @@ export const caseUpdate: Capability = {
     type: 'object',
     properties: {
       ...caseIdProp,
-      stage: { type: 'string', enum: [...cases.CASE_STAGES], description: '案件所处阶段' },
+      stage: { type: 'string', enum: ALL_STAGES, description: '案件所处阶段' },
       goal: { type: 'string', description: '用户自述的诉求目标' },
       bottom_line: { type: 'string', description: '用户自述的底线' },
       employed_from: { type: 'string', description: '入职时间，YYYY-MM-DD，不能晚于今天；工龄年限的起点' },
@@ -156,65 +167,24 @@ export const intakeSubmit: Capability = {
     '经过（时间线）、诉求、底线。**新用户或用工基本盘还空着时用它一次建档**，问齐了再调，' +
     '不要让用户回网页填。金额传元（monthly_wage_yuan），服务端换算成分。' +
     '校验不过会逐字段回原因（如 INVALID_MONTHLY_WAGE），照着补齐再提交即可。',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      ...caseIdProp,
-      stage: { type: 'string', enum: [...cases.CASE_STAGES], description: '案件所处阶段' },
-      company_name: { type: 'string', description: LABOR_CAPABILITY_COPY.intakeCompanyName },
-      employed_from: { type: 'string', description: '入职时间，YYYY-MM-DD，不能晚于今天' },
-      monthly_wage_yuan: { type: 'number', description: '月工资，单位元（会换算成分落库）' },
-      position: { type: 'string', description: '岗位，可省略' },
-      contract_count: { type: 'string', description: '合同签署次数，用户自述原样记录，可省略' },
-      events: {
-        type: 'array',
-        description: '用户记得的事件，每条含 date（YYYY-MM-DD，可留空）与 text',
-        items: {
-          type: 'object',
-          properties: {
-            date: { type: 'string', description: 'YYYY-MM-DD，记不清就留空' },
-            text: { type: 'string', description: '发生了什么' },
-          },
-          required: ['text'],
-        },
-      },
-      free_text: { type: 'string', description: '用户整段自述的经过，可省略' },
-      company_docs: {
-        type: 'object',
-        description: '公司给过哪些文件（键 terminationNotice / settlementAgreement / otherPaper）',
-        properties: {
-          terminationNotice: { type: 'string', description: LABOR_CAPABILITY_COPY.intakeTerminationNotice },
-          settlementAgreement: { type: 'string', description: '《协商解除协议》' },
-          otherPaper: { type: 'string', description: '调岗通知 / 绩效改进（PIP）/ 警告信' },
-        },
-      },
-      company_wording: { type: 'string', description: '公司口头给的说法，可省略' },
-      goals: {
-        type: 'array',
-        items: { type: 'string' },
-        description: '诉求，至少一项',
-      },
-      bottom_line: { type: 'string', description: '用户的底线，可省略' },
-    },
-    required: ['case_id', 'stage', 'company_name', 'employed_from', 'monthly_wage_yuan', 'goals'],
-  },
+  // 入参 schema **由领域包的首诊表生成**（intakeInputSchema）：字段、必填、问法与
+  // 服务端校验读的是同一份，不存在「说明书上没有这个参数、服务端却要它」的缝。
+  // tools/list 没有案件上下文，这里给的是缺省领域那一份（与其它 enum 同一口径）。
+  inputSchema: intakeInputSchema(INTAKE_PACK),
   // 归属校验、枚举校验、落库事务全在 cases.submitIntake（与网页 POST /cases/{id}/intake 同一函数）。
-  // 本壳只做元→分换算，其余入参原样透传；校验失败结构（ok:false + errorCode + message）由路由渲染成 isError。
+  // 校验失败结构（ok:false + errorCode + message）由路由渲染成 isError。
+  //
+  // 【param→key 与元→分也由同一份 intakeSchema 派生】intakeArgsToInput 读的是上面那行
+  // 生成说明书用的**同一个包**：往首诊表加一个字段，说明书与本壳一起认识它，不会出现
+  // 「说明书宣告了、壳把它丢了」的缝。手写第二份对照表的形态见 shared.ts 的头注释。
+  //
+  // 【归属写在展开之后】assertDomainPack 已经不许首诊表用 caseId / userId 当键，
+  // 所以今天这两行放哪儿都一样；写在后面是为了让「归属只认调用者身份」这件事
+  // 不依赖另一个文件里的守卫还在不在——展开在前，同名键盖不到归属上。
   run: (db, identity, args) =>
     cases.submitIntake(db, {
+      ...intakeArgsToInput(INTAKE_PACK, args),
       caseId: num(args.case_id),
       userId: identity.uid,
-      stage: args.stage,
-      companyName: args.company_name,
-      employedFrom: args.employed_from,
-      monthlyWageFen: yuanToFen(args.monthly_wage_yuan),
-      position: args.position,
-      contractCount: args.contract_count,
-      events: args.events,
-      freeText: args.free_text,
-      companyDocs: (args.company_docs ?? {}) as Record<string, unknown>,
-      companyWording: args.company_wording,
-      goals: args.goals,
-      bottomLine: args.bottom_line,
-    }),
+    } as Parameters<typeof cases.submitIntake>[1]),
 };

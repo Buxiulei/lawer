@@ -225,8 +225,10 @@ export function parsePasteBack(text: string, pack: DomainPack): ParseSuccess | P
     const it = isObject(entry) ? entry : {};
     const kind = str(it.kind);
     const fen = it.amount_yuan === undefined ? 0 : yuanToFen(it.amount_yuan);
-    const error = !kind || !pack.calculatorKinds.includes(kind)
-      ? invalid('INVALID_KIND', `kind 只能是 ${pack.calculatorKinds.join(' / ')}`)
+    // 这里落的是**诉求登记**（claim_register），词表是 claimKinds 不是算钱器那份——
+    // 两者只有一半重叠：能记一笔账的名目比服务端能替你算的多。
+    const error = !kind || !pack.claimKinds.includes(kind)
+      ? invalid('INVALID_KIND', `kind 只能是 ${pack.claimKinds.join(' / ')}`)
       : fen === null
         ? invalid('INVALID_AMOUNT', 'amount_yuan 必须是非负数，且换算成分之后是整数')
         : null;

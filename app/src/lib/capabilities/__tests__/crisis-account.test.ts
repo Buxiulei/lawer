@@ -12,9 +12,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import Database from 'better-sqlite3';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import * as agent from '@/lib/agent';
+import { assembleCrisisOpener, type CrisisOpenerText } from '@/lib/agent/crisis-opener';
+import { DEFAULT_DOMAIN, DOMAINS, type DomainPack } from '@/lib/domains/registry';
 import { crisisStatusMark, CRISIS_HIT_WINDOW_HOURS } from '@/lib/cases/crisis-hits';
 import { runMigrations } from '@/lib/db/migrate';
 import { toSql } from '@/lib/db/time';
@@ -169,6 +171,75 @@ describe('同源守卫：crisis_check 不许有第二份词表', () => {
     for (const s of samples) {
       expect(call('crisis_check', { text: s }).hit, s).toBe(agent.assessCrisis(s).triggered);
     }
+  });
+});
+
+/**
+ * crisis_check 按**这个案件所属领域**的词表判、用那个领域的首段（设计稿 §13「危机」行）。
+ *
+ * 【为什么这条非有不可】(复审 2026-09-06 点名) 站内对话那条路已经按案件领域走了，
+ * MCP 这条路此前仍取缺省领域——于是同一句话在网页上触发、在用户自己的助手里不触发，
+ * **两边都跑得通、都不报错**，而不触发的那一次正是安全关键路径。
+ * 这正是本文件抬头第①类失败的第二种形态（第一种是"抄了第二份词表"）。
+ */
+describe('crisis_check 按案件领域判（变异：把 case_id 的领域忽略掉 → 红）', () => {
+  const FAKE_KEY = '假领域-MCP危机判据专用';
+  const OPENER: CrisisOpenerText = {
+    head: ['假领域 MCP 首段第一行。', '假领域 MCP 首段第二行：'],
+    tail: '假领域 MCP 收束句。',
+  };
+  const LABOR_PACK = DOMAINS[DEFAULT_DOMAIN];
+  const FAKE_PACK: DomainPack = {
+    ...LABOR_PACK,
+    key: FAKE_KEY,
+    crisis: {
+      ...LABOR_PACK.crisis,
+      lexicon: ['甲乙丙'],
+      openerText: OPENER,
+      firstSegment: (c) => assembleCrisisOpener(OPENER, c.facts, { compact: c.compact }),
+      // 资源卡仍指向真卡：这样首段里既有假包的话、又有真号码，
+      // 一条断言同时证明"包换了"与"卡还取得到"。
+    },
+  };
+  let fakeCase: number;
+
+  beforeAll(() => {
+    DOMAINS[FAKE_KEY] = FAKE_PACK;
+  });
+  afterAll(() => {
+    delete DOMAINS[FAKE_KEY];
+  });
+  beforeEach(() => {
+    fakeCase = Number(
+      db
+        .prepare('INSERT INTO cases (user_id, title, domain) VALUES (?, ?, ?)')
+        .run(uidA, '假领域的案子', FAKE_KEY).lastInsertRowid,
+    );
+  });
+
+  it('带上假领域的 case_id ⇒ 认假包的词，首段是假包的话 + 真卡的号码', () => {
+    const r = call('crisis_check', { text: '我最近总是甲乙丙', case_id: fakeCase });
+    expect(r.hit).toBe(true);
+    expect(String(r.first_segment)).toContain(OPENER.head[0]);
+    expect(String(r.first_segment)).not.toContain(LABOR_PACK.crisis.openerText.head[0]);
+    expect((r.hotlines as unknown[]).length).toBeGreaterThan(0);
+    expect(r.case_id).toBe(fakeCase);
+  });
+
+  it('缺省领域的词在假领域的案子里不触发（词表真的换了，不是两份并集）', () => {
+    const term = LABOR_PACK.crisis.lexicon[0];
+    expect(call('crisis_check', { text: `我最近总觉得${term}`, case_id: fakeCase }).hit).toBe(false);
+    // 同一句话不带 case_id（按缺省领域判）照旧触发——自证上一条不是"这句话本来就不触发"
+    expect(call('crisis_check', { text: `我最近总觉得${term}` }).hit).toBe(true);
+  });
+
+  it('不是本人的案子 / 不存在的编号 ⇒ 按无案（缺省领域）判，不报错也不少给号码', () => {
+    // 安全关键路径上不能因为一个填错的编号就不给号码；这条同时钉住"归属查询挪到判定之前"
+    // 没有把原来的宽容行为改掉。
+    const r = call('crisis_check', { text: '我不想活了', case_id: theirs });
+    expect(r.hit).toBe(true);
+    expect(r.case_id).toBeNull();
+    expect(String(r.first_segment)).toContain(LABOR_PACK.crisis.openerText.head[0]);
   });
 });
 

@@ -27,6 +27,8 @@ import {
   type TokenUsage,
   type UsageReport,
 } from '@/lib/llm';
+import { domainPackOrDefault } from '@/lib/domains/registry';
+
 import type { AgentEventSink } from './events';
 import { intakeStage, type IntakeStage } from './intake';
 import { buildSystemPrompt } from './prompt';
@@ -37,7 +39,6 @@ import {
   CRISIS_CARD_MARKER,
   applyLeverageGate,
   assessNbdpsyEligibility,
-  CRISIS_SAFE_FALLBACK,
   detectCrisisPaidContent,
   detectNbdpsyPitch,
   leverageSubject,
@@ -598,12 +599,21 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   // 预检索：用用户原话当查询，把命中的 pack 逐字放进 system prompt。
   // 与工具里的 knowledge_search 并存而不是二选一——预检索省掉最常见那一次往返，
   // 工具则让模型在发现自己需要别的卡时能自己去拿。
-  const packs = input.searcher ? input.searcher.search(message, { limit: MAX_INJECTED_PACKS }) : [];
+  // 注入按**这个案件的领域**过滤（设计稿 §13-3：跨域检索默认关闭）。
+  // 不过滤的形态是：第二个领域的用户拿到一批另一个行当的法条卡，
+  // 而每一张卡本身都是真的、引用格式也对——错的只是它跟这个人的事无关。
+  const packs = input.searcher
+    ? input.searcher.search(message, { limit: MAX_INJECTED_PACKS, domain: snapshot.case.domain })
+    : [];
 
   // 危机轮：判据来自 lib/agent/crisis 那一层的纯函数，注入内容也由它给定；
   // 本处只负责把它说的那张卡取回来（IO）并插到最前——它是本轮唯一真正要紧的那张卡。
   // 不经检索排序：危机表述与资源卡用词天然没有词面交集，靠调权重治不好（见 crisis.ts 文件头）。
-  const crisis = assessCrisis(message);
+  // 危机判定按**这个案件所属领域**的词表与首段（设计稿 §13「危机」行）。
+  // 用缺省领域判别的领域的形态是：一个正在崩溃的人说的那句话不在缺省词表里，
+  // 于是这一轮什么都没发生——没有报错，只是号码没给出去。
+  const crisisPack = domainPackOrDefault(snapshot.case.domain).crisis;
+  const crisis = assessCrisis(message, crisisPack);
   // 命中就留痕，走与 MCP crisis_check 同一个入口（见 lib/cases/crisis-hits.ts 抬头）。
   // 本轮这一条不会出现在本轮事实卡的首行里（快照在上面已经取过了）——本轮的危机由
   // 确定性首段与资源卡当场接住，首行标记讲的是**之前那些轮**，两件事不重叠。
@@ -826,6 +836,10 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
     db,
     caseId,
     userId,
+    // 工具句柄的词表（诉求种类 / 算钱器 / 文书种类）按这个案子的领域取，
+    // 不按缺省领域——按缺省领域的形态是：另一个领域的案子在站内对话里
+    // 收下一批本领域没有的种类，而回包结构完全正常。
+    domain: snapshot.case.domain,
     threadId: thread.id,
     sourceMessageId: messageId,
     searcher: input.searcher,
@@ -871,7 +885,7 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   let openerPhones: string[] = [];
   if (crisis.triggered) {
     // 两态：窗外首次带机构名与时段（描述有安抚价值），窗内复现只给号码行
-    const opener = buildCrisisOpener(crisisCardFacts, { compact: alreadyGiven });
+    const opener = buildCrisisOpener(crisisCardFacts, { compact: alreadyGiven }, crisisPack);
     openerPhones = extractHotlines(crisisCardFacts).filter((p) => opener.includes(p));
     // deterministic:true —— 心跳不因它停（模型还没开始出字，那 2-4 分钟正是心跳的主场）
     emit({ event: 'delta', data: { text: opener, deterministic: true } });
@@ -981,6 +995,7 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
         modelBody,
         userTurns: [message, ...history.filter((h) => h.role === 'user').map((h) => h.content)],
       }),
+      crisisPack,
     );
     let body = gate.text;
     leverageOutcome = gate.outcome;
@@ -1055,7 +1070,7 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   // 首段现在带一句随卡下发的 CRISIS_NBDPSY_LINE，它含「NBDpsy」，直接对全文判会把它当模型推销剥掉。
   // 与 D15 兜底同一处理：先劈掉首段，只在**模型段**上判/剥；非危机轮没有首段，行为不变。
   {
-    const { opener, body } = crisis.triggered ? splitCrisisOpener(text) : { opener: '', body: text };
+    const { opener, body } = crisis.triggered ? splitCrisisOpener(text, crisisPack) : { opener: '', body: text };
     if (detectNbdpsyPitch(body)) {
       const kept = stripNbdpsyPitch(body);
       text = opener ? `${opener}\n\n${kept}` : kept;
@@ -1078,12 +1093,13 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
     // 确定性首段不参与剥除：它是我们自己的固定文本，是危机轮里唯一保证在场的号码来源，
     // 且 2026-09-05 起还带一句合法的 NBDpsy 引导语（含「NBDpsy」）——**判定也必须只看模型段**，
     // 否则 detectCrisisPaidContent 会命中首段那句，每轮凭空开火、报一条假的付费内容。
-    const { opener, body } = splitCrisisOpener(text);
+    const { opener, body } = splitCrisisOpener(text, crisisPack);
     const paid = detectCrisisPaidContent(body);
     if (paid) {
       const kept = stripCrisisPaidContent(body);
       const emptied = !kept.trim();
-      text = opener ? `${opener}\n\n${emptied ? CRISIS_SAFE_FALLBACK : kept}` : (emptied ? CRISIS_SAFE_FALLBACK : kept);
+      const fallback = crisisPack.safeFallback;
+      text = opener ? `${opener}\n\n${emptied ? fallback : kept}` : (emptied ? fallback : kept);
       emit({
         event: 'notice',
         data: {

@@ -29,23 +29,29 @@ describe('labor 领域包', () => {
   });
 
   /**
-   * factsSections 目前**没有消费点**（渲染器 lib/agent/case-facts.ts 仍自带标题，
-   * P1 不动它）。没有消费点的清单最容易变成装饰，所以这里对着渲染器源码逐条比：
-   * 谁改了渲染器的分节标题、或改了这份清单，两边就会对不上。
+   * 事实卡渲染器现在**按 key 取抬头**（不再自带中文字面），所以此处比的是
+   * 「渲染器用到的键」与「包里声明的键」一一对上。
+   * 渲染器多取一个包里没有的键 ⇒ 那一节没有抬头；包里多一个键 ⇒ 有一节永远不渲染。
+   * 两个方向都要红。
    */
-  it('factsSections 与事实卡渲染器的分节标题一一对上（变异：改任一处标题 → 红）', () => {
+  it('factsSections 的键与事实卡渲染器取的键一一对上（变异：删包里任一节、或渲染器换一个键 → 红）', () => {
     const src = fs.readFileSync(path.join(SRC_ROOT, 'lib/agent/case-facts.ts'), 'utf-8');
-    const inRenderer = [...src.matchAll(/heading: '([^']+)'/g)].map((m) => m[1]);
-    // 渲染器里「当事人」按分支写了多次，去重后比顺序
-    const unique = inRenderer.filter((h, i) => inRenderer.indexOf(h) === i);
-    expect(LABOR.factsSections).toEqual(unique);
+    const used = [...src.matchAll(/heading\(s, '([a-z]+)'\)/g)].map((m) => m[1]);
+    // 「当事人」按分支写了多次，去重后比顺序
+    const unique = used.filter((k, i) => used.indexOf(k) === i);
+    expect(LABOR.factsSections.map((sec) => sec.key)).toEqual(unique);
+    expect(unique.length).toBeGreaterThanOrEqual(10); // 空匹配会让上面那条永远绿
   });
 
   /**
-   * 三组种类取的是已落库那份值集（migrate.ts 的 DDL 注释）。对着注释比，
+   * 落库的几组种类取的是**已落库那份值集**（migrate.ts 的 DDL 注释）。对着注释比，
    * 免得包里列出一批库里存不进去的种类——那是一份看着像真的假清单。
+   *
+   * 【为什么 calculatorKinds 不在这里】它是"服务端能替你算的那几项"，与 claims 表能
+   * 存哪些 kind 是两件事（算钱器只覆盖其中一部分，另有几项库里根本没有对应值）。
+   * 拿 DDL 比它，等于要求「能算的」和「能记账的」永远一样多——那正是本票拆开的那个混淆。
    */
-  it('deadlineKinds / docKinds / calculatorKinds 与 migrate.ts 的 DDL 注释同一份', () => {
+  it('deadlineKinds / docKinds / claimKinds 与 migrate.ts 的 DDL 注释同一份', () => {
     const src = fs.readFileSync(path.join(SRC_ROOT, 'lib/db/migrate.ts'), 'utf-8');
     /** 取某张表 DDL 里 kind 列后面那条 `-- a|b|c` 注释 */
     const kindEnumOf = (table: string): string[] => {
@@ -58,6 +64,50 @@ describe('labor 领域包', () => {
     };
     expect(LABOR.deadlineKinds).toEqual(kindEnumOf('deadlines'));
     expect(LABOR.docKinds).toEqual(kindEnumOf('drafts'));
-    expect(LABOR.calculatorKinds).toEqual(kindEnumOf('claims'));
+    expect(LABOR.claimKinds).toEqual(kindEnumOf('claims'));
+  });
+
+  /**
+   * 算钱器与诉求种类**刻意不同**。这条不是在钉具体取值（那由零变化守卫钉），
+   * 是在钉「它们不是同一份」这件事——两者一旦被谁改成同一个数组，
+   * 本票修掉的那个缺陷就会原样长回来（粘贴回填按算钱器校验诉求种类，
+   * 「欠薪」一类根本落不进去，而回包结构完全正常）。
+   */
+  it('calculatorKinds 与 claimKinds 是两份不同的清单（变异：把其中一处改成引用另一处 → 红）', () => {
+    expect(LABOR.calculatorKinds).not.toEqual(LABOR.claimKinds);
+    // 各自都有对方没有的项，说明"重叠但不相等"，而不是一个包含另一个
+    expect(LABOR.claimKinds.filter((k) => !LABOR.calculatorKinds.includes(k)).length).toBeGreaterThan(0);
+    expect(LABOR.calculatorKinds.filter((k) => !LABOR.claimKinds.includes(k)).length).toBeGreaterThan(0);
+  });
+
+  /** 对外文书必须是文书种类的子集（否则那道「少了发送后果就拒收」的闸永远命不中） */
+  it('outboundDocKinds ⊆ docKinds', () => {
+    for (const k of LABOR.outboundDocKinds) expect(LABOR.docKinds).toContain(k);
+  });
+
+  /**
+   * 低调模式的兜底措辞里不许出现本领域一眼能认出来的词。
+   * 这条以前只是 bootstrap.ts 里的一句注释（「硬规则：不得出现『裁员』『仲裁』…」），
+   * 靠人记得；现在词表在包里、比对在这里。
+   */
+  it('NEUTRAL 词典不含本领域的显眼词（变异：把 title 改成带「仲裁」的词 → 红）', () => {
+    const { title, appTitle, notice, forbiddenWords } = LABOR.copy.neutral;
+    expect(forbiddenWords.length).toBeGreaterThan(0);
+    for (const word of forbiddenWords) {
+      for (const text of [title, appTitle, notice]) expect(text).not.toContain(word);
+    }
+  });
+
+  /** 首诊落期限的那条规则必须落在自己的词表里，否则那条期限存不进库而首诊照常成功 */
+  it('intakeLimitation 的 kind 与 stages 都在本领域词表里', () => {
+    const lim = LABOR.intakeLimitation!;
+    expect(LABOR.deadlineKinds).toContain(lim.kind);
+    for (const st of lim.stages) expect(LABOR.stages).toContain(st);
+    expect(lim.note).toContain('{anchor}'); // 占位符没了 = 锚点日不会被写进去
+  });
+
+  /** 本领域主线线性，没有并行轨——空数组是结论，`undefined` 才是漏填 */
+  it('tracks 是空数组（不是 undefined）', () => {
+    expect(LABOR.tracks).toEqual([]);
   });
 });

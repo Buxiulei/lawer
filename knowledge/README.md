@@ -37,6 +37,7 @@ applies_to: [逼迫离职, 欠薪, 社保断缴, 协商解除]   # 场景标签�
 law_refs: [劳动合同法§38, 劳动合同法§46]           # 规范化法条引用，可选
 related: [calc-jingji-buchang-n, sop-tiaogang-yingdui]  # 关联 pack id，可选
 region: 北京          # 北京|全国；北京口径与全国规则并存时标「北京」
+domain: labor         # 可选，缺省 labor；取值见 app/src/lib/domains/registry.ts 的 DOMAINS
 sources:
   - https://flk.npc.gov.cn/...
 confidence: 原文核实   # 原文核实|二手转述|待核实（取全 pack 最低档）
@@ -143,5 +144,18 @@ facts:
 
 ## 6. index.json
 
-数组，每项：`{id, type, title, keywords, applies_to, region, confidence, updated, path}`。
+数组，每项：`{id, type, title, keywords, applies_to, region, domain, confidence, updated, path}`。
 `path` 相对 `knowledge/`。检索逻辑（lib/knowledge）：keywords + applies_to + title 分词匹配。
+
+### domain（多领域，设计稿 §13）
+
+一张卡属于哪个领域。生成器按这个顺序判：frontmatter 的 `domain` → `packs/<domain>/…`
+这种分包布局的第一层目录 → 缺省 `labor`。取值必须是注册过的领域
+（`app/src/lib/domains/registry.ts` 的 `DOMAINS`，生成器里有一份同步的影子，判据比对）。
+
+检索默认**不过滤**领域；带案件上下文的调用方（站内注入、`knowledge_search` 传了 `case_id`）
+按 `cases.domain` 限本领域——跨域检索是显式选择，不是默认行为。
+
+写一个没人认识的 `domain` 会当场拒绝生成；万一混进 index.json，加载时也会拒绝启动。
+两道都拦是因为它的失效形态是静默的：那批卡在按领域过滤时凭空消失，而检索照常返回
+200 与一个更短的列表。

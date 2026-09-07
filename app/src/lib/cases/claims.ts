@@ -25,10 +25,19 @@ import {
   sanbeiCapFacts,
 } from '@/lib/cap/sanbei';
 import * as store from '@/lib/db/agent';
+import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
 
-/** claim_calc 目前实装的公式（lib/agent/calc）。年假/加班费/双倍工资等后批再加，
- *  加进来之前不列进 enum——列了模型就会调，然后拿到一个「不支持」的错误。 */
-export const CALC_KINDS = ['N', 'N+1', '2N', '年假', '双倍工资', '加班费', '待岗', '加付赔偿金', '竞业补偿', '病假工资'] as const;
+/**
+ * **缺省领域**的算钱器清单（正本在 DomainPack.calculatorKinds）。
+ *
+ * 列的是目前实装的公式（lib/agent/calc）：没实装的不列进 enum——列了模型就会调，
+ * 然后拿到一个「不支持」的错误。
+ *
+ * 【带案件上下文的入口不要用它】拿得到案件的调用方应传 `ctx.calculatorKinds`
+ * （那个案件所属领域的词表）。用缺省领域校验别的领域的案子，形态是：
+ * 一条本领域根本没有的算法被放行，或本领域有的算法被拒——两种都返回正常结构。
+ */
+export const CALC_KINDS: readonly string[] = DOMAINS[DEFAULT_DOMAIN].calculatorKinds;
 
 /** 最低工资数据卡：年假折算、双倍工资、加班费、待岗四个公式都要用它兜底下限 */
 export const MIN_WAGE_PACK_ID = 'data-beijing-zuidi-gongzi';
@@ -48,6 +57,11 @@ export interface ClaimCalcEnv {
   /** 取不到卡时公式走内置缺省并如实发 notice，不静默 */
   searcher?: KnowledgeSearcher;
   emit?: AgentEventSink;
+  /**
+   * 这个案子所属领域能算的那几项（DomainPack.calculatorKinds）。
+   * 省略时按缺省领域走——**只有拿不到案件领域的调用方才该省略它**。
+   */
+  calculatorKinds?: readonly string[];
 }
 
 /**
@@ -433,10 +447,11 @@ export function persistCalc(
  * 于是一条路按新卡算、另一条路悄悄用着内置缺省值，两边都返回 200。
  */
 export function runClaimCalc(args: Record<string, unknown>, ctx: ClaimCalcEnv): ClaimCalcResult {
-  const kind = inEnum(args.kind, CALC_KINDS);
+  const kinds = ctx.calculatorKinds ?? CALC_KINDS;
+  const kind = inEnum(args.kind, kinds);
   if (!kind) {
     const p = new Problems(args);
-    p.note('kind', `只能是 ${CALC_KINDS.join(' / ')}`);
+    p.note('kind', `只能是 ${kinds.join(' / ')}`);
     return rejectInputs('claim_calc', p);
   }
 

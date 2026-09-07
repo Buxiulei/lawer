@@ -46,7 +46,12 @@ export function createKnowledgeSearcher(): KnowledgeSearcher {
     search(query, options = {}) {
       if (!query.trim()) return [];
       return knowledge
-        .search(query, { limit: options.limit, type: options.type, court: options.court })
+        .search(query, {
+          limit: options.limit,
+          type: options.type,
+          court: options.court,
+          domain: options.domain,
+        })
         .map(toPack);
     },
     get(id) {

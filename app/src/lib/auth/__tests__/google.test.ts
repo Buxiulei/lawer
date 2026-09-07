@@ -699,7 +699,9 @@ describe('既有邮箱绑定', () => {
   test('🔴 老账号用 Google 登进来：不新建账号，旧案件还在他自己名下', async () => {
     const db = makeTestDb();
     const uid = await registerByPhoneAndEmail(db, '13800138000', EMAIL);
-    const { caseId } = ensureDefaultCase(db, uid);
+    const made = ensureDefaultCase(db, uid);
+    if ('ok' in made) throw new Error(`建案被领域开关拦下：${made.message}`);
+    const { caseId } = made;
 
     const res = await callback(db);
     expect(res.ok).toBe(true);
