@@ -90,9 +90,22 @@ describe('assertDomainPack：包必须实现全部字段', () => {
       'inheritCompanyRoleOnUnnamed',
       { inheritCompanyRoleOnUnnamed: undefined as unknown as boolean },
     ],
+    // 不点名 role 的登记落在哪一格：空着时**每一次**登记都落到一个空角色上，
+    // 而 role 是分享/导出「洗不洗这个名字」的唯一依据 —— 落空格的名字从此两边都不管
+    ['defaultCompanyRole', { defaultCompanyRole: '' }],
     ['stages', { stages: [] }],
     ['tracks', { tracks: undefined as unknown as string[] }],
     ['intakeSchema', { intakeSchema: [] }],
+    // 整份种子表缺席：首诊照常 201、时间线照常有内容，而驾驶舱「只推一件事」那一格恒空
+    [
+      'intakeStageActions',
+      { intakeStageActions: undefined as unknown as DomainPack['intakeStageActions'] },
+    ],
+    // 事实卡 basics 四行的抬头：空着不会崩，只会让那一行顶着英文键名进 prompt 与页面
+    ['factsBasics.employedFrom', { factsBasics: { ...LABOR.factsBasics, employedFrom: '' } }],
+    ['factsBasics.position', { factsBasics: { ...LABOR.factsBasics, position: '  ' } }],
+    ['factsBasics.monthlyWage', { factsBasics: { ...LABOR.factsBasics, monthlyWage: '' } }],
+    ['factsBasics.contractCount', { factsBasics: { ...LABOR.factsBasics, contractCount: '' } }],
     ['factsSections', { factsSections: [] }],
     ['reportSections', { reportSections: [] }],
     ['deadlineKinds', { deadlineKinds: [] }],
@@ -116,6 +129,16 @@ describe('assertDomainPack：包必须实现全部字段', () => {
     [
       'crisis.firstSegment',
       { crisis: { ...LABOR.crisis, firstSegment: undefined as unknown as () => string } },
+    ],
+    // 重复触发危机时那句话：缺了不会崩，只会让第二次触发少一句「刚才给过号码」的交代
+    [
+      'crisis.repeatCardNote',
+      {
+        crisis: {
+          ...LABOR.crisis,
+          repeatCardNote: undefined as unknown as (n: readonly string[]) => string,
+        },
+      },
     ],
     // lawyerReview / sensitive 是**可选**的（省略 = 本领域没这回事），但一旦声明就不许半张。
     // 所以负样本要先把它声明齐、再打坏其中一项——否则打坏的是"没声明"，守卫本来就该放过。
@@ -162,6 +185,15 @@ describe('assertDomainPack：包必须实现全部字段', () => {
 
   for (const [name, over] of broken) {
     it(`缺 ${name} ⇒ 抛错并点全名（变异：把 assertDomainPack 里那一行删掉 → 红）`, () => {
+      /*
+       * 【先认"这一句是守卫自己说的"，再认它点了谁】只匹字段名的形态是：
+       * 从 assertDomainPack 里冒出来的**任何** TypeError 都可能带着同一串字段路径
+       *（`pack.crisis.repeatCardNote is not a function` 里逐字含 crisis.repeatCardNote），
+       * 于是守卫被删掉、样本落进后一个分支抛 TypeError，这条判据照样绿。
+       * 变异实测（集成 2026-09-07）：删掉 `crisis.repeatCardNote` 那道 typeof 守卫，
+       * 加这句之前 75 条全绿，加之后该条当场红。
+       */
+      expect(() => assertDomainPack(clone(over))).toThrow(/不完整，缺 \d+ 项/);
       expect(() => assertDomainPack(clone(over))).toThrow(pointsAt(name));
       // 自证这条负样本打坏的**就是这一项**：完好的包不该抛
       expect(() => assertDomainPack(clone())).not.toThrow();
