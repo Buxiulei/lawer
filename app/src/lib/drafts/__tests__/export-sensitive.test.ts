@@ -60,16 +60,28 @@ beforeEach(() => {
   uid = Number(db.prepare('INSERT INTO users (phone_hash) VALUES (?)').run('exp').lastInsertRowid);
 });
 
-/** 建案 → 起一份带号码的内部件 → 走完报价+确认两步，回渲染器收到的那段 markdown。 */
-async function exportedMarkdown(domain: string, kind: string): Promise<string> {
+/**
+ * 建案 → 起一份内部件 → 走完报价+确认两步，回渲染器收到的那段 markdown。
+ *
+ * `alias` 传了就同时登记成本案的对方称呼（这个领域的 company_profiles 里装的就是来访化名）。
+ */
+async function exportedMarkdown(
+  domain: string,
+  kind: string,
+  body = `联系了 ${VISITOR_PHONE}，未接。`,
+  alias?: string,
+): Promise<string> {
   const made = cases.ensureDefaultCase(db, uid, domain);
   if ('ok' in made) throw new Error(JSON.stringify(made));
+  if (alias !== undefined) {
+    db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?, ?)').run(made.caseId, alias);
+  }
   const draft = cases.writeDraft(db, {
     caseId: made.caseId,
     userId: uid,
     kind,
     title: '一份记录',
-    body: `联系了 ${VISITOR_PHONE}，未接。`,
+    body,
   });
   if (!draft.ok) throw new Error(JSON.stringify(draft));
 
@@ -88,6 +100,35 @@ describe('导出 PDF：敏感级案件强制脱敏 + 附那句说明', () => {
     expect(md, '来访者的号码原样印进了导出的 PDF').not.toContain(VISITOR_PHONE);
     expect(md).toContain(SENSITIVE_MASK);
     expect(md).toContain(COUNSELING.sensitive!.redactNotice);
+  });
+
+  it('已登记的来访化名也不进 PDF（分享页与导出读同一份化名清单）', async () => {
+    // 【为什么导出这一半要单独钉】分享页与导出是两条代码路径。只在分享页那条路加上化名替换、
+    // 导出这条忘了的形态是：导出照常返回 200，PDF 打开来什么都不缺，只是它现在在对方电脑里，
+    // 而纸上印着那句声称化名已被替换的说明。
+    const md = await exportedMarkdown(
+      'counseling',
+      '危机处置记录',
+      '来访甲乙丙今天没有到场。',
+      '来访甲乙丙',
+    );
+    expect(md, '已登记的来访化名原样印进了导出的 PDF').not.toContain('来访甲乙丙');
+    expect(md).toContain(SENSITIVE_MASK);
+    expect(md).toContain(COUNSELING.sensitive!.redactNotice);
+  });
+
+  it('缺省领域登记的公司名**不洗**（自证这道化名替换不是恒发生）', async () => {
+    const internal = DOMAINS[DEFAULT_DOMAIN].docKinds.find(
+      (k) => !DOMAINS[DEFAULT_DOMAIN].outboundDocKinds.includes(k),
+    )!;
+    const md = await exportedMarkdown(
+      DEFAULT_DOMAIN,
+      internal,
+      '蓝海科技有限公司至今没有答复。',
+      '蓝海科技有限公司',
+    );
+    expect(md).toContain('蓝海科技有限公司');
+    expect(md).not.toContain(SENSITIVE_MASK);
   });
 
   it('缺省领域的同一份文书**逐字不变**，也不多那句说明（自证不是恒脱敏）', async () => {

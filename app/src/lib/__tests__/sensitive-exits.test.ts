@@ -21,7 +21,7 @@ import * as cases from '@/lib/cases';
 import { runMigrations } from '@/lib/db/migrate';
 import { DEFAULT_DOMAIN, DOMAINS, DOMAINS_ENABLED_ENV } from '@/lib/domains/registry';
 import { buildPacket } from '@/lib/referral/packet';
-import { SENSITIVE_MASK, maskContacts, redactForShare, sensitivityOf } from '@/lib/sensitive';
+import { SENSITIVE_MASK, maskContacts, sensitivityOf, shareRedactorFor } from '@/lib/sensitive';
 import { createShare, readShare } from '@/lib/shares';
 
 const COUNSELING = DOMAINS.counseling;
@@ -74,8 +74,43 @@ describe('敏感级声明的读法', () => {
 
   it('没声明敏感级的领域，同一段文本**逐字不变**（自证脱敏不是恒发生）', () => {
     const raw = `联系人 ${VISITOR_PHONE}`;
-    expect(redactForShare(DEFAULT_DOMAIN, raw).text).toBe(raw);
-    expect(redactForShare(DEFAULT_DOMAIN, raw).notice).toBeNull();
+    const redactor = shareRedactorFor(db, makeCase(DEFAULT_DOMAIN));
+    expect(redactor.text(raw).text).toBe(raw);
+    expect(redactor.notice).toBeNull();
+  });
+
+  it('出口二的脱敏器把两类都洗：有形状的联系方式 + 本案登记的化名', () => {
+    // 【为什么这两类要在同一个脱敏器里一起验】它们的来源不同——联系方式靠跨案件通用的
+    // 规则认，化名靠**本案**登记的那份清单认。分成两处传参的形态是：某条出口只传了领域、
+    // 忘了传化名清单，而它照常返回 200。这里验的是"拿到脱敏器就两类都洗"。
+    const caseId = makeCase('counseling');
+    db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?, ?)').run(caseId, '来访甲乙丙');
+    const redactor = shareRedactorFor(db, caseId);
+    const got = redactor.text(`来访甲乙丙的电话是 ${VISITOR_PHONE}`);
+    expect(got.text).not.toContain('来访甲乙丙');
+    expect(got.text).not.toContain(VISITOR_PHONE);
+    expect(got.hits).toBe(2);
+    expect(redactor.notice).toBe(COUNSELING.sensitive!.redactNotice);
+  });
+
+  it('长的化名先替：短名是长名的一截时不会把长名切碎', () => {
+    // 「来访甲」与「来访甲乙丙」同案并存时，先替短的会在页面上留下「〔已脱敏〕乙丙」——
+    // 那半截仍然指得到人，而两处都不报错。
+    const caseId = makeCase('counseling');
+    const ins = db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?, ?)');
+    ins.run(caseId, '来访甲');
+    ins.run(caseId, '来访甲乙丙');
+    const got = shareRedactorFor(db, caseId).text('来访甲乙丙与来访甲不是同一个人');
+    expect(got.text).not.toContain('乙丙');
+    expect(got.text).toBe(`${SENSITIVE_MASK}与${SENSITIVE_MASK}不是同一个人`);
+  });
+
+  it('单字的登记名不参与替换（替了会把整份产物洗成读不成句）', () => {
+    // 用户随手把对方记成「甲」时，替换会把正文里每一个「甲」都换掉：「甲方」→「〔已脱敏〕方」。
+    // 漏掉一个单字化名的代价是它留在页面上；替掉它的代价是整份文书作废、且看起来像系统坏了。
+    const caseId = makeCase('counseling');
+    db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?, ?)').run(caseId, '甲');
+    expect(shareRedactorFor(db, caseId).text('甲方与乙方').text).toBe('甲方与乙方');
   });
 });
 
@@ -132,6 +167,84 @@ describe('出口二·免登录分享页：强制脱敏 + 印一句为什么', ()
     if (read.state !== 'ok') return;
     expect(read.view.body).toContain(VISITOR_PHONE);
     expect(read.view.redact_notice).toBeNull();
+  });
+
+  // ───── 化名/编号这一格：notice 上写着它被替换了，那句话必须是真的 ─────
+  //
+  // 【为什么它单独占三条判据】这个领域的档案里，来访者的身份**就是那个化名或编号**
+  //（§16：不收真实姓名，所以化名是唯一的身份标识）。分享页印的那句话逐字写着
+  //「出现的化名或编号已替换为占位」——只洗联系方式不洗化名的形态是：
+  // 页面上同时出现「来访甲乙丙」和一句声称它已被替换的说明，两边都不报错，
+  // 而读的人会把这个真化名当成占位符。转介包那个出口早就在拦已登记的化名了
+  //（走 companyTerms），三个出口里只有这一个漏着。
+  it('已登记的来访化名在文书分享页上被换掉（notice 说它替换了，就必须真替换）', () => {
+    const caseId = makeCase('counseling');
+    db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?, ?)').run(caseId, '来访甲乙丙');
+    const made = cases.writeDraft(db, {
+      caseId,
+      userId: uid,
+      kind: '危机处置记录',
+      title: '一份记录',
+      body: '来访甲乙丙今天没有到场，电话未接。',
+    });
+    if (!made.ok) throw new Error(JSON.stringify(made));
+    const share = createShare(db, { userId: uid, draftId: made.draft.id });
+    if (!share.ok) throw new Error(JSON.stringify(share));
+    const read = readShare(db, share.token);
+    expect(read.state).toBe('ok');
+    if (read.state !== 'ok') return;
+    expect(read.view.body, '已登记的来访化名原样进了免登录分享页').not.toContain('来访甲乙丙');
+    expect(read.view.body).toContain(SENSITIVE_MASK);
+    expect(read.view.redact_notice).toBe(COUNSELING.sensitive!.redactNotice);
+  });
+
+  it('证据分享的材料名与明细里的化名同样被换掉（两条路读同一份化名清单）', () => {
+    const caseId = makeCase('counseling');
+    db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?, ?)').run(caseId, '来访甲乙丙');
+    const fileId = Number(
+      db
+        .prepare('INSERT INTO files (sha256, size, mime, enc_path) VALUES (?, ?, ?, ?)')
+        .run('b'.repeat(64), 1, 'audio/mp4', '/dev/null').lastInsertRowid,
+    );
+    const evId = Number(
+      db
+        .prepare(
+          `INSERT INTO evidence (case_id, user_id, file_id, name, category, status, prove_purpose, original_medium)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(caseId, uid, fileId, '与来访甲乙丙的通话录音', '录音', '已上传', '来访甲乙丙口头承认', '手机录音')
+        .lastInsertRowid,
+    );
+    const share = createShare(db, { userId: uid, evidenceId: evId });
+    if (!share.ok) throw new Error(JSON.stringify(share));
+    const read = readShare(db, share.token);
+    expect(read.state).toBe('ok');
+    if (read.state !== 'ok') return;
+    expect(read.view.title, '材料名里的化名没被洗').not.toContain('来访甲乙丙');
+    expect(JSON.stringify(read.view.meta)).not.toContain('来访甲乙丙');
+  });
+
+  it('缺省领域登记的对方名字**不洗**（自证这道化名替换不是恒发生）', () => {
+    // 那个领域的对面是一家公司，公司名正是分享页要给对方看的东西——
+    // 把它也洗掉的形态是：用户分享一份文书给对方律师，正文里对面叫〔已脱敏〕。
+    const caseId = makeCase(DEFAULT_DOMAIN);
+    db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?, ?)').run(caseId, '蓝海科技有限公司');
+    const made = cases.writeDraft(db, {
+      caseId,
+      userId: uid,
+      kind: DOMAINS[DEFAULT_DOMAIN].docKinds.find(
+        (k) => !DOMAINS[DEFAULT_DOMAIN].outboundDocKinds.includes(k),
+      )!,
+      title: '一份文书',
+      body: '蓝海科技有限公司至今没有答复。',
+    });
+    if (!made.ok) throw new Error(JSON.stringify(made));
+    const share = createShare(db, { userId: uid, draftId: made.draft.id });
+    if (!share.ok) throw new Error(JSON.stringify(share));
+    const read = readShare(db, share.token);
+    expect(read.state).toBe('ok');
+    if (read.state !== 'ok') return;
+    expect(read.view.body).toContain('蓝海科技有限公司');
   });
 
   it('证据分享：材料名与每一条明细都过同一道脱敏（变异：只洗明细不洗标题 → 红）', () => {
