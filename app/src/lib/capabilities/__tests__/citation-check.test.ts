@@ -253,9 +253,11 @@ describe('citation_check · 判例四步法', () => {
     }[];
     expect(mutated.find((e) => e.id === HEARSAY_ID)!.confidence).toBe('二手转述');
     // 而真实库里挑不出一张现成的——这正是这张卡必须造出来的原因。
-    // 【为什么按豁免目录分开数】带 GROUNDING_PENDING 的包整包欠着账（有到期日），
-    // 它的卡照常进索引、confidence 照常是最低档；把它们并进来数，这条会红成"回归"。
-    // 分两句说：`二手转述` 全库一张不许有；`待核实` 只许出现在豁免目录里。
+    // 【豁免目录这一层为什么还留着】2026-09-07 收口后现库已**没有** GROUNDING_PENDING
+    // 豁免目录（counseling 包核实完毕、欠条已销），所以 pendingFor 现在恒为 null、
+    // 下面两句实际是在数整个索引。留着这一层是因为豁免机制本身没删：将来某个包再欠账时，
+    // 这条不会因为"数进了欠账包的卡"而红成假回归。**现库无豁免**这件事本身由
+    // knowledge/__tests__/index-guard.test.ts 与 scripts/tests/test_gen_guards.py 各钉一条。
     const pending = loadPending(KNOWLEDGE_DIR);
     expect(INDEX.filter((e) => e.confidence === '二手转述').map((e) => e.id)).toEqual([]);
     expect(

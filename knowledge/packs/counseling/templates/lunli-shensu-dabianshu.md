@@ -9,9 +9,9 @@ related: [sop-lunli-shensu-yingdui, ethic-lunli-1-8-1-10-shuangchong-guanxi, eth
 region: 全国
 domain: counseling
 sources:
-  - https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml
-confidence: 待核实
-updated: 2026-09-06
+  - https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 《伦理申诉答辩书》模板
@@ -21,8 +21,8 @@ updated: 2026-09-06
 收到行业协会伦理工作组的申诉受理通知，需要在其载明期限内提交书面答辩。
 分线纪律见 [[sop-lunli-shensu-yingdui]]——**伦理答辩不与监管答复、诉讼答辩共用文本。**
 
-> ⚠️ **引用条号前先核对官方 PDF**：本知识包的伦理卡整卡标 `待核实`
-> （[[ethic-lunli-3-2-baomi-liwai]]、[[ethic-lunli-1-8-1-10-shuangchong-guanxi]]）。
+> ⚠️ **引用条号前先核对官方 PDF**：本知识包的伦理卡条文尚未完成官方 PDF 逐字核对
+> （[[ethic-lunli-3-2-baomi-liwai]]、[[ethic-lunli-1-8-1-10-shuangchong-guanxi]]，引用前请先核对其当前状态）。
 > **答辩书中的守则条号与条文必须由人工核对学会官方 PDF 后填写，不得从本知识包直接照抄。**
 
 ## 全文模板
@@ -101,15 +101,5 @@ updated: 2026-09-06
 ## 注意事项
 
 - 提交前完成一次交叉核对：答辩书 ⇄ 投诉答复函 ⇄ 诉讼材料，**三处事实必须一致**；
-- 涉及同一事实已进入诉讼的，据报道曾有协会因诉讼在案暂停调查的情形
-  （[[case-dongni-lisongwei-weizhongshen]]，未终审、仅内部参考）——
-  **不得据此推迟准备**，两条线各自按期推进。
-
-## 待核实
-
-- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
-  下列未决项：
-  - [[case-dongni-lisongwei-weizhongshen]]（未终审、无裁判文书全文，§H4）
-  - [[ethic-lunli-1-8-1-10-shuangchong-guanxi]]（伦理守则条文待人工核对官方 PDF，§H1）
-  - [[ethic-lunli-3-2-baomi-liwai]]（伦理守则条文待人工核对官方 PDF，§H1）
-  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。
+- 涉及同一事实已进入诉讼的，协会可能因诉讼在案而暂停或推迟其自身调查程序——
+  **不得据此推迟本答辩书的准备**，两条线各自按期推进。

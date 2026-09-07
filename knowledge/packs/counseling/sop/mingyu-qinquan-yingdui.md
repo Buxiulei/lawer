@@ -5,14 +5,14 @@ title: 网络曝光/差评/剪辑录音的名誉侵权应对 SOP
 keywords: [名誉权, 网络曝光, 差评, 录音剪辑, 公证保全, 通知删除, 平台投诉, 律师函, 基本内容失实, 舆论]
 applies_to: [名誉侵权, 隐私泄露, 来访投诉, 证据固定, 诉讼与仲裁]
 law_refs: [民法典§1032, 民法典§1033, 民法典§188]
-related: [statute-mfd-1032-1033-yinsi, statute-mfd-188-susong-shixiao, case-guge-mingyu-quan, case-dongni-lisongwei-weizhongshen, template-lvshihan-yingdui-yaodian, sop-yinsi-xielou-zhikong]
+related: [statute-mfd-1032-1033-yinsi, statute-mfd-188-susong-shixiao, method-counseling-panli-heyan, template-lvshihan-yingdui-yaodian, sop-yinsi-xielou-zhikong]
 region: 全国
 domain: counseling
 sources:
   - https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm
   - http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html
-confidence: 待核实
-updated: 2026-09-06
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 网络曝光与差评的名誉侵权应对 SOP
@@ -36,8 +36,7 @@ updated: 2026-09-06
 ### 第 1 步（发现当天，最紧急）：固定证据，**不回应**
 
 - **立刻公证保全**或至少做可信时间戳存证：完整页面、发布时间、账号信息、
-  阅读/转发数据、评论区。据报道，公证费在名誉权案中可获支持
-  （见 [[case-guge-mingyu-quan]]，仅内部参考）。
+  阅读/转发数据、评论区——固定证据越早、越完整，后续无论走通知删除还是诉讼都越主动。
 - ❌ **不在评论区回应、不私聊争辩、不发朋友圈自辩**——每一次回应都会给对方新的素材，
   并把内容推上更多人的信息流。
 
@@ -65,7 +64,7 @@ updated: 2026-09-06
 
 - 诉讼时效 3 年，起算自"知道或者应当知道权利受到损害以及义务人"之日
   （民法典第 188 条，见 [[statute-mfd-188-susong-shixiao]]）；
-- **未终审案件不能用来预测胜败**（见 [[case-dongni-lisongwei-weizhongshen]]）；
+- **未终审案件不能用来预测胜败**（原则见 [[method-counseling-panli-heyan]]）；
 - 诉讼会带来二次传播，须与机构负责人书面确认利弊后再决定。
 
 ## 三条绝对红线（违反即把一场官司变成两场）
@@ -95,12 +94,3 @@ updated: 2026-09-06
 
 - 民法典第 1032/1033 条（[[statute-mfd-1032-1033-yinsi]]）
 - 民法典第 188 条（[[statute-mfd-188-susong-shixiao]]）
-- 参考案例（仅内部参考）：[[case-guge-mingyu-quan]]、[[case-dongni-lisongwei-weizhongshen]]
-
-## 待核实
-
-- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
-  下列未决项：
-  - [[case-dongni-lisongwei-weizhongshen]]（未终审、无裁判文书全文，§H4）
-  - [[case-guge-mingyu-quan]]（无裁判文书全文，§H4）
-  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。

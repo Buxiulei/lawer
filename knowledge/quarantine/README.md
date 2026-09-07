@@ -9,8 +9,11 @@
 knowledge/quarantine/<原子目录>/<原卡文件名>.md
 ```
 
-`<原子目录>` 沿用它原来在 `packs/` 下的子目录名（`statutes/`、`cases/`、`calc/` …），
-这样将来核实成功要搬回去时，路径是现成的。
+`<原子目录>` 沿用它原来在 `packs/` 下的**整段**相对路径（`statutes/`、`cases/`、`calc/` …），
+这样将来核实成功要搬回去时，路径是现成的。**领域包连领域那一段一起沿用**：
+`packs/counseling/cases/x.md` → `quarantine/counseling/cases/x.md`，不是 `quarantine/cases/x.md`。
+（2026-09-07 收口时纠正过一次：counseling 的两张判例卡一度落在 `quarantine/cases/` 里，
+与劳动包的四十来张判例卡混在同一个目录下——搬回去时会搬错地方，而目录本身不会说这件事。）
 
 移动用普通 `mv`，卡片正文一个字不改；**在 frontmatter 之后、正文之前**加一段隔离说明：
 
@@ -199,3 +202,25 @@ knowledge/quarantine/<原子目录>/<原卡文件名>.md
 
 复活条件同上：拿到判决全文或典型案例逐案全文的 `.gov.cn` 原件并核过引文；
 汇编/通报会类通稿不算——只有一句话要旨的官方页不足以核实本卡断言的具体案情与裁判理由原文。
+
+### 第 13 批（2026-09-07，心理咨询纠纷领域包 `packs/counseling`，核实员第 3 批；收口时归位到 `quarantine/counseling/cases/`）
+
+本批分到 3 张判例卡，1 张（四川高院退费案）在四川省高级人民法院官网「典型案例」栏目
+（`scfy.scssfw.gov.cn`）找到官方原文并复活（登记为 `cases-scfy-2024-xiaofei-dxal-3`，
+案情、金额与裁判理由逐字核对一致，改写为只断言官网原文，回到 `knowledge/packs/counseling/cases/`）。
+以下 2 张维持隔离：
+
+- **case-dongni-lisongwei-weizhongshen**（冬妮诉李松蔚名誉权互诉案）：卡片自述"2024 年开庭·
+  未终审"，按 [[method-counseling-panli-heyan]] 未终审案件没有先例价值；唯一来源为澎湃新闻转载，
+  非 `.gov.cn`。本次复核用 `html.duckduckgo.com` 检索该案后续进展，搜索引擎持续返回 HTTP 202
+  （限流）未获结果，本会话 WebSearch 工具配额已耗尽（200/200），未能确认终审情况。
+- **case-guge-mingyu-quan**（顾歌诉来访者家属名誉权案）：唯一来源是代理律所（上海市光大律师
+  事务所）官网的自我宣传文章，不是司法机关或中立媒体发布，案号/审理法院/判决年份均未载。
+  试过：`www.court.gov.cn` 新闻中心/典型案例栏目人工翻页未见收录；`rmfyalk.court.gov.cn`
+  （人民法院案例库）首页可达但检索接口 `/cpws_al_api/api/cpwsAl/...` 直接请求返回
+  `400 Bad Request`（需前端会话，未能绕过）；`wenshu.court.gov.cn` 搜到的 2 个 `down/one?docId=`
+  直链请求均返回 0 字节（需要登录会话）；`html.duckduckgo.com`／`www.bing.com`／`www.so.com`
+  多次检索均被限流或返回与查询无关的结果。
+
+复活条件同上：拿到该案（或顾歌案）在 `.gov.cn` 上的判决全文/官方通稿并核过引文；
+冬妮案额外需要确认已终审。

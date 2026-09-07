@@ -10,8 +10,8 @@ region: 全国
 domain: counseling
 sources:
   - https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm
-confidence: 待核实
-updated: 2026-09-06
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 《转介函》模板
@@ -87,11 +87,3 @@ updated: 2026-09-06
 - ⛔ 不在函中写诊断、不写"你必须去"；
 - ⛔ 不代来访挂号、代为决策、垫付费用——好意会变成"实际接管"的证据；
 - 转介函编号写入 [[template-weiji-chuzhi-jilu]] 第四栏，两份文件互相印证。
-
-## 待核实
-
-- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
-  下列未决项：
-  - [[script-laifang-tousu-goutong]]（同为待核实卡，§H6）
-  - [[template-weiji-chuzhi-jilu]]（同为待核实卡，§H6）
-  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。

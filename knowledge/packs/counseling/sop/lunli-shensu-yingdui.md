@@ -5,14 +5,13 @@ title: 行业协会伦理申诉的应对 SOP（注册系统伦理工作组来函
 keywords: [伦理申诉, 中国心理学会, 注册系统, 伦理工作组, 答辩, 除名, 自律处分, 三条线并行, 督导记录]
 applies_to: [伦理申诉, 来访投诉, 名誉侵权, 监管投诉, 诉讼与仲裁]
 law_refs: [精神卫生法§23]
-related: [ethic-lunli-1-8-1-10-shuangchong-guanxi, ethic-lunli-3-2-baomi-liwai, template-lunli-shensu-dabianshu, sop-jianguan-xiehui-tousu, sop-mingyu-qinquan-yingdui, case-dongni-lisongwei-weizhongshen, data-counseling-shixiao-qixian]
+related: [ethic-lunli-1-8-1-10-shuangchong-guanxi, ethic-lunli-3-2-baomi-liwai, template-lunli-shensu-dabianshu, sop-jianguan-xiehui-tousu, sop-mingyu-qinquan-yingdui, data-counseling-shixiao-qixian]
 region: 全国
 domain: counseling
 sources:
-  - https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml
   - https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm
-confidence: 待核实
-updated: 2026-09-06
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 伦理申诉应对 SOP
@@ -27,16 +26,16 @@ updated: 2026-09-06
 1. **协会管的是行业自律，不是法律责任**。处理结果与民事赔偿、行政处罚互不替代。
 2. **三条线可能并行**：伦理申诉、监管投诉（[[sop-jianguan-xiehui-tousu]]）、
    民事诉讼与舆论（[[sop-mingyu-qinquan-yingdui]]）。**三条线各自准备，不共用一份文本。**
-3. **不能指望"等协会先查清"**：据报道，已有案例中协会因诉讼在案暂停调查
-   （见 [[case-dongni-lisongwei-weizhongshen]]，未终审、仅内部参考）。
+3. **不能指望"等协会先查清"**：诉讼在案期间协会可能因此暂停或推迟其自身调查程序，
+   两条线应分别按各自期限推进，不得以"等协会结论"为由拖延诉讼准备，反之亦然。
 
 ## 分步动作
 
 ### 第 1 步：确认程序事项
 
 - 申诉受理通知的**来函主体、申诉事项原文、要求答复的期限与形式**；
-- **协会伦理申诉的受理与答复时限本项目未取得公开明文**（【待核实】，
-  见 [[data-counseling-shixiao-qixian]]）——**一律以来函载明的期限为准**，不自行推算。
+- **协会伦理申诉的受理与答复时限本项目未取得公开明文**
+  （见 [[data-counseling-shixiao-qixian]]）——**一律以来函载明的期限为准**，不自行推算。
 
 ### 第 2 步：按被指控条款逐条对照，做"条款—事实—证据"三列表
 
@@ -44,8 +43,8 @@ updated: 2026-09-06
 |---|---|---|
 | 如 1.8 双重关系 | （原文抄录） | （沟通渠道记录、时间线、督导记录） |
 
-⚠️ 引用守则条号前先看核实状态：本知识包的伦理卡**整卡待核实（需人工核对 PDF）**
-（[[ethic-lunli-1-8-1-10-shuangchong-guanxi]]、[[ethic-lunli-3-2-baomi-liwai]]）。
+⚠️ 引用守则条号前先看核实状态：本知识包的伦理卡**条文尚未完成官方 PDF 逐字核对**
+（[[ethic-lunli-1-8-1-10-shuangchong-guanxi]]、[[ethic-lunli-3-2-baomi-liwai]]，引用前请先核对其当前状态）。
 **答辩书中引用条号与条文，必须先由人工核对学会官方 PDF 原文**，不得直接照抄本知识包。
 
 ### 第 3 步：写答辩书（模板 [[template-lunli-shensu-dabianshu]]）
@@ -88,6 +87,6 @@ updated: 2026-09-06
 
 ## 依据
 
-- 伦理守则 1.8/1.9/1.10（[[ethic-lunli-1-8-1-10-shuangchong-guanxi]]，**整卡待核实**）
-- 伦理守则 3.1—3.4（[[ethic-lunli-3-2-baomi-liwai]]，**整卡待核实**）
+- 伦理守则 1.8/1.9/1.10（[[ethic-lunli-1-8-1-10-shuangchong-guanxi]]，**条文尚未完成官方 PDF 逐字核对**）
+- 伦理守则 3.1—3.4（[[ethic-lunli-3-2-baomi-liwai]]，**条文尚未完成官方 PDF 逐字核对**）
 - 精神卫生法第 23 条（[[statute-jswsf-23-zixun-bianjie]]）

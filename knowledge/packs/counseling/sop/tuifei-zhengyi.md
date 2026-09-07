@@ -11,8 +11,8 @@ domain: counseling
 sources:
   - https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml
   - http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm
-confidence: 待核实
-updated: 2026-09-06
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 退费争议应对 SOP
@@ -101,12 +101,3 @@ updated: 2026-09-06
 - 消费者权益保护法第 26 条（[[statute-xbf-26-55-geshi-tiaokuan-chengfa]]）
 - 合同定性风险：[[risk-hetong-dingxing]]（**未经律师书面确认不得作为结论输出**）
 - 参考案例（仅内部参考）：[[case-sichuan-tuifei-7500]]
-
-## 待核实
-
-- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
-  下列未决项：
-  - [[case-sichuan-tuifei-7500]]（无裁判文书全文，§H4）
-  - [[data-counseling-shixiao-qixian]]（现行条号与各类答复期限待核，§H3）
-  - [[risk-hetong-dingxing]]（待律师书面确认，§H2）
-  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。

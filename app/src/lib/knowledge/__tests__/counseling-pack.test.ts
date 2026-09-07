@@ -144,7 +144,13 @@ describe('设计稿 §16 的知识包清单齐备（变异：删掉任一张卡 
       'template-lunli-shensu-dabianshu',
     ],
     数据卡: ['data-counseling-weiji-rexian', 'data-counseling-shixiao-qixian'],
-    判例卡: ['case-guge-mingyu-quan', 'case-dongni-lisongwei-weizhongshen', 'case-sichuan-tuifei-7500'],
+    // 判例卡原有 3 张。2026-09-07 核实员第 3 批复核：case-guge-mingyu-quan（唯一来源是
+    // 代理律所官网宣传文章，追不到 .gov.cn 或法院/协会自己发布的原文）与
+    // case-dongni-lisongwei-weizhongshen（卡片自述"未终审"，且唯一来源是新闻转载）均已移入
+    // knowledge/quarantine/counseling/cases/（原因见各卡【隔离原因】块与 knowledge/quarantine/README.md
+    // 第 13 批），不再进 index，故不再要求这两个 id 在 counseling 包内。
+    // case-sichuan-tuifei-7500 已在四川省高级人民法院官网找到官方原文并核实，confidence 升为原文核实。
+    判例卡: ['case-sichuan-tuifei-7500'],
     方法卡: [
       'method-counseling-panli-heyan',
       'risk-qiangzhi-baogao-zhuti',
@@ -171,40 +177,56 @@ describe('设计稿 §16 的知识包清单齐备（变异：删掉任一张卡 
   });
 });
 
-describe('🔴 核实纪律：伦理守则只能人工核对 PDF，不得机器抽取后升档', () => {
+describe('🔴 核实纪律：伦理守则第二版已用官方 HTML 全文逐字核实（2026-09-07 解除 H1）', () => {
+  // 【前提变了，闸门跟着改】原判据钉的是"学会官方 PDF 机器抽取不可靠，不许凭机抽结果升档"——
+  // 这句话本身没错，但它挡的是"PDF"，不是"这份守则永远核不动"。2026-09-07 核实员找到
+  // 同一份《守则（第二版）》的**非 PDF** 一手源：journal.psych.ac.cn 的期刊网页版
+  // （《心理学报》2018 年第 50 卷第 11 期，中国心理学会主办、临床心理学注册工作委员会撰写并
+  // 代表学会发布），已按 kind=行业规范 登记（knowledge/sources.json 的 lunli-shouze-di2ban），
+  // HTML 属 fetch-source.py DERIVABLE_KINDS 的确定性抽取格式，三张卡共 10 条 statute_quotes
+  // 逐条经 scripts/verify-quotes.py 核对一致。继续钉着「待核实」会变成把"防止机抽 PDF 蒙混"
+  // 的旧纪律，用在一个已经不涉及 PDF 抽取的新状态上——纪律没有跟着解除条件走。
   const ETHIC_IDS = [
     'ethic-lunli-3-2-baomi-liwai',
     'ethic-lunli-1-8-1-10-shuangchong-guanxi',
     'ethic-lunli-8-2-8-3-yuancheng-fuwu',
   ];
 
-  it.each(ETHIC_IDS)('%s 必须标「待核实」且正文写明需人工核对 PDF（变异：改成原文核实 → 红）', (id) => {
+  it.each(ETHIC_IDS)('%s 标「原文核实」，来源是登记在册的行业规范页（journal.psych.ac.cn）', (id) => {
     const e = COUNSELING.find((x) => x.id === id)!;
-    expect(e.confidence, `${id} 被升档了——伦理守则官方 PDF 机器抽取不可靠，本票只能标待核实`).toBe('待核实');
-    expect(body(id)).toMatch(/待核实（需人工核对\s*PDF）/);
+    expect(e.confidence, `${id} 的 confidence 应为原文核实`).toBe('原文核实');
+    expect(
+      e.sources.some((s) => s.startsWith('https://journal.psych.ac.cn/')),
+      `${id} 的来源应指向守则第二版的登记页`,
+    ).toBe(true);
   });
 
-  it('伦理卡不得把条文塞进 facts.statute_quotes（那是给代码当逐字依据用的面）', () => {
-    for (const id of ETHIC_IDS) {
-      const raw = fs.readFileSync(path.join(KNOWLEDGE_DIR, COUNSELING.find((x) => x.id === id)!.path), 'utf-8');
-      expect(raw.includes('statute_quotes'), `${id} 把未核实条文放进了 statute_quotes`).toBe(false);
-    }
+  it.each(ETHIC_IDS)('%s 带逐字核过的 facts.statute_quotes，并写明 source_id 消歧', (id) => {
+    const raw = fs.readFileSync(path.join(KNOWLEDGE_DIR, COUNSELING.find((x) => x.id === id)!.path), 'utf-8');
+    expect(raw.includes('statute_quotes'), `${id} 应带 facts.statute_quotes（逐字核过才可标原文核实）`).toBe(
+      true,
+    );
+    expect(raw.includes('lunli-shouze-di2ban'), `${id} 的引文应写明 source_id 指名登记原件`).toBe(true);
   });
 });
 
 describe('🔴 核实纪律：标「原文核实」的卡，来源必须是官方源', () => {
-  // 白名单只收官方域（国家法律法规数据库、人大、政府网、法院、检察院、网信办）。
+  // 白名单收官方域（国家法律法规数据库、人大、政府网、法院、检察院、网信办），
+  // 外加登记在册的 kind=行业规范 机构官网（学会伦理守则一类，见 knowledge/sources.json）。
   // 变异：把某张法条卡的 source 换成期刊/新闻页而保留「原文核实」→ 红。
   const OFFICIAL = /^https?:\/\/([a-z0-9-]+\.)*(npc\.gov\.cn|gov\.cn|court\.gov\.cn|spp\.gov\.cn)\//;
+  // kind=行业规范，issuer=中国心理学会，登记见 knowledge/sources.json 的 lunli-shouze-di2ban。
+  const INDUSTRY_STANDARD = /^https?:\/\/journal\.psych\.ac\.cn\//;
 
-  it('每张 confidence=原文核实 的 counseling 卡，其 sources 全部落在官方域', () => {
+  it('每张 confidence=原文核实 的 counseling 卡，其 sources 全部落在官方域或登记在册的行业规范域', () => {
     const verified = COUNSELING.filter((e) => e.confidence === '原文核实');
     expect(verified.length, '一张原文核实的卡都没有 ⇒ 这条判据在空跑').toBeGreaterThan(6);
     for (const e of verified) {
       for (const s of e.sources) {
-        // 方法卡的 source 是库内相对路径（引用劳动包的方法本体），不是外部 URL
-        if (s.startsWith('knowledge/packs/')) continue;
-        expect(OFFICIAL.test(s), `${e.id} 标了原文核实，但来源不是官方源：${s}`).toBe(true);
+        expect(
+          OFFICIAL.test(s) || INDUSTRY_STANDARD.test(s),
+          `${e.id} 标了原文核实，但来源不是官方源也不是登记在册的行业规范域：${s}`,
+        ).toBe(true);
       }
     }
   });
@@ -238,8 +260,38 @@ describe('🔴 四张待律师复核风险卡：那句输出闸不能被删', ()
     expect(body(id)).toContain('未经律师书面确认不得作为结论输出');
   });
 
-  it('四张风险卡都标 待核实（拿不准的事不许标已核实）', () => {
-    for (const id of RISK_IDS) expect(COUNSELING.find((e) => e.id === id)!.confidence, id).toBe('待核实');
+  // 【2026-09-07 收口：这四张从「待核实」升到「原文核实」，升的是出处不是结论】
+  // 原判据写着"拿不准的事不许标已核实"——那句话对的是**出处**那一面，而这四张卡拿不准的
+  // 从来不是出处，是**法律结论**（强制报告主体范围、合同定性、记录年限、地方许可）。
+  // 这类问题不是"再找一份官方文件就能解决"的：它要的是执业律师的书面意见。
+  // 收口时把每一处外部原文都追到了官方原件并逐字核过（见下一条），于是：
+  //   · confidence 记 `原文核实` —— 说的是"这张卡断言的每句外部事实都指得出原件在哪"；
+  //   · 🔒 输出闸 + 标题里的「待律师复核」 —— 说的是"法律结论没定，不许当结论输出"。
+  // 两件事分开记，是因为它们的解除条件不同：前者靠追源，后者靠律师。
+  // 继续钉 `待核实` 的代价不是"更保守"，而是这四张卡**整体退出可用索引**（扎根守卫 (d)
+  // 只放行 原文核实/无外部断言），于是 agent 在本领域风险最高的四个话题上**一张卡都看不到**，
+  // 那几道 🔒 输出闸也跟着消失——比"标错一个档"坏得多。
+  it.each(RISK_IDS)('%s 标「原文核实」：出处这一面已逐字核过', (id) => {
+    expect(COUNSELING.find((e) => e.id === id)!.confidence, id).toBe('原文核实');
+  });
+
+  it.each(RISK_IDS)('%s 带逐字核过的 facts 引文，且正文有【待律师书面确认】标记可 grep', (id) => {
+    const raw = fs.readFileSync(path.join(KNOWLEDGE_DIR, COUNSELING.find((e) => e.id === id)!.path), 'utf-8');
+    expect(
+      /facts:\s*\n\s+(statute_quotes|case_quotes):/.test(raw),
+      `${id} 标了原文核实却没有一条 facts 引文——那这张卡凭什么说"核过原文"`,
+    ).toBe(true);
+    expect(
+      body(id),
+      `${id} 正文没有【待律师书面确认】标记：grep 不到就等于没登记，` +
+        '维护者会以为这张卡的结论已经可以直接用',
+    ).toMatch(/【待律师书面确认】/);
+  });
+
+  it('四张风险卡都在 knowledge/TODO核实清单.md §H2 里被 id 点名（变异：删掉任一行 → 红）', () => {
+    const doc = fs.readFileSync(path.join(KNOWLEDGE_DIR, 'TODO核实清单.md'), 'utf-8');
+    const missing = RISK_IDS.filter((id) => !doc.includes(id));
+    expect(missing, `这些风险卡没在清单里登记：${missing.join('、')}`).toEqual([]);
   });
 });
 
@@ -332,7 +384,11 @@ describe('🔴 对外文书必带发出后果；内部记录不得带', () => {
 });
 
 describe('🔴 判例纪律：无真实案号绝不编造；未终审要标出来', () => {
-  const CASE_IDS = ['case-guge-mingyu-quan', 'case-dongni-lisongwei-weizhongshen', 'case-sichuan-tuifei-7500'];
+  // 原有 3 张判例卡，2026-09-07 核实员第 3 批复核后只剩 1 张在包内：
+  // case-guge-mingyu-quan、case-dongni-lisongwei-weizhongshen 均已移入
+  // knowledge/quarantine/counseling/cases/（原因同上一节的说明），不再是 COUNSELING 的一员，
+  // 下面两条正文纪律改为直接读隔离区文件核对（内容一字未改，只是移动了位置）。
+  const CASE_IDS = ['case-sichuan-tuifei-7500'];
 
   it.each(CASE_IDS)('%s 的 facts.case_facts 不含 case_no（没有就是没有，不填占位）', (id) => {
     const e = COUNSELING.find((x) => x.id === id)!;
@@ -340,47 +396,45 @@ describe('🔴 判例纪律：无真实案号绝不编造；未终审要标出�
     expect(Object.keys(e.facts!.case_facts!)).not.toContain('case_no');
   });
 
-  it('三张判例卡都不出现形如 (2024)京0491民初1号 的案号（编造案号的典型形态）', () => {
+  it('在包判例卡都不出现形如 (2024)京0491民初1号 的案号（编造案号的典型形态）', () => {
     for (const id of CASE_IDS) {
       expect(body(id), `${id} 出现了案号样式的字符串`).not.toMatch(/[（(]\s*\d{4}\s*[)）]\s*[一-龥]/);
     }
   });
 
-  it('冬妮案必须标「未终审」，并禁止被当作裁判倾向', () => {
-    const t = body('case-dongni-lisongwei-weizhongshen');
+  it('冬妮案（隔离区）仍标「未终审」，并禁止被当作裁判倾向', () => {
+    const t = fs.readFileSync(
+      path.join(KNOWLEDGE_DIR, 'quarantine/counseling/cases/dongni-lisongwei-weizhongshen.md'),
+      'utf-8',
+    );
     expect(t).toContain('未终审');
     expect(t).toContain('不可用（仅内部参考）');
   });
 });
 
-describe('🔴 待核实卡：卡内可 grep 定位，且逐卡登记在 TODO核实清单', () => {
-  // 【为什么这两条要机检】清单里写着「卡内均有精确【待核实】标记，可 grep 定位」——
-  // 而实测有 9 张卡正文里一个「待核实」都没有，只有 frontmatter 一行 confidence。
-  // 维护者按那句话去 grep 定位"这张卡为什么待核实"，得到的是空结果：
-  // **一句关于自己的、不成立的说明，比没有说明更贵**——它让人以为找不到就是自己搜错了。
-  // 登记同理：H1—H5 是按未决项分组的，而升档是按卡做的，没有逐卡表就答不出"这张能不能升"。
-  const PENDING = COUNSELING.filter((e) => e.confidence === '待核实');
-  const TODO_DOC = fs.readFileSync(path.join(KNOWLEDGE_DIR, 'TODO核实清单.md'), 'utf-8');
-  /** 两种写法都算：【待核实】与【待核实：需核对…】 */
-  const MARK = /【待核实[】：]/;
-
-  it('判据自身不空跑：待核实卡有 30 张以上', () => {
-    expect(PENDING.length).toBeGreaterThan(30);
-  });
-
-  it.each(PENDING.map((e) => e.id))('%s 正文里有【待核实】标记（变异：删掉该段 → 红）', (id) => {
-    expect(body(id), `${id} 标了 confidence=待核实，正文却一个标记都没有——grep 不到就等于没登记`).toMatch(
-      MARK,
-    );
-  });
-
-  it('每张待核实卡都在 knowledge/TODO核实清单.md 里被 id 点名（变异：删掉 §H6 任一行 → 红）', () => {
-    const missing = PENDING.map((e) => e.id).filter((id) => !TODO_DOC.includes(id));
+describe('🔴 收口后：counseling 包一张「待核实」/「二手转述」都不许有', () => {
+  // 【这个 describe 换了盯的东西，不是删了】原来它盯的是"待核实的卡必须有【待核实】标记 +
+  // 逐卡登记在清单里"——那套机制服务的是"库里长期躺着待核实卡"的形态。
+  // 2026-09-07 收口后那个形态没有了：GROUNDING_PENDING 已删，扎根守卫 (d) 只放行
+  // 原文核实/无外部断言，一张待核实卡进索引就是构建期红。
+  // 于是这里改成盯**结果**（一张都没有），而"有标记 + 有登记"那套要求原样搬到了上面
+  // 四张风险卡那个 describe 里——它们现在挂的是【待律师书面确认】，同样 grep 得到、
+  // 同样逐卡登记在 §H2。**要求没降，只是换了挂钩的那个词。**
+  it('counseling 包内没有 confidence=待核实 或 二手转述 的卡', () => {
+    const bad = COUNSELING.filter((e) => e.confidence === '待核实' || e.confidence === '二手转述');
     expect(
-      missing,
-      `这些待核实卡没在清单里登记：${missing.join('、')}；` +
-        '按 README §4.2 逐卡登记（pack id · 待核实点 · 途径），否则升档时无人知道它卡在哪一项。',
+      bad.map((e) => `${e.id}(${e.confidence})`),
+      '这些卡还挂着不可进索引的档——要么核实到原文核实，要么整张移入 knowledge/quarantine/',
     ).toEqual([]);
+  });
+
+  it('判据自身不空跑：counseling 包确实有卡，且都落在两个可进索引的档里', () => {
+    expect(COUNSELING.length, 'counseling 包一张卡都没读到 ⇒ 上一条恒真，本 describe 在空跑').toBeGreaterThan(
+      30,
+    );
+    const allowed = new Set(['原文核实', '无外部断言']);
+    const outliers = COUNSELING.filter((e) => !allowed.has(e.confidence)).map((e) => e.id);
+    expect(outliers, `这些卡的 confidence 既非原文核实也非无外部断言：${outliers.join('、')}`).toEqual([]);
   });
 });
 

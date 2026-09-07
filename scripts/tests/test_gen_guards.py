@@ -340,19 +340,13 @@ def test_real_library_generates_with_no_strict_and_has_no_unverified_confidence(
     code, data = run(gen, root, "--no-strict")
     assert code == 0
     assert len(data) > 100, "夹具没拷对？现库不该只有这么几张卡"
-    # 【为什么按豁免目录分开数】带 GROUNDING_PENDING 的包整包欠着账（有到期日），
-    # 它的卡照常进索引、confidence 照常是最低档。把它们并进来数，这条会红成"回归"；
-    # 把它们无差别排除掉，一张落在 labor 里的「待核实」卡就再没人拦。
-    # 所以分两句：豁免外一张都不许有，豁免内的必须**真的**落在豁免目录下。
-    pending = ks.load_pending(root)
-    bad = [
-        e["id"]
-        for e in data
-        if e["confidence"] not in ("原文核实", "无外部断言")
-        and not ks.pending_for(e["path"], pending)
-    ]
-    assert bad == [], f"豁免目录之外还有既非原文核实也非无外部断言的卡：{bad}"
-    assert pending, "现库的豁免目录一个都没读到 ⇒ 上面那句 `not pending_for(...)` 恒真，本条在空跑"
+    # 【2026-09-07 收口：现库已没有豁免目录】counseling 包核实完毕、GROUNDING_PENDING 已删，
+    # 于是这里不再需要"豁免内/豁免外"分两句数——**全库一张都不许有**。
+    # 分两句那版留在下面 test_real_library_has_no_grounding_pending_left：
+    # 它盯的是"豁免目录数为 0"这件事本身，一旦有人再放一个 GROUNDING_PENDING 进来就红；
+    # 本条盯的是索引内容，两条合起来才既拦住"卡退化"又拦住"用豁免文件把退化盖住"。
+    bad = [e["id"] for e in data if e["confidence"] not in ("原文核实", "无外部断言")]
+    assert bad == [], f"索引里还有既非原文核实也非无外部断言的卡：{bad}"
 
 
 def test_real_library_goes_red_when_one_card_regresses(gen, tmp_path):
@@ -709,17 +703,23 @@ def test_pending_file_without_a_deadline_is_rejected(gen, kb):
         run(gen, kb)
 
 
-def test_real_library_pending_is_exactly_the_counseling_pack(gen):
-    """现库的豁免**只有** counseling 一处，且到期日就是台账上写的那天。
+def test_real_library_has_no_grounding_pending_left(gen):
+    """现库**一个豁免目录都没有**（2026-09-07：counseling 包核实完毕，欠条已销）。
 
-    【为什么钉死这两件事】豁免是唯一一个"合法地不合规"的口子。不钉的话，
-    下一个包只要抄一份这个文件进来就同样免检，而全库判据一条都不会红。
+    【这条为什么不是"删掉就行"】豁免是唯一一个"合法地不合规"的口子。原判据钉的是
+    "现库的豁免只有 counseling 一处、到期日是那天"——欠条销掉之后，那句话没有东西可钉了，
+    但**口子还在**：下一个包只要抄一份 GROUNDING_PENDING 进来就整包免检，
+    而全库判据一条都不会红（上面那条"索引里不许有待核实卡"会被豁免绕过去）。
+    所以判据从"豁免恰好是这一处"改成"一处都没有"——机制判据（豁免生效/过期即红/
+    没写到期日即拒）全部留在上面那批夹具测试里，一条没删：**机制照旧能用，
+    只是现库不再用它**。将来某个包真要欠账，改这条并在这里写明欠的是什么、欠到哪天。
     """
     pending = ks.load_pending(REAL_KNOWLEDGE)
-    assert sorted(pending) == ["packs/counseling"], f"现库多出了豁免目录：{sorted(pending)}"
-    assert str(pending["packs/counseling"]["until"]) == "2026-09-14"
-    text = pending["packs/counseling"]["text"]
-    assert "TODO核实清单" in text, "豁免文件里没有指向逐项欠账清单的线索"
+    assert pending == {}, (
+        f"现库出现了扎根守卫豁免目录：{sorted(pending)}。"
+        "豁免会让那个目录整包退出 (b)–(h)，且不会有任何一条全库判据变红——"
+        "要用它就改这条判据并写明欠账内容与到期日。"
+    )
 
 
 # ── 两把尺子必须是同一把 ────────────────────────────────────────────────

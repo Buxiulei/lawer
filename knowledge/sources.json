@@ -437,6 +437,22 @@
     }
   },
   {
+    "source_id": "cases-scfy-2024-xiaofei-dxal-3",
+    "kind": "官方案例",
+    "name": "四川省高级人民法院2024年消费者权益保护典型案例（三）：杜某某诉某文化传播公司网络服务合同纠纷案",
+    "issuer": "四川省高级人民法院",
+    "official_host": "scfy.scssfw.gov.cn",
+    "url": "http://scfy.scssfw.gov.cn/article/detail/2024/04/id/7884636.shtml",
+    "fetched_at": "2026-09-07T14:00:01+08:00",
+    "content_sha256": "48182583ba3e21903b76fadcd1347bf072a3914bd61b01f3ab1767d11df47a91",
+    "version_label": "2024年消费者权益保护典型案例（三）",
+    "status": "现行",
+    "files": {
+      "raw": "sources/originals/cases-scfy-2024-xiaofei-dxal-3/raw.html",
+      "text": "sources/originals/cases-scfy-2024-xiaofei-dxal-3/text.txt"
+    }
+  },
+  {
     "source_id": "cases-spc-2025-laodong-dxal",
     "kind": "官方案例",
     "name": "最高人民法院2025年劳动人事争议典型案例发布页",
@@ -700,6 +716,40 @@
     }
   },
   {
+    "source_id": "guowei-yizheng-han-2024-259",
+    "kind": "规范性文件",
+    "name": "国家卫生健康委办公厅关于应用\"12356\"全国统一心理援助热线电话号码的通知",
+    "issuer": "国家卫生健康委",
+    "official_host": "www.gov.cn",
+    "url": "https://www.gov.cn/zhengce/zhengceku/202412/content_6994470.htm",
+    "fetched_at": "2026-09-07T14:10:40+08:00",
+    "content_sha256": "97e99f758b793c3b2ebbbdd4d7a7b9f31c8c9e34e497ad289fca130510d8da2a",
+    "version_label": "国卫医政函〔2024〕259号",
+    "status": "现行",
+    "files": {
+      "raw": "sources/originals/guowei-yizheng-han-2024-259/raw.html",
+      "text": "sources/originals/guowei-yizheng-han-2024-259/text.txt"
+    },
+    "effective_from": "2024-12-06"
+  },
+  {
+    "source_id": "lunli-shouze-di2ban",
+    "kind": "行业规范",
+    "name": "中国心理学会临床与咨询心理学工作伦理守则（第二版）",
+    "issuer": "中国心理学会",
+    "official_host": "journal.psych.ac.cn",
+    "url": "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml",
+    "fetched_at": "2026-09-07T14:07:41+08:00",
+    "content_sha256": "0c2f01fd72b085a6094610b219a1fa2adaeeadc4aeb01de095499d983e361634",
+    "version_label": "心理学报2018年第50卷第11期，1314-1322页",
+    "status": "现行",
+    "files": {
+      "raw": "sources/originals/lunli-shouze-di2ban/raw.html",
+      "text": "sources/originals/lunli-shouze-di2ban/text.txt"
+    },
+    "effective_from": "2018-02-01"
+  },
+  {
     "source_id": "pkuh6-huxi-fangsong",
     "kind": "机构官网",
     "name": "你了解呼吸放松法吗？",
@@ -715,6 +765,23 @@
       "text": "sources/originals/pkuh6-huxi-fangsong/text.txt"
     },
     "justification": "北京大学第六医院在自己官网发布的科普文，讲的是该院自己给出的呼吸放松法步骤；只作背景参考，本库不拿它断言任何医学结论或法律规则"
+  },
+  {
+    "source_id": "spp-2020-qiangzhi-baogao-yijian",
+    "kind": "规范性文件",
+    "name": "关于建立侵害未成年人案件强制报告制度的意见（试行）",
+    "issuer": "最高人民检察院、国家监察委员会、教育部、公安部、民政部、司法部、国家卫生健康委员会、共青团中央、全国妇联",
+    "official_host": "www.spp.gov.cn",
+    "url": "https://www.spp.gov.cn/xwfbh/wsfbt/202005/t20200529_463482.shtml",
+    "fetched_at": "2026-09-07T14:14:44+08:00",
+    "content_sha256": "1e42a57f1999fd5bba716f7458feabc069df24319144b8ab9dd6171ef193b23f",
+    "version_label": "2020年5月7日印发，自印发之日起试行",
+    "status": "现行",
+    "files": {
+      "raw": "sources/originals/spp-2020-qiangzhi-baogao-yijian/raw.html",
+      "text": "sources/originals/spp-2020-qiangzhi-baogao-yijian/text.txt"
+    },
+    "effective_from": "2020-05-07"
   },
   {
     "source_id": "statute-ai-shengcheng-hecheng-neirong-biaoshi-banfa",

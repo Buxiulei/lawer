@@ -1,0 +1,22 @@
+{
+  "source_id": "lunli-shouze-di2ban",
+  "kind": "行业规范",
+  "name": "中国心理学会临床与咨询心理学工作伦理守则（第二版）",
+  "issuer": "中国心理学会",
+  "official_host": "journal.psych.ac.cn",
+  "url": "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml",
+  "fetched_at": "2026-09-07T14:07:41+08:00",
+  "content_sha256": "0c2f01fd72b085a6094610b219a1fa2adaeeadc4aeb01de095499d983e361634",
+  "version_label": "心理学报2018年第50卷第11期，1314-1322页",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/lunli-shouze-di2ban/raw.html",
+    "text": "sources/originals/lunli-shouze-di2ban/text.txt"
+  },
+  "effective_from": "2018-02-01",
+  "http_status": 200,
+  "content_type": "text/html;charset=UTF-8",
+  "fetch_method": "https",
+  "fetch_url": "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml",
+  "bytes": 77437
+}

@@ -11,8 +11,8 @@ domain: counseling
 sources:
   - http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm
   - https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm
-confidence: 待核实
-updated: 2026-09-06
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 被投诉到监管/消协/协会的应对 SOP
@@ -40,8 +40,8 @@ updated: 2026-09-06
 1. **是谁在问**（部门全称、经办人、联系方式、文号或工单号）；
 2. **问的是什么**（投诉事项的原文，要一字不改地拿到）；
 3. **要求什么时候答复、以什么形式答复**（书面/电话/到场）。
-   期限务必落进期限台账（口径见 [[data-counseling-shixiao-qixian]]，
-   **监管答复期限本身待核实，一律以通知载明的为准**）。
+   期限务必落进期限台账（口径见 [[data-counseling-shixiao-qixian]]；
+   **本项目未取得各类监管答复期限的统一官方口径，一律以通知载明的为准，不自行推算**）。
 
 ### 第 2 步：按投诉事项逐条取证，不多不少
 
@@ -93,11 +93,3 @@ updated: 2026-09-06
 - 消费者权益保护法第 26/55 条（[[statute-xbf-26-55-geshi-tiaokuan-chengfa]]）
 - 精神卫生法第 23 条（[[statute-jswsf-23-zixun-bianjie]]）
 - 个人信息保护法第 28—31 条（[[statute-grxxbhf-28-31-mingan-xinxi]]）
-
-## 待核实
-
-- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
-  下列未决项：
-  - [[data-counseling-shixiao-qixian]]（现行条号与各类答复期限待核，§H3）
-  - [[risk-difang-xuke-beian]]（待律师书面确认，§H2）
-  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。

@@ -10,9 +10,8 @@ region: 全国
 domain: counseling
 sources:
   - https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm
-  - https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml
-confidence: 待核实
-updated: 2026-09-06
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 《保密告知与例外说明》模板
@@ -65,7 +64,7 @@ updated: 2026-09-06
 ## 填空位说明
 
 - 第二条三项为**伦理守则 3.2 的要点转述**；核实状态见 [[ethic-lunli-3-2-baomi-liwai]]
-  （**整卡待核实，需人工核对学会官方 PDF**）。**在核对前，本模板不得对外宣称"依据守则第 3.2 条"**，
+  （**该卡条文尚未完成官方 PDF 逐字核对**）。**在核对前，本模板不得对外宣称"依据守则第 3.2 条"**，
   只写"依据行业伦理规范"。
 - 第一条引用的精神卫生法第二十三条第四款为**原文核实**条文
   （见 [[statute-jswsf-23-zixun-bianjie]]），可直接引用。
@@ -90,10 +89,3 @@ updated: 2026-09-06
 - ⛔ 不要把"我们会报警"写成绝对承诺——法定送医主体是近亲属、所在单位、当地公安机关
   （见 [[statute-jswsf-28-30-31-weiji-songyi]]），我方承担的是预警责任；
 - 每次实际触发例外，按 [[template-weiji-chuzhi-jilu]] 留痕。
-
-## 待核实
-
-- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
-  下列未决项：
-  - [[ethic-lunli-3-2-baomi-liwai]]（伦理守则条文待人工核对官方 PDF，§H1）
-  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。

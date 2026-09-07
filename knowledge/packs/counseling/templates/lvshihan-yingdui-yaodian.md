@@ -5,14 +5,14 @@ title: 《律师函应对要点》与回函骨架（收到对方律师函后 72 
 keywords: [律师函, 应对要点, 回函, 核对主张, 不仓促回应, 碎片化信息, 委托律师, 时效抗辩, 证据封存]
 applies_to: [名誉侵权, 来访投诉, 退费争议, 诉讼与仲裁, 隐私泄露]
 law_refs: [民法典§1032, 民法典§1033, 民法典§188]
-related: [sop-mingyu-qinquan-yingdui, statute-mfd-1032-1033-yinsi, statute-mfd-188-susong-shixiao, case-guge-mingyu-quan, template-tousu-dafu-han]
+related: [sop-mingyu-qinquan-yingdui, statute-mfd-1032-1033-yinsi, statute-mfd-188-susong-shixiao, template-tousu-dafu-han]
 region: 全国
 domain: counseling
 sources:
   - https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm
   - http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html
-confidence: 待核实
-updated: 2026-09-06
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 《律师函应对要点》与回函骨架
@@ -70,8 +70,7 @@ updated: 2026-09-06
 
 1. ⛔ **不在回函中引用或附具咨询内容**——那是我方主动实施民法典第 1033 条第（五）项
    "处理他人的私密信息"，并同时违反保密义务（见 [[statute-mfd-1032-1033-yinsi]]）。
-2. ⛔ **不公开回应、不发声明**——参照顾歌案的反向教训（[[case-guge-mingyu-quan]]，仅内部参考）：
-   碎片化信息一旦进入公共讨论，控制权就不在我方手里。
+2. ⛔ **不公开回应、不发声明**——碎片化信息一旦进入公共讨论，控制权就不在我方手里。
 3. ⛔ **不在核查完成前认账或道歉**——包括"我们深表歉意给您带来的一切困扰"这类概括致歉，
    它会被作为自认使用。
 
@@ -94,10 +93,3 @@ updated: 2026-09-06
 - 律师函载明的"最后期限"是对方设定的，不是法定期限；
   确需时间的，可在收悉函中说明核查所需时间。
 - 涉及网络内容的，回函与平台通知删除并行推进，不互相等待。
-
-## 待核实
-
-- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
-  下列未决项：
-  - [[case-guge-mingyu-quan]]（无裁判文书全文，§H4）
-  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。

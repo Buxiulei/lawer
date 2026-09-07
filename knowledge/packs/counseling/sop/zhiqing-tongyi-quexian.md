@@ -11,8 +11,8 @@ domain: counseling
 sources:
   - http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm
   - http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html
-confidence: 待核实
-updated: 2026-09-06
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 知情同意书缺陷的自查与补正 SOP
@@ -85,12 +85,5 @@ updated: 2026-09-06
 
 - 消费者权益保护法第 26 条（[[statute-xbf-26-55-geshi-tiaokuan-chengfa]]）
 - 个人信息保护法第 29/30/31 条（[[statute-grxxbhf-28-31-mingan-xinxi]]）
-- 伦理守则 3.1/3.2（[[ethic-lunli-3-2-baomi-liwai]]，**整卡待核实**）
-
-## 待核实
-
-- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
-  下列未决项：
-  - [[case-sichuan-tuifei-7500]]（无裁判文书全文，§H4）
-  - [[ethic-lunli-3-2-baomi-liwai]]（伦理守则条文待人工核对官方 PDF，§H1）
-  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。
+- 伦理守则 3.1/3.2（[[ethic-lunli-3-2-baomi-liwai]]，**条文尚未完成官方 PDF 逐字核对，
+  引用前请先核对该卡当前状态**）

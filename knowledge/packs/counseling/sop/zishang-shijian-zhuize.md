@@ -11,8 +11,8 @@ domain: counseling
 sources:
   - https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm
   - https://www.gov.cn/zhengce/zhengceku/202412/content_6994470.htm
-confidence: 待核实
-updated: 2026-09-06
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 危机事件处置与事后追责应对 SOP
@@ -86,7 +86,7 @@ updated: 2026-09-06
 5. **时效**：人身损害类主张适用普通民事诉讼时效 3 年
    （见 [[statute-mfd-188-susong-shixiao]]、[[data-counseling-shixiao-qixian]]）。
 
-> ⚠️ **本次调研未查到可公开引用的同类裁判文书**（【待核实】），
+> ⚠️ **本次调研未查到可公开引用的同类裁判文书**，
 > 因此**不得**向用户给出"这类案件通常判……"的倾向性结论。
 
 ## 证据固定清单
@@ -110,5 +110,6 @@ updated: 2026-09-06
 
 - 精神卫生法第 28/30/31 条（[[statute-jswsf-28-30-31-weiji-songyi]]）、第 23 条
   （[[statute-jswsf-23-zixun-bianjie]]）
-- 伦理守则 3.2/3.3（[[ethic-lunli-3-2-baomi-liwai]]，**整卡待核实**）
+- 伦理守则 3.2/3.3（[[ethic-lunli-3-2-baomi-liwai]]，**条文尚未完成官方 PDF 逐字核对，
+  引用前请先核对该卡当前状态**）
 - 号码与拨打顺序：[[data-counseling-weiji-rexian]]

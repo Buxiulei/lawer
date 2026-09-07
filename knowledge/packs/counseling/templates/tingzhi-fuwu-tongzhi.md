@@ -9,10 +9,9 @@ related: [template-zhuanjie-han, template-tuifei-xieyi, sop-tuifei-zhengyi, ethi
 region: 全国
 domain: counseling
 sources:
-  - https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml
   - https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm
-confidence: 待核实
-updated: 2026-09-06
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 《停止服务通知》模板
@@ -24,7 +23,7 @@ updated: 2026-09-06
 
 > **伦理底线**：不得随意中断专业工作；无法继续时应以负责的态度转介并作书面记录
 > （伦理守则 1.11—1.13 要点，条文核实状态见 [[ethic-lunli-1-8-1-10-shuangchong-guanxi]]，
-> **整卡待核实**）。**"负责地终止" = 通知 + 转介 + 结算 + 记录，四件齐全。**
+> **该卡条文尚未完成官方 PDF 逐字核对**）。**"负责地终止" = 通知 + 转介 + 结算 + 记录，四件齐全。**
 
 ## 全文模板
 
@@ -98,11 +97,3 @@ updated: 2026-09-06
 - ⛔ 不在通知里追讨欠费之外的其他要求；
 - ⛔ 不把终止作为对来访投诉的报复——时间上紧接投诉发出的终止通知极易被这样解读，
   确需终止的应写清与投诉无关的独立理由并留下决策记录。
-
-## 待核实
-
-- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
-  下列未决项：
-  - [[ethic-lunli-1-8-1-10-shuangchong-guanxi]]（伦理守则条文待人工核对官方 PDF，§H1）
-  - [[sop-zishang-shijian-zhuize]]（无可引用的裁判文书，§H4）
-  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。

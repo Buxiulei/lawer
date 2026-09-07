@@ -1,0 +1,22 @@
+{
+  "source_id": "spp-2020-qiangzhi-baogao-yijian",
+  "kind": "规范性文件",
+  "name": "关于建立侵害未成年人案件强制报告制度的意见（试行）",
+  "issuer": "最高人民检察院、国家监察委员会、教育部、公安部、民政部、司法部、国家卫生健康委员会、共青团中央、全国妇联",
+  "official_host": "www.spp.gov.cn",
+  "url": "https://www.spp.gov.cn/xwfbh/wsfbt/202005/t20200529_463482.shtml",
+  "fetched_at": "2026-09-07T14:14:44+08:00",
+  "content_sha256": "1e42a57f1999fd5bba716f7458feabc069df24319144b8ab9dd6171ef193b23f",
+  "version_label": "2020年5月7日印发，自印发之日起试行",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/spp-2020-qiangzhi-baogao-yijian/raw.html",
+    "text": "sources/originals/spp-2020-qiangzhi-baogao-yijian/text.txt"
+  },
+  "effective_from": "2020-05-07",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.spp.gov.cn/xwfbh/wsfbt/202005/t20200529_463482.shtml",
+  "bytes": 58063
+}

@@ -2562,84 +2562,9 @@
     }
   },
   {
-    "id": "case-dongni-lisongwei-weizhongshen",
-    "type": "判例卡",
-    "title": "冬妮诉李松蔚名誉权互诉案（2024 年开庭·**未终审**，仅作风险场景，不作裁判倾向）",
-    "keywords": [
-      "冬妮",
-      "李松蔚",
-      "名誉权",
-      "互诉",
-      "双重关系指控",
-      "北京互联网法院",
-      "未终审",
-      "伦理调查暂停",
-      "永久除名"
-    ],
-    "applies_to": [
-      "名誉侵权",
-      "伦理申诉",
-      "来访投诉",
-      "诉讼与仲裁"
-    ],
-    "region": "全国",
-    "domain": "counseling",
-    "sources": [
-      "https://www.thepaper.cn/newsDetail_forward_27375992"
-    ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
-    "path": "packs/counseling/cases/dongni-lisongwei-weizhongshen.md",
-    "facts": {
-      "case_facts": {
-        "court": "北京互联网法院",
-        "gist": "来访者指控咨询师在咨询关系存续期间发生亲密行为，咨询师另行提起名誉权之诉，双方互诉。",
-        "issue": "咨询关系中是否存在越界的亲密关系，以及公开指控是否构成名誉侵权。"
-      }
-    }
-  },
-  {
-    "id": "case-guge-mingyu-quan",
-    "type": "判例卡",
-    "title": "顾歌诉来访者家属名誉权案（据报道为全国首例心理咨询师名誉维权案·案号待核实）",
-    "keywords": [
-      "顾歌案",
-      "名誉权",
-      "心理咨询师",
-      "私录录音",
-      "剪辑发布",
-      "基本内容失实",
-      "删除文章",
-      "公开道歉",
-      "精神抚慰金",
-      "公证费"
-    ],
-    "applies_to": [
-      "名誉侵权",
-      "隐私泄露",
-      "伦理申诉",
-      "证据固定"
-    ],
-    "region": "全国",
-    "domain": "counseling",
-    "sources": [
-      "https://www.everbrightlaw.com/CN/07/36d57b8b9cb54172.aspx"
-    ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
-    "path": "packs/counseling/cases/guge-mingyu-quan.md",
-    "facts": {
-      "case_facts": {
-        "gist": "来访者家属私自录制咨询过程录音并经剪辑后发布于网络平台，指控咨询师违背伦理、建立双重关系。",
-        "issue": "网络发布的指控内容是否构成名誉侵权，咨询师能否要求删除、道歉与赔偿。",
-        "holding": "据报道，法院认定发布内容基本内容失实、构成名誉侵权，判令删除文章、公开道歉、赔偿公证费与精神抚慰金。"
-      }
-    }
-  },
-  {
     "id": "case-sichuan-tuifei-7500",
     "type": "判例卡",
-    "title": "四川高院 2024 年消保典型案例·网络情感咨询服务退费（无书面合同，判退 7500 元）",
+    "title": "四川高院 2024 年消保典型案例（三）：网络情感咨询服务合同纠纷，无书面合同判退 7500 元",
     "keywords": [
       "四川高院",
       "消费者权益保护典型案例",
@@ -2660,23 +2585,36 @@
     "region": "全国",
     "domain": "counseling",
     "sources": [
-      "https://www.thepaper.cn/newsDetail_forward_26699216"
+      "https://scfy.scssfw.gov.cn/article/detail/2024/04/id/7884636.shtml"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/cases/sichuan-tuifei-7500.md",
     "facts": {
       "case_facts": {
-        "gist": "消费者购买网络情感咨询服务，双方未签订书面合同，以聊天记录确认服务合同关系成立；消费者当天即申请退款。",
+        "court": "一审法院未披露；由四川省高级人民法院以2024年消费者权益保护典型案例（三）发布",
+        "gist": "杜某某因个人情感关系出现问题，看到某文化传播公司的情感咨询服务广告后添加其销售人员微信，就咨询服务的内容、方式、价款沟通后支付咨询费用8000元，双方未签订书面咨询服务合同。付款后杜某某要求公司当天安排第一次咨询服务，公司无法立即提供，杜某某遂提出全额退款，公司仅同意退一半，双方对退款金额未达成一致，杜某某诉至法院要求全额退还8000元。",
         "issue": "无书面合同时服务合同关系如何认定，以及合同无法继续履行时退费金额如何确定。",
-        "holding": "据报道，法院认定合同无法继续履行，综合履约程度与双方过错，判决退还 7500 元。"
-      }
+        "holding": "法院认为，虽然杜某某与某文化传播公司未签订书面合同，但杜某某提交的聊天记录显示，双方已建立了事实上的咨询服务合同关系。合同履行过程中，杜某某因对咨询服务不满意要求退还服务费用，案涉合同无法继续履行，应予退还服务费用。同时，因杜某某在合同成立的当天即提出了退款申请，某文化传播公司尚未向杜某某提供正式服务，法院综合考虑案涉合同履约程度、双方过错程度等因素，遂判决某文化传播公司向杜某某退还服务费7500元。"
+      },
+      "case_quotes": [
+        {
+          "source_id": "cases-scfy-2024-xiaofei-dxal-3",
+          "text": "法院认为，虽然杜某某与某文化传播公司未签订书面合同，但杜某某提交的聊天记录显示，双方已建立了事实上的咨询服务合同关系。合同履行过程中，杜某某因对咨询服务不满意要求退还服务费用，案涉合同无法继续履行，应予退还服务费用。同时，因杜某某在合同成立的当天即提出了退款申请，某文化传播公司尚未向杜某某提供正式服务，法院综合考虑案涉合同履约程度、双方过错程度等因素，遂判决某文化传播公司向杜某某退还服务费7500元。",
+          "note": "裁判结果段落，官方页原文"
+        },
+        {
+          "source_id": "cases-scfy-2024-xiaofei-dxal-3",
+          "text": "人民法院将此类咨询服务认定为具有较强人身属性的服务合同，合同解除后在认定履约损失、违约责任时要综合考虑合同性质、合同内容、履约程度和双方过错等因素。",
+          "note": "典型意义段，本案确立的一般裁判规则"
+        }
+      ]
     }
   },
   {
     "id": "data-counseling-shixiao-qixian",
     "type": "数据卡",
-    "title": "心理咨询纠纷的时效与期限表（诉讼时效3年/最长20年、答辩期15日、其余待核实）",
+    "title": "心理咨询纠纷的时效与期限表（诉讼时效3年/最长20年、答辩期15日、举证期限法院指定不少于15/10日）",
     "keywords": [
       "诉讼时效",
       "三年",
@@ -2684,8 +2622,6 @@
       "答辩期",
       "十五日",
       "举证期限",
-      "伦理申诉时限",
-      "投诉答复期限",
       "记录保存年限",
       "期限表"
     ],
@@ -2700,16 +2636,18 @@
     "region": "全国",
     "domain": "counseling",
     "sources": [
-      "http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html",
-      "http://gongbao.court.gov.cn/Details/42a89051fa54947fa9d96bf7276b6a.html"
+      "https://www.court.gov.cn/zixun/xiangqing/233181.html",
+      "https://www.ssf.gov.cn/portal/rootfiles/2023/11/14/1701622126444477-1701622126462201.pdf",
+      "https://www.court.gov.cn/zixun/xiangqing/353651.html"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/data/shixiao-yu-qixian.md",
     "law_refs": [
       "民法典§188",
       "民法典§191",
-      "民事诉讼法§125"
+      "民事诉讼法§128",
+      "民诉法解释§99"
     ],
     "facts": {
       "values": [
@@ -2733,9 +2671,51 @@
           "key": "counseling_dabian_qi_days",
           "value": 15,
           "unit": "日",
-          "effective_from": "2013-01-01",
-          "confidence": "待核实",
+          "effective_from": "2024-01-01",
+          "confidence": "原文核实",
           "source_idx": 1
+        },
+        {
+          "key": "counseling_juzheng_qixian_yishen_min_days",
+          "value": 15,
+          "unit": "日",
+          "effective_from": "2022-04-10",
+          "confidence": "原文核实",
+          "source_idx": 2
+        },
+        {
+          "key": "counseling_juzheng_qixian_ershen_min_days",
+          "value": 10,
+          "unit": "日",
+          "effective_from": "2022-04-10",
+          "confidence": "原文核实",
+          "source_idx": 2
+        }
+      ],
+      "statute_quotes": [
+        {
+          "law": "中华人民共和国民法典",
+          "article": "第一百八十八条",
+          "source_id": "statute-minfadian",
+          "text": "向人民法院请求保护民事权利的诉讼时效期间为三年。法律另有规定的，依照其规定。\n诉讼时效期间自权利人知道或者应当知道权利受到损害以及义务人之日起计算。法律另有规定的，依照其规定。但是，自权利受到损害之日起超过二十年的，人民法院不予保护，有特殊情况的，人民法院可以根据权利人的申请决定延长。"
+        },
+        {
+          "law": "中华人民共和国民法典",
+          "article": "第一百九十一条",
+          "source_id": "statute-minfadian",
+          "text": "未成年人遭受性侵害的损害赔偿请求权的诉讼时效期间，自受害人年满十八周岁之日起计算。"
+        },
+        {
+          "law": "中华人民共和国民事诉讼法",
+          "article": "第一百二十八条",
+          "source_id": "statute-minsufa",
+          "text": "人民法院应当在立案之日起五日内将起诉状副本发送被告，被告应当在收到之日起十五日内提出答辩状。"
+        },
+        {
+          "law": "最高人民法院关于适用《中华人民共和国民事诉讼法》的解释",
+          "article": "第九十九条",
+          "source_id": "statute-fashi-2022-11-minsu",
+          "text": "人民法院应当在审理前的准备阶段确定当事人的举证期限。举证期限可以由当事人协商，并经人民法院准许。人民法院确定举证期限，第一审普通程序案件不得少于十五日，当事人提供新的证据的第二审案件不得少于十日。"
         }
       ]
     }
@@ -2766,10 +2746,36 @@
     "sources": [
       "https://www.gov.cn/zhengce/zhengceku/202412/content_6994470.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/data/weiji-rexian.md",
     "facts": {
+      "statute_quotes": [
+        {
+          "law": "国家卫生健康委关于应用\"12356\"全国统一心理援助热线电话号码的通知（国卫医政函〔2024〕259号）",
+          "article": "通知正文（编号前）",
+          "source_id": "guowei-yizheng-han-2024-259",
+          "text": "我委协调工业和信息化部设置“12356”作为全国统一心理援助热线电话号码。"
+        },
+        {
+          "law": "国家卫生健康委关于应用\"12356\"全国统一心理援助热线电话号码的通知（国卫医政函〔2024〕259号）",
+          "article": "一",
+          "source_id": "guowei-yizheng-han-2024-259",
+          "text": "确保于2025年5月1日0时前，实现拨打“12356”电话号码接通心理援助热线的功能。"
+        },
+        {
+          "law": "国家卫生健康委关于应用\"12356\"全国统一心理援助热线电话号码的通知（国卫医政函〔2024〕259号）",
+          "article": "二",
+          "source_id": "guowei-yizheng-han-2024-259",
+          "text": "原则上每个设区的市（含直辖市、州、盟等）至少开通1条心理援助热线，每条心理援助热线至少设置2个心理援助热线坐席，并配备足量符合要求的热线咨询员，每日提供不少于18小时心理援助服务。"
+        },
+        {
+          "law": "国家卫生健康委关于应用\"12356\"全国统一心理援助热线电话号码的通知（国卫医政函〔2024〕259号）",
+          "article": "三",
+          "source_id": "guowei-yizheng-han-2024-259",
+          "text": "积极推进心理援助与110、119、120等服务热线和综治维稳工作等建立联动机制，提升心理援助效能。"
+        }
+      ],
       "hotlines": [
         {
           "name": "全国统一心理援助热线",
@@ -2811,7 +2817,7 @@
   {
     "id": "ethic-lunli-1-8-1-10-shuangchong-guanxi",
     "type": "法条卡",
-    "title": "伦理守则1.8—1.10：性与亲密关系禁令、三年禁期与非专业关系（待核实）",
+    "title": "伦理守则1.8—1.10：性与亲密关系禁令、三年禁期与非专业关系",
     "keywords": [
       "伦理守则",
       "1.8",
@@ -2836,14 +2842,36 @@
     "sources": [
       "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
-    "path": "packs/counseling/ethics/lunli-1-8-1-10-shuangchong-guanxi.md"
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
+    "path": "packs/counseling/ethics/lunli-1-8-1-10-shuangchong-guanxi.md",
+    "facts": {
+      "statute_quotes": [
+        {
+          "law": "中国心理学会临床与咨询心理学工作伦理守则（第二版）",
+          "article": "1.8",
+          "source_id": "lunli-shouze-di2ban",
+          "text": "心理师不得与当前寻求专业服务者或其家庭成员发生任何形式的性或亲密关系, 包括当面和通过电子媒介进行的性或亲密沟通与交往。心理师不得给与自己有过性或亲密关系者做心理咨询或心理治疗。一旦关系超越了专业界限(例如开始性和亲密关系), 应立即采取适当措施(例如寻求督导或同行建议), 并终止专业关系。"
+        },
+        {
+          "law": "中国心理学会临床与咨询心理学工作伦理守则（第二版）",
+          "article": "1.9",
+          "source_id": "lunli-shouze-di2ban",
+          "text": "心理师在与寻求专业服务者结束心理咨询或治疗关系后至少三年内, 不得与该寻求专业服务者或其家庭成员发生任何形式的性或亲密关系, 包括当面和通过电子媒介进行的性或亲密的沟通与交往。三年后如果发展此类关系, 要仔细考察该关系的性质, 确保此关系不存在任何剥削、控制和利用的可能性, 同时要有可查证的书面记录。"
+        },
+        {
+          "law": "中国心理学会临床与咨询心理学工作伦理守则（第二版）",
+          "article": "1.10",
+          "source_id": "lunli-shouze-di2ban",
+          "text": "当心理师和寻求专业服务者存在除了性或亲密关系以外的其他非专业关系, 如果可能对寻求专业服务者造成伤害, 心理师应当避免与其建立专业关系。例如, 因无法保持客观、中立, 心理师不得与自己的朋友和亲人建立专业关系。"
+        }
+      ]
+    }
   },
   {
     "id": "ethic-lunli-3-2-baomi-liwai",
     "type": "法条卡",
-    "title": "伦理守则3.1—3.4：保密原则的三类例外与「最低限度披露」（待核实）",
+    "title": "伦理守则3.1—3.4：保密原则的三类例外与「最低限度披露」",
     "keywords": [
       "伦理守则",
       "中国心理学会",
@@ -2871,14 +2899,42 @@
     "sources": [
       "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
-    "path": "packs/counseling/ethics/lunli-3-2-baomi-liwai.md"
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
+    "path": "packs/counseling/ethics/lunli-3-2-baomi-liwai.md",
+    "facts": {
+      "statute_quotes": [
+        {
+          "law": "中国心理学会临床与咨询心理学工作伦理守则（第二版）",
+          "article": "3.1",
+          "source_id": "lunli-shouze-di2ban",
+          "text": "在专业服务开始时, 心理师有责任向寻求专业服务者说明工作的保密原则及其应用的限度、保密例外情况并签署知情同意书。"
+        },
+        {
+          "law": "中国心理学会临床与咨询心理学工作伦理守则（第二版）",
+          "article": "3.2",
+          "source_id": "lunli-shouze-di2ban",
+          "text": "心理师应清楚地了解保密原则的应用有其限度, 下列情况为保密原则的例外：(1)心理师发现寻求专业服务者有伤害自身或他人的严重危险; (2)不具备完全民事行为能力的未成年人等受到性侵犯或虐待; (3)法律规定需要披露的其他情况。"
+        },
+        {
+          "law": "中国心理学会临床与咨询心理学工作伦理守则（第二版）",
+          "article": "3.3",
+          "source_id": "lunli-shouze-di2ban",
+          "text": "遇到3.2(1)和(2)的情况, 心理师有责任向寻求专业服务者的合法监护人、可确认的潜在受害者或相关部门预警; 遇到3.2(3)的情况, 心理师有义务遵守法律法规, 并按照最低限度原则披露有关信息, 但须要求法庭及相关人员出示合法的正式文书, 并要求他们注意专业服务相关信息的披露范围。"
+        },
+        {
+          "law": "中国心理学会临床与咨询心理学工作伦理守则（第二版）",
+          "article": "3.4",
+          "source_id": "lunli-shouze-di2ban",
+          "text": "心理师应按照法律法规和专业伦理规范在严格保密的前提下创建、使用、保存、传递和处理专业工作相关信息(如个案记录、测验资料、信件、录音、录像等)。"
+        }
+      ]
+    }
   },
   {
     "id": "ethic-lunli-8-2-8-3-yuancheng-fuwu",
     "type": "法条卡",
-    "title": "伦理守则8.2/8.3：远程服务的保密局限告知与身份、紧急联系人核实（待核实）",
+    "title": "伦理守则8.1—8.3：远程服务的告知义务、保密局限告知与身份、紧急联系人核实",
     "keywords": [
       "伦理守则",
       "8.1",
@@ -2905,9 +2961,31 @@
     "sources": [
       "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
-    "path": "packs/counseling/ethics/lunli-8-2-8-3-yuancheng-fuwu.md"
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
+    "path": "packs/counseling/ethics/lunli-8-2-8-3-yuancheng-fuwu.md",
+    "facts": {
+      "statute_quotes": [
+        {
+          "law": "中国心理学会临床与咨询心理学工作伦理守则（第二版）",
+          "article": "8.1",
+          "source_id": "lunli-shouze-di2ban",
+          "text": "心理师通过网络/电话提供专业服务时, 除了常规知情同意外, 还需要帮助寻求专业服务者了解并同意下列信息：(1)远程服务所在的地理位置、时差和联系信息; (2)远程专业工作的益处、局限和潜在风险; (3)发生技术故障的可能性及处理方案; (4)无法联系到心理师时的应急程序。"
+        },
+        {
+          "law": "中国心理学会临床与咨询心理学工作伦理守则（第二版）",
+          "article": "8.2",
+          "source_id": "lunli-shouze-di2ban",
+          "text": "心理师应告知寻求专业服务者电子记录和远程服务过程在网络传输中保密的局限性, 告知寻求专业服务者相关人员(同事、督导、个案管理者、信息技术员)有无权限接触这些记录和咨询过程。心理师应采取合理预防措施(例如设置用户开机密码、网站密码、咨询记录文档密码等)来保证信息传递和保存过程中的安全性。"
+        },
+        {
+          "law": "中国心理学会临床与咨询心理学工作伦理守则（第二版）",
+          "article": "8.3",
+          "source_id": "lunli-shouze-di2ban",
+          "text": "心理师远程工作时须确认寻求专业服务者真实身份及联系信息, 也需确认双方具体地理位置和紧急联系人信息, 以确保在寻求专业服务者出现危机状况时可有效采取保护措施。"
+        }
+      ]
+    }
   },
   {
     "id": "method-counseling-panli-heyan",
@@ -2934,10 +3012,10 @@
     "region": "全国",
     "domain": "counseling",
     "sources": [
-      "knowledge/packs/method/panli-heyan-sibufa.md"
+      "本卡不含外部事实断言（D 类，见 knowledge/README.md §2.2）：本卡是本项目自己写的、 判例核验四步法在心理咨询纠纷领域的引用纪律；四步法本体见 [[method-panli-heyan-sibufa]]， 逐字复用不重写。表格中提到的三则案例本身是否可用/是否已核实，由各案例卡自己的 confidence 与 case_quotes 负责，本卡不因此升档或降档。"
     ],
-    "confidence": "原文核实",
-    "updated": "2026-09-06",
+    "confidence": "无外部断言",
+    "updated": "2026-09-07",
     "path": "packs/counseling/method/panli-heyan-counseling.md"
   },
   {
@@ -2965,9 +3043,19 @@
     "sources": [
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
-    "path": "packs/counseling/risk/difang-xuke-beian.md"
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
+    "path": "packs/counseling/risk/difang-xuke-beian.md",
+    "facts": {
+      "statute_quotes": [
+        {
+          "law": "中华人民共和国精神卫生法",
+          "article": "第二十五条",
+          "source_id": "statute-jingshen-weishengfa",
+          "text": "第二十五条　开展精神障碍诊断、治疗活动，应当具备下列条件，并依照医疗机构的管理规定办理有关手续：\n（一）有与从事的精神障碍诊断、治疗相适应的精神科执业医师、护士；\n（二）有满足开展精神障碍诊断、治疗需要的设施和设备；\n（三）有完善的精神障碍诊断、治疗管理制度和质量监控制度。\n从事精神障碍诊断、治疗的专科医疗机构还应当配备从事心理治疗的人员。"
+        }
+      ]
+    }
   },
   {
     "id": "risk-hetong-dingxing",
@@ -2992,11 +3080,21 @@
     "region": "全国",
     "domain": "counseling",
     "sources": [
-      "https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml"
+      "https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml",
+      "http://scfy.scssfw.gov.cn/article/detail/2024/04/id/7884636.shtml"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
-    "path": "packs/counseling/risk/hetong-dingxing.md"
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
+    "path": "packs/counseling/risk/hetong-dingxing.md",
+    "facts": {
+      "case_quotes": [
+        {
+          "source_id": "cases-scfy-2024-xiaofei-dxal-3",
+          "text": "人民法院将此类咨询服务认定为具有较强人身属性的服务合同，合同解除后在认定履约损失、违约责任时要综合考虑合同性质、合同内容、履约程度和双方过错等因素。",
+          "note": "该案【典型意义】段对合同定性与裁量因素的表述"
+        }
+      ]
+    }
   },
   {
     "id": "risk-jilu-baocun-nianxian",
@@ -3021,12 +3119,22 @@
     "region": "全国",
     "domain": "counseling",
     "sources": [
-      "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html",
+      "https://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html",
       "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
-    "path": "packs/counseling/risk/jilu-baocun-nianxian.md"
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
+    "path": "packs/counseling/risk/jilu-baocun-nianxian.md",
+    "facts": {
+      "statute_quotes": [
+        {
+          "law": "中国心理学会临床与咨询心理学工作伦理守则（第二版）",
+          "article": "3.4",
+          "source_id": "lunli-shouze-di2ban",
+          "text": "心理师应按照法律法规和专业伦理规范在严格保密的前提下创建、使用、保存、传递和处理专业工作相关信息(如个案记录、测验资料、信件、录音、录像等)。"
+        }
+      ]
+    }
   },
   {
     "id": "risk-qiangzhi-baogao-zhuti",
@@ -3053,9 +3161,19 @@
     "sources": [
       "https://www.spp.gov.cn/xwfbh/wsfbt/202005/t20200529_463482.shtml"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
-    "path": "packs/counseling/risk/qiangzhi-baogao-zhuti.md"
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
+    "path": "packs/counseling/risk/qiangzhi-baogao-zhuti.md",
+    "facts": {
+      "statute_quotes": [
+        {
+          "law": "关于建立侵害未成年人案件强制报告制度的意见（试行）",
+          "article": "第三条",
+          "source_id": "spp-2020-qiangzhi-baogao-yijian",
+          "text": "本意见所称密切接触未成年人行业的各类组织，是指依法对未成年人负有教育、看护、医疗、救助、监护等特殊职责，或者虽不负有特殊职责但具有密切接触未成年人条件的企事业单位、基层群众自治组织、社会组织。主要包括：居（村）民委员会；中小学校、幼儿园、校外培训机构、未成年人校外活动场所等教育机构及校车服务提供者；托儿所等托育服务机构；医院、妇幼保健院、急救中心、诊所等医疗机构；儿童福利机构、救助管理机构、未成年人救助保护机构、社会工作服务机构；旅店、宾馆等。"
+        }
+      ]
+    }
   },
   {
     "id": "script-laifang-tousu-goutong",
@@ -3087,8 +3205,8 @@
       "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm",
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/scripts/laifang-tousu-goutong.md"
   },
   {
@@ -3119,8 +3237,8 @@
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm",
       "https://www.gov.cn/zhengce/zhengceku/202412/content_6994470.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/scripts/weiji-tonghua-huashu.md",
     "law_refs": [
       "精神卫生法§28",
@@ -3156,8 +3274,8 @@
       "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm",
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/sop/jianguan-xiehui-tousu.md",
     "law_refs": [
       "消费者权益保护法§26",
@@ -3193,8 +3311,8 @@
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm",
       "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/sop/liaoxiao-zhengyi.md",
     "law_refs": [
       "精神卫生法§23",
@@ -3227,11 +3345,10 @@
     "region": "全国",
     "domain": "counseling",
     "sources": [
-      "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml",
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/sop/lunli-shensu-yingdui.md",
     "law_refs": [
       "精神卫生法§23"
@@ -3266,8 +3383,8 @@
       "https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm",
       "http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/sop/mingyu-qinquan-yingdui.md",
     "law_refs": [
       "民法典§1032",
@@ -3303,8 +3420,8 @@
       "https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml",
       "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/sop/tuifei-zhengyi.md",
     "law_refs": [
       "民法典§933",
@@ -3341,8 +3458,8 @@
       "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html",
       "https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/sop/yinsi-xielou-zhikong.md",
     "law_refs": [
       "个人信息保护法§28",
@@ -3382,8 +3499,8 @@
       "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm",
       "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/sop/zhiqing-tongyi-quexian.md",
     "law_refs": [
       "消费者权益保护法§26",
@@ -3425,8 +3542,8 @@
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm",
       "https://www.gov.cn/zhengce/zhengceku/202412/content_6994470.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/sop/zishang-shijian-zhuize.md",
     "law_refs": [
       "精神卫生法§28",
@@ -3640,7 +3757,7 @@
       "https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm"
     ],
     "confidence": "原文核实",
-    "updated": "2026-09-06",
+    "updated": "2026-09-07",
     "path": "packs/counseling/statutes/mfd-1032-1033-yinsi.md",
     "law_refs": [
       "民法典§1032",
@@ -3652,11 +3769,13 @@
         {
           "law": "中华人民共和国民法典",
           "article": "第一千零三十二条",
+          "source_id": "statute-minfadian",
           "text": "第一千零三十二条　自然人享有隐私权。任何组织或者个人不得以刺探、侵扰、泄露、公开等方式侵害他人的隐私权。\n隐私是自然人的私人生活安宁和不愿为他人知晓的私密空间、私密活动、私密信息。"
         },
         {
           "law": "中华人民共和国民法典",
           "article": "第一千零三十三条",
+          "source_id": "statute-minfadian",
           "text": "第一千零三十三条　除法律另有规定或者权利人明确同意外，任何组织或者个人不得实施下列行为：\n（一）以电话、短信、即时通讯工具、电子邮件、传单等方式侵扰他人的私人生活安宁；\n（二）进入、拍摄、窥视他人的住宅、宾馆房间等私密空间；\n（三）拍摄、窥视、窃听、公开他人的私密活动；\n（四）拍摄、窥视他人身体的私密部位；\n（五）处理他人的私密信息；\n（六）以其他方式侵害他人的隐私权。"
         }
       ]
@@ -3690,7 +3809,7 @@
       "http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html"
     ],
     "confidence": "原文核实",
-    "updated": "2026-09-06",
+    "updated": "2026-09-07",
     "path": "packs/counseling/statutes/mfd-188-susong-shixiao.md",
     "law_refs": [
       "民法典§188",
@@ -3703,16 +3822,19 @@
         {
           "law": "中华人民共和国民法典",
           "article": "第一百八十八条",
+          "source_id": "statute-minfadian",
           "text": "向人民法院请求保护民事权利的诉讼时效期间为三年。法律另有规定的，依照其规定。\n诉讼时效期间自权利人知道或者应当知道权利受到损害以及义务人之日起计算。法律另有规定的，依照其规定。但是，自权利受到损害之日起超过二十年的，人民法院不予保护，有特殊情况的，人民法院可以根据权利人的申请决定延长。"
         },
         {
           "law": "中华人民共和国民法典",
           "article": "第一百九十一条",
+          "source_id": "statute-minfadian",
           "text": "未成年人遭受性侵害的损害赔偿请求权的诉讼时效期间，自受害人年满十八周岁之日起计算。"
         },
         {
           "law": "中华人民共和国民法典",
           "article": "第一百九十三条",
+          "source_id": "statute-minfadian",
           "text": "人民法院不得主动适用诉讼时效的规定。"
         }
       ]
@@ -3746,7 +3868,7 @@
       "https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml"
     ],
     "confidence": "原文核实",
-    "updated": "2026-09-06",
+    "updated": "2026-09-07",
     "path": "packs/counseling/statutes/mfd-933-weituo-jiechu.md",
     "law_refs": [
       "民法典§933",
@@ -3758,11 +3880,13 @@
         {
           "law": "中华人民共和国民法典",
           "article": "第九百三十三条",
+          "source_id": "statute-minfadian",
           "text": "第九百三十三条　委托人或者受托人可以随时解除委托合同。因解除合同造成对方损失的，除不可归责于该当事人的事由外，无偿委托合同的解除方应当赔偿因解除时间不当造成的直接损失，有偿委托合同的解除方应当赔偿对方的直接损失和合同履行后可以获得的利益。"
         },
         {
           "law": "中华人民共和国民法典",
           "article": "第九百二十八条",
+          "source_id": "statute-minfadian",
           "text": "第九百二十八条　受托人完成委托事务的，委托人应当按照约定向其支付报酬。\n因不可归责于受托人的事由，委托合同解除或者委托事务不能完成的，委托人应当向受托人支付相应的报酬。当事人另有约定的，按照其约定。"
         }
       ]
@@ -3798,7 +3922,7 @@
       "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm"
     ],
     "confidence": "原文核实",
-    "updated": "2026-09-06",
+    "updated": "2026-09-07",
     "path": "packs/counseling/statutes/xbf-26-55-geshi-tiaokuan-chengfa.md",
     "law_refs": [
       "消费者权益保护法§26",
@@ -3843,11 +3967,10 @@
     "region": "全国",
     "domain": "counseling",
     "sources": [
-      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm",
-      "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/templates/baomi-gaozhi-liwai.md",
     "law_refs": [
       "精神卫生法§4",
@@ -3878,10 +4001,10 @@
     "region": "全国",
     "domain": "counseling",
     "sources": [
-      "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml"
+      "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/templates/lunli-shensu-dabianshu.md",
     "law_refs": [
       "精神卫生法§23"
@@ -3915,8 +4038,8 @@
       "https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm",
       "http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/templates/lvshihan-yingdui-yaodian.md",
     "law_refs": [
       "民法典§1032",
@@ -3948,11 +4071,10 @@
     "region": "全国",
     "domain": "counseling",
     "sources": [
-      "https://journal.psych.ac.cn/xlxb/article/2018/0439-755X/0439-755X-50-11-1314.shtml",
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/templates/tingzhi-fuwu-tongzhi.md",
     "law_refs": [
       "精神卫生法§23"
@@ -3984,8 +4106,8 @@
     "sources": [
       "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/templates/tousu-dafu-han.md",
     "law_refs": [
       "消费者权益保护法§26",
@@ -4016,8 +4138,8 @@
     "sources": [
       "https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/templates/tuifei-xieyi.md",
     "law_refs": [
       "民法典§933",
@@ -4052,8 +4174,8 @@
     "sources": [
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/templates/weiji-chuzhi-jilu.md",
     "law_refs": [
       "精神卫生法§28",
@@ -4089,8 +4211,8 @@
       "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html",
       "http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/templates/zhiqing-tongyishu.md",
     "law_refs": [
       "精神卫生法§23",
@@ -4125,8 +4247,8 @@
     "sources": [
       "https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm"
     ],
-    "confidence": "待核实",
-    "updated": "2026-09-06",
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
     "path": "packs/counseling/templates/zhuanjie-han.md",
     "law_refs": [
       "精神卫生法§23"

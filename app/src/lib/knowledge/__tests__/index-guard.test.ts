@@ -588,18 +588,22 @@ describe('🔴 索引里的 sources 全是官方 host（wikisource / sohu / 公�
     expect(rows.some((r) => r.sources.some((s) => hostOf(s) !== null))).toBe(true);
   });
 
-  test(`豁免目录只有台账上那一处，且没过期（${GROUNDING_PENDING}）`, () => {
+  test(`现库一个豁免目录都没有（${GROUNDING_PENDING}）`, () => {
     // 【为什么要钉这一条】上面那两条判据一律跳过豁免目录。不钉的话，
     // 下一个包只要抄一份 GROUNDING_PENDING 进来就同样免检，而这里一条都不会红。
-    // python 侧 test_real_library_pending_is_exactly_the_counseling_pack 钉的是同一件事。
-    expect(pending.map((p) => p.dir)).toEqual(['packs/counseling']);
-    expect(pending[0].until).toBe('2026-09-14');
+    // 2026-09-07 收口：counseling 包核实完毕、欠条已销，于是判据从"豁免恰好是这一处"
+    // 改成"一处都没有"——**口子还在，所以判据也还在**，只是它现在钉的是零。
+    // 豁免机制本身（生效 / 过期即红 / 没写到期日即拒）仍由 python 侧
+    // scripts/tests/test_gen_guards.py 的夹具测试逐条盯着，一条没删；
+    // python 侧的现库判据 test_real_library_has_no_grounding_pending_left 钉的是同一件事。
     expect(
-      pending[0].expired,
-      `${pending[0].dir}/${GROUNDING_PENDING} 已于 ${pending[0].until} 到期：` +
-        '到期即恢复全部扎根守卫。要么把这批卡核实完并删掉该文件，要么改到期日并写明为什么再欠一段。',
-    ).toBe(false);
-    expect(exempt.length, '豁免目录里一张卡都没有 ⇒ 这个文件已经没有存在理由了').toBeGreaterThan(0);
+      pending.map((p) => p.dir),
+      '现库出现了扎根守卫豁免目录：那个目录整包退出 (b)–(h)，' +
+        '而上面每一条 host / confidence 判据都会跳过它。' +
+        '要用它就改这条判据，并在 knowledge/TODO核实清单.md 写明欠的是什么、欠到哪天。',
+    ).toEqual([]);
+    expect(exempt.length, '没有豁免目录，却有卡被判为豁免 ⇒ pendingFor 的口径错了').toBe(0);
+    expect(rows.length, '没有豁免目录时 rows 应当就是整个索引').toBe(allRows.length);
   });
 
   test('每一条 http(s) 出处的 host 都是 .gov.cn 或登记在册的行业规范发布机构官网', () => {

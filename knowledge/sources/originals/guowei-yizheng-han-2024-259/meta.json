@@ -1,0 +1,22 @@
+{
+  "source_id": "guowei-yizheng-han-2024-259",
+  "kind": "规范性文件",
+  "name": "国家卫生健康委办公厅关于应用\"12356\"全国统一心理援助热线电话号码的通知",
+  "issuer": "国家卫生健康委",
+  "official_host": "www.gov.cn",
+  "url": "https://www.gov.cn/zhengce/zhengceku/202412/content_6994470.htm",
+  "fetched_at": "2026-09-07T14:10:40+08:00",
+  "content_sha256": "97e99f758b793c3b2ebbbdd4d7a7b9f31c8c9e34e497ad289fca130510d8da2a",
+  "version_label": "国卫医政函〔2024〕259号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/guowei-yizheng-han-2024-259/raw.html",
+    "text": "sources/originals/guowei-yizheng-han-2024-259/text.txt"
+  },
+  "effective_from": "2024-12-06",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.gov.cn/zhengce/zhengceku/202412/content_6994470.htm",
+  "bytes": 29677
+}

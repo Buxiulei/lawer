@@ -350,9 +350,13 @@ python3 scripts/fetch-source.py --reextract [--source-id <id>]
 判据在 `scripts/tests/test_gen_guards.py`：罩得太宽、撕不掉、到期不失效、没写到期日，
 各钉一条，外加一条"不带这个文件的目录必须照常判红"的正对照。
 
-当前在册的豁免只有一处：`packs/counseling`（心理咨询纠纷领域包 39 张卡，最迟 2026-09-14），
-逐项欠账见 `knowledge/TODO核实清单.md` 第六章。判据 `test_real_library_pending_is_exactly_the_counseling_pack`
-把"只有这一处、就是这个日子"钉死——不钉的话，下一个包抄一份这个文件进来就同样免检。
+**当前在册的豁免：一处也没有。** 唯一用过它的 `packs/counseling`（心理咨询纠纷领域包）
+已于 2026-09-07 核实完毕并删掉了该文件，闭卷记录见 `knowledge/TODO核实清单.md` 第六章。
+判据 `test_real_library_pending_is_exactly_the_counseling_pack` 随之改名为
+`test_real_library_has_no_grounding_pending_left`，钉的从"只有这一处、就是这个日子"
+变成"一处都没有"（TS 侧 `index-guard.test.ts` 同改）——**口子还在，所以判据也还在**，
+不钉的话下一个包抄一份这个文件进来就同样免检，而全库判据一条都不会红。
+上面那批机制判据（豁免生效、罩得多宽、到期失效、没写到期日即拒）一条没删，随时可再用。
 
 ### 7.4 引文怎么写才核得动
 

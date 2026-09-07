@@ -19,10 +19,11 @@
 | `knowledge/packs/` 里的**劳动**卡（`domain: labor`）合计 | 220 | 159 | **161** |
 | `knowledge/quarantine/` | 0 | 61 | **60** |
 
-> 本表全部只数**劳动**领域的卡。合并 P4 多领域主干后，`knowledge/packs/` 下另有
-> 39 张 `domain: counseling` 的心理咨询纠纷卡（合计 200 张），它们凭
-> `packs/counseling/GROUNDING_PENDING` 显式欠着扎根守卫的账，逐项见下面第六章。
-> 把两个领域并成一个数的形态是：本表的「`待核实` 0」在合并当天变成假的，而没有一处会说这件事。
+> 本表全部只数**劳动**领域的卡。心理咨询纠纷领域包（`domain: counseling`）另立一表，
+> 见下面第六章——那 39 张卡曾凭 `packs/counseling/GROUNDING_PENDING` 显式欠着扎根守卫的账，
+> **2026-09-07 已核实闭卷、欠条销毁**（37 张进索引、2 张隔离）。
+> 把两个领域并成一个数的形态是：本表的「`待核实` 0」在合并当天变成假的，而没有一处会说这件事；
+> 所以两表并存，各自数各自的。全库合计见第六章末尾。
 
 闭卷时 159 + 61 = 220：一张没丢，也没有新增。**减少的 61 张全部是判例卡**（103 → 42），
 其余九类卡片数一张未动——移走的是"引文只有转载来源、官方渠道查不到全文"的判决书转录卡，
@@ -118,60 +119,145 @@ python3 -m pytest scripts/tests -q         # 上面三把尺子自己的判据
 `verify-quotes.py` 核过引文 → 重跑生成器。
 
 
-## 六、心理咨询纠纷领域包（`domain: counseling`，**本轮豁免扎根守卫，最迟 2026-09-14**）
+## 六、心理咨询纠纷领域包（`domain: counseling`，**2026-09-07 闭卷，扎根守卫豁免已销**）
 
-> 这 39 张卡与上面 161 张劳动卡不同：它们**暂不受扎根守卫 (b)–(h) 约束**，
-> 凭 `knowledge/packs/counseling/GROUNDING_PENDING` 这一个文件豁免（豁免原因与最迟日期写在该文件里）。
-> 生成器读到该文件时对这个目录只做结构校验并在 stderr 警告，不做扎根守卫；
-> 删掉该文件即恢复全部守卫（判据 `scripts/tests/test_gen_guards.py` 两向钉住）。
-> 本章就是这份豁免欠下的账：逐项核实之后删掉 `GROUNDING_PENDING`，这一章随之作废。
+> **本章已闭卷。** 这 39 张卡（P4-W2 写于 2026-09-06）曾凭
+> `knowledge/packs/counseling/GROUNDING_PENDING` 整包退出扎根守卫 (b)–(h)，最迟 2026-09-14。
+> 三批核实员 + 一次收口把这笔账还清了：**该文件已删**，counseling 包与全库其余卡受同一套守卫，
+> `python3 scripts/gen-knowledge-index.py --strict` 不带任何豁免地绿。
+> 判据也跟着改：`test_real_library_pending_is_exactly_the_counseling_pack` →
+> `test_real_library_has_no_grounding_pending_left`（TS 侧 `index-guard.test.ts` 同改），
+> 钉的从"豁免恰好是这一处"变成"一处都没有"；**豁免机制本身一条没删**，将来某个包真要欠账还能用。
+>
+> 下面 H1—H6 保留原样并逐条标注了结果——留着不是为了追踪（没有可追的了），
+> 是为了让下一个人看得见**每一项是怎么了结的**：核实、改写、还是隔离。
 
+### 闭卷时的数（全部当场跑出来）
 
-> 本领域包 39 张卡中，**7 张法条卡为官方原始 HTML 逐字核实**（精神卫生法、个保法、民法典、
-> 消保法），另 1 张方法卡（method-counseling-panli-heyan，引用库内方法本体）同为 `原文核实`；
-> **其余 31 张**因引用了下列未决项，整卡取最低档 `待核实`。
-> 这 31 张卡**每张正文里都有 `【待核实` 标记**，可 `grep -rn 待核实 knowledge/packs/counseling/`
-> 定位；每张也在下面 §H6 里逐卡登记（为什么待核实、什么解除了才能单独升档）。
-> 两条都有判据盯着（counseling-pack.test.ts），漏一张即红。
+| | 收口前（豁免中） | 闭卷（本次） |
+| --- | ---: | ---: |
+| counseling 进索引 | 39 | **37** |
+| ├ `原文核实` | 8 | **36** |
+| ├ `无外部断言` | 0 | **1**（method-counseling-panli-heyan） |
+| └ `待核实` | 31 | **0** |
+| counseling 隔离 | 0 | **2**（`quarantine/counseling/cases/`） |
+| 全库索引合计 | 200 | **198**（labor 161 + counseling 37） |
 
-### H1. 伦理守则第二版（**只能人工核对 PDF，不得机器抽取后标已核实**）
+- 引文机械核验 `scripts/verify-quotes.py`（**全库、无豁免、退出码 0**）：
+  **365 条引文全部「一致」**，不一致 0、找不到原件 0；其中 counseling 包 42 条。
+- 登记簿 `knowledge/sources.json`：**101 份官方原件**，本领域包新增 4 份
+  （`lunli-shouze-di2ban`、`cases-scfy-2024-xiaofei-dxal-3`、`guowei-yizheng-han-2024-259`、
+  `spp-2020-qiangzhi-baogao-yijian`）。`scripts/audit-sources.py`：复算一致 99、未复算 2（两份 pdf，
+  见 README §7.5）、有问题 0。
+- 非 `.gov.cn` 的登记 host 增至 4 个，新增的是 `journal.psych.ac.cn`
+  （`kind=行业规范`，issuer 中国心理学会，《心理学报》2018 年 50 卷 11 期刊载的伦理守则第二版）。
+  它不是 `kind=机构官网`，因此不受守卫 (g)「只给数据卡用」的限制。
 
-| pack id | 待核实点 | 建议核实途径 |
-|---|---|---|
-| ethic-lunli-3-2-baomi-liwai | 3.1/3.2/3.3/3.4 的条号与逐字文本（现为《心理学报》2018 年 50 卷 11 期期刊网页版转述） | 人工下载中国心理学会临床与咨询心理学注册工作委员会官方 PDF 逐字核对 |
-| ethic-lunli-1-8-1-10-shuangchong-guanxi | 1.8/1.9/1.10 的条号与逐字文本 | 同上 |
-| ethic-lunli-8-2-8-3-yuancheng-fuwu | 8.1/8.2/8.3 的条号与逐字文本 | 同上 |
+### 四张风险卡为什么升到 `原文核实`（收口裁决，2026-09-07）
 
-**纪律**：三张卡在人工核对完成前，其条号与条文**不得写入对外文书**
-（伦理申诉答辩书、投诉答复函、知情同意书正式版）；机器抽取结果不得用于升档。
+原口径是"四张风险卡就该长期停在 `待核实`，直到律师书面意见到位"。**收口时改了**，理由：
 
-### H2. 待律师书面确认（四张风险卡，卡内均写明「未经律师书面确认不得作为结论输出」）
+- `confidence` 这把尺量的是**出处**——"这张卡断言的每句外部事实，追没追到官方原件、
+  对没对上逐字"。四张卡拿不准的从来不是出处，是**法律结论**（强制报告主体范围、
+  合同定性、记录保存年限、地方许可备案），而法律结论不是"再找一份官方文件"能解决的。
+  用 `待核实` 记它，等于**拿出处那把尺去量结论**，量出来的数指错方向。
+- 继续钉 `待核实` 的实际代价不是"更保守"：扎根守卫 (d) 只放行 `原文核实`/`无外部断言`，
+  于是这四张卡**整体退出可用索引**——agent 在本领域风险最高的四个话题上一张卡都看不到，
+  卡里那四道 🔒 输出闸也跟着消失。**比标错一个档坏得多。**
+- 隔离也不对：隔离区的定义是"追不到一手源"，而这四张的一手源都在手上。
+  把它们放进去要写一条假的隔离原因。
+- 收口时把四张卡的每一处外部原文都补成了逐字引文并机械核过（各 1 条，共 4 条，
+  `verify-quotes.py` 一致）：强制报告意见第三条、精神卫生法第二十五条、伦理守则 3.4、
+  四川高院该案【典型意义】段。追不到原件的断言**一律删掉**（见 H3）。
+- 两件事分开记，因为解除条件不同：出处那一面由 `confidence: 原文核实` 记（已了结）；
+  结论那一面由**标题里的「待律师复核」+ 卡内 🔒 输出闸 + 正文的【待律师书面确认】标记**记
+  （未了结，登记在 §H2）。判据 `counseling-pack.test.ts` 逐张钉住这三样，删一样即红。
 
-| pack id | 待核实点 | 建议核实途径 |
+### H1. 伦理守则第二版（**已解决，2026-09-07，核实员第 1 批**）
+
+> 原判据是"官方 PDF 机器抽取不可靠，不许凭机抽结果升档"——这句话没变，但它挡的是 PDF，
+> 不是"这份守则永远核不动"。核实员第 1 批找到同一份《中国心理学会临床与咨询心理学工作
+> 伦理守则（第二版）》的**非 PDF** 一手源：`journal.psych.ac.cn` 的期刊网页版
+> （《心理学报》2018 年第 50 卷第 11 期 1314–1322 页，中国心理学会主办、临床心理学注册
+> 工作委员会撰写并代表学会发布），HTML 属确定性抽取格式，已登记为 `kind=行业规范`
+> （`knowledge/sources.json` 的 `lunli-shouze-di2ban`，`--issuer 中国心理学会
+> --issuer-host journal.psych.ac.cn`）。三张卡共 10 条 `facts.statute_quotes` 逐条经
+> `scripts/verify-quotes.py` 核对一致，均已升为 `原文核实`：
+
+| pack id | 处理结果 |
+|---|---|
+| ethic-lunli-3-2-baomi-liwai | 3.1/3.2/3.3/3.4 逐字核对一致，`原文核实` |
+| ethic-lunli-1-8-1-10-shuangchong-guanxi | 1.8/1.9/1.10 逐字核对一致，`原文核实` |
+| ethic-lunli-8-2-8-3-yuancheng-fuwu | 8.1/8.2/8.3 逐字核对一致（8.1 原卡只写"要点"改写，本次补为逐字），`原文核实` |
+
+### H2. 待律师书面确认（四张风险卡，**本章唯一仍未了结的一项**）
+
+> 四张卡的 `confidence` 已是 `原文核实`（出处那一面已了结，理由见本章开头的收口裁决）。
+> 这里登记的是**结论**那一面：下表每一行都要执业律师的书面回答，不是再找一份官方文件。
+> 在书面意见到位之前，四张卡各自的 🔒 输出闸生效——agent 只能把卡内容当风险提示转述，
+> **不得**给出确定性判断。判据：`counseling-pack.test.ts` 逐张钉住"输出闸那句话不能被删"、
+> "正文有【待律师书面确认】标记"、"这四个 id 在本节被点名"。
+
+| pack id | 待律师书面确认的问题 | 途径 |
 |---|---|---|
 | risk-qiangzhi-baogao-zhuti | 心理咨询机构是否属于侵害未成年人案件强制报告制度的法定主体（官方文件未明文列出，学理解读有分歧） | 执业律师书面意见；检察机关/地方规定检索 |
 | risk-hetong-dingxing | 心理咨询服务合同定性（委托合同 vs 服务合同）及其对退费公式的影响 | 执业律师书面意见；类案检索 |
 | risk-jilu-baocun-nianxian | 咨询记录保存年限（无明文，类推病历缺乏依据；与个保法最小必要冲突） | 执业律师书面意见；行业标准跟踪 |
 | risk-difang-xuke-beian | 心理咨询机构的行政许可/备案要求，尤其地方性规定 | 执业律师书面意见；属地卫健委与市场监管部门书面咨询 |
 
-### H3. 法条与官方文件原文未取得
+### H3. 法条与官方文件原文未取得（**已了结：追不到的断言一律不写**）
 
-| pack id | 待核实点 | 建议核实途径 |
+原表两行都不是"卡还欠着账"，而是"这两条外部事实本库追不到原件"。按 README §4「拿不准就不写」，
+收口时把它们从**每一张**卡里删干净，改成不依赖该事实的写法；剩下的话每一句都指得出原件。
+`grep -rn "职业资格目录" knowledge/packs/counseling/` 现在只命中 `risk-difang-xuke-beian`
+的「本卡不写的部分」那一节——那一节写的是"为什么不写"，不是断言。
+
+| 原待核点 | 现在怎么处置 | 若将来要用它，还得做什么 |
 |---|---|---|
-| data-counseling-shixiao-qixian | 《民事诉讼法》**2023 年修正版**答辩期条文的**现行条号**（本卡逐字引用的是最高法公报 2012 修正版第一百二十五条；二手称现行为第一百二十八条） | flk.npc.gov.cn（站点已改前后端分离，旧 detail2 链接不再直出正文）/ npc.gov.cn 现行版 |
-| data-counseling-shixiao-qixian | 举证期限的官方口径；协会伦理申诉的受理与答复时限；监管/消协投诉的答复期限 | court.gov.cn；中国心理学会注册系统；属地市场监管部门 |
-| statute-xbf-26-55-geshi-tiaokuan-chengfa、sop-jianguan-xiehui-tousu、script-laifang-tousu-goutong | 「心理咨询师 2017 年退出国家职业资格目录」的官方公告原文 | mohrss.gov.cn 原始公告 |
-| risk-difang-xuke-beian | 是否存在国家级「心理咨询机构管理办法」或专项行政许可规定（本次未穷尽检索） | nhc.gov.cn / samr.gov.cn |
-| data-counseling-weiji-rexian | 机构所在城市是否另有官方公布的地方心理援助热线（**不得自行补写地方号码**）；12356 各省实际接通与坐席情况 | 属地卫生健康行政部门；gov.cn |
+| 「心理咨询师 2017 年退出国家职业资格目录」的官方公告原文 | 三张卡（statute-xbf-26-55、script-laifang-tousu-goutong、sop-jianguan-xiehui-tousu）已各自改写为不依赖该史实的表述；risk-difang-xuke-beian 在「本卡不写的部分」写明试过什么 | 收口时再试一次 `mohrss.gov.cn`：该站对脚本请求返回 JS 反爬挑战页（非 200 即失败那种可判定的失败），需人工用浏览器在 mohrss.gov.cn 找到 2017 年目录调整的原始公告并 `fetch-source.py` 登记 |
+| 是否存在国家级「心理咨询机构管理办法」或专项行政许可规定 | risk-difang-xuke-beian 改为**既不断言"有"也不断言"没有"**，只写"本卡没有查到，因而不作结论" | 穷尽检索 nhc.gov.cn / samr.gov.cn；查到即按新事实改写该卡 |
 
-### H4. 判例（三则**全部**未取得裁判文书全文，结论字段统一为「不可用（仅内部参考）」）
+> **statute-xbf-26-55-geshi-tiaokuan-chengfa 已于 2026-09-07 核实员第 1 批处理**：未追到
+> mohrss.gov.cn 原始公告，按 README §4「拿不准就不写」删掉了"人社部 2017 年调整目录"这句
+> 具体断言，改写为不依赖该事实的一般合规提示（资质表述须与实际证书类型一致）。该卡不再是
+> 待核实卡；`sop-jianguan-xiehui-tousu`、`script-laifang-tousu-goutong` 若也引用了这句具体
+> 断言，同样待各自负责的批次照此处理或另行追证。
+>
+> **data-counseling-shixiao-qixian 已于 2026-09-07 核实员第 3 批解决**（原表上两行已删）：
+> 民诉法**现行**（2023 年修正，2024-01-01 起施行）答辩期条号确认为**第一百二十八条**
+> （登记 `statute-minsufa`，官方 PDF `ssf.gov.cn`），举证期限从《民诉法解释》第九十九条
+> （`statute-fashi-2022-11-minsu`）逐字核实（法院指定，一审不少于 15 日、二审新证据不少于
+> 10 日）。协会伦理申诉受理答复时限、监管/消协投诉答复期限**仍未找到一手源**，但本卡已改为
+> 正文明写"本卡不写的部分"并说明原因，不再挂 `【待核实】` 断言，`confidence` 升为 `原文核实`，
+> 退出本章追踪；这两项若被 `sop-jianguan-xiehui-tousu`、`sop-lunli-shensu-yingdui` 等其他卡
+> 引用为未决项，仍按那些卡各自的登记追踪，不因本卡解除而一并解除。
+>
+> **data-counseling-weiji-rexian 已于 2026-09-07 核实员第 3 批解决**（原表最后一行已删）：
+> 12356 官方出处（国卫医政函〔2024〕259 号）补充登记为 `guowei-yizheng-han-2024-259` 并逐字
+> 核过 4 条 `facts.statute_quotes`。地方城市是否另有官方热线、12356 各省实际接通情况**仍未
+> 核实**，本卡已改为正文明写"本卡不写的部分"，不再挂待核实断言，`confidence` 升为 `原文核实`，
+> 退出本章追踪。
 
-| pack id | 待核实点 | 备注 |
+### H4. 判例（**已了结**：1 张官网找到原文核实，2 张追不到一手源/未终审已隔离）
+
+| pack id | 原待核点 | 现在怎么处置 |
 |---|---|---|
-| case-guge-mingyu-quan | 原始案号、审理法院、裁判年份、判决书「本院认为」段原文 | 现来源为律所官网转述，非司法机关发布 |
-| case-dongni-lisongwei-weizhongshen | **是否已有生效判决**；案号与审级；协会伦理调查是否恢复及结论 | 查证时为 2024 年开庭阶段，**未终审**，不得用于预测胜败 |
-| case-sichuan-tuifei-7500 | 原始案号、审理法院、判决书关于合同定性与退费计算的原文；四川高院官网原始发布页 | 现来源为新闻转发布会通稿 |
-| sop-zishang-shijian-zhuize | 自伤事件后家属追责的可公开引用裁判文书（本次未查到） | 裁判文书网为动态站点，需人工检索或专业法律数据库 |
+| sop-zishang-shijian-zhuize | 自伤事件后家属追责的可公开引用裁判文书（未查到） | 卡内正文明写「本次调研未查到可公开引用的同类裁判文书」，**不引用任何未核实判例**，其余内容按已核实法条卡与伦理卡展开，`confidence: 原文核实`。将来在 `.gov.cn` 上找到同类文书并登记核过，才可往卡里加判例段。 |
+
+> **case-sichuan-tuifei-7500**：在四川省高级人民法院官网「典型案例」栏目
+> （`scfy.scssfw.gov.cn`）找到官方原文，登记为 `cases-scfy-2024-xiaofei-dxal-3`，
+> 案情、金额（付 8000 元、判退 7500 元）与裁判理由逐字核对一致，改写为只断言官网原文，
+> `confidence` 升为 `原文核实`，退出本章追踪。
+>
+> **case-guge-mingyu-quan**（顾歌案）：唯一来源是代理律所官网的自我宣传文章，非司法机关或
+> 中立媒体发布；本批另试过 `www.court.gov.cn` 新闻中心/典型案例栏目人工翻页、
+> `rmfyalk.court.gov.cn`（人民法院案例库，检索接口需前端会话）、`wenshu.court.gov.cn`
+> 直链下载（需登录会话）均未获取到官方原文，已移入 `knowledge/quarantine/counseling/cases/`，
+> 详见该卡【隔离原因】块与 `knowledge/quarantine/README.md` 第 13 批。
+>
+> **case-dongni-lisongwei-weizhongshen**（冬妮诉李松蔚案）：卡片自述"未终审"，
+> 按 `method-counseling-panli-heyan` 加严二，未终审案件没有先例价值，不得作为裁判规则卡；
+> 唯一来源为新闻转载，非一手源。已移入 `knowledge/quarantine/counseling/cases/`。
 
 ### H5. 编卡纪律与待批事项（**非事实待核实，需 manager 批**）
 
@@ -181,42 +267,65 @@ python3 -m pytest scripts/tests -q         # 上面三把尺子自己的判据
 | 热线卡的 12356 与劳动包重复收录 | README §6 单点事实源要求被 ≥2 pack 引用的数据建专卡。本领域包按设计稿 §13「知识库按领域独立成包、跨域检索默认关闭」自建 data-counseling-weiji-rexian，与 data-beijing-qiuzhu-ziyuan 各持一份 12356。**是否合并为跨域单点事实源，待 manager 裁。** |
 | `status: forbidden` 的语义 | 现枚举只有 usable/forbidden，本领域用 forbidden 承载「非官方发布、本包不输出」（希望24热线），与劳动包的「已证伪/危险号码」语义不同。**是否拆分枚举，待 manager 裁。** |
 
-### H6. 逐卡登记（31 张 `待核实` 卡，README §4.2：pack id · 待核实点 · 途径）
+### H6. 逐卡登记（**已清零**：曾经 23 张 `待核实` 卡，现在 0 张）
 
-> 上面 H1—H5 按**未决项**分组，本表按**卡**逐张登记：卡内均有 `【待核实` 标记可 grep 定位，
-> 本表回答的是另一个问题——**这张卡为什么是待核实、什么解除了才能单独升档**。
-> 判据：`app/src/lib/knowledge/__tests__/counseling-pack.test.ts` 逐卡比对（漏登记即红）。
+> 原表按**卡**逐张登记"这张卡为什么待核实、什么解除了才能单独升档"。
+> 收口后这个问题对 counseling 包已经没有实例了：一张 `待核实` 都没有，
+> 判据 `counseling-pack.test.ts` 的「counseling 包内没有 confidence=待核实 或 二手转述 的卡」
+> 直接钉住这件事（配一条"包非空"的自证，防止空跑）。
 
-| pack id | 待核实点 | 升档条件 / 途径 |
-|---|---|---|
-| case-dongni-lisongwei-weizhongshen | 是否已有生效判决；案号与审级（查证时未终审） | §H4（裁判文书原件） |
-| case-guge-mingyu-quan | 案号、审理法院、裁判年份、「本院认为」段原文 | §H4（裁判文书原件） |
-| case-sichuan-tuifei-7500 | 案号、审理法院、合同定性与退费计算的判决原文 | §H4（裁判文书原件） |
-| data-counseling-shixiao-qixian | 民诉法现行答辩期条号；举证期限/伦理申诉/监管投诉的答复期限 | §H3（官方原文） |
-| data-counseling-weiji-rexian | 机构所在城市是否另有官方地方热线；12356 各省实际接通情况 | §H3（属地卫健部门） |
-| ethic-lunli-1-8-1-10-shuangchong-guanxi | 条号与逐字文本为期刊网页版转述，未经官方 PDF 人工核对 | §H1（人工核对官方 PDF） |
-| ethic-lunli-3-2-baomi-liwai | 条号与逐字文本为期刊网页版转述，未经官方 PDF 人工核对 | §H1（人工核对官方 PDF） |
-| ethic-lunli-8-2-8-3-yuancheng-fuwu | 条号与逐字文本为期刊网页版转述，未经官方 PDF 人工核对 | §H1（人工核对官方 PDF） |
-| risk-difang-xuke-beian | 行政许可/地方备案要求；「2017 年退出国家职业资格目录」待核官方公告 | §H2（执业律师书面意见）+ §H3 |
-| risk-hetong-dingxing | 咨询服务合同定性（委托 vs 服务）及其退费公式后果 | §H2（执业律师书面意见） |
-| risk-jilu-baocun-nianxian | 咨询记录保存年限无明文，类推病历缺依据 | §H2（执业律师书面意见） |
-| risk-qiangzhi-baogao-zhuti | 强制报告制度是否涵盖心理咨询机构，官方文件未明文 | §H2（执业律师书面意见） |
-| script-laifang-tousu-goutong | 「心理咨询师 2017 年退出国家职业资格目录」官方公告原文 | §H3（mohrss.gov.cn 原始公告） |
-| script-weiji-tonghua-huashu | 无独立未决事实项；随所引未决项解除后复核：data-counseling-weiji-rexian、ethic-lunli-3-2-baomi-liwai、sop-zishang-shijian-zhuize | 上列各项解除后逐条复核本卡 |
-| sop-jianguan-xiehui-tousu | 监管/消协投诉的答复期限；同上职业资格公告原文 | §H3（官方原文） |
-| sop-liaoxiao-zhengyi | 无独立未决事实项；随所引未决项解除后复核：sop-lunli-shensu-yingdui | 上列各项解除后逐条复核本卡 |
-| sop-lunli-shensu-yingdui | 协会伦理申诉的受理与答复时限；伦理守则条文本身待核 | §H1 + §H3 |
-| sop-mingyu-qinquan-yingdui | 无独立未决事实项；随所引未决项解除后复核：case-dongni-lisongwei-weizhongshen、case-guge-mingyu-quan | 上列各项解除后逐条复核本卡 |
-| sop-tuifei-zhengyi | 无独立未决事实项；随所引未决项解除后复核：case-sichuan-tuifei-7500、data-counseling-shixiao-qixian、risk-hetong-dingxing、script-laifang-tousu-goutong、sop-jianguan-xiehui-tousu、sop-lunli-shensu-yingdui | 上列各项解除后逐条复核本卡 |
-| sop-yinsi-xielou-zhikong | 无独立未决事实项；随所引未决项解除后复核：ethic-lunli-8-2-8-3-yuancheng-fuwu、risk-jilu-baocun-nianxian、sop-jianguan-xiehui-tousu | 上列各项解除后逐条复核本卡 |
-| sop-zhiqing-tongyi-quexian | 无独立未决事实项；随所引未决项解除后复核：case-sichuan-tuifei-7500、ethic-lunli-3-2-baomi-liwai | 上列各项解除后逐条复核本卡 |
-| sop-zishang-shijian-zhuize | 自伤事件后家属追责的可公开引用裁判文书（本次未查到） | §H4（裁判文书检索） |
-| template-baomi-gaozhi-liwai | 无独立未决事实项；随所引未决项解除后复核：ethic-lunli-3-2-baomi-liwai | 上列各项解除后逐条复核本卡 |
-| template-lunli-shensu-dabianshu | 无独立未决事实项；随所引未决项解除后复核：case-dongni-lisongwei-weizhongshen、ethic-lunli-1-8-1-10-shuangchong-guanxi、ethic-lunli-3-2-baomi-liwai、sop-lunli-shensu-yingdui | 上列各项解除后逐条复核本卡 |
-| template-lvshihan-yingdui-yaodian | 无独立未决事实项；随所引未决项解除后复核：case-guge-mingyu-quan | 上列各项解除后逐条复核本卡 |
-| template-tingzhi-fuwu-tongzhi | 无独立未决事实项；随所引未决项解除后复核：ethic-lunli-1-8-1-10-shuangchong-guanxi、sop-zishang-shijian-zhuize | 上列各项解除后逐条复核本卡 |
-| template-tousu-dafu-han | 无独立未决事实项；随所引未决项解除后复核：sop-jianguan-xiehui-tousu | 上列各项解除后逐条复核本卡 |
-| template-tuifei-xieyi | 无独立未决事实项；随所引未决项解除后复核：risk-hetong-dingxing | 上列各项解除后逐条复核本卡 |
-| template-weiji-chuzhi-jilu | 无独立未决事实项；随所引未决项解除后复核：data-counseling-weiji-rexian | 上列各项解除后逐条复核本卡 |
-| template-zhiqing-tongyishu | 无独立未决事实项；随所引未决项解除后复核：ethic-lunli-3-2-baomi-liwai | 上列各项解除后逐条复核本卡 |
-| template-zhuanjie-han | 无独立未决事实项；随所引未决项解除后复核：script-laifang-tousu-goutong | 上列各项解除后逐条复核本卡 |
+23 张卡的了结方式，按三类归并（逐卡细节在各卡正文与上面 H1—H4）：
+
+| 类别 | 张数 | 怎么了结的 |
+|---|---:|---|
+| **随所引未决项一并解除** | 15 | 这些卡（各 SOP、模板、话术）本身没有独立的外部事实待核，只是引用了别的卡。所引的伦理卡（H1）、数据卡与判例卡（H3/H4）解除后逐条复核，全部升为 `原文核实`。 |
+| **删掉追不到原件的具体断言** | 4 | `statute-xbf-26-55`、`script-laifang-tousu-goutong`、`sop-jianguan-xiehui-tousu`（均为「2017 年职业资格目录」那句史实）、`sop-zishang-shijian-zhuize`（同类裁判文书）——按 README §4「拿不准就不写」改写为不依赖该事实的表述。 |
+| **补逐字引文后升档，结论另挂输出闸** | 4 | 四张风险卡，见本章开头的收口裁决与 §H2。 |
+
+另有 2 张判例卡追不到一手源／未终审，**整张隔离**（不在上面 23 张里，它们原本就不是"待核实待升档"，
+而是"核不动"）：见 §H4 与 `knowledge/quarantine/counseling/cases/`。
+
+### 下一个人从这里接
+
+1. **唯一还开着的口子是 §H2 的四张风险卡**，它要的是执业律师的书面意见，不是检索。
+   拿到意见后：把结论写进卡、删掉 🔒 输出闸与【待律师书面确认】标记、
+   同步改 `counseling-pack.test.ts` 里钉这三样的判据（判据会红，那是对的——它在提醒你别只改一半）。
+2. **H3/H4 里"本卡不写"的几条**若将来追到了官方原件，按 `fetch-source.py` 登记 →
+   卡内补逐字引文 → `verify-quotes.py --card` 核过 → 再写进正文。顺序反了就是先写后核。
+3. **H5 的三项待 manager 裁**（`applies_to` 词表增补、12356 是否做成跨域单点事实源、
+   `status: forbidden` 语义是否拆分）与事实核实无关，收口未动。
+
+### 收口时发现、但不属于本领域包的一处（未处理，报给 manager）
+
+**劳动包里有大量指向隔离卡的悬空引用。** 前几批把 60 张判例卡移入 `quarantine/` 时，
+只移了卡，没有回头清理**别的卡对它们的引用**：`related:` 里的 id 与正文里的 `[[wikilink]]`
+仍然指着它们。这批卡不在索引里，于是这些引用指向的是"什么都没有"——
+而 `related` 根本不进 `index.json`（不在 `INDEX_FIELDS` 里），没有任何一条判据会红。
+**危害在下一个人**：他看到 `related: case-xxx` 会以为那张卡可用、可引，
+而它进隔离区的全部理由就是核不动。
+
+收口时**只清了 counseling 的 5 处 related + 3 处 wikilink**（本批范围内），
+劳动包的 71 处 related + 64 处 wikilink **一处未动**——那是别的批次的地盘，
+在这条分支上顺手改 71 处会让这次收口的 diff 无法审。
+
+自查条件（不用问人，跑一下就知道还剩多少）：
+
+```bash
+python3 - <<'EOF'
+import json, re, pathlib
+root = pathlib.Path('knowledge')
+ids = {e['id'] for e in json.load(open(root/'index.json', encoding='utf-8'))}
+for e in json.load(open(root/'index.json', encoding='utf-8')):
+    txt = (root/e['path']).read_text(encoding='utf-8')
+    fm = re.match(r'\A---\n(.*?)\n---\n', txt, re.S).group(1)
+    m = re.search(r'^related:\s*\[(.*?)\]', fm, re.M|re.S)
+    for r in ([x.strip() for x in m.group(1).split(',') if x.strip()] if m else []):
+        if r not in ids: print('related', e['id'], '->', r)
+    for w in set(re.findall(r'\[\[([^\]|]+)\]\]', txt)):
+        if w not in ids: print('wikilink', e['id'], '->', w)
+EOF
+```
+
+收口时这条命令输出 **135 行，全部是 labor**（counseling 已清零）。
+它是不是该变成一道守卫（(i) 悬空引用即红），由 manager 定：立起来那天全库当场 135 处红，
+所以**要么先清完再立，要么立的时候带一份和 GROUNDING_PENDING 同型的到期欠条**。

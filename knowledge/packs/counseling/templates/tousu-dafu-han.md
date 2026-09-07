@@ -10,8 +10,8 @@ region: 全国
 domain: counseling
 sources:
   - http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm
-confidence: 待核实
-updated: 2026-09-06
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 《投诉答复函》模板
@@ -91,12 +91,3 @@ updated: 2026-09-06
 - ⛔ 不以撤回投诉作为退费的条件；
 - ⛔ 不附整本咨询记录（违反最低限度原则）；
 - 涉及退费金额的，先按 [[sop-tuifei-zhengyi]] 算两条线、给区间，再定方案。
-
-## 待核实
-
-- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
-  下列未决项：
-  - [[sop-jianguan-xiehui-tousu]]（同为待核实卡，§H6）
-  - [[sop-tuifei-zhengyi]]（同为待核实卡，§H6）
-  - [[sop-yinsi-xielou-zhikong]]（同为待核实卡，§H6）
-  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。

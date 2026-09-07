@@ -11,14 +11,16 @@ domain: counseling
 sources:
   - https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml
 confidence: 原文核实
-updated: 2026-09-06
+updated: 2026-09-07
 facts:
   statute_quotes:
     - law: "中华人民共和国民法典"
       article: "第九百三十三条"
+      source_id: statute-minfadian
       text: "第九百三十三条　委托人或者受托人可以随时解除委托合同。因解除合同造成对方损失的，除不可归责于该当事人的事由外，无偿委托合同的解除方应当赔偿因解除时间不当造成的直接损失，有偿委托合同的解除方应当赔偿对方的直接损失和合同履行后可以获得的利益。"
     - law: "中华人民共和国民法典"
       article: "第九百二十八条"
+      source_id: statute-minfadian
       text: "第九百二十八条　受托人完成委托事务的，委托人应当按照约定向其支付报酬。\n因不可归责于受托人的事由，委托合同解除或者委托事务不能完成的，委托人应当向受托人支付相应的报酬。当事人另有约定的，按照其约定。"
 ---
 

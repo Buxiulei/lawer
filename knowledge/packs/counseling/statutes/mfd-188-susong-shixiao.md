@@ -5,23 +5,26 @@ title: 民法典第188条：诉讼时效三年、最长二十年（多年后被�
 keywords: [民法典, 第188条, 诉讼时效, 三年, 二十年, 起算点, 知道或者应当知道, 时效抗辩, 事后追责]
 applies_to: [诉讼与仲裁, 名誉侵权, 隐私泄露, 退费争议, 自伤事件]
 law_refs: [民法典§188, 民法典§191, 民法典§192, 民法典§193]
-related: [data-counseling-shixiao-qixian, case-dongni-lisongwei-weizhongshen, sop-lunli-shensu-yingdui]
+related: [data-counseling-shixiao-qixian, sop-lunli-shensu-yingdui]
 region: 全国
 domain: counseling
 sources:
   - http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html
 confidence: 原文核实
-updated: 2026-09-06
+updated: 2026-09-07
 facts:
   statute_quotes:
     - law: "中华人民共和国民法典"
       article: "第一百八十八条"
+      source_id: statute-minfadian
       text: "向人民法院请求保护民事权利的诉讼时效期间为三年。法律另有规定的，依照其规定。\n诉讼时效期间自权利人知道或者应当知道权利受到损害以及义务人之日起计算。法律另有规定的，依照其规定。但是，自权利受到损害之日起超过二十年的，人民法院不予保护，有特殊情况的，人民法院可以根据权利人的申请决定延长。"
     - law: "中华人民共和国民法典"
       article: "第一百九十一条"
+      source_id: statute-minfadian
       text: "未成年人遭受性侵害的损害赔偿请求权的诉讼时效期间，自受害人年满十八周岁之日起计算。"
     - law: "中华人民共和国民法典"
       article: "第一百九十三条"
+      source_id: statute-minfadian
       text: "人民法院不得主动适用诉讼时效的规定。"
 ---
 
@@ -46,8 +49,9 @@ http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html
 ## 适用要点
 
 1. **三年，从"知道或者应当知道权利受到损害**以及**义务人"之日起算**——两个要件同时具备才起算。
-   在多年后被翻出旧事追责的场景（业内已有咨询关系结束数年后公开指控的先例，
-   见 [[case-dongni-lisongwei-weizhongshen]]），起算点之争往往比实体之争更决定成败。
+   在多年后被翻出旧事追责的场景里，起算点之争往往比实体之争更决定成败。
+   （本领域这类争议的公开报道本库**没有**核到官方原件，相关案例卡已隔离，
+   见 `knowledge/quarantine/counseling/cases/`；所以这里只说规则，不举例。）
 2. **法院不主动适用（第 193 条）**——时效抗辩**必须由我方明确提出**，不提就等于放弃。
    这是我方在答辩阶段最容易漏掉的一步：先写实体反驳、忘了写时效抗辩。
    **答辩状写作顺序：程序（管辖、时效）→ 事实 → 实体。**

@@ -10,8 +10,8 @@ region: 全国
 domain: counseling
 sources:
   - https://www.spp.gov.cn/spp/ssmfdyflvdtpgz/202008/t20200831_478413.shtml
-confidence: 待核实
-updated: 2026-09-06
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 《退费协议》模板
@@ -95,10 +95,3 @@ updated: 2026-09-06
 - 退费金额与"已提供服务次数"必须相互对得上，二者矛盾会成为新的争议点；
 - 涉及第三方支付平台或分期的，写清退款路径与到账周期；
 - 终止服务另需 [[template-tingzhi-fuwu-tongzhi]] 的，两份文件同日出具、内容不得冲突。
-
-## 待核实
-
-- 【待核实】本卡自身不含未经核实的条号或数字；整卡取最低档 `待核实`，是因为它落地时要引用
-  下列未决项：
-  - [[risk-hetong-dingxing]]（待律师书面确认，§H2）
-  上列各项解除前，本卡不得单独升档（逐卡登记见 knowledge/TODO核实清单.md §H6）。
