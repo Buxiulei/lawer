@@ -20,6 +20,7 @@
 import type { Database } from 'better-sqlite3';
 
 import { parseBrief } from '@/lib/evidence/brief';
+import { precedentLine } from '@/lib/knowledge/precedent-line';
 import * as caseStore from '@/lib/db/cases';
 import * as agentStore from '@/lib/db/agent';
 import { getDomainPack, type DomainPack, type ReportSectionSpec } from '@/lib/domains/registry';
@@ -258,8 +259,20 @@ function draftSection(
       // 而这几条是这个行当里本来就没有定论的东西，只会由某位律师针对某个案子书面确认一次。
       // 混进缺口列表的形态是：模型看见"风险 6 条"，于是逐条"解决"它们，
       // 而解决其中四条的唯一方式就是给出一个结论——那正是这几条要拦的事。
+      //
+      // 【为什么每条下面还要挂一行「过往相似案例」】报告是用户和模型一起"从头读一遍"的
+      // 那一份。只印条目本身的形态是：读到"这几件事没有定论"就到此为止，
+      // 既不知道库里有没有判过的，也没有任何东西说"库里确实没有"——于是要么跳过找案例
+      // 这一步，要么顺手编一个填上。措辞与事实卡共用同一个入口（lib/knowledge/precedent-line），
+      // 两处各写一句的形态是其中一处的空臂悄悄消失，而两份文本各自读起来都正常。
       const fixed = pack.interpretationDisputed
-        ? [`**${pack.interpretationDisputed.discipline}**`, ...pack.interpretationDisputed.items].map((x) => `- ${x}`).join('\n')
+        ? [
+            `- **${pack.interpretationDisputed.discipline}**`,
+            ...pack.interpretationDisputed.items.flatMap((x) => [
+              `- ${x.text}`,
+              `  - ${precedentLine(x.precedents)}`,
+            ]),
+          ].join('\n')
         : '';
       const gaps: string[] = [];
       const missing = basicsMissing(c);

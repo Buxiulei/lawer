@@ -22,6 +22,7 @@ import { crisisStatusMark } from '@/lib/cases/crisis-hits';
 import { basicsMissing } from '@/lib/cases/report';
 import { BRIEF_SUMMARY_MAX, briefSummary, parseBrief } from '@/lib/evidence/brief';
 import { EVIDENCE_CATEGORIES } from '@/lib/evidence/categories';
+import { precedentLine } from '@/lib/knowledge/precedent-line';
 import { DEFAULT_DOMAIN, DOMAINS, domainPackOrDefault, type FactsSectionKey } from '@/lib/domains/registry';
 import { toDisplayDay, toDisplayTime } from '@/lib/time';
 
@@ -615,7 +616,7 @@ function interpretationDisputedSection(s: CaseSnapshot): FactSection | null {
     heading: review.title,
     // 纪律那句话进 stat：stat 是整区降级后唯一幸存的部分，而这一节里最不能丢的正是这句
     stat: `- ${review.discipline}`,
-    detail: review.items.map((x) => `- ${x}`),
+    detail: review.items.flatMap((x) => [`- ${x.text}`, `  - ${precedentLine(x.precedents)}`]),
   };
 }
 

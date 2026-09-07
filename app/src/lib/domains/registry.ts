@@ -283,9 +283,40 @@ export interface DomainInterpretationDisputed {
   /** 这一节的抬头（事实卡与个案报告共用同一份措辞） */
   title: string;
   /** 逐条：**存疑的是什么、分歧点在哪**。一条一件事，不合并 */
-  items: readonly string[];
+  items: readonly DomainDisputedItem[];
   /** 统一纪律，逐字对外——这句话才是这一节的作用，条目只是它的适用范围 */
   discipline: string;
+}
+
+/**
+ * 解释存疑那一节里的**一条**：存疑的是什么，以及**过往相似的官方案例在哪**。
+ *
+ * 【为什么一条不只是一句话】主理人 2026-09-07 裁决：**现行法律解释存疑时应找过往相似判例**——
+ * 存疑不是终点，先给官方相似案例的实际裁法（标明个案非规则），再给分歧点，仍不下结论。
+ * 只留一句 text 的形态是：那句话每轮照常渲染，而"去找找有没有判过的"这一步没有任何
+ * 东西记着它该做——模型读到"存疑"就直接进入"我不下结论"，一条案例都不去取，
+ * 而那一轮回复读起来完全负责任。
+ *
+ * 【为什么 precedents 与 searchKeywords 必须是两格，不能合并成一格】它们回答的是两个问题：
+ * 前者是"库里现在有哪几张"，后者是"下一次该怎么找"。合并的形态是：一条空的案例列表
+ * 与"这件事没人查过"在包里长得一模一样，于是每一轮调研都从零开始重走一遍死路。
+ */
+export interface DomainDisputedItem {
+  /** 存疑的是什么、分歧点在哪。一条一件事，不合并 */
+  text: string;
+  /**
+   * 已收录的**官方**判例卡 id（knowledge/packs/**）。
+   *
+   * **空数组是一个结论，不是待填项**：它说的是"查过，库里没有"——所以它必须配着
+   * 非空的 searchKeywords 才成立（见下）。渲染侧据此明说"库里暂无官方相似案例"，
+   * 而不是把这一条整个略过：略过的形态是用户读不出"到底是没有，还是没人找过"。
+   */
+  precedents: readonly string[];
+  /**
+   * 下一次去找案例该用的检索词。**不许为空**——空的 precedents 配空的 searchKeywords，
+   * 与"这一条从来没人查过"完全同形；写下检索词，才把"查过没找到"这个结论落到纸上。
+   */
+  searchKeywords: readonly string[];
 }
 
 /**
@@ -745,6 +776,21 @@ export function assertDomainPack(pack: DomainPack): void {
     str('interpretationDisputed.title', pack.interpretationDisputed.title);
     arr('interpretationDisputed.items', pack.interpretationDisputed.items);
     str('interpretationDisputed.discipline', pack.interpretationDisputed.discipline);
+    // 逐条查三格。**precedents 与 searchKeywords 分开查，且两格的判据不一样**：
+    //   · precedents 允许为空数组（"查过，库里没有"是个结论），但必须**是**数组——
+    //     undefined 的形态是渲染侧 `.length` 当场 TypeError，报错点离病因隔着好几层；
+    //   · searchKeywords **不许为空**：空的 precedents 配空的 searchKeywords，
+    //     与"这一条从来没人查过"完全同形，于是每一轮调研都从零重走一遍死路。
+    // 【为什么按下标点名】这一节的条目没有稳定键（不像 lawyerMandatory 有 key）；
+    // 下标会随插入位置位移，所以报错里同时带上 text 的前十几个字，指得到人。
+    (pack.interpretationDisputed.items ?? []).forEach((item, i) => {
+      const at = typeof item?.text === 'string' && item.text.trim() !== '' ? `#${i}「${item.text.slice(0, 12)}」` : `#${i}`;
+      str(`interpretationDisputed.items[${at}].text`, item?.text);
+      if (!Array.isArray(item?.precedents)) {
+        missing.push(`interpretationDisputed.items[${at}].precedents（查过没找到就给空数组，别省略）`);
+      }
+      arr(`interpretationDisputed.items[${at}].searchKeywords`, item?.searchKeywords);
+    });
   }
   if (pack.sensitive) {
     str('sensitive.subject', pack.sensitive.subject);

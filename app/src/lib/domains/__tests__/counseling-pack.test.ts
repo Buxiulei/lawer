@@ -7,6 +7,9 @@
 //   · 危机词表写成第一个领域那份 ⇒ 咨询师说「来访有自杀计划」不触发，而首段照常不出现；
 //   · interpretationDisputed 少一条 ⇒ 模型对那一件事给出干脆的答案，而它读起来很像答案。
 // 所以这里逐项钉住，而不是只做一次 assertDomainPack（那只查"在不在"，不查"是不是这一份"）。
+import fs from 'node:fs';
+import path from 'node:path';
+
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -22,6 +25,7 @@ import { DEADLINE_RULES } from '@/lib/deadline';
 import type { CaseRow } from '@/lib/db/cases';
 import { runMigrations } from '@/lib/db/migrate';
 import * as knowledge from '@/lib/knowledge';
+import { NO_PRECEDENT_LINE } from '@/lib/knowledge/precedent-line';
 
 import { COUNSELING } from '../counseling';
 import {
@@ -36,6 +40,15 @@ import {
 } from '../registry';
 
 const LABOR = DOMAINS[DEFAULT_DOMAIN];
+
+const REPO = path.resolve(__dirname, '../../../../../');
+
+/** `needle` 在 `hay` 里出现了几次（不重叠）。判据要数"几条"时用它，不用 toContain。 */
+function countOf(hay: string, needle: string): number {
+  let n = 0;
+  for (let i = hay.indexOf(needle); i >= 0; i = hay.indexOf(needle, i + needle.length)) n += 1;
+  return n;
+}
 
 describe('counseling 领域包挂在注册表上（设计稿 §16 分期：W3 挂包）', () => {
   it('取得到，且过结构守卫', () => {
@@ -341,7 +354,7 @@ describe('§16 解释存疑：四条固定条目 + 一句纪律', () => {
   it('四条各说一件事，逐条覆盖 §16 点名的那四项', () => {
     const items = COUNSELING.interpretationDisputed!.items;
     expect(items.length).toBe(4);
-    const joined = items.join('\n');
+    const joined = items.map((x) => x.text).join('\n');
     for (const topic of ['强制报告', '合同定性', '保存年限', '许可']) {
       expect(joined, `解释存疑少了「${topic}」那一条`).toContain(topic);
     }
@@ -364,12 +377,78 @@ describe('§16 解释存疑：四条固定条目 + 一句纪律', () => {
     );
   });
 
+  /**
+   * 【为什么末句要单独钉一遍】上面那条 toContain(discipline) 是拿**整串**去比事实卡，
+   * 而事实卡里那串就是从 discipline 渲染来的——删掉 discipline 的末句，两边一起变，
+   * 那条断言照常绿。这一条比的是**字面量与包**，删句即红。
+   *
+   * 【为什么偏偏是这一句】没有它，"存疑"就成了最省力的转介借口：模型不下结论，
+   * 改说"这一项等专业人士确认"，四条禁止结论当场变成四条转介理由——而它读起来像谨慎。
+   *
+   * 变异：把 discipline 末尾「**存疑不是把事情交出去的理由**，能做完的照常做完。」删掉 → 本条红。
+   */
+  it('纪律末句逐字写着「存疑不是把事情交出去的理由，能做完的照常做完」（删句即红）', () => {
+    expect(
+      COUNSELING.interpretationDisputed!.discipline,
+      '存疑没了这一句，就成了最省力的转介借口',
+    ).toContain('**存疑不是把事情交出去的理由**，能做完的照常做完。');
+  });
+
   it('纪律不止说"不许下结论"，还说了不许据此做哪些不可逆的动作', () => {
     // 【为什么这半句不能省】只说"不得下结论"的形态是：模型不说"你必须报"，
     // 改说"那你先把记录销毁吧"——它没下结论，但用户做了一件收不回的事。
     const d = COUNSELING.interpretationDisputed!.discipline;
     expect(d).toContain('不可逆');
     expect(d).toContain('销毁记录');
+  });
+
+  /**
+   * 【这一条钉的是"存疑之后还得去找判过的"】主理人 2026-09-07 裁决：
+   * **现行法律解释存疑时应找过往相似判例**——先给官方相似案例的实际裁法（标明个案非规则），
+   * 再给分歧点，仍不下结论、不推律师。
+   *
+   * 只留一句 text 的形态是：那四句每轮照常渲染，而"去找找有没有判过的"这一步
+   * **没有任何东西记着它该做**，模型读到"存疑"就直接进入"我不下结论"。
+   * 而 searchKeywords 不许空的理由是另一件事：空的 precedents 配空的 searchKeywords，
+   * 与"这一条从来没人查过"在包里完全同形，于是下一轮调研从零重走一遍死路。
+   *
+   * 变异：把 COUNSELING 里「合同定性」那条的 precedents 清空 → 第三段红；
+   * 把任意一条的 searchKeywords 清空 → 第二段红。
+   */
+  it('四条各自带着 precedents 与 searchKeywords，合同定性那条挂着四川高院那张判例卡', () => {
+    const items = COUNSELING.interpretationDisputed!.items;
+    // 每条都得有这两格（precedents 可空——"查过，库里没有"是个结论；searchKeywords 不许空）
+    for (const item of items) {
+      expect(Array.isArray(item.precedents), `「${item.text.slice(0, 8)}」缺 precedents`).toBe(true);
+      expect(item.searchKeywords.length, `「${item.text.slice(0, 8)}」没写检索词，下一轮要从零重走`)
+        .toBeGreaterThan(0);
+    }
+    // 挂上去的每一张都必须**真的在库里**：挂一个不存在的 id，渲染侧只会退回打印这串 id，
+    // 用户读到的是一个查无此卡的编号，而它看起来完全像一个案例。
+    const hung = items.flatMap((x) => [...x.precedents]);
+    expect(hung.length, '一张判例卡都没挂 ⇒ 下面那条恒真').toBeGreaterThan(0);
+    for (const id of hung) expect(knowledge.titleOf(id), `precedents 挂了库里没有的卡 ${id}`).toBeTruthy();
+    // 已找到官方案例的那一条（合同定性）必须挂着它；其余三条本轮官方源不可达，空着是结论
+    const dingxing = items.find((x) => x.text.includes('合同定性'))!;
+    expect(dingxing.precedents, '合同定性那条丢了四川高院那张卡').toContain('case-sichuan-tuifei-7500');
+  });
+
+  /**
+   * 纪律那句话里必须同时写着三样：**顺序**（先案例、后分歧点）、每个案例后面那句
+   *「个案不是规则」、以及**库里没有时明说**。第三样最不能省——不明说的形态是
+   * 模型顺手编一个案例出来填上，而编出来的案例读起来最像尽责。
+   *
+   * 变异：把 discipline 里"先案例、后分歧点"那半句删掉 → 本条红。
+   */
+  it('纪律句写死"先案例后分歧点 / 个案不是规则 / 库里没有要明说"', () => {
+    const d = COUNSELING.interpretationDisputed!.discipline;
+    expect(d, '没定先后，模型会先下判断再补案例').toContain('先案例、后分歧点');
+    expect(d).toContain('precedents');
+    expect(d).toContain('searchKeywords');
+    expect(d, '不标这句，一个个案的判法会被当成这四项已有定论').toContain('个案不是规则');
+    expect(d, '不明说"库里暂无"，模型会编一个案例填上').toContain('库里暂无官方相似案例');
+    // 存疑那句闸仍在（这一节的作用没有被"去找案例"顶掉）
+    expect(d).toContain('本问题现行法律解释存疑');
   });
 
   it('抬头与报告里那一节同名（两处读同一份措辞，不是抄的第二份）', () => {
@@ -397,6 +476,68 @@ describe('§16 解释存疑：四条固定条目 + 一句纪律', () => {
     expect(seg, '清单段没点名这一节，模型不知道说的是哪一节').toContain(COUNSELING.interpretationDisputed!.title);
     expect(seg).toContain('不得**当成把用户支给律师的理由');
     expect(seg, '只堵不给出路的话，模型只能在两条禁令之间挑一条违反').toContain('照第 1 条由你写清楚');
+  });
+
+  /**
+   * 【这一条钉的是第 4 条里那句"不下是/否结论"只说一次】它此前在同一条里出现两遍：
+   * 开头「它限制的是**结论**（……不许答"是"或"否"）」，结尾 ③「只是不下"是/否"的结论」。
+   * 两份措辞的形态是——改其中一份（比如把"是/否"放宽成"不给倾向性判断"），
+   * 另一份还在说旧话，同一段里两条纪律各自读起来都对，而模型按哪一条办都说得通。
+   *
+   * 变异：把「不许答"是"或"否"」那半句加回开头那行 → 本条红（数到 2）。
+   */
+  it('第 4 条里「不下"是/否"结论」只说一次（合并冗余后钉住）', () => {
+    const seg = renderLawyerMandatory(COUNSELING);
+    const at = seg.indexOf('4. 本领域另有一节');
+    expect(at, '第 4 条不见了').toBeGreaterThan(0);
+    const tiebreak = seg.slice(at);
+    expect(
+      tiebreak.match(/是.{0,3}否/g) ?? [],
+      '同一条纪律在第 4 条里说了两遍，改一处另一处还在说旧话',
+    ).toHaveLength(1);
+    expect(tiebreak, '合并之后这条纪律整个不见了').toContain('只是不下"是/否"的结论');
+  });
+
+  /**
+   * 【这一条钉的是四张风险卡里不许再存第二份检索词】那四张卡此前各自列了一份
+   * 「下一轮再找用这几个词」，逐词等于领域包里那一条的 searchKeywords。
+   * 两份词表的形态是：包里把词改了（上一轮走死的方向换掉），卡上还留着旧词——
+   * 两份各自读起来都正常，下一个人照卡去检索，走的正是已经作废的那几个方向。
+   *
+   * 【裁法】卡上只留**指针**，词只有包里一份。所以这里两臂：
+   *   ① 每张卡都指得回包（没有指针的卡，读卡的人根本不知道词在哪）；
+   *   ② 卡里不许再出现"词表"那个形状（`词`、`词`、…）——那正是被删掉的那四行的形状，
+   *      也是任何人要把词抄回来时最可能用的形状。
+   *
+   * 【这条守卫不覆盖什么，说清楚】卡里「本轮实测试过」那几行仍然引着当时试过的字符串
+   *（例如站内检索「强制报告 未成年人」）。那是**过去时的证据**（试了什么、回了什么），
+   * 不是下一轮该用的词，所以不构成会飘的第二份词表，本条不拦它。
+   *
+   * 变异：把任一张卡里的指针那行换回原来的词表 → 本条两臂都红。
+   */
+  it('四张风险卡只留指针、不再各存一份检索词（变异：把词表抄回任一张卡 → 红）', () => {
+    const CARDS = [
+      'knowledge/packs/counseling/risk/qiangzhi-baogao-zhuti.md',
+      'knowledge/packs/counseling/risk/hetong-dingxing.md',
+      'knowledge/packs/counseling/risk/jilu-baocun-nianxian.md',
+      'knowledge/packs/counseling/risk/difang-xuke-beian.md',
+    ];
+    // 指针指的那一头必须真的有词：包里 searchKeywords 空了，卡上这句话就是指着空气说话
+    for (const item of COUNSELING.interpretationDisputed!.items) {
+      expect(item.searchKeywords.length, `「${item.text.slice(0, 8)}」的 searchKeywords 空了`)
+        .toBeGreaterThan(0);
+    }
+    expect(CARDS.length, '名单空了，下面整条恒真').toBe(COUNSELING.interpretationDisputed!.items.length);
+    for (const rel of CARDS) {
+      const abs = path.join(REPO, rel);
+      expect(fs.existsSync(abs), `${rel} 不在了（改名要连这份名单一起改）`).toBe(true);
+      const text = fs.readFileSync(abs, 'utf8');
+      expect(text, `${rel} 没有指回领域包的 searchKeywords`).toContain(
+        '见领域包 `interpretationDisputed` 本条的 `searchKeywords`',
+      );
+      const tables = text.match(/`[^`\n]+`、`/g) ?? [];
+      expect(tables, `${rel} 里又抄了一份检索词表：${tables.join(' ')}`).toHaveLength(0);
+    }
   });
 });
 
@@ -649,9 +790,55 @@ describe('counseling 的事实卡：多一节「风险与解释存疑」，证�
     const card = renderCaseFacts(buildCaseFacts(snapshotOf()));
     expect(card).toContain(`### ${COUNSELING.interpretationDisputed!.title}`);
     for (const item of COUNSELING.interpretationDisputed!.items) {
-      expect(card, '解释存疑少了一条').toContain(item);
+      expect(card, '解释存疑少了一条').toContain(item.text);
     }
     expect(card).toContain(COUNSELING.interpretationDisputed!.discipline);
+  });
+
+  /**
+   * 【这一条钉的是事实卡上那行"过往相似案例"】它是模型每一轮都看得见的地方——
+   * 只印四句"现行法律解释存疑"的形态是：模型手边没有任何已收录案例的线索，
+   * 于是要么跳过找案例这一步，要么**凭印象编一个**填上去。
+   *
+   * 两个方向都要钉：挂了卡的那一条印**卡的标题**（不是那串 id——用户读到一个编号
+   * 等于什么都没读到）；一张都没挂的那几条印"库里暂无"，**而不是把这一行整个省掉**
+   *（省掉的形态是"查过没有"与"没人查过"在事实卡上长得一模一样）。
+   *
+   * 变异：把 case-facts.interpretationDisputedSection 的 detail 改回 `- ${x}` 一行 → 本条红；
+   * 把 lib/knowledge/precedent-line 的空臂改成 `return ''` → 本条红（空臂计数 0 ≠ 3）。
+   */
+  it('事实卡逐条印出「过往相似案例」：有卡印卡名，没卡印"库里暂无"（变异：detail 改回只印 text → 红）', () => {
+    const card = renderCaseFacts(buildCaseFacts(snapshotOf()));
+    const items = COUNSELING.interpretationDisputed!.items;
+    const withCase = items.filter((x) => x.precedents.length);
+    const without = items.filter((x) => !x.precedents.length);
+    expect(withCase.length, '一条挂卡的都没有 ⇒ 下面那段恒真').toBeGreaterThan(0);
+    expect(without.length, '一条空的都没有 ⇒ 下面那段恒真').toBeGreaterThan(0);
+
+    for (const item of withCase) {
+      for (const id of item.precedents) {
+        const title = knowledge.titleOf(id)!;
+        expect(card, `事实卡上只有 id 没有卡名，用户读到的是一个编号：${id}`).toContain(title);
+        expect(card, '事实卡上印的是 id 本身（说明标题没取到，退回打编号了）').not.toContain(`《${id}》`);
+      }
+    }
+    // 摆案例必须带解毒剂，否则个案裁法会被当成这一条已有定论
+    expect(card).toContain('个案不是规则');
+
+    // 空的那几条也要出这一行：省掉的形态是"查过没有"与"没人查过"同形。
+    //
+    // 【为什么这里数次数、且数的是**整句**】只 toContain('库里暂无官方相似案例') 的形态是
+    // 一条恒真的断言——那半句话本来就写在纪律句里（"库里一条都没有时**明说**……"），
+    // 而纪律句每轮都进事实卡的 stat。于是空臂整个不渲染，这条断言照样绿。
+    // 所以先证明整句只属于空臂（不与纪律句撞词），再数它出现了几次。
+    expect(
+      COUNSELING.interpretationDisputed!.discipline,
+      '纪律句里出现了空臂那整句，下面的计数会把纪律句自己数进去',
+    ).not.toContain(NO_PRECEDENT_LINE);
+    expect(
+      countOf(card, NO_PRECEDENT_LINE),
+      `没挂卡的有 ${without.length} 条，事实卡上"库里暂无"那一行却不是这个条数`,
+    ).toBe(without.length);
   });
 
   it('缺省领域的事实卡里**一个字都没多**（labor 零变化）', () => {
@@ -816,7 +1003,7 @@ describe('counseling 的个案报告：多一行「当前轨」，风险节先�
 
   it('风险节：四条固定条目 + 那句纪律排在「缺口」**之前**，两段分开', () => {
     const risks = reportOf('counseling', null)['风险与解释存疑'];
-    for (const item of COUNSELING.interpretationDisputed!.items) expect(risks).toContain(item);
+    for (const item of COUNSELING.interpretationDisputed!.items) expect(risks).toContain(item.text);
     expect(risks).toContain(COUNSELING.interpretationDisputed!.discipline);
     // 【为什么必须分成两段】混进缺口列表的形态是：模型看见"风险 6 条"，逐条去"解决"它们，
     // 而解决其中四条的唯一方式就是给出一个结论——那正是这几条要拦的事。
@@ -825,6 +1012,41 @@ describe('counseling 的个案报告：多一行「当前轨」，风险节先�
     expect(disciplineAt).toBeGreaterThanOrEqual(0);
     expect(gapAt, '这份报告里没有缺口，下面那句比较恒真').toBeGreaterThan(0);
     expect(disciplineAt, '固定条目排到缺口后面去了').toBeLessThan(gapAt);
+  });
+
+  /**
+   * 【这一条钉的是报告里那几行「过往相似案例」】报告是"从头读一遍"的那一份，
+   * 也是模型整理案子时唯一会通读的长文本。只印四条存疑项的形态是：读到"没有定论"就到此为止，
+   * 既不知道库里有没有判过的，也没有任何东西说"库里确实没有"——于是要么跳过找案例这一步，
+   * 要么顺手编一个填上，而编出来的案例读起来最像尽责。
+   *
+   * 两臂都要钉，且都不能靠 toContain 那半句话（"库里暂无官方相似案例"写在纪律句里，
+   * 而纪律句就排在这一节最上面，单数半句是一条恒真断言）：
+   *   · 有卡的那条印**卡名**（不是 id——用户读到一个编号等于什么都没读到）；
+   *   · 空的那几条印整句"库里暂无……"，条数对得上。
+   *
+   * 变异：把 report.ts 风险节的 flatMap 改回 map(x => x.text) → 本条两臂都红。
+   */
+  it('风险节：每条存疑项下面挂着「过往相似案例」，有卡印卡名、没卡印"库里暂无"且条数对得上', () => {
+    const risks = reportOf('counseling', null)['风险与解释存疑'];
+    const items = COUNSELING.interpretationDisputed!.items;
+    const withCase = items.filter((x) => x.precedents.length);
+    const without = items.filter((x) => !x.precedents.length);
+    expect(withCase.length, '一条挂卡的都没有 ⇒ 下面第一臂恒真').toBeGreaterThan(0);
+    expect(without.length, '一条空的都没有 ⇒ 下面第二臂恒真').toBeGreaterThan(0);
+
+    for (const item of withCase) {
+      for (const id of item.precedents) {
+        const title = knowledge.titleOf(id)!;
+        expect(risks, `报告里只有 id 没有卡名：${id}`).toContain(title);
+        expect(risks, '报告里印的是 id 本身（标题没取到，退回打编号了）').not.toContain(`《${id}》`);
+      }
+    }
+    expect(risks, '摆了案例却没带解毒剂，个案裁法会被当成这一条已有定论').toContain('个案不是规则');
+    expect(
+      countOf(risks, NO_PRECEDENT_LINE),
+      `没挂卡的有 ${without.length} 条，报告里"库里暂无"那一行却不是这个条数`,
+    ).toBe(without.length);
   });
 
   it('缺省领域的风险节里一条固定条目都没有（自证它来自包）', () => {

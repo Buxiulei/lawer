@@ -41,7 +41,15 @@ function clone(over: Partial<DomainPack> = {}): DomainPack {
  */
 const FULL_INTERPRETATION_DISPUTED = {
   title: '解释存疑',
-  items: ['这一条为什么还没有结论'],
+  items: [
+    {
+      text: '这一条为什么还没有结论',
+      // 空的 precedents 是「查过，库里没有」这个**结论**，所以完好样张里就该有一条这样的：
+      // 只给带案例的样张，"空数组也算齐"这件事就没有任何一条判据验过。
+      precedents: [],
+      searchKeywords: ['假领域 检索词'],
+    },
+  ],
   discipline: '本问题现行法律解释存疑：以下是依据原文与分歧点，土八鼠不下结论',
 } as const;
 
@@ -279,6 +287,46 @@ describe('assertDomainPack：包必须实现全部字段', () => {
       expect(() => assertDomainPack(clone())).not.toThrow();
     });
   }
+
+  /**
+   * 解释存疑那一节里某一条**缺一格**。三格分开各一条，且**三格的判据不一样**：
+   *
+   *   · `text` 与 `searchKeywords` 空了即红；
+   *   · `precedents` **空数组是合法的**（它说的是"查过，库里没有"），红的只有"整格省略"——
+   *     省略的形态是渲染侧 `.length` 当场 TypeError，报错点离病因隔着好几层。
+   *
+   * 【为什么 searchKeywords 不许空】主理人 2026-09-07 裁决：解释存疑时应找过往相似判例。
+   * 空的 precedents 配空的 searchKeywords，与"这一条从来没人查过"在包里完全同形，
+   * 于是下一轮调研从零开始重走一遍已经走过的死路——而两种情况读起来一模一样。
+   */
+  const disputedOf = (over: Record<string, unknown>) => ({
+    interpretationDisputed: {
+      ...FULL_INTERPRETATION_DISPUTED,
+      items: [{ ...FULL_INTERPRETATION_DISPUTED.items[0], ...over }],
+    },
+  });
+
+  it('解释存疑某一条缺 text ⇒ 点名到条（变异：删掉守卫里那一行 → 红）', () => {
+    expect(() => assertDomainPack(clone(disputedOf({ text: '  ' }) as Partial<DomainPack>))).toThrow(
+      /interpretationDisputed\.items\[#0\]\.text/,
+    );
+  });
+
+  it('解释存疑某一条**省略** precedents ⇒ 红（空数组不红，省略才红）', () => {
+    expect(() =>
+      assertDomainPack(clone(disputedOf({ precedents: undefined }) as Partial<DomainPack>)),
+    ).toThrow(/interpretationDisputed\.items\[#0「这一条为什么还没有结论」\]\.precedents/);
+    // 反方向自证：空数组是**结论**不是缺项，不许红——否则"查过没找到"就没法登记了
+    expect(() =>
+      assertDomainPack(clone(disputedOf({ precedents: [] }) as Partial<DomainPack>)),
+    ).not.toThrow();
+  });
+
+  it('解释存疑某一条 searchKeywords 为空 ⇒ 红（空的话"查过没找到"与"没人查过"同形）', () => {
+    expect(() =>
+      assertDomainPack(clone(disputedOf({ searchKeywords: [] }) as Partial<DomainPack>)),
+    ).toThrow(/interpretationDisputed\.items\[#0「这一条为什么还没有结论」\]\.searchKeywords/);
+  });
 
   it('缺项一次列全，不是挤牙膏式一次报一个', () => {
     let message = '';

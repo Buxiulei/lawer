@@ -8,7 +8,7 @@ related: [statute-mfd-933-weituo-jiechu, statute-xbf-26-55-geshi-tiaokuan-chengf
 region: 全国
 domain: counseling
 sources:
-  - https://scfy.scssfw.gov.cn/article/detail/2024/04/id/7884636.shtml
+  - http://scfy.scssfw.gov.cn/article/detail/2024/04/id/7884636.shtml
 confidence: 原文核实
 updated: 2026-09-07
 facts:
@@ -32,7 +32,13 @@ facts:
 - **法院**：一审法院未披露；由四川省高级人民法院以 **2024 年消费者权益保护典型案例（三）** 发布
 - **案由**：杜某某诉某文化传播公司网络服务合同纠纷案
 - **裁判年份**：2024（发布时间 2024-03-15）
-- **来源**：<https://scfy.scssfw.gov.cn/article/detail/2024/04/id/7884636.shtml>（四川省高级人民法院官网「典型案例」栏目原文）
+- **来源**：<http://scfy.scssfw.gov.cn/article/detail/2024/04/id/7884636.shtml>（四川省高级人民法院官网「典型案例」栏目原文）
+  **必须走 http，且要带浏览器 UA**（2026-09-07 复测）：该站 https 的证书与域名不匹配
+  （`no alternative certificate subject name matches target host name`），写成 https 会停在证书校验；
+  http 下裸脚本 UA 回 **449、0 字节**，换浏览器 UA 才回 200、22200 字节（与
+  `knowledge/sources.json` 里 `cases-scfy-2024-xiaofei-dxal-3` 存档的 `bytes` 对得上）。
+  卡上这条链接与那份登记的 `url` / `fetch_url` 写成同一个地址——两处不一致的形态是：
+  卡上的链接点开是错的，而下一个人照卡去取原文时以为是自己网络的问题。
 
 ## 案情要旨（官方通稿）
 
