@@ -139,7 +139,11 @@ export const crisisCheck: Capability = {
     // 命中即留痕，走与站内对话同一个入口（lib/cases/crisis-hits.ts）。
     recordCrisisHit(db, { userId: identity.uid, caseId, source: 'mcp', matched: assessment.matched });
 
-    const card = agent.createKnowledgeSearcher().get?.(crisisPack.resourcePackId);
+    // 【domain: null = 不过领域闸】id 来自上面那个领域包自己的 crisis.resourcePackId。
+    // 少这个 null 的形态是：词表按本领域命中了、卡却按缺省域去取，于是 hotlines 回空数组、
+    // first_segment 里一个号码都没有，而 hit=true、HTTP 200、没有一处报错——
+    // 一个正在处置危机的人拿到的是一段空指引。
+    const card = agent.createKnowledgeSearcher().get?.(crisisPack.resourcePackId, { domain: null });
     // 跨库禁用名单再过一道：卡自己声明的 forbidden 由 crisisHotlines 滤掉，
     // 别处声明为禁用的同一个号码由这一道滤掉（设计稿 §4.4：任何回包里都不得出现）。
     const banned = new Set(bannedPhones());

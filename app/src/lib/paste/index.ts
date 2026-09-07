@@ -51,7 +51,7 @@ export function crisisNotice(text: string, domain?: string): CrisisNotice {
   if (!crisis.triggered) return { triggered: false, message: null };
   // 号码从资源卡里取，不写死在代码里（记错一个数字，用户拨过去就是空号）
   const card = crisis.resourcePackId
-    ? createKnowledgeSearcher().get?.(crisis.resourcePackId)
+    ? createKnowledgeSearcher().get?.(crisis.resourcePackId, { domain: null })
     : undefined;
   const hotline = buildCrisisOpener(card?.facts, {}, crisisPack);
   return {
