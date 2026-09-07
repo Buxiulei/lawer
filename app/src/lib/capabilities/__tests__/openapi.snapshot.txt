@@ -63,6 +63,7 @@ GET /api/openapi.json	get_openapi_json	none	[]	{}
 GET /api/mcp	get_mcp	none	[]	{}
 POST /api/mcp	post_mcp	bearer	[]	{}
 GET /api/v1/version	get_v1_version	none	[]	{}
+GET /api/v1/domains	get_v1_domains	none	[]	{}
 POST /api/v1/auth/sms/send	post_v1_auth_sms_send	none	[]	{}
 POST /api/v1/auth/sms/verify	post_v1_auth_sms_verify	none	[]	{}
 POST /api/v1/auth/email/send	post_v1_auth_email_send	none	[]	{}
@@ -93,7 +94,7 @@ GET /api/v1/billing/ledger	get_v1_billing_ledger	bearer	[]	{}
 POST /api/v1/redeem	post_v1_redeem	bearer	[]	{}
 GET /api/v1/cases	case_list	bearer	[]	{}
 GET /api/v1/cases/{id}	case_get	bearer	[path:id!,query:timeline_limit]	{}
-PATCH /api/v1/cases/{id}	case_update	bearer	[path:id!]	{stage,goal,bottom_line,employed_from,monthly_wage_yuan,position,contract_count}
+PATCH /api/v1/cases/{id}	case_update	bearer	[path:id!]	{stage,goal,bottom_line,employed_from,monthly_wage_yuan,position,contract_count,track}
 GET /api/v1/cases/{id}/facts	case_facts	bearer	[path:id!]	{}
 POST /api/v1/cases/{id}/intake	intake_submit	bearer	[path:id!]	{stage,company_name,employed_from,monthly_wage_yuan,position,contract_count,events,free_text,company_docs,company_wording,goals,bottom_line}
 GET /api/v1/cases/{id}/messages	get_v1_cases_by_id_messages	bearer	[path:id!]	{}

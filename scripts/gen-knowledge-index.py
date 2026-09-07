@@ -30,7 +30,7 @@ TYPES = {"法条卡", "判例卡", "计算规则", "流程SOP", "文书模板", 
 #     于是**全站每一轮对话的预检索、knowledge_search、危机资源卡取卡统统 500**，
 #     连本来好好的那个领域的用户一起。先写卡后挂包这个顺序本身是合理的工作方式，
 #     所以不能靠"记得按顺序合入"来防，只能让这里放行不了还没挂上的领域。
-DOMAINS = {"labor"}
+DOMAINS = {"labor", "counseling"}
 DEFAULT_DOMAIN = "labor"
 CONFIDENCES = {"原文核实", "二手转述", "待核实"}
 REQUIRED = ["id", "type", "title", "keywords", "applies_to", "sources", "confidence", "updated"]

@@ -172,6 +172,47 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
   });
 
   /**
+   * **lib/cases 里那两份零依赖词表的待清理清单**（不是豁免，2026-09-07 复审点名）。
+   *
+   * `lib/cases/stages.ts` 与 `lib/cases/milestones.ts` 住在共用层 `lib/cases`，
+   * 但两份词表本身是**缺省领域的内容**（阶段名、里程碑名）。领域包引它们
+   *（labor.ts 的 `stages` / `journey`），第二个领域自己写自己那份。
+   *
+   * 【它们为什么不在 SHARED_FILES 里，也不该是盲区】进那份名单会当场红——里面本来就有
+   * 领域词。而不写进任何一份名单的形态是：`lib/cases` 这个目录既不在共用层守卫的扫描面里
+   *（那份只点名到 report*、intake、drafts 几个文件），也不在页面守卫的扫描面里
+   *（那份只扫 app/ 与 components/），于是**往这两个文件里再加一格领域词，两道闸都不响**。
+   * 复审当场点过：milestones.ts 是从 index.ts 搬出来的，搬家不算新增违规，
+   * 但搬完之后它落在了两道闸中间。
+   *
+   * 【这条守什么】守「**别再多**」：现存的领域词逐行钉住，多一行即红。
+   * 真把词表搬进领域包了（`lib/cases` 只剩机制），这条也会红——那时把文件加进 SHARED_FILES
+   * 并删掉本条。
+   */
+  it('lib/cases 的词表文件里领域字面量只剩已知那几行（变异：往 milestones.ts 再加一格带「仲裁」的里程碑 → 红）', () => {
+    const known: Record<string, string[]> = {
+      'lib/cases/stages.ts': ["  '仲裁准备',"],
+      'lib/cases/milestones.ts': ["  '仲裁申请',"],
+    };
+    for (const [rel, expected] of Object.entries(known)) {
+      const file = path.join(SRC_ROOT, rel);
+      expect(fs.existsSync(file), `${rel} 不在了：把本条里对应那一项删掉`).toBe(true);
+      const hits = fs
+        .readFileSync(file, 'utf-8')
+        .split('\n')
+        .filter((line) => FORBIDDEN.some((w) => line.includes(w)));
+      expect(
+        hits,
+        `${rel} 的领域字面量清单变了。\n` +
+          '缺什么：这个文件不在任何一道闸的扫描面里（共用层守卫按文件点名、页面守卫只扫 app/ 与 components/）。\n' +
+          '为什么缺：它是从 lib/cases/index.ts 搬出来的零依赖词表，搬家时没人把闸跟着挪。\n' +
+          '怎么办：新加的那一格搬进 lib/domains/<key>.ts；真把整份词表搬走了，' +
+          '把这个文件加进 SHARED_FILES 并删掉本条对应的那一项。',
+      ).toEqual(expected);
+    }
+  });
+
+  /**
    * **lib/agent/crisis.ts 的待清理清单**（不是豁免）。
    *
    * 危机层是共用层，但它现在还进不了上面那份名单：出口闸的 `LEGAL_MONEY_CONTEXT`

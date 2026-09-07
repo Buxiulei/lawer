@@ -12,6 +12,7 @@
 
 import type { CrisisOpenerText, HotlineFact } from '@/lib/agent/crisis-opener';
 
+import { COUNSELING } from './counseling';
 import { LABOR } from './labor';
 
 /**
@@ -199,6 +200,59 @@ export interface DomainCopy {
   capabilities: Readonly<Record<string, string>>;
   /** 站内与落库文案（建档标题、首诊落下来的那几条事件的标题…） */
   site: Readonly<Record<string, string>>;
+  /**
+   * **共用页面上按领域换的那几句**（驾驶舱的档案入口、接入话术的开场与能力清单、
+   * 证据页的填写提示、文书页的导语与空态、关系图的涉诉口径、解读页的收尾建议）。
+   *
+   * 【它与 site 的分野】site 是**落库**的字（建档标题、事件标题），写下去就长在数据里；
+   * 这一份是**渲染**的字，只活在屏幕上。混成一份的形态是：改一句页面文案，
+   * 历史案件里已经落库的那条事件标题跟着"变了"——而库里那一行其实一个字都没动。
+   *
+   * 【为什么它必须存在】这些页第二个领域的用户照样会打开。把字写死在页面里的形态是：
+   * 页面照常渲染、一处报错都没有，只有那个行当的用户读到的每一句都在讲另一件事。
+   * 由 app/__tests__/page-domain-guard.test.ts 按文件拦、
+   * app/__tests__/page-copy-by-domain.test.tsx 按渲染产物拦。
+   */
+  pages: Readonly<Record<string, string>>;
+}
+
+/**
+ * 一组**恒常在场**的「这几件事没有律师书面确认之前不许下结论」。
+ *
+ * 【为什么它是包的一部分，而不是一条条待办】待办做完就消失，而这几项做不完——
+ * 它们是这个行当里本来就没有定论的东西，只会由某一位律师针对某一个案子书面确认一次。
+ * 做成待办的形态是：模型看见"待办 4 项"，于是替用户把它们逐条"办掉"（给出一个结论），
+ * 而每一条结论读起来都很像答案。
+ *
+ * 【为什么恒常在场而不是"命中才提"】它防的是**模型的默认行为**，不是某种输入。
+ * 只在用户问到时才提的形态是：用户没问、模型自己顺口断言了一句，没有任何东西会拦它。
+ */
+export interface DomainLawyerReview {
+  /** 这一节的抬头（事实卡与个案报告共用同一份措辞） */
+  title: string;
+  /** 逐条：**待核的是什么、为什么没定论**。一条一件事，不合并 */
+  items: readonly string[];
+  /** 统一纪律，逐字对外——这句话才是这一节的作用，条目只是它的适用范围 */
+  discipline: string;
+}
+
+/**
+ * 敏感级：本领域的档案里写着**第三人**的敏感个人信息（个保法 §28 那一类）。
+ *
+ * 【它约束的是三个出口】每轮喂给模型的事实卡、免登录分享页、转介数据包。
+ * 三处各写一遍"记得脱敏"的形态是——总有一个出口忘了，而它照常返回 200、页面上什么都不缺。
+ * 所以三处读同一份声明；要改口径只改这里。
+ */
+export interface DomainSensitivity {
+  /** 被保护的是谁（「来访者」）。脱敏提示与分享页的措辞取它，不在共用层写死一个称呼 */
+  subject: string;
+  /**
+   * 事实卡里逐字写给模型的那段纪律。写在卡里而不是 prompt 里，
+   * 因为它要与"这一条证据长什么样"挨着出现——隔开的形态是，模型读到明细时早忘了那句话。
+   */
+  factsNotice: string;
+  /** 分享 / 导出页上逐字给读者的那句话（说明这里被脱敏过、以及要核对该找谁） */
+  redactNotice: string;
 }
 
 /** 一个领域包要提供的东西。**每一项都必填**：缺项由 assertDomainPack 在启动时点名。 */
@@ -222,6 +276,19 @@ export interface DomainPack {
    * 不是「还没填」。
    */
   tracks: readonly string[];
+  /**
+   * 驾驶舱那条轨道的格子（页面上「案件进度」那一条）。
+   *
+   * 【与 stages 是两种东西，不许合并】stages 是**可变可回退的当前态**，
+   * 轨道格子是**只追加的既成事实**：案子从这一格退回上一格时，stage 变了，
+   * 而走过的格子仍然走过。拿 stages 当轨道画的形态是——谈崩退回上一步，
+   * 页面上已经点亮的后几格会被抹回未到，用户以为自己白走了一趟。
+   *
+   * **省略 = 本领域还没有单独的轨道词表**，页面退回按 `stages` 摆格子
+   * （见 app/_ui/domain.ts 的 journeyOf）。退回是有代价的：那条轨道会跟着 stage 回退，
+   * 所以这一项只是没填时的兜底，不是等价物。
+   */
+  journey?: readonly string[];
   /** 首诊表 schema：字段、必填、校验规则与问法 */
   intakeSchema: readonly IntakeFieldSpec[];
   /**
@@ -266,6 +333,13 @@ export interface DomainPack {
   calculatorKinds: readonly string[];
   /** 危机词表与首段 */
   crisis: DomainCrisis;
+  /**
+   * 「未经律师书面确认不得作为结论输出」的固定条目。**省略 = 本领域没有这类条目**，
+   * 是一个结论不是待填项。
+   */
+  lawyerReview?: DomainLawyerReview;
+  /** 敏感级。**省略 = 本领域不按敏感级处理**（同上，是结论不是待填项）。 */
+  sensitive?: DomainSensitivity;
   /** 对外文案（低调模式词典 + 能力文案 + 站内文案） */
   copy: DomainCopy;
 }
@@ -273,6 +347,7 @@ export interface DomainPack {
 /** key → 领域包。加一个领域 = 加一个包 + 在这里挂一行。 */
 export const DOMAINS: Record<string, DomainPack> = {
   [LABOR.key]: LABOR,
+  [COUNSELING.key]: COUNSELING,
 };
 
 /**
@@ -283,9 +358,11 @@ export const DOMAINS: Record<string, DomainPack> = {
  * 自己声明时才写进 index.json）。没有缺省就只能把"没声明"读成"不属于任何领域"，
  * 而那会让全部既有内容在按领域过滤的那一刻整批消失——返回 200、一条卡都不给。
  *
- * 【取值同源】取的是今天全站唯一在跑的那个包的 key，与 lib/db/migrate.ts 给
- * cases.domain 的 DDL 默认值同值。两处不一致的形态是：同一个存量案件按 A 包校验阶段、
- * 按 B 域检索知识，而两边都返回 200、都不报错。
+ * 【取值同源】写死取 LABOR.key，与 lib/db/migrate.ts 给 cases.domain 的 DDL 默认值同值。
+ * 两处不一致的形态是：同一个存量案件按 A 包校验阶段、按 B 域检索知识，而两边都返回
+ * 200、都不报错。**不取 `Object.keys(DOMAINS)[0]`**：注册第二个包之后，那个写法把
+ * "缺省领域是哪个"绑在了对象字面量的书写顺序上——挪一下 counseling 的位置，
+ * 全部存量案件与存量知识卡的归属当场易主，而 TypeScript 与既有判据都看不见。
  */
 export const DEFAULT_DOMAIN: string = LABOR.key;
 
@@ -320,6 +397,16 @@ export function getDomainPack(key: string): DomainPack | undefined {
  */
 export function domainPackOrDefault(key: string | null | undefined): DomainPack {
   return (key ? DOMAINS[key] : undefined) ?? DOMAINS[DEFAULT_DOMAIN];
+}
+
+/**
+ * 这个领域的轨道格子。**读 journey / 退回 stages 这条规矩只写在这一处**：
+ * 散着写 `pack.journey ?? pack.stages` 的形态是——某一处忘了兜底，
+ * 没给 journey 的领域在那一处炸在属性访问上；或者将来要改这条规矩时，
+ * 得先把散落的每一处翻出来，而漏掉的那一处不会报错。
+ */
+export function journeyOfPack(pack: DomainPack): readonly string[] {
+  return pack.journey ?? pack.stages;
 }
 
 // ========== 灰度开关（设计稿 §16 分期：LAWER_DOMAINS_ENABLED=labor,counseling）==========
@@ -432,6 +519,20 @@ export function assertDomainPack(pack: DomainPack): void {
   str('crisis.openerText.tail', pack.crisis?.openerText?.tail);
   if (typeof pack.crisis?.firstSegment !== 'function') missing.push('crisis.firstSegment');
 
+  // lawyerReview / sensitive 都是**可选**的（省略 = 本领域没有这回事）。但一旦声明，
+  // 就不许半张：空的 items = 一节只有抬头没有内容；空的 discipline = 列了四件事却没说
+  // 「不许下结论」——而那句话才是这一节存在的理由，缺了它这一节读起来像四条待办。
+  if (pack.lawyerReview) {
+    str('lawyerReview.title', pack.lawyerReview.title);
+    arr('lawyerReview.items', pack.lawyerReview.items);
+    str('lawyerReview.discipline', pack.lawyerReview.discipline);
+  }
+  if (pack.sensitive) {
+    str('sensitive.subject', pack.sensitive.subject);
+    str('sensitive.factsNotice', pack.sensitive.factsNotice);
+    str('sensitive.redactNotice', pack.sensitive.redactNotice);
+  }
+
   str('copy.neutral.title', pack.copy?.neutral?.title);
   str('copy.neutral.appTitle', pack.copy?.neutral?.appTitle);
   str('copy.neutral.notice', pack.copy?.neutral?.notice);
@@ -440,6 +541,9 @@ export function assertDomainPack(pack: DomainPack): void {
     missing.push('copy.capabilities');
   }
   if (!pack.copy?.site || Object.keys(pack.copy.site).length === 0) missing.push('copy.site');
+  // 空的 pages 不是"这个领域的页面没有文案"，是**页面会退回缺省领域那几句**——
+  // 而页面照常渲染、一处报错都没有（键取不到时 packOf 兜的是包，不是这一句话）。
+  if (!pack.copy?.pages || Object.keys(pack.copy.pages).length === 0) missing.push('copy.pages');
 
   // 分节**必须覆盖全部键**，且一个键只能出现一次。
   // 【为什么这条比"数组非空"更要紧】渲染器按键取抬头：缺一个键的形态不是崩溃，
@@ -527,6 +631,14 @@ export function assertDomainPack(pack: DomainPack): void {
         }
       }
     }
+  }
+
+  // 轨道格子给了就不许是空数组：空数组画出来是一条**没有任何格子的进度条**，
+  // 页面照常渲染、一个报错都没有，只是这个领域的用户从此看不见自己走到哪一步。
+  // 「本领域没有单独的轨道词表」的表达方式是**不给这一项**（页面退回按 stages 摆），
+  // 不是给一个空数组。
+  if (pack.journey !== undefined && (!Array.isArray(pack.journey) || pack.journey.length === 0)) {
+    missing.push('journey 给了却是空的（不写这一项才是「本领域没有单独的轨道词表」）');
   }
 
   // 声明了并行轨却与主线阶段重名，说明这一项被当成阶段填了——两套词表混用时，

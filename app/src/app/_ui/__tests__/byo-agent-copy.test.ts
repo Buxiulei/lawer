@@ -128,6 +128,14 @@ const COPY_FILES = [
   // 哪天有人在里面顺手写一句「接了就免费」，那句话不能是全站唯一一处没人看守的。
   '../skill/SKILL.md',
   '../skill/陪跑指南.md',
+  // 两个领域包。**它们是随 P4-W4 进来的**：驾驶舱那张档案入口卡的标题与副标题
+  //（原先写死在 Dashboard.tsx 里、由下面两条豁免看着）已经搬进 DomainPack.copy.pages，
+  // 页面按案件领域取。不把包列进来的形态是：那两句话从此**无人看守**——
+  // 文件里一个字没少、守卫却再也扫不到它们，而这一切看起来完全正常。
+  // 列进来的代价是包里那几条工具计费说明也一并进扫描范围，逐条豁免见下（理由与
+  // 《接入说明》里同名那四行同源：那份文档正是由这些字生成的）。
+  'src/lib/domains/labor.ts',
+  'src/lib/domains/counseling.ts',
 ];
 
 /**
@@ -158,19 +166,92 @@ const EXEMPT: { file: string; line: string; why: string }[] = [
     line: '除此之外，任何操作都不扣。',
     why: '同上，SelfHostHint 段内',
   },
+  // ─── 驾驶舱那张档案入口卡的两句（P4-W4 起住在领域包里，一个包一份）───
+  // 理由与它们在 Dashboard.tsx 里时逐字相同：说的是**档案自己的免费预览档**
+  //（查得到什么先白看，买不买另说），与「在你自己的 agent 上处理不收费」是两笔账。
+  // 买那一步走 dossiers/quote 报价 → dossiers/confirm 扣费，《接入说明》计费节例外二写着它。
   {
-    file: 'src/app/(app)/case/[id]/_components/Dashboard.tsx',
+    file: 'src/lib/domains/labor.ts',
     line: '公司档案：先免费查有没有货',
-    why:
-      '说的是**公司档案自己的免费预览档**（查得到什么先白看，买不买另说），' +
-      '与「在你自己的 agent 上处理不收费」是两笔账。买那一步走 dossiers/quote 报价 → ' +
-      'dossiers/confirm 扣费，《接入说明》计费节的例外二写着它。' +
-      '（本行随 fcc4cb8 的 DossierEntry 一起进入本文件的扫描范围。）',
+    why: '档案入口卡标题（原 Dashboard.tsx DossierEntry，P4-W4 搬进 copy.pages）',
   },
   {
-    file: 'src/app/(app)/case/[id]/_components/Dashboard.tsx',
+    file: 'src/lib/domains/labor.ts',
     line: '这家公司被仲裁过几次、赔没赔、有没有关联主体——免费的那部分先看着。',
-    why: '同上，DossierEntry 段内的副标题',
+    why: '同上，档案入口卡副标题',
+  },
+  {
+    file: 'src/lib/domains/counseling.ts',
+    line: '对方组织的档案：先免费查有没有货',
+    why: '同上，第二个领域那一份标题',
+  },
+  {
+    file: 'src/lib/domains/counseling.ts',
+    line: '先看登记状态、关联主体、涉诉记录——免费的那部分先看着。',
+    why: '同上，第二个领域那一份副标题',
+  },
+  // ─── 领域包里那几条工具计费说明 ───
+  // 与《接入说明》里同名四行是**同一批字**（那份文档由这些字生成），理由逐条对应；
+  // 一个包一份，所以两个包各列一遍。少列一条那一行就会被当成无条件的「不收费」而红。
+  {
+    file: 'src/lib/domains/labor.ts',
+    line: '只给手机号会让座机用户错过免费线',
+    why: '说的是**公益热线本身免费**（座机线），与本服务计费无关',
+  },
+  {
+    file: 'src/lib/domains/labor.ts',
+    line: '先免费探一眼这家',
+    why: 'company_probe：免费前置探测，不动钱、不建档',
+  },
+  {
+    file: 'src/lib/domains/labor.ts',
+    line: '它是下一步报价的底数',
+    why: '同上，company_probe 那段里「不扣任何费用、也不建档」那半句',
+  },
+  {
+    file: 'src/lib/domains/labor.ts',
+    line: '缓存命中不占免费次数',
+    why: '同上，说的是免费次数怎么算，不是「本服务不收费」',
+  },
+  {
+    file: 'src/lib/domains/labor.ts',
+    line: '所以可以放心先报一次给用户看',
+    why: 'dossier_quote：报价绝不动钱',
+  },
+  {
+    file: 'src/lib/domains/labor.ts',
+    line: '不要改小参数重试',
+    why: 'dossier_confirm：余额不够时整笔失败，说的是失败不扣钱',
+  },
+  {
+    file: 'src/lib/domains/labor.ts',
+    line: '档位定的是下个月按哪档收月费',
+    why: 'company_watch_set：加守望这一次调用不扣钱，月费在月度巡检里按档收',
+  },
+  {
+    file: 'src/lib/domains/counseling.ts',
+    line: '先免费探一眼对方主体的公开概况',
+    why: '同 labor 的 company_probe',
+  },
+  {
+    file: 'src/lib/domains/counseling.ts',
+    line: '**不扣任何费用、也不建档**。',
+    why: '同上，company_probe 那段',
+  },
+  {
+    file: 'src/lib/domains/counseling.ts',
+    line: '回包里的 quote_id 才是下单凭据',
+    why: '同 labor 的 dossier_quote',
+  },
+  {
+    file: 'src/lib/domains/counseling.ts',
+    line: '余额不够时整笔失败：不建档、不扣任何钱，把差额如实告诉用户。',
+    why: '同 labor 的 dossier_confirm',
+  },
+  {
+    file: 'src/lib/domains/counseling.ts',
+    line: '档位定的是下个月按哪档收月费',
+    why: '同 labor 的 company_watch_set',
   },
   // ─── 《接入说明》能力表里对方主体情报那四行（由 npm run gen:docs 生成，手改会被覆盖）───
   // 与上面 DossierEntry 两条同一个理由：说的是**这几条工具本身收不收费**（探测免费、

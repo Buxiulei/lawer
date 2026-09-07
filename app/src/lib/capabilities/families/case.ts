@@ -14,6 +14,11 @@ import type { Capability } from '../registry';
 
 /** 阶段枚举的对外并集（tools/list 拿不到案件上下文）；落库前按案件领域的词表再校验一次。 */
 const ALL_STAGES = [...new Set(Object.values(DOMAINS).flatMap((p) => p.stages))];
+/**
+ * 各领域包并行轨的并集（同 ALL_STAGES 的口径：tools/list 拿不到案件上下文）。
+ * 服务端按**案件所属领域**那一份校验，所以这里宽一点不会让谁写进一条本领域没有的轨。
+ */
+const ALL_TRACKS = [...new Set(Object.values(DOMAINS).flatMap((p) => p.tracks))];
 
 /**
  * 首诊工具的说明书与入参映射读的那个包。
@@ -67,7 +72,8 @@ export const caseUpdate: Capability = {
   description:
     '更新案件档案：阶段 stage、目标 goal、底线 bottom_line，以及用工基本盘四项——' +
     '入职时间 employed_from（YYYY-MM-DD）、月工资 monthly_wage_yuan（单位元）、岗位 position、' +
-    '合同签署次数 contract_count。**至少传一个**，用于零散补齐，不必重走首诊。stage 必须是法定枚举值之一。',
+    '合同签署次数 contract_count，以及并行轨 track（有并行轨的领域才有，传 null 表示回主线）。' +
+    '**至少传一个**，用于零散补齐，不必重走首诊。stage 必须是法定枚举值之一。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -79,6 +85,14 @@ export const caseUpdate: Capability = {
       monthly_wage_yuan: { type: 'number', description: '月工资，单位元（会换算成分落库）；所有赔偿金额的基数' },
       position: { type: 'string', description: '岗位' },
       contract_count: { type: 'string', description: '合同签署次数，用户自述原样记录，如「只签过一次」' },
+      track: {
+        type: ['string', 'null'],
+        enum: [...ALL_TRACKS, null],
+        description:
+          '并行轨：可以与主线同时在走的那条线（不是阶段）。进轨传轨名，处置完传 null 回主线。' +
+          '**它不覆盖 stage**——进轨时主线走到哪一步不变。' +
+          '不是每个领域都有并行轨；这个案子所属领域没有的话，只能传 null。',
+      },
     },
     required: ['case_id'],
   },
@@ -93,6 +107,10 @@ export const caseUpdate: Capability = {
       monthlyWageFen: args.monthly_wage_yuan === undefined ? undefined : yuanToFen(args.monthly_wage_yuan),
       position: args.position,
       contractCount: args.contract_count,
+      // 【为什么用 'track' in args 而不是 args.track !== undefined】传 null 是**出轨**这个动作，
+      // 与"这次不动它"是两件事。用 !== undefined 判的形态是：null 与不传被折成同一件事，
+      // 于是"处置完了，回主线"这条指令静默地什么都没做，而回包 200、字段还是原来那条轨。
+      track: 'track' in args ? args.track : undefined,
     }),
 };
 

@@ -5,7 +5,7 @@ import { cn } from '@/app/_ui/cn';
 import { formatDate, formatMonthDay } from '@/app/_ui/format';
 import { Seal } from '@/components/brand/Seal';
 import { useMilestoneAdvance } from '@/hooks/useMilestoneAdvance';
-import { deriveTrack, type Milestone, type TrackCell, type Attainment } from './milestones';
+import { deriveTrack, type TrackCell, type Attainment } from './milestones';
 
 /**
  * 里程碑时间轴。**不是进度条**——产品方案第贰条明说线性进度对本产品失真：
@@ -25,7 +25,8 @@ export function MilestoneTrack({
   track,
   attainments,
 }: {
-  track: readonly Milestone[];
+  /** 轨道格子。由调用方按案件所属领域取（app/_ui/domain.journeyOf），本组件不认领域 */
+  track: readonly string[];
   attainments: readonly Attainment[];
 }) {
   const cells = deriveTrack(track, attainments);

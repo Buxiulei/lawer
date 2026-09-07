@@ -6,6 +6,7 @@ import { demoCase } from '@/app/_mock/demo';
 import type { ActionItem } from '@/app/_mock/types';
 import { ByoAgentEntry } from '@/app/_ui/ByoAgentEntry';
 import { useDiscreet } from '@/app/_ui/discreet';
+import { packOf, journeyOf, tracksOf } from '@/app/_ui/domain';
 import { NeutralLabel } from '@/app/_ui/NeutralLabel';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Mascot } from '@/components/brand/Mascot';
@@ -17,7 +18,6 @@ import { useEnterStagger } from '@/hooks/useEnterStagger';
 import { DeadlineTiles } from './DeadlineTiles';
 import { MilestoneTrack } from './MilestoneTrack';
 import { RecentRecords } from './RecentRecords';
-import { FULL_JOURNEY } from './milestones';
 import {
   demoDashboard,
   failureOf,
@@ -111,7 +111,7 @@ export function DashboardBody({
   data: DashboardData;
   onToggle?: (id: string, done: boolean) => void;
 }) {
-  // 最急的排前面。仲裁时效虽然常驻，但它不该挡在两天后到期的事情前面
+  // 最急的排前面。常驻不动的那类期限不该挡在两天后到期的事情前面
   const deadlines = [...data.deadlines].sort((a, b) => a.dueAt.localeCompare(b.dueAt));
   const rest = data.actions.filter((a) => a.status === '待办').length - 1;
   /* 入场 stagger 只挂 `data-mo-enter` 点名的那几块（A7）。渲染层持有 root，取数层（Dashboard）不碰。
@@ -132,8 +132,12 @@ export function DashboardBody({
           把这份 MilestoneTrack 收成 `lg:hidden`、桌面切到 `<CaseHeaderBar caseId={caseId} />`。
           CaseHeaderBar 组件与它的测试已合入本仓，只差挂回这一步。 */}
       <div data-mo-enter>
-        <MilestoneTrack track={FULL_JOURNEY} attainments={data.attainments} />
+        {/* 轨道格子按**这个案子所属领域**取（app/_ui/domain.journeyOf）。
+            写死一份的形态是：第二个领域的用户打开自己的驾驶舱，
+            八格里每一格都在讲另一个行当的事，而没有一处会报错。 */}
+        <MilestoneTrack track={journeyOf(data.domain)} attainments={data.attainments} />
       </div>
+      <TrackRow domain={data.domain} track={data.track} />
       {/* 只推一件事（产品方案叁）；计数仍是全量，不然「1/5」会缩成「0/1」。
           `collapseOnDone`：勾完这一件它让开，下一件才有地方站——
           「完成庆祝」的正确形态是下一件事出现，不是彩带。 */}
@@ -152,7 +156,7 @@ export function DashboardBody({
       )}
       <DeadlineTiles deadlines={deadlines} />
       <ReportEntry caseId={caseId} />
-      <DossierEntry caseId={caseId} />
+      <DossierEntry caseId={caseId} domain={data.domain} />
       {/* 「用你自己的 agent」的常驻入口。排在期限与公司档案之后、最近材料之前：
           它是入口不是内容，不该挤在"该做什么 / 什么时候之前"前面；
           但也不能只留在设置页——想省钱的念头是在办事的路上起的。 */}
@@ -161,6 +165,42 @@ export function DashboardBody({
         <RecentRecords caseId={caseId} records={data.records} />
       </div>
     </div>
+  );
+}
+
+/**
+ * 并行轨那一行（设计稿 §16）：可在任一主线阶段进入、处置完回主线的那几条轨道。
+ *
+ * 【本领域没有并行轨时整行不渲染】`tracks` 是空数组就是「本领域没有并行轨」这个**结论**，
+ * 不是「还没填」。摆一行「当前轨：无」出来，是在告诉用户这里本该有点什么。
+ * 缺省领域的 tracks 就是空的，所以这一行在它的页面上一个字节都不多。
+ *
+ * 【在轨与主线是两句不同的话，不是同一句话填不同的值】在轨那一句必须把**主线阶段**
+ * 一并说出来：并行轨的语义是"主线不动、另一条线同时在走"，只印轨名的形态是——
+ * 用户以为自己的案子已经从协商挪到了危机处置，于是不再管协商那边的期限。
+ *
+ * 【为什么不认领域名】轨名逐字来自领域包的 tracks（app/_ui/domain.tracksOf），
+ * 当前在哪一轨来自 cases.track（W3 落的列）。本组件一个具体领域都不认识。
+ */
+function TrackRow({ domain, track }: { domain: string; track: string | null }) {
+  const tracks = tracksOf(domain);
+  if (tracks.length === 0) return null;
+  return (
+    <section data-mo-enter aria-label="并行轨" className="mt-3 rounded-[10px] bg-surface-2 px-3.5 py-2.5">
+      <p data-veil="" className="text-[14px] leading-6 text-ink">
+        当前轨：
+        {track ? (
+          <span className="font-medium text-ink">{track}</span>
+        ) : (
+          <span className="text-ink-2">主线</span>
+        )}
+      </p>
+      <p data-veil="" className="mt-0.5 text-[13px] leading-5 text-ink-2">
+        {track
+          ? '这条线与主线并行：主线的阶段没有被它顶掉，那边该办的事照办。处置完了回主线。'
+          : `本案主线之外还有这几条轨可以走：${tracks.join('、')}。走进去主线不动，处置完回主线。`}
+      </p>
+    </section>
   );
 }
 
@@ -196,14 +236,19 @@ function ReportEntry({ caseId }: { caseId: string }) {
 }
 
 /**
- * 公司档案的入口。**先免费查有没有货**：这家公司被仲裁过多少次、赔没赔、有没有关联主体，
- * 决定了谈判时敢不敢硬、以及把谁列成被申请人。
+ * 对方主体档案的入口。**先免费查有没有货**：对面以前被人告过几次、赔没赔、
+ * 有没有关联主体，决定了谈判时敢不敢硬、以及把谁列成对方当事人。
  *
  * 【为什么摆在驾驶舱而不是加一个底部 Tab】底部导航是全站最贵的四个位置，
  * 加第五个会把每一个都挤窄；而这件事是**案件里的一步**，不是一个常驻场所。
  * 在此之前它没有任何入口：功能整套做好了，用户找不到门。
+ *
+ * 【那两句话按领域取，不写死】这一格第二个领域的用户照样会看见，而对他来说
+ * 对面可能根本不是一家公司（自然人查不到工商信息，也不该去查）。写死的形态是：
+ * 卡片照常渲染、点进去也照常打开，只是这两行字在讲另一个行当的事。
  */
-function DossierEntry({ caseId }: { caseId: string }) {
+function DossierEntry({ caseId, domain }: { caseId: string; domain: string }) {
+  const copy = packOf(domain).copy.pages;
   return (
     <Link
       href={`/case/${caseId}/dossier`}
@@ -212,10 +257,10 @@ function DossierEntry({ caseId }: { caseId: string }) {
     >
       <span className="min-w-0 flex-1">
         <span className="block text-[15px] leading-6 font-medium text-ink">
-          公司档案：先免费查有没有货
+          {copy.dossierEntryTitle}
         </span>
         <span className="mt-0.5 block text-[13px] leading-5 text-ink-2">
-          这家公司被仲裁过几次、赔没赔、有没有关联主体——免费的那部分先看着。
+          {copy.dossierEntryDetail}
         </span>
       </span>
       <span aria-hidden className="shrink-0 text-[15px] text-ink-2">

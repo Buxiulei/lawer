@@ -36,13 +36,16 @@ vi.mock('@/app/_ui/currentCase', async (importOriginal) => ({
   fetchMyCases: () => fetchMyCases(),
 }));
 
-/** 挂载后那次查（useEffect）在 node 环境不跑，这里替它把三态直接喂进去 */
+/**
+ * 挂载后那次查（useEffect）在 node 环境不跑，这里替它把结论直接喂进去。
+ * 领域给空串＝没查到，页面退回缺省领域——这一组验的是引导条，不是领域分流。
+ */
 const guardState: { guard: CaseGuard } = { guard: 'unknown' };
 vi.mock('../_components/caseGuard', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../_components/caseGuard')>();
   return {
     ...actual,
-    useCaseGuard: () => [guardState.guard, () => {}] as const,
+    useCaseGuard: () => [{ guard: guardState.guard, domain: '' }, () => {}] as const,
   };
 });
 

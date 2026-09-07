@@ -421,18 +421,38 @@ export async function sendEmailCode(
  * 将来放宽成"任一验证通道齐备即算注册完成"时，改这一个函数，两条线同时生效——
  * 各写各的话，改完一处另一处会静默地停在旧规则上。
  */
-export function provisionOnRegistered(db: Database, userId: number): Onboarding | undefined {
+export function provisionOnRegistered(
+  db: Database,
+  userId: number,
+  /**
+   * 建哪个领域的案子（设计稿 §13：注册时按入口站点/参数落 domain）。
+   * 省略即缺省领域。
+   *
+   * 【省略 ≠ "页面没摆选择控件"】注册页在只开着一个领域时确实不摆控件，但它**照样会
+   * 把那唯一一项填进来**（app/_ui/DomainChoice.submittedDomain）。两者当成一件事的形态是：
+   * 只开着一个非缺省领域的站点上，注册请求不带 domain → 这里落缺省领域 →
+   * 缺省领域没开 → 建案被拒 → 而注册照常成功，用户名下一个案件都没有。
+   */
+  domain?: string,
+): Onboarding | undefined {
   const user = store.findUserById(db, userId);
   // 邮箱必须已验证是两条线的公共前提；第二个凭据手机或 Google 有一个就够
   if (!user?.email_verified_at) return undefined;
   if (!user.phone_verified_at && !user.google_sub) return undefined;
-  return provisionDefaultCase(db, userId);
+  return provisionDefaultCase(db, userId, domain);
 }
 
 /** 上面那段「建案失败不许阻断登录」的实现体；邮箱注册那条路径也用它，判据不同、兜底相同。 */
-function provisionDefaultCase(db: Database, userId: number): Onboarding | undefined {
+function provisionDefaultCase(
+  db: Database,
+  userId: number,
+  domain?: string,
+): Onboarding | undefined {
   try {
-    const made = ensureDefaultCase(db, userId);
+    // 领域是否开着由 ensureDefaultCase → requireEnabledDomain 说了算：
+    // **服务端是权威**，页面递上来的 key 只是一个愿望。关着的领域会被它拒掉，
+    // 走下面那条「不阻断登录、但留一行日志」的路。
+    const made = ensureDefaultCase(db, userId, domain);
     // 领域灰度把缺省领域关掉时 ensureDefaultCase 回的是自述错误而不是抛异常。
     // 与下面那条 catch 同一口径：**建案失败不许阻断登录**，但要留一行日志——
     // 静默返回 undefined 的形态是，一批用户手里没有案件，而谁都不知道为什么。
@@ -458,7 +478,7 @@ function provisionDefaultCase(db: Database, userId: number): Onboarding | undefi
  */
 export function verifyEmailCode(
   db: Database,
-  input: { userId: number | null; email: string; code: string },
+  input: { userId: number | null; email: string; code: string; domain?: string },
   deps: OtpDeps = {},
 ): EmailVerifyResult {
   const now = deps.now ?? new Date();
@@ -489,7 +509,7 @@ export function verifyEmailCode(
   store.markEmailCodeUsed(db, row!.id);
   if (input.userId !== null) store.setUserEmailVerified(db, userId, email, toSql(now));
 
-  const onboarding = provisionOnRegistered(db, userId);
+  const onboarding = provisionOnRegistered(db, userId, input.domain);
   return {
     ok: true,
     token: signToken(userId, now),
@@ -571,7 +591,7 @@ export async function sendEmailRegisterCode(
  */
 export function verifyEmailRegisterCode(
   db: Database,
-  input: { email: string; code: string },
+  input: { email: string; code: string; domain?: string },
   deps: OtpDeps = {},
 ): EmailRegisterResult {
   const now = deps.now ?? new Date();
@@ -606,7 +626,7 @@ export function verifyEmailRegisterCode(
     user = store.findUserById(db, createAccount())!;
   }
 
-  const onboarding = provisionDefaultCase(db, user.id);
+  const onboarding = provisionDefaultCase(db, user.id, input.domain);
   return {
     ok: true,
     token: signToken(user.id, now),

@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import type { CompanyGraph } from '@/app/_mock/company-graph';
+import { useCaseDomain } from '@/app/_ui/caseDomain';
+import { packOf } from '@/app/_ui/domain';
 import { formatDate } from '@/app/_ui/format';
 import { NeutralLabel } from '@/app/_ui/NeutralLabel';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
@@ -43,6 +45,9 @@ export function CompanyGraphView({
   graph: CompanyGraph | null;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 引言首句里那三层各叫什么，按这个案子所属领域取。写死的形态是：
+  // 第二个领域的用户打开自己的关系图，第一句就在讲另一个行当里谁给谁发钱。
+  const intro = packOf(useCaseDomain(caseId)).copy.pages.graphIntro;
 
   const { layout, payrollChain } = useMemo(() => {
     const nodes: LayoutNodeInput[] = (graph?.nodes ?? []).map((n) => ({
@@ -89,7 +94,7 @@ export function CompanyGraphView({
   if (!graph || graph.nodes.length === 0) {
     return (
       <div className="pt-1">
-        <Header />
+        <Header intro={intro} />
         <EmptyState
           title="公司调查完成后这里会生成关系图谱"
           description="调查会把签约主体、发薪主体、控股股东和同体系的用工主体串起来，标出谁有钱可执行、谁是追责主战场。"
@@ -102,7 +107,7 @@ export function CompanyGraphView({
 
   return (
     <div className="pt-1">
-      <Header />
+      <Header intro={intro} />
 
       <GraphCanvas
         graph={graph}
@@ -182,7 +187,8 @@ function LegendLine({
   );
 }
 
-function Header() {
+/** @param intro 引言首句：这三层各是谁，按案件领域取（DomainPack.copy.pages.graphIntro） */
+function Header({ intro }: { intro: string }) {
   return (
     <header className="py-3">
       <h1 className="text-[20px] font-semibold text-ink">
@@ -190,8 +196,7 @@ function Header() {
       </h1>
       {/* 「告谁、向谁要钱」是这页最露的一句，标题「公司图谱」中性可以留着 */}
       <p data-veil="" className="prose-measure mt-0.5 text-[15px] leading-7 text-ink-2">
-        跟你签合同的、给你发工资的、背后控股的，常常不是同一家。这张图把它们的关系摆开，
-        方便你决定告谁、向谁要钱。
+        {intro}这张图把它们的关系摆开，方便你决定告谁、向谁要钱。
       </p>
     </header>
   );

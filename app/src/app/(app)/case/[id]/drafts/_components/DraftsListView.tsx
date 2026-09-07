@@ -1,4 +1,9 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect } from 'react';
+import { useCaseDomain } from '@/app/_ui/caseDomain';
+import { packOf } from '@/app/_ui/domain';
 import { formatDateTime } from '@/app/_ui/format';
 import { NeutralLabel } from '@/app/_ui/NeutralLabel';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
@@ -6,12 +11,16 @@ import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
 import { EmptyState } from '@/components/shadcn/empty-state';
 import { DraftKindBadge, DraftStatusBadge } from './badges';
-import type { DraftView } from './draftsData';
+import { unknownKinds, type DraftView } from './draftsData';
 
 /**
  * 文书列表的画法。**只吃传进来的 drafts**，自己不取数、不认 demo——
  * 演示案件传 mock、真实案件传接口取回的行，两条路走同一份版式。
  * 分出来也是为了让「这一页有没有渲染演示数据」在 node 环境里就验得出来。
+ *
+ * 【导语与空态那两句按领域取】文书递到谁手里，是这一页唯一按行当变的东西。
+ * 写死的形态是：第二个领域的用户在自己的文书页上读到一个跟他无关的收件人，
+ * 而页面照常渲染、列表照常是他的那几份。
  */
 export function DraftsListView({
   caseId,
@@ -20,26 +29,50 @@ export function DraftsListView({
   caseId: string;
   drafts: DraftView[];
 }) {
+  const pack = packOf(useCaseDomain(caseId));
+  const copy = pack.copy.pages;
+
+  /**
+   * 【词表外的种类要出声，但屏幕上一个字都不改】库里这一类不在本领域的 `docKinds` 里，
+   * 说明写它的那一侧与本领域的词表对不上——那是要人去看的事。
+   *
+   * 从前这个信号是在数据层顺手发的，而那一层只有 caseId、认不出领域，于是挂了一份写死的
+   * 缺省领域词表：第二个领域的**每一份**文书都触发一次告警，并被折成「其他」。
+   * 判在这里之后词表是这个案子自己的那份，**而渲染的字一个都没被改过**——
+   * 出声与改归类从前绑在一起，现在拆开了。
+   *
+   * 【为什么判在这一层，不判在 RealDrafts】领域是问出来的，而这一层本来就问了一次
+   *（导语与空态那两句按领域取）。挪到取数那一层的形态是：文书页在"取数失败"和"一份都没有"
+   * 这两屏上也会多问一次案件详情——多一条谁都用不上的请求，只为一句控制台日志。
+   */
+  useEffect(() => {
+    const unknown = unknownKinds(drafts.map((d) => d.kind), pack.docKinds);
+    if (unknown.length > 0) {
+      console.warn('[drafts] 这个领域的文书词表里没有这几类，已照原样渲染：', unknown.join('、'));
+    }
+  }, [drafts, pack]);
+
   return (
     <div className="pt-1">
       <header className="py-3">
         <h1 className="text-[20px] font-semibold text-ink">
           <NeutralLabel plain="文书" neutral={NEUTRAL_WORD.drafts} />
         </h1>
-        {/* 标题换了中性词，这句导语里还有「仲裁委」，得进糊层 */}
+        {/* 标题换了中性词，这句导语里还点着收件人（各领域各有各的），得进糊层。
+            拆成前后两截是因为中间夹着「问它」那条行内链接，见领域包 draftsIntroBefore。 */}
         <p data-veil="" className="mt-0.5 text-[15px] leading-7 text-ink-2">
-          写给公司和仲裁委的东西都在这儿。需要新的一份，去
+          {copy.draftsIntroBefore}
           <Link href={`/case/${caseId}/ask`} className="mx-1 text-primary-ink underline underline-offset-4">
             问它
           </Link>
-          说一句就行。
+          {copy.draftsIntroAfter}
         </p>
       </header>
 
       {drafts.length === 0 ? (
         <EmptyState
           title="还没有文书"
-          description="要递给公司或仲裁委的东西都会存在这一页。现在一份都还没有——去对话里说清楚你要写什么，它会起草并存进来；手里已有的材料先传进证据库。"
+          description={copy.draftsEmptyDescription}
           action={<DraftEntries caseId={caseId} />}
         />
       ) : (

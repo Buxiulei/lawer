@@ -39,36 +39,59 @@ export type CaseGuard = 'unknown' | 'has-case' | 'no-case';
  */
 export const COMPLETE_EMAIL_HREF = '/login';
 
+/**
+ * 名下案件那次查的结论：三态 + **这个案子属于哪个领域**。
+ * 领域决定首诊问什么（DomainPack.intakeSchema），所以必须与三态**同一次**查出来——
+ * 分两次查的形态是：两次之间的答案可能不一致，而页面按其中一次问、按另一次交。
+ */
+export interface CaseProbe {
+  guard: CaseGuard;
+  /** cases.domain；查不到（含未登录、网络断）就是空串，由调用方退回缺省领域 */
+  domain: string;
+}
+
 /** 现查一次名下案件。**异常一律回 unknown**，不回 no-case。 */
-export async function checkCaseGuard(): Promise<CaseGuard> {
+export async function probeCase(): Promise<CaseProbe> {
   try {
-    return latestOf(await fetchMyCases()) !== null ? 'has-case' : 'no-case';
+    const mine = latestOf(await fetchMyCases());
+    return mine === null
+      ? { guard: 'no-case', domain: '' }
+      : { guard: 'has-case', domain: mine.domain };
   } catch {
-    return 'unknown';
+    return { guard: 'unknown', domain: '' };
   }
+}
+
+/** 只要三态那一半。**保持既有签名**：调用方只关心三态时不必接一个对象再取字段。 */
+export async function checkCaseGuard(): Promise<CaseGuard> {
+  return (await probeCase()).guard;
 }
 
 /**
  * 页面挂载后查一次。返回的 setter 给末步用：提交前那次查（在 saveIntake 里）
  * 得出「名下没有案件」时，把结论写回来，好让引导条在第 6 步也摆出来。
  */
-export function useCaseGuard(signedIn: boolean): [CaseGuard, (next: CaseGuard) => void] {
-  const [guard, setGuard] = useState<CaseGuard>('unknown');
+export function useCaseGuard(
+  signedIn: boolean,
+): [CaseProbe, (next: CaseGuard) => void] {
+  const [probe, setProbe] = useState<CaseProbe>({ guard: 'unknown', domain: '' });
   useEffect(() => {
     if (!signedIn) {
       // 没登录的人本来就走「保存草稿并注册」那条路，不该再被这条引导条截一次
-      setGuard('unknown');
+      setProbe({ guard: 'unknown', domain: '' });
       return;
     }
     let alive = true;
-    void checkCaseGuard().then((next) => {
-      if (alive) setGuard(next);
+    void probeCase().then((next) => {
+      if (alive) setProbe(next);
     });
     return () => {
       alive = false;
     };
   }, [signedIn]);
-  return [guard, setGuard];
+  // 末步那次查只得出三态（saveIntake 的 no-case 支），领域照旧留着——
+  // 那一次并没有查出一个新的领域，把它抹成空串等于凭空丢掉已经知道的事。
+  return [probe, (guard: CaseGuard) => setProbe((prev) => ({ ...prev, guard }))];
 }
 
 /**

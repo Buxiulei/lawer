@@ -13,12 +13,15 @@ import * as store from '@/lib/db/cases';
 import { dedupTitleKey } from '@/lib/db/dedup';
 import {
   DEFAULT_DOMAIN,
+  journeyOfPack,
   getDomainPack,
   requireEnabledDomain,
   type DomainPack,
 } from '@/lib/domains/registry';
 import { normalizeDateOnly, submitIntakeInto, type IntakeInput, type IntakeResult } from './intake';
 import { markReportStale } from './report-stale';
+// 下面那张 MILESTONE_OF_STAGE 的值类型引它（词表本身在 ./milestones，此处只借类型）
+import type { CaseMilestone } from './milestones';
 // 只剩 MILESTONE_OF_STAGE 的键类型还引它（`typeof CASE_STAGES`）。**stage 校验不再走它**，
 // 一律经 stagesForCase 从领域包取词表。
 import { CASE_STAGES } from './stages';
@@ -46,36 +49,17 @@ import { reconcileServedModel } from '@/lib/billing/served-model';
 // 而页面引 lib/cases 会把整个 lib/db 拖进浏览器包。此处原样再导出，引用方不必改。
 export { CASE_STAGES, type CaseStage } from './stages';
 export type { IntakeInput, IntakeResult } from './intake';
+// 首诊请求体的解法（body 键 → 字段）只有这一份，REST 路由从这里取，不再手抄一遍
+export { intakeInputFromBody } from './intake';
 // 发出去之前剥掉「发出前必读」尾注：导出（lib/drafts/export）与分享（lib/shares）都从这里取
 export { stripConfirmationFooter } from './drafts';
 
 /** 与 migrate.ts timeline_events.kind 注释逐字对齐 */
 export const TIMELINE_KINDS = ['公司动作', '我方动作', '系统动作', '期限'] as const;
 
-/**
- * 案件里程碑（批 6 驾驶舱，契约 docs/contracts/case-milestone.md §三）。
- *
- * 【为什么不是 CASE_STAGES 的子集】里程碑是**只追加的既成事实**，stage 是**可变可回退的
- * 当前态**，是两种东西（契约 §二）。早先按子集写过一稿，撞上死结：第一格「协商」在
- * CASE_STAGES 里没有对应值（那段被拆成 风声/约谈中/已收通知/已解除 四个更细的值），
- * 只能拿 `约谈中` 当键——于是「公司不谈直接解除」的案子库里会留下一条从没发生过的约谈。
- * 而且 `Extract<CaseStage, …>` **fails open**：把 CASE_STAGES 里某个值改名，
- * 里程碑联合会**静默少一员，tsc 退出码 0 一句话不报**（2026-08-28 本仓实测）——
- * 一个防词表漂移的机制，自己的失效方式就是静默漂移。改成独立联合 + 下面那张全量表，
- * 漏键报 TS2741、错值报 TS2322，**两个方向都红**。
- */
-export const CASE_MILESTONES = [
-  '协商',
-  '仲裁申请',
-  '立案',
-  '开庭',
-  '裁决',
-  '一审',
-  '二审',
-  '执行',
-] as const;
-
-export type CaseMilestone = (typeof CASE_MILESTONES)[number];
+// 里程碑词表同样单独成文件（lib/cases/milestones.ts）：领域包与驾驶舱轨道都要读它，
+// 而那两处引 lib/cases 会把整个 lib/db 拖进浏览器包。此处原样再导出，引用方不必改。
+export { CASE_MILESTONES, type CaseMilestone } from './milestones';
 
 /**
  * stage → 它属于哪个里程碑。**全量**：键覆盖 CASE_STAGES 每一个值。
@@ -483,6 +467,11 @@ export function updateCase(
     monthlyWageFen?: unknown;
     position?: unknown;
     contractCount?: unknown;
+    /**
+     * 并行轨（设计稿 §16）。取值须在本案领域包的 tracks 里；传 `null` = **出轨回主线**。
+     * 「不传」与「传 null」是两件事：不传是这次不动它，传 null 是明确说处置结束了。
+     */
+    track?: unknown;
     /** 「入职不晚于今天」的今天基准，测试可注入 */
     now?: Date;
   },
@@ -498,7 +487,30 @@ export function updateCase(
     monthly_wage_fen?: number;
     position?: string;
     contract_count?: string;
+    track?: string | null;
   } = {};
+  if (input.track !== undefined) {
+    // null = 出轨回主线，任何领域都允许（哪怕这个领域根本没有并行轨——那时它本来就是 null）
+    if (input.track === null) {
+      fields.track = null;
+    } else {
+      const pack = packForCase(found);
+      if (isFailure(pack)) return pack;
+      if (typeof input.track !== 'string' || !pack.pack.tracks.includes(input.track)) {
+        // 【为什么"本领域没有并行轨"要单独说一句】回一句「track 只能是 」（后面空着）
+        // 的形态是：调用方以为自己填错了值，照着空清单再试一次，再收到同一句。
+        return fail(
+          400,
+          'INVALID_TRACK',
+          pack.pack.tracks.length === 0
+            ? `领域「${pack.pack.key}」没有并行轨，track 只能是 null（出轨/不在轨上）。` +
+              '并行轨是"主线不动、另一条线同时在走"的那种轨；本领域的主线是线性的，没有这种轨。'
+            : `track 只能是 ${pack.pack.tracks.join(' / ')}，或 null（出轨回主线）。`,
+        );
+      }
+      fields.track = input.track;
+    }
+  }
   if (input.stage !== undefined) {
     const stages = stagesForCase(found);
     if (isFailure(stages)) return stages;
@@ -547,7 +559,7 @@ export function updateCase(
     return fail(
       400,
       'NO_FIELDS',
-      '至少要改一个字段：stage / goal / bottom_line / employed_from / monthly_wage / position / contract_count',
+      '至少要改一个字段：stage / goal / bottom_line / employed_from / monthly_wage / position / contract_count / track',
     );
   }
 
@@ -677,11 +689,14 @@ export function confirmMilestone(
       '里程碑必须由用户确认后才能写入：agent 只递笔，案件史归用户执笔',
     );
   }
-  if (
-    typeof input.milestone !== 'string' ||
-    !(CASE_MILESTONES as readonly string[]).includes(input.milestone)
-  ) {
-    return fail(400, 'INVALID_MILESTONE', `milestone 只能是 ${CASE_MILESTONES.join(' / ')}`);
+  // 认哪几格，按**这个案子所属领域**的轨道判（stagesForCase 同一条口径）。
+  // 引死一份词表的形态是：第二个领域的案子只能盖上一个领域的里程碑，
+  // 而错误信息读起来完全正常——它列的每一格都是真的，只是不属于这个案子。
+  const packed = packForCase(found);
+  if (isFailure(packed)) return packed;
+  const journey = journeyOfPack(packed.pack);
+  if (typeof input.milestone !== 'string' || !journey.includes(input.milestone)) {
+    return fail(400, 'INVALID_MILESTONE', `milestone 只能是 ${journey.join(' / ')}`);
   }
 
   const updated = store.setEventMilestone(db, {

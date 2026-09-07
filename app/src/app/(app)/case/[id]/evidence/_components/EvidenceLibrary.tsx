@@ -617,6 +617,7 @@ export function EvidenceLibrary({ caseId }: { caseId: string }) {
       />
 
       <EvidenceDetailSheet
+        caseId={caseId}
         item={open}
         busy={open !== null && busyId === open.id}
         editablePurpose={isDemo}

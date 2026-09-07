@@ -28,6 +28,12 @@ export async function POST(req: Request) {
     userId,
     email: stringField(body, 'email'),
     code: stringField(body, 'code'),
+    // 建哪个领域的案子。**空串当没给**（落缺省领域）：空串是"这一格没有值"，
+    // 不是"某个领域"，两边同一条口径，谁都不必猜另一边怎么理解一个空字符串。
+    // 页面在只有一个领域可选时不摆控件，但**照样会把那唯一的一项填进来**
+    // （app/_ui/DomainChoice.submittedDomain）——不摆控件是因为没什么可问的，
+    // 不是因为没有答案。开着没开由服务端复核。
+    domain: stringField(body, 'domain') || undefined,
   });
   if (!result.ok) return failureResponse(result);
 

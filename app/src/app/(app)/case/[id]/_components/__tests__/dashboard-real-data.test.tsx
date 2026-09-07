@@ -56,6 +56,7 @@ const { DeadlineTiles } = await import('../DeadlineTiles');
 const { RecentRecords } = await import('../RecentRecords');
 const { ActionGroup } = await import('@/components/case/ActionCard');
 const { FULL_JOURNEY } = await import('../milestones');
+const { DEFAULT_DOMAIN } = await import('@/lib/domains/registry');
 const COMPONENTS = join(process.cwd(), 'src/app/(app)/case/[id]/_components');
 
 const ssr = (node: React.ReactNode) => renderToStaticMarkup(<>{node}</>);
@@ -207,6 +208,8 @@ describe('取数与字段映射', () => {
  */
 describe('四种屏幕状态', () => {
   const full: Parameters<typeof viewState>[0]['data'] = {
+    domain: DEFAULT_DOMAIN,
+    track: null,
     actions: [],
     deadlines: [],
     attainments: [{ milestone: '协商', happenedAt: '2026-07-24T10:00:00+08:00' }],
@@ -231,7 +234,15 @@ describe('四种屏幕状态', () => {
     expect(
       viewState({
         error: null,
-        data: { actions: [], deadlines: [], attainments: [], records: [], timelineCount: 0 },
+        data: {
+          domain: DEFAULT_DOMAIN,
+          track: null,
+          actions: [],
+          deadlines: [],
+          attainments: [],
+          records: [],
+          timelineCount: 0,
+        },
       }),
     ).toBe('blank');
   });

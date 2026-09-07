@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useCaseDomain } from '@/app/_ui/caseDomain';
 import { useDiscreet } from '@/app/_ui/discreet';
+import { packOf } from '@/app/_ui/domain';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
@@ -10,11 +12,15 @@ import { useToast } from '@/components/ui/Toast';
 
 /**
  * 解读页底部行动：接着聊 / 把这份文件收进证据库。
- * 两个动作都不会被公司看到，不需要二次确认。
+ * 两个动作对面都看不见，不需要二次确认。
+ *
+ * 【那句建议按领域取】「收进证据库，某某场合要用」里的场合各行当各不同。
+ * 写死的形态是：第二个领域的用户被建议为一个他这辈子不会去的场合留证。
  */
 export function DocActions({ caseId, docTitle }: { caseId: string; docTitle: string }) {
   const toast = useToast();
   const { discreet } = useDiscreet();
+  const copy = packOf(useCaseDomain(caseId)).copy.pages;
   const [added, setAdded] = useState(false);
   // 这个按钮必须看得懂才能点，不能进糊层：低调模式下换成中性词
   const libWord = discreet ? NEUTRAL_WORD.evidenceLib : '证据库';
@@ -23,7 +29,7 @@ export function DocActions({ caseId, docTitle }: { caseId: string; docTitle: str
     <Card className="p-4">
       <h2 className="fs-m font-semibold text-ink">接下来</h2>
       <p data-veil="" className="prose-measure mt-1 fs-m text-ink-2">
-        对某一条还有疑问，或者想让人帮你把回复的原话写出来，去「问它」接着说。这份文件本身建议收进证据库，仲裁时要用。
+        {copy.docActionsHint}
       </p>
       <div className="mt-3.5 flex flex-col gap-2 sm:flex-row">
         <Button asChild>

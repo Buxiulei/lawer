@@ -1489,6 +1489,18 @@ export function runMigrations(db: Database.Database): void {
   // 默认值就是今天全站唯一在跑的那个领域：存量案件本来就都是它，这不是编出来的值。
   addColumnIfMissing(db, 'cases', 'domain', "TEXT NOT NULL DEFAULT 'labor'");
 
+  // cases.track：这个案子此刻在哪条**并行轨**上（设计稿 §16）。取值来自领域包的
+  // DomainPack.tracks；没有并行轨的领域这一列恒为 NULL。
+  //
+  // 【为什么不是再加几个 stage】stage 是**单值**的当前态。并行轨的语义正是"主线不动、
+  // 另一条线同时在走"：进轨的那一刻主线走到哪一步这件事没有变（投诉还在受理、退费还在谈）。
+  // 塞进 stage 的形态是——一进轨，主线态被覆盖掉，出轨时没有任何地方记得该回到哪，
+  // 而 stage 字段自始至终都是一个合法值，没有一处会报错。
+  //
+  // 可空且不回填：NULL = 只在主线上，这对存量行与没有并行轨的领域都是**正确**的语义，
+  // 不是"还没填"。
+  addColumnIfMissing(db, 'cases', 'track', 'TEXT');
+
   // company_profiles.dossier_id：案件维度的主体 → 公司维度的档案（多对一）。
   // 可空：手建的背调档不一定买过档案，且档案是后来才有的东西，老行一律 NULL。
   addColumnIfMissing(db, 'company_profiles', 'dossier_id', 'INTEGER REFERENCES company_dossiers(id)');

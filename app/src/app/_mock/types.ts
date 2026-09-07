@@ -124,14 +124,16 @@ export interface ActionItem {
   createdAt: string;
 }
 
-export type DeadlineKind =
-  | '仲裁时效'
-  | '起诉15日'
-  | '上诉15日'
-  | '举证期限'
-  | '开庭'
-  | '申请执行2年'
-  | '自定义';
+/**
+ * 期限种类。**开放字符串，不是联合类型**：能落哪几类由**案件所属领域**的
+ * `DomainPack.deadlineKinds` 说了算（服务端 deadline_set 按它校验），每个领域各一份。
+ *
+ * 【为什么不在这里钉一个领域那七类】钉死的形态是：第二个领域的每一类期限都不在联合里，
+ * 页面把它们一律收成词表里最保守的那一档，于是每张卡的标题都写着同一个词
+ *（「诉讼时效3年」在卡面上叫「自定义」），而 tsc 退出码 0、页面不报错、卡片数量也对。
+ * 服务端那侧同一条结论早就落了（lib/cases/drafts.ts 的 `DraftKind = string`）。
+ */
+export type DeadlineKind = string;
 
 export interface Deadline {
   id: string;
@@ -142,15 +144,8 @@ export interface Deadline {
   derivedFrom: string;
 }
 
-export type DraftKind =
-  | '异议函'
-  | '被迫解除通知'
-  | '仲裁申请书'
-  | '证据清单'
-  | '答辩状'
-  | '上诉状'
-  | '谈判话术'
-  | '其他';
+/** 文书种类。同 DeadlineKind：词表在 `DomainPack.docKinds`，这里只说"是个字符串"。 */
+export type DraftKind = string;
 
 export interface Draft {
   id: string;

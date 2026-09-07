@@ -14,6 +14,7 @@
 import { demoEvidence } from '@/app/_mock/demo';
 import type { EvidenceCategory, EvidenceItem, EvidenceStatus } from '@/app/_mock/types';
 import { apiFetch, apiFetchAll, apiUpload } from '@/app/_ui/api';
+import { EVIDENCE_CATEGORIES } from '@/lib/evidence/categories';
 
 /** 存证订单（后端 AttestationView 的可展示子集） */
 export interface AttestationInfo {
@@ -86,22 +87,24 @@ export interface EvidenceView {
   detailed: boolean;
 }
 
-const CATEGORIES: readonly EvidenceCategory[] = [
-  '合同',
-  '工资',
-  '社保',
-  '考勤',
-  '沟通记录',
-  '公司文件',
-  '录音',
-  '其他',
-];
-
 const STATUSES: readonly EvidenceStatus[] = ['已上传', '已固化', '已出证'];
 
-/** 后端枚举与前端联合类型逐字一致；万一将来多出一个值，按最保守的「已上传」渲染 */
+/**
+ * 分类枚举**引 spec §7 那一份，不在这里抄第二份**（lib/evidence/categories.ts，零依赖叶子）。
+ *
+ * 【为什么这一份不按领域取】evidence.category 是 spec §7 表定义里的固定枚举，
+ * 上传那一侧（lib/evidence/index.ts）对所有领域都按同一份校验、写不进第九个值。
+ * 页面另抄一份的形态是：两份哪天岔开，库里合法的一类在页面上被折成「其他」，
+ * 而两边各自看都正常——上传成功、列表也有这一条，只是归错了类。
+ * （按领域各给一份词表是另一件事：那要先改 spec §7 与上传校验，不在页面这一层。）
+ *
+ * 词表外的值按最保守的「其他」渲染而不是原样透传：category 还要喂给证据库的分面统计
+ * （EvidenceLibrary 按 EVIDENCE_CATEGORIES 逐类数），原样透传会让那一条从每一个分面里消失。
+ */
 function toCategory(raw: string): EvidenceCategory {
-  return CATEGORIES.includes(raw as EvidenceCategory) ? (raw as EvidenceCategory) : '其他';
+  return (EVIDENCE_CATEGORIES as readonly string[]).includes(raw)
+    ? (raw as EvidenceCategory)
+    : '其他';
 }
 
 function toStatus(raw: string): EvidenceStatus {

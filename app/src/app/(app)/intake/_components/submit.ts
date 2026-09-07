@@ -14,6 +14,8 @@
  */
 
 import { apiFetch, humanError } from '@/app/_ui/api';
+import { type DomainPack } from '@/lib/domains/registry';
+import { hasHandwrittenFlow, schemaPayload } from './schemaFlow';
 import { fetchMyCases } from '@/app/_ui/currentCase';
 import { latestOf } from '@/app/(app)/case/_components/resolve';
 import { NO_CASE_GUIDE_LEAD } from './caseGuard';
@@ -122,8 +124,22 @@ export function wageFenOf(raw: string): number | null {
   return Math.round(yuan * 100);
 }
 
-/** 草稿 → 接口请求体。字段名照后端路由，前端不另起一套语义。 */
-export function toIntakePayload(draft: IntakeDraft): Record<string, unknown> {
+/**
+ * 草稿 → 接口请求体。字段名照后端路由（对照表在 lib/cases/intake-params.ts），
+ * 前端不另起一套语义。
+ *
+ * 【两条路】有手写向导的领域走下面这份手写映射（六步向导各格逐字不变）；
+ * 没有的按它自己的 intakeSchema 拼（schemaPayload）。
+ * 让后者也走这份手写映射的形态是：它的答案存在 draft.fields 里，
+ * 这份映射一格都读不到，于是请求体里每一项都是空的，而回包照常 201。
+ *
+ * 【分流问的是 hasHandwrittenFlow，不是「是不是缺省领域」】排步那一侧
+ *（IntakeFlow 的 HANDWRITTEN_FLOWS）认的就是这份名单，两侧必须是同一个判断。
+ * 这里自己按领域键再判一次的形态是——将来第二个领域也有了手写稿，
+ * 页面按那份稿子问、这里按 schema 拼，请求体里每一格都是空的而回包照常 201。
+ */
+export function toIntakePayload(draft: IntakeDraft, pack?: DomainPack): Record<string, unknown> {
+  if (pack && !hasHandwrittenFlow(pack.key)) return schemaPayload(pack, draft.fields);
   return {
     stage: draft.stage,
     company_name: draft.companyName,
@@ -153,13 +169,17 @@ export function toIntakePayload(draft: IntakeDraft): Record<string, unknown> {
  * 页面挂载时那次查（useCaseGuard）是**提前**告知，不能代替这一次：
  * 用户可能在另一个标签页刚把邮箱补完，也可能刚好相反。
  */
-export async function saveIntake(draft: IntakeDraft): Promise<FinishOutcome> {
+export async function saveIntake(
+  draft: IntakeDraft,
+  /** 这一份是哪个领域的；有手写向导的走手写映射，其余按它的 intakeSchema 拼。省略同前者 */
+  pack?: DomainPack,
+): Promise<FinishOutcome> {
   try {
     const target = latestOf(await fetchMyCases());
     if (!target) return { kind: 'no-case' };
     await apiFetch(`/cases/${target.id}/intake`, {
       method: 'POST',
-      body: toIntakePayload(draft),
+      body: toIntakePayload(draft, pack),
     });
     return { kind: 'saved', caseId: target.id };
   } catch (err) {

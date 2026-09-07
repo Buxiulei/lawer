@@ -10,6 +10,7 @@ import {
   type CrisisOpenerText,
   type HotlineFact,
 } from '@/lib/agent/crisis-opener';
+import { CASE_MILESTONES } from '@/lib/cases/milestones';
 import { CASE_STAGES } from '@/lib/cases/stages';
 
 import type { DomainPack } from './registry';
@@ -377,6 +378,10 @@ export const LABOR: DomainPack = {
   // 事实卡与报告会各多显示一行「当前轨」。
   tracks: [],
 
+  // 驾驶舱那条轨道的八格。**引用 CASE_MILESTONES，不在这里抄第二份**：
+  // 抄一份的形态是页面上的轨道与服务端认的里程碑各说各话，而两边各自看都正常。
+  journey: CASE_MILESTONES,
+
   intakeSchema: LABOR_INTAKE_SCHEMA,
   intakeLimitation: LABOR_INTAKE_LIMITATION,
 
@@ -470,6 +475,49 @@ export const LABOR: DomainPack = {
       intakeCounterpartDocsTitle: '公司已经给过哪些文件',
       /** 首诊落公司主体时记的来源 */
       intakeCompanySource: '用户首诊自述',
+    },
+    /**
+     * 共用页面上按领域换的那几句。**这里每一句都是从页面里原样搬过来的**
+     *（P4-W4 复审修补轮）：搬之前它们写死在驾驶舱、设置页、证据页、文书页、
+     * 关系图、解读页六处，而这六页第二个领域的用户照样会打开。
+     * 搬家不许改字——改了就不是"搬"，是趁搬家顺手换了一次对外文案。
+     */
+    pages: {
+      /** 驾驶舱底部「公司档案」那张入口卡的标题 */
+      dossierEntryTitle: '公司档案：先免费查有没有货',
+      /** 同上，卡片正文那一句 */
+      dossierEntryDetail: '这家公司被仲裁过几次、赔没赔、有没有关联主体——免费的那部分先看着。',
+      /** 一键接入话术的开场白（设置页复制给用户自己的 agent 的第一句） */
+      agentSetupOpening: '请帮我接入「土八鼠」法律陪跑平台（我的劳动仲裁案件档案库）。',
+      /** 同上，「接入后你能替我做」那一段 */
+      agentSetupAbilities:
+        '【接入后你能替我做】读案件档案与时间线、上传并固化证据（可信时间戳）、OCR 解读公司文件、按北京口径计算赔偿、检索劳动法知识库、起草文书、管理待办与法定期限。',
+      /** 同上，「边界」那一段 */
+      agentSetupBoundary:
+        '【边界】发给公司的文书必须经我本人确认；档案数据仅用于本案维权；此密钥是我的私人凭据，不要写进共享配置或转发他人。',
+      /** 证据详情里「这份材料想证明什么」那一栏的占位提示 */
+      evidencePurposePlaceholder: '一句话写明证明目的，仲裁的证据目录里要逐条填。',
+      /**
+       * 文书页导语。**拆成前后两截**是因为中间夹着一条「问它」的行内链接：
+       * 拼成一整句就没地方放那条链，改成两个 <p> 又会把一句话拆成两行。
+       */
+      draftsIntroBefore: '写给公司和仲裁委的东西都在这儿。需要新的一份，去',
+      draftsIntroAfter: '说一句就行。',
+      /** 文书页空态那一段 */
+      draftsEmptyDescription:
+        '要递给公司或仲裁委的东西都会存在这一页。现在一份都还没有——去对话里说清楚你要写什么，它会起草并存进来；手里已有的材料先传进证据库。',
+      /** 关系图节点详情里「涉诉 N 件」后面那半句口径 */
+      graphLitigationNote: '已入档的劳动争议',
+      /**
+       * 关系图那一页（与卷宗栏「公司图谱」那一格）的引言首句：**这张图为什么值得看**。
+       * 「谁跟你签的、谁给你付的、谁在背后」这三层在每个行当里各有各的称呼。
+       */
+      graphIntro: '跟你签合同的、给你发工资的、背后控股的，常常不是同一家。',
+      /** 卷宗栏诉求表脚注：这几个数是怎么来的、按哪儿的口径算的 */
+      claimsFootnote: '初算值，随证据补充调整；北京口径，月工资未触及三倍社平封顶。',
+      /** 文件解读页底部「接下来」那一段 */
+      docActionsHint:
+        '对某一条还有疑问，或者想让人帮你把回复的原话写出来，去「问它」接着说。这份文件本身建议收进证据库，仲裁时要用。',
     },
   },
 };

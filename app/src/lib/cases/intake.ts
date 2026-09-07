@@ -22,6 +22,7 @@ import { insertActionItem, insertDeadline, upsertCompanyProfileByRole } from '@/
 import * as store from '@/lib/db/cases';
 import { nowSql } from '@/lib/db/time';
 import { INTAKE_STAGE_ACTIONS, intakeActionDueAt, intakeActionPriority } from './intake-actions';
+import { INTAKE_BODY_PARAMS } from './intake-params';
 import type { CaseStage } from './stages';
 
 /** 首诊里公司给过哪些文件的三问，键与前端 draft 同名 */
@@ -54,6 +55,26 @@ export interface IntakeInput {
   bottomLine?: unknown;
   /** 落库时刻，测试可注入 */
   now?: Date;
+}
+
+/**
+ * 请求体 → 首诊入参。**REST 那条路上「body 上叫什么」只写在这一处**
+ * （对照表在 ./intake-params.ts，页面拼请求体走同一份）。
+ *
+ * 【为什么从路由里收上来】原先路由里是一段手抄清单，形态是：领域包的 intakeSchema
+ * 多一个字段、页面老实填进请求体、**路由不读它也不报错**——那一格一路消失，回包还是 201。
+ * 收成一处之后，判据能对着这份表核对「每个领域包的每个首诊字段都有人接」。
+ *
+ * `company_docs` 缺省成空对象是原样保留的既有行为：那一问整段没答与答了空，
+ * 在落库那侧走的是同一条路（拼不出 docLine 就不落那条事件）。
+ */
+export function intakeInputFromBody(
+  body: Record<string, unknown>,
+): Omit<IntakeInput, 'caseId' | 'userId'> {
+  const out: Record<string, unknown> = {};
+  for (const [param, key] of Object.entries(INTAKE_BODY_PARAMS)) out[key] = body[param];
+  out.companyDocs = (body.company_docs ?? {}) as Record<string, unknown>;
+  return out as Omit<IntakeInput, 'caseId' | 'userId'>;
 }
 
 export interface IntakeResult {
@@ -282,16 +303,36 @@ function persist(
       ? computeDeadline(lim.kind, anchor)
       : null;
 
+  // 【选填的日期与金额也要落库】validateIntake 只归一化**带 errorCode 的那几项**
+  // （必填校验那一批），选填的一格都不碰。而 employed_from / monthly_wage_fen 是 cases 上的
+  // 固定列，persist 从 value 里取——一个把这两格声明成选填的领域包，它的用户老老实实填了、
+  // 页面老老实实发了、服务端老老实实收了、回包 201，而这两格在库里恒为 NULL。
+  // 后果不是"少一格"：这两个值正是时效起算与退费基数的输入。
+  // 【为什么写在这里而不是把它们改成必填】必填与否是**领域包的产品判断**，
+  // 不是落库层的判断；落库层该做的是"包声明要问的、用户填了的，就得存下来"。
+  // 【填了但格式不对的那一格】选填字段没有 errorCode，说不出话来，只能不写这个键
+  //（与下面「只改不删」同一条口径）。这条缺口记在本票的 openQuestions 里。
+  const today = nowIso.slice(0, 10);
+  const optionalDay = normalizeDateOnly(input.employedFrom);
+  // 【指向将来的那一天也不写】选填格没有 errorCode，说不出话来；但把一个还没到的日子写进
+  // 起算列，比不写更坏——时效会按它往后推，屏幕上显示的每一句都很正常。
+  const employedFrom =
+    value.employedFrom ?? (optionalDay !== null && optionalDay <= today ? optionalDay : undefined);
+  const wageRaw = input.monthlyWageFen;
+  const monthlyWageFen =
+    value.monthlyWageFen ??
+    (typeof wageRaw === 'number' && Number.isInteger(wageRaw) && wageRaw > 0 ? wageRaw : undefined);
+
   const write = db.transaction((): IntakeResult => {
-    // 【只改不删】下面三个字段用条件展开：这一次没填就**不写这个键**，库里原来的值原样留着。
+    // 【只改不删】下面几个字段用条件展开：这一次没填就**不写这个键**，库里原来的值原样留着。
     // 所以「上次填了底线、这次清空重提」不会把底线清掉——这是刻意的，不是漏了 else 分支。
     // 留着旧值最坏是过时，用户看得见也改得回；而替他删掉上一次亲手写下的底线是不可撤销的。
     // 真要清空得有一个明确的「删掉这条」动作，不能靠一个空输入框顺手完成。
     store.updateCaseFields(db, caseId, {
       stage: value.stage,
       goal: value.goals.join('、'),
-      employed_from: value.employedFrom,
-      monthly_wage_fen: value.monthlyWageFen,
+      ...(employedFrom === undefined ? {} : { employed_from: employedFrom }),
+      ...(monthlyWageFen === undefined ? {} : { monthly_wage_fen: monthlyWageFen }),
       ...(trimmed(input.bottomLine) === null ? {} : { bottom_line: trimmed(input.bottomLine)! }),
       ...(trimmed(input.position) === null ? {} : { position: trimmed(input.position)! }),
       ...(trimmed(input.contractCount) === null ? {} : { contract_count: trimmed(input.contractCount)! }),

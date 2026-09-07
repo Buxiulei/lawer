@@ -11,6 +11,7 @@ import {
   intakeActionDueAt,
   intakeActionPriority,
 } from '@/lib/cases/intake-actions';
+import { EVIDENCE_CATEGORIES as SPEC_EVIDENCE_CATEGORIES } from '@/lib/evidence/categories';
 import type { ActionItem, CaseStage, EvidenceCategory, EvidenceItem } from './types';
 
 /* ── 步骤 1：现在处于哪一步 ─────────────────────────────── */
@@ -252,17 +253,13 @@ export function previewActions(
 
 /* ── 证据库 ─────────────────────────────────────────────── */
 
-/** 分组与选择器的类别顺序，和 spec §7 evidence.category 枚举一致。 */
-export const EVIDENCE_CATEGORIES: EvidenceCategory[] = [
-  '合同',
-  '工资',
-  '社保',
-  '考勤',
-  '沟通记录',
-  '公司文件',
-  '录音',
-  '其他',
-];
+/**
+ * 分组与选择器的类别顺序：**就是 spec §7 那一份**（lib/evidence/categories.ts），不另抄。
+ *
+ * 抄一份的形态是：上传校验认八类、页面选择器摆着另外八类，中间那个不一致的值
+ * 上传时被 400 拒掉，而用户看到的只是"传不上去"，没有一处说得出为什么。
+ */
+export const EVIDENCE_CATEGORIES: readonly EvidenceCategory[] = SPEC_EVIDENCE_CATEGORIES;
 
 export interface EvidenceChecklistItem {
   category: EvidenceCategory;
