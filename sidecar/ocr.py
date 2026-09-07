@@ -132,7 +132,7 @@ def ocr_image(image_bytes: bytes, mime: str = "image/jpeg", prompt: str = None,
 
         if code == 403:
             # 403 是「该 key 未开通这个精确模型名」，不是代码问题。百炼按精确名授权，
-            # 报错必须点名模型与 OCR_MODEL 覆盖手段，否则排查会绕远路（见文件头 TODO）。
+            # 报错必须点名模型与 OCR_MODEL 覆盖手段，否则排查会绕远路（见文件头说明）。
             raise OcrError(
                 f"该 key 未开通 {model}：DashScope 返回 403 拒绝访问。"
                 "为什么：百炼按精确模型名授权，这把 key 尚未获授该模型。"
