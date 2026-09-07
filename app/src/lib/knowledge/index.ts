@@ -512,6 +512,19 @@ export function get(id: string): PackHit {
   return { ...meta, score: 0, content: loadContent(meta) };
 }
 
+/**
+ * 按 id 取卡的**标题**（不读正文）。**取不到回 null，不抛**。
+ *
+ * 【为什么不复用 get()】get 取不到就抛，那是对的——按 id 取整张卡的调用方要的就是那张卡，
+ * 拿不到就该当场停。但这里的调用方（事实卡里那一行"过往相似案例：《…》"）要的只是一个
+ * 展示用的标题：一个改错的 id 让它抛，形态是**每一轮对话 500**，而缺的只是一行字。
+ * 与 loadIndex 对隔离区/未注册域那两类卡的处置同一条口径：排除并让调用方降级，
+ * 不放大成全站故障。
+ */
+export function titleOf(id: string): string | null {
+  return loadIndex().find((m) => m.id === id)?.title ?? null;
+}
+
 /** 全量元数据（不含正文），供管理端与调试。返回副本，调用方改不到进程级缓存。 */
 /**
  * 本进程**检索真正在用的**那份索引里有多少张卡。

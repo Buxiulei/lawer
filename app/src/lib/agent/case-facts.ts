@@ -22,6 +22,7 @@ import { crisisStatusMark } from '@/lib/cases/crisis-hits';
 import { basicsMissing } from '@/lib/cases/report';
 import { BRIEF_SUMMARY_MAX, briefSummary, parseBrief } from '@/lib/evidence/brief';
 import { EVIDENCE_CATEGORIES } from '@/lib/evidence/categories';
+import { titleOf as knowledgeTitleOf } from '@/lib/knowledge';
 import { DEFAULT_DOMAIN, DOMAINS, domainPackOrDefault, type FactsSectionKey } from '@/lib/domains/registry';
 import { toDisplayDay, toDisplayTime } from '@/lib/time';
 
@@ -615,8 +616,27 @@ function interpretationDisputedSection(s: CaseSnapshot): FactSection | null {
     heading: review.title,
     // 纪律那句话进 stat：stat 是整区降级后唯一幸存的部分，而这一节里最不能丢的正是这句
     stat: `- ${review.discipline}`,
-    detail: review.items.map((x) => `- ${x}`),
+    detail: review.items.flatMap((x) => [`- ${x.text}`, `  - ${precedentLine(x.precedents)}`]),
   };
+}
+
+/**
+ * 一条存疑项下面那行「过往相似案例」。**没有案例时照样出这一行**。
+ *
+ * 【为什么空的时候不能省掉这一行】主理人 2026-09-07 裁决：解释存疑时应先找过往相似判例。
+ * 省掉的形态是——模型读到一条光秃秃的"现行法律解释存疑"，既不知道库里有没有判过的，
+ * 也没有任何东西告诉它"库里确实没有"；于是它要么跳过这一步，要么**顺手编一个案例填上**，
+ * 而编出来的案例读起来最像尽责。写出"库里暂无"，才把"查过没找到"与"没人查过"分开。
+ *
+ * 【为什么每条案例后面都跟着"个案不是规则"】这一节存在的全部理由是"这几件事没有定论"。
+ * 只把案例摆出来的形态是：模型拿一个个案的判法当成定论答给用户——它引了官方来源、
+ * 摆了真实数字，看起来比"存疑"那句话可信得多，而它恰好推翻了这一节要立的东西。
+ */
+function precedentLine(ids: readonly string[]): string {
+  if (!ids.length) return '过往相似案例：库里暂无官方相似案例（缺口已登记）。不许拿转载站、公众号或印象补一个上去。';
+  const titles = ids.map((id) => `《${knowledgeTitleOf(id) ?? id}》`).join('；');
+  return `过往相似案例（先检索再引用，每个都要说明谁发布的、实际怎么判的）：${titles}。` +
+    '**个案不是规则**：只能证明"这一个案子是这么判的"，不能拿去套本案，也不能当成这一条已有定论。';
 }
 
 /** 取值 + 标注来源，不做裁剪（裁剪归 renderCaseFacts）。 */

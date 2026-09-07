@@ -259,7 +259,12 @@ function draftSection(
       // 混进缺口列表的形态是：模型看见"风险 6 条"，于是逐条"解决"它们，
       // 而解决其中四条的唯一方式就是给出一个结论——那正是这几条要拦的事。
       const fixed = pack.interpretationDisputed
-        ? [`**${pack.interpretationDisputed.discipline}**`, ...pack.interpretationDisputed.items].map((x) => `- ${x}`).join('\n')
+        ? [
+            `**${pack.interpretationDisputed.discipline}**`,
+            ...pack.interpretationDisputed.items.map((x) => x.text),
+          ]
+            .map((x) => `- ${x}`)
+            .join('\n')
         : '';
       const gaps: string[] = [];
       const missing = basicsMissing(c);
