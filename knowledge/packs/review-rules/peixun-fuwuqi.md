@@ -5,7 +5,7 @@ title: 培训服务期协议审查规则卡（15 条：专项培训费用 / 违�
 keywords: [培训服务期, 服务期协议审查, 审查规则, 专项培训费用, 专业技术培训, 服务期违约金, 第22条, 违约金上限, 未履行部分分摊, 落户服务期, 户口违约金, 特殊待遇, 空白协议, 被裁不赔违约金]
 applies_to: [裁员, 协商解除, 逼迫离职, 违纪解除, 仲裁申请, 证据固定]
 law_refs: [劳动合同法§22, 劳动合同法§25, 劳动合同法§26, 劳动合同法§37, 劳动合同法§46, 劳动合同法§50, 劳动合同法§87, 劳动合同法实施条例§16, 劳动合同法实施条例§17, 劳动合同法实施条例§26, 法释〔2025〕12号§8, 法释〔2025〕12号§12, 京高法发〔2024〕534号§74, 京高法发〔2024〕534号§82, 京高法发〔2024〕534号§83]
-related: [sop-fuwuqi-baomi-xieyi, review-baomi-xieyi, review-jingye-xianzhi, review-laodong-hetong, review-xieshang-jiechu-xieyi, statute-jgf-2024-534-jieda-1, statute-fashi-2025-12-jieshi-2, case-shiye-danwei-peixun-weiyuejin-bjzc24-10, case-jinghu-fuwuqi-sunshi-107, sop-nianzhongjiang-guquan-ticheng, sop-tuoqian-kekou-gongzi, sop-jiaojie-fanyao, calc-jingji-buchang-n, template-xieshang-jiechu-shencha-qingdan]
+related: [sop-fuwuqi-baomi-xieyi, review-baomi-xieyi, review-jingye-xianzhi, review-laodong-hetong, review-xieshang-jiechu-xieyi, statute-jgf-2024-534-jieda-1, statute-fashi-2025-12-jieshi-2, case-shiye-danwei-peixun-weiyuejin-bjzc24-10, sop-nianzhongjiang-guquan-ticheng, sop-tuoqian-kekou-gongzi, sop-jiaojie-fanyao, calc-jingji-buchang-n, template-xieshang-jiechu-shencha-qingdan]
 region: 北京
 sources:
   - http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm
@@ -37,7 +37,7 @@ facts:
       pattern_hint: 协议写明甲方为乙方办理本市户口、解决进京落户指标，据此约定服务期若干年，乙方提前离职的应支付违约金若干万元或退还落户费用、按年度递减的落户违约金
       basis: 京高法发〔2024〕534号§82；劳动合同法§25
       suggestion: 要求删除违约金条款。理由：京高法发〔2024〕534号《解答（一）》第 82 问明确——用人单位为其招用的劳动者办理了本市户口，双方据此约定了服务期和违约金，用人单位以双方约定为依据要求劳动者支付违约金的，**不应予以支持**；落户不属于《劳动合同法》第二十二条、第二十三条这两种法定可约定违约金的情形。但要同时告知用户下半句：确因劳动者违反诚实信用原则给用人单位造成损失的，仍应予以赔偿。
-      negotiation_tip: 协议里的数字要不成，但不等于零成本——北京三中院（2024）京03民终107号即判决违约金不予支持、另酌定损失赔偿 15 万元。争取调低的三个抓手：**在职年限**（干得越久越接近履行完毕）、公司办理落户的实际支出、**离职原因是否可归责于公司**。被裁员、被降薪逼走与“拿完户口主动跑路”性质完全不同，这一点务必在答辩中写足。
+      negotiation_tip: 协议里约定的违约金数字要不成，但不等于零成本——公司仍可能另主张损失赔偿并由裁审酌定。争取调低的三个抓手：**在职年限**（干得越久越接近履行完毕）、公司办理落户的实际支出、**离职原因是否可归责于公司**。被裁员、被降薪逼走与”拿完户口主动跑路”性质完全不同，这一点务必在答辩中写足。
     - id: pxfq-004
       severity: must
       title: 入职时签空白服务期协议，金额、期限或培训内容留白
@@ -175,10 +175,9 @@ related：[[case-shiye-danwei-peixun-weiyuejin-bjzc24-10]]（三年住院医师�
 注意这是**上限不是应付额**——上面还叠着 pxfq-005（解除事由过滤）与 pxfq-006（凭证过滤）。
 
 **pxfq-003 落户服务期**　北京特有，也是本卡与全国口径分叉最大的一条。要点是**上下半句都得说**：
-违约金按约定的数额要不成（534§82 前半句），但公司可另主张实际损失并由裁审酌定（后半句）。
-只说前半句会让用户以为零成本，庭上被酌定十几万时会崩。
-related：[[case-jinghu-fuwuqi-sunshi-107]]（违约金不予支持，酌定损失 15 万元；
-酌定时法院看的是在职年限、落户指标稀缺性、公司办理成本）。
+违约金按约定的数额要不成（534§82 前半句），但公司可另主张实际损失并由裁审酌定（后半句，
+酌定时通常会看在职年限、落户指标稀缺性、公司实际办理成本等因素）。
+只说前半句会让用户以为零成本，庭上被酌定一笔损失赔偿时会崩。
 
 **pxfq-004 空白协议**　这条的补救窗口只有签字当时。**实践中事后主张协议被掉包、
 要求鉴定的几乎不被准许**——所以审查意见给的是当场动作（填齐、骑缝、拍照、取回己方原件），
@@ -309,7 +308,7 @@ related：[[case-shiye-danwei-peixun-weiyuejin-bjzc24-10]]（50 万元每满一�
 （第 74 问未收录于 [[statute-jgf-2024-534-jieda-1]]，逐字取自同一份官方 PDF，
 与 [[sop-nianzhongjiang-guquan-ticheng]] 所载一致。）
 
-## 争议点 / 待核实
+## 争议点
 
 - **pxfq-010 定 strong 而非 must 的理由**：《实施条例》第十七条后半句"双方另有约定的，
   从其约定"给了协议排除续延的空间，未检索到北京法院直接认定"排除续延条款无效"的公开案例。
@@ -321,10 +320,11 @@ related：[[case-shiye-danwei-peixun-weiyuejin-bjzc24-10]]（50 万元每满一�
 - **pxfq-007"服务期畸长"无法定上限**：第二十二条对服务期长度未设上限，
   司解二§12 只在"赔偿损失"场景给了酌定因素，不能直接推出"服务期超过 X 年无效"。
   本条只做谈判建议，**不承诺可撤销或部分无效**。
-- **pxfq-003 的损失酌定区间样本不足**：该案例本身已逐字核实
-  （[[case-jinghu-fuwuqi-sunshi-107]]，酌定 15 万元），但一例不足以形成可报给用户的区间，
+- **pxfq-003 的损失酌定区间未核实**：本卡此前引用的落户服务期酌定案例来源仅为
+  **非官方转载站**转录，无法在官方渠道核到全文，已隔离
+  （`knowledge/quarantine/cases/jinghu-fuwuqi-sunshi-107.md`），本卡不再引用其具体数额。
   所以 pxfq-003 的话术只说"公司可另主张实际损失、由裁审酌定"，**不报数字**。
-  **触发动作**：北京三中院、二中院落户服务期类案积累 3—5 例后，在本卡补一张酌定区间表。
+  **触发动作**：找到官方渠道可查的落户服务期类案后，在本卡补一张酌定区间表。
 - **本卡与 [[review-laodong-hetong]] 的 ldht-006、ldht-023 存在覆盖重叠**：
   劳动合同正文中的服务期条款两卡都会命中。contract-review 消费时按文件类型选卡，
   劳动合同走 ldht，独立服务期协议走 pxfq；两卡同时命中时以本卡的颗粒度为准。

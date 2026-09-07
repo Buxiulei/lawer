@@ -1,0 +1,22 @@
+{
+  "source_id": "fashi-2025-12-jieshi-2",
+  "kind": "司法解释",
+  "name": "最高人民法院关于审理劳动争议案件适用法律问题的解释（二）",
+  "issuer": "最高人民法院",
+  "official_host": "www.court.gov.cn",
+  "url": "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+  "fetched_at": "2026-09-07T00:30:36+08:00",
+  "content_sha256": "adebfb788510a17b75972367fd6ceee055215ab75151f3fdd1ab5ffc70ff87c4",
+  "version_label": "法释〔2025〕12号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/fashi-2025-12-jieshi-2/raw.html",
+    "text": "sources/originals/fashi-2025-12-jieshi-2/text.txt"
+  },
+  "effective_from": "2025-09-01",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.court.gov.cn/zixun/xiangqing/472691.html",
+  "bytes": 25509
+}

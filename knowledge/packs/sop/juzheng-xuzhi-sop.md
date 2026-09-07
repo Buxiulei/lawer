@@ -8,7 +8,9 @@ law_refs: [劳动人事争议仲裁办案规则§13, 劳动人事争议仲裁办
 related: [template-zhengju-cailiao-qingdan, template-zhongcai-shenqingshu, sop-zhengren-yu-zhengju-qingdan, sop-luyin-quzheng, sop-dianzi-shuju-guzheng, sop-shumian-songda-liucun, statute-jgf-2024-534-jieda-1]
 region: 北京
 sources:
-  - 朝阳区仲裁办事指南附件《1.证据交换下载-举证须知.docx》《5.注意事项/3.举证须知.doc》《劳动人事争议仲裁办案规则.docx》（官方原版附件包）
+  - http://www.bjchy.gov.cn/UserFiles/File/2bb0130a4e614ecdbb06bf2b7933ab77.zip
+  - https://www.gov.cn/gongbao/content/2017/content_5232371.htm
+  - http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2008-02/23/content_1462417.htm
   - https://www.court.gov.cn/fabu/xiangqing/212721.html
 confidence: 原文核实
 updated: 2026-08-19

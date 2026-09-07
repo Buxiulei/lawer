@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html>
+<head>
+ <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+     <meta property="og:image" content="http://www.pkuh6.cn/Content/Areas/Common/images/logo/wxShare.jpg" />
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+<meta name="applicable-device" content="pc,mobile" />
+<title>
+科普知识 - 你了解呼吸放松法吗？-北京大学第六医院
+</title>
+<meta name="keywords" content="康复-北京大学第六医院" />
+<meta name="description" content="放松训练与呼吸放松法人不能同时处在紧张和放松两种状态。当人预感到一个压力源存在时，常以交感神经系统兴奋为主，做出战斗或逃跑的反应，表现为呼吸变浅、瞳孔散大、心率加快和肌肉紧张。如果过大的压力源持续存在，将导致机体的防御系统崩溃，产生疾病。放松则是以副交感神经系统兴奋为主的内脏和躯体表现的身心状态；或…" />
+ <link href="/Content/Areas/Common/css/common.css" rel="stylesheet" type="text/css" />
+ <link href="/Content/Areas/Common/css/message.css" rel="stylesheet" type="text/css" />
+ <link href="/Content/Areas/Common/css/article.css" rel="stylesheet" type="text/css" />
+
+ 
+
+ <link href="/Content/Awesome/jquery-ui.css" rel="stylesheet" type="text/css" />
+ <link href="/Content/Awesome/Awesome.css" rel="stylesheet" type="text/css" />
+ <script src="/Scripts/jquery.min.js" type="text/javascript"></script>
+ <script src="/Scripts/Awesome/jquery-ui.min.js" type="text/javascript"></script>
+ <script src="/Scripts/Awesome/jquery.form.js" type="text/javascript"></script>
+ <script src="/Scripts/Awesome/Awesome.js" type="text/javascript"></script>
+ <script src="/Scripts/Common/control.js" type="text/javascript"></script>
+ <script src="/Scripts/jquery.unobtrusive-ajax.js" type="text/javascript"></script>
+ 
+ 
+<link href="/Content/Areas/News/css/KangFuGuangJIao.css" rel="stylesheet" type="text/css" />
+
+ 
+ <script src="/Content/Areas/Common/scripts/change_fontsize.js" type="text/javascript"></script>
+
+</head>
+<body> 
+    <img src="http://www.pkuh6.cn/Content/Areas/Common/images/logo/wxShare.jpg" width="0" height="0" style="display: none" />
+        <script type="text/javascript">
+            var urlStr = window.location.href;
+            $(document).ready(function () {
+                var ua = window.navigator.userAgent.toLowerCase();
+                if (ua.match(/MicroMessenger/i) == 'micromessenger') {
+                    $.ajax({
+                        url: "/Mobile/Common/WxShare",
+                        type: "POST",
+                        datatype: "JSON",
+                        data: { url: encodeURIComponent(urlStr) },
+                        success: function (data) {
+                            if (data.status == 1) {
+                                $.getScript("https://res.wx.qq.com/open/js/jweixin-1.6.0.js", function () {
+                                    var appId = data.appId;
+                                    var timestamp = data.timestamp;
+                                    var nonceStr = data.noncestr;
+                                    var signature = data.signature;
+                                    var title = '科普知识 - 你了解呼吸放松法吗？'; // 分享标题
+                                    var desc = '放松训练与呼吸放松法人不能同时处在紧张和放松两种状态。当人预感到一个压力源存在时，常以交感神经系统兴奋为主，做出战斗或逃跑的反应，表现为呼吸变浅、瞳孔散大、心率加快和肌肉紧张。如果过大的压力源持续存在，将导致机体的防御系统崩溃，产生疾病。放松则是以副交感神经系统兴奋为主的内脏和躯体表现的身心状态；或…'; // 分享描述
+                                    var link = urlStr; // 分享链接，该链接域名或路径必须与当前页面对应的公众号JS安全域名一致
+                                    var imgUrl = 'http://www.pkuh6.cn/Content/Areas/Common/images/logo/wxShare.jpg'; // 分享图标
+                                    wx.config({
+                                        debug: false,
+                                        appId: appId,
+                                        timestamp: timestamp,
+                                        nonceStr: nonceStr,
+                                        signature: signature,
+                                        jsApiList: [
+                                            'checkJsApi',
+                                            'onMenuShareTimeline',
+                                            'onMenuShareAppMessage',
+                                            'onMenuShareQQ',
+                                            'onMenuShareWeibo',
+                                            'hideMenuItems',
+                                            'showMenuItems',
+                                            'hideAllNonBaseMenuItem',
+                                            'showAllNonBaseMenuItem',
+                                            'translateVoice',
+                                            'startRecord',
+                                            'stopRecord',
+                                            'onRecordEnd',
+                                            'playVoice',
+                                            'pauseVoice',
+                                            'stopVoice',
+                                            'uploadVoice',
+                                            'downloadVoice',
+                                            'chooseImage',
+                                            'previewImage',
+                                            'uploadImage',
+                                            'downloadImage',
+                                            'getNetworkType',
+                                            'openLocation',
+                                            'getLocation',
+                                            'hideOptionMenu',
+                                            'showOptionMenu',
+                                            'closeWindow',
+                                            'scanQRCode',
+                                            'chooseWXPay',
+                                            'openProductSpecificView',
+                                            'addCard',
+                                            'chooseCard',
+                                            'openCard',
+                                            'updateAppMessageShareData',
+                                            'updateTimelineShareData'
+                                        ]
+                                    });
+                                    wx.ready(function () {
+                                        //自定义“分享给朋友”及“分享到QQ”按钮的分享内容
+                                        wx.updateAppMessageShareData({
+                                            title: title, // 分享标题
+                                            desc: desc, // 分享描述
+                                            link: link, // 分享链接，该链接域名或路径必须与当前页面对应的公众号JS安全域名一致
+                                            imgUrl:imgUrl, // 分享图标
+                                            success: function () {
+                                            // 设置成功
+                                            }
+                                        });
+                                         //自定义“分享到朋友圈”及“分享到QQ空间”按钮的分享内容
+                                        wx.updateTimelineShareData({
+                                            title: title, // 分享标题
+                                            desc: desc, // 分享描述
+                                            link: link, // 分享链接，该链接域名或路径必须与当前页面对应的公众号JS安全域名一致
+                                            imgUrl:imgUrl, // 分享图标
+                                            success: function () {
+                                            // 设置成功
+                                            }
+                                        });
+                                    });
+                                });
+                            }
+                        },
+                        error: function () {
+                        }
+                    });
+                }
+            });
+
+        </script>
+        <!-- 54Doctor -->
+        <script type="text/javascript">
+        var _paq = _paq || [];
+        _paq.push(["setCookieDomain", "*.pkuh6.cn"]);
+        _paq.push(["setDomains", ["*.pkuh6.cn"]]);
+        _paq.push(['trackPageView']);
+        _paq.push(['enableLinkTracking']);
+        (function () {
+            var u = "https://tongji.54doctor.net/";
+            _paq.push(['setTrackerUrl', u + '54doctor.php']);
+            _paq.push(['setSiteId', 11]);
+            var d = document, g = d.createElement('script'), s = d.getElementsByTagName('script')[0];
+            g.type = 'text/javascript'; g.async = true; g.defer = true; g.src = u + '54doctor.js'; s.parentNode.insertBefore(g, s);
+        })();
+        </script>
+        <noscript><p><img src="https://tongji.54doctor.net/54doctor.php?idsite=11" style="border:0;" alt="" /></p></noscript>
+        <!-- End 54Doctor Code -->
+
+
+
+ <div class="wrap">
+ <!--top start-->
+ 
+<div class="header">
+ <div class="header_content">
+  <div class="header_content_top">
+  <ul class="h_r">
+ <li style="background:none"> <a onClick="var strHref=window.location.href;this.style.behavior='url(#default#homepage)';this.setHomePage('http://www.pkuh6.cn/');" style="CURSOR: hand">设为首页</a></li>
+ <li><a href="/Html/Hospitals/Main/Description.html">联系我们</a></li>
+ <li><a href="javascript:window.external.AddFavorite('http://www.pkuh6.cn/','北京大学第六医院');">加入收藏</a></li>
+  
+  <li class="last">
+  <div class="ss_box">
+<form action="/Hospitals/Search?SiteId=134&amp;locateId=134&amp;isSearchChildren=True" method="post"><input class="searchTxt" id="search" name="search" placeholder="请输入关键字..." type="text" value="" /> <input name="" value="Search" class="searchBtn" type="submit" />  
+</form> </div> 
+ </li>  
+  <div class="clearb"></div>
+  </ul>
+  <ul class="h_l">
+  <li><a href="/">医院首页</a></li>
+  <li style="background:none"><a href="/Html/News/Main/134.html">精神康复广角</a></li>
+  </ul>
+  </div>
+ </div>
+ </div>
+ <!--top end-->
+  <div class="clearb"></div>
+ 
+   
+ <!--top end-->
+ <div class="linkN">
+ <link href="/Content/Areas/Common/css/linkMap.css" rel="stylesheet" type="text/css" />
+
+<div class="linkmap">
+    <span>您的当前位置：<a href="/">首页</a></span>
+            <span><text>></text><a id="5" class="go " href="/Html/News/Main/106.html" target="_self"><span class="navspan">健康科普</span></a></span>
+            <span><text>></text><a id="100" class="go " href="/Html/News/Columns/154/Index.html" target="_self"><span class="navspan">科普知识</span></a></span>
+    
+</div>
+
+ </div>
+ <!---------------------content--------------------------------->
+ <div class="main">
+ 
+
+
+
+<div class="main_content">
+   <div class="mainLeft">
+   		<script src="/Content/Areas/Common/scripts/side_menu.js" type="text/javascript"></script>
+
+ <script type="text/javascript">
+ jQuery(function () {
+ 
+ if ($('#left_1')) {
+ $("#left_p_1").addClass("current");
+ if($("#left_ul_1").length>0)
+					{
+						$("#left_p_1").addClass("show");
+						$("#left_ul_1").show();
+					}
+ }
+ 
+ 
+ if ($('#left_5')) {
+ $("#left_p_5").addClass("current");
+ if($("#left_ul_5").length>0)
+					{
+						$("#left_p_5").addClass("show");
+						$("#left_ul_5").show();
+					}
+ }
+ 
+ 
+ if ($('#left_98')) {
+ $("#left_p_98").addClass("current");
+ if($("#left_ul_98").length>0)
+					{
+						$("#left_p_98").addClass("show");
+						$("#left_ul_98").show();
+					}
+ }
+ 
+ 
+ if ($('#left_100')) {
+ $("#left_p_100").addClass("current");
+ if($("#left_ul_100").length>0)
+					{
+						$("#left_p_100").addClass("show");
+						$("#left_ul_100").show();
+					}
+ }
+ 
+ });
+  </script>
+
+<h1 class="leftNavTitle" title="精神康复广角">精神康复广角</h1>
+<div id="leftNav" class="side_menu_inside">
+        <ul id="left_ul_98" class="lv1_ul">
+            <li class="lv1_li">
+                <p id="left_p_99" class="lv1_p">
+                    <a id="99" class="lv1_tit " href="/Html/News/Columns/155/Index.html" target="_self"><span class="navspan">新闻集锦</span></a>
+                </p>
+
+                
+            </li>
+            <li class="lv1_li">
+                <p id="left_p_100" class="lv1_p">
+                    <a id="100" class="lv1_tit " href="/Html/News/Columns/154/Index.html" target="_self"><span class="navspan">科普知识</span></a>
+                </p>
+
+                
+            </li>
+            <li class="lv1_li">
+                <p id="left_p_101" class="lv1_p">
+                    <a id="101" class="lv1_tit " href="/Html/News/Columns/156/Index.html" target="_self"><span class="navspan">康复活动</span></a>
+                </p>
+
+                
+            </li>
+            <li class="lv1_li">
+                <p id="left_p_102" class="lv1_p">
+                    <a id="102" class="lv1_tit " href="/Html/News/Columns/157/Index.html" target="_self"><span class="navspan">康复故事</span></a>
+                </p>
+
+                
+            </li>
+            <li class="lv1_li">
+                <p id="left_p_103" class="lv1_p">
+                    <a id="103" class="lv1_tit " href="/Html/News/Columns/158/Index.html" target="_self"><span class="navspan">编读往来</span></a>
+                </p>
+
+                
+            </li>
+            <li class="lv1_li">
+                <p id="left_p_176" class="lv1_p">
+                    <a id="176" class="lv1_tit " href="/Html/News/Columns/215/Index.html" target="_self"><span class="navspan">心理加油站</span></a>
+                </p>
+
+                
+            </li>
+            <li class="lv1_li">
+                <p id="left_p_104" class="lv1_p">
+                    <a id="104" class="lv1_tit " href="/Html/News/Columns/159/Index.html" target="_self"><span class="navspan">联系我们</span></a>
+                </p>
+
+                
+            </li>
+            <li class="lv1_li">
+                <p id="left_p_293" class="lv1_p">
+                    <a id="293" class="lv1_tit " href="/Html/News/Columns/248/Index.html" target="_self"><span class="navspan">绿丝带志愿者协会</span></a>
+                </p>
+
+                
+            </li>
+    </ul>
+
+    <div class="clearit">
+    </div>
+</div>
+
+ <div class="ContactUs">
+ <div class="MessTitie"><img src="/Sites/Uploaded/UserUpLoad/20230207/20230207104424.png"></div>
+ <div class="MessCount">
+ <p><img src="/Sites/Uploaded/UserUpLoad/20230207/20230207105038.png" alt="">北京大学第六医院</p>
+ <p><img src="/Sites/Uploaded/UserUpLoad/20230207/20230207105441.png" alt="">海淀院区：北京市海淀区花园北路51号</p>
+ <p><img src="/Sites/Uploaded/UserUpLoad/20230207/20230207105441.png" alt="">昌平院区：北京市昌平区科学园路2号</p>
+ <p><img src="/Sites/Uploaded/UserUpLoad/20230207/20230207105520.png" alt="">
+   <a href="tel:010-62723860">010-62723860&nbsp;</a>
+   <a href="tel:010-82801936"> / 82801936</a>
+ </p>
+ <p><img src="/Sites/Uploaded/UserUpLoad/20230207/20230207105544.png" alt=""><a href="mailto: h6yuanban@126.com"> h6yuanban@126.com</a></p>
+ </div>
+ </div> 
+    
+ <div class="contactUs">
+ <p style="line-height:18px;margin-top:5px">海淀院区：北京市海淀区花园北路51号</p>
+ <p style="line-height:18px;">昌平院区：北京市昌平区科学园路2号</p>
+ <p class="bd">北京大学第六医院 精神疾病康复中心</p>
+ 	<p>Tel:010-82088261</p>
+ <p>Email:lykangfuzhongxin@163.com</p>
+ </div>
+   </div>
+   <div class="main_right2">
+   
+    <div class="article_blue_block">
+ <div class="article_head">
+ <h3>科普知识</h3>					
+ </div>
+ <h1> 你了解呼吸放松法吗？</h1>
+					
+ <div class="sub_tit">
+					
+					 <span>来源：</span>
+ <span>作者：北京工业大学文法学部  严云鹤</span>
+ </div>
+ <div style="display:none">浏览次数：
+
+<span id="ajax_div__GetArticleViewCount_0_4049_0_3456">
+    <script type="text/javascript">
+        GetAjaxContentByUrl('ajax_div__GetArticleViewCount_0_4049_0_3456', '/PartialView/_Plugin/_GetArticleViewCount/4049?isPlus=True');
+    </script>
+</span></div>
+ <div class="article_cont" id="zoom">
+ <p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-size: 14px; font-style: normal; font-weight: normal; margin-top: 0px; margin-bottom: 0px;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">一、放松训练与呼吸放松法</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">人不能同时处在紧张和放松两种状态。当人预感到一个压力源存在时，常以交感神经系统兴奋为主，做出战斗或逃跑的反应，表现为呼吸变浅、瞳孔散大、心率加快和肌肉紧张。如果过大的压力源持续存在，将导致机体的防御系统崩溃，产生疾病。放松则是以副交感神经系统兴奋为主的内脏和躯体表现的身心状态；或是生理、精神和情绪的无紧张状态，与战斗或逃跑的应激反应完全相反。<strong>放松训练</strong>也称松弛疗法，是由行为医学领域发展而来的一种治疗方法，是通过一些固定的程式使人达到身体放松状态，从而达到心理上的松弛。常用的放松训练方法包括渐进性肌肉松弛方法、引导想象、沉思等以及由其演变而来的生物反馈放松训练、漂浮疗法等，深呼吸、音乐、按摩、太极拳、瑜伽等也可作为放松的技巧选择使用。</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><strong><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">呼吸放松法</span></strong><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">是放松训练的一种，呼吸放松法是通过一定的训练，控制自己呼吸的频率和深度，来获得身体和精神上放松的方法。在应激或焦虑情况下，人们常屏住呼吸，而当感到紧张和焦虑时，则趋向于浅和快的呼吸，导致血液中氧气和二氧化碳含量的减少。二氧化碳含量的减少与浅快呼吸进一步增加焦虑的水平。另外脑及血液中二氧化碳含量的减少可引起慌乱、难以集中、理解困难及其他的认知障碍。呼吸放松训练通过深慢的呼吸，并进行屏气，可增加氧的扩散，提高二氧化碳含量，且深吸、深呼的动作引起肩部及腹部肌肉交替的紧张、松弛。</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">呼吸放松法可以帮助体验者放松，从而缓解焦虑、抑郁情绪。呼吸放松训练在焦虑抑郁患者中的应用已经得到广泛认可，呼吸放松训练通过调节自主神经功能，达到放松的目的，可以避免焦虑、抑郁和失眠（田宝等，2006；崔英丹等<a name="_GoBack"></a>，2014；李玉霞，2011）。除此之外，呼吸放松法对高血压、心脏病等疾病的治疗和预后也有一定的积极作用。</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-size: 14px; font-style: normal; font-weight: normal; margin-top: 0px; margin-bottom: 0px;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">二、常见的呼吸放松法</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">呼吸放松法的种类有很多，主要包括<strong>腹式呼吸法</strong>、<strong>缩唇呼吸法</strong>、<strong>对抗阻力呼吸法</strong>、<strong>吸气末停顿呼吸法</strong>和<strong>全身性呼吸体操</strong>等。本文主要介绍腹式呼吸法与缩唇呼吸法。</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">（一）腹式呼吸法</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">1938</span><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">年美国SOLEY等人提出了腹式呼吸法的概念：体验者采取舒适体位，全身放松，闭嘴用鼻深吸气至不能再吸气，稍屏气或不屏气直接用口缓慢呼气。吸气时膈肌收缩下降，腹肌松弛，腹部外凸，保证最大吸气量；呼气时腹肌收缩帮助膈肌松弛，随腹腔内压增加而上抬，腹部内凹，增加呼吸潮气量。根据张力军等（2005）的研究成果，腹式呼吸具有帮助人体放松的作用，这种效果主要通过提高自主神经系统的调节功能而实现，进而达到缓解精神压力和紧张、焦虑等情绪。</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">（二）缩唇呼吸法</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">缩唇呼吸法也称“吹笛状”呼气法，体验者取舒适体位（立位或坐位），放松全身肌肉，平静心情，经鼻吸气，吸气时腹肌放松，尽量使腹部鼓起。每次吸气后稍屏气再行缩唇呼气，经口呼气，呼气时缩成“吹笛状”，同时腹肌用力收缩，腹壁随之下陷，此时肺内气体经口缓缓呼出，呼气与吸气的时间比大约为2:1，每分钟呼吸7-8次左右，每次10-15分钟，每日2-3次。呼气时缩唇程度由体验者自行选择把握，以能轻轻吹动面前30厘米的白纸为宜。要尽量做到深吸气慢呼气，无论是吸气还是呼气都要尽量达到“极限”量，即吸到不能再吸，呼到不能再呼为度。根据倪涵晨等（2017）的研究成果，缩唇呼吸可明显改善中老年人轻、中度慢性阻塞性肺病患者的肺功能，具有很好的临床效果。</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">三、简单的呼吸放松练习</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">在生活中，我们可以学习、运用呼吸放松法来缓解负面情绪，下面介绍一个<strong>简单的呼吸放松法练习</strong>：</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">用一个舒适的姿势半躺在椅子上，一只手放在腹部，另一只手放在胸部，注意先呼气，感觉肺部有足够的空间来做后面的深呼吸，然后用鼻子吸气，保持1秒钟，心里默数：1、2、3，停顿1秒钟，再把气体缓缓地呼出，可以在心中默数：1、2、3、4、5，吸气时可以让空气进入腹部，感觉那只放在腹部的手向上推，而胸部只是在腹部隆起时跟着微微隆起，要使呼气的时间比吸气的时间长。<strong>参考指导语</strong>：深吸气，保持1秒钟，1、2、3，再呼气；1、2、3、4、5，深吸气，保持1秒钟，1、2、3，再呼出；1、2、3、4、5，同时想象所有不快、烦恼、压力都随着每一次的呼气将之慢慢地呼出了，感觉身体越来越放松了，心情越来越平静了。</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">&nbsp;</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">参考文献</span></p><ol class=" list-paddingleft-2" style="list-style-type: decimal;"><li><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-size: 14px; font-style: normal; font-weight: normal; margin-top: 0px; margin-bottom: 0px;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">周晓荣, 刘美丽, 高春燕等. 心理干预中放松训练的研究进展[J]. 护理学杂志, 2003, 18(5).</span></p></li><li><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">田萍,王梅新. 心理干预中放松训练的研究进展[J]. 护理研究(36):3293-3294.</span></p></li><li><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">汤明靖. 呼吸放松训练对生理反应和疲劳的作用[D].苏州大学,2018.</span></p></li><li><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">刘丽. 呼吸放松训练对负性思维的作用[D].苏州大学,2018.</span></p></li><li><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">田宝, 赵志航, 李小宽. 放松训练对不同类型考试焦虑者的作用[J]. 中国临床康复, 2006, 10(26):27-29.</span></p></li><li><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">崔英丹, 郭德纲, 王昭等. 放松训练对舰艇军人焦虑情绪的干预效果[J]. 中国健康心理学杂志, 2014, 22(1):74-76.</span></p></li><li><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">李玉霞. 放松训练对抑郁与抑郁焦虑共病者的影响[J]. 现代预防医学, 2011, 38(14):2767-2770.</span></p></li><li><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">张力军, 杨雪琴, 吕沙里等. 腹式呼吸训练仪对心率及呼吸性窦性心律不齐作用的初步观察[J]. 北京生物医学工程, 2005, 24(1):39-41.</span></p></li><li><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">倪涵晨,陆雪琴.穴位敷贴联合缩唇呼吸对中老年轻、中度COPD患者肺功能的临床疗效观察[J].湖南中医药大学学报,2017,37(12):1369-1372.</span></p></li><li><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">孙燕. 你会呼吸吗?[J]. 科技信息, 2001(8):50-51.</span></p></li><li><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">王意田, 刘慧新. 用放松训练法缓解紧张情绪[J]. 政工导刊, 2015(8):58-58.</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">&nbsp;</span></p><p style="text-align: left; color: rgb(0, 0, 0); line-height: 150%; font-family:;"><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">&nbsp;&nbsp;&nbsp; </span><span style="line-height: 150%; font-family: 宋体; font-size: 16px;">本文由廖金敏编辑校对。</span></p></li></ol><p>&nbsp;</p>
+ </div>			
+ <div class="share_left"><link rel="stylesheet" href="https://www.54doctor.net/Scripts/Share/css/share.min.css"><script src="https://www.54doctor.net/Scripts/Share/js/jquery.share.min.js"></script><div class="social-share" data-sites="weibo,wechat"><span style="font-size: 12px;" > 分享到：</span></div></div>
+ 			<div class="clearb"></div>
+	 <div class="prev_top_ht">
+ <p class="prev_next">
+ 
+ </p>
+ <p class="prev_next1">
+ <a href="/Html/News/Articles/3912.html" title="老年人睡眠障碍">
+ 老年人睡眠障碍
+ </a>
+ </p>
+
+    </div>
+ </div> 
+	
+   </div>
+   <div class="clearb"></div>
+   
+
+</div>
+  
+ </div>
+ <!---------------------content--end------------------------------->
+ <!--foot start-->
+ <div class="clearit">
+ </div>
+ 
+
+ <div class="footer">  
+ <div class="c_f">  
+ <p><span><a href="https://beian.miit.gov.cn">京ICP备05033121 京公网安备110402430018 京卫网审[2013]第0166号 </a></span><span>Copyright ©2009 - 2020 pkuh6.cn 版权所有 地址：北京市海淀区花园北路51号</span></p>
+			<p><span>联系电话：010-82088261  Email：lykangfuzhongxin@163.com   邮编：100191</span><span>技术支持：<a href="http://www.54doctor.net/" target="_blank"><img src="/Content/Areas/News/images/KangFuGuangJiao/54doctor.png" /></a>&nbsp;&nbsp;&nbsp;本网站已被访问8376263次 </span></p>
+ </div>
+   	 </div>  
+
+<script>
+var _hmt = _hmt || [];
+(function() {
+  var hm = document.createElement("script");
+  hm.src = "https://hm.baidu.com/hm.js?0546590c688d87ccc1032d9f3ca27f28";
+  var s = document.getElementsByTagName("script")[0]; 
+  s.parentNode.insertBefore(hm, s);
+})();
+</script>
+  
+ <!--foot end-->
+ </div>
+</body>
+</html>
+ 

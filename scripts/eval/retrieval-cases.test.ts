@@ -15,7 +15,11 @@ const IDS = new Set(INDEX.map((m) => m.id));
 describe('检索评测集 · 地板', () => {
   it('🔒 规模与卡库都不为空（切错文件会让下面每条断言空过）', () => {
     expect(RETRIEVAL_CASES.length).toBeGreaterThanOrEqual(40);
-    expect(IDS.size).toBeGreaterThanOrEqual(200);
+    // 【这个地板 2026-09-07 从 200 降到 100】核实闭卷把 61 张追不到一手源的判例卡
+    // 移进了 knowledge/quarantine/（220 → 159）。地板的用途是"切错文件/读到空文件"的
+    // 自证，不是"卡库有多大"的指标——把它钉在当时的卡数上，只会在每次正当的增删时
+    // 变成噪音，而它挡的那件事（IDS 是空的）用 100 一样挡得住。
+    expect(IDS.size).toBeGreaterThanOrEqual(100);
   });
 
   it('**每个 expect 的卡 id 都必须真实存在**——标错一个，尺子安静地量低', () => {

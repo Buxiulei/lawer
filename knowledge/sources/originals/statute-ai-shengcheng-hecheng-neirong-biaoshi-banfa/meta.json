@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-ai-shengcheng-hecheng-neirong-biaoshi-banfa",
+  "kind": "部门规章",
+  "name": "人工智能生成合成内容标识办法",
+  "issuer": "国家互联网信息办公室、工业和信息化部、公安部、国家广播电视总局",
+  "official_host": "www.cac.gov.cn",
+  "url": "https://www.cac.gov.cn/2025-03/14/c_1743654684782215.htm",
+  "fetched_at": "2026-09-07T00:48:42+08:00",
+  "content_sha256": "3686321b6f2fca2e245e210209dff4af75b5adc3be36d912695d28b5a681f642",
+  "version_label": "国信办通字〔2025〕2号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-ai-shengcheng-hecheng-neirong-biaoshi-banfa/raw.html",
+    "text": "sources/originals/statute-ai-shengcheng-hecheng-neirong-biaoshi-banfa/text.txt"
+  },
+  "effective_from": "2025-09-01",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.cac.gov.cn/2025-03/14/c_1743654684782215.htm",
+  "bytes": 23354
+}

@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-shengchengshi-ai-fuwu-zanxing-banfa",
+  "kind": "部门规章",
+  "name": "生成式人工智能服务管理暂行办法",
+  "issuer": "国家互联网信息办公室、国家发展和改革委员会、教育部、科学技术部、工业和信息化部、公安部、国家广播电视总局",
+  "official_host": "www.cac.gov.cn",
+  "url": "https://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm",
+  "fetched_at": "2026-09-07T00:48:43+08:00",
+  "content_sha256": "7fae988c064dde72c95e96e5727bf9abee4b3a5a1ea817606a9ca1f97ffac54b",
+  "version_label": "国家互联网信息办公室令第15号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-shengchengshi-ai-fuwu-zanxing-banfa/raw.html",
+    "text": "sources/originals/statute-shengchengshi-ai-fuwu-zanxing-banfa/text.txt"
+  },
+  "effective_from": "2023-08-15",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm",
+  "bytes": 29431
+}

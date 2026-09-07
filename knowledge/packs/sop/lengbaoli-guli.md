@@ -10,8 +10,6 @@ region: 北京
 sources:
   - https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html
-  - http://www.bjzgh12351.org/
-  - https://www.bjzgh.org/
 confidence: 原文核实
 updated: 2026-08-19
 ---

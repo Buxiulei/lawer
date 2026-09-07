@@ -1,0 +1,22 @@
+{
+  "source_id": "bcnpo-jingcheng-baoquan-shoufei",
+  "kind": "机构官网",
+  "name": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
+  "issuer": "北京市精诚公证处",
+  "official_host": "www.bcnpo.cn",
+  "url": "http://www.bcnpo.cn/bjjcgzw/web/bzzn/sfbz/8307.html",
+  "fetched_at": "2026-09-07T08:55:30+08:00",
+  "content_sha256": "ba0531e35d6d5d52a74c193e90b40b9e2530e5d815b85d38c80ba2ed9875f75a",
+  "version_label": "2020-09-22 公示",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/bcnpo-jingcheng-baoquan-shoufei/raw.html",
+    "text": "sources/originals/bcnpo-jingcheng-baoquan-shoufei/text.txt"
+  },
+  "justification": "证据保全公证在北京是市场调节价，各公证处自主定价并须在自己官网公示；这份收费标准就是该公证处对自己收费的公示，只作为数据卡里「这一家收多少钱」的样本出处，不代表北京行情、更不作为任何法律规则的依据",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "http://www.bcnpo.cn/bjjcgzw/web/bzzn/sfbz/8307.html",
+  "bytes": 45550
+}

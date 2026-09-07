@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-caishui-2018-164",
+  "kind": "规范性文件",
+  "name": "财政部、税务总局关于个人所得税法修改后有关优惠政策衔接问题的通知（财税〔2018〕164号）",
+  "issuer": "财政部、税务总局",
+  "official_host": "fgk.chinatax.gov.cn",
+  "url": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5202364/content.html",
+  "fetched_at": "2026-09-07T00:48:50+08:00",
+  "content_sha256": "227c8ab762394dff50d2f3e34a0958a6adf658537813a89faee2e14362a958ce",
+  "version_label": "财税〔2018〕164号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-caishui-2018-164/raw.html",
+    "text": "sources/originals/statute-caishui-2018-164/text.txt"
+  },
+  "effective_from": "2019-01-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5202364/content.html",
+  "bytes": 48962
+}

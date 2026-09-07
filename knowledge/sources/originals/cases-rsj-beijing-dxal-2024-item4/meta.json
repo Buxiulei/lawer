@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-rsj-beijing-dxal-2024-item4",
+  "kind": "官方案例",
+  "name": "北京市劳动人事争议仲裁十大典型案例（2024）·案例4·邓某诉某置业公司",
+  "issuer": "北京市人力资源和社会保障局",
+  "official_host": "rsj.beijing.gov.cn",
+  "url": "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241231_3977650.html",
+  "fetched_at": "2026-09-07T08:17:24+08:00",
+  "content_sha256": "3daa48ddfebda64fa283acf7dda33542112ddc51feecbfd0c853de23faa1596c",
+  "version_label": "2024-12-31发布",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-rsj-beijing-dxal-2024-item4/raw.html",
+    "text": "sources/originals/cases-rsj-beijing-dxal-2024-item4/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241231_3977650.html",
+  "bytes": 157363
+}

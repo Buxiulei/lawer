@@ -179,7 +179,13 @@ describe('facts 结构化透传（规范 §2.1：代码只读 facts，禁啃正�
   test('search 命中的卡同样带 facts；无 facts 的卡该字段缺省', () => {
     const hit = search('最低工资', { type: '数据卡' }).find((h) => h.id === 'data-beijing-zuidi-gongzi');
     expect(hit?.facts?.values?.length).toBeGreaterThan(0);
-    expect(get('calc-bingjia-gongzi').facts).toBeUndefined();
+    // 【无 facts 的样本从库里现挑，不写死 id】原来钉的是 calc-bingjia-gongzi——
+    // 2026-09-07 核实时给它补上了《医疗期规定》的逐字条文，它从此有了 facts，
+    // 这条判据便以"期望 undefined"红。它要验的是"没有 facts 的卡不会凭空长出这个字段"，
+    // 具体是哪张卡无关紧要，而写死一个 id 会让每次正当的补录都变成假红。
+    const noFacts = listPacks().find((m) => m.facts === undefined);
+    expect(noFacts, '库里已经没有一张不带 facts 的卡了，这条判据请改钉别的').toBeTruthy();
+    expect(get(noFacts!.id).facts).toBeUndefined();
   });
 
   test('判例卡 case_facts 透传（判例引用消费面，字段取自正文）', () => {

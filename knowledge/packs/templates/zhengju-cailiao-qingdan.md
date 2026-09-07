@@ -8,9 +8,10 @@ law_refs: [劳动争议调解仲裁法§6, 劳动人事争议仲裁办案规则�
 related: [template-zhongcai-shenqingshu, template-qingqiu-shixiang-ku, sop-juzheng-xuzhi-sop, sop-zhengren-yu-zhengju-qingdan, sop-luyin-quzheng, sop-dianzi-shuju-guzheng, sop-shumian-songda-liucun, sop-gongzi-shebao-geshui-beijing, statute-jgf-2024-534-jieda-1]
 region: 北京
 sources:
-  - 朝阳区仲裁办事指南附件《1-1.证据交换下载-证据材料清单.doc》《1-2.证据交换下载-证据材料清单模板.jpg》（官方原版附件包）
+  - http://www.bjchy.gov.cn/UserFiles/File/2bb0130a4e614ecdbb06bf2b7933ab77.zip
+  - http://www.bjchy.gov.cn/affair/ldwq/tjzc/8a24fe9767393e2d01673f3dbdc70a21.html
 confidence: 原文核实
-updated: 2026-08-19
+updated: 2026-09-07
 ---
 
 # 《证据材料清单》（北京市朝阳区官方表）

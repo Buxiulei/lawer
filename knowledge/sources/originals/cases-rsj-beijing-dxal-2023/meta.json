@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-rsj-beijing-dxal-2023",
+  "kind": "官方案例",
+  "name": "2023年北京市仲裁典型案例发布页",
+  "issuer": "北京市人力资源和社会保障局",
+  "official_host": "rsj.beijing.gov.cn",
+  "url": "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202312/t20231229_3518105.html",
+  "fetched_at": "2026-09-07T00:45:53+08:00",
+  "content_sha256": "b8f2416df89a1a4db9565a1b5f006505a7a90c77ddaa3169c4946a5e3a5c7144",
+  "version_label": "",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-rsj-beijing-dxal-2023/raw.html",
+    "text": "sources/originals/cases-rsj-beijing-dxal-2023/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202312/t20231229_3518105.html",
+  "bytes": 202633
+}

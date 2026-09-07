@@ -8,7 +8,7 @@ law_refs: [民事诉讼证据规定§68, 民事诉讼证据规定§69, 民事诉
 related: [sop-luyin-quzheng, sop-shumian-songda-liucun, sop-dianzi-shuju-guzheng, sop-gongzi-shebao-geshui-beijing, statute-jgf-2024-534-jieda-1, statute-minsu-zhengju-guiding]
 region: 北京
 sources:
-  - http://gongbao.court.gov.cn/Details/0c15319f2bdbabb8e398035f775385.html
+  - http://www.npc.gov.cn/npc/c2/c30834/201912/t20191226_304057.html
   - http://gongbao.court.gov.cn/Details/997e66171cf55d219c613ec18dc370.html
   - https://www.gsxt.gov.cn/
 confidence: 原文核实

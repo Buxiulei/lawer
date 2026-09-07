@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-gongshang-baoxian-tiaoli",
+  "kind": "行政法规",
+  "name": "工伤保险条例（国务院令第586号）",
+  "issuer": "国务院",
+  "official_host": "www.gov.cn",
+  "url": "https://www.gov.cn/gongbao/content/2011/content_1778064.htm",
+  "fetched_at": "2026-09-07T00:48:13+08:00",
+  "content_sha256": "cfbbdccea9b126c95b402f95ea6a330843e68016a3b5e051d479c60452bfb788",
+  "version_label": "2010年12月20日国务院令第586号修订",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-gongshang-baoxian-tiaoli/raw.html",
+    "text": "sources/originals/statute-gongshang-baoxian-tiaoli/text.txt"
+  },
+  "effective_from": "2011-01-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.gov.cn/gongbao/content/2011/content_1778064.htm",
+  "bytes": 63873
+}

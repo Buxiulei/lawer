@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-jingrenshe-laofa-2025-7",
+  "kind": "规范性文件",
+  "name": "北京市人力资源和社会保障局等部门关于调整北京市2025年最低工资标准的通知",
+  "issuer": "北京市人力资源和社会保障局",
+  "official_host": "www.beijing.gov.cn",
+  "url": "https://www.beijing.gov.cn/zhengce/zhengcefagui/202507/t20250728_4159830.html",
+  "fetched_at": "2026-09-07T00:46:23+08:00",
+  "content_sha256": "2870a255e740b7916890919ad7f7d9ef71ebd44b319784062c2c489e6cd5fd52",
+  "version_label": "京人社劳发〔2025〕7号；2025年7月24日印发",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-jingrenshe-laofa-2025-7/raw.html",
+    "text": "sources/originals/statute-jingrenshe-laofa-2025-7/text.txt"
+  },
+  "effective_from": "2025-09-01",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.beijing.gov.cn/zhengce/zhengcefagui/202507/t20250728_4159830.html",
+  "bytes": 27363
+}

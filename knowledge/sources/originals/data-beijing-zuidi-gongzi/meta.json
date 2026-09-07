@@ -1,0 +1,22 @@
+{
+  "source_id": "data-beijing-zuidi-gongzi",
+  "kind": "官方数据",
+  "name": "北京市人力资源和社会保障局关于调整北京市最低工资标准的通知",
+  "issuer": "北京市人力资源和社会保障局",
+  "official_host": "rsj.beijing.gov.cn",
+  "url": "https://rsj.beijing.gov.cn/xxgk/2024zcwj/202507/t20250725_4158456.html",
+  "fetched_at": "2026-09-07T00:46:36+08:00",
+  "content_sha256": "ae6a6fed740b8d02c75493516d4bf1fa56cffc01ca8c5069d45e3ae935248d06",
+  "version_label": "京人社劳发〔2025〕7号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/data-beijing-zuidi-gongzi/raw.html",
+    "text": "sources/originals/data-beijing-zuidi-gongzi/text.txt"
+  },
+  "effective_from": "2025-09-01",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://rsj.beijing.gov.cn/xxgk/2024zcwj/202507/t20250725_4158456.html",
+  "bytes": 167535
+}

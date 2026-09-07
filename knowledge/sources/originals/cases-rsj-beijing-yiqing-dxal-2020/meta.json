@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-rsj-beijing-yiqing-dxal-2020",
+  "kind": "官方案例",
+  "name": "北京市涉新冠肺炎疫情劳动争议仲裁十大典型案例",
+  "issuer": "北京市人力资源和社会保障局",
+  "official_host": "rsj.beijing.gov.cn",
+  "url": "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202011/t20201120_2141627.html",
+  "fetched_at": "2026-09-07T08:26:47+08:00",
+  "content_sha256": "bd78779c42faf6ccd20933ad2dba0f2fdb8643c58aad17cc085b7bd9d867dfe8",
+  "version_label": "2020年11月20日发布",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-rsj-beijing-yiqing-dxal-2020/raw.html",
+    "text": "sources/originals/cases-rsj-beijing-yiqing-dxal-2020/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202011/t20201120_2141627.html",
+  "bytes": 201370
+}

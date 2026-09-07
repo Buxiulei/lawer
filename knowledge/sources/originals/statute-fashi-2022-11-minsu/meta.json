@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-fashi-2022-11-minsu",
+  "kind": "司法解释",
+  "name": "最高人民法院关于适用《中华人民共和国民事诉讼法》的解释",
+  "issuer": "最高人民法院",
+  "official_host": "www.court.gov.cn",
+  "url": "https://www.court.gov.cn/zixun/xiangqing/353651.html",
+  "fetched_at": "2026-09-07T00:49:40+08:00",
+  "content_sha256": "01b7015570f033b265b532c4245a97412938f88d6d72e0ab0c4e4f44e8c1aae1",
+  "version_label": "2022年修正（第二次修正），法释〔2022〕11号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-fashi-2022-11-minsu/raw.html",
+    "text": "sources/originals/statute-fashi-2022-11-minsu/text.txt"
+  },
+  "effective_from": "2022-04-10",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.court.gov.cn/zixun/xiangqing/353651.html",
+  "bytes": 209659
+}

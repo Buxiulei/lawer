@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-gerenxinxi-baohufa",
+  "kind": "法律",
+  "name": "中华人民共和国个人信息保护法",
+  "issuer": "全国人大常委会",
+  "official_host": "www.npc.gov.cn",
+  "url": "https://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html",
+  "fetched_at": "2026-09-07T00:46:45+08:00",
+  "content_sha256": "23eeb747cb57b852929e30906c51b5816095dc43977868543a4bce5b3540b429",
+  "version_label": "2021年8月20日通过",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-gerenxinxi-baohufa/raw.html",
+    "text": "sources/originals/statute-gerenxinxi-baohufa/text.txt"
+  },
+  "effective_from": "2021-11-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "http-fallback",
+  "fetch_url": "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html",
+  "bytes": 42748
+}

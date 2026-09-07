@@ -5,13 +5,15 @@
 // 【判据夹具从 index.json 现读，不抄第二份清单】写死一份「库里有哪几条」的清单，
 // 在有人改卡的那天会变成**空跑**：断言照常绿，验的却是一条已经不存在的东西。
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import type { Database } from 'better-sqlite3';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { Identity } from '@/lib/auth/identity';
 import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
+import { __resetForTest } from '@/lib/knowledge';
 
 import { citationCheck } from '../families/knowledge';
 
@@ -84,10 +86,18 @@ const ARTICLE_CN = '第四十六条';
 /** 同名前缀的另一部法（短名吞长名的反例来源） */
 const LAW_SIBLING = '中华人民共和国劳动合同法实施条例';
 
+/**
+ * 库里这一条的逐字原文。**取最长的那一份**，与产线的 `findQuote` 同规则。
+ *
+ * 【为什么不是 `.find()`】条号归一会剥掉「第N项/第N款」，于是"只录了某一项的 SOP 卡"
+ * 与"录了整条的法条卡"落在同一个键上。判据用第一个、产线用另一个规则时，
+ * 这条判据会以「期望（六）…、实际（五）…」的形式红，而两边其实都没错——
+ * 错的是两把尺不共用刻度。
+ */
 const quoteOf = (law: string, article: string) =>
-  INDEX.flatMap((e) => e.facts?.statute_quotes ?? []).find(
-    (q) => q.law === law && q.article === article,
-  );
+  INDEX.flatMap((e) => e.facts?.statute_quotes ?? [])
+    .filter((q) => q.law === law && q.article === article)
+    .sort((a, b) => b.text.length - a.text.length)[0];
 
 describe('判据夹具有效性（夹具失效会让下面几条变成空跑）', () => {
   it('库里确实以法名全称 + 汉字条号收录着这一条的逐字原文', () => {
@@ -150,17 +160,26 @@ describe('citation_check · 法条', () => {
   });
 
   it('短名不吞长名：拿短法名去要长法名独有的条号 ⇒ found:false（张冠李戴比对不上键危险）', () => {
-    // 「第二十五条」只有实施条例有，母法没有
-    const onlySibling = quoteOf(LAW_SIBLING, '第二十五条');
-    expect(onlySibling, '夹具失效：实施条例第二十五条不在库里').toBeTruthy();
-    expect(quoteOf(LAW_FULL, '第二十五条')).toBeUndefined();
+    // 【条号从库里现挑，不写死】原来这里写死的是「第二十五条」——那时它只有实施条例有；
+    // 2026-09-07 有张卡给母法也录了第二十五条，这条判据就以"夹具失效"的形式红了。
+    // 判据要的从来不是那个具体条号，而是"存在一个只属于长法名的条号"。
+    const fullArticles = new Set(
+      INDEX.flatMap((e) => e.facts?.statute_quotes ?? [])
+        .filter((q) => q.law === LAW_FULL)
+        .map((q) => q.article),
+    );
+    const onlySibling = INDEX.flatMap((e) => e.facts?.statute_quotes ?? []).find(
+      (q) => q.law === LAW_SIBLING && !fullArticles.has(q.article),
+    );
+    expect(onlySibling, '夹具失效：库里没有"只有实施条例有、母法没有"的条号了').toBeTruthy();
+    const article = onlySibling!.article;
 
-    const out = check({ citations: [{ law: LAW_SHORT, article: '第二十五条' }] });
-    expect(out.citations[0].found).toBe(false);
+    const out = check({ citations: [{ law: LAW_SHORT, article }] });
+    expect(out.citations[0].found, `${LAW_SHORT}${article} 不该命中`).toBe(false);
     // 反向：写全实施条例的名字就能命中
-    const ok = check({ citations: [{ law: '劳动合同法实施条例', article: '第二十五条' }] });
+    const ok = check({ citations: [{ law: '劳动合同法实施条例', article }] });
     expect(ok.citations[0].found).toBe(true);
-    expect(ok.citations[0].exact_text).toBe(onlySibling!.text);
+    expect(ok.citations[0].exact_text).toBe(quoteOf(LAW_SIBLING, article)!.text);
   });
 
   it('law 或 article 缺一 ⇒ 该条按未核验处理，不要引用（不静默当成命中）', () => {
@@ -181,13 +200,57 @@ const VERBATIM_CASE = INDEX.find(
     e.facts.case_facts.court &&
     e.facts.case_facts.case_no,
 );
-/** 二手转述样本：按方法卡第一步只能标「仅内部参考」 */
-const HEARSAY_CASE = INDEX.find((e) => e.type === '判例卡' && e.confidence === '二手转述');
+/**
+ * 二手转述样本：按方法卡第一步只能标「仅内部参考」。
+ *
+ * 【为什么这一张是造出来的，而不是从库里找的】主理人 2026-09-07 裁决**禁止**知识库里
+ * 存在「二手转述」「待核实」的卡（追不到一手源的整张移进 knowledge/quarantine/），
+ * 于是"库里找一张二手转述的判例卡"从 2026-09-07 起恒为 undefined——原来那条
+ * `INDEX.find(...)` 会让整组判据带着 `HEARSAY_CASE!` 直接 TypeError，
+ * 而它测的那段代码（confidence≠原文核实 ⇒ 第一步不过）一行没变、仍在产线上跑。
+ *
+ * 【怎么造】复制一份知识库到临时目录，只把 index.json 里某张判例卡的 confidence 改成
+ * 「二手转述」（卡文件不动——加载器只比对 id，不比对 confidence），
+ * 再用 LAWER_KNOWLEDGE_DIR 指过去。这与 index-guard.test.ts 造坏索引是同一套手法。
+ */
+let hearsayDir: string | null = null;
+let HEARSAY_ID = '';
 
 describe('citation_check · 判例四步法', () => {
-  it('夹具有效：库里确有「原文核实带裁判理由」与「二手转述」两类判例卡', () => {
+  beforeAll(() => {
+    const donor = INDEX.find((e) => e.type === '判例卡' && e.id !== VERBATIM_CASE?.id);
+    HEARSAY_ID = donor!.id;
+    hearsayDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lawer-kb-hearsay-'));
+    for (const name of ['index.json', 'aliases.json', 'packs']) {
+      const src = path.join(KNOWLEDGE_DIR, name);
+      if (fs.existsSync(src)) fs.cpSync(src, path.join(hearsayDir, name), { recursive: true });
+    }
+    const idxPath = path.join(hearsayDir, 'index.json');
+    const idx = JSON.parse(fs.readFileSync(idxPath, 'utf8')) as { id: string; confidence: string }[];
+    idx.find((e) => e.id === HEARSAY_ID)!.confidence = '二手转述';
+    fs.writeFileSync(idxPath, JSON.stringify(idx));
+    process.env.LAWER_KNOWLEDGE_DIR = hearsayDir;
+    __resetForTest();
+  });
+
+  afterAll(() => {
+    delete process.env.LAWER_KNOWLEDGE_DIR;
+    __resetForTest();
+    if (hearsayDir) fs.rmSync(hearsayDir, { recursive: true, force: true });
+    hearsayDir = null;
+  });
+
+  it('夹具有效：有「原文核实带裁判理由」的真卡，也造出了一张「二手转述」的判例卡', () => {
     expect(VERBATIM_CASE, '没有原文核实且带 court/case_no/reasoning 的判例卡').toBeTruthy();
-    expect(HEARSAY_CASE, '没有二手转述的判例卡').toBeTruthy();
+    expect(HEARSAY_ID, '没能从库里挑一张判例卡来改造').toBeTruthy();
+    // 【自证夹具真的被改坏了】不验这一条的话，下面那组"第一步不过"可能是**任何**原因不过
+    const mutated = JSON.parse(fs.readFileSync(path.join(hearsayDir!, 'index.json'), 'utf8')) as {
+      id: string;
+      confidence: string;
+    }[];
+    expect(mutated.find((e) => e.id === HEARSAY_ID)!.confidence).toBe('二手转述');
+    // 而真实库里一张都没有——这正是这张卡必须造出来的原因
+    expect(INDEX.filter((e) => e.confidence === '二手转述' || e.confidence === '待核实')).toEqual([]);
   });
 
   it('回 court / case_no / holding 摘要 + 四步各一条（变异：漏掉任一步 → 红）', () => {
@@ -214,7 +277,7 @@ describe('citation_check · 判例四步法', () => {
   });
 
   it('二手转述的卡：第一步不过 ⇒ 第四步结论「不可用」（变异：第一步无条件 pass → 红）', () => {
-    const out = check({ precedent_ids: [HEARSAY_CASE!.id] });
+    const out = check({ precedent_ids: [HEARSAY_ID] });
     const steps = out.precedents[0].checklist!;
     expect(steps[0].status).toBe('fail');
     expect(steps[0].detail).toContain('内部参考');

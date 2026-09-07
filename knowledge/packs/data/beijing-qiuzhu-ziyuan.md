@@ -8,24 +8,26 @@ related: [statute-jgf-2024-534-jieda-1, calc-tuoqian-jiafu-peichang]
 region: 北京
 sources:
   - https://www.beijing.gov.cn/fuwu/bmfw/jhsyfwzdzx/2025gjjtr/xgxx/202505/t20250508_4084704.html
-  - https://www.crisis.org.cn/
+  - https://www.crisis.org.cn/lists/1.html
   - http://www.bjchy.gov.cn/dynamic/notice/8a24fe976758fe19016759868dce005c.html
   - http://www.bjchy.gov.cn/slh/gsgg/4028805a8a64745f018a6d526a0e04ee.html
   - https://sfj.beijing.gov.cn/sfj/sfdt/ywdt82/flfw93/743831535/index.html
+  - http://www.bjchy.gov.cn/affair/ldwq/ldjc/8a24fe9767393e2d01673f37e8cc0a0b.html
+  - https://www.beijing.gov.cn/ywdt/gzdt/202504/t20250430_4078622.html
 facts:
   hotlines:
     - {name: 全国统一心理援助热线（北京安定医院承接）, phone: "12356", category: crisis, status: usable, hours: 24小时, dial_hint: 全国统一心理援助热线，手机座机均可直拨, agent_note: 首选统一入口，偏心理咨询}
-    - {name: 北京心理援助热线·座机线（回龙观医院）, phone: "800-810-1117", category: crisis, status: usable, hours: 7×24, dial_hint: 用座机拨打（免费）；手机拨打不通，请改拨 010-82951332, agent_note: 必须与手机线成对给出；7×24 为官网口径待人工核验}
+    - {name: 北京心理援助热线·座机线（回龙观医院）, phone: "800-810-1117", category: crisis, status: usable, hours: 7×24, dial_hint: 用座机拨打（免费）；手机拨打不通，请改拨 010-82951332, agent_note: 必须与手机线成对给出；7×24 已核对北京心理危机研究与干预中心官网（crisis.org.cn）原文"365天7*24小时"}
     - {name: 北京心理援助热线·手机线（回龙观医院）, phone: "010-82951332", category: crisis, status: usable, hours: 7×24, dial_hint: 用手机拨打此号；座机可改拨免费线 800-810-1117, agent_note: 偏心理危机干预（自杀干预）；必须与座机线成对给出}
     - {name: 朝阳区公共法律服务中心（法律援助受理）, phone: "010-85963226", category: legal, status: usable, hours: 工作日, dial_hint: 朝阳区六里屯西里7号楼（14号线朝阳公园站D口），工作日拨打或到场, agent_note: 朝阳法援受理唯一正确号；法援需经济困难审查，勿说免审}
     - {name: 公共法律服务热线, phone: "12348", category: legal, status: usable, dial_hint: 公共法律服务热线，可咨询法律援助申请条件, agent_note: 经济困难标准数额不写死，引导来电咨询}
-    - {name: 北京市职工服务（维权）热线, phone: "12351", category: union, status: usable, hours: 365天7×24, dial_hint: 北京市职工服务热线，咨询、帮扶、投诉、法律援助均可, agent_note: 市总工会法律服务中心地址电话存疑，只给本热线由其转接}
+    - {name: 北京市职工服务（维权）热线, phone: "12351", category: union, status: usable, dial_hint: 北京市职工服务热线，咨询、帮扶、投诉、法律援助均可, agent_note: 号码经首都之窗官方报道（2025-04-30《市总工会为职工推出100项福利…通过12351App等平台发布》）确认为市总工会在用号码；具体服务时间未查到.gov.cn原文逐字确认，不写死，agent 只说"可拨打咨询"。市总工会法律服务中心地址电话存疑，只给本热线由其转接}
     - {name: 朝阳区劳动保障监察投诉, phone: "010-53918580", category: inspection, status: usable, dial_hint: 朝阳区劳动监察投诉电话，欠薪问题直接打（不限农民工）, agent_note: 加付赔偿金行政前置的入口（534号第6问）}
     - {name: 人社政策咨询热线, phone: "12333", category: inspection, status: usable, dial_hint: 人社政策咨询热线（问政策用）, agent_note: 不是投诉专线——投诉一律给监察窗口，绝不把 12333 当投诉线给用户}
     - {name: 北京市正阳公证处（曾被误传为朝阳法援号）, phone: "010-85961236", category: legal, status: forbidden, agent_note: 实为北京市正阳公证处，不是法援线——绝不输出给用户}
     - {name: 官方无踪号码（曾流传为朝阳法援号）, phone: "010-65060953", category: legal, status: forbidden, agent_note: 官方页面查无此号——绝不输出给用户}
-confidence: 待核实
-updated: 2026-08-19
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 北京免费求助资源卡
@@ -38,7 +40,7 @@ updated: 2026-08-19
 | 热线 | 号码 | 定位 | 服务时间 |
 |---|---|---|---|
 | 全国统一心理援助热线（北京由安定医院承接） | **12356** | 首选统一入口，偏心理咨询 | 24 小时（首都之窗确认） |
-| 北京心理援助热线（回龙观医院·北京心理危机研究与干预中心） | 座机 **800-810-1117** / 手机 **010-82951332** | 偏心理危机干预（自杀干预），2002 年运行至今 | 官网载 7×24 人工接听【待核实：上线前人工电话核验，已列 OPS 清单】 |
+| 北京心理援助热线（回龙观医院·北京心理危机研究与干预中心） | 座机 **800-810-1117** / 手机 **010-82951332** | 偏心理危机干预（自杀干预），2002 年运行至今 | 365 天 7×24 人工接听（crisis.org.cn 官网原文核实） |
 
 给用户时**两条线都给**，并注明座机/手机之分——只给 010-82951332 会让座机用户错过免费线（800 号码手机打不通）。
 
@@ -54,8 +56,10 @@ updated: 2026-08-19
 
 ## 工会
 
-- **12351** 北京市职工服务（维权）热线：365 天 7×24；受理咨询/帮扶/信访投诉/法律援助等；
-  一般问题 ≤2 个工作日办理。2023-09 起接入全国工会统一号码体系。
+- **12351** 北京市职工服务（维权）热线：受理咨询/帮扶/信访投诉/法律援助等（首都之窗
+  2025-04-30《市总工会为职工推出100项福利…通过12351App等平台发布》确认市总工会在用此号）。
+  具体服务时间（是否 365 天 7×24）与办理时限未查到 .gov.cn 原文逐字确认，agent 不得报出
+  具体服务时间，只说"可拨打 12351 咨询"。
 - 市总工会法律服务中心的门牌地址与直线电话**不列**（来源存疑）——引导拨 12351 或访问
   www.bjzgh12351.org 查询。会员/非会员法援条件细则同样引导 12351 咨询。
 

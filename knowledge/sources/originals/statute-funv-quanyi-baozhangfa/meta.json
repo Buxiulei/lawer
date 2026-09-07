@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-funv-quanyi-baozhangfa",
+  "kind": "法律",
+  "name": "中华人民共和国妇女权益保障法",
+  "issuer": "全国人大常委会",
+  "official_host": "www.gov.cn",
+  "url": "https://www.gov.cn/xinwen/2022-10/30/content_5722636.htm",
+  "fetched_at": "2026-09-07T00:47:51+08:00",
+  "content_sha256": "0e4dc9adb4401b499a9d843b39f038a7b30da9f71a46ebd591c3257e952bcdfd",
+  "version_label": "1992年4月3日通过，2005年、2018年两次修正，2022年10月30日修订",
+  "status": "已修正",
+  "files": {
+    "raw": "sources/originals/statute-funv-quanyi-baozhangfa/raw.html",
+    "text": "sources/originals/statute-funv-quanyi-baozhangfa/text.txt"
+  },
+  "effective_from": "2023-01-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.gov.cn/xinwen/2022-10/30/content_5722636.htm",
+  "bytes": 62870
+}

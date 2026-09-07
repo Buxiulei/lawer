@@ -1,0 +1,21 @@
+{
+  "source_id": "bjchy-banli-cailiao-baofuzhuang",
+  "kind": "规范性文件",
+  "name": "北京市朝阳区劳动人事争议仲裁委员会办理材料立案下载使用材料附件包",
+  "issuer": "北京市朝阳区劳动人事争议仲裁委员会",
+  "official_host": "www.bjchy.gov.cn",
+  "url": "http://www.bjchy.gov.cn/UserFiles/File/2bb0130a4e614ecdbb06bf2b7933ab77.zip",
+  "fetched_at": "2026-09-07T01:20:35+08:00",
+  "content_sha256": "f8e2c4ebcbd02aaed92c521b80532eedf951309f5c986f2ae8c52bc9b8fd4d4c",
+  "version_label": "",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/bjchy-banli-cailiao-baofuzhuang/raw.bin",
+    "text": "sources/originals/bjchy-banli-cailiao-baofuzhuang/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "application/zip",
+  "fetch_method": "https",
+  "fetch_url": "http://www.bjchy.gov.cn/UserFiles/File/2bb0130a4e614ecdbb06bf2b7933ab77.zip",
+  "bytes": 5893182
+}

@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-minfadian",
+  "kind": "法律",
+  "name": "中华人民共和国民法典",
+  "issuer": "全国人民代表大会",
+  "official_host": "www.court.gov.cn",
+  "url": "https://www.court.gov.cn/zixun/xiangqing/233181.html",
+  "fetched_at": "2026-09-07T00:51:13+08:00",
+  "content_sha256": "16fb30a132114600f32059367dae0d6dd274519aa154126eae0ef9600cf4074e",
+  "version_label": "2020年5月28日第十三届全国人民代表大会第三次会议通过（最高人民法院官网转载全文），未再修正，现行有效",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-minfadian/raw.html",
+    "text": "sources/originals/statute-minfadian/text.txt"
+  },
+  "effective_from": "2021-01-01",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.court.gov.cn/zixun/xiangqing/233181.html",
+  "bytes": 375644
+}

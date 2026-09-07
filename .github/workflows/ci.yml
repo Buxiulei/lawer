@@ -69,6 +69,40 @@ jobs:
       - run: npx vitest run
         working-directory: app
 
+  knowledge:
+    name: knowledge · 扎根守卫 pytest
+    runs-on: ubuntu-latest
+    # 【为什么单起一个 job 而不是塞进 sidecar】两边的依赖面完全不同：
+    # sidecar 那个要装 reportlab / 中文字体 / fastapi，这几条判据只要 pyyaml 加两个抽取器包。
+    # 合并的形态是：sidecar 的依赖装挂了，扎根守卫也跟着不跑——
+    # 而"没跑"和"跑绿了"在检查列表里长得一模一样（本文件抬头记的就是这个坑）。
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      # olefile / xlrd 是 .doc / .xls 抽取器的依赖（knowledge/README.md §7.6）。
+      # 缺了它们 audit-sources.py 不会"少审一条"，而是**判红**——所以这一行漏了会当场红，
+      # 不会变成一份少审两条的全绿报告。故意不装它们跑一遍，就能看见那个红。
+      - run: pip install pyyaml pytest olefile xlrd
+      # 全程离线：三套判据都在临时目录里造自己的知识库，download() 被换成假货
+      - run: python -m pytest scripts/tests -q
+      # 现库本身也要过：pytest 那条跑的是临时副本，下面这几条跑的是**仓库里躺着的这一份**。
+      # ① 登记簿同源审计：每条登记的 raw/text/元数据是不是同一份文件（2026-09-07 新增，
+      #    起因是 statute-gerensuodeshuifa：raw 是 flk 的 552 字节 SPA 空壳、text 是从
+      #    chinatax 另抓的正文，而 verify-quotes 只读 text，于是全链路照常全绿）；
+      # ② 生成出来的 index.json 必须与提交进仓库的那份逐字节相同（否则就是有人手改过索引、
+      #    或改了卡没重跑生成器——那份索引会静默地与卡片分叉）；
+      # ③ 全库引文（法条 + 判例）与官方原件逐条对得上。全部不联网（原件已存档在 knowledge/sources/）。
+      - run: python3 scripts/audit-sources.py
+      # 【这里曾经是 --no-strict】守卫 (f)（判例卡必须有核得过的 case_quotes）落地当天，
+      # 42 张存量判例卡还没补引文 ⇒ 现库在 strict 下必红在 (f)，那时这一步降级跑并记账。
+      # 2026-09-07 收口把 case_quotes 补齐，八道守卫全绿，降级去掉。
+      # 判据侧同步换向：test_gen_guards.py::test_real_library_is_green_under_strict。
+      - run: python3 scripts/gen-knowledge-index.py
+      - run: git diff --exit-code knowledge/index.json
+      - run: python3 scripts/verify-quotes.py
+
   sidecar:
     name: sidecar · pytest
     runs-on: ubuntu-latest

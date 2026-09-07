@@ -1,0 +1,22 @@
+{
+  "source_id": "pkuh6-huxi-fangsong",
+  "kind": "机构官网",
+  "name": "你了解呼吸放松法吗？",
+  "issuer": "北京大学第六医院",
+  "official_host": "www.pkuh6.cn",
+  "url": "https://www.pkuh6.cn/Html/News/Articles/4049.html",
+  "fetched_at": "2026-09-07T01:43:18+08:00",
+  "content_sha256": "f4183b2a220edccb0e4f46fadaef540f156ab0a8cf08122ce4da411b57a971ee",
+  "version_label": "",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/pkuh6-huxi-fangsong/raw.html",
+    "text": "sources/originals/pkuh6-huxi-fangsong/text.txt"
+  },
+  "justification": "北京大学第六医院在自己官网发布的科普文，讲的是该院自己给出的呼吸放松法步骤；只作背景参考，本库不拿它断言任何医学结论或法律规则",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.pkuh6.cn/Html/News/Articles/4049.html",
+  "bytes": 30469
+}

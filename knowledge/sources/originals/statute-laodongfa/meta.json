@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-laodongfa",
+  "kind": "法律",
+  "name": "中华人民共和国劳动法",
+  "issuer": "全国人大常委会",
+  "official_host": "www.npc.gov.cn",
+  "url": "http://www.npc.gov.cn/zgrdw/npc/xinwen/2019-01/07/content_2070261.htm",
+  "fetched_at": "2026-09-07T00:51:08+08:00",
+  "content_sha256": "adfddf8bb6b689b0b402c5fed918ea9cb14877f12662aaea1fc85dc193c3be75",
+  "version_label": "1994年7月5日第八届全国人大常委会第八次会议通过；根据2009年8月27日第十一届全国人大常委会第十次会议《关于修改部分法律的决定》第一次修正；根据2018年12月29日第十三届全国人大常委会第七次会议《关于修改〈中华人民共和国劳动法〉等七部法律的决定》第二次修正，该决定自公布之日起施行",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-laodongfa/raw.html",
+    "text": "sources/originals/statute-laodongfa/text.txt"
+  },
+  "effective_from": "2018-12-29",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "http://www.npc.gov.cn/zgrdw/npc/xinwen/2019-01/07/content_2070261.htm",
+  "bytes": 36872
+}

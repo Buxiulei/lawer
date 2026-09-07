@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-bj3zy-yinxing-jiaban-2024-shidazhanjian",
+  "kind": "官方案例",
+  "name": "揭晓！北京三中院隐形加班劳动争议案入选新时代推动法治进程2023年度十大案件",
+  "issuer": "北京市第三中级人民法院",
+  "official_host": "bj3zy.bjcourt.gov.cn",
+  "url": "https://bj3zy.bjcourt.gov.cn/article/detail/2024/01/id/7783787.shtml",
+  "fetched_at": "2026-09-07T08:40:37+08:00",
+  "content_sha256": "724d4400e8ce29dcdc9979a0d8715fef9a2957d52c81393ab8668a1f30df5cfb",
+  "version_label": "2024-01-25发布",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-bj3zy-yinxing-jiaban-2024-shidazhanjian/raw.html",
+    "text": "sources/originals/cases-bj3zy-yinxing-jiaban-2024-shidazhanjian/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://bj3zy.bjcourt.gov.cn/article/detail/2024/01/id/7783787.shtml",
+  "bytes": 32390
+}

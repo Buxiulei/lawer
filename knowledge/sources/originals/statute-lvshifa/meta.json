@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-lvshifa",
+  "kind": "法律",
+  "name": "中华人民共和国律师法",
+  "issuer": "全国人大常委会",
+  "official_host": "www.npc.gov.cn",
+  "url": "https://www.npc.gov.cn/zgrdw/npc/xinwen/2017-09/12/content_2028697.htm",
+  "fetched_at": "2026-09-07T00:46:41+08:00",
+  "content_sha256": "509106f784e01d2bd0cb57bcaf9c9f9924d63b27a16700c6b2e51b7d3132b468",
+  "version_label": "2017年9月1日第三次修正",
+  "status": "已修正",
+  "files": {
+    "raw": "sources/originals/statute-lvshifa/raw.html",
+    "text": "sources/originals/statute-lvshifa/text.txt"
+  },
+  "effective_from": "2008-06-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "http-fallback",
+  "fetch_url": "http://www.npc.gov.cn/zgrdw/npc/xinwen/2017-09/12/content_2028697.htm",
+  "bytes": 51561
+}

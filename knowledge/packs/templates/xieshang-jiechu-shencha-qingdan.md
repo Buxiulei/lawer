@@ -4,16 +4,17 @@ type: 文书模板
 title: 《协商解除协议》逐条审查清单（签字前逐项打勾，20 条）
 keywords: [协商解除, 解除协议, 审查清单, 一揽子结清, 陷阱条款, 竞业限制, 离职证明, 签字前]
 applies_to: [协商解除, 逼迫离职, 离职证明, 竞业限制, 证据固定]
-law_refs: [劳动合同法§25, 劳动合同法§26, 劳动合同法§46, 劳动合同法§47, 劳动合同法§50, 劳动合同法实施条例§24, 京高法发〔2024〕534号§55, 京高法发〔2024〕534号§68, 京高法发〔2024〕534号§70, 京高法发〔2024〕534号§73, 北京市工资支付规定§12, 法释〔2025〕12号§13, 法释〔2025〕12号§14, 法释〔2025〕12号§15]
-related: [statute-jgf-2024-534-jieda-1, statute-fashi-2025-12-jieshi-2, statute-beijing-gongzi-zhifu-guiding, case-xianjing-tiaokuan-bjzc25-3, case-lizhi-zhengming-pingjia-neirong-bjzc23-9, case-xieyi-yilanzi-fangqi-16272, case-xianshi-gongping-chexiao-49641, calc-jingji-buchang-n, statute-lhtf-38-beipo-jiechu, script-hongxian-qingdan]
+law_refs: [劳动合同法§25, 劳动合同法§26, 劳动合同法§46, 劳动合同法§47, 劳动合同法§50, 劳动合同法实施条例§24, 京高法发〔2024〕534号§55, 京高法发〔2024〕534号§68, 京高法发〔2024〕534号§69, 京高法发〔2024〕534号§70, 京高法发〔2024〕534号§73, 北京市工资支付规定§12, 法释〔2025〕12号§13, 法释〔2025〕12号§14, 法释〔2025〕12号§15, 财税〔2018〕164号五]
+related: [statute-jgf-2024-534-jieda-1, statute-fashi-2025-12-jieshi-2, statute-beijing-gongzi-zhifu-guiding, case-xianjing-tiaokuan-bjzc25-3, case-lizhi-zhengming-pingjia-neirong-bjzc23-9, case-xieyi-yilanzi-fangqi-16272, case-xianshi-gongping-chexiao-49641, calc-jingji-buchang-n, calc-buchangjin-geshui, statute-lhtf-38-beipo-jiechu, script-hongxian-qingdan]
 region: 北京
 sources:
   - https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf
   - https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=
   - https://www.court.gov.cn/zixun/xiangqing/472691.html
   - https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf
-confidence: 待核实
-updated: 2026-08-19
+  - https://rsj.beijing.gov.cn/xxgk/tzgg/202404/t20240430_3648905.html
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 《协商解除协议》逐条审查清单
@@ -54,10 +55,10 @@ updated: 2026-08-19
 | 12 | 竞业限制 | 若不需要，写明"**双方确认不适用竞业限制条款，公司放弃要求乙方履行竞业限制义务**"；若适用，必须写补偿标准与按月支付时间 | 沉默（沉默 = 竞业协议仍有效，你却拿不到补偿） | 《劳动争议司法解释（二）》第 13—15 条（第 13 条：未知悉商业秘密的可请求确认条款不生效、超合理比例部分无效；第 15 条：违反有效约定须返还补偿并付违约金。原文见 [[statute-fashi-2025-12-jieshi-2]]） |
 | 13 | 保密/不诋毁 | 可接受，但应**双向对等**（公司同样不得诋毁劳动者） | 单方约束劳动者且设高额违约金 | 《劳动合同法》第 26 条第 1 款第 2 项 |
 | 14 | "一揽子结清"条款 | 只有在**款项已实际到账**或**同日足额支付**的前提下才签 | "签署本协议后，双方再无任何劳动争议"（而钱还没给） | 《解答（一）》第 68 条（履行完毕后一般不予推翻） |
-| 15 | 放弃仲裁/诉权 | 不接受该表述；如公司坚持，改为"就本协议已明确处理的事项不再另行主张" | "乙方放弃就劳动关系相关事宜申请仲裁或提起诉讼的权利" | 《劳动合同法》第 26 条第 1 款第 2 项；2024 年北京典型案例【待核实】 |
+| 15 | 放弃仲裁/诉权 | 不接受该表述；如公司坚持，改为"就本协议已明确处理的事项不再另行主张" | "乙方放弃就劳动关系相关事宜申请仲裁或提起诉讼的权利" | 《劳动合同法》第 26 条第 1 款第 2 项（免除自己的法定责任、排除劳动者权利的条款无效） |
 | 16 | 违约金/赔偿责任 | 不接受给劳动者单方设定的高额违约金（法定只有**服务期**与**竞业限制**两种可约定违约金） | "乙方违反本协议任一条款须支付 10 万元违约金" | 《劳动合同法》第 25 条 |
 | 17 | 交接安排 | 明确交接内容、期限、接收人，并约定"交接完成以《工作交接清单》双方签字为准" | "乙方须完成全部交接，否则公司有权不予支付补偿" | 《劳动合同法》第 50 条；《解答（一）》第 70 条 |
-| 18 | 税费 | 明确经济补偿的个税处理由谁承担；经济补偿在当地上年职工平均工资 3 倍以内的部分免征个人所得税 | 不提，事后被扣税导致到手减少 | **【待核实】**（税收政策具体口径与当年数额） |
+| 18 | 税费 | 明确经济补偿的个税处理由谁承担；经济补偿在当地上年职工平均工资 3 倍以内的部分免征个人所得税 | 不提，事后被扣税导致到手减少 | 财税〔2018〕164号"五、（一）"：一次性补偿收入在当地上年职工平均工资 3 倍数额以内的部分免征个人所得税，超过部分单独计税；算例见 [[calc-buchangjin-geshui]] |
 | 19 | 份数与留存 | 一式两份，双方各执一份，**当场拿走你那份原件** | 公司说"我们盖完章再给你"而你先签走了 | — |
 | 20 | 附件 | 工资结算明细、未休年假天数计算表作为附件并双方签字 | 无 | — |
 
@@ -85,11 +86,10 @@ updated: 2026-08-19
 - 协议里**没写**的事项不等于放弃，但第 14 条那种"一揽子结清"写法会把没写的一并盖掉——所以第 8 条
   要求逐项列明金额。
 - 更多"不签/不说/不做"的红线见 [[script-hongxian-qingdan]]。
-- **【待核实】汇总**：仅剩两项——第 15 条援引的"2024 年北京典型案例"（放弃仲裁/诉权条款）
-  为二手转述、未找到对应官方案例；第 18 条个税免征口径与当年三倍数额未核实。使用时按
-  "合格标准"一栏操作即可，引用该案例/数额前请先核实。
-  （已核实：第 5 条见 [[case-xianjing-tiaokuan-bjzc25-3]]；第 10 条见
+- **已核实**：第 5 条见 [[case-xianjing-tiaokuan-bjzc25-3]]；第 10 条见
   [[case-lizhi-zhengming-pingjia-neirong-bjzc23-9]]；第 8 条《北京市工资支付规定》第 12 条见
   [[statute-beijing-gongzi-zhifu-guiding]]；第 12 条竞业限制所依司法解释（二）第 13—15 条见
-  [[statute-fashi-2025-12-jieshi-2]]。第 14 条"一揽子结清"另可参 [[case-xieyi-yilanzi-fangqi-16272]]、
-  [[case-xianshi-gongping-chexiao-49641]]。）
+  [[statute-fashi-2025-12-jieshi-2]]；第 18 条个税免征口径见财税〔2018〕164号"五、（一）"，
+  算例见 [[calc-buchangjin-geshui]]。第 14 条"一揽子结清"另可参 [[case-xieyi-yilanzi-fangqi-16272]]、
+  [[case-xianshi-gongping-chexiao-49641]]。第 15 条放弃仲裁/诉权的依据只用《劳动合同法》第 26 条
+  第 1 款第 2 项，未找到对应官方案例，本卡不再援引。

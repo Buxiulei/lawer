@@ -8,10 +8,20 @@ law_refs: [劳动合同法§29, 劳动合同法§30, 劳动合同法§35, 劳动
 related: [statute-jgf-2024-534-jieda-1, statute-lhtf-38-beipo-jiechu, calc-jingji-buchang-n, data-beijing-zuidi-gongzi, sop-tiaogang-yingdui]
 region: 北京
 sources:
-  - https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=
-  - https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf
+  - http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm
+  - https://www.beijing.gov.cn/zhengce/zhengcefagui/201905/t20190522_56550.html
 confidence: 原文核实
-updated: 2026-08-19
+updated: 2026-09-07
+facts:
+  statute_quotes:
+    - law: 中华人民共和国劳动合同法
+      article: 第三十五条
+      source_id: statute-ldht
+      text: 用人单位与劳动者协商一致，可以变更劳动合同约定的内容。变更劳动合同，应当采用书面形式。变更后的劳动合同文本由用人单位和劳动者各执一份。
+    - law: 北京市工资支付规定
+      article: 第十一条
+      source_id: beijing-gongzi-zhifu-guiding
+      text: "用人单位不得随意扣除劳动者工资。\n除法律、法规、规章规定的事项外，用人单位扣除劳动者工资应当符合集体合同、劳动合同的约定或者本单位规章制度的规定。\n因劳动者本人原因给用人单位造成经济损失，用人单位按照前款规定扣除劳动者工资的，扣除后的余额不得低于本市最低工资标准。"
 ---
 
 # 被降薪当天与后续应对 SOP

@@ -1,0 +1,21 @@
+{
+  "source_id": "data-beijing-2025-guomin-jingji-gongbao",
+  "kind": "官方数据",
+  "name": "北京市2025年国民经济和社会发展统计公报",
+  "issuer": "北京市统计局",
+  "official_host": "tjj.beijing.gov.cn",
+  "url": "https://tjj.beijing.gov.cn/zxfbu/202603/t20260324_4564401.html",
+  "fetched_at": "2026-09-07T08:33:01+08:00",
+  "content_sha256": "4dd6578b251e2922bdd5970ed646fb313c453adce2356ab0bbe2cb3db2fa31b2",
+  "version_label": "发布时间2026-03-24",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/data-beijing-2025-guomin-jingji-gongbao/raw.html",
+    "text": "sources/originals/data-beijing-2025-guomin-jingji-gongbao/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://tjj.beijing.gov.cn/zxfbu/202603/t20260324_4564401.html",
+  "bytes": 66691
+}

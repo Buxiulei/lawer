@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-beijing-renkou-jihuashengyu-tiaoli",
+  "kind": "地方规章",
+  "name": "北京市人口与计划生育条例",
+  "issuer": "北京市人民代表大会常务委员会",
+  "official_host": "www.beijing.gov.cn",
+  "url": "https://www.beijing.gov.cn/zhengce/dfxfg/202111/t20211126_2546761.html",
+  "fetched_at": "2026-09-07T00:46:20+08:00",
+  "content_sha256": "01574bad2646bd038f882f2a44ebeea232ece575d81e43af99ee1ca8fdcad118",
+  "version_label": "2003年7月18日北京市第十二届人民代表大会常务委员会第五次会议通过；根据2014年2月21日、2016年3月24日、2021年11月26日三次《关于修改〈北京市人口与计划生育条例〉的决定》修正（现行合并文本）",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-beijing-renkou-jihuashengyu-tiaoli/raw.html",
+    "text": "sources/originals/statute-beijing-renkou-jihuashengyu-tiaoli/text.txt"
+  },
+  "effective_from": "2003-09-01",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.beijing.gov.cn/zhengce/dfxfg/202111/t20211126_2546761.html",
+  "bytes": 40299
+}

@@ -5,16 +5,15 @@ title: 竞业限制协议审查规则卡（18 条：期限 / 人员范围 / 补�
 keywords: [竞业限制, 竞业协议审查, 审查规则, 竞业期限2年, 30%补偿, 违约金5倍, 地域全国全世界, 工资含补偿, 报告义务, 在职竞业, 提前解除3个月, 亲友代持]
 applies_to: [竞业限制, 协商解除, 仲裁申请, 离职证明]
 law_refs: [劳动合同法§23, 劳动合同法§24, 劳动合同法§26, 法释〔2020〕26号§36, 法释〔2025〕12号§13, 法释〔2025〕12号§14, 法释〔2025〕12号§15, 人社厅发〔2025〕40号§7, 人社厅发〔2025〕40号§9, 人社厅发〔2025〕40号§10, 人社厅发〔2025〕40号§11, 人社厅发〔2025〕40号§12, 人社厅发〔2025〕40号§13, 人社厅发〔2025〕40号§14, 人社厅发〔2025〕40号§15, 人社厅发〔2025〕40号§16, 人社厅发〔2025〕40号§17, 人社厅发〔2025〕40号§18, 人社厅发〔2025〕40号§19, 人社厅发〔2025〕40号§23, 民法典§1032, 民法典§1035, 民法典合同编通则解释§65]
-related: [statute-rsty-2025-40-jingye-zhiyin, statute-fashi-2025-12-jieshi-2, calc-jingye-buchang-weiyuejin, data-beijing-zuidi-gongzi, case-jingye-gongzi-han-buchang-wuxiao-sz26-4, case-jingye-lanyong-jujue-buchang-sz26-1, case-jingye-fanhua-jianshen-jiaolian-bjzc24-9, case-jingye-fanwei-shiying-zgf25-4, case-jingye-jingzheng-guanxi-shizhi-sz26-2, case-jingye-jingzheng-zhengju-buzu-11222, case-jingye-yewu-chonghe-weiyue-12630, case-jingye-weiyuejin-tiaozheng-sz26-5, case-jingye-peiou-daichi-sz26-3, case-peiou-jingye-jing03-683, case-jingye-baogao-zuixiao-biyao-bjzc25-8, case-jingye-feifa-quzheng-sz26-6, case-zaizhi-jingye-weiyue-zgf25-5]
+related: [statute-rsty-2025-40-jingye-zhiyin, statute-fashi-2025-12-jieshi-2, calc-jingye-buchang-weiyuejin, data-beijing-zuidi-gongzi, case-jingye-gongzi-han-buchang-wuxiao-sz26-4, case-jingye-lanyong-jujue-buchang-sz26-1, case-jingye-fanhua-jianshen-jiaolian-bjzc24-9, case-jingye-fanwei-shiying-zgf25-4, case-jingye-jingzheng-guanxi-shizhi-sz26-2, case-jingye-weiyuejin-tiaozheng-sz26-5, case-jingye-peiou-daichi-sz26-3, case-peiou-jingye-jing03-683, case-jingye-baogao-zuixiao-biyao-bjzc25-8, case-jingye-feifa-quzheng-sz26-6, case-zaizhi-jingye-weiyue-zgf25-5]
 region: 北京
 sources:
   - https://www.gov.cn/zhengce/zhengceku/202509/content_7040571.htm
   - https://www.court.gov.cn/zixun/xiangqing/472691.html
-  - https://www.sohu.com/a/1014564022_121123853
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html
 confidence: 原文核实
-updated: 2026-08-20
+updated: 2026-09-07
 facts:
   review_rules:
     - id: jyxz-001
@@ -37,7 +36,7 @@ facts:
       pattern_hint: 工资结构被拆成基础工资加保密费加竞业补偿金加培训费等比例，或写明工资中已包含竞业限制补偿、离职后不再另行支付
       basis: 劳动合同法§26；法释〔2020〕26号§36；人社厅发〔2025〕40号§16
       suggestion: 要求删除工资中已包含竞业限制补偿的表述，改为“乙方离职后，甲方在竞业限制期限内以货币形式按月支付经济补偿”。这类约定不符合法律规定：竞业补偿是离职后为弥补择业受限损失支付的专项补偿，与在职工资性质不同，不能相互替代。
-      negotiation_tip: 已经签了这种合同也不吃亏——离职后仍可按离职前 12 个月月平均工资的 30% 主张全额补偿。北京三中院 2026 年竞业典型案例四即按此判付 2 年共 12 万余元。
+      negotiation_tip: 已经签了这种合同也不吃亏——离职后仍可按离职前 12 个月月平均工资的 30% 主张全额补偿，判例参见 [[case-jingye-gongzi-han-buchang-wuxiao-sz26-4]]。
     - id: jyxz-004
       severity: must
       title: 约定劳动者放弃经济补偿或公司无需支付补偿
@@ -211,17 +210,16 @@ related：[[case-jingye-fanwei-shiying-zgf25-4]]（新单位产品与原单位�
 **法院不会主动降，必须自己提出请求并举证**。
 related：[[case-jingye-weiyuejin-tiaozheng-sz26-5]]（七因素清单原文）、[[case-peiou-jingye-jing03-683]]（约定 10 倍年收入，实判 24 万元）。
 
-**jyxz-009 补偿低于 30% 或按基本工资计**　基数口径是**应得工资**，公司常拿“基本工资”当基数（三中院案例五即按离职前月基本工资 50% 给付）。
+**jyxz-009 补偿低于 30% 或按基本工资计**　基数口径是**应得工资**，公司常拿“基本工资”当基数。
 期限超 1 年的 50% 只作谈判目标，报数仍以 30% 为可主张值。
 related：[[case-jingye-gongzi-han-buchang-wuxiao-sz26-4]]、[[case-jingye-lanyong-jujue-buchang-sz26-1]]（按月基本工资 1/3 支付）。
 
 **jyxz-010 竞争关系定义超宽**　认定要看**同业（形式）+ 竞争（实质）双层**：实际经营内容、服务对象或产品受众、相关市场、地域范围。
 举证责任在公司。反面情形要如实提示用户：新旧岗位同为部门主要负责人且业务重合的，会被认定违约。
-related：[[case-jingye-jingzheng-guanxi-shizhi-sz26-2]]（不看营业执照看实际业务）、[[case-jingye-jingzheng-zhengju-buzu-11222]]（公司举证不足被驳）、[[case-jingye-yewu-chonghe-weiyue-12630]]（反面对照，判付违约金）。
+related：[[case-jingye-jingzheng-guanxi-shizhi-sz26-2]]（不看营业执照看实际业务）。
 
-**jyxz-011 离职当口强塞签署**　指引§9“不得利用强势地位”目前无判例支持据此撤销协议，**不要许诺能撤销**；
+**jyxz-011 离职当口强塞签署**　指引§9”不得利用强势地位”目前无判例支持据此撤销协议，**不要许诺能撤销**；
 可用的动作是拆包（先办离职结算与离职证明）、留痕（每页骑缝签名并拍照）、并追问本人是否属于保密人员。
-related：[[case-jingye-yewu-chonghe-weiyue-12630]]（主张协议前两页被替换，鉴定申请不予准许）。
 
 **jyxz-012 未约定支付时间与方式**　真正的代价是**解套条款用不上**：指引§17 的两条路径都要从约定付款日起算。
 
@@ -255,7 +253,7 @@ related：[[case-jingye-peiou-daichi-sz26-3]]（返还 266,785.65 元并另付�
 6. **出意见时逐条标注效力档位**：must 说“该约定不符合法律规定／超出部分无效”；strong 说“合法但对你不利，可以谈”；
    涉及 50%、5 倍、3 个月、地域相符的，一律加一句“这是人社部合规指引给企业的标尺，不是法院必须适用的规则”。
 
-## 争议点 / 待核实
+## 争议点
 
 - **约定补偿低于 30% 时的处理路径属推导**：法释〔2020〕26号§36 的文义是“**未约定**补偿时按 30%”；约定了但低于 30% 的，实践中一般按 30% 补足（可类比 [[case-jingye-gongzi-han-buchang-wuxiao-sz26-4]] 对无效约定的处理），但未检索到直接判决。jyxz-009 定为 strong 而非 must 即出于此。
 - **50% 的司法采纳率未知**：截至 2026-08-20 未检索到北京法院按 50% 判付的公开案例，已知 2 年期案例用的仍是 30%。

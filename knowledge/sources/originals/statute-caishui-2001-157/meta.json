@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-caishui-2001-157",
+  "kind": "规范性文件",
+  "name": "财政部、国家税务总局关于个人与用人单位解除劳动关系取得的一次性补偿收入征免个人所得税问题的通知（财税〔2001〕157号）",
+  "issuer": "财政部、国家税务总局",
+  "official_host": "fgk.chinatax.gov.cn",
+  "url": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5202764/content.html",
+  "fetched_at": "2026-09-07T00:48:50+08:00",
+  "content_sha256": "f5dceda489476f3033b777821aeac5dc802d9d7263f3f6ad253f6cc605326947",
+  "version_label": "财税〔2001〕157号；自2001年10月1日起执行；第一条自2019年1月1日起被财税〔2018〕164号第九条第（一）项废止",
+  "status": "已修正",
+  "files": {
+    "raw": "sources/originals/statute-caishui-2001-157/raw.html",
+    "text": "sources/originals/statute-caishui-2001-157/text.txt"
+  },
+  "effective_from": "2001-10-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5202764/content.html",
+  "bytes": 37527
+}

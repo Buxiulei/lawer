@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-qiye-pochanfa",
+  "kind": "法律",
+  "name": "中华人民共和国企业破产法",
+  "issuer": "全国人大常委会",
+  "official_host": "www.gov.cn",
+  "url": "https://www.gov.cn/gongbao/content/2006/content_413952.htm",
+  "fetched_at": "2026-09-07T00:44:03+08:00",
+  "content_sha256": "53a81ad46d6d3e7e37f2433ff7065df528637b9d120f5134bcba9343fc003328",
+  "version_label": "2006年8月27日通过，2007年6月1日起施行",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-qiye-pochanfa/raw.html",
+    "text": "sources/originals/statute-qiye-pochanfa/text.txt"
+  },
+  "effective_from": "2007-06-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.gov.cn/gongbao/content/2006/content_413952.htm",
+  "bytes": 99527
+}

@@ -9,7 +9,9 @@ related: [template-zhengju-cailiao-qingdan, sop-juzheng-xuzhi-sop, sop-zhengren-
 region: 北京
 sources:
   - https://ipc.court.gov.cn/zh-cn/news/view-393.html
-  - 朝阳区仲裁办事指南附件《1-1.证据交换下载-证据材料清单.doc》《1.证据交换下载-举证须知.docx》（官方原版附件包）
+  - http://www.npc.gov.cn/npc/c2/c30834/201912/t20191226_304057.html
+  - http://www.bjchy.gov.cn/UserFiles/File/2bb0130a4e614ecdbb06bf2b7933ab77.zip
+  - https://www.court.gov.cn/fabu/xiangqing/282121.html
 confidence: 原文核实
 updated: 2026-08-19
 ---

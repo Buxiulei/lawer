@@ -6,8 +6,11 @@ keywords: [判例核验, 引用判例, 先例, 全文核验, 自认与裁判, �
 applies_to: [仲裁申请, 开庭质证, 一审二审]
 region: 全国
 sources:
-  - https://user-case/litigation/朝阳判决精读.md
-confidence: 原文核实
+  - 本卡不含外部事实断言（D 类，见 knowledge/README.md §2.2）：四步法是本项目自己的方法论。
+    它沉淀自用户个人案卷（user-case/litigation/朝阳判决精读.md）——那是用户自己的档案，
+    不随本库分发、也无公开原件可核；正文里的案名只作方法示例，不作先例引用，
+    agent 不得把它们当判例写进对外文书（这正是本卡第一步要求的事）。
+confidence: 无外部断言
 updated: 2026-08-21
 ---
 

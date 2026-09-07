@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-jingshen-weishengfa",
+  "kind": "法律",
+  "name": "中华人民共和国精神卫生法",
+  "issuer": "全国人大常委会",
+  "official_host": "www.npc.gov.cn",
+  "url": "http://www.npc.gov.cn/npc/c2/c12435/c12488/201905/t20190522_74839.html",
+  "fetched_at": "2026-09-07T00:46:16+08:00",
+  "content_sha256": "300d2af5515eae73f722dbf77d47898c534b6d31e47926a590ba91996e3d2b4f",
+  "version_label": "2012年10月26日通过，2013年5月1日起施行",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-jingshen-weishengfa/raw.html",
+    "text": "sources/originals/statute-jingshen-weishengfa/text.txt"
+  },
+  "effective_from": "2013-05-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "http://www.npc.gov.cn/npc/c2/c12435/c12488/201905/t20190522_74839.html",
+  "bytes": 47920
+}

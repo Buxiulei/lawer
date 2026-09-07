@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-shiye-baoxian-tiaoli",
+  "kind": "行政法规",
+  "name": "失业保险条例（国务院令第258号）",
+  "issuer": "国务院",
+  "official_host": "xzfg.moj.gov.cn",
+  "url": "https://xzfg.moj.gov.cn/front/law/detail?LawID=517",
+  "fetched_at": "2026-09-07T00:48:16+08:00",
+  "content_sha256": "85fb7f387e9de76ce9e5dd264219a3a16a4e839d3e21dbcd2dc63e4c3cadd79d",
+  "version_label": "国务院令第258号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-shiye-baoxian-tiaoli/raw.html",
+    "text": "sources/originals/statute-shiye-baoxian-tiaoli/text.txt"
+  },
+  "effective_from": "1999-01-22",
+  "http_status": 200,
+  "content_type": "text/html;charset=UTF-8",
+  "fetch_method": "https",
+  "fetch_url": "https://xzfg.moj.gov.cn/front/law/detail?LawID=517",
+  "bytes": 46503
+}

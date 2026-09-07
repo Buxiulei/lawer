@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-fashi-2020-26",
+  "kind": "司法解释",
+  "name": "最高人民法院关于审理劳动争议案件适用法律问题的解释（一）",
+  "issuer": "最高人民法院",
+  "official_host": "www.court.gov.cn",
+  "url": "https://www.court.gov.cn/fabu/xiangqing/282121.html",
+  "fetched_at": "2026-09-07T00:45:12+08:00",
+  "content_sha256": "509492403560da7a6a8386c664cd876886046d22cb96590847b7f82d9095c8a1",
+  "version_label": "法释〔2020〕26号（第三十二条第一款已被法释〔2025〕12号第二十一条同步废止）",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-fashi-2020-26/raw.html",
+    "text": "sources/originals/statute-fashi-2020-26/text.txt"
+  },
+  "effective_from": "2021-01-01",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.court.gov.cn/fabu/xiangqing/282121.html",
+  "bytes": 35563
+}

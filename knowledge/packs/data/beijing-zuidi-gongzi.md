@@ -10,6 +10,7 @@ region: 北京
 sources:
   - https://rsj.beijing.gov.cn/xxgk/2024zcwj/202507/t20250725_4158456.html
   - https://www.beijing.gov.cn/zhengce/zhengcefagui/202507/t20250728_4159830.html
+  - https://rsj.beijing.gov.cn/xxgk/2024zcjd/202508/t20250801_4164868.html
 facts:
   values:
     - {key: min_wage_monthly, value: 2540, unit: 元/月, effective_from: "2025-09-01", confidence: 原文核实, source_idx: 0}

@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-hulianwang-fayuan-guiding",
+  "kind": "司法解释",
+  "name": "最高人民法院关于互联网法院审理案件若干问题的规定",
+  "issuer": "最高人民法院",
+  "official_host": "gongbao.court.gov.cn",
+  "url": "http://gongbao.court.gov.cn/Details/7e594961f195254a863d6cc90be5cd.html",
+  "fetched_at": "2026-09-07T00:49:41+08:00",
+  "content_sha256": "4015901ff54c7cc239cd203a7d3741513a947dc2c5e8fbc7f32138ab3074839c",
+  "version_label": "法释〔2018〕16号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-hulianwang-fayuan-guiding/raw.html",
+    "text": "sources/originals/statute-hulianwang-fayuan-guiding/text.txt"
+  },
+  "effective_from": "2018-09-07",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "http://gongbao.court.gov.cn/Details/7e594961f195254a863d6cc90be5cd.html",
+  "bytes": 20351
+}

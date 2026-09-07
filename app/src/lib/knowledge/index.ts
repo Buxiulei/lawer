@@ -31,6 +31,12 @@ export interface PackFacts {
   hotlines?: Array<{ name: string; phone: string; category: 'crisis' | 'legal' | 'union' | 'inspection'; status: 'usable' | 'forbidden'; hours?: string; dial_hint?: string; agent_note?: string }>;
   values?: Array<{ key: string; value: number; unit: string; effective_from: string; confidence: string; source_idx: number }>;
   statute_quotes?: Array<{ law: string; article: string; text: string }>;
+  /**
+   * 判例卡从**官方页**上逐字节选的那几句（规范 §2.1）。`source_id` 必填——判例没有"法名"
+   * 可以拿去和登记簿互为子串匹配，靠猜的形态是随机挑一份发布会通稿来核，并且照样报「一致」。
+   * 构建期强制：`packs/cases/` 下每张判例卡必须有 ≥1 条核得过的 case_quotes（守卫 (f)）。
+   */
+  case_quotes?: Array<{ source_id: string; text: string; note?: string }>;
   case_facts?: { case_no?: string; court?: string; judged_at?: string; gist?: string; issue?: string; holding?: string; reasoning?: string };
   addresses?: Array<{ name: string; scene: Array<'仲裁立案' | '一审起诉' | '二审上诉' | '执行申请'>; address: string; phone?: string; status: 'usable' | 'unverified'; hours?: string; agent_note?: string; source?: string; confidence?: string }>;
   review_rules?: Array<{ id: string; severity: 'must' | 'strong' | 'suggest'; title: string; pattern_hint: string; basis: string; suggestion: string; negotiation_tip?: string }>;
@@ -170,71 +176,89 @@ function loadIndex(): PackMeta[] {
       );
     }
   }
-  // ⑤【零张卡默认拒绝启动】manager 2026-08-29 产品裁定：
-  // **一个没有任何知识、却照常回答法律问题的 agent，是本产品最不可接受的静默故障形态**——
-  // 比宕机糟：宕机用户知道坏了。一次把 packs/ 弄丢的部署，此前会静默上线这样一个 agent。
-  // 本地想空跑是正当需求，但必须**明说**：KNOWLEDGE_ALLOW_EMPTY=1。默认关。
-  if (parsed.length === 0 && process.env.KNOWLEDGE_ALLOW_EMPTY !== '1') {
-    throw new Error(
-      `knowledge 索引是空的：${indexPath}（0 张卡）。` +
-        '一个没有知识却照常作答的 agent 比宕机更坏，故默认拒绝启动；' +
-        '本地确需空库请显式设 KNOWLEDGE_ALLOW_EMPTY=1',
+  // ⑨⑩【隔离区的卡与未注册 domain 的卡：**排除并点名**，不拒绝启动】
+  //     manager 2026-09-07 裁决（改自此前的"拒绝启动"）。
+  //
+  // 两类各自的病因：
+  // ⑩ 隔离区（knowledge/quarantine/**）放的是追不到一手源、已判定不可用的卡
+  //   （主理人 2026-09-07 裁决：知识库里不允许「二手转述」「待核实」）。它仍是一份存档，
+  //   但一旦进了索引，它与一张核实过的卡在 agent 那里**长得一模一样**。
+  // ⑨ domain 写了个注册表不认识的值，那批卡按领域过滤时对谁都不可见，
+  //   而检索照常返回 200 与一个更短的列表——没有任何一处会报错。
+  //
+  // 【为什么加载器要管，而生成器已经管了】生成器管的是"从卡片到 index.json"，
+  // 管不着**别人手里那份 index.json**：部署时被换掉的、别的分支带过来的、手改过的。
+  //
+  // 【口径由谁定】经理 2026-09-07 裁决（台账）。ws/p4-w1 那一版是「未注册即抛」、
+  // ws/p4-w2 与本支是「排除」，两支单独看都自洽；此处按裁决统一成排除。
+  //
+  // 【为什么不静默按缺省领域算】那等于给拼错的域发一张跨域通行证：
+  // 第二个领域的卡会出现在第一个领域用户的检索结果里，而回包一切正常。
+  // 排除是"抛"与"静默按缺省算"之间唯一诚实的那一档：这批卡确实不可用，而全站照常工作。
+  //
+  // 【为什么是排除而不是拒绝启动】拒绝启动是**放大**故障：loadIndex 抛错且不缓存
+  // ⇒ 之后每一次预检索、knowledge_search、危机资源卡取卡都重抛一次 ⇒ 全站每一轮对话 500，
+  // 连好卡的用户一起断。而这两类的正确后果是"少这几张卡"，不是"整个 agent 停机"。
+  // **构建期仍然严格**：scripts/gen-knowledge-index.py 遇到这两类一律拒绝生成（CI 即红），
+  // 所以本仓库产出的 index.json 不会带着它们；这里挡的是运行时拿到一份不是本仓库产的索引。
+  // 排除必须**出声**——静默排除与"这几张卡从来不存在"在日志里长得一样。
+  const known = Object.keys(DOMAINS);
+  const excluded: string[] = [];
+  const kept: PackMeta[] = [];
+  for (const entry of parsed as PackMeta[]) {
+    if (String(entry.path).split(/[\\/]/).includes('quarantine')) {
+      excluded.push(
+        `${entry.id} → ${entry.path}：指向隔离区（追不到一手源、已判定不可用的卡）。` +
+          '若它其实已核实过，把它移回 knowledge/packs/ 下再重跑 scripts/gen-knowledge-index.py。',
+      );
+      continue;
+    }
+    // domain 补齐：没写的算缺省领域（存量卡片写于只有一个领域的时候）。
+    // 补在**入口**而不是各消费点：漏补一处的形态是那批卡在按领域过滤时凭空消失。
+    if (entry.domain === undefined || entry.domain === '') {
+      entry.domain = DEFAULT_DOMAIN;
+    } else if (!known.includes(entry.domain)) {
+      excluded.push(
+        `${entry.id} → domain「${entry.domain}」不在 lib/domains 注册表里（已注册：${known.join('、')}）。` +
+          '请核对卡片 frontmatter 的 domain，或补上这个领域包再重跑 scripts/gen-knowledge-index.py。',
+      );
+      continue;
+    }
+    kept.push(entry);
+  }
+  if (excluded.length > 0) {
+    console.error(
+      `knowledge 索引里有 ${excluded.length} 条被排除，未进入检索面（${indexPath}）：\n` +
+        excluded.map((line) => `  · ${line}`).join('\n') +
+        '\n这几张卡从现在起对谁都检索不到（不抛错是刻意的：抛错会把全站每一轮对话打成 500）。',
     );
   }
 
   // ⑥【id 重复即拒】id 是索引、卡内 frontmatter、检索三处共用的主键；
   // 重复时 get(id) 返回先到的那张，**不报错、只是从此拿错卡**。
+  // 只查留下来的那批：被排除的卡根本进不了 get()，拿它们的 id 去挡活人没有道理。
   const seen = new Set<string>();
-  for (const entry of parsed as PackMeta[]) {
+  for (const entry of kept) {
     if (seen.has(entry.id)) {
       throw new Error(`knowledge 索引里 id 重复：${entry.id}（${indexPath}）；id 是主键，重复即歧义`);
     }
     seen.add(entry.id);
   }
 
-  // ⑦【domain 补齐】没写 domain 的条目按缺省领域算，补在**加载器这一处**，
-  // 下游（检索过滤、条文注入表、判据）读到的恒有值。
-  // 【为什么不是让下游各自 `?? 缺省`】少补一处的形态是：那批卡在按领域过滤的那一刻
-  // 整批消失，而检索照常返回 200 与一个更短的列表——没有一处会报错。
+  // ⑤【零张卡默认拒绝启动】manager 2026-08-29 产品裁定：
+  // **一个没有任何知识、却照常回答法律问题的 agent，是本产品最不可接受的静默故障形态**——
+  // 比宕机糟：宕机用户知道坏了。一次把 packs/ 弄丢的部署，此前会静默上线这样一个 agent。
+  // 本地想空跑是正当需求，但必须**明说**：KNOWLEDGE_ALLOW_EMPTY=1。默认关。
   //
-  // ⑨【domain 写了但注册表不认识 ⇒ **排除那几条并点名，不拒绝启动**】
-  //
-  // 【口径由谁定】经理 2026-09-07 裁决（台账）。ws/p4-w1 这一版原本是「未注册即抛」，
-  // ws/p4-w2 是「排除」，两支单独看都自洽；此处按裁决统一成排除。
-  //
-  // 【为什么不抛】loadIndex 抛错**且不缓存**（packIndex 停在 null），于是之后每一次
-  // 预检索、knowledge_search、危机资源卡取卡都重抛一次 —— 一张卡的 domain 拼错
-  // 会把**全站每一轮对话**打成 500，连 domain 正常的那批用户一起。
-  // 「先写卡、后挂包」本身是合理的工作顺序，不该由它引发全站不可用。
-  //
-  // 【为什么不静默按缺省领域算】那等于给拼错的域发一张跨域通行证：
-  // 第二个领域的卡会出现在第一个领域用户的检索结果里，而回包一切正常。
-  // 排除是这两者之间唯一诚实的那一档：这批卡确实不可用，而全站照常工作。
-  //
-  // 【为什么必须 console.error 点名】被排除的卡与"这批卡根本没入库"在检索结果里同形。
-  // 不出声的形态是：知识库少了一批卡、检索照常返回 200 与一个更短的列表，没人知道。
-  // 出声要说清缺什么 / 为什么缺 / 怎么办 —— 裸喊一句"有卡被排除了"会让人再推一遍我们已经推过的那遍。
-  const known = Object.keys(DOMAINS);
-  const dropped: PackMeta[] = [];
-  const kept: PackMeta[] = [];
-  for (const entry of parsed as PackMeta[]) {
-    if (entry.domain === undefined || entry.domain === '') {
-      entry.domain = DEFAULT_DOMAIN;
-      kept.push(entry);
-    } else if (known.includes(entry.domain)) {
-      kept.push(entry);
-    } else {
-      dropped.push(entry);
-    }
-  }
-  if (dropped.length > 0) {
-    console.error(
-      `knowledge 索引里有 ${dropped.length} 条卡的 domain 没有对应的领域包，已从本次加载中**排除**（${indexPath}）：\n` +
-        dropped.map((e) => `  · ${e.id} → domain「${e.domain}」`).join('\n') +
-        `\nlib/domains 里注册过的领域只有 ${known.join('、')}。` +
-        '这几张卡从现在起对谁都检索不到（不抛错是刻意的：抛错会把全站每一轮对话打成 500）。' +
-        '怎么办：核对卡片 frontmatter 的 domain 是不是拼错了，' +
-        '或者把这个领域的包挂进 lib/domains/registry 再重跑 scripts/gen-knowledge-index.py。',
+  // 【为什么数的是排除之后的那个数】上面那道闸把坏卡排除掉、不停机，是因为"少几张卡"
+  // 好过"全站 500"；但**一张不剩**时这个权衡就反过来了——那正是 ⑤ 要防的形态。
+  // 数 parsed.length 的话，一份全是隔离卡的索引会带着 0 张可用卡静默启动。
+  if (kept.length === 0 && process.env.KNOWLEDGE_ALLOW_EMPTY !== '1') {
+    throw new Error(
+      `knowledge 索引是空的：${indexPath}（0 张卡` +
+        (excluded.length > 0 ? `；原始 ${parsed.length} 条全部被上面的排除规则挡下` : '') +
+        '）。一个没有知识却照常作答的 agent 比宕机更坏，故默认拒绝启动；' +
+        '本地确需空库请显式设 KNOWLEDGE_ALLOW_EMPTY=1',
     );
   }
 

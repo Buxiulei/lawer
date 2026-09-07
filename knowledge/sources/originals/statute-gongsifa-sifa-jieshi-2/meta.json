@@ -1,0 +1,21 @@
+{
+  "source_id": "statute-gongsifa-sifa-jieshi-2",
+  "kind": "司法解释",
+  "name": "最高人民法院关于适用《中华人民共和国公司法》若干问题的规定（二）",
+  "issuer": "最高人民法院",
+  "official_host": "gongbao.court.gov.cn",
+  "url": "http://gongbao.court.gov.cn/Details/9215381727e7b8bcd7a5006b0afbdc.html",
+  "fetched_at": "2026-09-07T00:45:57+08:00",
+  "content_sha256": "8ad9ee265012e28911559a95134728bac72c5ab0d5c62e56448bafa2dd7e04a0",
+  "version_label": "法释〔2008〕6号，2020年12月23日第二次修正",
+  "status": "已修正",
+  "files": {
+    "raw": "sources/originals/statute-gongsifa-sifa-jieshi-2/raw.html",
+    "text": "sources/originals/statute-gongsifa-sifa-jieshi-2/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "http://gongbao.court.gov.cn/Details/9215381727e7b8bcd7a5006b0afbdc.html",
+  "bytes": 21236
+}

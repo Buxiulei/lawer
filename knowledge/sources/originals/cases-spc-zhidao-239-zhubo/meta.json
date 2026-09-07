@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-spc-zhidao-239-zhubo",
+  "kind": "官方案例",
+  "name": "指导性案例239号：王某诉北京某文化传媒有限公司确认劳动关系纠纷案",
+  "issuer": "最高人民法院",
+  "official_host": "www.court.gov.cn",
+  "url": "https://www.court.gov.cn/shenpan/xiangqing/450741.html",
+  "fetched_at": "2026-09-07T08:28:22+08:00",
+  "content_sha256": "dc0755cff276de810b98260a2e8bc5a06ad2f4f246022a328d3518a2cadeb216",
+  "version_label": "指导性案例239号，2024-12-20发布",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-spc-zhidao-239-zhubo/raw.html",
+    "text": "sources/originals/cases-spc-zhidao-239-zhubo/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.court.gov.cn/shenpan/xiangqing/450741.html",
+  "bytes": 18182
+}

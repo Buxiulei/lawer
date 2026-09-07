@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-spc-zhidao-18-wangpeng",
+  "kind": "官方案例",
+  "name": "指导案例18号：中兴通讯（杭州）有限责任公司诉王鹏劳动合同纠纷案",
+  "issuer": "最高人民法院",
+  "official_host": "www.court.gov.cn",
+  "url": "https://www.court.gov.cn/shenpan/xiangqing/6002.html",
+  "fetched_at": "2026-09-07T08:27:01+08:00",
+  "content_sha256": "a6faf91d686e374b57be478d746d0be02b2869324b61664d9702f62e59a71499",
+  "version_label": "指导案例18号，2013-11-08发布",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-spc-zhidao-18-wangpeng/raw.html",
+    "text": "sources/originals/cases-spc-zhidao-18-wangpeng/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.court.gov.cn/shenpan/xiangqing/6002.html",
+  "bytes": 14485
+}

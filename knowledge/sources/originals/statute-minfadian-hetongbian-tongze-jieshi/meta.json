@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-minfadian-hetongbian-tongze-jieshi",
+  "kind": "司法解释",
+  "name": "最高人民法院关于适用《中华人民共和国民法典》合同编通则若干问题的解释",
+  "issuer": "最高人民法院",
+  "official_host": "www.court.gov.cn",
+  "url": "https://www.court.gov.cn/zixun/xiangqing/419382.html",
+  "fetched_at": "2026-09-07T00:45:57+08:00",
+  "content_sha256": "60dd9e30c5eb6e9079cf113efd414fd6cd08827ca175bf62fa2e51f86d80155b",
+  "version_label": "法释〔2023〕13号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-minfadian-hetongbian-tongze-jieshi/raw.html",
+    "text": "sources/originals/statute-minfadian-hetongbian-tongze-jieshi/text.txt"
+  },
+  "effective_from": "2023-12-05",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.court.gov.cn/zixun/xiangqing/419382.html",
+  "bytes": 64503
+}

@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-spc-2025-laodong-dxal",
+  "kind": "官方案例",
+  "name": "最高人民法院2025年劳动人事争议典型案例发布页",
+  "issuer": "最高人民法院",
+  "official_host": "www.court.gov.cn",
+  "url": "https://www.court.gov.cn/zixun/xiangqing/472681.html",
+  "fetched_at": "2026-09-07T00:43:08+08:00",
+  "content_sha256": "211143f843da7c94179d3cb262a9bfea4be8cbe05259b04d8fc3980614282596",
+  "version_label": "",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-spc-2025-laodong-dxal/raw.html",
+    "text": "sources/originals/cases-spc-2025-laodong-dxal/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.court.gov.cn/zixun/xiangqing/472681.html",
+  "bytes": 30482
+}

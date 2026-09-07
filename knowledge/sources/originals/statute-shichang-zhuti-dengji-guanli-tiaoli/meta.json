@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-shichang-zhuti-dengji-guanli-tiaoli",
+  "kind": "行政法规",
+  "name": "中华人民共和国市场主体登记管理条例",
+  "issuer": "国务院",
+  "official_host": "www.gov.cn",
+  "url": "https://www.gov.cn/gongbao/content/2021/content_5636139.htm",
+  "fetched_at": "2026-09-07T00:45:12+08:00",
+  "content_sha256": "0dec304b94305522e00cee9c9508a34da6adee89eee5dbd7f2e6532e28ee5408",
+  "version_label": "国务院令第746号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-shichang-zhuti-dengji-guanli-tiaoli/raw.html",
+    "text": "sources/originals/statute-shichang-zhuti-dengji-guanli-tiaoli/text.txt"
+  },
+  "effective_from": "2022-03-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.gov.cn/gongbao/content/2021/content_5636139.htm",
+  "bytes": 63044
+}
