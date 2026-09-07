@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { AgentKeyCards } from './_components/AgentKeyCards';
 import { PreferencesCard } from './_components/PreferencesCard';
+import { PrivacyCard } from './_components/PrivacyCard';
 import { RealnameCard } from './_components/RealnameCard';
 import { ReferralCard } from './_components/ReferralCard';
 
@@ -19,6 +20,9 @@ export default function SettingsPage() {
         <AgentKeyCards />
         {/* 转介状态卡：**只在有转介记录时自己渲染**，没有记录整张卡不出现（见 ReferralCard） */}
         <ReferralCard />
+        {/* 隐私与同意（境外模型 / 评测授权 / 情绪记录）：摆在通用偏好之前，
+            因为它管的是「我们能拿你的数据做什么」，比主题与震动重要 */}
+        <PrivacyCard />
         <PreferencesCard />
       </div>
     </div>

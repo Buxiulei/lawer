@@ -70,11 +70,25 @@ export interface Onboarding {
 }
 
 export type SendResult = { ok: true; ttlSeconds: number; retryAfter: number } | AuthFailure;
-export type PhoneVerifyResult = { ok: true; token: string; needEmail: boolean } | AuthFailure;
-export type EmailVerifyResult = { ok: true; token: string; onboarding?: Onboarding } | AuthFailure;
+/**
+ * 验码成功的公共部分。**userId 是给调用方落台账用的**（注册/登录那道同意闸要把这次点头
+ * 记到具体账号上，见 lib/auth/consent.ts）。
+ *
+ * 【为什么不让路由自己去解 token】那等于把 token 的载荷格式复制一份到路由里，
+ * 而 token 是我们自己刚签的——签它的时候账号 id 就在手上，交出去比让人再解一遍便宜且不会错。
+ */
+interface VerifiedSession {
+  ok: true;
+  token: string;
+  /** 这条登录态属于哪个账号 */
+  userId: number;
+}
+
+export type PhoneVerifyResult = (VerifiedSession & { needEmail: boolean }) | AuthFailure;
+export type EmailVerifyResult = (VerifiedSession & { onboarding?: Onboarding }) | AuthFailure;
 /** 邮箱注册/登录的结果。isNewUser=true 表示这次调用现建的号（前端可据此决定要不要展示新手引导） */
 export type EmailRegisterResult =
-  | { ok: true; token: string; isNewUser: boolean; onboarding?: Onboarding }
+  | (VerifiedSession & { isNewUser: boolean; onboarding?: Onboarding })
   | AuthFailure;
 
 /** 外部副作用注入点：单测把短信/邮件换成假实现，绝不真发（真发既费钱又打扰真号） */
@@ -302,7 +316,7 @@ export function verifyPhoneCode(
     user = store.findUserById(db, createAccount())!;
   }
 
-  return { ok: true, token: signToken(user.id, now), needEmail: !user.email_verified_at };
+  return { ok: true, token: signToken(user.id, now), userId: user.id, needEmail: !user.email_verified_at };
 }
 
 // ========== 邮箱验证码 ==========
@@ -513,6 +527,7 @@ export function verifyEmailCode(
   return {
     ok: true,
     token: signToken(userId, now),
+    userId,
     ...(onboarding ? { onboarding } : {}),
   };
 }
@@ -630,6 +645,7 @@ export function verifyEmailRegisterCode(
   return {
     ok: true,
     token: signToken(user.id, now),
+    userId: user.id,
     isNewUser,
     ...(onboarding ? { onboarding } : {}),
   };

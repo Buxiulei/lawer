@@ -20,13 +20,17 @@ export const emotionLog: Capability = {
   kind: 'write',
   domains: ['*'],
   exposeTo: ['mcp'],
-  precondition: [],
+  // 敏感信息的单独同意（协议 五.2（2）/ 附一 #4）：没同意就零写入，回 CONSENT_REQUIRED。
+  // 由注册表驱动、在 invoke 一处拦——各能力自觉的形态见 checkPreconditions 抬头。
+  precondition: ['emotion_consent'],
   idempotency: { clientRef: true },
   title: '记录情绪状态',
   description:
     '记一笔用户当前的情绪档位。识别到低落/焦虑/严重痛苦时都要记——这是长期陪跑看走向的依据，' +
     '不是评价。refer_nbdpsy 只在符合持续焦虑抑郁表现时置 true：档位没到「焦虑」以上、' +
-    '或这个案子此前已经转介过一次，服务端都会把它降回 false 并在返回里说明原因（记录照常落库）。',
+    '或这个案子此前已经转介过一次，服务端都会把它降回 false 并在返回里说明原因（记录照常落库）。' +
+    '**这类记录属于敏感个人信息**：用户没有单独同意过时，本工具一律回 CONSENT_REQUIRED 且零写入，' +
+    '那时请把「记什么、为什么记、不同意会怎样」念给用户听，同意由他本人在网页上给。',
   inputSchema: {
     type: 'object',
     properties: {

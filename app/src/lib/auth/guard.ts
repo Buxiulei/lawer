@@ -6,6 +6,12 @@ import { NextResponse } from 'next/server';
 import { apiJson } from '@/lib/http/json';
 import type { Database } from 'better-sqlite3';
 
+// 直接引那张常量表而不是 lib/capabilities 的门面：error-codes.ts 自己一个 import 都没有，
+// 引它不会把注册表（以及它引的整条链）拖进每一条路由；而状态码抄第二份的形态是——
+// 同一道闸在 REST 上回 403、在 MCP 上回 400，两边都"正常"，对方 agent 按状态码分支就分岔了。
+import { ERROR_CODES } from '@/lib/capabilities/error-codes';
+import { CONSENT_KINDS, REALNAME_EXITS } from '@/lib/consent';
+import { hasConsent } from '@/lib/db/consents';
 import * as users from '@/lib/db/otp';
 import type { Scope } from './api-key';
 import { hasScope, resolveIdentity, type Identity } from './identity';
@@ -76,12 +82,59 @@ export async function requireRealname(
   identity: Identity,
   message = '这一步需要先完成实名认证：出证与对外文书要与本人身份绑定',
 ): Promise<GateResult> {
-  if (await realnameVerifiedOrLinked(db, identity.uid)) return { ok: true };
-  return { ok: false, response: deny(403, 'REALNAME_REQUIRED', message) };
+  const gate = await realnameGate(db, identity.uid);
+  if (gate.ok) return { ok: true };
+  // 两条出路一律跟在自述的第三段上：只说"去实名"的形态是——一个已经在 NBDpsy
+  // 认证过的人被要求再认证一次，而他有一条一步就能走完的路（见 lib/consent.ts）。
+  return {
+    ok: false,
+    response: deny(gateStatus(gate.errorCode), gate.errorCode, `${message}。${REALNAME_EXITS}`),
+  };
+}
+
+/** 闸门错误码 → HTTP 状态：以对外错误码表为准（那张表就是对方 agent 读到的说明书）。 */
+function gateStatus(code: string): number {
+  return ERROR_CODES.find((e) => e.code === code)?.status ?? 403;
 }
 
 /**
- * 实名闸的**唯一判定入口**：先看本地，本地没有再去问一次 NBDpsy（实名互认，设计稿 §14）。
+ * 实名闸的三态判定（协议 三.3 / 附一 #3）。**闸门与能力层的唯一判定入口。**
+ *
+ * 三态而不是布尔，是因为"没过闸"有两个完全不同的原因，对应两条不同的路：
+ *   · REALNAME_REQUIRED —— 本地没实名，对面也没有可采用的认证 → 去认证；
+ *   · CONSENT_REQUIRED  —— 对面认过了，但用户还没单独同意我们采用它 → 点一下同意。
+ * 把它们压成同一个 false 的形态是：第二种人被反复要求"去实名认证"，
+ * 而他真正要做的只是勾一个框——而这两句话在页面上、在对方 agent 的回包里长得一模一样。
+ *
+ * 【为什么"问对方"发生在没同意的时候也照做】问的是「这个手机号在你们那儿实名了没有」，
+ * 与采用是两件事（peekNbdpsyRealname 只问不写）。不问就答不出上面那两态的区别，
+ * 于是协议三.3 承诺的"我们会向你说明并征求同意"这句话没有触发的时机。
+ * 采用（写库、落姓名与掩码证件号）仍然只在拿到同意之后发生。
+ */
+export type RealnameGateOutcome =
+  | { ok: true }
+  | { ok: false; errorCode: 'REALNAME_REQUIRED' | 'CONSENT_REQUIRED' };
+
+export async function realnameGate(db: Database, uid: number): Promise<RealnameGateOutcome> {
+  if (isRealnameVerified(db, uid)) return { ok: true };
+
+  const { adoptNbdpsyRealname, peekNbdpsyRealname } = await import('@/lib/referral/identity-link');
+  if (hasConsent(db, uid, CONSENT_KINDS.realnameAdopt)) {
+    if (await adoptNbdpsyRealname(db, uid)) return { ok: true };
+    // 同意了但对面没有可采用的认证：这是"还没实名"，不是"还没同意"。
+    return { ok: false, errorCode: 'REALNAME_REQUIRED' };
+  }
+
+  const adoptable = await peekNbdpsyRealname(db, uid);
+  return { ok: false, errorCode: adoptable ? 'CONSENT_REQUIRED' : 'REALNAME_REQUIRED' };
+}
+
+/**
+ * 实名闸的布尔外壳：只回"这次放不放行"。**要区分为什么不放行的，调 realnameGate。**
+ *
+ * 【2026-09-07 起不再自动采用】本地没实名时仍会问一次 NBDpsy（实名互认，设计稿 §14），
+ * 但**采用要先有用户的单独同意**（协议三.3 / consents.kind=realname_adopt）——
+ * 判定全在 realnameGate，本函数只把三态压成布尔。
  *
  * 【为什么它是 async、而 isRealnameVerified 仍是同步】互认要发一次网络请求，
  * 这一步天然是异步的。把它塞进 isRealnameVerified 会让那个纯本地判定也变成 Promise，
@@ -97,9 +150,7 @@ export async function requireRealname(
  * 而绝大多数请求走的是「本地已实名」那一支，根本用不到它。
  */
 export async function realnameVerifiedOrLinked(db: Database, uid: number): Promise<boolean> {
-  if (isRealnameVerified(db, uid)) return true;
-  const { adoptNbdpsyRealname } = await import('@/lib/referral/identity-link');
-  return adoptNbdpsyRealname(db, uid);
+  return (await realnameGate(db, uid)).ok;
 }
 
 /**

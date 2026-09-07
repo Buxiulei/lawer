@@ -10,7 +10,11 @@
 // 从领域包取词表与文案。两边互引就是循环导入——它的失效形态是**模块加载顺序决定生死**：
 // 谁先被 import，另一边的顶层常量就是 undefined，而报错点离病因隔着好几层。
 // 拆成这个叶子模块（谁都不引它、它谁都不引）之后，环从结构上就不存在了。
+//
+// 唯一的例外是 lib/consent.ts（危机留痕的那一句告知）：它也是个谁都不引的纯常量叶子，
+// 引它建不出环。那句话为什么必须在首段里、为什么是告知而不是闸，见该常量的注释。
 // ─────────────────────────────────────────────────────
+import { CRISIS_HIT_NOTICE } from '@/lib/consent';
 
 /** 结构化事实里的一条热线（形状同 lib/knowledge 的 PackFacts.hotlines） */
 export interface HotlineFact {
@@ -98,11 +102,18 @@ export function assembleCrisisOpener(
 ): string {
   const lines = crisisHotlines(facts);
   const head = [...text.head];
+  // 危机留痕的告知（协议 五.1/五.2（2））：**摆在最末尾、两态都给、永不阻断**。
+  // 号码仍然在最前面；告知在它之后、模型段之前，既不挡号码，也不会被模型改写或漏掉。
+  const notice = ['', CRISIS_HIT_NOTICE];
+  // 【一条热线都取不到时不加这一句】那是资源卡缺失的事故态：首段只剩一句「我在」，
+  // 而这一刻**唯一该说的就是那一句**。在它后面接一段关于我们怎么记录的话，
+  // 只会把仅剩的一句陪伴稀释掉。告知义务由协议五.1（我们收集什么）与
+  // 有号码时的那一句承担；这条分支另有 KNOWLEDGE_UNAVAILABLE 报警，不是常态。
   if (lines.length === 0) return head[0];
 
   if (options.compact) {
     const nums = lines.map((h) => (isLandlineOnly(h.phone) ? `${h.phone}（座机）` : h.phone));
-    return [...head, '', `**${nums.join(' / ')}**`, '', text.tail].join('\n');
+    return [...head, '', `**${nums.join(' / ')}**`, '', text.tail, ...notice].join('\n');
   }
 
   return [
@@ -118,6 +129,7 @@ export function assembleCrisisOpener(
     '',
     text.tail,
     ...(text.after ? ['', text.after] : []),
+    ...notice,
   ].join('\n');
 }
 
@@ -147,6 +159,14 @@ export function splitCrisisOpenerWith(
     if (afterGap.startsWith(text.after)) {
       end += rest.length - afterGap.length + text.after.length;
     }
+  }
+  // 留痕告知同样是确定性首段的一部分（拼装时排在最后），所以也要一起划进 opener——
+  // 漏掉它的形态是：出口侧的杠杆闸把我们自己写的这句话当成模型自作主张，剥掉它，
+  // 于是"我们记了一笔"这件事在最需要说清楚的那一轮反而没说。
+  const tailRest = raw.slice(end);
+  const tailGap = tailRest.replace(/^\n+/, '');
+  if (tailGap.startsWith(CRISIS_HIT_NOTICE)) {
+    end += tailRest.length - tailGap.length + CRISIS_HIT_NOTICE.length;
   }
   return { opener: raw.slice(0, end), body: raw.slice(end).replace(/^\n+/, '') };
 }

@@ -13,6 +13,8 @@ import { maskPhone } from '@/lib/auth/phone';
 import { getMembership } from '@/lib/billing/fulfillment';
 import { decryptField } from '@/lib/crypto';
 import { getDb } from '@/lib/db/client';
+import { consentedKinds } from '@/lib/db/consents';
+import { getModelPreferences } from '@/lib/db/otp';
 import { apiJson } from '@/lib/http/json';
 
 export async function GET(req: Request) {
@@ -44,12 +46,18 @@ export async function GET(req: Request) {
   }
 
   const membership = getMembership(db, guard.identity.uid);
+  const prefs = getModelPreferences(db, guard.identity.uid);
 
   return apiJson({
     ok: true,
     phone_masked: phoneMasked,
     email: row.email ?? null,
     auth_status: row.auth_status,
+    // 设置页要一次性知道「哪几类同意过、两个开关是开是关」。
+    // 分成几条接口各查一次的形态是：页面上开关的位置与它旁边那句「你在 X 时同意过」
+    // 来自两次请求，中间任何一次失败都让这一格显示成"没同意"，而用户明明同意过。
+    consents: consentedKinds(db, guard.identity.uid),
+    preferences: { overseas_models: prefs.overseasModels, eval_optin: prefs.evalOptin },
     // 无有效会员时给 null，不给「无」这类占位串：前端按「查不到就不显示套餐徽标」处理。
     membership: membership.plan ? { plan: membership.plan, expires_at: membership.expiresAt } : null,
   });

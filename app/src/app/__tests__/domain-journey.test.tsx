@@ -140,7 +140,8 @@ async function registerWithDomain(
     new Request('http://localhost/api/v1/auth/email/register/verify', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, code, ...(domain ? { domain } : {}) }),
+      // 页面就是这么拼的：两个同意位随每次验码一起上来（LoginFlow 的 consentBody）
+      body: JSON.stringify({ email, code, ...AGREED, ...(domain ? { domain } : {}) }),
     }),
   );
   const body = await json(res);
@@ -180,7 +181,7 @@ async function registerViaWeb(
     new Request('http://localhost/api/v1/auth/sms/verify', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ phone, code: smsCode }),
+      body: JSON.stringify({ phone, code: smsCode, ...AGREED }),
     }),
   );
   const smsBody = await json(smsRes);
@@ -202,8 +203,9 @@ async function registerViaWeb(
     new Request('http://localhost/api/v1/auth/email/verify', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${phoneToken}` },
-      // 页面就是这么拼的：空串不发（LoginFlow 的 `...(completing && domain ? {domain} : {})`）
-      body: JSON.stringify({ email, code: mailCode, ...(domain ? { domain } : {}) }),
+      // 页面就是这么拼的：空串不发（LoginFlow 的 `...(completing && domain ? {domain} : {})`）；
+      // 补绑这一步页面上没有勾选框（手机那一步已经勾过），两位带的是当时那两个 state
+      body: JSON.stringify({ email, code: mailCode, ...AGREED, ...(domain ? { domain } : {}) }),
     }),
   );
   const body = await json(res);
@@ -211,6 +213,9 @@ async function registerViaWeb(
   const onboarding = body.onboarding as { case_id: number } | undefined;
   return { token: body.token as string, caseId: onboarding?.case_id ?? null };
 }
+
+/** 发登录态的三条路由都要求带两个同意位（协议 一.3、二.6）；本文件测的是领域透传。 */
+const AGREED = { agree_terms: true, agree_adult: true };
 
 const authed = (url: string, token: string, init: RequestInit = {}) =>
   new Request(url, {

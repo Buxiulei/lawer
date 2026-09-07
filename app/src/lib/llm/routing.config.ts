@@ -218,6 +218,54 @@ const RELAY_DOMESTIC_PROVIDERS: ReadonlySet<ProviderName> = new Set<ProviderName
  *  一旦中转饱和 bulk 就没有任何可用降级腿了。已知走不通的腿不该由开关去翻。 */
 export const RELAY_UNSUPPORTED_MODELS: ReadonlySet<string> = new Set<string>([MODELS.QWEN_FLASH.api]);
 
+// ───────────────────────── 境外接收方（协议 五.5（2）：默认关闭）─────────────────────────
+
+/**
+ * 由**境外接收方**提供的型号（api 串）。目前只有 Anthropic 的 Claude 系列。
+ *
+ * 【为什么按型号判而不是按 provider 判】provider 说的是"这次请求发到哪个端点"，
+ * 而个人信息出境看的是"谁在处理这份数据"。中转（relay）两样都可能：
+ * Claude 两档经它接入 Anthropic（出境），而 RELAY_ROUTE_DOMESTIC 打开时境内两家也走它
+ * （数据仍由境内厂商处理）。只按 provider==='relay' 判的形态是：运维一打开那个开关，
+ * **境内型号也被当成境外**，于是 critical 档的降级链上一条腿都不剩，route() 当场抛错——
+ * 一个隐私开关把整站的对话打挂，而两边的日志都只说"无可用模型"。
+ */
+export const OVERSEAS_MODELS: ReadonlySet<string> = new Set<string>([
+  MODELS.CLAUDE_OPUS.api,
+  MODELS.CLAUDE_SONNET.api,
+]);
+
+/** 这个目标会不会把数据交到境外接收方手上（provider 直连 anthropic，或型号本身是境外的）。 */
+export function isOverseasTarget(t: RouteTarget): boolean {
+  return t.provider === 'anthropic' || OVERSEAS_MODELS.has(t.model.api);
+}
+
+/**
+ * 用户没开境外模型时，这一档该落到哪个目标：**沿本档位的降级链向后找第一个境内目标**。
+ *
+ * 【为什么走降级链而不是写死一个"境内替身"】降级链已经是 manager 审定过的
+ * 「这类活儿退而求其次该用谁」的完整偏好序（见 DEGRADE_CHAIN）。另写一张替换表的形态是：
+ * 两张表慢慢分叉，而分叉的后果是**某一档被静默降到会编条号的便宜模型**——
+ * 输出照常生成、格式完全正常，只有条号是假的。向后找第一个，拿到的就是**境内最高档**。
+ *
+ * 首选本来就是境内的，原样返回（绝大多数请求走这一支）。
+ */
+export function domesticEquivalent(taskClass: TaskClass, preferred: RouteTarget, chain: RouteTarget[]): RouteTarget {
+  if (!isOverseasTarget(preferred)) return preferred;
+  const from = chain.findIndex((t) => t.model === preferred.model && t.provider === preferred.provider);
+  const rest = from < 0 ? chain : chain.slice(from + 1);
+  const domestic = rest.find((t) => !isOverseasTarget(t));
+  if (!domestic) {
+    // 链上一条境内腿都没有 = 路由表配置错误，不是用户的问题。**绝不静默回落到境外**：
+    // 那正好把这道隐私闸变成一句写在注释里的承诺。
+    throw new Error(
+      `${taskClass} 的降级链上没有境内目标，无法在关闭境外模型时提供服务：` +
+        `请检查 DEGRADE_CHAIN.${taskClass}（当前 ${chain.map((t) => t.model.api).join(' → ')}）`,
+    );
+  }
+  return domestic;
+}
+
 export function relayDomesticEnabled(): boolean {
   return process.env[RELAY_DOMESTIC_ENV] === '1';
 }

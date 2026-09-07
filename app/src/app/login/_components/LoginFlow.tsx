@@ -3,7 +3,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  DISCLAIMER_TEXT,
   isEmail,
   isPhone,
   maskEmail,
@@ -21,7 +20,7 @@ import { takeLoginRedirect } from '@/app/_ui/loginRedirect';
 import { beginSession } from '@/app/_ui/session';
 import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
-import { Checkbox } from '@/components/shadcn/checkbox';
+import { ConsentGate } from './ConsentGate';
 import { ChannelStep } from './ChannelStep';
 import { clearLoginStep, loadLoginStep, NO_RESUME, type LoginResume } from './loginStep';
 
@@ -30,6 +29,21 @@ const DEFAULT_AFTER_LOGIN = '/welcome';
 
 /** 只在「新号补绑邮箱」这条路上显示的两格进度；单因素登录一步就完，没什么好指的 */
 const COMPLETION_STEPS = ['手机验证', '邮箱验证'];
+
+/** 请求体里的三个同意位（服务端字段名，见 lib/auth/consent.ts） */
+export interface ConsentBody {
+  agree_terms: boolean;
+  agree_adult: boolean;
+  /** 境外模型。**可选**：不勾照样注册，服务端也不据它拦人（见 lib/auth/consent.ts） */
+  agree_overseas: boolean;
+}
+
+/** 各子组件独立渲染（判据里）时的缺省：三位都没勾。 */
+const NO_CONSENT: ConsentBody = {
+  agree_terms: false,
+  agree_adult: false,
+  agree_overseas: false,
+};
 
 interface SendResponse {
   ttl_seconds: number;
@@ -115,7 +129,26 @@ export function LoginForm({ resume }: { resume: LoginResume }) {
   const [channel, setChannel] = useState<Channel>(resumed?.channel === 'email' ? 'email' : 'phone');
   /** true = 手机验过了、是个新号，正停在补绑邮箱那一步（此时请求带 token） */
   const [completing, setCompleting] = useState(resumed?.channel === 'completion');
-  const [agreed, setAgreed] = useState(false);
+  /**
+   * 两个勾选框（协议附一 #1、#2）。**两样都勾才算过闸**——它们是两件事，
+   * 见 ConsentGate 抬头。这两位同时是请求体里的 agree_terms / agree_adult：
+   * 服务端不看页面上勾没勾，只看请求里带了什么（见 lib/auth/consent.ts）。
+   */
+  const [agreedTerms, setAgreedTerms] = useState(false);
+  const [agreedAdult, setAgreedAdult] = useState(false);
+  /**
+   * 境外模型那一位（主理人 2026-09-07 口径）。**刻意不进 `agreed`**：
+   * 它是可选的，进了闸的形态是——一个"单独同意"变成了注册的前置条件，
+   * 于是它不再是单独同意（理由见 lib/consent.ts OVERSEAS_CHECKBOX_LABEL 抬头）。
+   */
+  const [agreedOverseas, setAgreedOverseas] = useState(false);
+  const agreed = agreedTerms && agreedAdult;
+  /** 每一条发登录态的请求都要带上这三位，服务端据此落同意台账 */
+  const consentBody = {
+    agree_terms: agreedTerms,
+    agree_adult: agreedAdult,
+    agree_overseas: agreedOverseas,
+  };
   const [phone, setPhone] = useState(resumed?.channel === 'phone' ? resumed.target : '');
   /**
    * 新号要建哪个领域的案子。空串＝没选（灰度只开着一个领域时控件根本不出现），
@@ -133,6 +166,7 @@ export function LoginForm({ resume }: { resume: LoginResume }) {
         email={email}
         onEmailChange={setEmail}
         agreed={agreed}
+        consentBody={consentBody}
         resume={resume}
         domains={domains}
         domain={domain}
@@ -150,6 +184,7 @@ export function LoginForm({ resume }: { resume: LoginResume }) {
           email={email}
           onEmailChange={setEmail}
           agreed={agreed}
+          consentBody={consentBody}
           resume={resume}
           onBack={() => setChannel('phone')}
         />
@@ -185,7 +220,7 @@ export function LoginForm({ resume }: { resume: LoginResume }) {
             onVerify={async (code) => {
               const res = await apiFetch<PhoneVerifyResponse>('/auth/sms/verify', {
                 method: 'POST',
-                body: { phone: phone.trim(), code },
+                body: { phone: phone.trim(), code, ...consentBody },
                 auth: false,
               });
               beginSession(res.token);
@@ -196,18 +231,14 @@ export function LoginForm({ resume }: { resume: LoginResume }) {
         </Card>
       )}
 
-      {/* 点整条由浏览器转发给里面的 Checkbox（button 是 labelable 元素），
-          这一层不要再挂 onClick，否则勾选状态会被切两次。 */}
-      <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-[10px] bg-surface-2 p-3.5">
-        <Checkbox
-          checked={agreed}
-          onCheckedChange={(next) => setAgreed(next === true)}
-          className="mt-1"
-        />
-        <span className="text-[14px] leading-6 text-ink-2">
-          我已阅读并理解：{DISCLAIMER_TEXT}
-        </span>
-      </label>
+      <ConsentGate
+        terms={agreedTerms}
+        adult={agreedAdult}
+        overseas={agreedOverseas}
+        onTermsChange={setAgreedTerms}
+        onAdultChange={setAgreedAdult}
+        onOverseasChange={setAgreedOverseas}
+      />
 
       {channel === 'phone' && (
         <ChannelSwitchLink onClick={() => setChannel('email')}>用邮箱登录 →</ChannelSwitchLink>
@@ -277,12 +308,14 @@ export function EmailPane({
   email,
   onEmailChange,
   agreed,
+  consentBody = NO_CONSENT,
   resume = NO_RESUME,
   onBack,
 }: {
   email: string;
   onEmailChange: (next: string) => void;
   agreed: boolean;
+  consentBody?: ConsentBody;
   resume?: LoginResume;
   /** 回主路（手机号） */
   onBack: () => void;
@@ -296,6 +329,7 @@ export function EmailPane({
           email={email}
           onEmailChange={onEmailChange}
           agreed={agreed}
+          consentBody={consentBody}
           resume={resume}
         />
       </Card>
@@ -315,6 +349,7 @@ export function CompletionPane({
   email,
   onEmailChange,
   agreed,
+  consentBody = NO_CONSENT,
   resume = NO_RESUME,
   domains = [],
   domain = '',
@@ -324,6 +359,7 @@ export function CompletionPane({
   email: string;
   onEmailChange: (next: string) => void;
   agreed: boolean;
+  consentBody?: ConsentBody;
   resume?: LoginResume;
   /** 当前开着的领域；**只有一个（或还没问到）时选择控件整块不渲染** */
   domains?: readonly DomainOption[];
@@ -349,6 +385,7 @@ export function CompletionPane({
           email={email}
           onEmailChange={onEmailChange}
           agreed={agreed}
+          consentBody={consentBody}
           resume={resume}
           /* 【不是原样递 domain】清单只有一项时控件不渲染、domain 恒是空串，
              而那一项**就是答案**——递空串上去等于让服务端按缺省领域建案，
@@ -383,6 +420,7 @@ export function EmailChannel({
   email,
   onEmailChange,
   agreed,
+  consentBody = NO_CONSENT,
   resume = NO_RESUME,
   domain = '',
 }: {
@@ -391,6 +429,12 @@ export function EmailChannel({
   email: string;
   onEmailChange: (next: string) => void;
   agreed: boolean;
+  /**
+   * 两个勾选位。补绑那一路带的是**手机验码那一步已经勾过的那两位**——
+   * 半程恢复时它们是 false，此时服务端按"这个账号此前已经同意过"放行
+   * （见 lib/auth/consent.ts registrationConsentFailure 的 knownUserId 分支）。
+   */
+  consentBody?: ConsentBody;
   resume?: LoginResume;
   /**
    * 新号要建哪个领域的案子；空串＝没选。**只在补绑那一路带上**：
@@ -442,6 +486,7 @@ export function EmailChannel({
           body: {
             email: email.trim(),
             code,
+            ...consentBody,
             // 空串不发：服务端把「没给」当作缺省领域，把空串也当没给（见路由注释），
             // 两边同一条口径，谁都不必猜另一边怎么理解一个空字符串。
             ...(completing && domain ? { domain } : {}),

@@ -14,8 +14,10 @@
 // ─────────────────────────────────────────────────────
 import type { Database } from 'better-sqlite3';
 
-import { realnameVerifiedOrLinked } from '@/lib/auth/guard';
+import { realnameGate } from '@/lib/auth/guard';
 import { hasScope, type Identity } from '@/lib/auth/identity';
+import { CONSENT_KINDS, REALNAME_EXITS } from '@/lib/consent';
+import { hasConsent } from '@/lib/db/consents';
 
 import { ERROR_CODES } from './error-codes';
 import { getCapability, type Capability, type CapabilitySurface } from './registry';
@@ -89,17 +91,32 @@ export async function checkPreconditions(
   capability: Capability,
   identity: Identity,
 ): Promise<CapabilityFailure | null> {
+  if (capability.precondition.includes('realname')) {
+    const gate = await realnameGate(db, identity.uid);
+    if (!gate.ok) {
+      return fail(
+        statusForFailure({ errorCode: gate.errorCode }),
+        gate.errorCode,
+        `${capability.name} 需要账号先完成实名认证，本次调用没有产生任何写入。` +
+          '原因是这一步的产物要与本人身份绑定（材料要能证明是谁存的，出证上要印实名快照）。' +
+          `${REALNAME_EXITS}` +
+          '两条都在网页上做，做完再调一次；' +
+          '在那之前不要改用别的工具绕开这一步，绕过去的记录日后不能用于出证。',
+      );
+    }
+  }
   if (
-    capability.precondition.includes('realname') &&
-    !(await realnameVerifiedOrLinked(db, identity.uid))
+    capability.precondition.includes('emotion_consent') &&
+    !hasConsent(db, identity.uid, CONSENT_KINDS.emotion)
   ) {
     return fail(
-      403,
-      'REALNAME_REQUIRED',
-      `${capability.name} 需要账号先完成实名认证，本次调用没有产生任何写入。` +
-        '原因是这一步的产物要与本人身份绑定（材料要能证明是谁存的，出证上要印实名快照）。' +
-        '请让用户到网页「设置 → 实名认证」完成认证后再调一次；' +
-        '认证前不要改用别的工具绕开这一步，绕过去的记录日后不能用于出证。',
+      statusForFailure({ errorCode: 'CONSENT_REQUIRED' }),
+      'CONSENT_REQUIRED',
+      `${capability.name} 要记录的是敏感个人信息（可以推知心理健康状况），` +
+        '用户还没有对这件事单独同意过，本次调用**没有写入任何东西**。' +
+        '请把这件事按原样念给用户听：记什么（档位、时间、你说过的那一句依据）、' +
+        '为什么记（判断要不要给心理支持的信息与转介）、不同意的后果（不记，其余功能照常）。' +
+        '同意要由用户本人在网页上给（设置 → 隐私与同意），不要替他点头，也不要改参数重试。',
     );
   }
   return null;

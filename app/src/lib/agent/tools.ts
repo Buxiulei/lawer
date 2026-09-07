@@ -15,6 +15,8 @@ import type { Database } from 'better-sqlite3';
 
 import * as cases from '@/lib/cases';
 import * as claims from '@/lib/cases/claims';
+import { AGENT_GRANTABLE_CONSENT_KINDS, type ConsentKind } from '@/lib/consent';
+import { recordConsent } from '@/lib/db/consents';
 import { CALC_KINDS } from '@/lib/cases/claims';
 import { DEFAULT_DOMAIN, DOMAINS, domainPackOrDefault } from '@/lib/domains/registry';
 import * as store from '@/lib/db/agent';
@@ -193,6 +195,16 @@ function inEnum(v: unknown, allowed: readonly string[]): string | null {
   return s && allowed.includes(s) ? s : null;
 }
 
+/**
+ * 情绪记录工具的名字。
+ *
+ * 【为什么提成常量】同意闸按**名字**拦它（orchestrator 的 runTool），
+ * 而 schema 里也要写一次这个名字。两处各写一遍字符串的形态是：哪天改了名，
+ * 闸拦的是一个不存在的工具名——于是拦不住任何东西，而工具照常执行、照常写库、
+ * 没有一处报错。同一个常量，两边就不可能对不上。
+ */
+export const EMOTION_TOOL = 'emotion_log';
+
 // ───────────────────────── 工具 schema（下发给模型）─────────────────────────
 //
 // 手写 JSON Schema 字面量，与 lib/mcp/tools.ts 同一风格（那边的理由同样适用：
@@ -307,7 +319,7 @@ export const AGENT_TOOLS: ToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'emotion_log',
+      name: EMOTION_TOOL,
       description:
         '记录用户当前情绪状态。识别到低落/焦虑/严重痛苦时都要记，这是长期陪跑看走向的依据。' +
         'refer_nbdpsy 只在符合持续焦虑抑郁表现时置 true，且一个案子最多一次。',
@@ -319,6 +331,29 @@ export const AGENT_TOOLS: ToolDef[] = [
           refer_nbdpsy: { type: 'boolean', description: '本轮是否转介心理咨询，默认 false' },
         },
         required: ['level'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'consent_grant',
+      description:
+        '用户在对话里**明确答应**我们记录某一类敏感信息时调它，把这次同意记进台账。' +
+        'kind=emotion 表示他同意我们记录情绪状态与危机识别记录。' +
+        '**只有他自己说了同意才调**：他说「不用了」「先不要」，或者压根没提这件事，都不要调；' +
+        '也不要为了让上一次失败的记录成功而替他点头。记完之后可以再调一次 emotion_log。',
+      parameters: {
+        type: 'object',
+        properties: {
+          kind: {
+            type: 'string',
+            enum: [...AGENT_GRANTABLE_CONSENT_KINDS],
+            description: '同意的类别。目前只有 emotion（情绪状态与危机识别记录）',
+          },
+          said: { type: 'string', description: '用户表示同意的原话片段，一句即可' },
+        },
+        required: ['kind'],
       },
     },
   },
@@ -772,6 +807,34 @@ const HANDLERS: Record<string, Handler> = {
     });
     ctx.emit({ event: 'record', data: { tool: 'emotion_log', id, summary: `情绪：${level}` } });
     return ok({ id, referred: refer, ...(referNote ? { note: referNote } : {}) });
+  },
+
+  /**
+   * 记一次同意（协议 五.2（2）/ 附一 #4）。**这是站内对话里唯一能落同意台账的地方**，
+   * 而且只落白名单里的类别（见 lib/consent.ts AGENT_GRANTABLE_CONSENT_KINDS）。
+   *
+   * 【为什么同意能由对话给】情绪这一类问的就是"要不要把你刚说的这个状态记进档案"，
+   * 用户在对话里答的那句"同意"正是对这件事本身的同意——把他赶到设置页去点一个框，
+   * 反而是在他最不想操作的时候多加一道手续。协议与境外模型不在此列：那两样必须在页面上点。
+   */
+  consent_grant(args, ctx) {
+    const kind = inEnum(args.kind, AGENT_GRANTABLE_CONSENT_KINDS);
+    if (!kind) {
+      return reject(
+        `kind 只能是 ${AGENT_GRANTABLE_CONSENT_KINDS.join(' / ')}；` +
+          '协议与境外模型这两类同意必须由用户在网页上亲手点，工具记不了。',
+      );
+    }
+    const { created } = recordConsent(ctx.db, { userId: ctx.userId, kind: kind as ConsentKind });
+    ctx.emit({
+      event: 'notice',
+      data: {
+        code: 'CONSENT_RECORDED',
+        message: '已记下你的同意：可以把情绪状态与危机识别记录记进档案。你随时可以改主意。',
+      },
+    });
+    // first_time=false = 他此前就同意过（多半是模型重复调了一次），不是失败。
+    return ok({ kind, granted: true, first_time: created });
   },
 
   company_profile_upsert(args, ctx) {

@@ -27,6 +27,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { requireRealname } from '@/lib/auth/guard';
 import type { Identity } from '@/lib/auth/identity';
 import { getCapability } from '@/lib/capabilities';
+import { CONSENT_KINDS } from '@/lib/consent';
+import { recordConsent } from '@/lib/db/consents';
 import { decryptField, encryptField, hashLookup } from '@/lib/crypto';
 import { runMigrations } from '@/lib/db/migrate';
 import * as referralStore from '@/lib/db/referrals';
@@ -504,8 +506,43 @@ describe('实名互认（读侧）', () => {
     expect(count('realname_verifications')).toBe(0);
   });
 
-  it('接通且对方 approved ⇒ requireRealname 当场放行（走同一道判定入口）', async () => {
+  /**
+   * 采用要先有单独同意（协议三.3 / 附一 #3）。两臂都在这儿：
+   * 没同意 → 闸不放行、**一行都不写**，且错误码是 CONSENT_REQUIRED（对方认过了，缺的是同意）；
+   * 同意了 → 照常采用并放行。
+   *
+   * 变异确认：把 realnameGate 里那句 hasConsent 判断删掉（退回自动采用），
+   * 第一臂当场红（无同意也放行、还落了一行快照）。
+   */
+  it('对方 approved 但没同意采用 ⇒ 不放行、零写入，错误码 CONSENT_REQUIRED', async () => {
     connect();
+    const original = globalThis.fetch;
+    globalThis.fetch = identityFetch({
+      verified: true,
+      real_name: '张三',
+      id_number_masked: '1101**********1234',
+      customer_code: 'C-1',
+    });
+    try {
+      const gate = await requireRealname(db, identity);
+      expect(gate.ok).toBe(false);
+      const body = await (gate as { ok: false; response: Response }).response.json();
+      expect(body.error_code).toBe('CONSENT_REQUIRED');
+      // 自述三段式的第三段：两条出路都要写出来
+      expect(body.message).toContain('同意采用');
+      expect(count('realname_verifications'), '没同意就一行都不该写').toBe(0);
+      expect(
+        (db.prepare('SELECT auth_status FROM users WHERE id=?').get(uid) as { auth_status: string })
+          .auth_status,
+      ).toBe('未认证');
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it('同意采用之后接通且对方 approved ⇒ requireRealname 当场放行（走同一道判定入口）', async () => {
+    connect();
+    recordConsent(db, { userId: uid, kind: CONSENT_KINDS.realnameAdopt });
     const original = globalThis.fetch;
     globalThis.fetch = identityFetch({
       verified: true,

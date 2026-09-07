@@ -21,6 +21,13 @@ let emailVerify: Handler;
 let emailRegisterSend: Handler;
 let emailRegisterVerify: Handler;
 
+/**
+ * 三条**发登录态**的路由现在都要求带两个同意位（协议 一.3、二.6 / 附一 #1、#2）。
+ * 本文件这些用例测的是别的事（手机号形状、验证码桶、Bearer 强度、响应体字段），
+ * 所以统一把两位带上；同意闸本身另有一组用例（lib/auth/__tests__/consent-gate.test.ts）。
+ */
+const AGREED = { agree_terms: true, agree_adult: true };
+
 function post(body: unknown, headers: Record<string, string> = {}): Request {
   return new Request('http://localhost/api/v1/auth/x', {
     method: 'POST',
@@ -63,13 +70,13 @@ describe('错误响应形状', () => {
   });
 
   test('phone 字段缺失时按非法手机号处理，不抛 500', async () => {
-    const res = await smsVerify(post({}));
+    const res = await smsVerify(post({ ...AGREED }));
     expect(res.status).toBe(400);
     expect((await res.json()).error_code).toBe('INVALID_PHONE');
   });
 
   test('没发过码就验 → OTP_NOT_FOUND', async () => {
-    const res = await smsVerify(post({ phone: '13800138000', code: '123456' }));
+    const res = await smsVerify(post({ phone: '13800138000', code: '123456', ...AGREED }));
     expect(res.status).toBe(400);
     expect((await res.json()).error_code).toBe('OTP_NOT_FOUND');
   });
@@ -82,7 +89,7 @@ describe('邮箱两条路由的 Bearer 校验', () => {
   // **缺 Authorization 头不再是 401**，请求确实进到了业务层。
   test('缺 Authorization 头不再被拒：请求照常进业务层（这里被邮箱格式拦下）', async () => {
     for (const handler of [emailSend, emailVerify]) {
-      const res = await handler(post({ email: 'not-an-email', code: '123456' }));
+      const res = await handler(post({ email: 'not-an-email', code: '123456', ...AGREED }));
       expect(res.status).toBe(400);
       expect((await res.json()).error_code).toBe('INVALID_EMAIL');
     }
@@ -94,7 +101,7 @@ describe('邮箱两条路由的 Bearer 校验', () => {
    * 早先它回 404 EMAIL_NOT_REGISTERED，一次请求就能问出注册状态。
    */
   test('🔴 匿名验陌生邮箱 → OTP_NOT_FOUND，不再有专属于「没注册」的错误码', async () => {
-    const res = await emailVerify(post({ email: 'a@b.com', code: '123456' }));
+    const res = await emailVerify(post({ email: 'a@b.com', code: '123456', ...AGREED }));
     expect(res.status).toBe(400);
     expect((await res.json()).error_code).toBe('OTP_NOT_FOUND');
   });
@@ -110,7 +117,7 @@ describe('邮箱两条路由的 Bearer 校验', () => {
     for (const bad of [`Bearer ${expired}`, 'Bearer nonsense', 'Basic abc', '']) {
       for (const handler of [emailSend, emailVerify]) {
         const res = await handler(
-          post({ email: 'a@b.com', code: '123456' }, { authorization: bad }),
+          post({ email: 'a@b.com', code: '123456', ...AGREED }, { authorization: bad }),
         );
         expect(res.status, `坏 token「${bad}」被放过了`).toBe(401);
         expect((await res.json()).error_code).toBe('UNAUTHORIZED');
@@ -121,7 +128,7 @@ describe('邮箱两条路由的 Bearer 校验', () => {
   test('token 有效但邮箱格式不对 → 400 INVALID_EMAIL（没走到发邮件）', async () => {
     const token = signToken(1);
     const res = await emailVerify(
-      post({ email: 'not-an-email', code: '123456' }, { authorization: `Bearer ${token}` }),
+      post({ email: 'not-an-email', code: '123456', ...AGREED }, { authorization: `Bearer ${token}` }),
     );
     expect(res.status).toBe(400);
     expect((await res.json()).error_code).toBe('INVALID_EMAIL');
@@ -134,7 +141,7 @@ describe('邮箱注册两条路由：匿名可达', () => {
   // 用非法邮箱正好能在不发出任何邮件的前提下证明这一点。
   test('不带 Authorization 也不回 401，直接走到业务校验（400 INVALID_EMAIL）', async () => {
     for (const handler of [emailRegisterSend, emailRegisterVerify]) {
-      const res = await handler(post({ email: 'not-an-email', code: '123456' }));
+      const res = await handler(post({ email: 'not-an-email', code: '123456', ...AGREED }));
       expect(res.status).toBe(400);
       expect((await res.json()).error_code).toBe('INVALID_EMAIL');
     }
@@ -150,7 +157,7 @@ describe('邮箱注册两条路由：匿名可达', () => {
 
   test('没发过注册码就验 → OTP_NOT_FOUND（不会误命中绑定桶）', async () => {
     const res = await emailRegisterVerify(
-      post({ email: 'nobody@example.com', code: '123456' }),
+      post({ email: 'nobody@example.com', code: '123456', ...AGREED }),
     );
     expect(res.status).toBe(400);
     expect((await res.json()).error_code).toBe('OTP_NOT_FOUND');
@@ -196,7 +203,7 @@ describe('邮箱注册两条路由：匿名可达', () => {
 
       const db = (await import('@/lib/db/client')).getDb();
       const first = await emailRegisterVerify(
-        post({ email, code: store.latestEmailCode(db, email, store.EMAIL_PURPOSE.register)!.code }),
+        post({ email, code: store.latestEmailCode(db, email, store.EMAIL_PURPOSE.register)!.code, ...AGREED }),
       );
       expect(first.status).toBe(200);
       const firstBody = await first.json();
@@ -219,7 +226,7 @@ describe('邮箱注册两条路由：匿名可达', () => {
         expiresAt: toSql(new Date(Date.now() + 5 * 60 * 1000)),
         createdAt: toSql(new Date()),
       });
-      const second = await emailRegisterVerify(post({ email, code: code2 }));
+      const second = await emailRegisterVerify(post({ email, code: code2, ...AGREED }));
       expect(second.status).toBe(200);
       const secondBody = await second.json();
       expect(secondBody).toEqual({

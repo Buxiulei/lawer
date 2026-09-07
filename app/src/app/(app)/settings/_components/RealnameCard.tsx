@@ -14,8 +14,10 @@ import {
   CardTitle,
 } from '@/components/shadcn/card';
 import { Skeleton } from '@/components/shadcn/skeleton';
+import { CONSENT_KINDS } from '@/lib/consent';
 import { CodeBlock } from './CodeBlock';
 import { IdCardForm } from './IdCardForm';
+import { NbdpsyAdoptConsent, RealnameCollectConsent } from './RealnameConsent';
 import { PassportForm } from './PassportForm';
 import { SignInHint } from './SignInHint';
 
@@ -118,6 +120,12 @@ export function RealnameCard() {
   const [idCard, setIdCard] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  /** 收证件号前的单独同意（协议五.2（1））。默认不勾——同意不能预置。 */
+  const [collectConsent, setCollectConsent] = useState(false);
+  /** 采用 NBDpsy 实名结果的单独同意（协议三.3）：本地状态只管这张卡的显示 */
+  const [adoptGranted, setAdoptGranted] = useState(false);
+  const [adoptBusy, setAdoptBusy] = useState(false);
+  const [adoptError, setAdoptError] = useState<string | null>(null);
   /** init 拿到的 H5 认证页地址：电脑上要把它给用户拿手机打开 */
   const [certifyUrl, setCertifyUrl] = useState<string | null>(null);
   const [pollsLeft, setPollsLeft] = useState(POLL_LIMIT);
@@ -182,7 +190,9 @@ export function RealnameCard() {
     try {
       const body = await apiFetch<RealnameInit>('/realname/init', {
         method: 'POST',
-        body: { real_name: name.trim(), id_card: idCard.trim().toUpperCase() },
+        // consent 与那两个字段同一次请求：证件号是在这一刻交出去的，
+        // 同意必须与它同行（服务端在读证件号之前判，见 realnameConsentFailure）。
+        body: { real_name: name.trim(), id_card: idCard.trim().toUpperCase(), consent: collectConsent },
       });
       rememberMaskedName(maskName(name));
       setMaskedName(maskName(name));
@@ -205,6 +215,22 @@ export function RealnameCard() {
   const missing: string[] = [];
   if (name.trim().length === 0) missing.push('姓名');
   if (!isIdCard(idCard)) missing.push('身份证号');
+  // 没勾同意就点不动提交。**页面这一层只是提前拦**：真拦在服务端
+  // （realnameConsentFailure），删掉这一行也一样交不上去，只是用户白填一次。
+  if (!collectConsent) missing.push('对收集证件信息的同意');
+
+  const grantAdopt = async () => {
+    setAdoptBusy(true);
+    setAdoptError(null);
+    try {
+      await apiFetch('/consents', { method: 'POST', body: { kind: CONSENT_KINDS.realnameAdopt } });
+      setAdoptGranted(true);
+    } catch (err) {
+      setAdoptError(humanError(err));
+    } finally {
+      setAdoptBusy(false);
+    }
+  };
 
   return (
     <Card>
@@ -253,37 +279,50 @@ export function RealnameCard() {
                 onRestart={() => setRestarting(true)}
               />
             ) : channel === 'passport' ? (
-              <PassportForm
-                rejectedMessage={
-                  status.verification_status === '未通过' ? status.message : undefined
-                }
-                onSubmitted={() => {
-                  setRestarting(false);
-                  setPollsLeft(POLL_LIMIT);
-                  void refresh();
-                }}
-                onCancel={() => setChannel('cloudauth')}
-              />
+              <div className="flex flex-col gap-4">
+                <RealnameCollectConsent checked={collectConsent} onChange={setCollectConsent} />
+                <PassportForm
+                  consent={collectConsent}
+                  rejectedMessage={
+                    status.verification_status === '未通过' ? status.message : undefined
+                  }
+                  onSubmitted={() => {
+                    setRestarting(false);
+                    setPollsLeft(POLL_LIMIT);
+                    void refresh();
+                  }}
+                  onCancel={() => setChannel('cloudauth')}
+                />
+              </div>
             ) : (
-              <IdCardForm
-                name={name}
-                idCard={idCard}
-                rejectedMessage={
-                  status.verification_status === '未通过' ? status.message : undefined
-                }
-                idCardError={
-                  idCard.length >= 18 && !isIdCard(idCard)
-                    ? '身份证号格式不对，再核一遍'
-                    : undefined
-                }
-                formError={formError}
-                submitting={submitting}
-                missing={missing}
-                onNameChange={setName}
-                onIdCardChange={setIdCard}
-                onSubmit={() => void submit()}
-                onUsePassport={() => setChannel('passport')}
-              />
+              <div className="flex flex-col gap-4">
+                <RealnameCollectConsent checked={collectConsent} onChange={setCollectConsent} />
+                <NbdpsyAdoptConsent
+                  granted={adoptGranted}
+                  busy={adoptBusy}
+                  error={adoptError}
+                  onGrant={() => void grantAdopt()}
+                />
+                <IdCardForm
+                  name={name}
+                  idCard={idCard}
+                  rejectedMessage={
+                    status.verification_status === '未通过' ? status.message : undefined
+                  }
+                  idCardError={
+                    idCard.length >= 18 && !isIdCard(idCard)
+                      ? '身份证号格式不对，再核一遍'
+                      : undefined
+                  }
+                  formError={formError}
+                  submitting={submitting}
+                  missing={missing}
+                  onNameChange={setName}
+                  onIdCardChange={setIdCard}
+                  onSubmit={() => void submit()}
+                  onUsePassport={() => setChannel('passport')}
+                />
+              </div>
             )}
           </div>
         )}

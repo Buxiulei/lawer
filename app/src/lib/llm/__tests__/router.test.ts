@@ -4,7 +4,7 @@
 // 另外三条性质各有专门用例：降级只能向下；qwen 目标必须钉 variant；计费键锁 dated 串。
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { route, getProvider } from '../router';
-import { DEGRADE_CHAIN, MODELS, ROUTING_TABLE, VARIANT_REQUEST_PARAMS, billingKey, degradeChain, relayDomesticEnabled, routingTable } from '../routing.config';
+import { DEGRADE_CHAIN, MODELS, ROUTING_TABLE, VARIANT_REQUEST_PARAMS, billingKey, degradeChain, domesticEquivalent, isOverseasTarget, relayDomesticEnabled, routingTable } from '../routing.config';
 import type { Plan, RouteTarget, TaskClass } from '../routing.config';
 import type { ProviderName } from '../types';
 
@@ -17,10 +17,20 @@ const DS_FLASH: RouteTarget = { provider: 'deepseek', model: MODELS.DEEPSEEK_FLA
 const QWEN_MAX: RouteTarget = { provider: 'dashscope', model: MODELS.QWEN_MAX, variant: 'nothink' };
 const QWEN_FLASH: RouteTarget = { provider: 'dashscope', model: MODELS.QWEN_FLASH, variant: 'nothink' };
 
+/**
+ * **本文件绝大多数用例说的是「表长什么样」，那是已开启境外模型的用户看到的表。**
+ * 境外闸（协议五.5（2）：默认关，关着时 Claude 两档换成境内最高档）另有专门一组用例，
+ * 见文末「境外模型闸」。两组分开是有意的：混在一起的话，改闸门的人会分不清
+ * 某条用例红了是"表变了"还是"闸变了"。
+ */
+const OVERSEAS_ON = { overseasAllowed: true } as const;
 /** 矩阵用例要的是「表长什么样」，与本机有没有 key 无关，所以把可用性钉死为全可用。 */
-const allUp = { isAvailable: () => true };
+const allUp = { isAvailable: () => true, ...OVERSEAS_ON };
 /** 只有列出的 provider 有 key */
-const only = (...ups: ProviderName[]) => ({ isAvailable: (p: ProviderName) => ups.includes(p) });
+const only = (...ups: ProviderName[]) => ({
+  isAvailable: (p: ProviderName) => ups.includes(p),
+  ...OVERSEAS_ON,
+});
 
 /** 遍历路由表与降级链上的全部目标 */
 function allTargets(): { where: string; target: RouteTarget }[] {
@@ -246,21 +256,21 @@ describe('默认可用性判据走环境变量', () => {
   });
 
   test('不传 isAvailable 时按环境变量判断', () => {
-    expect(route('critical', 'pro').degraded).toBe(false);
+    expect(route('critical', 'pro', OVERSEAS_ON).degraded).toBe(false);
     delete process.env.RELAY_API_KEY;
-    expect(route('critical', 'pro')).toMatchObject({ ...DS_PRO, degraded: true, degradedFrom: OPUS });
+    expect(route('critical', 'pro', OVERSEAS_ON)).toMatchObject({ ...DS_PRO, degraded: true, degradedFrom: OPUS });
   });
 
   test('中转缺端点与缺 key 同样算不可用——端点也是凭据', () => {
     // 只判 key 的话这里会判可用、选中中转，然后在 createProvider 里炸掉，
     // 而降级链上明明还有 DeepSeek 那条腿没试。可用性判据必须与「能不能真建出来」同口径。
     delete process.env.RELAY_BASE_URL;
-    expect(route('critical', 'pro')).toMatchObject({ ...DS_PRO, degraded: true, degradedFrom: OPUS });
+    expect(route('critical', 'pro', OVERSEAS_ON)).toMatchObject({ ...DS_PRO, degraded: true, degradedFrom: OPUS });
   });
 
   test('空串 key 当作未配置（半配置比没配置更容易让人误判）', () => {
     process.env.RELAY_API_KEY = '';
-    expect(route('critical', 'pro').degraded).toBe(true);
+    expect(route('critical', 'pro', OVERSEAS_ON).degraded).toBe(true);
   });
 
   test('中转凭据缺失就是真实场景（本机常态）：联调不该被阻塞', () => {
@@ -329,10 +339,10 @@ describe('getProvider', () => {
   test('高配三档分别落到 Opus / Sonnet / DeepSeek-Flash（Claude 两档经中转）', () => {
     // 发给上游的 model 参数仍是官方别名——中转认的就是这个串（实测 543 个模型里逐字在册），
     // 换的只是端点与计费键，不是型号名。
-    expect(getProvider('critical', 'pro').client).toMatchObject({ name: 'relay', model: 'claude-opus-5' });
-    expect(getProvider('standard', 'pro').client).toMatchObject({ name: 'relay', model: 'claude-sonnet-5' });
+    expect(getProvider('critical', 'pro', OVERSEAS_ON).client).toMatchObject({ name: 'relay', model: 'claude-opus-5' });
+    expect(getProvider('standard', 'pro', OVERSEAS_ON).client).toMatchObject({ name: 'relay', model: 'claude-sonnet-5' });
     expect(getProvider('bulk', 'pro').client).toMatchObject({ name: 'deepseek', model: 'deepseek-v4-flash' });
-    expect(getProvider('critical', 'pro').client.billingModel).toBe('relay/claude-opus-5');
+    expect(getProvider('critical', 'pro', OVERSEAS_ON).client.billingModel).toBe('relay/claude-opus-5');
   });
 
   test('降级到 qwen 时 variant 参数与计费键同源下发', () => {
@@ -344,7 +354,7 @@ describe('getProvider', () => {
 
   test('降级时客户端与 route 结果一致，degraded 可透传到响应头', () => {
     delete process.env.RELAY_API_KEY;
-    const { client, route: r } = getProvider('critical', 'pro');
+    const { client, route: r } = getProvider('critical', 'pro', OVERSEAS_ON);
     expect(r).toMatchObject({ degraded: true, degradedFrom: OPUS });
     expect(client.name).toBe(r.provider);
     expect(client.model).toBe(r.model.api);
@@ -352,7 +362,7 @@ describe('getProvider', () => {
 
   test('自带 apiKey 时按首选走，不因环境变量没配而降级', () => {
     delete process.env.RELAY_API_KEY;
-    const { client, route: r } = getProvider('critical', 'pro', { apiKey: 'injected' });
+    const { client, route: r } = getProvider('critical', 'pro', { apiKey: 'injected', ...OVERSEAS_ON });
     expect(r.degraded).toBe(false);
     expect(client.name).toBe('relay');
   });
@@ -361,7 +371,7 @@ describe('getProvider', () => {
     // 自带 apiKey 会绕过可用性判据直取首选，此时端点缺失只能在建实例时才发现。
     // 这条错必须说清「缺什么 / 为什么缺 / 怎么办」——裸报网络错会让人去查中转有没有挂。
     delete process.env.RELAY_BASE_URL;
-    expect(() => getProvider('critical', 'pro', { apiKey: 'injected' })).toThrow(
+    expect(() => getProvider('critical', 'pro', { apiKey: 'injected', ...OVERSEAS_ON })).toThrow(
       /RELAY_BASE_URL 未配置[\s\S]*只有变量名[\s\S]*RELAY_BASE_URL=/,
     );
   });
@@ -369,5 +379,131 @@ describe('getProvider', () => {
   test('降级链全缺时仍然报错，不返回半成品客户端', () => {
     for (const k of ['RELAY_API_KEY', 'DEEPSEEK_API_KEY', 'DASHSCOPE_API_KEY']) delete process.env[k];
     expect(() => getProvider('critical', 'pro')).toThrow(/无可用模型/);
+  });
+});
+
+// ─────────────────────────── 境外模型闸 ───────────────────────────
+//
+// 协议 五.5（2）/ 附一 #6：境外模型**默认关闭**；没同意的人，Claude 那两档换成
+// 降级链上的**境内最高档**，功能不缺。
+//
+// 【判据分四层，缺一层就漏掉对应的失效形态】
+//  ① 全矩阵：关着时选中的目标**一个都不是**境外目标（九格逐格数，不是抽查）；
+//  ② 缺省即拒：不传这一位与显式传 false 结果逐格相同——新调用方忘了传也不会出境；
+//  ③ 降级不绕闸：relay 有 key 时也不许被"缺 key 降级"这条路径把人送回 Claude；
+//  ④ 换到的是**境内最高档**、不是随便一个境内档（降到会编条号的便宜模型是最像正常的失败）。
+//
+// 【变异矩阵】2026-09-07 逐条实跑（改 router.ts / routing.config.ts、跑本文件、再改回），
+// 结果如实照抄，包括**没抓住的那一条**：
+//  · N-1 route() 里 `o.overseasAllowed ? tabled : domesticEquivalent(...)` 改成恒取 tabled
+//        （＝闸整个失效）                                      ⇒ 5 失败 / 40 通过。
+//  · N-3 缺省改成放行（`(o.overseasAllowed ?? true)`）         ⇒ 2 失败 / 43 通过。
+//  · N-4 domesticEquivalent 取链上**最后**一个境内目标而非第一个（＝降到最便宜那档）
+//        ⇒ 3 失败 / 42 通过。
+//  · N-2 删掉降级循环里那句 `if (!o.overseasAllowed && isOverseasTarget(target)) continue;`
+//        ⇒ **45 全绿，本组一条都没抓住。** 如实记在这里，别把它读成"守住了"：
+//        今天的 DEGRADE_CHAIN 里境外目标全排在境内目标**之前**（Claude → Claude →
+//        DeepSeek → Qwen），而 domesticEquivalent 已经先把首选换成了链上第一个境内目标，
+//        它之后的每一格都是境内的——那句 continue 因此**当前不可达**，是留给
+//        "将来链上境内档后面又出现境外档"的前置守卫。要给它配判据，得能往 route() 里
+//        注入一条自造的链（今天注不进去）。改动那句时不要指望本组会变红。
+describe('境外模型闸：没同意的人，一格都不许落到境外目标', () => {
+  const PLANS: Plan[] = ['entry', 'standard', 'pro'];
+  const CLASSES: TaskClass[] = ['critical', 'standard', 'bulk'];
+  /** 凭据全可用——这条判据说的是「表怎么选」，与本机有没有 key 无关 */
+  const allAvailable = { isAvailable: () => true };
+
+  test('① 九格全扫：关着境外时，选中的目标一个都不是境外的', () => {
+    const overseas: string[] = [];
+    for (const plan of PLANS) {
+      for (const taskClass of CLASSES) {
+        const r = route(taskClass, plan, { ...allAvailable, overseasAllowed: false });
+        if (isOverseasTarget(r)) overseas.push(`${plan}/${taskClass} → ${r.model.api}`);
+      }
+    }
+    expect(overseas, '这些格子把没同意出境的用户送到了境外接收方').toEqual([]);
+  });
+
+  test('② 缺省就是拒：不传这一位与显式 false 逐格相同（新调用方忘了传也不会出境）', () => {
+    // 【方向不能反】默认放行时"忘了传"的代价是那条路上所有人的对话都出境，
+    // 而回包一切正常、没有任何一处报错。默认拒绝时的代价只是都用境内模型。
+    for (const plan of PLANS) {
+      for (const taskClass of CLASSES) {
+        const omitted = route(taskClass, plan, { ...allAvailable });
+        const explicit = route(taskClass, plan, { ...allAvailable, overseasAllowed: false });
+        expect(omitted, `${plan}/${taskClass}：不传与传 false 必须同一个结果`).toEqual(explicit);
+      }
+    }
+  });
+
+  test('③ Claude 两档换成 DeepSeek-Pro，且**不算降级**（是这个人本来就该走的档）', () => {
+    // relay 的 key 是有的——换档的理由是"他没同意出境"，不是"中转挂了"。
+    const pro = route('critical', 'pro', { ...allAvailable, overseasAllowed: false });
+    expect(pro).toMatchObject({ ...DS_PRO });
+    const std = route('standard', 'pro', { ...allAvailable, overseasAllowed: false });
+    expect(std).toMatchObject({ ...DS_PRO });
+    const mid = route('critical', 'standard', { ...allAvailable, overseasAllowed: false });
+    expect(mid).toMatchObject({ ...DS_PRO });
+  });
+
+  test('④ 换到的是链上**第一个**境内目标（境内最高档），不是最便宜那档', () => {
+    // 【为什么这条要单独设防】降到 Qwen-Flash 这类便宜档的形态是：输出照常生成、
+    // 格式完全正常，只有条号是编的。它比"报错"难发现得多。
+    const r = route('critical', 'pro', { ...allAvailable, overseasAllowed: false });
+    const firstDomestic = DEGRADE_CHAIN.critical.find((t) => !isOverseasTarget(t))!;
+    expect(r.model.api).toBe(firstDomestic.model.api);
+    expect(r.model.api).not.toBe(MODELS.QWEN_MAX.api);
+  });
+
+  test('⑤ 零 relay 调用（计数）：整张矩阵建成客户端，落在中转上的一个都没有', () => {
+    // 【为什么这条要真的把客户端建出来】前面几条量的是 route() 的返回值；
+    // 这条量的是**真正会被拿去发请求的那个对象**。两者之间还隔着 createProvider，
+    // 而"路由算对了、客户端却建成了另一个"正是最难从返回值上看出来的失效形态。
+    const saved = { ...process.env };
+    process.env.RELAY_API_KEY = 'sk-relay-x';
+    process.env.RELAY_BASE_URL = 'https://relay.example/v1';
+    process.env.DEEPSEEK_API_KEY = 'sk-ds-x';
+    process.env.DASHSCOPE_API_KEY = 'sk-dash-x';
+    // 中转转发境内型号的开关必须关着，否则 name==='relay' 不再等价于"出境"
+    delete process.env.RELAY_ROUTE_DOMESTIC;
+    try {
+      expect(relayDomesticEnabled(), '前提自检：这条判据要求中转境内转发是关的').toBe(false);
+      const relayCalls: string[] = [];
+      for (const plan of PLANS) {
+        for (const taskClass of CLASSES) {
+          const { client } = getProvider(taskClass, plan, { overseasAllowed: false });
+          if (client.name === 'relay' || client.name === 'anthropic') {
+            relayCalls.push(`${plan}/${taskClass} → ${client.name}/${client.model}`);
+          }
+        }
+      }
+      expect(relayCalls, '没同意出境的用户，这些格子仍然会把请求发往境外通路').toEqual([]);
+    } finally {
+      process.env = { ...saved };
+    }
+  });
+
+  test('⑥ 自带 apiKey 不放宽境外闸（那把 key 是谁的，与他同不同意出境是两件事）', () => {
+    const saved = { ...process.env };
+    process.env.DEEPSEEK_API_KEY = 'sk-ds-x';
+    try {
+      const { client, route: r } = getProvider('critical', 'pro', { apiKey: 'injected' });
+      expect(r.model.api).toBe(MODELS.DEEPSEEK_PRO.api);
+      expect(client.name).not.toBe('relay');
+    } finally {
+      process.env = { ...saved };
+    }
+  });
+
+  test('⑦ 对照臂：同意了就照常走 Claude（闸不是"永远不给用"）', () => {
+    // 只有这一臂能挡住"把闸写成恒拒"——那时上面六条全绿，而买了高配的人拿不到 Claude。
+    expect(route('critical', 'pro', { ...allAvailable, overseasAllowed: true })).toMatchObject(OPUS);
+    expect(route('standard', 'pro', { ...allAvailable, overseasAllowed: true })).toMatchObject(SONNET);
+  });
+
+  test('⑧ 链上一条境内腿都没有时**抛错**，绝不静默回落到境外', () => {
+    // 那样会把这道闸变成一句只写在注释里的承诺：用户没同意，数据照样出境，而日志一切正常。
+    const overseasOnly: RouteTarget[] = [OPUS, SONNET];
+    expect(() => domesticEquivalent('critical', OPUS, overseasOnly)).toThrow(/没有境内目标/);
   });
 });

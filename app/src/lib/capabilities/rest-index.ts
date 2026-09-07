@@ -135,8 +135,10 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'web', method: 'GET', path: '/api/v1/keys/{id}/secret', auth: 'jwt', description: '取回这把 key 的明文（本能力上线前签发的旧密钥无密文，回 KEY_NOT_VIEWABLE）' },
   { category: 'web', method: 'POST', path: '/api/v1/keys/{id}/rotate', auth: 'jwt', description: '轮换：换发新明文，旧明文立即失效；id / name / scopes 不变' },
   { category: 'web', method: 'DELETE', path: '/api/v1/keys/{id}', auth: 'jwt', description: '吊销 api key（置 enabled=0，留行保审计线索）' },
-  { category: 'web', method: 'POST', path: '/api/v1/realname/init', auth: 'jwt', description: '发起实人认证，返回 H5 活体认证页 URL' },
-  { category: 'web', method: 'POST', path: '/api/v1/realname/passport', auth: 'jwt', description: '护照实名提交（multipart），落「待审」等人工核；只有护照的人走这条' },
+  { category: 'web', method: 'POST', path: '/api/v1/consents', auth: 'jwt', description: '记一次单独同意（realname_adopt / emotion）。协议、年龄、实名、境外模型四类各有自己的采集点，不从这条收' },
+  { category: 'web', method: 'POST', path: '/api/v1/me/preferences', auth: 'jwt', description: '境外模型与评测授权两个开关；开启境外模型要带 consent:true（读过 /terms/overseas 之后）' },
+  { category: 'web', method: 'POST', path: '/api/v1/realname/init', auth: 'jwt', description: '发起实人认证，返回 H5 活体认证页 URL；要带 consent:true（收证件号前的单独同意）' },
+  { category: 'web', method: 'POST', path: '/api/v1/realname/passport', auth: 'jwt', description: '护照实名提交（multipart，含 consent=true），落「待审」等人工核；只有护照的人走这条' },
 
   // ──────── 管理员 ────────
   { category: 'admin', method: 'GET', path: '/api/v1/admin/audit', auth: 'admin', description: '最近的后台操作流水，只读（无删改端点）' },

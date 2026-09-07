@@ -91,29 +91,49 @@ export function adoptIdentity(db: Database, userId: number, id: NbdpsyIdentity):
 }
 
 /**
- * 去问一次对方，approved 就采信并放行。**只在本地未实名时调**（由 guard 编排）。
+ * 去问一次对方「这个人在你们那儿实名了没有」，**只问不写**。
+ *
+ * 【为什么要把「问」和「采用」拆开】协议三.3：在 NBDpsy 实名过的人，首次在这里用到
+ * 需要实名的功能时，我们要**先说明并征求他的单独同意，同意后才采用**。
+ * 拆开之后，闸门才答得出"是没实名，还是实名了但你还没同意我们采用"——
+ * 这两句话对用户是完全不同的两条路（去认证 / 点一下同意），而合成一句的形态是：
+ * 一个已经认证过的人被反复要求再认证一次，而那条一步就能走完的路我们知道、他不知道。
+ *
+ * @returns 对方人级终态为 approved 时回那份身份；否则（没接通 / 连不上 / 没实名）回 null。
+ * 一律不抛错、不重试：这条挂在用户的一次请求上，多等一轮不如让他走本地实名。
+ */
+export async function peekNbdpsyRealname(
+  db: Database,
+  userId: number,
+  fetchImpl?: FetchImpl,
+): Promise<NbdpsyIdentity | null> {
+  // 没接通就别去解密手机号：那是一次没有用处的敏感字段解密。
+  if (!nbdpsyConfigured()) return null;
+
+  const enc = users.findUserPhoneEnc(db, userId);
+  if (!enc) return null;
+  let phone: string;
+  try {
+    phone = decryptField(enc);
+  } catch {
+    return null; // 解不开就当没绑手机；绝不拿密文去当匹配键
+  }
+
+  const res = await identityStatus(phone, fetchImpl ?? fetch);
+  return res.ok && res.approved ? res : null;
+}
+
+/**
+ * 去问一次对方，approved 就采信并放行。**只在本地未实名、且用户已单独同意采用时调**
+ * （由 guard 编排，见 lib/auth/guard.ts realnameGate）。
  *
  * 对方不可用（没接通 / 连不上 / 回了看不懂的东西）一律返回 false ＝ 按未实名处理。
- * 这里刻意不抛错、不重试：这条挂在用户的一次请求上，多等一轮不如让他走本地实名。
  */
 export async function adoptNbdpsyRealname(
   db: Database,
   userId: number,
   fetchImpl?: FetchImpl,
 ): Promise<boolean> {
-  // 没接通就别去解密手机号：那是一次没有用处的敏感字段解密。
-  if (!nbdpsyConfigured()) return false;
-
-  const enc = users.findUserPhoneEnc(db, userId);
-  if (!enc) return false;
-  let phone: string;
-  try {
-    phone = decryptField(enc);
-  } catch {
-    return false; // 解不开就当没绑手机；绝不拿密文去当匹配键
-  }
-
-  const res = await identityStatus(phone, fetchImpl ?? fetch);
-  if (!res.ok) return false;
-  return adoptIdentity(db, userId, res);
+  const identity = await peekNbdpsyRealname(db, userId, fetchImpl);
+  return identity ? adoptIdentity(db, userId, identity) : false;
 }
