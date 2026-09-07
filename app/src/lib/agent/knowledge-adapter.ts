@@ -78,19 +78,27 @@ export function createKnowledgeSearcher(): KnowledgeSearcher {
 /**
  * `法名|条号` → 收录该条逐字原文的卡 id。进程级建一次——
  * 每轮重扫全库是纯浪费，而库是只读的（同 lib/knowledge 的 index 缓存口径）。
+ *
+ * **同一个键落在多张卡上时，取逐字原文最长的那张**（2026-09-07 改，此前是"取第一张"）。
+ * 【为什么这不是可有可无的取舍】条号归一会剥掉「第N项/第N款」（见 normalizeArticle），
+ * 所以"只录了某一项"的卡与"录了整条"的卡**落在同一个键上**。取第一张的形态是：
+ * 问一条法条，回来的是它其中一项——一段逐字为真、却只有一项的原文，
+ * 而调用方拿它当整条用。实测：某条有三张卡收录，整条 280 字、两张分别只有 29 字与 68 字，
+ * 谁在前完全取决于 index.json 的排列顺序。这里是全库唯一的"选哪张"入口，
+ * 修在这里，下游（citation_check、⭐核心条注入）一起对。
  */
 let articleIndexCache: Map<string, string> | null = null;
 function articleIndex(): Map<string, string> {
   if (articleIndexCache) return articleIndexCache;
-  const out = new Map<string, string>();
+  const best = new Map<string, { id: string; len: number }>();
   for (const meta of knowledge.listPacks()) {
     for (const q of meta.facts?.statute_quotes ?? []) {
       if (!q?.article || !q.text?.trim()) continue;
       const key = articleKey(q.law, q.article);
-      // 同一条被多张卡收录时取第一张（index 顺序稳定），不做取舍——注入一张就够
-      if (!out.has(key)) out.set(key, meta.id);
+      const cur = best.get(key);
+      if (!cur || q.text.length > cur.len) best.set(key, { id: meta.id, len: q.text.length });
     }
   }
-  articleIndexCache = out;
-  return out;
+  articleIndexCache = new Map([...best].map(([k, v]) => [k, v.id]));
+  return articleIndexCache;
 }

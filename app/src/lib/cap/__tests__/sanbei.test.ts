@@ -105,10 +105,22 @@ describe('封顶值的主来源必须是北京市官方域', () => {
     expect(host === 'beijing.gov.cn' || host.endsWith('.beijing.gov.cn'), `主来源域名不是北京官方域：${host}`).toBe(true);
   });
 
-  it('正对照：二手源仍在 sources 里（守卫拦的是"主来源被换掉"，不是"不许列旁证"）', () => {
-    // 空集上断言恒真——先证明这张卡确实还带着二手源，守卫才有意义
-    expect(meta().sources.some((s) => s.includes('helsen.com.cn'))).toBe(true);
-    expect(primarySource()).not.toContain('helsen.com.cn');
+  it('正对照：这把尺子分得出"北京官方域"与"别的官方域"（不是恒真）', () => {
+    // 【原来这条断言的是什么，为什么改】原文是"helsen.com.cn 这条二手源仍在 sources 里"——
+    // 用它证明守卫拦的是"主来源被换掉"而不是"不许列旁证"。2026-09-07 核实闭卷后，
+    // 生成器的 host 闸（README §7.3 (b)）**禁止任何 confidence=原文核实 的卡带非 .gov.cn 出处**，
+    // 那条旁证已被删除，于是原断言恒 false。
+    // 现在这张卡的 5 条 sources 全是 .gov.cn，光看数据分不出这把尺子有没有用——
+    // 所以改成直接量尺子本身：它必须对"别的官方域"和"二手站"都判 false。
+    const isBeijing = (u: string) => {
+      const h = new URL(u).hostname;
+      return h === 'beijing.gov.cn' || h.endsWith('.beijing.gov.cn');
+    };
+    expect(isBeijing(primarySource())).toBe(true);
+    expect(isBeijing('https://www.gov.cn/zhengce/x.htm'), '国务院域不是北京域').toBe(false);
+    expect(isBeijing('https://www.helsen.com.cn/x'), '二手站更不是').toBe(false);
+    // 旁证仍然允许存在（守卫拦的是主来源），只是这张卡现在恰好没有非北京域的旁证
+    expect(meta().sources.length).toBeGreaterThan(1);
   });
 });
 

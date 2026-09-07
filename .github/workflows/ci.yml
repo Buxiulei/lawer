@@ -69,6 +69,29 @@ jobs:
       - run: npx vitest run
         working-directory: app
 
+  knowledge:
+    name: knowledge · 扎根守卫 pytest
+    runs-on: ubuntu-latest
+    # 【为什么单起一个 job 而不是塞进 sidecar】两边的依赖面完全不同：
+    # sidecar 那个要装 reportlab / 中文字体 / fastapi，这三条判据只要 pyyaml。
+    # 合并的形态是：sidecar 的依赖装挂了，扎根守卫也跟着不跑——
+    # 而"没跑"和"跑绿了"在检查列表里长得一模一样（本文件抬头记的就是这个坑）。
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml pytest
+      # 全程离线：三套判据都在临时目录里造自己的知识库，download() 被换成假货
+      - run: python -m pytest scripts/tests -q
+      # 现库本身也要过：pytest 那条跑的是临时副本，这三条跑的是**仓库里躺着的这一份**。
+      # ① strict 生成必须绿；② 生成出来的 index.json 必须与提交进仓库的那份逐字节相同
+      #（否则就是有人手改过索引、或改了卡没重跑生成器——那份索引会静默地与卡片分叉）；
+      # ③ 全库引文与官方原件逐条对得上。三条都不联网（原件已存档在 knowledge/sources/）。
+      - run: python3 scripts/gen-knowledge-index.py
+      - run: git diff --exit-code knowledge/index.json
+      - run: python3 scripts/verify-quotes.py
+
   sidecar:
     name: sidecar · pytest
     runs-on: ubuntu-latest

@@ -1,18 +1,39 @@
 #!/usr/bin/env python3
 """从 knowledge/packs/**/*.md 的 frontmatter 再生成 knowledge/index.json。
 
-用法：python3 scripts/gen-knowledge-index.py
+用法：python3 scripts/gen-knowledge-index.py [--no-strict] [--knowledge-dir DIR]
 校验：id 唯一、必填字段齐全、type/confidence 枚举合法；
 facts 两面一致性（规范 §2.1）：values/hotlines 的数值与号码必须出现在本卡正文、
 statute_quotes.text 必须与正文逐字一致（空白归一）、facts key 全库唯一、
 status=forbidden 的号码不得出现在其他任何卡正文。失败即退出非零（构建即断）。
+
+【扎根守卫（主理人 2026-09-07 裁决：知识库里不允许「二手转述」「待核实」）】
+在上面那批"卡片自洽"的校验之外，另有三道守卫管"卡片与外部世界一致"：
+  (b) confidence=原文核实 的卡，每一条 source 都必须是官方 host
+      （.gov.cn，或登记簿 knowledge/sources.json 里 kind=行业规范 的发布机构官网）；
+  (c) 带 facts.statute_quotes 的卡，每条引文都要与登记在册的官方原件逐字对得上
+      （scripts/verify-quotes.py 的三态判定，"找不到原件"同样不算过）；
+  (d) --strict（默认开）：索引里出现 confidence 既非「原文核实」也非「无外部断言」的卡即拒绝生成并逐张点名；
+  (e) 自称「无外部断言」（D 类，见 knowledge/README.md §2.2）的卡必须真的没有外部断言——
+      带 facts、带 law_refs、或 sources 里有 http(s) 出处的，一律拒绝：那说明它有原件可核，
+      该走「原文核实」并接受 (b)(c) 的检查，而不是从这个口子绕过去。
+
+**`--no-strict` 把这三道整体降为警告**，只在核实作业期间用（存量 60 张待核实 + 21 张
+二手转述正在逐张追一手源，中途必然红）。降的是这三道，**前面那批卡片自洽的校验一条不降**——
+一个开关只有一种含义，才不会有人以为自己关掉的是别的东西。
+
+隔离区 knowledge/quarantine/** 一律不进索引（追不到一手源的卡整张移进去，带原因）。
 """
+import argparse
 import json
 import re
 import sys
 from pathlib import Path
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import knowledge_sources as ks  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent / "knowledge"
 TYPES = {"法条卡", "判例卡", "计算规则", "流程SOP", "文书模板", "话术卡", "情绪指南", "数据卡", "审查规则", "方法卡"}
@@ -32,7 +53,12 @@ TYPES = {"法条卡", "判例卡", "计算规则", "流程SOP", "文书模板", 
 #     所以不能靠"记得按顺序合入"来防，只能让这里放行不了还没挂上的领域。
 DOMAINS = {"labor"}
 DEFAULT_DOMAIN = "labor"
-CONFIDENCES = {"原文核实", "二手转述", "待核实"}
+# confidence 的四档。前三档是"核到什么程度"，第四档 `无外部断言` 不在那条轴上：
+# 它说的是**这张卡压根没有可核的外部原件**（纯方法论/陪伴话术，全部内容是本库自己写的），
+# 见 knowledge/README.md §2.2。第四档由 (e) 自证守卫兜底，不是一句可以随手贴的免检标签。
+CONFIDENCES = {"原文核实", "二手转述", "待核实", "无外部断言"}
+#: D 类（无外部断言卡）。放在这里而不是散在各处：它同时是 (b)(d)(e) 三道守卫的分支条件。
+NO_EXTERNAL_CLAIM = "无外部断言"
 REQUIRED = ["id", "type", "title", "keywords", "applies_to", "sources", "confidence", "updated"]
 # sources 必须导出：卡片正文里虽然常常也带着官方 URL，但那是散文，代码读不到。
 # 呈现层（VenueCard.sources）要把出处**结构化**地摆在卡片下方——一张说不出出处的
@@ -164,10 +190,109 @@ def domain_of(path: Path, fm: dict) -> str:
     return DEFAULT_DOMAIN
 
 
-def main() -> None:
+QUARANTINE = "quarantine"
+
+
+def grounding_guards(entries: list[dict], strict: bool) -> None:
+    """三道扎根守卫（(b) 官方 host / (c) 引文对得上原件 / (d) 全库原文核实）。
+
+    strict=True 时任何一条不过就拒绝生成并逐张点名；--no-strict 时整体降为警告。
+    **在写 index.json 之前跑**：一个通不过守卫的知识库不该留下一份看起来正常的索引，
+    否则下一个人拿到的是"文件在、时间新、内容没人验过"。
+    """
+    registry = ks.load_registry(ROOT)
+    extra_hosts = ks.extra_allowed_hosts(registry)
+    unofficial, quote_bad, unverified, fake_d = [], [], [], []
+
+    for e in entries:
+        if e["confidence"] == NO_EXTERNAL_CLAIM:
+            # (e) D 类的自证：它豁免了 (b) 的 host 闸，所以必须自己证明"真的没有外部断言"。
+            # 没有这一条，`无外部断言` 就是一句谁都能贴上去、贴上去就免检的话。
+            bad = []
+            if e.get("facts"):
+                bad.append(f"带 facts（{'、'.join(sorted(e['facts']))}）")
+            if e.get("law_refs"):
+                bad.append(f"带 law_refs（{'、'.join(str(x) for x in e['law_refs'])}）")
+            urls = [s for s in e["sources"] if ks.host_of(s)]
+            if urls:
+                bad.append(f"sources 里有 http(s) 出处（{urls[0]}）")
+            if bad:
+                fake_d.append(f"  · {e['id']}（{e['path']}）：{'；'.join(bad)}")
+            continue
+        if e["confidence"] != "原文核实":
+            unverified.append(f"  · [{e['confidence']}] {e['id']}（{e['path']}）")
+            continue  # 非原文核实的卡由 (d) 管，不必再挑它的 source
+        for s in e["sources"]:
+            reason = ks.check_source_url(s, extra_hosts)
+            if reason:
+                unofficial.append(f"  · {e['id']}（{e['path']}）：{reason}")
+
+    cards = [
+        (e["id"], e["path"], e["facts"]["statute_quotes"])
+        for e in entries
+        if (e.get("facts") or {}).get("statute_quotes")
+    ]
+    for r in ks.verify_cards(ROOT, cards):
+        if r["state"] != "一致":
+            quote_bad.append(
+                f"  · [{r['state']}] {r['card_id']} · {r['law']}{r['article']}：{r.get('detail', '')}"
+            )
+
+    groups = [
+        ("(b) 非官方出处（confidence=原文核实 却引了非 .gov.cn 的源）", unofficial),
+        ("(c) 引文与官方原件对不上（scripts/verify-quotes.py 可单独复跑）", quote_bad),
+        (f"(d) 索引里仍有既非「原文核实」也非「{NO_EXTERNAL_CLAIM}」的卡", unverified),
+        (
+            f"(e) 自称「{NO_EXTERNAL_CLAIM}」却带着外部断言的卡"
+            f"（有 facts / law_refs / http(s) 出处 ⇒ 它有原件可核，应走「原文核实」并过 (b)(c)）",
+            fake_d,
+        ),
+    ]
+    if not any(rows for _, rows in groups):
+        return
+    if not strict:
+        summary = "，".join(f"{title.split(' ')[0]} {len(rows)} 条" for title, rows in groups if rows)
+        print(
+            f"警告（--no-strict，三道扎根守卫已降为警告）：{summary}。"
+            f"逐条清单去掉 --no-strict 再跑一次即可看到。",
+            file=sys.stderr,
+        )
+        return
+    lines = ["错误：扎根守卫不通过，拒绝生成索引。"]
+    for title, rows in groups:
+        if rows:
+            lines.append(f"{title}：共 {len(rows)} 条")
+            lines.extend(rows)
+    lines.append(
+        "怎么办：逐张追一手源并逐字核实（scripts/fetch-source.py 抓原件 → "
+        "scripts/verify-quotes.py 核引文）；追不到的整张移入 knowledge/quarantine/<原子目录>/ "
+        "并写明原因与试过的信源。核实作业期间可加 --no-strict 让本脚本先出索引。"
+    )
+    sys.exit("\n".join(lines))
+
+
+def main(argv: list[str] | None = None) -> None:
+    global ROOT
+    ap = argparse.ArgumentParser(description="再生成 knowledge/index.json")
+    ap.add_argument(
+        "--strict",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="默认开；--no-strict 把三道扎根守卫降为警告，供核实作业期间使用",
+    )
+    ap.add_argument("--knowledge-dir", default=None, help="默认仓内 knowledge/；测试用")
+    args = ap.parse_args(argv)
+    if args.knowledge_dir:
+        ROOT = Path(args.knowledge_dir).resolve()
+
     entries, seen_ids, seen_keys, forbidden = [], {}, {}, []
     bodies = {}
     for path in sorted(ROOT.glob("packs/**/*.md")):
+        # 【隔离区不进索引】追不到一手源的卡整张移进 knowledge/quarantine/，
+        # 它仍是一份存档（写着原因与试过的信源），但**绝不能被检索到**——
+        # 一张进了索引的隔离卡与一张正常卡，在 agent 那里长得一模一样。
+        if QUARANTINE in path.relative_to(ROOT).parts:
+            continue
         fm, body = parse(path)
         for field in REQUIRED:
             if field not in fm or fm[field] in ("", [], None):
@@ -211,6 +336,7 @@ def main() -> None:
         for path, body_norm in bodies.items():
             if path != home and phone in body_norm:
                 die(f"禁用号码 {phone} 出现在 {path}（仅允许存在于 {home}）")
+    grounding_guards(entries, args.strict)
     out = ROOT / "index.json"
     out.write_text(json.dumps(entries, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
     by_domain = {}

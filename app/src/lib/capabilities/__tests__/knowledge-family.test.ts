@@ -149,20 +149,47 @@ describe('full_text 与截断标记', () => {
 });
 
 describe('court 过滤', () => {
+  /**
+   * 法院名**从库里现挑**，不写死。
+   *
+   * 【原来写死的是「朝阳」，为什么改】2026-09-07 核实闭卷把 61 张只有转载来源的判例卡
+   * 移进了隔离区，其中包括全部朝阳法院的判决书转录卡——于是"按朝阳过滤"恒回 0 条，
+   * 这条判据以 `expected 0 to be greater than 0` 红。它要验的从来不是"库里有朝阳的判例"，
+   * 而是"court 过滤按结构化字段生效"。挑一个**库里真有**的法院名即可。
+   */
+  const COURT_KEY = (() => {
+    const courts = (INDEX as unknown as { facts?: { case_facts?: { court?: string } } }[])
+      .map((e) => e.facts?.case_facts?.court)
+      .filter((c): c is string => Boolean(c && c.includes('人民法院')));
+    // 取「三中院」这类可作子串的机构名里出现最多的那个，保证下面的检索能捞到东西
+    const tally = new Map<string, number>();
+    for (const c of courts) {
+      const m = /北京市第[一二三四]中级人民法院/.exec(c);
+      if (m) tally.set(m[0], (tally.get(m[0]) ?? 0) + 1);
+    }
+    return [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+  })();
+
+  it('夹具有效：库里确实有带审理机构的判例卡（否则下面两条空过）', () => {
+    expect(COURT_KEY, 'index.json 里找不到任何带 facts.case_facts.court 的判例卡').toBeTruthy();
+  });
+
   it('按结构化字段 facts.case_facts.court 子串匹配，只回该法院的判例', () => {
-    const out = search({ query: '违法解除 赔偿金', court: '朝阳' });
-    expect(out.packs.length).toBeGreaterThan(0);
+    // 用机构名里的一段做子串（用户不会记全称），验的正是"子串匹配"这件事
+    const needle = COURT_KEY.replace('北京市', '').replace('人民法院', '');
+    const out = search({ query: '违法解除 赔偿金 竞业', court: needle });
+    expect(out.packs.length, `court=${needle} 一条都没捞到`).toBeGreaterThan(0);
     for (const p of out.packs) {
       const meta = INDEX.find((e) => e.id === p.id) as unknown as {
         facts?: { case_facts?: { court?: string } };
       };
-      expect(meta.facts?.case_facts?.court, p.id).toContain('朝阳');
+      expect(meta.facts?.case_facts?.court, p.id).toContain(needle);
     }
   });
 
   it('没有审理机构的卡在传 court 时一律滤掉（否则这个过滤条件换回的是一批无关卡）', () => {
     const all = search({ query: '经济补偿 计算' });
-    const filtered = search({ query: '经济补偿 计算', court: '朝阳' });
+    const filtered = search({ query: '经济补偿 计算', court: COURT_KEY });
     expect(all.packs.length).toBeGreaterThan(filtered.packs.length);
   });
 });

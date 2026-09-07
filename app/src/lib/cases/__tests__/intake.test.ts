@@ -314,7 +314,11 @@ describe('仲裁时效的推算依据：两态都要对', () => {
     // 这两句只在**卡**里有，代码内置副本没有；用它们区分两态，光看「不含未取到」区分不出来
     expect(derived).toContain('期间包括法定期间和人民法院指定的期间');
     expect(derived).toContain('仲裁期间包括法定期间和仲裁委员会指定期间');
-    expect(derived).toContain('依据卡 statute-qijian-jisuan-tongze，可信度：待核实');
+    // 【为什么这里从「待核实」改成「原文核实」】2026-09-07 核实闭卷：这张期间通则卡
+    // 已追到 ssf.gov.cn 的官方原件并逐字核过，confidence 随之升档。
+    // 这条判据钉的是"把卡里的 confidence 如实带出来"，不是那个具体档位——
+    // 所以顺着卡走，别把当时的档位写死成期望。
+    expect(derived).toContain('依据卡 statute-qijian-jisuan-tongze，可信度：原文核实');
     expect(derived).not.toContain('依据卡未取到');
     expect(derived).not.toContain('可能已陈旧');
   });

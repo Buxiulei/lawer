@@ -251,6 +251,17 @@ describe('labor 零变化守卫（基线取自 origin/main 4098805）', () => {
     expect(confirmationFooter('对方会据此认为你已接受解除')).toEqual(BASELINE.confirmationFooter);
   });
 
+  /**
+   * 【基线动过一次，记在这】2026-09-07 核实闭卷，改了本项目**内部**的两处元数据：
+   * · `800-810-1117` 的 `agent_note`：「7×24 为官网口径待人工核验」→ 已核对
+   *   crisis.org.cn 官网原文「365天7*24小时」；
+   * · `12351` 的 `agent_note` 补上号码的官方出处；并**删掉了它的 `hours`**——
+   *   服务时间没能在 .gov.cn 原文逐字核到，按纪律不写死。
+   *
+   * 这两处都在 `compactCard` 里，`agent_note` 从不渲染给用户，`hours` 缺省时开场白不印它。
+   * **改基线前先验了这一条：`openerFull` 一个字没动**——用户读到的那段就是对外承诺，
+   * 它没变，才轮得到改基线；它要是也变了，那就不是"更新元数据"，是改了承诺。
+   */
   it('⑥ 危机首段与词表：两态首段、指令、兜底、判定结果全部逐字不变（变异：改词表或首段任一句 → 红）', () => {
     const realFacts = knowledge.get(CRISIS_RESOURCE_PACK_ID).facts as { hotlines?: HotlineFact[] };
     const opener = buildCrisisOpener(realFacts);

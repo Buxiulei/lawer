@@ -2,7 +2,24 @@
 // 这个端点存在的唯一理由是让**别人**核验线上跑的是哪一版。
 // 所以两条底线：① 取不到就说取不到，绝不给一个能被误读成"核验通过"的值；
 // ② 不许被缓存——缓存住的 SHA 会让核验方核到上一版，而且看起来一切正常。
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
+/**
+ * 真实索引里有多少张卡——**现读 index.json，不写死一个数**。
+ * 写死的 `>200` 在核实作业把 61 张追不到一手源的卡移进隔离区那天变成了假的：
+ * 它从"卡数正常"退化成"卡数还剩一大半"，而它照常绿。
+ */
+const REAL_KB_CARDS: number = (
+  JSON.parse(
+    fs.readFileSync(
+      path.join(process.env.LAWER_KNOWLEDGE_DIR ?? path.resolve(process.cwd(), '..', 'knowledge'), 'index.json'),
+      'utf8',
+    ),
+  ) as unknown[]
+).length;
 
 let GET: () => Promise<Response>;
 const SAVED = { sha: process.env.BUILD_SHA, at: process.env.BUILD_AT };
@@ -63,11 +80,11 @@ describe('🔴 取不到 SHA 时必须说"取不到"', () => {
 });
 
 describe('kb_cards：哨兵唯一能看见"卡数变没变"的面', () => {
-  test('正常时给出真实卡数（>200）', async () => {
+  test('正常时给出真实卡数（与 index.json 逐一对齐，不是"看起来不少"）', async () => {
     process.env.BUILD_SHA = 'abc';
     const body = await (await GET()).json();
     expect(typeof body.kb_cards).toBe('number');
-    expect(body.kb_cards).toBeGreaterThan(200);
+    expect(body.kb_cards).toBe(REAL_KB_CARDS);
   });
 
   test('🔑 索引坏掉时 kb_cards 为 null，而 sha 仍然给得出来', async () => {

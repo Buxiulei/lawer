@@ -332,20 +332,32 @@ function textList(value: unknown): string[] {
   return value.map((v) => (typeof v === 'string' ? v.trim() : '')).filter(Boolean);
 }
 
-/** 命中某条逐字原文的卡与那段原文；库里没有收录这一条时返回 undefined。 */
+/**
+ * 命中某条逐字原文的卡与那段原文；库里没有收录这一条时返回 undefined。
+ *
+ * **同一条被多张卡收录时取最长的那一份**（2026-09-07 改，与 knowledge-adapter 的
+ * `articleIndex()` 同规则；那里是全库唯一的"选哪张卡"入口，这里是同一张卡内选哪条引文）。
+ * 【为什么不是"第一个"】条号归一会剥掉「第N项/第N款」（见 normalizeArticle 的注释），
+ * 于是"只录了某一项"的引文与"录了整条"的引文**落在同一个键上**。取第一个的形态是：
+ * 问一条法条，回来的是它其中一项——一段逐字为真、却只有一项的原文，
+ * 而调用方拿它当整条用。
+ * 【为什么按长度而不是按卡的类型挑】按类型挑要再引入一条"哪类卡更权威"的规则，
+ * 而这里要的东西只有一个：**同一条的几份逐字摘录里，哪份最全**。长度直接回答它。
+ */
 function findQuote(law: string, article: string) {
   const key = agent.articleKey(law, article);
   const packs = agent.createKnowledgeSearcher().findByArticleKeys?.([key]) ?? [];
+  let best: { quote: { law: string; article: string; text: string }; pack: agent.KnowledgePack } | undefined;
   for (const p of packs) {
     for (const q of p.facts?.statute_quotes ?? []) {
       // 卡侧与引用侧走**同一个归一函数**取键：卡里存法名全称 + 汉字条号（「中华人民共和国某某法 / 第四十六条」），
       // 对方惯写简称 + 阿拉伯数字 + 项（「《某某法》第46条第2项」）。不归一就对不上键，而对不上键的表现是
       // 「库里明明有原文，却回 found:false」，读起来像修法生效。
       if (agent.articleKey(q.law, q.article) !== key) continue;
-      return { quote: q, pack: p };
+      if (!best || q.text.length > best.quote.text.length) best = { quote: q, pack: p };
     }
   }
-  return undefined;
+  return best;
 }
 
 /** 判例卡可供「否定性核验」搜索的文本范围：结构化案情 + 卡正文 */

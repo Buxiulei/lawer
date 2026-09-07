@@ -168,46 +168,85 @@ function loadIndex(): PackMeta[] {
       );
     }
   }
-  // ⑤【零张卡默认拒绝启动】manager 2026-08-29 产品裁定：
-  // **一个没有任何知识、却照常回答法律问题的 agent，是本产品最不可接受的静默故障形态**——
-  // 比宕机糟：宕机用户知道坏了。一次把 packs/ 弄丢的部署，此前会静默上线这样一个 agent。
-  // 本地想空跑是正当需求，但必须**明说**：KNOWLEDGE_ALLOW_EMPTY=1。默认关。
-  if (parsed.length === 0 && process.env.KNOWLEDGE_ALLOW_EMPTY !== '1') {
-    throw new Error(
-      `knowledge 索引是空的：${indexPath}（0 张卡）。` +
-        '一个没有知识却照常作答的 agent 比宕机更坏，故默认拒绝启动；' +
-        '本地确需空库请显式设 KNOWLEDGE_ALLOW_EMPTY=1',
+  // ⑨⑩【隔离区的卡与未注册 domain 的卡：**排除并点名**，不拒绝启动】
+  //     manager 2026-09-07 裁决（改自此前的"拒绝启动"）。
+  //
+  // 两类各自的病因：
+  // ⑩ 隔离区（knowledge/quarantine/**）放的是追不到一手源、已判定不可用的卡
+  //   （主理人 2026-09-07 裁决：知识库里不允许「二手转述」「待核实」）。它仍是一份存档，
+  //   但一旦进了索引，它与一张核实过的卡在 agent 那里**长得一模一样**。
+  // ⑨ domain 写了个注册表不认识的值，那批卡按领域过滤时对谁都不可见，
+  //   而检索照常返回 200 与一个更短的列表——没有任何一处会报错。
+  //
+  // 【为什么加载器要管，而生成器已经管了】生成器管的是"从卡片到 index.json"，
+  // 管不着**别人手里那份 index.json**：部署时被换掉的、别的分支带过来的、手改过的。
+  //
+  // 【为什么是排除而不是拒绝启动】拒绝启动是**放大**故障：loadIndex 抛错且不缓存
+  // ⇒ 之后每一次预检索、knowledge_search、危机资源卡取卡都重抛一次 ⇒ 全站每一轮对话 500，
+  // 连好卡的用户一起断。而这两类的正确后果是"少这几张卡"，不是"整个 agent 停机"。
+  // **构建期仍然严格**：scripts/gen-knowledge-index.py 遇到这两类一律拒绝生成（CI 即红），
+  // 所以本仓库产出的 index.json 不会带着它们；这里挡的是运行时拿到一份不是本仓库产的索引。
+  // 排除必须**出声**——静默排除与"这几张卡从来不存在"在日志里长得一样。
+  const known = Object.keys(DOMAINS);
+  const excluded: string[] = [];
+  const kept: PackMeta[] = [];
+  for (const entry of parsed as PackMeta[]) {
+    if (String(entry.path).split(/[\\/]/).includes('quarantine')) {
+      excluded.push(
+        `${entry.id} → ${entry.path}：指向隔离区（追不到一手源、已判定不可用的卡）。` +
+          '若它其实已核实过，把它移回 knowledge/packs/ 下再重跑 scripts/gen-knowledge-index.py。',
+      );
+      continue;
+    }
+    // domain 补齐：没写的算缺省领域（存量卡片写于只有一个领域的时候）。
+    // 补在**入口**而不是各消费点：漏补一处的形态是那批卡在按领域过滤时凭空消失。
+    if (entry.domain === undefined || entry.domain === '') {
+      entry.domain = DEFAULT_DOMAIN;
+    } else if (!known.includes(entry.domain)) {
+      excluded.push(
+        `${entry.id} → domain「${entry.domain}」不在 lib/domains 注册表里（已注册：${known.join('、')}）。` +
+          '请核对卡片 frontmatter 的 domain，或补上这个领域包再重跑 scripts/gen-knowledge-index.py。',
+      );
+      continue;
+    }
+    kept.push(entry);
+  }
+  if (excluded.length > 0) {
+    console.error(
+      `knowledge 索引里有 ${excluded.length} 条被排除，未进入检索面（${indexPath}）：\n` +
+        excluded.map((line) => `  · ${line}`).join('\n'),
     );
   }
 
   // ⑥【id 重复即拒】id 是索引、卡内 frontmatter、检索三处共用的主键；
   // 重复时 get(id) 返回先到的那张，**不报错、只是从此拿错卡**。
+  // 只查留下来的那批：被排除的卡根本进不了 get()，拿它们的 id 去挡活人没有道理。
   const seen = new Set<string>();
-  for (const entry of parsed as PackMeta[]) {
+  for (const entry of kept) {
     if (seen.has(entry.id)) {
       throw new Error(`knowledge 索引里 id 重复：${entry.id}（${indexPath}）；id 是主键，重复即歧义`);
     }
     seen.add(entry.id);
   }
 
-  // domain 补齐：没写的算缺省领域（存量卡片写于只有一个领域的时候）。
-  // 补在**入口**而不是各消费点：漏补一处的形态是那批卡在按领域过滤时凭空消失。
-  // 写了但没人认识的 domain 直接拒绝启动——那批卡会静默地对谁都不可见。
-  const known = Object.keys(DOMAINS);
-  for (const entry of parsed as PackMeta[]) {
-    if (entry.domain === undefined || entry.domain === '') {
-      entry.domain = DEFAULT_DOMAIN;
-    } else if (!known.includes(entry.domain)) {
-      throw new Error(
-        `knowledge 索引条目 ${entry.id} 的 domain 是「${entry.domain}」，` +
-          `而 lib/domains 里注册过的领域只有 ${known.join('、')}（${indexPath}）。` +
-          '这批卡按领域过滤时对谁都不可见，而检索会照常返回 200 与一个更短的列表。' +
-          '请核对卡片 frontmatter 的 domain，或补上这个领域包再重跑 scripts/gen-knowledge-index.py。',
-      );
-    }
+  // ⑤【零张卡默认拒绝启动】manager 2026-08-29 产品裁定：
+  // **一个没有任何知识、却照常回答法律问题的 agent，是本产品最不可接受的静默故障形态**——
+  // 比宕机糟：宕机用户知道坏了。一次把 packs/ 弄丢的部署，此前会静默上线这样一个 agent。
+  // 本地想空跑是正当需求，但必须**明说**：KNOWLEDGE_ALLOW_EMPTY=1。默认关。
+  //
+  // 【为什么数的是排除之后的那个数】上面那道闸把坏卡排除掉、不停机，是因为"少几张卡"
+  // 好过"全站 500"；但**一张不剩**时这个权衡就反过来了——那正是 ⑤ 要防的形态。
+  // 数 parsed.length 的话，一份全是隔离卡的索引会带着 0 张可用卡静默启动。
+  if (kept.length === 0 && process.env.KNOWLEDGE_ALLOW_EMPTY !== '1') {
+    throw new Error(
+      `knowledge 索引是空的：${indexPath}（0 张卡` +
+        (excluded.length > 0 ? `；原始 ${parsed.length} 条全部被上面的排除规则挡下` : '') +
+        '）。一个没有知识却照常作答的 agent 比宕机更坏，故默认拒绝启动；' +
+        '本地确需空库请显式设 KNOWLEDGE_ALLOW_EMPTY=1',
+    );
   }
 
-  packIndex = parsed as PackMeta[];
+  packIndex = kept;
   return packIndex;
 }
 
