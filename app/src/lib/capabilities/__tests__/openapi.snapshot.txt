@@ -55,6 +55,9 @@ referral_create	—
 referral_list	—
 evidence_void	POST /api/v1/evidence/{id}/void
 evidence_brief_regenerate	POST /api/v1/evidence/{id}/brief/regenerate
+case_delete	DELETE /api/v1/cases/{id}
+case_export	GET /api/v1/cases/{id}/export
+referral_delete_request	POST /api/v1/referrals/{id}/delete-request
 
 # 全量 operation
 GET /api/health	get_health	none	[]	{}
@@ -88,6 +91,7 @@ GET /api/v1/tools	get_v1_tools	bearer	[]	{}
 POST /api/v1/tools/{name}	post_v1_tools_by_name	bearer	[path:name!]	{}
 GET /api/v1/me	get_v1_me	bearer	[]	{}
 GET /api/v1/referrals	get_v1_referrals	bearer	[]	{}
+POST /api/v1/referrals/{id}/delete-request	referral_delete_request	bearer	[path:id!]	{reason}
 GET /api/v1/me/storage	get_v1_me_storage	bearer	[]	{}
 GET /api/v1/realname/status	get_v1_realname_status	bearer	[]	{}
 GET /api/v1/billing/ledger	get_v1_billing_ledger	bearer	[]	{}
@@ -95,7 +99,9 @@ POST /api/v1/redeem	post_v1_redeem	bearer	[]	{}
 GET /api/v1/cases	case_list	bearer	[]	{}
 GET /api/v1/cases/{id}	case_get	bearer	[path:id!,query:timeline_limit]	{}
 PATCH /api/v1/cases/{id}	case_update	bearer	[path:id!]	{stage,goal,bottom_line,employed_from,monthly_wage_yuan,position,contract_count,track}
+DELETE /api/v1/cases/{id}	case_delete	bearer	[path:id!,query:confirm_token]	{}
 GET /api/v1/cases/{id}/facts	case_facts	bearer	[path:id!]	{}
+GET /api/v1/cases/{id}/export	case_export	bearer	[path:id!]	{}
 POST /api/v1/cases/{id}/intake	intake_submit	bearer	[path:id!]	{stage,company_name,employed_from,monthly_wage_yuan,position,contract_count,events,free_text,company_docs,company_wording,goals,bottom_line}
 GET /api/v1/cases/{id}/messages	get_v1_cases_by_id_messages	bearer	[path:id!]	{}
 POST /api/v1/cases/{id}/chat	post_v1_cases_by_id_chat	bearer	[path:id!]	{}
@@ -139,6 +145,9 @@ POST /api/v1/keys/{id}/rotate	post_v1_keys_by_id_rotate	bearer	[path:id!]	{}
 DELETE /api/v1/keys/{id}	delete_v1_keys_by_id	bearer	[path:id!]	{}
 POST /api/v1/realname/init	post_v1_realname_init	bearer	[]	{}
 POST /api/v1/realname/passport	post_v1_realname_passport	bearer	[]	{}
+GET /api/v1/me/consents	get_v1_me_consents	bearer	[]	{}
+POST /api/v1/me/consents	post_v1_me_consents	bearer	[]	{}
+POST /api/v1/me/cancel	post_v1_me_cancel	bearer	[]	{}
 GET /api/v1/admin/audit	get_v1_admin_audit	bearer	[]	{}
 GET /api/v1/admin/users	get_v1_admin_users	bearer	[]	{}
 POST /api/v1/admin/users/{uid}/gongdao	post_v1_admin_users_by_uid_gongdao	bearer	[path:uid!]	{}

@@ -83,6 +83,7 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'agent', method: 'POST', path: '/api/v1/tools/{name}', auth: 'jwt|api_key', description: '通用工具桥：按能力名调任意一条能力，body = 该能力 inputSchema 的入参 JSON。scope 按能力自身要求判，与 MCP 同一批判定' },
   { category: 'agent', method: 'GET', path: '/api/v1/me', auth: 'jwt|api_key', scope: 'case:read', description: '本人身份摘要（手机号在服务端已掩码）' },
   { category: 'agent', method: 'GET', path: '/api/v1/referrals', auth: 'jwt|api_key', scope: 'case:read', description: '本人名下的转介台账与状态，外加「转介会传什么、不会传什么」那份同意文案；不回数据包全文' },
+  { category: 'agent', method: 'POST', path: '/api/v1/referrals/{id}/delete-request', auth: 'jwt|api_key', scope: 'case:write', description: '要求删除一条已发出的转介（对应工具 referral_delete_request）。今天只记在本站并由人工转达，回包 delivered 恒为 false' },
   { category: 'agent', method: 'GET', path: '/api/v1/me/storage', auth: 'jwt|api_key', scope: 'case:read', description: '本人的存储用量；不接受任何指定用户的入参' },
   { category: 'agent', method: 'GET', path: '/api/v1/realname/status', auth: 'jwt|api_key', description: '查本人实名状态。网页登录态会去上游拉一次结果；api key 只读三态（已实名/待审/未认证），不回姓名证件（不校 scope）' },
   { category: 'agent', method: 'GET', path: '/api/v1/billing/ledger', auth: 'jwt|api_key', scope: 'case:read', description: '本人的公道值余额与流水（同时给 balance 与 ledger_sum）' },
@@ -91,6 +92,8 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}', auth: 'jwt|api_key', scope: 'case:read', description: '案件档案 + 最近时间线（对应工具 case_get）' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/facts', auth: 'jwt|api_key', scope: 'case:read', description: '案件事实卡全文，与站内每轮同一渲染（对应工具 case_facts）' },
   { category: 'agent', method: 'PATCH', path: '/api/v1/cases/{id}', auth: 'jwt|api_key', scope: 'case:write', description: '更新阶段 / 目标 / 底线及用工基本盘（对应工具 case_update）' },
+  { category: 'agent', method: 'DELETE', path: '/api/v1/cases/{id}', auth: 'jwt|api_key', scope: 'case:write', description: '删除案件档案（对应工具 case_delete）。不带 ?confirm_token= 只回确认单、一行不删；带上才执行。软删即刻生效，30 日后彻底删除，不可撤销' },
+  { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/export', auth: 'jwt|api_key', scope: 'case:read', description: '导出整案副本 zip（档案 JSON + 文书 PDF + 证据原件），回一条一次性下载地址（对应工具 case_export）。免费。**需已实名**' },
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/intake', auth: 'jwt|api_key', scope: 'case:write', description: '首诊建档：一次原子写入基本盘 + 时间线 + 诉求（对应工具 intake_submit）' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/messages', auth: 'jwt|api_key', scope: 'case:read', description: '案件的历史对话（只读；写那一路在同级 chat）' },
   { category: 'agent', method: 'POST', path: '/api/v1/cases/{id}/chat', auth: 'jwt|api_key', scope: 'case:write', description: '让本服务的模型跑一轮并回 SSE。**调一次扣一轮公道值**，自带模型的 agent 不要调' },
@@ -137,6 +140,9 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'web', method: 'DELETE', path: '/api/v1/keys/{id}', auth: 'jwt', description: '吊销 api key（置 enabled=0，留行保审计线索）' },
   { category: 'web', method: 'POST', path: '/api/v1/realname/init', auth: 'jwt', description: '发起实人认证，返回 H5 活体认证页 URL' },
   { category: 'web', method: 'POST', path: '/api/v1/realname/passport', auth: 'jwt', description: '护照实名提交（multipart），落「待审」等人工核；只有护照的人走这条' },
+  { category: 'web', method: 'GET', path: '/api/v1/me/consents', auth: 'jwt', description: '本人的单独同意清单与此刻状态（每项带「撤回之后会发生什么」）' },
+  { category: 'web', method: 'POST', path: '/api/v1/me/consents', auth: 'jwt', description: '撤回一项单独同意（幂等；撤回不删记录）。撤回情绪那一项即停止写入情绪记录，撤回境外那一项即只走境内模型' },
+  { category: 'web', method: 'POST', path: '/api/v1/me/cancel', auth: 'jwt', description: '注销账号。不带 code 只出确认单并把验证码发到本人手机/邮箱（零删除）；带 confirm_token + code 才执行。不可撤销' },
 
   // ──────── 管理员 ────────
   { category: 'admin', method: 'GET', path: '/api/v1/admin/audit', auth: 'admin', description: '最近的后台操作流水，只读（无删改端点）' },

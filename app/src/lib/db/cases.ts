@@ -29,6 +29,16 @@ export interface CaseRow {
   position: string | null;
   /** 合同签了几次（只签过一次 / 续签过一次 / …），首诊原样记录 */
   contract_count: string | null;
+  /**
+   * 用户按下删除的时刻（软删标记）；NULL = 没删过。
+   * 非空的行**在本文件的两个读入口里根本取不出来**（findCaseById / listCasesByUser），
+   * 所以业务侧读到的 CaseRow 这一列恒为 NULL；要读被删的行走 findCaseByIdIncludingDeleted。
+   *
+   * 【为什么可选】库里这一列一定在（迁移建的），但仓里有若干处手搓 CaseRow 字面量的
+   * 纯函数判据——它们喂给的是「业务层看到的案件」，而业务层看到的案件从定义上就没被删过。
+   * 写成必填只会逼那些判据补一个恒为 null 的字段，读起来像是它有什么意义。
+   */
+  deleted_at?: string | null;
   created_at: string;
 }
 
@@ -109,11 +119,38 @@ export function insertCase(
   return Number(info.lastInsertRowid);
 }
 
+/**
+ * 按 id 取一个案件。**已软删的行在这里取不出来**（回 undefined）。
+ *
+ * 【为什么过滤写在这一处，而不是让每个调用方各加一句 `AND deleted_at IS NULL`】
+ * 本函数是 lib/cases.assertOwned 的唯一取数口，而 assertOwned 是全部按 case_id 的读写
+ * 必经的那道门。过滤放在这里，一条也漏不掉；让四十几个调用方各自记得加一句的形态是：
+ * 忘掉的那一处照常返回 200，用户已经删掉的案子从那个入口仍然读得出来、写得进去，
+ * 而没有任何一处会报错。
+ */
 export function findCaseById(db: Database, caseId: number): CaseRow | undefined {
+  return db.prepare('SELECT * FROM cases WHERE id = ? AND deleted_at IS NULL').get(caseId) as
+    | CaseRow
+    | undefined;
+}
+
+/**
+ * 连已软删的行一起取。**只有生命周期那条路该用它**（删除本身要幂等、清理任务要按
+ * deleted_at 找到期的行）。业务读一律用 findCaseById——两个函数同名不同义会让人随手拿错，
+ * 所以这个名字写得又长又刺眼。
+ */
+export function findCaseByIdIncludingDeleted(db: Database, caseId: number): CaseRow | undefined {
   return db.prepare('SELECT * FROM cases WHERE id = ?').get(caseId) as CaseRow | undefined;
 }
 
 export function listCasesByUser(db: Database, userId: number): CaseRow[] {
+  return db
+    .prepare('SELECT * FROM cases WHERE user_id = ? AND deleted_at IS NULL ORDER BY id DESC')
+    .all(userId) as CaseRow[];
+}
+
+/** 某人名下**全部**案件，含已软删的（注销时要把它们一并标删）。 */
+export function listCasesByUserIncludingDeleted(db: Database, userId: number): CaseRow[] {
   return db
     .prepare('SELECT * FROM cases WHERE user_id = ? ORDER BY id DESC')
     .all(userId) as CaseRow[];

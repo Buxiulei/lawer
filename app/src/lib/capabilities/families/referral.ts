@@ -7,6 +7,7 @@
 //
 // 【工具说明里带着同意文案的正本】说明不是文档，是 agent 唯一读得到的东西。
 // 「会传什么」这张清单只写在网页上的形态是：agent 念的是它自己编的一版。
+import { requestReferralDelete } from '@/lib/lifecycle/referral-delete';
 import * as referral from '@/lib/referral';
 import { defaultSummaryLlm } from '@/lib/referral/summary-llm';
 
@@ -85,6 +86,48 @@ export const referralCreate: Capability = {
       (res) => ({ table: 'referrals', id: res.referral_id }),
     );
   },
+};
+
+/**
+ * 转介删除请求（协议九.3）。
+ *
+ * 【为什么它必须是一条能力，而不只是网页上的一个按钮】转介是用户自己的 agent 就能发起的
+ * 动作（referral_create）。发得出去、撤不回来的形态是：同一个助手把资料交出去之后，
+ * 用户回头说「帮我要求他们删掉」，而它手上没有任何工具，只能告诉用户自己去网页找。
+ */
+export const referralDeleteRequest: Capability = {
+  name: 'referral_delete_request',
+  family: 'referral',
+  scope: 'case:write',
+  kind: 'write',
+  domains: ['*'],
+  exposeTo: ['mcp'],
+  // 不设前置闸：这是撤回一次已经发生的对外披露，任何账号状态下都该做得成。
+  precondition: [],
+  idempotency: { naturalKey: 'referral_id（同一条转介再提一次原样返回，首次提出时刻不变）' },
+  rest: { method: 'POST', path: '/api/v1/referrals/{id}/delete-request' },
+  title: '要求删除一条已发出的转介',
+  description:
+    '替用户提出「请把这条转介的信息删掉」。referral_id 从 referral_list 取。\n' +
+    '**回包里的 delivered 今天恒为 false**：我们与对方之间的内部接口目前没有删除通道，' +
+    '这条请求先记在我们这边、由人工转达，通道开出来之后会自动补发。' +
+    '把 note 原样念给用户听，**不要说成「已经删掉了」**——那是一句我们此刻还证明不了的话。\n' +
+    '**幂等**：同一条转介再提一次照样成功，already_requested=true，首次提出的时刻不变。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      referral_id: { type: 'integer', description: '要删除的那条转介 id，从 referral_list 取' },
+      reason: { type: 'string', description: '用户为什么要求删除，一句话（可不填）' },
+    },
+    required: ['referral_id'],
+  },
+  run: (db, identity, args) =>
+    requestReferralDelete({
+      db,
+      userId: identity.uid,
+      referralId: num(args.referral_id),
+      reason: args.reason,
+    }),
 };
 
 export const referralList: Capability = {

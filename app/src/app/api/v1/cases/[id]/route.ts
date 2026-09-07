@@ -1,7 +1,9 @@
 // app/src/app/api/v1/cases/[id]/route.ts
-// GET   案件档案 + 最近时间线（对应 MCP 工具 case_get）
-// PATCH 更新档案（走 case_update 这一条能力本身，见下方）——
-// 与 MCP 工具调的是同一条能力，两条入口行为逐字一致。
+// GET    案件档案 + 最近时间线（对应 MCP 工具 case_get）
+// PATCH  更新档案（走 case_update 这一条能力本身，见下方）——
+//        与 MCP 工具调的是同一条能力，两条入口行为逐字一致。
+// DELETE 删除档案（对应 MCP 工具 case_delete）。同理走那一条能力：二次确认、软删、
+//        收回分享链接、幂等全在能力那一份实现里，本路由只把 confirm_token 递进去。
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 import { invokeCapability } from '@/lib/capabilities/invoke';
@@ -53,6 +55,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const outcome = await invokeCapability(getDb(), guard.identity, 'case_update', {
     ...body,
     case_id: caseId,
+  });
+  if (!outcome.ok) return domainFailure(outcome);
+
+  return apiJson({ ok: true, ...outcome.value });
+}
+
+/**
+ * DELETE 删除案件档案。
+ *
+ * 【confirm_token 走查询串而不是请求体】DELETE 带体在各家 HTTP 客户端与网关上的支持
+ * 参差不齐（有的直接丢掉），而丢掉了 confirm_token 的那次调用会**看起来像第一步**——
+ * 回一份确认单、什么都没删，用户在页面上点了删除却什么也没发生，且没有一处报错。
+ */
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const guard = requireIdentity(getDb(), req, 'case:write');
+  if (!guard.ok) return guard.response;
+
+  const caseId = parseId((await params).id);
+  if (caseId === null) return apiJson(NOT_FOUND, { status: 404 });
+
+  const outcome = await invokeCapability(getDb(), guard.identity, 'case_delete', {
+    case_id: caseId,
+    confirm_token: new URL(req.url).searchParams.get('confirm_token') ?? undefined,
   });
   if (!outcome.ok) return domainFailure(outcome);
 

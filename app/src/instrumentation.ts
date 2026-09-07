@@ -22,4 +22,9 @@ export async function register(): Promise<void> {
   // 待发送——而页面上看起来一切正常。
   const { startReferralWorker } = await import('@/lib/jobs/referral-worker');
   startReferralWorker(getDb());
+
+  // 保留期到点清理（协议五.8「30 日内彻底删除」）：同理，没有它，被删掉的档案会一直躺在
+  // 库里——而页面上它早就不见了，**这个任务没起来这件事，从外面一个字都看不出来**。
+  const { startRetentionWorker } = await import('@/lib/jobs/retention-worker');
+  startRetentionWorker(getDb());
 }

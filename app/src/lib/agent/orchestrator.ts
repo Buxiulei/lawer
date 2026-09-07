@@ -28,6 +28,7 @@ import {
   type UsageReport,
 } from '@/lib/llm';
 import { domainPackOrDefault } from '@/lib/domains/registry';
+import { overseasRevoked } from '@/lib/lifecycle/consents';
 
 import type { AgentEventSink } from './events';
 import { intakeStage, type IntakeStage } from './intake';
@@ -594,7 +595,13 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   const taskClass = classifyTask({ message, mode });
   const routed = input.provider
     ? { client: input.provider, route: { degraded: false } as const }
-    : getProvider(taskClass, input.plan ?? 'entry');
+    : getProvider(taskClass, input.plan ?? 'entry', {
+        // 撤回了境外处理的同意就只走境内（协议第五条第 5 款、附一第 7 项）。
+        // 这是全站唯一一处「按这个用户挑模型」的地方，闸挂在这里就一条也漏不掉；
+        // 挂在各调用方那里的形态是：新开一条会话入口忘了抄这一句，它照常工作、
+        // 照常出结果，只是这个人的案情又出了一次境，而没有一处会报错。
+        domesticOnly: overseasRevoked(db, userId),
+      });
 
   // 预检索：用用户原话当查询，把命中的 pack 逐字放进 system prompt。
   // 与工具里的 knowledge_search 并存而不是二选一——预检索省掉最常见那一次往返，

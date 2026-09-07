@@ -303,6 +303,10 @@ describe('tools/list', () => {
       // 作废与简报重生成，同样**追加在末尾**
       'evidence_void',
       'evidence_brief_regenerate',
+      // 数据生命周期（删除 / 整案导出 / 转介删除请求），同样**追加在末尾**
+      'case_delete',
+      'case_export',
+      'referral_delete_request',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();

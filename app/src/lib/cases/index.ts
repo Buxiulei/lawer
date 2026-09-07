@@ -19,6 +19,7 @@ import {
   requireEnabledDomain,
   type DomainPack,
 } from '@/lib/domains/registry';
+import { EMOTION_REVOKED_NOTE, emotionRecordingRevoked } from '@/lib/lifecycle/consents';
 import { normalizeDateOnly, submitIntakeInto, type IntakeInput, type IntakeResult } from './intake';
 import { markReportStale } from './report-stale';
 // 下面那张 MILESTONE_OF_STAGE 的值类型引它（词表本身在 ./milestones，此处只借类型）
@@ -981,6 +982,13 @@ export function logEmotion(
 ): Result<{ id: number; referred: boolean; refuse_reason?: string }> {
   const found = assertOwned(db, input.caseId, input.userId);
   if (isFailure(found)) return found;
+
+  // 撤回同意即停止写入（协议第五条第 2 款）。判据只有 lib/lifecycle/consents 那一份，
+  // 站内对话那条路（lib/agent/tools 的 emotion_log）调的是同一个函数、同一句话——
+  // 两处各写一份的形态是：用户在设置页撤回了，网页那条路仍然照记不误，而两边都返回正常。
+  if (emotionRecordingRevoked(db, input.caseId)) {
+    return fail(403, 'CONSENT_REVOKED', EMOTION_REVOKED_NOTE);
+  }
 
   if (typeof input.level !== 'string' || !(EMOTION_LEVELS as readonly string[]).includes(input.level)) {
     return fail(400, 'INVALID_EMOTION_LEVEL', `level 只能是 ${EMOTION_LEVELS.join(' / ')}`);

@@ -1714,6 +1714,80 @@ export function runMigrations(db: Database.Database): void {
   // 存量行取 DDL 默认值 'self'：它们确实都是用户自己建的，这不是编出来的默认值。
   addColumnIfMissing(db, 'api_keys', 'source', "TEXT NOT NULL DEFAULT 'self'");
 
+  // ───────────────── 数据生命周期（协议 v0.2 五.8 / 五.9 / 五.12、附一第 7、9 项）─────────────────
+  //
+  // 【为什么删除是两段而不是一刀】协议承诺「删除后 30 日内彻底删除」。当场硬删做不到两件事：
+  // 一是用户误删无从挽回（一次点击抹掉全部证据与文书）；二是同一时刻还可能有正在跑的
+  // 后台任务读着这个案子。所以第一段只落 deleted_at（读侧当作不存在，见 lib/db/cases.ts），
+  // 第二段由 lib/jobs/retention-worker 到期真删。
+  //
+  // 【为什么是列而不是「删除队列表」】队列表要与 cases 保持同步，漏写一条的形态是
+  // 「用户看不见了，但永远不会被真删」——两份真值分开放，就会有一天对不上。
+  // deleted_at 长在被删的那一行上，不存在同步问题。
+  addColumnIfMissing(db, 'cases', 'deleted_at', 'TEXT');
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_cases_deleted ON cases (deleted_at) WHERE deleted_at IS NOT NULL;
+  `);
+
+  // 账号注销的两个时刻。**注销不删 users 行**：gongdao_ledger / orders / memberships /
+  // realname_verifications 等十余张表按 user_id 引着它且不带级联，而协议五.8 又要求
+  // 支付记录与已出具的存证证明按法定期限保留——删掉这一行等于把要留的东西一起带走。
+  // 所以注销走「即刻抹掉可识别字段 + 到期再抹一次并盖 purged_at」，行本身留成一个空壳。
+  // cancelled_at = 用户确认注销的时刻（也是 30 日的起算点）；purged_at = 清理任务落定的时刻。
+  addColumnIfMissing(db, 'users', 'cancelled_at', 'TEXT');
+  addColumnIfMissing(db, 'users', 'purged_at', 'TEXT');
+
+  // 同意台账（协议五.2、五.9「撤回同意」）。一个用户一种同意一行，granted_at / revoked_at
+  // 记两个时刻。
+  //
+  // 【为什么撤回也要能建行】撤回的效力不能依赖「先有一条同意记录」：本表落地之前
+  // 已经在跑的功能没有留下过任何同意行，而那些人恰恰最需要能把它关掉。
+  // 没有行时撤回即插一行 granted_at=NULL、revoked_at=now——「这个人明确说过不要」。
+  //
+  // 【为什么不是只追加的流水】撤回要幂等（再撤一次不改首次撤回时点），而读侧问的永远是
+  // 「此刻这个人同意没有」。一行一态读得出这个答案；真要逐次留痕，另起一张事件表，
+  // 不要把当前态与历史挤进同一张表。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS consents (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind       TEXT NOT NULL,                             -- 值集由 lib/lifecycle/consents.ts 把关
+      granted_at TEXT,
+      revoked_at TEXT,
+      note       TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_consents_user_kind ON consents (user_id, kind);
+  `);
+
+  // 转介删除请求（协议九.3：「你可以要求 NBDpsy 删除该转介信息」）。
+  //
+  // 【为什么单独一张表而不是往 referrals 加两列】这条请求要比它指向的那次转介活得久：
+  // 案件被硬删时 referrals 随案级联消失，而「这个人要求过对方删除」是我们对外的承诺记录，
+  // 不该跟着消失。所以 referral_id 可空 + ON DELETE SET NULL，user_id 独立记一份。
+  //
+  // status：recorded（已记下，还没发给对方）| sent（对方已受理）| unsupported（对方接口
+  // 尚无此通道，只在本地留档）| failed（发过但失败，见 last_error）。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS referral_delete_requests (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      referral_id  INTEGER REFERENCES referrals(id) ON DELETE SET NULL,
+      user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      external_ref TEXT,                                    -- 请求发出时对方那条线索的号，便于人工对账
+      status       TEXT NOT NULL DEFAULT 'recorded',
+      reason       TEXT,
+      attempts     INTEGER NOT NULL DEFAULT 0,
+      last_error   TEXT,
+      requested_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_referral_delete_requests_referral
+      ON referral_delete_requests (referral_id) WHERE referral_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_referral_delete_requests_user
+      ON referral_delete_requests (user_id, id DESC);
+  `);
+
   // ───────────────── 费率种子 ─────────────────
   // C01 核定的模型费率必须**在建表之后立刻播下去**：缺行时 getRatesForModel 会回落
   // DEFAULT_RATES（最便宜的 Flash 档），于是每一笔账都按兜底价少收——而账面看起来完全正常。

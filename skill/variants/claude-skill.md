@@ -321,6 +321,8 @@ REST = 专用端点 + `/tools/{name}` 通用桥。表里 REST 列给的是专用
 | `case_facts` | `GET /cases/{id}/facts` | `case:read` | 读 | 一次拿全这个案子的当前事实：当事人、案件抬头、法定期限、用工基本盘（入职时间/月薪/岗位）、公司主体、行动卡、诉求金额、时间线、证据清单。**回答任何与案情有关的问题之前先调它**。档案里没有的项会明写「未记录」——那是「档案里没有这一项」，不是「不存在」，不要自己脑补一个值。 | `case_id` 案件 id |
 | `case_list` | `GET /cases` | `case:read` | 读 | 列出当前 api key 所属用户自己的全部案件（case_id、抬头 title、阶段 stage、建档时间），新的在前。**连上后先调它认领案件**：只有一个案件（绝大多数人）就直接用它的 case_id，不要开口问用户要编号；有多个就把抬头列出来让用户挑；一个都没有就请用户去网页端建档（首诊）。无需任何入参。 | 无入参 |
 | `intake_submit` | `POST /cases/{id}/intake` | `case:write` | 写 | 把首诊问下来的内容一次性写进这个案件：阶段、公司名、入职时间、月工资、岗位、合同次数、经过（时间线）、诉求、底线。**新用户或用工基本盘还空着时用它一次建档**，问齐了再调，不要让用户回网页填。金额传元（monthly_wage_yuan），服务端换算成分。校验不过会逐字段回原因（如 INVALID_MONTHLY_WAGE），照着补齐再提交即可。 | `case_id` 案件 id；`stage` 案件所处阶段；`company_name` 公司名称，就是仲裁里的被申请人；`employed_from` 入职时间，YYYY-MM-DD，不能晚于今天；`monthly_wage_yuan` 月工资，单位元（会换算成分落库）；`goals` 诉求，至少一项；`position`? 岗位，可省略；`contract_count`? 合同签署次数，用户自述原样记录，可省略；`events`? 用户记得的事件，每条含 date（YYYY-MM-DD，可留空）与 text；`free_text`? 用户整段自述的经过，可省略；`company_docs`? 公司给过哪些文件（键 terminationNotice / settlementAgreement / otherPaper）；`company_wording`? 公司口头给的说法，可省略；`bottom_line`? 用户的底线，可省略 |
+| `case_delete` | `DELETE /cases/{id}` | `case:write` | 写 | 删掉一个案件的整份档案。**两步，且不可撤销**： 第一步不带 confirm_token 调一次，回一份确认单（removes = 会删掉什么、keeps = 什么会留下）与一串 confirm_token，**这一步一行都不会删**； 第二步把 removes 与 keeps 逐条念给用户听、得到明确同意后，带上 confirm_token 再调一次才执行。 执行后档案立即从所有页面与接口上消失（免登录分享链接当场失效），30 日后由后台任务彻底删除。**我们不提供「撤销删除」**，请在确认前就说清这一点。 已经出具过的存证证明与支付记录不在删除范围内（keeps 里逐条写着）。 **幂等**：删过的再删一次照样成功，already_deleted=true，首次删除时点不变。 | `case_id` 案件 id；`confirm_token`? 第一步回包里那串确认令牌。不给 = 只出确认单、一行都不删；给了且对得上 = 执行删除。不要自己拼一个：它是按案件身份算出来的 |
+| `case_export` | `GET /cases/{id}/export` | `case:read` | 读 | 把一个案件的全部内容打成一个 zip，回一条**一次性、限时**的下载地址（浏览器直接打开即可，不必带凭据）。包里有：档案.json（全部数据，逐表原样导出）、文书/（每份文书的 PDF）、证据原件/（上传过的材料原件）、清单.json 与 README.txt。 **免费**，不报价、不扣费，也不改动案卷里的任何一行。 回包里的 omissions 是「这次少装了哪几项、为什么少」——**不为空时不要把这次导出说成完整副本**，照原因念给用户听。需已完成实名认证。 | `case_id` 案件 id |
 
 **时间线**
 
@@ -437,6 +439,7 @@ REST = 专用端点 + `/tools/{name}` 通用桥。表里 REST 列给的是专用
 |---|---|---|---|---|---|
 | `referral_create` | `POST /tools/referral_create` | `case:write` | 写 | 把用户转介给 NBDpsy 的心理咨询。**调之前必须先把下面这段逐项念给用户听，得到明确同意再带 consent:true 调**——服务端只认 consent，不认「我觉得他同意了」。 会发过去的：identity：你的姓名与手机号，以及你在本站是否已完成实名（含实名是在哪一侧完成的）；emotion_summary：一段不超过 200 字的情绪状态摘要，由近 30 天的情绪记录与最近的对话生成（连同「其中被我们挡掉了几个词」这个数字）；referral_reason：你为什么想找人聊聊，一句话（我们会先把其中的公司名与事件细节滤掉）；needs：你勾选或写下的需求（例如情绪疏导、睡眠、焦虑、决策支持）；stage_sentence：你的事情办到哪一步了，一句话（不含任何细节）；urgency：近 72 小时内有没有出现过需要紧急关注的信号；consent_at：你点下同意的时间；source_case_hash：一串由本案编号算出的哈希，用于两边对账；它反查不出你的案情。 不会发过去的：你公司的名字，以及任何能指认出这家公司的字眼；你的事情本身：经过、金额、证据、文书，一个字都不传；你上传的材料与它们的内容；你的证件号码（对方即使已有，我们这边也只存掩码）。 情绪状态摘要由服务端生成并过一道过滤（公司名与事件细节会被替换成「（略）」），reason 与 needs 也走同一道过滤，所以不必替用户自我审查，如实写即可。返回 status 恒为 pending：发送是异步的，稍后用 referral_list 看它有没有送达。 | `case_id` 案件 id；`consent` 用户是否已明确同意本次转介。**必须为 true**，且必须是用户真的说过；`reason`? 用户为什么想找人聊聊，一句话（会过滤后原样带走）；`needs`? 用户的需求，如「情绪疏导」「睡眠」「焦虑」「决策支持」；最多 8 条；`client_ref`? 幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库 |
 | `referral_list` | `POST /tools/referral_list` | `case:read` | 读 | 列出本案发起过的转介与它们的状态：pending 还在等着发出去（last_error 说的是上次为什么没发成）、sent 对方已收下（external_ref 是对方那条线索的号）、accepted / declined 是对方后来的回执、failed 是重试用尽。**没有记录就是从没转介过**，不要据此推断用户不需要。 | `case_id` 案件 id |
+| `referral_delete_request` | `POST /referrals/{id}/delete-request` | `case:write` | 写 | 替用户提出「请把这条转介的信息删掉」。referral_id 从 referral_list 取。 **回包里的 delivered 今天恒为 false**：我们与对方之间的内部接口目前没有删除通道，这条请求先记在我们这边、由人工转达，通道开出来之后会自动补发。把 note 原样念给用户听，**不要说成「已经删掉了」**——那是一句我们此刻还证明不了的话。 **幂等**：同一条转介再提一次照样成功，already_requested=true，首次提出的时刻不变。 | `referral_id` 要删除的那条转介 id，从 referral_list 取；`reason`? 用户为什么要求删除，一句话（可不填） |
 
 只能读写用户自己的案件。传了别人的 `case_id`，服务端一律回「案件不存在」——
 不区分"不存在"和"不是你的"，别据此推断案件号的有效性。
@@ -491,6 +494,21 @@ REST = 专用端点 + `/tools/{name}` 通用桥。表里 REST 列给的是专用
 | `REALNAME_REQUIRED` | 403 | 该动作要求用户已完成实名（证据上传、固化出证）；「待审」不算已实名 | 把这一步是干什么的说清楚，请用户在网页上完成实名后再来 |
 | `CONSENT_REQUIRED` | 400 | 要把用户资料交给站外机构的动作没带上本人的明示同意（consent 必须为 true） | 把「会传什么、不会传什么」逐项念给用户听，得到明确同意后带 consent:true 再调一次；不要替用户点头 |
 | `REFERRAL_UNAVAILABLE` | 500 | 服务端这会儿生成不了要外发的数据包（本机加密配置缺失），本次零外发 | 这是我们的运维问题，不是用户填错了；如实告诉用户稍后再试，不要改参数重试 |
+| `CONSENT_REVOKED` | 403 | 这个账号已经撤回了这一类信息的单独同意，服务端不再写入该类记录（本次零写入） | 不要换个工具绕开；如实告诉用户这一项已关，想重新开启要去网页设置页 |
+
+**入参不合法**
+
+| error_code | HTTP | 什么时候拿到它 | 拿到之后怎么办 |
+|---|---|---|---|
+| `INVALID_CONFIRM_TOKEN` | 400 | confirm_token 与服务端算出的不一致（多为手抄错、或用了别的对象的令牌） | 重新不带 confirm_token 调一次拿新的确认单，不要自己拼一个令牌 |
+| `INVALID_BODY` | 400 | 请求体不是合法 JSON，或缺必填字段 | 照 manifest 里该端点的入参重发；不要重试同一份体 |
+| `INVALID_CASE_ID` | 400 | case_id 不是正整数 | — |
+| `INVALID_STAGE` | 400 | stage 不在法定枚举里 | 取值见 case_get 回包里的当前 stage 与工具入参说明 |
+| `INVALID_HAPPENED_AT` | 400 | 时间不是 ISO8601，或落在合理区间之外 | — |
+| `INVALID_KIND` | 400 | kind 不在该表的法定枚举里 | — |
+| `INVALID_MONTHLY_WAGE` | 400 | 月薪不是正数（单位是**元**，不是分） | — |
+| `NO_FIELDS` | 400 | 更新类调用一个字段都没传 | — |
+| `FILE_TOO_LARGE` | 413 | 上传文件超过单文件上限 | — |
 
 **找不到对象**
 
@@ -502,21 +520,9 @@ REST = 专用端点 + `/tools/{name}` 通用桥。表里 REST 列给的是专用
 | `EVIDENCE_NOT_FOUND` | 404 | 证据 id 不存在或不属于本人 | — |
 | `ORDER_NOT_FOUND` | 404 | 存证订单号查不到 | — |
 | `DOSSIER_NOT_FOUND` | 404 | 公司档案 id 查不到 | — |
+| `REFERRAL_NOT_FOUND` | 404 | 转介 id 不存在或不属于本人——两者刻意不区分 | — |
 | `KEY_NOT_FOUND` | 404 | api key id 不在本人名下 | — |
 | `TOOL_NOT_FOUND` | 404 | 通用桥 POST /tools/{name} 里的 name 不是一条可调用的能力 | 调 GET /tools 拿当前可用的能力名，不要按旧说明书里的名字重试 |
-
-**入参不合法**
-
-| error_code | HTTP | 什么时候拿到它 | 拿到之后怎么办 |
-|---|---|---|---|
-| `INVALID_BODY` | 400 | 请求体不是合法 JSON，或缺必填字段 | 照 manifest 里该端点的入参重发；不要重试同一份体 |
-| `INVALID_CASE_ID` | 400 | case_id 不是正整数 | — |
-| `INVALID_STAGE` | 400 | stage 不在法定枚举里 | 取值见 case_get 回包里的当前 stage 与工具入参说明 |
-| `INVALID_HAPPENED_AT` | 400 | 时间不是 ISO8601，或落在合理区间之外 | — |
-| `INVALID_KIND` | 400 | kind 不在该表的法定枚举里 | — |
-| `INVALID_MONTHLY_WAGE` | 400 | 月薪不是正数（单位是**元**，不是分） | — |
-| `NO_FIELDS` | 400 | 更新类调用一个字段都没传 | — |
-| `FILE_TOO_LARGE` | 413 | 上传文件超过单文件上限 | — |
 
 **余额与并发**
 
