@@ -1,4 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
+import {
+  AI_LABELING_TERMS_HREF,
+  AI_LABELING_TERMS_LINK_TEXT,
+} from '@/app/_ui/aiLabelingTerms';
 import { TubashuMark } from '@/components/shell/TubashuMark';
 import { LoginFlow } from './_components/LoginFlow';
 
@@ -26,6 +31,17 @@ export default function LoginPage() {
 
       <footer className="mt-10 w-full max-w-[420px] text-[13px] leading-6 text-ink-2">
         手机号与身份信息加密存储，只用于验证、通知和存证出具。
+        {/* 注册就是在这一页发生的：标识办法 §8 要的"提示用户仔细阅读"得摆在这之前，
+            不是等他建完档案再说。 */}
+        <br />
+        平台的回复与文书由人工智能生成，发出前请读一遍
+        <Link
+          href={AI_LABELING_TERMS_HREF}
+          className="mx-1 text-primary-ink underline underline-offset-4"
+        >
+          {AI_LABELING_TERMS_LINK_TEXT}
+        </Link>
+        。
       </footer>
     </div>
   );

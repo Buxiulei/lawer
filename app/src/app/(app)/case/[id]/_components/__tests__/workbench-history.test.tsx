@@ -271,6 +271,12 @@ function walk(
       ).length,
     });
   }
+  // 生成合成内容的显式标识（标识办法 §4）。它的字在自己里面（组件不被这里展开），
+  // 这里只取「在不在、问的是哪个案子」——字那一侧由
+  // app/__tests__/page-copy-by-domain.test.tsx 的「文书页·生成合成内容标识」按渲染产物验。
+  if (typeName === 'CaseAiGeneratedNotice') {
+    aiNotices.push({ caseId: el.props?.caseId });
+  }
   const message = el.props?.message as ProbedMessage | undefined;
   if (message) messages.push(message);
   if (typeof message?.content === 'string') texts.push(message.content);
@@ -289,6 +295,9 @@ const composers: {
 /** 这一帧画出来的「上一轮还在答」提示条（walk 的收集处，probe 每次开跑前清空） */
 const inFlightNotices: { handlers: number }[] = [];
 
+/** 这一帧画出来的生成合成内容标识（walk 的收集处，probe 每次开跑前清空） */
+const aiNotices: { caseId: unknown }[] = [];
+
 /** 这一帧画出来的失败横幅（walk 的收集处，probe 每次开跑前清空） */
 const errorCards: {
   code: unknown;
@@ -304,6 +313,7 @@ function probe(node: ReactNode): {
   errors: typeof errorCards;
   composers: typeof composers;
   inFlight: typeof inFlightNotices;
+  aiNotices: typeof aiNotices;
 } {
   const types: string[] = [];
   const texts: string[] = [];
@@ -311,6 +321,7 @@ function probe(node: ReactNode): {
   errorCards.length = 0;
   composers.length = 0;
   inFlightNotices.length = 0;
+  aiNotices.length = 0;
   walk(node, types, texts, messages);
   return {
     types,
@@ -319,6 +330,7 @@ function probe(node: ReactNode): {
     errors: [...errorCards],
     composers: [...composers],
     inFlight: [...inFlightNotices],
+    aiNotices: [...aiNotices],
   };
 }
 
@@ -835,6 +847,38 @@ describe('上一轮还在答这一屏（409）', () => {
     );
     expect(composers[0].disabled, '余额见底还能接着打字，每次被同一句话弹回来').toBe(true);
     expect(inFlight, '上一档的提示条没换掉').toHaveLength(0);
+  });
+});
+
+/* ── 六、生成合成内容的显式标识 ───────────────────────────── */
+
+describe('对话界面持续可见的生成合成内容标识（标识办法 §4 第（一）项）', () => {
+  /**
+   * §4 第（一）项对交互场景界面的要求是「添加显著的提示标识」——**持续**在场，
+   * 不是首轮之前提一句就撤。做成"随第一条回答一起出现"的形态是：
+   * 用户读到第一条回答的那一刻它还不在，而那正是最需要它在的一刻。
+   *
+   * 【变异臂】
+   *  · A1 把 Workbench 里那句 <CaseAiGeneratedNotice/> 删掉 ⇒ 这三条全红
+   *  · A2 把它挪进 `messages.length > 0 &&` ⇒ 「一条都还没聊过时照样在」红
+   *  · A3 caseId 写死成 'demo' ⇒ 「问的是自己那个案子」红
+   */
+  it('聊过之后在（变异 A1：删掉那一句 → 红）', async () => {
+    const { aiNotices } = probe(await settled(CASE));
+    expect(aiNotices, '对话界面上没有生成合成内容标识').toHaveLength(1);
+  });
+
+  it('一条都还没聊过时照样在（变异 A2：挂到"有消息才出"上 → 红）', async () => {
+    bus.rows = [];
+    const { aiNotices, messages, types } = probe(await settled(CASE));
+    expect(messages, '这一帧还画着消息，验的不是空态').toHaveLength(0);
+    expect(types, '这一帧根本不是对话屏（走了骨架或失败那一屏），下面在空过').toContain('Composer');
+    expect(aiNotices, '一条都还没聊过时，对话界面上没有标识').toHaveLength(1);
+  });
+
+  it('问的是自己那个案子（变异 A3：caseId 写死 → 红）', async () => {
+    const { aiNotices } = probe(await settled(CASE));
+    expect(aiNotices[0].caseId).toBe(CASE);
   });
 });
 

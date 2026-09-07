@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { humanError } from '@/app/_ui/api';
 import { formatDateTime } from '@/app/_ui/format';
+import { CaseAiGeneratedNotice } from '@/app/_ui/CaseAiGeneratedNotice';
 import { NeutralLabel } from '@/app/_ui/NeutralLabel';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Button } from '@/components/shadcn/button';
@@ -93,6 +94,11 @@ export function RealDraftBody({ caseId, draft }: { caseId: string; draft: DraftV
           {draft.title}
         </h1>
       </header>
+
+      {/* 这一页整篇正文是模型起草的：标识排在正文**之前**（标识办法 §4 第（一）项
+          「在文本的起始…添加文字提示」）。排在正文之后的形态是，读的人一路读到底
+          才知道这是 AI 写的，而多数人读到一半就去照着发了。 */}
+      <CaseAiGeneratedNotice caseId={caseId} />
 
       {/* 正文整篇都是公司名、金额和主张：低调模式下整块糊着 */}
       <pre

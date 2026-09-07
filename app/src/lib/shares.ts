@@ -19,6 +19,7 @@ import { findDraftById } from '@/lib/db/agent';
 import * as store from '@/lib/db/share-links';
 import { findEvidenceDetail } from '@/lib/db/evidence';
 import { toSql } from '@/lib/db/time';
+import { caseAiDisclaimer } from '@/lib/ai-label-case';
 import { shareRedactorFor } from '@/lib/sensitive';
 
 /** 默认有效期（小时）：三天。够对方看完、也够用户改主意。 */
@@ -214,6 +215,14 @@ export interface ShareView {
    * 脱敏挡住了数据，却把"索要真值"这件事推给了当事人本人。
    */
   redact_notice: string | null;
+  /**
+   * 显式标识的**后半截**（标识办法 §4；前半截是 lib/ai-label 的那句法定文字）。
+   * 文书那一路必给：交出去的正文整篇是模型起草的，而这条链接谁拿到谁能看——
+   * 收件人手上没有任何别的线索能看出这是 AI 写的。
+   * 证据那一路恒为 null：那一页上只有用户自己填的元数据与文件哈希，
+   * 给它挂一句「由人工智能生成」是**往严重方向说的假话**，会连带削弱这份材料。
+   */
+  ai_label: string | null;
 }
 
 export type ShareReadResult =
@@ -257,6 +266,7 @@ export function readShare(db: Database, token: string): ShareReadResult {
         body: redacted.text,
         meta: null,
         redact_notice: redactor.notice,
+        ai_label: caseAiDisclaimer(db, row.case_id),
       },
     };
   }
@@ -282,6 +292,8 @@ export function readShare(db: Database, token: string): ShareReadResult {
         body: null,
         meta: redacted.meta,
         redact_notice: redactor.notice,
+        // 见 ShareView.ai_label 的说明：这一页没有生成合成内容，不加标识
+        ai_label: null,
       },
     };
   }

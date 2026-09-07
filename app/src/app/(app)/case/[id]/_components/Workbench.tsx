@@ -35,6 +35,7 @@ import {
   toActionItem,
   type DraftFrame,
 } from '../_stream/frames';
+import { CaseAiGeneratedNotice } from '@/app/_ui/CaseAiGeneratedNotice';
 import { ByoAgentNotice } from './ByoAgentNotice';
 import { readToken } from '../_stream/httpTransport';
 import { useCaseHistory } from '../_stream/useCaseHistory';
@@ -467,6 +468,12 @@ export function Workbench({ caseId }: { caseId: string }) {
           **这仍是 768 与 393 版式不同的可量证据**：同一段文字的左边界 x
           会从 16px 变成 (可用宽-672)/2。 */}
       <div className="min-w-0 @min-[736px]/work:mx-auto @min-[736px]/work:max-w-2xl">
+        {/* 交互界面上**持续可见**的生成合成内容标识（标识办法 §4 第（一）项
+            「或者在交互场景界面、文字周边添加显著的提示标识」）。
+            排在消息列之上、恒渲染：做成"首轮之后才出现"或"可关闭"的形态是，
+            用户读到第一条回答时它还不在——而那正是最需要它在的一刻。 */}
+        <CaseAiGeneratedNotice caseId={caseId} className="mb-2" />
+
         {/* 已接入自己 agent 的人才看得到；没接入时它自己返回 null。
             放在正文收窄容器内，左边界与消息对齐——它是说给这一栏听的一句话。 */}
         <ByoAgentNotice />

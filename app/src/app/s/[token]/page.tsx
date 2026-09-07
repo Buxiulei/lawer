@@ -9,6 +9,7 @@
 // 这里就是那两块「已失效」的文案，两处不会分叉。
 import type { Metadata } from 'next';
 
+import { AiGeneratedNotice } from '@/app/_ui/AiGeneratedNotice';
 import { TubashuMark } from '@/components/shell/TubashuMark';
 import { getDb } from '@/lib/db/client';
 import { readShare } from '@/lib/shares';
@@ -73,6 +74,14 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
           <p className="prose-measure mb-5 rounded-lg border border-line bg-surface p-4 text-[13px] leading-6 text-ink-2">
             {result.view.redact_notice}
           </p>
+        )}
+
+        {/* 生成合成内容的显式标识（标识办法 §4）：排在正文**之前**。
+            这一页上站着的是一个没有账号、也没读过我们任何说明的人，
+            正文之后再说的形态是——他多半已经照着这份文书行动了。
+            证据那一路 ai_label 恒为 null，这一块整块不出现（见 lib/shares.ShareView）。 */}
+        {result.state === 'ok' && result.view.ai_label !== null && (
+          <AiGeneratedNotice disclaimer={result.view.ai_label} className="mb-5" />
         )}
 
         {result.state === 'ok' && result.view.body !== null && (

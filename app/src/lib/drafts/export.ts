@@ -29,6 +29,8 @@ import {
   quoteService,
   type ServiceQuote,
 } from '@/lib/billing/service-quotes';
+import { aiLabelPdfMeta } from '@/lib/ai-label';
+import { caseAiLabelLine } from '@/lib/ai-label-case';
 import { writeOnce } from '@/lib/capabilities/shared';
 import * as cases from '@/lib/cases';
 import type { DomainFailure, Result } from '@/lib/cases';
@@ -345,6 +347,13 @@ export async function exportDraft(
       subtitle: null,
       markdown: pdfBody,
       footer_note: null,
+      // 显式标识（标识办法 §4 末款：「提供生成合成内容下载、复制、导出等功能时，
+      // 应当确保文件中含有满足要求的显式标识」）。站内那句话只活在屏幕上——
+      // 这份 PDF 一导出就脱离我们，收件人手上只有它。
+      ai_label: caseAiLabelLine(db, draft.case_id),
+      // 隐式标识（§5）：三要素写进文件元数据。内容编号带上版本——
+      // 同一份草稿改一版再导一次是**另一份**生成内容，编号不区分就查不回是哪一版。
+      ai_meta: aiLabelPdfMeta(`draft:${draft.id}@v${draft.version}`),
     });
   } catch (err) {
     return fail(

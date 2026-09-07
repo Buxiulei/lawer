@@ -864,6 +864,8 @@ export const COUNSELING: DomainPack = {
       docActionsHint:
         '对某一条还有疑问，或者想让人帮你把回复的原话写出来，去「问它」接着说。' +
         '这份文件本身建议收进证据库，答复投诉或应诉时要用。',
+      /** 显式标识的后半截（口径见 labor.ts 同名键）：这个行当里最容易被误当成的是诊断与治疗意见 */
+      aiLabelDisclaimer: '不构成诊断、治疗或督导意见',
     },
   },
 };

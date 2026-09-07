@@ -5,6 +5,10 @@
 import Link from 'next/link';
 import { PrimaryCta } from '@/app/_components/PrimaryCta';
 import { DISCLAIMER_TEXT } from '@/app/_mock/authpay';
+import {
+  AI_LABELING_TERMS_HREF,
+  AI_LABELING_TERMS_LINK_TEXT,
+} from '@/app/_ui/aiLabelingTerms';
 import { BYO, byoBillingLine } from '@/app/_ui/byoAgent';
 
 /** 卷一的三张文书卡。**全部是示例**，卡上带「示例」角标，不留可被误读成真实数据的余地。 */
@@ -372,7 +376,16 @@ export default function LandingPage() {
       </div>
 
       <footer className="border-t border-kraft-deep px-6 pt-[26px] pb-10 text-center text-[13px] text-ink-2">
-        <div className="mx-auto max-w-[1120px]">{DISCLAIMER_TEXT}</div>
+        <div className="mx-auto max-w-[1120px]">
+          {DISCLAIMER_TEXT}
+          {/* 标识办法 §8 的那一页：首次使用之前就要够得着，所以挂在这一页的页脚上 */}
+          <Link
+            href={AI_LABELING_TERMS_HREF}
+            className="ml-2 whitespace-nowrap underline underline-offset-4"
+          >
+            {AI_LABELING_TERMS_LINK_TEXT}
+          </Link>
+        </div>
       </footer>
     </>
   );
