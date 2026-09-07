@@ -32,17 +32,17 @@ function clone(over: Partial<DomainPack> = {}): DomainPack {
 }
 
 /**
- * lawyerReview / sensitive 两节的**完好**样张。labor 包没有这两节（省略 = 本领域没这回事），
+ * interpretationDisputed / sensitive 两节的**完好**样张。labor 包没有这两节（省略 = 本领域没这回事），
  * 所以要验「一旦声明就不许半张」，得先自己给一份齐的再打坏其中一项——
  * 直接打坏一个不存在的节，守卫本来就该放过，那条判据就成了恒绿。
  *
  * 【为什么不从 counseling 包里取】判据要验的是守卫，不是某个包今天长什么样：
  * 借用真包的话，真包哪天把某一节删了，这几条负样本会一起变成"没声明"而恒绿。
  */
-const FULL_LAWYER_REVIEW = {
-  title: '待律师核',
+const FULL_INTERPRETATION_DISPUTED = {
+  title: '解释存疑',
   items: ['这一条为什么还没有结论'],
-  discipline: '未经律师书面确认不得作为结论输出',
+  discipline: '本问题现行法律解释存疑：以下是依据原文与分歧点，土八鼠不下结论',
 } as const;
 
 const FULL_SENSITIVE = {
@@ -71,7 +71,7 @@ describe('assertDomainPack：包必须实现全部字段', () => {
    * 【这张表此前只覆盖一半的必填项】parties.self / parties.counterparts / parties.multiParty /
    * crisis.negations / crisis.resourcePackId / crisis.safeFallback / crisis.openerText.* /
    * copy.neutral.appTitle / copy.neutral.notice / copy.neutral.forbiddenWords /
-   * factsSections[].title / lawyerReview.* / sensitive.* —— 这十几项的守卫**整行删掉都不会红**。
+   * factsSections[].title / interpretationDisputed.* / sensitive.* —— 这十几项的守卫**整行删掉都不会红**。
    * 而它们缺了都不崩：空的 negations = 反例句一律照样触发危机；空的 resourcePackId =
    * 危机首段拿不到号码卡；空的 redactNotice = 分享页不再说自己脱敏过。全部 200，全部静默。
    * 每一项补一条负样本，并把「点名」验成**点全名**（见下面的 pointsAt）。
@@ -144,11 +144,11 @@ describe('assertDomainPack：包必须实现全部字段', () => {
     // 空清单读起来像"这个行当没有这类事项"，而它与漏填在产出上完全同形——
     // 那一段渲染不出来，于是"什么时候可以把用户指向律师"重新变成没人管的事。
     ['lawyerMandatory', { lawyerMandatory: [] }],
-    // lawyerReview / sensitive 是**可选**的（省略 = 本领域没这回事），但一旦声明就不许半张。
+    // interpretationDisputed / sensitive 是**可选**的（省略 = 本领域没这回事），但一旦声明就不许半张。
     // 所以负样本要先把它声明齐、再打坏其中一项——否则打坏的是"没声明"，守卫本来就该放过。
-    ['lawyerReview.title', { lawyerReview: { ...FULL_LAWYER_REVIEW, title: '' } }],
-    ['lawyerReview.items', { lawyerReview: { ...FULL_LAWYER_REVIEW, items: [] } }],
-    ['lawyerReview.discipline', { lawyerReview: { ...FULL_LAWYER_REVIEW, discipline: '  ' } }],
+    ['interpretationDisputed.title', { interpretationDisputed: { ...FULL_INTERPRETATION_DISPUTED, title: '' } }],
+    ['interpretationDisputed.items', { interpretationDisputed: { ...FULL_INTERPRETATION_DISPUTED, items: [] } }],
+    ['interpretationDisputed.discipline', { interpretationDisputed: { ...FULL_INTERPRETATION_DISPUTED, discipline: '  ' } }],
     ['sensitive.subject', { sensitive: { ...FULL_SENSITIVE, subject: '' } }],
     ['sensitive.factsNotice', { sensitive: { ...FULL_SENSITIVE, factsNotice: '' } }],
     ['sensitive.redactNotice', { sensitive: { ...FULL_SENSITIVE, redactNotice: '   ' } }],

@@ -90,4 +90,4 @@ updated: 2026-09-07
 - 民法典第 1032/1033 条（[[statute-mfd-1032-1033-yinsi]]）
 - 伦理守则 8.2（[[ethic-lunli-8-2-8-3-yuancheng-fuwu]]，**条文尚未完成官方 PDF 逐字核对，
   引用前请先核对该卡当前状态**）
-- 记录保存年限：[[risk-jilu-baocun-nianxian]]（**未经律师书面确认不得作为结论输出**）
+- 记录保存年限：[[risk-jilu-baocun-nianxian]]（**本问题现行法律解释存疑：以下是依据原文与分歧点，土八鼠不下结论**）

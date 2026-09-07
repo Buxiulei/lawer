@@ -31,8 +31,10 @@
 //   S2 否定式搭配（NEGATION）——否定词必须与它同在**一个分句**内，且在它前 12 字以内。
 //      分句按「，；！？」切：跨了逗号的否定词托不住后半句，这正是第一版漏掉的形态；
 //   S3 闭合清单标记（MANDATORY）——「必须/只能由执业律师」在同一分句里；
-//   S4 法条引用——出现位置落在《》书名号内部，或**同一分句里同时有《…》与「第X条」**
-//      （即这一分句是逐字引条文，而不是随口报了个法名）；
+//   S4 法条引用——出现位置落在《》书名号内部，或落在**逐字引文那一段里**：
+//      「第X条：」之后到分句末（这一段就是被抄下来的条文），或分句已报出《…》时的引号内部。
+//      判的是**位置**，不是"这一分句里有没有引文"：后者把整分句白名单了，
+//      于是「可以找律所代理（依据《律师法》第十三条）」原样通过（2026-09-07 第二次复审实测）；
 //   S5 被引用的那句禁语——出现位置落在引号内部，且整句带禁令语气。
 //      产品面里"禁止说『建议咨询律师』"就是这个形态：被禁的原话必须能写出来；
 //   S6 顿号并列继承——「指向律师、律所」里的后一项，跟着前一项走（间隔只许是顿号一类）。
@@ -73,11 +75,18 @@ const NEGATION = /不构成|不自称|不冒充|不声称|请不起|没有律师
 const MANDATORY = /必须由执业律师|只能由执业律师|lawyerMandatory/;
 
 /**
- * S4 的第二半：条号。**光有法名不算引文**——"依据：律师法第十三条"里的"律师法"
- * 只是随口报的一个法名，而第一版正是被这种写法白名单掉的。要落在《》里，
- * 或这一分句同时给出《…》与条号，才算在引条文。
+ * S4 的第二半：**逐字引文从哪里开始**。
+ *
+ * 【为什么钉的是「第X条：」这个冒号，而不是"分句里有条号"】第二版写成
+ * `titles.length > 0 && STATUTE_ARTICLE.test(clause)`——即"这一分句里既有《…》又有条号
+ * 就整分句放行"。于是「可以找律所代理（依据《律师法》第十三条）」原样通过：
+ * 括号里那半句是真引文，被它白名单掉的却是括号外面那半句。
+ * **法名与条号都是最容易顺手带上的东西**，靠"分句里有没有"判定，
+ * 等于给每一句违规话留了一个加个括号就能满足的出口。
+ * 冒号之后那一段才是被抄下来的条文本身，位置是可数的。
  */
-const STATUTE_ARTICLE = /第[一二三四五六七八九十百千零〇\d]+条/;
+const ARTICLE_LEAD = /第[一二三四五六七八九十百千零〇\d]+条[：:]/g;
+
 
 /**
  * S5 的语气条件：引用一句被禁的话时，整句必须带禁令语气。
@@ -118,7 +127,7 @@ function walk(dir: string, out: string[] = []): string[] {
  * 扫描面 = 产品面（用户看得见的字）+ 写给模型的那三份纪律文案。
  *
  * 【为什么 lib 那侧只点这四个文件，而不是整个 lib】"律师"这两个字在 lib 里到处都是，
- * 而绝大多数是**内部叙述**（模块头注释、变量名、待律师复核那套机制）。
+ * 而绝大多数是**内部叙述**（模块头注释、变量名、解释存疑那套机制）。
  * 整个 lib 一起扫的形态是：判据一片红，于是有人给它加一张长长的豁免名单，
  * 而豁免名单一长就没人看得懂它到底还在拦什么。这四个文件是**对外说话的那几份**：
  * 准则、system prompt、无工具模式开场白、闭合清单渲染。
@@ -166,6 +175,22 @@ function titleSpans(clause: string): Array<[number, number]> {
   return pairedSpans(clause, '《', '》');
 }
 
+/**
+ * S4 的放行区间：**逐字引文占的那一段**。两种构造，都按位置算：
+ *   ① 「第X条：」之后到分句末 —— 冒号后面那一段就是被抄下来的条文；
+ *   ② 这一分句已经报出《…》时的引号内部 —— "《律师法》第十三条规定「……」"这一形态。
+ * 分句里只出现《…》与条号、而"律师"落在它们外面（"找律所代理（依据《律师法》第十三条）"），
+ * 一条都不占，按红处理。
+ */
+function citationSpans(clause: string): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const m of clause.matchAll(ARTICLE_LEAD)) {
+    out.push([(m.index ?? 0) + m[0].length, clause.length]);
+  }
+  if (titleSpans(clause).length > 0) out.push(...quoteSpans(clause));
+  return out;
+}
+
 /** 引号区间（S5）。 */
 function quoteSpans(clause: string): Array<[number, number]> {
   return [
@@ -205,7 +230,7 @@ export function unsanctionedMentions(text: string): string[] {
       const titles = titleSpans(clause);
       const quotes = quoteSpans(clause);
       const pinned = pinnedSpans(clause);
-      const isCitation = titles.length > 0 && STATUTE_ARTICLE.test(clause);
+      const citations = citationSpans(clause);
       const hasMandatory = MANDATORY.test(clause);
       let prevEnd = -1;
       let prevOk = false;
@@ -220,7 +245,7 @@ export function unsanctionedMentions(text: string): string[] {
           NEGATION.test(clause.slice(Math.max(0, at - WINDOW), end)) ||
           hasMandatory ||
           inside(titles) ||
-          isCitation ||
+          inside(citations) ||
           (inside(quotes) && quotedIsCited) ||
           (prevOk && gap !== null && ENUM_GAP.test(gap));
         if (!ok) out.push(clause.replace(/\s+/g, ' ').trim().slice(0, 80));
@@ -314,6 +339,30 @@ describe('产品面与 charter 只在三个位置提「律师」（主理人 202
   });
 
   /**
+   * 【第二版漏过的三条，逐条钉住】第二版把 S4 写成"这一分句里既有《…》又有条号就整分句放行"，
+   * 于是**把括号里那半句真引文的白名单，发给了括号外面那半句**。
+   * 第二次复审（2026-09-07）给的三条探针在第二版下实测全绿——它们不是假想，
+   * 是"加个括号引一条法"这个几乎零成本的出口。
+   */
+  it.each([
+    ['括号里的引文白名单了括号外', '金额较大的可以找律所代理（依据《律师法》第十三条）'],
+    ['先报法名再支人（同一分句）', '根据《民事诉讼法》第六十一条你也可以委托律师代理'],
+    ['引文当理由用', '《律师法》第十三条摆在那里所以这类事还是得找律师'],
+  ])('第二版漏过的形态现在判红：%s', (_label, t) => {
+    expect(unsanctionedMentions(t).length, `这一句仍然被放行了：${t}`).toBeGreaterThan(0);
+  });
+
+  /**
+   * 反方向自证：**真的逐字引条文仍然放行**。上面三条判红若是靠"S4 整条废掉"实现的，
+   * 这一条会跟着红——那样守卫就从"太宽"翻到了"引不了法条"，同样是坏的。
+   */
+  it('逐字引条文仍然放行（自证上面三条不是把 S4 整条废掉）', () => {
+    expect(
+      unsanctionedMentions('《律师法》第十三条：没有取得律师执业证书的人员，不得以律师名义从事法律服务业务。'),
+    ).toEqual([]);
+  });
+
+  /**
    * 【托住一次出现的东西，不许外溢到下一次】上面那组钉的是"否定词与它无关"；
    * 这一组钉的是**否定词确实托住了前一次出现，但不该顺带托住后一次**——
    * 它是"先写一句合规的话、再在同一口气里把人支出去"的完整形态，
@@ -341,14 +390,16 @@ describe('产品面与 charter 只在三个位置提「律师」（主理人 202
    * 【每一条放行标记都要能命中它自己的例句】写坏的正则不会报错，只会**静默永绿**：
    * 它从此谁也不放行，而"谁也不放行"在这份判据里的表现与"扫描面很干净"完全一样。
    *
-   * 【为什么 S4 只验例句、不验扫描面】产品面现在一处法条原文都没引到律师法，
-   * 要求它在扫描面里出现等于逼人写一句用不着的话。前两类反过来必须在扫描面里真的在用——
-   * 一次都不命中说明它们已经与文案脱钩了。
+   * 【为什么 S4 只验例句、不验扫描面】扫描面里的法条引用只有无工具模式指南那一处
+   *（《中华人民共和国律师法》第十三条），措辞随裁决会变；把它钉进这条自证里，
+   * 下一次改文案时红的是"正则还活着吗"这条判据，指错方向。前两类反过来必须在扫描面里
+   * 真的在用——一次都不命中说明它们已经与文案脱钩了。
    */
   it('放行标记各自能命中自己的例句，前两类在扫描面里真的在用', () => {
     expect(NEGATION.test('不构成律师意见')).toBe(true);
     expect(MANDATORY.test('法律上必须由执业律师做')).toBe(true);
-    expect(STATUTE_ARTICLE.test('第十三条')).toBe(true);
+    expect(citationSpans('《律师法》第十三条：没有取得律师执业证书的人员').length).toBe(1);
+    expect(citationSpans('可以找律所代理（依据《律师法》第十三条）'), '没有冒号就不是引文段').toEqual([]);
     expect(titleSpans('《中华人民共和国律师法》').length).toBe(1);
     expect(quoteSpans('「建议咨询律师」').length).toBe(1);
 

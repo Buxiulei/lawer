@@ -15,19 +15,15 @@ MultiModalConversation，也不带 ocr_options）：与 NBDpsy 发票 OCR 同一
 key 从 env DASHSCOPE_API_KEY 读；模型从 env OCR_MODEL 读。
 
 ------------------------------------------------------------------------------
-默认模型为什么暂用浮动别名 qwen3-vl-plus（而非锁 dated 版本号）
+默认模型为什么是浮动别名 qwen3-vl-plus（不用带日期版本）
 ------------------------------------------------------------------------------
 百炼的模型授权按「精确模型名」开通：生产这把 key（与 NBDpsy 同一把）对
 qwen-vl-ocr-2025-11-20 / qwen-vl-ocr / qwen-vl-plus / qwen3-vl-plus-2025-12-19
 等一律 403 Model.AccessDenied，只有浮动别名 qwen3-vl-plus（与 qwen-vl-max）能 200。
-锁 dated 版本号本是为价稳（浮动别名指向变更可能悄悄抬价），但此刻 dated 名根本调不通，
-只能先用浮动别名把功能跑起来。
 
-TODO（换回 dated 名的判据）：主理人在百炼控制台为该 key 开通 qwen3-vl-plus-2025-12-19
-后，把下面 DEFAULT_OCR_MODEL 的默认值从 "qwen3-vl-plus" 改回
-"qwen3-vl-plus-2025-12-19"，并把 tests/test_ocr.py 里
-test_ocr_default_model 的期望值一并改成 dated 名（同时确认 .env.example 与 README）。
-换任何版都要同步核对 research/raw/C01-模型定价核定.md 的费率表。
+主理人 2026-09-07 裁决：**不用带日期版本**——浮动别名就是这里的定值，不是过渡态。
+（原先此处挂着一条"开通 dated 名后改回去"的 TODO，按裁决删除。）
+换版走 env OCR_MODEL，并同步核对 research/raw/C01-模型定价核定.md 的费率表。
 """
 
 import base64

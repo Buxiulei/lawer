@@ -69,4 +69,4 @@ http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html
 - ❌ 以为"事情过去五年了对方告不了"就不必应诉——时效抗辩要提，且起算点可能被认定为
   对方"知道"的那一天，而不是事发那天。
 - ❌ 把伦理申诉、监管投诉的受理与诉讼时效混为一谈——协会与监管的受理时限是另一套规则
-  （多数未见公开明文，见 [[data-counseling-shixiao-qixian]] 的待核实项）。
+  （多数未见公开明文，见 [[data-counseling-shixiao-qixian]] 的「本卡不写的部分」）。

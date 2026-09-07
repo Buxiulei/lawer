@@ -595,8 +595,8 @@ function evidenceContentNote(e: CaseSnapshot['evidence'][number]): string {
 // ========== 组装与预算 ==========
 
 /**
- * 「未经律师书面确认不得作为结论输出」的那几条（设计稿 §16）。
- * **没有声明 lawyerReview 的领域根本不出这一节**——所以第一个领域的事实卡逐字不变。
+ * 「本问题现行法律解释存疑：只给依据原文与分歧点，不下结论」的那几条（设计稿 §16）。
+ * **没有声明 interpretationDisputed 的领域根本不出这一节**——所以第一个领域的事实卡逐字不变。
  *
  * 【为什么它是 P0（永不被预算降级）】它挡的是模型的默认行为：这几件事恰恰是它最容易
  * 给出干脆答案的那几件。被预算压掉的形态是——档案越厚这一节越先消失，
@@ -606,11 +606,11 @@ function evidenceContentNote(e: CaseSnapshot['evidence'][number]): string {
  * **每一轮**都在的。只放报告的形态是：模型在没读过报告的那一轮里，把"是不是强制报告主体"
  * 直接答了——而那一轮看起来与其它轮没有任何区别。
  */
-function lawyerReviewSection(s: CaseSnapshot): FactSection | null {
-  const review = domainPackOrDefault(s.case.domain).lawyerReview;
+function interpretationDisputedSection(s: CaseSnapshot): FactSection | null {
+  const review = domainPackOrDefault(s.case.domain).interpretationDisputed;
   if (!review) return null;
   return {
-    key: 'lawyerReview',
+    key: 'interpretationDisputed',
     priority: 0,
     heading: review.title,
     // 纪律那句话进 stat：stat 是整区降级后唯一幸存的部分，而这一节里最不能丢的正是这句
@@ -645,7 +645,7 @@ export function buildCaseFacts(s: CaseSnapshot): FactCard {
       evidenceSection(s),
       // 排在最后：前面每一节说的都是"手上有什么"，这一节说的是"哪几件事不许下结论"，
       // 它该是读完全部事实之后的最后一句话。没有这类条目的领域这里是空数组。
-      ...([lawyerReviewSection(s)].filter((x): x is FactSection => x !== null)),
+      ...([interpretationDisputedSection(s)].filter((x): x is FactSection => x !== null)),
     ],
   };
 }

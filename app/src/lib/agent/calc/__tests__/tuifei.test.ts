@@ -85,7 +85,7 @@ describe('退费：给区间，不给单一数字', () => {
     expect(r.formula).toContain('退费区间');
     expect(r.formula).toContain('—'); // 区间是两端，不是一个数
     expect(r.flags).toContain('退费给区间不给单一数字（合同定性未定）');
-    expect(r.flags).toContain('合同定性（委托/服务）未经律师书面确认');
+    expect(r.flags).toContain('合同定性（委托/服务）现行法律解释存疑');
   });
 
   it('区间的两端确实来自那几条口径（变异：把 rangeHigh 写死成某一条 → 红）', () => {

@@ -219,11 +219,10 @@ PDF 本身的签名用 Adobe 或 `verify_evidence_pdf.py` 验。
   不带 `ocr_options`，也不走「本地文件先传阿里云临时 OSS」那条路）；`/asr` 用
   `paraformer-v2` 开 `diarization_enabled`。
 
-  **OCR 模型过渡态暂用浮动别名 `qwen3-vl-plus`**：生产这把 key（与 NBDpsy 同一把）
+  **OCR 模型用浮动别名 `qwen3-vl-plus`**：生产这把 key（与 NBDpsy 同一把）
   对 dated 名（`qwen3-vl-plus-2025-12-19`）与 `qwen-vl-ocr-*` 一律 403 `Model.AccessDenied`，
-  只有浮动别名 `qwen3-vl-plus` 能 200。锁 dated 版本号本是为价稳（浮动别名指向变更可能悄悄抬价），
-  但此刻 dated 名调不通，只能先用浮动别名把功能跑起来。主理人在百炼控制台为该 key 开通
-  `qwen3-vl-plus-2025-12-19` 后，把默认值改回 dated 名（`sidecar/ocr.py` 文件头有 TODO 与判据）。
+  只有浮动别名 `qwen3-vl-plus` 能 200。主理人 2026-09-07 裁决**不用带日期版本**，
+  所以这是定值不是过渡态（原先挂在 `sidecar/ocr.py` 文件头的"改回 dated 名"TODO 按裁决删除）。
   换版走 env `OCR_MODEL`，并同步核对 `research/raw/C01-模型定价核定.md` 的费率表。
 - **中文字体**：PDF 渲染需要 CJK 字体，镜像里装的是 `fonts-noto-cjk`。
   裸机缺字体会回退 Helvetica，中文渲染成方块。

@@ -14,6 +14,12 @@
 // 【为什么钉的是"产出"而不是"实现"】实现会被改（这一票就在改），产出不会：
 // 用户读到哪句话、agent 收到哪个枚举、危机首段是哪几行——这些是对外承诺。
 // 钉实现的判据会在每次重构时误红，于是被顺手改绿；钉产出的判据只在承诺真变了时红。
+//
+// ⚠️ **它没有钉 system prompt，别拿它当"labor 的 prompt 没变"的证据。**（第二次复审
+// 2026-09-07 点名）buildSystemPrompt 的输出一个字都不在下面这些项里：律师转介口径那一票
+// 改了 charter §1、往 labor 的 prompt 里加了一整段闭合清单，本文件从头到尾全绿。
+// prompt 那一面由 `lib/agent/__tests__/labor-prompt-snapshot.test.ts` 钉——
+// 它的基线是**裁决之后**的文本，与本文件这份"搬家前"的基线不是同一个东西。
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

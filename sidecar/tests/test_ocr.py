@@ -73,14 +73,14 @@ def _patch(monkeypatch, script):
     return rec
 
 
-# ---------------- 默认模型名（TODO 判据） ----------------
+# ---------------- 默认模型名 ----------------
 
 def test_ocr_default_model():
-    """默认模型暂锁浮动别名 qwen3-vl-plus。
+    """默认模型锁浮动别名 qwen3-vl-plus。
 
-    这是过渡态：生产 key 对 dated 名（qwen3-vl-plus-2025-12-19 等）一律 403，
-    只有浮动别名能 200。主理人开通 dated 名后，把默认值与本断言一并改成 dated 名
-    （见 ocr.py 文件头 TODO）。
+    生产 key 对 dated 名（qwen3-vl-plus-2025-12-19 等）一律 403，只有浮动别名能 200；
+    主理人 2026-09-07 裁决**不用带日期版本**，所以这是定值不是过渡态
+    （理由见 ocr.py 文件头）。换版走 env OCR_MODEL，改默认值要连本断言一起改。
     """
     assert ocr.DEFAULT_OCR_MODEL == "qwen3-vl-plus"
 

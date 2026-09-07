@@ -2,7 +2,7 @@
 // 预付费服务的退费测算（设计稿 §16 的 calculatorKinds「退费与违约金」）。
 // 口径唯一来源：knowledge/packs/counseling/sop/tuifei-zhengyi.md 第 3 步与第 4 步、
 // statutes/xbf-26-55-geshi-tiaokuan-chengfa.md（消保法 §26/§55 逐字原文已在卡上）、
-// risk/hetong-dingxing.md（合同定性未定，**待律师书面确认**）。
+// risk/hetong-dingxing.md（合同定性未定，**现行法律解释存疑**）。
 //
 // ─────────────────────────────────────────────────────────────
 // 【这个算钱器与其它几个最大的不同：它不产出一个数，它产出一个区间】
@@ -277,8 +277,8 @@ export function calcRefund(input: RefundInput): RefundResult {
     detail:
       `能算出来的口径共 ${candidates.length} 条 ⇒ 退费区间 ${yuan(rangeLowFen)} — ${yuan(rangeHighFen)} 元。` +
       '**对外只给这个区间 + 每条口径各自的结果 + 差异原因**，不要给一个数：' +
-      '合同定性（委托合同 vs 服务合同）直接决定用哪条公式，而定性未经律师书面确认' +
-      '（见知识卡 risk-hetong-dingxing）。给单一数字就是替律师下了定性结论。' +
+      '合同定性（委托合同 vs 服务合同）直接决定用哪条公式，而这个定性现行法律解释存疑' +
+      '（见知识卡 risk-hetong-dingxing）。给单一数字就是把一个存疑的问题当成了定论。' +
       `amountFen 落的是区间**上限** ${yuan(rangeHighFen)} 元——取不准时偏向对我方最不利的那一端，` +
       '好过让人按一个乐观的数去安排事情。',
     valueFen: rangeHighFen,

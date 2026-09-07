@@ -5,7 +5,7 @@
 //   · 少一个 stage ⇒ 那个阶段的案子永远校验不过，而错误信息看起来像用户填错了；
 //   · calculatorKinds 多列一项 ⇒ 模型会调它，然后拿到一个我们编的数；
 //   · 危机词表写成第一个领域那份 ⇒ 咨询师说「来访有自杀计划」不触发，而首段照常不出现；
-//   · lawyerReview 少一条 ⇒ 模型对那一件事给出干脆的答案，而它读起来很像答案。
+//   · interpretationDisputed 少一条 ⇒ 模型对那一件事给出干脆的答案，而它读起来很像答案。
 // 所以这里逐项钉住，而不是只做一次 assertDomainPack（那只查"在不在"，不查"是不是这一份"）。
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -167,7 +167,7 @@ describe('§16 factsSections / reportSections：十节各一份', () => {
       '证据地图（含敏感级）',
       '期限',
       '待办与下一步',
-      '风险与待律师核',
+      '风险与解释存疑',
       '变更日志',
     ]);
   });
@@ -337,51 +337,64 @@ describe('§16 crisis：咨询师侧词表 + 处置骨架首段', () => {
   });
 });
 
-describe('§16 待律师复核：四条固定条目 + 一句纪律', () => {
+describe('§16 解释存疑：四条固定条目 + 一句纪律', () => {
   it('四条各说一件事，逐条覆盖 §16 点名的那四项', () => {
-    const items = COUNSELING.lawyerReview!.items;
+    const items = COUNSELING.interpretationDisputed!.items;
     expect(items.length).toBe(4);
     const joined = items.join('\n');
     for (const topic of ['强制报告', '合同定性', '保存年限', '许可']) {
-      expect(joined, `待律师复核少了「${topic}」那一条`).toContain(topic);
+      expect(joined, `解释存疑少了「${topic}」那一条`).toContain(topic);
     }
   });
 
-  it('纪律那句话逐字写着「未经律师书面确认不得作为结论输出」', () => {
-    expect(COUNSELING.lawyerReview!.discipline).toContain('未经律师书面确认不得作为结论输出');
+  /**
+   * 【这句话 2026-09-07 换过一次，换的是理由不是闸】原话是"未经律师书面确认不得作为结论输出"。
+   * 主理人裁决：**没有律师签字这回事**——所以闸留着（只给依据原文与分歧点、不下结论），
+   * 理由改成"现行法律解释存疑"。钉逐字是因为这句话本身就是这一节的作用；
+   * 换掉半句（比如只剩"不下结论"、丢掉"以下是依据原文与分歧点"）的形态是：
+   * 模型照旧不下结论，但也不再把依据原文摆出来，于是用户读到的是一句"这事说不清"。
+   */
+  it('纪律那句话逐字写着「本问题现行法律解释存疑：以下是依据原文与分歧点，土八鼠不下结论」', () => {
+    expect(COUNSELING.interpretationDisputed!.discipline).toContain(
+      '本问题现行法律解释存疑：以下是依据原文与分歧点，土八鼠不下结论',
+    );
+    // 旧口径一个字都不许剩：只改一半的形态是两种说法在同一节里并存
+    expect(COUNSELING.interpretationDisputed!.discipline, '这一节里还留着"律师"，旧口径没改干净').not.toContain(
+      '律师',
+    );
   });
 
   it('纪律不止说"不许下结论"，还说了不许据此做哪些不可逆的动作', () => {
     // 【为什么这半句不能省】只说"不得下结论"的形态是：模型不说"你必须报"，
     // 改说"那你先把记录销毁吧"——它没下结论，但用户做了一件收不回的事。
-    const d = COUNSELING.lawyerReview!.discipline;
+    const d = COUNSELING.interpretationDisputed!.discipline;
     expect(d).toContain('不可逆');
     expect(d).toContain('销毁记录');
   });
 
   it('抬头与报告里那一节同名（两处读同一份措辞，不是抄的第二份）', () => {
     expect(COUNSELING.reportSections.find((s) => s.source === 'risks')!.title).toBe(
-      COUNSELING.lawyerReview!.title,
+      COUNSELING.interpretationDisputed!.title,
     );
   });
 
   it('第一个领域没有这一节（自证它是包的字段，不是全站恒有的一段）', () => {
-    expect(LABOR.lawyerReview).toBeUndefined();
+    expect(LABOR.interpretationDisputed).toBeUndefined();
   });
 
   /**
    * 【这一条钉的是"同一份 prompt 里两条指令互斥"】这四条每轮随事实卡渲染，
-   * 逐条写着"待律师书面确认"；而主理人 2026-09-07 裁决之后，同一份 system prompt 里
+   * 逐条写着"现行法律解释存疑"；而主理人 2026-09-07 裁决之后，同一份 system prompt 里
    * 还有一段闭合清单，写着"清单以外的每一件事都由你做完""不许用建议咨询律师收尾"。
    *
    * 谁优先不写下来的形态是：用户问"我们机构算不算强制报告主体"，模型按清单那段办
    * 就给出是/否结论（正是这四条要禁的），按这四条办就把人指向了律师（正是那段要禁的），
    * **两种都不会报错**。所以裁法必须出现在下发给模型的字里 —— 见
-   * lib/agent/lawyer-mandatory.ts 的 lawyerReviewTiebreak。
+   * lib/agent/lawyer-mandatory.ts 的 interpretationDisputedTiebreak。
    */
   it('闭合清单那一段点名了这一节，并写死"它限制结论、不是把人支出去的理由"', () => {
     const seg = renderLawyerMandatory(COUNSELING);
-    expect(seg, '清单段没点名这一节，模型不知道说的是哪一节').toContain(COUNSELING.lawyerReview!.title);
+    expect(seg, '清单段没点名这一节，模型不知道说的是哪一节').toContain(COUNSELING.interpretationDisputed!.title);
     expect(seg).toContain('不得**当成把用户支给律师的理由');
     expect(seg, '只堵不给出路的话，模型只能在两条禁令之间挑一条违反').toContain('照第 1 条由你写清楚');
   });
@@ -581,7 +594,7 @@ describe('counseling 案件建得出来，且事实卡按本包渲染', () => {
   });
 });
 
-describe('counseling 的事实卡：多一节「风险与待律师核」，证据只给元数据', () => {
+describe('counseling 的事实卡：多一节「风险与解释存疑」，证据只给元数据', () => {
   /** 一份**合法**的简报（parseBrief 会逐字段校验；随手拼一个对象会被判无效，
    *  于是那条证据被当成"没有简报"，判据测的就成了另一件事）。 */
   const BRIEF_PROVES = '这一段简报正文绝不该出现在事实卡里';
@@ -632,18 +645,18 @@ describe('counseling 的事实卡：多一节「风险与待律师核」，证�
     };
   }
 
-  it('四条待律师核逐条印进事实卡，纪律那句话也在（变异：删掉 lawyerReviewSection → 红）', () => {
+  it('四条解释存疑逐条印进事实卡，纪律那句话也在（变异：删掉 interpretationDisputedSection → 红）', () => {
     const card = renderCaseFacts(buildCaseFacts(snapshotOf()));
-    expect(card).toContain(`### ${COUNSELING.lawyerReview!.title}`);
-    for (const item of COUNSELING.lawyerReview!.items) {
-      expect(card, '待律师核少了一条').toContain(item);
+    expect(card).toContain(`### ${COUNSELING.interpretationDisputed!.title}`);
+    for (const item of COUNSELING.interpretationDisputed!.items) {
+      expect(card, '解释存疑少了一条').toContain(item);
     }
-    expect(card).toContain(COUNSELING.lawyerReview!.discipline);
+    expect(card).toContain(COUNSELING.interpretationDisputed!.discipline);
   });
 
   it('缺省领域的事实卡里**一个字都没多**（labor 零变化）', () => {
     const card = renderCaseFacts(buildCaseFacts(snapshotOf({ domain: DEFAULT_DOMAIN, stage: LABOR.stages[0] })));
-    expect(card).not.toContain('未经律师书面确认不得作为结论输出');
+    expect(card).not.toContain('本问题现行法律解释存疑');
     expect(card).not.toContain('当前轨');
   });
 
@@ -747,7 +760,7 @@ describe('counseling 的事实卡：多一节「风险与待律师核」，证�
   });
 });
 
-// ========== 个案报告：当前轨 + 待律师核那几条 ==========
+// ========== 个案报告：当前轨 + 解释存疑那几条 ==========
 
 describe('counseling 的个案报告：多一行「当前轨」，风险节先给固定条目', () => {
   let rdb: Database.Database;
@@ -802,12 +815,12 @@ describe('counseling 的个案报告：多一行「当前轨」，风险节先�
   });
 
   it('风险节：四条固定条目 + 那句纪律排在「缺口」**之前**，两段分开', () => {
-    const risks = reportOf('counseling', null)['风险与待律师核'];
-    for (const item of COUNSELING.lawyerReview!.items) expect(risks).toContain(item);
-    expect(risks).toContain(COUNSELING.lawyerReview!.discipline);
+    const risks = reportOf('counseling', null)['风险与解释存疑'];
+    for (const item of COUNSELING.interpretationDisputed!.items) expect(risks).toContain(item);
+    expect(risks).toContain(COUNSELING.interpretationDisputed!.discipline);
     // 【为什么必须分成两段】混进缺口列表的形态是：模型看见"风险 6 条"，逐条去"解决"它们，
     // 而解决其中四条的唯一方式就是给出一个结论——那正是这几条要拦的事。
-    const disciplineAt = risks.indexOf(COUNSELING.lawyerReview!.discipline);
+    const disciplineAt = risks.indexOf(COUNSELING.interpretationDisputed!.discipline);
     const gapAt = risks.indexOf('基本盘缺');
     expect(disciplineAt).toBeGreaterThanOrEqual(0);
     expect(gapAt, '这份报告里没有缺口，下面那句比较恒真').toBeGreaterThan(0);
@@ -817,7 +830,7 @@ describe('counseling 的个案报告：多一行「当前轨」，风险节先�
   it('缺省领域的风险节里一条固定条目都没有（自证它来自包）', () => {
     const risks = reportOf(DEFAULT_DOMAIN, null)['风险与未定项'] ?? '';
     expect(Object.values(reportOf(DEFAULT_DOMAIN, null)).join('\n')).not.toContain(
-      '未经律师书面确认不得作为结论输出',
+      '本问题现行法律解释存疑',
     );
     expect(typeof risks).toBe('string');
   });

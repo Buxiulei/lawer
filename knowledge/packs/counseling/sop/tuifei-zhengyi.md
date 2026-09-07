@@ -99,5 +99,5 @@ updated: 2026-09-07
 
 - 民法典第 933 条、第 928 条（[[statute-mfd-933-weituo-jiechu]]）
 - 消费者权益保护法第 26 条（[[statute-xbf-26-55-geshi-tiaokuan-chengfa]]）
-- 合同定性风险：[[risk-hetong-dingxing]]（**未经律师书面确认不得作为结论输出**）
+- 合同定性风险：[[risk-hetong-dingxing]]（**本问题现行法律解释存疑：以下是依据原文与分歧点，土八鼠不下结论**）
 - 参考案例（仅内部参考）：[[case-sichuan-tuifei-7500]]

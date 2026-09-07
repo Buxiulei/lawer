@@ -258,8 +258,8 @@ function draftSection(
       // 而这几条是这个行当里本来就没有定论的东西，只会由某位律师针对某个案子书面确认一次。
       // 混进缺口列表的形态是：模型看见"风险 6 条"，于是逐条"解决"它们，
       // 而解决其中四条的唯一方式就是给出一个结论——那正是这几条要拦的事。
-      const fixed = pack.lawyerReview
-        ? [`**${pack.lawyerReview.discipline}**`, ...pack.lawyerReview.items].map((x) => `- ${x}`).join('\n')
+      const fixed = pack.interpretationDisputed
+        ? [`**${pack.interpretationDisputed.discipline}**`, ...pack.interpretationDisputed.items].map((x) => `- ${x}`).join('\n')
         : '';
       const gaps: string[] = [];
       const missing = basicsMissing(c);
