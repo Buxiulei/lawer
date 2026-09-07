@@ -10,7 +10,10 @@ region: 北京
 sources:
   - http://www.npc.gov.cn/npc//c2/c183/c198/201905/t20190522_28233.html
   - http://www.bjchy.gov.cn/affair/ldwq/tjzc/8a24fe9767393e2d01673f3dbdc70a21.html
-confidence: 待核实
+  - https://www.gov.cn/gongbao/content/2017/content_5232371.htm
+  - https://www.beijing.gov.cn/zhengce/zhengcefagui/202207/t20220714_2771636.html
+  - https://www.court.gov.cn/zixun/xiangqing/472691.html
+confidence: 原文核实
 updated: 2026-08-19
 ---
 
@@ -90,7 +93,7 @@ updated: 2026-08-19
 | 违法解除赔偿金 2N / 经济补偿 N / 代通知金 | **解除或终止之日** | 最硬的一条线，别拖 |
 | 在职期间被拖欠的工资、加班费（属劳动报酬） | 劳动关系存续期间**不受 1 年限制**；关系终止的，自**终止之日**起 1 年 | 第 27 条第 4 款 |
 | 二倍工资差额 | 加付的一倍属**惩罚性赔偿而非劳动报酬**，适用 1 年普通时效，**自主张权利之日起向前一年按日倒算** | 北京有明文：《解答（一）》第 41 问，原文见 [[statute-jgf-2024-534-jieda-1]]；实际给付不超过 12 个月，算法见 [[calc-weiqian-hetong-shuangbei]] |
-| 未休年休假工资 | 【待核实】北京实务常见按"次年 12 月 31 日"或"应休未休年度终了"起算，各地口径有差异 | 拿不准就当短的算，先申请 |
+| 未休年休假工资 | 【无统一口径】北京实务常见按"次年 12 月 31 日"或"应休未休年度终了"起算，各地掌握不一 | 拿不准就当短的算，先申请 |
 
 ### 时效中断的四种做法（《办案规则》第二十七条）
 

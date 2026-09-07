@@ -4,14 +4,14 @@ type: 文书模板
 title: 《当事人送达地址确认书》（朝阳仲裁官方表 + 填写说明）
 keywords: [送达地址确认书, 送达地址, 电子送达, 短信送达, 公告送达, 视为送达, 非京号码, 立案材料, 朝阳仲裁]
 applies_to: [仲裁申请, 裁员, 欠薪, 证据固定]
-law_refs: [劳动人事争议仲裁办案规则§25]
+law_refs: [劳动人事争议仲裁办案规则§20]
 related: [sop-chaoyang-lian-sop, template-shouquan-weituoshu, sop-zhongcai-guanxia-shixiao]
 region: 北京
 sources:
   - http://www.bjchy.gov.cn/UserFiles/File/2bb0130a4e614ecdbb06bf2b7933ab77.zip
   - http://www.bjchy.gov.cn/affair/ldwq/tjzc/8a24fe9767393e2d01673f3dbdc70a21.html
 confidence: 原文核实
-updated: 2026-08-19
+updated: 2026-09-07
 ---
 
 # 《当事人送达地址确认书》

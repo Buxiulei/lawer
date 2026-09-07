@@ -5,7 +5,7 @@ title: 保密协议审查规则卡（14 条：违约金无效 / 秘密范围 / �
 keywords: [保密协议, 保密协议审查, 审查规则, 保密违约金无效, 第25条, 商业秘密范围, 变相竞业, 保密费, 脱密期, 无限期保密, 载体返还, 公知信息, 第90条赔偿损失]
 applies_to: [竞业限制, 协商解除, 裁员, 仲裁申请, 离职证明, 证据固定]
 law_refs: [劳动合同法§4, 劳动合同法§22, 劳动合同法§23, 劳动合同法§24, 劳动合同法§25, 劳动合同法§26, 劳动合同法§35, 劳动合同法§37, 劳动合同法§39, 劳动合同法§50, 劳动合同法§90, 劳动合同法§91, 法释〔2020〕26号§36, 法释〔2025〕12号§13, 人社厅发〔2025〕40号§4, 人社厅发〔2025〕40号§5, 人社厅发〔2025〕40号§6, 人社厅发〔2025〕40号§7, 人社厅发〔2025〕40号§8, 人社厅发〔2025〕40号§9]
-related: [sop-fuwuqi-baomi-xieyi, review-jingye-xianzhi, review-laodong-hetong, review-peixun-fuwuqi, statute-rsty-2025-40-jingye-zhiyin, statute-fashi-2025-12-jieshi-2, calc-jingye-buchang-weiyuejin, case-di-er-zhiye-zhidu-hefa-13839, case-jingye-fanhua-jianshen-jiaolian-bjzc24-9, sop-weixie-beidiao-lizhengming, sop-jiaojie-fanyao, sop-weiji-jiechu-yingdui, sop-tiaogang-yingdui, template-xieshang-jiechu-shencha-qingdan]
+related: [sop-fuwuqi-baomi-xieyi, review-jingye-xianzhi, review-laodong-hetong, review-peixun-fuwuqi, statute-rsty-2025-40-jingye-zhiyin, statute-fashi-2025-12-jieshi-2, calc-jingye-buchang-weiyuejin, case-jingye-fanhua-jianshen-jiaolian-bjzc24-9, sop-weixie-beidiao-lizhengming, sop-jiaojie-fanyao, sop-weiji-jiechu-yingdui, sop-tiaogang-yingdui, template-xieshang-jiechu-shencha-qingdan]
 region: 北京
 sources:
   - http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm
@@ -93,7 +93,7 @@ facts:
       pattern_hint: 约定乙方违反本协议任一条款即构成严重违反规章制度甲方可立即解除劳动合同且无需支付经济补偿，而公司拿不出该保密制度的职工代表大会讨论记录或乙方的签收公示记录
       basis: 劳动合同法§4；劳动合同法§39；人社厅发〔2025〕40号§8
       suggestion: 条款本身可以保留，但要求把触发门槛写实：改为“乙方违反保密义务且情节严重、给甲方造成重大损害的，甲方可依《劳动合同法》第三十九条解除劳动合同”，删除“违反任一条款即视为严重违纪”。同时向公司索要保密制度的民主程序记录与你本人的签收件——《劳动合同法》第四条规定，直接涉及劳动者切身利益的规章制度应当经职工代表大会或者全体职工讨论并向劳动者公示告知。
-      negotiation_tip: 这条是双刃的，务必如实提示反面风险：制度经民主程序制定且已公示的，法院会认可其效力并据此支持解除。北京三中院（2023）京03民终13839号即认定《员工手册》中“在外从事第二职业不论是否取酬均按重大违纪处理”的条款有效，员工败诉。所以真被解除时，第一刀砍在“有没有民主程序、有没有公示”，而不是“条款太苛刻”。
+      negotiation_tip: 这条是双刃的，务必如实提示反面风险：制度经民主程序制定且已公示的，法院会认可其效力并据此支持解除。所以真被解除时，第一刀砍在”有没有民主程序、有没有公示”，而不是”条款太苛刻”。
     - id: bmxy-012
       severity: suggest
       title: 未约定载体返还与删除的清单、期限与确认流程
@@ -211,10 +211,9 @@ related：[[sop-weixie-beidiao-lizhengming]]（离职证明的索要与第 91 �
 但可以顺势问一句"协议里有没有限制你去哪儿上班"，有的话按 bmxy-002 转成竞业限制去要钱。
 
 **bmxy-011 违纪解除挂钩**　**必须如实提示反面风险**，这条不是纯粹的"对劳动者有利"：
-经民主程序制定且已公示的制度，法院认可其效力。
-related：[[case-di-er-zhiye-zhidu-hefa-13839]]（《员工手册》禁止第二职业条款有效，
-公司用 APP 录屏、朋友圈截图举证成功，劳动者败诉）——这个案子同时提示争议期不要在社交平台
-公开自己的其他工作与合作身份。质证要点见 [[sop-weiji-jiechu-yingdui]]。
+经民主程序制定且已公示的制度，法院认可其效力，公司据此以保密违规为由解除并非必然违法；
+争议期不要在社交平台公开自己的其他工作与合作身份，公司常以聊天记录、朋友圈截图等作为
+违纪证据。质证要点见 [[sop-weiji-jiechu-yingdui]]。
 另一面的用法：制度**未经民主程序或未公示**的，不能作为解除依据——查有无职代会记录、有无你的签收页，
 是打掉违纪解除的第一刀。
 
@@ -317,7 +316,7 @@ related：[[case-di-er-zhiye-zhidu-hefa-13839]]（《员工手册》禁止第二
 
 > **第九条** 企业应当根据规章制度的规定，与劳动者通过协商明确实施竞业限制的权利义务，并在劳动合同、保密协议或竞业限制协议中书面约定竞业限制的具体事项，包括限制从业范围、地域、期限、经济补偿标准和支付方式、违反竞业限制的违约责任等。
 
-## 争议点 / 待核实
+## 争议点
 
 - **北京 2023 年仲裁典型案例 5 尚未单独建判例卡**（孙某、违约金 50,000 元、索要保密补偿
   61,977 元）。事实本身已由 [[sop-fuwuqi-baomi-xieyi]] 对照 rsj 原始页核实并标 `原文核实`，
@@ -331,6 +330,7 @@ related：[[case-di-er-zhiye-zhidu-hefa-13839]]（《员工手册》禁止第二
 - **脱密期的地方规范依据未检索到现行有效文本**：脱密期制度的传统出处是劳部发〔1996〕355 号，
   该文件的现行效力状态未核实；本卡 bmxy-006 只援引人社厅发〔2025〕40号§6（行政指引）与
   《劳动合同法》§35、§37，未引用 355 号。建议核实途径：flk.npc.gov.cn 与人社部规章清理目录。
-- **bmxy-011 与违纪解除的衔接尚缺"保密违规被解除"的北京判例**：现有
-  [[case-di-er-zhiye-zhidu-hefa-13839]] 是第二职业情形，制度效力的说理可类比，
-  但保密违规的"严重程度"认定标准未见公开案例。
+- **bmxy-011 与违纪解除的衔接尚缺"保密违规被解除"的北京判例**：本卡此前引用的类比判例
+  （员工手册禁止第二职业条款有效一案）来源仅为 `zh.wikisource.org` 转录，无法在官方渠道核到
+  全文，已隔离（`knowledge/quarantine/cases/di-er-zhiye-zhidu-hefa-13839.md`），本卡不再引用。
+  保密违规的"严重程度"认定标准目前未见可核实的公开案例。

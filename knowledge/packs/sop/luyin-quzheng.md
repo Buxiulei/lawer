@@ -8,9 +8,9 @@ law_refs: [民诉法解释§106, 民事诉讼证据规定§15, 民法典§1032, 
 related: [sop-shumian-songda-liucun, sop-dianzi-shuju-guzheng, sop-zhengren-yu-zhengju-qingdan, sop-tiaogang-yingdui]
 region: 北京
 sources:
-  - http://gongbao.court.gov.cn/Details/63ff48da6a9792f8ad1cb65a8b99d1.html
-  - http://gongbao.court.gov.cn/Details/0c15319f2bdbabb8e398035f775385.html
-  - http://gongbao.court.gov.cn/Details/51eb6750b8361f79be8f90d09bc202.html
+  - https://www.court.gov.cn/zixun/xiangqing/353651.html
+  - http://www.npc.gov.cn/npc/c2/c30834/201912/t20191226_304057.html
+  - https://www.court.gov.cn/zixun/xiangqing/233181.html
 confidence: 原文核实
 updated: 2026-08-19
 ---

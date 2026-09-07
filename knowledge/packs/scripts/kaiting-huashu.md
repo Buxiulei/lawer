@@ -8,11 +8,10 @@ law_refs: [京高法发〔2024〕534号§18, 劳动争议调解仲裁法§6, 劳
 related: [sop-kaiting-liucheng-sop, script-zhizheng-yaodian, sop-tingqian-zhunbei-sop, statute-jgf-2024-534-jieda-1, calc-jingji-buchang-n, statute-minsu-zhengju-guiding]
 region: 北京
 sources:
-  - 北京市朝阳区劳动人事争议仲裁委员会办事指南官方附件包（本地副本 research/raw/朝阳仲裁官方附件/相关附件/）
-  - 同上·3.办理材料/证据交换、出庭下载使用材料/1.证据交换下载-举证须知.docx
-  - 同上·1.设定依据/中华人民共和国劳动争议调解仲裁法.doc、劳动人事争议仲裁办案规则.docx、中华人民共和国劳动合同法.doc
+  - http://www.bjchy.gov.cn/UserFiles/File/2bb0130a4e614ecdbb06bf2b7933ab77.zip
+  - http://www.bjchy.gov.cn/affair/ldwq/tjzc/8a24fe9767393e2d01673f3dbdc70a21.html
 confidence: 原文核实
-updated: 2026-08-19
+updated: 2026-09-07
 ---
 
 # 开庭话术卡（照读版）

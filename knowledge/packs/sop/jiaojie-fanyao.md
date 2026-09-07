@@ -8,9 +8,16 @@ law_refs: [劳动合同法§50, 京高法发〔2024〕534号§70]
 related: [statute-jgf-2024-534-jieda-1, calc-jingji-buchang-n, sop-koutou-chengnuo-xianzou, sop-weixie-beidiao-lizhengming]
 region: 北京
 sources:
-  - https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_0abfdd261c03417b949df19d869add8d.html
+  - http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm
+  - https://rsj.beijing.gov.cn/xxgk/tzgg/202404/t20240430_3648905.html
 confidence: 原文核实
-updated: 2026-08-19
+updated: 2026-09-07
+facts:
+  statute_quotes:
+    - law: 中华人民共和国劳动合同法
+      article: 第五十条第二款
+      source_id: statute-ldht
+      text: 劳动者应当按照双方约定，办理工作交接。用人单位依照本法有关规定应当向劳动者支付经济补偿的，在办结工作交接时支付。
 ---
 
 # 催促交接后反咬"未办理交接" 应对 SOP

@@ -14,6 +14,7 @@ sources:
 facts:
   statute_quotes:
     - law: "中华人民共和国劳动合同法"
+      source_id: "statute-ldht"
       article: "第三十五条"
       text: "**第三十五条**　用人单位与劳动者协商一致，可以变更劳动合同约定的内容。变更劳动合同，应当采用书面形式。\n\n变更后的劳动合同文本由用人单位和劳动者各执一份。"
 confidence: 原文核实

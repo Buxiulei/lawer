@@ -8,12 +8,10 @@ law_refs: [劳动合同法§47, 劳动争议调解仲裁法§27, 京高法发〔
 related: [script-goutong-huashu-ku, script-hongxian-qingdan, script-hr-huashu-chaijie, script-hr-taolu-fangyu, statute-jgf-2024-534-jieda-1, calc-jingji-buchang-n, calc-daitongzhijin-n1, calc-weiqian-hetong-shuangbei, sop-zhongcai-guanxia-shixiao, sop-tiaojie-sop, template-xieshang-jiechu-shencha-qingdan, case-tanpan-poulie-shiwei-xieshang-15407, case-jiechu-buzhengju-jing0105-6093]
 region: 北京
 sources:
-  - https://zh.wikipedia.org/wiki/%E8%AB%87%E5%88%A4%E5%8D%94%E8%AD%B0%E6%9C%80%E4%BD%B3%E6%9B%BF%E4%BB%A3%E6%96%B9%E6%A1%88
-  - https://wiki.mbalib.com/wiki/%E8%B0%88%E5%88%A4%E5%8D%8F%E8%AE%AE%E6%9C%80%E4%BD%B3%E6%9B%BF%E4%BB%A3%E6%96%B9%E6%A1%88
   - https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=
   - https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf
-confidence: 待核实
-updated: 2026-08-19
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 谈判心理工具箱
@@ -61,8 +59,6 @@ BATNA = 谈判破裂时你能采取的最佳替代方案（Fisher & Ury，《Get
 > 照读："我不是在跟公司讨价还价，我是在核对法定标准。按《劳动合同法》第四十七条，
 > 我在本单位工作【　】年，解除前十二个月平均工资【　】元。公司这个数字是怎么算出来的？
 > 请把计算过程写给我。"
-
-【待核实】流传的"先出价方平均多获利 10–15%"来自科普文转述，未见原始研究出处，不作为依据使用。
 
 ## 三、人为截止日期：损失厌恶
 

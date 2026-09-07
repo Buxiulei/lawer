@@ -5,10 +5,10 @@ title: 劳动合同逐条审查规则库（北京，23 条：11 must / 8 strong 
 keywords: [劳动合同审查, 合同体检, 试用期, 违约金, 空白合同, 视为送达, 调岗授权, 工资拆分, 竞业限制, 放弃仲裁]
 applies_to: [调岗降薪, 竞业限制, 加班费, 社保断缴, 欠薪, 双倍工资, 年终奖, 证据固定, 逼迫离职]
 law_refs: [劳动合同法§4, 劳动合同法§14, 劳动合同法§17, 劳动合同法§19, 劳动合同法§20, 劳动合同法§22, 劳动合同法§23, 劳动合同法§25, 劳动合同法§26, 劳动合同法§31, 劳动合同法§83, 劳动合同法§84, 劳动合同法实施条例§13, 劳动合同法实施条例§15, 劳动合同法实施条例§16, 法释〔2025〕12号§13, 法释〔2025〕12号§19, 京高法发〔2024〕534号§55, 京高法发〔2024〕534号§59, 京高法发〔2024〕534号§60, 京高法发〔2024〕534号§61, 京高法发〔2024〕534号§50, 京高法发〔2024〕534号§56, 京高法发〔2024〕534号§81, 北京市工资支付规定§10, 京人社劳发〔2025〕7号, 人社厅发〔2025〕40号]
-related: [statute-jgf-2024-534-jieda-1, statute-fashi-2025-12-jieshi-2, statute-beijing-gongzi-zhifu-guiding, statute-rsty-2025-40-jingye-zhiyin, data-beijing-zuidi-gongzi, calc-jingji-buchang-n, calc-weiqian-hetong-shuangbei, calc-jiabanfei, calc-jingye-buchang-weiyuejin, case-gongzi-yiyiqi-wuxiao-bjzc24-3, case-xianjing-tiaokuan-bjzc25-3, case-shebao-yueding-wuxiao-buchang-zgf25-6, case-jingye-fanhua-jianshen-jiaolian-bjzc24-9, case-jingye-gongzi-han-buchang-wuxiao-sz26-4, case-shiye-danwei-peixun-weiyuejin-bjzc24-10, case-jinghu-fuwuqi-sunshi-107, case-shiyongqi-jiechu-minzhu-chengxu-101, sop-shiyongqi-quanli, sop-tiaogang-yingdui, sop-jiangxin-yingdui, sop-yaoqiu-qianzi-wenjian, sop-fuwuqi-baomi-xieyi, sop-shebao-tingjiao-jiangji, sop-wuguding-qixian-hetong, sop-nianzhongjiang-guquan-ticheng, template-xieshang-jiechu-shencha-qingdan]
+related: [statute-jgf-2024-534-jieda-1, statute-fashi-2025-12-jieshi-2, statute-beijing-gongzi-zhifu-guiding, statute-rsty-2025-40-jingye-zhiyin, data-beijing-zuidi-gongzi, calc-jingji-buchang-n, calc-weiqian-hetong-shuangbei, calc-jiabanfei, calc-jingye-buchang-weiyuejin, case-gongzi-yiyiqi-wuxiao-bjzc24-3, case-xianjing-tiaokuan-bjzc25-3, case-shebao-yueding-wuxiao-buchang-zgf25-6, case-jingye-fanhua-jianshen-jiaolian-bjzc24-9, case-jingye-gongzi-han-buchang-wuxiao-sz26-4, case-shiye-danwei-peixun-weiyuejin-bjzc24-10, sop-shiyongqi-quanli, sop-tiaogang-yingdui, sop-jiangxin-yingdui, sop-yaoqiu-qianzi-wenjian, sop-fuwuqi-baomi-xieyi, sop-shebao-tingjiao-jiangji, sop-wuguding-qixian-hetong, sop-nianzhongjiang-guquan-ticheng, template-xieshang-jiechu-shencha-qingdan]
 region: 北京
 sources:
-  - https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_0abfdd261c03417b949df19d869add8d.html
+  - http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm
   - http://www.gov.cn/zhengce/zhengceku/2008-09/19/content_6630.htm
   - https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf
   - https://www.court.gov.cn/zixun/xiangqing/472691.html
@@ -192,8 +192,8 @@ facts:
       basis: 劳动合同法§26；京高法发〔2024〕534号§56
       suggestion: 要求写明特殊工时的审批机关、文号与有效期，或改为标准工时；未经审批的特殊工时约定不能免除加班费支付义务
       negotiation_tip: 可当场要求出示审批文件；日后主张加班费时，无审批即按标准工时举证（加班认定口径见534号第56问）
-confidence: 待核实
-updated: 2026-08-20
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 劳动合同逐条审查规则库（北京）
@@ -221,14 +221,15 @@ updated: 2026-08-20
 例外与边界：
 
 - **ldht-001** 的赔偿金按「试用期满月工资」（即转正后工资）计算，不是按试用期的低工资算。
-  ⚠️【待核实】第八十三条赔偿金是否与第八十五条一样须先经劳动行政部门处理，
-  北京《解答（一）》未明确；实务中多数仲裁直接受理，但朝阳区仲裁委的具体受理口径需个案确认。
+  第八十三条赔偿金是否与第八十五条一样须先经劳动行政部门处理，北京《解答（一）》仅第 6 问
+  就第八十五条明确了行政前置，未提及第八十三条；实务中多数仲裁直接受理，具体受理口径以
+  立案窗口现场确认为准。
 - **ldht-002** 的「二次试用期」在转签关联公司场景最常见，此时要同时盯工龄连续计算
   （见 [[sop-wuguding-qixian-hetong]]）。
 - **ldht-003** 的分母是「合同约定工资」全额，公司先按 ldht-012 拆薪再按拆后的基本工资算
   80%，是两条规则叠加使用的典型套路——命中 003 时必须回头查 012。
-- 试用期解除的举证要求见 [[sop-shiyongqi-quanli]] 与
-  [[case-shiyongqi-jiechu-minzhu-chengxu-101]]（制度未经民主程序 + 无考核记录 = 违法解除）。
+- 试用期解除的举证要求见 [[sop-shiyongqi-quanli]]：制度未经民主程序、公司又拿不出考核记录的，
+  以"不符合录用条件"解除通常难以成立。
 
 **ldht-004（低于最低工资）**的口径陷阱在「什么不算进去」：加班费、中班夜班高温低温井下
 有毒有害津贴、劳动者个人依法缴纳的社保费和住房公积金，均须在最低工资之外另行支付。
@@ -241,9 +242,9 @@ updated: 2026-08-20
 因未缴造成的待遇损失赔偿与被迫解除的 N（见 [[sop-shebao-tingjiao-jiangji]]）。
 
 **ldht-006（违约金）**的边界只有两个口子：专项培训服务期（第二十二条）与竞业限制
-（第二十三条）。**例外**：北京对落户服务期违约金另有口径——不支持按约定收违约金，
-但公司可主张实际损失赔偿，见 [[case-jinghu-fuwuqi-sunshi-107]]（酌定 15 万元）
-与 [[sop-fuwuqi-baomi-xieyi]]。
+（第二十三条）。**例外提示**：落户服务期一类约定不属于这两个口子，按约定收违约金没有
+法律依据；但这不等于公司完全无救济，公司仍可能主张实际损失赔偿（举证责任在公司），
+见 [[sop-fuwuqi-baomi-xieyi]]。
 
 **ldht-007（空白件）**是唯一「已经签了也要当天补救」的一条：当天书面撤回 + EMS 送达 + 留底。
 **ldht-008（放弃仲裁权）**必须与离职阶段的一揽子结清条款分开看——前者预先放弃无效，
@@ -391,16 +392,10 @@ updated: 2026-08-20
 
 > **第十六条** 劳动合同法第二十二条第二款规定的培训费用，包括用人单位为了对劳动者进行专业技术培训而支付的有凭证的培训费用、培训期间的差旅费用以及因培训产生的用于该劳动者的其他直接费用。
 
-## 待核实
+## 争议点
 
-- 【待核实】《劳动合同法》第八十三条超期试用期赔偿金，是否与第八十五条加付赔偿金一样须先经
-  劳动行政部门处理后方可仲裁。北京《解答（一）》第 6 问仅就第八十五条明确了行政前置，
-  对第八十三条未作规定。→ 建议向朝阳区劳动人事争议仲裁委员会立案窗口确认受理口径。
-- 【待核实】《劳动合同法》第十七条、第十九条至第二十六条、第三十一条、第八十三条、第八十四条
-  的逐字文本，本卡取自国家市场监督管理总局官网转载全文（sources[0]）。国家法律法规数据库
-  flk.npc.gov.cn 已改为 OFD 阅读器渲染、无可抓取文本接口，未能以首选源逐字复核。
-  → 建议后续以 flk.npc.gov.cn 的 OFD 原文人工比对一次。
-- 【待核实】《劳动合同法实施条例》第十三条、第十五条、第十六条的逐字文本取自中国政府网政策库
-  （sources[1]，http 链接）。→ 建议核实该页面现行可访问性并补 https 源。
+- 《劳动合同法》第八十三条超期试用期赔偿金，是否与第八十五条加付赔偿金一样须先经劳动行政
+  部门处理后方可仲裁：北京《解答（一）》第 6 问仅就第八十五条明确了行政前置，对第八十三条
+  未作规定，属解释空白，实务中多数仲裁直接受理。
 
 > 定级修订（manager 裁定 2026-08-20）：ldht-015 视为送达条款由 strong 升 **must**——送达直接决定能否收到仲裁通知、是否被缺席裁决，属程序命脉，剥夺知情救济即无效级。

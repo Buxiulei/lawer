@@ -11,8 +11,9 @@ sources:
   - https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=
   - https://www.court.gov.cn/zixun/xiangqing/472691.html
   - https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf
+  - http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2008-02/23/content_1462417.htm
   - http://si.12333.gov.cn/
-confidence: 待核实
+confidence: 原文核实
 updated: 2026-08-19
 ---
 
@@ -62,7 +63,8 @@ updated: 2026-08-19
    - 「北京通」APP /「京通」小程序：社保查询与参保证明打印；
    - 线下各区社保经办机构自助终端打印《北京市社会保险个人权益记录》，可加盖章。
      网点地图 <https://map.beijing.gov.cn/category?categoryId=qjsbjg>
-     （【待核实】：上述平台的具体菜单路径需实名登录后以现场界面为准。）
+     （以上均为需实名登录才能进入的个人查询功能，具体菜单文字与层级以你登录时看到的实际界面为准，
+     平台改版不会改变"能查到逐月参保记录"这个事实）。
 2. **对照判断类型**：是"某个月完全没有缴费记录/根本没开户"（→ 可被迫解除），还是"每月都缴、
    只是基数远低于工资"（→ 走补缴）。险种是否齐全（养老、医疗、失业、工伤、生育）逐项核对。
 3. **不签字、不表态、不辞职**。公司拿《自愿放弃社保声明书》或《社保补贴协议》来签的，一个字不签，

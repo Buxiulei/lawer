@@ -4,15 +4,15 @@ type: 文书模板
 title: 仲裁请求事项规范表述库＋事实理由写作骨架（裁员场景，可直接抄写）
 keywords: [请求事项, 仲裁请求, 规范表述, 句式, 2N, 继续履行, 二倍工资差额, 年休假差额, 代通知金, 事实和理由, 计算方法, 不予受理]
 applies_to: [仲裁申请, 裁员, 欠薪, 加班费, 年假, 双倍工资, 逼迫离职, 协商解除, 社保断缴, 竞业限制]
-law_refs: [京高法发〔2024〕534号§1, 京高法发〔2024〕534号§4, 京高法发〔2024〕534号§20, 劳动合同法§40, 劳动合同法§41, 劳动合同法§46, 劳动合同法§47, 劳动合同法§48, 劳动合同法§50, 劳动合同法§82, 劳动合同法§85, 劳动合同法§87, 劳动合同法实施条例§20, 劳动合同法实施条例§25, 劳动法§44, 法释〔2025〕12号§13, 法释〔2025〕12号§16, 法释〔2025〕12号§18, 法释〔2025〕12号§19, 劳动人事争议仲裁办案规则§30, 劳动人事争议仲裁办案规则§44]
+law_refs: [京高法发〔2024〕534号§1, 京高法发〔2024〕534号§4, 京高法发〔2024〕534号§20, 劳动合同法§40, 劳动合同法§41, 劳动合同法§46, 劳动合同法§47, 劳动合同法§48, 劳动合同法§50, 劳动合同法§82, 劳动合同法§85, 劳动合同法§87, 劳动合同法实施条例§20, 劳动合同法实施条例§25, 劳动法§44, 法释〔2025〕12号§6, 法释〔2025〕12号§9, 法释〔2025〕12号§13, 法释〔2025〕12号§16, 法释〔2025〕12号§18, 法释〔2025〕12号§19, 劳动人事争议仲裁办案规则§30, 劳动人事争议仲裁办案规则§44]
 related: [template-zhongcai-shenqingshu, template-zhengju-cailiao-qingdan, calc-jingji-buchang-n, calc-daitongzhijin-n1, calc-weiqian-hetong-shuangbei, calc-nianjia-300, calc-jiabanfei, calc-tuoqian-jiafu-peichang, statute-jgf-2024-534-jieda-1, statute-fashi-2025-12-jieshi-2]
 region: 北京
 sources:
-  - 朝阳区仲裁办事指南附件《1-1.申请书模板.jpg》《劳动人事争议仲裁办案规则.docx》（官方原版附件包）
+  - http://www.bjchy.gov.cn/UserFiles/File/2bb0130a4e614ecdbb06bf2b7933ab77.zip
   - https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=
   - https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf
 confidence: 原文核实
-updated: 2026-08-19
+updated: 2026-09-07
 ---
 
 # 请求事项规范表述库

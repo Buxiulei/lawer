@@ -5,14 +5,15 @@ title: 核心依据条场景映射表（⭐标注的 S3 档优先权来源）
 keywords: [核心依据条, 场景映射, 优先权, 首诊, 逐字原文, 引用分层]
 applies_to: [首诊问诊, 协商解除, 违法解除, 仲裁准备, 开庭, 执行]
 region: 全国
+related: [statute-lhtf-jiechu-buchang-core, statute-lhtf-38-beipo-jiechu, statute-beijing-gongzi-zhifu-guiding, statute-minsu-zhengju-guiding, statute-qijian-jisuan-tongze]
 sources:
-  - knowledge/packs/statutes/lhtf-jiechu-buchang-core.md
-  - knowledge/packs/statutes/lhtf-38-beipo-jiechu.md
-  - knowledge/packs/statutes/beijing-gongzi-zhifu-guiding.md
-  - knowledge/packs/statutes/minsu-zhengju-guiding.md
-  - knowledge/packs/statutes/qijian-jisuan-tongze.md
+  - http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm
+  - https://www.gov.cn/zhengce/zhengceku/2008-09/19/content_6630.htm
+  - https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf
+  - http://www.npc.gov.cn/npc/c2/c30834/201912/t20191226_304057.html
+  - https://www.ssf.gov.cn/portal/rootfiles/2023/11/14/1701622126444477-1701622126462201.pdf
 confidence: 原文核实
-updated: 2026-08-25
+updated: 2026-09-07
 facts:
   core_article_map:
     - scene: 风声

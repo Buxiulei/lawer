@@ -8,11 +8,10 @@ law_refs: [京高法发〔2024〕534号§63, 劳动合同法§4, 劳动合同法
 related: [script-kaiting-huashu, sop-kaiting-liucheng-sop, statute-jgf-2024-534-jieda-1, sop-mowei-taotai, sop-pip-yingdui, sop-weiji-jiechu-yingdui, template-xieshang-jiechu-shencha-qingdan]
 region: 北京
 sources:
-  - 北京市朝阳区劳动人事争议仲裁委员会办事指南官方附件包（本地副本 research/raw/朝阳仲裁官方附件/相关附件/）
-  - 同上·3.办理材料/证据交换、出庭下载使用材料/1.证据交换下载-举证须知.docx
-  - 同上·1.设定依据/中华人民共和国劳动合同法.doc、中华人民共和国劳动争议调解仲裁法.doc
-confidence: 待核实
-updated: 2026-08-19
+  - http://www.bjchy.gov.cn/UserFiles/File/2bb0130a4e614ecdbb06bf2b7933ab77.zip
+  - http://www.bjchy.gov.cn/affair/ldwq/tjzc/8a24fe9767393e2d01673f3dbdc70a21.html
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # 质证要点卡：公司六类证据怎么打
@@ -147,8 +146,8 @@ updated: 2026-08-19
 > **第三，主体与独立性。** 该工会主席由被申请人人力资源部负责人兼任，与被申请人存在利害关系，其意见的证明力应予降低。
 > **第四**（公司没有工会时）**：** 被申请人未设立工会，亦未提交向上级工会通知的证据，未履行第四十三条规定的程序义务。"
 
-> **【待核实】**未通知工会的程序瑕疵，在起诉前补正能否补救、北京的具体裁审口径，本次未取得官方文件或北京口径条文，
-> **各地掌握不一**。庭上按上述话术指出程序违法即可，不要断言"必然构成违法解除"。
+> 未通知工会的程序瑕疵，起诉前补正能否补救，尚未查到专门的北京口径文件，各地掌握不一。
+> 庭上按上述话术指出程序违法即可，**不要断言"必然构成违法解除"**。
 
 ---
 

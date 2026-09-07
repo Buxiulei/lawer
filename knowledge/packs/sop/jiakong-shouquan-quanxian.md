@@ -8,10 +8,30 @@ law_refs: [劳动合同法§38, 劳动合同法§46, 劳动合同法实施条例
 related: [statute-lhtf-38-beipo-jiechu, statute-jgf-2024-534-jieda-1, calc-jingji-buchang-n, sop-daigang-tinggong, sop-lengbaoli-guli]
 region: 北京
 sources:
-  - https://flk.npc.gov.cn/detail2.html?MmM5MDlmZGQ2NzhiZjE3OTAxNjc4YmY3NGQ3MTA2YjM=
+  - http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm
+  - https://www.gov.cn/zhengce/zhengceku/2008-09/19/content_6630.htm
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html
+  - https://rsj.beijing.gov.cn/xxgk/tzgg/202404/t20240430_3648905.html
 confidence: 原文核实
-updated: 2026-08-19
+updated: 2026-09-07
+facts:
+  statute_quotes:
+    - law: 中华人民共和国劳动合同法
+      article: 第三十八条
+      source_id: statute-ldht
+      text: "用人单位有下列情形之一的，劳动者可以解除劳动合同：（一）未按照劳动合同约定提供劳动保护或者劳动条件的；（二）未及时足额支付劳动报酬的；（三）未依法为劳动者缴纳社会保险费的；（四）用人单位的规章制度违反法律、法规的规定，损害劳动者权益的；（五）因本法第二十六条第一款规定的情形致使劳动合同无效的；（六）法律、行政法规规定劳动者可以解除劳动合同的其他情形。"
+    - law: 2024年北京市劳动人事争议仲裁十大典型案例·案例7
+      article: 案例评析
+      source_id: cases-rsj-beijing-dxal-2024
+      text: 劳动条件主要是指用人单位为劳动者顺利完成劳动合同约定的工作任务，为劳动者提供必要的物质和基础条件，如必要的劳动工具、设备、工作场地（工作地点）以及技术条件和其他工作条件等。
+    - law: 2024年北京市劳动人事争议仲裁十大典型案例·案例7
+      article: 仲裁委员会提示
+      source_id: cases-rsj-beijing-dxal-2024
+      text: "用人单位乃至管理者个人滥用管理权，未给予劳动者提供正常劳动条件，对劳动者给予不公平的对待及处罚等行为，既损害了劳动者的身心健康，造成恶劣的职场风气，更与劳动法律法规精神相悖。"
+    - law: 2024年北京市劳动人事争议仲裁十大典型案例·案例7
+      article: 仲裁委员会提示（续）
+      source_id: cases-rsj-beijing-dxal-2024
+      text: 员工在日常履职时应提高对职场霸凌或隐形霸凌的识别和防范能力，有权拒绝超过管理边界的不正当要求，并注意保留证据，及时采取法律途径来维护自己的合法权益。
 ---
 
 # 被架空 / 收回办公权限的应对 SOP

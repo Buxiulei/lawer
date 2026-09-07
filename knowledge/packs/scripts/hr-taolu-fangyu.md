@@ -8,13 +8,9 @@ law_refs: [劳动合同法§35, 劳动合同法§39, 劳动合同法§40, 京高
 related: [script-hr-huashu-chaijie, script-tanpan-xinli-gongju, script-goutong-huashu-ku, script-hongxian-qingdan, statute-jgf-2024-534-jieda-1, sop-pip-yingdui, sop-mowei-taotai, sop-kpi-bukeneng-renwu, sop-tiaogang-yingdui, sop-jiangxin-yingdui, sop-quxiao-jixiao-jiangjin, sop-lengbaoli-guli, sop-daigang-tinggong, sop-koutou-jiechu-yingdui, sop-kaoqin-diaonan, sop-yaoqiu-qianzi-wenjian, sop-keguan-qingkuang-jiechu, sop-luyin-quzheng, case-daocha-kaoqin-kuanggong-2002, case-jixiao-gaijin-chengxu-jing03-16660, case-mowei-taotai-shangwei-guize-2016, case-ai-tidai-gangwei-2025-zhongcai, case-guandian-tiaogang-kuanggong-16940, case-tanpan-poulie-shiwei-xieshang-15407, case-weiji-zhengju-buzu-jixiao-87802, case-qingjia-shouxu-maodun-kuanggong-2025, case-tiaogang-jiangxin-19866, template-xieshang-jiechu-shencha-qingdan, template-jujue-tiaogang-huifuhan]
 region: 北京
 sources:
-  - https://www.hrloo.com/rz/14690849.html
-  - https://www.hrloo.com/rz/14731452.html
-  - https://www.haorcw.com/article/2194.html
-  - https://www.7-dimension.com/index.php?id=1182
   - https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf
-confidence: 待核实
-updated: 2026-08-19
+confidence: 原文核实
+updated: 2026-09-07
 ---
 
 # HR 套路识别与防御
@@ -101,9 +97,6 @@ updated: 2026-08-19
      同时全力找下家。**明确表态"我不存在不胜任情形，我把改进培训视为正常工作"。**
 - **去这张卡**：[[sop-pip-yingdui]]、[[sop-kpi-bukeneng-renwu]]、[[sop-mowei-taotai]]、
   [[sop-quxiao-jixiao-jiangjin]]、[[sop-jiangxin-yingdui]]。
-- 【待核实】流传的"PIP 90/10 法则"（90% 进 PIP 即已定局）与"用人单位在不胜任解除类案件
-  胜诉率仅约 7%"均为文章作者经验性表述，无权威统计来源，**不向用户断言**。
-  某大厂 PIP 后以不胜任解除被认定违法的传闻案例未取得一手判决文书，**不作为判例引用**。
 
 ## 家族 D｜改变劳动条件：调岗、降薪、合并岗位、异地出差
 
