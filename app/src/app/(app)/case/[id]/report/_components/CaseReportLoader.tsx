@@ -6,6 +6,7 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiFetch, humanError } from '@/app/_ui/api';
 import { readToken, useSignedIn } from '@/app/_ui/auth';
+import { CaseAiGeneratedNotice } from '@/app/_ui/CaseAiGeneratedNotice';
 import { useDiscreet } from '@/app/_ui/discreet';
 import { NEUTRAL_WORD } from '@/app/_ui/neutral';
 import { Alert, AlertDescription, AlertTitle } from '@/components/shadcn/alert';
@@ -126,7 +127,7 @@ export function CaseReportLoader({ caseId }: { caseId: string }) {
     );
   }
 
-  return <ReportBody report={report} word={word} />;
+  return <ReportBody caseId={caseId} report={report} word={word} />;
 }
 
 /** 与 lib/cases/report.ts 的 ReportView 同形，只留这一页用得上的字段。 */
@@ -166,7 +167,15 @@ function humanTime(sqlTime: string | null): string {
  * 只吃传进来的 report，自己不取数——「四块到底有没有接上真数据」这类判据
  * 在 node 环境里就能验，不必跑 effect。
  */
-export function ReportBody({ report, word }: { report: ReportView; word: string }) {
+export function ReportBody({
+  caseId,
+  report,
+  word,
+}: {
+  caseId: string;
+  report: ReportView;
+  word: string;
+}) {
   const stale = report.stale.state !== null;
   return (
     <div className="pt-1">
@@ -177,6 +186,13 @@ export function ReportBody({ report, word }: { report: ReportView; word: string 
           <span className="num">{report.version}</span> 版）
         </p>
       </header>
+
+      {/* 这一整页是 agent 整理出来的长期记忆——rendered_md 从第一个字到最后一个字都是
+          模型写的。标识排在正文之前（标识办法 §4 第（一）项「在文本的起始…添加文字提示」）：
+          排在末尾的形态是，读的人一路读完那几节结论才知道是谁写的。
+          它排在「过期标」之前——过期标说的是"这份新不新"，标识说的是"这份是谁写的"，
+          后者是读之前就该知道的那件事。 */}
+      <CaseAiGeneratedNotice caseId={caseId} className="mb-3" />
 
       {/* 过期标。**不把过期的正文藏起来**：藏了用户就只剩一句"过期了"，
           而他此刻要的正是那份内容——哪怕旧，也比什么都没有强。说清楚即可。 */}

@@ -35,6 +35,7 @@ import {
   toActionItem,
   type DraftFrame,
 } from '../_stream/frames';
+import { AI_NOTICE_STICKY_CLASS } from '@/app/_ui/AiGeneratedNotice';
 import { CaseAiGeneratedNotice } from '@/app/_ui/CaseAiGeneratedNotice';
 import { ByoAgentNotice } from './ByoAgentNotice';
 import { readToken } from '../_stream/httpTransport';
@@ -471,8 +472,12 @@ export function Workbench({ caseId }: { caseId: string }) {
         {/* 交互界面上**持续可见**的生成合成内容标识（标识办法 §4 第（一）项
             「或者在交互场景界面、文字周边添加显著的提示标识」）。
             排在消息列之上、恒渲染：做成"首轮之后才出现"或"可关闭"的形态是，
-            用户读到第一条回答时它还不在——而那正是最需要它在的一刻。 */}
-        <CaseAiGeneratedNotice caseId={caseId} className="mb-2" />
+            用户读到第一条回答时它还不在——而那正是最需要它在的一刻。
+
+            **sticky 不是装饰**：/terms/ai-labeling 第二节向用户写明的是「不随对话滚走」，
+            而一个普通块聊过三五轮就滚出了屏幕——那时满屏都是模型输出、一处标识都没有。
+            定位类见 AI_NOTICE_STICKY_CLASS（它顺带让开顶栏那 56px）。 */}
+        <CaseAiGeneratedNotice caseId={caseId} className={`${AI_NOTICE_STICKY_CLASS} mb-2`} />
 
         {/* 已接入自己 agent 的人才看得到；没接入时它自己返回 null。
             放在正文收窄容器内，左边界与消息对齐——它是说给这一栏听的一句话。 */}

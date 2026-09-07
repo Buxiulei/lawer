@@ -167,6 +167,8 @@ vi.mock('react', async (importOriginal) => {
 
 const { Workbench } = await import('../Workbench');
 const { demoCase } = await import('@/app/_mock/demo');
+// 定位类的**同一份**常量：判据不另抄一遍字符串（抄了就会在改动那天各说各话）
+const { AI_NOTICE_STICKY_CLASS } = await import('@/app/_ui/AiGeneratedNotice');
 
 /** 一段真实案件的历史，字段名逐字照后端行（lib/cases 的 CaseMessageView） */
 function realRows() {
@@ -275,7 +277,7 @@ function walk(
   // 这里只取「在不在、问的是哪个案子」——字那一侧由
   // app/__tests__/page-copy-by-domain.test.tsx 的「文书页·生成合成内容标识」按渲染产物验。
   if (typeName === 'CaseAiGeneratedNotice') {
-    aiNotices.push({ caseId: el.props?.caseId });
+    aiNotices.push({ caseId: el.props?.caseId, className: el.props?.className });
   }
   const message = el.props?.message as ProbedMessage | undefined;
   if (message) messages.push(message);
@@ -296,7 +298,7 @@ const composers: {
 const inFlightNotices: { handlers: number }[] = [];
 
 /** 这一帧画出来的生成合成内容标识（walk 的收集处，probe 每次开跑前清空） */
-const aiNotices: { caseId: unknown }[] = [];
+const aiNotices: { caseId: unknown; className: unknown }[] = [];
 
 /** 这一帧画出来的失败横幅（walk 的收集处，probe 每次开跑前清空） */
 const errorCards: {
@@ -879,6 +881,30 @@ describe('对话界面持续可见的生成合成内容标识（标识办法 §4
   it('问的是自己那个案子（变异 A3：caseId 写死 → 红）', async () => {
     const { aiNotices } = probe(await settled(CASE));
     expect(aiNotices[0].caseId).toBe(CASE);
+  });
+
+  /**
+   * 【为什么"在"还不够】上面三条只证明它被画了一次。一个普通块画在消息列上方，
+   * 聊过三五轮之后就滚出了屏幕——那时满屏是模型输出、一处标识都没有，
+   * 而 /terms/ai-labeling 第二节向用户写的是「不随对话滚走」。
+   * 两边都不报错，只有承诺与实现对不上。所以这里连**定位**一起钉。
+   *
+   * 【变异臂】
+   *  · A4 把 className 里的 AI_NOTICE_STICKY_CLASS 去掉（回到只有 `mb-2`）⇒ 红
+   *  · A5 把常量本身改成不含 sticky 的字符串 ⇒ 下面那条「常量真的是 sticky」红
+   *    （只验 className 含常量的形态是：把常量掏空，两边照样对得上、判据全绿）
+   */
+  it('钉在消息列顶部，不随对话滚走（变异 A4：去掉 sticky 定位 → 红）', async () => {
+    const { aiNotices } = probe(await settled(CASE));
+    expect(String(aiNotices[0].className), '标识没带上 sticky 定位类').toContain(
+      AI_NOTICE_STICKY_CLASS,
+    );
+  });
+
+  it('那个常量本身真的是 sticky 且让开了顶栏（变异 A5：把常量掏空 → 红）', () => {
+    expect(AI_NOTICE_STICKY_CLASS.split(/\s+/)).toContain('sticky');
+    // 顶栏是 `sticky top-0` 的 `h-14`；偏移小于它，这一条会被顶栏压住半截
+    expect(AI_NOTICE_STICKY_CLASS.split(/\s+/)).toContain('top-14');
   });
 });
 

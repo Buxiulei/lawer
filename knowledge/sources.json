@@ -1447,6 +1447,23 @@
     "effective_from": "2011-07-01"
   },
   {
+    "source_id": "statute-shendu-hecheng-guanli-guiding",
+    "kind": "部门规章",
+    "name": "互联网信息服务深度合成管理规定",
+    "issuer": "国家互联网信息办公室、工业和信息化部、公安部",
+    "official_host": "www.cac.gov.cn",
+    "url": "https://www.cac.gov.cn/2022-12/11/c_1672221949354811.htm",
+    "fetched_at": "2026-09-07T13:15:32+08:00",
+    "content_sha256": "92e2f7b5478f9b32247276c456df0adaafa149f8f9dd8bbc6068f89e9952c0e0",
+    "version_label": "国家互联网信息办公室、工业和信息化部、公安部令第12号",
+    "status": "现行",
+    "files": {
+      "raw": "sources/originals/statute-shendu-hecheng-guanli-guiding/raw.html",
+      "text": "sources/originals/statute-shendu-hecheng-guanli-guiding/text.txt"
+    },
+    "effective_from": "2023-01-10"
+  },
+  {
     "source_id": "statute-shengchengshi-ai-fuwu-zanxing-banfa",
     "kind": "部门规章",
     "name": "生成式人工智能服务管理暂行办法",

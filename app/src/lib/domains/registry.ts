@@ -248,8 +248,20 @@ export interface DomainCopy {
    * 页面照常渲染、一处报错都没有，只有那个行当的用户读到的每一句都在讲另一件事。
    * 由 app/__tests__/page-domain-guard.test.ts 按文件拦、
    * app/__tests__/page-copy-by-domain.test.tsx 按渲染产物拦。
+   *
+   * 【`aiLabelDisclaimer` 是这一份里唯一的**必填键**】其余键是"哪一页要换字就加一条"，
+   * 漏一条的后果是那一页退回缺省领域的话；而这一条漏掉的后果是**法条要求的那句话缺半截**
+   *（《人工智能生成合成内容标识办法》§4 的显式标识 = 法定前半句 + 本行当那半句），
+   * 而页面照常渲染、HTTP 200、前半句还在——看上去"标识在的"。
+   * 所以它在类型上必填、在 assertDomainPack 里点名，两道一起上。
    */
-  pages: Readonly<Record<string, string>>;
+  pages: Readonly<Record<string, string>> & {
+    /**
+     * 显式标识的后半截：「所以它不是什么」。不带句末标点（标点由渲染件补）。
+     * 逐个行当都不一样——见 domains/labor.ts 同名键的长注释。
+     */
+    readonly aiLabelDisclaimer: string;
+  };
 }
 
 /**
@@ -703,6 +715,10 @@ export function assertDomainPack(pack: DomainPack): void {
   // 空的 pages 不是"这个领域的页面没有文案"，是**页面会退回缺省领域那几句**——
   // 而页面照常渲染、一处报错都没有（键取不到时 packOf 兜的是包，不是这一句话）。
   if (!pack.copy?.pages || Object.keys(pack.copy.pages).length === 0) missing.push('copy.pages');
+  // 显式标识（标识办法 §4）的后半截。**单独点名，不与上面那条合并**：pages 里有别的键时
+  // 上面那条照样绿，而缺的偏偏是这一条——页面上前半句「以下内容由人工智能生成合成」还在，
+  // 后半句「所以它不是什么」没了。屏幕上看起来标识是在的，法条上缺的正是分辨它的那半句。
+  str('copy.pages.aiLabelDisclaimer', pack.copy?.pages?.aiLabelDisclaimer);
 
   // 分节**必须覆盖全部键**，且一个键只能出现一次。
   // 【为什么这条比"数组非空"更要紧】渲染器按键取抬头：缺一个键的形态不是崩溃，

@@ -50,6 +50,7 @@ export default async function DocDetailPage({
       </header>
 
       <AdviceCard
+        caseId={id}
         advice={doc.advice}
         detail={doc.adviceDetail}
         revisePoints={revisePointsByDoc[doc.id]}

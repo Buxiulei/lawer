@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { versionsOf, type DraftVersion } from '@/app/_mock/docs-drafts';
 import type { Draft } from '@/app/_mock/types';
+import { CaseAiGeneratedNotice } from '@/app/_ui/CaseAiGeneratedNotice';
 import { cn } from '@/app/_ui/cn';
 import { formatDateTime } from '@/app/_ui/format';
 import { Button } from '@/components/shadcn/button';
@@ -44,7 +45,15 @@ function AutoTextarea({
   );
 }
 
-export function DraftEditor({ draft }: { draft: Draft }) {
+/**
+ * 演示案件的文书页（可编辑的那一版；改动不落库）。
+ *
+ * 【为什么演示这一版也要带标识】正文同样是模型起草的，而演示案件恰恰是**没登录的人
+ * 第一次看到文书长什么样**的那一屏。只给真实案件加标识的形态是：一份 AI 起草的文书
+ * 摆在屏幕上、看起来与真实那一版一模一样，只是没有那句提示——
+ * 而它比真实那一版更容易被截图转发出去。口径与对话页、真实文书页同一条。
+ */
+export function DraftEditor({ caseId, draft }: { caseId: string; draft: Draft }) {
   const toast = useToast();
 
   const [versions, setVersions] = useState<DraftVersion[]>(() => versionsOf(draft));
@@ -106,6 +115,10 @@ export function DraftEditor({ draft }: { draft: Draft }) {
           {draft.title}
         </h1>
       </header>
+
+      {/* 标识排在正文（含编辑框）**之前**：标识办法 §4 第（一）项「在文本的起始…
+          添加文字提示」。与真实文书页 RealDraftView 同一处位置、同一件组件。 */}
+      <CaseAiGeneratedNotice caseId={caseId} />
 
       <div className="flex flex-wrap gap-2">
         <Button size="sm" onClick={save} disabled={!onLatest || !dirty}>

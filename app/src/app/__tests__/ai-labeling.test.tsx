@@ -30,9 +30,9 @@ const {
   AI_LABEL_PROVIDER,
   aiLabelPdfMeta,
 } = await import('@/lib/ai-label');
-const { AI_LABELING_TERMS_HREF, AI_LABELING_TERMS_LINK_TEXT } = await import(
-  '@/app/_ui/aiLabelingTerms'
-);
+const { AI_LABELING_TERMS_HREF, AI_LABELING_TERMS_LINK_TEXT, AI_LABELING_TERMS_TITLE } =
+  await import('@/app/_ui/aiLabelingTerms');
+const { AI_NOTICE_STICKY_CLASS } = await import('@/app/_ui/AiGeneratedNotice');
 const { DOMAINS } = await import('@/lib/domains/registry');
 
 const ssr = (node: React.ReactNode) => renderToStaticMarkup(<>{node}</>);
@@ -156,10 +156,15 @@ describe('隐式标识的三要素（标识办法 §5）', () => {
 
 /* ── ④ 用户服务协议里的标识条款 ───────────────────────────── */
 
-describe('用户服务协议的标识条款（标识办法 §8）', () => {
-  it('那一页说清了方法与样式，并给出样例', async () => {
+describe('生成合成内容标识规范说明那一页（标识办法 §8）', () => {
+  /** 那一页渲成的纯文本（server component，直接当函数推） */
+  async function termsText(): Promise<string> {
     const { default: TermsPage } = await import('@/app/terms/ai-labeling/page');
-    const body = text(ssr(<TermsPage />));
+    return text(ssr(<TermsPage />));
+  }
+
+  it('那一页说清了方法与样式，并给出样例', async () => {
+    const body = await termsText();
     // §8 要的「方法、样式」：显式怎么加、隐式加在哪、样例长什么样
     expect(body).toContain('第四条');
     expect(body).toContain('第五条');
@@ -169,6 +174,54 @@ describe('用户服务协议的标识条款（标识办法 §8）', () => {
     // §8 后半句：提示用户仔细阅读并理解标识管理要求（§10 的义务与禁止行为）
     expect(body).toContain('仔细阅读');
     expect(body).toContain('不得恶意删除、篡改、伪造、隐匿');
+  });
+
+  /**
+   * 【自称必须与事实一致】此前这一页开头写着"是用户服务协议里的那一节"，
+   * 而那份协议还没起草——读的人会去找它，一处都找不到。
+   * 一句无法兑现的自称比不写更糟：它把"还没写"包装成"写过了，在别处"。
+   *
+   * 【变异臂】把标题改回「…标识说明」并删掉括号那半句 ⇒ 这条红。
+   */
+  it('自称说清了协议还没起草（变异：把括号那半句删掉 → 红）', async () => {
+    const body = await termsText();
+    expect(AI_LABELING_TERMS_TITLE).toContain('规范说明');
+    expect(AI_LABELING_TERMS_TITLE).toContain('用户服务协议起草后并入');
+    expect(body, '页面标题没用那个自称').toContain(AI_LABELING_TERMS_TITLE);
+    expect(body, '正文里没交代协议还没起草').toContain('用户服务协议尚未起草');
+    // 链接文案是标题去掉括号那半句：两处对不上时，点进来的人会以为走错了页
+    expect(AI_LABELING_TERMS_TITLE.startsWith(AI_LABELING_TERMS_LINK_TEXT)).toBe(true);
+  });
+
+  /**
+   * 【适用链条】§4 只说"属于深度合成规定 §17 第一款情形的"要加标识，
+   * 到底哪一种服务属于那一款写在**另一份**规章里。只引 §4 的形态是：
+   * 读的人无从判断我们是不是那一款，而我们自己也就无从被质疑。
+   * 引文与原件的逐字关系另有一组判据（ai-labeling-quotes.test.ts）。
+   */
+  it('写出了两跳的适用链条（变异：把深度合成那一节删掉 → 红）', async () => {
+    const body = await termsText();
+    expect(body).toContain('《互联网信息服务深度合成管理规定》');
+    expect(body).toContain('第十七条第一款');
+    expect(body, '没说清我们落在哪一项上').toContain('智能对话、智能写作');
+    expect(body, '隐式标识那一跳（§5 → 深度合成 §16）没写').toContain('第十六条');
+  });
+
+  /**
+   * 【措辞与实现要对得上】这一页向用户承诺对话界面那条提示「不随对话滚走」。
+   * 实现成一个普通块的形态是：聊过三五轮它已经滚出屏幕，而这句承诺还印在页面上，
+   * 两边都不报错。所以把承诺与那个定位常量钉在一起。
+   *
+   * 【变异臂】把 AI_NOTICE_STICKY_CLASS 里的 sticky 去掉 ⇒ 红；
+   * 把页面上「不随对话滚走」改掉而实现不动 ⇒ 也红。
+   */
+  it('「不随对话滚走」这句承诺背后真有 sticky（变异：删掉 sticky → 红）', async () => {
+    const body = await termsText();
+    expect(body, '页面没有向用户承诺它持续可见').toContain('不随对话滚走');
+    expect(
+      AI_NOTICE_STICKY_CLASS.split(/\s+/),
+      '页面承诺了不随对话滚走，实现却不是 sticky',
+    ).toContain('sticky');
   });
 
   it('注册处够得着：登录页有一条指过去的链接（变异：删掉那条链接 → 红）', async () => {
@@ -183,3 +236,95 @@ describe('用户服务协议的标识条款（标识办法 §8）', () => {
     expect(ssr(<HomePage />)).toContain(`href="${AI_LABELING_TERMS_HREF}"`);
   });
 });
+
+/* ── ⑤ 另外两处整段模型输出 ─────────────────────────────── */
+
+/**
+ * 【为什么这两页要单独钉】它们与对话页、文书页一样是**整段模型输出**，
+ * 却不在最初那四处的清单里：个案报告页的 rendered_md 从第一个字到最后一个字都是
+ * agent 写的；文件解读页那张四态大卡（签/不签 + 理由 + 逐条改签要点）也是。
+ * 漏掉的形态是它们照常渲染、看不出少了什么——只有法条上缺一块。
+ *
+ * 首帧问不到领域（useCaseDomain 在 SSR 那一遍恒回空串），所以这里只验
+ * **法定那半句在不在**；后半截随领域变，由 page-copy-by-domain 那一组按渲染产物验。
+ */
+describe('个案报告页与文件解读页的显式标识（标识办法 §4）', () => {
+  const REPORT = {
+    version: 3,
+    updated_at: '2026-09-01 10:00:00',
+    updated_by: 'agent:7',
+    rendered_md: '## 争议焦点\n\n这里是整理过的长期记忆。',
+    stale: { state: null, since: null, changes: 0, detail: '' },
+  } as const;
+
+  it('个案报告页画了标识（变异：把 <CaseAiGeneratedNotice/> 删掉 → 红）', async () => {
+    const { ReportBody } = await import(
+      '@/app/(app)/case/[id]/report/_components/CaseReportLoader'
+    );
+    const html = ssr(<ReportBody caseId="7" report={{ ...REPORT }} word="个案报告" />);
+    expect(text(html), '报告正文没画出来，下面在验空页').toContain('整理过的长期记忆');
+    expect(text(html)).toContain(AI_GENERATED_LABEL);
+  });
+
+  it('文件解读页那张建议卡画了标识（变异：把它删掉 → 红）', async () => {
+    const { AdviceCard } = await import('@/app/(app)/case/[id]/docs/_components/AdviceCard');
+    const html = ssr(
+      <AdviceCard caseId="7" advice="不签" detail="这一条把竞业范围写成了全行业。" />,
+    );
+    expect(text(html), '建议段没画出来，下面在验空卡').toContain('竞业范围');
+    expect(text(html)).toContain(AI_GENERATED_LABEL);
+  });
+
+  /**
+   * 【糊层不许罩住法定那半句】这张卡的正文整块挂着 data-veil（里面全是公司名与金额）。
+   * 把标识放进那一块的形态是：开着低调模式的人连「以下内容由人工智能生成合成」
+   * 也读不到，而 §4 要的正是"可以被用户明显感知到"。
+   *
+   * 【变异臂】把 <CaseAiGeneratedNotice/> 挪回 `<div data-veil>` 里面 ⇒ 这条红。
+   */
+  it('建议卡的标识在糊块之外（变异：把它挪进 data-veil 那一块 → 红）', async () => {
+    const { AdviceCard } = await import('@/app/(app)/case/[id]/docs/_components/AdviceCard');
+    const html = ssr(
+      <AdviceCard caseId="7" advice="不签" detail="这一条把竞业范围写成了全行业。" />,
+    );
+    const body = veiledDivHtml(html);
+    // 自证取到的确实是卡正文那一块（否则下面那条在空过）
+    expect(body, '没取到正文糊块，验不出"标识在糊块外"').toContain('竞业范围');
+    expect(
+      body,
+      '法定那半句落在正文糊块里：`filter: blur` 罩整棵子树，开着低调模式的人读不到它，' +
+        '而 §4 要的正是"可以被用户明显感知到"。把它挪到那一块外面（后半截自己进糊层）。',
+    ).not.toContain(AI_GENERATED_LABEL);
+    // 卡上确实有标识，只是不在糊块里——否则"不在里面"是因为压根没有
+    expect(text(html)).toContain(AI_GENERATED_LABEL);
+  });
+});
+
+/**
+ * 第一个 `<div … data-veil="">` 的内层 HTML（含它自己的开合标签）。
+ *
+ * 【为什么要数层，不能用 indexOf 凑合】`labelAt > veilStart` 在"嵌在里面"与
+ * "排在后面"两种情形下都为真——那条断言无论怎么改代码都绿。
+ * 数 `<div`/`</div>` 才分得开这两件事。
+ */
+function veiledDivHtml(html: string): string {
+  const attr = html.indexOf('data-veil=""');
+  if (attr < 0) return '';
+  const start = html.lastIndexOf('<div', attr);
+  if (start < 0) return '';
+  let depth = 0;
+  for (let i = start; i < html.length; ) {
+    const open = html.indexOf('<div', i);
+    const close = html.indexOf('</div>', i);
+    if (close < 0) break;
+    if (open >= 0 && open < close) {
+      depth += 1;
+      i = open + 4;
+    } else {
+      depth -= 1;
+      if (depth === 0) return html.slice(start, close + 6);
+      i = close + 6;
+    }
+  }
+  return html.slice(start);
+}

@@ -31,7 +31,11 @@ export default async function DraftDetailPage({
       >
         ← 全部文书
       </Link>
-      {draft ? <DraftEditor draft={draft} /> : <RealDraftView caseId={id} draftId={draftId} />}
+      {draft ? (
+        <DraftEditor caseId={id} draft={draft} />
+      ) : (
+        <RealDraftView caseId={id} draftId={draftId} />
+      )}
     </div>
   );
 }

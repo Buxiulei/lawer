@@ -1,6 +1,7 @@
 import { Card } from '@/components/shadcn/card';
 import { cn } from '@/components/shadcn/utils';
 import type { CompanyDoc } from '@/app/_mock/types';
+import { CaseAiGeneratedNotice } from '@/app/_ui/CaseAiGeneratedNotice';
 import { ADVICE_SUMMARY } from './badges';
 import { SensitiveText } from './SensitiveText';
 
@@ -34,11 +35,23 @@ const SKIN: Record<Advice, { box: string; word: string; line: string }> = {
   },
 };
 
+/**
+ * 【为什么标识挂在这一件里，而不是挂在两个调用方的页面上】这张卡的每一个字——
+ * 签/不签的结论、那段说明、逐条改签要点——都是模型读完文件之后写的。
+ * 它有两个调用方（演示样张页与真实解读页），各写一遍标识的形态是：
+ * 写两次忘一次，而忘掉的那一页照常渲染出一张四态大卡，看不出少了什么。
+ * 收在这里之后，"有没有标识"与"有没有这张卡"是同一件事。
+ *
+ * @param caseId 问哪个案子的领域（标识后半截随行当变）。**必填**：让它可省的形态是
+ *   某个调用方不传，那一页的后半句静静退回缺省领域的行当话。
+ */
 export function AdviceCard({
+  caseId,
   advice,
   detail,
   revisePoints,
 }: {
+  caseId: string;
   advice: Advice;
   detail: string;
   revisePoints?: string[];
@@ -82,6 +95,19 @@ export function AdviceCard({
             </ol>
           </div>
         )}
+      </div>
+
+      {/* 建议段是模型写的：标识排在这张卡的末尾（标识办法 §4 第（一）项允许
+          「在文本的起始、末尾或者中间适当位置」）。放在结论**之后**是有意的——
+          这张卡的头等大事是三秒内看到"签/不签"，把提示插在结论之前会把它挤下去；
+          而读到理由那一段的人，正好在这里读到"这是谁写的"。
+
+          【为什么摆在 data-veil 那一块**外面**】糊层是 `filter: blur` 罩整棵子树：
+          放进去的形态是，开着低调模式的人连「以下内容由人工智能生成合成」这半句
+          也读不到，而 §4 要的正是"可以被用户明显感知到"。
+          带行当的后半截自己进糊层（见 AiGeneratedNotice），不靠这一块罩。 */}
+      <div className="px-4 pb-4">
+        <CaseAiGeneratedNotice caseId={caseId} />
       </div>
     </Card>
   );

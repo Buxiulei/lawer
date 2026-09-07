@@ -112,7 +112,12 @@ export function RealDocBody({ caseId, doc }: { caseId: string; doc: ApiDocDetail
         </div>
       </header>
 
-      <AdviceCard advice={view.advice} detail={view.adviceDetail} revisePoints={revisePoints} />
+      <AdviceCard
+        caseId={caseId}
+        advice={view.advice}
+        detail={view.adviceDetail}
+        revisePoints={revisePoints}
+      />
 
       {doc.summary && (
         <Card className="p-4">

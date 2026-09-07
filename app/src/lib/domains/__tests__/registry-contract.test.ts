@@ -168,7 +168,24 @@ describe('assertDomainPack：包必须实现全部字段', () => {
     ['copy.site', { copy: { ...LABOR.copy, site: {} } }],
     ['copy.capabilities', { copy: { ...LABOR.copy, capabilities: {} } }],
     // 共用页那几句：空着不会崩，只会让那几页退回缺省领域的话（P4-W4）
-    ['copy.pages', { copy: { ...LABOR.copy, pages: {} } }],
+    // 【为什么要 as】aiLabelDisclaimer 在类型上必填，空对象根本编译不过——
+    // 而**运行期**的守卫仍然必须拦住它：包也可能来自手写 JSON、来自 `as` 过的旧代码。
+    // 类型闸与运行期闸是两道，这条负样本验的是后一道。
+    [
+      'copy.pages',
+      { copy: { ...LABOR.copy, pages: {} as DomainPack['copy']['pages'] } },
+    ],
+    // 显式标识的后半截（标识办法 §4）：pages 里还有别的键，所以上面那条不会红；
+    // 缺的只是「所以它不是什么」那半句——页面照常渲染、前半句还在，看着像"标识在的"。
+    [
+      'copy.pages.aiLabelDisclaimer',
+      {
+        copy: {
+          ...LABOR.copy,
+          pages: { ...LABOR.copy.pages, aiLabelDisclaimer: '' },
+        },
+      },
+    ],
   ];
 
   /**
