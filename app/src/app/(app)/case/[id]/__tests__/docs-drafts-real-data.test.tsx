@@ -167,15 +167,20 @@ describe('文书取数与字段映射', () => {
     expect(toDraftView({ ...realDraftRows()[0], content: null }).content).toBe('');
   });
 
-  it('认不出的类型按「其他」渲染但要出声，不静默改归类', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  /**
+   * 【2026-09-07 复审改判：**不许改归类**】这条原本断言"认不出的类型折成「其他」"。
+   * 那份"认得出"的词表是写死的缺省领域八类，于是第二个领域的九类文书全被折成「其他」——
+   * 用户在列表里找不到自己那一份，而页面不报错、条数也对、更新时间也对。
+   *
+   * 现在数据层**原样透传**，「这一类在不在本领域词表里」由知道领域的那一层判并出声
+   *（DraftsListView + draftsData.unknownKinds，判据见 app/__tests__/kinds-by-domain.test.tsx）。
+   */
+  it('认不出的类型原样透传，不静默改归类（变异：在数据层折成某一档 → 红）', async () => {
     responses['/cases/1/drafts'] = {
       drafts: [{ ...realDraftRows()[0], kind: '和解协议' }],
     };
     const drafts = await fetchDrafts('1');
-    expect(drafts[0].kind).toBe('其他');
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+    expect(drafts[0].kind).toBe('和解协议');
   });
 
   it('认不出的状态按「草稿」渲染——往「已发出」错会让人以为对方收到了', async () => {

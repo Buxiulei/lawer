@@ -26,14 +26,9 @@ import {
   demoEvidence,
   demoTimeline,
 } from '@/app/_mock/demo';
-import type {
-  ActionItem,
-  ActionStatus,
-  Deadline,
-  DeadlineKind,
-} from '@/app/_mock/types';
+import type { ActionItem, ActionStatus, Deadline } from '@/app/_mock/types';
 import { apiFetch, apiFetchAll, ApiError, humanError } from '@/app/_ui/api';
-import { journeyOf } from '@/app/_ui/domain';
+import { journeyOf, packOf } from '@/app/_ui/domain';
 import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
 import type { BadgeTone } from '@/components/shadcn/badge';
 import { demoAttainments, type Attainment } from './milestones';
@@ -129,16 +124,6 @@ export function viewState(input: {
 
 const ACTION_STATUSES: readonly ActionStatus[] = ['待办', '完成', '放弃'];
 
-const DEADLINE_KINDS: readonly DeadlineKind[] = [
-  '仲裁时效',
-  '起诉15日',
-  '上诉15日',
-  '举证期限',
-  '开庭',
-  '申请执行2年',
-  '自定义',
-];
-
 const EVIDENCE_TONE: Record<string, BadgeTone> = {
   已上传: 'neutral',
   已固化: 'success',
@@ -149,12 +134,6 @@ function toActionStatus(raw: string): ActionStatus {
   if (ACTION_STATUSES.includes(raw as ActionStatus)) return raw as ActionStatus;
   console.warn('[dashboard] 未知的行动卡状态，按「待办」渲染：', raw);
   return '待办';
-}
-
-function toDeadlineKind(raw: string): DeadlineKind {
-  if (DEADLINE_KINDS.includes(raw as DeadlineKind)) return raw as DeadlineKind;
-  console.warn('[dashboard] 未知的期限类型，按「自定义」渲染：', raw);
-  return '自定义';
 }
 
 /** 1/2/3 之外的优先级按最低档渲染——排序会因此下沉，但不会把一张卡弄丢 */
@@ -232,13 +211,20 @@ function toAction(row: ApiActionRow): ActionItem {
  * 那是一整句推算依据（「自 X 月 X 日收到解除通知起算一年」），塞进两行高的小卡里会截断，
  * 而截断后的半句话比只写「仲裁时效」更难懂。完整依据留在期限页展开看。
  */
-function toDeadline(row: ApiDeadlineRow): Deadline {
-  const kind = toDeadlineKind(row.kind);
+function toDeadline(row: ApiDeadlineRow, kinds: readonly string[]): Deadline {
+  // 【认不认得出，按**这个案子所属领域**的词表判，而且认不出也照原样渲染】
+  // 从前这里挂着一份写死的缺省领域七类，词表外的一律折成其中最保守的那一档。
+  // 那个形态是：第二个领域的每一张期限卡标题都写着同一个词——库里明明是「诉讼时效3年」，
+  // 卡面上叫「自定义」——而页面不报错、卡片数量也对，用户只是看不出这张卡说的是什么。
+  // 折一下换来的是"枚举收口"，但 kind 在这一页只当标题用（见上），折掉的全是信息。
+  if (!kinds.includes(row.kind)) {
+    console.warn('[dashboard] 这个领域的期限词表里没有这一类，照原样渲染：', row.kind);
+  }
   return {
     id: String(row.id),
     caseId: String(row.case_id),
-    kind,
-    title: kind,
+    kind: row.kind,
+    title: row.kind,
     dueAt: row.due_at,
     derivedFrom: row.derived_from ?? '',
   };
@@ -304,12 +290,13 @@ export async function fetchDashboard(caseId: string): Promise<DashboardData> {
   ]);
 
   const domain = detail.case.domain;
+  const pack = packOf(domain);
   return {
     domain,
     // `?? null` 只把 undefined（旧后端没这一列）折进 null，不替 null 编一个值
     track: detail.case.track ?? null,
     actions: actions.map(toAction),
-    deadlines: deadlines.map(toDeadline),
+    deadlines: deadlines.map((row) => toDeadline(row, pack.deadlineKinds)),
     attainments: toAttainments(detail.timeline, journeyOf(domain)),
     timelineCount: detail.timeline.length,
     // 公司文件（「解读结论：不签」那一类）后端还没有列表接口，真实案件这一半先只有证据。

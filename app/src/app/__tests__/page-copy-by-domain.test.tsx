@@ -68,6 +68,10 @@ const { EvidenceDetailSheet } = await import(
   '@/app/(app)/case/[id]/evidence/_components/EvidenceDetailSheet'
 );
 const { SetupPrompt } = await import('@/app/(app)/settings/_components/SetupPrompt');
+const { CasePanel } = await import('@/app/(app)/case/[id]/_components/CasePanel');
+const { CompanyGraphView } = await import(
+  '@/app/(app)/case/[id]/graph/_components/CompanyGraphView'
+);
 const { mockCompanyGraph } = await import('@/app/_mock/company-graph');
 
 type DashboardData = Awaited<
@@ -198,6 +202,22 @@ const SURFACES: {
           onRequestExtract={() => {}}
         />,
       ),
+  },
+  {
+    // 卷宗栏（PC 右栏 / 手机抽屉）里按行当变的两句：图谱那一格的引言、诉求表脚注的口径。
+    // 这一面同时验两个键，是因为它们在同一个组件里由同一次 useCaseDomain 取。
+    name: '卷宗栏·图谱引言与诉求脚注',
+    domainFrom: 'case',
+    keys: ['graphIntro', 'claimsFootnote'],
+    render: () => ssr(<CasePanel caseId={CASE_ID} actions={[]} />),
+  },
+  {
+    // 关系图整页的引言首句。**用空图那一支渲染**：这一句在有图和没图两屏上是同一个
+    // Header，空图那支不必造一整份图数据，而 Header 渲染不出来时下面的长度自检会红。
+    name: '关系图·引言首句',
+    domainFrom: 'case',
+    keys: ['graphIntro'],
+    render: () => ssr(<CompanyGraphView caseId={CASE_ID} graph={null} />),
   },
   {
     name: '设置页·一键接入话术',

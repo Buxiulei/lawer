@@ -13,6 +13,9 @@
  * 不存在的选择停一次。所以 `domains.length <= 1` 直接回 null——
  * 页面 HTML 与没有这个控件时逐字节一致（judged by domain-choice.test.tsx）。
  *
+ * 【但"不摆控件"不等于"不给答案"】提交时该带哪个 key 由 submittedDomain 说了算，
+ * 见它自己那段注释：清单只有一项时那一项就是答案，不摆控件只是因为没什么可问的。
+ *
  * 【取不到清单也回 null】/api/v1/domains 挂了或还没回来时，清单是空的，
  * 控件不出现，建案落缺省领域（服务端的 ensureDefaultCase 省略 domain 即缺省）。
  * 这是**有意的降级**：一个空的或半截的选择控件会让人以为自己选过了。
@@ -65,7 +68,25 @@ export function useEnabledDomains(): DomainOption[] {
 }
 
 /**
- * 领域单选。`value` 为空串＝还没选，提交时不带这个字段。
+ * 提交时该带哪个领域键。**选过就用选的；没选而清单只有一项，就是那一项。**
+ *
+ * 【为什么"没选"在只有一项时不能读成"没给"】控件在只有一项时整块不渲染（见上），
+ * 于是 value 恒是空串——那不是"用户放弃选择"，是"这里没有第二个答案"。
+ * 把它当没给的形态是：运维只开着**一个非缺省领域**（`LAWER_DOMAINS_ENABLED=<非缺省>`，
+ * 正是拿一个领域做试用站最自然的配置）时，注册请求不带 domain →
+ * 服务端按 DEFAULT_DOMAIN 建案 → 那个领域没开 → 建案被 DOMAIN_NOT_ENABLED 拒掉 →
+ * 而注册本身照常回 200。用户进了站，名下一个案件都没有，**一处报错都没有**。
+ *
+ * 清单为空（端点挂了 / 还没问到）回空串：那时本来就该落缺省领域。
+ * 清单有多项而用户没选也回空串：不替用户挑一个——挑错了要重新建档。
+ */
+export function submittedDomain(domains: readonly DomainOption[], value: string): string {
+  if (value !== '') return value;
+  return domains.length === 1 ? domains[0].key : '';
+}
+
+/**
+ * 领域单选。`value` 为空串＝还没选，提交时带不带这个字段由 submittedDomain 决定。
  *
  * 【不选时落的是**缺省领域**，与这份清单的顺序无关】清单的顺序确实是开关里写的顺序，
  * 但服务端不选时取的是 registry.DEFAULT_DOMAIN（见 cases.ensureDefaultCase 的

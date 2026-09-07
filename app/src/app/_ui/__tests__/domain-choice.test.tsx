@@ -22,7 +22,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
-const { DomainChoice } = await import('../DomainChoice');
+const { DomainChoice, submittedDomain } = await import('../DomainChoice');
 const { CompletionPane } = await import('@/app/login/_components/LoginFlow');
 const { DOMAINS, DOMAINS_ENABLED_ENV, DEFAULT_DOMAIN, listDomains } = await import(
   '@/lib/domains/registry'
@@ -146,6 +146,35 @@ describe('只开着一个领域时（今天的生产缺省）', () => {
         />,
       ),
     ).toBe('');
+  });
+
+  /**
+   * **不摆控件 ≠ 不给答案**（2026-09-07 复审点名）。
+   *
+   * 只开着一个领域时控件不渲染，于是页面手里那个 value 恒是空串。把它当作"没给"往上递的
+   * 形态是：运维用 `LAWER_DOMAINS_ENABLED=<非缺省领域>` 起一个试用站——一个领域一个站，
+   * 是这个开关最自然的用法——注册请求不带 domain，服务端按 DEFAULT_DOMAIN 建案，
+   * 而那个领域没开，建案被 DOMAIN_NOT_ENABLED 拒掉；注册本身照常回 200。
+   * 用户进了站，名下一个案件都没有，**一处报错都没有**。
+   *
+   * 这一条与上面「逐字节一致」不矛盾：屏幕上一个字节没多，进请求体的那个 key 多了一个。
+   */
+  it('只有一项时提交带的就是那一项（变异：把 submittedDomain 改成恒回 value → 红）', () => {
+    for (const key of Object.keys(DOMAINS)) {
+      expect(submittedDomain(optionsOf([key]), '')).toBe(key);
+    }
+  });
+
+  it('清单为空 / 有得选却没选：提交不带领域（前者本就该落缺省，后者不替用户挑）', () => {
+    expect(submittedDomain([], '')).toBe('');
+    expect(submittedDomain(optionsOf(Object.keys(DOMAINS)), '')).toBe('');
+  });
+
+  it('选过就用选的，清单几项都一样（选中的那一个不许被"只有一项"这条规矩盖掉）', () => {
+    const keys = Object.keys(DOMAINS);
+    expect(submittedDomain(optionsOf(keys), keys[1])).toBe(keys[1]);
+    // 只有一项、而用户选的正是那一项：结果同样是它，不因为路径不同而变
+    expect(submittedDomain(optionsOf([keys[1]]), keys[1])).toBe(keys[1]);
   });
 
   it('开关里写上第二个领域之后，同一段代码就摆出控件了（不是"这个控件从来不出现"）', () => {

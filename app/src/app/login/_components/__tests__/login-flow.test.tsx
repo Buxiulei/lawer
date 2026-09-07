@@ -371,15 +371,18 @@ describe('注册那一步选的领域进不进请求体', () => {
     return init.body;
   };
 
-  const completionPane = (domain: string) => (
+  const completionPane = (
+    domain: string,
+    domains: { key: string; label: string }[] = [
+      { key: 'labor', label: '甲类' },
+      { key: 'counseling', label: '乙类' },
+    ],
+  ) => (
     <CompletionPane
       email="xin@example.com"
       onEmailChange={() => {}}
       agreed
-      domains={[
-        { key: 'labor', label: '甲类' },
-        { key: 'counseling', label: '乙类' },
-      ]}
+      domains={domains}
       domain={domain}
       onDomainChange={() => {}}
       onBack={() => {}}
@@ -397,11 +400,35 @@ describe('注册那一步选的领域进不进请求体', () => {
     expect(body.code).toBe('123456');
   });
 
-  it('🔴 没选（灰度只开一个领域时控件根本不出现）：body 里**没有 domain 这个键**', async () => {
+  it('🔴 有得选却没选：body 里**没有 domain 这个键**（不替用户挑一个——挑错了要重新建档）', async () => {
     const body = await verifyBodyOf(completionPane(''));
     // 空串与"没给"在服务端是同一条口径（见路由注释）；页面这一侧发的是"没给"，
     // 两边同一条口径，谁都不必猜另一边怎么理解一个空字符串。
     expect(Object.keys(body), 'body 里塞了一个空的 domain').not.toContain('domain');
+  });
+
+  /**
+   * 🔴 **灰度只开着一个领域时，那一项照样要进 body**（2026-09-07 复审点名）。
+   *
+   * 控件在只有一项时整块不渲染（那个问题没有第二个答案），于是 value 恒是空串。
+   * 把它读成"没给"的形态是：运维用 `LAWER_DOMAINS_ENABLED=<非缺省领域>` 起一个试用站——
+   * 一个领域做一个站，是这个开关最自然的用法——注册请求不带 domain →
+   * 服务端按 DEFAULT_DOMAIN 建案 → 那个领域没开 → 建案被 DOMAIN_NOT_ENABLED 拒 →
+   * 而注册本身照常回 200、照常发 token。用户进了站，名下一个案件都没有，一处报错都没有。
+   */
+  it('🔴 灰度只开着一个领域：那唯一一项进 body（变异：把 submittedDomain 换回原样递 domain → 红）', async () => {
+    const body = await verifyBodyOf(
+      completionPane('', [{ key: 'counseling', label: '乙类' }]),
+    );
+    expect(
+      body.domain,
+      '只开着一个非缺省领域时页面没把它递上去：服务端会按缺省领域建案，而那个领域没开 = 建不出案件',
+    ).toBe('counseling');
+  });
+
+  it('🔴 清单还没问到（端点挂了 / 首帧）：body 里没有 domain——那时本来就该落缺省领域', async () => {
+    const body = await verifyBodyOf(completionPane('', []));
+    expect(Object.keys(body), '空清单也硬塞了一个 domain').not.toContain('domain');
   });
 
   it('🔴 邮箱通道登录那一路一个字都不带：老用户早就有案件了，那时递领域进去只会让人误会', async () => {

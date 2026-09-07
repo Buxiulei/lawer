@@ -11,7 +11,12 @@ import {
 } from '@/app/_mock/authpay';
 import { apiFetch } from '@/app/_ui/api';
 import { cn } from '@/app/_ui/cn';
-import { DomainChoice, useEnabledDomains, type DomainOption } from '@/app/_ui/DomainChoice';
+import {
+  DomainChoice,
+  submittedDomain,
+  useEnabledDomains,
+  type DomainOption,
+} from '@/app/_ui/DomainChoice';
 import { takeLoginRedirect } from '@/app/_ui/loginRedirect';
 import { beginSession } from '@/app/_ui/session';
 import { Button } from '@/components/shadcn/button';
@@ -345,7 +350,10 @@ export function CompletionPane({
           onEmailChange={onEmailChange}
           agreed={agreed}
           resume={resume}
-          domain={domain}
+          /* 【不是原样递 domain】清单只有一项时控件不渲染、domain 恒是空串，
+             而那一项**就是答案**——递空串上去等于让服务端按缺省领域建案，
+             只开着一个非缺省领域的试用站因此会注册成功却建不出案件。见 submittedDomain。 */
+          domain={submittedDomain(domains, domain)}
         />
       </Card>
       <p className="text-[13px] leading-5 text-ink-2">

@@ -31,10 +31,26 @@ import { describe, expect, it } from 'vitest';
 /** app/src */
 const SRC_ROOT = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
 
-// 与 lib/capabilities/__tests__/registry-guard.test.ts 同一份词。
-// 「用人单位」是对方主体在某一个领域里的称呼（领域包 parties.counterparts[0]），
-// 它最容易被顺手写进共用组件——总要有个词指代"对面那家"。
-const FORBIDDEN = ['劳动', '仲裁', '用人单位', '劳动者'];
+/**
+ * 前四个与 lib/capabilities/__tests__/registry-guard.test.ts 同一份词。
+ * 「用人单位」是对方主体在某一个领域里的称呼（领域包 parties.counterparts[0]），
+ * 它最容易被顺手写进共用组件——总要有个词指代"对面那家"。
+ *
+ * 【后四个是页面独有的，2026-09-07 复审点名补上】那一轮点了三处共用页文案
+ *（卷宗栏诉求脚注、图谱引言、工作区空态），它们**全都过了这道闸**——
+ * 「月工资未触及三倍社平封顶」「给你发工资的」「把被裁的经过、工资和司龄讲清楚」
+ * 里一个前四词都没有。于是"无领域字面量泄漏到第二个领域的视图"这句自报，
+ * 当时只对那四个词成立，而它读起来像是对所有领域文案成立。
+ *
+ * 挑这四个词的标准：**一眼就属于某个行当、且不会误伤**。试过而否掉的有「用工」——
+ * 「可用工具」里含它（settings/AgentSetupCard），一个词表守卫最坏的失效方式
+ * 是被误红逼着往白名单里加真·共用组件，那会让整道闸越挡越少（见文件头那段）。
+ *
+ * 这四个词只加在**页面这一侧**：共用层那侧（registry-guard）今天还有
+ * lib/capabilities/families/case.ts 的工具描述写着「月工资」，那是对外接口的字面，
+ * 改它是接口变更，不在本票里顺手做。
+ */
+const FORBIDDEN = ['劳动', '仲裁', '用人单位', '劳动者', '工资', '社平', '被裁', '司龄'];
 
 /**
  * 逐文件豁免：这些页面/组件**只服务缺省领域**，里面的领域字面量是它们的正文，不是漏网。
@@ -49,6 +65,14 @@ const FORBIDDEN = ['劳动', '仲裁', '用人单位', '劳动者'];
  *（app/_ui/caseDomain.useCaseDomain → app/_ui/domain.packOf），
  * 渲染产物那一侧另有 app/__tests__/page-copy-by-domain.test.tsx 逐句盯。
  *
+ * 【同一轮复审的第二批：期限/文书词表与三句共用页文案，也搬走了】
+ * dashboardData.ts 与 draftsData.ts 当初以「这一页本来就只服务缺省领域」的名义进名单，
+ * 而它们是**每个领域的用户都要经过的数据层**：里面各挂着一份写死的缺省领域词表，
+ * 把词表外的种类折成其中一档（期限折成「自定义」、文书折成「其他」）。
+ * 现在两处都按 `DomainPack.deadlineKinds / docKinds` 认，认不出照原样渲染。
+ * 三句页面文案（诉求脚注、图谱引言、工作区空态）进了 copy.pages，
+ * 由 page-copy-by-domain.test.tsx 按渲染产物盯。
+ *
  * 【还留在名单里、但同样不是"只服务缺省领域"的那几处】公司情报四页
  *（DossierBody / StatsSection / VenueCards / OrderQuote）与存证页 verify/[no]。
  * 它们照样是第二个领域的用户点得进去的（驾驶舱那张档案入口卡就通向前四页），
@@ -61,11 +85,9 @@ const DOMAIN_SPECIFIC_FILES = [
   'app/page.tsx',
   'app/_ui/neutral.ts',
   'app/api/manifest/route.ts',
-  // 驾驶舱的数据层：期限词表与里程碑演示数据（渲染层 Dashboard.tsx 已出名单，见下）
-  'app/(app)/case/[id]/_components/dashboardData.ts',
+  // 驾驶舱轨道的演示数据（数据层 dashboardData.ts 已出名单，见下）
   'app/(app)/case/[id]/_components/milestones.ts',
-  // 证据 / 文书 / 公司情报：这几页整页是这个行当的产物（文书种类、辖区卡、背调口径）
-  'app/(app)/case/[id]/drafts/_components/draftsData.ts',
+  // 证据 / 公司情报：这几页整页是这个行当的产物（材料清单、辖区卡、背调口径）
   'app/(app)/case/[id]/docs/_components/UploadSheet.tsx',
   'app/(app)/case/[id]/dossier/_components/DossierBody.tsx',
   'app/(app)/case/[id]/dossier/_components/StatsSection.tsx',
@@ -75,6 +97,7 @@ const DOMAIN_SPECIFIC_FILES = [
   //（没有手写稿的领域走 schema 排步，见 IntakeFlow.HANDWRITTEN_FLOWS）
   'app/(app)/intake/_components/StepBasics.tsx',
   'app/(app)/intake/_components/StepPreview.tsx',
+  'app/(app)/intake/_components/StepTimeline.tsx',
   'app/(app)/intake/_components/validate.ts',
   // 出证页：存证模板与那句"给谁核验"都是这个行当的话
   //（接入话术 agentSetup.ts 已出名单：那三段改由领域包给，见下）

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect } from 'react';
 import { useCaseDomain } from '@/app/_ui/caseDomain';
 import { packOf } from '@/app/_ui/domain';
 import { formatDateTime } from '@/app/_ui/format';
@@ -10,7 +11,7 @@ import { Button } from '@/components/shadcn/button';
 import { Card } from '@/components/shadcn/card';
 import { EmptyState } from '@/components/shadcn/empty-state';
 import { DraftKindBadge, DraftStatusBadge } from './badges';
-import type { DraftView } from './draftsData';
+import { unknownKinds, type DraftView } from './draftsData';
 
 /**
  * 文书列表的画法。**只吃传进来的 drafts**，自己不取数、不认 demo——
@@ -28,7 +29,29 @@ export function DraftsListView({
   caseId: string;
   drafts: DraftView[];
 }) {
-  const copy = packOf(useCaseDomain(caseId)).copy.pages;
+  const pack = packOf(useCaseDomain(caseId));
+  const copy = pack.copy.pages;
+
+  /**
+   * 【词表外的种类要出声，但屏幕上一个字都不改】库里这一类不在本领域的 `docKinds` 里，
+   * 说明写它的那一侧与本领域的词表对不上——那是要人去看的事。
+   *
+   * 从前这个信号是在数据层顺手发的，而那一层只有 caseId、认不出领域，于是挂了一份写死的
+   * 缺省领域词表：第二个领域的**每一份**文书都触发一次告警，并被折成「其他」。
+   * 判在这里之后词表是这个案子自己的那份，**而渲染的字一个都没被改过**——
+   * 出声与改归类从前绑在一起，现在拆开了。
+   *
+   * 【为什么判在这一层，不判在 RealDrafts】领域是问出来的，而这一层本来就问了一次
+   *（导语与空态那两句按领域取）。挪到取数那一层的形态是：文书页在"取数失败"和"一份都没有"
+   * 这两屏上也会多问一次案件详情——多一条谁都用不上的请求，只为一句控制台日志。
+   */
+  useEffect(() => {
+    const unknown = unknownKinds(drafts.map((d) => d.kind), pack.docKinds);
+    if (unknown.length > 0) {
+      console.warn('[drafts] 这个领域的文书词表里没有这几类，已照原样渲染：', unknown.join('、'));
+    }
+  }, [drafts, pack]);
+
   return (
     <div className="pt-1">
       <header className="py-3">

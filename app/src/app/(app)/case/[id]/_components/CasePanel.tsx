@@ -19,7 +19,9 @@ import {
   demoTimeline,
 } from "@/app/_mock/demo";
 import { mockCompanyGraph } from "@/app/_mock/company-graph";
+import { useCaseDomain } from "@/app/_ui/caseDomain";
 import { useDiscreet } from "@/app/_ui/discreet";
+import { packOf } from "@/app/_ui/domain";
 import { NEUTRAL_WORD } from "@/app/_ui/neutral";
 import { cn } from "@/app/_ui/cn";
 import { formatDate } from "@/app/_ui/format";
@@ -50,11 +52,14 @@ export function CasePanel({
   caseId: string;
   actions: ActionItem[];
 }) {
+  // 卷宗栏里有两句是按行当变的（图谱那一格的引言、诉求表脚注的口径）。写死的形态是：
+  // 第二个领域的用户在自己的卷宗栏里读到另一个行当的口径，而每一个数字都是对的。
+  const copy = packOf(useCaseDomain(caseId)).copy.pages;
   return (
     <div className="flex flex-col gap-3">
       <TimelineBlock events={demoTimeline} />
-      <CompanyGraphBlock caseId={caseId} />
-      <ClaimsBlock claims={demoClaims} />
+      <CompanyGraphBlock caseId={caseId} intro={copy.graphIntro} />
+      <ClaimsBlock claims={demoClaims} footnote={copy.claimsFootnote} />
       <EvidenceBlock caseId={caseId} items={demoEvidence} />
       {/* **不能排在最后**：本块窄屏 display:none，但 `:last-child` 照样命中它，
           排最后会把 TodoBlock 的 last:border-b-0 顶掉、在手机上凭空多一条底线
@@ -156,7 +161,7 @@ function TimelineBlock({ events }: { events: TimelineEvent[] }) {
 
 /* ── 公司图谱入口 ─────────────────────────────────────────── */
 
-function CompanyGraphBlock({ caseId }: { caseId: string }) {
+function CompanyGraphBlock({ caseId, intro }: { caseId: string; intro: string }) {
   return (
     <section className="border-b border-line pb-4 last:border-b-0">
       <header className="mb-2 flex items-center justify-between gap-2">
@@ -167,7 +172,7 @@ function CompanyGraphBlock({ caseId }: { caseId: string }) {
       </header>
       <div>
         <p data-veil="" className="fs-s text-ink-2">
-          跟你签合同的、给你发工资的、背后控股的，常常不是同一家。
+          {intro}
         </p>
         <Link
           href={`/case/${caseId}/graph`}
@@ -188,7 +193,7 @@ const CLAIM_TONE = {
   初算: "neutral",
 } as const;
 
-function ClaimsBlock({ claims }: { claims: Claim[] }) {
+function ClaimsBlock({ claims, footnote }: { claims: Claim[]; footnote: string }) {
   const total = claims.reduce((sum, c) => sum + c.amountFen, 0);
 
   return (
@@ -244,7 +249,7 @@ function ClaimsBlock({ claims }: { claims: Claim[] }) {
           </tfoot>
         </table>
         <p data-veil="" className="mt-1 fs-xs text-ink-2">
-          初算值，随证据补充调整；北京口径，月工资未触及三倍社平封顶。
+          {footnote}
         </p>
       </div>
     </section>

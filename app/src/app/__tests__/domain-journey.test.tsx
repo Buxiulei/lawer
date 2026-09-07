@@ -22,9 +22,9 @@ import path from 'node:path';
 
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { Database } from 'better-sqlite3';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { DomainChoice } from '@/app/_ui/DomainChoice';
+import { DomainChoice, submittedDomain } from '@/app/_ui/DomainChoice';
 import { schemaSteps } from '@/app/(app)/intake/_components/IntakeFlow';
 import { EMPTY_DRAFT, type IntakeDraft } from '@/app/(app)/intake/_components/draft';
 import {
@@ -35,18 +35,24 @@ import {
 import { toIntakePayload } from '@/app/(app)/intake/_components/submit';
 import { buildCaseFacts, renderCaseFacts } from '@/lib/agent/case-facts';
 import { loadCaseSnapshot } from '@/lib/agent/snapshot';
+import { verifyToken } from '@/lib/auth/jwt';
 import * as otp from '@/lib/auth/otp';
 import * as otpStore from '@/lib/db/otp';
 import { INTAKE_STAGE_ACTIONS } from '@/lib/cases/intake-actions';
 import {
+  DEFAULT_DOMAIN,
   DOMAINS,
   DOMAINS_ENABLED_ENV,
+  listDomains,
   type DomainPack,
   type IntakeFieldSpec,
 } from '@/lib/domains/registry';
 
 let db: Database;
 let registerVerify: (req: Request) => Promise<Response>;
+/** 网页注册那条链真正调的两条：手机验完拿 token，再拿 token 去验邮箱（带 domain）。 */
+let smsVerify: (req: Request) => Promise<Response>;
+let emailVerify: (req: Request) => Promise<Response>;
 let listDomainsRoute: () => Promise<Response>;
 let listCases: (req: Request) => Promise<Response>;
 let postIntake: (
@@ -60,12 +66,16 @@ const MAILER = { sendEmail: async () => {}, sendSms: async () => {} };
 
 beforeAll(async () => {
   process.env.JWT_SECRET = 'test-secret-do-not-use-in-prod';
+  // 手机号那条链要按查找键哈希手机号（lib/crypto.hashLookup），没有主密钥会当场抛
+  process.env.LAWER_DATA_KEY = crypto.randomBytes(32).toString('base64');
   dbFile = path.join(os.tmpdir(), `lawer-journey-${crypto.randomUUID()}.db`);
   process.env.DB_PATH = dbFile;
   // 灰度全开：这条路要走的正是"开了第二个领域之后"的那条。
   process.env[DOMAINS_ENABLED_ENV] = Object.keys(DOMAINS).join(',');
 
   registerVerify = (await import('../api/v1/auth/email/register/verify/route')).POST;
+  smsVerify = (await import('../api/v1/auth/sms/verify/route')).POST;
+  emailVerify = (await import('../api/v1/auth/email/verify/route')).POST;
   listDomainsRoute = (await import('../api/v1/domains/route')).GET;
   listCases = (await import('../api/v1/cases/route')).GET;
   postIntake = (await import('../api/v1/cases/[id]/intake/route')).POST;
@@ -141,6 +151,68 @@ async function registerWithDomain(
   return { token: body.token as string, caseId: onboarding!.case_id };
 }
 
+/**
+ * 走**网页那条注册链**：手机验完 → 补绑邮箱（带 domain）→ 顺带建案。
+ *
+ * 【为什么必须另有这一条，而不是复用上面那个 registerWithDomain】上面走的是
+ * `/auth/email/register/verify`（匿名邮箱开户），而**网页注册页调的是
+ * `/auth/email/verify`**（手机验完之后补绑邮箱那一路，见 LoginFlow 的 EmailChannel）——
+ * 仓里没有任何非测试客户端调过 register/verify。两条路由今天恰好都接 domain，
+ * 于是「机构负责人试用旅程」全绿的同时，网页那条链上 domain 有没有被透传
+ * **没有任何真路由判据**：把 verify/route.ts 里那行 `domain: stringField(...)` 删掉，
+ * 页面判据（只看页面发了什么）与本文件（走的是另一条路由）都照样绿，
+ * 而第二个领域的注册全部落成缺省领域，一处报错都没有。
+ *
+ * 发码那两步走 lib（注入不出网的 sender）：真发短信/发信与领域无关，
+ * 而它们的路由默认会去连真的网关。**验码那两步走真路由**——被验的正是它们。
+ */
+async function registerViaWeb(
+  phone: string,
+  email: string,
+  domain: string,
+): Promise<{ token: string; caseId: number | null }> {
+  const sentSms = await otp.sendPhoneCode(db, { phone, ip: '203.0.113.9' }, MAILER);
+  expect(sentSms.ok, '前置失败：短信码没发出去').toBe(true);
+  const smsCode = (
+    db.prepare('SELECT code FROM sms_codes ORDER BY id DESC LIMIT 1').get() as { code: string }
+  ).code;
+
+  const smsRes = await smsVerify(
+    new Request('http://localhost/api/v1/auth/sms/verify', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ phone, code: smsCode }),
+    }),
+  );
+  const smsBody = await json(smsRes);
+  expect(smsRes.status, `手机验证失败：${JSON.stringify(smsBody)}`).toBe(200);
+  expect(smsBody.need_email, '这不是一个新号：后面补绑那一步不会建案').toBe(true);
+  const phoneToken = smsBody.token as string;
+  // 用户 id 从 token 里读，不靠"库里最后一行"猜——同一个文件里别的用例也在建号
+  const userId = verifyToken(phoneToken)!.uid;
+
+  const sentMail = await otp.sendEmailCode(db, { userId, email, ip: '203.0.113.9' }, MAILER);
+  expect(sentMail.ok, '前置失败：邮箱码没发出去').toBe(true);
+  const mailCode = (
+    db
+      .prepare('SELECT code FROM email_codes WHERE email = ? AND purpose = ? ORDER BY id DESC LIMIT 1')
+      .get(email, otpStore.EMAIL_PURPOSE.verify) as { code: string }
+  ).code;
+
+  const res = await emailVerify(
+    new Request('http://localhost/api/v1/auth/email/verify', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${phoneToken}` },
+      // 页面就是这么拼的：空串不发（LoginFlow 的 `...(completing && domain ? {domain} : {})`）
+      body: JSON.stringify({ email, code: mailCode, ...(domain ? { domain } : {}) }),
+    }),
+  );
+  const body = await json(res);
+  expect(res.status, `补绑邮箱失败：${JSON.stringify(body)}`).toBe(200);
+  const onboarding = body.onboarding as { case_id: number } | undefined;
+  return { token: body.token as string, caseId: onboarding?.case_id ?? null };
+}
+
 const authed = (url: string, token: string, init: RequestInit = {}) =>
   new Request(url, {
     ...init,
@@ -186,6 +258,80 @@ describe('建案：注册那一步的领域选择', () => {
       expect(welcome.detail).toBe(copy.welcomeEventDetail);
     },
   );
+});
+
+/* ── 同一步，但走网页那条链：手机验完 → 补绑邮箱（带 domain）─────── */
+
+describe('建案：网页注册页真正走的那条路由', () => {
+  /** 每个用例一个新号：手机号要能过 normalizePhone，且不能撞上已验证过的存量号。 */
+  let seq = 0;
+  const nextPhone = () => `1380000${String(1000 + seq++).slice(-4)}`;
+
+  it.each(Object.keys(DOMAINS))(
+    '选了「%s」→ /auth/email/verify 把它透传下去，案子真的落这个领域（变异：删掉该路由里那行 domain → 红）',
+    async (key) => {
+      const { caseId } = await registerViaWeb(nextPhone(), `web-${key}@example.com`, key);
+      expect(caseId, '网页这条链没顺带建案：后面每一步都没有落点').not.toBeNull();
+      const row = db.prepare('SELECT domain FROM cases WHERE id = ?').get(caseId!) as {
+        domain: string;
+      };
+      expect(row.domain).toBe(key);
+    },
+  );
+
+  /**
+   * 🔴 **灰度只开着一个非缺省领域**——「一个领域一个试用站」是这个开关最自然的用法。
+   *
+   * 那时注册页的领域控件整块不渲染（没有第二个答案可选），页面手里的 value 恒是空串。
+   * 把空串直接递上去的形态是：服务端按 DEFAULT_DOMAIN 建案 → 那个领域没开 →
+   * ensureDefaultCase 回 DOMAIN_NOT_ENABLED → provisionDefaultCase 只留一行日志 →
+   * **注册照常回 200、照常发 token，而用户名下一个案件都没有**，一处报错都没有。
+   * 所以页面在只有一项时必须把那一项填进去（app/_ui/DomainChoice.submittedDomain）。
+   *
+   * 这一条同时验两侧：不填（旧行为）建不出案件，按 submittedDomain 填就建得出。
+   */
+  it('🔴 只开着一个非缺省领域：页面填的那一项让案子建得出来，什么都不填就建不出来', async () => {
+    const only = Object.keys(DOMAINS).find((k) => k !== DEFAULT_DOMAIN);
+    expect(only, '注册表里没有第二个领域，本条恒真').toBeTruthy();
+    const before = process.env[DOMAINS_ENABLED_ENV];
+    // 建案被开关拦下时服务端会打一行 error（刻意的，见 provisionDefaultCase），这里不让它刷屏
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      process.env[DOMAINS_ENABLED_ENV] = only!;
+
+      // 页面问到的清单就只有一项，控件因此整块不渲染
+      const options = listDomains().map((d) => ({ key: d.key, label: d.label }));
+      expect(options.map((o) => o.key)).toEqual([only]);
+      expect(ssr(<DomainChoice domains={options} value="" onChange={() => {}} />)).toBe('');
+
+      // ① 旧行为：控件没渲染 ⇒ 递空串 ⇒ 服务端按缺省领域建案 ⇒ 缺省领域没开 ⇒ 建不出来
+      const blank = await registerViaWeb(nextPhone(), 'solo-blank@example.com', '');
+      expect(
+        blank.caseId,
+        '缺省领域没开着，却把案子建出来了？那这一条在验的不是这件事',
+      ).toBeNull();
+      expect(quiet, '建案被拦下时没有留下任何一行日志').toHaveBeenCalled();
+
+      // ② 现在的行为：页面把那唯一一项填进去 ⇒ 案子建得出来，且落的就是它
+      const filled = await registerViaWeb(
+        nextPhone(),
+        'solo-filled@example.com',
+        submittedDomain(options, ''),
+      );
+      expect(
+        filled.caseId,
+        '只开着一个非缺省领域时注册成功却没有案件：进站后什么都没有，而一处报错都没有',
+      ).not.toBeNull();
+      const row = db.prepare('SELECT domain FROM cases WHERE id = ?').get(filled.caseId!) as {
+        domain: string;
+      };
+      expect(row.domain).toBe(only);
+    } finally {
+      quiet.mockRestore();
+      if (before === undefined) delete process.env[DOMAINS_ENABLED_ENV];
+      else process.env[DOMAINS_ENABLED_ENV] = before;
+    }
+  });
 });
 
 /* ── 第二步 + 第三步：首诊按这个领域问、落库，事实卡按这个领域说话 ── */
