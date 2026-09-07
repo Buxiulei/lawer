@@ -203,10 +203,14 @@ export const intakeSubmit: Capability = {
   // 【param→key 与元→分也由同一份 intakeSchema 派生】intakeArgsToInput 读的是上面那行
   // 生成说明书用的**同一个包**：往首诊表加一个字段，说明书与本壳一起认识它，不会出现
   // 「说明书宣告了、壳把它丢了」的缝。手写第二份对照表的形态见 shared.ts 的头注释。
+  //
+  // 【归属写在展开之后】assertDomainPack 已经不许首诊表用 caseId / userId 当键，
+  // 所以今天这两行放哪儿都一样；写在后面是为了让「归属只认调用者身份」这件事
+  // 不依赖另一个文件里的守卫还在不在——展开在前，同名键盖不到归属上。
   run: (db, identity, args) =>
     cases.submitIntake(db, {
+      ...intakeArgsToInput(INTAKE_PACK, args),
       caseId: num(args.case_id),
       userId: identity.uid,
-      ...intakeArgsToInput(INTAKE_PACK, args),
     } as Parameters<typeof cases.submitIntake>[1]),
 };
