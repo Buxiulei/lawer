@@ -258,6 +258,12 @@ describe('G-F10 证据与历史接线：库里有什么，卡上就得数出什�
       emit: makeSink().emit,
     });
 
+    // 【把时刻钉进跨日那一段】messages.created_at 由库给缺省值（canonical UTC），
+    // 不钉的话它就是"跑批那一刻"：一天里有 16 个小时 UTC 日与北京日相同，这条断言
+    // 那时对 toDisplayDay 还是 slice(0,10) 一视同仁——**改坏了也不红**。
+    // 16:30Z = 北京次日 00:30，两把尺差一天，于是「用哪把尺」这件事全天可观测。
+    f.db.prepare("UPDATE messages SET created_at = '2026-09-06 16:30:00'").run();
+
     const s = loadCaseSnapshot(f.db, f.caseId);
     expect(s.historyStats.total).toBe(4);
     expect(s.historyStats.firstAt).not.toBeNull();
@@ -266,5 +272,8 @@ describe('G-F10 证据与历史接线：库里有什么，卡上就得数出什�
     // 用 slice(0,10) 截 UTC 串的形态是：北京 00:00–08:00 之间跑，两边差一天，这条必红——
     // 而红的不是被测代码，是判据自己换了时区。
     expect(text).toContain(`本案历史消息共 4 条（最早 ${toDisplayDay(s.historyStats.firstAt!)}）`);
+    // 钉住的是"北京日"这件事本身：UTC 日是 09-06，卡上必须是 09-07。
+    expect(s.historyStats.firstAt!.slice(0, 10)).toBe('2026-09-06');
+    expect(text).toContain('最早 2026-09-07');
   });
 });

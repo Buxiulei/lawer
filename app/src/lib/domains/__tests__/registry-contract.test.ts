@@ -137,6 +137,29 @@ describe('assertDomainPack：包必须实现全部字段', () => {
     expect(() => assertDomainPack(clone({ intakeSchema: bad }))).toThrow(/不必填却给了 errorCode/);
   });
 
+  /**
+   * 【为什么归属保留字要单独一道】首诊工具壳把 intakeArgsToInput 派生出来的映射
+   * **展开**进 submitIntake 的入参（lib/capabilities/families/case.ts）。包里若把
+   * caseId / userId 当成首诊字段声明，这两个键就跟着入参一起来了——「记到谁名下」
+   * 由调用方填的值说了算。不会报错：说明书上多一个参数、服务端照着填的值落库。
+   * 展开顺序已经让归属写在后面兜了一层，这道守卫是为了让包作者**当场**知道，
+   * 而不是把一个装载得进去的包留在注册表里。
+   */
+  it('首诊表拿 userId 当键 ⇒ 点名（归属来自调用者身份，不能由入参覆盖）', () => {
+    const bad = LABOR.intakeSchema.map((f, i) => (i === 0 ? { ...f, key: 'userId' } : f));
+    expect(() => assertDomainPack(clone({ intakeSchema: bad }))).toThrow(/归属保留字/);
+  });
+
+  it('首诊表拿 caseId 当键 ⇒ 点名（同上）', () => {
+    const bad = LABOR.intakeSchema.map((f, i) => (i === 0 ? { ...f, key: 'caseId' } : f));
+    expect(() => assertDomainPack(clone({ intakeSchema: bad }))).toThrow(/归属保留字/);
+  });
+
+  it('首诊表拿 case_id 当参数名 ⇒ 点名（它由首诊 schema 自己声明，包里再声明就是两份对外定义）', () => {
+    const bad = LABOR.intakeSchema.map((f, i) => (i === 0 ? { ...f, param: 'case_id' } : f));
+    expect(() => assertDomainPack(clone({ intakeSchema: bad }))).toThrow(/保留参数名 case_id/);
+  });
+
   it('intakeLimitation 落一个词表里没有的期限种类 ⇒ 点名（那条期限存不进库而首诊照常成功）', () => {
     expect(() =>
       assertDomainPack(clone({ intakeLimitation: { ...LABOR.intakeLimitation!, kind: '没这种期限' } })),
