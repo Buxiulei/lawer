@@ -15,8 +15,8 @@
 //
 // ───────────────── 归属路径与两个坑 ─────────────────
 // files 是**内容寻址的裸资源**：无 case_id/user_id、sha256 唯一（同一份文件全库只存一行）。
-// 所以「这些字节算谁的」只能由引用它的三张表回推（OWNER_PATHS）。由此有两个必须报出来、
-// 不能悄悄抹平的口径问题：
+// 所以「这些字节算谁的」只能由引用它的那几张表回推（OWNER_PATHS，与 filesGc.REFERENCERS 同一份）。
+// 由此有两个必须报出来、不能悄悄抹平的口径问题：
 //
 //   【坑一 · 一文件多主】sha256 唯一 ⇒ 两个用户传同一份文件只占一份盘空间，
 //   但两人各自的用量里都该算上它（对用户说「你占了 0 字节，因为别人也传了」是荒谬的）。
@@ -71,6 +71,22 @@ const OWNER_PATHS: readonly { table: string; column: string; sql: string }[] = [
     sql: `SELECT d.file_id AS file_id, c.user_id AS user_id
             FROM company_docs d
             JOIN cases c ON c.id = d.case_id`,
+  },
+  {
+    // 上传令牌自带 user_id（签发时就知道是谁），不必绕 case。file_id 在字节落库后才回填，
+    // 所以要滤掉还没落库的那些——SELECT 出一列 NULL 会被 own() 丢掉，但滤在 SQL 里更直白。
+    table: 'evidence_upload_tokens',
+    column: 'file_id',
+    sql: `SELECT t.file_id AS file_id, t.user_id AS user_id
+            FROM evidence_upload_tokens t
+           WHERE t.file_id IS NOT NULL`,
+  },
+  {
+    // 下载令牌同上。它引着的多半是一份整案导出件或文书 PDF——那些字节确实占着我们的盘，
+    // 也确实是这个人的，不该因为「没有 case_id」就落进无主那一桶。
+    table: 'file_download_tokens',
+    column: 'file_id',
+    sql: `SELECT t.file_id AS file_id, t.user_id AS user_id FROM file_download_tokens t`,
   },
 ];
 
@@ -258,7 +274,7 @@ interface ControlCounts {
  * 分桶口径与主查询保持一致（有主 / 非有主但有引用 / 无引用），故「有主却无人引用」这种
  * 归属与引用判据打架的情形两边会一致地多计——那一路由恒等式 ① 单独兜。
  *
- * 【日后加第四条 files 外键】OWNER_PATHS 与本函数都要加。只加 OWNER_PATHS 的表现是本自检
+ * 【日后再加一条 files 外键】OWNER_PATHS 与本函数都要加。只加 OWNER_PATHS 的表现是本自检
  * **误报**（主查询说有主、对照说无主），错在偏报警那一侧，不会把错数静默放过。
  */
 function recomputeFromBaseTables(db: Database.Database): ControlCounts {
@@ -308,6 +324,14 @@ function recomputeFromBaseTables(db: Database.Database): ControlCounts {
     .prepare('SELECT evidence_id, cert_pdf_file_id FROM attestations')
     .iterate() as Iterable<{ evidence_id: number | null; cert_pdf_file_id: number | null }>) {
     own(a.cert_pdf_file_id, a.evidence_id == null ? null : userOfEvidence.get(a.evidence_id));
+  }
+  for (const t of ['evidence_upload_tokens', 'file_download_tokens']) {
+    for (const r of db.prepare(`SELECT file_id, user_id FROM ${t}`).iterate() as Iterable<{
+      file_id: number | null;
+      user_id: number;
+    }>) {
+      own(r.file_id, r.user_id);
+    }
   }
 
   const referenced = new Set<number>();

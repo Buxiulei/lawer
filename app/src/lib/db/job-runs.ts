@@ -27,7 +27,8 @@ export type JobName =
   | '公道值对账'
   | '公司监控巡检'
   | '公司档案采集'
-  | '守望计费';
+  | '守望计费'
+  | '数据留存清理';
 
 export interface JobRun {
   id: number;

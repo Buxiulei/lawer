@@ -6,7 +6,13 @@ export { sendOtp, isMainlandPhone } from './sms';
 export { buildSignedRpcUrl } from './aliyun-rpc';
 export type { FetchImpl, SignatureMethod } from './aliyun-rpc';
 export { sendMail, isValidEmail } from './email';
-export { emailNotRegistered, emailVerifyCode, smsVerifyTemplateParam, NOTIFY_BRAND } from './copy';
+export {
+  emailCancelCode,
+  emailNotRegistered,
+  emailVerifyCode,
+  smsVerifyTemplateParam,
+  NOTIFY_BRAND,
+} from './copy';
 export { shouldDryRun } from './dry-run';
 // 邮件版式的唯一入口（见 mail-template.ts 顶部）：要预览/落样例的从这里取，不要另拼一份
 export { renderMail, BURGUNDY } from './mail-template';

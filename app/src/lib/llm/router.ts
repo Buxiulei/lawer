@@ -86,7 +86,15 @@ export function route(taskClass: TaskClass, plan: Plan, o: RouteOptions = {}): R
     .slice(from)
     .map((t) => `${REQUIRED_ENV[t.provider].join('+')}(${t.model.api})`)
     .join(' → ');
-  throw new Error(`${plan}/${taskClass} 无可用模型：降级链上的 key 全部缺失（${tried}），请补齐 app/.env.local`);
+  // 没同意出境时要**明说**是这道闸把 Claude 那几条腿排除掉的：只报「key 全部缺失」的话，
+  // 运维会去补一个补了也不会被选中的 key，而真正的原因（这个账号没有境外处理的同意）
+  // 一个字都看不见。
+  const why = o.overseasAllowed
+    ? ''
+    : '（本次只在境内型号里选：这个账号没有「境外模型处理」的有效同意，出境的那几条腿已被排除）';
+  throw new Error(
+    `${plan}/${taskClass} 无可用模型：降级链上的 key 全部缺失（${tried}）${why}，请补齐 app/.env.local`,
+  );
 }
 
 /** 路由 + 建客户端一步到位，供 lib/agent 直接用。
@@ -94,7 +102,11 @@ export function route(taskClass: TaskClass, plan: Plan, o: RouteOptions = {}): R
  *  而 client.name/model 只说得出「用了谁」，说不出「本该用谁」。
  *
  *  传了 apiKey 就视为调用方自带凭据、所有 provider 都可用——否则会出现
- *  「明明给了 key 却因为环境变量没配而降级」的怪事。 */
+ *  「明明给了 key 却因为环境变量没配而降级」的怪事。
+ *
+ *  **domesticOnly 不受自带 key 影响**：自带 key 说的是「凭据不缺」，与「这个人允不允许
+ *  出境」是两件事。让它把境内约束一起绕过去，就等于一个自带 key 的调用把用户撤回过的
+ *  同意抹掉了，而没有任何一处会报错。 */
 export function getProvider(
   taskClass: TaskClass,
   plan: Plan,

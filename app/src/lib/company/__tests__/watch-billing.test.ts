@@ -67,6 +67,35 @@ const consumeCount = (db: Database.Database, watchId: number, mk: string) =>
     'SELECT COUNT(*) c FROM gongdao_ledger WHERE type=? AND ref_id=?',
   ).get(GONGDAO_LEDGER_TYPE.consume, `watch-${watchId}-${mk}`) as { c: number }).c;
 
+describe('🔴 档案删了就不再收钱', () => {
+  /**
+   * 【为什么这条要单独钉】软删到硬删之间有 30 天，**几乎一定跨过一个月初**。
+   * 不挡的形态是：用户 9 月 20 日删掉档案，10 月 1 日照样被扣一档月费。
+   * 注销账号的人更糟——注销那一刻名下案件全被标删，而他余额不足时这里会记欠费、
+   * 发欠费通知，可他已经登录不进来看到这一切。盯梢的标的没了，收费就该停。
+   *
+   * 变异：scanActiveWatches 去掉 `c.deleted_at IS NULL` → 本条红（examined=1、真扣了钱）。
+   */
+  test('软删的案件不进计费名单：不扣费、不记欠费、不发信', async () => {
+    const ctx = setup({ balance: 1000 });
+    const id = addWatch(ctx.db, { caseId: ctx.caseId, name: 'A', tier: 'daily' }).id;
+    // 前置：不删的话这一轮确实会扣（不然下面的 0 说明不了任何事）
+    const dry = await runWatchBilling(ctx.db, { sendMail: mailer().sendMail, now: JUN, dryRun: true });
+    expect(dry.examined).toBe(1);
+
+    ctx.db.prepare("UPDATE cases SET deleted_at='2026-06-20 00:00:00' WHERE id=?").run(ctx.caseId);
+
+    const m = mailer();
+    const r = await runWatchBilling(ctx.db, { sendMail: m.sendMail, now: JUL });
+
+    expect(r.examined, '已删档案还在计费名单里').toBe(0);
+    expect(consumeCount(ctx.db, id, monthKey(JUL))).toBe(0);
+    expect(getGongdao(ctx.userId, ctx.db)).toBe(1000);
+    expect(watchRow(ctx.db, id).billed_month).toBeNull();
+    expect(m.calls).toEqual([]);
+  });
+});
+
 describe('三档结算（D2）', () => {
   test('daily 扣 199、weekly 扣 60、archive 不扣且不落 ledger 行', async () => {
     const ctx = setup({ balance: 1000 });

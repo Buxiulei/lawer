@@ -210,6 +210,32 @@ export function emailVerifyCode(
 }
 
 /**
+ * 注销账号的验证码邮件。
+ *
+ * 【为什么不复用 emailVerifyCode】那封信说的是「您正在验证账号的邮箱地址」。用它来发注销码，
+ * 用户读到的是一件与实际发生的事完全不同的事——而这一步之后他的档案就开始进入删除流程。
+ * 一封验证码邮件唯一的作用就是让本人知道**自己正在授权什么**；说错了，它就不再是一道闸。
+ *
+ * neutral 档同样明说「注销」：低调模式防的是他人代收时读出案情，而"有人在注销这个账号"
+ * 恰恰是本人必须看见的那句话。
+ */
+export function emailCancelCode(code: string, expiryMinutes: number, options: CopyOptions = {}): MailCopy {
+  const tail = `${expiryMinutes} 分钟内有效，请勿转发他人。\n若不是你本人在操作，请不要输入这串数字，并尽快修改登录方式。`;
+  const lead = options.detailed
+    ? `你正在注销${NOTIFY_BRAND}账号。注销后案件档案会进入删除流程，且无法撤销。`
+    : '你正在注销账号。注销后档案会进入删除流程，且无法撤销。';
+  return {
+    subject: options.detailed ? `${NOTIFY_BRAND} 注销账号验证码：${code}` : `注销账号验证码：${code}`,
+    text: `${lead}\n验证码：${code}\n${tail}`,
+    blocks: [
+      { kind: 'text', text: lead },
+      { kind: 'code', code },
+      { kind: 'text', text: tail },
+    ],
+  };
+}
+
+/**
  * 有人拿一个**名下还没有账号**的邮箱来收登录验证码时，发给这个邮箱的引导信。
  *
  * 【为什么是一封信，而不是一个错误码】接口对「这个邮箱注册过没有」必须一个字都不说：

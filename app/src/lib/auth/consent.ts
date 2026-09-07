@@ -17,7 +17,7 @@ import type { Database } from 'better-sqlite3';
 
 import { CONSENT_KINDS } from '@/lib/consent';
 import { hasConsent, ipDigest, recordConsent } from '@/lib/db/consents';
-import { setModelPreferences } from '@/lib/db/otp';
+import { getModelPreferences, setModelPreferences } from '@/lib/db/otp';
 
 import type { AuthFailure } from './otp';
 
@@ -110,10 +110,17 @@ export function recordRegistrationConsent(
   ip: string | null,
 ): void {
   const digest = ipDigest(ip);
-  recordConsent(db, { userId, kind: CONSENT_KINDS.terms, ipDigest: digest });
-  recordConsent(db, { userId, kind: CONSENT_KINDS.adult, ipDigest: digest });
+  const consent = readRegistrationConsent(body);
 
-  if (readRegistrationConsent(body).overseas) {
+  // 【三个框都只按"这次请求里勾没勾"落行，不按"闸门放没放行"落行】闸门有一条旁路：
+  // 补绑那一路（knownUserId 已同意过）不带勾选位也能过。无条件落行的形态是——
+  // 协议改版之后，这个人凭旧版的同意过了闸，我们却给他记上一行**新版**的同意，
+  // 而他从没读过新版那份文本。台账要回答"他当时同意的是哪一版"，编出来的那一行
+  // 让这个问题永远答不对，且没有任何一处会报错。
+  if (consent.terms) recordConsent(db, { userId, kind: CONSENT_KINDS.terms, ipDigest: digest });
+  if (consent.adult) recordConsent(db, { userId, kind: CONSENT_KINDS.adult, ipDigest: digest });
+
+  if (consent.overseas) {
     recordConsent(db, { userId, kind: CONSENT_KINDS.overseas, ipDigest: digest });
     // 台账记"他同意过"，开关记"现在生效的是什么"。两样都要写：
     // 只写台账的形态是他勾了框而路由照样走境内，只写开关的形态是日后证明不了他同意过。
@@ -162,4 +169,24 @@ export function realnameConsentFailure(
       '怎么办：在实名页读完那段说明、勾选「我同意提供姓名与证件号用于实名认证」再提交。' +
       '不同意也可以继续对话、登记事实、算金额、写草稿。',
   };
+}
+
+// ───────────────── 境外模型的有效同意（协议 五.5（2）/ 五.9 / 附一 #6）─────────────────
+
+/**
+ * 这个账号此刻允不允许把对话交给**境外接收方**处理。**全站只有这一个判据**，
+ * 唯一的调用点是 lib/agent/orchestrator 里取模型那一处（唯一一处按用户挑模型的地方）。
+ *
+ * 【为什么是"开关 ∧ 有效同意"两个都要】两件事记在两处，各自答的不是同一个问题：
+ *  · users.overseas_models 是**此刻生效的状态**——用户可以随手关掉再打开，关掉不是撤回；
+ *  · consents 那一行是**发生过的事实**，撤回之后 hasConsent 就不再认它（协议五.9）。
+ * 只看开关的形态是：一个在设置页撤回过同意的人，开关还开着（撤回那条路忘了关它），
+ * 于是他的对话继续出境；只看台账的形态是：一个同意过、但把开关关掉的人，
+ * 关了跟没关一样。两个都要，缺哪个都是"页面显示的与实际发生的相反"。
+ *
+ * 【为什么不给缺省放行的重载】没有默认值可言：调用方只有一个，多出来的那个调用方
+ * 应当被迫想清楚它凭什么放行，而不是继承一个"看起来安全"的缺省。
+ */
+export function overseasModelsAllowed(db: Database, userId: number): boolean {
+  return hasConsent(db, userId, CONSENT_KINDS.overseas) && getModelPreferences(db, userId).overseasModels;
 }

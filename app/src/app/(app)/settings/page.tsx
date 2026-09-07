@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AgentKeyCards } from './_components/AgentKeyCards';
+import { DataRightsCard } from './_components/DataRightsCard';
 import { PreferencesCard } from './_components/PreferencesCard';
 import { PrivacyCard } from './_components/PrivacyCard';
 import { RealnameCard } from './_components/RealnameCard';
@@ -23,6 +24,9 @@ export default function SettingsPage() {
         {/* 隐私与同意（境外模型 / 评测授权 / 情绪记录）：摆在通用偏好之前，
             因为它管的是「我们能拿你的数据做什么」，比主题与震动重要 */}
         <PrivacyCard />
+        {/* 协议附一第 7 项的四个入口（案件删除 / 整案导出 / 账号注销 / 撤回同意）都在这张卡里；
+            撤回同意后两条通路回给用户的那句话就是把人指到这儿的（见 DataRightsCard 抬头）。 */}
+        <DataRightsCard />
         <PreferencesCard />
       </div>
     </div>

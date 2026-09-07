@@ -14,9 +14,20 @@
 // 【为什么不并进 lib/cases/index.ts】调它的是 lib/agent 的对话主循环与能力层，
 // 两边都不需要 index.ts 那一整套归属校验与领域写入口；单独一个文件只依赖 Database，
 // 与 report-stale.ts 同样的理由（见该文件头）。
+//
+// 【同意闸也挂在这里，理由与上面那条是同一条】可撤回的那一项叫「情绪状态与**危机识别记录**」
+// （lib/lifecycle/consents 的 CONSENT_KINDS.emotion.label），一句话覆盖两样东西。
+// 闸只挂在 emotion_log 那两条写入路上的形态是：用户在设置页点了撤回、页面显示已撤回，
+// 而他每说一次那种话，库里仍然多一行 crisis_hits——两边都不报错，外面也看不出来。
+// 所以判定落在这个唯一入口上：谁调 recordCrisisHit，谁就自动被这道闸管着。
+//
+// 【撤回停的是「记这一笔」，不是「接住这个人」】危机首段、热线号码、must_say_first
+// 一样不少地照给（P5-C1 定的口径）——那是当场救人的东西，与我们要不要留档是两件事。
 import { createHash } from 'node:crypto';
 
 import type { Database } from 'better-sqlite3';
+
+import { consentRevoked } from '../lifecycle/consents';
 
 import { toSql } from '../db/time';
 
@@ -41,6 +52,12 @@ export function crisisTermsHash(matched: readonly string[]): string {
  *
  * @param caseId 无案调用时传 null——一个还没建档的人也可能正处在那一刻，
  *               那一行仍要记下来（它服务的是审计与用量，不是只服务某个案子的首行标记）。
+ * @returns 撤回过「情绪状态与危机识别记录」这项同意的人回 **null**：一行都没写。
+ *          调用方不必因此改变自己的回应——回 null 只说明"没留档"，不说明"没发生"。
+ *
+ * 【为什么按 user_id 判而不是按 case_id】无案时 caseId 就是 null，而这条通路上
+ * user_id 从来都在。按案件问的那个版本（emotionRecordingRevoked）在这里会退化成
+ * 「查不到案件 ⇒ 照常写」，于是撤回过的人只要还没建档就照记不误。
  */
 export function recordCrisisHit(
   db: Database,
@@ -51,7 +68,8 @@ export function recordCrisisHit(
     /** assessCrisis 回的 matched（去重、首现序） */
     matched: readonly string[];
   },
-): { id: number; termsHash: string } {
+): { id: number; termsHash: string } | null {
+  if (consentRevoked(db, input.userId, 'emotion')) return null;
   const termsHash = crisisTermsHash(input.matched);
   // at 交给列 DEFAULT (datetime('now'))，不从 JS 落串（ADR-002）
   const id = Number(

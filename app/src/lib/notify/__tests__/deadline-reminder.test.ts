@@ -16,6 +16,7 @@ import {
   daysUntil,
   markSent,
   planReminders,
+  scanDue,
   stageFor,
   type DueRow,
 } from '../deadline-reminder';
@@ -238,6 +239,28 @@ describe('扫描与计划', () => {
     const { uid } = seed({ kind: '开庭', dueAt: '2026-09-03' });
     db.prepare('UPDATE users SET notify_verbose=1 WHERE id=?').run(uid);
     expect(planReminders(db, NOW)[0].detailed).toBe(true);
+  });
+
+  /**
+   * 🔴 删掉的档案不再提醒。
+   *
+   * 【为什么这条要单独钉】软删到硬删之间有 30 天，**几乎一定跨过一次提醒窗口**。
+   * 不挡的形态是：用户删完档案第二天收到「你的仲裁时效还剩 2 天」——他删掉的东西反过来
+   * 找上门，而站内任何一页都查不到它，他也无处去关掉。这与删除回包那句
+   *「此刻起在所有页面与接口上都不再出现」正面冲突。
+   *
+   * 变异：scanDue 去掉 `c.deleted_at IS NULL` → 本条红。
+   */
+  test('🔴 用户删掉的档案不再进发信名单（软删即止，不等 30 天硬删）', () => {
+    const { cid } = seed({ kind: '仲裁时效', dueAt: '2026-09-03' });
+    // 前置：没删之前它确实会被提醒（不然下面的"空"说明不了任何事）
+    expect(scanDue(db).map((r) => r.case_id)).toEqual([cid]);
+    expect(planReminders(db, NOW)).toHaveLength(1);
+
+    db.prepare("UPDATE cases SET deleted_at='2026-09-01 00:00:00' WHERE id=?").run(cid);
+
+    expect(scanDue(db), '删掉的档案还在发信名单里').toEqual([]);
+    expect(planReminders(db, NOW)).toEqual([]);
   });
 });
 

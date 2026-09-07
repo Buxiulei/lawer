@@ -279,6 +279,15 @@ const EXEMPT: { file: string; line: string; why: string }[] = [
     line: '| `company_watch_set` |',
     why: '加守望这一次调用不扣钱（月费在月度巡检里按档收），这句正是为了不让人说成「已扣」',
   },
+  {
+    file: '../skill/接入说明.md',
+    line: '| `case_export` |',
+    why:
+      '整案导出是个保法第四十五条那项复制权的落地（协议五.9），**在哪条界面上都不收费**——' +
+      '它不是「在你自己的 agent 上处理所以不收」，而是这件事本身不该收钱。' +
+      '把它按 BYO 口径改写，反而会写出「网页上导出要收费」这个与实现相反的暗示。' +
+      '正本在 lib/capabilities/families/case-lifecycle.ts 的 caseExport.description。',
+  },
 ];
 
 /** 那两条 SelfHostHint 豁免的附带条件：它们必须仍与自己的条件从句同段 */

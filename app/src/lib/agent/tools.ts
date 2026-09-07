@@ -20,6 +20,7 @@ import { recordConsent } from '@/lib/db/consents';
 import { CALC_KINDS } from '@/lib/cases/claims';
 import { DEFAULT_DOMAIN, DOMAINS, domainPackOrDefault } from '@/lib/domains/registry';
 import * as store from '@/lib/db/agent';
+import { EMOTION_REVOKED_NOTE, emotionRecordingRevoked } from '@/lib/lifecycle/consents';
 import type { ToolDef } from '@/lib/llm';
 import type { AgentEventSink } from './events';
 import { citationCorrectionDirective, type CitationGuard } from './citation-guard';
@@ -780,6 +781,11 @@ const HANDLERS: Record<string, Handler> = {
   },
 
   emotion_log(args, ctx) {
+    // 撤回同意即停止写入（协议第五条第 2 款）。判据与措辞与 MCP 那条路同源
+    // （lib/lifecycle/consents）：两处各写一份的形态是，用户在设置页撤回之后，
+    // 其中一条路仍然照记不误，而两边都返回正常。
+    if (emotionRecordingRevoked(ctx.db, ctx.caseId)) return reject(EMOTION_REVOKED_NOTE);
+
     const level = inEnum(args.level, EMOTION_LEVELS);
     if (!level) return reject(`level 只能是 ${EMOTION_LEVELS.join(' / ')}`);
 

@@ -22,6 +22,8 @@ import { runMigrations } from '@/lib/db/migrate';
 import { toSql } from '@/lib/db/time';
 import type { Identity } from '@/lib/auth/identity';
 
+import { revokeConsent } from '@/lib/lifecycle/consents';
+
 import { getCapability } from '..';
 
 const SRC_ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)), '..', '..');
@@ -281,6 +283,30 @@ describe('crisis_hits：单一落库入口', () => {
     expect(row.user_id).toBe(uidA);
     expect(String(row.terms_hash)).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(row)).not.toContain('不想活');
+  });
+
+  /**
+   * 撤回「情绪状态与危机识别记录」之后：**记录停，接住不停**。
+   *
+   * 两半都要验，缺哪一半都是一次真事故：
+   *   · 只验"不落行" ⇒ 把整个 crisis_check 改成撤回即返回 hit:false 也全绿，
+   *     而那是一个正在崩溃的人拿到一段空回复；
+   *   · 只验"照给号码" ⇒ 闸根本没接上也全绿，正是本条要拦的那个 major。
+   */
+  it('撤回同意后：一行都不记，但首段与号码照给（变异：把 recordCrisisHit 里那句 consentRevoked 删掉 → 本条红）', () => {
+    // 正对照：撤回之前是记得下来的
+    call('crisis_check', { text: '我不想活了', case_id: mine });
+    expect(hits()).toBe(1);
+
+    revokeConsent(db, { userId: uidA, kind: 'emotion' });
+
+    const r = call('crisis_check', { text: '我不想活了', case_id: mine });
+    expect(hits(), '撤回之后还记了一行危机识别记录').toBe(1);
+    // 而这个人该拿到的东西一样不少
+    expect(r.hit).toBe(true);
+    expect(r.must_say_first).toBe(true);
+    expect((r.hotlines as unknown[]).length, '撤回同意把热线号码一起拦掉了').toBeGreaterThan(0);
+    expect(String(r.first_segment).length).toBeGreaterThan(10);
   });
 
   it('无 case_id 也能调，落一行且 case_id 为空（变异：把 case_id 做成必填 → 红）', () => {

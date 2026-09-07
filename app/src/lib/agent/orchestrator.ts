@@ -16,8 +16,8 @@ import { costOfUsage, type UsageTokens } from '@/lib/billing/pricing';
 import { countSubstantiveHits } from '@/lib/knowledge';
 import { CONSENT_KINDS, EMOTION_CONSENT_ASK, EMOTION_CONSENT_TOOL_REJECT } from '@/lib/consent';
 import * as store from '@/lib/db/agent';
+import { overseasModelsAllowed } from '@/lib/auth/consent';
 import { hasConsent } from '@/lib/db/consents';
-import { getModelPreferences } from '@/lib/db/otp';
 import { getRatesForModel } from '@/lib/db/modelRates';
 import { fromSql } from '@/lib/db/time';
 import { toUserFacingError } from '@/lib/errors/user-facing';
@@ -605,9 +605,13 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   const routed = input.provider
     ? { client: input.provider, route: { degraded: false } as const }
     : getProvider(taskClass, input.plan ?? 'entry', {
-        // 境外模型默认关（协议 五.5（2））：没同意的人，路由把 Claude 那两档换成
-        // 降级链上的境内最高档。开关本身在设置页，落库在 users.overseas_models。
-        overseasAllowed: getModelPreferences(db, userId).overseasModels,
+        // 境外模型默认关（协议 五.5（2）/ 五.9）：没同意、或同意后又撤回的人，
+        // 路由把 Claude 那两档换成降级链上的境内最高档。
+        // 判据只有 overseasModelsAllowed 一个（开关 ∧ 有效同意），理由见那个函数抬头。
+        // 这是全站唯一一处「按这个用户挑模型」的地方，闸挂在这里就一条也漏不掉；
+        // 挂在各调用方那里的形态是：新开一条会话入口忘了抄这一句，它照常工作、
+        // 照常出结果，只是这个人的案情又出了一次境，而没有一处会报错。
+        overseasAllowed: overseasModelsAllowed(db, userId),
       });
 
   // 预检索：用用户原话当查询，把命中的 pack 逐字放进 system prompt。

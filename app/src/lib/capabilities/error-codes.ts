@@ -44,6 +44,9 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
 
   { code: 'CONSENT_REQUIRED', group: 'gate', status: 400, when: '这次动作要收集/外发的东西需要用户的**单独同意**，而他还没给过：把资料交给站外机构（consent 必须为 true）、记录情绪与危机识别记录、采用 NBDpsy 那侧的实名结果，都在此列。本次调用零写入、零外发', recovery: '把「要做什么、为什么要、不同意会怎样」逐项念给用户听；同意由用户本人在网页上给（外发类带 consent:true 再调一次）。不要替用户点头，也不要改参数重试' },
   { code: 'REFERRAL_UNAVAILABLE', group: 'gate', status: 500, when: '服务端这会儿生成不了要外发的数据包（本机加密配置缺失），本次零外发', recovery: '这是我们的运维问题，不是用户填错了；如实告诉用户稍后再试，不要改参数重试' },
+  { code: 'CONSENT_REVOKED', group: 'gate', status: 403, when: '这个账号已经撤回了这一类信息的单独同意，服务端不再写入该类记录（本次零写入）', recovery: '不要换个工具绕开；如实告诉用户这一项已关，想重新开启要去网页设置页' },
+
+  { code: 'INVALID_CONFIRM_TOKEN', group: 'input', status: 400, when: 'confirm_token 与服务端算出的不一致（多为手抄错、或用了别的对象的令牌）', recovery: '重新不带 confirm_token 调一次拿新的确认单，不要自己拼一个令牌' },
 
   { code: 'CASE_NOT_FOUND', group: 'notfound', status: 404, when: '案件不存在，**或不属于本人**——两者刻意不区分', recovery: '先调 case_list 拿本人名下真实的 case_id，不要据此推断编号有效性' },
   { code: 'ACTION_NOT_FOUND', group: 'notfound', status: 404, when: '行动卡 id 不在本案下' },
@@ -51,6 +54,7 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
   { code: 'EVIDENCE_NOT_FOUND', group: 'notfound', status: 404, when: '证据 id 不存在或不属于本人' },
   { code: 'ORDER_NOT_FOUND', group: 'notfound', status: 404, when: '存证订单号查不到' },
   { code: 'DOSSIER_NOT_FOUND', group: 'notfound', status: 404, when: '公司档案 id 查不到' },
+  { code: 'REFERRAL_NOT_FOUND', group: 'notfound', status: 404, when: '转介 id 不存在或不属于本人——两者刻意不区分' },
   { code: 'KEY_NOT_FOUND', group: 'notfound', status: 404, when: 'api key id 不在本人名下' },
   { code: 'TOOL_NOT_FOUND', group: 'notfound', status: 404, when: '通用桥 POST /tools/{name} 里的 name 不是一条可调用的能力', recovery: '调 GET /tools 拿当前可用的能力名，不要按旧说明书里的名字重试' },
 

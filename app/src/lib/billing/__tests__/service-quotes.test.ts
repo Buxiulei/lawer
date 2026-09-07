@@ -308,6 +308,31 @@ describe('⑥ 归属闸', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM service_quotes').get()).toEqual({ n: 0 });
   });
 
+  /**
+   * 🔴 自己删掉的案件也一律 404。
+   *
+   * 软删到硬删之间有 30 天，这一段全靠读侧过滤。少这半句的形态是：用户删完档案，
+   * 用自己的 agent 照样能对它报价、确认、扣公道值——**在一个他已经删掉、站内任何一页
+   * 都看不到的案子上花钱**。归属对不等于可见，两件事。
+   *
+   * 变异：service-quotes 的归属判据换回裸 `SELECT id FROM cases WHERE id=? AND user_id=?` → 本条红。
+   */
+  test('🔴 给自己已删的案件报价同样 CASE_NOT_FOUND，不落行', () => {
+    const { db, uid, caseId } = makeDb();
+    // 前置：没删之前它确实报得出价（不然下面的 404 说明不了任何事）
+    mustOk(quoteService(db, { userId: uid, caseId, service: 'ocr', payload: { units: 1 } }));
+    db.prepare("UPDATE cases SET deleted_at='2026-09-01 00:00:00' WHERE id=?").run(caseId);
+
+    const f = mustFail(
+      quoteService(db, { userId: uid, caseId, service: 'ocr', payload: { units: 1 } }),
+    );
+    expect(f.errorCode).toBe('CASE_NOT_FOUND');
+    expect(f.status).toBe(404);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM service_quotes').get(), '已删案件还能落一张新报价').toEqual({
+      n: 1,
+    });
+  });
+
   test('确认别人的报价一律 QUOTE_NOT_FOUND，且不动那张报价', () => {
     const { db, uid, other, caseId } = makeDb();
     topUp(db, other, 1000);

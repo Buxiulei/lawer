@@ -50,6 +50,27 @@ export function resolveIdentity(
   headers: Headers,
   now: Date = new Date(),
 ): Identity | null {
+  const identity = resolveCredential(db, headers, now);
+  if (!identity) return null;
+  // 注销过的账号，任何凭据都不再认（协议五.9「注销账号」）。
+  //
+  // 【为什么闸在这里，而不是在注销那一步把凭据都作废】api key 与 OAuth 令牌确实在注销时
+  // 就停用了，但**网页登录态是一枚纯 HMAC 的 JWT，签出去就撤不回**：它在过期前的那几天里
+  // 照样解得开。少了这一句，一个刚刚注销完的人还能拿着手上那张 token 继续建案、继续对话，
+  // 而页面上一切正常。多出来的代价是每个已鉴权请求一次主键查询。
+  return isCancelled(db, identity.uid) ? null : identity;
+}
+
+/** 注销过没有。单独一个函数是为了让上面那句话读得出意图（而不是一段裸 SQL）。 */
+function isCancelled(db: Database, uid: number): boolean {
+  const row = db.prepare('SELECT cancelled_at FROM users WHERE id = ?').get(uid) as
+    | { cancelled_at: string | null }
+    | undefined;
+  return Boolean(row?.cancelled_at);
+}
+
+/** 凭据本身认不认（不管账号状态）。resolveIdentity 在它之上再加一道注销闸。 */
+function resolveCredential(db: Database, headers: Headers, now: Date): Identity | null {
   const token = extractBearer(headers);
   if (!token) return null;
 

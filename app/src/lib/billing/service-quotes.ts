@@ -28,6 +28,7 @@ import { ENTITLEMENT_KIND, consumeEntitlement } from './entitlements';
 import { featureLabel } from './features';
 import { gongdaoExhaustedMessage, gongdaoSettle } from './index';
 import { readPrice, type PriceKey } from './pricing-config';
+import { findOwnedCase } from '../db/cases';
 import { nowSql, toSql } from '../db/time';
 
 /** service_quotes.service 的值域（= 全部走报价流的服务，含尚未迁到本文件的两个）。 */
@@ -184,9 +185,7 @@ export function quoteService(
     );
   }
 
-  const owns = db
-    .prepare('SELECT id FROM cases WHERE id=? AND user_id=?')
-    .get(caseId, userId) as { id: number } | undefined;
+  const owns = findOwnedCase(db, caseId, userId);
   if (!owns) {
     return fail(
       404,

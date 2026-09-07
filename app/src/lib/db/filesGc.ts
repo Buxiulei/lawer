@@ -4,13 +4,19 @@
 // 本模块找出无人引用的 files 行并回收；CLI 入口在仓库根 scripts/gc-files.ts
 // （那里只做「定位库 + dry-run/真删 + 退出码」，逻辑全在这里，可单测）。
 //
-// 引用者清单（2026-08-20 逐条核对 migrate.ts 全部 `REFERENCES files`，共 3 处）：
-//   ① evidence.file_id            NOT NULL REFERENCES files(id)
-//   ② attestations.cert_pdf_file_id      REFERENCES files(id)   —— 可空
-//   ③ company_docs.file_id        NOT NULL REFERENCES files(id)
+// 引用者清单（2026-09-07 逐条核对 migrate.ts 全部 `REFERENCES files`，共 5 处）：
+//   ① evidence.file_id                   NOT NULL REFERENCES files(id)
+//   ② attestations.cert_pdf_file_id               REFERENCES files(id)   —— 可空
+//   ③ company_docs.file_id               NOT NULL REFERENCES files(id)
+//   ④ evidence_upload_tokens.file_id              REFERENCES files(id)   —— 可空，字节落库后回填
+//   ⑤ file_download_tokens.file_id       NOT NULL REFERENCES files(id)
 // 漏一个引用者 = 误删用户证据的密文文件，且 files.sha256 唯一、盘上文件删了不可复原。
-// 本文件最大的风险点就在这份清单：**日后任何表新增 files 外键，必须同步加进 REFERENCERS**，
-// 加表时请再跑一次 `grep -n 'REFERENCES files' app/src/lib/db/migrate.ts` 核对。
+// **而在开着 foreign_keys 的进程里（lib/db/client 就是），漏一个的实际表现更坏**：
+// DELETE 撞外键 → 整个事务回滚 → 本轮已经 unlink 掉的那几份低 id 孤儿的库行原地复活，
+// 正是本文件抬头要避免的「有记录无密文」。④⑤ 就是这样漏掉的（2026-09-07 复审）。
+//
+// 【这份清单不靠人记】__tests__/filesGc.test.ts 的「结构守卫」直接从 migrate.ts 的建表语句里
+// 抽出全部 `REFERENCES files(id)`，与下面这份逐条比对，漏一张会当场点名是哪张表哪一列。
 import Database from 'better-sqlite3';
 
 import { openCliDb, rethrowIfSchemaStale } from './cli-open';
@@ -25,6 +31,8 @@ export const REFERENCERS: readonly [table: string, column: string][] = [
   ['evidence', 'file_id'],
   ['attestations', 'cert_pdf_file_id'],
   ['company_docs', 'file_id'],
+  ['evidence_upload_tokens', 'file_id'],
+  ['file_download_tokens', 'file_id'],
 ];
 
 /** 「无任何引用者引用 f.id」的条件式，供查孤儿与删前重验共用一套口径。 */
@@ -32,11 +40,20 @@ const NO_REFERENCE = REFERENCERS.map(
   ([t, c]) => `NOT EXISTS (SELECT 1 FROM ${t} x WHERE x.${c} = f.id)`,
 ).join('\n     AND ');
 
+const ORPHAN_COLUMNS = 'f.id, f.sha256, f.size, f.enc_path, f.created_at';
+
 const SQL_ORPHANS = `
-  SELECT f.id, f.sha256, f.size, f.enc_path, f.created_at
+  SELECT ${ORPHAN_COLUMNS}
     FROM files f
    WHERE ${NO_REFERENCE}
    ORDER BY f.id
+`;
+
+/** 单行版：同一份 NO_REFERENCE，只是把范围收到一个 id 上（候选集回收用）。 */
+const SQL_ORPHAN_BY_ID = `
+  SELECT ${ORPHAN_COLUMNS}
+    FROM files f
+   WHERE f.id = ? AND ${NO_REFERENCE}
 `;
 
 const SQL_STILL_ORPHAN = `
@@ -92,6 +109,47 @@ export function gcOrphanFiles(
   });
 
   return run(findOrphanFiles(db));
+}
+
+/**
+ * 只在**候选集**里回收孤儿：候选集之外的 files 行一律不看、不删。
+ *
+ * 【为什么要有这个而不是只有全库版】全库版问的是「此刻谁没人引用」，而"没人引用"这个判据
+ * 只认表上的外键——**一份 file_id 只写在别处（比如一段加密 JSON）里的文件，在它眼里就是垃圾**。
+ * 人工 CLI 那样用没问题（dry-run 默认、有人看着输出）；接成每小时一轮的常驻任务就不行：
+ * 那等于把「清单漏一处」的代价从"某天有人跑脚本"变成"一小时内自动、永久、无人察觉"。
+ * 所以常驻任务只回收**它自己这一轮删掉引用者的那批文件**（见 lib/jobs/retention-worker ④）。
+ *
+ * 判据仍是同一份 NO_REFERENCE：候选集只决定"看哪些行"，不决定"删不删"——
+ * 跨案件共享的同一份文件（sha256 全局去重）在别的案子那里还有引用，照样删不掉。
+ *
+ * @param candidates 本轮释放出来的 file_id（可重复、可含已不存在的行，内部去重并逐行重验）
+ */
+export function gcOrphanFilesAmong(
+  db: Database.Database,
+  candidates: Iterable<number>,
+  opts: { deleteFromDisk: (encPath: string) => void },
+): GcResult {
+  const pick = db.prepare(SQL_ORPHAN_BY_ID);
+  const del = db.prepare('DELETE FROM files WHERE id = ?');
+
+  const run = db.transaction((ids: number[]): GcResult => {
+    let removed = 0;
+    let freedBytes = 0;
+    for (const id of ids) {
+      // 取不到 = 还有人引着，或这一行已经不在了。两种都跳过，不必区分。
+      const row = pick.get(id) as OrphanFile | undefined;
+      if (!row) continue;
+      if (del.run(id).changes !== 1) continue;
+      opts.deleteFromDisk(row.enc_path);
+      removed += 1;
+      freedBytes += row.size;
+    }
+    return { removed, freedBytes };
+  });
+
+  // 去重 + 升序：同一份文件被两处释放时只处置一次，顺序稳定便于判据逐字断言。
+  return run([...new Set(candidates)].sort((a, b) => a - b));
 }
 
 /**

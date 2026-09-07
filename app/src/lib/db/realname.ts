@@ -2,6 +2,9 @@
 // realname_verifications 表的封装（spec §6：lib/db 是唯一 SQL 层）。表结构见 migrate.ts。
 //
 // 只追加 + 只读：一次核验一行，用户改名/换证 = 新一行，历史核验记录不改不删。
+// **唯一的例外是注销**：这几行里装着姓名与证件号（见下面 raw_meta_enc），而注销回包
+// 对用户说的是「姓名与证件号已经抹掉」。所以 deleteAllByUser 存在，且只许注销那条路调
+// （lib/lifecycle/identity-erase，结构守卫钉着调用方名单）。
 // users.auth_status 是本表结论的物化缓存，由 lib/realname 域层同步——本文件不碰 users。
 //
 // raw_meta_enc 是三方核验原始报文的**密文**（内含姓名身份证，争议时要能回溯）。
@@ -53,6 +56,26 @@ export function latestByUser(db: Database, userId: number): RealnameVerification
   return db
     .prepare('SELECT * FROM realname_verifications WHERE user_id = ? ORDER BY id DESC LIMIT 1')
     .get(userId) as RealnameVerificationRow | undefined;
+}
+
+/** 这个人名下全部核验流水（旧到新）。注销时要先逐行问出材料 file_id，再删行。 */
+export function listByUser(db: Database, userId: number): RealnameVerificationRow[] {
+  return db
+    .prepare('SELECT * FROM realname_verifications WHERE user_id = ? ORDER BY id')
+    .all(userId) as RealnameVerificationRow[];
+}
+
+/**
+ * 删掉这个人名下全部核验流水。**只给注销/到期清理用**（见文件头那条例外）。
+ *
+ * 为什么是删行而不是把 cert_no 与 raw_meta_enc 置空：anonymizeUser 连 auth_status 都要
+ * 退回「未认证」，理由是留着它等于留了一句「这个空壳曾经是个实名用户」。留着一行
+ * provider='passport'、created_at=某日 的空流水，说的是同一句话。
+ *
+ * @returns 删掉的行数（幂等：再删一次回 0）
+ */
+export function deleteAllByUser(db: Database, userId: number): number {
+  return db.prepare('DELETE FROM realname_verifications WHERE user_id = ?').run(userId).changes;
 }
 
 /** 按 id 取一行。护照通道的人工审核要先读出材料哈希与信封，再决定落不落定。 */

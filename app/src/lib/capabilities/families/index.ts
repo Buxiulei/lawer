@@ -9,6 +9,7 @@ import { meGet, quoteList } from './account';
 import { actionComplete, actionList } from './actions';
 import { actionCreate } from './actions-write';
 import { caseFacts, caseGet, caseList, caseUpdate, intakeSubmit } from './case';
+import { caseDelete, caseExport } from './case-lifecycle';
 import { claimCalc, claimsList, claimsUpsert } from './claims';
 import {
   companyGraphGet,
@@ -41,7 +42,7 @@ import {
   evidenceVoid,
 } from './evidence-write';
 import { citationCheck, knowledgeGet, knowledgeSearch } from './knowledge';
-import { referralCreate, referralList } from './referral';
+import { referralCreate, referralDeleteRequest, referralList } from './referral';
 import { caseReportGet, caseReportUpdate } from './report';
 import { timelineAdd, timelineList, timelineMilestone } from './timeline';
 
@@ -105,4 +106,7 @@ export const CAPABILITIES: Capability[] = [
   referralList,
   evidenceVoid,
   evidenceBriefRegenerate,
+  caseDelete,
+  caseExport,
+  referralDeleteRequest,
 ];

@@ -29,6 +29,16 @@ export interface CaseRow {
   position: string | null;
   /** 合同签了几次（只签过一次 / 续签过一次 / …），首诊原样记录 */
   contract_count: string | null;
+  /**
+   * 用户按下删除的时刻（软删标记）；NULL = 没删过。
+   * 非空的行**在本文件的两个读入口里根本取不出来**（findCaseById / listCasesByUser），
+   * 所以业务侧读到的 CaseRow 这一列恒为 NULL；要读被删的行走 findCaseByIdIncludingDeleted。
+   *
+   * 【为什么可选】库里这一列一定在（迁移建的），但仓里有若干处手搓 CaseRow 字面量的
+   * 纯函数判据——它们喂给的是「业务层看到的案件」，而业务层看到的案件从定义上就没被删过。
+   * 写成必填只会逼那些判据补一个恒为 null 的字段，读起来像是它有什么意义。
+   */
+  deleted_at?: string | null;
   created_at: string;
 }
 
@@ -109,11 +119,56 @@ export function insertCase(
   return Number(info.lastInsertRowid);
 }
 
+/**
+ * 按 id 取一个案件。**已软删的行在这里取不出来**（回 undefined）。
+ *
+ * 【为什么过滤写在这一处，而不是让每个调用方各加一句 `AND deleted_at IS NULL`】
+ * 本函数是 lib/cases.assertOwned 的唯一取数口，而 assertOwned 是全部按 case_id 的读写
+ * 必经的那道门。过滤放在这里，一条也漏不掉；让四十几个调用方各自记得加一句的形态是：
+ * 忘掉的那一处照常返回 200，用户已经删掉的案子从那个入口仍然读得出来、写得进去，
+ * 而没有任何一处会报错。
+ */
 export function findCaseById(db: Database, caseId: number): CaseRow | undefined {
+  return db.prepare('SELECT * FROM cases WHERE id = ? AND deleted_at IS NULL').get(caseId) as
+    | CaseRow
+    | undefined;
+}
+
+/**
+ * 「这个 case_id 是不是这个人的、且还在」——**按 case_id 取数的归属判据只有这一份**。
+ * 取不到（不存在 / 不是本人的 / 已被删）一律 undefined，调用方回同一个 404，三者不区分。
+ *
+ * 【为什么要有它，findCaseById 还不够】lib/cases.assertOwned 走的是 findCaseById，
+ * 那条路上的四十几个入口都对。问题出在**不经 lib/cases 的那几处**（按量报价、文书审查、
+ * crisis_check 带案调用、来文解读）：它们各自手写了一句
+ * `SELECT id FROM cases WHERE id=? AND user_id=?`——归属对，但少了软删那半句，
+ * 于是用户删掉的案子在这些接口上照样读得出、照样能发起付费动作，而删除回包答应过
+ * 「在所有页面与接口上都不再出现」。独立写 N 次就会忘 N 次，所以收成这一个函数，
+ * 并由 __tests__/soft-delete-scope.test.ts 扫源码机检：还有谁在裸查 cases 就点谁的名。
+ */
+export function findOwnedCase(db: Database, caseId: number, userId: number): CaseRow | undefined {
+  return db
+    .prepare('SELECT * FROM cases WHERE id = ? AND user_id = ? AND deleted_at IS NULL')
+    .get(caseId, userId) as CaseRow | undefined;
+}
+
+/**
+ * 连已软删的行一起取。**只有生命周期那条路该用它**（删除本身要幂等、清理任务要按
+ * deleted_at 找到期的行）。业务读一律用 findCaseById——两个函数同名不同义会让人随手拿错，
+ * 所以这个名字写得又长又刺眼。
+ */
+export function findCaseByIdIncludingDeleted(db: Database, caseId: number): CaseRow | undefined {
   return db.prepare('SELECT * FROM cases WHERE id = ?').get(caseId) as CaseRow | undefined;
 }
 
 export function listCasesByUser(db: Database, userId: number): CaseRow[] {
+  return db
+    .prepare('SELECT * FROM cases WHERE user_id = ? AND deleted_at IS NULL ORDER BY id DESC')
+    .all(userId) as CaseRow[];
+}
+
+/** 某人名下**全部**案件，含已软删的（注销时要把它们一并标删）。 */
+export function listCasesByUserIncludingDeleted(db: Database, userId: number): CaseRow[] {
   return db
     .prepare('SELECT * FROM cases WHERE user_id = ? ORDER BY id DESC')
     .all(userId) as CaseRow[];

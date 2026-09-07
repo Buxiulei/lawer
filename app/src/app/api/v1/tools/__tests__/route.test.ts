@@ -260,6 +260,11 @@ const MINIMAL_ARGS: Record<string, Record<string, unknown>> = {
   // 转介
   referral_create: { case_id: '#case', consent: true },
   referral_list: { case_id: '#case' },
+  // 数据生命周期。case_delete **刻意不带 confirm_token**：那一步只出确认单、零写入，
+  // 所以这张最小入参表不会在每次全量跑里把甲的案子删掉（带上就会真删）。
+  case_delete: { case_id: '#case' },
+  case_export: { case_id: '#case' },
+  referral_delete_request: { referral_id: 999_999 },
 };
 
 /** 把 '#case' / '#evidence' 换成本轮的真实 id */
