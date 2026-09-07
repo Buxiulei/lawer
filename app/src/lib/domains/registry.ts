@@ -574,6 +574,18 @@ export function assertDomainPack(pack: DomainPack): void {
     str(`intakeSchema[${f.key}].key`, f.key);
     str(`intakeSchema[${f.key}].param`, f.param);
     str(`intakeSchema[${f.key}].description`, f.description);
+    // 【归属字段不许出现在首诊表里】caseId / userId 来自**调用者身份**（case_id 换来的号、
+    // 会话里的 uid），不是用户填的答案。工具壳把首诊表派生出来的那份映射
+    // （intakeArgsToInput）展开进入参对象，键同名就会盖掉壳填好的归属——
+    // 于是「这条首诊记到谁名下」由调用方的入参说了算，是越权，而两边各自看都正常：
+    // 说明书上多了一个参数、服务端老老实实照着填的值落库。
+    // 同理 `case_id`：它由 intakeInputSchema 自己声明，包里再声明一次就是两份对外定义。
+    if (f.key === 'caseId' || f.key === 'userId') {
+      missing.push(`intakeSchema[${f.key}].key 用了归属保留字（归属来自调用者身份，不能由入参覆盖）`);
+    }
+    if (f.param === 'case_id') {
+      missing.push(`intakeSchema[${f.key}].param 用了保留参数名 case_id（它由首诊 schema 自己声明）`);
+    }
     if (f.required && (!f.errorCode || !f.invalidMessage)) {
       missing.push(`intakeSchema[${f.key}] 必填却没给 errorCode/invalidMessage`);
     }
