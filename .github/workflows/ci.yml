@@ -84,11 +84,21 @@ jobs:
       - run: pip install pyyaml pytest
       # 全程离线：三套判据都在临时目录里造自己的知识库，download() 被换成假货
       - run: python -m pytest scripts/tests -q
-      # 现库本身也要过：pytest 那条跑的是临时副本，这三条跑的是**仓库里躺着的这一份**。
-      # ① strict 生成必须绿；② 生成出来的 index.json 必须与提交进仓库的那份逐字节相同
-      #（否则就是有人手改过索引、或改了卡没重跑生成器——那份索引会静默地与卡片分叉）；
-      # ③ 全库引文与官方原件逐条对得上。三条都不联网（原件已存档在 knowledge/sources/）。
-      - run: python3 scripts/gen-knowledge-index.py
+      # 现库本身也要过：pytest 那条跑的是临时副本，下面这几条跑的是**仓库里躺着的这一份**。
+      # ① 登记簿同源审计：每条登记的 raw/text/元数据是不是同一份文件（2026-09-07 新增，
+      #    起因是 statute-gerensuodeshuifa：raw 是 flk 的 552 字节 SPA 空壳、text 是从
+      #    chinatax 另抓的正文，而 verify-quotes 只读 text，于是全链路照常全绿）；
+      # ② 生成出来的 index.json 必须与提交进仓库的那份逐字节相同（否则就是有人手改过索引、
+      #    或改了卡没重跑生成器——那份索引会静默地与卡片分叉）；
+      # ③ 全库引文（法条 + 判例）与官方原件逐条对得上。全部不联网（原件已存档在 knowledge/sources/）。
+      - run: python3 scripts/audit-sources.py
+      # 【为什么这里是 --no-strict，而 pytest 那边钉着"唯一的红是 (f)"】
+      # 守卫 (f)（判例卡必须有核得过的 case_quotes）本轮先落机制，42 张存量判例卡的内容
+      # 是下一阶段的作业 ⇒ 现库在 strict 下必红在 (f)。把这一步改成 --no-strict 是**记账**，
+      # 不是放弃：(b)(c)(d)(e)(g)(h) 有任何一条开始红，
+      # scripts/tests/test_gen_guards.py::test_real_library_red_is_only_the_case_quotes_gap
+      # 会在上面那个 pytest 步骤里当场失败。补完 case_quotes 后把这里的 --no-strict 去掉。
+      - run: python3 scripts/gen-knowledge-index.py --no-strict
       - run: git diff --exit-code knowledge/index.json
       - run: python3 scripts/verify-quotes.py
 
