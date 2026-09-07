@@ -148,6 +148,11 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
       'lib/cases/drafts.ts', // 文书种类与对外清单（在 DomainPack.docKinds / outboundDocKinds）
       'lib/paste/parse.ts', // 粘贴回填的逐条校验（词表按案件领域取）
       'app/_ui/bootstrap.ts', // 低调模式词典（在 DomainPack.copy.neutral）
+      // ↓ P4-W3 新增的共用层：敏感级三个出口读的那一份声明（内容全在 DomainPack.sensitive）。
+      //   它天生就该进这份名单——这个文件里出现任何一个领域词，都意味着"哪一类信息要保护、
+      //   保护它的那句话怎么说"被写死在了共用层，而第二个声明敏感级的领域接进来时，
+      //   它的分享页会印着上一个行当的措辞，且照常返回 200。
+      'lib/sensitive.ts',
     ].map((f) => path.join(SRC_ROOT, f)),
   ];
 

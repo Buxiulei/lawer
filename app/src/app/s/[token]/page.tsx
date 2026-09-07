@@ -67,6 +67,14 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
           />
         )}
 
+        {/* 敏感级那句话排在正文与明细**之前**：排在后面的形态是，读的人先看见一串
+            〔已脱敏〕、以为出了故障，翻到底才读到解释——而多数人翻不到底就去问人了。 */}
+        {result.state === 'ok' && result.view.redact_notice !== null && (
+          <p className="prose-measure mb-5 rounded-lg border border-line bg-surface p-4 text-[13px] leading-6 text-ink-2">
+            {result.view.redact_notice}
+          </p>
+        )}
+
         {result.state === 'ok' && result.view.body !== null && (
           // whitespace-pre-wrap：正文是纯文本，换行与空行就是作者排的样子，不许被折没
           <article className="prose-measure whitespace-pre-wrap text-[15px] leading-8 text-ink">

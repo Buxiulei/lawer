@@ -36,6 +36,7 @@ import { findFileById } from '@/lib/db/evidence';
 import { renderDraftPdf } from '@/lib/evidence/sidecar-client';
 import { storeBytes } from '@/lib/evidence/files';
 import { DOWNLOAD_TOKEN_TTL_MS, issueDownloadToken } from '@/lib/files/download-token';
+import { shareRedactorFor } from '@/lib/sensitive';
 
 /** 目前只支持 pdf。留成枚举而不是布尔，是因为 docx 是可预见的下一个。 */
 export const DRAFT_EXPORT_FORMATS = ['pdf'] as const;
@@ -327,13 +328,22 @@ export async function exportDraft(
     }
   }
 
+  // 【敏感级：导出去的那份也脱敏】(设计稿 §16) 导出 PDF 与免登录分享是同一类东西——
+  // 交出去就不在我们手里。事实卡那一处退回元数据、分享页那一处脱敏，而导出忘了的形态是：
+  // 三个出口里最容易被转发的那个反而是原文，且它照常返回 200、PDF 里什么都不缺。
+  // 没声明敏感级的领域这里逐字不变（脱敏器原样返回）。
+  const redactor = shareRedactorFor(db, draft.case_id);
+  const shareSafe = redactor.text(body);
+  const pdfBody =
+    redactor.notice === null ? body : `${shareSafe.text ?? body}\n\n---\n\n> ${redactor.notice}`;
+
   // 渲染。失败到此为止：报价那一行留着（未确认 = 未扣费），到期自然作废。
   let pdf: Buffer;
   try {
     pdf = await renderDraftPdf({
       title: draft.title,
       subtitle: null,
-      markdown: body,
+      markdown: pdfBody,
       footer_note: null,
     });
   } catch (err) {

@@ -49,6 +49,7 @@ const FULL_SENSITIVE = {
   subject: '第三人',
   factsNotice: '这一节里有第三人的敏感信息，逐条核对再用',
   redactNotice: '本页已做脱敏处理',
+  aliasRoles: ['签约主体'],
 } as const;
 
 const ORIGINAL_ENV = process.env[DOMAINS_ENABLED_ENV];
@@ -119,6 +120,7 @@ describe('assertDomainPack：包必须实现全部字段', () => {
     ['sensitive.subject', { sensitive: { ...FULL_SENSITIVE, subject: '' } }],
     ['sensitive.factsNotice', { sensitive: { ...FULL_SENSITIVE, factsNotice: '' } }],
     ['sensitive.redactNotice', { sensitive: { ...FULL_SENSITIVE, redactNotice: '   ' } }],
+    ['sensitive.aliasRoles', { sensitive: { ...FULL_SENSITIVE, aliasRoles: [] } }],
     [
       'copy.neutral.title',
       { copy: { ...LABOR.copy, neutral: { ...LABOR.copy.neutral, title: '' } } },
