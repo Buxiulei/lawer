@@ -9,6 +9,8 @@
 // 于是收尾动作（回收密文文件、记账）跑两遍，而第二遍面对的是一个已经不存在的案子。
 import type { Database } from 'better-sqlite3';
 
+import { REFERENCERS } from './filesGc';
+
 // ───────────────────────────── 案件软删 / 硬删 ─────────────────────────────
 
 /**
@@ -88,7 +90,8 @@ export function purgeCase(db: Database, caseId: number, cutoff: string): boolean
 export const DEAD_TOKEN_GRACE_HOURS = 24;
 
 /**
- * 删掉已经死透（过期满 DEAD_TOKEN_GRACE_HOURS）的一次性上传/下载令牌行，返回删了几行。
+ * 删掉已经死透（过期满 DEAD_TOKEN_GRACE_HOURS）的一次性上传/下载令牌行。
+ * 返回删了几行 + 这几行原本引着的 file_id（调用方据此把随之无人引用的密文一并回收）。
  *
  * 【为什么清理任务非删它们不可】这两张表的 file_id 是 files 的外键（见 lib/db/filesGc 的
  * REFERENCERS），而它们**从来没有别处删行**：签一条整案副本的下载地址，那份 zip 就永远
@@ -102,14 +105,56 @@ export function purgeExpiredFileTokens(
   db: Database,
   now: string,
   graceHours: number = DEAD_TOKEN_GRACE_HOURS,
-): number {
+): { removed: number; fileIds: number[] } {
   let removed = 0;
+  const fileIds: number[] = [];
   for (const table of ['evidence_upload_tokens', 'file_download_tokens']) {
-    removed += db
-      .prepare(`DELETE FROM ${table} WHERE expires_at <= datetime(?, ?)`)
-      .run(now, `-${graceHours} hours`).changes;
+    // RETURNING 与 DELETE 是同一句：删掉的正是回来的那几行。分两句写（先 SELECT 再 DELETE）
+    // 就有了两份口径，而中间那一瞬新签的令牌会让两份不一致——回收侧多一个 id 就是误删。
+    const gone = db
+      .prepare(`DELETE FROM ${table} WHERE expires_at <= datetime(?, ?) RETURNING file_id`)
+      .all(now, `-${graceHours} hours`) as { file_id: number | null }[];
+    removed += gone.length;
+    for (const r of gone) if (r.file_id != null) fileIds.push(r.file_id);
   }
-  return removed;
+  return { removed, fileIds };
+}
+
+/**
+ * REFERENCERS 里「自带 case_id 列」的那几张表——案件一硬删，它们的行随级联一起没，
+ * 于是它们引着的密文文件在那一刻起可能变成无人引用。
+ *
+ * 【为什么是推出来的，不是手写三张表名】filesGc.REFERENCERS 是「谁引用了 files」的唯一真源，
+ * 这里再手抄一份的形态是：日后新增一张带 case_id 的引用表，抄漏了它——清理任务照常跑完、
+ * 回包上一切正常，只有那份该删的密文永远留在盘上（协议五.8 对它就是假的）。
+ * 挂不挂 case_id 由 PRAGMA 现问，两处不可能对不上。
+ */
+export function caseScopedReferencers(db: Database): readonly (readonly [string, string])[] {
+  return REFERENCERS.filter(([table]) =>
+    (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).some(
+      (col) => col.name === 'case_id',
+    ),
+  );
+}
+
+/**
+ * 这个案子名下、会随硬删一起失去引用者的 file_id。
+ *
+ * **必须在硬删之前问**：级联一旦发生，这些行连同它们的 file_id 就都不在了，
+ * 那份密文从此无人引用、也无人知道它是谁释放出来的。
+ *
+ * 返回的只是**候选**：同一份文件（sha256 全局去重）可能还被别的案件引着，
+ * 删不删由 filesGc 的「无人引用」判据在回收那一刻定。
+ */
+export function listCaseFileIds(db: Database, caseId: number): number[] {
+  const parts = caseScopedReferencers(db).map(
+    ([table, col]) => `SELECT ${col} AS file_id FROM ${table} WHERE case_id = ? AND ${col} IS NOT NULL`,
+  );
+  if (parts.length === 0) return [];
+  const rows = db.prepare(parts.join('\n     UNION\n     ')).all(...parts.map(() => caseId)) as {
+    file_id: number;
+  }[];
+  return rows.map((r) => r.file_id);
 }
 
 // ───────────────────────────── 账号注销 / 清理 ─────────────────────────────

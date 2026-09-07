@@ -40,7 +40,14 @@ interface BillableWatch {
   notify_verbose: number;
 }
 
-/** 扫出所有活跃盯梢（连同其所属用户的收件人信息）。paused 的不在此列（已停盯，不再计费）。 */
+/**
+ * 扫出所有活跃盯梢（连同其所属用户的收件人信息）。paused 的不在此列（已停盯，不再计费）。
+ *
+ * 【软删的案件不在此列】案件删除到硬删之间有 30 天，**几乎一定跨过一个月初**：
+ * 不挡的形态是用户 9 月 20 日删档案、10 月 1 日照样被扣一档月费；账号注销的人更糟——
+ * 名下案件在注销那一刻全被标删，而他余额不足时这里会记欠费、发欠费通知，
+ * 而他已经登录不进来看到这一切。**盯梢的标的没了，收费就该停**，不必等硬删。
+ */
 function scanActiveWatches(db: Database.Database): BillableWatch[] {
   return db
     .prepare(
@@ -49,7 +56,7 @@ function scanActiveWatches(db: Database.Database): BillableWatch[] {
          FROM company_watches w
          JOIN cases c ON c.id = w.case_id
          JOIN users u ON u.id = c.user_id
-        WHERE w.status = 'active'
+        WHERE w.status = 'active' AND c.deleted_at IS NULL
         ORDER BY w.id`,
     )
     .all() as BillableWatch[];

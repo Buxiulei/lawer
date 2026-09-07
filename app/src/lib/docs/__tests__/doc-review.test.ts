@@ -330,6 +330,37 @@ describe('⑦ 别人的解读一律「不存在」', () => {
     // 正对照：本人读得到，断言不是落在「谁都读不到」上
     expect(listDocs(db, caseId, uid)).toHaveLength(1);
   });
+
+  /**
+   * 🔴 自己删掉的案子上的解读，本人也读不到了。
+   *
+   * 删除回包答应的是「这份档案与它的全部内容，此刻起在**所有页面与接口上**都不再出现」，
+   * 而硬删要等 30 天。少这半句的形态是：用户删完档案，用自己的 agent 调
+   * GET /api/v1/docs?case_id=已删案，把这个案子的全部来文解读一条不落地拿回来。
+   *
+   * 变异：read.ts 两处子查询去掉 `AND deleted_at IS NULL` → 本条红。
+   */
+  test('🔴 案件被软删之后，本人也读不到它名下的解读', async () => {
+    const { db, uid, caseId } = makeDb();
+    const llm = fakeLlm();
+    const quoted = mustOk(
+      await submitDoc(db, { userId: uid, caseId, text: NOTICE, docKind: '解除通知' }, { llm }),
+    ) as DocQuoteResult & { ok: true };
+    const done = mustOk(
+      await submitDoc(
+        db,
+        { userId: uid, caseId, text: NOTICE, docKind: '解除通知', quoteId: quoted.quote.quote_id },
+        { llm },
+      ),
+    ) as DocReviewResult & { ok: true };
+    // 前置：删之前本人是读得到的
+    expect(getDoc(db, done.doc.id, uid)).not.toBeNull();
+
+    db.prepare("UPDATE cases SET deleted_at='2026-09-01 00:00:00' WHERE id=?").run(caseId);
+
+    expect(getDoc(db, done.doc.id, uid), '已删案件的解读详情仍读得到').toBeNull();
+    expect(listDocs(db, caseId, uid), '已删案件的解读列表仍读得到').toEqual([]);
+  });
 });
 
 // ⑧ 报价与这次请求对不上：钱必须原路退回，且账上两笔挂同一个功能名。

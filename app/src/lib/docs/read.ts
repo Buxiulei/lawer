@@ -123,12 +123,13 @@ function toListItem(row: DocRow): DocListItem {
  *
  * 归属由 cases.user_id 判，**不是**由 company_docs 自己判：这张表没有 user_id 列，
  * 拿 case_id 直接查等于谁知道案件号谁就能读。
+ * 已软删的案件同样取不出来（`deleted_at IS NULL`）——删除回包答应的是"所有接口上都不再出现"。
  */
 export function listDocs(db: Database, caseId: number, userId: number): DocListItem[] {
   const rows = db
     .prepare(
       `SELECT ${DOC_COLUMNS} FROM company_docs d
-        WHERE d.case_id = ? AND d.case_id IN (SELECT id FROM cases WHERE user_id = ?)
+        WHERE d.case_id = ? AND d.case_id IN (SELECT id FROM cases WHERE user_id = ? AND deleted_at IS NULL)
         ORDER BY d.id DESC`,
     )
     .all(caseId, userId) as DocRow[];
@@ -144,7 +145,7 @@ export function getDoc(db: Database, docId: number, userId: number): DocDetail |
   const row = db
     .prepare(
       `SELECT ${DOC_COLUMNS} FROM company_docs d
-        WHERE d.id = ? AND d.case_id IN (SELECT id FROM cases WHERE user_id = ?)`,
+        WHERE d.id = ? AND d.case_id IN (SELECT id FROM cases WHERE user_id = ? AND deleted_at IS NULL)`,
     )
     .get(docId, userId) as DocRow | undefined;
   if (!row) return null;

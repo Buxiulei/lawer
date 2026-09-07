@@ -22,7 +22,7 @@ import path from 'node:path';
 
 import type Database from 'better-sqlite3';
 
-import { gcOrphanFiles } from '../db/filesGc';
+import { gcOrphanFilesAmong } from '../db/filesGc';
 import { finishRun, startRun } from '../db/job-runs';
 import * as lifecycle from '../db/lifecycle';
 import { toSql } from '../db/time';
@@ -43,7 +43,7 @@ export interface RetentionResult {
   cases_purged: number;
   /** 做完最终清理的账号数 */
   users_purged: number;
-  /** 顺带回收的无引用密文文件数 */
+  /** 顺带回收的密文文件数（只在本轮释放出来的那批里挑，且仍要无人引用） */
   files_removed: number;
   freed_bytes: number;
   /** 顺带删掉的过期一次性令牌行数（它们是密文文件的引用者，不删就回收不到） */
@@ -98,10 +98,18 @@ export function runRetentionOnce(
   };
 
   try {
+    // 本轮**自己删掉引用者**的那些 file_id。回收只在这个集合里挑（见下面 ④）。
+    const released: number[] = [];
+
     // ① 到期的案件。硬删即级联带走它的全部子表（见 lib/db/lifecycle.purgeCase 的说明）。
     for (const due of lifecycle.listCasesDueForPurge(db, cutoff, batch)) {
       try {
-        if (lifecycle.purgeCase(db, due.id, cutoff)) result.cases_purged += 1;
+        // 先问后删：级联一发生，这个案子引着哪些密文就再也问不出来了。
+        const files = lifecycle.listCaseFileIds(db, due.id);
+        if (lifecycle.purgeCase(db, due.id, cutoff)) {
+          result.cases_purged += 1;
+          released.push(...files);
+        }
       } catch (err) {
         result.failed += 1;
         console.warn(`[retention] 案件 ${due.id} 没能删掉：${(err as Error).message}`);
@@ -130,15 +138,24 @@ export function runRetentionOnce(
     //    它们是 files 的外键引用者，一条签给整案副本的下载地址会把那份装着全部证据原件的
     //    zip 永远钉住（那张表没有任何一处删行）。不删它，下面那一步对这份密文永远无能为力，
     //    协议五.8 的三十日承诺对它就是假的。判据口径见 lib/db/lifecycle.purgeExpiredFileTokens。
-    result.tokens_purged = lifecycle.purgeExpiredFileTokens(db, nowStr);
+    const deadTokens = lifecycle.purgeExpiredFileTokens(db, nowStr);
+    result.tokens_purged = deadTokens.removed;
+    released.push(...deadTokens.fileIds);
 
-    // ④ 回收无人引用的密文文件。
+    // ④ 回收本轮释放出来的密文文件里、已经无人引用的那些。
     //
-    // 【为什么调全局回收，而不是「只删这个案子的那几份」】files 是内容寻址的裸资源，
-    // 同一份文件可能被别的案件引用着（按 sha256 全局去重）。按案件删就会把别人的证据
+    // 【为什么删不删仍由「无人引用」判，而不是「这个案子的就删」】files 是内容寻址的裸资源，
+    // 同一份文件可能被别的案件引用着（按 sha256 全局去重）。按案件直接删就会把别人的证据
     // 一起删掉——而那份文件的所有者那边一切正常，直到他去下载。
     // 判据「无引用才删」只有 lib/db/filesGc 那一份，这里不另写一套。
-    const gc = gcOrphanFiles(db, {
+    //
+    // 【为什么只在候选集里挑，而不是扫全库】「无人引用」这个判据只认表上的外键：
+    // 一份 file_id 只写在别处（例如一段加密 JSON）的文件，在它眼里就是垃圾。
+    // 人工 CLI 那样用没问题（dry-run 默认、有人看着输出）；这里是**每小时自动跑一轮**的
+    // 常驻任务，同一个判断错的代价从"某天有人跑脚本"变成"一小时内自动、永久、无人察觉"。
+    // 所以本任务只处置**它自己刚删掉引用者的那批**：清单漏一处的后果退回成"少收一点垃圾"。
+    // 全库那一遍留在人工 CLI（scripts/gc-files.ts）里。
+    const gc = gcOrphanFilesAmong(db, released, {
       deleteFromDisk: options.deleteFromDisk ?? defaultDeleteFromDisk,
     });
     result.files_removed = gc.removed;

@@ -107,7 +107,14 @@ function safeParse(json: string | null): string[] {
   }
 }
 
-/** 扫出所有生效中的期限（含收件人）。resolved_at 非空 = 已了结，停止提醒。 */
+/**
+ * 扫出所有生效中的期限（含收件人）。resolved_at 非空 = 已了结，停止提醒。
+ *
+ * 【为什么这里也要挡软删的案子】删除回包对用户说的是「这份档案与它的全部内容，此刻起在
+ * 所有页面与接口上都不再出现」。而硬删要等 30 天，这中间**几乎一定跨过一次提醒窗口**：
+ * 不挡的形态是，用户删完档案第二天收到一封「你的仲裁时效还剩 N 天」——他删掉的东西
+ * 反过来找上门，而站内任何一页都查不到它。这条不能靠调用方自觉：本函数是发信的唯一取数口。
+ */
 export function scanDue(db: Database): DueRow[] {
   return db
     .prepare(
@@ -116,7 +123,7 @@ export function scanDue(db: Database): DueRow[] {
          FROM deadlines d
          JOIN cases c ON c.id = d.case_id
          JOIN users u ON u.id = c.user_id
-        WHERE d.resolved_at IS NULL
+        WHERE d.resolved_at IS NULL AND c.deleted_at IS NULL
         ORDER BY d.due_at`,
     )
     .all() as DueRow[];

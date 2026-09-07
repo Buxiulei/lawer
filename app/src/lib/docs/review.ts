@@ -26,6 +26,7 @@ import type { DomainFailure, Result } from '@/lib/cases';
 import { writeOnce } from '@/lib/capabilities/shared';
 import { readBytes, storeBytes } from '@/lib/evidence/files';
 import { ocrImage } from '@/lib/evidence/sidecar-client';
+import { findOwnedCase } from '@/lib/db/cases';
 import { nowSql } from '@/lib/db/time';
 import type { ChatMessage } from '@/lib/llm';
 
@@ -314,9 +315,9 @@ function resolveSource(db: Database, input: SubmitDocInput): Source | DomainFail
   return { fileId: null, mime: 'text/plain', name: '粘贴的来文', text: pasted, evidenceId: null, pastedText: pasted };
 }
 
-/** 案件必须是本人的。不存在与不是你的同码同文案。 */
+/** 案件必须是本人的、且没被删。不存在、不是你的、已删除，三者同码同文案。 */
 function assertOwnedCase(db: Database, caseId: number, userId: number): DomainFailure | null {
-  const row = db.prepare('SELECT id FROM cases WHERE id=? AND user_id=?').get(caseId, userId);
+  const row = findOwnedCase(db, caseId, userId);
   return row
     ? null
     : fail(404, 'CASE_NOT_FOUND', `案件 ${caseId} 不存在，或不属于本人（两者刻意不区分）。`);

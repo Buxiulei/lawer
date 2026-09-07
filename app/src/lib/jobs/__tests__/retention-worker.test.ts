@@ -5,7 +5,9 @@
 //   ③ 硬删是级联的：证据条目、对话、情绪与危机记录、时间线、文书一起没；
 //   ④ **已出证的存证记录仍可读**：它脱离案件继续存在，公开核验那条路不受影响；
 //   ⑤ 密文文件被回收，且回收判据仍是「无人引用」——别的案件还引着的那一份不许删；
-//   ⑥ **这个账号导出过整案副本**时上面五条照旧成立。这条是复审 blocker 的回归位：
+//   ⑥ **回收只在本轮自己释放出来的那批里挑**：file_id 只写在库表之外（护照实名那段加密
+//      JSON）的文件，这个每小时自动跑的任务一根手指都不许碰——那是复审 blocker 的回归位；
+//   ⑦ **这个账号导出过整案副本**时上面几条照旧成立。这条是上一轮复审 blocker 的回归位：
 //      导出会签一条下载令牌，那张表是 files 的外键引用者，签过之后这一轮清理的形态
 //      完全不同（要么整轮回滚、要么那份装着全部原件的 zip 永远留在盘上）。
 import crypto from 'node:crypto';
@@ -20,6 +22,8 @@ process.env.LAWER_DATA_KEY = crypto.randomBytes(32).toString('base64');
 const FILES_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'retention-'));
 process.env.FILES_DIR = FILES_DIR;
 
+import { initPassportRealname, readPassportEnvelope } from '@/lib/auth/passport-realname';
+import { VERIFICATION_STATUS } from '@/lib/auth/realname';
 import { lastRun } from '@/lib/db/job-runs';
 import { runMigrations } from '@/lib/db/migrate';
 import { storeBytes } from '@/lib/evidence/files';
@@ -358,29 +362,86 @@ describe('导出过整案副本之后', () => {
    *
    * 变异：REFERENCERS 去掉 file_download_tokens → 本条红（真孤儿没被收、job_runs ok=0）。
    */
-  it('还没过期的下载令牌一行都不动，它引着的文件不许删，同一轮的真孤儿照收', async () => {
-    seedAndAttest();
+  it('还没过期的下载令牌一行都不动，它引着的文件不许删，同一轮该收的照收', async () => {
+    const { fileId } = seedAndAttest();
     // 到点前 5 分钟才导出：令牌 10 分钟有效期，跑清理时它还活着
     const zipFileId = await exportOnce(new Date('2026-09-30T23:55:00Z'));
-    // 同一轮里摆一个货真价实的孤儿：整轮回滚的话它会跟着幸存下来
-    const realOrphan = Number(
-      db
-        .prepare("INSERT INTO files (sha256, size, enc_path) VALUES ('0000orphan', 7, '00/orphan.enc')")
-        .run().lastInsertRowid,
-    );
+    // 同一份导出件上再挂一条**已经死透**的旧令牌（同一个案子导出过两次就是这个形态）。
+    // 本轮会把死的那条删掉，于是那份 zip 进了候选集——活着的那条必须把它拦住。
+    db.prepare(
+      `INSERT INTO file_download_tokens (token_hash, file_id, user_id, filename, expires_at)
+       VALUES ('dead-token', ?, ?, '上一次的整案副本.zip', '2026-09-01 00:00:00')`,
+    ).run(zipFileId, uid);
+    db.prepare('UPDATE cases SET deleted_at=? WHERE id=?').run(DELETED_AT, caseId);
 
     const res = runRetentionOnce(db, opts(DUE));
 
-    // ① 活着的令牌与它引着的导出件都在
-    expect(res.tokens_purged).toBe(0);
+    // ① 死令牌删了，活着的那条与它引着的导出件都在
+    expect(res.tokens_purged).toBe(1);
     expect(count('SELECT COUNT(*) AS n FROM file_download_tokens')).toBe(1);
     expect(count('SELECT COUNT(*) AS n FROM files WHERE id=?', zipFileId), '把还能下载的导出件删了').toBe(1);
-    // ② 整轮没被一次外键冲突带走：真孤儿收掉了，留痕也是 ok
+    // ② 整轮没被一次外键冲突带走：这个案子的证据原件照收，留痕也是 ok
     expect(res.files_removed).toBe(1);
-    expect(removedPaths).toEqual(['00/orphan.enc']);
-    expect(count('SELECT COUNT(*) AS n FROM files WHERE id=?', realOrphan)).toBe(0);
+    expect(count('SELECT COUNT(*) AS n FROM files WHERE id=?', fileId)).toBe(0);
     const run = lastRun(db, RETENTION_JOB_NAME);
     expect(run!.error_text).toBeNull();
     expect(run!.ok).toBe(1);
   });
+
+});
+
+// ───────────────────────── 只在库表外被引用的密文文件 ─────────────────────────
+describe('file_id 不在任何外键上的那些文件', () => {
+  /**
+   * 🔴 复审 blocker 的回归位（2026-09-07）。
+   *
+   * 护照实名的两份材料（资料页、手持自拍）走 files 表落盘，而**没有任何一张表按外键引着它们**
+   * ——file_id 只写在 realname_verifications.raw_meta_enc 那段加密 JSON 里。
+   * 于是「无人引用即孤儿」这个判据把它们当垃圾：本任务一旦扫全库，只有护照的用户提交实名后
+   * ≤1 小时材料就从盘上和库里消失，管理员打开待审流水时材料已经不在，用户永远卡在待审。
+   *
+   * 【为什么修的是"看哪些行"而不是"补一张引用表"】补表只救得了以后提交的那些；
+   * 库里已经躺着的待审材料仍然每小时被扫一遍，而回填历史数据是数据表那边的活（迁移框架无事务）。
+   * 所以常驻任务只处置**它自己刚删掉引用者的那批**（见 retention-worker ④）。
+   *
+   * 变异：把 ④ 改回全库的 gcOrphanFiles → 本条红（两份材料被删、盘上文件也没了）。
+   */
+  it('🔴 待审的护照实名材料一份都不动（它的 file_id 只在加密信封里，不在任何外键上）', () => {
+    const init = initPassportRealname(db, {
+      userId: uid,
+      realName: '甲',
+      passportNo: 'E12345678',
+      idPage: { bytes: Buffer.from('护照资料页'), mime: 'image/jpeg' },
+      selfie: { bytes: Buffer.from('手持护照自拍'), mime: 'image/jpeg' },
+    });
+    expect(init.ok, '护照流水没落成，本条判据在空转').toBe(true);
+    const env = readPassportEnvelope(db, (init as { verificationId: number }).verificationId)!;
+    const material = [env.materials.id_page.file_id, env.materials.selfie.file_id];
+    const encPaths = material.map(
+      (id) => (db.prepare('SELECT enc_path FROM files WHERE id=?').get(id) as { enc_path: string }).enc_path,
+    );
+
+    // 同一轮里确实有正事要做：一个到期的案子。否则"什么都没删"可能只是因为这轮空跑。
+    const { fileId } = seedAndAttest();
+    db.prepare('UPDATE cases SET deleted_at=? WHERE id=?').run(DELETED_AT, caseId);
+
+    const res = runRetentionOnce(db, opts(DUE));
+
+    // ① 该删的删了
+    expect(res.cases_purged).toBe(1);
+    expect(count('SELECT COUNT(*) AS n FROM files WHERE id=?', fileId)).toBe(0);
+    // ② 两份材料一份不少，盘上也没被删
+    expect(
+      count('SELECT COUNT(*) AS n FROM files WHERE id IN (?,?)', material[0], material[1]),
+      '待审的护照材料被清理任务销毁了',
+    ).toBe(2);
+    for (const p of encPaths) expect(removedPaths).not.toContain(p);
+    // ③ 而那条流水还是「待审」——材料没了、人却还等着审，正是这条要拦的形态
+    expect(
+      (db.prepare('SELECT status FROM realname_verifications WHERE id=?').get(env.verificationId) as {
+        status: string;
+      }).status,
+    ).toBe(VERIFICATION_STATUS.pending);
+  });
+
 });

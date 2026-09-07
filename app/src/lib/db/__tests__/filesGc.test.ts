@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../migrate';
-import { findOrphanFiles, gcOrphanFiles, gcFilesCli, REFERENCERS } from '../filesGc';
+import { findOrphanFiles, gcOrphanFiles, gcOrphanFilesAmong, gcFilesCli, REFERENCERS } from '../filesGc';
+import { caseScopedReferencers, listCaseFileIds } from '../lifecycle';
 
 let db: Database.Database;
 
@@ -165,6 +166,80 @@ describe('gcOrphanFiles', () => {
       }),
     ).toThrow(/EACCES/);
     expect((db.prepare('SELECT COUNT(*) c FROM files').get() as { c: number }).c).toBe(6);
+  });
+});
+
+// ───────────────────── 候选集版：常驻清理任务用的那个 ─────────────────────
+//
+// 【为什么另有一个】全库版问的是「此刻谁没人引用」，而"没人引用"只认表上的外键——
+// file_id 只写在别处（例如护照实名那段加密 JSON）的文件，在它眼里就是垃圾。
+// 人工 CLI 那样用没问题（dry-run 默认、有人看着输出）；每小时自动跑一轮的常驻任务不行。
+// 所以 lib/jobs/retention-worker 只回收**它自己这一轮删掉引用者的那批**。
+describe('gcOrphanFilesAmong', () => {
+  test('候选集之外的孤儿一行不动（这正是常驻任务与全库 CLI 的差别）', () => {
+    const { evFile, orphan } = seed(db);
+    const deleted: string[] = [];
+
+    // 候选集里给的是"还被引用着"的那一份，真孤儿根本不在候选集里
+    const r = gcOrphanFilesAmong(db, [evFile], { deleteFromDisk: (p) => void deleted.push(p) });
+
+    expect(r).toEqual({ removed: 0, freedBytes: 0 });
+    expect(deleted).toEqual([]);
+    expect(count('SELECT COUNT(*) AS n FROM files WHERE id=?', orphan), '候选集外的行被删了').toBe(1);
+  });
+
+  test('删案释放出来的那批被收掉，跨案共享的同一份不收（判据仍是「无人引用」）', () => {
+    const { uid, caseId, evFile, docFile, upFile, certFile, dlFile, orphan } = seed(db);
+    // 另一个案子引着同一份原件：它必须活下来
+    const otherCase = Number(
+      db.prepare('INSERT INTO cases (user_id, title) VALUES (?,?)').run(uid, '另一个案子').lastInsertRowid,
+    );
+    db.prepare('INSERT INTO evidence (case_id, user_id, file_id, name) VALUES (?,?,?,?)')
+      .run(otherCase, uid, evFile, '同一份原件');
+
+    // 候选集必须在硬删**之前**取：级联一发生就再也问不出来了
+    const released = listCaseFileIds(db, caseId);
+    expect([...released].sort(), '释放清单不是三张挂 case_id 的引用表').toEqual(
+      [evFile, docFile, upFile].sort(),
+    );
+    db.prepare('DELETE FROM cases WHERE id=?').run(caseId);
+
+    const deleted: string[] = [];
+    const r = gcOrphanFilesAmong(db, released, { deleteFromDisk: (p) => void deleted.push(p) });
+
+    expect(r.removed, '该收的两份没收全').toBe(2);
+    expect(deleted.sort()).toEqual(['ab/ab55.enc', 'bb/bb22.enc']);
+    expect(count('SELECT COUNT(*) AS n FROM files WHERE id=?', evFile), '把别人还在用的原件删了').toBe(1);
+    // 候选集外的三个一律没动：证书 PDF、下载令牌引着的、以及那个真孤儿
+    expect(count('SELECT COUNT(*) AS n FROM files WHERE id IN (?,?,?)', certFile, dlFile, orphan)).toBe(3);
+  });
+
+  test('重复的 id 只处置一次，已经不存在的 id 不炸', () => {
+    const { caseId } = seed(db);
+    const released = listCaseFileIds(db, caseId);
+    db.prepare('DELETE FROM cases WHERE id=?').run(caseId);
+    const deleted: string[] = [];
+
+    const r = gcOrphanFilesAmong(db, [...released, ...released, 99999], {
+      deleteFromDisk: (p) => void deleted.push(p),
+    });
+
+    expect(r.removed).toBe(3);
+    expect(deleted).toHaveLength(3);
+    expect(new Set(deleted).size, '同一份文件被删了两次').toBe(3);
+  });
+});
+
+describe('结构守卫：随案件一起释放的引用表是推出来的，不是手抄的', () => {
+  test('恰好是 REFERENCERS 里带 case_id 列的那三张（变异：手抄漏一张 → 这里点名）', () => {
+    expect(caseScopedReferencers(db).map(([t, c]) => `${t}.${c}`).sort()).toEqual([
+      'company_docs.file_id',
+      'evidence.file_id',
+      'evidence_upload_tokens.file_id',
+    ]);
+    // 反向：不挂 case_id 的两张不许混进来——它们不随删案消失，混进来就是误删
+    expect(caseScopedReferencers(db).map(([t]) => t)).not.toContain('attestations');
+    expect(caseScopedReferencers(db).map(([t]) => t)).not.toContain('file_download_tokens');
   });
 });
 

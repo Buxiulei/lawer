@@ -135,6 +135,24 @@ export function findCaseById(db: Database, caseId: number): CaseRow | undefined 
 }
 
 /**
+ * 「这个 case_id 是不是这个人的、且还在」——**按 case_id 取数的归属判据只有这一份**。
+ * 取不到（不存在 / 不是本人的 / 已被删）一律 undefined，调用方回同一个 404，三者不区分。
+ *
+ * 【为什么要有它，findCaseById 还不够】lib/cases.assertOwned 走的是 findCaseById，
+ * 那条路上的四十几个入口都对。问题出在**不经 lib/cases 的那几处**（按量报价、文书审查、
+ * crisis_check 带案调用、来文解读）：它们各自手写了一句
+ * `SELECT id FROM cases WHERE id=? AND user_id=?`——归属对，但少了软删那半句，
+ * 于是用户删掉的案子在这些接口上照样读得出、照样能发起付费动作，而删除回包答应过
+ * 「在所有页面与接口上都不再出现」。独立写 N 次就会忘 N 次，所以收成这一个函数，
+ * 并由 __tests__/soft-delete-scope.test.ts 扫源码机检：还有谁在裸查 cases 就点谁的名。
+ */
+export function findOwnedCase(db: Database, caseId: number, userId: number): CaseRow | undefined {
+  return db
+    .prepare('SELECT * FROM cases WHERE id = ? AND user_id = ? AND deleted_at IS NULL')
+    .get(caseId, userId) as CaseRow | undefined;
+}
+
+/**
  * 连已软删的行一起取。**只有生命周期那条路该用它**（删除本身要幂等、清理任务要按
  * deleted_at 找到期的行）。业务读一律用 findCaseById——两个函数同名不同义会让人随手拿错，
  * 所以这个名字写得又长又刺眼。

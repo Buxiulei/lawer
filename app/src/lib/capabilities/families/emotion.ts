@@ -7,6 +7,7 @@
 import * as agent from '@/lib/agent';
 import * as cases from '@/lib/cases';
 import { recordCrisisHit } from '@/lib/cases/crisis-hits';
+import { findOwnedCase } from '@/lib/db/cases';
 import { domainPackOrDefault } from '@/lib/domains/registry';
 
 import { bannedPhones, redactBanned } from './knowledge';
@@ -117,9 +118,7 @@ export const crisisCheck: Capability = {
     const asked = num(args.case_id);
     const owned =
       Number.isInteger(asked) && asked > 0
-        ? (db.prepare('SELECT id, domain FROM cases WHERE id=? AND user_id=?').get(asked, identity.uid) as
-            | { id: number; domain: string }
-            | undefined)
+        ? findOwnedCase(db, asked, identity.uid)
         : undefined;
     const caseId = owned ? owned.id : null;
     const crisisPack = domainPackOrDefault(owned?.domain).crisis;
