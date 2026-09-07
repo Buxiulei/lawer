@@ -23,7 +23,9 @@ export async function GET() {
     {
       ok: true,
       // key 是落进 cases.domain 的那个值，label 是给人看的名字。
-      // **顺序即开关里写的顺序**，第一个是建案不选时的缺省。
+      // **顺序即开关里写的顺序**；但「不选时落哪个」取的是 registry.DEFAULT_DOMAIN，
+      // 不是这份清单的第一项（cases.ensureDefaultCase 的 `domain ?? DEFAULT_DOMAIN`）。
+      // 两件事说成一件的形态是：运维调换开关里的顺序想改缺省，改完毫无变化且不报错。
       domains: domains.map((d) => ({ key: d.key, label: d.label })),
     },
     { headers: { 'cache-control': 'no-store' } },

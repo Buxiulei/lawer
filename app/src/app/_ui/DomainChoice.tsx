@@ -65,9 +65,14 @@ export function useEnabledDomains(): DomainOption[] {
 }
 
 /**
- * 领域单选。`value` 为空串＝还没选，提交时按缺省领域走。
+ * 领域单选。`value` 为空串＝还没选，提交时不带这个字段。
  *
- * @param domains 可选领域（顺序即开关里写的顺序，第一个是缺省）
+ * 【不选时落的是**缺省领域**，与这份清单的顺序无关】清单的顺序确实是开关里写的顺序，
+ * 但服务端不选时取的是 registry.DEFAULT_DOMAIN（见 cases.ensureDefaultCase 的
+ * `domain ?? DEFAULT_DOMAIN`），不是清单的第一项。把这两件事说成一件的形态是：
+ * 运维调换 `LAWER_DOMAINS_ENABLED` 里的顺序想改缺省，改完一点变化都没有，而没有报错。
+ *
+ * @param domains 可选领域，顺序即开关里写的顺序
  */
 export function DomainChoice({
   domains,
