@@ -45,6 +45,36 @@ knowledge/quarantine/<原子目录>/<原卡文件名>.md
 （一个没有知识却照常作答的 agent 比宕机更坏），仍然拒绝启动。
 判据见 `app/src/lib/knowledge/__tests__/index-guard.test.ts`。
 
+## 隔离区的 confidence 一律是「待核实」（经理 2026-09-07 裁定）
+
+隔离区的卡**不进索引**，所以它写什么 confidence 一度没人管——于是这里躺着 52 张
+`confidence: 原文核实`。那是一句假话：这些卡进隔离区的**全部理由**就是核不动。
+
+它的危害不在检索面（隔离区本来就被排除），在**下一个人**：搬回 `packs/` 的动作只是
+一次 `mv`，而搬的人看到 frontmatter 上写着"原文核实"，会以为核实这一步已经有人做过了。
+
+口径：**隔离区里的卡，confidence 只能是 `待核实` 或 `二手转述`**（写卡时它是什么就留什么，
+但一律不许挂 `原文核实` / `无外部断言` 这两个"可进索引"的标签）。本次统一改成 `待核实`。
+
+| 位置 | 拦法 |
+| --- | --- |
+| `scripts/gen-knowledge-index.py` 守卫 (h)（构建期） | `quarantine/**` 下出现 `confidence: 原文核实` 或 `无外部断言` ⇒ 拒绝生成并逐张点名 |
+| `app/src/lib/knowledge/__tests__/index-guard.test.ts`（判据） | 直接扫仓库里的 `knowledge/quarantine/**`，同一条规则；它管的是**仓库里现在躺着的这一份**，构建器管的是"生成这一次" |
+
+## 第 12 批（2026-09-07，同源审计与判例引文机制）
+
+**本批复活（移出本区，回到 `knowledge/packs/cases/`）**：
+
+- `case-qingjia-shouxu-maodun-kuanggong-2025`（三中院 2025-05-13 发布会·案例九）——
+  核心裁判规则在已登记的官方原件 `cases-bj3zy-2025-dxal`
+  （<https://www.court.gov.cn/zixun/xiangqing/465001.html>）正文里**逐字写着**：
+  「第九个典型案例指出，劳动者未履行请假手续且请假合理性存疑，其擅自离岗构成旷工。」
+  按同场发布会另外三张卡（`case-weixin-youxing-jiaban-sz25-1` 等）已经在用的做法，
+  **只保留官方通稿明文的要旨**，删掉全部来自非官方转载站的当事人、岗位、缺勤日期与
+  "裁判理由原文"，并补上 `facts.case_quotes` 逐字节选（新机制见 `knowledge/README.md` §2.1）。
+  原隔离记录里"只有一句话要旨、核不动"的判断，前提是那张卡要断言大段案情；
+  把卡改成只断言那一句之后，它就核得动了。
+
 ## 已隔离清单（按批次追加，逐卡记录）
 
 > 每行：id · 隔离原因 · 试过的信源（结果）。详细版留在各卡文件的【隔离原因】块里，
@@ -164,7 +194,7 @@ knowledge/quarantine/<原子目录>/<原卡文件名>.md
 - `case-keguan-yiqing-yewuliang-jing03-15429`、`case-keguan-zhanlue-tiaozheng-jing03-20183`：`bj3zy.bjcourt.gov.cn` 检索"疫情 业务量""客观情况""客观情况发生重大变化""组织架构调整"及双方案号均 0 命中——这两案是普通二审案件，未被制成官方专文。
 - `case-qianfu-yongjin-38-jiechu-16097`（焦某）、`case-lirun-20-jixiao-weiyuejin-11114`（苏某）、`case-lizhi-zhengming-jianli-riqi-72152`（郭某）、`case-luyin-lihai-guanxi-bucaina-14444`（姚某）、`case-nianzhongjiang-jishu-2n-jing0105-33722`（钟奇燕/楷亚锐衡）、`case-qingjia-benshang-jing03-9422`（乔某伟）：`bj3zy.bjcourt.gov.cn` 与 `cyqfy.bjcourt.gov.cn` 站内检索当事人姓名均 0 命中或只命中同名他案。
 - `case-nianzhongjiang-beijing-koujing`（8 案汇编卡）：其中 2 案已在上面确认查无官方专文，其余 6 案本批预算内未逐一复查。
-- `case-peichanjia-shijia-koufa-sz25-7`、`case-nianjia-guoqi-zuofei-wuxiao-sz25-2`、`case-nianjia-yuerjia-gongzi-sz25-8`、`case-qingjia-shouxu-maodun-kuanggong-2025`（均属北京三中院 2025-05-13 发布会 9 件典型案例之一）：除已登记的通稿 `cases-bj3zy-2025-dxal` 外，本批另找到并登记了同一发布会的调研版报道 `cases-bj3zy-2025-xiuxijiajiaquan-diaoyan`（<https://bj3zy.bjcourt.gov.cn/article/detail/2025/06/id/8865668.shtml>），比通稿多一两句案情，但仍**未逐案给出本卡引用级别的案情细节与裁判理由原文**，核不动。
+- `case-peichanjia-shijia-koufa-sz25-7`、`case-nianjia-guoqi-zuofei-wuxiao-sz25-2`、`case-nianjia-yuerjia-gongzi-sz25-8`（均属北京三中院 2025-05-13 发布会 9 件典型案例之一）：除已登记的通稿 `cases-bj3zy-2025-dxal` 外，本批另找到并登记了同一发布会的调研版报道 `cases-bj3zy-2025-xiuxijiajiaquan-diaoyan`（<https://bj3zy.bjcourt.gov.cn/article/detail/2025/06/id/8865668.shtml>），比通稿多一两句案情，但仍**未逐案给出本卡引用级别的案情细节与裁判理由原文**，核不动。
 - `case-nongmingong-zongbao-qingchang-cy24-5`、`case-paiqian-gongjijin-guocuo-cy24-6`、`case-pingtai-yonggong-qunti-tiaojie-cy24-7`（均属朝阳法院 2024-07-25 涉多元用工典型案例通报会）：找到并登记了朝阳法院官方原件 `cases-cyqfy-2024-duoyuanyonggong-tongbaohui`（<https://cyqfy.bjcourt.gov.cn/article/detail/2024/08/id/8071059.shtml>），但该文**只叙述通报会本身，未列出任何一件具体典型案例的案情**，核不动。
 
 复活条件同上：拿到判决全文或典型案例逐案全文的 `.gov.cn` 原件并核过引文；

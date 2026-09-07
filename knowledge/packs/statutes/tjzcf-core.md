@@ -39,7 +39,7 @@ updated: 2026-08-25
 
 > 单点事实源卡：该法散见于 chaoyang-lian-sop / caijue-yicaizhongju / zhongcai-guanxia-shixiao 等 5+ 卡，
 > 此处逐字收录核心六条防副本漂移。三官方源交叉核对一致（人大网+安康人社局+国家信访局，取材 2026-08-25，
-> flk 为 JS 渲染未用、wikisource 未作来源）。其他卡引本法条文一律经 related 指向本卡。
+> flk 为 JS 渲染未用、非官方转载站未作来源）。其他卡引本法条文一律经 related 指向本卡。
 
 ## 第二十七条　仲裁时效（一年·中断中止·欠薪特例）
 

@@ -76,7 +76,7 @@
     "sources": [
       "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5202764/content.html",
       "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5202364/content.html",
-      "https://flk.npc.gov.cn/detail?id=2c909fdd678bf17901678bf724bd0609&fileId=&type=&title=%E4%B8%AD%E5%8D%8E%E4%BA%BA%E6%B0%91%E5%85%B1%E5%92%8C%E5%9B%BD%E4%B8%AA%E4%BA%BA%E6%89%80%E5%BE%97%E7%A8%8E%E6%B3%95"
+      "https://fgk.chinatax.gov.cn/zcfgk/c100009/c5193028/content.html"
     ],
     "confidence": "原文核实",
     "updated": "2026-09-07",
@@ -1436,6 +1436,52 @@
     }
   },
   {
+    "id": "case-qingjia-shouxu-maodun-kuanggong-2025",
+    "type": "判例卡",
+    "title": "未履行请假手续且请假合理性存疑 → 擅自离岗构成旷工（劳动者败诉对照案，三中院 2025 典型案例·案例九）",
+    "keywords": [
+      "请假手续",
+      "请假合理性",
+      "擅自离岗",
+      "旷工",
+      "违纪解除",
+      "反面案例",
+      "劳动者败诉"
+    ],
+    "applies_to": [
+      "违纪解除",
+      "证据固定"
+    ],
+    "region": "北京",
+    "domain": "labor",
+    "sources": [
+      "https://www.court.gov.cn/zixun/xiangqing/465001.html"
+    ],
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
+    "path": "packs/cases/qingjia-shouxu-maodun-kuanggong-2025.md",
+    "law_refs": [
+      "劳动合同法§39"
+    ],
+    "facts": {
+      "case_facts": {
+        "case_no": "官方案例，未公开案号",
+        "court": "北京市第三中级人民法院",
+        "gist": "三中院 2025-05-13 新闻发布会披露：劳动者未履行请假手续且请假合理性存疑的，其擅自离岗构成旷工。",
+        "issue": "未履行请假手续、且请假合理性本身存疑的缺勤，能不能对抗旷工认定。",
+        "holding": "构成旷工。",
+        "reasoning": "劳动者未履行请假手续且请假合理性存疑，其擅自离岗构成旷工。"
+      },
+      "case_quotes": [
+        {
+          "source_id": "cases-bj3zy-2025-dxal",
+          "note": "案例九的裁判要旨（人民法院报通稿，最高人民法院网转载）",
+          "text": "值得关注的是，司法裁判既遏制企业滥用管理权，也引导劳动者理性维权。第九个典型案例指出，劳动者未履行请假手续且请假合理性存疑，其擅自离岗构成旷工。"
+        }
+      ]
+    }
+  },
+  {
     "id": "case-qunti-zhengyi-duoyuan-tiaochu-bjzc25-9",
     "type": "判例卡",
     "title": "群体性争议 / 涉外企业纾困：北京走多元调处、专项调解（2025 北京仲裁十大典型案例·案例九）",
@@ -2216,6 +2262,99 @@
     }
   },
   {
+    "id": "data-beijing-gongzheng-baoquan-shoufei",
+    "type": "数据卡",
+    "title": "北京证据保全公证收费（市场调节价；精诚公证处公示价样本，2020-09-22）",
+    "keywords": [
+      "公证费",
+      "证据保全公证",
+      "市场调节价",
+      "公证收费标准",
+      "精诚公证处",
+      "网页截屏公证",
+      "录音公证",
+      "书证保全",
+      "公证报价"
+    ],
+    "applies_to": [
+      "证据固定",
+      "开庭质证"
+    ],
+    "region": "北京",
+    "domain": "labor",
+    "sources": [
+      "https://fgw.beijing.gov.cn/gzdt/fgzs/gzdt/202004/t20200417_1815267.htm",
+      "http://www.bcnpo.cn/bjjcgzw/web/bzzn/sfbz/8307.html"
+    ],
+    "confidence": "原文核实",
+    "updated": "2026-09-07",
+    "path": "packs/data/beijing-gongzheng-baoquan-shoufei.md",
+    "facts": {
+      "statute_quotes": [
+        {
+          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
+          "article": "保全证据·网络软件保全",
+          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
+          "text": "网络、软件保全：网页截屏类，1000元起/件，每个截屏页50元（不足20页按20页计算）；录像类，3500元起/件，超过半小时的，每多半小时加收500元（不足半小时按半小时计算）"
+        },
+        {
+          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
+          "article": "保全证据·证人证言",
+          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
+          "text": "证人证言： 2000元起/件，超过半小时的，每多半小时加收500元（不足半小时按半小时计算）"
+        },
+        {
+          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
+          "article": "保全证据·书证保全",
+          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
+          "text": "书证保全：500元起/件"
+        },
+        {
+          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
+          "article": "保全证据·本地购买",
+          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
+          "text": "本地购买：5000元起/半天/件"
+        },
+        {
+          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
+          "article": "保全证据·外地购买",
+          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
+          "text": "外地购买：10000元起/天/件"
+        },
+        {
+          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
+          "article": "保全证据·邮寄保全",
+          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
+          "text": "邮寄保全：1000元起/件"
+        },
+        {
+          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
+          "article": "保全证据·本地查看现场",
+          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
+          "text": "本地查看现场、提取资料等：5000元起/半天/件"
+        },
+        {
+          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
+          "article": "保全证据·外地查看现场",
+          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
+          "text": "外地查看现场、提取资料等：10000元起/天/件"
+        },
+        {
+          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
+          "article": "保全证据·司法强制拆迁保全",
+          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
+          "text": "司法强制拆迁保全：15000元起/半天/件"
+        },
+        {
+          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
+          "article": "保全证据·其他",
+          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
+          "text": "其他保全证据：参照相近公证事项协商收费"
+        }
+      ]
+    }
+  },
+  {
     "id": "data-beijing-lian-zuobiao",
     "type": "数据卡",
     "title": "北京劳动仲裁/法院立案坐标（朝阳·仲裁与法院两套，绝不混淆）",
@@ -2704,9 +2843,9 @@
     "region": "北京",
     "domain": "labor",
     "sources": [
-      "https://www.pkuh6.cn/Html/News/Articles/4049.html"
+      "本卡不含外部事实断言：节点清单、陪伴话术、照读版练习与引流红线全部是本项目自己写的（按裁员—仲裁时间线归纳的经验判断，非官方统计）。正文提到的\"呼吸放松法\"\"5-4-3-2-1 着地\"是通用的放松训练技术，只作背景，不作依据——本卡不引用任何一家机构对它的表述，也不断言任何医学结论。"
     ],
-    "confidence": "原文核实",
+    "confidence": "无外部断言",
     "updated": "2026-09-07",
     "path": "packs/emotion/bengkui-jiedian-jijiu.md"
   },
@@ -5784,8 +5923,7 @@
     "region": "北京",
     "domain": "labor",
     "sources": [
-      "https://fgw.beijing.gov.cn/gzdt/fgzs/gzdt/202004/t20200417_1815267.htm",
-      "http://www.bcnpo.cn/bjjcgzw/web/bzzn/sfbz/8307.html"
+      "https://fgw.beijing.gov.cn/gzdt/fgzs/gzdt/202004/t20200417_1815267.htm"
     ],
     "confidence": "原文核实",
     "updated": "2026-09-07",
@@ -5808,66 +5946,6 @@
           "article": "第十三条第（二）项",
           "source_id": "statute-zaixian-susong-guize",
           "text": "电子化材料形成过程已经过公证机构公证的"
-        },
-        {
-          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
-          "article": "保全证据·网络软件保全",
-          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
-          "text": "网络、软件保全：网页截屏类，1000元起/件，每个截屏页50元（不足20页按20页计算）；录像类，3500元起/件，超过半小时的，每多半小时加收500元（不足半小时按半小时计算）"
-        },
-        {
-          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
-          "article": "保全证据·证人证言",
-          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
-          "text": "证人证言： 2000元起/件，超过半小时的，每多半小时加收500元（不足半小时按半小时计算）"
-        },
-        {
-          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
-          "article": "保全证据·书证保全",
-          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
-          "text": "书证保全：500元起/件"
-        },
-        {
-          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
-          "article": "保全证据·本地购买",
-          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
-          "text": "本地购买：5000元起/半天/件"
-        },
-        {
-          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
-          "article": "保全证据·外地购买",
-          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
-          "text": "外地购买：10000元起/天/件"
-        },
-        {
-          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
-          "article": "保全证据·邮寄保全",
-          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
-          "text": "邮寄保全：1000元起/件"
-        },
-        {
-          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
-          "article": "保全证据·本地查看现场",
-          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
-          "text": "本地查看现场、提取资料等：5000元起/半天/件"
-        },
-        {
-          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
-          "article": "保全证据·外地查看现场",
-          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
-          "text": "外地查看现场、提取资料等：10000元起/天/件"
-        },
-        {
-          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
-          "article": "保全证据·司法强制拆迁保全",
-          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
-          "text": "司法强制拆迁保全：15000元起/半天/件"
-        },
-        {
-          "law": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
-          "article": "保全证据·其他",
-          "source_id": "bcnpo-jingcheng-baoquan-shoufei",
-          "text": "其他保全证据：参照相近公证事项协商收费"
         }
       ]
     }

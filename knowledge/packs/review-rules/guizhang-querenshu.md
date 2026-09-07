@@ -307,7 +307,7 @@ updated: 2026-09-07
 ## 争议点
 
 - gzqr-006 对**普通员工**（非高管）内网公示能否认定知晓，本卡此前引用的判例（三中院
-  (2023)京03民终19249号）因来源仅为 `zh.wikisource.org` 转录、无法在 `wenshu.court.gov.cn` /
+  (2023)京03民终19249号）因来源仅为**非官方转载站**转录、无法在 `wenshu.court.gov.cn` /
   `www.bjcourt.gov.cn` / `rmfyalk.court.gov.cn` 任一官方渠道核到全文，已隔离
   （见 `knowledge/quarantine/cases/hegui-wenze-neibu-xitong-19249.md`），本卡不再引用其具体案情。
   普通岗位内网公示能否认定知晓，目前**没有可核实的官方判例支持任一结论**，gzqr-006 按 strong

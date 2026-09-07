@@ -7,8 +7,8 @@ applies_to: [情绪支持, 裁员, 仲裁申请, 开庭质证, 裁决与终局, 
 related: [emotion-caiyuan-xinli-jieduan, emotion-kaiting-xinli-jianshe, data-beijing-qiuzhu-ziyuan, sop-zhongcai-guanxia-shixiao, sop-yaoqiu-qianzi-wenjian, sop-caijue-yicaizhongju, sop-yishen-ersheng-sop, script-hongxian-qingdan]
 region: 北京
 sources:
-  - https://www.pkuh6.cn/Html/News/Articles/4049.html
-confidence: 原文核实
+  - 本卡不含外部事实断言：节点清单、陪伴话术、照读版练习与引流红线全部是本项目自己写的（按裁员—仲裁时间线归纳的经验判断，非官方统计）。正文提到的"呼吸放松法""5-4-3-2-1 着地"是通用的放松训练技术，只作背景，不作依据——本卡不引用任何一家机构对它的表述，也不断言任何医学结论。
+confidence: 无外部断言
 updated: 2026-09-07
 ---
 
@@ -85,7 +85,11 @@ updated: 2026-09-07
 > 5. 重复 6-10 次。
 
 原理照读："呼气拉得比吸气长，身体会收到'安全信号'，心跳会自己慢下来。"
-（北京大学第六医院《你了解呼吸放松法吗？》科普文对此有专门说明。）
+
+> **本节的性质**：这是一段**照读用的陪伴脚本**，不是医学指导。呼吸放松（腹式呼吸）与
+> 5-4-3-2-1 着地都是公开通用的放松技术，本卡写的是自己的口语版本，**不引用、也不依据
+> 任何一家机构的表述**；感到不适随时停下。持续两周以上的失眠早醒/食欲下降/白天完全没法
+> 做事，走第五节，不由 agent 判断成疾病。
 
 ### 着地：5-4-3-2-1（脑子空白、手抖、要哭出来时）
 
