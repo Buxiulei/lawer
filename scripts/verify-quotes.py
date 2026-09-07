@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""把卡片里的 facts.statute_quotes 逐条拿去和登记在册的官方原件比对。
+"""把卡片里的 facts.statute_quotes 与 facts.case_quotes 逐条拿去和登记在册的官方原件比对。
 
 用法：
 
@@ -18,6 +18,11 @@
               在退出码上长得一模一样——而知识库最危险的失效形态正是这种。
 
 归一口径见 knowledge_sources.normalize_quote（NFKC + 引号折叠 + 去空白与 markdown 记号）。
+
+**两种引文共用同一把尺**（`facts.statute_quotes` 法条逐字条文、`facts.case_quotes`
+判例卡从官方页摘的原文）："这段字是不是逐字出自那份原件"是同一件事。唯一的区别是
+case_quotes **必须写 source_id**：判例没有"法名"这种能互为子串匹配的东西，
+靠 law 名去猜的形态是随机挑一份发布会通稿来核，并且照样报「一致」。
 """
 
 from __future__ import annotations
@@ -37,7 +42,7 @@ ROOT = Path(__file__).resolve().parent.parent / "knowledge"
 
 
 def iter_cards(root: Path):
-    """遍历 packs/ 下的卡，产出 (id, 相对路径, statute_quotes)。跳过隔离区。"""
+    """遍历 packs/ 下的卡，产出 (id, 相对路径, statute_quotes, case_quotes)。跳过隔离区。"""
     for path in sorted(root.glob("packs/**/*.md")):
         rel = path.relative_to(root)
         if "quarantine" in rel.parts:
@@ -56,9 +61,11 @@ def iter_cards(root: Path):
             fm = yaml.safe_load(fm_text) or {}
         except yaml.YAMLError:
             continue
-        quotes = ((fm.get("facts") or {}).get("statute_quotes")) or []
-        if quotes:
-            yield str(fm.get("id", rel)), str(rel), quotes
+        facts = fm.get("facts") or {}
+        statutes = facts.get("statute_quotes") or []
+        cases = facts.get("case_quotes") or []
+        if statutes or cases:
+            yield str(fm.get("id", rel)), str(rel), statutes, cases
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -79,9 +86,10 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(args.knowledge_dir).resolve() if args.knowledge_dir else ROOT
     cards = [c for c in iter_cards(root) if args.card is None or c[0] == args.card]
     if args.card and not cards:
-        print(f"错误：没有 id={args.card} 的卡，或它没有 statute_quotes", file=sys.stderr)
+        print(f"错误：没有 id={args.card} 的卡，或它既没有 statute_quotes 也没有 case_quotes", file=sys.stderr)
         return 2
-    rows = ks.verify_cards(root, cards)
+    rows = ks.verify_cards(root, [(cid, rel, q) for cid, rel, q, _ in cards], ks.STATUTE_QUOTE)
+    rows += ks.verify_cards(root, [(cid, rel, q) for cid, rel, _, q in cards], ks.CASE_QUOTE)
     mismatch = [r for r in rows if r["state"] == "不一致"]
     missing = [r for r in rows if r["state"] == "找不到原件"]
 

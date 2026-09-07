@@ -55,8 +55,12 @@ def test_quarantine_cards_never_enter_the_index(gen, kb):
     而它恰恰是"追不到一手源"的那张。
     """
     write_card(kb, "packs/statutes/ok.md", card_id="statute-ok", sources=[GOOD_SOURCE])
-    write_card(kb, "quarantine/statutes/bad.md", card_id="statute-bad", sources=["https://zh.wikisource.org/x"])
-    write_card(kb, "packs/quarantine/worse.md", card_id="statute-worse", sources=["https://www.sohu.com/x"])
+    # 隔离卡的 confidence 只能是「待核实」/「二手转述」（守卫 (h)，见本文件末尾那一组）——
+    # 这里写 待核实 不是为了绕开 (h)，而是因为**隔离卡本来就该长这样**。
+    write_card(kb, "quarantine/statutes/bad.md", card_id="statute-bad", confidence="待核实",
+               sources=["https://zh.wikisource.org/x"])
+    write_card(kb, "packs/quarantine/worse.md", card_id="statute-worse", confidence="待核实",
+               sources=["https://www.sohu.com/x"])
     code, data = run(gen, kb)
     assert code == 0, "隔离区里的坏卡不该拖垮生成"
     assert [e["id"] for e in data] == ["statute-ok"]
@@ -291,21 +295,46 @@ def test_d_class_with_facts_is_rejected(gen, kb):
 
 
 # ── 现库正对照 ────────────────────────────────────────────────────────
-def test_real_library_is_green_under_strict(gen, tmp_path):
-    """现库在 **默认 --strict** 下必须绿（2026-09-07 核实闭卷后的目标态）。
+def test_real_library_red_is_only_the_case_quotes_gap(gen, tmp_path):
+    """现库在 **默认 --strict** 下唯一的红是 (f)（判例卡还没补 case_quotes），别的守卫一条不红。
 
-    【这条判据换过一次方向，记在这】守卫刚上线时（2026-09-07 上午）现库还有
-    60 张待核实 + 21 张二手转述，那时这里钉的是**反过来的两条**：
-    "--no-strict 下能出索引" + "strict 下必须红"。核实闭卷后现库全绿，
-    那两条会以"现库居然不红了"的形式失败——**而那正是作业做完的标志**，不是回归。
-    所以把它们换成现在这一条：现库 strict 绿，且索引里一张 `二手转述`／`待核实` 都没有。
+    【这条判据换过两次方向，记在这】
+    · 守卫刚上线时（2026-09-07 上午）钉的是"strict 下必须红"（当时 60 张待核实）；
+    · 核实闭卷后换成"strict 下必须绿"；
+    · (f) 落地后（2026-09-07 下午）**机制先于内容**：42 张存量判例卡还没补 case_quotes，
+      于是现库又红了。这一次不把判据改回"必须红"了事——那等于把"库里还有脏卡"写成永久前提，
+      而且 (b)(c)(d)(e)(g)(h) 里任何一条开始红，一句"反正它本来就红"就能盖过去。
+
+    所以这里钉的是**红的形状**：报错里必须有 (f)，且**不能有别的守卫编号**。
+    补完 case_quotes 之后这条会以"(f) 不再出现"的形式失败——那正是作业做完的标志，
+    届时把断言改成"一条都不红"。
 
     全程在临时副本上跑，不碰仓内 knowledge/。
     """
     root = tmp_path / "kb"
     shutil.copytree(REAL_KNOWLEDGE, root)
-    code, data = run(gen, root)
-    assert code == 0, f"现库 strict 下不再是绿的：{code}"
+    before = (root / "index.json").read_bytes()
+    code, _ = run(gen, root)
+    msg = str(code)
+    assert code != 0 and "扎根守卫不通过" in msg
+    # 拷贝里本来就带着仓内那份 index.json，所以这里断言的是"没被改写"，
+    # 而不是"不存在"（后者由 test_strict_names_every_unverified_card 在空库上钉）。
+    assert (root / "index.json").read_bytes() == before, "守卫没过却改写了 index.json"
+    assert "(f)" in msg, f"现库居然不缺 case_quotes 了？该把这条判据改成「一条都不红」：{msg[:400]}"
+    others = [tag for tag in ("(b)", "(c)", "(d)", "(e)", "(g)", "(h)") if tag in msg]
+    assert others == [], f"除了 (f) 之外还有守卫在红，这是回归不是已知欠账：{others}\n{msg[:2000]}"
+
+
+def test_real_library_generates_with_no_strict_and_has_no_unverified_confidence(gen, tmp_path):
+    """现库 --no-strict 下出得来索引，且索引里一张 `二手转述`／`待核实` 都没有。
+
+    (d) 那条"全库原文核实"的成果在这里独立钉一次——上面那条只看报错文本，
+    看不见索引内容；两条合起来才既盯住"没有新的红"又盯住"旧的绿没退化"。
+    """
+    root = tmp_path / "kb"
+    shutil.copytree(REAL_KNOWLEDGE, root)
+    code, data = run(gen, root, "--no-strict")
+    assert code == 0
     assert len(data) > 100, "夹具没拷对？现库不该只有这么几张卡"
     bad = [e["id"] for e in data if e["confidence"] not in ("原文核实", "无外部断言")]
     assert bad == [], f"索引里还有既非原文核实也非无外部断言的卡：{bad}"
@@ -340,3 +369,245 @@ def test_real_library_still_generates_with_no_strict(gen, tmp_path):
     code, data = run(gen, root, "--no-strict")
     assert code == 0
     assert len(data) > 100
+
+
+# ── (f) 判例卡必须有核得过的 case_quotes ────────────────────────────────
+CASE_ORIGINAL = "第九个典型案例指出，劳动者未履行请假手续且请假合理性存疑，其擅自离岗构成旷工。\n"
+
+
+@pytest.fixture
+def kb_with_case_source(tmp_path):
+    """一个既有法条原件、又有官方案例原件的临时库。"""
+    write_registry(
+        tmp_path,
+        [
+            write_original(tmp_path, "lhtf", ORIGINAL, name="中华人民共和国劳动合同法"),
+            write_original(tmp_path, "dxal", CASE_ORIGINAL, kind="官方案例", name="某法院典型案例发布页"),
+        ],
+    )
+    return tmp_path
+
+
+def test_case_card_with_a_verified_case_quote_passes(gen, kb_with_case_source):
+    """正向对照：判例卡带一条对得上官方页的 case_quotes ⇒ strict 下必须过。
+
+    没有它，下面每条红都可能是"判例卡怎么写都过不了"。
+    """
+    write_card(
+        kb_with_case_source, "packs/cases/ok.md", card_id="case-ok", card_type="判例卡",
+        sources=[GOOD_SOURCE],
+        case_quotes=[{"source_id": "dxal", "text": "劳动者未履行请假手续且请假合理性存疑，其擅自离岗构成旷工。", "note": "案例九要旨"}],
+    )
+    code, data = run(gen, kb_with_case_source)
+    assert code == 0, code
+    assert [e["id"] for e in data] == ["case-ok"]
+
+
+def test_case_card_without_case_quotes_is_rejected(gen, kb_with_case_source):
+    """判例卡一条 case_quotes 都没有 ⇒ 拒绝生成并点名。
+
+    【为什么这道闸非有不可】判例卡最常见的失效不是"没有出处"，而是**出处是真的、
+    案情是转载站编的**：官方通稿只给一句话要旨，卡里却写着当事人姓名、金额、
+    大段"裁判理由原文"。要求至少一句逐字对得上官方页，等于逼这张卡至少有一句话
+    是从原件上抄下来的。
+    """
+    write_card(kb_with_case_source, "packs/cases/bad.md", card_id="case-bad", card_type="判例卡", sources=[GOOD_SOURCE])
+    code, _ = run(gen, kb_with_case_source)
+    assert code != 0
+    assert "(f)" in str(code) and "case-bad" in str(code)
+
+
+def test_case_quote_that_does_not_match_the_original_does_not_count(gen, kb_with_case_source):
+    """有 case_quotes 但对不上原件 ⇒ 照样不算数（"有这个字段"不是判据）。
+
+    只数字段个数的话，往卡里塞一句自己编的话就能过闸——而那正是这道闸要防的东西。
+    """
+    write_card(
+        kb_with_case_source, "packs/cases/bad.md", card_id="case-bad", card_type="判例卡",
+        sources=[GOOD_SOURCE],
+        case_quotes=[{"source_id": "dxal", "text": "劳动者未履行请假手续的，一律构成旷工并可解除劳动合同。"}],
+    )
+    code, _ = run(gen, kb_with_case_source)
+    assert code != 0
+    assert "(c)" in str(code) and "(f)" in str(code), "既要报「引文对不上」也要报「这张卡没有核得过的引文」"
+
+
+def test_case_quote_without_source_id_is_not_verifiable(gen, kb_with_case_source):
+    """case_quotes 不写 source_id ⇒ 当场拒绝（判例没有"法名"可以拿去猜原件）。"""
+    write_card(
+        kb_with_case_source, "packs/cases/bad.md", card_id="case-bad", card_type="判例卡",
+        sources=[GOOD_SOURCE],
+        case_quotes=[{"text": "劳动者未履行请假手续且请假合理性存疑，其擅自离岗构成旷工。"}],
+    )
+    code, _ = run(gen, kb_with_case_source)
+    assert code != 0 and "source_id" in str(code)
+
+
+def test_case_quote_must_also_appear_in_the_card_body(gen, kb_with_case_source):
+    """两面一致对 case_quotes 同样成立：facts 里写着、正文里没有 ⇒ 拒绝。
+
+    这条属于"卡片自洽"那一批，**--no-strict 也不降**。
+    """
+    path = write_card(
+        kb_with_case_source, "packs/cases/bad.md", card_id="case-bad", card_type="判例卡",
+        sources=[GOOD_SOURCE],
+        case_quotes=[{"source_id": "dxal", "text": "劳动者未履行请假手续且请假合理性存疑，其擅自离岗构成旷工。"}],
+    )
+    head, body = path.read_text(encoding="utf-8").split("---\n", 2)[1:]
+    path.write_text("---\n" + head + "---\n正文里没有那句话。\n", encoding="utf-8")
+    code, _ = run(gen, kb_with_case_source, "--no-strict")
+    assert code != 0 and "与正文不逐字一致" in str(code)
+
+
+def test_non_case_card_needs_no_case_quotes(gen, kb_with_case_source):
+    """负对照：法条卡不受 (f) 管。闸若写成"所有卡都要有 case_quotes"，全库当场停摆。"""
+    write_card(kb_with_case_source, "packs/statutes/ok.md", card_id="statute-ok", sources=[GOOD_SOURCE])
+    assert run(gen, kb_with_case_source)[0] == 0
+
+
+def test_case_type_card_outside_cases_dir_is_still_covered(gen, kb_with_case_source):
+    """判例卡放到 packs/statutes/ 下也一样要过 (f)——闸认的是类型，不只是目录。
+
+    只认目录的话，把文件挪个位置就能绕过去，而挪位置不需要理由。
+    """
+    write_card(kb_with_case_source, "packs/statutes/sneaky.md", card_id="case-sneaky",
+               card_type="判例卡", sources=[GOOD_SOURCE])
+    code, _ = run(gen, kb_with_case_source)
+    assert code != 0 and "case-sneaky" in str(code)
+
+
+# ── (g) 机构官网只给数据卡用 ────────────────────────────────────────────
+INST_URL = "https://www.example-hospital.org/kepu/4049.html"
+
+
+def _kb_with_institution(tmp_path):
+    entry = write_original(tmp_path, "inst", ORIGINAL, name="某机构官网页")
+    entry.update(
+        {
+            "kind": "机构官网",
+            "official_host": "www.example-hospital.org",
+            "url": INST_URL,
+            "justification": "这条热线由该机构自己运行，号码与服务时间是它自己公布的",
+        }
+    )
+    write_registry(tmp_path, [write_original(tmp_path, "lhtf", ORIGINAL, name="中华人民共和国劳动合同法"), entry])
+    return tmp_path
+
+
+def test_institution_source_is_allowed_on_a_data_card(gen, kb):
+    """正向对照：数据卡引机构官网 ⇒ 过。这是这个 kind 存在的全部理由。"""
+    root = _kb_with_institution(kb)
+    write_card(root, "packs/data/x.md", card_id="data-x", card_type="数据卡", sources=[INST_URL])
+    assert run(gen, root)[0] == 0
+
+
+@pytest.mark.parametrize("card_type", ["法条卡", "判例卡", "流程SOP", "计算规则", "情绪指南"])
+def test_institution_source_rejected_on_every_other_card_type(gen, kb, card_type):
+    """机构官网被数据卡之外的卡引用 ⇒ 拒绝生成并点名。
+
+    【为什么不能并进 (b) 的 host 闸】(b) 问"这是不是一手源"，答案是"是——机构自己的官网"；
+    (g) 问"这份一手源能拿来断言什么"，答案是"只有它自己的事"。合成一道的形态是：
+    某个 host 为了一条热线号码进了白名单，从此一张法条卡可以拿某医院的科普文当法律依据。
+    """
+    root = _kb_with_institution(kb)
+    rel = "packs/cases/x.md" if card_type == "判例卡" else "packs/statutes/x.md"
+    write_card(root, rel, card_id="card-x", card_type=card_type, sources=[INST_URL])
+    code, _ = run(gen, root)
+    assert code != 0
+    assert "(g)" in str(code) and "card-x" in str(code)
+
+
+def test_institution_source_rejected_when_referenced_only_by_source_id(gen, kb):
+    """从 sources 里拿掉、只在 facts 的 source_id 里引 ⇒ 照样红。
+
+    只查 sources 的话，把 URL 从 sources 删掉、留着 facts 里的 source_id 就能绕过去，
+    而**代码消费的恰恰是 facts 那一面**。
+    """
+    root = _kb_with_institution(kb)
+    write_card(
+        root, "packs/statutes/x.md", card_id="statute-x", sources=[GOOD_SOURCE],
+        quotes=[{"law": "某机构官网页", "article": "收费表", "source_id": "inst", "text": ORIGINAL.strip()}],
+    )
+    code, _ = run(gen, root)
+    assert code != 0 and "(g)" in str(code) and "inst" in str(code)
+
+
+def test_industry_norm_is_not_restricted_to_data_cards(gen, kb):
+    """负对照：`行业规范`（真正的规范文件）不受 (g) 管，任何卡都能引。
+
+    两个 kind 若在这里表现一致，那就说明 (g) 认的不是 kind 而是别的东西。
+    """
+    entry = write_original(kb, "ethics", ORIGINAL, name="某学会伦理守则")
+    entry.update({"kind": "行业规范", "official_host": "www.example-society.org",
+                  "url": "https://www.example-society.org/ethics.html"})
+    write_registry(kb, [write_original(kb, "lhtf", ORIGINAL, name="中华人民共和国劳动合同法"), entry])
+    write_card(kb, "packs/statutes/x.md", card_id="statute-x",
+               sources=["https://www.example-society.org/ethics.html"])
+    assert run(gen, kb)[0] == 0
+
+
+# ── (h) 隔离区的标签不许撒谎 ────────────────────────────────────────────
+@pytest.mark.parametrize("rel", ["quarantine/cases/x.md", "packs/cases/quarantine/x.md"])
+@pytest.mark.parametrize("confidence", ["原文核实", "无外部断言"])
+def test_quarantine_card_may_not_claim_an_indexable_confidence(gen, kb, rel, confidence):
+    """隔离卡挂「原文核实」/「无外部断言」⇒ 拒绝生成并点名。
+
+    隔离区的卡本来就不进索引，所以这道闸管的**不是**它会不会被检索到，
+    而是**标签会不会撒谎**：搬回 packs/ 只是一次 mv，搬的人看到"原文核实"
+    会以为核实这一步已经有人做过了——而它进隔离区的全部理由就是核不动。
+    两种摆法都要拦：闸认的是**目录段**，不是某一条固定路径。
+    """
+    write_card(kb, "packs/statutes/ok.md", card_id="statute-ok", sources=[GOOD_SOURCE])
+    write_card(kb, rel, card_id="case-q", confidence=confidence, sources=["本卡没有出处。"])
+    code, _ = run(gen, kb)
+    assert code != 0
+    assert "(h)" in str(code) and "x.md" in str(code) and confidence in str(code)
+
+
+@pytest.mark.parametrize("confidence", ["待核实", "二手转述"])
+def test_quarantine_card_with_an_honest_label_passes(gen, kb, confidence):
+    """负对照：诚实的标签放行。闸若写成"隔离区一律红"，整个隔离区当场没法存在。"""
+    write_card(kb, "packs/statutes/ok.md", card_id="statute-ok", sources=[GOOD_SOURCE])
+    write_card(kb, "quarantine/cases/x.md", card_id="case-q", confidence=confidence,
+               sources=["https://www.sohu.com/x"])
+    code, data = run(gen, kb)
+    assert code == 0
+    assert [e["id"] for e in data] == ["statute-ok"]
+
+
+# ── 现库的两条数据判据（本轮裁定②⑥的落地面）────────────────────────────
+REVIVED_CASE = "case-qingjia-shouxu-maodun-kuanggong-2025"
+
+
+def test_revived_case_card_is_grounded_and_not_in_the_case_quotes_gap(gen, tmp_path):
+    """搬回 packs/cases/ 的那张卡（三中院 2025 典型案例·案例九）必须**自己过 (f)**。
+
+    【为什么要单独钉】它是"从隔离区复活"的样板：复活的正确做法是把卡改成只断言官方页
+    逐字写着的那一句，再用 case_quotes 把那一句钉到原件上。若哪天有人把它的 case_quotes
+    删了、或把案情细节又加回来，这条会以"它出现在 (f) 名单里"的形式失败——
+    而 test_real_library_red_is_only_the_case_quotes_gap 那条**不会**，因为现库本来就红在 (f)。
+    """
+    root = tmp_path / "kb"
+    shutil.copytree(REAL_KNOWLEDGE, root)
+    assert (root / "packs" / "cases" / f"{REVIVED_CASE[len('case-'):]}.md").exists(), "卡不在 packs/cases/ 下"
+    code, _ = run(gen, root)
+    lines = [ln for ln in str(code).splitlines() if REVIVED_CASE in ln]
+    assert lines == [], f"复活的那张卡自己没站住：{lines}"
+
+
+@pytest.mark.parametrize("needle", ["wikisource", "sohu"])
+def test_packs_never_name_a_reprint_site(needle):
+    """`packs/` 的说明文字里不许再出现转载站的站名（经理 2026-09-07 裁定⑥）。
+
+    【为什么连"说明里提一句"都不行】这些字样出现在卡里时，形态永远是
+    "此前版本来自 sohu.com，已删除"——一句本意是自证清白的话。但它同时在**卡的正文里**
+    留下了一个可检索的站名，而卡的正文是要喂给模型的：模型看到的是"这张卡与 sohu 有关"，
+    看不到那半句"已删除"。统一改写成「非官方转载站」，语义一个字不少，站名不进上下文。
+    """
+    hits = [
+        f"{p}:{i}"
+        for p in sorted((REAL_KNOWLEDGE / "packs").glob("**/*.md"))
+        for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
+        if needle in line
+    ]
+    assert hits == [], f"packs/ 里还留着「{needle}」：\n" + "\n".join(hits)

@@ -219,3 +219,78 @@ def test_quarantine_cards_are_not_verified(verify, kb):
         quotes=[{"law": "根本没有这部法", "article": "第一条", "text": "随便什么"}],
     )
     assert run(verify, kb) == 0
+
+
+# ── ④ case_quotes（判例卡的官方页逐字节选）────────────────────────────
+CASE_ORIGINAL = (
+    "北京市第三中级人民法院召开新闻发布会。\n"
+    "第九个典型案例指出，劳动者未履行请假手续且请假合理性存疑，其擅自离岗构成旷工。\n"
+)
+
+
+@pytest.fixture
+def kb_case(tmp_path):
+    write_registry(
+        tmp_path,
+        [
+            write_original(tmp_path, "lhtf", ORIGINAL, name="中华人民共和国劳动合同法"),
+            write_original(tmp_path, "dxal", CASE_ORIGINAL, kind="官方案例", name="某法院典型案例发布页"),
+        ],
+    )
+    return tmp_path
+
+
+def test_case_quote_match(verify, kb_case, capsys):
+    write_card(
+        kb_case, "packs/cases/a.md", card_id="case-a", card_type="判例卡",
+        case_quotes=[{"source_id": "dxal", "text": "劳动者未履行请假手续且请假合理性存疑，其擅自离岗构成旷工。"}],
+    )
+    assert run(verify, kb_case) == 0
+    assert "一致 1" in capsys.readouterr().out
+
+
+def test_case_quote_mismatch_is_reported_as_a_case_quote(verify, kb_case, capsys):
+    """报告要说清这是**判例引文**——法条引文与判例引文的修法完全不同。"""
+    write_card(
+        kb_case, "packs/cases/b.md", card_id="case-b", card_type="判例卡",
+        case_quotes=[{"source_id": "dxal", "text": "劳动者未履行请假手续的，一律构成旷工并可解除劳动合同。"}],
+    )
+    assert run(verify, kb_case) == 1
+    printed = capsys.readouterr().out
+    assert "[不一致]" in printed and "判例引文" in printed and "case-b" in printed
+
+
+def test_case_quote_without_source_id_is_missing_not_match(verify, kb_case, capsys):
+    """判例引文不写 source_id ⇒ 判「找不到原件」，不是按 law 名去猜。
+
+    猜的形态是：一句"第九个典型案例指出…"匹上了另一场发布会的通稿，然后报「一致」。
+    """
+    write_card(
+        kb_case, "packs/cases/c.md", card_id="case-c", card_type="判例卡",
+        case_quotes=[{"text": "劳动者未履行请假手续且请假合理性存疑，其擅自离岗构成旷工。"}],
+    )
+    assert run(verify, kb_case) == 1
+    printed = capsys.readouterr().out
+    assert "[找不到原件]" in printed and "source_id" in printed
+
+
+def test_case_quote_pointing_at_an_unregistered_source_is_missing(verify, kb_case, capsys):
+    write_card(
+        kb_case, "packs/cases/d.md", card_id="case-d", card_type="判例卡",
+        case_quotes=[{"source_id": "no-such", "text": "随便什么"}],
+    )
+    assert run(verify, kb_case) == 1
+    assert "no-such" in capsys.readouterr().out
+
+
+def test_both_quote_kinds_are_verified_in_one_run(verify, kb_case, capsys):
+    """一张卡同时带两种引文时，两种都要核——只核其中一种的形态是另一种从不报错。"""
+    write_card(
+        kb_case, "packs/cases/e.md", card_id="case-e", card_type="判例卡",
+        quotes=[{"law": "中华人民共和国劳动合同法", "article": "第四十七条", "text": "经济补偿按劳动者在本单位工作的年限"}],
+        case_quotes=[{"source_id": "dxal", "text": "其擅自离岗构成旷工。"}],
+    )
+    assert run(verify, kb_case, "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["total"] == 2 and payload["ok"] == 2
+    assert {r["field"] for r in payload["rows"]} == {"statute_quotes", "case_quotes"}

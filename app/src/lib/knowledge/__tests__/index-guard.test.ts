@@ -356,6 +356,55 @@ describe('自证：夹具真的坏了，不是测试在空转', () => {
 });
 
 /**
+ * 隔离区里的卡不许挂「可进索引」的 confidence（经理 2026-09-07 裁定）。
+ *
+ * 【它防的是什么】隔离区的卡本来就不进索引，所以这里管的**不是**它们会不会被检索到
+ *（那由上面 ⑩ 那组管），而是**标签会不会撒谎**：一张 `confidence: 原文核实` 的卡在
+ * `knowledge/quarantine/` 里躺着，而它进隔离区的**全部理由**就是核不动。
+ * 搬回 `packs/` 只是一次 `mv`，搬的人看到"原文核实"会以为这一步已经有人做过了。
+ * 2026-09-07 本仓实见 52 张这样的卡。
+ *
+ * 【为什么判据摆在这里，而不是只留在 python 侧】`gen-knowledge-index.py` 的守卫 (h)
+ * 管的是"生成索引的那一次"；这条断言管的是**仓库里现在躺着的这一批文件**。
+ * 两者会分叉的真实路径：有人只 `mv` 不重跑生成器（隔离区的卡本来就不进索引，
+ * 生成器的输出一个字都不会变，于是"没重跑"这件事在 index.json 上看不出来）。
+ */
+describe('🔴 隔离区的卡不许挂「可进索引」的 confidence（标签不能撒谎）', () => {
+  const QUARANTINE_DIR = path.join(REAL_DIR, 'quarantine');
+  /** 递归收集 quarantine 下的卡；不用 glob 依赖 */
+  function quarantineCards(dir: string): string[] {
+    if (!fs.existsSync(dir)) return [];
+    return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) return quarantineCards(full);
+      return e.isFile() && e.name.endsWith('.md') && e.name !== 'README.md' ? [full] : [];
+    });
+  }
+  const cards = quarantineCards(QUARANTINE_DIR);
+  const confidenceOf = (file: string): string | null => {
+    const raw = fs.readFileSync(file, 'utf8');
+    const fm = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(raw);
+    return fm ? (/^confidence:\s*(\S+)\s*$/m.exec(fm[1])?.[1] ?? null) : null;
+  };
+
+  test('夹具有效：隔离区里确实有卡，且每张都读得出 confidence（否则下面那条是空跑）', () => {
+    expect(cards.length).toBeGreaterThan(0);
+    expect(cards.filter((f) => confidenceOf(f) === null)).toEqual([]);
+  });
+
+  test('没有一张隔离卡挂着「原文核实」或「无外部断言」', () => {
+    const INDEXABLE = ['原文核实', '无外部断言'];
+    const bad = cards
+      .filter((f) => INDEXABLE.includes(confidenceOf(f)!))
+      .map((f) => `${path.relative(REAL_DIR, f)} → ${confidenceOf(f)}`);
+    expect(
+      bad,
+      `隔离区的卡挂着"可进索引"的标签，而它在那儿的理由就是核不动：\n${bad.join('\n')}`,
+    ).toEqual([]);
+  });
+});
+
+/**
  * 索引里的 sources 必须**全部是官方 host**（主理人 2026-09-07 裁决：知识库里不允许
  * 「二手转述」「待核实」，每条信息都要追到一手信源）。
  *
@@ -366,8 +415,11 @@ describe('自证：夹具真的坏了，不是测试在空转', () => {
  *
  * 【口径】判的是 host，不是"看着像不像官网"：
  * · `.gov.cn`（含 `gov.cn` 本身）恒可；
- * · 非 .gov.cn 只有一个口子——`knowledge/sources.json` 里 `kind=行业规范` 的发布机构官网，
+ * · 非 .gov.cn 只有两个口子——`knowledge/sources.json` 里 `kind=行业规范`（行业组织发的规范文件）
+ *   与 `kind=机构官网`（机构讲自己的事：热线/地址/收费）的机构官网，
  *   且必须是**先真的抓过一份原件**才会出现在登记簿里（白名单不能在代码里随手加一行字符串）；
+ * · `机构官网` 那批还**只能被数据卡引**（规范 §7.1.1）：进白名单答的是"这是不是一手源"，
+ *   引用范围答的是"这份一手源能拿来断言什么"，两个问题分开问；
  * · 不是 http(s) URL 的 source 只允许出现在 `confidence: 无外部断言` 的 D 类卡上
  *   （见 knowledge/README.md §2.2）——那类卡压根没有可核的外部原件，它的 sources 是一段
  *   说明自己为什么没有出处的话。任何一张有外部断言的卡拿散文当出处，都在这里红。
@@ -376,17 +428,22 @@ describe('🔴 索引里的 sources 全是官方 host（wikisource / sohu / 公�
   interface Row {
     id: string;
     path: string;
+    type: string;
     confidence: string;
     sources: string[];
   }
   const NO_EXTERNAL_CLAIM = '无外部断言';
+  const INSTITUTION_ONLY_CARD_TYPE = '数据卡';
   const rows: Row[] = JSON.parse(fs.readFileSync(path.join(REAL_DIR, 'index.json'), 'utf8'));
   const registry: Array<{ kind?: string; official_host?: string }> = JSON.parse(
     fs.readFileSync(path.join(REAL_DIR, 'sources.json'), 'utf8'),
   );
-  const extraHosts = new Set(
-    registry.filter((e) => e.kind === '行业规范' && e.official_host).map((e) => e.official_host!.toLowerCase()),
-  );
+  const hostsOfKind = (kind: string) =>
+    new Set(
+      registry.filter((e) => e.kind === kind && e.official_host).map((e) => e.official_host!.toLowerCase()),
+    );
+  const institutionHosts = hostsOfKind('机构官网');
+  const extraHosts = new Set([...hostsOfKind('行业规范'), ...institutionHosts]);
   const hostOf = (s: string): string | null => {
     try {
       const u = new URL(s);
@@ -419,6 +476,25 @@ describe('🔴 索引里的 sources 全是官方 host（wikisource / sohu / 公�
         r.sources.filter((s) => hostOf(s) === null).map((s) => `[${r.confidence}] ${r.id} → ${s.slice(0, 60)}`),
       );
     expect(bad, `散文出处只有 D 类卡可以有，这几张不是 D 类：\n${bad.join('\n')}`).toEqual([]);
+  });
+
+  test('夹具有效：登记簿里确实有 kind=机构官网 的 host（否则下面那条是空跑）', () => {
+    expect(institutionHosts.size).toBeGreaterThan(0);
+  });
+
+  test(`kind=机构官网 的 host 只出现在${INSTITUTION_ONLY_CARD_TYPE}上`, () => {
+    // 【为什么这条要单独有】它与上一条各答一个问题：上一条问"这是不是一手源"，
+    // 这一条问"这份一手源能拿来断言什么"。合成一条的形态是：某个 host 为了一条热线号码
+    // 进了白名单，从此一张法条卡可以拿某医院的科普文当法律依据，而 host 闸一声不吭地放行。
+    const bad = rows
+      .filter((r) => r.type !== INSTITUTION_ONLY_CARD_TYPE)
+      .flatMap((r) =>
+        r.sources
+          .map((s) => ({ src: s, host: hostOf(s) }))
+          .filter((x) => x.host !== null && institutionHosts.has(x.host))
+          .map((x) => `[${r.type}] ${r.id}（${r.path}）→ ${x.src}`),
+      );
+    expect(bad, `机构官网只能给数据卡的 facts（热线/地址/收费）做出处：\n${bad.join('\n')}`).toEqual([]);
   });
 
   test(`反向：${NO_EXTERNAL_CLAIM} 的卡不许带 http(s) 出处（有出处就该走原文核实并过 host 闸）`, () => {
