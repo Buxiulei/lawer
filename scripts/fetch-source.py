@@ -288,7 +288,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--issuer-host",
         default=None,
-        help=f"仅 kind={ks.NON_GOV_KIND} 可用：显式声明这个非 .gov.cn 的 host 是发布机构官网，须与 url 的 host 完全相同",
+        help=(
+            f"仅 kind∈{{{ks.NON_GOV_KIND}, {ks.INSTITUTION_KIND}}} 可用：显式声明这个非 .gov.cn 的 host "
+            f"是该机构自己的官网，须与 url 的 host 完全相同"
+        ),
+    )
+    p.add_argument(
+        "--justification",
+        default=None,
+        help=(
+            f"仅 kind={ks.INSTITUTION_KIND} 必填：写明该机构与它自述信息的关系"
+            f"（如「这条热线由该中心自己运行，号码与服务时间是它自己公布的」）。"
+            f"落进登记簿，供人复核这份源凭什么算数"
+        ),
     )
     p.add_argument("--knowledge-dir", default=None, help="默认仓内 knowledge/；测试用")
     return p
@@ -305,17 +317,30 @@ def main(argv: list[str] | None = None) -> int:
     if host is None:
         die(f"--url 必须是 http(s) URL：{args.url}")
     if not (host == "gov.cn" or host.endswith(".gov.cn")):
-        if args.kind != ks.NON_GOV_KIND or not args.issuer_host:
+        if args.kind not in ks.NON_GOV_KINDS or not args.issuer_host:
             die(
                 f"拒绝抓取非官方 host「{host}」。\n"
                 f"  缺什么：一手源必须落在 .gov.cn 上。\n"
                 f"  为什么：转载站（wikisource / sohu / 律所站 / 公众号）与原件在字面上会有出入，"
                 f"而登记簿一旦收了它，机械核验只会证明「与那份转载一致」。\n"
-                f"  怎么办：换官方页面重抓；确属{ks.NON_GOV_KIND}（发布机构自己的官网）时，"
-                f"加 --kind {ks.NON_GOV_KIND} --issuer-host {host}"
+                f"  怎么办：换官方页面重抓；确属{ks.NON_GOV_KIND}（行业组织发布的规范文件）时，"
+                f"加 --kind {ks.NON_GOV_KIND} --issuer-host {host}；"
+                f"若只是某机构在自己官网上讲自己的事（热线/地址/收费），"
+                f"加 --kind {ks.INSTITUTION_KIND} --issuer-host {host} --justification <说明>"
+                f"——后者只有数据卡能引（见 knowledge/README.md §7.1）"
             )
         if args.issuer_host.lower() != host:
             die(f"--issuer-host「{args.issuer_host}」与 url 的 host「{host}」不一致，拒绝抓取")
+    if args.kind == ks.INSTITUTION_KIND and not (args.justification or "").strip():
+        die(
+            f"kind={ks.INSTITUTION_KIND} 必须写 --justification。\n"
+            f"  缺什么：一句「这家机构与这条信息是什么关系」。\n"
+            f"  为什么：这个 kind 是白名单上唯一凭「机构自述」成立的一类。"
+            f"不写理由的话，它会退化成一个填了就能进白名单的下拉框选项。\n"
+            f"  怎么办：--justification「12356 是该中心自己运行的热线，号码与服务时间由它自己公布」这类"
+        )
+    if args.justification and args.kind != ks.INSTITUTION_KIND:
+        die(f"--justification 只对 kind={ks.INSTITUTION_KIND} 有意义（当前 kind={args.kind}）")
 
     entries = ks.load_registry(root)
     for e in entries:
@@ -335,21 +360,41 @@ def main(argv: list[str] | None = None) -> int:
     # 而登记簿里还是旧的。整条 entry 相等才叫未变化。
     content_same = bool(old and old["url"] == args.url and old["content_sha256"] == sha and raw_path.exists())
 
+    # 【text.txt 只能由抽取器写，人工粘贴这条路已封死（经理 2026-09-07 裁定）】
+    # 旧行为是"抽不出就让人自己把正文写进 text.txt，脚本认已存在的文件"。
+    # 那条路的产物是 **raw 与 text 毫无对应关系**的条目，而登记簿看起来完全正常：
+    # 有 url、有 sha256、有抓取时间。2026-09-07 在 statute-gerensuodeshuifa 上实见此形态——
+    # raw 是 flk 的 552 字节 SPA 空壳，text 是从 chinatax 另抓的正文，
+    # 而 verify-quotes 只读 text，于是"逐字核实"核的是一份没人登记过的文件。
+    # 现在：抽不出就只落 raw、files.text=null、needs_text=true，
+    # 由 scripts/audit-sources.py 判红，直到有人换一个抽得动的官方 URL 重抓。
+    needs_text = False
     if not content_same:
         outdir.mkdir(parents=True, exist_ok=True)
         raw_path.write_bytes(raw)
         text = extract_text(raw, ext, fetch_meta.get("content_type", ""))
         if text:
             text_path.write_text(text, encoding="utf-8")
-        elif not text_path.exists():
+        else:
+            needs_text = True
+            stale = ""
+            if text_path.exists():
+                text_path.unlink()
+                stale = f"  已删除：{text_path}（它不是从这份 raw 抽出来的，留着就是一把脱离了原件的尺子）\n"
             print(
-                f"注意：{ext} 原件已存档，但本机抽不出文本。\n"
+                f"注意：{ext} 原件已存档，但抽不出文本，已登记为 needs_text=true。\n"
                 f"  缺什么：{text_path}\n"
-                f"  为什么：{ext} 需要额外依赖（PDF 需 pypdf/PyPDF2），本机没有，本脚本不为此新增依赖。\n"
-                f"  怎么办：自行把纯文本写到上面那个路径，再原样重跑本命令即可完成登记"
-                f"（本脚本幂等，会认已存在的 text.txt）。在那之前 verify-quotes 会把引用它的卡判为「找不到原件」。",
+                f"{stale}"
+                f"  为什么：{ext} 需要额外依赖（PDF 需 pypdf/PyPDF2），本机没有，本脚本不为此新增依赖；"
+                f"而**手工把正文粘进 text.txt 这条路已经封死**——那样 raw 与 text 之间没有任何对应关系，"
+                f"机械核验会照常判「一致」，只是一致于一份没人登记过的文件。\n"
+                f"  怎么办：换一个本机抽得动的官方 URL（同一份文件的 HTML 版／DOCX 版）重跑本命令；"
+                f"或在本机装上 pypdf 后重跑。在那之前 scripts/audit-sources.py 判红、"
+                f"verify-quotes 把引用它的卡判为「找不到原件」。",
                 file=sys.stderr,
             )
+    elif old:
+        needs_text = bool(old.get("needs_text"))
 
     entry = {
         "source_id": args.source_id,
@@ -364,9 +409,13 @@ def main(argv: list[str] | None = None) -> int:
         "status": args.status,
         "files": {
             "raw": f"{ks.ORIGINALS_DIR}/{args.source_id}/raw.{ext}",
-            "text": f"{ks.ORIGINALS_DIR}/{args.source_id}/text.txt" if text_path.exists() else None,
+            "text": None if needs_text else f"{ks.ORIGINALS_DIR}/{args.source_id}/text.txt",
         },
     }
+    if needs_text:
+        entry["needs_text"] = True
+    if args.justification:
+        entry["justification"] = args.justification
     if args.effective_from:
         entry["effective_from"] = args.effective_from
 

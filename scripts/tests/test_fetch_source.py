@@ -161,3 +161,89 @@ def test_corrupt_registry_refuses_rather_than_treating_as_empty(fetch, tmp_path)
     (tmp_path / "sources.json").write_text("{不是数组}", encoding="utf-8")
     with pytest.raises(ValueError):
         fetch.main(["--source-id", "x", "--kind", "法律", "--url", GOV_URL, *BASE, "--knowledge-dir", str(tmp_path)])
+
+
+# ── kind=机构官网（经理 2026-09-07 裁定新增）─────────────────────────────
+HOSP_URL = "https://www.example-hospital.org/kepu/1.html"
+JUSTIFY = ["--justification", "这条热线由该机构自己运行，号码与服务时间是它自己公布的"]
+
+
+def test_institution_kind_needs_issuer_host_and_justification(fetch, tmp_path):
+    """两样都齐才放行。这是白名单上唯一凭「机构自述」成立的一类，理由必须写下来。"""
+    code = run(fetch, tmp_path, ["--source-id", "inst-1", "--kind", "机构官网", "--url", HOSP_URL,
+                                 "--issuer-host", "www.example-hospital.org", *JUSTIFY, *BASE])
+    assert code == 0
+    entry = registry(tmp_path)[0]
+    assert entry["kind"] == "机构官网" and entry["justification"].startswith("这条热线")
+
+
+def test_institution_kind_without_justification_rejected(fetch, tmp_path):
+    """不写理由就放行的话，这个 kind 会退化成一个填了就能进白名单的下拉框选项。"""
+    code = run(fetch, tmp_path, ["--source-id", "inst-2", "--kind", "机构官网", "--url", HOSP_URL,
+                                 "--issuer-host", "www.example-hospital.org", *BASE])
+    assert code != 0 and "justification" in str(code)
+    assert not (tmp_path / "sources.json").exists()
+
+
+def test_institution_kind_without_issuer_host_rejected(fetch, tmp_path):
+    code = run(fetch, tmp_path, ["--source-id", "inst-3", "--kind", "机构官网", "--url", HOSP_URL, *JUSTIFY, *BASE])
+    assert code != 0
+
+
+def test_justification_is_rejected_on_other_kinds(fetch, tmp_path):
+    """--justification 用在别的 kind 上是无意义的，静默忽略会让人以为自己写下了理由。"""
+    code = run(fetch, tmp_path, ["--source-id", "law-1", "--kind", "法律", "--url", GOV_URL, *JUSTIFY, *BASE])
+    assert code != 0 and "justification" in str(code)
+
+
+# ── text.txt 只能由抽取器写（经理 2026-09-07 裁定）───────────────────────
+def test_unextractable_content_is_registered_as_needs_text(fetch, tmp_path, capsys):
+    """抽不出文本 ⇒ 只落 raw、files.text=null、needs_text=true。
+
+    旧行为是"让人自己把正文写进 text.txt，脚本认已存在的文件"，产物是
+    **raw 与 text 毫无对应关系**的条目，而登记簿看起来完全正常。
+    """
+    code = run(fetch, tmp_path, ["--source-id", "pdf-1", "--kind", "法律", "--url", GOV_URL, *BASE],
+               content=b"%PDF-1.4 binary", ctype="application/pdf")
+    assert code == 0
+    entry = registry(tmp_path)[0]
+    assert entry["files"]["text"] is None and entry["needs_text"] is True
+    assert (tmp_path / "sources/originals/pdf-1/raw.pdf").exists()
+    assert not (tmp_path / "sources/originals/pdf-1/text.txt").exists()
+    assert "needs_text" in capsys.readouterr().err
+
+
+def test_a_hand_pasted_text_file_is_deleted_not_adopted(fetch, tmp_path, capsys):
+    """人工粘进去的 text.txt 不但不采信，还要删掉——留着就是一把脱离了原件的尺子。
+
+    2026-09-07 实见的事故形态：raw 是 SPA 空壳、text 是从另一个站抓来的正文，
+    verify-quotes 照常判「一致」，只是一致于一份没人登记过的文件。
+    """
+    pasted = tmp_path / "sources/originals/pdf-2/text.txt"
+    pasted.parent.mkdir(parents=True, exist_ok=True)
+    pasted.write_text("这段正文是人从别处粘进来的。", encoding="utf-8")
+    code = run(fetch, tmp_path, ["--source-id", "pdf-2", "--kind", "法律", "--url", GOV_URL, *BASE],
+               content=b"%PDF-1.4 binary", ctype="application/pdf")
+    assert code == 0
+    assert not pasted.exists(), "人工粘贴的正文必须被删掉，不能被当成这份 raw 的抽取结果"
+    assert registry(tmp_path)[0]["files"]["text"] is None
+    assert "已删除" in capsys.readouterr().err
+
+
+def test_extractable_content_never_gets_needs_text(fetch, tmp_path):
+    """负对照：抽得出文本的正常路径一如既往（闸若写成"一律 needs_text"，全库当场作废）。"""
+    assert run(fetch, tmp_path, ["--source-id", "html-1", "--kind", "法律", "--url", GOV_URL, *BASE]) == 0
+    entry = registry(tmp_path)[0]
+    assert entry["files"]["text"].endswith("text.txt") and "needs_text" not in entry
+
+
+def test_needs_text_survives_a_metadata_only_rerun(fetch, tmp_path):
+    """字节没变、只改元数据时，needs_text 不能被悄悄抹掉。
+
+    抹掉的形态是：一条抽不出正文的登记，改一次 status 就变成"看起来正常"的条目。
+    """
+    argv = ["--source-id", "pdf-3", "--kind", "法律", "--url", GOV_URL, *BASE]
+    assert run(fetch, tmp_path, argv, content=b"%PDF-1.4 binary", ctype="application/pdf") == 0
+    assert run(fetch, tmp_path, [*argv, "--status", "已修正"], content=b"%PDF-1.4 binary", ctype="application/pdf") == 0
+    entry = registry(tmp_path)[0]
+    assert entry["status"] == "已修正" and entry["needs_text"] is True and entry["files"]["text"] is None

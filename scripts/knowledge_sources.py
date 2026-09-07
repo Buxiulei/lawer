@@ -48,10 +48,22 @@ KINDS = {
     "官方案例",
     "官方数据",
     "行业规范",
+    "机构官网",
 }
 STATUSES = {"现行", "已修正", "已废止"}
-#: 只有这一类的一手源可以不在 .gov.cn 上（发布机构自己的官网），且必须在登记簿里写明。
+#: 行业规范：学会守则一类**规范文件**，一手源就是发布它的行业组织官网。
 NON_GOV_KIND = "行业规范"
+#: 机构官网（2026-09-07 经理裁定新增）：不是规范文件，是**一家机构在自己官网上讲自己的事**
+#: ——热线号码、办公地址、自己的收费公示。它与"行业规范"必须分开，因为两者的可信范围不同：
+#: 一份学会守则说的是行业该怎么做，一个机构的官网说的只是它自己。前者可以被任何卡当依据引，
+#: 后者**只配给数据卡里那几个"打这个号码/去这个地址/这家收多少钱"的事实做出处**。
+#: 混在一个 kind 里的形态是：某天一张法条卡拿某医院的科普文当法律依据，而 host 闸放行，
+#: 因为那个 host 早就为了一条热线号码进过白名单。
+INSTITUTION_KIND = "机构官网"
+#: 这两类的一手源可以不在 .gov.cn 上（机构自己的官网），且必须在登记簿里写明。
+NON_GOV_KINDS = frozenset({NON_GOV_KIND, INSTITUTION_KIND})
+#: 机构官网条目只允许被这个 type 的卡引用（见 gen-knowledge-index.py 守卫 (g)）。
+INSTITUTION_ONLY_CARD_TYPE = "数据卡"
 
 REGISTRY_NAME = "sources.json"
 ORIGINALS_DIR = "sources/originals"
@@ -141,6 +153,15 @@ def load_registry(knowledge_dir: Path) -> list[dict[str, Any]]:
         for field in ("source_id", "kind", "name", "issuer", "official_host", "url", "content_sha256", "status", "files"):
             if field not in e:
                 raise ValueError(f"{path} 条目缺字段 {field}：{json.dumps(e, ensure_ascii=False)[:120]}")
+        # 机构官网是**唯一**一类"非 .gov.cn 且不是规范文件"的源，它凭什么算数只有一个答案：
+        # 这家机构在讲它自己的事。那句话必须写下来（--justification），否则这个 kind 会变成
+        # 一个"填了就能进白名单"的下拉框选项。
+        if e["kind"] == INSTITUTION_KIND and not str(e.get("justification", "")).strip():
+            raise ValueError(
+                f"{path} 的 {e['source_id']} 是 kind={INSTITUTION_KIND} 却没有 justification："
+                f"必须写明该机构与它自述信息的关系（如「12356 是该中心自己运行的热线，号码与服务时间由它自己公布」）。"
+                f"用 scripts/fetch-source.py --kind {INSTITUTION_KIND} --issuer-host <host> --justification <说明> 重新登记。"
+            )
     return data
 
 
@@ -157,16 +178,34 @@ def by_id(entries: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
 # ── host 白名单 ─────────────────────────────────────────────────────────
 def extra_allowed_hosts(entries: list[dict[str, Any]]) -> set[str]:
-    """登记簿里 kind=行业规范 的发布机构官网 host——白名单在 .gov.cn 之外的唯一来源。
+    """登记簿里 kind∈{行业规范, 机构官网} 的机构官网 host——白名单在 .gov.cn 之外的唯一来源。
 
     刻意做成"必须先进登记簿才算数"：白名单若能在代码里随手加一行字符串，
     它迟早会长出 sohu.com。要加一个非 .gov.cn 的源，就得先真的抓一份原件下来。
+
+    **进了这个白名单只是"能被引"，不等于"谁都能引"**：机构官网那批还要过
+    gen-knowledge-index.py 的守卫 (g)（只有数据卡能引）。两道分开，是因为它们答的是
+    不同的问题——host 闸问"这是不是一手源"，(g) 问"这份一手源能拿来断言什么"。
     """
     return {
         str(e.get("official_host", "")).lower().strip()
         for e in entries
-        if e.get("kind") == NON_GOV_KIND and e.get("official_host")
+        if e.get("kind") in NON_GOV_KINDS and e.get("official_host")
     }
+
+
+def institution_hosts(entries: list[dict[str, Any]]) -> set[str]:
+    """kind=机构官网 的 host 集合。引用它们的卡只能是数据卡（守卫 (g)）。"""
+    return {
+        str(e.get("official_host", "")).lower().strip()
+        for e in entries
+        if e.get("kind") == INSTITUTION_KIND and e.get("official_host")
+    }
+
+
+def institution_source_ids(entries: list[dict[str, Any]]) -> set[str]:
+    """kind=机构官网 的 source_id 集合（facts 里按 source_id 指名原件的那条路）。"""
+    return {str(e["source_id"]) for e in entries if e.get("kind") == INSTITUTION_KIND}
 
 
 def host_of(url: str) -> str | None:
@@ -190,7 +229,8 @@ def check_source_url(url: str, extra: set[str]) -> str | None:
         return f"不是 http(s) URL（散文出处、本地副本描述都不算机器可核的出处）：{str(url)[:60]}"
     if not is_official_host(host, extra):
         return (
-            f"host「{host}」不是官方源：只认 .gov.cn，或登记簿里 kind={NON_GOV_KIND} 的发布机构官网"
+            f"host「{host}」不是官方源：只认 .gov.cn，或登记簿里 "
+            f"kind∈{{{NON_GOV_KIND}, {INSTITUTION_KIND}}} 的机构官网"
             f"（当前登记在册的有 {sorted(extra) or '无'}）"
         )
     return None
@@ -250,20 +290,46 @@ def resolve_original(
     return entry, path.read_text(encoding="utf-8"), None
 
 
+#: 引文的两种形态。共用同一套归一与三态判定——"这段字是不是逐字出自那份原件"是同一件事，
+#: 两处各写一份的形态是"法条核得动、判例核不动"，而两边都不报错。
+STATUTE_QUOTE = "statute_quotes"
+CASE_QUOTE = "case_quotes"
+
+
 def verify_quote(
-    knowledge_dir: Path, entries: list[dict[str, Any]], card_id: str, card_path: str, quote: dict[str, Any]
+    knowledge_dir: Path,
+    entries: list[dict[str, Any]],
+    card_id: str,
+    card_path: str,
+    quote: dict[str, Any],
+    field: str = STATUTE_QUOTE,
 ) -> dict[str, Any]:
-    """核一条引文。三态：一致 / 不一致 / 找不到原件。"""
-    law = str(quote.get("law", ""))
-    article = str(quote.get("article", ""))
+    """核一条引文。三态：一致 / 不一致 / 找不到原件。
+
+    `field` 说这条引文来自 facts 的哪个字段：`statute_quotes`（法条逐字条文，可按 law 名
+    匹配登记簿）或 `case_quotes`（判例卡摘的官方页原文，**必须写 source_id**）。
+    判例没有"法名"这种可以互为子串匹配的东西——一句"第九个典型案例指出…"能匹上哪份原件，
+    只有写卡的人知道；靠猜的形态是随机挑一份发布会通稿来核，且照样报"一致"。
+    """
+    law = str(quote.get("law", "") or quote.get("source_id", ""))
+    article = str(quote.get("article", "") or quote.get("note", ""))
     text = str(quote.get("text", ""))
     row: dict[str, Any] = {
         "card_id": card_id,
         "path": card_path,
+        "field": field,
         "law": law,
         "article": article,
         "source_id": quote.get("source_id"),
     }
+    if field == CASE_QUOTE and not str(quote.get("source_id", "")).strip():
+        row["state"] = _MISSING
+        row["detail"] = (
+            "case_quotes 缺 source_id：判例引文不能按名字猜原件（一句案例要旨匹不到任何"
+            "「法名」，猜中的那份多半不是它）。先用 scripts/fetch-source.py 抓官方发布页，"
+            "再把它的 source_id 写到这条 quote 上。"
+        )
+        return row
     entry, original, reason = resolve_original(knowledge_dir, entries, quote)
     if entry is not None:
         row["source_id"] = entry["source_id"]
@@ -295,14 +361,14 @@ def verify_quote(
 
 
 def verify_cards(
-    knowledge_dir: Path, cards: list[tuple[str, str, list[dict[str, Any]]]]
+    knowledge_dir: Path, cards: list[tuple[str, str, list[dict[str, Any]]]], field: str = STATUTE_QUOTE
 ) -> list[dict[str, Any]]:
-    """cards: [(card_id, 相对 knowledge/ 的 path, statute_quotes)]"""
+    """cards: [(card_id, 相对 knowledge/ 的 path, 该字段的引文列表)]"""
     entries = load_registry(knowledge_dir)
     rows = []
     for card_id, card_path, quotes in cards:
         for q in quotes:
-            rows.append(verify_quote(knowledge_dir, entries, card_id, card_path, q))
+            rows.append(verify_quote(knowledge_dir, entries, card_id, card_path, q, field))
     return rows
 
 
@@ -311,7 +377,8 @@ def format_rows(rows: list[dict[str, Any]]) -> str:
     bad = [r for r in rows if r["state"] != _MATCH]
     out = []
     for r in bad:
-        out.append(f"[{r['state']}] {r['card_id']} · {r['law']}{r['article']}（{r['path']}）")
+        tag = "判例引文" if r.get("field") == CASE_QUOTE else "法条引文"
+        out.append(f"[{r['state']}]（{tag}）{r['card_id']} · {r['law']}{r['article']}（{r['path']}）")
         out.append(f"    {r.get('detail', '')}")
         if r["state"] == _MISMATCH and "card_excerpt" in r:
             out.append(f"    卡内：{r['card_excerpt']}")

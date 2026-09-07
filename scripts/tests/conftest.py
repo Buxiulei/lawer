@@ -48,6 +48,11 @@ def verify():
     return load_script("verify-quotes")
 
 
+@pytest.fixture
+def audit():
+    return load_script("audit-sources")
+
+
 def write_card(
     root: Path,
     rel: str,
@@ -56,13 +61,14 @@ def write_card(
     confidence: str = "原文核实",
     sources: list[str] | None = None,
     quotes: list[dict] | None = None,
+    case_quotes: list[dict] | None = None,
     body: str = "正文占位。",
     card_type: str = "法条卡",
 ) -> Path:
     """写一张合规的最小卡片。
 
-    facts.statute_quotes 的 text 会自动追加进正文——**卡内两面一致**是既有校验，
-    与本轮要测的"卡片 ↔ 官方原件"是两件事，夹具不该在那里先绊倒。
+    facts.statute_quotes / facts.case_quotes 的 text 会自动追加进正文——**卡内两面一致**
+    是既有校验，与本轮要测的"卡片 ↔ 官方原件"是两件事，夹具不该在那里先绊倒。
     """
     fm: dict = {
         "id": card_id,
@@ -76,9 +82,16 @@ def write_card(
         "updated": "2026-09-07",
     }
     text_blocks = ""
+    facts: dict = {}
     if quotes:
-        fm["facts"] = {"statute_quotes": quotes}
-        text_blocks = "\n\n" + "\n\n".join(f"> {q['text']}" for q in quotes)
+        facts["statute_quotes"] = quotes
+    if case_quotes:
+        facts["case_quotes"] = case_quotes
+    if facts:
+        fm["facts"] = facts
+        text_blocks = "\n\n" + "\n\n".join(
+            f"> {q['text']}" for q in (list(quotes or []) + list(case_quotes or []))
+        )
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
