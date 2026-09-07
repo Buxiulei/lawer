@@ -100,9 +100,12 @@ describe('知识索引带 domain', () => {
    * 【为什么两个方向都要钉，且"多一个"那个方向更要紧】(复审 2026-09-06 点名，原来只钉了一向)
    *   · 脚本**少**一个注册表有的领域 ⇒ 那批卡生成时即被判非法 domain，当场失败，有人看见；
    *   · 脚本**多**一个注册表没有的领域 ⇒ 生成器放行、index.json 进仓库，
-   *     而 loadIndex 不认识那个 domain 会抛错**且不缓存**——**全站每一轮对话**
-   *     （预检索、knowledge_search、危机资源卡取卡）当场 500，连本来好好的那个领域一起。
+   *     而 loadIndex 按经理 2026-09-07 的裁决把那批卡**排除**、只在 console.error 点一次名
+   *     ⇒ 那批卡对谁都检索不到，而检索照常返回 200 与一个更短的列表。
+   *     页面上什么都不缺，只有日志里那一行说了实话。
    *     那条路径的负对照在 index-guard.test.ts「domain 是注册表不认识的」一条。
+   *     （裁决之前那一版加载器是"未注册即抛"，后果是全站每一轮对话 500。
+   *      裁决换掉的是**响度**，不是这道闸的必要性：生成即失败是有人一定看得见的那一档。）
    */
   it('gen-knowledge-index.py 认的领域键与注册表**严格相等**（变异：脚本里多写/少写一个领域 → 红）', () => {
     const src = fs.readFileSync(path.join(REPO_ROOT, 'scripts/gen-knowledge-index.py'), 'utf-8');
@@ -115,7 +118,7 @@ describe('知识索引带 domain', () => {
     for (const key of inScript) {
       expect(
         Object.keys(DOMAINS),
-        `脚本认「${key}」而注册表没有它：生成器会放行这批卡，加载时全站抛错`,
+        `脚本认「${key}」而注册表没有它：生成器会放行这批卡，而加载器会把它们静默排除`,
       ).toContain(key);
     }
 

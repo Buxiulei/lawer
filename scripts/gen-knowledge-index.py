@@ -26,10 +26,14 @@ TYPES = {"法条卡", "判例卡", "计算规则", "流程SOP", "文书模板", 
 # 两个方向的分叉后果完全不同，而"宽一点"那个方向更坏：
 #   · 这里**少**一个注册表有的领域 ⇒ 那个领域的卡当场被判非法 domain，生成即失败，有人看见；
 #   · 这里**多**一个注册表没有的领域 ⇒ 生成器放行、index.json 提交进仓库，
-#     而加载器（lib/knowledge/index.ts loadIndex）不认识那个 domain 会**抛错且不缓存**——
-#     于是**全站每一轮对话的预检索、knowledge_search、危机资源卡取卡统统 500**，
-#     连本来好好的那个领域的用户一起。先写卡后挂包这个顺序本身是合理的工作方式，
-#     所以不能靠"记得按顺序合入"来防，只能让这里放行不了还没挂上的领域。
+#     而加载器（lib/knowledge/index.ts loadIndex）按经理 2026-09-07 的裁决**把那批卡排除**、
+#     只在 console.error 里点一次名 —— 于是那批卡对谁都检索不到，
+#     而检索照常返回 200 与一个更短的列表：**页面上什么都不缺**，只有日志里那一行说了实话。
+#     （这道闸立起来时加载器还是「未注册即抛」那一版，那时的后果是全站每一轮对话 500；
+#      裁决把后果从"全站 500"换成了"静默少一批卡"——**换掉的是响度，不是这道闸的必要性**：
+#      生成即失败是有人一定看得见的那一档，日志里一行不是。）
+#     先写卡后挂包这个顺序本身是合理的工作方式，所以不能靠"记得按顺序合入"来防，
+#     只能让这里放行不了还没挂上的领域。
 DOMAINS = {"labor", "counseling"}
 DEFAULT_DOMAIN = "labor"
 CONFIDENCES = {"原文核实", "二手转述", "待核实"}
@@ -199,13 +203,13 @@ def main() -> None:
             if h["status"] == "forbidden":
                 forbidden.append((normalize(h["phone"]), path))
         entry = {f: str(fm.get(f, "")) if f == "updated" else fm.get(f, "") for f in INDEX_FIELDS}
+        # domain：领域键（设计稿 §13「知识库 index 增 domain 字段」）。**每条都导出显式值**：
+        # 卡里没写就按 domain_of 的规则算（packs/<领域>/ 的目录布局，都不是就缺省领域）。
+        # 【合并时清掉的那两行】ws/p4-w2 那一版是"只在卡片自己声明时导出"，
+        # 与 ws/p4-w1 的 domain_of 合到一起后，后写的那个 if 恒被前一行的结果覆盖 ——
+        # 代码只剩一种行为，注释却还写着另一种。留着的形态是：下一个人照注释改代码。
         entry["domain"] = domain_of(path, fm)
         entry["path"] = str(path.relative_to(ROOT))
-        # domain：领域键（设计稿 §13「知识库 index 增 domain 字段」）。**只在卡片自己声明时导出**，
-        # 不给未声明的卡填默认值——填默认值会把 218 张既有卡一起改写，而"这张卡属于哪个领域"
-        # 的真源本就该在卡里，不在生成器里。消费方读不到该字段时按默认领域处理。
-        if fm.get("domain"):
-            entry["domain"] = fm["domain"]
         if fm.get("law_refs"):
             entry["law_refs"] = fm["law_refs"]
         if fm.get("facts"):

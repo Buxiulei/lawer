@@ -192,24 +192,53 @@ function loadIndex(): PackMeta[] {
     seen.add(entry.id);
   }
 
-  // domain 补齐：没写的算缺省领域（存量卡片写于只有一个领域的时候）。
-  // 补在**入口**而不是各消费点：漏补一处的形态是那批卡在按领域过滤时凭空消失。
-  // 写了但没人认识的 domain 直接拒绝启动——那批卡会静默地对谁都不可见。
+  // ⑦【domain 补齐】没写 domain 的条目按缺省领域算，补在**加载器这一处**，
+  // 下游（检索过滤、条文注入表、判据）读到的恒有值。
+  // 【为什么不是让下游各自 `?? 缺省`】少补一处的形态是：那批卡在按领域过滤的那一刻
+  // 整批消失，而检索照常返回 200 与一个更短的列表——没有一处会报错。
+  //
+  // ⑨【domain 写了但注册表不认识 ⇒ **排除那几条并点名，不拒绝启动**】
+  //
+  // 【口径由谁定】经理 2026-09-07 裁决（台账）。ws/p4-w1 这一版原本是「未注册即抛」，
+  // ws/p4-w2 是「排除」，两支单独看都自洽；此处按裁决统一成排除。
+  //
+  // 【为什么不抛】loadIndex 抛错**且不缓存**（packIndex 停在 null），于是之后每一次
+  // 预检索、knowledge_search、危机资源卡取卡都重抛一次 —— 一张卡的 domain 拼错
+  // 会把**全站每一轮对话**打成 500，连 domain 正常的那批用户一起。
+  // 「先写卡、后挂包」本身是合理的工作顺序，不该由它引发全站不可用。
+  //
+  // 【为什么不静默按缺省领域算】那等于给拼错的域发一张跨域通行证：
+  // 第二个领域的卡会出现在第一个领域用户的检索结果里，而回包一切正常。
+  // 排除是这两者之间唯一诚实的那一档：这批卡确实不可用，而全站照常工作。
+  //
+  // 【为什么必须 console.error 点名】被排除的卡与"这批卡根本没入库"在检索结果里同形。
+  // 不出声的形态是：知识库少了一批卡、检索照常返回 200 与一个更短的列表，没人知道。
+  // 出声要说清缺什么 / 为什么缺 / 怎么办 —— 裸喊一句"有卡被排除了"会让人再推一遍我们已经推过的那遍。
   const known = Object.keys(DOMAINS);
+  const dropped: PackMeta[] = [];
+  const kept: PackMeta[] = [];
   for (const entry of parsed as PackMeta[]) {
     if (entry.domain === undefined || entry.domain === '') {
       entry.domain = DEFAULT_DOMAIN;
-    } else if (!known.includes(entry.domain)) {
-      throw new Error(
-        `knowledge 索引条目 ${entry.id} 的 domain 是「${entry.domain}」，` +
-          `而 lib/domains 里注册过的领域只有 ${known.join('、')}（${indexPath}）。` +
-          '这批卡按领域过滤时对谁都不可见，而检索会照常返回 200 与一个更短的列表。' +
-          '请核对卡片 frontmatter 的 domain，或补上这个领域包再重跑 scripts/gen-knowledge-index.py。',
-      );
+      kept.push(entry);
+    } else if (known.includes(entry.domain)) {
+      kept.push(entry);
+    } else {
+      dropped.push(entry);
     }
   }
+  if (dropped.length > 0) {
+    console.error(
+      `knowledge 索引里有 ${dropped.length} 条卡的 domain 没有对应的领域包，已从本次加载中**排除**（${indexPath}）：\n` +
+        dropped.map((e) => `  · ${e.id} → domain「${e.domain}」`).join('\n') +
+        `\nlib/domains 里注册过的领域只有 ${known.join('、')}。` +
+        '这几张卡从现在起对谁都检索不到（不抛错是刻意的：抛错会把全站每一轮对话打成 500）。' +
+        '怎么办：核对卡片 frontmatter 的 domain 是不是拼错了，' +
+        '或者把这个领域的包挂进 lib/domains/registry 再重跑 scripts/gen-knowledge-index.py。',
+    );
+  }
 
-  packIndex = parsed as PackMeta[];
+  packIndex = kept;
   return packIndex;
 }
 

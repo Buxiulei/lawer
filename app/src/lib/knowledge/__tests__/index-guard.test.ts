@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
 
@@ -182,41 +182,59 @@ describe('🔴 manager 2026-08-29 裁定新加的四道（此前全部放行）'
   });
 
   /**
-   * ⑨ domain 是注册表不认识的 → 拒绝启动（复审 2026-09-06 点名补上的负对照）。
+   * ⑨ domain 是注册表不认识的 → **排除那几条并点名，不拒绝启动**。
    *
-   * 【为什么这条非有不可】这道闸 2026-09-06 立的时候，`domain-index.test.ts` 的抬头里
-   * 写着「变异：往 index.json 塞一条 domain: "x" → 加载即抛」——**而那句话从没被跑过**：
-   * 复审官把 loadIndex 里的抛错分支改成不抛，lib/knowledge 5 个文件 59 条全绿。
-   * 一个从没被负测过的闸，与一个不存在的闸，输出一模一样。
+   * 【口径由谁定】经理 2026-09-07 裁决（台账）：三支在这里分叉（W1 未注册即抛、
+   * W2 排除），按裁决统一成排除 + console.error 点名。本条钉的就是这个裁决。
    *
-   * 【它挡的那个后果有多大】loadIndex 抛错**且不缓存** ⇒ 之后每一次预检索、
-   * knowledge_search、危机资源卡取卡都重抛一次 ⇒ **全站每一轮对话 500**，
-   * 连 domain 正常的那批用户一起。所以宁可拒绝启动，也不能让它进到运行时。
+   * 【为什么不是抛】loadIndex 抛错**且不缓存** ⇒ 之后每一次预检索、knowledge_search、
+   * 危机资源卡取卡都重抛一次 ⇒ 一张卡的 domain 拼错把**全站每一轮对话**打成 500，
+   * 连 domain 正常的那批用户一起。
+   *
+   * 【为什么排除之后必须出声】被排除的卡与"这批卡根本没入库"在检索结果里同形：
+   * 检索照常 200、只是列表更短。不出声 = 知识库少了一批卡而没人知道。
+   * 所以这条同时验**三件事**：那几条真的没进来、别的条目一条不少、日志点了名。
    */
-  test('⑨ domain 是注册表不认识的 → 拒绝启动，并指名是哪条卡、哪个 domain', () => {
+  test('⑨ domain 是注册表不认识的 → 排除那几条并 console.error 点名，其余照常加载', () => {
     let victim = '';
+    let total = 0;
     brokenDir((d) => {
       const p2 = path.join(d, 'index.json');
       const idx = JSON.parse(fs.readFileSync(p2, 'utf8')) as { id: string; domain?: string }[];
       victim = idx[0].id;
+      total = idx.length;
       idx[0].domain = '还没挂上包的领域';
       fs.writeFileSync(p2, JSON.stringify(idx));
     });
-    expect(() => listPacks()).toThrow(/还没挂上包的领域/);
-    expect(() => listPacks()).toThrow(new RegExp(victim));
-    // 报错要说**怎么办**（补 domain 或补领域包），不是只说"不认识"
-    expect(() => listPacks()).toThrow(/领域包/);
+    const errors: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => {
+      errors.push(a.map(String).join(' '));
+    });
+    let packs: ReturnType<typeof listPacks>;
+    try {
+      packs = listPacks();
+    } finally {
+      spy.mockRestore();
+    }
+    // ① 不拒绝启动，且**只**少了那一条（少一条 ≠ 整批消失；把闸写成"一律排除"这里会红）
+    expect(packs.length, '排除的条数不对').toBe(total - 1);
+    expect(packs.find((m) => m.id === victim), '未注册域的那条卡还是被加载进来了').toBeUndefined();
+    // ② 出声了，且点了名：哪条卡、哪个 domain、怎么办（缺什么/为什么缺/怎么办）
+    const said = errors.join('\n');
+    expect(said, 'console.error 没出声 ⇒ 知识库少了一批卡而没人知道').toContain(victim);
+    expect(said).toContain('还没挂上包的领域');
+    expect(said).toMatch(/领域包/);
   });
 
-  test('⑨ 没写 domain 的存量条目照常放行（补成缺省领域，不是拒绝）', () => {
-    // 【为什么这条是上一条的必要配套】只测"拒绝"的话，把闸改成"一律拒绝"也全绿，
-    // 而那会让整个存量知识库（一张卡都没写 domain）当场启动不了。
+  test('⑨ 没写 domain 的存量条目照常放行（补成缺省领域，不是排除）', () => {
     brokenDir((d) => {
       const p2 = path.join(d, 'index.json');
       const idx = JSON.parse(fs.readFileSync(p2, 'utf8')) as Record<string, unknown>[];
       for (const e of idx) delete e.domain;
       fs.writeFileSync(p2, JSON.stringify(idx));
     });
+    // 【为什么这条是上一条的必要配套】只测"排除"的话，把闸改成"一律排除"也全绿，
+    // 而那会让整个存量知识库（一张卡都没写 domain）一张都检索不到。
     const packs = listPacks();
     expect(packs.length).toBeGreaterThan(200);
     expect(new Set(packs.map((p) => p.domain))).toEqual(new Set([DEFAULT_DOMAIN]));
@@ -245,25 +263,29 @@ describe('⑦ domain 补齐（复审 P4-W2 二轮 minor④：此前这一步一�
 });
 
 describe('🔴 索引里的域 × 加载器的严格度（复审 P4-W2 二轮 major②：合并顺序闸）', () => {
-  // 【这条守的不是本支的行为，是"两支合到一起"的那一刻】
-  // 另一支（ws/p4-w1）的加载器对**注册表里没有的 domain** 直接抛错；本支的索引里带着
+  // 【这条守的不是某一支的行为，是"两支合到一起"的那一刻】
+  // ws/p4-w1 的加载器对**注册表里没有的 domain** 直接抛错；ws/p4-w2 的索引里带着
   // 尚未挂进 lib/domains 的域。两者单独看都对，合到一起而挂包的那一票还没到，形态是：
   // 任何一次 knowledge_search / knowledge_get / 条文注入 → 加载器抛错 ⇒
   // **全部用户的知识能力整体不可用**，而两支各自的判据都是绿的。
-  // 本条不替谁裁"该不该拒未注册域"——它只保证这件事发生时**当场变红**，而不是上线后才知道。
+  //
+  // 【裁决之后这条为什么留着】经理 2026-09-07 已裁：加载器排除、不抛。所以今天探针恒回
+  // "不严格"、本条恒绿——它从"当场发现两支相撞"变成了**看住这条裁决别被改回去**：
+  // 谁把 loadIndex 改回「未注册即抛」，而库里又还有没挂包的域，这条立刻红。
+  // （裁决本身那条正判据在上面 ⑨，两条各管一头：⑨ 管"排除且点名"，本条管"别改回抛"。）
   const PROBE_DOMAIN = '__probe-未注册的域__';
 
-  /** 往索引里塞一条带未注册域的条目，返回被塞的那条 id */
-  function plantUnregisteredDomain(): string {
+  /** 往索引里塞一条带未注册域的条目，返回被塞的那条 id 与那份夹具目录 */
+  function plantUnregisteredDomain(): { victim: string; dir: string } {
     let victim = '';
-    brokenDir((d) => {
+    const dir = brokenDir((d) => {
       const p = path.join(d, 'index.json');
       const idx = JSON.parse(fs.readFileSync(p, 'utf8')) as { id: string; domain?: string }[];
       idx[0].domain = PROBE_DOMAIN;
       victim = idx[0].id;
       fs.writeFileSync(p, JSON.stringify(idx));
     });
-    return victim;
+    return { victim, dir };
   }
 
   /** 探针：问加载器本身"你拒不拒注册表里没有的 domain"，而不是去读它的源码或版本号 */
@@ -280,17 +302,33 @@ describe('🔴 索引里的域 × 加载器的严格度（复审 P4-W2 二轮 ma
   test('探针自身不空跑：那条被改过域的条目确实到达了加载器', () => {
     // 【这条证明的是探针的路径是活的】若夹具没写对、或加载器把 domain 覆盖掉，
     // 探针就会恒返回"不严格"，下面那条主判据从此永远绿——一个从不生效的闸。
-    const victim = plantUnregisteredDomain();
+    //
+    // 【裁决之后"到达了"有三种长相，缺一不可】经理 2026-09-07 裁成排除，于是那条卡
+    // 既不抛、也不出现在结果里——只看这两条会把"排除"错读成"夹具没写对"。
+    // 所以第三种长相要**先证夹具真写进去了**（读回磁盘上的那份），再证它没被加载：
+    // 「文件里有 + 结果里没有」= 加载器看见了它并排除了它，而不是我们根本没塞进去。
+    const { victim, dir } = plantUnregisteredDomain();
+    const onDisk = (
+      JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8')) as {
+        id: string;
+        domain?: string;
+      }[]
+    ).find((e) => e.id === victim);
+    expect(onDisk?.domain, '夹具没把未注册域写进磁盘 ⇒ 探针在空跑').toBe(PROBE_DOMAIN);
+
     let threw = false;
+    let loadedIds: string[] = [];
     let loaded: string | undefined;
     try {
-      loaded = listPacks().find((m) => m.id === victim)?.domain;
+      const packs = listPacks();
+      loadedIds = packs.map((m) => m.id);
+      loaded = packs.find((m) => m.id === victim)?.domain;
     } catch {
       threw = true; // 严格加载器拒了它 —— 同样说明那条改动到达了加载器
     }
     expect(
-      threw || loaded === PROBE_DOMAIN,
-      '塞进去的未注册域既没被拒、也没被原样读到 ⇒ 探针在空跑',
+      threw || loaded === PROBE_DOMAIN || (loadedIds.length > 0 && !loadedIds.includes(victim)),
+      '塞进去的未注册域既没被拒、没被原样读到、也没被排除 ⇒ 探针在空跑',
     ).toBe(true);
   });
 
