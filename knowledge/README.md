@@ -275,7 +275,22 @@ python3 scripts/gen-knowledge-index.py [--no-strict]
 
 # 登记簿同源审计：每条登记的 raw / text / 元数据是不是同一份文件（见 §7.5）
 python3 scripts/audit-sources.py [--source-id <id>] [--json]
+
+# 不下载，用当前抽取器从盘上的 raw 重写 text.txt（改了抽取器之后用）
+python3 scripts/fetch-source.py --reextract [--source-id <id>]
 ```
+
+`--reextract` 是**抽取器变强之后唯一的补救路**：上面那条抓取命令是幂等的，
+条件正是"抓下来的字节没变"，所以重跑一遍只会打印"未变化"、**不重写 `text.txt`**。
+没有这条路的话，修一份过时的存档就只剩"手写 `text.txt`"，而那条路已经封死（§7.5）。
+它只碰 `text.txt`；`raw` / `content_sha256` / `fetched_at` 一个字节不动，
+登记簿只在 `files.text`／`needs_text` 真的翻转时才改写。
+
+**它只重抽复算量程内的格式**（`DERIVABLE_KINDS`，§7.5），量程外的（今天只有 pdf）跳过并报数。
+这道闸是拿事故换来的：第一版没有它，一次全库 `--reextract` 就用本机的 pypdf 6.17
+覆盖了两份 pdf 的存档（`statute-minsufa` 的目录被抽成"第四章回避**2**第五章"，页码插进正文），
+而审计对 pdf 只报"未复算"、照常退 0——**一次审计看不见的存档漂移**。
+写者与审计者必须共用同一份名单，不能各有各的政策。
 
 行业规范（学会伦理守则一类）的一手源是发布机构自己的官网，抓取时必须显式声明：
 `--kind 行业规范 --issuer-host <该 host>`。登记之后，**那个 host 才进白名单**。
@@ -294,11 +309,11 @@ python3 scripts/audit-sources.py [--source-id <id>] [--json]
 | (g) | `kind=机构官网` 的源只能被**数据卡**引用（§7.1.1），无论是 `sources` 里的 URL 还是 facts 里的 `source_id` | 拒绝生成，逐张点名 |
 | (h) | `quarantine/**` 下的卡不许挂 `原文核实` / `无外部断言` 这两个"可进索引"的标签 | 拒绝生成，逐张点名 |
 
-> **(f) 的现状（2026-09-07 记账）**：机制与判据本轮先落地，**存量 42 张判例卡还没补
-> `case_quotes`**，所以现库在 `--strict` 下会红在 (f) 这一条上（其余 (b)(c)(d)(e)(g)(h) 全绿）。
-> 补内容是下一阶段的作业；在补完之前，`knowledge/index.json` 由 `--no-strict` 生成。
-> **这条记账本身就是判据**：`scripts/tests/test_gen_guards.py::test_real_library_red_is_only_the_case_quotes_gap`
-> 钉住"现库唯一的红是 (f)"——任何别的守卫开始红，那条判据当场失败。
+> **(f) 已闭卷（2026-09-07 收口）**：机制落地当天现库红在 (f)（42 张存量判例卡没有
+> `case_quotes`），`knowledge/index.json` 一度由 `--no-strict` 生成。本轮把 43 张判例卡的
+> `case_quotes` 逐条补齐并核过，现库在**默认 `--strict`** 下八道守卫全绿，CI 与索引都不再带
+> `--no-strict`。**判据跟着换了方向**：`scripts/tests/test_gen_guards.py::test_real_library_is_green_under_strict`
+> 现在钉的是"一条都不红，且重新生成的索引与仓里那份逐字节相同"。
 
 `--no-strict` 把**这几道**整体降为警告，只在核实作业期间用；
 **前面那批"卡片自洽"的校验（facts 两面一致、id 唯一、类型闸…）一条不降**——
@@ -329,27 +344,56 @@ text 是从 raw 抽出来的、raw 是从 url 抓下来的。这个默认一旦�
 | ④ | `needs_text: true` 的条目 | 判红：抽不出正文的登记在修好之前不算数 |
 | ⑤ | `text.txt` 字符数 ≤ raw 字节数 | 判红：抽出来的正文不可能比原件长 |
 
-③ 只对**不依赖第三方库就能重抽**的格式（html/htm/xml/txt/docx）真的复算。pdf/zip/xls 一律
-只报"未复算"并逐条印出——pypdf 装没装因机器而异，且实测同一份 PDF 在两个 pypdf 版本下
-抽出的文本不同（页码被插进正文），拿它当判据等于让审计结论随环境漂，
-而**同一份库这台机器红、那台机器绿**时，人只会挑绿的那台。
-未复算的条目仍要过 ①②④⑤；新登记的条目若抽不出文本，会被 ④ 挡住（fetch-source 会给它
-标 `needs_text`），所以这个"量程之外"不会成为新的口子。
+③ 的量程写在 `scripts/fetch-source.py` 的 `DERIVABLE_KINDS`（**只此一份**，审计不另立名单）：
+html / htm / xml / txt / docx / **doc / xls / zip**。判据是"抽出来的字只随仓里的代码变"——
+这几种格式的抽取器全在 `fetch-source.py` 里（.doc 是 [MS-DOC] 的分片表解析，
+.xls 走 xlrd 读单元格，.zip 逐成员分派），换台机器输出一个字不差。
+
+**pdf 不在量程里**，只报"未复算"并逐条印出。不是嫌麻烦：pypdf 的输出随它自己的版本漂。
+2026-09-07 实测——用 pypdf 6.17 重抽 `statute-minsufa`，目录处抽成
+"第四章回避**2**第五章诉讼参加人"（页码被插进正文），与存档的 33991 字对不上；
+同一天同一台机器重抽 `statute-beijing-gongzi-zhifu-guiding-doc` 却逐字相同。
+把这种东西当判据，等于让审计结论随环境漂，而**同一份库这台机器红、那台机器绿**时，
+人只会挑绿的那台。未复算的条目仍要过 ①②④⑤。
+
+**量程内的格式若本机缺工具（olefile / xlrd，§7.6），审计判红并印出 `pip install` 那行**，
+不会退回"未复算"。"这台机器没量"与"量过了"不能在退出码上长得一样——
+判据：`test_missing_extraction_tool_is_red_not_quietly_underived`。
 
 **"未复算"这个桶是钉死的**：`scripts/tests/test_audit_sources.py::test_real_registry_underived_set_is_pinned`
-把现库的未复算名单钉在四条上（`bjchy-banli-cailiao-baofuzhuang` / `data-beijing-shepin-fengding` /
-`statute-beijing-gongzi-zhifu-guiding-doc` / `statute-minsufa`），多一条就红。
-上一段说的"不会成为新的口子"只覆盖**经 fetch-source 登记**的条目；
-手写一条 pdf 登记再自己写一份 text.txt，审计照样退 0——那条路由这颗钉子拦。
+把现库的未复算名单钉在两条 pdf 上（`statute-beijing-gongzi-zhifu-guiding-doc` /
+`statute-minsufa`），**多一条少一条都红**。新登记的条目若抽不出文本，会被 ④ 挡住
+（fetch-source 给它标 `needs_text`）；这颗钉子管的是**绕开 fetch-source、手写登记簿**
+那条路——手写一条 pdf 登记再自己写一份 text.txt，审计照样退 0。
 
-> **这四条里已发现两处旧账（2026-09-07 实查，本轮未修）**，它们正是"复算不动"的代价：
-> · `bjchy-banli-cailiao-baofuzhuang`（朝阳区办理材料包 .zip）的 `text.txt` **正好 30720 字
->   （30×1024）且停在半句话上**（"…第八十七条规定"，无句号）——是一份被截断的存档。
->   现有两张 SOP 卡的引文都落在截断点之前，所以今天全绿；将来引到后半段的人会看到
->   "找不到原件"，而真相是原件存档不全。报警方向是安全的，但结论会指错地方。
+> **两处旧账已清（2026-09-07 收口）**，它们当初正是"复算不动"的代价：
+> · `bjchy-banli-cailiao-baofuzhuang`（朝阳区办理材料包 .zip，29 个成员、13 个是 .doc）的
+>   `text.txt` 里，**11 个 .doc 只有一行占位说明**（"本机无 antiword/catdoc，未抽取"），
+>   另外 2 个的正文是**人工用 `libreoffice --convert-to txt` 转出来粘进去的**——块尾还留着
+>   "[补记 2026-09-07：…逐字核对无损]"这样的人写句子。补上 .doc 抽取器整份重抽后
+>   30720 字 → 70418 字，找回 4.4 万字官方正文（劳动法/劳动合同法/调解仲裁法全文与各式模板）。
+>   **顺带更正一条此前写在这里的判断**：那 30720 字（30×1024）是巧合，**不是截断**——
+>   29 个成员一个不少，末尾那句无句号的话是最后一份 .docx 自己的结尾。往严重方向猜错
+>   同样是猜错，写在这里以免后人照着"被截断"去查。
 > · `data-beijing-shepin-fengding`（统计年鉴表 3-14 .xls）的 `text.txt` 头三行是**人写的**
->   出处说明（"本地经 LibreOffice 由 .xls 转 CSV 抽取正文…"），不是抽取器的输出——
->   即"人工粘贴"这条已封的路留下的存量。表内数值本身另有旁证：188413÷12×3 = 47103.25，
+>   出处说明（"本地经 LibreOffice 由 .xls 转 CSV 抽取正文…"）。改由 xlrd 逐格重抽，
+>   人写的三行没了，表内数值一个不变：188413÷12×3 = 47103.25，
 >   与 12333 口头确认的北京 2023 年度封顶基数一致（见 `data-beijing-*` 相关卡）。
-> 两处都要用 LibreOffice/antiword 一类外部工具重抽后重登记，属下一阶段作业；
-> 修完把它们从 `UNDERIVED_PIN` 里划掉。
+> 两条都用 `--reextract` 重抽（§7.2），raw 与 sha256 一个字节没动。
+
+### 7.6 抽取器的外部依赖（本机装什么）
+
+| 包 | 谁用它 | 缺了会怎样 |
+| --- | --- | --- |
+| `pyyaml` | 三个脚本读卡片 frontmatter | 脚本起不来 |
+| `olefile` | `.doc` / `.xls` 的 OLE 容器拆流 | 审计对这两类格式**判红**并印出 pip 命令 |
+| `xlrd` | `.xls` 读单元格（xlrd 2.x 只认 .xls，正合本库） | 同上 |
+
+```bash
+pip install --user pyyaml olefile xlrd      # CI 的 knowledge job 装的是同一份
+```
+
+**为什么允许这两个依赖，却不许 pypdf**：它们只负责把二进制容器拆开（哪个流、哪个格子），
+拆完之后**怎么变成一行行文本，全由本仓的代码决定**——换个版本，输出不变。
+pypdf 反过来：文本布局的还原逻辑在它自己那里，版本一变正文就变（见 §7.5 的实测）。
+判据不是"有没有依赖"，是"输出会不会随依赖的版本漂"。

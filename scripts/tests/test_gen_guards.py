@@ -295,19 +295,22 @@ def test_d_class_with_facts_is_rejected(gen, kb):
 
 
 # ── 现库正对照 ────────────────────────────────────────────────────────
-def test_real_library_red_is_only_the_case_quotes_gap(gen, tmp_path):
-    """现库在 **默认 --strict** 下唯一的红是 (f)（判例卡还没补 case_quotes），别的守卫一条不红。
+def test_real_library_is_green_under_strict(gen, tmp_path):
+    """现库在 **默认 --strict** 下一条守卫都不红，且重新生成的索引与仓里那份逐字节相同。
 
-    【这条判据换过两次方向，记在这】
+    【这条判据换过三次方向，记在这】
     · 守卫刚上线时（2026-09-07 上午）钉的是"strict 下必须红"（当时 60 张待核实）；
     · 核实闭卷后换成"strict 下必须绿"；
-    · (f) 落地后（2026-09-07 下午）**机制先于内容**：42 张存量判例卡还没补 case_quotes，
-      于是现库又红了。这一次不把判据改回"必须红"了事——那等于把"库里还有脏卡"写成永久前提，
-      而且 (b)(c)(d)(e)(g)(h) 里任何一条开始红，一句"反正它本来就红"就能盖过去。
+    · (f)（判例卡必须有核得过的 case_quotes）落地当天**机制先于内容**：42 张存量判例卡
+      还没补引文，于是现库又红了，判据一度钉的是"红的形状"——报错里必须有 (f)、
+      且不能有别的守卫编号，免得"反正它本来就红"盖过 (b)(c)(d)(e)(g)(h) 的回归；
+    · case_quotes 补齐后（2026-09-07 收口）回到"必须绿"。上一版的注释里写着
+      "补完之后这条会以「(f) 不再出现」的形式失败，届时把断言改成一条都不红"——就是这一版。
 
-    所以这里钉的是**红的形状**：报错里必须有 (f)，且**不能有别的守卫编号**。
-    补完 case_quotes 之后这条会以"(f) 不再出现"的形式失败——那正是作业做完的标志，
-    届时把断言改成"一条都不红"。
+    **绿也有形状**：不是只看退出码。还要求重新生成的 index.json 与拷进来的那份
+    （即仓库里提交的那份）逐字节相同——少了这一条，"改了卡没重跑生成器"会让索引与卡片
+    静默分叉，而退出码照常是 0。CI 里那条 `git diff --exit-code knowledge/index.json`
+    守的是同一件事，这里是它的离线形态。
 
     全程在临时副本上跑，不碰仓内 knowledge/。
     """
@@ -315,14 +318,11 @@ def test_real_library_red_is_only_the_case_quotes_gap(gen, tmp_path):
     shutil.copytree(REAL_KNOWLEDGE, root)
     before = (root / "index.json").read_bytes()
     code, _ = run(gen, root)
-    msg = str(code)
-    assert code != 0 and "扎根守卫不通过" in msg
-    # 拷贝里本来就带着仓内那份 index.json，所以这里断言的是"没被改写"，
-    # 而不是"不存在"（后者由 test_strict_names_every_unverified_card 在空库上钉）。
-    assert (root / "index.json").read_bytes() == before, "守卫没过却改写了 index.json"
-    assert "(f)" in msg, f"现库居然不缺 case_quotes 了？该把这条判据改成「一条都不红」：{msg[:400]}"
-    others = [tag for tag in ("(b)", "(c)", "(d)", "(e)", "(g)", "(h)") if tag in msg]
-    assert others == [], f"除了 (f) 之外还有守卫在红，这是回归不是已知欠账：{others}\n{msg[:2000]}"
+    assert code == 0, f"现库在 strict 下红了，这是回归不是已知欠账：\n{str(code)[:2000]}"
+    assert (root / "index.json").read_bytes() == before, (
+        "strict 过了，但重新生成的 index.json 与仓库里那份不同"
+        "——有人改了卡没重跑生成器，或手改过索引"
+    )
 
 
 def test_real_library_generates_with_no_strict_and_has_no_unverified_confidence(gen, tmp_path):
@@ -584,8 +584,9 @@ def test_revived_case_card_is_grounded_and_not_in_the_case_quotes_gap(gen, tmp_p
 
     【为什么要单独钉】它是"从隔离区复活"的样板：复活的正确做法是把卡改成只断言官方页
     逐字写着的那一句，再用 case_quotes 把那一句钉到原件上。若哪天有人把它的 case_quotes
-    删了、或把案情细节又加回来，这条会以"它出现在 (f) 名单里"的形式失败——
-    而 test_real_library_red_is_only_the_case_quotes_gap 那条**不会**，因为现库本来就红在 (f)。
+    删了、或把案情细节又加回来，这条会以"它出现在 (f) 名单里"的形式失败，
+    并且**直接点出是哪张卡**——上面那条 test_real_library_is_green_under_strict 只会说
+    "现库红了"，而红的原因可能是任意一张卡的任意一条守卫。
     """
     root = tmp_path / "kb"
     shutil.copytree(REAL_KNOWLEDGE, root)

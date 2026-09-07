@@ -249,19 +249,19 @@ def test_real_registry_goes_red_when_one_raw_is_swapped(audit, tmp_path, capsys)
     assert victim["source_id"] in printed and "SPA 空壳" in printed
 
 
-#: 现库里抽取器复算不动的四条（zip / xls / 两份 pdf，见 knowledge/README.md §7.5）。
-#: 它们的 text.txt 产自**旧路线**（fetch-source 还允许人工落 text 的年代），
-#: 正文与 raw 的对应关系在本仓里只是"断言"，没有任何一处复算过。
+#: 现库里复算不动的两条，都是 pdf（见 knowledge/README.md §7.5）。
+#: 原先还有 zip 与 xls 那两条，它们的 text.txt 产自**旧路线**（fetch-source 还允许人工落 text
+#: 的年代，块里甚至留着"补记：libreoffice 转换取得以上纯文本"这样的人写说明）。
+#: 2026-09-07 收口时给 fetch-source 补了 .doc/.xls/.zip 的机械抽取器并整份重抽，
+#: 两条都进了复算量程，于是从这份名单上划掉。
 UNDERIVED_PIN = {
-    "bjchy-banli-cailiao-baofuzhuang",
-    "data-beijing-shepin-fengding",
     "statute-beijing-gongzi-zhifu-guiding-doc",
     "statute-minsufa",
 }
 
 
 def test_real_registry_underived_set_is_pinned(audit, capsys):
-    """现库"未复算"名单钉死在这四条上——多一条就红。
+    """现库"未复算"名单钉死在这两条上——多一条就红。
 
     【它防的是什么】审计对 pdf/zip/xls 只报"未复算"并**照常退 0**（§7.5：拿 pypdf 当判据
     会让同一份库这台机器红、那台机器绿）。于是"登记一条 pdf + 自己写一份 text.txt"
@@ -274,6 +274,9 @@ def test_real_registry_underived_set_is_pinned(audit, capsys):
 
     多出来的条目只有两种正当结局：换成可复算的格式重抓，或者在这里显式记一笔。
     "谁都没发现"与"看见了并认了"必须在判据里长得不一样。
+
+    **少一条也要红**（`==` 而不是 `<=`）：桶变小是好事，但那意味着有人扩了抽取器的量程，
+    而这份名单旁边那段"为什么它抽不动"的说明就此过期。过期的理由比没有理由更难发现。
     """
     assert audit.main(["--json"]) == 0
     payload = json.loads(out(capsys))
@@ -281,4 +284,56 @@ def test_real_registry_underived_set_is_pinned(audit, capsys):
     assert underived == UNDERIVED_PIN, (
         "现库的「未复算」名单变了。新增的条目意味着又一份 text.txt 的来历无人复算过；"
         "先确认它不是手写的，再决定是重抓成可复算格式，还是把它加进 UNDERIVED_PIN 并写明理由。"
+        "少了条目则说明抽取器的量程扩了，把这里和 knowledge/README.md §7.5 的说明一起更新。"
     )
+
+
+def test_zip_and_xls_are_recomputed_from_their_raw(audit, capsys):
+    """现库那份打包件（.zip）与那张年鉴表（.xls）**必须是复算过的**，不是"未复算"。
+
+    【为什么单独钉这两条】它们的 raw 都叫 `raw.bin`（政府站发的 octet-stream，
+    guess_ext 认不出扩展名），而 2026-09-07 之前的审计**只按扩展名**判能不能复算 ⇒
+    它们永远归进"未复算"，于是 text.txt 里那份人工用 libreoffice 转出来、
+    还带着一句"补记：…逐字核对无损"的正文，从来没有任何一处机械核过。
+    上面那颗钉子只管"桶不许变大"，管不到"这两条到底有没有被真的算过"——
+    它们从桶里消失，也可能是因为有人把它们从登记簿里删了。
+    """
+    assert audit.main(["--json"]) == 0
+    rows = {r["source_id"]: r for r in json.loads(out(capsys))["rows"]}
+    for sid in ("bjchy-banli-cailiao-baofuzhuang", "data-beijing-shepin-fengding"):
+        assert rows[sid]["derived"] == "一致", f"{sid} 没被复算：{rows[sid]}"
+
+
+def test_missing_extraction_tool_is_red_not_quietly_underived(audit, tmp_path, capsys, monkeypatch):
+    """本机缺 olefile/xlrd 时，审计必须**判红并说出装哪个包**，不许退回"未复算"。
+
+    【这是整条新量程的兜底判据】把 .doc/.xls/.zip 纳入复算，代价是引入了两个第三方包。
+    那个代价唯一不可接受的兑现方式是——某台机器上包没装，审计于是"抽不动"，
+    把这两条归进未复算的桶里、**照常退 0**，而人看到的是一份全绿的报告。
+    这里就把那条路堵死：缺工具 ⇒ 退出码 1，且报错里有 pip 命令。
+
+    做法是把抽取器的 `_need`（唯一的 import 入口）换成"永远说没装"，
+    其余一个字不改——模拟的是一台干净机器，不是一个坏掉的审计。
+    """
+    import shutil
+
+    from conftest import REAL_KNOWLEDGE
+
+    root = tmp_path / "kb"
+    shutil.copytree(REAL_KNOWLEDGE, root)
+    fetch = audit._load_fetch_source()
+
+    def _no_tools(mod, pkg, why):
+        raise fetch.MissingTool(f"缺什么：Python 包 {pkg}。\n  为什么：{why}\n  怎么办：pip install --user {pkg}")
+
+    monkeypatch.setattr(fetch, "_need", _no_tools)
+    monkeypatch.setattr(audit, "_load_fetch_source", lambda: fetch)
+    assert run(audit, root, "--json") == 1, "缺工具却绿了——这正是本条判据要防的那份全绿报告"
+    rows = {r["source_id"]: r for r in json.loads(out(capsys))["rows"]}
+    # **逐条看，不看整篇**：只 assert"报告里出现过 pip 那句话"是过不了变异的——
+    # 打包件那条被悄悄归进"未复算"、年鉴那条判红，整篇里照样有它。
+    for sid in ("bjchy-banli-cailiao-baofuzhuang", "data-beijing-shepin-fengding"):
+        row = rows[sid]
+        assert row["derived"] != "未复算", f"{sid} 缺工具却被归进「未复算」并放过：{row}"
+        assert row["problems"] and "pip install --user" in "\n".join(row["problems"]), row
+    assert "olefile" in "\n".join(rows["bjchy-banli-cailiao-baofuzhuang"]["problems"])

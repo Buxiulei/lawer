@@ -28,10 +28,14 @@
   ④ needs_text：抽不出文本的条目由 fetch-source 标 `needs_text: true`，
      这里一律判红——"还没抽出正文"与"抽出来了"不能在退出码上长得一样。
 
-【为什么③只对一部分 ext 真的复算】只有**不依赖任何第三方库**就能重抽的格式
-（html/htm/xml/txt/docx）才复算。pdf 要 pypdf、xls/zip 里的 .doc 要 LibreOffice——
-这些依赖装没装因机器而异，跟着变的审计结论比没有审计更坏（同一份库，这台机器红、
-那台机器绿，人只会挑绿的那台）。不复算的条目**逐条印出来并计数**，不静默放过；
+【为什么③只对一部分格式真的复算】量程写在 fetch-source.py 的 DERIVABLE_KINDS，
+这里不另立名单。判据是"抽出来的字只随仓里的代码变"：html/txt/docx/doc/xls/zip 的抽取器
+全在那个文件里（.doc 是 [MS-DOC] 分片表解析，.xls 走 xlrd 读格子），换台机器输出一个字不差；
+**pdf 不在量程内**——pypdf 的文本还原逻辑在它自己那里，版本一变正文就变
+（2026-09-07 实测：pypdf 6.17 把页码插进 statute-minsufa 的目录，抽成"第四章回避2第五章"）。
+跟着环境漂的审计结论比没有审计更坏：同一份库这台机器红、那台机器绿，人只会挑绿的那台。
+不复算的条目**逐条印出来并计数**，不静默放过；量程内的格式若本机缺 olefile/xlrd，
+一律判红并印出 pip 命令——"这台机器没量"不许长得像"量过了"。
 它们仍要过 ①②④ 与下面这条对所有格式都成立的量级判据：
 
   ⑤ 量级：text 的字符数不得超过 raw 的字节数。压缩件（docx/pdf/zip）与网页抽出的正文
@@ -57,11 +61,14 @@ import knowledge_sources as ks  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent / "knowledge"
 
-#: 不依赖第三方库就能重抽的原件格式。**这份名单是审计的量程**：
-#: 名单内的条目复算不过即红，名单外的条目只报"未复算"。
-#: pdf 不在名单里不是遗漏——pypdf 装没装因机器而异，而且实测同一份 PDF 在两个 pypdf
+#: 【量程在哪里定的】能不能复算，由 `fetch-source.py` 的 `DERIVABLE_KINDS` 说了算，
+#: 这里不另立一份名单——两份名单的形态是"抽取器支持了、审计还当它抽不动"，
+#: 而那正好是"未复算"这个桶悄悄变大的方式。
+#: pdf 不在那份名单里不是遗漏：pypdf 装没装因机器而异，且实测同一份 PDF 在两个 pypdf
 #: 版本下抽出的文本不同（页码被插进正文），拿它当判据等于让审计结论随环境漂。
-DERIVABLE_EXTS = {"html", "htm", "xml", "txt", "docx"}
+#: 而 .doc/.xls/.zip 在名单里，是因为抽它们的那几十行代码就在本仓 fetch-source.py 里，
+#: 输出只随仓里的代码变；本机缺 olefile/xlrd 时抛 MissingTool，在下面**判红**——
+#: "这台机器没量" 与 "量过了" 不能在退出码上长得一样。
 
 #: 空壳判定：小于这个字节数**且**带着下面任一标记，就是个由 JS 渲染的壳，不是正文。
 #: 2KB 这个数不是拍的：本库 96 份原件里最小的正文件是 22KB，而 flk 的空壳是 552 字节，
@@ -169,12 +176,22 @@ def audit_entry(root: Path, entry: dict[str, Any], fetch: Any) -> dict[str, Any]
         )
 
     # ── ③ text 复算 ────────────────────────────────────────────────────
-    ext = _ext_of(rel_raw)
-    if ext not in DERIVABLE_EXTS:
-        row["derived"] = "未复算"
-        row["derived_reason"] = f"{ext or '无扩展名'} 的抽取需要外部依赖，本脚本不引入（见 DERIVABLE_EXTS 注释）"
+    # 认格式看**魔数**不看扩展名：本库两份 raw.bin 实为 .zip 与 .xls，
+    # 只按扩展名分派会把它们永远归进"未复算"（见 fetch-source.content_kind 的注释）。
+    try:
+        kind = fetch.content_kind(raw, _ext_of(rel_raw))
+    except fetch.MissingTool as e:
+        problems.append(f"认不出这份原件是什么格式，因为：\n      {e}")
         return row
-    extracted = fetch.extract_text(raw, ext, "")
+    if kind not in fetch.DERIVABLE_KINDS:
+        row["derived"] = "未复算"
+        row["derived_reason"] = f"{kind or '无扩展名'} 的抽取不进复算量程（见 fetch-source.DERIVABLE_KINDS）"
+        return row
+    try:
+        extracted = fetch.extract_text(raw, kind, "")
+    except fetch.MissingTool as e:
+        problems.append(f"这条本该复算（{kind}），但本机抽不动：\n      {e}")
+        return row
     if not extracted:
         problems.append(f"用 fetch-source 的抽取器从 raw 抽不出任何文本，但登记簿里有 text.txt（{len(stored)} 字）")
         return row
@@ -231,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
         if underived:
             # 【为什么绿的时候也要印】"没复算"与"复算过了"在退出码上长得一样，
             # 唯一的区别只能是这几行。静默放过它们，等于把量程外的东西说成量过了。
-            print(f"未复算（抽取需外部依赖，本脚本量程之外）：{len(underived)} 条")
+            print(f"未复算（不在复算量程内，见 fetch-source.DERIVABLE_KINDS）：{len(underived)} 条")
             for r in underived:
                 print(f"    · {r['source_id']}：{r['derived_reason']}"
                       f"（raw {r.get('bytes')} 字节 → text {r.get('text_chars')} 字，已过 sha256/空壳/量级三关）")

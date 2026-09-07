@@ -10,28 +10,39 @@
 
 ## 一、统计
 
-| | 核实前（基线 `aeb5e9e`） | 闭卷后 |
-| --- | ---: | ---: |
-| `原文核实` | 139 | **156** |
-| `待核实` | 60 | **0** |
-| `二手转述` | 21 | **0** |
-| `无外部断言`（D 类，见 `README.md` §2.2） | — | **3** |
-| `knowledge/packs/` 合计 | 220 | **159** |
-| `knowledge/quarantine/` | 0 | **61** |
+| | 核实前（基线 `aeb5e9e`） | 闭卷时（`f11b346`） | 收口后（本次） |
+| --- | ---: | ---: | ---: |
+| `原文核实` | 139 | 156 | **157** |
+| `待核实` | 60 | 0 | **0** |
+| `二手转述` | 21 | 0 | **0** |
+| `无外部断言`（D 类，见 `README.md` §2.2） | — | 3 | **4** |
+| `knowledge/packs/` 合计 | 220 | 159 | **161** |
+| `knowledge/quarantine/` | 0 | 61 | **60** |
 
-159 + 61 = 220：一张没丢，也没有新增。**减少的 61 张全部是判例卡**（103 → 42），
+闭卷时 159 + 61 = 220：一张没丢，也没有新增。**减少的 61 张全部是判例卡**（103 → 42），
 其余九类卡片数一张未动——移走的是"引文只有转载来源、官方渠道查不到全文"的判决书转录卡，
 不是按主题裁的。隔离清单与逐张的"试过哪些信源"在 [`quarantine/README.md`](quarantine/README.md)。
 
-配套的机械面：
+收口后 161 + 60 = 221，比基线多 1：`case-qingjia-shouxu-maodun-kuanggong-2025`
+按官方页原文重写后从隔离区**搬回**（61→60、159→160），另**新建** 1 张数据卡
+`data-beijing-gongzheng-baoquan-shoufei`（160→161）。
+
+配套的机械面（数字都是本次收口当场跑出来的）：
 
 - 法源登记簿 `knowledge/sources.json`：**96 份官方原件**（官方案例 24、法律 17、规范性文件 13、
-  官方数据 12、行政法规 10、司法解释 8、部门规章 6、行业规范 3、地方规章 3），落在 22 个 host 上；
-  非 `.gov.cn` 的只有 3 个，全部是 `kind=行业规范` 的发布机构官网（`www.bcnpo.cn`、
-  `www.crisis.org.cn`、`www.pkuh6.cn`），每一个都在登记簿里写明。
-- 引文机械核验 `scripts/verify-quotes.py`：**279 条 `facts.statute_quotes` 全部「一致」**，
-  不一致 0、找不到原件 0。
-- 生成器 `scripts/gen-knowledge-index.py`（默认 `--strict`）：159 张卡全绿。
+  官方数据 12、行政法规 10、司法解释 8、部门规章 6、机构官网 3、地方规章 3），落在 21 个 host 上；
+  非 `.gov.cn` 的只有 3 个，全部是 `kind=机构官网` 的机构自己的官网（`www.bcnpo.cn`、
+  `www.crisis.org.cn`、`www.pkuh6.cn`），每一个都在登记簿里写明 `justification`，
+  且只有数据卡能引（守卫 (g)，`README.md` §7.1.1）。
+- 引文机械核验 `scripts/verify-quotes.py`：**323 条引文全部「一致」**
+  （`facts.statute_quotes` 279 条 + `facts.case_quotes` 44 条），不一致 0、找不到原件 0。
+- **判例卡 `case_quotes` 覆盖 43 / 43 = 100%**：`packs/cases/` 下每一张都至少有一条
+  从官方页逐字摘下来、且核得过的原文（守卫 (f)）。收口前是 1 / 43。
+- 登记簿同源审计 `scripts/audit-sources.py`：96 条登记，**复算一致 94、未复算 2、有问题 0**。
+  未复算的 2 条都是 pdf，为什么不算它们见 `README.md` §7.5；
+  原先未复算的另两条（`.zip` 打包件与 `.xls` 年鉴表）本次补了机械抽取器整份重抽，已进复算量程。
+- 生成器 `scripts/gen-knowledge-index.py`（**默认 `--strict`，不再带 `--no-strict`**）：
+  161 张卡、八道守卫全绿。CI 的 knowledge job 也同步去掉了降级。
 
 ## 二、三类处置各是什么意思
 
@@ -77,12 +88,24 @@
   并补齐了 `statute-gongzi-zhifu-zanxing-guiding`）。
 - **隔离区双拦**：构建期拒绝生成（CI 即红），运行时排除并 `console.error` 点名、不拒绝启动
   （排到一张不剩时仍拒绝启动）。口径与理由见 `quarantine/README.md`。
+- **登记簿同源审计 `scripts/audit-sources.py`**（`README.md` §7.5）：问的是"这份原件是不是
+  它自称的那份文件"——`verify-quotes` 问的是另一件事（"卡里这句话是不是原件里的话"），
+  缺哪一把，另一把量出来的都可能是好看的假数。
+- **`.doc` / `.xls` / `.zip` 的机械抽取器进 `fetch-source.py`，`text.txt` 全部由抽取器写**：
+  收口前这两份存档里还留着"人工用 libreoffice 转出来粘进去"的正文和一句句人写的补记
+  （朝阳办事材料包里 11 个 .doc 只有占位行，4.4 万字官方正文根本不在存档里）。
+  现在按魔数认格式、逐成员分派，审计能对它们**复算**。配套加了 `--reextract`：
+  抽取器变强之后，不下载也能用盘上的 raw 重写 `text.txt`（§7.2）——
+  没有这条路，修一份过时存档的唯一办法又会变回手写 `text.txt`。
 
 ## 五、下一个人怎么接
 
 ```bash
+pip install --user pyyaml olefile xlrd     # 抽取器的依赖，缺了审计判红（README.md §7.6）
+python3 scripts/audit-sources.py           # 每条登记的 raw / text / 元数据是不是同一份文件
 python3 scripts/gen-knowledge-index.py     # 默认 --strict，红了就照它点名的卡修
 python3 scripts/verify-quotes.py           # 引文 ↔ 官方原件，三态
+python3 -m pytest scripts/tests -q         # 上面三把尺子自己的判据
 ```
 
 想让一张隔离卡复活：拿到 `.gov.cn` 上的**全文**原件（通稿摘要不算）→

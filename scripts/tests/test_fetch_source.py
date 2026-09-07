@@ -6,7 +6,9 @@
 
 from __future__ import annotations
 
+import io
 import json
+import zipfile
 
 import pytest
 
@@ -247,3 +249,162 @@ def test_needs_text_survives_a_metadata_only_rerun(fetch, tmp_path):
     assert run(fetch, tmp_path, [*argv, "--status", "已修正"], content=b"%PDF-1.4 binary", ctype="application/pdf") == 0
     entry = registry(tmp_path)[0]
     assert entry["status"] == "已修正" and entry["needs_text"] is True and entry["files"]["text"] is None
+
+
+# ── 抽取器：认格式看魔数，打包件逐成员分派 ────────────────────────────────
+def _docx_bytes(text: str) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr(
+            "word/document.xml",
+            f"<w:document><w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>",
+        )
+    return buf.getvalue()
+
+
+def _zip_bytes(members: list[tuple[str, bytes]]) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, data in members:
+            z.writestr(name, data)
+    return buf.getvalue()
+
+
+def test_content_kind_reads_the_magic_bytes_not_the_extension(fetch):
+    """认格式先认魔数。**扩展名说了不算**——本库两份原件的 raw 都叫 `raw.bin`。
+
+    政府站把 .zip / .xls 走 octet-stream 发下来，guess_ext 只能落成 bin。
+    只按扩展名分派的形态是：它们永远归进"抽不出"，于是 text.txt 里那份人工转出来的正文
+    永远没人复算（2026-09-07 实见，两条都是）。
+    """
+    assert fetch.content_kind(_zip_bytes([("a.txt", b"x")]), "bin") == "zip"
+    assert fetch.content_kind(_docx_bytes("正文"), "bin") == "docx"
+    assert fetch.content_kind(b"%PDF-1.4 xxx", "bin") == "pdf"
+    # 负对照：认不出魔数时才退回扩展名，别把 HTML 也判成别的东西
+    assert fetch.content_kind(b"<html><body>x</body></html>", "html") == "html"
+
+
+def test_zip_members_are_extracted_each_by_its_own_kind(fetch):
+    """打包件逐成员抽：docx / txt 出正文，图片出**抽取器生成的**占位行。
+
+    占位行必须由抽取器写，不能是人手打的一句说明——前者复算时逐字可重现，
+    后者就是本轮清掉的那种存量（旧 text.txt 里留着"补记：libreoffice 转换取得以上纯文本"）。
+    """
+    raw = _zip_bytes(
+        [
+            ("材料/规则.docx", _docx_bytes("第一条　这是规则正文。")),
+            ("材料/说明.txt", "这是说明正文。".encode("utf-8")),
+            ("材料/流程图.jpg", b"\xff\xd8\xff\xe0not an image really"),
+        ]
+    )
+    text = fetch.extract_text(raw, "bin", "")
+    assert "【文件】材料/规则.docx" in text and "第一条　这是规则正文。" in text
+    assert "这是说明正文。" in text
+    assert "【文件】材料/流程图.jpg" in text and "[jpg：未抽取。" in text
+    # 抽两遍必须逐字相同——审计的③就是拿这个和盘上的 text.txt 比
+    assert fetch.extract_text(raw, "bin", "") == text
+
+
+def test_word97_doc_inside_the_real_package_yields_its_real_text(fetch):
+    """真件对照：现库那个朝阳办事材料包里的《中华人民共和国劳动法》.doc 必须抽出真正文。
+
+    这条不用夹具用真件，是因为 .doc 的分片表解析只有拿真文件才验得动——
+    自己造一份 OLE 复合文档来验自己写的解析器，等于用同一套理解验它自己
+    （"仪器错 vs 范围错"：自造对照有系统性折价）。
+    """
+    from conftest import REAL_KNOWLEDGE
+
+    raw = (REAL_KNOWLEDGE / "sources/originals/bjchy-banli-cailiao-baofuzhuang/raw.bin").read_bytes()
+    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+        name = next(n for n in z.namelist() if n.endswith("中华人民共和国劳动法.doc"))
+        text = fetch._doc_text(z.read(name))
+    assert "第一条　为了保护劳动者的合法权益" in text
+    assert "\x07" not in text and "\r" not in text, "单元格/段落标记没折成换行"
+
+
+# ── --reextract：不下载，用当前抽取器重写 text.txt ─────────────────────────
+def test_reextract_rewrites_text_without_touching_raw_or_sha(fetch, tmp_path):
+    """抽取器改好之后，已存档的 text.txt 靠这条路跟上；raw / sha256 / fetched_at 一个字节不动。
+
+    【为什么非有这条路不可】幂等分支的条件正是"字节没变"，所以重跑原命令只会打印
+    "未变化"、**不重写 text.txt**。没有 --reextract 的话，一份被截断的、或者当年人工
+    粘进去的正文就只能一直烂在登记簿里——而修它的唯一办法又变回了手写 text.txt。
+    """
+    assert run(fetch, tmp_path, ["--source-id", "html-9", "--kind", "法律", "--url", GOV_URL, *BASE]) == 0
+    before = registry(tmp_path)[0]
+    text_path = tmp_path / "sources/originals/html-9/text.txt"
+    text_path.write_text("被谁改坏了的正文", encoding="utf-8")
+
+    def _never(url):  # noqa: ANN001
+        raise AssertionError("--reextract 不许下载：它的输入只有盘上那份 raw")
+
+    fetch.download = _never
+    assert fetch.main(["--reextract", "--source-id", "html-9", "--knowledge-dir", str(tmp_path)]) == 0
+    assert text_path.read_text(encoding="utf-8") == "正文"
+    after = registry(tmp_path)[0]
+    assert after == before, "重抽改动了登记簿：raw/sha256/fetched_at 都不该动"
+
+
+def test_reextract_flips_needs_text_when_the_extractor_learns_a_new_format(fetch, tmp_path):
+    """一条原来抽不出的登记，在抽取器学会那个格式之后重抽 ⇒ needs_text 撤掉、files.text 补上。
+
+    负对照在下一句：抽取器**没**学会的时候，重抽不许把 needs_text 抹掉
+    （那会让一条没有正文的登记看起来正常）。
+    """
+    argv = ["--source-id", "zip-1", "--kind", "法律", "--url", GOV_URL, *BASE]
+    body = _zip_bytes([("材料/规则.docx", _docx_bytes("第一条　包里的正文。"))])
+    real_extract = fetch.extract_text
+    fetch.extract_text = lambda raw, ext, ctype: None  # 假装本机还不会抽打包件
+    assert run(fetch, tmp_path, argv, content=body, ctype="application/octet-stream") == 0
+    assert registry(tmp_path)[0]["needs_text"] is True
+
+    fetch.extract_text = real_extract  # 抽取器学会了
+    assert fetch.main(["--reextract", "--knowledge-dir", str(tmp_path)]) == 0
+    entry = registry(tmp_path)[0]
+    assert "needs_text" not in entry and entry["files"]["text"].endswith("text.txt")
+    assert "第一条　包里的正文。" in (tmp_path / "sources/originals/zip-1/text.txt").read_text(encoding="utf-8")
+
+
+def test_reextract_never_touches_formats_outside_the_recompute_range(fetch, tmp_path, capsys):
+    """量程外的格式（今天只有 pdf）一律跳过，`text.txt` 一个字节不动。
+
+    【这条是拿事故换来的】第一版 `--reextract` 没有这道闸，一次全库重抽就用本机的
+    pypdf 6.17 覆盖了两份 pdf 的存档（`statute-minsufa` 的目录被抽成"第四章回避**2**第五章"，
+    页码插进了正文）。而审计对 pdf 只报"未复算"、照常退 0 ⇒ **一次审计看不见的存档漂移**。
+    写者与审计者必须共用同一份 `DERIVABLE_KINDS`，不能各有各的政策。
+
+    没有这道闸时本条的失败形态有两种，都被下面那句断言接住：本机装了 pypdf ⇒ 存档被覆盖；
+    没装 ⇒ `_pdf_text` 返回 None，`text.txt` 被删掉、条目被标 needs_text。
+    """
+    assert run(fetch, tmp_path, ["--source-id", "pdf-9", "--kind", "法律", "--url", GOV_URL, *BASE],
+               content=b"%PDF-1.4 binary", ctype="application/pdf") == 0
+    archived = tmp_path / "sources/originals/pdf-9/text.txt"
+    archived.write_text("这是当年另行取得、登记在册的正文。", encoding="utf-8")
+    entry = registry(tmp_path)[0]
+    entry["files"]["text"] = "sources/originals/pdf-9/text.txt"
+    entry.pop("needs_text", None)
+    write_registry(tmp_path, [entry])
+
+    assert fetch.main(["--reextract", "--knowledge-dir", str(tmp_path)]) == 0
+    assert archived.read_text(encoding="utf-8") == "这是当年另行取得、登记在册的正文。"
+    assert registry(tmp_path)[0] == entry, "跳过的条目连登记簿都不该动"
+    assert "跳过" in capsys.readouterr().out
+
+
+def test_reextract_is_idempotent_when_the_archive_contains_crlf(fetch, tmp_path, capsys):
+    """刚抓完就重抽 ⇒ 必须报"未变化"，哪怕正文里带着 \\r\\n。
+
+    【它防的是一种只在输出里说谎的不幂等】`Path.read_text` 走通用换行：盘上是 \\r\\n，
+    读回来变 \\n，于是"写进去的"和"读出来的"永远不等 ⇒ 每跑一次都判"变了"、每跑一次都重写。
+    写下去的字节其实一个没变，所以 **git 看不见、审计看不见**，唯一的痕迹是这条命令
+    每次都报一串"重抽：9680 字 → 9801 字"——一串技术上为真、实际上把人引向
+    "存档一直在变"的假消息。2026-09-07 第一版实见。
+    """
+    body = "<html><body><p>第一条</p>\r\n<p>第二条</p>\r\n</body></html>".encode("utf-8")
+    assert run(fetch, tmp_path, ["--source-id", "crlf-1", "--kind", "法律", "--url", GOV_URL, *BASE],
+               content=body) == 0
+    assert "\r" in (tmp_path / "sources/originals/crlf-1/text.txt").read_bytes().decode("utf-8"), "夹具没造出 \\r"
+    capsys.readouterr()
+    assert fetch.main(["--reextract", "--knowledge-dir", str(tmp_path)]) == 0
+    printed = capsys.readouterr().out
+    assert "未变化" in printed and "重抽" not in printed, printed
