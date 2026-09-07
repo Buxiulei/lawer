@@ -757,9 +757,13 @@
     "appTitle": "土八鼠"
   },
   "companyRole": {
-    "说明": "从 4098805 的两条产线路径逐字提取（不读当前 HEAD 的 DomainPack 字段——同值自比恒绿）。基线两条路都是 `role ?? 字面量`，函数体里一次同名行查询都没有，所以「已登记在别的角色位、再不点名补充」在基线下也落这同一格（旧行被搬走）。",
+    "说明": "从 4098805 的两条产线路径逐字提取（不读当前 HEAD 的 DomainPack 字段——同值自比恒绿）。基线两条路都是 `role ?? 字面量`，函数体里一次同名行查询都没有，所以「已登记在别的角色位、再不点名补充」在基线下也落这同一格（旧行被搬走）。 「不合法 role」那三格（invalidRoleViaAgentTool / 非串 / 空串）是 2026-09-07 在 4098805 副本上真跑一遍 executeTool('company_profile_upsert') 捕获的落库行，不是照着表达式手抄：基线工具面写作 `inEnum(args.role, COMPANY_ROLES) ?? '签约主体'`，三种坏值一律当没点名，整条登记（公司名 / uscc / 风险备注）照常落档，回包 ok=true。",
     "unnamedViaCases": "签约主体",
     "unnamedViaAgentTool": "签约主体",
-    "unnamedAfterExistingOtherRole": "签约主体"
+    "unnamedAfterExistingOtherRole": "签约主体",
+    "invalidRoleViaAgentTool": "签约主体",
+    "nonStringRoleViaAgentTool": "签约主体",
+    "emptyStringRoleViaAgentTool": "签约主体",
+    "invalidRoleStillSavesRecord": true
   }
 }

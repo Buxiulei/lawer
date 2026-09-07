@@ -781,12 +781,25 @@ const HANDLERS: Record<string, Handler> = {
     // 此前两条路各写了一遍 `?? '签约主体'`，而写死那一格的形态是——声明了敏感级的领域里，
     // 每一次不带 role 的登记（登记平台/协会/监管走的就是这条路）都落进化名位，
     // 于是分享页与导出把机构全称一起洗成占位符，产物照常生成、没有一处会报错。
+    //
+    // 【为什么工具面先把 role 过一遍词表，而不是把不合法的原样递进去】
+    // 经理 2026-09-07 裁决（台账在案）：**工具面**保持 4098805 的宽松语义。
+    // 基线这条路是 `inEnum(args.role, COMPANY_ROLES) ?? '签约主体'`——不合法/空串/非字符串
+    // 一律当「没点名」，整条登记照常落档。改成拒收的形态是：模型把角色位拼错一个字，
+    // 用户刚说出口的公司名、统一社会信用代码、风险备注**一个字都没进档案**，
+    // 而用户只看到一句「已记下」之后的下一轮追问。名字比角色位重要，先落档。
+    // （MCP / REST 那条路不在此列：那边调用方是人或程序，点错了就该当场知道，
+    //  cases.upsertCompany 照旧回 INVALID_COMPANY_ROLE。）
+    const named = inEnum(args.role, COMPANY_ROLES);
     const role = cases.resolveCompanyRole(ctx.db, {
       caseId: ctx.caseId,
       pack: packOfCtx(ctx),
       name,
-      role: args.role,
+      // null（没点名或点得不合法）→ 交给 resolveCompanyRole 的「不点名」那两条：
+      // 本领域声明了沿用就沿用已有角色，否则落 pack.defaultCompanyRole
+      role: named ?? undefined,
     });
+    // 上一句只可能递进词表内的串或 undefined，那条 400 分支到不了；留着是为了收窄类型
     if (typeof role !== 'string') return reject(role.message);
     const res = store.upsertCompanyProfile(ctx.db, {
       caseId: ctx.caseId,

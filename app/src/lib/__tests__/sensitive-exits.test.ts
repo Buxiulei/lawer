@@ -58,6 +58,10 @@ const LABOR_COMPANY_ROLE_BASELINE = (
       unnamedViaCases: string;
       unnamedViaAgentTool: string;
       unnamedAfterExistingOtherRole: string;
+      invalidRoleViaAgentTool: string;
+      nonStringRoleViaAgentTool: string;
+      emptyStringRoleViaAgentTool: string;
+      invalidRoleStillSavesRecord: boolean;
     };
   }
 ).companyRole;
@@ -349,6 +353,112 @@ describe('登记对方主体的两条工具路：不点名角色时落在哪一�
     expect(bad.ok).toBe(false);
     if (bad.ok) return;
     expect(bad.errorCode).toBe('INVALID_COMPANY_ROLE');
+  });
+
+  /**
+   * 【经理 2026-09-07 裁决（台账在案）：工具面保持 4098805 的宽松语义】
+   * 基线那一行是 `inEnum(args.role, COMPANY_ROLES) ?? '签约主体'`——不合法 / 空串 / 非字符串
+   * 一律当「没点名」，整条登记照常落档。W3 把两条路收敛成 resolveCompanyRole 时，
+   * 顺带把这一格也改成了拒收，于是**缺省领域的对外行为变了**：
+   * 模型把角色位拼错一个字，用户刚说出口的公司全称、统一社会信用代码、风险备注
+   * 一个字都不进档案，而用户只看到下一轮追问——这正是 P4 说好的「labor 零变化」不许发生的事。
+   *
+   * 【为什么钉的是基线常量而不是当前包字段】同 unnamedViaAgentTool 那条：
+   * 拿 DOMAINS[DEFAULT_DOMAIN].defaultCompanyRole 当期望值是自比恒绿。
+   * 【变异确认（集成 2026-09-07）】把 tools.ts 那句 `inEnum(args.role, COMPANY_ROLES)` 去掉、
+   * 恢复成把 args.role 原样递给 resolveCompanyRole ⇒ 本条三个子断言当场红（回包 ok=false）。
+   */
+  it('缺省领域**逐字不变**：工具面递一个不合法 role，落签约主体位且公司名/备注照常落档（变异：把工具面那道 inEnum 去掉 → 红）', () => {
+    const caseId = makeCase(DEFAULT_DOMAIN);
+    const out = executeTool(
+      'company_profile_upsert',
+      JSON.stringify({
+        name: '某某科技有限公司',
+        role: '不存在的角色',
+        uscc: '91110105MA01ABCD2X',
+        risk_notes: '欠薪两个月',
+      }),
+      agentCtx(caseId, DEFAULT_DOMAIN),
+    );
+    expect(out.ok, out.content).toBe(LABOR_COMPANY_ROLE_BASELINE.invalidRoleStillSavesRecord);
+    expect(rolesOf(caseId)['某某科技有限公司']).toBe(
+      LABOR_COMPANY_ROLE_BASELINE.invalidRoleViaAgentTool,
+    );
+    // 【为什么还要读回这两列】只验角色位的形态是：把整条登记改成"只落一个空壳行"也照样绿，
+    // 而用户真正丢掉的是这两格（公司全称之外，正是他刚说出口的那两句）。
+    const row = db
+      .prepare('SELECT uscc, risk_notes FROM company_profiles WHERE case_id = ? AND name = ?')
+      .get(caseId, '某某科技有限公司') as { uscc: string | null; risk_notes: string | null };
+    expect(row.uscc).toBe('91110105MA01ABCD2X');
+    expect(row.risk_notes).toBe('欠薪两个月');
+
+    // 非字符串与空串是同一类坏值，基线对三者一视同仁；漏掉其中一种的形态是
+    // 模型传 role: null / role: 0 时又回到拒收，而这两种恰恰是模型最常传的
+    const viaNonString = makeCase(DEFAULT_DOMAIN);
+    const n = executeTool(
+      'company_profile_upsert',
+      JSON.stringify({ name: '另一家公司', role: 123 }),
+      agentCtx(viaNonString, DEFAULT_DOMAIN),
+    );
+    expect(n.ok, n.content).toBe(true);
+    expect(rolesOf(viaNonString)['另一家公司']).toBe(
+      LABOR_COMPANY_ROLE_BASELINE.nonStringRoleViaAgentTool,
+    );
+
+    const viaEmpty = makeCase(DEFAULT_DOMAIN);
+    const e = executeTool(
+      'company_profile_upsert',
+      JSON.stringify({ name: '第三家公司', role: '' }),
+      agentCtx(viaEmpty, DEFAULT_DOMAIN),
+    );
+    expect(e.ok, e.content).toBe(true);
+    expect(rolesOf(viaEmpty)['第三家公司']).toBe(
+      LABOR_COMPANY_ROLE_BASELINE.emptyStringRoleViaAgentTool,
+    );
+  });
+
+  it('第二个领域同一条口径：不合法 role 也不拒收，落本领域的缺省位——而不是化名位', () => {
+    // 【为什么这条要单列】宽松语义是按「不点名」处理的，而不点名在这个领域会走沿用/缺省两条。
+    // 落进化名位的形态是：机构全称从此在分享页上被洗成占位符，答复函寄不出去。
+    const caseId = makeCase('counseling');
+    const out = executeTool(
+      'company_profile_upsert',
+      JSON.stringify({ name: '简单心理平台', role: '不存在的角色' }),
+      agentCtx(caseId, 'counseling'),
+    );
+    expect(out.ok, out.content).toBe(true);
+    expect(rolesOf(caseId)['简单心理平台']).toBe(COUNSELING.defaultCompanyRole);
+    expect(COUNSELING.sensitive!.aliasRoles).not.toContain(rolesOf(caseId)['简单心理平台']);
+    expect(shareRedactorFor(db, caseId).text('致简单心理平台').text).toContain('简单心理平台');
+  });
+
+  /**
+   * 【经理 2026-09-07 裁决（台账在案）：读路径口径也管 upsertCompany】
+   * 这个案子早已建好、领域早已选过，登记一个公司名只需要定一个角色位。
+   * 走 packForCase 的形态是：一行 cases.domain 写坏、或某个包被摘下线，
+   * 用户往自己的档案里补一个公司名就收到 500 UNKNOWN_DOMAIN——
+   * 而这条 500 什么也保护不了（角色词表本来就跨领域同一套）。
+   * UNKNOWN_DOMAIN 留给**建案/选领域**那条路：那里的领域是调用方这一次给的。
+   */
+  it('domain 写坏的老案件仍能登记公司，角色回落缺省领域那一格（变异：把 upsertCompany 改回 packForCase → 红）', () => {
+    const caseId = makeCase(DEFAULT_DOMAIN);
+    db.prepare('UPDATE cases SET domain = ? WHERE id = ?').run('从没注册过的领域', caseId);
+
+    const made = cases.upsertCompany(db, { caseId, userId: uid, name: '某某科技有限公司', note: '欠薪两个月' });
+    expect(made.ok, JSON.stringify(made)).toBe(true);
+    expect(rolesOf(caseId)['某某科技有限公司']).toBe(DOMAINS[DEFAULT_DOMAIN].defaultCompanyRole);
+    // 与 lib/sensitive.sensitivityOf 同一条读路径口径：取不到包按缺省领域算，不按最严处理
+    expect(sensitivityOf('从没注册过的领域')).toBeNull();
+  });
+
+  it('对照：**建案**那条路遇到不认识的领域照旧拒（自证上一条放宽的只是读路径）', () => {
+    const other = Number(
+      db.prepare('INSERT INTO users (phone_hash) VALUES (?)').run('sens-unknown').lastInsertRowid,
+    );
+    const made = cases.ensureDefaultCase(db, other, '从没注册过的领域');
+    expect('ok' in made && made.ok === false).toBe(true);
+    if (!('ok' in made)) return;
+    expect(made.errorCode).toBe('UNKNOWN_DOMAIN');
   });
 });
 

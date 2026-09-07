@@ -13,6 +13,7 @@ import * as store from '@/lib/db/cases';
 import { dedupTitleKey } from '@/lib/db/dedup';
 import {
   DEFAULT_DOMAIN,
+  domainPackOrDefault,
   journeyOfPack,
   getDomainPack,
   requireEnabledDomain,
@@ -944,9 +945,14 @@ export function upsertCompany(
 
   const name = trimmedOrNull(input.name);
   if (!name) return fail(400, 'INVALID_COMPANY_NAME', 'name 不能为空');
-  const packed = packForCase(found);
-  if (!packed.ok) return packed;
-  const role = resolveCompanyRole(db, { caseId: input.caseId, pack: packed.pack, name, role: input.role });
+  // 【为什么这里走 domainPackOrDefault，而不是 packForCase】这一格只用来定**角色位**，
+  // 案子早已存在、领域早已选过。走 packForCase 的形态是：一行 cases.domain 写坏、
+  // 或某个包被摘下线，用户往这个案子里补一个公司名就收到 500 UNKNOWN_DOMAIN——
+  // 而档案里那一行本来只需要落一个缺省角色位就行了。口径与 lib/sensitive.sensitivityOf
+  // 同一条（读路径取不到包就按缺省领域算）；UNKNOWN_DOMAIN 留给**建案/选领域**那条路，
+  // 那里领域是调用方这一次给的，取不到就该当场说不认识，不能替他挑一个。
+  const pack = domainPackOrDefault(found.domain);
+  const role = resolveCompanyRole(db, { caseId: input.caseId, pack, name, role: input.role });
   if (typeof role !== 'string') return role;
 
   const sources = trimmedOrNull(input.sources);
