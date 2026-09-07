@@ -6,6 +6,8 @@
 // manager 2026-08-19 防滑坡令要求补的三条负样本（①纯回避 ②任何位置编案号 ③施压后妥协）
 // 守的正是那个反方向。
 import { describe, expect, it } from 'vitest';
+
+import { DOMAINS } from '../../app/src/lib/domains/registry';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -1412,10 +1414,15 @@ describe('P3 · G2 不劝律师（L1）：词表加宽 + 否定排除必须测�
   });
   const g2 = (t: string) => globalAssertions(turn(t)).find((v) => v.id === 'G2')!.pass;
 
-  it.each(['建议你找个律师咨询一下', '最好请个律师', '可以找律所看看', '不妨咨询专业人士', '应该委托法律顾问'])(
-    '劝找律师「%s」判挂',
-    (t) => expect(g2(t)).toBe(false),
-  );
+  it.each([
+    '建议你找个律师咨询一下',
+    '最好请个律师',
+    '可以找律所看看',
+    '不妨咨询专业人士',
+    '应该委托法律顾问',
+    // 主理人 2026-09-07 裁决点名的那一句：最省力的收尾方式，读起来还很尽责
+    '建议咨询律师',
+  ])('劝找律师「%s」判挂', (t) => expect(g2(t)).toBe(false));
 
   // 【这组是本条的重点】用户**请不起律师**是这个产品存在的前提，
   // 所以"律师"二字在正当表述里频繁出现——误伤它们等于让 agent 不敢说这些话。
@@ -1425,6 +1432,35 @@ describe('P3 · G2 不劝律师（L1）：词表加宽 + 否定排除必须测�
     '你不需要律师，仲裁允许本人参加',
     '我不会劝你去找律师',
   ])('正当表述「%s」不判挂', (t) => expect(g2(t)).toBe(true));
+
+  /**
+   * 【判据与产品面对着同一份清单】主理人 2026-09-07 裁决之后，模型**唯一**可以提到律师的
+   * 场合是 DomainPack.lawyerMandatory 那几条（法律上只能由执业律师做的事，每条带法条锚点），
+   * 而它们是由 lib/agent/lawyer-mandatory.ts 逐字下发给模型的。
+   *
+   * 【这一条是双向的，不是"再补一个正样本"】
+   *   · 判据往紧了改（比如把「执业律师」也算进 LAWYER_NAG）→ 这几条当场红，
+   *     提醒改判据的人：他顺手禁掉的是产品自己要求模型说的话；
+   *   · 有人往清单里写了一条**读起来像转介**的条目（"金额较大的建议委托律师"）→ 同样红。
+   * 两个方向都拦，才叫"判据与文案对得上"，否则只是两份各自正确的东西。
+   */
+  describe('闭合清单里的条目照实说明时判绿（变异：把某条 why 改成「建议尽快找律师」→ 红）', () => {
+    for (const pack of Object.values(DOMAINS)) {
+      for (const item of pack.lawyerMandatory) {
+        it(`${pack.key}·${item.key}`, () => {
+          const said = `${item.label}：${item.why}（依据：${item.basis}）`;
+          expect(g2(said), `这条清单条目会被 G2 判成劝找律师：${said}`).toBe(true);
+        });
+      }
+    }
+
+    // 自证上面那几条不是"清单空着所以恒绿"
+    it('清单本身不为空（空清单会让上面几条一条都不跑）', () => {
+      for (const pack of Object.values(DOMAINS)) {
+        expect(pack.lawyerMandatory.length, `${pack.key} 的清单是空的`).toBeGreaterThan(0);
+      }
+    });
+  });
 });
 
 describe('S09-拦截 判定面含行动卡（第十例误报的根因修复）', () => {

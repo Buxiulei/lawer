@@ -25,6 +25,7 @@ import { buildCaseFacts, renderCaseFacts } from '../case-facts';
 import { assembleCrisisOpener, type CrisisOpenerText, type HotlineFact } from '../crisis-opener';
 import { applyLeverageGate, leverageSubject } from '../crisis';
 import { runTurn } from '../orchestrator';
+import { LAWYER_MANDATORY_HEADING } from '../lawyer-mandatory';
 import { buildSystemPrompt } from '../prompt';
 import type { KnowledgePack, KnowledgeSearcher } from '../retrieval';
 import type { CaseSnapshot } from '../snapshot';
@@ -64,6 +65,16 @@ const FAKE_PACK: DomainPack = {
   key: FAKE_KEY,
   crisis: FAKE_CRISIS,
   factsSections: FAKE_FACTS_SECTIONS,
+  // 「法律上只能由执业律师做的那几件事」也要与缺省领域一个字都不重合：
+  // 沿用缺省包那两条的话，下面那条判据分不出"按领域取"和"恒取缺省包"。
+  lawyerMandatory: [
+    {
+      key: 'fake-only',
+      label: '假领域·只能由执业律师做的那一件',
+      why: '假领域的理由句，以及我们仍然替他做完了哪一半。',
+      basis: '《假领域法》第一条',
+    },
+  ],
 };
 
 /**
@@ -396,5 +407,57 @@ describe('工具通路：知识检索也按案件领域过滤', () => {
     // 预检索一次 + 工具一次，两条通路都必须带同一个领域（少一条就是"从那个通道绕过去"）
     expect(calls.length).toBeGreaterThanOrEqual(2);
     for (const c of calls) expect(c.options.domain).toBe(FAKE_KEY);
+  });
+});
+
+// ========== 「只能由执业律师做」的闭合清单 ==========
+
+/**
+ * 主理人 2026-09-07 裁决落到 system prompt 上的那一段：能我们做完的都我们做完，
+ * 只有清单里的事项才说明法律上必须由执业律师做。
+ *
+ * 【这里为什么要按领域验一遍】清单是**领域包的对外承诺**。共用层写死一份的形态是：
+ * 第二个领域的用户读到的是上一个行当的清单——每一句都通顺、法条也是真的，
+ * 只是那几件事不是他这件事，而这一轮回复照常生成、没有一处会报错。
+ */
+describe('「只能由执业律师做」的闭合清单按 cases.domain 取（变异：把 prompt.ts 里那行 renderLawyerMandatory 删掉 → 红）', () => {
+  const plainPrompt = (domain: string) =>
+    buildSystemPrompt({
+      snapshot: snapshotOf(domain),
+      mode: '陪跑',
+      stage: 'D',
+      packs: [FAKE_CARD],
+      now: new Date('2026-09-06T02:00:00Z'),
+    } as Parameters<typeof buildSystemPrompt>[0]);
+
+  it('假领域：进 prompt 的是假包那一条，缺省领域的两条一个字都不进', () => {
+    const p = plainPrompt(FAKE_KEY);
+    expect(p).toContain(FAKE_PACK.lawyerMandatory[0].label);
+    expect(p).toContain(FAKE_PACK.lawyerMandatory[0].why);
+    expect(p).toContain(FAKE_PACK.lawyerMandatory[0].basis);
+    for (const item of LABOR_PACK.lawyerMandatory) {
+      expect(p, `缺省领域的「${item.label}」串到假领域去了`).not.toContain(item.label);
+    }
+  });
+
+  it('缺省领域照旧逐条进 prompt（自证上一条不是"整段没了"）', () => {
+    const p = plainPrompt(DEFAULT_DOMAIN);
+    for (const item of LABOR_PACK.lawyerMandatory) {
+      expect(p).toContain(item.label);
+      expect(p).toContain(item.why);
+      expect(p).toContain(item.basis);
+    }
+  });
+
+  /**
+   * 【为什么要单钉"普通轮也在"】这一段防的是**模型的默认收尾**（顺手加一句
+   *「建议咨询专业律师」），不是某一种输入。做成"命中才注入"的形态是：
+   * 用户没问、模型自己收了这么一句尾，而那一轮与其它轮看起来没有任何区别。
+   */
+  it('普通轮（非危机、非空包）也带这一段，且带着那三条纪律', () => {
+    const p = plainPrompt(DEFAULT_DOMAIN);
+    expect(p).toContain(LAWYER_MANDATORY_HEADING);
+    expect(p).toContain('清单以外的每一件事，都由你做完');
+    expect(p).toContain('禁止用「建议咨询律师」');
   });
 });
