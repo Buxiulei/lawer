@@ -1,7 +1,7 @@
 [
   {
     "source_id": "bcnpo-jingcheng-baoquan-shoufei",
-    "kind": "行业规范",
+    "kind": "机构官网",
     "name": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
     "issuer": "北京市精诚公证处",
     "official_host": "www.bcnpo.cn",
@@ -13,7 +13,8 @@
     "files": {
       "raw": "sources/originals/bcnpo-jingcheng-baoquan-shoufei/raw.html",
       "text": "sources/originals/bcnpo-jingcheng-baoquan-shoufei/text.txt"
-    }
+    },
+    "justification": "证据保全公证在北京是市场调节价，各公证处自主定价并须在自己官网公示；这份收费标准就是该公证处对自己收费的公示，只作为数据卡里「这一家收多少钱」的样本出处，不代表北京行情、更不作为任何法律规则的依据"
   },
   {
     "source_id": "beijing-gongzi-zhifu-guiding",
@@ -485,7 +486,7 @@
   },
   {
     "source_id": "crisis-org-cn-zhongxin-jianjie",
-    "kind": "行业规范",
+    "kind": "机构官网",
     "name": "北京心理危机研究与干预中心简介（含心理援助热线号码与运行时间）",
     "issuer": "北京心理危机研究与干预中心",
     "official_host": "www.crisis.org.cn",
@@ -497,7 +498,8 @@
     "files": {
       "raw": "sources/originals/crisis-org-cn-zhongxin-jianjie/raw.html",
       "text": "sources/originals/crisis-org-cn-zhongxin-jianjie/text.txt"
-    }
+    },
+    "justification": "北京心理援助热线 800-810-1117 / 010-82951332 就是该中心自己运行的热线，号码与「365天7*24小时」的运行时间是它在自己官网上公布的自述信息；本库只用它做数据卡里这两个号码与服务时间的出处，不用它断言任何法律规则"
   },
   {
     "source_id": "data-beijing-12351-baodao",
@@ -699,7 +701,7 @@
   },
   {
     "source_id": "pkuh6-huxi-fangsong",
-    "kind": "行业规范",
+    "kind": "机构官网",
     "name": "你了解呼吸放松法吗？",
     "issuer": "北京大学第六医院",
     "official_host": "www.pkuh6.cn",
@@ -711,7 +713,8 @@
     "files": {
       "raw": "sources/originals/pkuh6-huxi-fangsong/raw.html",
       "text": "sources/originals/pkuh6-huxi-fangsong/text.txt"
-    }
+    },
+    "justification": "北京大学第六医院在自己官网发布的科普文，讲的是该院自己给出的呼吸放松法步骤；只作背景参考，本库不拿它断言任何医学结论或法律规则"
   },
   {
     "source_id": "statute-ai-shengcheng-hecheng-neirong-biaoshi-banfa",
@@ -905,10 +908,10 @@
     "kind": "法律",
     "name": "中华人民共和国个人所得税法",
     "issuer": "全国人大常委会",
-    "official_host": "flk.npc.gov.cn",
-    "url": "https://flk.npc.gov.cn/detail?id=2c909fdd678bf17901678bf724bd0609&fileId=&type=&title=%E4%B8%AD%E5%8D%8E%E4%BA%BA%E6%B0%91%E5%85%B1%E5%92%8C%E5%9B%BD%E4%B8%AA%E4%BA%BA%E6%89%80%E5%BE%97%E7%A8%8E%E6%B3%95",
-    "fetched_at": "2026-09-07T01:41:03+08:00",
-    "content_sha256": "636b4c2fe9d2bce913bcc9c9f2e280a5190e12fa82f815261b10e106d968e126",
+    "official_host": "fgk.chinatax.gov.cn",
+    "url": "https://fgk.chinatax.gov.cn/zcfgk/c100009/c5193028/content.html",
+    "fetched_at": "2026-09-07T10:11:45+08:00",
+    "content_sha256": "442006d0f1157e381eb044c60a4cafad7bae30f5dcf3592d1bdf72d99a798cb7",
     "version_label": "2018年8月31日第七次修正",
     "status": "已修正",
     "files": {
