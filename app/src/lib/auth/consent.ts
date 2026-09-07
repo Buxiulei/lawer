@@ -21,6 +21,39 @@ import { getModelPreferences, setModelPreferences } from '@/lib/db/otp';
 
 import type { AuthFailure } from './otp';
 
+// ───────────────── 协议生不生效（经理裁决 2026-09-07）─────────────────
+
+/** 协议生效开关的环境变量名。判据与文档念这一个常量，字面量只在下面那个函数里出现一次。 */
+export const TERMS_LIVE_ENV = 'LAWER_TERMS_LIVE';
+
+/**
+ * 《用户服务协议》此刻**生不生效**。默认关。
+ *
+ * 【为什么要这么一个开关】协议正文里还有占位（个保法 §38 的出境路径、中转商名称与所在地、
+ * 境外接收方联系方式）与附二那批业务事实没填。一份自己都还没写完的合同，
+ * 不能拿去当注册的前置条件——用户勾的那一下，勾的是一段还会变的文本。
+ * 但 P5 其余的东西（生命周期、实名、情绪同意、三张条款页）该上产。所以是一个旗，不是一次回滚。
+ *
+ * 【为什么每次现读 env，不进程级缓存】缓存的形态是：运维把旗打开、重启进程也不生效，
+ * 而它不报错，只是行为停在启动那一刻——运维会以为自己写错了变量名（同
+ * lib/domains/registry.ts enabledDomainKeys 抬头那条）。
+ *
+ * 【为什么认不出的值按"关"处理】关着的代价是「协议还没生效」，这与现状一致；
+ * 反过来把一个写成 `flase` 的值认成开，就是拿一份没写完的合同去取同意，
+ * 而页面上一切正常。往严的方向错，错得看得见。
+ *
+ * 【为什么它不在 lib/consent.ts】那一份是**客户端组件也要 import 的纯文案层**，
+ * 而 Next 的浏览器包里 `process.env` 只有 NEXT_PUBLIC_*：真把这个函数放过去，
+ * 某天有人在客户端组件里直接调它，得到的恒是 false——旗明明开着，页面上却一个框都不出现，
+ * 且没有任何一处会报错。放在这个只有服务端 import 得动的文件里（它连着 better-sqlite3），
+ * 那种调用压根编译不过去。旗进浏览器只有两条路，都是服务端先读好再递过去：
+ * 登录页由服务端组件当 prop 递（见 app/login/page.tsx），设置页由 GET /api/v1/me 带回来。
+ */
+export function termsLive(): boolean {
+  const raw = (process.env[TERMS_LIVE_ENV] ?? '').trim().toLowerCase();
+  return raw === '1' || raw === 'true';
+}
+
 /** 三个勾选框在请求体里的字段名。前后端只认这一份常量。 */
 export const AGREE_TERMS_FIELD = 'agree_terms';
 export const AGREE_ADULT_FIELD = 'agree_adult';
@@ -70,6 +103,10 @@ export function registrationConsentFailure(
   body: Record<string, unknown>,
   knownUserId: number | null,
 ): AuthFailure | null {
+  // 协议还没生效时这道闸整个不在（经理裁决 2026-09-07）：注册页那时也不摆那两个框，
+  // 拦下去的形态是——用户被要求勾一个页面上不存在的框，而错误文案指着一处空白。
+  if (!termsLive()) return null;
+
   const consent = readRegistrationConsent(body);
   if (consent.terms && consent.adult) return null;
   if (knownUserId !== null && hasRegistrationConsent(db, knownUserId)) return null;
@@ -109,6 +146,11 @@ export function recordRegistrationConsent(
   body: Record<string, unknown>,
   ip: string | null,
 ): void {
+  // 协议没生效就一行都不落：台账要回答「他同意的是哪一版」，而此刻还没有可同意的那一版。
+  // 落了的形态是——将来协议定稿，库里却已经有一批指向一份不存在文本的同意记录，
+  // 于是这批人再也不会被要求勾一次真正的协议（hasRegistrationConsent 认得那些行）。
+  if (!termsLive()) return;
+
   const digest = ipDigest(ip);
   const consent = readRegistrationConsent(body);
 
@@ -188,5 +230,9 @@ export function realnameConsentFailure(
  * 应当被迫想清楚它凭什么放行，而不是继承一个"看起来安全"的缺省。
  */
 export function overseasModelsAllowed(db: Database, userId: number): boolean {
+  // 【为什么旗也是这个判据的一部分】境外那一次单独同意的合法性，全靠 /terms/overseas 那页
+  // 告知得完整（个保法 §39）——而那页此刻还有占位（出境路径、中转商、接收方联系方式）。
+  // 旗关着时既往的同意行照样留在台账里（撤回是另一回事），只是**不据它出境**。
+  if (!termsLive()) return false;
   return hasConsent(db, userId, CONSENT_KINDS.overseas) && getModelPreferences(db, userId).overseasModels;
 }

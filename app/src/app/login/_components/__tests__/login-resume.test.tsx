@@ -94,7 +94,7 @@ afterEach(() => {
 
 /** 「拿到半程记录之后的那一帧」——LoginFlow 挂载后渲染的正是它 */
 const flow = () =>
-  renderToStaticMarkup(<LoginForm resume={{ ready: true, step: loadLoginStep() }} />);
+  renderToStaticMarkup(<LoginForm resume={{ ready: true, step: loadLoginStep() }} termsLive />);
 
 describe('刷新之后还停在原来那一格', () => {
   it('🔴 量具自检：没有半程记录时（第一次进来）照旧是手机号那一格', () => {
@@ -211,7 +211,7 @@ describe('首帧与服务端一致：登录页首帧不读 sessionStorage', () =
       setItem: () => {},
       removeItem: () => {},
     });
-    renderToStaticMarkup(<LoginFlow />);
+    renderToStaticMarkup(<LoginFlow termsLive />);
     expect(
       getItem.mock.calls.length,
       '缺什么：首帧就去读了半程记录（读了 ' +
@@ -227,7 +227,7 @@ describe('首帧与服务端一致：登录页首帧不读 sessionStorage', () =
 
   it('🔴 有没有半程记录，首帧渲染出来的 HTML 一模一样', () => {
     // 服务端那一帧永远是"没有记录"的那一版；两版不同就等于 SSR/CSR 首帧不同。
-    const fresh = renderToStaticMarkup(<LoginFlow />);
+    const fresh = renderToStaticMarkup(<LoginFlow termsLive />);
     saveLoginStep({
       channel: 'phone',
       step: 'code',
@@ -235,7 +235,7 @@ describe('首帧与服务端一致：登录页首帧不读 sessionStorage', () =
       expiresAt: Date.now() + 45_000,
     });
     expect(
-      renderToStaticMarkup(<LoginFlow />),
+      renderToStaticMarkup(<LoginFlow termsLive />),
       '有半程记录时首帧长得不一样 = 客户端首帧跟服务端对不上（React #418）',
     ).toBe(fresh);
   });
@@ -248,8 +248,8 @@ describe('首帧与服务端一致：登录页首帧不读 sessionStorage', () =
       target: '13800001111',
       expiresAt: Date.now() + 45_000,
     });
-    expect(renderToStaticMarkup(<LoginFlow />)).toContain('11 位手机号');
-    expect(flow()).not.toBe(renderToStaticMarkup(<LoginFlow />));
+    expect(renderToStaticMarkup(<LoginFlow termsLive />)).toContain('11 位手机号');
+    expect(flow()).not.toBe(renderToStaticMarkup(<LoginFlow termsLive />));
   });
 });
 

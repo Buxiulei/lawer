@@ -61,7 +61,7 @@ type Channel = 'phone' | 'email';
 /**
  * 引言：说的是**眼前这一格**要填什么、大概多久，所以它跟着通道换。
  *
- * 【为什么不能留在 page.tsx】那一页是无状态的服务端组件（/login 要保持静态预渲染），
+ * 【为什么不能留在 page.tsx】那一页是**无状态**的服务端组件（通道是这里的 useState），
  * 换不动通道：点进邮箱那屏之后，顶上仍写着"手机号验证码登录"，跟下面的邮箱表单对不上。
  *
  * 【为什么只说眼前这一步】补绑邮箱是**少数人**（新号注册那一次）才会撞上的支路，
@@ -89,11 +89,13 @@ const CHANNEL_INTRO: Record<Channel, string> = {
  * 而短信已经发出去了——补绑那一步更糟，token 已经在手上，人却被打回登录第一格。
  * 所以要问一次半程记录（sessionStorage，关标签页即清），见 loginStep.ts。
  */
-export function LoginFlow() {
+export function LoginFlow({ termsLive }: { termsLive: boolean }) {
   const resume = useResumedLoginStep();
   // 记录到手那一刻整块重挂，让下面各格的初始 state 按记录重新播种。
   // 没有记录时 key 一直是 fresh，压根不会重挂。
-  return <LoginForm key={resume.step ? 'resumed' : 'fresh'} resume={resume} />;
+  return (
+    <LoginForm key={resume.step ? 'resumed' : 'fresh'} resume={resume} termsLive={termsLive} />
+  );
 }
 
 /**
@@ -123,7 +125,20 @@ function useResumedLoginStep(): LoginResume {
  * 登录表单本体。半程记录当 prop 收，不自己去读——
  * 「什么时候读 sessionStorage」这件事只由上面那个 hook 说了算。
  */
-export function LoginForm({ resume }: { resume: LoginResume }) {
+export function LoginForm({
+  resume,
+  termsLive,
+}: {
+  resume: LoginResume;
+  /**
+   * 协议生效了没有（服务端读旗，见 app/login/page.tsx）。
+   *
+   * **必填，没有缺省值**：给一个缺省的形态是——新加一个渲染 LoginForm 的地方忘了递，
+   * 那一处按缺省画，而缺省无论取哪一边都有一半的场合是错的（关着时凭空多出三个框，
+   * 开着时三个必勾框凭空消失、发码按钮却是亮的）。让它编译不过去。
+   */
+  termsLive: boolean;
+}) {
   const resumed = resume.step;
   const enterSite = useEnterSite();
   const [channel, setChannel] = useState<Channel>(resumed?.channel === 'email' ? 'email' : 'phone');
@@ -142,7 +157,12 @@ export function LoginForm({ resume }: { resume: LoginResume }) {
    * 于是它不再是单独同意（理由见 lib/consent.ts OVERSEAS_CHECKBOX_LABEL 抬头）。
    */
   const [agreedOverseas, setAgreedOverseas] = useState(false);
-  const agreed = agreedTerms && agreedAdult;
+  /**
+   * 发码闸开不开。协议没生效时**恒开**：那时页面上根本没有可勾的框，
+   * 而闸照旧盯着两个永远是 false 的 state 的形态是——发码按钮永远是灰的，
+   * 旁边一句「先勾选下方的说明」指着一处空白，整站没有一个人能注册，而没有一处报错。
+   */
+  const agreed = termsLive ? agreedTerms && agreedAdult : true;
   /** 每一条发登录态的请求都要带上这三位，服务端据此落同意台账 */
   const consentBody = {
     agree_terms: agreedTerms,
@@ -231,14 +251,19 @@ export function LoginForm({ resume }: { resume: LoginResume }) {
         </Card>
       )}
 
-      <ConsentGate
-        terms={agreedTerms}
-        adult={agreedAdult}
-        overseas={agreedOverseas}
-        onTermsChange={setAgreedTerms}
-        onAdultChange={setAgreedAdult}
-        onOverseasChange={setAgreedOverseas}
-      />
+      {/* 协议没生效时这一组框整块不渲染（经理裁决 2026-09-07）：一份还在改的文本
+          不能拿去取同意，而勾选框本身就是取同意的动作。画成禁用态也不行——
+          那仍然是把一份未定稿的合同摆在注册路上，只是勾不动。 */}
+      {termsLive && (
+        <ConsentGate
+          terms={agreedTerms}
+          adult={agreedAdult}
+          overseas={agreedOverseas}
+          onTermsChange={setAgreedTerms}
+          onAdultChange={setAgreedAdult}
+          onOverseasChange={setAgreedOverseas}
+        />
+      )}
 
       {channel === 'phone' && (
         <ChannelSwitchLink onClick={() => setChannel('email')}>用邮箱登录 →</ChannelSwitchLink>

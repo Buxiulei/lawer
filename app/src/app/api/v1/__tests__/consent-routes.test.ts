@@ -9,6 +9,12 @@
 // 读进进程、甚至落了库的形态是：状态码看着对，承诺已经破了，而没有任何一处报错。
 //
 // 【变异矩阵】2026-09-07 实跑，结果照抄在各 describe 抬头。
+//
+// 【本文件整组跑在旗打开的那一臂】协议生效旗 LAWER_TERMS_LIVE 默认关，关着时这道闸
+// 整个不在（经理裁决 2026-09-07：协议里还有占位，不能拿去当注册的前置条件）。
+// 这一组要判的是**协议生效之后**的闸，所以先把旗打开；旗关着那一臂另有一组
+// （lib/auth/__tests__/terms-live-flag.test.ts）。不显式设旗的形态是：
+// 本组随环境变量的默认值一起变绿变红，而它自己一个字都不提这件事。
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,6 +22,7 @@ import path from 'node:path';
 import type { Database } from 'better-sqlite3';
 import { beforeAll, beforeEach, describe, expect, test } from 'vitest';
 
+import { TERMS_LIVE_ENV } from '@/lib/auth/consent';
 import { CONSENT_KINDS } from '@/lib/consent';
 import { consentedKinds, hasConsent, recordConsent } from '@/lib/db/consents';
 import * as store from '@/lib/db/otp';
@@ -30,6 +37,7 @@ let db: Database;
 let signToken: (uid: number) => string;
 
 beforeAll(async () => {
+  process.env[TERMS_LIVE_ENV] = '1';
   process.env.LAWER_DATA_KEY = crypto.randomBytes(32).toString('base64');
   process.env.JWT_SECRET = 'test-secret-do-not-use-in-prod';
   process.env.DB_PATH = path.join(os.tmpdir(), `lawer-consent-routes-${crypto.randomUUID()}.db`);

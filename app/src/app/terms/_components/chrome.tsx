@@ -16,6 +16,8 @@
 import Link from 'next/link';
 
 import { Pending } from '@/app/_ui/Pending';
+import { termsLive } from '@/lib/auth/consent';
+import { TERMS_PREVIEW_BANNER } from '@/lib/consent';
 import { TubashuMark } from '@/components/shell/TubashuMark';
 
 import type { TermsQuote } from '../quotes';
@@ -43,6 +45,10 @@ export function TermsShell({
 }) {
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[760px] flex-col px-4 py-8 sm:px-6 sm:py-12">
+      {/* 协议还没生效时，三张页都在这一处顶上挂横幅（经理裁决 2026-09-07）。
+          挂在外壳而不是各页各写一条：三页共用一个外壳，各写一遍的形态是
+          某一页漏了——而那一页读起来与生效后的正本一模一样，没有任何东西会报错。 */}
+      <TermsPreviewBanner />
       <header className="border-b border-line pb-5">
         <div className="flex items-center gap-2.5">
           <TubashuMark size={24} className="size-6" />
@@ -63,6 +69,30 @@ export function TermsShell({
         {footer}
       </footer>
     </div>
+  );
+}
+
+/**
+ * 「这一页还不是生效的正本」那条横幅。协议生效旗开着时**什么都不渲染**
+ * （旗名与读法只在 lib/auth/consent.termsLive 一处，这里不再抄一遍变量名）。
+ *
+ * 【为什么是横幅而不是把页面撤掉】页上印着的法条原文、受托方清单、境外接收方说明是
+ * **现在就成立**的告知，首页与登录页页脚也已经指过来了。整页拿掉的形态是那几条链接静默 404，
+ * 而"合规条款读不到"看起来只像"链接坏了"。
+ *
+ * 【为什么用 amber 而不是 danger】DESIGN.md 色彩纪律：danger 留给风险与不可逆结论；
+ * 这里的事实是"还没发布"，与 <Pending/> 同一类（同色是刻意的：一页上那些方括号占位
+ * 与这条横幅说的是同一件事——这份文本还没定稿）。
+ */
+export function TermsPreviewBanner() {
+  if (termsLive()) return null;
+  return (
+    <p
+      data-terms-preview="1"
+      className="mb-5 rounded-[10px] border-l-4 border-amber bg-amber-wash px-3.5 py-2.5 text-[13.5px] leading-6 font-medium text-amber-ink"
+    >
+      {TERMS_PREVIEW_BANNER}
+    </p>
   );
 }
 

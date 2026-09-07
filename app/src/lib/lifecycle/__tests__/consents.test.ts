@@ -5,6 +5,13 @@
 // 真的按同意状态判，或者干脆谁都不写。所以每条接线都验两次——撤回之前必须照常写得进去、
 // 照常走境外那一档，撤回之后才停。少了前一半，把闸改成恒拒也全绿，
 // 而那会让所有人的情绪记录一起消失。
+//
+// 【本文件整组跑在旗打开的那一臂】协议生效旗 LAWER_TERMS_LIVE 默认关，关着时
+// overseasModelsAllowed 恒 false（经理裁决 2026-09-07：/terms/overseas 那页还有占位，
+// 据它取得的同意不完整）。这一组要判的是**协议生效之后**撤回接不接得住路由，
+// 所以先把旗打开；旗关着那一臂另有一组
+// （lib/auth/__tests__/terms-live-flag.test.ts）。不显式设旗的形态是：
+// 本组随环境变量的默认值一起变绿变红，而它自己一个字都不提这件事。
 import crypto from 'node:crypto';
 
 import Database from 'better-sqlite3';
@@ -18,7 +25,7 @@ import { runMigrations } from '@/lib/db/migrate';
 import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
 import { route } from '@/lib/llm';
 
-import { overseasModelsAllowed } from '@/lib/auth/consent';
+import { TERMS_LIVE_ENV, overseasModelsAllowed } from '@/lib/auth/consent';
 import { consentAt, hasConsent, recordConsent } from '@/lib/db/consents';
 import { setModelPreferences } from '@/lib/db/otp';
 
@@ -36,6 +43,7 @@ let uid: number;
 let caseId: number;
 
 beforeAll(() => {
+  process.env[TERMS_LIVE_ENV] = '1';
   process.env.LAWER_DATA_KEY = crypto.randomBytes(32).toString('base64');
 });
 

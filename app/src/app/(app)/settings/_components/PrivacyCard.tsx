@@ -8,6 +8,8 @@ import {
   EVAL_OPTIN_LABEL,
   OVERSEAS_SWITCH_HINT,
   OVERSEAS_SWITCH_LABEL,
+  OVERSEAS_UNAVAILABLE_HINT,
+  OVERSEAS_UNAVAILABLE_LABEL,
   type ConsentKind,
 } from '@/lib/consent';
 import { OverseasConsent } from '@/app/terms/overseas/OverseasConsent';
@@ -21,6 +23,57 @@ import { SignInHint } from './SignInHint';
 interface MeResponse {
   consents: string[];
   preferences: { overseas_models: boolean; eval_optin: boolean };
+  /** 协议生效了没有（服务端读协议生效旗，见 lib/auth/consent.termsLive） */
+  terms_live: boolean;
+}
+
+/**
+ * 境外模型那一行。**单独成组件**：协议没生效时它换一副样子（换标题、换说明、开关关死），
+ * 而 PrivacyCard 自己那个 me 是 effect 里取回来的——本仓 vitest 跑 node 环境、不执行 effect，
+ * 判据驱动不了它。整行留在卡里的形态是：两种样子谁都渲染不出来，
+ * 于是"协议没生效时开关开不动"这件事没有任何一条判据盯得住。
+ *
+ * @param live 协议生效了没有；`null` = 还没问到（那一刻开关本来就是禁用的）
+ */
+export function OverseasRow({
+  live,
+  checked,
+  disabled,
+  onCheckedChange,
+}: {
+  live: boolean | null;
+  checked: boolean;
+  disabled: boolean;
+  onCheckedChange: (next: boolean) => void;
+}) {
+  // 【为什么"还没问到"画成常态而不是画成"暂未开放"】那一刻开关是禁用的（loading），
+  // 两种画法谁都点不动；但取回来发现协议是生效的时候，"暂未开放"要退回常态——
+  // 用户会看见一句"暂未开放"闪过再变成正常开关，读起来像是我们改了主意。
+  const unavailable = live === false;
+  return (
+    <div className="flex items-start gap-3 border-t border-line py-3">
+      <div className="min-w-0 flex-1">
+        <Label htmlFor="overseas-switch" className="text-[15px]">
+          {unavailable ? OVERSEAS_UNAVAILABLE_LABEL : OVERSEAS_SWITCH_LABEL}
+        </Label>
+        <p className="mt-0.5 text-[14px] leading-6 text-ink-2">
+          {unavailable ? OVERSEAS_UNAVAILABLE_HINT : OVERSEAS_SWITCH_HINT}
+        </p>
+      </div>
+      <div className="flex size-11 shrink-0 items-center justify-center">
+        <Switch
+          id="overseas-switch"
+          // 协议没生效时 overseasModelsAllowed 恒 false（见 lib/auth/consent）：
+          // 这里照旧显示库里那一位的形态是——开关是开的，而对话全部走境内，
+          // 页面显示的与实际发生的相反，且两边都不报错。
+          checked={unavailable ? false : checked}
+          disabled={unavailable || disabled}
+          onCheckedChange={onCheckedChange}
+          aria-label={unavailable ? OVERSEAS_UNAVAILABLE_LABEL : OVERSEAS_SWITCH_LABEL}
+        />
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -79,6 +132,7 @@ export function PrivacyCard() {
           ? {
               // 开启境外时同一次请求也落了同意台账，本地跟着记上，
               // 免得关掉再打开时又弹一次说明（服务端那侧本来就不会再要）
+              ...prev,
               consents: body.consent === true ? [...new Set([...prev.consents, CONSENT_KINDS.overseas])] : prev.consents,
               preferences: { overseas_models: next.overseas_models, eval_optin: next.eval_optin },
             }
@@ -117,27 +171,16 @@ export function PrivacyCard() {
             <SignInHint>这些开关记在你的账号上，登录之后在这里改。</SignInHint>
           ) : (
             <>
-              <div className="flex items-start gap-3 border-t border-line py-3">
-                <div className="min-w-0 flex-1">
-                  <Label htmlFor="overseas-switch" className="text-[15px]">
-                    {OVERSEAS_SWITCH_LABEL}
-                  </Label>
-                  <p className="mt-0.5 text-[14px] leading-6 text-ink-2">{OVERSEAS_SWITCH_HINT}</p>
-                </div>
-                <div className="flex size-11 shrink-0 items-center justify-center">
-                  <Switch
-                    id="overseas-switch"
-                    checked={me?.preferences.overseas_models ?? false}
-                    disabled={loading || busy}
-                    onCheckedChange={(next) => {
-                      // 开：先给说明再确认；关：立刻生效（撤回不设前置条件）
-                      if (next) setOverseasOpen(true);
-                      else void savePreferences({ overseas_models: false });
-                    }}
-                    aria-label={OVERSEAS_SWITCH_LABEL}
-                  />
-                </div>
-              </div>
+              <OverseasRow
+                live={me ? me.terms_live : null}
+                checked={me?.preferences.overseas_models ?? false}
+                disabled={loading || busy}
+                onCheckedChange={(next) => {
+                  // 开：先给说明再确认；关：立刻生效（撤回不设前置条件）
+                  if (next) setOverseasOpen(true);
+                  else void savePreferences({ overseas_models: false });
+                }}
+              />
 
               <div className="flex items-start gap-3 border-t border-line py-3">
                 <div className="min-w-0 flex-1">

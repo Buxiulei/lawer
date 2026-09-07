@@ -48,6 +48,13 @@ export const metadata: Metadata = {
 /** 运营主体全称。与存证签章证书的 CN、隐式标识里的服务提供者名称同一个。 */
 const OPERATOR = '北京天开艾洛迪心理咨询有限公司';
 
+/**
+ * 【为什么不静态预渲染】页顶那条「预览版」横幅由 TermsShell 按协议生效旗渲染，
+ * 而旗只在服务端读得到。被预渲染的形态是：旗**烙进构建产物**——协议正式发布那天
+ * 运维打开旗、重启进程，三张页顶上那条"尚未生效"原样还在，而没有一处会报错。
+ */
+export const dynamic = 'force-dynamic';
+
 export default function TermsPage() {
   return (
     <TermsShell

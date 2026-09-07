@@ -104,7 +104,7 @@ beforeEach(() => {
 });
 
 describe('登录第一屏', () => {
-  const first = () => renderToStaticMarkup(<LoginFlow />);
+  const first = () => renderToStaticMarkup(<LoginFlow termsLive />);
 
   it('🔴 首屏直接就是手机号表单：没有 Tab 条，也没有并排摆着的邮箱表单', () => {
     // 量具自检：Tabs 组件还在仓里（设置页仍在用），所以"渲染产物里没有它"
@@ -148,7 +148,7 @@ describe('登录第一屏', () => {
     // 量具自检：这两个词确实还写在源码里（在补绑那一步用），
     // 否则「渲染产物里找不到」就成了因为它压根不存在——守卫看着在守、其实什么也没守。
     for (const w of labels) expect(SOURCE, `源码里已经没有「${w}」，这条判据失去了对象`).toContain(w);
-    for (const w of labels) expect(text(renderToStaticMarkup(<LoginFlow />))).not.toContain(w);
+    for (const w of labels) expect(text(renderToStaticMarkup(<LoginFlow termsLive />))).not.toContain(w);
   });
 });
 
@@ -212,7 +212,7 @@ describe('点开那条次级入口之后', () => {
 
 describe('手机验完之后的去向', () => {
   const phoneStep = () => {
-    renderToStaticMarkup(<LoginFlow />);
+    renderToStaticMarkup(<LoginFlow termsLive />);
     return captured['手机号'];
   };
 

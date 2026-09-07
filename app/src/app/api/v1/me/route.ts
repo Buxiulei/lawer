@@ -8,6 +8,7 @@
 // 【为什么没有 nickname】users 表里根本没有这个字段（见 migrate.ts），
 // 全站也没有任何地方让用户起过名。**不编一个默认值顶上**——返回一个
 // 「土八鼠用户」之类的假名，页面就会看起来正常，而那正是 P0-2 的病灶形态。
+import { termsLive } from '@/lib/auth/consent';
 import { requireIdentity } from '@/lib/auth/guard';
 import { maskPhone } from '@/lib/auth/phone';
 import { getMembership } from '@/lib/billing/fulfillment';
@@ -58,6 +59,11 @@ export async function GET(req: Request) {
     // 来自两次请求，中间任何一次失败都让这一格显示成"没同意"，而用户明明同意过。
     consents: consentedKinds(db, guard.identity.uid),
     preferences: { overseas_models: prefs.overseasModels, eval_optin: prefs.evalOptin },
+    // 协议生效了没有（协议生效旗，见 lib/auth/consent.termsLive）。设置页那张境外卡据它决定是摆开关还是摆
+    // 「暂未开放」。**跟着这一次取数回来，不另开一条端点**：开关的位置与"这一项开不开放"
+    // 必须来自同一份数据，分两次问的形态是其中一次失败，页面画出一个可点的开关，
+    // 而点下去服务端拒绝——页面显示的与实际发生的相反。
+    terms_live: termsLive(),
     // 无有效会员时给 null，不给「无」这类占位串：前端按「查不到就不显示套餐徽标」处理。
     membership: membership.plan ? { plan: membership.plan, expires_at: membership.expiresAt } : null,
   });
