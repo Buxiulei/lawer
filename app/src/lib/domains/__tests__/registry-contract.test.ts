@@ -140,6 +140,10 @@ describe('assertDomainPack：包必须实现全部字段', () => {
         },
       },
     ],
+    // 「法律上只能由执业律师做的那几件事」：**必填且不许为空**。
+    // 空清单读起来像"这个行当没有这类事项"，而它与漏填在产出上完全同形——
+    // 那一段渲染不出来，于是"什么时候可以把用户指向律师"重新变成没人管的事。
+    ['lawyerMandatory', { lawyerMandatory: [] }],
     // lawyerReview / sensitive 是**可选**的（省略 = 本领域没这回事），但一旦声明就不许半张。
     // 所以负样本要先把它声明齐、再打坏其中一项——否则打坏的是"没声明"，守卫本来就该放过。
     ['lawyerReview.title', { lawyerReview: { ...FULL_LAWYER_REVIEW, title: '' } }],
@@ -255,6 +259,26 @@ describe('assertDomainPack：包必须实现全部字段', () => {
       new RegExp(`factsSections\\[${LABOR.factsSections[0].key}\\]\\.title`),
     );
   });
+
+  /**
+   * 「只能由执业律师做」清单里某一条**缺一格**。逐格各一条判据：合成一条的形态是，
+   * `basis` 那道守卫被删掉时整条仍然红（别的格还在报），于是没人发现
+   * **不带法条锚点的条目从此进得来**——而那正是把闭合清单撑成兜底表的第一步
+   *（"这事挺复杂的"与"法条把它划给了律师"，在没有 basis 时读起来一模一样）。
+   *
+   * 点名按 **key** 而不是下标：下标会随插入位置整体位移，报错指到的是另一条。
+   */
+  for (const field of ['key', 'label', 'why', 'basis'] as const) {
+    it(`lawyerMandatory 某一条缺 ${field} ⇒ 点名到条（变异：删掉守卫里那一行 → 红）`, () => {
+      const bad = LABOR.lawyerMandatory.map((item, i) => (i === 0 ? { ...item, [field]: '  ' } : item));
+      // key 本身被打坏时没得点名，守卫退回下标（这也是它唯一该退回下标的时候）
+      const at = field === 'key' ? '#0' : LABOR.lawyerMandatory[0].key;
+      expect(() => assertDomainPack(clone({ lawyerMandatory: bad }))).toThrow(
+        new RegExp(`lawyerMandatory\\[${at}\\]\\.${field}`),
+      );
+      expect(() => assertDomainPack(clone())).not.toThrow();
+    });
+  }
 
   it('缺项一次列全，不是挤牙膏式一次报一个', () => {
     let message = '';

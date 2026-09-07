@@ -13,6 +13,7 @@ import { buildCaseFacts, renderCaseFacts } from './case-facts';
 import { extractHotlines, isLandlineOnly, LANDLINE_MARK } from './crisis-opener';
 import { CHARTER } from './charter';
 import { intakeDirective, recapBrief, type IntakeStage } from './intake';
+import { renderLawyerMandatory } from './lawyer-mandatory';
 import { MAX_ACTION_CARDS } from './tools';
 import { domainPackOrDefault } from '@/lib/domains/registry';
 import { coreArticleKeys, packCitationGuide, type CoreArticleSources } from './citation-block';
@@ -211,7 +212,8 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
   // 取缺省领域的形态是：第二个领域的用户触发危机时，模型收到的是给上一个行当的指令
   // （连"必须给哪两个号码"都是别人的），而首段、词表、留痕全都按他自己的领域走了——
   // 同一轮里两套口径并存，没有一处会报错。
-  const crisisPack = domainPackOrDefault(input.snapshot.case.domain).crisis;
+  const pack = domainPackOrDefault(input.snapshot.case.domain);
+  const crisisPack = pack.crisis;
   const parts = [
     CHARTER,
     // 危机指令紧跟 charter，排在案件事实卡与问诊指令**之前**：
@@ -233,6 +235,10 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
     // 陪跑/文书这类"回头继续"的模式先给前情提要；首诊(问诊)不需要，用户刚开口
     input.mode === '问诊' ? intakeDirective(input.stage) : `${recapBrief(input.snapshot)}\n\n${intakeDirective(input.stage)}`,
     outputDiscipline(),
+    // 【它排在输出纪律之后、依据之前，且每轮都在】它管的是**这一轮该由谁做**，
+    // 而上面那 11 条管的是"做出来的东西长什么样"——先定谁做，再定怎么做。
+    // 清单逐条来自领域包：共用层一个条目都不写死（设计稿 §13）。
+    renderLawyerMandatory(pack),
     // 【前置禁令 > 事后剥句】不够格时**在生成前就禁掉**，而不是等它说完再剥——
     // 普通轮是流式的，剥句只能清掉入库正文，用户早看见了。
     // 事后剥句仍保留作兜底，但真正管用的是这条前置约束。

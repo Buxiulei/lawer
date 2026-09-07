@@ -25,6 +25,7 @@ import { buildCaseFacts, renderCaseFacts } from '../case-facts';
 import { assembleCrisisOpener, type CrisisOpenerText, type HotlineFact } from '../crisis-opener';
 import { applyLeverageGate, leverageSubject } from '../crisis';
 import { runTurn } from '../orchestrator';
+import { LAWYER_MANDATORY_HEADING, renderLawyerMandatory } from '../lawyer-mandatory';
 import { buildSystemPrompt } from '../prompt';
 import type { KnowledgePack, KnowledgeSearcher } from '../retrieval';
 import type { CaseSnapshot } from '../snapshot';
@@ -64,6 +65,16 @@ const FAKE_PACK: DomainPack = {
   key: FAKE_KEY,
   crisis: FAKE_CRISIS,
   factsSections: FAKE_FACTS_SECTIONS,
+  // 「法律上只能由执业律师做的那几件事」也要与缺省领域一个字都不重合：
+  // 沿用缺省包那两条的话，下面那条判据分不出"按领域取"和"恒取缺省包"。
+  lawyerMandatory: [
+    {
+      key: 'fake-only',
+      label: '假领域·只能由执业律师做的那一件',
+      why: '假领域的理由句，以及我们仍然替他做完了哪一半。',
+      basis: '《假领域法》第一条',
+    },
+  ],
 };
 
 /**
@@ -396,5 +407,110 @@ describe('工具通路：知识检索也按案件领域过滤', () => {
     // 预检索一次 + 工具一次，两条通路都必须带同一个领域（少一条就是"从那个通道绕过去"）
     expect(calls.length).toBeGreaterThanOrEqual(2);
     for (const c of calls) expect(c.options.domain).toBe(FAKE_KEY);
+  });
+});
+
+// ========== 「只能由执业律师做」的闭合清单 ==========
+
+/**
+ * 主理人 2026-09-07 裁决落到 system prompt 上的那一段：能我们做完的都我们做完，
+ * 只有清单里的事项才说明法律上必须由执业律师做。
+ *
+ * 【这里为什么要按领域验一遍】清单是**领域包的对外承诺**。共用层写死一份的形态是：
+ * 第二个领域的用户读到的是上一个行当的清单——每一句都通顺、法条也是真的，
+ * 只是那几件事不是他这件事，而这一轮回复照常生成、没有一处会报错。
+ */
+describe('「只能由执业律师做」的闭合清单按 cases.domain 取（变异：把 prompt.ts 里那行 renderLawyerMandatory 删掉 → 红）', () => {
+  const plainPrompt = (domain: string) =>
+    buildSystemPrompt({
+      snapshot: snapshotOf(domain),
+      mode: '陪跑',
+      stage: 'D',
+      packs: [FAKE_CARD],
+      now: new Date('2026-09-06T02:00:00Z'),
+    } as Parameters<typeof buildSystemPrompt>[0]);
+
+  it('假领域：进 prompt 的是假包那一条，缺省领域的两条一个字都不进', () => {
+    const p = plainPrompt(FAKE_KEY);
+    expect(p).toContain(FAKE_PACK.lawyerMandatory[0].label);
+    expect(p).toContain(FAKE_PACK.lawyerMandatory[0].why);
+    expect(p).toContain(FAKE_PACK.lawyerMandatory[0].basis);
+    for (const item of LABOR_PACK.lawyerMandatory) {
+      expect(p, `缺省领域的「${item.label}」串到假领域去了`).not.toContain(item.label);
+    }
+  });
+
+  it('缺省领域照旧逐条进 prompt（自证上一条不是"整段没了"）', () => {
+    const p = plainPrompt(DEFAULT_DOMAIN);
+    for (const item of LABOR_PACK.lawyerMandatory) {
+      expect(p).toContain(item.label);
+      expect(p).toContain(item.why);
+      expect(p).toContain(item.basis);
+    }
+  });
+
+  /**
+   * 【为什么要单钉"普通轮也在"】这一段防的是**模型的默认收尾**（顺手加一句
+   *「建议咨询专业律师」），不是某一种输入。做成"命中才注入"的形态是：
+   * 用户没问、模型自己收了这么一句尾，而那一轮与其它轮看起来没有任何区别。
+   */
+  it('普通轮（非危机、非空包）也带这一段，且带着那三条通用纪律（第 4 条只给声明了待复核节的领域）', () => {
+    const p = plainPrompt(DEFAULT_DOMAIN);
+    expect(p).toContain(LAWYER_MANDATORY_HEADING);
+    expect(p).toContain('清单以外的每一件事，都由你做完');
+    expect(p).toContain('禁止用「建议咨询律师」');
+  });
+});
+
+/**
+ * 【这一组补的是"同一份 prompt 里两条指令互斥"】有的领域另有一节
+ * 「待律师书面确认」（DomainPack.lawyerReview）：那几条每轮随事实卡渲染，
+ * 逐条写着"待律师书面确认"；而闭合清单那一段写着"清单以外的每一件事都由你做完"
+ * 「不许用建议咨询律师收尾」。
+ *
+ * 两条都进了同一份 system prompt 而**没有写明谁优先**时，模型对着同一个问题
+ * （比如"我们机构算不算强制报告主体"）两种做法都说得通，两种都不会报错：
+ * 按清单那段办就给出是/否结论（正是待复核那一节要禁的），
+ * 按待复核那一节办就把人指向了律师（正是清单那段要禁的）。
+ * 所以先后必须**写在下发给模型的字里**，而不是留在设计稿或复审记录里。
+ */
+describe('待复核那一节与闭合清单的先后写在同一段里（变异：删掉 lawyerReviewTiebreak 那几行 → 红）', () => {
+  const plainPrompt = (domain: string) =>
+    buildSystemPrompt({
+      snapshot: snapshotOf(domain),
+      mode: '陪跑',
+      stage: 'D',
+      packs: [FAKE_CARD],
+      now: new Date('2026-09-06T02:00:00Z'),
+    } as Parameters<typeof buildSystemPrompt>[0]);
+
+  const REVIEW = {
+    title: '假领域·风险与待核',
+    items: ['假领域待确认的那一条——待律师书面确认。'],
+    discipline: '假领域的纪律句：未经书面确认不得作为结论输出。',
+  };
+
+  it('声明了这一节的领域：清单段里点名它，并写死"它限制结论、不是转介理由"', () => {
+    const seg = renderLawyerMandatory({ ...FAKE_PACK, lawyerReview: REVIEW });
+    expect(seg, '清单段没点名那一节的名字，模型不知道说的是哪一节').toContain(REVIEW.title);
+    expect(seg).toContain('不得**当成把用户支给律师的理由');
+    expect(seg, '只说了"不是转介理由"却没说"那该怎么办"，等于只堵不给出路').toContain('照第 1 条由你写清楚');
+  });
+
+  /**
+   * 反方向：没有这一节的领域**一个字都不多**。无条件渲染的形态是——
+   * 缺省领域的模型读到"本领域另有一节……"，而那一节不存在，
+   * 于是它照着这句话编一个出来，读起来完全通顺。
+   */
+  it('没有这一节的领域一个字都不多（变异：把它改成无条件渲染 → 红）', () => {
+    const seg = renderLawyerMandatory(FAKE_PACK);
+    expect(FAKE_PACK.lawyerReview, '假包本来就该没有这一节，否则下面这条恒真').toBeUndefined();
+    expect(seg).not.toContain('本领域另有一节');
+    expect(seg).not.toContain(REVIEW.title);
+  });
+
+  it('缺省领域（同样没有这一节）的 prompt 里也不多这一句', () => {
+    expect(LABOR_PACK.lawyerReview).toBeUndefined();
+    expect(plainPrompt(DEFAULT_DOMAIN)).not.toContain('本领域另有一节');
   });
 });

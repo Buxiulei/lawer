@@ -285,6 +285,37 @@ export interface DomainLawyerReview {
 }
 
 /**
+ * 一件**法律上只能由执业律师做**的事。
+ *
+ * 【它与 DomainLawyerReview 不是一回事，别合并】那一份说的是「这几个问题还没有定论，
+ * 没有书面确认之前不许下结论」——限制的是**我们的结论**；这一份说的是「这几件事
+ * 法律上根本轮不到我们做」——限制的是**我们的动作**。合成一份的形态是：
+ * 一个尚无定论的问题被当成"你去找律师吧"的理由，而两边读起来都很像尽责。
+ *
+ * 【为什么是一份闭合清单，而不是一句"必要时可以找律师"】主理人 2026-09-07 裁决：
+ * 能我们的智能体完成的都我们来做，实在绕不过去、必须要律师签字背书的才建议去找律师，
+ * 不向用户推卸责任。一句松口的兜底话是**最省力的收尾方式**——它读起来像尽责，
+ * 实际是把人推回没人管的地方，而那一轮回复照常生成、格式完全正常、没有一处会报错。
+ * 闭合清单把"哪几件绕不过去"变成可数的几条：不在清单里的，我们做完。
+ *
+ * 【为什么每条都必须带法条锚点】没有锚点的条目与"这事看着挺复杂的"无法区分，
+ * 而后者会把清单撑成一张什么都装得下的兜底表——那就退回到了裁决之前的形态。
+ */
+export interface LawyerMandatoryItem {
+  /** 稳定键：判据与渲染按它认条目，不认中文措辞（认措辞的形态见 factsSections 那条注释） */
+  key: string;
+  /** 这件事叫什么（给用户看的名字） */
+  label: string;
+  /**
+   * 为什么这一件我们做不了。落在**法律限制**上，不是落在能力上；
+   * 并且要交代**我们仍然替他做完了哪一半**——只说"这个我不能做"就是推卸责任。
+   */
+  why: string;
+  /** 法条锚点：法名 + 条号，逐字可核。写不出锚点的条目不许进清单 */
+  basis: string;
+}
+
+/**
  * 敏感级：本领域的档案里写着**第三人**的敏感个人信息（个保法 §28 那一类）。
  *
  * 【它约束的是三个出口】每轮喂给模型的事实卡、免登录分享页、转介数据包。
@@ -464,6 +495,20 @@ export interface DomainPack {
    * 是一个结论不是待填项。
    */
   lawyerReview?: DomainLawyerReview;
+  /**
+   * 法律上只能由执业律师做的那几件事（**闭合清单**）。
+   *
+   * 【它是"能提律师"的唯一出口】共用层文案与 charter 里出现「律师」只有三个合法位置：
+   * 否定式免责、这份清单的渲染、法条/判例原文——其余即红
+   * （app/__tests__/lawyer-referral-guard.test.ts 按文件扫）。没有这一项时，
+   * 「什么时候可以把用户指向律师」就只能靠每个写文案的人各自把握，
+   * 而**独立写 N 次就会松口其中某一次**，且松口的那一句读起来最像负责任。
+   *
+   * 【不许为空，也不设"省略 = 没有"】空清单等于断言"这个行当里没有一件事非律师不可"，
+   * 那是一句要逐条论证的话；而它在产出上与"忘了填"完全同形——两者都让那一段消失、
+   * 都不报错。缺项由 assertDomainPack 在装载时点名。
+   */
+  lawyerMandatory: readonly LawyerMandatoryItem[];
   /** 敏感级。**省略 = 本领域不按敏感级处理**（同上，是结论不是待填项）。 */
   sensitive?: DomainSensitivity;
   /** 对外文案（低调模式词典 + 能力文案 + 站内文案） */
@@ -674,6 +719,20 @@ export function assertDomainPack(pack: DomainPack): void {
   else if (typeof pack.crisis.repeatCardNote([]) !== 'string' || pack.crisis.repeatCardNote([]).trim() === '') {
     missing.push('crisis.repeatCardNote([]) 返回空——一个号码都抽不到时也必须说得出话');
   }
+
+  // 「法律上只能由执业律师做的那几件事」：**必填且不许为空**。空清单在产出上与漏填同形——
+  // 那一段渲染不出来，于是"什么时候可以提律师"重新变成没人管的事，而没有一处会报错。
+  arr('lawyerMandatory', pack.lawyerMandatory);
+  // 逐条查四格。**缺 basis 是最要紧的那一格**：没有法条锚点的条目与"这事看着挺复杂的"
+  // 无法区分，而清单一旦能装下后者，它就退回成一张什么都能塞的兜底表。
+  // 【为什么按 key 而不按下标点名】下标会随插入位置整体位移，报错指到的是另一条。
+  (pack.lawyerMandatory ?? []).forEach((item, i) => {
+    const at = typeof item?.key === 'string' && item.key.trim() !== '' ? item.key : `#${i}`;
+    str(`lawyerMandatory[${at}].key`, item?.key);
+    str(`lawyerMandatory[${at}].label`, item?.label);
+    str(`lawyerMandatory[${at}].why`, item?.why);
+    str(`lawyerMandatory[${at}].basis`, item?.basis);
+  });
 
   // lawyerReview / sensitive 都是**可选**的（省略 = 本领域没有这回事）。但一旦声明，
   // 就不许半张：空的 items = 一节只有抬头没有内容；空的 discipline = 列了四件事却没说
