@@ -12,8 +12,10 @@
 // 【注销当场做四件事，第五件交给清理任务】
 //   ① 名下全部案件按删除口径标删（连同收回免登录分享链接）；
 //   ② 名下 api key 全部停用、OAuth 令牌全部吊销；
-//   ③ users 行上的可识别字段当场抹掉（不等 30 天——那 30 天是给「彻底删除」留的，
-//      不是给「还留着你的手机号」留的）；
+//   ③ 这个人的可识别信息当场抹掉（不等 30 天——那 30 天是给「彻底删除」留的，
+//      不是给「还留着你的手机号」留的）。走 lib/lifecycle/identity-erase 那一个入口：
+//      users 行只是四份副本里的第一份，另外三份（实名流水、护照材料密文、验证码行）
+//      在那边一并处置，本文件不自己列清单——列两份就会漏（2026-09-07 复审）；
 //   ④ 落 cancelled_at，它既是 30 日的起算点，也是凭据闸的判据（见 lib/auth/identity）。
 //   ⑤ 到期硬删由 lib/jobs/retention-worker 做。
 import crypto from 'node:crypto';
@@ -23,12 +25,15 @@ import type { Database } from 'better-sqlite3';
 import type { DomainFailure, Result } from '@/lib/cases';
 import { hashLookup, decryptField } from '@/lib/crypto';
 import * as store from '@/lib/db/cases';
+import { gcOrphanFilesAmong } from '@/lib/db/filesGc';
 import * as lifecycle from '@/lib/db/lifecycle';
 import { fromSql, toSql } from '@/lib/db/time';
 import { maskPhone } from '@/lib/auth/phone';
+import { deleteEncFile } from '@/lib/evidence/files';
 import { emailCancelCode, sendMail, sendOtp } from '@/lib/notify';
 import type { MailCopy } from '@/lib/notify';
 
+import { eraseUserIdentity } from './identity-erase';
 import { RETENTION_DAYS, purgeAfter } from './retention';
 
 /** 一条注销码最多错几次；与登录那一桶同一个数（错够了必须重新获取）。 */
@@ -102,7 +107,7 @@ export const CANCEL_REMOVES: readonly string[] = [
   '名下全部案件档案，以及它们的材料原件、对话、情绪与危机记录、时间线、文书与报告',
   '全部免登录分享链接（确认那一刻立即失效）',
   '全部 api key 与已授权的第三方助手（确认那一刻立即停用）',
-  '账号上的手机号、邮箱、姓名与证件号（确认那一刻立即抹除）',
+  '手机号、邮箱、姓名与证件号，含实名核验流水与上传过的护照材料（确认那一刻立即抹除）',
 ];
 
 export const CANCEL_KEEPS: readonly string[] = [
@@ -116,6 +121,8 @@ export interface CancelDeps {
   now?: Date;
   /** 注入验证码（判据用）。生产不传，走 CSPRNG。 */
   makeCode?: () => string;
+  /** 删密文文件（护照材料）；不给走真 unlink。判据注入探针，不碰文件系统。 */
+  deleteFromDisk?: (encPath: string) => void;
 }
 
 interface UserRow {
@@ -266,9 +273,20 @@ export async function cancelAccount(
     const tokens = lifecycle.revokeAllOauthTokens(db, userId, nowStr);
     // 抹字段排在最后：上面几步里有一步需要 phone_hash（发码那一桶按它取行），
     // 抹在前面的话第二次调用会因为找不到目标而报一个与真实原因无关的错。
-    lifecycle.anonymizeUser(db, userId);
-    return { first, cases, shares, keys, tokens };
+    const erased = eraseUserIdentity(db, userId);
+    return { first, cases, shares, keys, tokens, erased };
   })();
+
+  // 护照材料的密文文件：**事务提交之后**才收。回收器自带事务，嵌进上面那个事务里
+  // better-sqlite3 会当场拒绝；而判据仍是「无人引用」那一份，不是「这个人的就删」。
+  // 这一步失败不该把一次已经做成的注销翻成失败——库里那几行已经没有任何指向它的引用了。
+  try {
+    gcOrphanFilesAmong(db, done.erased.released_file_ids, {
+      deleteFromDisk: deps.deleteFromDisk ?? deleteEncFile,
+    });
+  } catch (err) {
+    console.warn(`[cancel] 实名材料密文没收干净（库行已抹）：${(err as Error).message}`);
+  }
 
   const after = lifecycle.findUserLifecycle(db, userId);
   const cancelledAt = after?.cancelled_at ?? nowStr;

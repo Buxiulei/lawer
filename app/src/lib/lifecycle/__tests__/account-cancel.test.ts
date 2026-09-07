@@ -7,7 +7,10 @@
 //   · 注销了但登录态还能用（JWT 是纯 HMAC，签出去撤不回）；
 //   · 注销了但手机号/邮箱还留在库里（页面上那个账号已经"没了"）；
 //   · 注销了但免登录分享链接照样打得开（确认单第 2 条明写「确认那一刻立即失效」，
-//     而回包上 shares_revoked=0 与「本来就没有链接」完全同形——2026-09-07 复审补位）。
+//     而回包上 shares_revoked=0 与「本来就没有链接」完全同形——2026-09-07 复审补位）；
+//   · 注销了但**实名核验流水还在**（cert_no + raw_meta_enc 里就是姓名与证件号），
+//     而回包那句话写着「姓名与证件号已经抹掉」——2026-09-07 复审 major 的回归位。
+//     四份副本各自的细账在 __tests__/identity-erase，这里只钉「注销这条路真的走了那个入口」。
 import crypto from 'node:crypto';
 
 import Database from 'better-sqlite3';
@@ -18,11 +21,13 @@ import { signToken } from '@/lib/auth/jwt';
 import { encryptField, hashLookup } from '@/lib/crypto';
 import * as store from '@/lib/db/cases';
 import { runMigrations } from '@/lib/db/migrate';
+import * as realnameStore from '@/lib/db/realname';
 import { createShare, readShare } from '@/lib/shares';
 
 import {
   CANCEL_BALANCE_COPY_ENV,
   CANCEL_BALANCE_COPY_PENDING,
+  CANCEL_REMOVES,
   cancelAccount,
   cancelBalanceCopy,
   cancelConfirmToken,
@@ -327,6 +332,46 @@ describe('拒绝臂：每一条都零删除', () => {
     const bare = Number(db.prepare('INSERT INTO users (auth_status) VALUES (?)').run('未认证').lastInsertRowid);
     const res = await cancelAccount({ db, userId: bare }, deps());
     expect(!res.ok && res.errorCode).toBe('CANCEL_CHANNEL_MISSING');
+  });
+});
+
+describe('「姓名与证件号已经抹掉」这句话对已实名的人也成立', () => {
+  /** 阿里云那条通道的一行：cert_no 是 provider 侧引用，raw_meta_enc 里是三方原始报文。 */
+  function seedRealname(): void {
+    realnameStore.insertVerification(db, {
+      userId: uid,
+      provider: 'cloudauth',
+      certNo: 'certify-9527',
+      status: 'passed',
+      rawMetaEnc: encryptField(JSON.stringify({ cert_name: '甲', cert_no: '110101199001011234' })),
+    });
+    db.prepare("UPDATE users SET auth_status='已认证' WHERE id=?").run(uid);
+  }
+
+  it('注销当场删掉实名流水与验证码行（变异：把 eraseUserIdentity 换回 anonymizeUser → 本条红）', async () => {
+    seedRealname();
+    // 正对照：这两样东西此刻确实在。没有它，下面几条断言可能只是在验空表
+    expect(realnameStore.latestByUser(db, uid)?.cert_no).toBe('certify-9527');
+
+    const ch = await challenge();
+    const res = await cancelAccount(
+      { db, userId: uid, code: CODE, confirmToken: ch.confirm_token },
+      { ...deps(), deleteFromDisk: () => {} },
+    );
+    if (!res.ok || res.stage !== 'cancelled') throw new Error(`本该注销：${JSON.stringify(res)}`);
+
+    expect(
+      (db.prepare('SELECT COUNT(*) AS n FROM realname_verifications').get() as { n: number }).n,
+      '注销回包说姓名与证件号已经抹掉，而实名流水还在',
+    ).toBe(0);
+    // 发码那一行也不留：它带着同一个 phone_hash 与注销那一刻的时间戳
+    expect((db.prepare('SELECT COUNT(*) AS n FROM sms_codes').get() as { n: number }).n).toBe(0);
+  });
+
+  it('确认单里那条承诺把实名材料也说出来了（页面念的与实际做的必须是同一件事）', () => {
+    const line = CANCEL_REMOVES.find((r) => r.includes('证件号'));
+    expect(line, 'CANCEL_REMOVES 里没有讲证件号的那一条').toBeDefined();
+    expect(line).toContain('实名核验流水');
   });
 });
 

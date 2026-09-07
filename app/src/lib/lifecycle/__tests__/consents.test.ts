@@ -13,6 +13,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { CitationGuard } from '@/lib/agent/citation-guard';
 import { executeTool, newTurnState, type AgentToolContext } from '@/lib/agent/tools';
 import * as cases from '@/lib/cases';
+import { countRecentCrisisHits, recordCrisisHit } from '@/lib/cases/crisis-hits';
 import { runMigrations } from '@/lib/db/migrate';
 import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
 import { route } from '@/lib/llm';
@@ -61,6 +62,9 @@ function agentCtx(): AgentToolContext {
 
 const emotionRows = () =>
   (db.prepare('SELECT COUNT(*) AS n FROM emotion_log WHERE case_id=?').get(caseId) as { n: number }).n;
+
+const crisisRows = () =>
+  (db.prepare('SELECT COUNT(*) AS n FROM crisis_hits WHERE user_id=?').get(uid) as { n: number }).n;
 
 describe('撤回本身：成功 / 拒绝 / 幂等', () => {
   it('从没有过同意行也能撤：插一条 granted_at 为空、revoked_at 有值的行', () => {
@@ -139,6 +143,63 @@ describe('接线一：撤回 emotion 之后停止写入', () => {
     revokeConsent(db, { userId: uid, kind: 'emotion' });
     expect(emotionRecordingRevoked(db, caseId)).toBe(true);
     expect(emotionRecordingRevoked(db, 999_999)).toBe(false);
+  });
+});
+
+describe('接线三：撤回 emotion 之后也不再记危机识别', () => {
+  /**
+   * 【为什么这一段必须存在】那一项同意的 label 是「情绪状态与**危机识别记录**」，
+   * 一句话覆盖两样东西，而设置页对用户说的是「撤回之后我们不再做这一项」。
+   * 闸只挂在 emotion_log 两条写入路上的形态是：用户点了撤回、页面显示已撤回，
+   * 而他每说一次那种话，crisis_hits 里仍然多一行——两边都不报错，外面也看不出来
+   *（2026-09-07 复审 major）。
+   *
+   * 【为什么直接验 recordCrisisHit 就够覆盖两条通路】站内与 MCP 都只许经它落库，
+   * 这一条由 lib/capabilities/__tests__/crisis-account「全仓只有 crisis-hits.ts 写
+   * crisis_hits」那道结构守卫钉着；那道守卫红了，这里验的东西才会失去意义。
+   */
+  it('撤回前照记、撤回后一行都不落（变异：把 recordCrisisHit 里那句 consentRevoked 删掉 → 本条红）', () => {
+    // 正对照：撤回之前必须记得下来。少了这一半，把闸改成恒拒也全绿，
+    // 而那会让所有人的危机识别记录一起消失——事实卡首行从此永远干净。
+    const before = recordCrisisHit(db, { userId: uid, caseId, source: 'site', matched: ['不想活'] });
+    expect(before, '撤回之前就没记下来').not.toBeNull();
+    expect(crisisRows()).toBe(1);
+
+    revokeConsent(db, { userId: uid, kind: 'emotion' });
+
+    const after = recordCrisisHit(db, { userId: uid, caseId, source: 'site', matched: ['不想活'] });
+    expect(after, '撤回之后仍然回了一个行 id').toBeNull();
+    expect(crisisRows(), '撤回之后还落了一行危机识别记录').toBe(1);
+  });
+
+  it('无案（case_id 为空）那条路同样受管——它手上没有 case_id，只有 user_id', () => {
+    revokeConsent(db, { userId: uid, kind: 'emotion' });
+    expect(recordCrisisHit(db, { userId: uid, caseId: null, source: 'mcp', matched: ['不想活'] })).toBeNull();
+    expect(crisisRows()).toBe(0);
+  });
+
+  it('撤回不删已经记下的那些（协议五.2：撤回不影响撤回前已进行的处理）', () => {
+    recordCrisisHit(db, { userId: uid, caseId, source: 'site', matched: ['不想活'] });
+    revokeConsent(db, { userId: uid, kind: 'emotion' });
+    expect(crisisRows()).toBe(1);
+    expect(countRecentCrisisHits(db, caseId)).toBe(1);
+  });
+
+  it('别人撤回不影响这个人（判的是本人那一行同意，不是全局开关）', () => {
+    const other = Number(
+      db.prepare("INSERT INTO users (email) VALUES ('b@t.com')").run().lastInsertRowid,
+    );
+    revokeConsent(db, { userId: other, kind: 'emotion' });
+    expect(recordCrisisHit(db, { userId: uid, caseId, source: 'site', matched: ['不想活'] })).not.toBeNull();
+    expect(crisisRows()).toBe(1);
+  });
+
+  it('这一项的「撤回之后会发生什么」把危机识别那一半也说出来了（label 覆盖两样，话只说一半等于没说）', () => {
+    const effect = CONSENT_KINDS.emotion.effect;
+    expect(CONSENT_KINDS.emotion.label).toContain('危机识别记录');
+    expect(effect, '只说了情绪档位，没说危机识别记录').toContain('危机识别');
+    // 而热线该给照给：撤回停的是留档，不是照应（P5-C1 的口径）
+    expect(effect).toContain('热线');
   });
 });
 

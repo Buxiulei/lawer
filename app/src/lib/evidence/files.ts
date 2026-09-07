@@ -70,6 +70,23 @@ export function storeBytes(
   return { fileId: row.id, sha256, size: row.size, deduped: !inserted };
 }
 
+/**
+ * 删掉盘上那份密文。**路径口径只有这一份**（filesDir()），回收器与注销都调它——
+ * 各自拼一遍 FILES_DIR 的形态是：某一处少读了环境变量，于是它删的是另一个目录里的
+ * 同名文件（多半什么都没删），而库里的行已经删掉了，谁也不会再来问这份密文。
+ *
+ * 【为什么只警告不抛】调用方（lib/db/filesGc）是在事务里删完行才调它的：抛错会把整个事务
+ * 回滚，让本轮已经 unlink 掉的那些文件的库行原地复活成「有记录无密文」的坏行。
+ * 盘上残留只是占空间，下一轮/CLI 还能收；坏行是不可读的证据。
+ */
+export function deleteEncFile(encPath: string): void {
+  try {
+    fs.unlinkSync(path.join(filesDir(), encPath));
+  } catch (err) {
+    console.warn(`[files] 删密文文件失败（库行已删）：${encPath}：${(err as Error).message}`);
+  }
+}
+
 /** 取回明文字节。文件缺失或密文被改动一律抛错，绝不返回残缺内容。 */
 export function readBytes(db: Database, fileId: number): Buffer {
   const row = store.findFileById(db, fileId);

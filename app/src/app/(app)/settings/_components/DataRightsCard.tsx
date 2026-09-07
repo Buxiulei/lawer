@@ -17,12 +17,22 @@
  * 【两步式一步都不省】删除案件与注销账号都是先取一份确认单（会删什么、会留下什么），
  * 逐条念给用户看，再带 confirm_token 调第二次。页面自己攒一份"会删什么"的清单是不行的：
  * 服务端那份改了，页面这份还在念旧的，而用户是照页面上那几行做的决定。
+ *
+ * 【附一第 9 项「转介删除请求通道」不在这张卡里】它落在同一页的 ReferralCard 上：
+ * 要撤回哪一条，得先看得见是哪一条，而转介台账只画在那张卡里；那张卡在没有转介记录时
+ * 整张不渲染，也就不会给从没转介过的人平白摆一个「删除转介」的按钮。判据在
+ * __tests__/referral-delete-entry。
+ *
+ * 【服务端那些句子一律过 ServerCopy】它们同时也是给 agent 读的，里头带着 `**…**`。
+ * 直接 {text} 出去的形态是：用户在最该读清的那一句上看到四个裸星号
+ *（「余额处理方式 **尚未定稿** 」），而没有一处报错（见 _ui/serverCopy 抬头）。
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch, humanError } from '@/app/_ui/api';
 import { clearToken } from '@/app/_ui/auth';
+import { ServerCopy } from '@/app/_ui/serverCopy';
 import { Alert } from '@/components/shadcn/alert';
 import { Button } from '@/components/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/shadcn/card';
@@ -131,16 +141,24 @@ export function ConsequenceLists({
       <p className="text-[14px] leading-6 text-ink">会被删掉的：</p>
       <ul className="mt-1 list-disc pl-5 text-[13px] leading-6 text-ink-2">
         {removes.map((r) => (
-          <li key={r}>{r}</li>
+          <li key={r}>
+            <ServerCopy text={r} />
+          </li>
         ))}
       </ul>
       <p className="mt-3 text-[14px] leading-6 text-ink">会留下的：</p>
       <ul className="mt-1 list-disc pl-5 text-[13px] leading-6 text-ink-2">
         {keeps.map((k) => (
-          <li key={k}>{k}</li>
+          <li key={k}>
+            <ServerCopy text={k} />
+          </li>
         ))}
       </ul>
-      {tail ? <p className="mt-3 text-[13px] leading-6 text-ink-2">{tail}</p> : null}
+      {tail ? (
+        <p className="mt-3 text-[13px] leading-6 text-ink-2">
+          <ServerCopy text={tail} />
+        </p>
+      ) : null}
     </>
   );
 }
@@ -207,7 +225,9 @@ export function ConsentsSection() {
             <li key={c.kind} className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[15px] text-ink">{c.label}</p>
-                <p className="mt-0.5 text-[13px] leading-6 text-ink-2">{c.effect}</p>
+                <p className="mt-0.5 text-[13px] leading-6 text-ink-2">
+                  <ServerCopy text={c.effect} />
+                </p>
                 {c.revoked ? (
                   <p className="mt-0.5 text-[13px] leading-6 text-ink-2">
                     已于 {c.revoked_at?.slice(0, 16)} 撤回
@@ -230,11 +250,13 @@ export function ConsentsSection() {
       )}
 
       {s.done ? (
-        <Alert className="mt-3">{s.done}</Alert>
+        <Alert className="mt-3">
+          <ServerCopy text={s.done} />
+        </Alert>
       ) : null}
       {s.error ? (
         <Alert tone="danger" className="mt-3">
-          {s.error}
+          <ServerCopy text={s.error} />
         </Alert>
       ) : null}
 
@@ -242,7 +264,7 @@ export function ConsentsSection() {
         open={s.pending !== null}
         title={`撤回「${s.pending?.label ?? ''}」`}
         // 后果那句话是服务端给的（CONSENT_KINDS[kind].effect），页面不另写一份
-        description={s.pending?.effect ?? ''}
+        description={<ServerCopy text={s.pending?.effect ?? ''} />}
         confirmLabel="确认撤回这一项同意"
         onConfirm={confirmRevoke}
         onCancel={() => set((p) => ({ ...p, pending: null }))}
@@ -366,18 +388,24 @@ export function CaseDataSection() {
           <a href={s.exported.download_url} className="underline">
             下载 {s.exported.filename}
           </a>
-          <span className="block">{s.exported.note}</span>
+          <span className="block">
+            <ServerCopy text={s.exported.note} />
+          </span>
           {s.exported.omissions.map((o) => (
             <span key={o.path} className="block">
-              {o.path}：{o.reason}
+              {o.path}：<ServerCopy text={o.reason} />
             </span>
           ))}
         </Alert>
       ) : null}
-      {s.done ? <Alert className="mt-3">{s.done}</Alert> : null}
+      {s.done ? (
+        <Alert className="mt-3">
+          <ServerCopy text={s.done} />
+        </Alert>
+      ) : null}
       {s.error ? (
         <Alert tone="danger" className="mt-3">
-          {s.error}
+          <ServerCopy text={s.error} />
         </Alert>
       ) : null}
 
@@ -460,8 +488,8 @@ export function CancelAccountSection() {
     <div className="border-t border-line py-3">
       <p className="text-[15px] font-medium text-ink">注销账号</p>
       <p className="mt-0.5 text-[14px] leading-6 text-ink-2">
-        注销不可撤销。点下面这个按钮**不会**注销任何东西，只会取回一份「会删什么、会留下什么」
-        的清单，并把验证码发到你的手机或邮箱。
+        注销不可撤销。点下面这个按钮<strong className="font-medium text-ink">不会</strong>
+        注销任何东西，只会取回一份「会删什么、会留下什么」的清单，并把验证码发到你的手机或邮箱。
       </p>
 
       {s.challenge === null ? (
@@ -498,10 +526,14 @@ export function CancelAccountSection() {
         </div>
       )}
 
-      {s.done ? <Alert className="mt-3">{s.done.note}</Alert> : null}
+      {s.done ? (
+        <Alert className="mt-3">
+          <ServerCopy text={s.done.note} />
+        </Alert>
+      ) : null}
       {s.error ? (
         <Alert tone="danger" className="mt-3">
-          {s.error}
+          <ServerCopy text={s.error} />
         </Alert>
       ) : null}
     </div>

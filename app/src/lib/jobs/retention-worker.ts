@@ -17,15 +17,14 @@
 // 所以 now 是一个可注入的函数，不是 new Date()。
 //
 // 【本文件是共用层，不写死任何具体领域的字面量】面向的是「一行到期数据 + 一种清理方式」。
-import fs from 'node:fs';
-import path from 'node:path';
-
 import type Database from 'better-sqlite3';
 
 import { gcOrphanFilesAmong } from '../db/filesGc';
 import { finishRun, startRun } from '../db/job-runs';
 import * as lifecycle from '../db/lifecycle';
 import { toSql } from '../db/time';
+import { deleteEncFile } from '../evidence/files';
+import { eraseUserIdentity } from '../lifecycle/identity-erase';
 import { purgeCutoff } from '../lifecycle/retention';
 
 /** job_runs 里这个任务的名字。「跑没跑」由那张表回答（见 lib/db/job-runs 抬头）。 */
@@ -60,18 +59,6 @@ export interface RetentionOptions {
   deleteFromDisk?: (encPath: string) => void;
   /** 落 job_runs 留痕。默认落——「今天有没有跑过」只有那张表答得上来。 */
   recordRun?: boolean;
-}
-
-/** 生产的删盘动作：路径与 lib/evidence/files 的 filesDir() 同源，否则会找不到文件。 */
-function defaultDeleteFromDisk(encPath: string): void {
-  const dir = process.env.FILES_DIR ?? path.join(process.cwd(), 'data', 'files');
-  try {
-    fs.unlinkSync(path.join(dir, encPath));
-  } catch (err) {
-    // 盘上文件缺失/无权限只警告不抛：抛错会回滚整个事务，让本轮已删掉的盘文件
-    // 对应的库行复活成「有记录无密文」的坏行（同 scripts/gc-files.ts 的口径）。
-    console.warn(`[retention] 删密文文件失败（库行已删）：${encPath}：${(err as Error).message}`);
-  }
 }
 
 /**
@@ -119,14 +106,19 @@ export function runRetentionOnce(
     // ② 到期的注销账号。抢占位（purged_at）拿到才做后面的抹除；
     //    抹除本身是幂等的，所以抢占失败直接跳过，不需要回滚什么。
     //
-    //    【这一步为什么只剩「再抹一遍」】注销当场就把可识别字段抹掉了（见
+    //    【这一步为什么只剩「再抹一遍」】注销当场就把可识别信息抹掉了（见
     //    lib/lifecycle/account-cancel），名下案件也在那一刻标了删、由上面 ① 到期删掉。
-    //    这里再抹一遍是兜「注销之后又有别的路径往这一行写回了什么」，并盖上 purged_at
+    //    这里再抹一遍是兜两件事：注销之后又有别的路径往这一行写回了什么；
+    //    以及**这段代码上线之前就注销掉的那些账号**——他们的实名流水与验证码行
+    //    当时没人动，30 日这一轮是唯一还会碰到他们的地方。并盖上 purged_at
     //    ——那个时刻是我们对外能说「这个账号已经清理完了」的唯一凭据。
+    //
+    //    走的是与注销同一个入口（lib/lifecycle/identity-erase），不是 anonymizeUser：
+    //    两处各列一份"要抹哪些表"的清单，迟早有一份是旧的。
     for (const user of lifecycle.listUsersDueForPurge(db, cutoff, batch)) {
       try {
         if (!lifecycle.claimUserPurge(db, user.id, cutoff, nowStr)) continue;
-        lifecycle.anonymizeUser(db, user.id);
+        released.push(...eraseUserIdentity(db, user.id).released_file_ids);
         result.users_purged += 1;
       } catch (err) {
         result.failed += 1;
@@ -156,7 +148,7 @@ export function runRetentionOnce(
     // 所以本任务只处置**它自己刚删掉引用者的那批**：清单漏一处的后果退回成"少收一点垃圾"。
     // 全库那一遍留在人工 CLI（scripts/gc-files.ts）里。
     const gc = gcOrphanFilesAmong(db, released, {
-      deleteFromDisk: options.deleteFromDisk ?? defaultDeleteFromDisk,
+      deleteFromDisk: options.deleteFromDisk ?? deleteEncFile,
     });
     result.files_removed = gc.removed;
     result.freed_bytes = gc.freedBytes;
@@ -203,15 +195,25 @@ export function startRetentionWorker(
 ): void {
   if (loop) return;
   let running = false;
-  loop = setInterval(() => {
+  const tick = () => {
     if (running) return;
     running = true;
     try {
       runRetentionOnce(db, options);
+    } catch (err) {
+      // runRetentionOnce 自己不抛（它把逐行与整轮失败都吞进结果里），这里是最后一道：
+      // 起进程那一下抛出去会连带把整个应用起不来，而它只是一个后台巡检。
+      console.warn(`[retention] 启动首轮失败：${(err as Error).message}`);
     } finally {
       running = false;
     }
-  }, RETENTION_POLL_MS);
+  };
+  // **启动即跑一轮**，不等第一个小时过去。等着的形态是：连续部署或看门狗把进程
+  // 每隔几十分钟重启一次时，这个任务一轮都跑不到——job_runs 里没有它的行，
+  // 而页面上那些档案早就不见了，协议五.8 的三十日承诺就这么静默失效
+  //（同 referral-worker 的形状，那边漏一轮只是晚一点发，这边漏是数据该删没删）。
+  tick();
+  loop = setInterval(tick, RETENTION_POLL_MS);
   // 这个定时器不该拖住进程退出：它是后台巡检，不是待办事项。
   loop.unref?.();
 }

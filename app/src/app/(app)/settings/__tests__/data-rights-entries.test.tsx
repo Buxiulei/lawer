@@ -116,7 +116,10 @@ function textOf(node: ReactNode): string {
     if (!isValidElement(n)) return;
     const props = n.props as Props;
     collect(props.children as ReactNode);
-    for (const key of ['description', 'title', 'confirmLabel', 'aria-label']) {
+    // 'text' 是 ServerCopy 的入参：服务端下发的那些句子挂在这个 prop 上，不在 children 里
+    // （页面不许直接 {note} 出去，见 _ui/serverCopy 抬头）。不收它，页面上明明写着的话
+    // 在这个迷你渲染器里会凭空消失，判据于是验了个空。
+    for (const key of ['description', 'title', 'confirmLabel', 'aria-label', 'text']) {
       collect(props[key] as ReactNode);
     }
   };
@@ -254,8 +257,8 @@ describe('撤回同意', () => {
 
     const dialog = findByProp(ConsentsSection() as ReactNode, 'confirmLabel');
     expect(dialog!.open).toBe(true);
-    // 后果那句话是服务端给的，页面照念不另写
-    expect(dialog!.description).toBe(CONSENTS[0].effect);
+    // 后果那句话是服务端给的，页面照念不另写（过 ServerCopy 画出来，逐字不改）
+    expect(textOf(dialog!.description as ReactNode)).toBe(CONSENTS[0].effect);
   });
 
   it('确认之后 POST /me/consents 带上 kind（已撤回的那一项没有按钮，撤不了第二遍）', async () => {

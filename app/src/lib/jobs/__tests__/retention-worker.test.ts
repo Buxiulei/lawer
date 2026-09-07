@@ -30,7 +30,12 @@ import { storeBytes } from '@/lib/evidence/files';
 import { exportCase } from '@/lib/lifecycle/case-export';
 import { RETENTION_DAYS } from '@/lib/lifecycle/retention';
 
-import { RETENTION_JOB_NAME, runRetentionOnce } from '../retention-worker';
+import {
+  RETENTION_JOB_NAME,
+  runRetentionOnce,
+  startRetentionWorker,
+  stopRetentionWorker,
+} from '../retention-worker';
 
 const DELETED_AT = '2026-09-01 00:00:00';
 /** 保留期最后一天的那一刻：**还不该删**。 */
@@ -234,6 +239,75 @@ describe('注销账号的最终清理', () => {
     expect(
       (db.prepare('SELECT purged_at FROM users WHERE id=?').get(uid) as { purged_at: string | null }).purged_at,
     ).toBeNull();
+  });
+
+  /**
+   * 【为什么这一条要在清理任务里再验一遍】注销当场就该把实名流水抹掉，可**这段代码上线
+   * 之前注销掉的那些账号**当时没人动过它们——他们的 cancelled_at 早就落了，
+   * 30 日这一轮是唯一还会碰到他们的地方。这里走 anonymizeUser 而不是同一个入口的形态是：
+   * 那批人的姓名与证件号永远留着，而 purged_at 上写着「已经清理完了」。
+   */
+  it('到期清理走的是与注销同一个入口：实名流水与护照材料一并处置（变异：改回 anonymizeUser → 本条红）', () => {
+    const init = initPassportRealname(db, {
+      userId: uid,
+      realName: '甲',
+      passportNo: 'E12345678',
+      idPage: { bytes: Buffer.from('护照资料页'), mime: 'image/jpeg' },
+      selfie: { bytes: Buffer.from('手持护照自拍'), mime: 'image/jpeg' },
+    });
+    expect(init.ok, '护照流水没落成，本条判据在空转').toBe(true);
+    const env = readPassportEnvelope(db, (init as { verificationId: number }).verificationId)!;
+    const material = [env.materials.id_page.file_id, env.materials.selfie.file_id];
+    const encPaths = material.map(
+      (id) => (db.prepare('SELECT enc_path FROM files WHERE id=?').get(id) as { enc_path: string }).enc_path,
+    );
+    // 正对照：清理之前流水与两份材料确实都在
+    expect(count('SELECT COUNT(*) AS n FROM realname_verifications WHERE user_id=?', uid)).toBe(1);
+    expect(count('SELECT COUNT(*) AS n FROM files WHERE id IN (?,?)', material[0], material[1])).toBe(2);
+
+    db.prepare('UPDATE users SET cancelled_at=? WHERE id=?').run(DELETED_AT, uid);
+    const res = runRetentionOnce(db, opts(DUE));
+
+    expect(res.users_purged).toBe(1);
+    expect(
+      count('SELECT COUNT(*) AS n FROM realname_verifications WHERE user_id=?', uid),
+      '账号清理完了，姓名与证件号还留在实名流水里',
+    ).toBe(0);
+    expect(
+      count('SELECT COUNT(*) AS n FROM files WHERE id IN (?,?)', material[0], material[1]),
+      '护照材料成了没人认领的孤儿：信封删了，file_id 再也问不出来',
+    ).toBe(0);
+    for (const p of encPaths) expect(removedPaths).toContain(p);
+  });
+});
+
+describe('常驻循环', () => {
+  /**
+   * 【为什么「启动即跑一轮」是判据而不是优化】只挂 setInterval(1h) 的形态是：
+   * 连续部署或看门狗把进程每隔几十分钟重启一次时，这个任务一轮都跑不到——
+   * job_runs 里没有它的行，而页面上那些档案早就不见了，协议五.8 的三十日承诺静默失效。
+   * 变异：把 startRetentionWorker 里那句 tick() 删掉 → 本条红。
+   */
+  it('起任务当场就跑一轮，不等第一个小时过去', () => {
+    db.prepare('UPDATE cases SET deleted_at=? WHERE id=?').run(DELETED_AT, caseId);
+    try {
+      startRetentionWorker(db, opts(DUE));
+      expect(count('SELECT COUNT(*) AS n FROM cases WHERE id=?', caseId), '起任务后那一轮没跑').toBe(0);
+      expect(lastRun(db, RETENTION_JOB_NAME), 'job_runs 里没有这一轮').toBeDefined();
+    } finally {
+      stopRetentionWorker();
+    }
+  });
+
+  it('重复起不叠第二个循环（幂等），停掉之后能再起', () => {
+    try {
+      startRetentionWorker(db, opts(DUE));
+      const after = lastRun(db, RETENTION_JOB_NAME)!;
+      startRetentionWorker(db, opts(DUE));
+      expect(lastRun(db, RETENTION_JOB_NAME)!.id, '第二次起又跑了一轮').toBe(after.id);
+    } finally {
+      stopRetentionWorker();
+    }
   });
 });
 

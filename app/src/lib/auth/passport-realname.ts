@@ -260,6 +260,35 @@ export function readPassportEnvelope(db: Database, verificationId: number): Pass
 }
 
 /**
+ * 这个人名下全部护照流水引着的材料 file_id（资料页 + 手持自拍）。
+ *
+ * 【为什么必须有这个函数】材料的 file_id **只写在 raw_meta_enc 那段加密 JSON 里**，
+ * files 表上没有任何一张表按外键引着它们（见 lib/db/filesGc 的引用者清单与
+ * lib/jobs/retention-worker ④ 的判据）。注销时若直接把流水行删掉，这两份护照照片
+ * 就再也没有一处查得到它属于谁——不是被删了，是永远躺在盘上而谁都不知道那是什么。
+ * 所以删行**之前**先把 file_id 问出来，交给回收器按「无人引用」删掉行与盘文件。
+ *
+ * 【为什么解不开的信封只跳过、不抛】注销这条路上抛一个异常，用户看到的是「注销失败」，
+ * 而他真正想要的那件事一件都没做成。坏行按"没有材料"算并留一条警告，其余照抹。
+ */
+export function passportMaterialFileIds(db: Database, userId: number): number[] {
+  const ids: number[] = [];
+  for (const row of store.listByUser(db, userId)) {
+    if (row.provider !== PASSPORT_PROVIDER || !row.raw_meta_enc) continue;
+    try {
+      const env = readPassportEnvelope(db, row.id);
+      if (!env) continue;
+      for (const m of [env.materials?.id_page, env.materials?.selfie]) {
+        if (typeof m?.file_id === 'number') ids.push(m.file_id);
+      }
+    } catch (err) {
+      console.warn(`[realname] 流水 ${row.id} 的信封读不出来，材料无法回收：${(err as Error).message}`);
+    }
+  }
+  return ids;
+}
+
+/**
  * 人工核过材料后驳回：流水转「未通过」+ 信封里写下谁驳的、何时、为什么；
  * users 打回「未认证」。
  *

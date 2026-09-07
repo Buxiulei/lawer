@@ -76,17 +76,23 @@ describe('realname_verifications', () => {
     expect(store.latestVerificationIdForUser(db, other)).toBe(null);
   });
 
-  it('接口面只读+插入：模块不导出 delete，也不碰 users.auth_status', () => {
+  it('接口面只读+插入，删除只此一个且只给注销用；不碰 users.auth_status', () => {
     // findById 是 2026-08-29 护照通道加的：人工审核要先读出材料哈希与信封再决定落不落定。
     // listPendingByProvider 是 2026-09-03 后台审核台加的：仍是只读（一条 SELECT）。
     // latestVerificationIdForUser 同日加：审核落定前比一次 MAX(id)，仍是只读。
+    // listByUser / deleteAllByUser 是 2026-09-07 注销那条路加的，**是这张表上唯一的删除口**：
+    // 这几行里装着姓名与证件号（raw_meta_enc 明写「内含姓名身份证」），而注销回包对用户说的是
+    // 「姓名与证件号已经抹掉」。谁调它由 lib/lifecycle/__tests__/identity-erase 的结构守卫钉着
+    // （除 identity-erase 外不许有第二个调用方）。
     // 这张清单**故意钉死全集**——新增导出必须来这里改一次，
     // 否则"这个模块只读+插入"这句保证会随每次顺手加函数而悄悄失效。
     expect(Object.keys(store).sort()).toEqual([
+      'deleteAllByUser',
       'findById',
       'insertVerification',
       'latestByUser',
       'latestVerificationIdForUser',
+      'listByUser',
       'listPendingByProvider',
       'setStatus',
     ]);

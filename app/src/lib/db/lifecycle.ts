@@ -181,6 +181,11 @@ export function markUserCancelled(db: Database, userId: number, now: string): bo
  * 幂等：抹第二遍与第一遍等值（全都置 NULL），所以不设条件、可反复调用。
  * auth_status 回到未认证：实名状态是可识别信息的一部分，留着它等于留了一句
  *「这个空壳曾经是个实名用户」。
+ *
+ * ⚠️ **这个函数只管 users 这一行**。姓名与证件号另有两处副本（实名核验流水的 cert_no 与
+ * raw_meta_enc、护照材料那两份密文文件），验证码表里还留着 phone_hash / email。
+ * 「把这个人抹干净」的唯一入口是 lib/lifecycle/identity-erase.eraseUserIdentity，
+ * 注销与到期清理都调那一个；调用方名单由 identity-erase 的结构守卫钉着。
  */
 export function anonymizeUser(db: Database, userId: number): void {
   db.prepare(
@@ -198,6 +203,28 @@ export function anonymizeUser(db: Database, userId: number): void {
             auth_status = '未认证'
       WHERE id = ?`,
   ).run(userId);
+}
+
+/**
+ * 删掉这个人名下全部登录/注销验证码行（sms_codes 按 phone_hash、email_codes 按 email）。
+ *
+ * 【为什么这也算可识别信息】users 行抹干净之后，sms_codes 里仍留着同一个 phone_hash 与
+ * 那一刻的时间戳，email_codes 里留着的是**明文邮箱**。同一个手机号再来注册时，这两张表
+ * 就把新账号接回了旧账号的注销时刻——而两边都没有报错，外面也看不出来。
+ *
+ * 必须在 anonymizeUser **之前**调：抹完 users 行就再也问不出这个人的 phone_hash 与 email 了。
+ * 幂等：抹过之后子查询取到 NULL，`= NULL` 一行都匹配不到，第二次回 0。
+ *
+ * @returns 删掉的行数合计
+ */
+export function purgeAuthCodes(db: Database, userId: number): number {
+  const sms = db
+    .prepare('DELETE FROM sms_codes WHERE phone_hash = (SELECT phone_hash FROM users WHERE id = ?)')
+    .run(userId).changes;
+  const mail = db
+    .prepare('DELETE FROM email_codes WHERE email = (SELECT email FROM users WHERE id = ?)')
+    .run(userId).changes;
+  return sms + mail;
 }
 
 /** 已过保留期、该做最终清理的注销账号。 */

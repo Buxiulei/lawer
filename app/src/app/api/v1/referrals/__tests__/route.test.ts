@@ -14,6 +14,10 @@ import path from 'node:path';
 import type { Database } from 'better-sqlite3';
 import { beforeAll, beforeEach, describe, expect, test } from 'vitest';
 
+import {
+  REFERRAL_DELETE_PENDING_NOTE,
+  requestReferralDelete,
+} from '@/lib/lifecycle/referral-delete';
 import { REFERRAL_CONSENT_ITEMS } from '@/lib/referral';
 
 let GET: (req: Request) => Promise<Response>;
@@ -38,7 +42,9 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  db.exec('DELETE FROM referrals; DELETE FROM cases; DELETE FROM users;');
+  db.exec(
+    'DELETE FROM referral_delete_requests; DELETE FROM referrals; DELETE FROM cases; DELETE FROM users;',
+  );
 });
 
 function seed(): { uid: number; caseId: number } {
@@ -97,6 +103,59 @@ describe('GET /api/v1/referrals', () => {
       'status',
       'updated_at',
     ]);
+  });
+
+  /**
+   * 附一第 9 项「转介删除请求通道」的网页那一半吃的也是这条端点：卡片按 delete_requests
+   * 决定「这条还给不给按钮」，按 delete_note 念「今天还发不出去、由人工转达」那句话。
+   * 不下发的形态是：页面自己攒一版说辞（对方通道开出来那天两边就分叉了），
+   * 或者刷新一次按钮又冒出来、用户以为上次没提成。
+   */
+  test('随台账一起下发「提过没有」与那句正本文案（变异：把 delete_requests 那一行删掉 → 本条红）', async () => {
+    const { uid, caseId } = seed();
+    const made = await createReferral(db, {
+      caseId,
+      userId: uid,
+      reason: '',
+      needs: [],
+      consent: true,
+    });
+    if (made.ok !== true) throw new Error('建包失败');
+
+    // 正对照：还没提过时是空的
+    const before = await (await GET(req(signToken(uid)))).json();
+    expect(before.delete_requests).toEqual([]);
+    expect(before.delete_note).toBe(REFERRAL_DELETE_PENDING_NOTE);
+
+    const asked = requestReferralDelete({ db, userId: uid, referralId: made.referral_id });
+    expect(asked.ok).toBe(true);
+
+    const after = await (await GET(req(signToken(uid)))).json();
+    expect(after.delete_requests).toHaveLength(1);
+    expect(after.delete_requests[0]).toMatchObject({
+      referral_id: made.referral_id,
+      delivered: false,
+    });
+    // 理由原文不回：那是用户写给我们的一句话，每次打开设置页再取一遍没有必要
+    expect(JSON.stringify(after.delete_requests)).not.toContain('reason');
+  });
+
+  test('别人的删除请求不出现在我的台账里', async () => {
+    const { uid, caseId } = seed();
+    const made = await createReferral(db, {
+      caseId,
+      userId: uid,
+      reason: '',
+      needs: [],
+      consent: true,
+    });
+    if (made.ok !== true) throw new Error('建包失败');
+    requestReferralDelete({ db, userId: uid, referralId: made.referral_id });
+    const other = Number(
+      db.prepare("INSERT INTO users (phone_hash) VALUES ('h-c')").run().lastInsertRowid,
+    );
+    const body = await (await GET(req(signToken(other)))).json();
+    expect(body.delete_requests).toEqual([]);
   });
 
   test('只看得到自己的：乙拿不到甲的转介', async () => {
