@@ -17,11 +17,26 @@
 // 顺手就写出来了，读起来还很负责任；它渲染不报错、测试也不红。复审时有没有人注意到，
 // 不能是这条红线唯一的依靠——**独立写 N 次就会松口其中某一次**。
 //
-// 【判定面：**这一句**，以及出现位置往前的 24 个字】拦的不是"律师"这两个字，
-// 是**没有被否定式或清单托住的那一次出现**。所以先按句号/换行切句，再只看它前面那一小段：
-// 否定词落在上一句里就不算托住它——"这不构成律师意见。另外建议你找律师看看"
-// 整段里确实有否定词，而第二句正是裁决要禁的那一句。整段一起判的形态是：
-// 先写一句免责、再在同一段里把人支出去，而免责那半句让整段看起来合规。
+// ============================ 判定面（2026-09-07 复审后收紧） ============================
+// 【第一版错在哪】第一版按句号切句、只问"这一句里出现『律师』的位置往前 24 个字里
+// 有没有任何一个否定字"，另外整句里只要出现「律师法／民事诉讼法」就整句放行。于是
+//   「这不是小事，拿不准的时候建议尽快咨询律师」——托它的"不是"根本不在托它；
+//   「金额较大的，可以找律所代理（依据：律师法第十三条）」——法条名把整句白名单了；
+// 这两句原样通过。**否定词与法条名都是句子里最容易顺手出现的东西**，靠"附近有没有"
+// 判定，等于给每一句违规话留了一个几乎必然满足的出口。
+//
+// 【现在怎么判】每一次「律师」出现，都必须落在下面某一个**具体的构造**里，
+// 而不是"附近有点像"：
+//   S1 逐字钉住的例外（PINNED）——出现位置必须落在那句话内部；
+//   S2 否定式搭配（NEGATION）——否定词必须与它同在**一个分句**内，且在它前 12 字以内。
+//      分句按「，；！？」切：跨了逗号的否定词托不住后半句，这正是第一版漏掉的形态；
+//   S3 闭合清单标记（MANDATORY）——「必须/只能由执业律师」在同一分句里；
+//   S4 法条引用——出现位置落在《》书名号内部，或**同一分句里同时有《…》与「第X条」**
+//      （即这一分句是逐字引条文，而不是随口报了个法名）；
+//   S5 被引用的那句禁语——出现位置落在引号内部，且整句带禁令语气。
+//      产品面里"禁止说『建议咨询律师』"就是这个形态：被禁的原话必须能写出来；
+//   S6 顿号并列继承——「指向律师、律所」里的后一项，跟着前一项走（间隔只许是顿号一类）。
+// 六条都不成立即红。取不准时偏向报警：漏判没有任何人会发现，误判会有人来吵。
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,35 +49,56 @@ const SRC_ROOT = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..'
 /** 提到律师的两种写法。「法律顾问」「专业人士」那几种由 C04 判据 G2 在行为面拦（LAWYER_NAG）。 */
 const MENTION = /律师|律所/g;
 
-/** 判定窗：出现位置往前数这么多个字。取 24 是因为一句中文分句通常短于它。 */
-const WINDOW = 24;
-
 /**
- * ① 否定式与禁令。**这些词必须离"律师"足够近**（同在判定窗里）才算托住它。
- * 摘不干净的代价不是"多报一次"：有人为了让判据变绿，会把那句免责删掉——
- * 而那正好是唯一一句合规的话。
+ * S2 的判定窗：否定词必须落在「律师」前这么多个字以内，且不许跨分句。
+ * 判定的那一小段**含「律师」本身**——「没有律师」这类搭配的否定字就贴在它前面，
+ * 切在它前面一格的话这条搭配永远匹配不上（第一版就是这么写的，靠一个通用的"没有"蒙混过去）。
  */
-const NEGATION = /不构成|不是|并非|不以|不自称|不冒充|请不起|没有|不劝|绝不劝|不必|不得|不许|不要|不用|不写|不该|不能|禁止|别/;
+const WINDOW = 12;
 
 /**
- * ② 闭合清单的渲染。判定按**这几个标记**，不按文件豁免：整份文件豁免的形态是，
+ * S2 否定式与禁令。**收的是与"律师"搭在一起的那几个说法**，不是"任何否定字"：
+ * 第一版把「不是／没有／别／不能」这类通用否定字也算进来，于是"这不是小事，……建议找律师"
+ * 只要不加句号就整句放行。这里只留搭配（不构成律师意见 / 不自称律师 / 请不起律师 /
+ * 不劝找律师 / 不得指向律师 / 不用「建议咨询律师」收尾 / 别找律师），
+ * 代价是将来写出新的正当说法时这道闸会红——那时**把它加进来并写下理由**，
+ * 而不是把窗口调宽：窗口一宽就没人知道它还在拦什么。
+ */
+const NEGATION = /不构成|不自称|不冒充|不声称|请不起|没有律师|不劝|不得|不许|不用|不写|禁止|别找|别去找/;
+
+/**
+ * S3 闭合清单的渲染。判定按**这几个标记**，不按文件豁免：整份文件豁免的形态是，
  * 有人往那个文件里加一句"拿不准就建议用户找律师"，而它是白名单文件，闸不响。
  */
 const MANDATORY = /必须由执业律师|只能由执业律师|lawyerMandatory/;
 
-/** ③ 法条 / 判例原文。逐字引用里的「律师」是被引的对象，不是我们说的话。 */
-const STATUTE = /律师法|律师执业证书|民事诉讼法/;
+/**
+ * S4 的第二半：条号。**光有法名不算引文**——"依据：律师法第十三条"里的"律师法"
+ * 只是随口报的一个法名，而第一版正是被这种写法白名单掉的。要落在《》里，
+ * 或这一分句同时给出《…》与条号，才算在引条文。
+ */
+const STATUTE_ARTICLE = /第[一二三四五六七八九十百千零〇\d]+条/;
 
 /**
- * ④ 两处**逐字钉住**的例外，各配一条理由。
+ * S5 的语气条件：引用一句被禁的话时，整句必须带禁令语气。
+ * 它比 NEGATION 宽（一个"不"就够），因为**加引号这件事本身**已经是很强的约束：
+ * 真要把人支出去的人不会给那句话打上引号再禁掉它。
+ */
+const PROHIBIT = /不|禁止|勿|别|绝/;
+
+/**
+ * S1 两处**逐字钉住**的例外，各配一条理由。
  *
- * 【为什么它们不能靠上面三条通过，也不该改写】「以执业律师的严谨方式工作」是
+ * 【为什么它们不能靠上面几条通过，也不该改写】「以执业律师的严谨方式工作」是
  * 身份边界那句话的前半截（后半截就是"但不自称律师"）——它讲的是**我们自己的标准**，
  * 既不是免责、也不是把人支出去。「律师 agent」是这份准则在文档里的名字（charter 的抬头），
  * 它随 charter 逐字进 system prompt，改它等于改 manager 维护的那份文件。
  * 钉成常量而不是放进上面的正则：例外要能被数清楚，多一条就得有人写下它为什么在这里。
  */
 const PINNED = ['以执业律师的严谨方式工作', '律师 agent'];
+
+/** S6 允许继承的间隔：并列项之间只许隔这些字符，且不超过两个。 */
+const ENUM_GAP = /^[、/／和或\s]{0,2}$/;
 
 /** 递归收集 .ts/.tsx，跳过 __tests__（判据里出现这些词是它在被验，不是它在说话） */
 function walk(dir: string, out: string[] = []): string[] {
@@ -101,23 +137,96 @@ function stripComments(text: string): string {
   return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/[^\n]*/g, '');
 }
 
+/** 成对符号围出来的区间（返回的是**里面**那一段的下标区间）。 */
+function pairedSpans(clause: string, open: string, close: string): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  let from = 0;
+  for (;;) {
+    const a = clause.indexOf(open, from);
+    if (a < 0) break;
+    const b = clause.indexOf(close, a + 1);
+    if (b < 0) break;
+    out.push([a + 1, b]);
+    from = b + 1;
+  }
+  return out;
+}
+
+/** 同形引号（英文双引号）按出现顺序两两配对。 */
+function sameCharSpans(clause: string, ch: string): Array<[number, number]> {
+  const at: number[] = [];
+  for (let i = 0; i < clause.length; i++) if (clause[i] === ch) at.push(i);
+  const out: Array<[number, number]> = [];
+  for (let k = 0; k + 1 < at.length; k += 2) out.push([at[k] + 1, at[k + 1]]);
+  return out;
+}
+
+/** 书名号区间（S4 的第一半）。 */
+function titleSpans(clause: string): Array<[number, number]> {
+  return pairedSpans(clause, '《', '》');
+}
+
+/** 引号区间（S5）。 */
+function quoteSpans(clause: string): Array<[number, number]> {
+  return [
+    ...pairedSpans(clause, '「', '」'),
+    ...pairedSpans(clause, '『', '』'),
+    ...pairedSpans(clause, '“', '”'),
+    ...sameCharSpans(clause, '"'),
+  ];
+}
+
+/** 逐字钉住那几句在本分句里占的区间（S1）。 */
+function pinnedSpans(clause: string): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const p of PINNED) {
+    let from = 0;
+    for (;;) {
+      const a = clause.indexOf(p, from);
+      if (a < 0) break;
+      out.push([a, a + p.length]);
+      from = a + p.length;
+    }
+  }
+  return out;
+}
+
 /**
- * 这段文字里，有哪几次「律师」**没有**被上面四类托住。
- * 返回的是那几次出现前后的原文片段（给人看的，报错里要能照着搜到）。
+ * 这段文字里，有哪几次「律师」**没有**被上面六条托住。
+ * 返回的是那几次出现所在分句的原文（给人看的，报错里要能照着搜到）。
  */
 export function unsanctionedMentions(text: string): string[] {
   const out: string[] = [];
-  // 按句号/换行切句：托住一次出现的必须是**同一句**里的否定式或清单标记
+  // 先切句（S5 的"整句带禁令语气"按这一层算），再切分句（S2/S3/S4/S6 按这一层算）
   for (const sentence of text.split(/[。\n]/)) {
-    for (const m of sentence.matchAll(MENTION)) {
-      const at = m.index ?? 0;
-      const before = sentence.slice(Math.max(0, at - WINDOW), at);
-      const around = sentence.replace(/\s+/g, ' ').trim();
-      if (NEGATION.test(before)) continue;
-      if (MANDATORY.test(around)) continue;
-      if (STATUTE.test(around)) continue;
-      if (PINNED.some((p) => around.includes(p))) continue;
-      out.push(around.slice(0, 80));
+    if (!/律师|律所/.test(sentence)) continue;
+    const quotedIsCited = PROHIBIT.test(sentence);
+    for (const clause of sentence.split(/[，,；;！!？?]/)) {
+      const titles = titleSpans(clause);
+      const quotes = quoteSpans(clause);
+      const pinned = pinnedSpans(clause);
+      const isCitation = titles.length > 0 && STATUTE_ARTICLE.test(clause);
+      const hasMandatory = MANDATORY.test(clause);
+      let prevEnd = -1;
+      let prevOk = false;
+      for (const m of clause.matchAll(MENTION)) {
+        const at = m.index ?? 0;
+        const end = at + m[0].length;
+        const inside = (spans: Array<[number, number]>) => spans.some(([a, b]) => at >= a && end <= b);
+        const gap = prevEnd < 0 ? null : clause.slice(prevEnd, at);
+        // 显式标 boolean：S6 会回看上一处的判定（prevOk ← ok），不标的话 tsc 认为它在自我引用
+        const ok: boolean =
+          inside(pinned) ||
+          NEGATION.test(clause.slice(Math.max(0, at - WINDOW), end)) ||
+          hasMandatory ||
+          inside(titles) ||
+          isCitation ||
+          (inside(quotes) && quotedIsCited) ||
+          (prevOk && gap !== null && ENUM_GAP.test(gap));
+        if (!ok) out.push(clause.replace(/\s+/g, ' ').trim().slice(0, 80));
+        prevEnd = end;
+        prevOk = ok;
+      }
     }
   }
   return out;
@@ -140,23 +249,31 @@ describe('产品面与 charter 只在三个位置提「律师」（主理人 202
         '而它渲染不报错、别的判据也不红。\n' +
         '怎么办：把这件事**做完**（查依据、算金额、起草、列清单），或者——如果它真的' +
         '法律上只能由执业律师做——把它加进 DomainPack.lawyerMandatory（要带法条锚点），' +
-        '由 lib/agent/lawyer-mandatory.ts 那一段统一说出口。',
+        '由 lib/agent/lawyer-mandatory.ts 那一段统一说出口。' +
+        '若确认是一句**正当**说法而被误判，把它的搭配加进本文件 NEGATION 并写下理由，' +
+        '不要去调宽 WINDOW。',
     ).toEqual([]);
   });
 
-  it('三类合法位置逐条放行（变异：删掉对应那一条 → 这一行红）', () => {
-    // ① 否定式免责与禁令
+  it('六条放行构造逐条放行（变异：删掉对应那一条 → 这一行红）', () => {
+    // S1 逐字钉住
+    expect(unsanctionedMentions('# 律师 agent 行为准则 v1.0')).toEqual([]);
+    expect(unsanctionedMentions('以执业律师的严谨方式工作，但不自称律师。')).toEqual([]);
+    // S2 否定式免责与禁令
     expect(unsanctionedMentions('这里提供法律信息与行动建议，不构成律师意见、不形成委托代理关系。')).toEqual([]);
     expect(unsanctionedMentions('7. 不劝找律师（§1 闭合清单例外）。')).toEqual([]);
     expect(unsanctionedMentions('你的用户请不起律师，仲裁与诉讼都要自己跑。')).toEqual([]);
     expect(unsanctionedMentions('禁止用「建议咨询律师」这类话收尾。')).toEqual([]);
-    expect(unsanctionedMentions('清单之外一律不得把用户指向律师、律所或"专业人士"。')).toEqual([]);
-    // ② 闭合清单的渲染
+    // S3 闭合清单的渲染
     expect(unsanctionedMentions('## 只有这几件事法律上必须由执业律师做（本段之外不许把用户支出去）')).toEqual([]);
-    // ③ 法条原文
+    // S4 法条原文
     expect(
       unsanctionedMentions('《律师法》第十三条：没有取得律师执业证书的人员，不得以律师名义从事法律服务业务。'),
     ).toEqual([]);
+    // S5 被引用的那句禁语
+    expect(unsanctionedMentions('不写「以上仅供参考」「建议咨询专业律师」这类话。')).toEqual([]);
+    // S6 顿号并列继承
+    expect(unsanctionedMentions('清单之外一律不得把用户指向律师、律所或"专业人士"。')).toEqual([]);
   });
 
   /**
@@ -175,10 +292,47 @@ describe('产品面与 charter 只在三个位置提「律师」（主理人 202
   });
 
   /**
-   * 【否定词必须离得近】"整句里有个否定词"不算托住——那正是最容易被绕过的形态：
+   * 【第一版原样漏过的九条，逐条钉住】它们的共同形态是：句子里**碰巧**有一个否定字
+   * 或一个法名，而它并不在托这一次出现。复审（2026-09-07）用同一份函数复刻脚本
+   * 实测这九条全绿——所以它们不是假想，是这道闸真实的口子。
+   */
+  it.each([
+    // ① 逗号隔开的否定词：托它的"不是/不能/没有/别"根本不在托它
+    ['逗号前的否定词', '这不是小事，拿不准的时候建议尽快咨询律师'],
+    ['先免责再支人（逗号连接）', '这不构成律师意见，但建议你找律师看看'],
+    ['催促式', '别拖了，赶紧去找个律师'],
+    ['条件式', '如果没有把握，建议委托律师处理'],
+    ['时限式', '不能再等了，请尽快找律师'],
+    // ② 不加逗号也一样：否定词管的是另一件事
+    ['同一分句里的无关否定', '如果没有把握就建议委托律师处理'],
+    ['拿不准三个字里的"不"', '拿不准的时候可以找个律师问问'],
+    // ③ 法名当白名单：随口报法名 ≠ 在引条文
+    ['随口报法名', '按民事诉讼法你也可以委托律所代理'],
+    ['法名加条号但不是引文', '金额较大的，可以找律所代理（依据：律师法第十三条）'],
+  ])('第一版漏过的形态现在判红：%s', (_label, t) => {
+    expect(unsanctionedMentions(t).length, `这一句仍然被放行了：${t}`).toBeGreaterThan(0);
+  });
+
+  /**
+   * 【托住一次出现的东西，不许外溢到下一次】上面那组钉的是"否定词与它无关"；
+   * 这一组钉的是**否定词确实托住了前一次出现，但不该顺带托住后一次**——
+   * 它是"先写一句合规的话、再在同一口气里把人支出去"的完整形态，
+   * 也是判定面（分句 + 12 字窗）唯一挡得住的东西。
+   */
+  it.each([
+    // 只有"按分句判"才拦得住：否定搭配落在逗号前的那一句里
+    ['跨分句外溢', '不劝你现在辞职，找个律师问问吧'],
+    // 只有"12 字窗"才拦得住：否定搭配与后一次出现同在一句，但隔了很远
+    ['同分句超窗外溢', '不劝找律师是我们的纪律但真到开庭那天最好还是请个律师'],
+  ])('前一句的否定式托不住后一句：%s', (_label, t) => {
+    expect(unsanctionedMentions(t).length, `这一句仍然被放行了：${t}`).toBeGreaterThan(0);
+  });
+
+  /**
+   * 【否定词必须离得近、且不跨分句】"整句里有个否定词"不算托住——那正是最容易被绕过的形态：
    * 先写一句免责，再在同一段里把人支出去，而免责那半句让整段看起来合规。
    */
-  it('隔了一句的否定词托不住后一句（变异：把判定面从"前 24 字"改成整段 → 红）', () => {
+  it('隔了一句的否定词托不住后一句（变异：把判定面从"分句"改成整段 → 红）', () => {
     const hits = unsanctionedMentions('这不构成律师意见。另外，这个问题建议你找律师看看，他们更专业。');
     expect(hits.length, '否定式与违规句同段时，违规那句被放过了').toBeGreaterThan(0);
   });
@@ -187,14 +341,16 @@ describe('产品面与 charter 只在三个位置提「律师」（主理人 202
    * 【每一条放行标记都要能命中它自己的例句】写坏的正则不会报错，只会**静默永绿**：
    * 它从此谁也不放行，而"谁也不放行"在这份判据里的表现与"扫描面很干净"完全一样。
    *
-   * 【为什么 STATUTE 只验例句、不验扫描面】产品面现在一处法条原文都没引到律师法，
+   * 【为什么 S4 只验例句、不验扫描面】产品面现在一处法条原文都没引到律师法，
    * 要求它在扫描面里出现等于逼人写一句用不着的话。前两类反过来必须在扫描面里真的在用——
    * 一次都不命中说明它们已经与文案脱钩了。
    */
-  it('三类放行标记各自能命中自己的例句，前两类在扫描面里真的在用', () => {
+  it('放行标记各自能命中自己的例句，前两类在扫描面里真的在用', () => {
     expect(NEGATION.test('不构成律师意见')).toBe(true);
     expect(MANDATORY.test('法律上必须由执业律师做')).toBe(true);
-    expect(STATUTE.test('《中华人民共和国律师法》第十三条')).toBe(true);
+    expect(STATUTE_ARTICLE.test('第十三条')).toBe(true);
+    expect(titleSpans('《中华人民共和国律师法》').length).toBe(1);
+    expect(quoteSpans('「建议咨询律师」').length).toBe(1);
 
     const corpus = SCANNED.map((f) => stripComments(fs.readFileSync(f, 'utf-8'))).join('\n');
     expect(NEGATION.test(corpus), 'NEGATION 在扫描面里一次都没命中——免责句多半被删了').toBe(true);

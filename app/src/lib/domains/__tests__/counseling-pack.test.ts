@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildCaseFacts, renderCaseFacts } from '@/lib/agent/case-facts';
 import { bannedHotlines, crisisHotlines } from '@/lib/agent/crisis-opener';
+import { renderLawyerMandatory } from '@/lib/agent/lawyer-mandatory';
 import { buildSystemPrompt } from '@/lib/agent/prompt';
 import type { KnowledgePack } from '@/lib/agent/retrieval';
 import type { CaseSnapshot } from '@/lib/agent/snapshot';
@@ -366,6 +367,23 @@ describe('§16 待律师复核：四条固定条目 + 一句纪律', () => {
 
   it('第一个领域没有这一节（自证它是包的字段，不是全站恒有的一段）', () => {
     expect(LABOR.lawyerReview).toBeUndefined();
+  });
+
+  /**
+   * 【这一条钉的是"同一份 prompt 里两条指令互斥"】这四条每轮随事实卡渲染，
+   * 逐条写着"待律师书面确认"；而主理人 2026-09-07 裁决之后，同一份 system prompt 里
+   * 还有一段闭合清单，写着"清单以外的每一件事都由你做完""不许用建议咨询律师收尾"。
+   *
+   * 谁优先不写下来的形态是：用户问"我们机构算不算强制报告主体"，模型按清单那段办
+   * 就给出是/否结论（正是这四条要禁的），按这四条办就把人指向了律师（正是那段要禁的），
+   * **两种都不会报错**。所以裁法必须出现在下发给模型的字里 —— 见
+   * lib/agent/lawyer-mandatory.ts 的 lawyerReviewTiebreak。
+   */
+  it('闭合清单那一段点名了这一节，并写死"它限制结论、不是把人支出去的理由"', () => {
+    const seg = renderLawyerMandatory(COUNSELING);
+    expect(seg, '清单段没点名这一节，模型不知道说的是哪一节').toContain(COUNSELING.lawyerReview!.title);
+    expect(seg).toContain('不得**当成把用户支给律师的理由');
+    expect(seg, '只堵不给出路的话，模型只能在两条禁令之间挑一条违反').toContain('照第 1 条由你写清楚');
   });
 });
 
