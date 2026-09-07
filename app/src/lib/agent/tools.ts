@@ -334,7 +334,13 @@ export const AGENT_TOOLS: ToolDef[] = [
         properties: {
           name: { type: 'string', description: '公司全称，尽量与营业执照一致' },
           uscc: { type: 'string', description: '统一社会信用代码，不知道就不传' },
-          role: { type: 'string', enum: [...COMPANY_ROLES], description: '默认签约主体' },
+          role: {
+            type: 'string',
+            enum: [...COMPANY_ROLES],
+            description:
+              '这一方在本案里是哪个角色位。不填时：这个名字在本案已经登记过就沿用它已有的角色，' +
+              '是新名字才落本领域声明的缺省角色位——**各领域的缺省不是同一个**，拿不准就点名。',
+          },
           legal_rep: { type: 'string', description: '法定代表人' },
           risk_notes: { type: 'string', description: '风险点：注册资本、经营异常、关联公司等' },
           sources: { type: 'string', description: '结论出处（用户自述 / 爱企查 / 用户回传截图），必须可溯源' },
@@ -771,11 +777,22 @@ const HANDLERS: Record<string, Handler> = {
   company_profile_upsert(args, ctx) {
     const name = str(args.name);
     if (!name) return reject('name 不能为空');
+    // 角色位怎么定，与 MCP 那条路**读同一个函数**（cases.resolveCompanyRole）：
+    // 此前两条路各写了一遍 `?? '签约主体'`，而写死那一格的形态是——声明了敏感级的领域里，
+    // 每一次不带 role 的登记（登记平台/协会/监管走的就是这条路）都落进化名位，
+    // 于是分享页与导出把机构全称一起洗成占位符，产物照常生成、没有一处会报错。
+    const role = cases.resolveCompanyRole(ctx.db, {
+      caseId: ctx.caseId,
+      pack: packOfCtx(ctx),
+      name,
+      role: args.role,
+    });
+    if (typeof role !== 'string') return reject(role.message);
     const res = store.upsertCompanyProfile(ctx.db, {
       caseId: ctx.caseId,
       name,
       uscc: str(args.uscc),
-      role: inEnum(args.role, COMPANY_ROLES) ?? '签约主体',
+      role,
       legalRep: str(args.legal_rep),
       riskNotes: str(args.risk_notes),
       sourcesJson: str(args.sources) ? JSON.stringify([str(args.sources)]) : null,

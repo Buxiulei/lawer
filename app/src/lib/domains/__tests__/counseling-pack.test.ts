@@ -408,6 +408,34 @@ describe('§16 copy：低调模式词典按本行当来', () => {
     expect(COUNSELING.copy.site.welcomeEventDetail).toContain('化名');
     expect(COUNSELING.copy.site.welcomeEventDetail).not.toBe(LABOR.copy.site.welcomeEventDetail);
   });
+
+  it('能力文案的键与第一个领域**一一对应**（对不上的形态是：接线那天要一句句去猜，而猜错不报错）', () => {
+    expect(Object.keys(COUNSELING.copy.capabilities).sort()).toEqual(
+      Object.keys(LABOR.copy.capabilities).sort(),
+    );
+  });
+
+  /**
+   * 【为什么这一条要单列】登记对方主体的那句文案与包字段（aliasRoles / defaultCompanyRole）
+   * 是同一件事的两个读者：文案叫 agent 把机构填进哪一格，脱敏按哪一格洗。
+   * 两者分叉的形态是——文案叫他填 A、脱敏在洗 B，两边各自读都通顺，
+   * 而产物（要寄出去的答复函）里机构全称成了占位符，HTTP 200、PDF 照常生成。
+   */
+  it('登记对方主体那句话逐字点到两个角色位，且与包字段同值', () => {
+    const desc = COUNSELING.copy.capabilities.companyProfileUpsertDescription;
+    const roleParam = COUNSELING.copy.capabilities.companyRoleParam;
+    const alias = COUNSELING.sensitive!.aliasRoles[0];
+    for (const text of [desc, roleParam]) {
+      expect(text, '没告诉 agent 化名该填哪一格').toContain(alias);
+      expect(text, '没告诉 agent 机构该填哪一格').toContain(COUNSELING.defaultCompanyRole);
+    }
+    // 【它同时要拦的自相矛盾】此前这句话读起来像"这张表整张只登记化名"，
+    // 而下一句 companyNameParam 又说机构用全称——agent 读完两句不知道机构到底登不登记。
+    expect(desc, '「只登记化名」读起来管整张表，与「机构用全称」自相矛盾').not.toContain(
+      '这里只登记化名或编号',
+    );
+    expect(COUNSELING.copy.capabilities.companyNameParam).toContain('机构全称');
+  });
 });
 
 // ========== 灰度开关（设计稿 §16 分期：LAWER_DOMAINS_ENABLED=labor,counseling）==========
@@ -599,6 +627,51 @@ describe('counseling 的事实卡：多一节「风险与待律师核」，证�
     const card = renderCaseFacts(buildCaseFacts(snapshotOf({ domain: DEFAULT_DOMAIN, stage: LABOR.stages[0] })));
     expect(card).not.toContain('未经律师书面确认不得作为结论输出');
     expect(card).not.toContain('当前轨');
+  });
+
+  /**
+   * 【这一组拦的是哪一次事故】basics 那一节此前只有**抬头**按领域换，节里四行正文是共用层
+   * 写死的字面量。于是本领域的事实卡长这样：抬头「咨询关系与执业基本盘」，下面接着
+   *「入职日期：2026-01-10 / 月工资：500.00 元」——而这两列在本领域装的是
+   * 服务关系开始日与**单次**咨询费用。模型每一轮都据此把一次咨询的收费当成月薪去算退费，
+   * 值一个都没错、格式完全正常、没有任何一处会报错。
+   *
+   * 变异确认：把 case-facts.employmentSection 的四行改回写死的那四句 → 下面第二条断言红。
+   */
+  const FOUR_BASICS: Partial<CaseRow> = {
+    employed_from: '2026-01-10',
+    monthly_wage_fen: 50000,
+    position: 'XX 心理工作室，注册咨询师',
+    contract_count: '套餐 10 次，已做 3 次',
+  };
+
+  it('basics 四行的抬头按本领域来：说的是服务关系与单次费用，不是另一个行当的入职与月薪', () => {
+    const card = renderCaseFacts(buildCaseFacts(snapshotOf(FOUR_BASICS)));
+    expect(card).toContain(`### ${COUNSELING.factsSections.find((x) => x.key === 'basics')!.title}`);
+    expect(card).toContain(`- ${COUNSELING.factsBasics.employedFrom}：2026-01-10`);
+    expect(card).toContain(`- ${COUNSELING.factsBasics.monthlyWage}：500.00 元`);
+    expect(card).toContain(`- ${COUNSELING.factsBasics.contractCount}：套餐 10 次，已做 3 次`);
+    expect(card).toContain(`- ${COUNSELING.factsBasics.position}：`);
+    // 四项都填了仍按「已记录 4/4」报——这一句是跨领域的统计口径，不随词表换
+    expect(card).toContain('首诊四项已记录 4/4');
+  });
+
+  it('本领域的事实卡里没有另一个行当的那四句抬头（自证它们真是从包里取的）', () => {
+    const card = renderCaseFacts(buildCaseFacts(snapshotOf(FOUR_BASICS)));
+    for (const word of Object.values(LABOR.factsBasics)) {
+      expect(card, `事实卡里出现了缺省领域的抬头「${word}」`).not.toContain(`- ${word}：`);
+    }
+  });
+
+  it('缺省领域那四行**逐字不变**（labor 零变化；labor-baseline.json 的 caseFacts 同时钉着它们）', () => {
+    const card = renderCaseFacts(
+      buildCaseFacts(snapshotOf({ ...FOUR_BASICS, domain: DEFAULT_DOMAIN, stage: LABOR.stages[0] })),
+    );
+    expect(card).toContain(`- ${LABOR.factsBasics.employedFrom}：2026-01-10`);
+    expect(card).toContain(`- ${LABOR.factsBasics.monthlyWage}：500.00 元`);
+    for (const word of Object.values(COUNSELING.factsBasics)) {
+      expect(card, `缺省领域的事实卡里出现了本领域的抬头「${word}」`).not.toContain(`- ${word}：`);
+    }
   });
 
   it('「当前轨」两态都印，且都把主线阶段并排写出来（不在轨上时说清本领域有哪些轨）', () => {

@@ -69,6 +69,28 @@ export interface FactsSectionSpec {
 }
 
 /**
+ * 事实卡 `basics` 那一节**四行正文的抬头**（键固定＝cases 表那四列，措辞按领域来）。
+ *
+ * 【为什么光有分节标题不够】分节标题（factsSections[basics].title）换了词，
+ * 而节里那四行仍是共用层写死的字面量的形态是：抬头写着这个行当的话，
+ * 下面四行却在用另一个行当的名词报同一批数——模型每一轮都据此把这四个数**读成别的东西**
+ *（同一列在两个行当里是完全不同的量：一个是按月发的，一个是按次收的），
+ * 然后拿它去算钱、去写文书，而没有任何一处会报错：值是对的，只有它叫什么错了。
+ *
+ * 键是 `cases` 表的列，跨领域固定；**只有措辞按领域换**——与 factsSections 同一条纪律。
+ */
+export interface DomainBasicsLabels {
+  /** cases.employed_from：本领域管这条时间线的起点叫什么 */
+  employedFrom: string;
+  /** cases.position */
+  position: string;
+  /** cases.monthly_wage_fen（渲染成「X 元」） */
+  monthlyWage: string;
+  /** cases.contract_count */
+  contractCount: string;
+}
+
+/**
  * 本领域里「我方」与「对方」各是谁（设计稿 §13-1）。角色**不写死**：有的领域对面是一家机构，
  * 有的领域对面可能同时有好几方，谁在对面是领域的事，不是工具面的事。
  *
@@ -293,6 +315,20 @@ export interface DomainPack {
   label: string;
   /** 我方与对方各是谁；工具面的「对方主体」措辞取自它，不在工具面写死 */
   parties: DomainParties;
+  /**
+   * 登记对方主体（company_profiles）时**调用方没点名角色**的那一行落哪个角色位。
+   * 取值必须是 lib/cases 的 COMPANY_ROLES 之一（角色位跨领域同一套，逐包比对的判据在
+   * lib/__tests__/sensitive-exits.test.ts——这里不 import lib/cases，免得共用层反向依赖）。
+   *
+   * 【为什么这一格必须按领域来，不能由共用层写死一个】同一张表在不同行当里装的东西不一样。
+   * 有的行当里「对面那一方」几乎总是我方签过字的那一家，缺省落签约位是对的；
+   * 而**声明了敏感级的行当**里，这张表同时装着两类名字——脱敏对象本人的化名或编号，
+   * 与要把产物寄过去的**机构全称**。缺省落进化名位的形态是：用户导出一份要寄给机构的
+   * 答复函，抬头与抄送栏都成了占位符，而 PDF 照常生成、HTTP 200，页脚还印着一句
+   *「出现的化名或编号已替换为占位」——产物废了，三处都在说一切正常。
+   * 这条缺省与 sensitive.aliasRoles 不许相交，由 assertDomainPack 在装载时点名。
+   */
+  defaultCompanyRole: string;
   /** 案件阶段枚举。**唯一真源**：stage 校验读它，不再各处引 CASE_STAGES */
   stages: readonly string[];
   /**
@@ -338,6 +374,8 @@ export interface DomainPack {
   };
   /** 事实卡分节（顺序即渲染顺序） */
   factsSections: readonly FactsSectionSpec[];
+  /** 事实卡 basics 那一节四行正文的抬头（键固定，措辞按领域） */
+  factsBasics: DomainBasicsLabels;
   /**
    * 个案报告的分节骨架（顺序即渲染顺序）。
    *
@@ -518,6 +556,7 @@ export function assertDomainPack(pack: DomainPack): void {
   str('parties.self', pack.parties?.self);
   arr('parties.counterparts', pack.parties?.counterparts);
   if (typeof pack.parties?.multiParty !== 'boolean') missing.push('parties.multiParty');
+  str('defaultCompanyRole', pack.defaultCompanyRole);
   arr('stages', pack.stages);
   // tracks 允许为空数组，但必须是数组——undefined 是"忘了填"，[] 是"没有并行轨"
   if (!Array.isArray(pack.tracks)) missing.push('tracks');
@@ -537,6 +576,12 @@ export function assertDomainPack(pack: DomainPack): void {
     }
   }
   arr('factsSections', pack.factsSections);
+  // basics 那四行的抬头：漏一个的形态是那一行顶着 `undefined：2026-01-10` 进 prompt，
+  // 或者（更常见）沿用上一个行当的名词，而值本身是对的，没有一处会报错。
+  str('factsBasics.employedFrom', pack.factsBasics?.employedFrom);
+  str('factsBasics.position', pack.factsBasics?.position);
+  str('factsBasics.monthlyWage', pack.factsBasics?.monthlyWage);
+  str('factsBasics.contractCount', pack.factsBasics?.contractCount);
   arr('reportSections', pack.reportSections);
   arr('deadlineKinds', pack.deadlineKinds);
   arr('docKinds', pack.docKinds);
@@ -574,6 +619,18 @@ export function assertDomainPack(pack: DomainPack): void {
     // 空清单 = 一个化名都不替换，而分享页照样印着「化名或编号已替换为占位」那句话：
     // 页面上同时出现真化名与一句声称它被替换过的说明，两边都不报错。
     arr('sensitive.aliasRoles', pack.sensitive.aliasRoles);
+    // 【缺省角色不许落在化名位上】这两项各自看都合法：缺省是一个真角色，清单里也是真角色。
+    // 但它们指到同一格时，**每一次不点名角色的登记都会被当成脱敏对象**——而登记机构
+    // 走的正是这条不点名的路。产物（分享页 / 导出 PDF / 转介包）里机构全称成了占位符，
+    // HTTP 200、页脚那句话还写着"只替换了化名或编号"。所以在装载时就拒绝这种包，
+    // 不留给运行期去发现：那时发现它的方式是一份寄不出去的文书。
+    if ((pack.sensitive.aliasRoles ?? []).includes(pack.defaultCompanyRole)) {
+      missing.push(
+        `defaultCompanyRole「${pack.defaultCompanyRole}」同时被列进 sensitive.aliasRoles——` +
+          '不点名角色的登记（登记机构走的就是这条路）会被当成脱敏对象，' +
+          '机构全称在分享/导出/转介里变成占位符，而产物照常生成',
+      );
+    }
   }
 
   str('copy.neutral.title', pack.copy?.neutral?.title);

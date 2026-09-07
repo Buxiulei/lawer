@@ -212,4 +212,33 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
       String.raw`/补偿|赔偿|工资|薪资|加班费|年假|社保|公积金|双倍|违法解除|经济性裁员|裁员|离职|解除|仲裁|诉讼|律师费|开庭|协议|调解|折算|工龄|欠薪|拖欠|押金|罚款|代通知金|N\s*[+＋]\s*1|2\s*N|方案是\s*N/;`,
     ]);
   });
+
+  /**
+   * **lib/agent/case-facts.ts 的待清理清单**（同上，不是豁免）。
+   *
+   * 事实卡渲染器是共用层，但它也还进不了 SHARED_FILES：实名那一节里逐字写着
+   *「姓名只用于……（某某申请书、通知函、授权书）」，那句话要搬进领域包才算清完。
+   *
+   * 【这条在守什么】守「**别再多**」。本文件此前一整节（basics 四行）都写着上一个行当的
+   * 名词（入职日期 / 岗位 / 月工资 / 合同签订次数），而 FORBIDDEN 那三个词一个都不沾——
+   * 于是没有任何一条判据点它的名，直到有人逐行读第二个领域的事实卡才发现。
+   * 那四行现在按 DomainPack.factsBasics 取（判据在 domains/__tests__/counseling-pack.test.ts），
+   * 这里把剩下的那一处钉住：多一处即红，少一处（真搬走了）也红。
+   */
+  it('lib/agent/case-facts.ts 里的领域字面量只剩已知那一行（变异：往它任一注释里写一个「劳动」 → 红）', () => {
+    const file = path.join(SRC_ROOT, 'lib/agent/case-facts.ts');
+    const hits = fs
+      .readFileSync(file, 'utf-8')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => FORBIDDEN.some((w) => line.includes(w)));
+
+    expect(
+      hits,
+      'case-facts.ts 的领域字面量清单变了。多出来的那行请搬进 DomainPack（分节抬头看 factsSections，' +
+        'basics 那四行看 factsBasics）；这一行真搬走了，就把 case-facts.ts 加进 SHARED_FILES 并删掉这条。',
+    ).toEqual([
+      "'- 这个姓名只用于用户明确要求的文书填写（仲裁申请书、通知函、授权书等）；' +",
+    ]);
+  });
 });

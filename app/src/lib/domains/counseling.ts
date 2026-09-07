@@ -36,6 +36,20 @@ const SELF = COUNSELING_PARTIES.self;
 const CP = COUNSELING_PARTIES.counterparts[0];
 const OTHERS = COUNSELING_PARTIES.counterparts.slice(1).join('、');
 
+/**
+ * 本领域用到的两个**角色位**（company_profiles.role）。
+ *
+ * 【为什么抽成常量】它们同时出现在三个地方：脱敏清单（sensitive.aliasRoles）、
+ * 不点名时的缺省（defaultCompanyRole）、以及工具面逐字告诉 agent 该填哪个的那两句文案。
+ * 三处各写一遍字面量的形态是——改其中一处（比如把化名位挪到另一格）而另两处没跟着改，
+ * 于是文案叫 agent 填 A、脱敏却在洗 B，两边各自看都正常，产物照常生成。
+ *
+ * · ALIAS_ROLE：装脱敏对象（来访者）化名或编号的那一格；首诊按它收敛，分享/导出按它替换。
+ * · INSTITUTION_ROLE：装机构全称（平台、协会、监管部门、媒体）的那一格；不点名角色时也落这里。
+ */
+const ALIAS_ROLE = '签约主体';
+const INSTITUTION_ROLE = '关联';
+
 // ========== 危机（设计稿 §16「crisis」行）==========
 
 /**
@@ -485,9 +499,17 @@ export const COUNSELING_CAPABILITY_COPY = {
   intakeCompanyName: '对方的化名或来访编号（不要填真实姓名）',
   intakeTerminationNotice: '《知情同意书》',
   companyProfileUpsertDescription:
-    `登记或补充${CP}方的主体档案。同一场纠纷对面可能同时有${OTHERS}，` +
-    '谁是签约方、谁是付款方、谁在投诉，各记一条。**这里只登记化名或编号，不要写真实姓名**。' +
-    '同案同名只有一条，反复补充即更新。',
+    `登记或补充对方主体的档案。同一场纠纷对面可能同时有${CP}与${OTHERS}，` +
+    '谁在投诉、谁在受理、谁在收单，各记一条；同案同名只有一条，反复补充即更新。' +
+    // 【为什么这一句要点到角色位】这张表同时装两类名字，而分享页与导出只洗其中一类
+    //（哪一类由 sensitive.aliasRoles 定）。不说清楚的形态是：机构被登记进化名位，
+    // 于是一份要寄出去的答复函，抬头与抄送栏都成了占位符，而 PDF 照常生成、HTTP 200。
+    `⚠️ ${CP}**只登记化名或来访编号，绝不要写真实姓名**，并登记为「${ALIAS_ROLE}」这个角色位；` +
+    `${OTHERS}这类**机构**用工商/登记全称，登记为「${INSTITUTION_ROLE}」。` +
+    `两者别混：登记为「${ALIAS_ROLE}」的名字，在分享页与导出里会被当成需要保护的标识替换成占位符。`,
+  companyRoleParam:
+    `角色位。${CP}（化名或编号）填「${ALIAS_ROLE}」，${OTHERS}这类机构填「${INSTITUTION_ROLE}」。` +
+    `不填时：这个名字已经登记过就沿用它已有的角色，是新名字才按本领域缺省落「${INSTITUTION_ROLE}」。`,
   companyNameParam:
     `对方主体的称呼（${CP}用化名或编号；${OTHERS}用机构全称）；查得准不准全看这个名字`,
   companyProbeDescription:
@@ -525,6 +547,24 @@ export const COUNSELING: DomainPack = {
   label: '心理咨询纠纷',
 
   parties: COUNSELING_PARTIES,
+
+  /**
+   * 登记对方主体时**没点名角色**的那一行落「关联」，不落签约位。
+   *
+   * 【为什么不是签约位】本领域的 company_profiles 一张表装两类名字：来访者的化名或编号
+   *（首诊那一格逐字写着"填化名或编号，不要填真实姓名"，按 role='签约主体' 收敛，
+   * 也就是 sensitive.aliasRoles 那一格），与平台、协会、监管部门这些**收件机构的全称**。
+   * 而工具面 company_profile_upsert 的常态用法正是登记后者，且**常态不带 role**——
+   * 缺省落在签约位的形态是：一份要寄给平台的投诉答复函，抬头与抄送栏都成了〔已脱敏〕，
+   * 而 PDF 照常生成、HTTP 200，页脚还印着一句"出现的化名或编号已替换为占位"。
+   * 这条缺省与 aliasRoles 不许相交，assertDomainPack 在装载时点名（改任一处都会被拦）。
+   *
+   * 【那来访者的化名怎么办】它由首诊落在签约位上（upsertCompanyProfileByRole），
+   * 之后不带 role 的补充**沿用这一行已有的角色**（lib/cases.resolveCompanyRole 第②条），
+   * 不会被这条缺省挪出化名位。留下的口子是"一个自然人第一次就由工具面不带角色登记"——
+   * 那属于 sensitive.aliasRoles 头注释里已写明的那一类残留（按 role 分而不按人/机构分）。
+   */
+  defaultCompanyRole: INSTITUTION_ROLE,
 
   /**
    * 主线阶段（§16）。**非线性**：来访投诉之后可能直接进协会伦理申诉，也可能先协商；
@@ -567,6 +607,20 @@ export const COUNSELING: DomainPack = {
     { key: 'timeline', title: '事件经过与危机记录' },
     { key: 'evidence', title: '证据地图（敏感级）' },
   ],
+
+  /**
+   * basics 那一节四行正文的抬头。**同一列在两个行当里根本不是同一个量**：
+   * monthly_wage_fen 在这里装的是**单次**咨询费用，employed_from 装的是服务关系开始的那天。
+   * 沿用上一个行当那四句的形态是：模型每一轮都读到「月工资：500.00 元」，
+   * 于是把一次咨询的收费当成月薪去算退费、去写答复函——数值一个没错，只有它叫什么错了，
+   * 而没有任何一处会报错。措辞与 §16「咨询关系（来访化名或编号、起止、次数、单次费用）」对齐。
+   */
+  factsBasics: {
+    employedFrom: '服务关系开始日',
+    position: '机构与执业信息',
+    monthlyWage: '单次咨询费用',
+    contractCount: '约定与已完成次数',
+  },
 
   /**
    * 个案报告分节（§16 那十节，顺序逐条照抄）。标题给人看，source 给生成器取数。
@@ -729,7 +783,7 @@ export const COUNSELING: DomainPack = {
      * 监管部门，工具面那一格逐字写着「用机构全称」。把它一并洗掉的形态是：
      * 一份要寄给平台的投诉答复函，抬头与抄送栏都变成〔已脱敏〕，而 PDF 照常生成。
      */
-    aliasRoles: ['签约主体'],
+    aliasRoles: [ALIAS_ROLE],
   },
 
   copy: {

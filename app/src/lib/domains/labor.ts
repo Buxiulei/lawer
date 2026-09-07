@@ -300,6 +300,9 @@ export const LABOR_CAPABILITY_COPY = {
     '仲裁列谁为被申请人由此判定，所以只要用户提到公司名就要落档。同案同名只有一条，反复补充即更新。',
   // ───── 公司情报面（设计稿 §2 H）：以下六句里的「对方主体」称呼一律由 LABOR_PARTIES 拼，
   //       不在这里也不在共用层再写死一个名词（§13-1 角色不写死）。
+  companyRoleParam:
+    '这一方在本案里是哪个角色位。不填时：这个名字已经登记过就沿用它已有的角色，' +
+    '是新名字才落本领域缺省的「签约主体」。',
   companyNameParam:
     `对方主体全称（${CP}、${OTHERS}都算），尽量与营业执照一致；查得准不准全看这个名字`,
   companyProbeDescription:
@@ -491,6 +494,11 @@ export const LABOR: DomainPack = {
   // 关联公司、用工平台可能是几家不同的公司，被申请人列谁由此判定，故 multiParty 为 true。
   parties: LABOR_PARTIES,
 
+  // 登记对方主体时没点名角色就落这一格——本领域首诊问到的那一家就是签约的那一家，
+  // 与 lib/cases/intake.ts 按 role='签约主体' 收敛的那一格同值（改一处不改另一处的形态是：
+  // 首诊填的公司与工具面补充的同名公司分落两行，而 pickRespondent 取到的是其中一行）。
+  defaultCompanyRole: '签约主体',
+
   // 阶段枚举**搬过来引用**，不在这里复制第二份：CASE_STAGES 还被首诊页（客户端）
   // 直接引着，抄一份的形态是两处枚举某天不一致，而 stage 校验只看得见其中一处。
   stages: CASE_STAGES,
@@ -518,6 +526,15 @@ export const LABOR: DomainPack = {
     { key: 'timeline', title: '时间线' },
     { key: 'evidence', title: '证据' },
   ],
+
+  // basics 那一节四行正文的抬头。**这四句逐字是本领域此前写在渲染器里的那四句**
+  //（labor-baseline.json 的 caseFacts 逐字钉着它们）：搬家不许改字，改字＝对外承诺变了。
+  factsBasics: {
+    employedFrom: '入职日期',
+    position: '岗位',
+    monthlyWage: '月工资',
+    contractCount: '合同签订次数',
+  },
 
   // 个案报告的分节（设计稿 §4.3）。标题是给人看的，source 是给生成器看的取数口径；
   // 顺序即报告从上往下的顺序：先「我是谁、案子是什么」，再主线与争议，

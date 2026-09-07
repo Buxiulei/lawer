@@ -17,9 +17,17 @@ import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { CitationGuard } from '@/lib/agent/citation-guard';
+import { executeTool, newTurnState, type AgentToolContext } from '@/lib/agent/tools';
 import * as cases from '@/lib/cases';
 import { runMigrations } from '@/lib/db/migrate';
-import { DEFAULT_DOMAIN, DOMAINS, DOMAINS_ENABLED_ENV } from '@/lib/domains/registry';
+import {
+  DEFAULT_DOMAIN,
+  DOMAINS,
+  DOMAINS_ENABLED_ENV,
+  assertDomainPack,
+  type DomainPack,
+} from '@/lib/domains/registry';
 import { buildPacket } from '@/lib/referral/packet';
 import { SENSITIVE_MASK, maskContacts, sensitivityOf, shareRedactorFor } from '@/lib/sensitive';
 import { createShare, readShare } from '@/lib/shares';
@@ -145,6 +153,129 @@ describe('敏感级声明的读法', () => {
     const caseId = makeCase('counseling');
     db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?, ?)').run(caseId, '甲');
     expect(shareRedactorFor(db, caseId).text('甲方与乙方').text).toBe('甲方与乙方');
+  });
+});
+
+// ───────────────── 真实调用路径：登记机构的那一行落在哪个角色位 ─────────────────
+
+/**
+ * 上面那条「机构全称不洗」的判据是**直接往表里插 role='关联'** 验的，
+ * 而真实产线上没有人手写这张表：登记对方主体只有一个工具面（company_profile_upsert），
+ * 它此前**不带 role 就一律落签约主体**——正好是本领域 aliasRoles 那一格。
+ * 于是上面那条判据绿着，产线上照样复现原事故：
+ *   `company_profile_upsert(name='简单心理平台')` → 落进化名位 →
+ *   分享/导出把「致简单心理平台」洗成「致〔已脱敏〕」，PDF 照常生成、HTTP 200。
+ *
+ * 【所以这一组只走工具面，一行 SQL 都不写】判据要接的是产线判据，不是我们自己造的那张表。
+ */
+describe('登记对方主体的两条工具路：不点名角色时落在哪一格', () => {
+  /** 站内 agent 那条路（lib/agent/tools.ts）的最小上下文。 */
+  function agentCtx(caseId: number, domain: string): AgentToolContext {
+    return {
+      db,
+      caseId,
+      userId: uid,
+      domain,
+      threadId: 1,
+      sourceMessageId: null,
+      citations: new CitationGuard(),
+      crisisCardAlreadyGiven: false,
+      state: newTurnState(),
+      emit: () => {},
+    };
+  }
+
+  function rolesOf(caseId: number): Record<string, string> {
+    const rows = db
+      .prepare('SELECT name, role FROM company_profiles WHERE case_id = ? ORDER BY id')
+      .all(caseId) as { name: string; role: string }[];
+    return Object.fromEntries(rows.map((r) => [r.name, r.role]));
+  }
+
+  it('MCP 那条路：不带 role 登记一家机构 → 不落化名位，答复函的抬头与抄送逐字留着', () => {
+    const caseId = makeCase('counseling');
+    const made = cases.upsertCompany(db, { caseId, userId: uid, name: '简单心理平台' });
+    expect(made.ok, JSON.stringify(made)).toBe(true);
+    expect(rolesOf(caseId)['简单心理平台']).toBe(COUNSELING.defaultCompanyRole);
+    expect(
+      COUNSELING.sensitive!.aliasRoles,
+      '缺省角色落进了化名位——这正是原事故',
+    ).not.toContain(COUNSELING.defaultCompanyRole);
+
+    const got = shareRedactorFor(db, caseId).text('致简单心理平台：关于来访庚辛壬的投诉，现答复如下。');
+    expect(got.text, '收件机构的全称被洗掉了，这份答复函寄不出去').toContain('简单心理平台');
+  });
+
+  it('站内 agent 那条路读同一份口径（两条路各写一遍 `?? 缺省` 的形态是，改一处漏一处）', () => {
+    const caseId = makeCase('counseling');
+    const out = executeTool('company_profile_upsert', JSON.stringify({ name: '简单心理平台' }), agentCtx(caseId, 'counseling'));
+    expect(out.ok, out.content).toBe(true);
+    expect(rolesOf(caseId)['简单心理平台']).toBe(COUNSELING.defaultCompanyRole);
+    expect(shareRedactorFor(db, caseId).text('致简单心理平台').text).toContain('简单心理平台');
+  });
+
+  it('已经登记在化名位上的名字，**不带 role 的补充不会把它挪走**（挪走＝这个人从此不脱敏）', () => {
+    // store.upsertCompanyProfile 按 (case_id, name) 收敛，而它对 role 是直接赋值不是 COALESCE：
+    // 少了「不点名就沿用已有角色」这条，给来访者补一句备注就会把他搬出化名位——
+    // 回包 created=false、HTTP 200，页面上那一行还在，而分享页从此原样印着他的化名。
+    const caseId = makeCase('counseling');
+    const first = cases.upsertCompany(db, {
+      caseId,
+      userId: uid,
+      name: '来访庚辛壬',
+      role: COUNSELING.sensitive!.aliasRoles[0],
+    });
+    expect(first.ok, JSON.stringify(first)).toBe(true);
+
+    const again = cases.upsertCompany(db, { caseId, userId: uid, name: '来访庚辛壬', note: '第三次爽约' });
+    expect(again.ok, JSON.stringify(again)).toBe(true);
+    expect(rolesOf(caseId)['来访庚辛壬']).toBe(COUNSELING.sensitive!.aliasRoles[0]);
+    expect(shareRedactorFor(db, caseId).text('来访庚辛壬第三次爽约').text).not.toContain('来访庚辛壬');
+  });
+
+  it('缺省领域**逐字不变**：不带 role 仍落它自己声明的那一格（自证缺省不是被换成了另一个词）', () => {
+    const caseId = makeCase(DEFAULT_DOMAIN);
+    const made = cases.upsertCompany(db, { caseId, userId: uid, name: '某某科技有限公司' });
+    expect(made.ok, JSON.stringify(made)).toBe(true);
+    expect(rolesOf(caseId)['某某科技有限公司']).toBe(DOMAINS[DEFAULT_DOMAIN].defaultCompanyRole);
+  });
+
+  it('点了名的 role 照旧原样落，不合法的照旧拒收（这一层没被改宽）', () => {
+    const caseId = makeCase('counseling');
+    const ok1 = cases.upsertCompany(db, { caseId, userId: uid, name: '某协会', role: '用工主体' });
+    expect(ok1.ok).toBe(true);
+    expect(rolesOf(caseId)['某协会']).toBe('用工主体');
+
+    const bad = cases.upsertCompany(db, { caseId, userId: uid, name: '某机构', role: '不存在的角色' });
+    expect(bad.ok).toBe(false);
+    if (bad.ok) return;
+    expect(bad.errorCode).toBe('INVALID_COMPANY_ROLE');
+  });
+});
+
+// ───────────────── 结构守卫：缺省角色不许与化名位重叠 ─────────────────
+
+describe('装载时就拦住「缺省角色 = 化名位」的包（设计稿 §16 敏感级）', () => {
+  it('每个包的 defaultCompanyRole 都是真存在的角色位（打错一个字 = 每一行都落到一个不存在的位上）', () => {
+    for (const pack of Object.values(DOMAINS)) {
+      expect(
+        cases.COMPANY_ROLES as readonly string[],
+        `${pack.key} 的 defaultCompanyRole「${pack.defaultCompanyRole}」不在角色词表里`,
+      ).toContain(pack.defaultCompanyRole);
+    }
+  });
+
+  it('声明了敏感级的包，缺省角色不在 aliasRoles 里（变异：把 counseling 的缺省改成化名位 → 装载即抛）', () => {
+    for (const pack of Object.values(DOMAINS)) {
+      if (!pack.sensitive) continue;
+      expect(
+        pack.sensitive.aliasRoles,
+        `${pack.key}：不点名角色的登记会被当成脱敏对象，机构全称在产物里变成占位符`,
+      ).not.toContain(pack.defaultCompanyRole);
+    }
+    // 判据自证有牙：把两者指到同一格的包**装不进来**，而不是等到某一份文书寄不出去才发现。
+    const broken: DomainPack = { ...COUNSELING, defaultCompanyRole: COUNSELING.sensitive!.aliasRoles[0] };
+    expect(() => assertDomainPack(broken)).toThrow(/defaultCompanyRole/);
   });
 });
 
