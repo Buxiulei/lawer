@@ -1,0 +1,21 @@
+{
+  "source_id": "crisis-org-cn-zhongxin-jianjie",
+  "kind": "行业规范",
+  "name": "北京心理危机研究与干预中心简介（含心理援助热线号码与运行时间）",
+  "issuer": "北京心理危机研究与干预中心",
+  "official_host": "www.crisis.org.cn",
+  "url": "https://www.crisis.org.cn/lists/1.html",
+  "fetched_at": "2026-09-07T01:41:45+08:00",
+  "content_sha256": "15fc55325e0dafde03a15e6ca131d245efb5a9b01ea38373478915303c072d15",
+  "version_label": "",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/crisis-org-cn-zhongxin-jianjie/raw.html",
+    "text": "sources/originals/crisis-org-cn-zhongxin-jianjie/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.crisis.org.cn/lists/1.html",
+  "bytes": 14790
+}

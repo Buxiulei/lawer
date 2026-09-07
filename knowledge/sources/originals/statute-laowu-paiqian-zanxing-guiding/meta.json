@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-laowu-paiqian-zanxing-guiding",
+  "kind": "部门规章",
+  "name": "劳务派遣暂行规定",
+  "issuer": "人力资源和社会保障部",
+  "official_host": "www.gov.cn",
+  "url": "https://www.gov.cn/gongbao/content/2014/content_2667613.htm",
+  "fetched_at": "2026-09-07T00:43:41+08:00",
+  "content_sha256": "fbe4df3e22686bd8a7d30bead6bddce6db1e310a3bedc1a62fbc3996c20ed0fb",
+  "version_label": "人力资源和社会保障部令第22号（2014年3月1日起施行）",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-laowu-paiqian-zanxing-guiding/raw.html",
+    "text": "sources/originals/statute-laowu-paiqian-zanxing-guiding/text.txt"
+  },
+  "effective_from": "2014-03-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.gov.cn/gongbao/content/2014/content_2667613.htm",
+  "bytes": 33082
+}

@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-shiye-danwei-renshi-guanli-tiaoli",
+  "kind": "行政法规",
+  "name": "事业单位人事管理条例",
+  "issuer": "国务院",
+  "official_host": "www.gov.cn",
+  "url": "https://www.gov.cn/zhengce/2014-05/15/content_2680034.htm",
+  "fetched_at": "2026-09-07T00:45:12+08:00",
+  "content_sha256": "3410548f66ee7f1ebcc8043acae896cc718836cc4a642582adfd212f6ded29fb",
+  "version_label": "国务院令第652号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-shiye-danwei-renshi-guanli-tiaoli/raw.html",
+    "text": "sources/originals/statute-shiye-danwei-renshi-guanli-tiaoli/text.txt"
+  },
+  "effective_from": "2014-07-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.gov.cn/zhengce/2014-05/15/content_2680034.htm",
+  "bytes": 41005
+}

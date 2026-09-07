@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-bj3zy-yinxing-jiaban-2024-alkrukukanti",
+  "kind": "官方案例",
+  "name": "能动司法｜三中院隐形加班案入选人民法院案例库入库参考案例",
+  "issuer": "北京市第三中级人民法院",
+  "official_host": "bj3zy.bjcourt.gov.cn",
+  "url": "https://bj3zy.bjcourt.gov.cn/article/detail/2024/03/id/7824728.shtml",
+  "fetched_at": "2026-09-07T08:40:43+08:00",
+  "content_sha256": "c9a2c306d71133876a851f7293765e12a9e5b13f541a48765b3de47d7f30b583",
+  "version_label": "2024-03-01发布",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-bj3zy-yinxing-jiaban-2024-alkrukukanti/raw.html",
+    "text": "sources/originals/cases-bj3zy-yinxing-jiaban-2024-alkrukukanti/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://bj3zy.bjcourt.gov.cn/article/detail/2024/03/id/7824728.shtml",
+  "bytes": 20630
+}

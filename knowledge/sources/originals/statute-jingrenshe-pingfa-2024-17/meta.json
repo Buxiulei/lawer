@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-jingrenshe-pingfa-2024-17",
+  "kind": "规范性文件",
+  "name": "北京市失业保险金申领发放实施办法（试行）",
+  "issuer": "北京市人力资源和社会保障局",
+  "official_host": "rsj.beijing.gov.cn",
+  "url": "https://rsj.beijing.gov.cn/xxgk/2024zcwj/202412/t20241227_3974931.html",
+  "fetched_at": "2026-09-07T00:43:30+08:00",
+  "content_sha256": "8f54df2f6092e9036eb9a96457bb87e5a6e043c0e026760fad78cd4b7834a6e8",
+  "version_label": "京人社评发〔2024〕17号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-jingrenshe-pingfa-2024-17/raw.html",
+    "text": "sources/originals/statute-jingrenshe-pingfa-2024-17/text.txt"
+  },
+  "effective_from": "2025-01-01",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://rsj.beijing.gov.cn/xxgk/2024zcwj/202412/t20241227_3974931.html",
+  "bytes": 176252
+}

@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-qukuailian-xinxi-fuwu-guanli-guiding",
+  "kind": "部门规章",
+  "name": "区块链信息服务管理规定",
+  "issuer": "国家互联网信息办公室",
+  "official_host": "www.cac.gov.cn",
+  "url": "https://www.cac.gov.cn/2019-01/10/c_1123971164.htm",
+  "fetched_at": "2026-09-07T00:48:36+08:00",
+  "content_sha256": "bba3fdf745435359a04c0717efab0fa2168710507ef2a3db462571c5189d3a6f",
+  "version_label": "国家互联网信息办公室令第3号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-qukuailian-xinxi-fuwu-guanli-guiding/raw.html",
+    "text": "sources/originals/statute-qukuailian-xinxi-fuwu-guanli-guiding/text.txt"
+  },
+  "effective_from": "2019-02-15",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.cac.gov.cn/2019-01/10/c_1123971164.htm",
+  "bytes": 21457
+}

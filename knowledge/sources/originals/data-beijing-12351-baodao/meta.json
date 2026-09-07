@@ -1,0 +1,21 @@
+{
+  "source_id": "data-beijing-12351-baodao",
+  "kind": "官方数据",
+  "name": "市总工会为职工推出100项福利 通过12351App等平台发布",
+  "issuer": "首都之窗（北京市人民政府门户网站）",
+  "official_host": "www.beijing.gov.cn",
+  "url": "https://www.beijing.gov.cn/ywdt/gzdt/202504/t20250430_4078622.html",
+  "fetched_at": "2026-09-07T08:30:43+08:00",
+  "content_sha256": "9d24ee4576ed238d9b8d8f57bceba6405e86d89399a2a6cc4dd050ea7e9065e5",
+  "version_label": "发布时间2025-04-30",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/data-beijing-12351-baodao/raw.html",
+    "text": "sources/originals/data-beijing-12351-baodao/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.beijing.gov.cn/ywdt/gzdt/202504/t20250430_4078622.html",
+  "bytes": 34723
+}

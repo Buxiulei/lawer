@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-bj3zy-yinxing-jiaban-2023-diaoyan",
+  "kind": "官方案例",
+  "name": "三中院审结首例认定隐形加班案件取得了良好社会效果",
+  "issuer": "北京市第三中级人民法院",
+  "official_host": "bj3zy.bjcourt.gov.cn",
+  "url": "https://bj3zy.bjcourt.gov.cn/article/detail/2023/04/id/7269444.shtml",
+  "fetched_at": "2026-09-07T08:40:24+08:00",
+  "content_sha256": "7bdebcade786ea90852da17caa000e6c7ccc276a5a53b4f03e2041ba5fb061fc",
+  "version_label": "2023-04-28发布，作者郑吉喆、田艳飞",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-bj3zy-yinxing-jiaban-2023-diaoyan/raw.html",
+    "text": "sources/originals/cases-bj3zy-yinxing-jiaban-2023-diaoyan/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://bj3zy.bjcourt.gov.cn/article/detail/2023/04/id/7269444.shtml",
+  "bytes": 16994
+}

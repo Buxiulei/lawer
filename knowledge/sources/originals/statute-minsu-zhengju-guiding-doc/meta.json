@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-minsu-zhengju-guiding-doc",
+  "kind": "司法解释",
+  "name": "最高人民法院关于民事诉讼证据的若干规定",
+  "issuer": "最高人民法院",
+  "official_host": "www.npc.gov.cn",
+  "url": "http://www.npc.gov.cn/npc/c2/c30834/201912/t20191226_304057.html",
+  "fetched_at": "2026-09-07T00:49:40+08:00",
+  "content_sha256": "54aa30065574a1c7eab39a5e5cf210c2fcdc5a804889f284525fef80d15ef7d4",
+  "version_label": "2019年修正，法释〔2019〕19号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-minsu-zhengju-guiding-doc/raw.html",
+    "text": "sources/originals/statute-minsu-zhengju-guiding-doc/text.txt"
+  },
+  "effective_from": "2020-05-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "http://www.npc.gov.cn/npc/c2/c30834/201912/t20191226_304057.html",
+  "bytes": 55694
+}

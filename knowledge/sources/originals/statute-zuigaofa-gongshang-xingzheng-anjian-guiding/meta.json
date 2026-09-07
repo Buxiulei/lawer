@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-zuigaofa-gongshang-xingzheng-anjian-guiding",
+  "kind": "司法解释",
+  "name": "最高人民法院关于审理工伤保险行政案件若干问题的规定",
+  "issuer": "最高人民法院",
+  "official_host": "www.court.gov.cn",
+  "url": "https://www.court.gov.cn/zixun/xiangqing/6775.html",
+  "fetched_at": "2026-09-07T00:45:57+08:00",
+  "content_sha256": "3ed997d29480b2fd759830fb7eeea9281cf46f0f95a6d588d20b9d48374d1d82",
+  "version_label": "法释〔2014〕9号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-zuigaofa-gongshang-xingzheng-anjian-guiding/raw.html",
+    "text": "sources/originals/statute-zuigaofa-gongshang-xingzheng-anjian-guiding/text.txt"
+  },
+  "effective_from": "2014-09-01",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.court.gov.cn/zixun/xiangqing/6775.html",
+  "bytes": 21918
+}

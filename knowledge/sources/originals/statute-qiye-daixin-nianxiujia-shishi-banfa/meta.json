@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-qiye-daixin-nianxiujia-shishi-banfa",
+  "kind": "部门规章",
+  "name": "企业职工带薪年休假实施办法",
+  "issuer": "人力资源和社会保障部",
+  "official_host": "www.mohrss.gov.cn",
+  "url": "https://www.mohrss.gov.cn/xxgk2020/gzk/gz/202112/t20211228_431596.html",
+  "fetched_at": "2026-09-07T00:50:18+08:00",
+  "content_sha256": "bab500846babced369a4b323c02813872ff5c8bcf5ccceb709472e1fb6f7a154",
+  "version_label": "人力资源和社会保障部令第1号（2008年9月18日公布，自公布之日起施行）",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-qiye-daixin-nianxiujia-shishi-banfa/raw.html",
+    "text": "sources/originals/statute-qiye-daixin-nianxiujia-shishi-banfa/text.txt"
+  },
+  "effective_from": "2008-09-18",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.mohrss.gov.cn/xxgk2020/gzk/gz/202112/t20211228_431596.html",
+  "bytes": 40709
+}

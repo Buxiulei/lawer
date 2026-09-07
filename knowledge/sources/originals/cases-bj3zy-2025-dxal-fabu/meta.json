@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-bj3zy-2025-dxal-fabu",
+  "kind": "官方案例",
+  "name": "劳动者休息休假权如何保障？这场发布会为您答疑解惑！（北京三中院法院要闻）",
+  "issuer": "北京市第三中级人民法院",
+  "official_host": "bj3zy.bjcourt.gov.cn",
+  "url": "https://bj3zy.bjcourt.gov.cn/article/detail/2025/06/id/8872266.shtml",
+  "fetched_at": "2026-09-07T08:27:25+08:00",
+  "content_sha256": "7624a572e77fe72ebd426988b95cf9f477962ea23dea11e2d355874d92ea1a59",
+  "version_label": "2025-05-14 发布",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-bj3zy-2025-dxal-fabu/raw.html",
+    "text": "sources/originals/cases-bj3zy-2025-dxal-fabu/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://bj3zy.bjcourt.gov.cn/article/detail/2025/06/id/8872266.shtml",
+  "bytes": 25405
+}

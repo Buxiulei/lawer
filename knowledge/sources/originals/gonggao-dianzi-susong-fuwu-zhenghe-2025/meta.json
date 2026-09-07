@@ -1,0 +1,21 @@
+{
+  "source_id": "gonggao-dianzi-susong-fuwu-zhenghe-2025",
+  "kind": "规范性文件",
+  "name": "北京市高级人民法院关于电子诉讼服务整合升级的公告",
+  "issuer": "北京市高级人民法院",
+  "official_host": "bj2zy.bjcourt.gov.cn",
+  "url": "https://bj2zy.bjcourt.gov.cn/article/detail/2025/10/id/9014520.shtml",
+  "fetched_at": "2026-09-07T08:46:13+08:00",
+  "content_sha256": "eb7f85234224ed5b1a75ddcc4e5253447584d08a6ff7a678ea584f9cb6158aa5",
+  "version_label": "2025-10-11发布",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/gonggao-dianzi-susong-fuwu-zhenghe-2025/raw.html",
+    "text": "sources/originals/gonggao-dianzi-susong-fuwu-zhenghe-2025/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://bj2zy.bjcourt.gov.cn/article/detail/2025/10/id/9014520.shtml",
+  "bytes": 17588
+}

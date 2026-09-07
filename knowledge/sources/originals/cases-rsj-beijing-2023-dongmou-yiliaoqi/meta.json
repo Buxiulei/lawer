@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-rsj-beijing-2023-dongmou-yiliaoqi",
+  "kind": "官方案例",
+  "name": "北京市人社局典型案例·董某医疗期满诉某超市",
+  "issuer": "北京市人力资源和社会保障局",
+  "official_host": "rsj.beijing.gov.cn",
+  "url": "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202309/t20230922_3264068.html",
+  "fetched_at": "2026-09-07T08:39:10+08:00",
+  "content_sha256": "9d651dbac6b9722fa3434b33061354c8e3dd550d808d11c076f72dae5695ecd0",
+  "version_label": "2023-09-22发布",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-rsj-beijing-2023-dongmou-yiliaoqi/raw.html",
+    "text": "sources/originals/cases-rsj-beijing-2023-dongmou-yiliaoqi/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202309/t20230922_3264068.html",
+  "bytes": 159560
+}

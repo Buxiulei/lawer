@@ -1,0 +1,21 @@
+{
+  "source_id": "bcnpo-jingcheng-baoquan-shoufei",
+  "kind": "行业规范",
+  "name": "北京市精诚公证处《实行市场调节价的公证服务项目目录和收费标准》",
+  "issuer": "北京市精诚公证处",
+  "official_host": "www.bcnpo.cn",
+  "url": "http://www.bcnpo.cn/bjjcgzw/web/bzzn/sfbz/8307.html",
+  "fetched_at": "2026-09-07T08:55:30+08:00",
+  "content_sha256": "ba0531e35d6d5d52a74c193e90b40b9e2530e5d815b85d38c80ba2ed9875f75a",
+  "version_label": "2020-09-22 公示",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/bcnpo-jingcheng-baoquan-shoufei/raw.html",
+    "text": "sources/originals/bcnpo-jingcheng-baoquan-shoufei/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "http://www.bcnpo.cn/bjjcgzw/web/bzzn/sfbz/8307.html",
+  "bytes": 45550
+}

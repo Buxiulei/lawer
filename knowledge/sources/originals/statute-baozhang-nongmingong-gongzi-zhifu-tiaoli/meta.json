@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-baozhang-nongmingong-gongzi-zhifu-tiaoli",
+  "kind": "行政法规",
+  "name": "保障农民工工资支付条例（国务院令第724号）",
+  "issuer": "国务院",
+  "official_host": "www.gov.cn",
+  "url": "https://www.gov.cn/gongbao/content/2020/content_5469641.htm",
+  "fetched_at": "2026-09-07T00:48:17+08:00",
+  "content_sha256": "162a6691906a2c80c110366b20bc00b31af9074765b6932411010d1923ef1c12",
+  "version_label": "国务院令第724号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-baozhang-nongmingong-gongzi-zhifu-tiaoli/raw.html",
+    "text": "sources/originals/statute-baozhang-nongmingong-gongzi-zhifu-tiaoli/text.txt"
+  },
+  "effective_from": "2020-05-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.gov.cn/gongbao/content/2020/content_5469641.htm",
+  "bytes": 66204
+}

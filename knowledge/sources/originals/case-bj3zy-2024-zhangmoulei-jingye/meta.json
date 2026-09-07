@@ -1,0 +1,21 @@
+{
+  "source_id": "case-bj3zy-2024-zhangmoulei-jingye",
+  "kind": "官方案例",
+  "name": "张某雷诉北京某国际体育文化发展有限公司劳动争议案——劳动者在竞业限制期通过配偶投资经营与原用人单位存在竞争关系的企业属于违反竞业限制的行为（我院新增两篇案例入选人民法院案例库）",
+  "issuer": "北京市第三中级人民法院",
+  "official_host": "bj3zy.bjcourt.gov.cn",
+  "url": "https://bj3zy.bjcourt.gov.cn/article/detail/2024/08/id/8082408.shtml",
+  "fetched_at": "2026-09-07T08:31:53+08:00",
+  "content_sha256": "9a8e18d35e7f2048bc33c0a339036908c538319bf8598e08002d88f4941a863a",
+  "version_label": "发布时间2024-08-28",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/case-bj3zy-2024-zhangmoulei-jingye/raw.html",
+    "text": "sources/originals/case-bj3zy-2024-zhangmoulei-jingye/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://bj3zy.bjcourt.gov.cn/article/detail/2024/08/id/8082408.shtml",
+  "bytes": 38764
+}

@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-shehui-baoxianfa",
+  "kind": "法律",
+  "name": "中华人民共和国社会保险法",
+  "issuer": "全国人大常委会",
+  "official_host": "www.gov.cn",
+  "url": "https://www.gov.cn/guoqing/2021-10/29/content_5647616.htm",
+  "fetched_at": "2026-09-07T00:47:51+08:00",
+  "content_sha256": "61b27da4fa1327a02735698fb827c145675f46abdd624356e04bde47ff7e1e1e",
+  "version_label": "2010年10月28日通过，根据2018年12月29日《全国人大常委会关于修改〈中华人民共和国社会保险法〉的决定》修正",
+  "status": "已修正",
+  "files": {
+    "raw": "sources/originals/statute-shehui-baoxianfa/raw.html",
+    "text": "sources/originals/statute-shehui-baoxianfa/text.txt"
+  },
+  "effective_from": "2011-07-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.gov.cn/guoqing/2021-10/29/content_5647616.htm",
+  "bytes": 71267
+}

@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-zaixian-susong-guize",
+  "kind": "规范性文件",
+  "name": "人民法院在线诉讼规则",
+  "issuer": "最高人民法院",
+  "official_host": "www.court.gov.cn",
+  "url": "https://www.court.gov.cn/zixun/xiangqing/309551.html",
+  "fetched_at": "2026-09-07T00:49:41+08:00",
+  "content_sha256": "21c1a3022dfc9fdbad1cbf6850d5e6313a94a0636303374fb6b7d31a7367fa92",
+  "version_label": "法释〔2021〕12号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-zaixian-susong-guize/raw.html",
+    "text": "sources/originals/statute-zaixian-susong-guize/text.txt"
+  },
+  "effective_from": "2021-08-01",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.court.gov.cn/zixun/xiangqing/309551.html",
+  "bytes": 35019
+}

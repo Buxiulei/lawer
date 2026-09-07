@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-bj3zy-daidaka-2026",
+  "kind": "官方案例",
+  "name": "同事代打卡？用人单位有权解除劳动合同！（北京三中院典型案件）",
+  "issuer": "北京市第三中级人民法院",
+  "official_host": "bj3zy.bjcourt.gov.cn",
+  "url": "https://bj3zy.bjcourt.gov.cn/article/detail/2026/07/id/9399749.shtml",
+  "fetched_at": "2026-09-07T02:13:50+08:00",
+  "content_sha256": "ea4bebb05b93fb4779f9add2ffbe539661f89863310a48d916d1f8da23e4e13e",
+  "version_label": "2026-06-30 发布",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-bj3zy-daidaka-2026/raw.html",
+    "text": "sources/originals/cases-bj3zy-daidaka-2026/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://bj3zy.bjcourt.gov.cn/article/detail/2026/07/id/9399749.shtml",
+  "bytes": 20510
+}

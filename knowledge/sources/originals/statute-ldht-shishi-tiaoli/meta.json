@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-ldht-shishi-tiaoli",
+  "kind": "行政法规",
+  "name": "中华人民共和国劳动合同法实施条例",
+  "issuer": "国务院",
+  "official_host": "www.gov.cn",
+  "url": "https://www.gov.cn/zhengce/zhengceku/2008-09/19/content_6630.htm",
+  "fetched_at": "2026-09-07T00:43:51+08:00",
+  "content_sha256": "d3f7166f9b50762fae53ac29be7a9c0792638f164656dea26814f156e56c54af",
+  "version_label": "国务院令第535号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-ldht-shishi-tiaoli/raw.html",
+    "text": "sources/originals/statute-ldht-shishi-tiaoli/text.txt"
+  },
+  "effective_from": "2008-09-18",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.gov.cn/zhengce/zhengceku/2008-09/19/content_6630.htm",
+  "bytes": 40818
+}

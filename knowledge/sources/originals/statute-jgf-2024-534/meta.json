@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-jgf-2024-534",
+  "kind": "规范性文件",
+  "name": "北京市高级人民法院、北京市劳动人事争议仲裁委员会关于审理劳动争议案件解答（一）",
+  "issuer": "北京市高级人民法院/北京市劳动人事争议仲裁委员会",
+  "official_host": "rsj.beijing.gov.cn",
+  "url": "https://rsj.beijing.gov.cn/xxgk/tzgg/202404/t20240430_3648905.html",
+  "fetched_at": "2026-09-07T00:46:51+08:00",
+  "content_sha256": "7af6ef56b1abe3bb194ec6bbbf4d8dc4359a23fb17bfb1fac119a6368a1c0abc",
+  "version_label": "京高法发〔2024〕534号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-jgf-2024-534/raw.html",
+    "text": "sources/originals/statute-jgf-2024-534/text.txt"
+  },
+  "effective_from": "2024-04-30",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://rsj.beijing.gov.cn/xxgk/tzgg/202404/t20240430_3648905.html",
+  "bytes": 233402
+}

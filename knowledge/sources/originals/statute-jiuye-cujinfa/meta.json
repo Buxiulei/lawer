@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-jiuye-cujinfa",
+  "kind": "法律",
+  "name": "中华人民共和国就业促进法",
+  "issuer": "全国人大常委会",
+  "official_host": "www.gov.cn",
+  "url": "https://www.gov.cn/guoqing/2021-10/29/content_5647636.htm",
+  "fetched_at": "2026-09-07T00:46:38+08:00",
+  "content_sha256": "9f9292f5c89be3472c2b96efa18555975895a7fe31986b72102b93b1b8a64600",
+  "version_label": "2015年4月24日修正",
+  "status": "已修正",
+  "files": {
+    "raw": "sources/originals/statute-jiuye-cujinfa/raw.html",
+    "text": "sources/originals/statute-jiuye-cujinfa/text.txt"
+  },
+  "effective_from": "2008-01-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.gov.cn/guoqing/2021-10/29/content_5647636.htm",
+  "bytes": 52496
+}

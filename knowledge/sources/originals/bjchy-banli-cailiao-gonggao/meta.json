@@ -1,0 +1,21 @@
+{
+  "source_id": "bjchy-banli-cailiao-gonggao",
+  "kind": "规范性文件",
+  "name": "北京市朝阳区劳动人事争议仲裁委员会《关于调整劳动人事争议仲裁立案、办理材料的公告》",
+  "issuer": "北京市朝阳区劳动人事争议仲裁委员会",
+  "official_host": "www.bjchy.gov.cn",
+  "url": "http://www.bjchy.gov.cn/affair/ldwq/tjzc/8a24fe9767393e2d01673f3dbdc70a21.html",
+  "fetched_at": "2026-09-07T01:22:12+08:00",
+  "content_sha256": "123afd20d42f1604bf0b21fbac3c2f36428a0ee4387400d1855686b7faccea8d",
+  "version_label": "",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/bjchy-banli-cailiao-gonggao/raw.html",
+    "text": "sources/originals/bjchy-banli-cailiao-gonggao/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "http://www.bjchy.gov.cn/affair/ldwq/tjzc/8a24fe9767393e2d01673f3dbdc70a21.html",
+  "bytes": 5379
+}

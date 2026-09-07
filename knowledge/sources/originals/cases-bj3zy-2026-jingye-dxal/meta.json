@@ -1,0 +1,22 @@
+{
+  "source_id": "cases-bj3zy-2026-jingye-dxal",
+  "kind": "官方案例",
+  "name": "北京市第三中级人民法院涉竞业限制劳动争议案件审理情况新闻发布会通稿（六起典型案例一句话要旨）",
+  "issuer": "北京市第三中级人民法院",
+  "official_host": "bj3zy.bjcourt.gov.cn",
+  "url": "https://bj3zy.bjcourt.gov.cn/article/detail/2026/05/id/9317393.shtml",
+  "fetched_at": "2026-09-07T08:21:51+08:00",
+  "content_sha256": "6a09d3fbecfe4538ad956c7b558f3cb4ad22234017d805fdf6203b9d02863f47",
+  "version_label": "2026年4月24日发布",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-bj3zy-2026-jingye-dxal/raw.html",
+    "text": "sources/originals/cases-bj3zy-2026-jingye-dxal/text.txt"
+  },
+  "effective_from": "2026-04-24",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://bj3zy.bjcourt.gov.cn/article/detail/2026/05/id/9317393.shtml",
+  "bytes": 31930
+}

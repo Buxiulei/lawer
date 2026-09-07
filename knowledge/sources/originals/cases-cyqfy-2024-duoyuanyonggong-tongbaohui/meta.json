@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-cyqfy-2024-duoyuanyonggong-tongbaohui",
+  "kind": "官方案例",
+  "name": "朝阳法院召开涉多元用工劳动争议案件审理情况及典型案例新闻通报会",
+  "issuer": "北京市朝阳区人民法院",
+  "official_host": "cyqfy.bjcourt.gov.cn",
+  "url": "http://cyqfy.bjcourt.gov.cn/article/detail/2024/08/id/8071059.shtml",
+  "fetched_at": "2026-09-07T08:35:01+08:00",
+  "content_sha256": "3ab5b00a0a1cf07c37666482e44eb22d88973f6bccd97dd1c27cd8ba6f03480b",
+  "version_label": "发布时间2024-07-25",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-cyqfy-2024-duoyuanyonggong-tongbaohui/raw.html",
+    "text": "sources/originals/cases-cyqfy-2024-duoyuanyonggong-tongbaohui/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "http://cyqfy.bjcourt.gov.cn/article/detail/2024/08/id/8071059.shtml",
+  "bytes": 18328
+}

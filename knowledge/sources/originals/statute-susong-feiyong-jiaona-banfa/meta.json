@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-susong-feiyong-jiaona-banfa",
+  "kind": "行政法规",
+  "name": "诉讼费用交纳办法",
+  "issuer": "国务院",
+  "official_host": "www.gov.cn",
+  "url": "https://www.gov.cn/zhengce/zhengceku/2008-03/28/content_6929.htm",
+  "fetched_at": "2026-09-07T00:44:35+08:00",
+  "content_sha256": "6566ee1b5713080497e2f93d035e91309fcd920f4736ade152b24b9e854b7e23",
+  "version_label": "国务院令第481号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-susong-feiyong-jiaona-banfa/raw.html",
+    "text": "sources/originals/statute-susong-feiyong-jiaona-banfa/text.txt"
+  },
+  "effective_from": "2007-04-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.gov.cn/zhengce/zhengceku/2008-03/28/content_6929.htm",
+  "bytes": 49476
+}

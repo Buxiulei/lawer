@@ -1,0 +1,23 @@
+{
+  "source_id": "statute-laobufa-1994-479",
+  "kind": "规范性文件",
+  "name": "企业职工患病或非因工负伤医疗期规定",
+  "issuer": "原劳动部",
+  "official_host": "www.mohrss.gov.cn",
+  "url": "https://www.mohrss.gov.cn/xxgk2020/gzk/gz/202112/t20211228_431556.html",
+  "fetched_at": "2026-09-07T09:15:54+08:00",
+  "content_sha256": "c268170221f581df4fc34a2b4ded935ec8d7f011559ec84071a9bc8d8f8dd3b2",
+  "version_label": "劳部发〔1994〕479号（1994年12月1日公布，自1995年1月1日起施行）",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-laobufa-1994-479/raw.html",
+    "text": "sources/originals/statute-laobufa-1994-479/text.txt"
+  },
+  "effective_from": "1995-01-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "eo_challenge": true,
+  "fetch_method": "https",
+  "fetch_url": "https://www.mohrss.gov.cn/xxgk2020/gzk/gz/202112/t20211228_431556.html",
+  "bytes": 16669
+}

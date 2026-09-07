@@ -1,0 +1,22 @@
+{
+  "source_id": "data-beijing-shepin-fengding",
+  "kind": "官方数据",
+  "name": "北京统计年鉴2024·表3-14 全市法人单位从业人员年末人数及工资情况(2023年)",
+  "issuer": "北京市统计局",
+  "official_host": "nj.tjj.beijing.gov.cn",
+  "url": "https://nj.tjj.beijing.gov.cn/nj/main/2024-tjnj/zk/e/html/C03-14.xls",
+  "fetched_at": "2026-09-07T00:45:17+08:00",
+  "content_sha256": "237c25bb127221e0bc266f4ddf09f22d12cd11a68a3633d776e7ce6c8bb576b4",
+  "version_label": "北京统计年鉴2024",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/data-beijing-shepin-fengding/raw.bin",
+    "text": "sources/originals/data-beijing-shepin-fengding/text.txt"
+  },
+  "effective_from": "2024-01-01",
+  "http_status": 200,
+  "content_type": "application/vnd.ms-excel",
+  "fetch_method": "https",
+  "fetch_url": "https://nj.tjj.beijing.gov.cn/nj/main/2024-tjnj/zk/e/html/C03-14.xls",
+  "bytes": 33792
+}

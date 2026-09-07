@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-rsj-beijing-2023-wangxiansheng",
+  "kind": "官方案例",
+  "name": "北京市人社局典型案例·王先生诉鸿图公司(化名)",
+  "issuer": "北京市人力资源和社会保障局",
+  "official_host": "rsj.beijing.gov.cn",
+  "url": "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202302/t20230227_2924693.html",
+  "fetched_at": "2026-09-07T08:17:24+08:00",
+  "content_sha256": "1b88f691c1d176a11bf0221d1e33067925aa07426e7df4bfac7c91b3c28fc652",
+  "version_label": "2023-02-27发布",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-rsj-beijing-2023-wangxiansheng/raw.html",
+    "text": "sources/originals/cases-rsj-beijing-2023-wangxiansheng/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202302/t20230227_2924693.html",
+  "bytes": 159405
+}

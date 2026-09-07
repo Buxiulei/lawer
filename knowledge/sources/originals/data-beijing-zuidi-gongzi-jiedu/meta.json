@@ -1,0 +1,21 @@
+{
+  "source_id": "data-beijing-zuidi-gongzi-jiedu",
+  "kind": "官方数据",
+  "name": "《关于调整北京市2025年最低工资标准的通知》政策解读",
+  "issuer": "北京市人力资源和社会保障局",
+  "official_host": "rsj.beijing.gov.cn",
+  "url": "https://rsj.beijing.gov.cn/xxgk/2024zcjd/202508/t20250801_4164868.html",
+  "fetched_at": "2026-09-07T08:33:56+08:00",
+  "content_sha256": "520bd00503b7a8d9138897b0fd3389beaf4d177c55e17b0f176a4e7fbe8cc749",
+  "version_label": "发布时间2025-08-01",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/data-beijing-zuidi-gongzi-jiedu/raw.html",
+    "text": "sources/originals/data-beijing-zuidi-gongzi-jiedu/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://rsj.beijing.gov.cn/xxgk/2024zcjd/202508/t20250801_4164868.html",
+  "bytes": 164599
+}

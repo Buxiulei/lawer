@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-laodong-baozhang-jiancha-tiaoli",
+  "kind": "行政法规",
+  "name": "劳动保障监察条例",
+  "issuer": "国务院",
+  "official_host": "www.gov.cn",
+  "url": "https://www.gov.cn/gongbao/content/2004/content_63042.htm",
+  "fetched_at": "2026-09-07T00:45:11+08:00",
+  "content_sha256": "ba46a3429180ba5631db8daec722e908933c004412eb74620c696d5bf3b319aa",
+  "version_label": "国务院令第423号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-laodong-baozhang-jiancha-tiaoli/raw.html",
+    "text": "sources/originals/statute-laodong-baozhang-jiancha-tiaoli/text.txt"
+  },
+  "effective_from": "2004-12-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.gov.cn/gongbao/content/2004/content_63042.htm",
+  "bytes": 50508
+}

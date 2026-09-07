@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-rsty-2025-40",
+  "kind": "规范性文件",
+  "name": "人力资源社会保障部办公厅关于发布《企业实施竞业限制合规指引》的通知",
+  "issuer": "人力资源和社会保障部办公厅",
+  "official_host": "www.gov.cn",
+  "url": "https://www.gov.cn/zhengce/zhengceku/202509/content_7040571.htm",
+  "fetched_at": "2026-09-07T00:45:57+08:00",
+  "content_sha256": "f82c1c571814613474ec3062d58f4348d5b89d67af69a6b9347a34902f0cac7c",
+  "version_label": "人社厅发〔2025〕40号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-rsty-2025-40/raw.html",
+    "text": "sources/originals/statute-rsty-2025-40/text.txt"
+  },
+  "effective_from": "2025-09-04",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.gov.cn/zhengce/zhengceku/202509/content_7040571.htm",
+  "bytes": 45031
+}

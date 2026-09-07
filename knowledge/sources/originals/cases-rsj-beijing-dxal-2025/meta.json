@@ -1,0 +1,22 @@
+{
+  "source_id": "cases-rsj-beijing-dxal-2025",
+  "kind": "官方案例",
+  "name": "2025年北京市劳动人事争议仲裁十大典型案例",
+  "issuer": "北京市人力资源和社会保障局",
+  "official_host": "rsj.beijing.gov.cn",
+  "url": "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html",
+  "fetched_at": "2026-09-07T00:46:52+08:00",
+  "content_sha256": "f84f34bb07233a04ae15de489935b4342ea43e68ce37719219cdd5c62f28ec2b",
+  "version_label": "2025年12月26日发布",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-rsj-beijing-dxal-2025/raw.html",
+    "text": "sources/originals/cases-rsj-beijing-dxal-2025/text.txt"
+  },
+  "effective_from": "2025-12-26",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html",
+  "bytes": 200634
+}

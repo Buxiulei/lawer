@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-jingrenshe-zhongfa-2022-5",
+  "kind": "规范性文件",
+  "name": "北京市人力资源和社会保障局关于调整我市劳动人事争议仲裁案件管辖的通知",
+  "issuer": "北京市人力资源和社会保障局",
+  "official_host": "www.beijing.gov.cn",
+  "url": "https://www.beijing.gov.cn/zhengce/zhengcefagui/202207/t20220714_2771636.html",
+  "fetched_at": "2026-09-07T00:45:27+08:00",
+  "content_sha256": "018ab19c619f54ee55d6b6bdf1552a405c8ff6071df217e69c48ed05af3c83be",
+  "version_label": "京人社仲发〔2022〕5号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-jingrenshe-zhongfa-2022-5/raw.html",
+    "text": "sources/originals/statute-jingrenshe-zhongfa-2022-5/text.txt"
+  },
+  "effective_from": "2022-05-01",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.beijing.gov.cn/zhengce/zhengcefagui/202207/t20220714_2771636.html",
+  "bytes": 28402
+}

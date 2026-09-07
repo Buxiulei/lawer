@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-lrszy-banan-guize",
+  "kind": "部门规章",
+  "name": "劳动人事争议仲裁办案规则",
+  "issuer": "人力资源和社会保障部",
+  "official_host": "www.gov.cn",
+  "url": "https://www.gov.cn/gongbao/content/2017/content_5232371.htm",
+  "fetched_at": "2026-09-07T00:45:57+08:00",
+  "content_sha256": "17b7dfe645206a596c2eef42274de8903d86200c84bde79ca190894d2ee258a0",
+  "version_label": "人力资源社会保障部令第33号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-lrszy-banan-guize/raw.html",
+    "text": "sources/originals/statute-lrszy-banan-guize/text.txt"
+  },
+  "effective_from": "2017-07-01",
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "https://www.gov.cn/gongbao/content/2017/content_5232371.htm",
+  "bytes": 77199
+}

@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-minsufa",
+  "kind": "法律",
+  "name": "中华人民共和国民事诉讼法",
+  "issuer": "全国人大常委会",
+  "official_host": "www.ssf.gov.cn",
+  "url": "https://www.ssf.gov.cn/portal/rootfiles/2023/11/14/1701622126444477-1701622126462201.pdf",
+  "fetched_at": "2026-09-07T00:51:19+08:00",
+  "content_sha256": "e2695d98633b562885be5cd19d291c0946a6943a93b03af338b645ab910321e8",
+  "version_label": "1991年4月9日第七届全国人大第四次会议通过；历经2007/2012/2017/2021年四次修正；根据2023年9月1日第十四届全国人大常委会第五次会议《关于修改〈中华人民共和国民事诉讼法〉的决定》第五次修正，该决定自2024年1月1日起施行",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-minsufa/raw.pdf",
+    "text": "sources/originals/statute-minsufa/text.txt"
+  },
+  "effective_from": "2024-01-01",
+  "http_status": 200,
+  "content_type": "application/pdf",
+  "fetch_method": "https+tlsv1.2+insecure",
+  "fetch_url": "https://www.ssf.gov.cn/portal/rootfiles/2023/11/14/1701622126444477-1701622126462201.pdf",
+  "bytes": 435705
+}

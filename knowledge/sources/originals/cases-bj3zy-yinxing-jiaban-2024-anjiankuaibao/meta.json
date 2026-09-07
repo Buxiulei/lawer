@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-bj3zy-yinxing-jiaban-2024-anjiankuaibao",
+  "kind": "官方案例",
+  "name": "下班回复微信，算加班吗？（案件快报，主审法官郑吉喆自述）",
+  "issuer": "北京市第三中级人民法院",
+  "official_host": "bj3zy.bjcourt.gov.cn",
+  "url": "https://bj3zy.bjcourt.gov.cn/article/detail/2024/07/id/8029438.shtml",
+  "fetched_at": "2026-09-07T08:40:29+08:00",
+  "content_sha256": "0a2e7c67f19bab8a754d2650fcb1428c08389b22f4e6bad8d7df7e35796a87fa",
+  "version_label": "2024-07-17发布",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-bj3zy-yinxing-jiaban-2024-anjiankuaibao/raw.html",
+    "text": "sources/originals/cases-bj3zy-yinxing-jiaban-2024-anjiankuaibao/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://bj3zy.bjcourt.gov.cn/article/detail/2024/07/id/8029438.shtml",
+  "bytes": 77668
+}

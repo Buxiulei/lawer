@@ -1,0 +1,21 @@
+{
+  "source_id": "statute-xiaofeizhe-quanyi-baohufa",
+  "kind": "法律",
+  "name": "中华人民共和国消费者权益保护法",
+  "issuer": "全国人大常委会",
+  "official_host": "www.npc.gov.cn",
+  "url": "http://www.npc.gov.cn/npc/c2/c12435/c12488/201905/t20190521_184603.html",
+  "fetched_at": "2026-09-07T00:46:26+08:00",
+  "content_sha256": "b23078234d06ffcdd22edbb23f32a24b2b8d53fa9b6d03a4b2697c8d5f515618",
+  "version_label": "1993年10月31日通过，2009年8月27日第一次修正，2013年10月25日第二次修正",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/statute-xiaofeizhe-quanyi-baohufa/raw.html",
+    "text": "sources/originals/statute-xiaofeizhe-quanyi-baohufa/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html",
+  "fetch_method": "https",
+  "fetch_url": "http://www.npc.gov.cn/npc/c2/c12435/c12488/201905/t20190521_184603.html",
+  "bytes": 37107
+}

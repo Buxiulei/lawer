@@ -1,0 +1,22 @@
+{
+  "source_id": "data-beijing-shiye-baoxianjin",
+  "kind": "官方数据",
+  "name": "关于调整失业保险金发放标准的通告",
+  "issuer": "北京市人力资源和社会保障局",
+  "official_host": "rsj.beijing.gov.cn",
+  "url": "https://rsj.beijing.gov.cn/xxgk/2024zcwj/202507/t20250729_4161229.html",
+  "fetched_at": "2026-09-07T00:45:46+08:00",
+  "content_sha256": "fb3395c4c8ce30a8c4bf83135883a4a988d924766753449959b48bbc4ef65984",
+  "version_label": "京人社发〔2025〕9号",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/data-beijing-shiye-baoxianjin/raw.html",
+    "text": "sources/originals/data-beijing-shiye-baoxianjin/text.txt"
+  },
+  "effective_from": "2025-09-01",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://rsj.beijing.gov.cn/xxgk/2024zcwj/202507/t20250729_4161229.html",
+  "bytes": 166255
+}

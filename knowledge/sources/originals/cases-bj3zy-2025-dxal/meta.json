@@ -1,0 +1,21 @@
+{
+  "source_id": "cases-bj3zy-2025-dxal",
+  "kind": "官方案例",
+  "name": "北京市第三中级人民法院2025年劳动争议典型案例发布页",
+  "issuer": "北京市第三中级人民法院",
+  "official_host": "www.court.gov.cn",
+  "url": "https://www.court.gov.cn/zixun/xiangqing/465001.html",
+  "fetched_at": "2026-09-07T00:45:55+08:00",
+  "content_sha256": "3848dc6d5e7f9d2bbed38ddf3eef034c648bdcb4d12f74cf216633ba58050bb1",
+  "version_label": "",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/cases-bj3zy-2025-dxal/raw.html",
+    "text": "sources/originals/cases-bj3zy-2025-dxal/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.court.gov.cn/zixun/xiangqing/465001.html",
+  "bytes": 13423
+}

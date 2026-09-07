@@ -1,0 +1,22 @@
+{
+  "source_id": "data-beijing-zhongcai-anliang",
+  "kind": "官方数据",
+  "name": "2024年度北京市人力资源和社会保障事业发展统计公报",
+  "issuer": "北京市人力资源和社会保障局",
+  "official_host": "rsj.beijing.gov.cn",
+  "url": "https://rsj.beijing.gov.cn/xxgk/zfxxgk/zdlygk/zdrwxxgk/202511/t20251128_4309608.html",
+  "fetched_at": "2026-09-07T00:46:07+08:00",
+  "content_sha256": "073f2f995f28a588029ff30661c4bf72975ae96767ab2581dfd6cf45c5dd639d",
+  "version_label": "2024年度公报",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/data-beijing-zhongcai-anliang/raw.html",
+    "text": "sources/originals/data-beijing-zhongcai-anliang/text.txt"
+  },
+  "effective_from": "2025-11-28",
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://rsj.beijing.gov.cn/xxgk/zfxxgk/zdlygk/zdrwxxgk/202511/t20251128_4309608.html",
+  "bytes": 160210
+}

@@ -1,0 +1,22 @@
+{
+  "source_id": "statute-beijing-gongzi-zhifu-guiding-doc",
+  "kind": "地方规章",
+  "name": "北京市工资支付规定",
+  "issuer": "北京市人民政府",
+  "official_host": "www.beijing.gov.cn",
+  "url": "https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf",
+  "fetched_at": "2026-09-07T01:21:29+08:00",
+  "content_sha256": "87f0a17618c5663551d911fdbf248e5c141d1a500d261afb9c91e08e5ec336e0",
+  "version_label": "2003年12月22日北京市人民政府第142号令公布，根据2007年11月23日北京市人民政府第200号令修改",
+  "status": "已修正",
+  "files": {
+    "raw": "sources/originals/statute-beijing-gongzi-zhifu-guiding-doc/raw.pdf",
+    "text": "sources/originals/statute-beijing-gongzi-zhifu-guiding-doc/text.txt"
+  },
+  "effective_from": "2003-12-22",
+  "http_status": 200,
+  "content_type": "application/pdf",
+  "fetch_method": "https",
+  "fetch_url": "https://www.beijing.gov.cn/gongkai/zfxxgk/zc/gz/202112/W020211224575744072611.pdf",
+  "bytes": 187426
+}

@@ -1,0 +1,21 @@
+{
+  "source_id": "data-beijing-12356-baodao",
+  "kind": "官方数据",
+  "name": "12356！“没事儿”热线如何解“心事”？",
+  "issuer": "首都之窗（北京市人民政府门户网站）",
+  "official_host": "www.beijing.gov.cn",
+  "url": "https://www.beijing.gov.cn/fuwu/bmfw/jhsyfwzdzx/2025gjjtr/xgxx/202505/t20250508_4084704.html",
+  "fetched_at": "2026-09-07T08:27:06+08:00",
+  "content_sha256": "647257edc6526793ffa461f20f417091a5cca166aaa9c18a7dd671a566938354",
+  "version_label": "发布时间2025-05-08",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/data-beijing-12356-baodao/raw.html",
+    "text": "sources/originals/data-beijing-12356-baodao/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://www.beijing.gov.cn/fuwu/bmfw/jhsyfwzdzx/2025gjjtr/xgxx/202505/t20250508_4084704.html",
+  "bytes": 38883
+}

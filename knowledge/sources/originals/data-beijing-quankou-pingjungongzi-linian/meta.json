@@ -1,0 +1,21 @@
+{
+  "source_id": "data-beijing-quankou-pingjungongzi-linian",
+  "kind": "官方数据",
+  "name": "历年北京市全口径城镇单位就业人员平均工资",
+  "issuer": "北京市人力资源和社会保障局",
+  "official_host": "rsj.beijing.gov.cn",
+  "url": "https://rsj.beijing.gov.cn/bm/ywml/202007/t20200717_1950961.html",
+  "fetched_at": "2026-09-07T01:44:19+08:00",
+  "content_sha256": "1c188d806510e2cb2ca279ecaf998f9d7db5b6c35f4f9da4ac8ca20625ba170c",
+  "version_label": "",
+  "status": "现行",
+  "files": {
+    "raw": "sources/originals/data-beijing-quankou-pingjungongzi-linian/raw.html",
+    "text": "sources/originals/data-beijing-quankou-pingjungongzi-linian/text.txt"
+  },
+  "http_status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "fetch_method": "https",
+  "fetch_url": "https://rsj.beijing.gov.cn/bm/ywml/202007/t20200717_1950961.html",
+  "bytes": 165007
+}
