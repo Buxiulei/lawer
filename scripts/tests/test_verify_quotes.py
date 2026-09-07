@@ -325,3 +325,90 @@ def test_statute_quote_header_stays_glued(verify, kb, capsys):
     )
     assert run(verify, kb) == 1
     assert "中华人民共和国劳动合同法第四十七条" in capsys.readouterr().out
+
+
+# ── 引号字形：这把尺子不折 ──────────────────────────────────────────────
+#: 原件里带一对**全角**引号的一句（.gov.cn 的正文与 PDF 抽出的文本都是这个写法）。
+QUOTE_ORIGINAL = (
+    "北京市高级人民法院关于审理劳动争议案件解答（一）\n\n"
+    "76．劳动者原岗位已被他人替代的，用人单位仅以此为由进行抗辩，"
+    "不宜认定为“劳动合同确实无法继续履行的”情形。\n"
+)
+
+
+@pytest.fixture
+def kb_quotes(tmp_path):
+    write_registry(
+        tmp_path,
+        [write_original(tmp_path, "jieda", QUOTE_ORIGINAL, name="北京市高级人民法院关于审理劳动争议案件解答（一）")],
+    )
+    return tmp_path
+
+
+def test_halfwidth_quote_against_fullwidth_original_is_a_mismatch(verify, kb_quotes, capsys):
+    """卡里把原件的 “…” 写成 "…" ⇒ **不一致**，并指出第几个字起分叉。
+
+    【为什么这条非有不可】(经理 2026-09-07 复审 major) 这把尺子此前会把引号族整体折成
+    半角双引号，于是这一类差异恒判「一致」——而 gen 的两面一致校验不折引号，
+    同一张卡在两把尺子下一绿一红，绿的那把正是我们对外说"逐字核过官方原件"时指的那把。
+    实测：现库 26 条引文（11 张卡）属于这一类，折引号时全绿。
+
+    **这不是吹毛求疵**：引号在法条里划的是定义的边界（「不宜认定为“劳动合同确实
+    无法继续履行的”情形」），边界写错了就是抄错了字，而"抄错了字"正是这把尺子唯一的用途。
+    """
+    write_card(
+        kb_quotes,
+        "packs/statutes/halfwidth.md",
+        card_id="statute-halfwidth",
+        quotes=[{
+            "law": "北京市高级人民法院关于审理劳动争议案件解答（一）",
+            "article": "第76问",
+            "text": '劳动者原岗位已被他人替代的，用人单位仅以此为由进行抗辩，不宜认定为"劳动合同确实无法继续履行的"情形。',
+        }],
+    )
+    assert run(verify, kb_quotes) == 1
+    printed = capsys.readouterr().out
+    assert "不一致 1" in printed
+    assert "第 34 字起分叉" in printed, printed  # 分叉处正是那个引号
+
+
+def test_fullwidth_quote_matching_the_original_passes(verify, kb_quotes, capsys):
+    """正对照：同一句、引号写法与原件一致（只差空白与 markdown 记号）⇒ **一致**。
+
+    【为什么必须连着上一条一起测】只测"半角判红"的话，把归一整个删掉也全绿——
+    而那会让全库每一条引文都判红（卡里条文是 `> **…**　` 的加粗引用块，原件是纯文本）。
+    这一条钉的正是"空白/换行/markdown 记号仍然归一"这半边。
+    """
+    write_card(
+        kb_quotes,
+        "packs/statutes/fullwidth.md",
+        card_id="statute-fullwidth",
+        quotes=[{
+            "law": "北京市高级人民法院关于审理劳动争议案件解答（一）",
+            "article": "第76问",
+            "text": "**劳动者原岗位已被他人替代的**，用人单位仅以此为由进行抗辩，\n"
+                    "不宜认定为“劳动合同确实无法继续履行的”情形。",
+        }],
+    )
+    assert run(verify, kb_quotes) == 0
+    assert "一致 1" in capsys.readouterr().out
+
+
+def test_fullwidth_and_halfwidth_are_not_equal_under_the_ruler():
+    """尺子本身：全角 “ ” ‘ ’ 与半角 " ' 归一后必须仍然不同，空白仍然归一。
+
+    上面两条走的是 CLI，这一条直接钉函数——CLI 那两条同时绿也可能是别的原因
+    （夹具没写对、原件没找到）造成的巧合。
+    """
+    import sys
+    sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.parent))
+    import knowledge_sources as ks
+
+    assert ks.normalize_quote("“甲”") != ks.normalize_quote('"甲"')
+    assert ks.normalize_quote("‘甲’") != ks.normalize_quote("'甲'")
+    assert ks.normalize_quote("＂甲＂") != ks.normalize_quote('"甲"'), "NFKC 顺手做的宽度折叠也要挡住"
+    assert ks.normalize_quote("第 三\n条\u3000甲") == ks.normalize_quote("第三条甲")
+    assert ks.normalize_quote("> **第三条**　甲") == ks.normalize_quote("第三条甲")
+    # 千分位逗号**不在**这把尺子里：那一层只属于数值那一面（gen 的 normalize），
+    # 引文这一面把 1,000 与 1000 判成同一个，就等于在"逐字"里放进了一档"顺手抹平"。
+    assert ks.normalize_quote("赔偿1,000元") != ks.normalize_quote("赔偿1000元")

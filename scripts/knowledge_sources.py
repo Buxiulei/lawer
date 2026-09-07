@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from datetime import date
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -69,31 +70,40 @@ REGISTRY_NAME = "sources.json"
 ORIGINALS_DIR = "sources/originals"
 
 # ── 归一 ────────────────────────────────────────────────────────────────
-#: 引号族一律折成半角双引号：原件（PDF 抽出的直角引号、HTML 里的弯引号）与卡片
-#: （编辑器自动配对的弯引号）在这一位上恒不一致，而它不是实质差异。
-_QUOTE_FOLD = str.maketrans({c: '"' for c in "“”‘’「」『』〝〞＂"})
+#: 引号族。**这些字符一个都不折**，只是要挡住 NFKC 顺手做的宽度折叠
+#: （NFKC 会把 ＂→" 、＇→' 、｢→「），归一前换成私用区哨兵、归一后换回来。
+#: 【为什么不折】（经理 2026-09-07 复审裁定）"逐字"这把尺子只允许空白归一。
+#: 折了引号字形之后，一张卡把原件的 “……” 写成 "……"，这把尺子照样报「一致」——
+#: 而 gen 的两面一致校验不折，于是同一张卡在两把尺子下一绿一红，
+#: 且绿的那把正是我们对外说"引文逐字核过官方原件"时指的那把。
+#: 实测：现库 26 条引文属于这一类（11 张卡），折引号时全绿。
+_QUOTE_CHARS = "\"'“”‘’「」『』〝〞＂＇｢｣"
+_SHIELD = str.maketrans({c: chr(0xE000 + i) for i, c in enumerate(_QUOTE_CHARS)})
+_UNSHIELD = str.maketrans({chr(0xE000 + i): c for i, c in enumerate(_QUOTE_CHARS)})
 #: 归一后要整体删掉的字符：空白（含 NFKC 后仍在的）、markdown 强调/引用符。
 _DROP = re.compile(r"[\s*_>`]")
 
 
 def normalize_quote(text: str) -> str:
-    """把「同一段条文的两种写法」折成同一个串，供子串判定。
+    """把「同一段条文的两种排版」折成同一个串，供子串判定。**引号字形不算排版。**
 
-    做四件事，缺一不可（每一条都是真实差异，不是防御性编程）：
-    1. NFKC：全角括号/逗号/冒号/数字/字母 → 半角（PDF 抽出的常是全角，HTML 常是半角）；
-       全角空格 U+3000 也在这一步变成普通空格。
-    2. 引号族折成 `"`（见 _QUOTE_FOLD）。
-    3. 删掉全部空白与 markdown 的 `*` `_` `>` `` ` ``：卡片正文里条文是加粗引用块，
-       原件里是纯文本，差的全是这些。
-    4. 不动 `。`『、』『；』这些中文标点——它们在两边都一样，折掉反而会让
-       "第三款" 与 "第三项" 之外的真实差异更难看见。
+    做三件事：
+    1. 引号族先换成哨兵，避开下一步 NFKC 的宽度折叠（见 _QUOTE_CHARS）；
+    2. NFKC：全角括号/逗号/冒号/数字/字母 → 半角（PDF 抽出的常是全角，HTML 常是半角）；
+       全角空格 U+3000 也在这一步变成普通空格。换回引号。
+    3. 删掉全部空白与 markdown 的 `*` `_` `>` `` ` ``：卡片正文里条文是加粗引用块
+       （`> **第三条**　…`），facts 里那份也带着同样的加粗记号，原件里是纯文本，
+       差的全是这些。**这一条是有牙的**：去掉它，现库 100 余条引文当场锚不上原件。
 
-    **不复用 gen-knowledge-index.py 里的 normalize()**：那一个管的是"卡片正文 ↔ 本卡
-    facts 两面一致"，两面同出一人之手，弱归一就够；这一个管的是"卡片 ↔ 官方原件"，
-    跨了排版体系。两把尺量的不是同一件事，共用会让其中一把变松。
+    不动 `。`『、』『；』这些中文标点——它们在两边都一样，折掉反而会让真实差异更难看见。
+
+    **gen-knowledge-index.py 用的是同一个函数**（经理 2026-09-07 裁定）：
+    "卡片正文 ↔ 本卡 facts" 与 "卡片 ↔ 官方原件" 判的都是"这段字一不一样"，
+    两处各写一把尺的形态是同一张卡在两把尺下一绿一红，而对外只报绿的那把。
     """
-    s = unicodedata.normalize("NFKC", str(text))
-    s = s.translate(_QUOTE_FOLD)
+    s = str(text).translate(_SHIELD)
+    s = unicodedata.normalize("NFKC", s)
+    s = s.translate(_UNSHIELD)
     return _DROP.sub("", s)
 
 
@@ -127,6 +137,78 @@ def divergence(original: str, quote: str, window: int = 60) -> tuple[int, str, s
         return n, original[:window], quote[:window]
     pos = original.find(quote[:n])
     return n, original[max(0, pos + n - 10) : pos + n + window], quote[max(0, n - 10) : n + window]
+
+
+# ── 扎根守卫的显式豁免 ──────────────────────────────────────────────────
+#: 豁免标记文件名。放在 `knowledge/packs/<某个包>/` 下，该目录（含子目录）里的卡
+#: **暂不受扎根守卫 (b)–(h) 约束**，只做结构校验。
+#:
+#: 【为什么要有这个东西，而不是把守卫调宽】一个新领域的包与守卫同时进库时，
+#: 只有两种诚实的做法：把它整包挡在库外，或者写下"这一包欠着账、欠到哪天"。
+#: 第三种做法——把守卫本身放宽到它能过——会把**全库**的标准降到最新那一包的水平，
+#: 而没有任何一处会说这件事发生过。
+#:
+#: 【为什么是文件而不是脚本里的一份名单】名单写在脚本里，删起来要改代码、要过 review，
+#: 于是它会留着；一个文件删掉就是删掉。而且"这个目录豁免"这件事，
+#: 应该在那个目录里就能看见，不必去读生成器。
+GROUNDING_PENDING = "GROUNDING_PENDING"
+#: 豁免文件里必须写明的到期日那一行（`最迟: 2026-09-14`）。
+_PENDING_UNTIL = re.compile(r"^\s*(?:最迟|until)\s*[:：]\s*(\d{4}-\d{2}-\d{2})\s*$", re.M)
+
+
+def load_pending(knowledge_dir: Path) -> dict[str, dict[str, Any]]:
+    """扫出所有豁免目录。返回 {相对 knowledge/ 的目录: {"until": date, "file": Path, "text": str}}。
+
+    没写到期日、或日期不合法，一律抛错：一份**没有到期日的豁免**与"这批卡不受任何标准约束"
+    是同一件事，而它长得像一句临时说明。
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for f in sorted(knowledge_dir.glob("packs/**/" + GROUNDING_PENDING)):
+        text = f.read_text(encoding="utf-8")
+        m = _PENDING_UNTIL.search(text)
+        if not m:
+            raise ValueError(
+                f"{f} 没写到期日：文件里必须有一行「最迟: YYYY-MM-DD」。"
+                f"一份没有到期日的豁免等于把这批卡永久移出扎根守卫，而它看起来只是一句说明。"
+            )
+        try:
+            until = date.fromisoformat(m.group(1))
+        except ValueError as e:
+            raise ValueError(f"{f} 的到期日不是合法日期：{m.group(1)}（{e}）") from e
+        out[str(f.parent.relative_to(knowledge_dir))] = {"until": until, "file": f, "text": text}
+    return out
+
+
+def pending_for(card_path: str, pending: dict[str, dict[str, Any]]) -> str | None:
+    """这张卡（相对 knowledge/ 的 path）落在哪个豁免目录下；不在任何一个下面返回 None。
+
+    认的是**目录段**，不是字符串前缀：`packs/counseling-x/` 不该被 `packs/counseling` 的
+    豁免罩住。
+    """
+    parts = re.split(r"[\\/]", str(card_path))
+    for d in pending:
+        dparts = re.split(r"[\\/]", d)
+        if parts[: len(dparts)] == dparts:
+            return d
+    return None
+
+
+def expired_pending(
+    pending: dict[str, dict[str, Any]], today: date | None = None
+) -> list[str]:
+    """已经过期的豁免目录，逐条给出可以照着做的一句话。
+
+    【为什么到期就失效，而不是只写在文件里】一个没人会去看的到期日与没有到期日一样：
+    "还没到期"与"根本没人管这件事"在外部长得一模一样。到期即恢复全部守卫，
+    于是这件事一定会有人看见——CI 当天变红，红里印着这个文件的路径。
+    """
+    today = today or date.today()
+    return [
+        f"  · {d}/{GROUNDING_PENDING} 已于 {info['until']} 到期（今天 {today}）："
+        f"到期即恢复全部扎根守卫。要么把这批卡核实完并删掉该文件，要么改到期日并写明为什么再欠一段。"
+        for d, info in sorted(pending.items())
+        if info["until"] < today
+    ]
 
 
 # ── 登记簿 ──────────────────────────────────────────────────────────────
@@ -384,15 +466,25 @@ def format_rows(rows: list[dict[str, Any]]) -> str:
         head = (" · " if r.get("field") == CASE_QUOTE else "").join(
             x for x in (r["law"], r["article"]) if x
         )
-        out.append(f"[{r['state']}]（{tag}）{r['card_id']} · {head}（{r['path']}）")
+        # 豁免行照常印，但行首就说清它不计入退出码——只印状态的话，
+        # 「找不到原件 7」配一个 0 退出码，读的人只会以为这把尺子坏了。
+        mark = f"[{r['state']}]" + (f"（豁免·{r['pending']}，不计入退出码）" if r.get("pending") else "")
+        out.append(f"{mark}（{tag}）{r['card_id']} · {head}（{r['path']}）")
         out.append(f"    {r.get('detail', '')}")
         if r["state"] == _MISMATCH and "card_excerpt" in r:
             out.append(f"    卡内：{r['card_excerpt']}")
             out.append(f"    原件：{r['original_excerpt']}")
     ok = len(rows) - len(bad)
+    exempt = [r for r in bad if r.get("pending")]
     out.append(
         f"合计 {len(rows)} 条引文：一致 {ok}，"
         f"不一致 {sum(1 for r in bad if r['state'] == _MISMATCH)}，"
         f"找不到原件 {sum(1 for r in bad if r['state'] == _MISSING)}"
+        + (
+            f"；其中 {len(exempt)} 条在豁免目录里（不计入退出码，"
+            f"到期后自动重新算数）"
+            if exempt
+            else ""
+        )
     )
     return "\n".join(out)

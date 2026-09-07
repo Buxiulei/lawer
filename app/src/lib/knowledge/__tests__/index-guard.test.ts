@@ -15,6 +15,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
 
 import { __resetForTest, listPacks, get } from '../index';
+import { GROUNDING_PENDING, loadPending, pendingFor } from './grounding-pending';
 
 const REAL_DIR = path.resolve(__dirname, '../../../../../knowledge');
 /**
@@ -555,7 +556,14 @@ describe('🔴 索引里的 sources 全是官方 host（wikisource / sohu / 公�
   }
   const NO_EXTERNAL_CLAIM = '无外部断言';
   const INSTITUTION_ONLY_CARD_TYPE = '数据卡';
-  const rows: Row[] = JSON.parse(fs.readFileSync(path.join(REAL_DIR, 'index.json'), 'utf8'));
+  const allRows: Row[] = JSON.parse(fs.readFileSync(path.join(REAL_DIR, 'index.json'), 'utf8'));
+  // 【豁免】带 knowledge/packs/<包>/GROUNDING_PENDING 的目录整包欠着账（有到期日，到期即失效）。
+  // 这几条判据与 python 侧的扎根守卫 (b)(e) 是同一条纪律的两侧，认同一个豁免文件；
+  // 只在一侧认的形态是 CI 里 python 全绿、vitest 全红，而两边说的其实是同一件事。
+  // 豁免的**不是**"这批卡进不进索引"——它们照常在 allRows 里、照常被检索到。
+  const pending = loadPending(REAL_DIR);
+  const rows = allRows.filter((r) => pendingFor(r.path, pending) === null);
+  const exempt = allRows.filter((r) => pendingFor(r.path, pending) !== null);
   const registry: Array<{ kind?: string; official_host?: string }> = JSON.parse(
     fs.readFileSync(path.join(REAL_DIR, 'sources.json'), 'utf8'),
   );
@@ -575,8 +583,23 @@ describe('🔴 索引里的 sources 全是官方 host（wikisource / sohu / 公�
   };
 
   test('夹具有效：索引非空，且确实有卡带着 http(s) 出处（否则下面那条是空跑）', () => {
-    expect(rows.length).toBe(REAL_COUNT);
+    expect(allRows.length).toBe(REAL_COUNT);
+    expect(rows.length, '豁免把整个索引都罩住了 ⇒ 下面每一条都在空跑').toBeGreaterThan(100);
     expect(rows.some((r) => r.sources.some((s) => hostOf(s) !== null))).toBe(true);
+  });
+
+  test(`豁免目录只有台账上那一处，且没过期（${GROUNDING_PENDING}）`, () => {
+    // 【为什么要钉这一条】上面那两条判据一律跳过豁免目录。不钉的话，
+    // 下一个包只要抄一份 GROUNDING_PENDING 进来就同样免检，而这里一条都不会红。
+    // python 侧 test_real_library_pending_is_exactly_the_counseling_pack 钉的是同一件事。
+    expect(pending.map((p) => p.dir)).toEqual(['packs/counseling']);
+    expect(pending[0].until).toBe('2026-09-14');
+    expect(
+      pending[0].expired,
+      `${pending[0].dir}/${GROUNDING_PENDING} 已于 ${pending[0].until} 到期：` +
+        '到期即恢复全部扎根守卫。要么把这批卡核实完并删掉该文件，要么改到期日并写明为什么再欠一段。',
+    ).toBe(false);
+    expect(exempt.length, '豁免目录里一张卡都没有 ⇒ 这个文件已经没有存在理由了').toBeGreaterThan(0);
   });
 
   test('每一条 http(s) 出处的 host 都是 .gov.cn 或登记在册的行业规范发布机构官网', () => {

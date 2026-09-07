@@ -11,10 +11,14 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 
 import pytest
 
-from conftest import REAL_KNOWLEDGE, write_card, write_original, write_registry
+from conftest import SCRIPTS, REAL_KNOWLEDGE, write_card, write_original, write_registry
+
+sys.path.insert(0, str(SCRIPTS))
+import knowledge_sources as ks  # noqa: E402
 
 ORIGINAL = "第四十七条　经济补偿按劳动者在本单位工作的年限，每满一年支付一个月工资的标准向劳动者支付。\n"
 GOOD_SOURCE = "https://flk.npc.gov.cn/detail2.html?id=lhtf"
@@ -336,8 +340,19 @@ def test_real_library_generates_with_no_strict_and_has_no_unverified_confidence(
     code, data = run(gen, root, "--no-strict")
     assert code == 0
     assert len(data) > 100, "夹具没拷对？现库不该只有这么几张卡"
-    bad = [e["id"] for e in data if e["confidence"] not in ("原文核实", "无外部断言")]
-    assert bad == [], f"索引里还有既非原文核实也非无外部断言的卡：{bad}"
+    # 【为什么按豁免目录分开数】带 GROUNDING_PENDING 的包整包欠着账（有到期日），
+    # 它的卡照常进索引、confidence 照常是最低档。把它们并进来数，这条会红成"回归"；
+    # 把它们无差别排除掉，一张落在 labor 里的「待核实」卡就再没人拦。
+    # 所以分两句：豁免外一张都不许有，豁免内的必须**真的**落在豁免目录下。
+    pending = ks.load_pending(root)
+    bad = [
+        e["id"]
+        for e in data
+        if e["confidence"] not in ("原文核实", "无外部断言")
+        and not ks.pending_for(e["path"], pending)
+    ]
+    assert bad == [], f"豁免目录之外还有既非原文核实也非无外部断言的卡：{bad}"
+    assert pending, "现库的豁免目录一个都没读到 ⇒ 上面那句 `not pending_for(...)` 恒真，本条在空跑"
 
 
 def test_real_library_goes_red_when_one_card_regresses(gen, tmp_path):
@@ -612,3 +627,148 @@ def test_packs_never_name_a_reprint_site(needle):
         if needle in line
     ]
     assert hits == [], f"packs/ 里还留着「{needle}」：\n" + "\n".join(hits)
+
+
+# ── 显式豁免 GROUNDING_PENDING ──────────────────────────────────────────
+#
+# 【这几条守的是什么】豁免是一个"合法地不合规"的口子，它最容易长歪的三种形态：
+#   · 罩得太宽——一个文件让全库都不检；
+#   · 撕不掉——删了文件还照样豁免（那它就不是豁免，是永久放行）；
+#   · 到期不失效——到期日变成一句没人看的说明，而"还没到期"与"根本没人管"在外部同形。
+# 下面四条各钉一个，外加一条正对照（不带这个文件的目录必须照常判红）。
+BAD_QUOTE = {"law": "中华人民共和国劳动合同法", "article": "第四十七条",
+             "text": "本句完全不在这份原件里出现过，而且它自称原文核实。"}
+
+
+def _pending_file(root, rel_dir, until="2099-01-01"):
+    d = root / rel_dir
+    d.mkdir(parents=True, exist_ok=True)
+    (d / ks.GROUNDING_PENDING).write_text(
+        f"# 测试用豁免\n\n最迟: {until}\n\n欠账：判据夹具。\n", encoding="utf-8"
+    )
+
+
+def test_card_in_a_pending_dir_is_exempt_from_grounding_guards(gen, kb, capsys):
+    """带 GROUNDING_PENDING 的目录：一张 (c) 必红的卡也放行，且 stderr 说清楚欠了几张、欠到哪天。"""
+    write_card(kb, "packs/pending/bad.md", card_id="statute-pending-bad", quotes=[BAD_QUOTE])
+    _pending_file(kb, "packs/pending")
+    code, data = run(gen, kb)
+    assert code == 0, f"豁免目录里的卡不该拦住生成：{code}"
+    assert [e["id"] for e in data] == ["statute-pending-bad"], "豁免的是守卫，不是入索引"
+    err = capsys.readouterr().err
+    assert "packs/pending" in err and "1 张" in err and "2099-01-01" in err
+
+
+def test_the_same_card_outside_the_pending_dir_still_goes_red(gen, kb):
+    """正对照：同一张卡放在**没有**豁免文件的目录里 ⇒ 照常判红并点名。
+
+    没有这一条，把守卫整个删掉上面那条也绿——"豁免生效"与"守卫不存在"输出一模一样。
+    """
+    write_card(kb, "packs/elsewhere/bad.md", card_id="statute-elsewhere-bad", quotes=[BAD_QUOTE])
+    _pending_file(kb, "packs/pending")   # 豁免文件在另一个目录里，罩不到这张
+    code, _ = run(gen, kb)
+    assert code != 0 and "statute-elsewhere-bad" in str(code)
+
+
+def test_deleting_the_pending_file_restores_the_guards(gen, kb):
+    """删掉那个文件即恢复守卫——豁免必须是撕得掉的。
+
+    【为什么单测"删掉"这一步】豁免若靠脚本里一份名单实现，删起来要改代码、要过 review，
+    于是它会留着。这条钉的是"这个口子的开关就是这个文件本身"。
+    """
+    write_card(kb, "packs/pending/bad.md", card_id="statute-pending-bad", quotes=[BAD_QUOTE])
+    _pending_file(kb, "packs/pending")
+    assert run(gen, kb)[0] == 0
+    (kb / "packs/pending" / ks.GROUNDING_PENDING).unlink()
+    code, _ = run(gen, kb)
+    assert code != 0 and "statute-pending-bad" in str(code)
+
+
+def test_expired_pending_stops_exempting_and_names_the_file(gen, kb):
+    """到期即失效，且报错里印着那个文件与到期日。
+
+    到期日若不被任何东西读，它与没有到期日是同一件事。
+    """
+    write_card(kb, "packs/pending/bad.md", card_id="statute-pending-bad", quotes=[BAD_QUOTE])
+    _pending_file(kb, "packs/pending", until="2020-01-01")
+    code, _ = run(gen, kb)
+    assert code != 0
+    assert "豁免已过期" in str(code) and "2020-01-01" in str(code)
+    assert ks.GROUNDING_PENDING in str(code), "报错没说是哪个文件过期了"
+
+
+def test_pending_file_without_a_deadline_is_rejected(gen, kb):
+    """没写到期日的豁免文件一律抛错——一份不会到期的豁免等于永久放行。"""
+    write_card(kb, "packs/pending/ok.md", card_id="statute-pending-ok",
+               quotes=[{"law": "中华人民共和国劳动合同法", "article": "第四十七条",
+                        "text": "经济补偿按劳动者在本单位工作的年限"}])
+    d = kb / "packs/pending"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / ks.GROUNDING_PENDING).write_text("先欠着，回头补。\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="没写到期日"):
+        run(gen, kb)
+
+
+def test_real_library_pending_is_exactly_the_counseling_pack(gen):
+    """现库的豁免**只有** counseling 一处，且到期日就是台账上写的那天。
+
+    【为什么钉死这两件事】豁免是唯一一个"合法地不合规"的口子。不钉的话，
+    下一个包只要抄一份这个文件进来就同样免检，而全库判据一条都不会红。
+    """
+    pending = ks.load_pending(REAL_KNOWLEDGE)
+    assert sorted(pending) == ["packs/counseling"], f"现库多出了豁免目录：{sorted(pending)}"
+    assert str(pending["packs/counseling"]["until"]) == "2026-09-14"
+    text = pending["packs/counseling"]["text"]
+    assert "TODO核实清单" in text, "豁免文件里没有指向逐项欠账清单的线索"
+
+
+# ── 两把尺子必须是同一把 ────────────────────────────────────────────────
+def test_gen_and_verify_share_one_verbatim_ruler(gen, verify):
+    """gen 的引文归一与 verify-quotes 的**是同一个函数对象**（经理 2026-09-07 裁定）。
+
+    "卡片正文 ↔ 本卡 facts" 与 "卡片 ↔ 官方原件" 判的都是"这段字一不一样"。
+    两处各写一把尺的形态是同一张卡在两把尺下一绿一红——而对外只报绿的那把。
+    """
+    assert gen.ks.normalize_quote is verify.ks.normalize_quote
+
+
+def test_quote_ruler_does_not_drop_thousands_separators(gen, kb):
+    """引文那把尺**不**吃千分位逗号：facts 写 1,000、正文写 1000 ⇒ 两面不一致，拒绝生成。
+
+    【为什么这条是上一条的必要配套】上一条只比函数对象是不是同一个，
+    把引文校验换回 `normalize()`（= 逐字尺 + 去千分位）照样绿——两者只在这一位上不同。
+    这条钉的就是那一位：数值那一面可以把 2,032 与 2032 当同一个数，引文那一面不行，
+    "逐字"里没有"顺手把标点抹平"这一档。
+    """
+    card = write_card(
+        kb, "packs/statutes/thousands.md", card_id="statute-thousands",
+        quotes=[{"law": "中华人民共和国劳动合同法", "article": "第四十七条", "text": "赔偿 1,000 元"}],
+        body="正文占位。",
+    )
+    # write_card 把 quote 原样抄进正文；这里只把正文那一份的逗号去掉，facts 不动
+    card.write_text(card.read_text(encoding="utf-8").replace("> 赔偿 1,000 元", "> 赔偿 1000 元"), encoding="utf-8")
+    code, _ = run(gen, kb)
+    assert code != 0 and "与正文不逐字一致" in str(code), code
+
+
+def test_numeric_facts_still_tolerate_thousands_separators(gen, kb):
+    """反向对照：`facts.values` 写 1000、正文写「1,000 元」⇒ 照常通过。
+
+    没有这一条，把千分位那一层一并删掉上一条也绿，而那会让全库
+    每一张写着「2,540 元/月」的计算卡当场判两面不一致。
+    """
+    card = kb / "packs/data/num.md"
+    card.parent.mkdir(parents=True, exist_ok=True)
+    card.write_text(
+        "---\n"
+        "id: data-num\ntype: 数据卡\ntitle: 测试数值卡\nkeywords: [\"测试\"]\napplies_to: [\"欠薪\"]\n"
+        "region: 全国\nsources: [\"https://flk.npc.gov.cn/detail2.html?id=lhtf\"]\n"
+        "confidence: 原文核实\nupdated: '2026-09-07'\n"
+        "facts:\n  values:\n    - key: test_thousand\n      value: 1000\n      unit: 元\n"
+        "      effective_from: '2026-01-01'\n      confidence: 原文核实\n      source_idx: 0\n"
+        "---\n\n本卡口径：1,000 元。\n",
+        encoding="utf-8",
+    )
+    code, data = run(gen, kb)
+    assert code == 0, code
+    assert [e["id"] for e in data] == ["data-num"]

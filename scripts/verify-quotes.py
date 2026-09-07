@@ -17,7 +17,9 @@
               **这一态必须与"一致"分开**：把它算作通过，等于"没核过"和"核过了"
               在退出码上长得一模一样——而知识库最危险的失效形态正是这种。
 
-归一口径见 knowledge_sources.normalize_quote（NFKC + 引号折叠 + 去空白与 markdown 记号）。
+归一口径见 knowledge_sources.normalize_quote（NFKC + 去空白与 markdown 记号；
+**引号字形一律不折**——全角 “ ” 与半角 " 在这把尺子下不是同一个字）。
+生成器 gen-knowledge-index.py 用的是同一个函数，不另立一把尺。
 
 **两种引文共用同一把尺**（`facts.statute_quotes` 法条逐字条文、`facts.case_quotes`
 判例卡从官方页摘的原文）："这段字是不是逐字出自那份原件"是同一件事。唯一的区别是
@@ -90,15 +92,35 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     rows = ks.verify_cards(root, [(cid, rel, q) for cid, rel, q, _ in cards], ks.STATUTE_QUOTE)
     rows += ks.verify_cards(root, [(cid, rel, q) for cid, rel, _, q in cards], ks.CASE_QUOTE)
-    mismatch = [r for r in rows if r["state"] == "不一致"]
-    missing = [r for r in rows if r["state"] == "找不到原件"]
+
+    # 【显式豁免】带 GROUNDING_PENDING 的目录：**照常核、照常印**，只是不参与成败判定。
+    # 不是"跳过不核"——跳过的话，那一包欠了多少账在报告里与"它全绿"长得一模一样。
+    # 到期即失效（ks.expired_pending），那天起这批行重新算数。
+    pending = ks.load_pending(root)
+    expired = ks.expired_pending(pending)
+    if expired:
+        print("\n".join(["错误：扎根守卫的豁免已过期，本轮不再豁免。"] + expired), file=sys.stderr)
+    for r in rows:
+        r["pending"] = None if expired else ks.pending_for(r["path"], pending)
+    counted = [r for r in rows if not r["pending"]]
+    if pending and not expired:
+        n = len(rows) - len(counted)
+        print(
+            f"警告：其中 {n} 条来自带 {ks.GROUNDING_PENDING} 的目录"
+            f"（{ '、'.join(f'{d}，最迟 {i["until"]}' for d, i in sorted(pending.items())) }），"
+            f"照常核、照常印，但不计入退出码。",
+            file=sys.stderr,
+        )
+    mismatch = [r for r in counted if r["state"] == "不一致"]
+    missing = [r for r in counted if r["state"] == "找不到原件"]
 
     if args.json:
         print(
             json.dumps(
                 {
                     "total": len(rows),
-                    "ok": len(rows) - len(mismatch) - len(missing),
+                    "counted": len(counted),
+                    "ok": len([r for r in rows if r["state"] == "一致"]),
                     "mismatch": len(mismatch),
                     "missing": len(missing),
                     "allow_missing": args.allow_missing,

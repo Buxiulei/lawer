@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Identity } from '@/lib/auth/identity';
 import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
 import { __resetForTest } from '@/lib/knowledge';
+import { loadPending, pendingFor } from '@/lib/knowledge/__tests__/grounding-pending';
 
 import { citationCheck } from '../families/knowledge';
 
@@ -68,6 +69,8 @@ interface IndexEntry {
   confidence: string;
   /** 领域键；只有声明了的卡才有，其余按缺省域算（lib/knowledge 的 packDomain 同口径） */
   domain?: string;
+  /** 相对 knowledge/ 的卡片路径——判"这张卡在不在豁免目录下"要用它 */
+  path: string;
   facts?: {
     statute_quotes?: Array<{ law: string; article: string; text: string }>;
     case_facts?: { case_no?: string; court?: string; holding?: string; reasoning?: string };
@@ -249,8 +252,18 @@ describe('citation_check · 判例四步法', () => {
       confidence: string;
     }[];
     expect(mutated.find((e) => e.id === HEARSAY_ID)!.confidence).toBe('二手转述');
-    // 而真实库里一张都没有——这正是这张卡必须造出来的原因
-    expect(INDEX.filter((e) => e.confidence === '二手转述' || e.confidence === '待核实')).toEqual([]);
+    // 而真实库里挑不出一张现成的——这正是这张卡必须造出来的原因。
+    // 【为什么按豁免目录分开数】带 GROUNDING_PENDING 的包整包欠着账（有到期日），
+    // 它的卡照常进索引、confidence 照常是最低档；把它们并进来数，这条会红成"回归"。
+    // 分两句说：`二手转述` 全库一张不许有；`待核实` 只许出现在豁免目录里。
+    const pending = loadPending(KNOWLEDGE_DIR);
+    expect(INDEX.filter((e) => e.confidence === '二手转述').map((e) => e.id)).toEqual([]);
+    expect(
+      INDEX.filter((e) => e.confidence === '待核实' && pendingFor(e.path, pending) === null).map(
+        (e) => e.id,
+      ),
+      '豁免目录之外冒出了「待核实」的卡',
+    ).toEqual([]);
   });
 
   it('回 court / case_no / holding 摘要 + 四步各一条（变异：漏掉任一步 → 红）', () => {

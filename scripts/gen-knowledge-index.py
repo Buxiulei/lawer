@@ -28,6 +28,12 @@ status=forbidden 的号码不得出现在其他任何卡正文。失败即退出
 降的是这几道，**前面那批卡片自洽的校验一条不降**——
 一个开关只有一种含义，才不会有人以为自己关掉的是别的东西。
 
+**单个包可以显式欠账**：`knowledge/packs/<包>/GROUNDING_PENDING`（必须写明到期日）
+让那个目录整包退出 (b)–(h)，只做结构校验，并在 stderr 逐目录报出张数与到期日。
+到期即整体失效、当场判红。见 knowledge_sources.load_pending。
+它与 `--no-strict` 的区别是：一个是"这一包欠着账、欠到哪天"，写在那个包里、进版本库；
+另一个是"这台机器这一次先别拦我"，一个命令行开关、谁都看不见。
+
 隔离区 knowledge/quarantine/** 一律不进索引（追不到一手源的卡整张移进去，带原因）。
 """
 import argparse
@@ -80,9 +86,21 @@ def die(msg: str) -> None:
     sys.exit(f"错误：{msg}")
 
 
+#: 千分位逗号：`facts.values` 里写 2032、正文里写「2,032 元」，是同一个数。
+#: 这一条**只用在数值/号码/地址这一面**，不进引文那把尺——引文那把尺是"逐字"，
+#: 一条把原件的 1000 写成 1,000 的引文不该判成一致。
+_THOUSANDS = re.compile(r"(?<=\d)[,，](?=\d)")
+
+
 def normalize(text: str) -> str:
-    """正文归一：去空白/引用符/加粗符/全角空格/千分位逗号，供两面一致性比对。"""
-    return re.sub(r"[\s>＞*　]|(?<=\d)[,，](?=\d)", "", text)
+    """数值 / 号码 / 地址这一面的归一：逐字尺（ks.normalize_quote）之上再去千分位逗号。
+
+    逐字那一层**不在这里重写一遍**（经理 2026-09-07 裁定：gen 与 verify-quotes 同源）：
+    "卡片正文 ↔ 本卡 facts" 与 "卡片 ↔ 官方原件" 判的都是"这段字一不一样"。
+    两处各写一把尺的形态是同一张卡在两把尺下一绿一红——而对外只报绿的那把。
+    引号字形一律不折，见 knowledge_sources.normalize_quote。
+    """
+    return _THOUSANDS.sub("", ks.normalize_quote(text))
 
 
 def parse(path: Path) -> tuple[dict, str]:
@@ -105,7 +123,7 @@ def parse(path: Path) -> tuple[dict, str]:
     return fm, m.group(2)
 
 
-def check_facts(path: Path, fm: dict, body_norm: str, seen_keys: dict) -> None:
+def check_facts(path: Path, fm: dict, body_norm: str, body_quote_norm: str, seen_keys: dict) -> None:
     facts = fm.get("facts") or {}
     for v in facts.get("values", []):
         for field in ("key", "value", "unit", "effective_from", "confidence", "source_idx"):
@@ -175,7 +193,7 @@ def check_facts(path: Path, fm: dict, body_norm: str, seen_keys: dict) -> None:
         for field in ("law", "article", "text"):
             if field not in q:
                 die(f"{path} facts.statute_quotes 缺字段 {field}：{q}")
-        if normalize(q["text"]) not in body_norm:
+        if ks.normalize_quote(q["text"]) not in body_quote_norm:
             die(f"{path} statute_quotes {q['article']} 与正文不逐字一致")
     # case_quotes（规范 §2.1）：判例卡从官方页逐字摘下来的那几句。
     # source_id 必填——判例没有"法名"可以拿去和登记簿互为子串匹配（见 verify-quotes 头注释）。
@@ -186,7 +204,7 @@ def check_facts(path: Path, fm: dict, body_norm: str, seen_keys: dict) -> None:
         for field in q:
             if field not in ("source_id", "text", "note"):
                 die(f"{path} facts.case_quotes 含未知字段 {field}（只允许 source_id / text / note）：{q}")
-        if normalize(q["text"]) not in body_norm:
+        if ks.normalize_quote(q["text"]) not in body_quote_norm:
             die(f"{path} case_quotes（{str(q['text'])[:24]}…）与正文不逐字一致")
 
 
@@ -261,6 +279,30 @@ def grounding_guards(entries: list[dict], strict: bool) -> None:
     inst_ids = ks.institution_source_ids(registry)
     unofficial, quote_bad, unverified, fake_d = [], [], [], []
     inst_misuse, no_case_quote = [], []
+
+    # 【显式豁免】带 knowledge/packs/<包>/GROUNDING_PENDING 的目录整包退出下面这几道，
+    # 只保留前面那批结构校验（那一批一条不降）。豁免过期即整体失效——见 ks.expired_pending。
+    pending = ks.load_pending(ROOT)
+    expired = ks.expired_pending(pending)
+    if expired:
+        sys.exit("\n".join(["错误：扎根守卫的豁免已过期，本轮不再豁免。"] + expired))
+    exempt = {e["id"]: ks.pending_for(e["path"], pending) for e in entries}
+    exempt = {k: v for k, v in exempt.items() if v}
+    if exempt:
+        by_dir: dict[str, int] = {}
+        for d in exempt.values():
+            by_dir[d] = by_dir.get(d, 0) + 1
+        print(
+            "警告：以下目录带 " + ks.GROUNDING_PENDING + " 豁免文件，本轮**不做扎根守卫**"
+            "（结构校验照常）：\n"
+            + "\n".join(
+                f"  · {d}：{n} 张，最迟 {pending[d]['until']}"
+                f"（欠账清单见该文件与 knowledge/TODO核实清单.md）"
+                for d, n in sorted(by_dir.items())
+            ),
+            file=sys.stderr,
+        )
+    entries = [e for e in entries if e["id"] not in exempt]
 
     for e in entries:
         if e["confidence"] == NO_EXTERNAL_CLAIM:
@@ -439,7 +481,7 @@ def main(argv: list[str] | None = None) -> None:
         seen_ids[fm["id"]] = path
         body_norm = normalize(body)
         bodies[path] = body_norm
-        check_facts(path, fm, body_norm, seen_keys)
+        check_facts(path, fm, body_norm, ks.normalize_quote(body), seen_keys)
         for h in (fm.get("facts") or {}).get("hotlines", []):
             if h["status"] == "forbidden":
                 forbidden.append((normalize(h["phone"]), path))
