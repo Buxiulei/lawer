@@ -331,9 +331,22 @@ describe('labor 零变化守卫（基线取自 origin/main 4098805）', () => {
     // 钉的是**标题与顺序**，那才是对外产出；key 是这一票新加的内部取数口径。
     expect(LABOR.factsSections.map((s) => s.title)).toEqual(BASELINE.factsSections);
     expect(LABOR.reportSections).toEqual(BASELINE.reportSections);
-    expect(getCapability('intake_submit')?.inputSchema).toEqual(BASELINE.schemas.intake_submit);
-    expect(getCapability('claim_register')?.inputSchema).toEqual(BASELINE.schemas.claim_register);
-    expect(getCapability('draft_create')?.inputSchema).toEqual(BASELINE.schemas.draft_create);
+    // 【此前这两行是永远绿的】原文写的是 `claim_register` / `draft_create` —— 两个**不存在的**
+    // 能力名（真名是 claims_upsert / draft_write）。`getCapability()` 回 undefined、
+    // `?.inputSchema` 回 undefined，而基线里同样没有这两个键 ⇒
+    // `expect(undefined).toEqual(undefined)` 恒绿：断言写在那儿，改坏 schema 也不会红。
+    // **名字打错与 schema 真的没变，在断言结果上长得一模一样**，所以名字本身要先被验一次。
+    // 两份基线取自 4098805 的 `git archive` 副本（与既有三份同一次 dump，逐字节相等）。
+    const mustExist = (name: string) => {
+      const cap = getCapability(name);
+      expect(cap, `能力 ${name} 不存在：能力名打错时断言会退化成 undefined===undefined 而恒绿`).toBeDefined();
+      return cap!;
+    };
+    expect(mustExist('intake_submit').inputSchema).toEqual(BASELINE.schemas.intake_submit);
+    // claims_upsert 的 kind 与 claim_calc / deadline_set 同口径，是**并集**，走同一个三条腿的比法
+    expectUnionSchema(mustExist('claims_upsert').inputSchema, BASELINE.schemas.claims_upsert, (p) => p.claimKinds);
+    // draft_write 的 kind 取的是 lib/cases/drafts 那一份（不是并集），逐字比
+    expect(mustExist('draft_write').inputSchema).toEqual(BASELINE.schemas.draft_write);
   });
 
   /**

@@ -5,6 +5,10 @@
 // 【这两条为什么值得一份判据】它们的失效都是静默的：
 //   · 缺一项的包不会崩，只会让那一块从此不工作（空词表 = 那类判定永不触发）；
 //   · 灰度开关失灵不会报错，只会让一个还没验收过的领域悄悄开始接用户。
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { LABOR } from '../labor';
@@ -27,6 +31,26 @@ function clone(over: Partial<DomainPack> = {}): DomainPack {
   return { ...LABOR, ...over };
 }
 
+/**
+ * lawyerReview / sensitive 两节的**完好**样张。labor 包没有这两节（省略 = 本领域没这回事），
+ * 所以要验「一旦声明就不许半张」，得先自己给一份齐的再打坏其中一项——
+ * 直接打坏一个不存在的节，守卫本来就该放过，那条判据就成了恒绿。
+ *
+ * 【为什么不从 counseling 包里取】判据要验的是守卫，不是某个包今天长什么样：
+ * 借用真包的话，真包哪天把某一节删了，这几条负样本会一起变成"没声明"而恒绿。
+ */
+const FULL_LAWYER_REVIEW = {
+  title: '待律师核',
+  items: ['这一条为什么还没有结论'],
+  discipline: '未经律师书面确认不得作为结论输出',
+} as const;
+
+const FULL_SENSITIVE = {
+  subject: '第三人',
+  factsNotice: '这一节里有第三人的敏感信息，逐条核对再用',
+  redactNotice: '本页已做脱敏处理',
+} as const;
+
 const ORIGINAL_ENV = process.env[DOMAINS_ENABLED_ENV];
 
 afterEach(() => {
@@ -42,11 +66,24 @@ describe('assertDomainPack：包必须实现全部字段', () => {
   /**
    * 逐项打坏。**每一项单独一条**：合成一条大断言的形态是，其中一项守卫失效时
    * 整条仍然红（别的项还在报），于是没人发现少了一道。
+   *
+   * 【这张表此前只覆盖一半的必填项】parties.self / parties.counterparts / parties.multiParty /
+   * crisis.negations / crisis.resourcePackId / crisis.safeFallback / crisis.openerText.* /
+   * copy.neutral.appTitle / copy.neutral.notice / copy.neutral.forbiddenWords /
+   * factsSections[].title / lawyerReview.* / sensitive.* —— 这十几项的守卫**整行删掉都不会红**。
+   * 而它们缺了都不崩：空的 negations = 反例句一律照样触发危机；空的 resourcePackId =
+   * 危机首段拿不到号码卡；空的 redactNotice = 分享页不再说自己脱敏过。全部 200，全部静默。
+   * 每一项补一条负样本，并把「点名」验成**点全名**（见下面的 pointsAt）。
    */
   const broken: [string, Partial<DomainPack>][] = [
     ['key', { key: '' }],
     ['label', { label: '   ' }],
-    ['parties', { parties: { self: '', counterparts: [], multiParty: true } }],
+    ['parties.self', { parties: { ...LABOR.parties, self: '' } }],
+    ['parties.counterparts', { parties: { ...LABOR.parties, counterparts: [] } }],
+    [
+      'parties.multiParty',
+      { parties: { ...LABOR.parties, multiParty: undefined as unknown as boolean } },
+    ],
     ['stages', { stages: [] }],
     ['tracks', { tracks: undefined as unknown as string[] }],
     ['intakeSchema', { intakeSchema: [] }],
@@ -58,25 +95,110 @@ describe('assertDomainPack：包必须实现全部字段', () => {
     ['claimKinds', { claimKinds: [] }],
     ['calculatorKinds', { calculatorKinds: [] }],
     ['crisis.lexicon', { crisis: { ...LABOR.crisis, lexicon: [] } }],
+    ['crisis.negations', { crisis: { ...LABOR.crisis, negations: [] } }],
+    ['crisis.resourcePackId', { crisis: { ...LABOR.crisis, resourcePackId: '' } }],
     ['crisis.directive', { crisis: { ...LABOR.crisis, directive: '' } }],
+    ['crisis.safeFallback', { crisis: { ...LABOR.crisis, safeFallback: '  ' } }],
+    [
+      'crisis.openerText.head',
+      { crisis: { ...LABOR.crisis, openerText: { ...LABOR.crisis.openerText, head: [] } } },
+    ],
+    [
+      'crisis.openerText.tail',
+      { crisis: { ...LABOR.crisis, openerText: { ...LABOR.crisis.openerText, tail: '' } } },
+    ],
     [
       'crisis.firstSegment',
       { crisis: { ...LABOR.crisis, firstSegment: undefined as unknown as () => string } },
     ],
+    // lawyerReview / sensitive 是**可选**的（省略 = 本领域没这回事），但一旦声明就不许半张。
+    // 所以负样本要先把它声明齐、再打坏其中一项——否则打坏的是"没声明"，守卫本来就该放过。
+    ['lawyerReview.title', { lawyerReview: { ...FULL_LAWYER_REVIEW, title: '' } }],
+    ['lawyerReview.items', { lawyerReview: { ...FULL_LAWYER_REVIEW, items: [] } }],
+    ['lawyerReview.discipline', { lawyerReview: { ...FULL_LAWYER_REVIEW, discipline: '  ' } }],
+    ['sensitive.subject', { sensitive: { ...FULL_SENSITIVE, subject: '' } }],
+    ['sensitive.factsNotice', { sensitive: { ...FULL_SENSITIVE, factsNotice: '' } }],
+    ['sensitive.redactNotice', { sensitive: { ...FULL_SENSITIVE, redactNotice: '   ' } }],
     [
       'copy.neutral.title',
       { copy: { ...LABOR.copy, neutral: { ...LABOR.copy.neutral, title: '' } } },
+    ],
+    [
+      'copy.neutral.appTitle',
+      { copy: { ...LABOR.copy, neutral: { ...LABOR.copy.neutral, appTitle: '' } } },
+    ],
+    [
+      'copy.neutral.notice',
+      { copy: { ...LABOR.copy, neutral: { ...LABOR.copy.neutral, notice: '  ' } } },
+    ],
+    [
+      'copy.neutral.forbiddenWords',
+      { copy: { ...LABOR.copy, neutral: { ...LABOR.copy.neutral, forbiddenWords: [] } } },
     ],
     ['copy.site', { copy: { ...LABOR.copy, site: {} } }],
     ['copy.capabilities', { copy: { ...LABOR.copy, capabilities: {} } }],
     // 共用页那几句：空着不会崩，只会让那几页退回缺省领域的话（P4-W4）
     ['copy.pages', { copy: { ...LABOR.copy, pages: {} } }],
   ];
+
+  /**
+   * 「点名」= 报错里出现**这一项的全名**，不是它的第一段。
+   *
+   * 【为什么不能只匹第一段】此前判据写的是 `new RegExp(name.split('.')[0])`：
+   * `crisis.negations` 那条只要求报错里有「crisis」——而 `crisis.lexicon`、
+   * `crisis.directive` 任意一条报出来都带这三个字母。于是把 negations 那行守卫删掉，
+   * 这条判据**照样绿**（别的 crisis 项在报）。点名要点到名，不是点到姓。
+   */
+  function pointsAt(name: string): RegExp {
+    return new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  }
+
   for (const [name, over] of broken) {
-    it(`缺 ${name} ⇒ 抛错并点名（变异：把 assertDomainPack 里那一行删掉 → 红）`, () => {
-      expect(() => assertDomainPack(clone(over))).toThrow(new RegExp(name.split('.')[0]));
+    it(`缺 ${name} ⇒ 抛错并点全名（变异：把 assertDomainPack 里那一行删掉 → 红）`, () => {
+      expect(() => assertDomainPack(clone(over))).toThrow(pointsAt(name));
+      // 自证这条负样本打坏的**就是这一项**：完好的包不该抛
+      expect(() => assertDomainPack(clone())).not.toThrow();
     });
   }
+
+  /**
+   * **这张表必须覆盖 assertDomainPack 里的每一个必填项**（否则「补全」只在补的那天成立）。
+   *
+   * 【为什么读源码而不是靠人对】新加一个 `str('x.y', …)` 的人不会想起来这里还有一张表；
+   * 漏掉的形态是那一项的守卫从此没有判据看着，而两边各自看都正常——
+   * 表是满的（对着当时的字段）、守卫也在（只是没人验）。
+   * 读源码取字段名，多一项没样本就当场点名，这样忘不掉。
+   */
+  it('负样本表覆盖 assertDomainPack 的每一个必填项（变异：往守卫加一个 str(\'x\') 不配样本 → 红）', () => {
+    const src = fs.readFileSync(
+      path.join(fileURLToPath(new URL('.', import.meta.url)), '..', 'registry.ts'),
+      'utf-8',
+    );
+    const body = src.slice(src.indexOf('export function assertDomainPack'));
+    const declared = new Set<string>();
+    // str('a.b', …) / arr('a.b', …) / missing.push('a.b') —— 只认**字段路径**形状的字面量，
+    // 模板串（`factsSections 缺键：…` 这类一致性检查）不在此列，它们各有专门的判据。
+    for (const m of body.matchAll(/(?:\b(?:str|arr)\(|missing\.push\()'([A-Za-z][A-Za-z0-9_.]*)'/g)) {
+      declared.add(m[1]);
+    }
+    // 逐卡遍历时用的是模板串，静态扫不到，这里补一句（它有自己的一条判据，见下）
+    expect(declared.size).toBeGreaterThan(20);
+    const covered = new Set(broken.map(([name]) => name));
+    const uncovered = [...declared].filter((f) => !covered.has(f)).sort();
+    expect(uncovered, '这些必填项在 assertDomainPack 里查了，却没有一条「缺它即点名」的负样本').toEqual(
+      [],
+    );
+    // 反过来：表里写了守卫根本不查的项，说明样本对着的是一个已经不存在的字段
+    const stray = [...covered].filter((f) => !declared.has(f)).sort();
+    expect(stray, '这些负样本对着的项 assertDomainPack 已经不查了，样本恒不红').toEqual([]);
+  });
+
+  it('factsSections 某一节只有键没有抬头 ⇒ 点名那一节（那一节会顶着英文键名进 prompt）', () => {
+    const bad = LABOR.factsSections.map((sec, i) => (i === 0 ? { ...sec, title: '' } : sec));
+    expect(() => assertDomainPack(clone({ factsSections: bad }))).toThrow(
+      new RegExp(`factsSections\\[${LABOR.factsSections[0].key}\\]\\.title`),
+    );
+  });
 
   it('缺项一次列全，不是挤牙膏式一次报一个', () => {
     let message = '';

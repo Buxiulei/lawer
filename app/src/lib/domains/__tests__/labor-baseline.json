@@ -302,6 +302,59 @@
         "goals"
       ]
     },
+    "claims_upsert": {
+      "type": "object",
+      "properties": {
+        "case_id": {
+          "type": "integer",
+          "description": "案件 id"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "2N",
+            "N",
+            "N+1",
+            "欠薪",
+            "年假",
+            "加班费",
+            "双倍工资",
+            "年终奖",
+            "竞业补偿",
+            "其他"
+          ],
+          "description": "诉求种类"
+        },
+        "amount_fen": {
+          "type": "integer",
+          "description": "金额，单位分，非负；还没算出来就给 0"
+        },
+        "basis": {
+          "type": "string",
+          "description": "依据（条号、来源卡 id 等），可省略"
+        },
+        "calc_json": {
+          "type": "string",
+          "description": "这个数从哪来、待证状态，JSON 串，可省略"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "confirmed"
+          ],
+          "description": "默认 draft"
+        },
+        "client_ref": {
+          "type": "string",
+          "description": "幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库"
+        }
+      },
+      "required": [
+        "case_id",
+        "kind"
+      ]
+    },
     "claim_calc": {
       "type": "object",
       "properties": {
@@ -345,6 +398,55 @@
       "required": [
         "case_id",
         "kind"
+      ]
+    },
+    "draft_write": {
+      "type": "object",
+      "properties": {
+        "case_id": {
+          "type": "integer",
+          "description": "案件 id"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "异议函",
+            "被迫解除通知",
+            "仲裁申请书",
+            "证据清单",
+            "答辩状",
+            "上诉状",
+            "谈判话术",
+            "其他"
+          ],
+          "description": "文书类型"
+        },
+        "title": {
+          "type": "string",
+          "description": "文书标题。同案同 kind 同 title 即视为同一份的新一稿"
+        },
+        "body": {
+          "type": "string",
+          "description": "文书全文。填空位保留【】并附填写说明"
+        },
+        "send_consequences": {
+          "type": "string",
+          "description": "发出后果说明：发出后法律关系会怎么变、对方可能怎么应对、哪些是不可逆的。发给公司的文书（异议函/被迫解除通知/仲裁申请书/答辩状/上诉状）必填，缺了会被拒收。"
+        },
+        "based_on_draft_id": {
+          "type": "integer",
+          "description": "这一稿是在哪一稿基础上改的（本案内的 draft_id），从零起草则不传"
+        },
+        "client_ref": {
+          "type": "string",
+          "description": "幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库"
+        }
+      },
+      "required": [
+        "case_id",
+        "kind",
+        "title",
+        "body"
       ]
     },
     "deadline_set": {
