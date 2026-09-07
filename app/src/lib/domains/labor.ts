@@ -499,6 +499,13 @@ export const LABOR: DomainPack = {
   // 首诊填的公司与工具面补充的同名公司分落两行，而 pickRespondent 取到的是其中一行）。
   defaultCompanyRole: '签约主体',
 
+  // 不点名角色的补充**不沿用**那一行已有的角色，照样落缺省位——这是 4098805 的逐字行为
+  //（两条产线路都是 `role ?? '签约主体'`，函数体里一次同名行查询都没有；
+  // 基线值由 __tests__/labor-baseline.json 的 companyRole 一节钉着）。
+  // 改成 true 的形态是：给一家已登记在「用工主体」位上的公司补一句风险备注，
+  // 落点从此不同，而回包 created=false、HTTP 200，页面上那一行还在。
+  inheritCompanyRoleOnUnnamed: false,
+
   // 阶段枚举**搬过来引用**，不在这里复制第二份：CASE_STAGES 还被首诊页（客户端）
   // 直接引着，抄一份的形态是两处枚举某天不一致，而 stage 校验只看得见其中一处。
   stages: CASE_STAGES,

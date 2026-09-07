@@ -900,18 +900,18 @@ export function writeDraft(
  * 一行对方主体该落**哪个角色位**。三条规则，顺序即优先级：
  *   ① 调用方点了名 → 用它（不在词表里就报错，**不静默改写**：静默改写的形态是
  *      调用方以为自己登记的是 A 位，而库里躺着 B 位，两边都不报错）；
- *   ② 没点名、而这个名字**在本案已经登记过** → 沿用那一行已有的角色；
- *   ③ 没点名、也是新名字 → 用本领域声明的缺省角色位（DomainPack.defaultCompanyRole）。
+ *   ② 没点名、这个名字**在本案已经登记过**、且本领域包声明了
+ *      `inheritCompanyRoleOnUnnamed` → 沿用那一行已有的角色；
+ *   ③ 其余情况 → 用本领域声明的缺省角色位（DomainPack.defaultCompanyRole）。
  *
- * 【为什么第②条必须在】store.upsertCompanyProfile 按 (case_id, name) 收敛，而它的 UPDATE
- * 对 role 是**直接赋值**（不是 COALESCE）。少了这一条的形态是：给一个已登记的主体补一句
- * 风险备注、补一个统一社会信用代码——只要这次调用没带 role，那一行就被**搬到另一个角色位**去了。
- * 搬家静默发生：回包 created=false、HTTP 200，页面上那一行还在。而下游按角色取数的东西
- * 全部改判——被申请人选谁（lib/dossier/build.ts 的 pickRespondent）、
- * 分享/导出时哪些名字要脱敏（lib/sensitive.ts 的 aliasRoles）——都在这一刻悄悄换了答案。
+ * 【第②条为什么挂在包字段上，而不是无条件生效】它是**对外行为**：同一串调用在
+ * 开与不开两种取值下落到不同角色位，而两种都不报错。无条件打开的形态是——
+ * 一个此前一律落缺省位的行当，在没人改过它的包的情况下换了落点，
+ * 下游按角色取数的东西（被申请人选谁 / 分享导出脱敏谁）随之改判，而没有一处会报错。
+ * 该开还是该关由行当自己在包里声明，取舍写在 DomainPack.inheritCompanyRoleOnUnnamed 的头注释里。
  *
  * 【为什么这一份要收成一个函数】此前 MCP 那条路与站内 agent 那条路各写了一遍
- * `?? '签约主体'`：独立写两次就会漏掉其中一次，而漏掉的那次不会报错。
+ * `?? 缺省值`：独立写两次就会漏掉其中一次，而漏掉的那次不会报错。
  *
  * @returns 角色名，或 DomainFailure（调用方原样回给用户）
  */
@@ -925,11 +925,14 @@ export function resolveCompanyRole(
     }
     return input.role;
   }
-  // 同名多行时取 id 最大的那一行——与 upsertCompanyProfile 的 `ORDER BY id DESC LIMIT 1`
-  // 同一行。取另一行的形态是：这里判定沿用 A 位，而真正被改写的是落在 B 位的另一行。
-  const sameName = listCompanyProfiles(db, input.caseId).filter((p) => p.name === input.name);
-  const existing = sameName[sameName.length - 1];
-  return existing ? existing.role : input.pack.defaultCompanyRole;
+  if (input.pack.inheritCompanyRoleOnUnnamed) {
+    // 同名多行时取 id 最大的那一行——与 upsertCompanyProfile 的 `ORDER BY id DESC LIMIT 1`
+    // 同一行。取另一行的形态是：这里判定沿用 A 位，而真正被改写的是落在 B 位的另一行。
+    const sameName = listCompanyProfiles(db, input.caseId).filter((p) => p.name === input.name);
+    const existing = sameName[sameName.length - 1];
+    if (existing) return existing.role;
+  }
+  return input.pack.defaultCompanyRole;
 }
 
 /**

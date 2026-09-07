@@ -329,6 +329,25 @@ export interface DomainPack {
    * 这条缺省与 sensitive.aliasRoles 不许相交，由 assertDomainPack 在装载时点名。
    */
   defaultCompanyRole: string;
+  /**
+   * 登记对方主体时**没点名角色**、而这个名字本案已经登记过：沿用那一行已有的角色（true），
+   * 还是照样落 defaultCompanyRole（false）。判定在 lib/cases.resolveCompanyRole 第②条。
+   *
+   * 【为什么这是一格包字段，而不是共用层的一条通则】两种取值各自都会静默毁掉一类产物，
+   * 而毁掉哪一类由行当决定，共用层看不出来：
+   *  · false（store.upsertCompanyProfile 对 role 是直接赋值不是 COALESCE）——给一个
+   *    已登记的主体补一句备注、补一个统一社会信用代码，只要这次没带 role，那一行就被
+   *    **搬到缺省角色位**去了。回包 created=false、HTTP 200，页面上那一行还在，
+   *    而下游按角色取数的东西全部改判（被申请人选谁、分享/导出时哪些名字要脱敏）。
+   *  · true——**声明了敏感级的行当**里，脱敏对象的化名由首诊落在化名位上，
+   *    之后不带 role 的补充要是把它搬到机构位，这个人从此在分享页上原样露出。
+   *
+   * 【为什么不由共用层挑一个更安全的】它是**对外行为**，不是实现细节：
+   * 同一串调用在两种取值下落到不同角色位，而两种都不报错。所以由每个包各自声明，
+   * 缺项由 assertDomainPack 在装载时点名（漏填时按 falsy 静默取 false 的形态是，
+   * 一个行当的化名位在没人改过它的情况下被搬空）。
+   */
+  inheritCompanyRoleOnUnnamed: boolean;
   /** 案件阶段枚举。**唯一真源**：stage 校验读它，不再各处引 CASE_STAGES */
   stages: readonly string[];
   /**
@@ -557,6 +576,9 @@ export function assertDomainPack(pack: DomainPack): void {
   arr('parties.counterparts', pack.parties?.counterparts);
   if (typeof pack.parties?.multiParty !== 'boolean') missing.push('parties.multiParty');
   str('defaultCompanyRole', pack.defaultCompanyRole);
+  // 漏填时 `pack.inheritCompanyRoleOnUnnamed` 是 undefined，判定处按 falsy 走 false 分支——
+  // 也就是"每一次不点名的补充都把那一行搬回缺省位"，而没有一处会报错。所以缺项在这里点名。
+  if (typeof pack.inheritCompanyRoleOnUnnamed !== 'boolean') missing.push('inheritCompanyRoleOnUnnamed');
   arr('stages', pack.stages);
   // tracks 允许为空数组，但必须是数组——undefined 是"忘了填"，[] 是"没有并行轨"
   if (!Array.isArray(pack.tracks)) missing.push('tracks');

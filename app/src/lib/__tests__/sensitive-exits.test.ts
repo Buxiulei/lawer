@@ -13,6 +13,9 @@
 // 同样的输入在那边**逐字不变**。没有对照的形态是：把脱敏函数改成恒脱敏也照样全绿，
 // 而那会让第一个领域的分享页从此把用户自己的手机号也洗掉。
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import Database from 'better-sqlite3';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -33,6 +36,31 @@ import { SENSITIVE_MASK, maskContacts, sensitivityOf, shareRedactorFor } from '@
 import { createShare, readShare } from '@/lib/shares';
 
 const COUNSELING = DOMAINS.counseling;
+
+/**
+ * 缺省领域（labor）在**改动前**（origin/main = 4098805）不点名角色时落哪一格。
+ *
+ * 【为什么不拿 DOMAINS[DEFAULT_DOMAIN].defaultCompanyRole 当判据】那是当前 HEAD 的字段，
+ * 与被判定的实现同源：把包字段与判定一起改成另一个词，自比恒绿——判据在，行为已经变了。
+ * 这里读的是从 4098805 副本逐字提取出来的常量（捕获器与提取方式见该文件 companyRole.说明）。
+ */
+const LABOR_COMPANY_ROLE_BASELINE = (
+  JSON.parse(
+    fs.readFileSync(
+      path.join(
+        fileURLToPath(new URL('.', import.meta.url)),
+        '../domains/__tests__/labor-baseline.json',
+      ),
+      'utf-8',
+    ),
+  ) as {
+    companyRole: {
+      unnamedViaCases: string;
+      unnamedViaAgentTool: string;
+      unnamedAfterExistingOtherRole: string;
+    };
+  }
+).companyRole;
 /** 一个第三人的联系方式：这三串在任何一个出口露头都是事故。 */
 const VISITOR_PHONE = '13900139001';
 const VISITOR_ID = '110101199003074511';
@@ -214,7 +242,7 @@ describe('登记对方主体的两条工具路：不点名角色时落在哪一�
     expect(shareRedactorFor(db, caseId).text('致简单心理平台').text).toContain('简单心理平台');
   });
 
-  it('已经登记在化名位上的名字，**不带 role 的补充不会把它挪走**（挪走＝这个人从此不脱敏）', () => {
+  it('已经登记在化名位上的名字，**不带 role 的补充不会把它挪走**（挪走＝这个人从此不脱敏；变异：counseling 包的 inheritCompanyRoleOnUnnamed 改成 false → 红）', () => {
     // store.upsertCompanyProfile 按 (case_id, name) 收敛，而它对 role 是直接赋值不是 COALESCE：
     // 少了「不点名就沿用已有角色」这条，给来访者补一句备注就会把他搬出化名位——
     // 回包 created=false、HTTP 200，页面上那一行还在，而分享页从此原样印着他的化名。
@@ -233,11 +261,82 @@ describe('登记对方主体的两条工具路：不点名角色时落在哪一�
     expect(shareRedactorFor(db, caseId).text('来访庚辛壬第三次爽约').text).not.toContain('来访庚辛壬');
   });
 
-  it('缺省领域**逐字不变**：不带 role 仍落它自己声明的那一格（自证缺省不是被换成了另一个词）', () => {
-    const caseId = makeCase(DEFAULT_DOMAIN);
-    const made = cases.upsertCompany(db, { caseId, userId: uid, name: '某某科技有限公司' });
+  it('缺省领域**逐字不变**：不带 role 落 4098805 那一格（两条路各验一遍；比的是基线常量不是当前包字段）', () => {
+    const viaCases = makeCase(DEFAULT_DOMAIN);
+    const made = cases.upsertCompany(db, { caseId: viaCases, userId: uid, name: '某某科技有限公司' });
     expect(made.ok, JSON.stringify(made)).toBe(true);
-    expect(rolesOf(caseId)['某某科技有限公司']).toBe(DOMAINS[DEFAULT_DOMAIN].defaultCompanyRole);
+    expect(rolesOf(viaCases)['某某科技有限公司']).toBe(LABOR_COMPANY_ROLE_BASELINE.unnamedViaCases);
+
+    const viaAgent = makeCase(DEFAULT_DOMAIN);
+    const out = executeTool(
+      'company_profile_upsert',
+      JSON.stringify({ name: '某某科技有限公司' }),
+      agentCtx(viaAgent, DEFAULT_DOMAIN),
+    );
+    expect(out.ok, out.content).toBe(true);
+    expect(rolesOf(viaAgent)['某某科技有限公司']).toBe(
+      LABOR_COMPANY_ROLE_BASELINE.unnamedViaAgentTool,
+    );
+  });
+
+  /**
+   * 【这一条守的是第②条不许溢到缺省领域】4098805 的两条产线路都是 `role ?? '签约主体'`，
+   * 函数体里一次同名行查询都没有——也就是说基线下，一个已经登记在「用工主体」位上的公司，
+   * 只要下一次不带 role 补充一句备注，就会被**搬回签约位**。
+   * 「不点名就沿用已有角色」这条规则本身是为敏感级行当加的；无条件打开的形态是：
+   * 缺省领域这一串调用的落点悄悄换了一格，回包 created=false、HTTP 200、页面上那一行还在，
+   * 而 pickRespondent 从此取到另一家。所以这里钉的是**基线值**，不是"哪个更合理"。
+   */
+  it('缺省领域**逐字不变**：已在别的角色位上、不点名补充仍落基线那一格（变异：labor 包的 inheritCompanyRoleOnUnnamed 改成 true → 红）', () => {
+    const caseId = makeCase(DEFAULT_DOMAIN);
+    const first = cases.upsertCompany(db, {
+      caseId,
+      userId: uid,
+      name: '某某科技有限公司',
+      role: '用工主体',
+    });
+    expect(first.ok, JSON.stringify(first)).toBe(true);
+    expect(rolesOf(caseId)['某某科技有限公司']).toBe('用工主体');
+
+    const again = cases.upsertCompany(db, {
+      caseId,
+      userId: uid,
+      name: '某某科技有限公司',
+      note: '欠薪两个月',
+    });
+    expect(again.ok, JSON.stringify(again)).toBe(true);
+    expect(rolesOf(caseId)['某某科技有限公司']).toBe(
+      LABOR_COMPANY_ROLE_BASELINE.unnamedAfterExistingOtherRole,
+    );
+
+    // 站内 agent 那条路读同一份口径：漏掉其中一条的形态是两条路落点不同，而两边都 200
+    const viaAgent = makeCase(DEFAULT_DOMAIN);
+    const seed = cases.upsertCompany(db, {
+      caseId: viaAgent,
+      userId: uid,
+      name: '某某科技有限公司',
+      role: '用工主体',
+    });
+    expect(seed.ok, JSON.stringify(seed)).toBe(true);
+    const out = executeTool(
+      'company_profile_upsert',
+      JSON.stringify({ name: '某某科技有限公司', risk_notes: '欠薪两个月' }),
+      agentCtx(viaAgent, DEFAULT_DOMAIN),
+    );
+    expect(out.ok, out.content).toBe(true);
+    expect(rolesOf(viaAgent)['某某科技有限公司']).toBe(
+      LABOR_COMPANY_ROLE_BASELINE.unnamedAfterExistingOtherRole,
+    );
+  });
+
+  it('缺省领域声明的缺省角色**就是** 4098805 那个词（包字段被顺手改掉时这里红，不等到产物里才发现）', () => {
+    expect(DOMAINS[DEFAULT_DOMAIN].defaultCompanyRole).toBe(
+      LABOR_COMPANY_ROLE_BASELINE.unnamedViaCases,
+    );
+    expect(
+      DOMAINS[DEFAULT_DOMAIN].inheritCompanyRoleOnUnnamed,
+      '缺省领域开了「沿用已有角色」——基线没有这条分支，落点会变',
+    ).toBe(false);
   });
 
   it('点了名的 role 照旧原样落，不合法的照旧拒收（这一层没被改宽）', () => {

@@ -560,11 +560,21 @@ export const COUNSELING: DomainPack = {
    * 这条缺省与 aliasRoles 不许相交，assertDomainPack 在装载时点名（改任一处都会被拦）。
    *
    * 【那来访者的化名怎么办】它由首诊落在签约位上（upsertCompanyProfileByRole），
-   * 之后不带 role 的补充**沿用这一行已有的角色**（lib/cases.resolveCompanyRole 第②条），
+   * 之后不带 role 的补充**沿用这一行已有的角色**（下面那一格声明的第②条），
    * 不会被这条缺省挪出化名位。留下的口子是"一个自然人第一次就由工具面不带角色登记"——
    * 那属于 sensitive.aliasRoles 头注释里已写明的那一类残留（按 role 分而不按人/机构分）。
    */
   defaultCompanyRole: INSTITUTION_ROLE,
+
+  /**
+   * 不点名角色的补充**沿用那一行已有的角色**（lib/cases.resolveCompanyRole 第②条）。
+   *
+   * 【为什么本领域必须开】这张表同时装着来访者的化名（首诊落在 aliasRoles 那一格）
+   * 与机构全称（缺省落 INSTITUTION_ROLE）。关掉它的形态是：给来访者补一句"第三次爽约"，
+   * 那一行被搬出化名位、落到机构位——回包 created=false、HTTP 200、页面上那一行还在，
+   * 而这个人从此在分享页与导出 PDF 里原样露出，页脚还印着"已替换为占位"。
+   */
+  inheritCompanyRoleOnUnnamed: true,
 
   /**
    * 主线阶段（§16）。**非线性**：来访投诉之后可能直接进协会伦理申诉，也可能先协商；
