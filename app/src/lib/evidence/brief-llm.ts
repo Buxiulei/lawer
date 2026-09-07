@@ -17,7 +17,13 @@ import type { BriefLlm } from './brief';
  */
 export function defaultBriefLlm(): BriefLlm | null {
   try {
-    const { client } = getProvider('standard', 'entry');
+    // **显式传 false，不吃缺省**：这三条流水线（证据简报 / 来文解读 / 转介摘要）拿不到
+    // user_id，判不出这个人同没同意出境，所以一律按"没同意"走境内（协议五.5（2）：
+    // 不同意的仍可使用仅境内模型的全部服务）。缺省本来也是 false，写出来是为了让
+    // 下一个读到这里的人看见这道闸在，而不是以为这里漏传了一位——
+    // 不写的形态是：有人为了"统一签名"顺手把缺省改成放行，这三条路上所有人的
+    // 材料从此出境，而回包一切正常、没有一处报错（口径同 lib/llm/router.ts RouteOptions）。
+    const { client } = getProvider('standard', 'entry', { overseasAllowed: false });
     if (!client.chatJSON) return null;
     const chatJSON = client.chatJSON.bind(client);
     return { chatJSON, billingModel: client.billingModel };

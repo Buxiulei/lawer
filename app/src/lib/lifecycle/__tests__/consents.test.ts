@@ -280,6 +280,24 @@ describe('接线二：撤回 overseas 之后路由回境内', () => {
     );
   });
 
+  it('开关开着但**没有有效同意**时一律不许出境（变异：判据只看开关 → 本条红）', () => {
+    // 【为什么这两臂要单独设防】开关与台账是两处状态，产线上由路由把它们写在一起，
+    // 于是"只看开关"与"开关 ∧ 同意"在正常流程里给出同一个答案——判据全绿，
+    // 而那一刻闸其实已经不在了。这里直接造出两处不一致的库态（写入口按设计造不出来，
+    // 正是判据该造的东西）：只要有人日后把两者写岔一次，出境就发生了。
+    //
+    // 臂一：从没同意过，开关却是开的（脚本改库、旧版遗留、日后新写的某条路径漏了台账）
+    setModelPreferences(db, uid, { overseasModels: true });
+    expect(overseasModelsAllowed(db, uid), '没有任何一次同意记录，却判定为允许出境').toBe(false);
+
+    // 臂二：同意过又撤回了，而开关被重新拨开（撤回把它关了，这里模拟"又被拨回来"）
+    recordConsent(db, { userId: uid, kind: 'overseas' });
+    expect(overseasModelsAllowed(db, uid), '正对照：同意 + 开关开着时本来就该允许').toBe(true);
+    revokeConsent(db, { userId: uid, kind: 'overseas' });
+    setModelPreferences(db, uid, { overseasModels: true });
+    expect(overseasModelsAllowed(db, uid), '撤回过的人只要开关被拨开就又出境了').toBe(false);
+  });
+
   it('overseasRevoked 仍然只回答「他明确撤回过没有」——从没表过态不算撤回', () => {
     expect(overseasRevoked(db, uid)).toBe(false);
     revokeConsent(db, { userId: uid, kind: 'overseas' });

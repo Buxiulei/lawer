@@ -24,6 +24,8 @@ type Handler = (req: Request) => Promise<Response>;
 let realnameInit: Handler;
 let consentsPost: Handler;
 let preferencesPost: Handler;
+let meGet: (req: Request) => Promise<Response>;
+let consentsRevoke: Handler;
 let db: Database;
 let signToken: (uid: number) => string;
 
@@ -34,6 +36,8 @@ beforeAll(async () => {
   realnameInit = (await import('@/app/api/v1/realname/init/route')).POST;
   consentsPost = (await import('@/app/api/v1/consents/route')).POST;
   preferencesPost = (await import('@/app/api/v1/me/preferences/route')).POST;
+  meGet = (await import('@/app/api/v1/me/route')).GET;
+  consentsRevoke = (await import('@/app/api/v1/me/consents/route')).POST;
   signToken = (await import('@/lib/auth')).signToken;
   db = (await import('@/lib/db/client')).getDb();
 });
@@ -201,5 +205,44 @@ describe('设置页两个开关', () => {
     const evalOn = await preferencesPost(post('/api/v1/me/preferences', { eval_optin: true }));
     expect(evalOn.status).toBe(200);
     expect(store.getModelPreferences(db, uid)).toEqual({ overseasModels: true, evalOptin: true });
+  });
+});
+
+/* ─────────── GET /api/v1/me：设置页那两张卡读的同一份台账 ─────────── */
+//
+// 【守的是哪种失效】实名卡上「同意采用 NBDpsy 实名结果」那个按钮，原来只认组件里的
+// 本地状态：昨天点过的人今天打开设置页又看见那个按钮，以为上次没点上、于是再点一次；
+// 服务端幂等、什么都不报，而页面从头到尾在说一件与库里相反的事
+// （经理裁决 2026-09-07 C1 minor 第二条：改从 /api/v1/me 的 consents 取）。
+// 这一组守的是**那条数据通路本身**：卡片能不能从这条响应里读出"他同意过"。
+describe('GET /api/v1/me 把同意状态一次带回来', () => {
+  const me = (): Request =>
+    new Request('http://localhost/api/v1/me', { headers: { authorization: `Bearer ${token}` } });
+
+  test('没同意过时 consents 里没有 realname_adopt（正对照：别把它写成恒真）', async () => {
+    const body = await (await meGet(me())).json();
+    expect(body.consents).not.toContain(CONSENT_KINDS.realnameAdopt);
+  });
+
+  test('点过「同意采用」之后，同一条响应里就带上了它', async () => {
+    await consentsPost(post('/api/v1/consents', { kind: CONSENT_KINDS.realnameAdopt }));
+    const body = await (await meGet(me())).json();
+    expect(body.consents, '实名卡据这一位决定还显不显示那个按钮').toContain(
+      CONSENT_KINDS.realnameAdopt,
+    );
+  });
+
+  test('撤回境外同意后，这条响应里的开关与同意位**同时**变（页面不会显示"已开启"）', async () => {
+    await preferencesPost(post('/api/v1/me/preferences', { overseas_models: true, consent: true }));
+    const before = await (await meGet(me())).json();
+    expect(before.preferences.overseas_models).toBe(true);
+    expect(before.consents).toContain(CONSENT_KINDS.overseas);
+
+    const revoked = await consentsRevoke(post('/api/v1/me/consents', { kind: 'overseas' }));
+    expect(revoked.status).toBe(200);
+
+    const after = await (await meGet(me())).json();
+    expect(after.preferences.overseas_models, '撤回了同意，开关却还开着').toBe(false);
+    expect(after.consents, '撤回过的行不该再算成一次有效同意').not.toContain(CONSENT_KINDS.overseas);
   });
 });

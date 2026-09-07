@@ -251,3 +251,72 @@ describe('存量用户补勾', () => {
     expect(consentedKinds(db, uid).sort()).toEqual([CONSENT_KINDS.adult, CONSENT_KINDS.terms].sort());
   });
 });
+
+/* ───────────── 落台账只按"这次勾没勾"，不按"闸放没放行" ───────────── */
+//
+// 【守的是哪种失效】闸有一条旁路：补绑那一路（这个账号此前勾过）不带勾选位也能过。
+// recordRegistrationConsent 无条件落行的形态是——协议改版之后，这个人凭旧版的同意
+// 过了闸，我们却给他记上一行**新版**的同意，而他从没读过新版那份文本。
+// 台账要回答的正是"他当时同意的是哪一版"，编出来的那一行让这个问题永远答不对，
+// 而没有任何一处会报错（经理裁决 2026-09-07 C1 minor 第一条）。
+//
+// 【变异臂】2026-09-07 实跑，本组 4 例：
+//  · G-7 recordRegistrationConsent 恢复成无条件落 terms/adult ⇒ 3 失败 / 1 通过。
+describe('落台账只认这次请求里的勾选位', () => {
+  let recordRegistrationConsent: typeof import('@/lib/auth/consent').recordRegistrationConsent;
+  let recordConsent: typeof import('@/lib/db/consents').recordConsent;
+
+  beforeAll(async () => {
+    recordRegistrationConsent = (await import('@/lib/auth/consent')).recordRegistrationConsent;
+    recordConsent = (await import('@/lib/db/consents')).recordConsent;
+  });
+
+  /** 建一个不经同意闸的账号（模拟存量用户 / 补绑那一路拿到的 uid） */
+  function newUser(): number {
+    const target = `137${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
+    return store.insertUser(db, {
+      phoneEnc: 'enc',
+      phoneHash: hashOf(target),
+      verifiedAt: toSql(new Date()),
+    });
+  }
+
+  const rowsOf = (uid: number): { kind: string; version: string }[] =>
+    db
+      .prepare('SELECT kind, version FROM consents WHERE user_id=? ORDER BY kind, version')
+      .all(uid) as { kind: string; version: string }[];
+
+  test('一位都没勾 ⇒ 一行都不落（变异：改回无条件落行 → 本条红）', () => {
+    const uid = newUser();
+    recordRegistrationConsent(db, uid, {}, null);
+    expect(rowsOf(uid), '没勾却记了一次同意').toEqual([]);
+  });
+
+  test('只勾了协议 ⇒ 只落 terms 那一行，adult 不跟着来', () => {
+    const uid = newUser();
+    recordRegistrationConsent(db, uid, { agree_terms: true }, null);
+    expect(rowsOf(uid).map((r) => r.kind)).toEqual([CONSENT_KINDS.terms]);
+  });
+
+  test('两位都勾 ⇒ 两行都在（正对照：别把闸改成恒不落行也全绿）', () => {
+    const uid = newUser();
+    recordRegistrationConsent(db, uid, { agree_terms: true, agree_adult: true }, null);
+    expect(rowsOf(uid).map((r) => r.kind).sort()).toEqual(
+      [CONSENT_KINDS.adult, CONSENT_KINDS.terms].sort(),
+    );
+  });
+
+  test('协议改版后，凭旧版同意过闸的人**不会被记上新版的同意**', () => {
+    const uid = newUser();
+    // 他当年同意的是 v0.1
+    recordConsent(db, { userId: uid, kind: CONSENT_KINDS.terms, version: 'v0.1' });
+    recordConsent(db, { userId: uid, kind: CONSENT_KINDS.adult, version: 'v0.1' });
+    // 今天带 token 补绑邮箱：闸看的是 hasRegistrationConsent（不比对版本），放行；
+    // 请求体里一位勾选都没有——页面上根本没再问过他。
+    recordRegistrationConsent(db, uid, {}, null);
+    expect(
+      rowsOf(uid).map((r) => r.version),
+      '他从没读过当前这一版，台账里却多了一行说他同意过',
+    ).toEqual(['v0.1', 'v0.1']);
+  });
+});

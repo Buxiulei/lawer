@@ -6,17 +6,16 @@ import {
   CONSENT_KINDS,
   EVAL_OPTIN_HINT,
   EVAL_OPTIN_LABEL,
-  OVERSEAS_CONSENT_COPY,
   OVERSEAS_SWITCH_HINT,
   OVERSEAS_SWITCH_LABEL,
   type ConsentKind,
 } from '@/lib/consent';
+import { OverseasConsent } from '@/app/terms/overseas/OverseasConsent';
 import { Button } from '@/components/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/shadcn/card';
-import { ConfirmDialog } from '@/components/shadcn/confirm-dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/shadcn/dialog';
 import { Label } from '@/components/shadcn/label';
 import { Switch } from '@/components/shadcn/switch';
-import { OverseasConsent } from './OverseasConsent';
 import { SignInHint } from './SignInHint';
 
 interface MeResponse {
@@ -186,20 +185,27 @@ export function PrivacyCard() {
         </CardContent>
       </Card>
 
-      <ConfirmDialog
-        open={overseasOpen}
-        title="开启境外模型前，先看清这几件事"
-        description={<OverseasConsent copy={OVERSEAS_CONSENT_COPY} />}
-        confirmLabel="同意并开启境外模型"
-        cancelLabel="不开启"
-        tone="primary"
-        onConfirm={() => {
-          setOverseasOpen(false);
-          // consent:true 与开关同一次请求：服务端据它落同意台账，没有它一律拒开
-          void savePreferences({ overseas_models: true, consent: true });
-        }}
-        onCancel={() => setOverseasOpen(false)}
-      />
+      {/* 开启前那一屏**用 /terms/overseas 那一页的同意件**（经理裁决 2026-09-07：
+          以 C3 页面为正本）。两处各写一份告知的形态是：它们慢慢分叉，
+          而用户点头时看的是这一屏——于是对外公示的告知与实际取得同意时给的告知
+          不是同一段话，合规上等于没有取得对那份告知的同意（见 OverseasDetails 抬头）。
+
+          用 Dialog 而不是 ConfirmDialog：那一件自带「同意 / 不同意」两个平级按钮
+          （§39 要的单独且自愿，见它的文件头），外面再套一层确认按钮就成了四个钮，
+          用户读不出哪一个才是表意的那一下。 */}
+      <Dialog open={overseasOpen} onOpenChange={(next) => !next && setOverseasOpen(false)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-[38rem]">
+          <DialogTitle className="sr-only">开启境外模型前，先看清这几件事</DialogTitle>
+          <OverseasConsent
+            onAgree={() => {
+              setOverseasOpen(false);
+              // consent:true 与开关同一次请求：服务端据它落同意台账，没有它一律拒开
+              void savePreferences({ overseas_models: true, consent: true });
+            }}
+            onDecline={() => setOverseasOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

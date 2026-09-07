@@ -122,7 +122,15 @@ export function RealnameCard() {
   const [formError, setFormError] = useState<string | null>(null);
   /** 收证件号前的单独同意（协议五.2（1））。默认不勾——同意不能预置。 */
   const [collectConsent, setCollectConsent] = useState(false);
-  /** 采用 NBDpsy 实名结果的单独同意（协议三.3）：本地状态只管这张卡的显示 */
+  /**
+   * 采用 NBDpsy 实名结果的单独同意（协议三.3）。
+   *
+   * 【为什么初值要从服务端取，不能只留本地 false】同意是**服务端记着的事实**
+   * （consents 表），本地这一位只是它的投影。只用本地状态的形态是：一个昨天已经
+   * 同意过的人今天打开设置页，又看见那个「同意采用」按钮——他会以为上次没点上，
+   * 于是再点一次；服务端幂等、什么都不报，而页面从头到尾在说一件与库里相反的事。
+   * 取自 GET /api/v1/me 的 consents（那一条本就把这个人同意过的类别一次带回来）。
+   */
   const [adoptGranted, setAdoptGranted] = useState(false);
   const [adoptBusy, setAdoptBusy] = useState(false);
   const [adoptError, setAdoptError] = useState<string | null>(null);
@@ -155,6 +163,15 @@ export function RealnameCard() {
       setStatus(body);
       setLoadError(null);
       setUnauthorized(false);
+      // 同意台账另取一次：它与实名流水是两张表，/realname/status 不带这一位。
+      // **失败不改这张卡的成败**——同意状态取不到只影响一个按钮的显示，
+      // 把整张卡判成加载失败反而让用户连认证都发起不了。
+      try {
+        const me = await apiFetch<{ consents: string[] }>('/me');
+        setAdoptGranted(me.consents.includes(CONSENT_KINDS.realnameAdopt));
+      } catch {
+        /* 保持上一次的值：默认 false，也就是把按钮显示出来（点它是幂等的） */
+      }
     } catch (err) {
       if (err instanceof ApiError && err.errorCode === 'UNAUTHORIZED') {
         setUnauthorized(true);

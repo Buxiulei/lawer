@@ -42,7 +42,9 @@ export default function OverseasTermsPage() {
           <p>
             本页是《{TERMS_TITLE}》第五条第 5 款的组成部分。
             <strong className="font-semibold text-ink">境外模型默认关闭</strong>
-            ；你在设置里开启它之前，我们要把下面这几项逐项告诉你，并单独取得你的同意。
+            ；这一项要你
+            <strong className="font-semibold text-ink">单独勾选同意</strong>
+            ——注册时那个单独的勾选框，或此后在设置里改。无论从哪一处开，我们都要先把下面这几项逐项告诉你，并单独取得你的同意。
           </p>
           <p>不开启的，你仍可使用仅境内模型的全部服务——这不是一个二选一的门槛。</p>
         </>
