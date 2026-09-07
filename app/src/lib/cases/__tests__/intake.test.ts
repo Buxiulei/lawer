@@ -90,7 +90,10 @@ describe('首诊落库', () => {
     );
     expect(timeline.some((t) => t.kind === '我方动作')).toBe(true);
 
-    // 「现在做这三件事」= 库里的三张行动卡，不只是屏幕上的三行字
+    // 「现在做这三件事」= 库里的三张行动卡，不只是屏幕上的三行字。
+    // 【这一条钉的是接线，不是内容】比的是「库里落下的 == 包里声明的」，两边同源：
+    // 把某个阶段的种子整段删成 []，这一句照样绿。内容逐字不变由
+    // lib/domains/__tests__/labor-zero-change.test.ts ⑩ 比基线钉住。
     const actions = f.db
       .prepare('SELECT title, due_at, priority FROM action_items WHERE case_id = ? AND title != ? ORDER BY priority DESC')
       .all(f.caseA, '去打社保记录') as { title: string; due_at: string | null; priority: number }[];

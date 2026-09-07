@@ -72,7 +72,12 @@ export interface KnowledgeSearcher {
    */
   search(
     query: string,
-    /** `domain` 缺省不过滤：拿得到案件的调用方按 cases.domain 传，跨域检索留空 */
+    /**
+     * `domain` **不传 = 按缺省领域闸**（跨域检索默认关闭，设计稿 §13；实现见
+     * lib/knowledge/index.ts 的 passesFilters）。拿得到案件的调用方按 cases.domain 传。
+     * 不传**不等于**不过滤——按「不传就是全域召回」写的调用方拿到的只有缺省域的卡，
+     * 而回包照常 200、一条判据都不会红。
+     */
     options?: { limit?: number; type?: string; court?: string; domain?: string },
   ): KnowledgePack[];
   /**

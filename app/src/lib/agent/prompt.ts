@@ -259,7 +259,7 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
       input.crisis && input.crisisCardAlreadyGiven
         ? {
             packId: crisisPack.resourcePackId,
-            // 【这句话与号码都由领域包给，共用层一个数字都不认识】(经理 2026-09-07 裁定)
+            // 【这句话与号码都由领域包给，共用层一个数字都不认识】（设计稿 §13「危机」行）
             // 号码原来写死在这里：第二个领域接进来之后，它的用户在危机窗内读到的是**上一个
             // 行当**的三个号码——号码本身是对的，只是不属于他这件事，而这一轮回复照常生成、
             // 格式完全正常、没有一处会报错。

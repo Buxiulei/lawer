@@ -130,14 +130,22 @@ function caseDomain(db: Database, caseId: number): string | null {
 }
 
 /**
- * 本案登记过的对方称呼。这个领域的 company_profiles 里装的就是来访化名/编号
- *（首诊那一格逐字写着"填化名或编号，不要填真实姓名"）。
+ * 本案登记过的**脱敏对象**的称呼——只取领域声明的那几个角色（`sensitive.aliasRoles`）。
+ *
+ * 【为什么必须按 role 筛，不能全取】company_profiles 在同一个案子里同时装两类名字：
+ * 脱敏对象本人的化名/编号（首诊那一格逐字写着"填化名或编号，不要填真实姓名"），
+ * 与**收件机构的全称**（平台、协会、监管部门——工具面那一格逐字写着"用机构全称"）。
+ * 全取的形态是：用户导出一份要寄给平台的投诉答复函，抬头成了「致〔已脱敏〕」、
+ * 抄送栏也是〔已脱敏〕，而 PDF 照常生成、HTTP 200，页脚还印着一句
+ *「出现的化名或编号已替换为占位」——产物废了，而三处都在说一切正常。
  */
-function caseAliases(db: Database, caseId: number): string[] {
+function caseAliases(db: Database, caseId: number, roles: readonly string[]): string[] {
+  if (roles.length === 0) return [];
+  const holes = roles.map(() => '?').join(', ');
   return (
-    db.prepare('SELECT name FROM company_profiles WHERE case_id = ?').all(caseId) as {
-      name: string;
-    }[]
+    db
+      .prepare(`SELECT name FROM company_profiles WHERE case_id = ? AND role IN (${holes})`)
+      .all(caseId, ...roles) as { name: string }[]
   )
     .map((r) => r.name.trim())
     .filter((n) => n.length >= ALIAS_MIN_LEN);
@@ -161,7 +169,7 @@ export function shareRedactorFor(db: Database, caseId: number): ShareRedactor {
       record: (meta) => ({ meta, hits: 0 }),
     };
   }
-  const aliases = caseAliases(db, caseId);
+  const aliases = caseAliases(db, caseId, sensitive.aliasRoles);
   const scrub = (t: string): RedactResult => {
     const byPattern = maskContacts(t);
     const byAlias = maskAliases(byPattern.text, aliases);

@@ -105,6 +105,40 @@ describe('敏感级声明的读法', () => {
     expect(got.text).toBe(`${SENSITIVE_MASK}与${SENSITIVE_MASK}不是同一个人`);
   });
 
+  it('声明的 aliasRoles 必须是 company_profiles 真有的角色（打错一个字＝那一行永不匹配，化名从此不洗）', () => {
+    // 这条钉的是"清单本身对不对得上表"：`role IN (...)` 里写了一个库里不存在的角色名时，
+    // 查询照常返回 0 行、脱敏器照常构造出来、分享页照常 200 —— 只是从此一个化名都不洗，
+    // 而页脚那句话仍然写着"化名或编号已替换为占位"。
+    for (const pack of Object.values(DOMAINS)) {
+      if (!pack.sensitive) continue;
+      expect(pack.sensitive.aliasRoles.length, `${pack.key} 的 aliasRoles 是空的`).toBeGreaterThan(0);
+      for (const role of pack.sensitive.aliasRoles) {
+        expect(cases.COMPANY_ROLES as readonly string[], `${pack.key} 声明了不存在的角色「${role}」`).toContain(role);
+      }
+    }
+  });
+
+  it('同案登记的**机构全称**不洗，只洗脱敏对象那一格（变异：去掉 role 过滤 → 红）', () => {
+    // 【它拦的是哪一次事故】这个领域的 company_profiles 一张表装两类东西：来访者的化名
+    //（首诊写进「签约主体」）与平台/协会/监管这些**收件机构的全称**（登记成「关联」）。
+    // 不分角色一律洗的形态是——用户导出一份要寄给平台的投诉答复函，
+    // 抬头成了「致〔已脱敏〕」、抄送栏也是〔已脱敏〕，而 PDF 照常生成、HTTP 200，
+    // 页脚还印着一句「出现的化名或编号已替换为占位」。产物废了，三处都说一切正常。
+    const caseId = makeCase('counseling');
+    const ins = db.prepare('INSERT INTO company_profiles (case_id, name, role) VALUES (?, ?, ?)');
+    ins.run(caseId, '来访庚辛壬', '签约主体');
+    ins.run(caseId, '简单心理平台', '关联');
+    ins.run(caseId, '中国心理学会临床心理学注册工作委员会', '关联');
+    const got = shareRedactorFor(db, caseId).text(
+      '致简单心理平台：关于来访庚辛壬对本机构的投诉，现答复如下。' +
+        '抄送：中国心理学会临床心理学注册工作委员会。',
+    );
+    expect(got.text, '来访者的化名没被洗').not.toContain('来访庚辛壬');
+    expect(got.text, '收件机构的全称被一并洗掉了，这份答复函寄不出去').toContain('简单心理平台');
+    expect(got.text).toContain('中国心理学会临床心理学注册工作委员会');
+    expect(got.hits, '只该洗掉化名那一处').toBe(1);
+  });
+
   it('单字的登记名不参与替换（替了会把整份产物洗成读不成句）', () => {
     // 用户随手把对方记成「甲」时，替换会把正文里每一个「甲」都换掉：「甲方」→「〔已脱敏〕方」。
     // 漏掉一个单字化名的代价是它留在页面上；替掉它的代价是整份文书作废、且看起来像系统坏了。

@@ -253,6 +253,22 @@ export interface DomainSensitivity {
   factsNotice: string;
   /** 分享 / 导出页上逐字给读者的那句话（说明这里被脱敏过、以及要核对该找谁） */
   redactNotice: string;
+  /**
+   * `company_profiles` 里**哪几个 role 装的是脱敏对象的化名/编号**（取值是 COMPANY_ROLES 的子集）。
+   *
+   * 【为什么不能"本案登记过的名字全洗"】这张表在同一个案子里同时装两类东西：
+   * 一类是脱敏对象本人的化名或编号（首诊那一格逐字写着「填化名或编号，不要填真实姓名」），
+   * 另一类是**收件机构的全称**（平台、协会、监管部门——工具面那一格逐字写着「用机构全称」）。
+   * 不分 role 一律洗掉的形态是：用户导出一份要寄给平台的投诉答复函，抬头变成
+   *「致〔已脱敏〕」、抄送栏也是〔已脱敏〕，而 PDF 照常生成、HTTP 200，
+   * 页脚那句 redactNotice 还写着"只替换了化名或编号"——三处一起说了假话。
+   *
+   * 【它挡不住的那一种，写在这里不是遗漏】一个自然人（如监护人）被登记成了不在本清单里的
+   * 角色时，他的化名不会被替换。那一层由**联系方式规则**（PII_PATTERNS，跨 role 恒生效）与
+   * 首诊/工具面「只填化名不填真名」的措辞兜底。要改成"按人/机构分而不按 role 分"，
+   * 得先给 company_profiles 加一个「主体是不是自然人」的列——那是一次表结构变更，不在这里将就。
+   */
+  aliasRoles: readonly string[];
 }
 
 /**
@@ -555,6 +571,9 @@ export function assertDomainPack(pack: DomainPack): void {
     str('sensitive.subject', pack.sensitive.subject);
     str('sensitive.factsNotice', pack.sensitive.factsNotice);
     str('sensitive.redactNotice', pack.sensitive.redactNotice);
+    // 空清单 = 一个化名都不替换，而分享页照样印着「化名或编号已替换为占位」那句话：
+    // 页面上同时出现真化名与一句声称它被替换过的说明，两边都不报错。
+    arr('sensitive.aliasRoles', pack.sensitive.aliasRoles);
   }
 
   str('copy.neutral.title', pack.copy?.neutral?.title);
