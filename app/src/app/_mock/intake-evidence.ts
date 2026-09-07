@@ -6,11 +6,8 @@
 
 import type { SanbeiCap } from '@/lib/cap/sanbei';
 import { sanbeiCapFacts, SANBEI_CAP_UNVERIFIED_CAVEAT, isSanbeiCapVerified } from '@/lib/cap/sanbei';
-import {
-  INTAKE_STAGE_ACTIONS,
-  intakeActionDueAt,
-  intakeActionPriority,
-} from '@/lib/cases/intake-actions';
+import { intakeActionDueAt, intakeActionPriority } from '@/lib/cases/intake-actions';
+import { LABOR } from '@/lib/domains/labor';
 import { EVIDENCE_CATEGORIES as SPEC_EVIDENCE_CATEGORIES } from '@/lib/evidence/categories';
 import type { ActionItem, CaseStage, EvidenceCategory, EvidenceItem } from './types';
 
@@ -234,9 +231,10 @@ export function previewActions(
   caseId = 'demo',
   now: Date = new Date(),
 ): ActionItem[] {
-  // 种子表在 lib/cases/intake-actions（服务端落库用的是同一份）。这里只做「种子 → 视图行」，
+  // 种子表在领域包里（服务端落库读的是同一份）。这里只做「种子 → 视图行」，
   // 不再自己存一份文案：屏幕上写着三件事、库里一件都没有，就是这么来的。
-  const seeds = INTAKE_STAGE_ACTIONS[stage] ?? [];
+  // 这一份 mock 画的是那个领域的首诊演示，所以直接读它的包；stage 为 '' 时没有对应项。
+  const seeds = LABOR.intakeStageActions[stage] ?? [];
   return seeds.map((seed, i) => ({
     id: `intake_action_${i + 1}`,
     caseId,

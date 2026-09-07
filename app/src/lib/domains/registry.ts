@@ -69,6 +69,28 @@ export interface FactsSectionSpec {
 }
 
 /**
+ * 事实卡 `basics` 那一节**四行正文的抬头**（键固定＝cases 表那四列，措辞按领域来）。
+ *
+ * 【为什么光有分节标题不够】分节标题（factsSections[basics].title）换了词，
+ * 而节里那四行仍是共用层写死的字面量的形态是：抬头写着这个行当的话，
+ * 下面四行却在用另一个行当的名词报同一批数——模型每一轮都据此把这四个数**读成别的东西**
+ *（同一列在两个行当里是完全不同的量：一个是按月发的，一个是按次收的），
+ * 然后拿它去算钱、去写文书，而没有任何一处会报错：值是对的，只有它叫什么错了。
+ *
+ * 键是 `cases` 表的列，跨领域固定；**只有措辞按领域换**——与 factsSections 同一条纪律。
+ */
+export interface DomainBasicsLabels {
+  /** cases.employed_from：本领域管这条时间线的起点叫什么 */
+  employedFrom: string;
+  /** cases.position */
+  position: string;
+  /** cases.monthly_wage_fen（渲染成「X 元」） */
+  monthlyWage: string;
+  /** cases.contract_count */
+  contractCount: string;
+}
+
+/**
  * 本领域里「我方」与「对方」各是谁（设计稿 §13-1）。角色**不写死**：有的领域对面是一家机构，
  * 有的领域对面可能同时有好几方，谁在对面是领域的事，不是工具面的事。
  *
@@ -166,6 +188,20 @@ export interface DomainCrisis {
    * 而分支之间只有作者知道差别在哪。
    */
   firstSegment(ctx: { facts?: { hotlines?: HotlineFact[] }; compact?: boolean }): string;
+  /**
+   * 危机窗内（24 小时内已经给过一次整张资源卡）贴在**那张卡正文之后**的使用限制
+   *（lib/agent/prompt.ts 的 packsSection noteAfter）。
+   *
+   * 【为什么它必须由领域包给，而不是共用层写一句通用的】这句话里要带号码：不带号码的
+   * 「别重印整张卡」会让模型这一轮**一个号码都不给**，而用户正是在这种时刻最需要号码。
+   * 共用层写死号码的形态是——第二个领域的用户在危机窗内读到的是**上一个行当**的三个号码，
+   * 而这一轮的回复照常生成、格式完全正常、没有一处会报错。
+   *
+   * @param numbers 从本领域**自己那张资源卡**的结构化 facts 里抽出来、已带座机标记的号码。
+   *   抽不到（卡不在本轮注入包里、或卡上没有可用号码）时传空数组——
+   *   包要自己决定这时说什么，共用层不替它兜底。
+   */
+  repeatCardNote(numbers: readonly string[]): string;
 }
 
 /**
@@ -271,6 +307,20 @@ export interface DomainSensitivity {
   aliasRoles: readonly string[];
 }
 
+/**
+ * 首诊结束时种下的一条自查提醒（「现在做这三件事」里的一件）。
+ *
+ * 【dueInDays 是自查提醒，不是法定期限】它算出来的是「几天内自己做完」，
+ * 与 lib/deadline 的法定期限不是一回事：落库时进 action_items.due_at，不进 deadlines。
+ * 两者混同的形态是——一条"三天内导出材料"的自查提醒被当成时效摆在期限栏里。
+ */
+export interface IntakeActionSeed {
+  title: string;
+  detail: string;
+  /** 距今天几天到期，null = 不设期限 */
+  dueInDays: number | null;
+}
+
 /** 一个领域包要提供的东西。**每一项都必填**：缺项由 assertDomainPack 在启动时点名。 */
 export interface DomainPack {
   /** 领域键，与 cases.domain 落库值同一份取值 */
@@ -279,6 +329,39 @@ export interface DomainPack {
   label: string;
   /** 我方与对方各是谁；工具面的「对方主体」措辞取自它，不在工具面写死 */
   parties: DomainParties;
+  /**
+   * 登记对方主体（company_profiles）时**调用方没点名角色**的那一行落哪个角色位。
+   * 取值必须是 lib/cases 的 COMPANY_ROLES 之一（角色位跨领域同一套，逐包比对的判据在
+   * lib/__tests__/sensitive-exits.test.ts——这里不 import lib/cases，免得共用层反向依赖）。
+   *
+   * 【为什么这一格必须按领域来，不能由共用层写死一个】同一张表在不同行当里装的东西不一样。
+   * 有的行当里「对面那一方」几乎总是我方签过字的那一家，缺省落签约位是对的；
+   * 而**声明了敏感级的行当**里，这张表同时装着两类名字——脱敏对象本人的化名或编号，
+   * 与要把产物寄过去的**机构全称**。缺省落进化名位的形态是：用户导出一份要寄给机构的
+   * 答复函，抬头与抄送栏都成了占位符，而 PDF 照常生成、HTTP 200，页脚还印着一句
+   *「出现的化名或编号已替换为占位」——产物废了，三处都在说一切正常。
+   * 这条缺省与 sensitive.aliasRoles 不许相交，由 assertDomainPack 在装载时点名。
+   */
+  defaultCompanyRole: string;
+  /**
+   * 登记对方主体时**没点名角色**、而这个名字本案已经登记过：沿用那一行已有的角色（true），
+   * 还是照样落 defaultCompanyRole（false）。判定在 lib/cases.resolveCompanyRole 第②条。
+   *
+   * 【为什么这是一格包字段，而不是共用层的一条通则】两种取值各自都会静默毁掉一类产物，
+   * 而毁掉哪一类由行当决定，共用层看不出来：
+   *  · false（store.upsertCompanyProfile 对 role 是直接赋值不是 COALESCE）——给一个
+   *    已登记的主体补一句备注、补一个统一社会信用代码，只要这次没带 role，那一行就被
+   *    **搬到缺省角色位**去了。回包 created=false、HTTP 200，页面上那一行还在，
+   *    而下游按角色取数的东西全部改判（被申请人选谁、分享/导出时哪些名字要脱敏）。
+   *  · true——**声明了敏感级的行当**里，脱敏对象的化名由首诊落在化名位上，
+   *    之后不带 role 的补充要是把它搬到机构位，这个人从此在分享页上原样露出。
+   *
+   * 【为什么不由共用层挑一个更安全的】它是**对外行为**，不是实现细节：
+   * 同一串调用在两种取值下落到不同角色位，而两种都不报错。所以由每个包各自声明，
+   * 缺项由 assertDomainPack 在装载时点名（漏填时按 falsy 静默取 false 的形态是，
+   * 一个行当的化名位在没人改过它的情况下被搬空）。
+   */
+  inheritCompanyRoleOnUnnamed: boolean;
   /** 案件阶段枚举。**唯一真源**：stage 校验读它，不再各处引 CASE_STAGES */
   stages: readonly string[];
   /**
@@ -308,6 +391,19 @@ export interface DomainPack {
   /** 首诊表 schema：字段、必填、校验规则与问法 */
   intakeSchema: readonly IntakeFieldSpec[];
   /**
+   * 首诊做完给的**那三件事**，按阶段一份（键必须是本领域的 stage）。
+   *
+   * 【为什么它非得按领域打包】这三条是纯粹的行当知识——"下次约谈前打开手机录音"
+   * 这句话对另一个行当的用户毫无意义。而它此前是一张**按上一个领域的阶段名建键**的
+   * 共用层常量：第二个领域的 stage 在表里一个都对不上，`?? []` 于是给 0 条种子，
+   * 首诊回包 actionsAdded=0、没有任何一处报错——用户做完首诊，"现在做这三件事"
+   * 那一屏是空的，而他不会知道这是个故障还是"这个阶段本来就没事可做"。
+   *
+   * **每个 stage 都必须有一项**（没有种子的阶段给空数组）：空数组是"这个阶段确实不给"
+   * 这个结论，缺键是"忘了填"，两者在产出上同形（都是 0 条），只能在这里分开。
+   */
+  intakeStageActions: Readonly<Record<string, readonly IntakeActionSeed[]>>;
+  /**
    * 首诊要不要顺手落一条法定期限，以及落哪一条。
    *
    * **省略 = 本领域首诊不自动落任何期限**——这是一个结论，不是待填项：
@@ -324,6 +420,8 @@ export interface DomainPack {
   };
   /** 事实卡分节（顺序即渲染顺序） */
   factsSections: readonly FactsSectionSpec[];
+  /** 事实卡 basics 那一节四行正文的抬头（键固定，措辞按领域） */
+  factsBasics: DomainBasicsLabels;
   /**
    * 个案报告的分节骨架（顺序即渲染顺序）。
    *
@@ -514,11 +612,35 @@ export function assertDomainPack(pack: DomainPack): void {
   str('parties.self', pack.parties?.self);
   arr('parties.counterparts', pack.parties?.counterparts);
   if (typeof pack.parties?.multiParty !== 'boolean') missing.push('parties.multiParty');
+  str('defaultCompanyRole', pack.defaultCompanyRole);
+  // 漏填时 `pack.inheritCompanyRoleOnUnnamed` 是 undefined，判定处按 falsy 走 false 分支——
+  // 也就是"每一次不点名的补充都把那一行搬回缺省位"，而没有一处会报错。所以缺项在这里点名。
+  if (typeof pack.inheritCompanyRoleOnUnnamed !== 'boolean') missing.push('inheritCompanyRoleOnUnnamed');
   arr('stages', pack.stages);
   // tracks 允许为空数组，但必须是数组——undefined 是"忘了填"，[] 是"没有并行轨"
   if (!Array.isArray(pack.tracks)) missing.push('tracks');
   arr('intakeSchema', pack.intakeSchema);
+  // 首诊种子表：键必须**恰好**是本领域的 stages。
+  // 缺一个键 = 那个阶段的用户做完首诊拿到 0 条待办且不报错；多一个键 = 那份文案永远画不出来，
+  // 两种都不会崩，只会静静地不工作，所以在装载时点名。
+  if (!pack.intakeStageActions || typeof pack.intakeStageActions !== 'object') {
+    missing.push('intakeStageActions');
+  } else if (Array.isArray(pack.stages)) {
+    const declared = new Set(Object.keys(pack.intakeStageActions));
+    for (const stage of pack.stages) {
+      if (!declared.has(stage)) missing.push(`intakeStageActions 缺阶段「${stage}」（没有种子就给空数组）`);
+    }
+    for (const key of declared) {
+      if (!pack.stages.includes(key)) missing.push(`intakeStageActions 多出「${key}」——它不是本领域的阶段`);
+    }
+  }
   arr('factsSections', pack.factsSections);
+  // basics 那四行的抬头：漏一个的形态是那一行顶着 `undefined：2026-01-10` 进 prompt，
+  // 或者（更常见）沿用上一个行当的名词，而值本身是对的，没有一处会报错。
+  str('factsBasics.employedFrom', pack.factsBasics?.employedFrom);
+  str('factsBasics.position', pack.factsBasics?.position);
+  str('factsBasics.monthlyWage', pack.factsBasics?.monthlyWage);
+  str('factsBasics.contractCount', pack.factsBasics?.contractCount);
   arr('reportSections', pack.reportSections);
   arr('deadlineKinds', pack.deadlineKinds);
   arr('docKinds', pack.docKinds);
@@ -534,6 +656,12 @@ export function assertDomainPack(pack: DomainPack): void {
   arr('crisis.openerText.head', pack.crisis?.openerText?.head);
   str('crisis.openerText.tail', pack.crisis?.openerText?.tail);
   if (typeof pack.crisis?.firstSegment !== 'function') missing.push('crisis.firstSegment');
+  if (typeof pack.crisis?.repeatCardNote !== 'function') missing.push('crisis.repeatCardNote');
+  // 空数组也得说得出话：抽不到号码时回空串的形态是，危机窗内那张卡后面**什么限制都没有**，
+  // 模型于是把整张卡又重印一遍（spec §10 不刷屏那条从此失效），而没有一处会报错。
+  else if (typeof pack.crisis.repeatCardNote([]) !== 'string' || pack.crisis.repeatCardNote([]).trim() === '') {
+    missing.push('crisis.repeatCardNote([]) 返回空——一个号码都抽不到时也必须说得出话');
+  }
 
   // lawyerReview / sensitive 都是**可选**的（省略 = 本领域没有这回事）。但一旦声明，
   // 就不许半张：空的 items = 一节只有抬头没有内容；空的 discipline = 列了四件事却没说
@@ -547,9 +675,21 @@ export function assertDomainPack(pack: DomainPack): void {
     str('sensitive.subject', pack.sensitive.subject);
     str('sensitive.factsNotice', pack.sensitive.factsNotice);
     str('sensitive.redactNotice', pack.sensitive.redactNotice);
-    // 空的 aliasRoles = 声明了敏感级、却一个化名都不替换，而 redactNotice 照旧逐字宣称
-    // 「出现的化名或编号已替换为占位」。页面 200、正文完整、那句话还在——三处一起说假话。
+    // 空清单 = 一个化名都不替换，而分享页照样印着「化名或编号已替换为占位」那句话：
+    // 页面上同时出现真化名与一句声称它被替换过的说明，两边都不报错。
     arr('sensitive.aliasRoles', pack.sensitive.aliasRoles);
+    // 【缺省角色不许落在化名位上】这两项各自看都合法：缺省是一个真角色，清单里也是真角色。
+    // 但它们指到同一格时，**每一次不点名角色的登记都会被当成脱敏对象**——而登记机构
+    // 走的正是这条不点名的路。产物（分享页 / 导出 PDF / 转介包）里机构全称成了占位符，
+    // HTTP 200、页脚那句话还写着"只替换了化名或编号"。所以在装载时就拒绝这种包，
+    // 不留给运行期去发现：那时发现它的方式是一份寄不出去的文书。
+    if ((pack.sensitive.aliasRoles ?? []).includes(pack.defaultCompanyRole)) {
+      missing.push(
+        `defaultCompanyRole「${pack.defaultCompanyRole}」同时被列进 sensitive.aliasRoles——` +
+          '不点名角色的登记（登记机构走的就是这条路）会被当成脱敏对象，' +
+          '机构全称在分享/导出/转介里变成占位符，而产物照常生成',
+      );
+    }
   }
 
   str('copy.neutral.title', pack.copy?.neutral?.title);

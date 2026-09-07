@@ -85,6 +85,11 @@ describe('assertDomainPack：包必须实现全部字段', () => {
       'parties.multiParty',
       { parties: { ...LABOR.parties, multiParty: undefined as unknown as boolean } },
     ],
+    [
+      // 漏填时判定处按 falsy 走 false 分支——每一次不点名的补充都把那一行搬回缺省位，不报错
+      'inheritCompanyRoleOnUnnamed',
+      { inheritCompanyRoleOnUnnamed: undefined as unknown as boolean },
+    ],
     ['stages', { stages: [] }],
     ['tracks', { tracks: undefined as unknown as string[] }],
     ['intakeSchema', { intakeSchema: [] }],

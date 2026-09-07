@@ -10,6 +10,7 @@
 // 任何一处「为了省 token 而转述」都会以「模型把转述当原文引用」的形式变成可信度事故。
 
 import { buildCaseFacts, renderCaseFacts } from './case-facts';
+import { extractHotlines, isLandlineOnly, LANDLINE_MARK } from './crisis-opener';
 import { CHARTER } from './charter';
 import { intakeDirective, recapBrief, type IntakeStage } from './intake';
 import { MAX_ACTION_CARDS } from './tools';
@@ -70,6 +71,22 @@ export function packsSection(
     '',
     blocks.join('\n\n---\n\n'),
   ].join('\n');
+}
+
+/**
+ * 本轮注入包里那张**危机资源卡**上的可用号码，已带座机标记。
+ *
+ * 【为什么从卡里抽而不是从任何一处文案里读】号码只有一个真源：卡的结构化 facts。
+ * 卡上标 forbidden 的号码在 extractHotlines 那一层就被滤掉了，所以这条路径
+ * **不可能**把一个被禁的号码递给领域包（评测官 08-26 查实的那条出口闸同源）。
+ * 卡不在本轮注入包里时回空数组——由领域包自己决定这时说什么。
+ *
+ * 标记口径与窗内紧凑卡（lib/agent/crisis.compactCrisisCard）逐字相同：同一轮里
+ * 两处印同一批号码，格式不一致的形态是模型以为那是两组不同的号码。
+ */
+function markedCrisisNumbers(packs: KnowledgePack[], resourcePackId: string): string[] {
+  const card = packs.find((p) => p.id === resourcePackId);
+  return extractHotlines(card?.facts).map((n) => (isLandlineOnly(n) ? `${n}（${LANDLINE_MARK}）` : n));
 }
 
 /** 输出纪律段：把 charter 里几条能机械判定的要求，翻译成「本轮具体该调哪个工具」。 */
@@ -242,11 +259,11 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
       input.crisis && input.crisisCardAlreadyGiven
         ? {
             packId: crisisPack.resourcePackId,
-            note:
-              '本案 24 小时内已经给过一次这张卡，本轮**不要再整张重复**（spec §10 不刷屏）。' +
-              '但三个号码本身**仍然必须出现在这一轮回复里**——用一句话重述即可，' +
-              '如「热线还是这三个，随时能打：12356 / 座机 800-810-1117 / 手机 010-82951332」。' +
-              '绝不能让用户在这种时刻回头翻聊天记录找号码。',
+            // 【这句话与号码都由领域包给，共用层一个数字都不认识】（设计稿 §13「危机」行）
+            // 号码原来写死在这里：第二个领域接进来之后，它的用户在危机窗内读到的是**上一个
+            // 行当**的三个号码——号码本身是对的，只是不属于他这件事，而这一轮回复照常生成、
+            // 格式完全正常、没有一处会报错。
+            note: crisisPack.repeatCardNote(markedCrisisNumbers(input.packs, crisisPack.resourcePackId)),
           }
         : undefined,
       // 核心依据条**由结构化事实判定**，不让模型自己勾——见 citation-block.coreArticleKeys：

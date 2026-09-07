@@ -344,6 +344,36 @@ export function calcNonSeverance(
         ...minWageOpt,
         inputSources,
       });
+    } else if (kind === '退费') {
+      const p = new Problems(args);
+      const paid = posInt(args.total_paid_fen);
+      const total = posInt(args.sessions_total);
+      const used = num(args.sessions_used);
+      const unit = posInt(args.unit_price_fen);
+      if (paid === null) p.note('total_paid_fen', '对方已实付的总额，单位分（正整数）');
+      if (total === null) p.note('sessions_total', '合同约定的总次数（正整数）');
+      if (used === null || !Number.isInteger(used) || used < 0) {
+        p.note('sessions_used', '已完成（已实际提供服务）的次数，非负整数；一次都没做就填 0');
+      }
+      if (unit === null) p.note('unit_price_fen', '单次价格，单位分（正整数）');
+      if (p.any) return rejectInputs('退费', p);
+      inputSources.totalPaidFen = sourceOf('total_paid_fen');
+      inputSources.sessionsUsed = sourceOf('sessions_used');
+      inputSources.unitPriceFen = sourceOf('unit_price_fen');
+      result = calc.calcRefund({
+        totalPaidFen: paid!,
+        sessionsTotal: total!,
+        sessionsUsed: used!,
+        unitPriceFen: unit!,
+        ...(parseRefundClause(args) ? { clause: parseRefundClause(args)! } : {}),
+        ...(posInt(args.punitive_base_low_fen) !== null
+          ? { punitiveBaseLowFen: posInt(args.punitive_base_low_fen)! }
+          : {}),
+        ...(posInt(args.punitive_base_high_fen) !== null
+          ? { punitiveBaseHighFen: posInt(args.punitive_base_high_fen)! }
+          : {}),
+        inputSources,
+      });
     } else {
       return null; // N / N+1 / 2N 不归这里管
     }
@@ -351,14 +381,47 @@ export function calcNonSeverance(
     return reject(`计算失败：${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // 加付赔偿金：把两条**会让用户白跑一趟**的前置条件贴在返回值上（指令紧贴约束对象）。
-  // 只写进 flags 不够——flags 是给代码看的，这句是逼模型讲给用户听的。
-  const noteFor = (k: string): string | null =>
-    k === '加付赔偿金'
-      ? '**必须同时讲清两件事**：①这一项要先经劳动监察责令限期支付、逾期不付才成立（行政前置）；' +
+  // 两项各自贴一条**会让用户白跑一趟 / 会把话说错**的前置条件（指令紧贴约束对象）。
+  // 只写进 flags 不够——flags 是给代码看的，这几句是逼模型讲给用户听的。
+  const noteFor = (k: string): string | null => {
+    if (k === '加付赔偿金') {
+      return (
+        '**必须同时讲清两件事**：①这一项要先经劳动监察责令限期支付、逾期不付才成立（行政前置）；' +
         '②**仲裁委不受理加付赔偿金**——把它写进仲裁申请会被驳回，用户会白跑一趟立案。'
-      : null;
+      );
+    }
+    if (k === '退费') {
+      return (
+        '**对外只给区间，不给一个数**：合同定性未经律师书面确认，给单一数字就是替律师下了定性结论。' +
+        '要同时给出每条口径各自的结果与差异原因（见 steps 的前四步）。' +
+        '**最后那一步（punitive-risk，消保法§55 三倍）是风险测算不是结论**：' +
+        '前提是先认定欺诈行为、举证责任在对方；它的 valueFen **不是**退费的一部分，' +
+        '不得并进退费总额，也不得在文书或报价里当成我方要赔的数。' +
+        '回包的 amount_fen 是**区间上限**（对我方最不利的那一端），不是"应退这么多"。'
+      );
+    }
+    return null;
+  };
   return persistCalc(kind, result, inputSources, ctx, noteFor(kind));
+}
+
+/**
+ * 把模型传来的散装参数拼成一条 `RefundClause`。**认不出来就回 null**（= 合同未约定），
+ * 不猜——猜错的形态是：合同里明明没有这一条，而我们替它填了一条「概不退费」，
+ * 于是区间的下限凭空变成 0，用户据此以为自己一分钱都不用退。
+ */
+function parseRefundClause(args: Record<string, unknown>): calc.RefundClause | null {
+  const kind = str(args.refund_clause);
+  if (kind === '概不退费') return { kind: '概不退费' };
+  if (kind === '按比例扣违约金') {
+    const bp = Number(args.penalty_rate_bp);
+    return Number.isFinite(bp) ? { kind: '按比例扣违约金', rateBp: bp } : null;
+  }
+  if (kind === '扣固定违约金') {
+    const fen = Number(args.penalty_fen);
+    return Number.isFinite(fen) ? { kind: '扣固定违约金', penaltyFen: fen } : null;
+  }
+  return null;
 }
 /**
  * 把算完的结果落库并回给模型。**七种算法共用这一段**——金额与算式必须同源，

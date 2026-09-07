@@ -45,7 +45,13 @@ export const companyProfileUpsert: Capability = {
     properties: {
       ...caseIdProp,
       name: { type: 'string', description: '公司全称，尽量与营业执照一致' },
-      role: { type: 'string', enum: [...cases.COMPANY_ROLES], description: '默认签约主体' },
+      role: {
+        type: 'string',
+        enum: [...cases.COMPANY_ROLES],
+        description:
+          '这一方在本案里是哪个角色位。不填时：这个名字在本案已经登记过就沿用它已有的角色，' +
+          '是新名字才落本领域声明的缺省角色位——**各领域的缺省不是同一个**，拿不准就点名。',
+      },
       uscc: { type: 'string', description: '统一社会信用代码，不知道就不传' },
       legal_rep: { type: 'string', description: '法定代表人' },
       note: { type: 'string', description: '风险点：注册资本、经营异常、关联公司等' },

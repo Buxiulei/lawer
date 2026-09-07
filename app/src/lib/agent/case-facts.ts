@@ -330,9 +330,18 @@ function hasValue(v: string | number | null | undefined): boolean {
   return v.trim().length > 0;
 }
 
-/** P1 首诊四项。有值必现、无值写「未记录」——省略等于让模型以为没问过。 */
+/**
+ * P1 首诊四项。有值必现、无值写「未记录」——省略等于让模型以为没问过。
+ *
+ * 【四行的抬头必须按领域取（DomainPack.factsBasics）】这四列在不同行当里装的**不是同一个量**：
+ * monthly_wage_fen 在一个行当里是按月发的，在另一个行当里是按次收的；employed_from
+ * 在一个行当里是入职那天，在另一个行当里是服务关系开始那天。抬头写死一份的形态是——
+ * 模型每一轮都把这四个数**读成别的东西**，然后拿它去算钱、去写文书，
+ * 而值一个都没错、格式完全正常、没有任何一处会报错。
+ */
 function employmentSection(s: CaseSnapshot): FactSection {
   const c = s.case;
+  const labels = domainPackOrDefault(s.case.domain).factsBasics;
   const wage = hasValue(c.monthly_wage_fen) ? `${(c.monthly_wage_fen! / 100).toFixed(2)} 元` : '未记录';
   const filled = [c.employed_from, c.position, c.monthly_wage_fen, c.contract_count].filter(hasValue).length;
   return {
@@ -341,10 +350,10 @@ function employmentSection(s: CaseSnapshot): FactSection {
     heading: heading(s, 'basics'),
     stat: `- 首诊四项已记录 ${filled}/4〔用户自述待核实〕`,
     detail: [
-      `- 入职日期：${hasValue(c.employed_from) ? c.employed_from : '未记录'}`,
-      `- 岗位：${hasValue(c.position) ? trunc(c.position!, 40) : '未记录'}`,
-      `- 月工资：${wage}`,
-      `- 合同签订次数：${hasValue(c.contract_count) ? trunc(c.contract_count!, 20) : '未记录'}`,
+      `- ${labels.employedFrom}：${hasValue(c.employed_from) ? c.employed_from : '未记录'}`,
+      `- ${labels.position}：${hasValue(c.position) ? trunc(c.position!, 40) : '未记录'}`,
+      `- ${labels.monthlyWage}：${wage}`,
+      `- ${labels.contractCount}：${hasValue(c.contract_count) ? trunc(c.contract_count!, 20) : '未记录'}`,
     ],
   };
 }

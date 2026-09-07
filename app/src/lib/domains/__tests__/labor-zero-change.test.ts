@@ -50,6 +50,7 @@ import { DOMAINS, type DomainPack } from '../registry';
 /** 基线文件的形状。写出来是为了让漏掉某一项时 tsc 就红，而不是等断言比出 undefined。 */
 interface Baseline {
   intakeValidation: Record<string, unknown>;
+  intakeStageActions: Record<string, { title: string; detail: string; dueInDays: number | null }[]>;
   caseFacts: string;
   factsSections: string[];
   reportSections: unknown;
@@ -224,8 +225,10 @@ function intakeCases(): Record<string, unknown> {
 
 describe('labor 零变化守卫（基线取自 origin/main 4098805）', () => {
   it('基线文件本身有料（空基线会让下面每一条永远绿）', () => {
-    expect(Object.keys(BASELINE).length).toBeGreaterThanOrEqual(14);
+    expect(Object.keys(BASELINE).length).toBeGreaterThanOrEqual(15);
     expect(BASELINE.caseFacts.length).toBeGreaterThan(500);
+    // 种子表整张被换成 {} 时上面那条计数照样过，所以这里点名钉它有条目
+    expect(Object.values(BASELINE.intakeStageActions).flat().length).toBe(15);
   });
 
   it('① 首诊校验：合法入参与九种非法入参，逐字段的 errorCode 与话都不变（变异：改 intakeSchema 里任一句 → 红）', () => {
@@ -347,6 +350,27 @@ describe('labor 零变化守卫（基线取自 origin/main 4098805）', () => {
     expectUnionSchema(mustExist('claims_upsert').inputSchema, BASELINE.schemas.claims_upsert, (p) => p.claimKinds);
     // draft_write 的 kind 取的是 lib/cases/drafts 那一份（不是并集），逐字比
     expect(mustExist('draft_write').inputSchema).toEqual(BASELINE.schemas.draft_write);
+  });
+
+  /**
+   * 【为什么这张表要单独钉一条】P4-W3 把首诊「现在做这三件事」的种子表从共用层
+   *（lib/cases/intake-actions.ts）搬进了 DomainPack.intakeStageActions。搬完之后
+   * lib/cases/__tests__/intake.test.ts 那条断言比的是「库里落下的行动卡 == 包里的种子」——
+   * 它钉的是**接线**（表真的被读了、真的落了库），两边同源，钉不住**内容**：
+   * 把某个阶段的三条种子整段删成 `[]`，那条判据照样绿（空数组等于空数组），
+   * 首诊回包 actionsAdded=0、页面上一件事都不推，而没有一处会报错。
+   * 所以内容由这里比基线，接线由那边比包，两条各管一头。
+   *
+   * 【`''` 那个键去哪了】改动前的表是 `Record<CaseStage | '', …>`，第 13 个键是空串
+   *（不是任何一个阶段，用来兜住 stage 还没填的案子）。搬进包之后键集合必须**恰好**是
+   * 本领域的 stages（assertDomainPack 两个方向都点名），所以空串那一格没有跟着搬；
+   * 两处消费点都写着 `?? []`，取不到键时给 0 条种子，行为与原来那一格逐字相同。
+   * 这条断言把「少了空串键」写成明账：比的是**基线去掉空串之后**的那 12 个阶段。
+   */
+  it('⑩ 首诊三件事的种子表逐字不变（变异：删掉「风声」的三条种子、或改任一句 detail → 红）', () => {
+    const { '': emptyStageSeeds, ...byStage } = BASELINE.intakeStageActions;
+    expect(emptyStageSeeds, '基线里空串那一格本来就是空的，去掉它不改变任何阶段的产出').toEqual([]);
+    expect(LABOR.intakeStageActions).toEqual(byStage);
   });
 
   /**

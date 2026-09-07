@@ -7,6 +7,9 @@ import { describe, expect, it } from 'vitest';
 
 import { CASE_STAGES } from '@/lib/cases/stages';
 
+import * as knowledge from '@/lib/knowledge';
+import { bannedHotlines, crisisHotlines } from '@/lib/agent/crisis-opener';
+
 import { LABOR } from '../labor';
 import { DOMAINS, getDomainPack } from '../registry';
 
@@ -109,5 +112,40 @@ describe('labor 领域包', () => {
   /** 本领域主线线性，没有并行轨——空数组是结论，`undefined` 才是漏填 */
   it('tracks 是空数组（不是 undefined）', () => {
     expect(LABOR.tracks).toEqual([]);
+  });
+
+  /**
+   * 【危机窗内那句话里的号码，与本领域资源卡上的号码不许分叉】
+   *
+   * repeatCardNote 是从 lib/agent/prompt.ts（共用层）搬过来的（设计稿 §13-6），
+   * 搬家这一票**一个字都没改**，所以这一版仍把三个号码写在句子里、不看传进来的入参。
+   * 于是多出一条只有判据看得见的风险：**卡上换了号，这句话不会跟着变**——
+   * 危机窗内模型照着一个我们自己写下的过期号码重述，而卡与代码各自看都完全正常。
+   *
+   * 这条就钉这件事：卡上每一个**可用**号码都必须出现在这句话里。
+   * （反方向不钉：句子里多一个卡上没有的号码由下一条钉，两件事分开报才知道该改哪边。）
+   */
+  it('危机窗内那句话里的号码 == 本领域资源卡上的可用号码（变异：卡上换个号 / 句子里改一位 → 红）', () => {
+    const card = knowledge.get(LABOR.crisis.resourcePackId);
+    expect(card, `资源卡 ${LABOR.crisis.resourcePackId} 取不到`).toBeDefined();
+    const usable = crisisHotlines(card!.facts).map((h) => h.phone);
+    expect(usable.length, '卡上一个可用号码都没有 ⇒ 下面的循环恒真').toBeGreaterThan(0);
+    const note = LABOR.crisis.repeatCardNote(usable);
+    for (const phone of usable) {
+      expect(note, `资源卡上的 ${phone} 没有出现在危机窗内那句话里`).toContain(phone);
+    }
+  });
+
+  it('那句话里也没有卡上不认的号码（含卡上标 forbidden 的那些）', () => {
+    const card = knowledge.get(LABOR.crisis.resourcePackId)!;
+    const usable = new Set(crisisHotlines(card.facts).map((h) => h.phone));
+    const note = LABOR.crisis.repeatCardNote([...usable]);
+    // 句子里出现的每一串「像电话号码」的东西，都必须是卡上可用的那几个之一
+    for (const found of note.match(/\d[\d-]{4,}/g) ?? []) {
+      expect(usable, `危机窗内那句话里出现了资源卡不认的号码 ${found}`).toContain(found);
+    }
+    for (const banned of bannedHotlines(card.facts)) {
+      expect(note, `危机窗内那句话里出现了卡上标 forbidden 的号码 ${banned}`).not.toContain(banned);
+    }
   });
 });

@@ -153,6 +153,12 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
       //   保护它的那句话怎么说"被写死在了共用层，而第二个声明敏感级的领域接进来时，
       //   它的分享页会印着上一个行当的措辞，且照常返回 200。
       'lib/sensitive.ts',
+      // ↓ P4-W3 清干净并纳入守卫：首诊「现在做这三件事」的种子表整份搬进了
+      //   DomainPack.intakeStageActions，本文件只剩到期时刻与轻重顺序两个换算。
+      //   它此前是这份名单外最大的一处敞口——一张**按某个领域的阶段名建键**、
+      //   写满那个行当做法的表，住在共用层；第二个领域接进来时 stage 一个都对不上，
+      //   `?? []` 给 0 条种子，首诊回包 actionsAdded=0 且不报错。
+      'lib/cases/intake-actions.ts',
     ].map((f) => path.join(SRC_ROOT, f)),
   ];
 
@@ -172,7 +178,7 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
   });
 
   it('守卫扫到的确实是那几个文件（空名单会让上面那条永远绿）', () => {
-    expect(SHARED_FILES.length).toBeGreaterThanOrEqual(14);
+    expect(SHARED_FILES.length).toBeGreaterThanOrEqual(15);
     for (const f of SHARED_FILES) expect(fs.existsSync(f), f).toBe(true);
   });
 
@@ -245,6 +251,35 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
     ).toEqual([
       '* 【为什么必须有这条（评测官 2026-08-26 造对抗样本查实）】劳动补偿的语言天生长成单价形状：',
       String.raw`/补偿|赔偿|工资|薪资|加班费|年假|社保|公积金|双倍|违法解除|经济性裁员|裁员|离职|解除|仲裁|诉讼|律师费|开庭|协议|调解|折算|工龄|欠薪|拖欠|押金|罚款|代通知金|N\s*[+＋]\s*1|2\s*N|方案是\s*N/;`,
+    ]);
+  });
+
+  /**
+   * **lib/agent/case-facts.ts 的待清理清单**（同上，不是豁免）。
+   *
+   * 事实卡渲染器是共用层，但它也还进不了 SHARED_FILES：实名那一节里逐字写着
+   *「姓名只用于……（某某申请书、通知函、授权书）」，那句话要搬进领域包才算清完。
+   *
+   * 【这条在守什么】守「**别再多**」。本文件此前一整节（basics 四行）都写着上一个行当的
+   * 名词（入职日期 / 岗位 / 月工资 / 合同签订次数），而 FORBIDDEN 那三个词一个都不沾——
+   * 于是没有任何一条判据点它的名，直到有人逐行读第二个领域的事实卡才发现。
+   * 那四行现在按 DomainPack.factsBasics 取（判据在 domains/__tests__/counseling-pack.test.ts），
+   * 这里把剩下的那一处钉住：多一处即红，少一处（真搬走了）也红。
+   */
+  it('lib/agent/case-facts.ts 里的领域字面量只剩已知那一行（变异：往它任一注释里写一个「劳动」 → 红）', () => {
+    const file = path.join(SRC_ROOT, 'lib/agent/case-facts.ts');
+    const hits = fs
+      .readFileSync(file, 'utf-8')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => FORBIDDEN.some((w) => line.includes(w)));
+
+    expect(
+      hits,
+      'case-facts.ts 的领域字面量清单变了。多出来的那行请搬进 DomainPack（分节抬头看 factsSections，' +
+        'basics 那四行看 factsBasics）；这一行真搬走了，就把 case-facts.ts 加进 SHARED_FILES 并删掉这条。',
+    ).toEqual([
+      "'- 这个姓名只用于用户明确要求的文书填写（仲裁申请书、通知函、授权书等）；' +",
     ]);
   });
 });

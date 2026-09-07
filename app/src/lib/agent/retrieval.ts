@@ -72,11 +72,28 @@ export interface KnowledgeSearcher {
    */
   search(
     query: string,
-    /** `domain` 缺省不过滤：拿得到案件的调用方按 cases.domain 传，跨域检索留空 */
+    /**
+     * `domain` **不传 = 按缺省领域闸**（跨域检索默认关闭，设计稿 §13；实现见
+     * lib/knowledge/index.ts 的 passesFilters）。拿得到案件的调用方按 cases.domain 传。
+     * 不传**不等于**不过滤——按「不传就是全域召回」写的调用方拿到的只有缺省域的卡，
+     * 而回包照常 200、一条判据都不会红。
+     */
     options?: { limit?: number; type?: string; court?: string; domain?: string },
   ): KnowledgePack[];
-  /** 按 id 精确取卡（模型引用了某张卡的 related 时用） */
-  get?(id: string): KnowledgePack | undefined;
+  /**
+   * 按 id 精确取卡（模型引用了某张卡的 related 时用）。
+   *
+   * `domain` 三态，分的是**这个 id 是谁给的**：
+   *   · 不传   → 按缺省领域闸。用户或模型报上来的 id 走这条（knowledge_get 那条 MCP 能力）：
+   *              id 是可猜的（`<域单数>-<slug>`），不闸就能取回别的领域的整张卡，
+   *              两个行当的口径并排出现在同一个回包里，且一切正常。
+   *   · 传域名 → 按这个域闸。调用方拿得到案件时按 cases.domain 传。
+   *   · 传 null → **不过闸**。这个 id 来自我们自己的配置（DomainPack.crisis.resourcePackId），
+   *              不是外面报上来的，所以没有"猜 id"这回事；而闸住它的形态是：
+   *              一个领域包指着另一个域的卡（比如新领域先共用缺省域那张危机卡）时，
+   *              号码静静地变成空数组，回包照常 200。
+   */
+  get?(id: string, options?: { domain?: string | null }): KnowledgePack | undefined;
   /**
    * 按 `法名|条号` 复合键找**收录了该条逐字原文**的卡（S3b 定向注入用）。
    *
@@ -84,7 +101,7 @@ export interface KnowledgeSearcher {
    * 映射表已经声明了"本场景核心条是哪几条"，剩下的是把那几条的原文取回来，
    * 让检索打分插一脚只会引入不确定性（且 manager 明令本轮不动检索打分）。
    */
-  findByArticleKeys?(keys: string[]): KnowledgePack[];
+  findByArticleKeys?(keys: string[], options?: { domain?: string | null }): KnowledgePack[];
 }
 
 /** 单次回复最多注入多少张卡的全文。超过这个数 system prompt 会挤掉案件档案本身。 */

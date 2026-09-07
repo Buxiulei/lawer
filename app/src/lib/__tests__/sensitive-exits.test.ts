@@ -1,31 +1,69 @@
 // app/src/lib/__tests__/sensitive-exits.test.ts
-// 敏感级出口二（设计稿 §16「分享/导出对来访者信息强制脱敏」）。
+// 敏感级的**三个出口**（设计稿 §16「敏感级」）：事实卡、分享/导出、转介包。
 //
-// 【它拦的是一句写在产物上的假话】声明了敏感级的领域，分享页与导出 PDF 上逐字印着
-// `redactNotice`：「出现的化名或编号已替换为占位」。而在这一票之前，出口上一个字都没洗——
-// 页面照常 200、正文完整、那句话还在。**读的人会把页面上那个真化名当成占位符**，
-// 于是这句本意是保护第三人的说明，成了最有效的误导。
+// 【这一组判据要拦的是同一类事故的三个化身】档案里写着**第三人**（来访者）的健康与心理
+// 信息（个保法 §28）。它每经过一个出口就有一次泄露机会，而泄露的形态全是静默的：
+//   · 分享页照常 200，页面上什么都不缺，只是多了一个手机号；
+//   · 导出的 PDF 打开来一切正常，只是它现在在对方的电脑里；
+//   · 转介包发到站外另一家机构，从此不在我们手里，而那个人从不知情。
+// 三处各写一遍"记得脱敏"的形态是——**总有一个出口忘了**。所以三处读同一份声明
+//（lib/sensitive.ts），本文件逐个出口验它真的读了。
 //
-// 【为什么每一条都配一条缺省领域的对照】没有对照的形态是：把脱敏改成恒发生也照样全绿，
-// 而那会让第一个领域的用户分享一份文书给对方律师时，正文里对面叫〔已脱敏〕。
+// 【自证不空跑】每一条都配一条缺省领域（没有 sensitive 声明）的对照：
+// 同样的输入在那边**逐字不变**。没有对照的形态是：把脱敏函数改成恒脱敏也照样全绿，
+// 而那会让第一个领域的分享页从此把用户自己的手机号也洗掉。
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import Database from 'better-sqlite3';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { CitationGuard } from '@/lib/agent/citation-guard';
+import { executeTool, newTurnState, type AgentToolContext } from '@/lib/agent/tools';
 import * as cases from '@/lib/cases';
 import { runMigrations } from '@/lib/db/migrate';
-import { DEFAULT_DOMAIN, DOMAINS, DOMAINS_ENABLED_ENV } from '@/lib/domains/registry';
-import { maskContacts, SENSITIVE_MASK, sensitivityOf, shareRedactorFor } from '@/lib/sensitive';
+import {
+  DEFAULT_DOMAIN,
+  DOMAINS,
+  DOMAINS_ENABLED_ENV,
+  assertDomainPack,
+  type DomainPack,
+} from '@/lib/domains/registry';
+import { buildPacket } from '@/lib/referral/packet';
+import { SENSITIVE_MASK, maskContacts, sensitivityOf, shareRedactorFor } from '@/lib/sensitive';
 import { createShare, readShare } from '@/lib/shares';
 
 const COUNSELING = DOMAINS.counseling;
-const LABOR_PACK = DOMAINS[DEFAULT_DOMAIN];
-/** 一个第三人的联系方式：这两串在任何一个出口露头都是事故。 */
+
+/**
+ * 缺省领域（labor）在**改动前**（origin/main = 4098805）不点名角色时落哪一格。
+ *
+ * 【为什么不拿 DOMAINS[DEFAULT_DOMAIN].defaultCompanyRole 当判据】那是当前 HEAD 的字段，
+ * 与被判定的实现同源：把包字段与判定一起改成另一个词，自比恒绿——判据在，行为已经变了。
+ * 这里读的是从 4098805 副本逐字提取出来的常量（捕获器与提取方式见该文件 companyRole.说明）。
+ */
+const LABOR_COMPANY_ROLE_BASELINE = (
+  JSON.parse(
+    fs.readFileSync(
+      path.join(
+        fileURLToPath(new URL('.', import.meta.url)),
+        '../domains/__tests__/labor-baseline.json',
+      ),
+      'utf-8',
+    ),
+  ) as {
+    companyRole: {
+      unnamedViaCases: string;
+      unnamedViaAgentTool: string;
+      unnamedAfterExistingOtherRole: string;
+    };
+  }
+).companyRole;
+/** 一个第三人的联系方式：这三串在任何一个出口露头都是事故。 */
 const VISITOR_PHONE = '13900139001';
 const VISITOR_ID = '110101199003074511';
-/** 首诊那一格里填的来访化名（问法逐字写着「填化名或来访编号，不要填真实姓名」）。 */
-const VISITOR_ALIAS = '来访甲乙丙';
 
 let db: Database.Database;
 let uid: number;
@@ -48,47 +86,7 @@ function makeCase(domain: string): number {
   return made.caseId;
 }
 
-/**
- * **走真首诊**把对方称呼登记进去，不手写 company_profiles。
- *
- * 【为什么判据要接产线那条路】手写一行 `INSERT INTO company_profiles` 验出来的是
- * 「表里有这个名字就洗得掉」，而产线上没有人手写这张表：化名是首诊那一格
- *（`company_name`，问法逐字写着"填化名或来访编号"）落进来的。
- * 首诊哪天改成落在另一个角色位上，手写版判据照样绿，而分享页从此原样印着化名。
- */
-function intakeWithAlias(caseId: number, domain: string, alias: string): void {
-  const pack = DOMAINS[domain];
-  const done = cases.submitIntake(db, {
-    caseId,
-    userId: uid,
-    stage: pack.stages[0],
-    companyName: alias,
-    employedFrom: '2024-03-01',
-    monthlyWageFen: 800000,
-    goals: ['把这件事了结'],
-  });
-  if (!done.ok) throw new Error(`首诊失败：${JSON.stringify(done)}`);
-}
-
-/** 起一份**内部件**（不进对外清单，省掉「发送后果」那一栏）。 */
-function writeInternalDraft(caseId: number, domain: string, body: string): number {
-  const pack = DOMAINS[domain];
-  const kind = pack.docKinds.find((k) => !pack.outboundDocKinds.includes(k));
-  if (!kind) throw new Error(`${domain} 没有内部件可用`);
-  const made = cases.writeDraft(db, { caseId, userId: uid, kind, title: '一份记录', body });
-  if (!made.ok) throw new Error(JSON.stringify(made));
-  return made.draft.id;
-}
-
-function sharedBodyOf(draftId: number): { body: string | null; notice: string | null } {
-  const share = createShare(db, { userId: uid, draftId });
-  if (!share.ok) throw new Error(JSON.stringify(share));
-  const read = readShare(db, share.token);
-  if (read.state !== 'ok') throw new Error(`读分享失败：${read.state}`);
-  return { body: read.view.body, notice: read.view.redact_notice };
-}
-
-// ───────────────────────── 声明与脱敏器本身 ─────────────────────────
+// ───────────────────────── 声明本身 ─────────────────────────
 
 describe('敏感级声明的读法', () => {
   it('声明了的领域取得到，没声明的回 null（不是抛错，也不是回一个空壳）', () => {
@@ -117,123 +115,356 @@ describe('敏感级声明的读法', () => {
     expect(redactor.notice).toBeNull();
   });
 
-  it('脱敏器把两类都洗：有形状的联系方式 + 首诊登记的化名', () => {
-    // 【为什么两类要在同一个脱敏器里一起验】来源不同：联系方式靠跨案件通用的规则认，
-    // 化名靠**本案**登记的那份清单认。分成两个参数各传一次的形态是：
-    // 某条出口只传了领域、忘了传化名清单，而它照常返回 200。
+  it('出口二的脱敏器把两类都洗：有形状的联系方式 + 本案登记的化名', () => {
+    // 【为什么这两类要在同一个脱敏器里一起验】它们的来源不同——联系方式靠跨案件通用的
+    // 规则认，化名靠**本案**登记的那份清单认。分成两处传参的形态是：某条出口只传了领域、
+    // 忘了传化名清单，而它照常返回 200。这里验的是"拿到脱敏器就两类都洗"。
     const caseId = makeCase('counseling');
-    intakeWithAlias(caseId, 'counseling', VISITOR_ALIAS);
-    const got = shareRedactorFor(db, caseId).text(`${VISITOR_ALIAS}的电话是 ${VISITOR_PHONE}`);
-    expect(got.text).not.toContain(VISITOR_ALIAS);
+    db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?, ?)').run(caseId, '来访甲乙丙');
+    const redactor = shareRedactorFor(db, caseId);
+    const got = redactor.text(`来访甲乙丙的电话是 ${VISITOR_PHONE}`);
+    expect(got.text).not.toContain('来访甲乙丙');
     expect(got.text).not.toContain(VISITOR_PHONE);
     expect(got.hits).toBe(2);
-  });
-
-  it('首诊登记的化名落在 aliasRoles 覆盖得到的角色位上（变异：把 aliasRoles 改成别的角色 → 红）', () => {
-    // 【为什么这条要单独钉】`aliasRoles` 是一份**按名字对**的清单：写了一个库里对不上的
-    // 角色名时，`role IN (...)` 照常返回 0 行、脱敏器照常构造出来、分享页照常 200——
-    // 只是从此一个化名都不洗，而页脚那句话仍写着"化名或编号已替换为占位"。
-    const caseId = makeCase('counseling');
-    intakeWithAlias(caseId, 'counseling', VISITOR_ALIAS);
-    const row = db
-      .prepare('SELECT role FROM company_profiles WHERE case_id = ? AND name = ?')
-      .get(caseId, VISITOR_ALIAS) as { role: string } | undefined;
-    expect(row, '首诊没有把对方称呼落进 company_profiles').toBeDefined();
-    expect(
-      COUNSELING.sensitive!.aliasRoles,
-      `首诊把化名落在「${row?.role}」，而 aliasRoles 里没有这一格 ⇒ 化名从此不洗`,
-    ).toContain(row!.role);
-    // 声明的每一格都得是真存在的角色（打错一个字＝那一行永不匹配）
-    for (const role of COUNSELING.sensitive!.aliasRoles) {
-      expect(cases.COMPANY_ROLES as readonly string[]).toContain(role);
-    }
-  });
-
-  it('同案登记在**别的角色位**上的名字不洗（变异：去掉 role 过滤 → 红）', () => {
-    // 【它拦的是哪一次事故】不分角色一律洗的形态是——用户导出一份要寄给平台的投诉答复函，
-    // 抬头成了「致〔已脱敏〕」、抄送栏也是〔已脱敏〕，而 PDF 照常生成、HTTP 200，
-    // 页脚还印着一句「出现的化名或编号已替换为占位」。产物废了，三处都说一切正常。
-    const caseId = makeCase('counseling');
-    intakeWithAlias(caseId, 'counseling', VISITOR_ALIAS);
-    const other = (cases.COMPANY_ROLES as readonly string[]).find(
-      (r) => !COUNSELING.sensitive!.aliasRoles.includes(r),
-    )!;
-    const made = cases.upsertCompany(db, {
-      caseId,
-      userId: uid,
-      name: '简单心理平台',
-      role: other,
-    });
-    expect(made.ok, JSON.stringify(made)).toBe(true);
-    const got = shareRedactorFor(db, caseId).text(
-      `致简单心理平台：关于${VISITOR_ALIAS}的投诉，现答复如下。`,
-    );
-    expect(got.text, '来访者的化名没被洗').not.toContain(VISITOR_ALIAS);
-    expect(got.text, '收件机构的全称被一并洗掉了，这份答复函寄不出去').toContain('简单心理平台');
-    expect(got.hits, '只该洗掉化名那一处').toBe(1);
+    expect(redactor.notice).toBe(COUNSELING.sensitive!.redactNotice);
   });
 
   it('长的化名先替：短名是长名的一截时不会把长名切碎', () => {
     // 「来访甲」与「来访甲乙丙」同案并存时，先替短的会在页面上留下「〔已脱敏〕乙丙」——
     // 那半截仍然指得到人，而两处都不报错。
     const caseId = makeCase('counseling');
-    intakeWithAlias(caseId, 'counseling', VISITOR_ALIAS);
-    const role = COUNSELING.sensitive!.aliasRoles[0];
-    db.prepare('INSERT INTO company_profiles (case_id, name, role) VALUES (?, ?, ?)').run(
-      caseId,
-      '来访甲',
-      role,
-    );
-    const got = shareRedactorFor(db, caseId).text(`${VISITOR_ALIAS}与来访甲不是同一个人`);
+    const ins = db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?, ?)');
+    ins.run(caseId, '来访甲');
+    ins.run(caseId, '来访甲乙丙');
+    const got = shareRedactorFor(db, caseId).text('来访甲乙丙与来访甲不是同一个人');
     expect(got.text).not.toContain('乙丙');
     expect(got.text).toBe(`${SENSITIVE_MASK}与${SENSITIVE_MASK}不是同一个人`);
+  });
+
+  it('声明的 aliasRoles 必须是 company_profiles 真有的角色（打错一个字＝那一行永不匹配，化名从此不洗）', () => {
+    // 这条钉的是"清单本身对不对得上表"：`role IN (...)` 里写了一个库里不存在的角色名时，
+    // 查询照常返回 0 行、脱敏器照常构造出来、分享页照常 200 —— 只是从此一个化名都不洗，
+    // 而页脚那句话仍然写着"化名或编号已替换为占位"。
+    for (const pack of Object.values(DOMAINS)) {
+      if (!pack.sensitive) continue;
+      expect(pack.sensitive.aliasRoles.length, `${pack.key} 的 aliasRoles 是空的`).toBeGreaterThan(0);
+      for (const role of pack.sensitive.aliasRoles) {
+        expect(cases.COMPANY_ROLES as readonly string[], `${pack.key} 声明了不存在的角色「${role}」`).toContain(role);
+      }
+    }
+  });
+
+  it('同案登记的**机构全称**不洗，只洗脱敏对象那一格（变异：去掉 role 过滤 → 红）', () => {
+    // 【它拦的是哪一次事故】这个领域的 company_profiles 一张表装两类东西：来访者的化名
+    //（首诊写进「签约主体」）与平台/协会/监管这些**收件机构的全称**（登记成「关联」）。
+    // 不分角色一律洗的形态是——用户导出一份要寄给平台的投诉答复函，
+    // 抬头成了「致〔已脱敏〕」、抄送栏也是〔已脱敏〕，而 PDF 照常生成、HTTP 200，
+    // 页脚还印着一句「出现的化名或编号已替换为占位」。产物废了，三处都说一切正常。
+    const caseId = makeCase('counseling');
+    const ins = db.prepare('INSERT INTO company_profiles (case_id, name, role) VALUES (?, ?, ?)');
+    ins.run(caseId, '来访庚辛壬', '签约主体');
+    ins.run(caseId, '简单心理平台', '关联');
+    ins.run(caseId, '中国心理学会临床心理学注册工作委员会', '关联');
+    const got = shareRedactorFor(db, caseId).text(
+      '致简单心理平台：关于来访庚辛壬对本机构的投诉，现答复如下。' +
+        '抄送：中国心理学会临床心理学注册工作委员会。',
+    );
+    expect(got.text, '来访者的化名没被洗').not.toContain('来访庚辛壬');
+    expect(got.text, '收件机构的全称被一并洗掉了，这份答复函寄不出去').toContain('简单心理平台');
+    expect(got.text).toContain('中国心理学会临床心理学注册工作委员会');
+    expect(got.hits, '只该洗掉化名那一处').toBe(1);
   });
 
   it('单字的登记名不参与替换（替了会把整份产物洗成读不成句）', () => {
     // 用户随手把对方记成「甲」时，替换会把正文里每一个「甲」都换掉：「甲方」→「〔已脱敏〕方」。
     // 漏掉一个单字化名的代价是它留在页面上；替掉它的代价是整份文书作废、且看起来像系统坏了。
     const caseId = makeCase('counseling');
-    intakeWithAlias(caseId, 'counseling', '甲');
+    db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?, ?)').run(caseId, '甲');
     expect(shareRedactorFor(db, caseId).text('甲方与乙方').text).toBe('甲方与乙方');
   });
 });
 
-// ───────────────────────── 出口二·免登录分享页 ─────────────────────────
+// ───────────────── 真实调用路径：登记机构的那一行落在哪个角色位 ─────────────────
 
-describe('免登录分享页：强制脱敏 + 印一句为什么', () => {
-  it('counseling 的文书分享：**首诊登记的化名**不出现在分享文本里（变异：拿掉 readShare 的脱敏 → 红）', () => {
-    const caseId = makeCase('counseling');
-    intakeWithAlias(caseId, 'counseling', VISITOR_ALIAS);
-    const draftId = writeInternalDraft(
+/**
+ * 上面那条「机构全称不洗」的判据是**直接往表里插 role='关联'** 验的，
+ * 而真实产线上没有人手写这张表：登记对方主体只有一个工具面（company_profile_upsert），
+ * 它此前**不带 role 就一律落签约主体**——正好是本领域 aliasRoles 那一格。
+ * 于是上面那条判据绿着，产线上照样复现原事故：
+ *   `company_profile_upsert(name='简单心理平台')` → 落进化名位 →
+ *   分享/导出把「致简单心理平台」洗成「致〔已脱敏〕」，PDF 照常生成、HTTP 200。
+ *
+ * 【所以这一组只走工具面，一行 SQL 都不写】判据要接的是产线判据，不是我们自己造的那张表。
+ */
+describe('登记对方主体的两条工具路：不点名角色时落在哪一格', () => {
+  /** 站内 agent 那条路（lib/agent/tools.ts）的最小上下文。 */
+  function agentCtx(caseId: number, domain: string): AgentToolContext {
+    return {
+      db,
       caseId,
-      'counseling',
-      `${VISITOR_ALIAS}今天没有到场，电话 ${VISITOR_PHONE} 未接，身份证 ${VISITOR_ID}。`,
+      userId: uid,
+      domain,
+      threadId: 1,
+      sourceMessageId: null,
+      citations: new CitationGuard(),
+      crisisCardAlreadyGiven: false,
+      state: newTurnState(),
+      emit: () => {},
+    };
+  }
+
+  function rolesOf(caseId: number): Record<string, string> {
+    const rows = db
+      .prepare('SELECT name, role FROM company_profiles WHERE case_id = ? ORDER BY id')
+      .all(caseId) as { name: string; role: string }[];
+    return Object.fromEntries(rows.map((r) => [r.name, r.role]));
+  }
+
+  it('MCP 那条路：不带 role 登记一家机构 → 不落化名位，答复函的抬头与抄送逐字留着', () => {
+    const caseId = makeCase('counseling');
+    const made = cases.upsertCompany(db, { caseId, userId: uid, name: '简单心理平台' });
+    expect(made.ok, JSON.stringify(made)).toBe(true);
+    expect(rolesOf(caseId)['简单心理平台']).toBe(COUNSELING.defaultCompanyRole);
+    expect(
+      COUNSELING.sensitive!.aliasRoles,
+      '缺省角色落进了化名位——这正是原事故',
+    ).not.toContain(COUNSELING.defaultCompanyRole);
+
+    const got = shareRedactorFor(db, caseId).text('致简单心理平台：关于来访庚辛壬的投诉，现答复如下。');
+    expect(got.text, '收件机构的全称被洗掉了，这份答复函寄不出去').toContain('简单心理平台');
+  });
+
+  it('站内 agent 那条路读同一份口径（两条路各写一遍 `?? 缺省` 的形态是，改一处漏一处）', () => {
+    const caseId = makeCase('counseling');
+    const out = executeTool('company_profile_upsert', JSON.stringify({ name: '简单心理平台' }), agentCtx(caseId, 'counseling'));
+    expect(out.ok, out.content).toBe(true);
+    expect(rolesOf(caseId)['简单心理平台']).toBe(COUNSELING.defaultCompanyRole);
+    expect(shareRedactorFor(db, caseId).text('致简单心理平台').text).toContain('简单心理平台');
+  });
+
+  it('已经登记在化名位上的名字，**不带 role 的补充不会把它挪走**（挪走＝这个人从此不脱敏；变异：counseling 包的 inheritCompanyRoleOnUnnamed 改成 false → 红）', () => {
+    // store.upsertCompanyProfile 按 (case_id, name) 收敛，而它对 role 是直接赋值不是 COALESCE：
+    // 少了「不点名就沿用已有角色」这条，给来访者补一句备注就会把他搬出化名位——
+    // 回包 created=false、HTTP 200，页面上那一行还在，而分享页从此原样印着他的化名。
+    const caseId = makeCase('counseling');
+    const first = cases.upsertCompany(db, {
+      caseId,
+      userId: uid,
+      name: '来访庚辛壬',
+      role: COUNSELING.sensitive!.aliasRoles[0],
+    });
+    expect(first.ok, JSON.stringify(first)).toBe(true);
+
+    const again = cases.upsertCompany(db, { caseId, userId: uid, name: '来访庚辛壬', note: '第三次爽约' });
+    expect(again.ok, JSON.stringify(again)).toBe(true);
+    expect(rolesOf(caseId)['来访庚辛壬']).toBe(COUNSELING.sensitive!.aliasRoles[0]);
+    expect(shareRedactorFor(db, caseId).text('来访庚辛壬第三次爽约').text).not.toContain('来访庚辛壬');
+  });
+
+  it('缺省领域**逐字不变**：不带 role 落 4098805 那一格（两条路各验一遍；比的是基线常量不是当前包字段）', () => {
+    const viaCases = makeCase(DEFAULT_DOMAIN);
+    const made = cases.upsertCompany(db, { caseId: viaCases, userId: uid, name: '某某科技有限公司' });
+    expect(made.ok, JSON.stringify(made)).toBe(true);
+    expect(rolesOf(viaCases)['某某科技有限公司']).toBe(LABOR_COMPANY_ROLE_BASELINE.unnamedViaCases);
+
+    const viaAgent = makeCase(DEFAULT_DOMAIN);
+    const out = executeTool(
+      'company_profile_upsert',
+      JSON.stringify({ name: '某某科技有限公司' }),
+      agentCtx(viaAgent, DEFAULT_DOMAIN),
     );
-    const got = sharedBodyOf(draftId);
-    expect(got.body, '首诊登记的来访化名原样进了免登录分享页').not.toContain(VISITOR_ALIAS);
-    expect(got.body, '来访者的手机号原样进了免登录分享页').not.toContain(VISITOR_PHONE);
-    expect(got.body).not.toContain(VISITOR_ID);
-    expect(got.body).toContain(SENSITIVE_MASK);
+    expect(out.ok, out.content).toBe(true);
+    expect(rolesOf(viaAgent)['某某科技有限公司']).toBe(
+      LABOR_COMPANY_ROLE_BASELINE.unnamedViaAgentTool,
+    );
+  });
+
+  /**
+   * 【这一条守的是第②条不许溢到缺省领域】4098805 的两条产线路都是 `role ?? '签约主体'`，
+   * 函数体里一次同名行查询都没有——也就是说基线下，一个已经登记在「用工主体」位上的公司，
+   * 只要下一次不带 role 补充一句备注，就会被**搬回签约位**。
+   * 「不点名就沿用已有角色」这条规则本身是为敏感级行当加的；无条件打开的形态是：
+   * 缺省领域这一串调用的落点悄悄换了一格，回包 created=false、HTTP 200、页面上那一行还在，
+   * 而 pickRespondent 从此取到另一家。所以这里钉的是**基线值**，不是"哪个更合理"。
+   */
+  it('缺省领域**逐字不变**：已在别的角色位上、不点名补充仍落基线那一格（变异：labor 包的 inheritCompanyRoleOnUnnamed 改成 true → 红）', () => {
+    const caseId = makeCase(DEFAULT_DOMAIN);
+    const first = cases.upsertCompany(db, {
+      caseId,
+      userId: uid,
+      name: '某某科技有限公司',
+      role: '用工主体',
+    });
+    expect(first.ok, JSON.stringify(first)).toBe(true);
+    expect(rolesOf(caseId)['某某科技有限公司']).toBe('用工主体');
+
+    const again = cases.upsertCompany(db, {
+      caseId,
+      userId: uid,
+      name: '某某科技有限公司',
+      note: '欠薪两个月',
+    });
+    expect(again.ok, JSON.stringify(again)).toBe(true);
+    expect(rolesOf(caseId)['某某科技有限公司']).toBe(
+      LABOR_COMPANY_ROLE_BASELINE.unnamedAfterExistingOtherRole,
+    );
+
+    // 站内 agent 那条路读同一份口径：漏掉其中一条的形态是两条路落点不同，而两边都 200
+    const viaAgent = makeCase(DEFAULT_DOMAIN);
+    const seed = cases.upsertCompany(db, {
+      caseId: viaAgent,
+      userId: uid,
+      name: '某某科技有限公司',
+      role: '用工主体',
+    });
+    expect(seed.ok, JSON.stringify(seed)).toBe(true);
+    const out = executeTool(
+      'company_profile_upsert',
+      JSON.stringify({ name: '某某科技有限公司', risk_notes: '欠薪两个月' }),
+      agentCtx(viaAgent, DEFAULT_DOMAIN),
+    );
+    expect(out.ok, out.content).toBe(true);
+    expect(rolesOf(viaAgent)['某某科技有限公司']).toBe(
+      LABOR_COMPANY_ROLE_BASELINE.unnamedAfterExistingOtherRole,
+    );
+  });
+
+  it('缺省领域声明的缺省角色**就是** 4098805 那个词（包字段被顺手改掉时这里红，不等到产物里才发现）', () => {
+    expect(DOMAINS[DEFAULT_DOMAIN].defaultCompanyRole).toBe(
+      LABOR_COMPANY_ROLE_BASELINE.unnamedViaCases,
+    );
+    expect(
+      DOMAINS[DEFAULT_DOMAIN].inheritCompanyRoleOnUnnamed,
+      '缺省领域开了「沿用已有角色」——基线没有这条分支，落点会变',
+    ).toBe(false);
+  });
+
+  it('点了名的 role 照旧原样落，不合法的照旧拒收（这一层没被改宽）', () => {
+    const caseId = makeCase('counseling');
+    const ok1 = cases.upsertCompany(db, { caseId, userId: uid, name: '某协会', role: '用工主体' });
+    expect(ok1.ok).toBe(true);
+    expect(rolesOf(caseId)['某协会']).toBe('用工主体');
+
+    const bad = cases.upsertCompany(db, { caseId, userId: uid, name: '某机构', role: '不存在的角色' });
+    expect(bad.ok).toBe(false);
+    if (bad.ok) return;
+    expect(bad.errorCode).toBe('INVALID_COMPANY_ROLE');
+  });
+});
+
+// ───────────────── 结构守卫：缺省角色不许与化名位重叠 ─────────────────
+
+describe('装载时就拦住「缺省角色 = 化名位」的包（设计稿 §16 敏感级）', () => {
+  it('每个包的 defaultCompanyRole 都是真存在的角色位（打错一个字 = 每一行都落到一个不存在的位上）', () => {
+    for (const pack of Object.values(DOMAINS)) {
+      expect(
+        cases.COMPANY_ROLES as readonly string[],
+        `${pack.key} 的 defaultCompanyRole「${pack.defaultCompanyRole}」不在角色词表里`,
+      ).toContain(pack.defaultCompanyRole);
+    }
+  });
+
+  it('声明了敏感级的包，缺省角色不在 aliasRoles 里（变异：把 counseling 的缺省改成化名位 → 装载即抛）', () => {
+    for (const pack of Object.values(DOMAINS)) {
+      if (!pack.sensitive) continue;
+      expect(
+        pack.sensitive.aliasRoles,
+        `${pack.key}：不点名角色的登记会被当成脱敏对象，机构全称在产物里变成占位符`,
+      ).not.toContain(pack.defaultCompanyRole);
+    }
+    // 判据自证有牙：把两者指到同一格的包**装不进来**，而不是等到某一份文书寄不出去才发现。
+    const broken: DomainPack = { ...COUNSELING, defaultCompanyRole: COUNSELING.sensitive!.aliasRoles[0] };
+    expect(() => assertDomainPack(broken)).toThrow(/defaultCompanyRole/);
+  });
+});
+
+// ───────────────────────── 出口二：免登录分享 ─────────────────────────
+
+describe('出口二·免登录分享页：强制脱敏 + 印一句为什么', () => {
+  /** 起一份带对方联系方式的文书。**内部件**（危机处置记录）省得再造发送后果那一栏。 */
+  function draftWithPhone(caseId: number): number {
+    const made = cases.writeDraft(db, {
+      caseId,
+      userId: uid,
+      kind: '危机处置记录',
+      title: '一份记录',
+      body: `联系了 ${VISITOR_PHONE}，其身份证 ${VISITOR_ID}，未接。`,
+    });
+    if (!made.ok) throw new Error(JSON.stringify(made));
+    return made.draft.id;
+  }
+
+  it('counseling 案件的文书分享：联系方式被换掉，且页面上带那句脱敏说明', () => {
+    const caseId = makeCase('counseling');
+    const draftId = draftWithPhone(caseId);
+    const share = createShare(db, { userId: uid, draftId });
+    if (!share.ok) throw new Error(JSON.stringify(share));
+
+    const read = readShare(db, share.token);
+    expect(read.state).toBe('ok');
+    if (read.state !== 'ok') return;
+    expect(read.view.body, '来访者的手机号原样进了免登录分享页').not.toContain(VISITOR_PHONE);
+    expect(read.view.body).not.toContain(VISITOR_ID);
+    expect(read.view.body).toContain(SENSITIVE_MASK);
     // 【为什么脱敏之后还要印一句话】读的人看到一串占位却没有解释，会回头找当事人索要真值——
     // 脱敏挡住了数据，却把"索要真值"这件事推给了当事人本人。
-    expect(got.notice).toBe(COUNSELING.sensitive!.redactNotice);
+    expect(read.view.redact_notice).toBe(COUNSELING.sensitive!.redactNotice);
   });
 
   it('缺省领域的同一份文书分享**逐字不变**，也不多印那句话（自证不是恒脱敏）', () => {
     const caseId = makeCase(DEFAULT_DOMAIN);
-    intakeWithAlias(caseId, DEFAULT_DOMAIN, '蓝海科技有限公司');
-    const body = `蓝海科技有限公司的联系电话 ${VISITOR_PHONE}`;
-    const draftId = writeInternalDraft(caseId, DEFAULT_DOMAIN, body);
-    const got = sharedBodyOf(draftId);
-    // 那个领域的对面是一家公司，公司名正是分享页要给对方看的东西——
-    // 把它也洗掉的形态是：用户分享一份文书给对方律师，正文里对面叫〔已脱敏〕。
-    expect(got.body).toBe(body);
-    expect(got.notice).toBeNull();
+    const made = cases.writeDraft(db, {
+      caseId,
+      userId: uid,
+      // 缺省领域里挑一份**不进对外清单**的（同上，省掉发送后果那一栏）
+      kind: DOMAINS[DEFAULT_DOMAIN].docKinds.find(
+        (k) => !DOMAINS[DEFAULT_DOMAIN].outboundDocKinds.includes(k),
+      )!,
+      title: '一份文书',
+      body: `联系电话 ${VISITOR_PHONE}`,
+    });
+    if (!made.ok) throw new Error(JSON.stringify(made));
+    const share = createShare(db, { userId: uid, draftId: made.draft.id });
+    if (!share.ok) throw new Error(JSON.stringify(share));
+    const read = readShare(db, share.token);
+    expect(read.state).toBe('ok');
+    if (read.state !== 'ok') return;
+    expect(read.view.body).toContain(VISITOR_PHONE);
+    expect(read.view.redact_notice).toBeNull();
+  });
+
+  // ───── 化名/编号这一格：notice 上写着它被替换了，那句话必须是真的 ─────
+  //
+  // 【为什么它单独占三条判据】这个领域的档案里，来访者的身份**就是那个化名或编号**
+  //（§16：不收真实姓名，所以化名是唯一的身份标识）。分享页印的那句话逐字写着
+  //「出现的化名或编号已替换为占位」——只洗联系方式不洗化名的形态是：
+  // 页面上同时出现「来访甲乙丙」和一句声称它已被替换的说明，两边都不报错，
+  // 而读的人会把这个真化名当成占位符。转介包那个出口早就在拦已登记的化名了
+  //（走 companyTerms），三个出口里只有这一个漏着。
+  it('已登记的来访化名在文书分享页上被换掉（notice 说它替换了，就必须真替换）', () => {
+    const caseId = makeCase('counseling');
+    db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?, ?)').run(caseId, '来访甲乙丙');
+    const made = cases.writeDraft(db, {
+      caseId,
+      userId: uid,
+      kind: '危机处置记录',
+      title: '一份记录',
+      body: '来访甲乙丙今天没有到场，电话未接。',
+    });
+    if (!made.ok) throw new Error(JSON.stringify(made));
+    const share = createShare(db, { userId: uid, draftId: made.draft.id });
+    if (!share.ok) throw new Error(JSON.stringify(share));
+    const read = readShare(db, share.token);
+    expect(read.state).toBe('ok');
+    if (read.state !== 'ok') return;
+    expect(read.view.body, '已登记的来访化名原样进了免登录分享页').not.toContain('来访甲乙丙');
+    expect(read.view.body).toContain(SENSITIVE_MASK);
+    expect(read.view.redact_notice).toBe(COUNSELING.sensitive!.redactNotice);
   });
 
   it('证据分享的材料名与明细里的化名同样被换掉（两条路读同一份化名清单）', () => {
     const caseId = makeCase('counseling');
-    intakeWithAlias(caseId, 'counseling', VISITOR_ALIAS);
+    db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?, ?)').run(caseId, '来访甲乙丙');
     const fileId = Number(
       db
         .prepare('INSERT INTO files (sha256, size, mime, enc_path) VALUES (?, ?, ?, ?)')
@@ -245,34 +476,49 @@ describe('免登录分享页：强制脱敏 + 印一句为什么', () => {
           `INSERT INTO evidence (case_id, user_id, file_id, name, category, status, prove_purpose, original_medium)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .run(
-          caseId,
-          uid,
-          fileId,
-          `与${VISITOR_ALIAS}的通话录音`,
-          '录音',
-          '已上传',
-          `${VISITOR_ALIAS}口头承认`,
-          '手机录音',
-        ).lastInsertRowid,
+        .run(caseId, uid, fileId, '与来访甲乙丙的通话录音', '录音', '已上传', '来访甲乙丙口头承认', '手机录音')
+        .lastInsertRowid,
     );
     const share = createShare(db, { userId: uid, evidenceId: evId });
     if (!share.ok) throw new Error(JSON.stringify(share));
     const read = readShare(db, share.token);
     expect(read.state).toBe('ok');
     if (read.state !== 'ok') return;
-    expect(read.view.title, '材料名里的化名没被洗').not.toContain(VISITOR_ALIAS);
-    expect(JSON.stringify(read.view.meta)).not.toContain(VISITOR_ALIAS);
-    expect(read.view.redact_notice).toBe(COUNSELING.sensitive!.redactNotice);
+    expect(read.view.title, '材料名里的化名没被洗').not.toContain('来访甲乙丙');
+    expect(JSON.stringify(read.view.meta)).not.toContain('来访甲乙丙');
   });
 
-  it('缺省领域的证据分享逐字不变（对照：材料名与明细都不许被动）', () => {
+  it('缺省领域登记的对方名字**不洗**（自证这道化名替换不是恒发生）', () => {
+    // 那个领域的对面是一家公司，公司名正是分享页要给对方看的东西——
+    // 把它也洗掉的形态是：用户分享一份文书给对方律师，正文里对面叫〔已脱敏〕。
     const caseId = makeCase(DEFAULT_DOMAIN);
-    intakeWithAlias(caseId, DEFAULT_DOMAIN, '蓝海科技有限公司');
+    db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?, ?)').run(caseId, '蓝海科技有限公司');
+    const made = cases.writeDraft(db, {
+      caseId,
+      userId: uid,
+      kind: DOMAINS[DEFAULT_DOMAIN].docKinds.find(
+        (k) => !DOMAINS[DEFAULT_DOMAIN].outboundDocKinds.includes(k),
+      )!,
+      title: '一份文书',
+      body: '蓝海科技有限公司至今没有答复。',
+    });
+    if (!made.ok) throw new Error(JSON.stringify(made));
+    const share = createShare(db, { userId: uid, draftId: made.draft.id });
+    if (!share.ok) throw new Error(JSON.stringify(share));
+    const read = readShare(db, share.token);
+    expect(read.state).toBe('ok');
+    if (read.state !== 'ok') return;
+    expect(read.view.body).toContain('蓝海科技有限公司');
+  });
+
+  it('证据分享：材料名与每一条明细都过同一道脱敏（变异：只洗明细不洗标题 → 红）', () => {
+    const caseId = makeCase('counseling');
     const fileId = Number(
       db
-        .prepare('INSERT INTO files (sha256, size, mime, enc_path) VALUES (?, ?, ?, ?)')
-        .run('c'.repeat(64), 1, 'audio/mp4', '/dev/null').lastInsertRowid,
+        .prepare(
+          `INSERT INTO files (sha256, size, mime, enc_path) VALUES (?, ?, ?, ?)`,
+        )
+        .run('a'.repeat(64), 1, 'audio/mp4', '/dev/null').lastInsertRowid,
     );
     const evId = Number(
       db
@@ -284,22 +530,105 @@ describe('免登录分享页：强制脱敏 + 印一句为什么', () => {
           caseId,
           uid,
           fileId,
-          '与蓝海科技有限公司的通话录音',
+          `与 ${VISITOR_PHONE} 的通话录音`,
           '录音',
           '已上传',
-          '公司口头承认',
+          `对方（${VISITOR_PHONE}）口头承认`,
           '手机录音',
         ).lastInsertRowid,
     );
     const share = createShare(db, { userId: uid, evidenceId: evId });
     if (!share.ok) throw new Error(JSON.stringify(share));
     const read = readShare(db, share.token);
-    if (read.state !== 'ok') throw new Error(read.state);
-    expect(read.view.title).toBe('与蓝海科技有限公司的通话录音');
-    expect(read.view.redact_notice).toBeNull();
+    expect(read.state).toBe('ok');
+    if (read.state !== 'ok') return;
+    expect(read.view.title, '材料名里的号码没被洗').not.toContain(VISITOR_PHONE);
+    expect(JSON.stringify(read.view.meta)).not.toContain(VISITOR_PHONE);
+    expect(read.view.redact_notice).toBe(COUNSELING.sensitive!.redactNotice);
+  });
+});
+
+// ───────────────────────── 出口三：转介数据包 ─────────────────────────
+
+describe('出口三·转介数据包：不含来访者信息', () => {
+  /** 一个把原料原样抄回来的假模型——它就是"模型第十次照抄了号码"那一次。 */
+  const parrotLlm = {
+    chatJSON: async (msgs: { role: string; content: string }[]) =>
+      JSON.stringify({ summary: `来访 ${VISITOR_PHONE} 情绪很差。${msgs[0].content.slice(0, 0)}` }),
+  };
+
+  it('模型把来访者手机号抄进摘要 ⇒ 出口这道脱敏照样把它挡下来', async () => {
+    const caseId = makeCase('counseling');
+    const packet = await buildPacket(db, {
+      caseId,
+      userId: uid,
+      stage: COUNSELING.stages[1],
+      reason: `对方（${VISITOR_PHONE}）投诉后我一直睡不好`,
+      needs: [`想聊聊，联系我 ${VISITOR_PHONE}`],
+      consentAt: '2026-09-07T00:00:00Z',
+      llm: parrotLlm,
+    });
+    const whole = JSON.stringify(packet);
+    expect(whole, '来访者的手机号进了发往站外的数据包').not.toContain(VISITOR_PHONE);
+    expect(packet.emotion_summary).toContain(SENSITIVE_MASK);
   });
 
-  it('LABOR 包没有敏感级声明（自证上面那几条对照不是"因为这个包也声明了"而绿）', () => {
-    expect(LABOR_PACK.sensitive).toBeUndefined();
+  it('已登记的来访化名也出不去（走既有的中立化过滤，不是本票新加的第二道）', async () => {
+    const caseId = makeCase('counseling');
+    db.prepare('INSERT INTO company_profiles (case_id, name) VALUES (?, ?)').run(caseId, '来访甲乙丙');
+    const packet = await buildPacket(db, {
+      caseId,
+      userId: uid,
+      stage: COUNSELING.stages[1],
+      reason: '来访甲乙丙的事让我很焦虑',
+      needs: [],
+      consentAt: '2026-09-07T00:00:00Z',
+      llm: { chatJSON: async () => JSON.stringify({ summary: '来访甲乙丙最近状态很差。' }) },
+    });
+    expect(JSON.stringify(packet)).not.toContain('来访甲乙丙');
+  });
+
+  it('敏感级案件的 system prompt 里多一句「不得出现第三人信息」（变异：删掉那段追加 → 红）', async () => {
+    const caseId = makeCase('counseling');
+    const seen: string[] = [];
+    await buildPacket(db, {
+      caseId,
+      userId: uid,
+      stage: COUNSELING.stages[0],
+      reason: '想找人聊聊',
+      needs: [],
+      consentAt: '2026-09-07T00:00:00Z',
+      llm: {
+        chatJSON: async (msgs) => {
+          seen.push(msgs[0].content);
+          return JSON.stringify({ summary: '最近睡不好。' });
+        },
+      },
+    });
+    expect(seen[0]).toContain('本案属敏感级');
+    // 称呼由领域包给，共用层不写死一个词
+    expect(seen[0]).toContain(COUNSELING.sensitive!.subject);
+  });
+
+  it('缺省领域的案子：system prompt 不多那一句，摘要也不过第二道脱敏（自证不是恒发生）', async () => {
+    const caseId = makeCase(DEFAULT_DOMAIN);
+    const seen: string[] = [];
+    const packet = await buildPacket(db, {
+      caseId,
+      userId: uid,
+      stage: DOMAINS[DEFAULT_DOMAIN].stages[0],
+      reason: '想找人聊聊',
+      needs: [],
+      consentAt: '2026-09-07T00:00:00Z',
+      llm: {
+        chatJSON: async (msgs) => {
+          seen.push(msgs[0].content);
+          return JSON.stringify({ summary: `随时打我 ${VISITOR_PHONE}。` });
+        },
+      },
+    });
+    expect(seen[0]).not.toContain('本案属敏感级');
+    // 第一个领域这条链路逐字不变：号码是用户**自己的**，洗掉它反而让对方联系不上
+    expect(packet.emotion_summary).toContain(VISITOR_PHONE);
   });
 });

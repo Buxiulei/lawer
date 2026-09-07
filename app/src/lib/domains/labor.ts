@@ -13,7 +13,7 @@ import {
 import { CASE_MILESTONES } from '@/lib/cases/milestones';
 import { CASE_STAGES } from '@/lib/cases/stages';
 
-import type { DomainPack } from './registry';
+import type { DomainPack, IntakeActionSeed } from './registry';
 
 /**
  * 本领域的当事人称呼。**先于 LABOR 定义**，因为下面那些对外文案由它拼出来——
@@ -301,6 +301,9 @@ export const LABOR_CAPABILITY_COPY = {
     '仲裁列谁为被申请人由此判定，所以只要用户提到公司名就要落档。同案同名只有一条，反复补充即更新。',
   // ───── 公司情报面（设计稿 §2 H）：以下六句里的「对方主体」称呼一律由 LABOR_PARTIES 拼，
   //       不在这里也不在共用层再写死一个名词（§13-1 角色不写死）。
+  companyRoleParam:
+    '这一方在本案里是哪个角色位。不填时：这个名字已经登记过就沿用它已有的角色，' +
+    '是新名字才落本领域缺省的「签约主体」。',
   companyNameParam:
     `对方主体全称（${CP}、${OTHERS}都算），尽量与营业执照一致；查得准不准全看这个名字`,
   companyProbeDescription:
@@ -347,6 +350,129 @@ export const LABOR_CAPABILITY_COPY = {
  * 时按最早一件事取，是**偏早的保守估计**；绝不拿「今天」当锚点——那会把到期日算得比
  * 真实的晚，等于告诉用户他还有时间。宁可没有，不可晚。
  */
+/**
+ * 首诊做完给的**那三件事**，按阶段一份。
+ *
+ * 【它从共用层搬回来的原因】P4-W3：这张表原先叫 INTAKE_STAGE_ACTIONS，住在
+ * lib/cases/intake-actions.ts——一个共用层文件，却按**本领域**的阶段名建键、
+ * 写着本行当的做法。第二个领域接进来时它的 stage 在表里一个都对不上，
+ * `?? []` 给 0 条种子，首诊回包 actionsAdded=0 且没有任何一处报错。
+ * 现在表在包里、机制（到期时刻与优先级换算）仍在 lib/cases/intake-actions。
+ *
+ * 【内容与搬家前逐字相同】搬运的失败形态不是崩溃，是某一句掉了一个字而看起来一切正常，
+ * 所以这一份是原样搬过来的，lib/cases/__tests__/intake.test.ts 逐条钉着它落库的样子。
+ * 没有种子的阶段给**空数组**——那是"这个阶段确实不给"，不是"忘了填"（assertDomainPack 分得开）。
+ */
+const LABOR_INTAKE_STAGE_ACTIONS: Readonly<Record<string, readonly IntakeActionSeed[]>> = {
+  风声: [
+    {
+      title: '先把劳动合同和近 12 个月工资流水导出来',
+      detail:
+        '一旦被收走权限，这些材料就不好拿了。合同拍照存到自己手机，工资流水从银行 App 导出带电子章的 PDF。',
+      dueInDays: 3,
+    },
+    {
+      title: '把公司宣布调整的场合记下来',
+      detail:
+        '开会时间、说了什么、谁说的，写成一句话记到时间线里。将来公司说"和裁员无关"时，这些是最早的印证。',
+      dueInDays: 7,
+    },
+    {
+      title: '暂时不要主动提离职，也不要签任何空白表格',
+      detail:
+        '主动辞职拿不到补偿。在没有书面方案之前，口头答应也可能被当成协商一致的证据。',
+      dueInDays: null,
+    },
+  ],
+  约谈中: [
+    {
+      title: '下次约谈前打开手机录音',
+      detail:
+        '在北京，当事人对自己参与的谈话录音是合法的，仲裁中可以作为证据。录完不要剪辑，原始文件留在手机里。',
+      dueInDays: 2,
+    },
+    {
+      title: '不要当场签《协商解除协议》',
+      detail:
+        '协议一旦签了，再主张违法解除赔偿金会非常被动。可以说"我要拿回去看看"，这句话不需要任何理由。',
+      dueInDays: null,
+    },
+    {
+      title: '用书面方式要公司出具方案',
+      detail:
+        '发一封工作邮件，请公司写明解除理由、补偿计算方式和支付时间，抄送自己的私人邮箱留底。',
+      dueInDays: 5,
+    },
+  ],
+  已收通知: [
+    {
+      title: '把解除通知原件拍照，传到文件解读',
+      detail:
+        '通知书上写的解除理由决定了你能主张 N 还是 2N。上传后会逐条标出对你不利的表述。',
+      dueInDays: 2,
+    },
+    {
+      title: '书面回复公司，保留异议',
+      detail:
+        '收到通知后不表态，容易被解读为默认接受。一封写明"不认可解除理由、保留全部权利"的回复就够了。',
+      dueInDays: 5,
+    },
+    {
+      title: '办交接可以配合，但别签认可解除理由的字',
+      detail:
+        '交接清单只写物品和工作，遇到"本人认可公司解除决定"这类表述，划掉再签，或者写明"仅确认交接物品"。',
+      dueInDays: null,
+    },
+  ],
+  已解除: [
+    {
+      title: '确认仲裁时效的起算日',
+      detail:
+        '劳动争议仲裁时效是一年，从你知道权利被侵害那天起算；欠薪的时效从劳动关系终止之日起算。先把这个日子定下来。',
+      dueInDays: 3,
+    },
+    {
+      title: '把工资流水、考勤、聊天记录补齐到证据库',
+      detail:
+        '离职后公司系统会陆续关闭，钉钉、企业微信里的记录要趁还能登录的时候导出来。',
+      dueInDays: 7,
+    },
+    {
+      title: '要求公司出具离职证明并办理退工',
+      detail:
+        '离职证明是法定义务，不能以"没签协议"为由扣着。拿不到会影响下一家入职，也是可以一并主张的诉求。',
+      dueInDays: 10,
+    },
+  ],
+  仲裁准备: [
+    {
+      title: '核对被申请人主体信息',
+      detail:
+        '申请书上的公司名称、统一社会信用代码必须和劳动合同上的签约主体一致，写错会被要求补正，白跑一趟。',
+      dueInDays: 3,
+    },
+    {
+      title: '按诉求逐条整理证据清单',
+      detail:
+        '每一条诉求对应哪几份证据、证明什么，列成表。朝阳区仲裁委立案时要提交证据目录。',
+      dueInDays: 5,
+    },
+    {
+      title: '把证据固化，拿到存证证明',
+      detail:
+        '聊天记录和录音这类电子证据，固化后带时间戳和哈希值，公司质疑真实性时能直接复核。',
+      dueInDays: 7,
+    },
+  ],
+  已立案: [],
+  开庭: [],
+  裁决: [],
+  一审: [],
+  二审: [],
+  执行: [],
+  结案: [],
+};
+
 export const LABOR_INTAKE_LIMITATION = {
   /** 落哪一类期限（取值须在 deadlineKinds 里） */
   kind: '仲裁时效',
@@ -369,6 +495,18 @@ export const LABOR: DomainPack = {
   // 关联公司、用工平台可能是几家不同的公司，被申请人列谁由此判定，故 multiParty 为 true。
   parties: LABOR_PARTIES,
 
+  // 登记对方主体时没点名角色就落这一格——本领域首诊问到的那一家就是签约的那一家，
+  // 与 lib/cases/intake.ts 按 role='签约主体' 收敛的那一格同值（改一处不改另一处的形态是：
+  // 首诊填的公司与工具面补充的同名公司分落两行，而 pickRespondent 取到的是其中一行）。
+  defaultCompanyRole: '签约主体',
+
+  // 不点名角色的补充**不沿用**那一行已有的角色，照样落缺省位——这是 4098805 的逐字行为
+  //（两条产线路都是 `role ?? '签约主体'`，函数体里一次同名行查询都没有；
+  // 基线值由 __tests__/labor-baseline.json 的 companyRole 一节钉着）。
+  // 改成 true 的形态是：给一家已登记在「用工主体」位上的公司补一句风险备注，
+  // 落点从此不同，而回包 created=false、HTTP 200，页面上那一行还在。
+  inheritCompanyRoleOnUnnamed: false,
+
   // 阶段枚举**搬过来引用**，不在这里复制第二份：CASE_STAGES 还被首诊页（客户端）
   // 直接引着，抄一份的形态是两处枚举某天不一致，而 stage 校验只看得见其中一处。
   stages: CASE_STAGES,
@@ -383,6 +521,7 @@ export const LABOR: DomainPack = {
   journey: CASE_MILESTONES,
 
   intakeSchema: LABOR_INTAKE_SCHEMA,
+  intakeStageActions: LABOR_INTAKE_STAGE_ACTIONS,
   intakeLimitation: LABOR_INTAKE_LIMITATION,
 
   // 事实卡分节，顺序即 lib/agent/case-facts.ts 的渲染顺序；渲染器按 key 取标题，
@@ -399,6 +538,15 @@ export const LABOR: DomainPack = {
     { key: 'timeline', title: '时间线' },
     { key: 'evidence', title: '证据' },
   ],
+
+  // basics 那一节四行正文的抬头。**这四句逐字是本领域此前写在渲染器里的那四句**
+  //（labor-baseline.json 的 caseFacts 逐字钉着它们）：搬家不许改字，改字＝对外承诺变了。
+  factsBasics: {
+    employedFrom: '入职日期',
+    position: '岗位',
+    monthlyWage: '月工资',
+    contractCount: '合同签订次数',
+  },
 
   // 个案报告的分节（设计稿 §4.3）。标题是给人看的，source 是给生成器看的取数口径；
   // 顺序即报告从上往下的顺序：先「我是谁、案子是什么」，再主线与争议，
@@ -442,6 +590,21 @@ export const LABOR: DomainPack = {
     safeFallback: LABOR_CRISIS_SAFE_FALLBACK,
     firstSegment: (ctx: { facts?: { hotlines?: HotlineFact[] }; compact?: boolean }) =>
       assembleCrisisOpener(LABOR_CRISIS_OPENER, ctx.facts, { compact: ctx.compact }),
+    /**
+     * 危机窗内贴在资源卡后面的使用限制。**这段话原来写死在 lib/agent/prompt.ts 里**
+     *（共用层），第二个领域接进来之后，它的用户在危机窗内会读到这三个号码——
+     * 号码是对的，只是属于另一个行当。按设计稿 §13（危机文案与词表归领域包）搬到这里。
+     *
+     * 【为什么这一版不用传进来的 numbers 渲染】搬家这一票只搬位置、不改一个字：
+     * 这句话是危机窗里逐字下发给模型的话，改措辞是行为变更，不该混在搬家里做。
+     * 号码不跟着卡走的风险由判据接住——labor-pack.test 有一条钉住
+     * 「本领域资源卡上每一个可用号码都必须出现在这句话里」，卡上换号而这里没跟着改即红。
+     */
+    repeatCardNote: () =>
+      '本案 24 小时内已经给过一次这张卡，本轮**不要再整张重复**（spec §10 不刷屏）。' +
+      '但三个号码本身**仍然必须出现在这一轮回复里**——用一句话重述即可，' +
+      '如「热线还是这三个，随时能打：12356 / 座机 800-810-1117 / 手机 010-82951332」。' +
+      '绝不能让用户在这种时刻回头翻聊天记录找号码。',
   },
 
   copy: {

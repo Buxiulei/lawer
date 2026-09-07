@@ -34,6 +34,7 @@ import {
   insertEmotionLog,
   listDrafts as listDraftRows,
   listCaseMessages,
+  listCompanyProfiles,
   upsertCompanyProfile,
   type DraftRow,
 } from '@/lib/db/agent';
@@ -883,6 +884,45 @@ export function writeDraft(
 }
 
 /**
+ * 一行对方主体该落**哪个角色位**。三条规则，顺序即优先级：
+ *   ① 调用方点了名 → 用它（不在词表里就报错，**不静默改写**：静默改写的形态是
+ *      调用方以为自己登记的是 A 位，而库里躺着 B 位，两边都不报错）；
+ *   ② 没点名、这个名字**在本案已经登记过**、且本领域包声明了
+ *      `inheritCompanyRoleOnUnnamed` → 沿用那一行已有的角色；
+ *   ③ 其余情况 → 用本领域声明的缺省角色位（DomainPack.defaultCompanyRole）。
+ *
+ * 【第②条为什么挂在包字段上，而不是无条件生效】它是**对外行为**：同一串调用在
+ * 开与不开两种取值下落到不同角色位，而两种都不报错。无条件打开的形态是——
+ * 一个此前一律落缺省位的行当，在没人改过它的包的情况下换了落点，
+ * 下游按角色取数的东西（被申请人选谁 / 分享导出脱敏谁）随之改判，而没有一处会报错。
+ * 该开还是该关由行当自己在包里声明，取舍写在 DomainPack.inheritCompanyRoleOnUnnamed 的头注释里。
+ *
+ * 【为什么这一份要收成一个函数】此前 MCP 那条路与站内 agent 那条路各写了一遍
+ * `?? 缺省值`：独立写两次就会漏掉其中一次，而漏掉的那次不会报错。
+ *
+ * @returns 角色名，或 DomainFailure（调用方原样回给用户）
+ */
+export function resolveCompanyRole(
+  db: Database,
+  input: { caseId: number; pack: DomainPack; name: string; role?: unknown },
+): string | DomainFailure {
+  if (input.role !== undefined && input.role !== null) {
+    if (typeof input.role !== 'string' || !(COMPANY_ROLES as readonly string[]).includes(input.role)) {
+      return fail(400, 'INVALID_COMPANY_ROLE', `role 只能是 ${COMPANY_ROLES.join(' / ')}`);
+    }
+    return input.role;
+  }
+  if (input.pack.inheritCompanyRoleOnUnnamed) {
+    // 同名多行时取 id 最大的那一行——与 upsertCompanyProfile 的 `ORDER BY id DESC LIMIT 1`
+    // 同一行。取另一行的形态是：这里判定沿用 A 位，而真正被改写的是落在 B 位的另一行。
+    const sameName = listCompanyProfiles(db, input.caseId).filter((p) => p.name === input.name);
+    const existing = sameName[sameName.length - 1];
+    if (existing) return existing.role;
+  }
+  return input.pack.defaultCompanyRole;
+}
+
+/**
  * 登记或补充公司主体。同案同 name 收敛成一条（store.upsertCompanyProfile 的既有语义），
  * 补充字段用 COALESCE 合并：先只知道公司名、后来查到统一社会信用代码是常态。
  */
@@ -904,10 +944,10 @@ export function upsertCompany(
 
   const name = trimmedOrNull(input.name);
   if (!name) return fail(400, 'INVALID_COMPANY_NAME', 'name 不能为空');
-  const role = input.role === undefined || input.role === null ? '签约主体' : input.role;
-  if (typeof role !== 'string' || !(COMPANY_ROLES as readonly string[]).includes(role)) {
-    return fail(400, 'INVALID_COMPANY_ROLE', `role 只能是 ${COMPANY_ROLES.join(' / ')}`);
-  }
+  const packed = packForCase(found);
+  if (!packed.ok) return packed;
+  const role = resolveCompanyRole(db, { caseId: input.caseId, pack: packed.pack, name, role: input.role });
+  if (typeof role !== 'string') return role;
 
   const sources = trimmedOrNull(input.sources);
   const res = upsertCompanyProfile(db, {

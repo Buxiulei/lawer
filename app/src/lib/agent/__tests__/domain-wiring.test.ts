@@ -49,6 +49,7 @@ const FAKE_CRISIS: DomainCrisis = {
   openerText: OPENER,
   safeFallback: '假领域的确定性兜底正文。',
   firstSegment: (ctx) => assembleCrisisOpener(OPENER, ctx.facts, { compact: ctx.compact }),
+  repeatCardNote: (numbers) => `假领域的窗内限制句：${numbers.join(' / ')}`,
 };
 
 /** 假包的事实卡抬头：每一节都换成一望即知不是缺省领域的字。 */
@@ -188,13 +189,43 @@ describe('危机指令与资源卡 id 按 cases.domain 取（变异：prompt 里
     expect(promptOf(DEFAULT_DOMAIN)).toContain(LABOR_PACK.crisis.directive);
   });
 
-  it('「别重印整张卡」那条贴附指令贴在**假包自己的**资源卡上', () => {
+  /**
+   * 【本条在 P4-W3 改过口径，原因写在这里】原来断言的是共用层写死的那句
+   *「本案 24 小时内已经给过一次这张卡」——而那句话连同**缺省领域的三个号码**一起
+   * 写死在 lib/agent/prompt.ts 里，第二个领域的用户在危机窗内读到的就是上一个行当的号码
+   *（设计稿 §13-6：共用层不许写死领域内容）。搬进 DomainPack.crisis.repeatCardNote 之后，
+   * 断言共用层那句话等于把刚拆掉的耦合又钉回来。改成钉**这句话来自这个包自己**。
+   */
+  it('「别重印整张卡」那条贴附指令贴在**假包自己的**资源卡上，且话是假包自己的', () => {
     // 贴错卡的形态是：那句话贴在缺省领域的资源卡后面，而本轮上下文里根本没有那张卡——
     // 于是这条指令谁也没约束到，而 prompt 看起来完全正常。
     const p = promptOf(FAKE_KEY);
     const at = p.indexOf(`### [${FAKE_CARD_ID}]`);
     expect(at, '假包的资源卡没进 prompt').toBeGreaterThan(-1);
-    expect(p.slice(at)).toContain('本案 24 小时内已经给过一次这张卡');
+    // 号码从**假包自己那张卡**的 facts 里抽（12345），不是共用层写死的那三个
+    expect(p.slice(at)).toContain(FAKE_CRISIS.repeatCardNote(['12345']));
+  });
+
+  it('危机窗内的号码不串领域：假领域的贴附指令里，缺省领域的号码一个都不出现', () => {
+    // 这条钉的是本票真正修掉的那件事：号码原来写死在共用层，于是**任何**领域的用户
+    // 在危机窗内都会读到缺省领域的三个号码——号码本身是对的，只是不属于他这件事，
+    // 而这一轮回复照常生成、格式完全正常、没有一处会报错。
+    const p = promptOf(FAKE_KEY);
+    const at = p.indexOf(`### [${FAKE_CARD_ID}]`);
+    const attached = p.slice(at);
+    for (const phone of ['12356', '800-810-1117', '010-82951332']) {
+      expect(attached, `假领域的危机窗内出现了缺省领域的号码 ${phone}`).not.toContain(phone);
+    }
+    expect(attached, '假包自己那张卡上的号码反而没出现').toContain('12345');
+  });
+
+  it('缺省领域的危机窗内那句话逐字不变（自证上一条不是"贴附指令整个没了"）', () => {
+    // 贴附指令只贴在**这个领域自己那张卡**上，所以要把缺省领域的卡也放进注入包，
+    // 否则这条测的是"卡不在包里"而不是"话对不对"。
+    const laborCard: KnowledgePack = { ...FAKE_CARD, id: LABOR_PACK.crisis.resourcePackId };
+    const p = promptOf(DEFAULT_DOMAIN, { packs: [laborCard] } as never);
+    expect(p).toContain(LABOR_PACK.crisis.repeatCardNote([]));
+    expect(p).toContain('热线还是这三个，随时能打：12356 / 座机 800-810-1117 / 手机 010-82951332');
   });
 });
 

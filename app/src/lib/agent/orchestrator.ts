@@ -683,7 +683,11 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   const withinCooldown = !shouldInjectCrisisCard(lastCardAt ? fromSql(lastCardAt) : null, now);
   const alreadyGiven = crisis.triggered && withinCooldown;
   if (crisis.triggered) {
-    const card = input.searcher?.get?.(crisis.resourcePackId!);
+    // 【domain: null = 不过领域闸】这个 id 来自本案领域包自己的 crisis.resourcePackId，
+    // 不是用户或模型报上来的。不写这个 null 的形态是：第二个领域的资源卡按缺省域闸取不回来，
+    // 于是走进下面那条 KNOWLEDGE_UNAVAILABLE，把"闸把它挡了"报成"知识库没装好"，
+    // 而知识库好好的、排查会从最不可能的地方开始。
+    const card = input.searcher?.get?.(crisis.resourcePackId!, { domain: null });
     if (card) {
       // 窗内只给号码（模型印不出它没见过的整张卡）；窗外首次仍给整张卡。
       const toInject = alreadyGiven ? compactCrisisCard(card) : card;
