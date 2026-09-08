@@ -151,7 +151,9 @@ const CRISIS_OUTPUT_GATES = [
     note:
       '**只判模型段**：与 D14/D15 同一条纪律，先 splitCrisisOpener 劈掉确定性首段再判。' +
       '不劈的形态是它去判一段我们自己逐字定好的文本（热线号码、机构名），每轮凭空开火。' +
-      '同为**增不是删**，不喂级联。裸 `N` 刻意不捕（见 value-guard.ts 文件头的缺口声明）。',
+      '同为**增不是删**，不喂级联。裸 `N` 刻意不捕（见 value-guard.ts 文件头的缺口声明）。' +
+      '**上线口径是观察模式**（gate-chain.ts 的 VALUE_GUARD_MODE = observe）：本轮照常记 ' +
+      'notice 与 gate_report，正文一个字不动——所以它现在连"增"都不是，更不可能喂级联。',
   },
 ] as const;
 

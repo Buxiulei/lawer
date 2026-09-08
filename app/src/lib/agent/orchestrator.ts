@@ -69,7 +69,7 @@ import {
 import { bareArticleCitations, precedentContamination, quotedStatuteSpans } from './citation-block';
 import { StatuteGuard, statuteNoticeMessage } from './statute-guard';
 import { applyValueGuard, valueNoticeMessage } from './value-guard';
-import { newGateReport, REPLACE_RATE_BUDGET, summarizeGateReport, tallyGate } from './gate-chain';
+import { newGateReport, REPLACE_RATE_BUDGET, summarizeGateReport, tallyGate, VALUE_GUARD_MODE, valueGuardText } from './gate-chain';
 import { MAX_INJECTED_PACKS, type KnowledgePack, type KnowledgeSearcher } from './retrieval';
 import { loadCaseSnapshot } from './snapshot';
 import { classifyTask } from './task-class';
@@ -1265,14 +1265,18 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
       // 用户看到的就是一个自相矛盾的产品。
       userTurns: [message, ...history.filter((h) => h.role === 'user').map((h) => h.content)],
     });
+    // 记账在**改不改正文之前**，且两个模式下逐字相同：观察模式存在的全部意义就是
+    // 继续量 seen / fired / 替换率——记账跟着模式走的形态是，观察期报表恒 0，
+    // 而切换到 rewrite 的判据（误标率 < 2%）恰恰要靠这段观察期的数才算得出来。
     tallyGate(gateReport, 'value_guard', { seen: valueGate.seen, fired: valueGate.violations.length });
     if (valueGate.violations.length > 0) {
-      text = opener ? `${opener}\n\n${valueGate.text}` : valueGate.text;
+      // 上线口径见 gate-chain.ts 的 VALUE_GUARD_MODE：observe 只记账、正文一个字不动。
+      text = valueGuardText(VALUE_GUARD_MODE, text, opener ? `${opener}\n\n${valueGate.text}` : valueGate.text);
       emit({
         event: 'notice',
         data: {
           code: 'VALUE_UNSOURCED',
-          message: valueNoticeMessage(valueGate.violations),
+          message: valueNoticeMessage(valueGate.violations, VALUE_GUARD_MODE),
           value_marked: valueGate.violations.map((v) => ({ token: v.token, kind: v.kind, mark: v.mark, nearest: v.nearest })),
         },
       });

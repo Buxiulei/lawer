@@ -181,7 +181,9 @@ export const GATE_CHAIN: readonly GateSpec[] = [
     status: 'live',
     stage: 'post',
     anchor: 'applyValueGuard(',
-    guards: '编造数字（「封顶 60 万」「按 3N」）：不在 claim_calc 出参与 facts.values 的标记出来',
+    guards:
+      '编造数字（「封顶 60 万」「按 3N」）：不在 claim_calc 出参与 facts.values 的标记出来。' +
+      '**上线口径见 VALUE_GUARD_MODE**——现在是观察模式，只记 notice 与 gate_report，正文不动。',
   },
   {
     order: 10,
@@ -197,6 +199,43 @@ export const GATE_CHAIN: readonly GateSpec[] = [
       '顺序先钉住，免得日后接线的人把它插在 ⑨ 之前——那样它会去判 ⑨ 刚插进正文的标记文本。',
   },
 ];
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * ⑨ 数值闸的上线口径
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * `observe` = 只记 notice 与 gate_report，**正文一个字不改**；`rewrite` = 就地缀标记。
+ *
+ * 【为什么先观察再改写（manager 2026-09-08 裁定）】⑨ 的标记是**写进用户面**的：
+ * 一处误伤就是在一个算对了的数旁边写上【数值无来源】，用户会因此不敢用那个数——
+ * 而这道闸的误标率至今只在合成样本与真库语料上量过，**没有一条真模型跑批的读数**。
+ * 拿一个没量过误标率的闸去改正文，赌的是用户对我们给的数的信任。
+ *
+ * 【切换条件】真模型跑批的**误标率 < 2%**（与 `REPLACE_RATE_BUDGET` 同一个口径：
+ * 分母是 ⑨ 这一轮看过的数值 token 数，分子是人工复核判定为误标的处数）。
+ * 达标即把这里改成 `'rewrite'`——**只改这一个字**，两臂的判据都已经在
+ * gate-chain.test.ts 里备好（`valueGuardText` 的两条 + 观察模式的端到端那条）。
+ *
+ * 【它与 GateSpec.effect 不是一回事】表里那格写的是这道闸**开着的时候**对正文做什么，
+ * 它决定的是「能不能与相邻闸换位」（⑩ 会看到 ⑨ 插进去的字）；本常量是上线节奏的开关。
+ * 把 effect 改成 `observe` 的形态是：⑨ 从替换率的分子分母里整个消失，
+ * 而观察模式存在的全部意义恰恰就是**继续统计这两个数**。
+ */
+export type ValueGuardMode = 'observe' | 'rewrite';
+export const VALUE_GUARD_MODE: ValueGuardMode = 'observe';
+
+/**
+ * ⑨ 这一轮交出去的正文。
+ *
+ * 【为什么是一个函数而不是调用点上的一个 if】与 `GATE_CHAIN` 同一条理由：
+ * 写在 orchestrator 里的那个 if 是**看不见的契约**——谁把它删了、谁把两个分支写反了，
+ * tsc 绿、全套测试绿（观察模式下正文本来就不该变，"忘了改"与"改对了"在输出上同形）。
+ * 抽成函数之后两臂各有一条可断言的判据，翻转任一臂当场红。
+ */
+export function valueGuardText(mode: ValueGuardMode, original: string, marked: string): string {
+  return mode === 'rewrite' ? marked : original;
+}
 
 /** 按 id 取一道闸（找不到即抛：id 是受控枚举，取不到说明表和消费方已经分叉） */
 export function gateOf(id: GateId): GateSpec {

@@ -53,6 +53,19 @@ const STATUS_CURRENT = '现行';
 const MAX_PENDING = 48;
 
 /**
+ * 这处引用**之前**的上文（本行行首到它为止），喂给 `isStatuteCitationForm` 判载体。
+ *
+ * 【三处调用必须给同一份上文】流上的 `sanitize` 用的是 `this.lineSoFar`
+ *（当前行已走过的字，跨 chunk 累积、遇换行清空）——本函数就是它的整段等价物。
+ * 两边给的上文一旦不同，形态判据在同一处引用上会给出两个答案：闸在流上按
+ *「这是合同条款」放行，自检按「这是法条」报漏网，gate_report 同时说「闸没标」和「闸漏了」。
+ * **回看多远由 `isStatuteCitationForm` 一处定**（它自己截末 N 字），这里只负责不跨行。
+ */
+function lineBefore(text: string, at: number): string {
+  return text.slice(text.lastIndexOf('\n', at) + 1, at);
+}
+
+/**
  * 可能正在成形的条号尾巴。四种形态各扣一段——**少一种就漏一类**：
  *   ① `《某某某某…`      书名号还没闭合；
  *   ② `《某某某某法》`    法名刚闭合，条号可能在下一片里（**这一条最容易漏**：
@@ -250,7 +263,7 @@ export class StatuteGuard {
   check(text: string, where: string): StatuteViolation[] {
     const bad: StatuteViolation[] = [];
     for (const span of authoredCitationSpans(text)) {
-      if (!isStatuteCitationForm(span.raw)) {
+      if (!isStatuteCitationForm(span.raw, lineBefore(text, span.at))) {
         this.ambiguousCount += 1;
         continue;
       }
@@ -301,7 +314,9 @@ export class StatuteGuard {
       .filter((span) => {
         // 形态上分不清条号与量词的那些，⑥ 在流上就没判（见 isStatuteCitationForm）。
         // 漏网自检必须用**同一条**取材规则，否则它会把闸明说不判的东西记成闸漏了。
-        if (!isStatuteCitationForm(span.raw)) return false;
+        // **上文也要一起给**：形态判据要看条号前面那几个字（载体是不是一份合同/手册），
+        // 自检这边不给上文的形态是——流上放行了、自检说漏了，而两边比的是同一处引用。
+        if (!isStatuteCitationForm(span.raw, lineBefore(text, span.at))) return false;
         const after = text.slice(span.end, span.end + UNVERIFIED_STATUTE.length + SUPERSEDED_STATUTE.length);
         if (after.startsWith(UNVERIFIED_STATUTE) || after.startsWith(SUPERSEDED_STATUTE)) return false;
         return !this.isSupported(span.raw);
@@ -354,7 +369,7 @@ export class StatuteGuard {
         const mark = marks[head];
         if (this.asymClose || this.inQuote || this.lineExempt) {
           mark.verdict = 'allowed'; // 免检：立法者写的交叉引用，不计分母也不计分子
-        } else if (!isStatuteCitationForm(mark.raw)) {
+        } else if (!isStatuteCitationForm(mark.raw, this.lineSoFar)) {
           // 形态上分不清条号与序数量词（「第三条路」「第一条建议」）——明说的缺口，
           // 单独计数、不判、不计分母。判它的代价是把一段正确的话弄脏（见 citation-block）。
           mark.verdict = 'allowed';

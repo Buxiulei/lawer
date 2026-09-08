@@ -194,6 +194,60 @@ describe('要件 I · 来源不止两份：法条原文、档案事实、用户�
   });
 });
 
+/**
+ * 【结构化来源那一份也必须分类别（2026-09-08 复审 major）】上面那条「类别不许串」
+ * 管住的只是**语料型**来源（法条原文、用户自述），它们天然带类别（`倍数:2`）。
+ * 而 calc 出参与 `facts.values` 这两份**结构化**来源当时是一个不分类别的大集合：
+ * 本轮算一次 N，出参里同时带着月数 12、封顶倍数 3、年限 7.5、以分为单位的工资 2000000，
+ * 模型顺口写「按 12 倍谈」「税率 3%」「工龄折 7.5 倍」「20000 倍」——**四处全部放行**，
+ * 因为这四个数确实都在出参里。闸退化成一张只看数字、不看它断言什么的白名单。
+ */
+describe('要件 L · 放行集按类别分格：出参里的月数不许去放行「倍」与「%」', () => {
+  /** 一次 N 的出参：金额 142500 元（分位 14250000），另有月数 12、封顶倍数 3、年限 7.5、月薪 20000 元 */
+  const N_CALC = {
+    kind: 'N',
+    amount_fen: 14_250_000,
+    amount_yuan: '142500.00',
+    inputs: { months: 12, cap_multiplier: 3, years: 7.5, avg_monthly_wage_fen: 2_000_000 },
+  };
+
+  it.each([
+    ['这一段按 12 倍算。', '12 倍', '出参里的 12 是**补偿月数**'],
+    ['税率大概 3%。', '3%', '出参里的 3 是**封顶倍数**'],
+    ['工龄折 7.5 倍。', '7.5 倍', '出参里的 7.5 是**年限**'],
+    ['封顶是社平的 20000 倍。', '20000 倍', '出参里的 20000 是**月工资（元）**'],
+  ])('负样本：「%s」照标（把三格合并回一个集合 → 红）', (text, token) => {
+    const r = mark(text, { calcPayloads: [N_CALC] });
+    expect(r.violations.map((v) => v.token), `放行了 ${token} —— 放行集没分类别`).toEqual([token]);
+    expect(r.violations[0].mark).toBe('unsourced');
+  });
+
+  it('正对照：同一份出参里的**金额**照旧放行，逐字与约写两种写法都放（分格分过头 → 红）', () => {
+    expect(mark('算下来是 142500 元。', { calcPayloads: [N_CALC] }).violations).toHaveLength(0);
+    expect(mark('算下来大概 14.3 万元。', { calcPayloads: [N_CALC] }).violations).toHaveLength(0);
+  });
+
+  it('卡里的数按**单位**归类：unit 是年的 3 不放行「3 倍」，unit 是倍的 3 才放行', () => {
+    const yearCard = {
+      facts: { values: [{ key: 'shixiao-years', value: 3, unit: '年', effective_from: '2021-01-01', confidence: '原文核实' }] },
+    };
+    const timesCard = {
+      facts: { values: [{ key: 'sanbei', value: 3, unit: '倍', effective_from: '2021-01-01', confidence: '原文核实' }] },
+    };
+    expect(mark('封顶是社平的 3 倍。', { retrieved: [yearCard] }).text).toContain(VALUE_UNSOURCED);
+    expect(mark('封顶是社平的 3 倍。', { retrieved: [timesCard] }).violations).toHaveLength(0);
+    // 反向也不许串：unit 是倍的 3 不放行「3 元」
+    expect(mark('赔你 3 元。', { retrieved: [timesCard] }).text).toContain(VALUE_UNSOURCED);
+  });
+
+  it('百分比只认**标为比率**的出参字段：rate 0.3 放行「30%」，未标为比率的 3 不放行「3%」', () => {
+    const rated = { kind: '竞业补偿', amount_fen: 100_000, inputs: { rate: 0.3, months: 3 } };
+    expect(mark('按 30% 计。', { calcPayloads: [rated] }).violations).toHaveLength(0);
+    // 同一份出参里的 months=3 不是比率 → 「3%」照标（把 ratiosIn 换成整份出参 → 红）
+    expect(mark('按 3% 计。', { calcPayloads: [rated] }).text).toContain(VALUE_UNSOURCED);
+  });
+});
+
 describe('要件 J · 约写：按自己写的位数四舍五入后相等 → 放行，不是「不一致」', () => {
   /**
    * 封顶数在真语料里几乎总以万元约写出现（卡里 47103.25，正文写「约 4.71 万元」）。

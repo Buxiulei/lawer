@@ -703,9 +703,40 @@ export function insideVerbatim(text: string, at: number, opts?: { requireClosed?
  */
 const ORDINAL_MAX = 10;
 
-export function isStatuteCitationForm(raw: string): boolean {
+/**
+ * 裸条号**前面紧挨着的那个载体**：它说明这个「第 N 条」条的是别的东西，不是法条。
+ *
+ * 【为什么条号 > 10 这条判据不够（2026-09-08 复审 major）】`ORDINAL_MAX` 挡的是
+ *「第三条建议」那种序数量词，靠的是"中文里没人说第四十七条建议"。但**合同、员工手册、
+ * 规章制度、和解协议、裁决书**同样是一条一条编号的，而且条数动辄几十上百：
+ *「你劳动合同第十二条写的是……」「员工手册第三十五条把这个定成了严重违纪」
+ * ——这两句是**用户案子里最常出现的句子**（HR 施压期几乎每轮都在谈这两份文件），
+ * 而 ⑥ 会把它们判成"本轮没取到原文的法条"，就地写成
+ *「劳动合同第十二条【条号待核验】」。用户读到的是：系统在质疑他手上那份合同的存在。
+ * 它还会计进替换率的分子，把 2% 的预算顶穿，读报表的人以为模型在编条号。
+ *
+ * 【为什么是"前 ≤6 字"而不是整句】载体与条号在中文里是**紧邻**的（「劳动合同第十二条」），
+ * 放大窗口就会把「依据劳动合同法的规定，见第四十七条」这种整句里的无关词吃进来——
+ * 那是给参数找例外（A7），方向恰好反了：它会把真法条判成非法条。
+ *
+ * 【判不准时的方向】与 `ORDINAL_MAX` 同一条：**选漏拦**。少标一处，用户拿到的是
+ * 一个没被标注的条号；多标一处，是在他自己那份合同旁边写上"待核验"。
+ * 漏掉的这些同样进 `StatuteGuard.ambiguous`——洞留着可以，洞有多大必须看得见。
+ */
+const NON_STATUTE_CARRIER = /合同|协议|手册|制度|章程|规定|通知|裁决|判决|条款/;
+const CARRIER_WINDOW = 6;
+
+/**
+ * @param before 这处引用**之前**的正文（**只看末 `CARRIER_WINDOW` 字，回看多远由本函数一处定**）。
+ *   调用方给的是"本行行首到它为止"——流上是逐片累积的当前行，整段扫描是 `lineBefore()`，
+ *   两条路给的是同一份上文（口径分叉的后果见 statute-guard.ts 的 `lineBefore`）。
+ *   缺省空串 = 不问上文，与旧行为逐字相同。
+ */
+export function isStatuteCitationForm(raw: string, before = ''): boolean {
   const flat = raw.replace(/\s+/g, '');
   if (/《[^》]{2,40}》/.test(flat)) return true;
+  // 带《》的先放行：《劳动合同法》第十二条 里那个「合同」是法名的一部分，不是载体
+  if (NON_STATUTE_CARRIER.test(before.replace(/\s+/g, '').slice(-CARRIER_WINDOW))) return false;
   if (/第[一二三四五六七八九十0-9]{1,3}[款项]/.test(flat)) return true;
   const m = /第([一二三四五六七八九十百零〇两]+|[0-9]+)条/.exec(flat);
   const n = m ? cnNumeral(m[1]) : null;

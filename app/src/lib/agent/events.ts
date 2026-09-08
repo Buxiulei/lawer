@@ -89,8 +89,12 @@ export type NoticeCode =
    */
   | 'STATUTE_UNVERIFIED'
   /**
-   * 【⑨ 数值闸】正文里带单位的金额/倍数/百分比不在本轮 claim_calc 出参与 facts.values 里，
-   * 已标注【数值无来源】；落在容差内却不相等的标【数值与来源卡不一致】。
+   * 【⑨ 数值闸】正文里带单位的金额/倍数/百分比不在本轮 claim_calc 出参与 facts.values 里
+   *（标记是【数值无来源】；落在容差内却不相等的是【数值与来源卡不一致】）。
+   *
+   * 【正文改没改要看上线口径】gate-chain.ts 的 `VALUE_GUARD_MODE` 现在是 `observe`：
+   * 这条 notice 照发、`value_marked` 照给、gate_report 照统计，**而正文一个字不动**。
+   * 消费方（前端淡色标注、判据的漏网复查）不许假定"发了这条就等于正文里有标记"。
    */
   | 'VALUE_UNSOURCED'
   /**

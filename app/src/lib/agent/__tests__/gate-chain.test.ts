@@ -16,16 +16,19 @@ import {
   GATE_CHAIN,
   RATE_GATES,
   REPLACE_RATE_BUDGET,
+  VALUE_GUARD_MODE,
   gateOf,
   liveGates,
   newGateReport,
   summarizeGateReport,
   tallyGate,
+  valueGuardText,
 } from '../gate-chain';
 import { CitationGuard, UNVERIFIED_CITATION } from '../citation-guard';
 import { StatuteGuard, UNVERIFIED_STATUTE } from '../statute-guard';
 import { applyValueGuard, VALUE_MISMATCH, VALUE_UNSOURCED } from '../value-guard';
 import {
+  CORE_ARTICLE_MAP_PACK_ID,
   coreArticleKeys,
   precedentContamination,
   renderCoreArticleFallback,
@@ -498,13 +501,40 @@ describe('五、端到端接线', () => {
     expect(allowed, '干净轮没有放行集 → 离线判据会把每一处放行都读成漏网').toBeDefined();
   });
 
-  it('⑨ 真的挂在出口：没算过钱的金额被标，且 notice 给出 claim_calc 这条出路', async () => {
-    const { result, notices } = await turn([{ text: '这一项一般封顶 60 万，可以谈。', tools: [CARD] }]);
-    expect(result.text).toContain(`60 万${VALUE_UNSOURCED}`);
+  /**
+   * 【⑨ 的上线口径是**观察模式**（manager 2026-09-08 裁定，见 gate-chain.ts 的 VALUE_GUARD_MODE）】
+   * 它的标记是写进用户面的：一处误伤就是在一个算对了的数旁边写上【数值无来源】。
+   * 而这道闸的误标率至今只在合成样本与真库语料上量过，没有一条真模型跑批的读数——
+   * 所以先只记账（notice + gate_report），正文一个字不动，等误标率 < 2% 再切 `rewrite`。
+   *
+   * 这一条钉的是**观察那一臂**：闸照常开火、照常记账、**正文里一个标记都没有**。
+   * 把 orchestrator 里那行改回无条件赋值（"忘了模式"）→ 红。
+   */
+  it('⑨ 真的挂在出口，且观察模式下只记账不改正文（改了正文 → 红）', async () => {
+    expect(VALUE_GUARD_MODE, '这条判据钉的是 observe 这一臂；切到 rewrite 要连它一起改').toBe('observe');
+    const { result, notices, gateReport } = await turn([{ text: '这一项一般封顶 60 万，可以谈。', tools: [CARD] }]);
+    expect(result.text, '观察模式下正文必须逐字原样').toBe('这一项一般封顶 60 万，可以谈。');
+    expect(result.text).not.toContain(VALUE_UNSOURCED);
+    // 但闸确实开了火：notice 逐条点名 + gate_report 照常进替换率的分子
     const n = notices.find((e) => e.data.code === 'VALUE_UNSOURCED');
     expect(n, '⑨ 开了火却没发自己的 notice').toBeTruthy();
     expect(n!.data.message).toContain('claim_calc');
-    expect(n!.data.value_marked?.[0]).toMatchObject({ kind: '金额', mark: 'unsourced' });
+    expect(n!.data.value_marked?.[0]).toMatchObject({ token: '60 万', kind: '金额', mark: 'unsourced' });
+    expect(gateReport.gates.value_guard).toEqual({ seen: 1, fired: 1 });
+    // 观察模式下这句话不许说「已标注」——正文里没有那个标记，用户会去找而找不到
+    expect(n!.data.message, '留痕说了一件没发生的事').not.toContain('已标注');
+  });
+
+  /**
+   * 【另一臂：`rewrite` 时行为同现在】切换只改 gate-chain.ts 里的一个字，
+   * 而"改对了没有"必须在切换**之前**就有判据——否则那天上线靠的是读一遍代码。
+   * 两臂都在这里，翻转 `valueGuardText` 的任一分支当场红。
+   */
+  it('⑨ 的两臂：observe 交出原文、rewrite 交出标注后的正文（把三元反过来 → 红）', () => {
+    const raw = '这一项一般封顶 60 万。';
+    const marked = `这一项一般封顶 60 万${VALUE_UNSOURCED}。`;
+    expect(valueGuardText('observe', raw, marked)).toBe(raw);
+    expect(valueGuardText('rewrite', raw, marked)).toBe(marked);
   });
 
   it('gate_report **无条件**发（一处都没动的干净轮也要发；只在非空时发 = 把"跑了没动"与"不知道"抹成一件事）', async () => {
@@ -560,6 +590,83 @@ describe('五、端到端接线', () => {
   });
 
   /**
+   * 【接线判据：**核心条映射定向注入**的那张卡也必须在 ⑥ 的放行集里（2026-09-08 复审 major）】
+   *
+   * statute-guard.ts 的文件头写着放行集的第二项是「核心条映射命中且已取到原文的条」，
+   * 并声明它是第一项的子集——"这不是巧合、也不该靠巧合"。而在此之前，**没有一条判据
+   * 跑过这条路**：上面那条工具轮判据走的是 `knowledge_search`，⑥⑧ 那条交互用例是纯函数，
+   * 两条都碰不到 S3b 那段定向注入（`findByArticleKeys` → `packs.push`）。
+   *
+   * 它守的形态是首诊最主流的一轮：预检索一张法条卡都没捞到（4e10b7c 批三跑实测），
+   * 映射表声明本场景的核心条是 §46，系统主动把那张卡送到模型面前——
+   * 模型照着引了，而 ⑥ 把它标成【条号待核验】。**闸在惩罚系统自己刚送进去的料**，
+   * 且 ⑧ 紧接着会给一个刚被标掉的位置补原文，两道闸在同一处各说各的。
+   */
+  describe('核心条映射定向注入的卡进放行集（allowFrom 漏掉 injectedCoreCards → 红）', () => {
+    /** 本场景（夹具的 stage = 已收通知）声明的核心条只有一条，好让 findByArticleKeys 的取到/取不到成为唯一变量 */
+    const MAP_PACK: KnowledgePack = {
+      ...statutePack([]),
+      id: CORE_ARTICLE_MAP_PACK_ID,
+      type: '方法卡',
+      title: '场景 → 核心依据条映射',
+      facts: { core_article_map: [{ scene: '已收通知', articles: ['劳动合同法|第46条'] }] },
+    };
+    /** 定向注入要取的那张卡。**只有它带 statute_quotes** */
+    const CORE_CARD: KnowledgePack = {
+      ...statutePack([
+        {
+          law: '劳动合同法',
+          article: '第四十六条',
+          text: '有下列情形之一的，用人单位应当向劳动者支付经济补偿：（一）劳动者依照本法第三十八条规定解除劳动合同的；',
+        },
+      ]),
+      id: 'statute-lhtf-46',
+    };
+    /** 预检索捞到的：一张不带逐字条文的卡 ⇒ ⭐候选为空 ⇒ S3b 定向注入才会触发 */
+    const NO_STATUTE: KnowledgePack = { ...statutePack([]), id: 'script-anytalk', type: '话术卡', title: '话术卡', facts: {} };
+    /** 核心位（`应当向劳动者支付` 命中结论标记）+ 光秃条号 ⇒ ⑧ 该在这里补原文 */
+    const LINE = '公司应当向劳动者支付经济补偿，依据是《劳动合同法》第四十六条。';
+
+    async function run(findByArticleKeys: (keys: string[]) => KnowledgePack[]) {
+      const { makeAgentFixture, makeSink, scriptedProvider } = await import('./fixtures');
+      const f = makeAgentFixture();
+      const sink = makeSink();
+      const result = await runTurn({
+        db: f.db,
+        caseId: f.caseId,
+        userId: f.userId,
+        message: '我想知道能拿多少钱。',
+        provider: scriptedProvider([{ text: LINE, tools: [CARD] }] as never),
+        searcher: {
+          search: () => [NO_STATUTE],
+          get: (id: string) => (id === CORE_ARTICLE_MAP_PACK_ID ? MAP_PACK : undefined),
+          findByArticleKeys,
+        },
+        emit: sink.emit,
+        now: new Date('2026-08-26T12:00:00Z'),
+      });
+      if (!('ok' in result) || !result.ok) throw new Error(`本轮未成功：${JSON.stringify(result)}`);
+      const notices = sink.events.filter((e) => e.event === 'notice') as Extract<AgentEvent, { event: 'notice' }>[];
+      return { result, notices, gateReport: notices.find((e) => e.data.code === 'GATE_REPORT')!.data.gate_report! };
+    }
+
+    it('取到了：⑥ 不标、⑧ 就地补原文、放行集里有这一条、漏网 0', async () => {
+      const { result, gateReport } = await run((keys) => (keys.includes('劳动合同法|第46条') ? [CORE_CARD] : []));
+      expect(result.text, '系统自己送进来的核心条被闸标成【条号待核验】').not.toContain(UNVERIFIED_STATUTE);
+      expect(result.text, '⑧ 没在核心位补上卡内逐字原文').toContain('第四十六条「');
+      expect(result.text).toContain('用人单位应当向劳动者支付经济补偿');
+      expect(gateReport.statute_allowed, '放行集里没有定向注入进来的那一条').toContain('劳动合同法|第46条');
+      expect(gateReport.leaked, '⑧ 补进来的原文里那句交叉引用被记成 ⑥ 的漏网').toBe(0);
+    });
+
+    it('负对照：同一条路上 findByArticleKeys 取不到 → 照标（否则上面那条可能只是闸整个关掉了）', async () => {
+      const { result, gateReport } = await run(() => []);
+      expect(result.text).toContain(`第四十六条${UNVERIFIED_STATUTE}`);
+      expect(gateReport.statute_allowed).not.toContain('劳动合同法|第46条');
+    });
+  });
+
+  /**
    * 【⑨ 的三份放行来源，每份一条**真编排**判据（2026-09-08 复审 major）】
    *
    * 这三份来源（本轮算出来的数 / 档案里的结构化事实 / 用户自己说过的话）都不是闸自己能取的，
@@ -573,6 +680,10 @@ describe('五、端到端接线', () => {
    * 否则"放行"这件事可以由"闸整个坏了"来解释，判据就成了恒真。
    */
   describe('⑨ 的三份放行来源各有一条接线判据', () => {
+    /** ⑨ 这一轮点名了哪几个数值 token（观察模式下正文不变，开没开火只能从 notice 读） */
+    const fired = (notices: Extract<AgentEvent, { event: 'notice' }>[]) =>
+      notices.find((e) => e.data.code === 'VALUE_UNSOURCED')?.data.value_marked?.map((v) => v.token) ?? [];
+
     /** 一次会算出 142500.00 元的 claim_calc（19000 元/月 × 7.5 年，见 record 的 claims_upsert 摘要） */
     const CALC_CALL = {
       name: 'claim_calc',
@@ -601,12 +712,18 @@ describe('五、端到端接线', () => {
       expect(gateReport.gates.value_guard).toEqual({ seen: 1, fired: 0 });
     });
 
+    /**
+      * 三条负对照读的是 **notice + gate_report**，不是正文里的标记：⑨ 现在是观察模式
+      *（gate-chain.ts 的 VALUE_GUARD_MODE），正文本来就不会变。查正文的形态是——
+      * 切回 rewrite 那天这三条才有意义，而在观察期它们恒绿，等于三条恒真的判据。
+      */
     it('① 负对照：同一轮里没人算过的「60 万」照样开火（否则上面两条可能只是闸坏了）', async () => {
-      const { result } = await turn([
+      const { result, notices, gateReport } = await turn([
         { text: '我先算一下。', tools: [CALC_CALL] },
         { text: '算下来是 142500 元，不过一般能谈到 60 万。', tools: [CARD] },
       ]);
-      expect(result.text).toContain(`60 万${VALUE_UNSOURCED}`);
+      expect(fired(notices)).toEqual(['60 万']);
+      expect(gateReport.gates.value_guard).toEqual({ seen: 2, fired: 1 });
       expect(result.text).toContain('142500 元，');
     });
 
@@ -619,10 +736,11 @@ describe('五、端到端接线', () => {
     });
 
     it('② 负对照：档案里没有的那个数照样开火（把 caseFacts 当"有档案就全放行" → 红）', async () => {
-      const { result } = await turn([{ text: '你月薪 20000 元，赔偿大概 60 万。', tools: [CARD] }], {
+      const { result, notices, gateReport } = await turn([{ text: '你月薪 20000 元，赔偿大概 60 万。', tools: [CARD] }], {
         monthlyWageFen: 2_000_000,
       });
-      expect(result.text).toContain(`60 万${VALUE_UNSOURCED}`);
+      expect(fired(notices)).toEqual(['60 万']);
+      expect(gateReport.gates.value_guard).toEqual({ seen: 2, fired: 1 });
       expect(result.text).toContain('你月薪 20000 元，');
     });
 
@@ -635,10 +753,11 @@ describe('五、端到端接线', () => {
     });
 
     it('③ 负对照：用户没说过的数照样开火（把 userTurns 当"有原话就全放行" → 红）', async () => {
-      const { result } = await turn([{ text: '你说月薪 2 万，大概能拿 60 万。', tools: [CARD] }], {
+      const { result, notices, gateReport } = await turn([{ text: '你说月薪 2 万，大概能拿 60 万。', tools: [CARD] }], {
         message: '我月薪 2 万，公司说要裁员。',
       });
-      expect(result.text).toContain(`60 万${VALUE_UNSOURCED}`);
+      expect(fired(notices)).toEqual(['60 万']);
+      expect(gateReport.gates.value_guard).toEqual({ seen: 2, fired: 1 });
       expect(result.text).toContain('你说月薪 2 万，');
     });
   });

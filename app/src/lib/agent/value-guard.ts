@@ -34,12 +34,18 @@
 // 里一个数字都没有，⑨ 自己的标记又是一次性批量插入、不回读。写一层免检去挡一个不存在的
 // 情况，代价是一条**恒真的测试**——它看起来是覆盖，实际什么都没验。真到 ⑩ 那天再加。
 //
+// ── 标记会不会到用户面前，由上线口径定 ──
+// 本文件只负责**判**与**产出标注后的正文**；那份正文用不用，看 gate-chain.ts 的
+// `VALUE_GUARD_MODE`。现在是 `observe`：violations 与 seen 照常交出去记账，正文不换。
+// 写在这里是因为读这个文件的人会以为下面每一处 `inserts.push` 都会出现在用户屏幕上。
+//
 // ── 为什么是标记而不是剥除 ──
 // 与第五闸的「改口」不同：一个数被剥掉，整句话就读不通了（「你大概能拿到 」）。
 // 标记保留了数、同时告诉用户"这个数没有来源"，并给出出路（用 claim_calc 算）。
 // 禁令必配出路（设计稿 §7.7）。
 
 import { cnNumeral, insideVerbatim } from './citation-block';
+import type { ValueGuardMode } from './gate-chain';
 import type { KnowledgePack } from './retrieval';
 
 /** 不在任何来源里 */
@@ -79,7 +85,12 @@ const DATE_TOKEN = /\d{4}\s*[-年/]\s*\d{1,2}\s*[-月/]\s*\d{1,2}\s*日?/g;
 const DEADLINE_CUE = /(到期|届满|截止|最后一天|最迟|时效[^。！？\n]{0,6}(?:到|止|截))/;
 const DEADLINE_CUE_WINDOW = 24;
 
-export type ValueKind = '金额' | '百分比' | '倍数' | '倍数记号' | '日期';
+/**
+ * 放行集的**类别**。`倍数记号`（2N/N+1）不在此列——它走 `calcKinds` 那一路；
+ * `日期` 也不在——它走 `dueDates`。这三格覆盖的是「带单位的数」那三类。
+ */
+export type ValueClass = '金额' | '百分比' | '倍数';
+export type ValueKind = ValueClass | '倍数记号' | '日期';
 export type ValueMark = 'unsourced' | 'mismatch';
 
 export interface ValueViolation {
@@ -248,15 +259,79 @@ function idsInCorpus(text: string, out: Set<string>): void {
   }
 }
 
+/** 每个类别一格。**分格是这道闸的要件，不是内部整洁**（见 `Allowed.exact` 的注释） */
+function byClass<T>(make: () => T): Record<ValueClass, T> {
+  return { 金额: make(), 百分比: make(), 倍数: make() };
+}
+
+/**
+ * 一条 `facts.values` 的单位落在哪一类。认不出来的单位（年 / 日 / 月 / 小时 / 人…）返回 null
+ * ——**它不进任何放行集**：正文里没有与它同类的 token，收下它只会去放行**别的类别**的数
+ *（真库里就有 `unit: 年`、`value: 3` 的时效年限——合在一格时它放行「3 倍」与「3%」）。
+ */
+function classOfUnit(unit: string | null | undefined): ValueClass | null {
+  if (!unit) return null;
+  if (/元/.test(unit)) return '金额';
+  if (/%|百分/.test(unit)) return '百分比';
+  if (/倍/.test(unit)) return '倍数';
+  return null;
+}
+
+/** 这个字段名是不是**标为比率**（`rate` / `ratio` / `pct` / `percent`）。驼峰与下划线都拆开比 */
+const RATIO_WORDS = new Set(['rate', 'rates', 'ratio', 'ratios', 'pct', 'percent', 'percents']);
+function isRatioKey(key: string): boolean {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .some((w) => RATIO_WORDS.has(w));
+}
+
+/**
+ * calc 出参里**标为比率**的那些字段（`rate: 0.3`、`rateLow: 0.5`）——百分比那一格的
+ * 唯一一份 calc 来源。出参里比率恒以小数存，而正文写的是「30%」，两种写法都收。
+ *
+ * 【为什么百分比不能吃整份出参】出参里遍地是与比率无关的整数（月数、年限、条号、分位金额）。
+ * 整份收下的形态是：本轮算了一次 N，模型顺口写「税后大概扣 12%」——那个 12 是补偿月数。
+ */
+function ratiosIn(value: unknown, marked: boolean, out: Set<string>, nums: number[]): void {
+  if (typeof value === 'number') {
+    if (!marked || !Number.isFinite(value)) return;
+    // 0.3 * 100 在 IEEE 754 下是 30.000000000000004——不收口就永远对不上正文里的「30%」
+    const asPercent = value > 0 && value <= 1 ? Number((value * 100).toFixed(6)) : value;
+    out.add(canonical(value));
+    out.add(canonical(asPercent));
+    nums.push(value, asPercent);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const v of value) ratiosIn(v, marked, out, nums);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) ratiosIn(v, marked || isRatioKey(k), out, nums);
+  }
+}
+
 interface Allowed {
-  /** 逐字放行的数字串（归一后） */
-  exact: Set<string>;
-  /** 归一身份放行集（`类别:数`）：来自法条原文与用户自述这两份**语料型**来源 */
+  /**
+   * 逐字放行的数字串（归一后），**按类别分格**。
+   *
+   * 【为什么不能是一个不分类别的大集合（2026-09-08 复审 major）】本轮算一次 N，出参里
+   * 同时带着 `months: 12`、`cap_multiplier: 3`、`years: 7.5`、`avg_monthly_wage_fen: 2000000`。
+   * 合成一格的形态是：模型顺口写「按 12 倍谈」「税率 3%」「工龄折 7.5 倍」「20000 倍」，
+   * **四处全部放行**——这四个数确实都在出参里，只是它们在出参里分别是月数、封顶倍数、
+   * 年限、以分为单位的工资。闸于是退化成一张**只看数字、不看它断言的是什么**的白名单，
+   * 而「3 元」「3 倍」「3%」是三件完全不同的事（要件 I 的「类别不许串」原本只管住了
+   * 语料型来源那一份，结构化来源这一份仍然是不分类别的）。
+   */
+  exact: Record<ValueClass, Set<string>>;
+  /** 归一身份放行集（`类别:数`）：来自法条原文与用户自述这两份**语料型**来源。天然带类别 */
   ids: Set<string>;
-  /** 卡里与档案里的数值，用来算容差与约写判定 */
-  cardValues: number[];
+  /** 卡里与档案里的数值，用来算容差与约写判定。**同样分格**，理由同 `exact` */
+  cardValues: Record<ValueClass, number[]>;
   /** 本轮**算出来**的数值，同样进约写与容差判定（出路与卡不同，故分列） */
-  calcValues: number[];
+  calcValues: Record<ValueClass, number[]>;
   /**
    * 本轮 `claim_calc` 算过的**记号**（出参的 `kind`：`N` / `N+1` / `2N` / 年假…）。
    *
@@ -275,24 +350,34 @@ function normDate(y: string, m: string, d: string): string {
 }
 
 function collect(sources: ValueSources): Allowed {
-  const exact = new Set<string>();
-  const calcValues: number[] = [];
+  const exact = byClass(() => new Set<string>());
+  const cardValues = byClass<number[]>(() => []);
+  const calcValues = byClass<number[]>(() => []);
   const calcKinds = new Set<string>();
   for (const p of sources.calcPayloads) {
-    numbersIn(p, exact, calcValues);
+    // 出参里的数**默认落在金额那一格**：算钱器算的就是钱，它的 formula / steps 里写的也是钱。
+    //
+    // 【明说的缺口】出参里的月数与年限同样落在这一格（`months: 12` 会放行「12 元」）。
+    // 按字段名把它们摘出去只是**半个修法**：同一个数在 `formula` 那串散文里还会再出现一次，
+    // 而散文的字段名叫 `formula`，按名摘不掉。真要收窄得让算钱器交一份带单位的结构化出参
+    // ——那是另一片的事。这里先把**跨类别**那条堵死：12 个月不再放行「12 倍」。
+    numbersIn(p, exact.金额, calcValues.金额);
+    ratiosIn(p, false, exact.百分比, calcValues.百分比);
     const kind = (p as { kind?: unknown } | null)?.kind;
     if (typeof kind === 'string' && kind.trim()) calcKinds.add(nFormKey(kind));
   }
-  const cardValues: number[] = [];
   const ids = new Set<string>();
   for (const p of sources.retrieved) {
     for (const v of p.facts?.values ?? []) {
       if (typeof v?.value !== 'number') continue;
-      cardValues.push(v.value);
-      exact.add(canonical(v.value));
-      exact.add(v.value.toFixed(2));
+      // 卡自己带单位，类别就按单位判——不按单位判等于让卡里的「3 年」去放行正文里的「3 倍」
+      const cls = classOfUnit(v.unit);
+      if (!cls) continue;
+      cardValues[cls].push(v.value);
+      exact[cls].add(canonical(v.value));
+      exact[cls].add(v.value.toFixed(2));
       // 卡里存「47103.25 元」，正文常写「4.71 万元」——万元换算同收，理由同分/元
-      exact.add(canonical(v.value / 10000));
+      if (cls === '金额') exact.金额.add(canonical(v.value / 10000));
     }
     // 【本轮取到的法条原文里写着的数】法定倍数/比例（「二倍」「百分之四十五」）的来源
     // 就是条文本身。不收它的形态是：模型引对了条、也抄对了数，闸照样标【数值无来源】，
@@ -300,11 +385,12 @@ function collect(sources: ValueSources): Allowed {
     for (const q of p.facts?.statute_quotes ?? []) if (q?.text) idsInCorpus(q.text, ids);
   }
   // 档案里的结构化事实（工资等）。**这是用户自己填的**，复述它不是编造。
+  // 它们已折成正文单位的**元**，故只进金额那一格。
   for (const n of sources.caseFacts ?? []) {
     if (!Number.isFinite(n)) continue;
-    cardValues.push(n);
-    exact.add(canonical(n));
-    exact.add(n.toFixed(2));
+    cardValues.金额.push(n);
+    exact.金额.add(canonical(n));
+    exact.金额.add(n.toFixed(2));
     ids.add(`金额:${canonical(n)}`);
   }
   // 用户自己说过的话。取材面与杠杆闸的 userTurns 同源。
@@ -358,7 +444,11 @@ function exempt(text: string, at: number): boolean {
   return insideVerbatim(text, at, { requireClosed: true });
 }
 
-function kindOf(token: string): ValueKind {
+/**
+ * 这个 token 断言的是哪一类。返回类型**刻意排除 `日期`**：日期不走 `VALUE_TOKEN` 那条路，
+ * 排除它之后「过完倍数记号那一支，剩下的恰是放行集的三格」由类型系统保证，不靠断言。
+ */
+function kindOf(token: string): ValueClass | '倍数记号' {
   if (/[Nn]/.test(token)) return '倍数记号';
   if (/倍/.test(token)) return '倍数';
   if (/%|百分之/.test(token)) return '百分比';
@@ -404,8 +494,11 @@ export function applyValueGuard(
       inserts.push({ at: at + token.length, mark: VALUE_UNSOURCED });
       continue;
     }
+    // 到这里 kind 恰是放行集的三格之一。**取的是同类别那一格**——
+    // 「3 元」不许拿卡里的「3 倍」放行，反之亦然（见 Allowed.exact 的注释）
+    const cls: ValueClass = kind;
     const raw = normNumber(token.replace(/[^\d.,]/g, ''));
-    if (raw && allow.exact.has(raw)) continue;
+    if (raw && allow.exact[cls].has(raw)) continue;
     // 归一身份放行：法条原文与用户自述这两份语料型来源，跨数字体系、跨单位写法比对
     const id = canonicalId(token);
     if (id && allow.ids.has(id)) continue;
@@ -419,12 +512,12 @@ export function applyValueGuard(
     }
     // 万元/万：正文的单位换算回卡的口径再比一次
     const scaled = /万/.test(token) ? n * 10000 : n;
-    if (allow.exact.has(canonical(scaled)) || allow.exact.has(scaled.toFixed(2))) continue;
+    if (allow.exact[cls].has(canonical(scaled)) || allow.exact[cls].has(scaled.toFixed(2))) continue;
     // 约写（「约 4.71 万元」之于 47103.25）：按它自己写的位数四舍五入后相等即放行。
     // **卡里的数与算出来的数一视同仁**——模型复述刚算完的结果时同样会四舍五入。
-    if (isRoundedForm(token, n, allow.cardValues) || isRoundedForm(token, n, allow.calcValues)) continue;
-    const nearCard = nearestWithin(allow.cardValues, n, scaled);
-    const near = nearCard ?? nearestWithin(allow.calcValues, n, scaled);
+    if (isRoundedForm(token, n, allow.cardValues[cls]) || isRoundedForm(token, n, allow.calcValues[cls])) continue;
+    const nearCard = nearestWithin(allow.cardValues[cls], n, scaled);
+    const near = nearCard ?? nearestWithin(allow.calcValues[cls], n, scaled);
     if (near !== undefined) {
       violations.push({
         token,
@@ -465,7 +558,10 @@ export function applyValueGuard(
  * 用户侧 notice 文案。**每一条标记都带出路**（设计稿 §7.7）：
  * 只说"这个数没来源"而不说他能做什么，等于把问题丢回给一个本来就不懂的人。
  */
-export function valueNoticeMessage(violations: readonly ValueViolation[]): string {
+export function valueNoticeMessage(violations: readonly ValueViolation[], mode: ValueGuardMode = 'rewrite'): string {
+  // 【观察模式下这句话不许说「已标注」（同 ⑥ 文书通道那条教训）】正文里一个标记都没有，
+  // 而这句话告诉用户"已经标注了"——他会去正文里找那个标记，找不到。留痕说假话比不留痕更贵。
+  const said = (m: string) => (mode === 'rewrite' ? `已标注${m}` : '本轮只在这条提醒里点名，正文未改动');
   const unsourced = [...new Set(violations.filter((v) => v.mark === 'unsourced').map((v) => v.token))];
   const mismatch = violations.filter((v) => v.mark === 'mismatch');
   // 【出路按"那个准数是哪儿来的"分（2026-09-08 复审 major 的连带修）】
@@ -476,7 +572,7 @@ export function valueNoticeMessage(violations: readonly ValueViolation[]): strin
   const lines: string[] = [];
   if (unsourced.length) {
     lines.push(
-      `本轮有 ${unsourced.length} 处数字既不是这一轮算出来的、也不在来源卡里：${unsourced.join('、')}，已标注${VALUE_UNSOURCED}。` +
+      `本轮有 ${unsourced.length} 处数字既不是这一轮算出来的、也不在来源卡里：${unsourced.join('、')}，${said(VALUE_UNSOURCED)}。` +
         '出路：回我一句「帮我算一下」，我用 claim_calc 按你档案里的入职日期与工资重算一遍，' +
         '算式、每一项输入的来源、依据条文会一起给你——那个数才是能拿去谈的数。',
     );
@@ -485,14 +581,14 @@ export function valueNoticeMessage(violations: readonly ValueViolation[]): strin
     lines.push(
       `本轮有 ${fromCard.length} 处数字与来源卡差了一点：` +
         fromCard.map((v) => `${v.token}（卡里是 ${v.nearest}）`).join('、') +
-        `，已标注${VALUE_MISMATCH}。出路：以来源卡的数为准，点开回复里的来源卡可以看到它的生效期间。`,
+        `，${said(VALUE_MISMATCH)}。出路：以来源卡的数为准，点开回复里的来源卡可以看到它的生效期间。`,
     );
   }
   if (fromCalc.length) {
     lines.push(
       `本轮有 ${fromCalc.length} 处数字与这一轮算出来的数差了一点：` +
         fromCalc.map((v) => `${v.token}（算出来是 ${v.nearest}）`).join('、') +
-        `，已标注${VALUE_MISMATCH}。出路：以 claim_calc 的算式为准，回我一句「把算式再说一遍」；` +
+        `，${said(VALUE_MISMATCH)}。出路：以 claim_calc 的算式为准，回我一句「把算式再说一遍」；` +
         '要是输入写错了（工资、入职日期），说清改哪一项，我重算。',
     );
   }

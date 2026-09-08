@@ -29,6 +29,8 @@ describe('真知识库全量：⑥→⑧→⑨ 对闸自己的产物不许开火
     const sixMarked: string[] = [];
     const leaked: string[] = [];
     const nineMarked: string[] = [];
+    /** 隔离臂：同一段正文里**该被判的那一处**没被判 */
+    const nineSilent: string[] = [];
     let total = 0;
     let multiline = 0;
 
@@ -53,6 +55,21 @@ describe('真知识库全量：⑥→⑧→⑨ 对闸自己的产物不许开火
         if (afterNine.violations.length) {
           nineMarked.push(`${p.id} ${q.article} → ${afterNine.violations.map((v) => v.token).join('、')}`);
         }
+        // 【隔离臂】同一段正文尾部追加一处**期限语境里的日期**，而本轮一条生效期限都没有 ⇒ 必判。
+        //
+        // 【为什么这一臂不能省（2026-09-08 复审 minor）】上面那个「⑨ 误标 0」有两种解释：
+        // ① 免检面正确地罩住了 ⑧ 补进来的原文；② ⑨ 对这段正文**根本没开过火**
+        //（免检面写宽了、捕获面写死了、这条卡的原文里恰好一个带单位的数都没有…）。
+        // 两种解释在这一列上长得一模一样，而后者是"闸关了"。隔离臂把它们分开：
+        // 同一段正文、同一份来源，只多一处该判的东西——它必须被判出来。
+        const isolated = applyValueGuard(`${afterEight.text}\n这条时效最迟到 2099-12-31 到期。`, {
+          calcPayloads: [],
+          retrieved: injected,
+          deadlines: [],
+        });
+        if (!isolated.violations.some((v) => v.kind === '日期' && v.token.includes('2099'))) {
+          nineSilent.push(`${p.id} ${q.article}`);
+        }
       }
     }
 
@@ -62,6 +79,10 @@ describe('真知识库全量：⑥→⑧→⑨ 对闸自己的产物不许开火
     expect(sixMarked, `⑥ 把放行集内的条标了：${sixMarked.slice(0, 5).join('｜')}`).toEqual([]);
     expect(leaked, `⑥ 把 ⑧ 补进来的原文记成漏网：${leaked.slice(0, 5).join('｜')}`).toEqual([]);
     expect(nineMarked, `⑨ 对 ⑧ 补进来的原文里的数字开火：${nineMarked.slice(0, 5).join('｜')}`).toEqual([]);
+    expect(
+      nineSilent,
+      `⑨ 在这些卡的正文上**一处都判不出来** → 上面那个"误标 0"是闸没开火，不是免检面对：${nineSilent.slice(0, 5).join('｜')}`,
+    ).toEqual([]);
   });
 
   /**
