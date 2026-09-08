@@ -501,6 +501,22 @@
     }
   },
   {
+    "source_id": "cases-tjhqfy-2026-05-laodong-dxal",
+    "kind": "官方案例",
+    "name": "红桥法院发布5起劳动争议典型案例",
+    "issuer": "天津市红桥区人民法院",
+    "official_host": "tjhqfy.tjcourt.gov.cn",
+    "url": "https://tjhqfy.tjcourt.gov.cn/article/detail/2026/05/id/9301098.shtml",
+    "fetched_at": "2026-09-08T15:54:01+08:00",
+    "content_sha256": "56dc0190ed3bf68d9f31b3ed30e9ee8593d8d5a0430716661eedab23729c51a9",
+    "version_label": "2026年05月发布",
+    "status": "现行",
+    "files": {
+      "raw": "sources/originals/cases-tjhqfy-2026-05-laodong-dxal/raw.html",
+      "text": "sources/originals/cases-tjhqfy-2026-05-laodong-dxal/text.txt"
+    }
+  },
+  {
     "source_id": "crisis-org-cn-zhongxin-jianjie",
     "kind": "机构官网",
     "name": "北京心理危机研究与干预中心简介（含心理援助热线号码与运行时间）",
