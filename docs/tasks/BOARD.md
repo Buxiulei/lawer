@@ -515,6 +515,7 @@
 - **2026-09-08 · 第七次额度中断续跑**：天津五案建卡完成（ws/tianjin-cases 1e12989：5 张卡、9 条逐字引文、related 全解析、gen strict 203 packs、verify 374/374、audit 102 条 0 问题；原文「朱文静」笔误未复制并注明），Fable 复审续跑；S2 实现刚起步即中断（wt-s2 干净、无提交）→ 加续跑说明重跑。
 - **2026-09-08 · 天津红桥五案建卡（ws/tianjin-cases 1e12989）复审 pass + 3 minor → 派小修后合入**：Fable 亲 curl 官方页 sha 一致，9 条 case_quotes 逐字命中，人名/日期/金额/结果全对，「朱文静」只在笔误提示段；两处变异红（holding 改字→两面不一致红；引文改数字→verify 红）。minor：案例一「裁判理由」把仲裁法 §27④ 改写当逐字引（改逐字并挂 statute_quotes）；案例三「5 个月」是自行折算（改照原文区间）；自报每卡 2 条与实际 2/2/2/2/1 不符（不改）。修完与卫生票一起滚版。
 - **2026-09-08 · 推 main 3a3a306（卫生票 4daf3f4 + 天津五案 7edfe1d + 台账）**：天津小修后 verify 375/375（新挂仲裁法 §27④ 逐字引文一致）；合并 index.json 自动合上、重生成零 diff；gen/verify/audit/pytest/tsc/vitest 6613 全 0。CI 盯中，bundle 与 deploy-3a3a306.sh 已备。
+- **2026-09-08 · 滚版 3a3a306 上产（卫生票 + 天津五案）**：CI 34206089712 绿 → ff c90a73d→3a3a306 → BUILD OK → 重启 → /、sidecar、公网 200；index labor 166 + counseling 37（天津 5 张在）；app.log 游标后零 error。09-08 第 1 次滚版。
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
