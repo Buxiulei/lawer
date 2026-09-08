@@ -1383,7 +1383,7 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
     gateReport.leaked = leakedCitations.length;
     gateReport.sourceStatusUnknown = statutes.sourceStatusUnknown;
     gateReport.ambiguousBareArticles = statutes.ambiguous;
-    gateReport.docRejected = statutes.docFound.length;
+    gateReport.docRejected = statutes.docFound.length + citations.docFound.length;
     const sum = summarizeGateReport(gateReport);
     emit({
       event: 'notice',
