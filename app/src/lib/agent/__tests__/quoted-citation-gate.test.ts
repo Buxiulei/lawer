@@ -98,12 +98,21 @@ describe('第五闸 · 分轨：正文改口，文书拒收', () => {
     const { executeTool, newTurnState } = await import('../tools');
     const { makeAgentFixture, makeSink, fixtureSearcher } = await import('./fixtures');
     const { CitationGuard } = await import('../citation-guard');
+    const { StatuteGuard } = await import('../statute-guard');
     const f = makeAgentFixture();
     const state = newTurnState();
     state.retrieved = S14_INJECTED; // 本轮注入里没有 534
+    // 【⑥ 的放行集要给足，否则这条测的就不是 ⑦ 了】文书通道里 ⑥ 排在 ⑦ 前面。
+    // 不给 ⑥ 放行集的形态是：它先因「§27 本轮拿不出原文」拒收，⑦ 一次都没跑到，
+    // 而这条测试的名字仍然叫"第五闸 · 文书通道"——**判据在测一道它没提过的闸**。
+    // 所以这里显式喂它 §27 的原文：本例要复现的是"条号有原文、引号里的话却是编的"。
+    const statutes = new StatuteGuard();
+    statutes.allowFrom([
+      { facts: { statute_quotes: [{ law: '劳动合同法实施条例', article: '第二十七条', text: '劳动合同法第四十七条规定的经济补偿的月工资……' }] } },
+    ]);
     const ctx = {
       db: f.db, caseId: f.caseId, userId: f.userId, threadId: 1, sourceMessageId: null,
-      citations: new CitationGuard(), crisisCardAlreadyGiven: false, searcher: fixtureSearcher(),
+      citations: new CitationGuard(), statutes, crisisCardAlreadyGiven: false, searcher: fixtureSearcher(),
       state, emit: makeSink().emit,
     } as never;
     const res = executeTool(

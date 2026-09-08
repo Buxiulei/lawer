@@ -33,6 +33,11 @@ import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
+// 闸标记的真源在服务端；这里 import 是为了给「手抄的那份字面」兜底
+import { UNVERIFIED_CITATION } from '@/lib/agent/citation-guard';
+import { SUPERSEDED_STATUTE, UNVERIFIED_STATUTE } from '@/lib/agent/statute-guard';
+import { VALUE_MISMATCH, VALUE_UNSOURCED } from '@/lib/agent/value-guard';
+
 vi.mock('@/app/_ui/discreet', () => ({
   useDiscreet: () => ({ discreet: false, setDiscreet: () => {}, toggle: () => {} }),
 }));
@@ -170,6 +175,29 @@ describe('三、不许回归：低调打码 / 引用占位 / 糊层锚点', () =
   it('【案号待核实】仍是淡色标注，不是警报色也不是裸文字', () => {
     const markup = html('参考【案号待核实】的口径。');
     expect(markup).toMatch(/<span class="[^"]*text-ink-2[^"]*">【案号待核实】<\/span>/);
+  });
+
+  /**
+   * 【五个闸标记逐字对服务端常量】(S2 闸链补齐 2026-09-08)
+   *
+   * `CITE_PENDING` 是手抄的字面（为了不把上千行纯函数拉进客户端包）。
+   * 手抄的代价必须由判据兜住：闸那边改了标记文案而这里没跟上，
+   * 形态是**标记原样摊在正文里、没有任何样式**——看起来只是"排版丑了一点"，
+   * 而它实际意味着用户读到的是一句没有视觉降权的断言。
+   */
+  it('五个出口闸的标记逐字与服务端常量一致，且都是淡色标注', () => {
+    for (const marker of [
+      UNVERIFIED_CITATION,
+      UNVERIFIED_STATUTE,
+      SUPERSEDED_STATUTE,
+      VALUE_UNSOURCED,
+      VALUE_MISMATCH,
+    ]) {
+      const markup = html(`前面一句${marker}后面一句。`);
+      expect(markup, `${marker} 没被 CITE_PENDING 认出来`).toMatch(
+        new RegExp(`<span class="[^"]*text-ink-2[^"]*">${marker}</span>`),
+      );
+    }
   });
 
   it('糊层锚点 data-veil 还在（低调模式整块糊靠它）', () => {

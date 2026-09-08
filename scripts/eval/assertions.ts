@@ -39,7 +39,20 @@ import {
  * `citationKey` 是产线 `articleKey` 的别名——保留旧名以免call site 与既有测试大面积改名，
  * **实现是同一个函数**，不是同名两份。
  */
-import { normalizeArticle, normLaw, articleKey as citationKey, packCorpus, bareArticleSpans } from '../../app/src/lib/agent/citation-block';
+import {
+  normalizeArticle,
+  normLaw,
+  articleKey as citationKey,
+  packCorpus,
+  bareArticleSpans,
+  isStatuteCitationForm,
+} from '../../app/src/lib/agent/citation-block';
+// 【标记字面从产线常量来，不在判据里手抄】抄一份的形态是：产线改了标记文案，
+// 判据仍按旧字面去找，于是「每一处都没带标记」→ **零泄漏判据整片翻红**，而闸完全正常。
+import {
+  SUPERSEDED_STATUTE as STATUTE_MARK_SUPERSEDED,
+  UNVERIFIED_STATUTE as STATUTE_MARK_UNVERIFIED,
+} from '../../app/src/lib/agent/statute-guard';
 export { normalizeArticle, normLaw, citationKey, packCorpus };
 
 export interface TurnRecord {
@@ -60,6 +73,43 @@ export interface TurnRecord {
     coreBlockRendered: string[];
     renderAdded: string[];
     substantiveHitCount: number;
+  } | null;
+  /**
+   * ⑥ 条号闸的归档留痕：**对象** = 这一层跑了（`marked` 可能为空、`allowed` 一定在）；
+   * **`null` 与 `undefined`** = 这份转录没有这一层（旧产物 / 跑在旧代码上）→ 不可判。
+   *
+   * 【为什么这里只有两态，而 `leverage` 有三态】(2026-09-08 修) 原先照抄了三态，
+   * 把 `null` 读成"跑了、闸没开火"并补成 `{ allowed: [] }`。而**空放行集不是中性值**：
+   * 它是最强的判定前提——用户面每一处条号都因此成为漏网。于是模型全引对的干净轮
+   * L1 恒红，同一轮的 `gate_report.leaked` 却是 0，两条判据当场打架。
+   * ⑥ 的放行集挂在**无条件发**的 GATE_REPORT 上，所以"跑了"必有对象，第三态不存在。
+   *
+   * 【为什么 `allowed` 必须落盘】漏网率要离线重算，而"当时放行的是哪几条"**从归档正文里
+   * 反推不出来**——正文里只剩没被标记的那些，它们看起来都一样。
+   * 不落盘的形态是：判据只能拿"有没有标记"当唯一依据，于是**闸整层失效时它照样全绿**
+   *（一处都没标 = 一处都没漏）。这与 08-26「杠杆闸那条 L1 结构上只能绿」是同一个形状。
+   */
+  statuteGate?: { marked: { cited: string; verdict: string }[]; allowed: string[] } | null;
+  /** 闸链汇总的归档留痕（三态同 `leverage`）。替换率/漏网率两列从它来，不从 message 里解析中文数字。 */
+  gateReport?: {
+    gates: Record<string, { seen: number; fired: number }>;
+    seen: number;
+    fired: number;
+    replace_rate: number;
+    leaked: number;
+    leak_rate: number;
+    budget: number;
+    over_budget: boolean;
+    source_status_unknown: number;
+    /** ⑥ 形态歧义放过去的处数（明说的洞；数字在涨说明口径要重看，不是闸坏了） */
+    statute_ambiguous?: number;
+    /** 上一项的两个分项：载体排除 / 序数量词。处置方向不同，故分列 */
+    statute_ambiguous_carrier?: number;
+    statute_ambiguous_ordinal?: number;
+    /** ⑥ 文书通道拒收数。**不在替换率里**：拒收不是替换，那一处从未到达用户面 */
+    statute_doc_rejected?: number;
+    /** 本轮 ⑥ 的放行集（`法名|第N条`）。零泄漏判据读它，不在评测侧另建一份 */
+    statute_allowed?: string[];
   } | null;
   /** 本轮检索到的全部 pack（含预检索与工具检索） */
   retrieved: KnowledgePack[];
@@ -1840,6 +1890,163 @@ export interface CoreMechanismState {
  * 反推等于给分账开第二个真源：闸的归因窗口一改，判据就静默漂移，
  * 而漂移的方向恰好是"把模型的漏引洗成闸的锅"——这条豁免只能由闸自己签发。
  */
+/* ═══════════════════════════════════════════════════════════════════════════
+ * ⑥ 条号闸 · 运行时零泄漏（设计稿 §1.2「条号可回溯」目标 100%）
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * 本轮 ⑥ 的归档留痕。**三态照 `injectionObservability` 的规矩读**：
+ * `undefined` = 不知道（旧产物 / 跑在旧代码上）→ 判据跳过，产 N/A，不计过不计挂。
+ *
+ * 【为什么先读归档字段再读 events】`events` 不进归档 —— 只读 events 的判据在**任何回放上
+ * 恒为 undefined**，而 undefined 会被当成"旧产物、跳过"。这是本仓踩过三次的同一个坑
+ *（08-26 leverage / 08-28 crisisPaid / 08-28 injection），这里是第四次遇到它。
+ */
+export function statuteGateTrail(t: TurnRecord): { marked: { cited: string; verdict: string }[]; allowed: string[] } | undefined {
+  // 【`null` 是"这份转录里没有 ⑥ 这一层"，不是"跑了没开火"】(2026-09-08 修)
+  // 原先 `?? { marked: [], allowed: [] }` 把 null 补成"跑了、放行集为空"——
+  // 而放行集为空是**最强的判定前提**：它让用户面每一处条号都成为漏网。
+  // 一个观测缺口被当成了一条断言的依据，方向恰好是把干净轮判红。
+  if (t.statuteGate === null) return undefined;
+  if (t.statuteGate) return t.statuteGate;
+  const marked: { cited: string; verdict: string }[] = [];
+  let allowed: string[] | undefined;
+  for (const e of t.events ?? []) {
+    if (e.event !== 'notice') continue;
+    if (e.data.code === 'STATUTE_UNVERIFIED') marked.push(...(e.data.statute_marked ?? []));
+    // 放行集跟着**无条件发**的那条走（干净轮也有），不跟着只在开火时发的那条
+    if (e.data.code === 'GATE_REPORT') allowed = e.data.gate_report?.statute_allowed ?? [];
+  }
+  return allowed === undefined ? undefined : { marked, allowed };
+}
+
+/** 闸链汇总的归档留痕（三态同上）。替换率/漏网率两列读它。 */
+export function gateReportTrail(t: TurnRecord): TurnRecord['gateReport'] | undefined {
+  if (t.gateReport !== undefined) return t.gateReport ?? undefined;
+  for (const e of t.events ?? []) {
+    if (e.event !== 'notice' || e.data.code !== 'GATE_REPORT') continue;
+    if (e.data.gate_report) return e.data.gate_report;
+  }
+  return undefined;
+}
+
+/**
+ * 用户面还没被标记的条号引用（取材面与产线 ⑥⑧ 同源，法条原文内部的交叉引用不算）。
+ *
+ * 【形态过滤必须与产线同一个函数】`isStatuteCitationForm` 是 ⑥ **明说不判**的那条口径
+ *（裸的「第三条建议」分不清条号与序数量词）。判据这边不跟着过滤的形态是：
+ * 闸按口径放行 → 判据按另一套口径判它漏网 → L1 红，而两边各自都在做对的事。
+ * 这正是教训 1（两处各写一份必然分叉），所以这里 import 而不是重写。
+ */
+export function unmarkedCitations(text: string): { raw: string; article: string; law: string }[] {
+  return bareArticleSpans(text)
+    .filter((span) => isStatuteCitationForm(span.raw))
+    .filter((span) => {
+      const at = text.indexOf(span.raw, Math.max(0, span.at - 2));
+      const end = (at < 0 ? span.at : at) + span.raw.length;
+      const after = text.slice(end, end + 12);
+      return !after.startsWith(STATUTE_MARK_UNVERIFIED) && !after.startsWith(STATUTE_MARK_SUPERSEDED);
+    })
+    .map((span) => ({ raw: span.raw, article: span.article, law: /《([^》]{2,40})》/.exec(span.raw)?.[1] ?? '' }));
+}
+
+/**
+ * 【机械断言 · 条号运行时零泄漏】(设计稿 §5 第 2 项：S03/S15 三轮「光秃条号」运行时零泄漏)
+ *
+ * 判据：**用户面每一处条号引用，要么带着闸的标记，要么在本轮放行集里。**
+ *
+ * 【为什么不是"正文里没有奇怪的条号"】那需要判据自己去认哪些条号是真的，
+ * 等于在评测侧重建一份放行集——两份放行集必有一天分叉，而分叉的方向看不见
+ *（教训 1：判据侧改了、行为侧没跟上，静默漂移）。所以只读**闸自己写下的放行集**。
+ *
+ * 【为什么是 L1】它与 G1「零编造案号」同族：用户拿一个我们手上没有原文的条号去主张权利，
+ * 与拿一个查无此案的案号，后果是同一种——当场被对方拆穿，且失信的是用户本人。
+ * 与 G4「光秃条号」（L2，"给少了"）分属两类，统计口径分开。
+ */
+export function statuteLeakAssertions(turns: TurnRecord[], scenarioId: string): Verdict[] {
+  return turns.flatMap((t, i): Verdict[] => {
+    const trail = statuteGateTrail(t);
+    if (!trail) {
+      return [
+        {
+          id: `${scenarioId}-轮${i + 1}-条号闸留痕缺失`,
+          tier: 'L1' as const,
+          pass: true, // 让旧的布尔消费者不炸；真正的判定看 na
+          na: true,
+          naKind: 'observability_missing' as const,
+          detail:
+            `第 ${i + 1} 轮没有 ⑥ 条号闸的留痕（旧产物或跑在旧代码上）→ 零泄漏**不可判**，` +
+            '不计过不计挂。**这不等于没有泄漏**，只等于我们看不见。',
+        },
+      ];
+    }
+    const allowed = new Set(trail.allowed);
+    const leaked = unmarkedCitations(userVisibleText(t)).filter(
+      (c) => !allowed.has(citationKey(c.law, c.raw)) && !allowed.has(citationKey(null, c.raw)) && !bareAllowed(allowed, c.article),
+    );
+    return [
+      {
+        id: `${scenarioId}-轮${i + 1}-条号零泄漏`,
+        tier: 'L1' as const,
+        pass: leaked.length === 0,
+        detail: leaked.length
+          ? `用户面有 ${leaked.length} 处条号既不在本轮放行集里、也没带闸的标记：` +
+            `${leaked.map((c) => c.raw).join('、')}｜放行集：${trail.allowed.join('、') || '（空）'}`
+          : `第 ${i + 1} 轮用户面条号全部可回溯（放行集 ${trail.allowed.length} 条，闸标注 ${trail.marked.length} 处）`,
+      },
+    ];
+  });
+}
+
+/** 没写法名的裸条号：放行集里任一条的条号对上即可（与产线 `byArticle` 同口径） */
+function bareAllowed(allowed: Set<string>, article: string): boolean {
+  for (const k of allowed) if (k.endsWith(`|${article}`)) return true;
+  return false;
+}
+
+/**
+ * 【剥除率与漏网率并列】(设计稿 §4.3) 从 `gate_report` 直接读，**不从 message 反推**。
+ *
+ * 超预算**不阻断**，只在报告里点名——因为超预算的定性是「闸误伤」而不是「模型变差」，
+ * 处置是去查闸的判据。把它做成阻断，会让人为了发版去放松闸，方向正好反了。
+ */
+export function gateRateAssertions(turns: TurnRecord[], scenarioId: string): Verdict[] {
+  return turns.flatMap((t, i): Verdict[] => {
+    const r = gateReportTrail(t);
+    if (!r) {
+      return [
+        {
+          id: `${scenarioId}-轮${i + 1}-闸链汇总缺失`,
+          tier: 'L3' as const,
+          pass: true,
+          na: true,
+          naKind: 'observability_missing' as const,
+          detail: `第 ${i + 1} 轮没有 gate_report 留痕 → 替换率/漏网率不可算，不计过不计挂`,
+        },
+      ];
+    }
+    const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+    return [
+      {
+        id: `${scenarioId}-轮${i + 1}-替换率`,
+        tier: 'L3' as const,
+        pass: !r.over_budget,
+        detail:
+          `替换率 ${pct(r.replace_rate)}（动手 ${r.fired}/候选 ${r.seen}，预算 ${pct(r.budget)}）` +
+          (r.over_budget ? '——**超预算：按闸误伤处理，先查闸的判据，不是先调提示词**（不阻断）' : ''),
+      },
+      {
+        id: `${scenarioId}-轮${i + 1}-漏网率`,
+        tier: 'L1' as const,
+        pass: r.leaked === 0,
+        detail:
+          `漏网 ${r.leaked} 处（${pct(r.leak_rate)}）` +
+          (r.leaked ? '——闸跑完仍有未标注且不在放行集里的引用，**这是闸自己漏了，不是模型变差**' : ''),
+      },
+    ];
+  });
+}
+
 export function gateStrippedArticles(t: TurnRecord): Set<string> {
   const out = new Set<string>();
   // 归档 turn 有 `gateStrippedArticles` 字段却没有 `events`——先吃归档那份，回放才判得出来

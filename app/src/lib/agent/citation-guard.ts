@@ -81,6 +81,25 @@ export class CitationGuard {
   private allowed = new Set<string>();
   private pending = '';
   private readonly violations: CitationViolation[] = [];
+  /**
+   * 本轮**看过**多少个案号形态的串（放行的也算）。
+   *
+   * 【为什么加这一格】(S2 闸链补齐 2026-09-08) 它是 gate_report 里替换率的**分母**。
+   * 只有 `violations`（分子）的形态是：一轮里唯一那处引用被换掉，替换率 100%，
+   * 与一轮里 50 处引用换掉 1 处在报表上长得一模一样——而前者是闸误伤的典型信号，
+   * 后者是闸正常工作。**分子单独存在时说不出任何事。**
+   */
+  private seenCount = 0;
+  /**
+   * **文书通道**的违规与看过数，与正文分开存（2026-09-08，与 ⑥ 同一处修法）。
+   *
+   * 【合账会同时说两句假话】① 轮末那条 `CITATION_BLOCKED` 对用户说
+   *「相应位置显示为『案号待核实』」——而文书通道是**拒收**，正文里一个占位符都没有；
+   * ② 替换率把拒收算进分子分母（文书错 1 处 + 正文 1 处引用 ⇒ 报 50%），
+   * 而超预算的定性是「闸误伤，去查闸的判据」——闸这一轮做的恰恰是它该做的事。
+   */
+  private readonly docViolations: CitationViolation[] = [];
+  private docSeenCount = 0;
 
   /** 把这些 pack 正文里出现的案号并入白名单 */
   allowFrom(packs: { id: string; body: string; title?: string }[]): void {
@@ -101,9 +120,24 @@ export class CitationGuard {
     return this.allowed.has(normalizeCaseNo(caseNo));
   }
 
-  /** 本轮拦下的全部违规（供 notice 与日志；空数组＝干净） */
+  /** 本轮在**正文**里换掉的全部违规（供 notice 与日志；空数组＝干净） */
   get found(): readonly CitationViolation[] {
     return this.violations;
+  }
+
+  /** 本轮**正文**看过多少处案号引用（替换率的分母，放行的也计；文书通道不在此列） */
+  get seen(): number {
+    return this.seenCount;
+  }
+
+  /** 本轮在**文书通道**拒收的违规。它们不曾出现在用户面，故不进正文 notice 与替换率 */
+  get docFound(): readonly CitationViolation[] {
+    return this.docViolations;
+  }
+
+  /** 文书通道看过多少处案号引用（单列，供 gate_report 记账） */
+  get docSeen(): number {
+    return this.docSeenCount;
   }
 
   /**
@@ -111,8 +145,10 @@ export class CitationGuard {
    * 不改写内容——文书是要落库的东西，该由模型改正后重写，而不是我们替它打补丁。
    */
   check(text: string, where: string): string[] {
-    const bad = extractCaseNumbers(text).filter((n) => !this.isSupported(n));
-    for (const cited of bad) this.violations.push({ cited, where });
+    const all = extractCaseNumbers(text);
+    this.docSeenCount += all.length;
+    const bad = all.filter((n) => !this.isSupported(n));
+    for (const cited of bad) this.docViolations.push({ cited, where });
     return bad;
   }
 
@@ -141,6 +177,7 @@ export class CitationGuard {
 
   private sanitize(text: string): string {
     return text.replace(new RegExp(CASE_NO_SOURCE, 'g'), (cited) => {
+      this.seenCount += 1;
       if (this.isSupported(cited)) return cited;
       this.violations.push({ cited, where: '正文' });
       return UNVERIFIED_CITATION;

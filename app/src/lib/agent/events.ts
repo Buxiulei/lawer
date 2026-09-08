@@ -80,6 +80,34 @@ export type NoticeCode =
    */
   | 'CITATION_INCOMPLETE'
   /**
+   * 【⑥ 条号闸】本轮有条号不在放行集里（本轮取到原文的 statute_quotes），
+   * 已在正文里就地标注【条号待核验】；来源登记簿标注已修正/已废止的标【已修正，见新版】。
+   *
+   * 【为什么不并进 CITATION_BLOCKED】那条量的是**案号**。同一个 code 量两件事，
+   * 就一定有一边在骗人（教训 11）——而这两件事的修法完全不同：
+   * 假案号是知识库里没有这个案子，错条号是我们没取到这条的原文。
+   */
+  | 'STATUTE_UNVERIFIED'
+  /**
+   * 【⑨ 数值闸】正文里带单位的金额/倍数/百分比不在本轮 claim_calc 出参与 facts.values 里
+   *（标记是【数值无来源】；落在容差内却不相等的是【数值与来源卡不一致】）。
+   *
+   * 【正文改没改要看上线口径】gate-chain.ts 的 `VALUE_GUARD_MODE` 现在是 `observe`：
+   * 这条 notice 照发、`value_marked` 照给、gate_report 照统计，**而正文一个字不动**。
+   * 消费方（前端淡色标注、判据的漏网复查）不许假定"发了这条就等于正文里有标记"。
+   */
+  | 'VALUE_UNSOURCED'
+  /**
+   * 【闸链汇总】十道闸这一轮各动了几处，以及替换率与漏网率（设计稿 §4.3）。
+   *
+   * 【为什么在各闸自己的 notice 之外还要这一条】各闸各写各的是对的（code 混用统计失真），
+   * 代价是「这一轮闸链一共动了正文几处」没有任何一处能回答——要读五条 notice、
+   * 再从各自的中文 message 里解析数字，而 message 是给人看的、随时会改文案。
+   * 所以：notice 归 notice（给人看），`gate_report` 归 gate_report（结构化、给机器读）。
+   * 判据只读这一份，**不从 message 反推**（反推等于给统计开第二个真源）。
+   */
+  | 'GATE_REPORT'
+  /**
    * 判例引用句里混进了卡内不存在的本案事实（ISSUE-03），已留痕**未改正文**。
    * 与 CITATION_BLOCKED（编造案号被拦）分开：那条是「号是假的」，这条是「号是真的、细节是编的」——
    * 后者恰好绕过只验号码存在性的案号闸，混用一个 code 会让两边统计同时失真。
@@ -261,6 +289,57 @@ export type AgentEvent =
           renderAdded: string[];
           /** 本轮注入包中**有实质命中**的卡数——手上这几张能不能用 */
           substantiveHitCount: number;
+        };
+        /**
+         * STATUTE_UNVERIFIED 专用：被闸标注的那些条号引用原串 + 判定。
+         * 与 `stripped_articles` 同一条纪律——**闸改了什么必须自己写下来**：
+         * 归档正文里只剩一个【条号待核验】，不留痕就分不清这一处是模型引错了、
+         * 还是我们这一轮没把那张卡检索回来（两者的修法一个是提示词、一个是召回）。
+         */
+        statute_marked?: { cited: string; verdict: 'unverified' | 'superseded' }[];
+        /** VALUE_UNSOURCED 专用：被标注的数值 token + 判定 + 卡里最接近的那个数 */
+        value_marked?: { token: string; kind: string; mark: 'unsourced' | 'mismatch'; nearest?: string }[];
+        /**
+         * GATE_REPORT 专用：闸链这一轮的结构化汇总。
+         *
+         * 【`leaked` 与 `replace_rate` 必须并列读】只报替换率的形态是：
+         * 闸把什么都替换掉（率高得离谱、漏网恒 0）看起来"守得很严"；
+         * 或者闸一处都不换（率 0）而漏网全靠没人看。两个数缺一个，另一个读不出意思。
+         */
+        gate_report?: {
+          /** 按闸 id：`{ seen, fired }`。**没跑的闸不出现**——"没跑"不是"跑了没开火" */
+          gates: Record<string, { seen: number; fired: number }>;
+          /** 全链候选总数 / 动手总数 */
+          seen: number;
+          fired: number;
+          /** fired / seen。超 `budget` 视为**闸误伤**（不是模型变差），不阻断 */
+          replace_rate: number;
+          /** 闸跑完后用户面仍未标注且不在放行集里的引用数。结构上应恒 0 */
+          leaked: number;
+          leak_rate: number;
+          budget: number;
+          over_budget: boolean;
+          /** 登记簿 `source_status` 未接上的条数（设计稿 §7.3 待接项，见 retrieval.ts） */
+          source_status_unknown: number;
+          /**
+           * ⑥ 形态上分不清条号与序数量词、**明说不判**而放过去的处数（见 isStatuteCitationForm）。
+           * 故意留的洞，但洞有多大必须每轮看得见——只写在注释里的缺口，在报表上与"没有这个缺口"同形。
+           */
+          statute_ambiguous?: number;
+          /**
+           * 上一行的两个分项：载体排除（合同/手册/制度的条号）与序数量词（「第三条建议」）。
+           * 分开报是因为**处置方向不同**——前者动载体词表，后者动 ORDINAL_MAX 的口径。
+           */
+          statute_ambiguous_carrier?: number;
+          statute_ambiguous_ordinal?: number;
+          /** ⑥ 在文书通道**拒收**的处数。不进替换率：拒收不是替换，那一处从未到达用户面 */
+          statute_doc_rejected?: number;
+          /**
+           * 本轮 ⑥ 的放行集（`法名|第N条`）。**挂在这条无条件发的 notice 上**：
+           * 挂在 STATUTE_UNVERIFIED（只在开火时发）的形态是——干净轮归档里没有放行集，
+           * 判据读成空集，于是用户面每一处真放行的裸条号都被判成漏网。
+           */
+          statute_allowed?: string[];
         };
         /** CALC_FAILED 专用：恒 true——补齐信息后可以直接再算一次，不是功能坏了 */
         retriable?: boolean;

@@ -136,7 +136,13 @@ export function packCorpus(pack: Pick<KnowledgePack, 'title' | 'body' | 'facts'>
 }
 
 /** 汉字数字 → 整数（覆盖 1–999：四十六=46、十九=19、二十=20、一百零八=108）。非法返回 null。 */
-function cnNumeral(s: string): number | null {
+/**
+ * 汉字数字 → 阿拉伯数字（`四十五` → 45）。取不到返回 null。
+ * **导出**是给 ⑨ 数值闸用的：法条原文写「二倍」「百分之四十五」，模型写「2 倍」「45%」，
+ * 不跨数字体系互认，闸就会把**逐字抄对了的数**标成【数值无来源】。
+ * 与条号那边同一条理由、同一个函数（教训 1：两处各写一份必然静默漂移）。
+ */
+export function cnNumeral(s: string): number | null {
   if (/^[0-9]+$/.test(s)) return Number(s);
   const D: Record<string, number> = { 〇: 0, 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
   let total = 0;
@@ -381,6 +387,15 @@ export function packCitationGuide(pack: KnowledgePack, core: Set<string> = new S
 
 /** 条号形态：《X法》第Y条 / 第Y条 / 第Y款。 */
 const ARTICLE = /(?:《[^》\n]{2,30}》\s*)?第\s*[一二三四五六七八九十百零〇0-9]{1,6}\s*条(?:第\s*[一二三四五六七八九十0-9]{1,3}\s*[款项])?/g;
+/**
+ * 上面那条正则的**源串**，给 StatuteGuard（⑥）在流上另建一份 lastIndex 独立的实例用。
+ *
+ * 【为什么导出源串而不是导出 `ARTICLE` 本身】带 `g` 的正则**自带可变的 `lastIndex`**：
+ * 两个消费者共用一个实例，谁先 `exec` 一半，另一个就从半截开始扫——错的方向是**漏捕**，
+ * 而漏捕在闸上等于放行。导出源串让每个消费者各持一份状态，同时仍然只有**一份形态定义**
+ *（教训 1：两边各写一份正则，判据侧改了行为侧没跟上，静默漂移）。
+ */
+export const ARTICLE_PATTERN = ARTICLE.source;
 /** 引号内的一段（中文/直角/英文引号通吃） */
 const QUOTED = /[「“"]([^」”"\n]{1,200})[」”"]/g;
 /**
@@ -559,21 +574,214 @@ function hasVerbatimNear(near: string, article: string): boolean {
 }
 
 /**
+ * **非对称引号**（「」『』“”）的配对开闭表。
+ *
+ * 【为什么只有非对称的那三对能跨行】对称的 ASCII `"` 开闭同形，跨行配对必然出错
+ *（见 quotedChunks 的注释：它会把两段正文之间的部分当成引文）。非对称引号的开与闭
+ * 是**不同字符**，跨多少行都配得准——所以跨行豁免只给它们，`"` 仍按行内奇偶数。
+ *
+ * 【它同时是 ⑥ 流上那份免检态的开闭表（2026-09-08 复审 minor）】导出而不是各写一份：
+ * ⑥ 原先在流上只留一个"在不在引号里"的布尔，于是**内层的异类闭引号会把外层的免检关掉**
+ *（`「…第“四十”条…第四十七条…」` → 后半截引文里的交叉引用被标【条号待核验】），
+ * 而整段扫描这边是按**同一对**配对、跨过内层的。两边就此分叉的下场是闸在引文内部误伤，
+ * 且自检恒说没漏（它看的是整段）。一张表两处读，分叉这条路就不存在。
+ */
+export const ASYM_QUOTES: readonly (readonly [string, string])[] = [
+  ['「', '」'],
+  ['『', '』'],
+  ['“', '”'],
+];
+
+/**
+ * 一个开引号最远罩到哪里。闭引号在此之内 → 区间到闭引号为止；否则**认定它没闭合**，
+ * 区间就到这个上限为止（不是一直到文末）。
+ *
+ * 【为什么未闭合也要给一段豁免，而不是一点都不给】⑥ 在**流上**逐片跑，它看不到后面
+ * 有没有闭引号——只能开着走、走够远就收回来。而漏网自检（`leakedIn`）跑在整段上、
+ * 看得见闭引号。两边口径一旦不同，就会出现**闸放行了、自检说漏了**：
+ * 用户面没有任何标记，gate_report 却报「闸自己漏了」，去查闸只会发现闸做得对。
+ * 所以两边用同一条规则：**闭引号，或走满上限，先到者为准。**
+ *
+ * 上限取 3000：真库 318 条 statute_quotes 最长 912 字，留三倍余量；
+ * 上限低于最长原文的形态是 ⑧ 补进来的长条文尾段丢掉豁免，反而制造漏网。
+ */
+export const ASYM_QUOTE_CAP = 3000;
+
+/**
+ * 文本里全部非对称引号豁免区（允许跨行；未闭合的按 `ASYM_QUOTE_CAP` 截断）。
+ *
+ * `requireClosed` = **只认闭合成对的引号**，未闭合的一段豁免都不给。给 post 段的闸用
+ *（见 `insideVerbatim` 的第二个参数）。
+ */
+function asymQuoteSpans(text: string, requireClosed = false): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const pair = ASYM_QUOTES.find(([open]) => text[i] === open);
+    if (!pair) {
+      i += 1;
+      continue;
+    }
+    const close = text.indexOf(pair[1], i + 1);
+    const closed = close >= 0 && close - i <= ASYM_QUOTE_CAP;
+    // 未闭合 + 调用方要求成对 → 这个开引号不产生豁免区，从它的下一个字接着找
+    if (!closed && requireClosed) {
+      i += 1;
+      continue;
+    }
+    const end = closed ? close : Math.min(text.length, i + ASYM_QUOTE_CAP + 1);
+    out.push({ start: i, end });
+    i = end + 1;
+  }
+  return out;
+}
+
+/**
  * 该位置是否落在**逐字原文内部**（引号内或 blockquote 行内）。
  *
  * 【为什么要排除】法条原文自己会**交叉引用**别的条：
  * §87 的原文里写着「应当依照本法**第四十七条**规定的经济补偿标准的二倍」。
  * 那个「第四十七条」是**立法者写的**，不是 agent 自己给的光秃引用——
  * 判它「没带原文」等于要求 agent 把被引法条的原文也一并附上，无限递归。
+ *
+ * 【为什么必须跨行（2026-09-08 修）】原本三条判据全按**行**算：blockquote 看本行行首、
+ * 引号看本行之前的引号奇偶。而 ⑧ `renderCoreArticleFallback` 是把卡内原文以
+ * `「…」` **内联**插进正文的，真库里 279 条 statute_quotes 有 153 条本身是多行的、
+ * 其中 29 条从第 2 行起才出现立法者的交叉引用（§46 的（一）…第三十八条… 就是其中之一）。
+ * 按行算的形态是：第 1 行豁免、第 2 行起不豁免 → ⑥ 的漏网自检把**闸自己刚补进来的原文**
+ * 记成漏网，gate_report 报「闸自己漏了」，而闸什么都没做错。
+ * 这条恰好发生在最主流的核心位路径上，所以它不是边角，是主路。
+ *
+ * 【为什么是"再加一条豁免"而不是"改掉按行那条"】按行那条对**未闭合**的引号是宽容的
+ *（前半行算在引号内）。改成只认成对，等于在一处无关的地方悄悄收紧闸，
+ * 而收紧的方向是多标记——那是误伤。所以新旧两条**取并集**：只增不减。
+ *
+ * 【`requireClosed`：post 段的闸不该继承流上的宽容（2026-09-08 复审 minor）】
+ * 上面那份宽容（未闭合的引号照样罩住后文）是**为流上的 ⑥ 定的**：它逐片跑，
+ * 看不见后面有没有闭引号，只能开着走、走满 `ASYM_QUOTE_CAP` 再收回来；
+ * 自检（`leakedIn`）必须与它同口径，否则会出现"闸放行了、自检说漏了"。
+ * ⑨ 不在这个处境里：它是 post 闸、拿到的是**整段**正文，⑧ 补进来的原文又恒闭合。
+ * 继承那份宽容的下场是**纯漏拦面**——用户消息里一个漏打的 `”`（真实转录里
+ * 「HR 说：“你签了吧。」这种半个引号很常见），其后整篇回复的金额、倍数、百分比全部免检，
+ * 而 gate_report 会诚实地报「候选 0 处」。所以这个参数只放给 post 段的调用方。
  */
-function insideVerbatim(text: string, at: number): boolean {
+export function insideVerbatim(text: string, at: number, opts?: { requireClosed?: boolean }): boolean {
+  const requireClosed = opts?.requireClosed === true;
+  // 成对非对称引号内（可跨行）：引号本身不算在内，引号里的每一个字都算
+  for (const s of asymQuoteSpans(text, requireClosed)) if (at > s.start && at < s.end) return true;
   const lineStart = text.lastIndexOf('\n', at) + 1;
   if (/^\s*>/.test(text.slice(lineStart, at))) return true; // blockquote 行
   // 引号内：数该位置之前同一行有几个引号，奇数即在引号内
   const before = text.slice(lineStart, at);
   const marks = (before.match(/["「『“”」』]/g) ?? []).length;
-  return marks % 2 === 1;
+  if (marks % 2 === 0) return false;
+  if (!requireClosed) return true;
+  // 要求成对时，本行后面还得有一个引号来收口；没有就是"开了没关"，不给豁免
+  const lineEnd = text.indexOf('\n', at);
+  const after = text.slice(at, lineEnd < 0 ? text.length : lineEnd);
+  return (after.match(/["「『“”」』]/g) ?? []).length > 0;
 }
+
+/**
+ * 这处 `第N条` 是**条号引用**，还是「三条建议」里的序数量词用法？
+ *
+ * 【这个歧义此前是无害的，现在不是】`ARTICLE` 只服务两个**只留痕**的消费者
+ *（G4 光秃条号 notice、⑧ 的补原文位）时，把「第一条，先别签字」当成条号至多多一条 notice。
+ * ⑥ 把它改成 `rewrite` 之后，同一处歧义直接写进用户面：
+ * 「第一条【条号待核验】，先别签字。第三条【条号待核验】路是走仲裁。」——
+ * 而且它会计进替换率，把 2% 的预算顶穿，读报表的人会以为模型在编条号。
+ *
+ * 【判据：形态而不是语境】三条里任一成立即按条号处置：
+ *   ① 带《法名》 —— 「《某某法》第三条」谁都不会读成量词；
+ *   ② 带款/项   —— 序数用法不会说「第三条第二项建议」；
+ *   ③ 条号 > `ORDINAL_MAX` —— 中文里没人说「第四十七条建议」。
+ *
+ * 【明说的缺口】裸的「第一条」…「第十条」**不判**。真语料里它们几乎总带着法名
+ *（`《某某法》第八条`），而序数用法几乎总是裸的；判不准时的方向由后果定：
+ * 误伤是把一段正确的话弄脏并计进闸的成绩，漏拦是少标一处——所以这里选漏拦，
+ * 且漏掉的条数由 `StatuteGuard.ambiguous` 单独计数，不许它静静地消失。
+ */
+const ORDINAL_MAX = 10;
+
+/**
+ * 裸条号**前面紧挨着的那个载体**：它说明这个「第 N 条」条的是别的东西，不是法条。
+ *
+ * 【为什么条号 > 10 这条判据不够（2026-09-08 复审 major）】`ORDINAL_MAX` 挡的是
+ *「第三条建议」那种序数量词，靠的是"中文里没人说第四十七条建议"。但**合同、员工手册、
+ * 规章制度、和解协议、裁决书**同样是一条一条编号的，而且条数动辄几十上百：
+ *「你劳动合同第十二条写的是……」「员工手册第三十五条把这个定成了严重违纪」
+ * ——这两句是**用户案子里最常出现的句子**（HR 施压期几乎每轮都在谈这两份文件），
+ * 而 ⑥ 会把它们判成"本轮没取到原文的法条"，就地写成
+ *「劳动合同第十二条【条号待核验】」。用户读到的是：系统在质疑他手上那份合同的存在。
+ * 它还会计进替换率的分子，把 2% 的预算顶穿，读报表的人以为模型在编条号。
+ *
+ * 【为什么是"前 ≤6 字"而不是整句】载体与条号在中文里是**紧邻**的（「劳动合同第十二条」），
+ * 放大窗口就会把「依据劳动合同法的规定，见第四十七条」这种整句里的无关词吃进来——
+ * 那是给参数找例外（A7），方向恰好反了：它会把真法条判成非法条。
+ *
+ * 【判不准时的方向】与 `ORDINAL_MAX` 同一条：**选漏拦**。少标一处，用户拿到的是
+ * 一个没被标注的条号；多标一处，是在他自己那份合同旁边写上"待核验"。
+ * 漏掉的这些同样进 `StatuteGuard.ambiguous`——洞留着可以，洞有多大必须看得见。
+ */
+const NON_STATUTE_CARRIER = /合同|协议|手册|制度|章程|规定|通知|裁决|判决|条款/;
+const CARRIER_WINDOW = 6;
+
+/**
+ * 窗口末尾是不是一个**法名**（而不是载体）。
+ *
+ * 【它挡的是载体排除的反向误伤（2026-09-08 第三轮复审 minor）】法名不带《》写出来是真语料
+ * 里的常态：「劳动合同法第四十七条」「北京市工资支付规定第十四条」。这两处的窗口里分别有
+ *「合同」与「规定」——`NON_STATUTE_CARRIER` 一命中就整处静默放过：不判、不标、不计分母，
+ * 只在 `ambiguousCarrier` 里加一。于是**⑥ 最该看的那两条**（46/47 与工资支付规定十四条，
+ * 正是本行当引用频次最高的条）在不带书名号时**一处都进不了闸**，而报表上只显示"载体排除若干处"。
+ *
+ * 【判据：末尾是法规后缀 + 它前面连读成名】「劳动合同」+「法」、「工资支付」+「规定」——
+ * 后缀前面得有 ≥2 个连读的汉字（无标点、无空白）才算法名形态。
+ * 「你劳动合同」末字是「同」、「员工手册」末字是「册」、「公司规章制度」末字是「度」，
+ * 三者都不是法规后缀，载体排除照旧生效。
+ *
+ * 【留着的缺口】「公司规定第二十条」同样满足这个形态（「公司」+「规定」），会被当法条判。
+ * 收窄它得先能分辨"这份规定是不是国家机关发布的"——那要一份法规名录，不是一条正则能办的事。
+ * 方向上它与载体排除相反：这里多判一处，那里少判一处，而少判的那两条是高频真法条。
+ */
+const STATUTE_NAME_TAIL = /[一-鿿]{2,}(?:条例|规定|办法|解释|细则|规程|法)$/;
+
+/**
+ * @param before 这处引用**之前**的正文（**只看末 `CARRIER_WINDOW` 字，回看多远由本函数一处定**）。
+ *   调用方给的是"本行行首到它为止"——流上是逐片累积的当前行，整段扫描是 `lineBefore()`，
+ *   两条路给的是同一份上文（口径分叉的后果见 statute-guard.ts 的 `lineBefore`）。
+ *   缺省空串 = 不问上文，与旧行为逐字相同。
+ */
+export function isStatuteCitationForm(raw: string, before = ''): boolean {
+  return citationFormOf(raw, before) === '法条';
+}
+
+/**
+ * 这处引用的形态判定，**连"为什么不判"一起返回**。
+ *
+ * 【为什么不是一个布尔（2026-09-08 第三轮复审 minor）】布尔的形态是：⑥ 把两种完全不同的
+ * 放过合并进一个 `ambiguous` 计数——「你劳动合同第十二条」（载体排除，条数上百的用户文件）
+ * 与「第三条建议」（序数量词）。两者的处置方向相反：载体排除涨了是**载体词表要扩**，
+ * 序数量词涨了是 `ORDINAL_MAX` 那条口径要重看。合成一个数，报表上只能看出"洞变大了"，
+ * 看不出该去动哪一条——而这个数存在的全部理由就是"洞有多大必须看得见"。
+ */
+export function citationFormOf(raw: string, before = ''): CitationForm {
+  const flat = raw.replace(/\s+/g, '');
+  if (/《[^》]{2,40}》/.test(flat)) return '法条';
+  // 带《》的先放行：《劳动合同法》第十二条 里那个「合同」是法名的一部分，不是载体
+  const tail = before.replace(/\s+/g, '').slice(-CARRIER_WINDOW);
+  if (NON_STATUTE_CARRIER.test(tail) && !STATUTE_NAME_TAIL.test(tail)) return '载体排除';
+  if (/第[一二三四五六七八九十0-9]{1,3}[款项]/.test(flat)) return '法条';
+  const m = /第([一二三四五六七八九十百零〇两]+|[0-9]+)条/.exec(flat);
+  const n = m ? cnNumeral(m[1]) : null;
+  return n === null || n > ORDINAL_MAX ? '法条' : '序数量词';
+}
+
+/**
+ * 形态判定的三态。`法条` 之外的两种都是**明说不判**的缺口，各自单独计数
+ *（见 `StatuteGuard.ambiguousCarrier` / `ambiguousOrdinal`）。
+ */
+export type CitationForm = '法条' | '载体排除' | '序数量词';
 
 /**
  * 找出正文里**只给了条号、附近没有逐字原文**的引用（G4 失败的主形态）。
@@ -666,10 +874,15 @@ export function citationSite(text: string, at: number, windowSize = 60): Citatio
  *   · 判据（`bareArticleSpans`）再过一道**归属**过滤 —— 它问的是「模型有没有给依据」；
  *   · 渲染（`renderCoreArticleFallback`）过的是**内容**过滤 —— 它问的是「原文在不在正文里」。
  * 两者从这里分岔，而不是让渲染去消费判据的结论。
+ *
+ * 【第三个消费者：⑥ StatuteGuard 的漏网自检（2026-09-08）】闸跑完之后要回答
+ *「用户面还剩几处不在放行集里的条号」。它必须与渲染共用**同一个取材面**——
+ * 法条原文自己的交叉引用（`insideVerbatim` / `insideOwnFormatQuote` 过滤掉的那些）
+ * 不是 agent 写下的引用，把它们算进漏网就会把 ⑧ 补进来的原文记成闸的失守。
  */
-function authoredCitationSpans(
+export function authoredCitationSpans(
   text: string,
-  windowSize: number,
+  windowSize = 60,
 ): { raw: string; at: number; end: number; article: string; site: CitationSite }[] {
   const out: { raw: string; at: number; end: number; article: string; site: CitationSite }[] = [];
   for (const m of text.matchAll(ARTICLE)) {

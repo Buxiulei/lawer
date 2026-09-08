@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import * as agentStore from '@/lib/db/agent';
 import { CitationGuard } from '../citation-guard';
+import { StatuteGuard } from '../statute-guard';
 import {
   emitCalcFailureNotice,
   executeTool,
@@ -30,6 +31,7 @@ function makeCtx(over: Partial<AgentToolContext> = {}) {
     threadId: 1,
     sourceMessageId: null,
     citations: new CitationGuard(),
+    statutes: new StatuteGuard(),
     crisisCardAlreadyGiven: false,
     searcher: fixtureSearcher(),
     state: newTurnState(),

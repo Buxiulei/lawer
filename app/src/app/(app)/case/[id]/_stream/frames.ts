@@ -86,6 +86,9 @@ export type NoticeCode =
   | 'TOOL_INPUT_REJECTED'
   | 'CITATION_BLOCKED'
   | 'CITATION_INCOMPLETE'
+  | 'STATUTE_UNVERIFIED'
+  | 'VALUE_UNSOURCED'
+  | 'GATE_REPORT'
   | 'PRECEDENT_CONTAMINATED'
   | 'CALC_FAILED'
   | 'EMOTIONAL_LEVERAGE_DETECTED'
@@ -348,6 +351,14 @@ const NOTICE_COPY: Record<NoticeCode, string | null | typeof PASSTHROUGH> = {
   // 「只给条号没给逐字原文」是内部质量信号，不对用户出提示行——
   // 告诉用户「这条引用不完整」既帮不上忙，又会让他怀疑手里已有的内容
   CITATION_INCOMPLETE: null,
+  // ⑥⑨ 与 ⑤ 同一条口径：**出路写在正文的标记旁边，不另起一条提示行**。
+  // 【条号待核验】【数值无来源】由 RichText 淡色标注承载，用户看得见是哪一处；
+  // 再顶一行"本轮有 2 处数字没有来源"只会让他怀疑整条回复，却不知道该动哪一句。
+  // notice 里的完整出路文案（"回我一句帮我算一下"）走的是运维通道与归档，不是提示行。
+  STATUTE_UNVERIFIED: null,
+  VALUE_UNSOURCED: null,
+  // 闸链汇总是纯运维指标，每轮都发。给用户看等于把我们的自检过程摊在他面前
+  GATE_REPORT: null,
   PRECEDENT_CONTAMINATED: null,
   // 唯一一条「失败」类的用户可见提示。文案由后端按缺失项拼好直接下发
   // （tools.ts：「还差：入职日期、月工资。你把这几项告诉我，我立刻重算一遍」），

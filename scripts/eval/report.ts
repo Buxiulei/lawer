@@ -84,6 +84,36 @@ export function archiveCrisisPaid(events: AgentEvent[]): ScenarioEvidence['turns
   return ev ? { message: ev.data.message } : null;
 }
 
+/**
+ * ⑥ 条号闸的留痕（S2 闸链补齐 2026-09-08）。**放行集必须跟着落盘**：
+ * 「当时放行的是哪几条」从归档正文里反推不出来——正文里只剩没被标记的那些，
+ * 它们看起来都一样。不落盘的形态是：零泄漏判据只能拿"有没有标记"当依据，
+ * 于是**闸整层失效时它照样全绿**（一处都没标 = 一处都没漏）。
+ * 这是「留痕不进归档」的第五处，前四处见 archiveInjection 的注释。
+ */
+/**
+ * 【放行集读的是 GATE_REPORT，不是 STATUTE_UNVERIFIED】(2026-09-08 修)
+ * 后者**只在闸开火时发**。从它取放行集的形态是：模型全引对的那一轮没有这条 notice，
+ * 归档里 `statuteGate: null` → 判据把它读成"放行集为空" → 用户面每一处**真放行**的
+ * 条号都被判成漏网，L1 在最理想的一轮恒红，还与同轮 `gate_report.leaked = 0` 打架。
+ * 所以：**标了哪几处**从 ⑥ 自己那条来，**当时放行的是哪几条**从无条件发的那条来。
+ */
+export function archiveStatuteGate(events: AgentEvent[]): ScenarioEvidence['turns'][number]['statuteGate'] {
+  const report = findNotice(events, 'GATE_REPORT');
+  const marks = findNotice(events, 'STATUTE_UNVERIFIED');
+  // 两条都没有 = 这份转录里根本没有 ⑥ 这一层（旧产物）→ null，判据据此产 N/A
+  if (!report && !marks) return null;
+  return {
+    marked: marks?.data.statute_marked ?? [],
+    allowed: report?.data.gate_report?.statute_allowed ?? [],
+  };
+}
+
+/** 闸链汇总的留痕。替换率/漏网率两列从它来，不从 message 里解析中文数字。 */
+export function archiveGateReport(events: AgentEvent[]): ScenarioEvidence['turns'][number]['gateReport'] {
+  return findNotice(events, 'GATE_REPORT')?.data.gate_report ?? null;
+}
+
 export interface ScenarioEvidence {
   id: string;
   title: string;
@@ -122,6 +152,29 @@ export interface ScenarioEvidence {
      * 而后者当天刚被评测官在 `nbdpsyPitchAssertions` 上实证发生过一次（登记+单测+import 齐全，唯独没接线）。
      */
     crisisPaid?: { message: string } | null;
+    /** ⑥ 条号闸的留痕（三态同 `leverage`）：闸标了哪几处 + **当时的放行集** */
+    statuteGate?: { marked: { cited: string; verdict: string }[]; allowed: string[] } | null;
+    /** 闸链汇总（三态同上）：替换率与漏网率并列的那两个数就从这里来 */
+    gateReport?: {
+      gates: Record<string, { seen: number; fired: number }>;
+      seen: number;
+      fired: number;
+      replace_rate: number;
+      leaked: number;
+      leak_rate: number;
+      budget: number;
+      over_budget: boolean;
+      source_status_unknown: number;
+      /** ⑥ 形态歧义放过去的处数（故意留的洞，但洞有多大要看得见） */
+      statute_ambiguous?: number;
+      /** 上一项的两个分项：载体排除 / 序数量词。处置方向不同，故分列 */
+      statute_ambiguous_carrier?: number;
+      statute_ambiguous_ordinal?: number;
+      /** ⑥ 在文书通道拒收的处数（不进替换率：拒收不是替换） */
+      statute_doc_rejected?: number;
+      /** 本轮 ⑥ 的放行集（`法名|第N条`），供离线回放重算漏网率 */
+      statute_allowed?: string[];
+    } | null;
     /**
      * ⭐注入产物可观测的留痕（2026-08-28 补）。没有它，`injectionObservability` 的判定
      * **在任何归档转录上都重放不出来**——它读 `t.events`，而 `events` 不进归档。
@@ -282,6 +335,69 @@ export function renderMarkdown(run: RunEvidence): string {
         '',
       );
     }
+    // ═══ 剥除率与漏网率**并列**（设计稿 §4.3）═══
+    // 只报一个的形态：闸把什么都替换掉（率高得离谱、漏网恒 0）看起来"守得很严"；
+    // 或者闸一处都不换（率 0）而漏网全靠没人看。两个数缺一个，另一个读不出意思。
+    const reported = s.turns.filter((t) => t.gateReport);
+    if (reported.length) {
+      lines.push('### 闸链替换率 / 漏网率（质量指标，替换率超预算只点名不阻断）', '');
+      lines.push('| 轮 | 候选 | 动手 | 替换率 | 漏网 | 漏网率 | 逐闸（seen/fired） |', '|---|---|---|---|---|---|---|');
+      for (const [i, t] of s.turns.entries()) {
+        const r = t.gateReport;
+        if (!r) {
+          // 三态：**缺留痕不写 0**——"这一轮不知道"与"这一轮一处都没动"必须分得开
+          lines.push(`| ${i + 1} | — | — | — | — | — | 无 gate_report 留痕（旧产物或跑在旧代码上） |`);
+          continue;
+        }
+        const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+        const per = Object.entries(r.gates)
+          .map(([id, g]) => `${id} ${g.seen}/${g.fired}`)
+          .join('；');
+        lines.push(
+          `| ${i + 1} | ${r.seen} | ${r.fired} | ${pct(r.replace_rate)}${r.over_budget ? ' ⚠️**超预算**' : ''} | ` +
+            `${r.leaked}${r.leaked ? ' ❌' : ''} | ${pct(r.leak_rate)} | ${per || '（无）'} |`,
+        );
+      }
+      const over = reported.filter((t) => t.gateReport!.over_budget).length;
+      lines.push('');
+      lines.push(
+        over
+          ? `> ⚠️ **本场 ${over} 轮替换率超预算（${(reported[0].gateReport!.budget * 100).toFixed(0)}%）——按闸误伤处理**：` +
+              '先查闸的判据（放行集取材面、免检态），**不是先去调提示词**。不阻断发版。'
+          : '> 替换率在预算内。漏网率恒 0 是结构应然，不为 0 即闸自身缺陷，按缺陷查。',
+      );
+      const ambiguous = reported.reduce((n, t) => n + (t.gateReport!.statute_ambiguous ?? 0), 0);
+      if (ambiguous > 0) {
+        // 【两个分项各占一列（2026-09-08 第三轮复审 minor）】只报总数的形态是：
+        // 读报表的人看得出洞变大了，看不出该去动哪一条——载体排除涨要动载体词表，
+        // 序数量词涨要重看 ORDINAL_MAX，两条的处置方向不同。
+        const carrier = reported.reduce((n, t) => n + (t.gateReport!.statute_ambiguous_carrier ?? 0), 0);
+        const ordinal = reported.reduce((n, t) => n + (t.gateReport!.statute_ambiguous_ordinal ?? 0), 0);
+        lines.push(
+          `> 📌 ⑥ 本场放过 ${ambiguous} 处形态判不了的裸条号` +
+            `（**载体排除** ${carrier} 处：合同/手册/制度那类用户自己的文件；` +
+            `**序数量词** ${ordinal} 处：「第三条建议」那种用法）——` +
+            '**这是明说的洞**（判它的代价是把正确的话弄脏并计进替换率）。' +
+            '载体排除在涨说明载体词表要重看，序数量词在涨说明 ORDINAL_MAX 那条口径要重看，不是闸坏了。',
+        );
+      }
+      const docRejected = reported.reduce((n, t) => n + (t.gateReport!.statute_doc_rejected ?? 0), 0);
+      if (docRejected > 0) {
+        lines.push(
+          `> 📌 ⑥ 本场在**文书通道拒收** ${docRejected} 处条号。它们不在上面的替换率里：` +
+            '拒收不是替换，那一处从未到达用户面，混进去会把闸做对的事记成误伤。',
+        );
+      }
+      const unknown = reported.reduce((n, t) => n + t.gateReport!.source_status_unknown, 0);
+      if (unknown > 0) {
+        lines.push(
+          `> 📌 登记簿 \`source_status\` 未接上的条目共 ${unknown} 处（设计稿 §7.3 待接项）：` +
+            '这些条**按现行处理**，但那是"我们不知道"而不是"它是现行"——知识层接上 source_id 之后这个数应归零。',
+        );
+      }
+      lines.push('');
+    }
+
     lines.push('### 机械断言', '');
     lines.push('| 层 | 结果 | 断言 | 说明 |', '|---|---|---|---|');
     // 按层排序：L1 在最上面。看成绩单的人第一眼该看到的是安全红线的状态

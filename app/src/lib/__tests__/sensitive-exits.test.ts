@@ -21,6 +21,7 @@ import Database from 'better-sqlite3';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { CitationGuard } from '@/lib/agent/citation-guard';
+import { StatuteGuard } from '@/lib/agent/statute-guard';
 import { executeTool, newTurnState, type AgentToolContext } from '@/lib/agent/tools';
 import * as cases from '@/lib/cases';
 import { runMigrations } from '@/lib/db/migrate';
@@ -211,6 +212,7 @@ describe('登记对方主体的两条工具路：不点名角色时落在哪一�
       threadId: 1,
       sourceMessageId: null,
       citations: new CitationGuard(),
+      statutes: new StatuteGuard(),
       crisisCardAlreadyGiven: false,
       state: newTurnState(),
       emit: () => {},

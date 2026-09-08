@@ -66,7 +66,10 @@ import {
   stripUnsupportedQuotes,
   type CoreArticleSources,
 } from './citation-block';
-import { bareArticleCitations, precedentContamination } from './citation-block';
+import { bareArticleCitations, precedentContamination, quotedStatuteSpans } from './citation-block';
+import { StatuteGuard, statuteNoticeMessage } from './statute-guard';
+import { applyValueGuard, valueNoticeMessage } from './value-guard';
+import { newGateReport, REPLACE_RATE_BUDGET, summarizeGateReport, tallyGate, VALUE_GUARD_MODE, valueGuardText } from './gate-chain';
 import { MAX_INJECTED_PACKS, type KnowledgePack, type KnowledgeSearcher } from './retrieval';
 import { loadCaseSnapshot } from './snapshot';
 import { classifyTask } from './task-class';
@@ -867,6 +870,19 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   // 正文在流上过滤，文书在落库前拒收——两条出口都堵住（见 citation-guard.ts 文件头）。
   const citations = new CitationGuard();
   citations.allowFrom(packs);
+  // 条号运行时闸门（⑥）。与案号闸**同一条流水线上的下一道**：先过 ⑤ 再过 ⑥，
+  // 顺序由 gate-chain.ts 的 GATE_CHAIN 声明、由 gate-chain.test.ts 逐道核对。
+  // 放行集同样随 knowledge_search 增长——模型先检索再引用是正常顺序。
+  //
+  // 【这一次 allowFrom 与 runOnce 里那次**完全重叠**（2026-09-08 复审 minor 记实）】
+  // `state.retrieved` 上面刚 push 过 packs，而 runOnce 每次开跑前都会
+  // `allowFrom(state.retrieved)`；单删这一行没有任何判据会红。留着是与紧邻的案号闸同形
+  // ——两道闸的接线一眼看过去应当是一样的。**带牙的是 runOnce 里那一行**（它收的是
+  // 工具轮中途才检索回来的卡，判据见 gate-chain.test.ts「工具轮里检索回来的卡也进放行集」）。
+  const statutes = new StatuteGuard();
+  statutes.allowFrom(packs);
+  /** 十道闸这一轮各动了几处。各闸只写自己的 notice，统计统一汇到这里（设计稿 §4.3） */
+  const gateReport = newGateReport();
   const toolCtx: AgentToolContext = {
     db,
     caseId,
@@ -879,6 +895,7 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
     sourceMessageId: messageId,
     searcher: input.searcher,
     citations,
+    statutes,
     // 工具通道也要执行同一套呈现规则（见 tools.knowledge_search 内注释）
     crisisCardAlreadyGiven: alreadyGiven,
     // 工具通道拿回来的卡也要标⭐（S2 取料面 = state.retrieved，现取）
@@ -938,6 +955,10 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
     // 每轮开跑前把新检索到的 pack 并进案号白名单：模型「先检索再引用」是正常顺序，
     // 白名单必须能中途扩充，否则它引用刚查到的真案号反而会被拦。
     citations.allowFrom(state.retrieved);
+    // 条号放行集同理。**漏掉这一行的形态是**：模型这一轮刚 knowledge_search 取回
+    // §46 的原文、下一句逐字引用它，闸把它标成【条号待核验】——闸在惩罚模型做对的事。
+    // （构造时那次收的是预检索包，收不到工具轮的卡；这一行才是"中途扩充"的那一行。）
+    statutes.allowFrom(state.retrieved);
     const gen = await routed.client.chatStream(messages, { tools: AGENT_TOOLS, idleTimeoutMs: IDLE_TIMEOUT_MS });
     let round = '';
     for (;;) {
@@ -949,15 +970,18 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
         // 一轮里跑了几次流就累加几次——tool-loop 的每一次往返都是要付钱的。
         usage = addUsage(usage, step.value.usage.usage);
         servedModel = step.value.usage.servedModel ?? servedModel;
-        const tail = citations.flush();
+        // 【两道闸各自冲刷，且顺序不能反】⑤ 扣住的尾巴吐出来之后，还要再过一遍 ⑥
+        // ——它可能正是一处条号的后半截。先 flush ⑥ 再喂 ⑤ 的尾巴，那半截就直接漏出去了。
+        const tail = statutes.push(citations.flush()) + statutes.flush();
         if (tail) {
           round += tail;
           if (emitText) emit({ event: 'delta', data: { text: tail } });
         }
         return { text: round, toolCalls: step.value.toolCalls };
       }
-      // 过闸门：查无此号的案号在这里就被换成【案号待核实】，用户永远看不到假号
-      const safe = citations.push(step.value);
+      // 过闸门：⑤ 查无此号的案号换成【案号待核实】，⑥ 放行集外的条号缀上【条号待核验】。
+      // 用户永远看不到假号，也不会拿到一个我们手上没有原文的条号却以为它可靠。
+      const safe = statutes.push(citations.push(step.value));
       if (safe) {
         round += safe;
         if (emitText) emit({ event: 'delta', data: { text: safe } });
@@ -1177,6 +1201,10 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   //
   // 比对只对**本轮注入**：没检索却背出来的那次最危险，它没经过任何新鲜度与版本校验。
   const quoteGate = stripUnsupportedQuotes(text, state.retrieved);
+  tallyGate(gateReport, 'strip_unsupported_quotes', {
+    seen: quotedStatuteSpans(text).length,
+    fired: quoteGate.stripped.length,
+  });
   if (quoteGate.stripped.length > 0) {
     text = quoteGate.text;
     emit({
@@ -1201,6 +1229,7 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   // 两份就有一份是**事后重新推导**的，那正是我们在 §27 那次吃过的亏（推导≠证据）。
   const coreCandidates = coreArticleKeys({ ...coreSources, retrieved: state.retrieved });
   const fallback = renderCoreArticleFallback(text, coreCandidates, state.retrieved);
+  tallyGate(gateReport, 'core_article_fallback', { seen: coreCandidates.size, fired: fallback.added.length });
   if (fallback.added.length > 0) {
     text = fallback.text;
     emit({
@@ -1210,6 +1239,48 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
         message: `核心位仍只给条号的核心依据条 ${fallback.added.join('、')} 已自动补上卡内逐字原文`,
       },
     });
+  }
+
+  // ── ⑨ ValueGuard（设计稿 §4.3）──
+  //
+  // 【为什么排在 ⑧ 之后，而不是和 ⑥ 一起在流上】⑧ 会往正文里插入法条逐字原文，
+  // 而法条原文里全是数字（「二倍」「三倍」「十二个月」）。排在 ⑧ 之前的形态是：
+  // ⑨ 判完 → ⑧ 补进来一段带数字的原文 → **那段原文没过任何闸**，
+  // 而 gate_report 会报"本轮数值全部有来源"。顺序表把它定在 ⑨，就是定它吃 ⑧ 的产物。
+  //
+  // 【为什么只判模型段】危机首段是我们自己的确定性文案（热线号码、机构名），
+  // 与 NBDpsy 闸、D15 兜底同一条纪律：**我们自己写的字不进闸**。
+  // 不劈首段的形态是：闸去判一段我们逐字定好的文本，命中即凭空开火、每轮报一条假的无来源。
+  {
+    const { opener, body } = crisis.triggered ? splitCrisisOpener(text, crisisPack) : { opener: '', body: text };
+    const valueGate = applyValueGuard(body, {
+      calcPayloads: state.calcPayloads,
+      retrieved: state.retrieved,
+      deadlines: snapshot.deadlines,
+      // 【档案里的结构化事实】月工资是用户自己填进档案的，模型复述它不是编造。
+      // 库里存「分」，正文里说的是「元」——在这里折一次，闸内不认识业务单位。
+      caseFacts: snapshot.case.monthly_wage_fen == null ? [] : [snapshot.case.monthly_wage_fen / 100],
+      // 【用户自己说过的话】取材面与杠杆闸的 userTurns **逐字同源**：
+      // 复述用户原话在那边不算杠杆，在这边同样不算无来源。两道闸对同一段话给相反判断，
+      // 用户看到的就是一个自相矛盾的产品。
+      userTurns: [message, ...history.filter((h) => h.role === 'user').map((h) => h.content)],
+    });
+    // 记账在**改不改正文之前**，且两个模式下逐字相同：观察模式存在的全部意义就是
+    // 继续量 seen / fired / 替换率——记账跟着模式走的形态是，观察期报表恒 0，
+    // 而切换到 rewrite 的判据（误标率 < 2%）恰恰要靠这段观察期的数才算得出来。
+    tallyGate(gateReport, 'value_guard', { seen: valueGate.seen, fired: valueGate.violations.length });
+    if (valueGate.violations.length > 0) {
+      // 上线口径见 gate-chain.ts 的 VALUE_GUARD_MODE：observe 只记账、正文一个字不动。
+      text = valueGuardText(VALUE_GUARD_MODE, text, opener ? `${opener}\n\n${valueGate.text}` : valueGate.text);
+      emit({
+        event: 'notice',
+        data: {
+          code: 'VALUE_UNSOURCED',
+          message: valueNoticeMessage(valueGate.violations, VALUE_GUARD_MODE),
+          value_marked: valueGate.violations.map((v) => ({ token: v.token, kind: v.kind, mark: v.mark, nearest: v.nearest })),
+        },
+      });
+    }
   }
 
   // 【注入产物可观测】**这四个字段不改变系统做什么，只让我们知道系统做了什么。**
@@ -1285,6 +1356,82 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
       data: {
         code: 'CITATION_BLOCKED',
         message: `已拦下知识库中不存在的案号 ${cited.join('、')}（相应位置显示为「案号待核实」）。这类引用一律不作数。`,
+      },
+    });
+  }
+
+  // ── ⑥ 条号闸的收口留痕（替换动作本身在流上早就做完了）──
+  //
+  // 【为什么留痕在这里而不在流上】流上每命中一处就发一条 notice，等于把一条运维信号
+  // 拆成 N 条帧插进正文流里；而这条要回答的是「这一轮一共标了哪几处」——那是轮级的问题。
+  // 与案号闸同一处置、同一位置（上面那一段），两条并排放着，改一条时另一条在眼前。
+  if (statutes.found.length > 0) {
+    emit({
+      event: 'notice',
+      data: {
+        code: 'STATUTE_UNVERIFIED',
+        message: statuteNoticeMessage(statutes.found),
+        statute_marked: statutes.found.map((v) => ({ cited: v.cited, verdict: v.verdict })),
+      },
+    });
+  }
+
+  // ── 闸链汇总（设计稿 §4.3）──
+  //
+  // 【为什么无条件发，哪怕全是 0】与 INJECTION_OBSERVED 同一条理由：
+  // 「闸链跑了、一处都没动」与「这一轮不知道闸链干了什么」是两件事，
+  // 只在非空时发就把它们抹成同一件。**恒为 0 的量看起来没用，直到它不是 0 的那天。**
+  //
+  // 【`leaked` 是闸对自己输出的复查】结构上应恒 0：⑥ 在流上把放行集外的条号都标了。
+  // 不为 0 就是闸自己漏了（缓冲边界、免检态判错），**不是模型变差**——
+  // 这条定性写在这里，因为它决定超标之后去查哪一边。
+  {
+    // 【只记正文通道】文书通道是**拒收**：那一处从未到达用户面，也没有任何东西被替换。
+    // 把它算进替换率的形态是：一份文书引错 1 处 + 正文 1 处引用 → 报 50%、点名"闸误伤"。
+    tallyGate(gateReport, 'citation_guard', { seen: citations.seen, fired: citations.found.length });
+    tallyGate(gateReport, 'statute_guard', { seen: statutes.seen, fired: statutes.found.length });
+    const leakedCitations = statutes.leakedIn(text);
+    gateReport.leaked = leakedCitations.length;
+    gateReport.sourceStatusUnknown = statutes.sourceStatusUnknown;
+    gateReport.ambiguousBareArticles = statutes.ambiguous;
+    gateReport.ambiguousCarrier = statutes.ambiguousCarrier;
+    gateReport.ambiguousOrdinal = statutes.ambiguousOrdinal;
+    gateReport.docRejected = statutes.docFound.length + citations.docFound.length;
+    const sum = summarizeGateReport(gateReport);
+    emit({
+      event: 'notice',
+      data: {
+        code: 'GATE_REPORT',
+        message:
+          `闸链本轮：候选 ${sum.seen} 处、动手 ${sum.fired} 处（替换率 ${(sum.replaceRate * 100).toFixed(1)}%）、` +
+          `漏网 ${sum.leaked} 处（${(sum.leakRate * 100).toFixed(1)}%）` +
+          (sum.overBudget
+            ? `。**替换率超预算 ${(REPLACE_RATE_BUDGET * 100).toFixed(0)}%——按闸误伤处理，先查闸的判据，不是先调提示词。**`
+            : '') +
+          (leakedCitations.length ? `｜漏网条号：${leakedCitations.join('、')}` : ''),
+        gate_report: {
+          gates: Object.fromEntries(Object.entries(gateReport.gates)) as Record<string, { seen: number; fired: number }>,
+          seen: sum.seen,
+          fired: sum.fired,
+          replace_rate: sum.replaceRate,
+          leaked: sum.leaked,
+          leak_rate: sum.leakRate,
+          budget: REPLACE_RATE_BUDGET,
+          over_budget: sum.overBudget,
+          source_status_unknown: gateReport.sourceStatusUnknown,
+          statute_ambiguous: gateReport.ambiguousBareArticles,
+          statute_ambiguous_carrier: gateReport.ambiguousCarrier,
+          statute_ambiguous_ordinal: gateReport.ambiguousOrdinal,
+          statute_doc_rejected: gateReport.docRejected,
+          /**
+           * 【放行集挂在**无条件发**的这一条上，不挂 STATUTE_UNVERIFIED】(2026-09-08 修)
+           * 挂在 ⑥ 自己那条 notice 上的形态是：那条只在开火时发，于是**模型全引对的干净轮**
+           * 归档里没有放行集，判据把它读成"放行集为空"，用户面每一处**真放行**的裸条号
+           * 都被判成漏网——L1 在最理想的那一轮恒红，还与同轮 `leaked: 0` 自相矛盾。
+           * 恒为 0 的量要发，恒非空的集合同样要发。
+           */
+          statute_allowed: statutes.allowedKeys(),
+        },
       },
     });
   }

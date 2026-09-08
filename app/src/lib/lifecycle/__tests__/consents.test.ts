@@ -18,6 +18,7 @@ import Database from 'better-sqlite3';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { CitationGuard } from '@/lib/agent/citation-guard';
+import { StatuteGuard } from '@/lib/agent/statute-guard';
 import { executeTool, newTurnState, type AgentToolContext } from '@/lib/agent/tools';
 import * as cases from '@/lib/cases';
 import { countRecentCrisisHits, recordCrisisHit } from '@/lib/cases/crisis-hits';
@@ -75,6 +76,7 @@ function agentCtx(): AgentToolContext {
     threadId: 1,
     sourceMessageId: null,
     citations: new CitationGuard(),
+    statutes: new StatuteGuard(),
     crisisCardAlreadyGiven: false,
     state: newTurnState(),
     emit: () => {},

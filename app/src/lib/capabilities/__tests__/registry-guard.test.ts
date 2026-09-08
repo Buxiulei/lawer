@@ -159,6 +159,16 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
       //   写满那个行当做法的表，住在共用层；第二个领域接进来时 stage 一个都对不上，
       //   `?? []` 给 0 条种子，首诊回包 actionsAdded=0 且不报错。
       'lib/cases/intake-actions.ts',
+      // ↓ S2 闸链补齐（2026-09-08）新落的三处共用层。**新写的文件必须当场进这份名单**——
+      //   不进的形态是：守卫全绿，因为它没在看那个文件。三处各自的敞口都是具体的：
+      //   · gate-chain.ts    闸链顺序表。写死某个领域的失败模式，第二个领域接进来时
+      //                      顺序表读起来仍然对，只是它描述的是另一个行当的闸。
+      //   · statute-guard.ts 条号闸。它的**回喂指令与 notice 文案会到达模型与用户**，
+      //                      写死领域词就等于对第二个领域的用户讲上一个行当的话。
+      //   · value-guard.ts   数值闸。同上，且它的单位表（元/倍/%）本身必须保持通用。
+      'lib/agent/gate-chain.ts',
+      'lib/agent/statute-guard.ts',
+      'lib/agent/value-guard.ts',
     ].map((f) => path.join(SRC_ROOT, f)),
   ];
 

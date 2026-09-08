@@ -130,7 +130,23 @@ describe('check()：文书走拒收而不是打补丁', () => {
     const g = guard();
     const bad = g.check('本人依据（2024）京01民终88888号主张…', '文书《仲裁申请书》');
     expect(bad).toEqual(['（2024）京01民终88888号']);
-    expect(g.found[0].where).toContain('仲裁申请书');
+    expect(g.docFound[0].where).toContain('仲裁申请书');
+  });
+
+  /**
+   * 【文书通道与正文分账（2026-09-08，与 ⑥ 同一处修法）】合账会同时说两句假话：
+   *   · 轮末那条 `CITATION_BLOCKED` 对用户说「相应位置显示为『案号待核实』」——
+   *     而文书是**拒收**，正文里一个占位符都没有；
+   *   · 替换率把拒收算进分子分母（文书错 1 处 + 正文 1 处引用 ⇒ 报 50%），
+   *     而超预算的定性是「闸误伤，去查闸的判据」——闸做的恰恰是它该做的事。
+   */
+  it('拒收不进 found / seen（合账 → 轮末 notice 说的占位符根本不存在 → 红）', () => {
+    const g = guard();
+    g.check('本人依据（2024）京01民终88888号主张…', '文书《仲裁申请书》');
+    expect(g.found, '文书拒收混进了正文违规').toHaveLength(0);
+    expect(g.seen, '文书拒收混进了替换率的分母').toBe(0);
+    expect(g.docFound).toHaveLength(1);
+    expect(g.docSeen).toBe(1);
   });
 
   it('全是真案号时返回空数组', () => {
@@ -181,5 +197,36 @@ describe('豁免：「官方未公开案号」是我们鼓励的说法，不能�
     const g = guard();
     expect(stream(g, text)).toBe(text);
     expect(g.found).toHaveLength(0);
+  });
+});
+
+/**
+ * 【`seen` 是 gate_report 里替换率的分母】(S2 闸链补齐 2026-09-08 新增)
+ *
+ * 这一节是**变异矩阵实测逼出来的**：`seen` 加上去的当天没有任何判据在看它，
+ * 把两处 `seenCount += 1` 全删掉，全套 6600 条测试一条不红——
+ * 于是替换率的分母恒为 0，而 `summarizeGateReport` 对 0 分母的处置是「率记 0」，
+ * **报表上会得到一个漂亮的 0%，而它的含义是"这一轮什么都没量"**。
+ * 分子有判据、分母没有，是最容易漏的那一种：错的方向恰好是"看起来一切正常"。
+ */
+describe('seen：替换率的分母', () => {
+  it('放行的也计入 seen（只在开火时计数 → 分母恒等于分子 → 替换率恒 100%）', () => {
+    const g = guard();
+    stream(g, '参见（2023）京03民终15407号与（2023）京0105民初88888号。');
+    expect(g.seen).toBe(2);
+    expect(g.found).toHaveLength(1);
+  });
+
+  it('文书通道单列计入 docSeen，**不进正文的 seen**（合账 → 替换率把拒收算成误伤）', () => {
+    const g = guard();
+    g.check('本案参考（2023）京03民终15407号与（2023）京0105民初88888号。', '文书《某申请书》');
+    expect(g.docSeen).toBe(2);
+    expect(g.seen, '拒收从未到达用户面，不该出现在"闸动了正文几处"的分母里').toBe(0);
+  });
+
+  it('一个案号都没有的正文，seen 是 0（不是 1，也不是文本长度）', () => {
+    const g = guard();
+    stream(g, '这一轮我们先不引案例。');
+    expect(g.seen).toBe(0);
   });
 });
