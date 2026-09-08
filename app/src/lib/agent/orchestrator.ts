@@ -873,6 +873,12 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   // 条号运行时闸门（⑥）。与案号闸**同一条流水线上的下一道**：先过 ⑤ 再过 ⑥，
   // 顺序由 gate-chain.ts 的 GATE_CHAIN 声明、由 gate-chain.test.ts 逐道核对。
   // 放行集同样随 knowledge_search 增长——模型先检索再引用是正常顺序。
+  //
+  // 【这一次 allowFrom 与 runOnce 里那次**完全重叠**（2026-09-08 复审 minor 记实）】
+  // `state.retrieved` 上面刚 push 过 packs，而 runOnce 每次开跑前都会
+  // `allowFrom(state.retrieved)`；单删这一行没有任何判据会红。留着是与紧邻的案号闸同形
+  // ——两道闸的接线一眼看过去应当是一样的。**带牙的是 runOnce 里那一行**（它收的是
+  // 工具轮中途才检索回来的卡，判据见 gate-chain.test.ts「工具轮里检索回来的卡也进放行集」）。
   const statutes = new StatuteGuard();
   statutes.allowFrom(packs);
   /** 十道闸这一轮各动了几处。各闸只写自己的 notice，统计统一汇到这里（设计稿 §4.3） */
@@ -949,8 +955,9 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
     // 每轮开跑前把新检索到的 pack 并进案号白名单：模型「先检索再引用」是正常顺序，
     // 白名单必须能中途扩充，否则它引用刚查到的真案号反而会被拦。
     citations.allowFrom(state.retrieved);
-    // 条号放行集同理。**漏掉这一行的形态最刺眼**：模型这一轮刚 knowledge_search 取回
+    // 条号放行集同理。**漏掉这一行的形态是**：模型这一轮刚 knowledge_search 取回
     // §46 的原文、下一句逐字引用它，闸把它标成【条号待核验】——闸在惩罚模型做对的事。
+    // （构造时那次收的是预检索包，收不到工具轮的卡；这一行才是"中途扩充"的那一行。）
     statutes.allowFrom(state.retrieved);
     const gen = await routed.client.chatStream(messages, { tools: AGENT_TOOLS, idleTimeoutMs: IDLE_TIMEOUT_MS });
     let round = '';

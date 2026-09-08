@@ -24,7 +24,16 @@
 // **⑧ 能补原文的每一条，⑥ 都必须放行**，否则 ⑧ 会去给一个刚被标成【条号待核验】的
 // 位置补原文，两道闸在同一处各说各的。判据见 gate-chain.test.ts「⑥⑧ 交互」。
 
-import { ARTICLE_PATTERN, articleKey, normalizeArticle, normLaw, authoredCitationSpans, isStatuteCitationForm } from './citation-block';
+import {
+  ARTICLE_PATTERN,
+  ASYM_QUOTES,
+  ASYM_QUOTE_CAP,
+  articleKey,
+  normalizeArticle,
+  normLaw,
+  authoredCitationSpans,
+  isStatuteCitationForm,
+} from './citation-block';
 import type { KnowledgePack } from './retrieval';
 
 /** 验不过的条号后面缀这个。**不删条号**——用户要看得见这里本来引的是哪一条，好自己去查。 */
@@ -87,12 +96,16 @@ export interface StatuteViolation {
 }
 
 /**
- * 未闭合的非对称引号最多罩住多少字。与 citation-block 的 `ASYM_QUOTE_CAP` 同一条理由，
- * 只是流上没有"往后找闭引号"这回事——只能数着字，超了就当它没闭合、把免检态收回来。
- * **不设这个上限的形态是**：模型漏打一个 `」`，从那个字起这一轮的闸全程关闭，
+ * 开引号 → 与它配对的那个闭引号。**与整段扫描共用 citation-block 的那张表**
+ *（`ASYM_QUOTES`），上限（`ASYM_QUOTE_CAP`）同样从那边取：
+ * 两处各写一份的形态是同一件事有两个真源，改一处忘一处即两边分叉，
+ * 而分叉的表现是"闸标了、自检说没漏"——查起来要先怀疑闸，最后发现是两张表不一样。
+ *
+ * 上限的意思在流上是：走了这么远还没等到配对的闭引号，就当它没闭合、把免检态收回来。
+ * **不设上限的形态是**：模型漏打一个 `」`，从那个字起这一轮的闸全程关闭，
  * 而 gate_report 会诚实地报「候选 0 处、动手 0 处」。
  */
-const ASYM_QUOTE_CAP = 3000;
+const ASYM_CLOSE_OF = new Map(ASYM_QUOTES.map(([open, close]) => [open, close]));
 
 /**
  * 条号闸门。allowed 集合随本轮检索到的 pack 增长——模型先检索再引用是正常顺序。
@@ -123,11 +136,18 @@ export class StatuteGuard {
 
   // ── 流上的免检态。跨 chunk 保持，因为引号和引用块都可能横跨好几片 ──
   /**
-   * 正处在**成对非对称引号**（「」『』“”）里。**跨行保持**——与 citation-block 的
-   * `asymQuoteSpans` 同口径：⑧ 内联补进来的原文有一半以上是多行的，按行清空免检态
-   * 就会在原文第 2 行起对着立法者的交叉引用开火。
+   * 当前**成对非对称引号**（「」『』“”）没闭合时，等着的那个闭引号；`null` = 不在引号里。
+   * **跨行保持**——与 citation-block 的 `asymQuoteSpans` 同口径：⑧ 内联补进来的原文
+   * 有一半以上是多行的，按行清空免检态就会在原文第 2 行起对着立法者的交叉引用开火。
+   *
+   * 【为什么存的是"等哪个闭引号"而不是一个布尔（2026-09-08 复审 minor）】
+   * 布尔的形态是**任何一种闭引号都能关掉免检**，而整段扫描那边是按同一对配对、
+   * 跨过内层的异类引号。真库 318 条原文里有 4 条自带弯引号，模型以「」逐字转引它们时，
+   * 内层那个 `”` 会把布尔关掉 → 引文后半截里立法者的交叉引用被标【条号待核验】，
+   * 计进 seen 与替换率，而整段自检说一处没漏（它按同对配对，认为整句都在引号里）。
+   * 存闭引号本身，两边的配对规则就是同一条。
    */
-  private inAsymQuote = false;
+  private asymClose: string | null = null;
   /** 非对称引号已经开着走了多少字。超 `ASYM_QUOTE_CAP` 即认定它没闭合，收回免检态 */
   private asymRun = 0;
   /** 正处在成对**对称**引号（`"`）里。对称引号开闭同形，只能按行数奇偶，故不跨行 */
@@ -320,11 +340,11 @@ export class StatuteGuard {
         this.inQuote = false;
         this.lineSoFar = '';
       }
-      if (this.inAsymQuote) {
+      if (this.asymClose) {
         this.asymRun += 1;
-        // 走了这么远还没闭合 → 当它没闭合，把免检态收回来（否则闸从此永久关闭）
+        // 走了这么远还没等到配对的闭引号 → 当它没闭合，把免检态收回来（否则闸从此永久关闭）
         if (this.asymRun > ASYM_QUOTE_CAP) {
-          this.inAsymQuote = false;
+          this.asymClose = null;
           this.asymRun = 0;
         }
       }
@@ -332,7 +352,7 @@ export class StatuteGuard {
       // 【判定在字符落定之前】此刻的免检态说的是"这个匹配的起点在不在免检区里"
       while (head < marks.length && marks[head].at === i) {
         const mark = marks[head];
-        if (this.inAsymQuote || this.inQuote || this.lineExempt) {
+        if (this.asymClose || this.inQuote || this.lineExempt) {
           mark.verdict = 'allowed'; // 免检：立法者写的交叉引用，不计分母也不计分子
         } else if (!isStatuteCitationForm(mark.raw)) {
           // 形态上分不清条号与序数量词（「第三条路」「第一条建议」）——明说的缺口，
@@ -353,15 +373,17 @@ export class StatuteGuard {
       if (ch !== '\n') this.lineSoFar += ch;
 
       // 引号状态在字符落定**之后**翻转：开引号本身不在引号内，闭引号本身还算在里面
-      if (ch === '「' || ch === '『' || ch === '“') {
-        // 已经开着时**不重置计时**：重置会让引号里再出现一个开引号就把上限往后推，
-        // 而整段扫描那边（asymQuoteSpans）是跳过区间内的开引号的——两边会就此分叉。
-        if (!this.inAsymQuote) {
-          this.inAsymQuote = true;
+      const opens = ASYM_CLOSE_OF.get(ch);
+      if (opens) {
+        // 已经开着时**不重置计时、也不改等待中的闭引号**：整段扫描那边是跳过区间内的
+        // 开引号的（`asymQuoteSpans` 从闭引号之后接着找），两边必须是同一条规则。
+        if (!this.asymClose) {
+          this.asymClose = opens;
           this.asymRun = 0;
         }
-      } else if (ch === '」' || ch === '』' || ch === '”') {
-        this.inAsymQuote = false;
+      } else if (this.asymClose && ch === this.asymClose) {
+        // **只认配对的那一个**：内层的异类闭引号（引文里的 `”`）关不掉外层的「」
+        this.asymClose = null;
         this.asymRun = 0;
       } else if (ch === '"') this.inQuote = !this.inQuote;
       // `>` 打头 = markdown 引用块整行免检

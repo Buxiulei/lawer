@@ -12,9 +12,12 @@ const CARD = {
   facts: { values: [{ key: 'cap-base', value: 47103.25, unit: '元', effective_from: '2023-01-01', confidence: '原文核实' }] },
 };
 
-/** 一次成功的 claim_calc 出参（形状同 persistCalc 的 payload） */
+/**
+ * 一次成功的 claim_calc 出参（形状同 persistCalc 的 payload）。
+ * `kind` 取真出参的取值域（`N` / `N+1` / `2N` / 年假…），倍数记号那一路的放行集读它。
+ */
 const CALC = {
-  kind: '某项补偿',
+  kind: 'N',
   amount_fen: 3500000,
   amount_yuan: '35000.00',
   formula: 'N = 3.5 × 10000',
@@ -84,8 +87,26 @@ describe('要件 C · 倍数记号：带系数的判，裸 N 不判（明说的�
     expect(mark('也可能是 N+1。').violations).toHaveLength(1);
   });
 
-  it('正对照：本轮算过钱 → 倍数记号放行（把 calcRan 判据写成恒 false → 红）', () => {
-    expect(mark('这一笔就是 2N。', { calcPayloads: [CALC] }).violations).toHaveLength(0);
+  it('正对照：本轮算的就是这个记号 → 放行（把 kind 那一路删掉 → 红）', () => {
+    expect(mark('这一笔就是 N。也就是 1N。', { calcPayloads: [CALC] }).violations).toHaveLength(0);
+    expect(mark('这一笔就是 2N。', { calcPayloads: [{ ...CALC, kind: '2N' }] }).violations).toHaveLength(0);
+    expect(mark('这一笔是 N+1。', { calcPayloads: [{ ...CALC, kind: 'N+1' }] }).violations).toHaveLength(0);
+  });
+
+  /**
+   * 【放行集是**值的集合**，不是"这一轮算过钱"这个事件（2026-09-08 复审 minor）】
+   * 按事件放行的形态是：本轮算的是 N，模型顺口写「你可以按 3N 谈，或者 2N+1」，
+   * 两个都没人算过，却因为"算过钱"整体放行——而 `3N` 正是设计稿点名的那条负样本，
+   * 它只在**一分钱都没算过**的轮里被拦，也就是最不需要拦的那一轮。
+   */
+  it('负样本：算的是 N，正文写「按 3N 谈」「2N+1」照标（把判据写回"算过钱"这个布尔 → 红）', () => {
+    const r = mark('你可以按 3N 谈，或者 2N+1。', { calcPayloads: [CALC] });
+    expect(r.violations.map((v) => v.token)).toEqual(['3N', '2N+1']);
+    expect(r.violations.every((v) => v.mark === 'unsourced')).toBe(true);
+  });
+
+  it('记号的归一两侧同源：正文写小写 n、全角＋、带空格，与出参的 kind 一样对得上', () => {
+    expect(mark('这一笔是 n ＋ 1。', { calcPayloads: [{ ...CALC, kind: 'N+1' }] }).violations).toHaveLength(0);
   });
 
   it('**声明的缺口**：裸 N 不捕。它是这个行当对某项补偿的通称，不是数值断言', () => {
@@ -195,6 +216,51 @@ describe('要件 J · 约写：按自己写的位数四舍五入后相等 → �
   });
 });
 
+describe('要件 K · 算出来的数与卡里的数一视同仁（2026-09-08 复审 major）', () => {
+  /**
+   * 【它挡的是 charter 的主路，不是边角】charter §3 是"一切金额走 claim_calc"。
+   * 只认逐字相等的形态是：模型刚算完 47103.25，正文写「算下来约 4.7 万元，
+   * 精确一点是 4.71 万」——**两处都被标【数值无来源】**，而出路还叫他
+   *「回我一句帮我算一下」。每一轮把结果写成整数或万元的输出都会开火并计进替换率，
+   * 2% 的预算在最该干净的那一轮被顶穿，成绩单点名"闸误伤"，而闸误伤的正是它自己的主路。
+   */
+  const CAP_CALC = { kind: 'N', amount_fen: 4_710_325, amount_yuan: '47103.25' };
+
+  it('约写：刚算出来的 47103.25 写成「约 4.7 万元」「4.71 万」放行（只喂 exact 集 → 红）', () => {
+    const r = mark('算下来约 4.7 万元，精确一点是 4.71 万。', { calcPayloads: [CAP_CALC] });
+    expect(r.text, `被标的：${r.violations.map((v) => v.token).join('、')}`).toBe('算下来约 4.7 万元，精确一点是 4.71 万。');
+  });
+
+  it('抹掉分位：写「47103 元」是四舍五入到个位，照样放行（约写只喂 cardValues → 红）', () => {
+    expect(mark('算下来是 47103 元。', { calcPayloads: [CAP_CALC] }).violations).toHaveLength(0);
+  });
+
+  it('抄错一位（47100 元）→ 与**算出来的数**不一致，且出路指向算式而不是来源卡', () => {
+    const r = mark('算下来是 47100 元。', { calcPayloads: [CAP_CALC] });
+    expect(r.text).toContain(VALUE_MISMATCH);
+    expect(r.text).not.toContain(VALUE_UNSOURCED);
+    expect(r.violations[0]).toMatchObject({ mark: 'mismatch', nearest: '47103.25', nearestFrom: 'calc' });
+  });
+
+  it('卡与算出来的数同时在场时，卡优先认领（两份混成一份 → 出路会指错地方）', () => {
+    const r = mark('上限基数是 47100 元。', { retrieved: [CARD], calcPayloads: [CAP_CALC] });
+    expect(r.violations[0]).toMatchObject({ mark: 'mismatch', nearestFrom: 'card' });
+  });
+
+  it('负对照：容差之外的数照标无来源（否则"算过钱就全放行"，闸等于关掉）', () => {
+    expect(mark('算下来是 60 万。', { calcPayloads: [CAP_CALC] }).text).toContain(VALUE_UNSOURCED);
+  });
+
+  it('出路按来源分：算出来的那个数走算式，不叫用户去翻来源卡（合成一句 → 红）', () => {
+    const msg = valueNoticeMessage([
+      { token: '47103 元', kind: '金额', mark: 'mismatch', nearest: '47103.25', nearestFrom: 'calc' },
+    ]);
+    expect(msg).toContain('claim_calc');
+    expect(msg).toContain('算式');
+    expect(msg).not.toContain('生效期间');
+  });
+});
+
 describe('要件 E · 免检：引号内、引用块、闸自己的标记', () => {
   it('引号内的原文数字免检（删掉 exempt 的引号计数 → 红）', () => {
     const r = mark('原文写的是「……按 300% 支付，且不超过 24000 元」。');
@@ -210,6 +276,23 @@ describe('要件 E · 免检：引号内、引用块、闸自己的标记', () =
     const r = mark('见《某法》第四十六条【条号待核验】，这一项大约 60 万。');
     expect(r.violations).toHaveLength(1);
     expect(r.text).toContain(`60 万${VALUE_UNSOURCED}`);
+  });
+
+  /**
+   * 【⑨ 只认闭合成对的引号（2026-09-08 复审 minor）】流上的 ⑥ 对未闭合引号是宽容的
+   *（它看不见后文，只能开着走一段再收回），⑨ 是 post 闸、拿到整段，没有这个处境。
+   * 继承那份宽容的下场是**纯漏拦面**：真实转录里「HR 说：“你签了吧。」这种半个引号很常见，
+   * 一个漏打的 `”` 就让其后整篇回复的金额、倍数全部免检，而 gate_report 报「候选 0 处」。
+   */
+  it('未闭合的引号不给免检：其后的金额照判（把 requireClosed 去掉 → 红）', () => {
+    const r = mark('HR 说：“你签了吧。\n\n我算了一下，一般按 3N 谈，大概 60 万。');
+    expect(r.violations.map((v) => v.token)).toEqual(['3N', '60 万']);
+  });
+
+  it('正对照：同一段把引号补齐，引号内的数就免检（证明上一条不是"根本不认引号"）', () => {
+    const r = mark('HR 说：“你签了吧，一般按 3N 谈，大概 60 万。”');
+    expect(r.violations).toHaveLength(0);
+    expect(r.seen).toBe(0);
   });
 
   it('负样本：把免检整段删掉之后，同一段引号内文本会被标（证明上面几条不是恒真）', () => {

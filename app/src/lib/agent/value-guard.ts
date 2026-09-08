@@ -87,8 +87,15 @@ export interface ValueViolation {
   token: string;
   kind: ValueKind;
   mark: ValueMark;
-  /** mismatch 时：卡里那个最接近的数 */
+  /** mismatch 时：最接近的那个**有来源的**数 */
   nearest?: string;
+  /**
+   * 那个数是从哪儿来的：来源卡/档案（`card`）还是本轮算出来的（`calc`）。
+   * **出路不同才要分**：卡的出路是"点开来源卡看生效期间"，算出来的那个的出路是
+   * "以 claim_calc 的算式为准"。合成一句的形态是：模型把刚算出来的数抄错一位，
+   * 系统让他去翻一张与这个数无关的来源卡。
+   */
+  nearestFrom?: 'card' | 'calc';
 }
 
 /**
@@ -109,6 +116,10 @@ export interface ValueSources {
   /**
    * 本轮 `claim_calc` 的出参（`persistCalc` 的 payload）。**没算过就是空数组**——
    * 空 ≠ 放行，空就是"本轮没有任何算出来的数"，正文里的金额一律无来源。
+   *
+   * 出参里的数**三条路都走**：逐字相等、约写（四舍五入到模型自己写的位数）、
+   * ±0.5% 容差（判成"抄错"而不是"编造"）。只走第一条的形态见 `numbersIn` 的注释。
+   * 出参里的 `kind`（`N`/`N+1`/`2N`）另外撑起倍数记号那一路的放行集。
    */
   calcPayloads: unknown[];
   /** 本轮检索到的卡（读 `facts.values` 与 `facts.statute_quotes` 的逐字原文） */
@@ -133,28 +144,57 @@ function normNumber(s: string): string {
   return s.replace(/[,\s　]/g, '');
 }
 
-/** 从任意 JSON 值里把所有数字串抠出来（calc 出参的形状随算法而异，不逐字段列） */
-function numbersIn(value: unknown, out: Set<string>): void {
+/**
+ * 从任意 JSON 值里把所有数字抠出来（calc 出参的形状随算法而异，不逐字段列）：
+ * `out` 收**逐字串**（用来判"抄得一字不差"），`nums` 收**数**（用来判约写与容差）。
+ *
+ * 【为什么两份一起收，而不是只收逐字串（2026-09-08 复审 major）】只收逐字串的形态是：
+ * 模型把刚算出来的 47103.25 写成「约 4.7 万元」或「47103 元」——**四舍五入、抹掉分位**，
+ * 是人读数字最常见的两种写法——闸标【数值无来源】，出路还叫他"回我一句帮我算一下"，
+ * 而他复述的正是这一轮刚算完的那个数。charter「一切金额走 claim_calc」的主路上，
+ * 每一轮把结果写成整数或万元的输出都会开火并计进替换率，2% 的预算在**最该干净的那一轮**
+ * 被顶穿。约写与容差这两条放行早就写好了，只是当时只喂了卡里的数、没喂算出来的数。
+ */
+function numbersIn(value: unknown, out: Set<string>, nums: number[]): void {
   if (value === null || value === undefined) return;
   if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return;
     out.add(String(value));
     // 分→元：出参里金额恒以「分」存，而正文里说的是「元」。两个都收，
     // 否则算对了的金额在正文里照样被标无来源（**闸误伤模型算对的那一次**）
     out.add(String(value / 100));
     out.add((value / 100).toFixed(2));
+    nums.push(value, value / 100);
     return;
   }
   if (typeof value === 'string') {
-    for (const m of value.match(/\d[\d,]*(?:\.\d+)?/g) ?? []) out.add(normNumber(m));
+    for (const m of value.match(/\d[\d,]*(?:\.\d+)?/g) ?? []) {
+      const flat = normNumber(m);
+      out.add(flat);
+      const n = Number(flat);
+      if (Number.isFinite(n)) nums.push(n);
+    }
     return;
   }
   if (Array.isArray(value)) {
-    for (const v of value) numbersIn(v, out);
+    for (const v of value) numbersIn(v, out, nums);
     return;
   }
   if (typeof value === 'object') {
-    for (const v of Object.values(value as Record<string, unknown>)) numbersIn(v, out);
+    for (const v of Object.values(value as Record<string, unknown>)) numbersIn(v, out, nums);
   }
+}
+
+/**
+ * 倍数记号（`2N`/`3N`/`N+1`）的归一键。`claim_calc` 的出参自带 `kind`，取值就是
+ * `N` / `N+1` / `2N` 这套记号本身（见 claims.persistCalc），两边用同一个归一即可对上。
+ */
+function nFormKey(token: string): string {
+  return token
+    .replace(/[\s　]/g, '')
+    .replace(/[Nn]/g, 'N')
+    .replace(/＋/g, '+')
+    .replace(/^1N/, 'N');
 }
 
 /** 把 `12.30` 与 `12.3` 视作同一个数（尾零不是差异） */
@@ -213,10 +253,19 @@ interface Allowed {
   exact: Set<string>;
   /** 归一身份放行集（`类别:数`）：来自法条原文与用户自述这两份**语料型**来源 */
   ids: Set<string>;
-  /** 卡里的数值，用来算容差与约写判定 */
+  /** 卡里与档案里的数值，用来算容差与约写判定 */
   cardValues: number[];
-  /** 本轮算过钱没有。倍数记号（2N/3N）只认这个 */
-  calcRan: boolean;
+  /** 本轮**算出来**的数值，同样进约写与容差判定（出路与卡不同，故分列） */
+  calcValues: number[];
+  /**
+   * 本轮 `claim_calc` 算过的**记号**（出参的 `kind`：`N` / `N+1` / `2N` / 年假…）。
+   *
+   * 【为什么是集合而不是"算过没有"这个布尔（2026-09-08 复审 minor）】布尔的形态是：
+   * 本轮算的是 N，模型顺口写「你可以按 3N 谈」「或者 2N+1」——**两个都没算过**，
+   * 却因为"这一轮算过钱"整体放行。放行集必须是**值的集合**，不是事件的标志；
+   * 而 `3N` 恰恰是设计稿点名的那条负样本。
+   */
+  calcKinds: Set<string>;
   /** 期限日期（归一成 `YYYY-M-D`） */
   dueDates: Set<string>;
 }
@@ -227,7 +276,13 @@ function normDate(y: string, m: string, d: string): string {
 
 function collect(sources: ValueSources): Allowed {
   const exact = new Set<string>();
-  for (const p of sources.calcPayloads) numbersIn(p, exact);
+  const calcValues: number[] = [];
+  const calcKinds = new Set<string>();
+  for (const p of sources.calcPayloads) {
+    numbersIn(p, exact, calcValues);
+    const kind = (p as { kind?: unknown } | null)?.kind;
+    if (typeof kind === 'string' && kind.trim()) calcKinds.add(nFormKey(kind));
+  }
   const cardValues: number[] = [];
   const ids = new Set<string>();
   for (const p of sources.retrieved) {
@@ -259,7 +314,7 @@ function collect(sources: ValueSources): Allowed {
     const m = /(\d{4})-(\d{1,2})-(\d{1,2})/.exec(d.due_at ?? '');
     if (m) dueDates.add(normDate(m[1], m[2], m[3]));
   }
-  return { exact, ids, cardValues, calcRan: sources.calcPayloads.length > 0, dueDates };
+  return { exact, ids, cardValues, calcValues, calcKinds, dueDates };
 }
 
 /**
@@ -279,6 +334,13 @@ function isRoundedForm(token: string, n: number, values: readonly number[]): boo
   return values.some((v) => Number((v / scale).toFixed(dec)) === n);
 }
 
+/** 容差内最接近的那个来源数（没有就是 undefined）。正文单位换算前后各比一次 */
+function nearestWithin(values: readonly number[], n: number, scaled: number): number | undefined {
+  return values.find(
+    (v) => v !== 0 && (Math.abs(v - n) / Math.abs(v) <= TOLERANCE || Math.abs(v - scaled) / Math.abs(v) <= TOLERANCE),
+  );
+}
+
 /**
  * 这处 token 在不在免检区（引号内 / markdown 引用块行）。
  *
@@ -290,7 +352,10 @@ function isRoundedForm(token: string, n: number, values: readonly number[]): boo
  * 免检面是三道闸共用的判断，它只能有一份实现。
  */
 function exempt(text: string, at: number): boolean {
-  return insideVerbatim(text, at);
+  // `requireClosed`：⑨ 是 post 闸、看得见整段，⑧ 补进来的原文又恒闭合，
+  // 没有理由继承流上那份"未闭合的引号照样罩住后文"的宽容——那是纯漏拦面
+  // （用户消息里一个漏打的 `”`，其后整篇回复的金额全部免检）。见 insideVerbatim 注释。
+  return insideVerbatim(text, at, { requireClosed: true });
 }
 
 function kindOf(token: string): ValueKind {
@@ -331,10 +396,10 @@ export function applyValueGuard(
     seen += 1;
     const token = m[0];
     const kind = kindOf(token);
-    // 倍数记号（2N/3N/N+1）只认「本轮算过钱」：它断言的是一个**算法结论**，
-    // 而这个结论只有 claim_calc 出得来。没算过就是模型自己按经验说的。
+    // 倍数记号（2N/3N/N+1）只认「本轮**按这个记号**算过」：它断言的是一个**算法结论**，
+    // 而这个结论只有 claim_calc 出得来。算的是 N 却写「按 3N 谈」，那个 3N 没人算过。
     if (kind === '倍数记号') {
-      if (allow.calcRan) continue;
+      if (allow.calcKinds.has(nFormKey(token))) continue;
       violations.push({ token, kind, mark: 'unsourced' });
       inserts.push({ at: at + token.length, mark: VALUE_UNSOURCED });
       continue;
@@ -355,13 +420,19 @@ export function applyValueGuard(
     // 万元/万：正文的单位换算回卡的口径再比一次
     const scaled = /万/.test(token) ? n * 10000 : n;
     if (allow.exact.has(canonical(scaled)) || allow.exact.has(scaled.toFixed(2))) continue;
-    // 约写（「约 4.71 万元」之于 47103.25）：按它自己写的位数四舍五入后相等即放行
-    if (isRoundedForm(token, n, allow.cardValues)) continue;
-    const near = allow.cardValues.find(
-      (v) => v !== 0 && (Math.abs(v - n) / Math.abs(v) <= TOLERANCE || Math.abs(v - scaled) / Math.abs(v) <= TOLERANCE),
-    );
+    // 约写（「约 4.71 万元」之于 47103.25）：按它自己写的位数四舍五入后相等即放行。
+    // **卡里的数与算出来的数一视同仁**——模型复述刚算完的结果时同样会四舍五入。
+    if (isRoundedForm(token, n, allow.cardValues) || isRoundedForm(token, n, allow.calcValues)) continue;
+    const nearCard = nearestWithin(allow.cardValues, n, scaled);
+    const near = nearCard ?? nearestWithin(allow.calcValues, n, scaled);
     if (near !== undefined) {
-      violations.push({ token, kind, mark: 'mismatch', nearest: canonical(near) });
+      violations.push({
+        token,
+        kind,
+        mark: 'mismatch',
+        nearest: canonical(near),
+        nearestFrom: nearCard === undefined ? 'calc' : 'card',
+      });
       inserts.push({ at: at + token.length, mark: VALUE_MISMATCH });
       continue;
     }
@@ -397,6 +468,11 @@ export function applyValueGuard(
 export function valueNoticeMessage(violations: readonly ValueViolation[]): string {
   const unsourced = [...new Set(violations.filter((v) => v.mark === 'unsourced').map((v) => v.token))];
   const mismatch = violations.filter((v) => v.mark === 'mismatch');
+  // 【出路按"那个准数是哪儿来的"分（2026-09-08 复审 major 的连带修）】
+  // 抄错的是来源卡里的数 → 去看卡；抄错的是这一轮刚算出来的数 → 去看算式。
+  // 合成一句的形态是：模型把自己刚算的数写少了一位，系统让用户去翻一张与它无关的卡。
+  const fromCalc = mismatch.filter((v) => v.nearestFrom === 'calc');
+  const fromCard = mismatch.filter((v) => v.nearestFrom !== 'calc');
   const lines: string[] = [];
   if (unsourced.length) {
     lines.push(
@@ -405,11 +481,19 @@ export function valueNoticeMessage(violations: readonly ValueViolation[]): strin
         '算式、每一项输入的来源、依据条文会一起给你——那个数才是能拿去谈的数。',
     );
   }
-  if (mismatch.length) {
+  if (fromCard.length) {
     lines.push(
-      `本轮有 ${mismatch.length} 处数字与来源卡差了一点：` +
-        mismatch.map((v) => `${v.token}（卡里是 ${v.nearest}）`).join('、') +
+      `本轮有 ${fromCard.length} 处数字与来源卡差了一点：` +
+        fromCard.map((v) => `${v.token}（卡里是 ${v.nearest}）`).join('、') +
         `，已标注${VALUE_MISMATCH}。出路：以来源卡的数为准，点开回复里的来源卡可以看到它的生效期间。`,
+    );
+  }
+  if (fromCalc.length) {
+    lines.push(
+      `本轮有 ${fromCalc.length} 处数字与这一轮算出来的数差了一点：` +
+        fromCalc.map((v) => `${v.token}（算出来是 ${v.nearest}）`).join('、') +
+        `，已标注${VALUE_MISMATCH}。出路：以 claim_calc 的算式为准，回我一句「把算式再说一遍」；` +
+        '要是输入写错了（工资、入职日期），说清改哪一项，我重算。',
     );
   }
   return lines.join('\n');

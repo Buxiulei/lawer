@@ -244,6 +244,28 @@ describe('要件 F · 免检态：立法者写的交叉引用不算 agent 的引
     );
   });
 
+  /**
+   * 【内层的异类闭引号不许关掉外层的免检（2026-09-08 复审 minor）】
+   * 流上原先只留一个"在不在引号里"的布尔，任何一种闭引号都能把它关掉；
+   * 而整段扫描那边（`asymQuoteSpans`）是按**同一对**配对、跨过内层的。
+   * 两边就此分叉的下场是：模型以「」逐字转引一段自带弯引号的原文（真库 318 条里有 4 条），
+   * 引文**后半截**里立法者的交叉引用被标【条号待核验】、计进 seen 与替换率，
+   * 而漏网自检说一处没漏——**闸在引文内部误伤，自检还给它背书**。
+   */
+  it('嵌套异类引号：内层的 ” 关不掉外层的「」（把 asymClose 改回布尔 → 红）', () => {
+    const g = guardWithTwo();
+    const out = run(g, '原文是「用人单位依照本法第“四十”条规定解除的，应当依照本法第九十九条规定…」');
+    expect(out, '内层弯引号把免检关掉了 → 引文内部被标记').not.toContain(UNVERIFIED_STATUTE);
+    expect(g.seen, '引文内部的交叉引用不该计进分母').toBe(0);
+  });
+
+  it('负对照：**配对的**那个闭引号照常收回免检态（否则一个「就把整轮的闸关掉）', () => {
+    const g = guardWithTwo();
+    const out = run(g, '原文是「……依照本法第九十九条」，另外《某某某某法》第四十八条也适用。');
+    expect(out).toContain(`第四十八条${UNVERIFIED_STATUTE}`);
+    expect(out).not.toContain(`第九十九条${UNVERIFIED_STATUTE}`);
+  });
+
   it('免检态跨 chunk 保持：引号开在上一片、条号落在下一片（把三个状态字段改成方法内局部变量 → 红）', () => {
     const g = guardWithTwo();
     const out = ['原文是「……应当依照本法', '第九十九条规定执行」。'].map((c) => g.push(c)).join('') + g.flush();

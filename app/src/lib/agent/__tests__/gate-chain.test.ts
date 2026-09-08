@@ -442,15 +442,26 @@ describe('五、端到端接线', () => {
     args: { what: '把解除通知转发到个人邮箱', how: '公司邮箱 → 私人邮箱', why: '权限随时可能被停', due_at: '2026-08-27T18:00:00+08:00' },
   };
 
-  async function turn(script: { text: string; tools?: unknown[] }[]) {
+  /**
+   * 跑一轮真编排。`opts.message` 换用户这一轮的原话（⑨ 的 `userTurns` 那份来源），
+   * `opts.monthlyWageFen` 往档案里写月工资（⑨ 的 `caseFacts` 那份来源）——
+   * 两份来源都只能从**编排**喂进闸，纯函数测试碰不到它们。
+   */
+  async function turn(
+    script: { text: string; tools?: unknown[] }[],
+    opts: { message?: string; monthlyWageFen?: number } = {},
+  ) {
     const { makeAgentFixture, makeSink, scriptedProvider, fixtureSearcher, FIXTURE_PACK } = await import('./fixtures');
     const f = makeAgentFixture();
+    if (opts.monthlyWageFen !== undefined) {
+      f.db.prepare('UPDATE cases SET monthly_wage_fen = ? WHERE id = ?').run(opts.monthlyWageFen, f.caseId);
+    }
     const sink = makeSink();
     const result = await runTurn({
       db: f.db,
       caseId: f.caseId,
       userId: f.userId,
-      message: '我想知道能拿多少钱。',
+      message: opts.message ?? '我想知道能拿多少钱。',
       provider: scriptedProvider(script as never),
       searcher: fixtureSearcher([FIXTURE_PACK]),
       emit: sink.emit,
@@ -458,7 +469,8 @@ describe('五、端到端接线', () => {
     });
     if (!('ok' in result) || !result.ok) throw new Error(`本轮未成功：${JSON.stringify(result)}`);
     const notices = sink.events.filter((e) => e.event === 'notice') as Extract<AgentEvent, { event: 'notice' }>[];
-    return { result, notices };
+    const gateReport = notices.find((e) => e.data.code === 'GATE_REPORT')!.data.gate_report!;
+    return { result, notices, gateReport };
   }
 
   it('⑥ 真的挂在流上：夹具卡里没有原文的条号，用户面拿到的是带标记的那一份', async () => {
@@ -545,6 +557,113 @@ describe('五、端到端接线', () => {
     if (!('ok' in result) || !result.ok) throw new Error(`本轮未成功：${JSON.stringify(result)}`);
     expect(result.text, '刚检索回来的条被闸标掉了 → 放行集没有中途扩充').not.toContain(UNVERIFIED_STATUTE);
     expect(result.text).toContain('第四十六条');
+  });
+
+  /**
+   * 【⑨ 的三份放行来源，每份一条**真编排**判据（2026-09-08 复审 major）】
+   *
+   * 这三份来源（本轮算出来的数 / 档案里的结构化事实 / 用户自己说过的话）都不是闸自己能取的，
+   * 全靠 orchestrator 在调用点喂进去。此前它们**只有闸内部的单测**：
+   * 删掉 `tools.ts` 里那行 `ctx.state.calcPayloads.push(res.payload)`，
+   * 或把 orchestrator 里的 `caseFacts` / `userTurns` 喂成空数组——
+   * agent 全套加 scripts/eval 一千四百多条判据**全绿**。
+   * 形态是「登记齐全、单测齐全、唯独没接线」，本仓 08-26 已经实证发生过一次。
+   *
+   * 三条各带一个负对照：同一轮里换一个没人给过的数，闸照样开火——
+   * 否则"放行"这件事可以由"闸整个坏了"来解释，判据就成了恒真。
+   */
+  describe('⑨ 的三份放行来源各有一条接线判据', () => {
+    /** 一次会算出 142500.00 元的 claim_calc（19000 元/月 × 7.5 年，见 record 的 claims_upsert 摘要） */
+    const CALC_CALL = {
+      name: 'claim_calc',
+      args: { kind: 'N', avg_monthly_wage_fen: 1_900_000, employed_from: '2019-03-01', terminated_at: '2026-08-19' },
+    };
+
+    it('① 算完再复述：逐字的「142500 元」放行（删掉 tools.ts 里的 calcPayloads.push → 红）', async () => {
+      const { result, gateReport } = await turn([
+        { text: '我先算一下。', tools: [CALC_CALL] },
+        { text: '算下来是 142500 元。', tools: [CARD] },
+      ]);
+      // **逐字比整句**，不是只查有没有【数值无来源】：⑨ 有两种标记，
+      // 只查其中一种的形态是——闸把它判成【数值与来源卡不一致】，判据照样绿。
+      expect(result.text, '刚算出来的数被标了 → 出参没进放行集').toContain('算下来是 142500 元。');
+      expect(gateReport.gates.value_guard).toEqual({ seen: 1, fired: 0 });
+    });
+
+    it('① 约写同样放行：「约 14.3 万元」是 142500 的四舍五入（约写只喂卡里的数 → 红）', async () => {
+      const { result, gateReport } = await turn([
+        { text: '我先算一下。', tools: [CALC_CALL] },
+        { text: '算下来大概 14.3 万元。', tools: [CARD] },
+      ]);
+      expect(result.text, 'charter 的主路：模型复述刚算完的数时几乎总要约写').toContain('算下来大概 14.3 万元。');
+      // 约写没接上时它会落进 ±0.5% 容差 →【数值与来源卡不一致】而不是【数值无来源】：
+      // 对用户仍然是"你抄错了"，而他抄对了。所以这里比的是 fired，不是某一种标记
+      expect(gateReport.gates.value_guard).toEqual({ seen: 1, fired: 0 });
+    });
+
+    it('① 负对照：同一轮里没人算过的「60 万」照样开火（否则上面两条可能只是闸坏了）', async () => {
+      const { result } = await turn([
+        { text: '我先算一下。', tools: [CALC_CALL] },
+        { text: '算下来是 142500 元，不过一般能谈到 60 万。', tools: [CARD] },
+      ]);
+      expect(result.text).toContain(`60 万${VALUE_UNSOURCED}`);
+      expect(result.text).toContain('142500 元，');
+    });
+
+    it('② 档案事实：复述档案里的月工资放行（orchestrator 的 caseFacts 喂空数组 → 红）', async () => {
+      const { result, gateReport } = await turn([{ text: '你月薪 20000 元，先记住这个数。', tools: [CARD] }], {
+        monthlyWageFen: 2_000_000,
+      });
+      expect(result.text, '用户自己填进档案的工资被判成编造').toContain('你月薪 20000 元，先记住这个数。');
+      expect(gateReport.gates.value_guard).toEqual({ seen: 1, fired: 0 });
+    });
+
+    it('② 负对照：档案里没有的那个数照样开火（把 caseFacts 当"有档案就全放行" → 红）', async () => {
+      const { result } = await turn([{ text: '你月薪 20000 元，赔偿大概 60 万。', tools: [CARD] }], {
+        monthlyWageFen: 2_000_000,
+      });
+      expect(result.text).toContain(`60 万${VALUE_UNSOURCED}`);
+      expect(result.text).toContain('你月薪 20000 元，');
+    });
+
+    it('③ 用户原话：复述他自己说过的数放行（orchestrator 的 userTurns 喂空数组 → 红）', async () => {
+      const { result, gateReport } = await turn([{ text: '你说月薪 2 万，先把这件事记下来。', tools: [CARD] }], {
+        message: '我月薪 2 万，公司说要裁员。',
+      });
+      expect(result.text, '系统在质疑用户对自己的事的陈述').toContain('你说月薪 2 万，先把这件事记下来。');
+      expect(gateReport.gates.value_guard).toEqual({ seen: 1, fired: 0 });
+    });
+
+    it('③ 负对照：用户没说过的数照样开火（把 userTurns 当"有原话就全放行" → 红）', async () => {
+      const { result } = await turn([{ text: '你说月薪 2 万，大概能拿 60 万。', tools: [CARD] }], {
+        message: '我月薪 2 万，公司说要裁员。',
+      });
+      expect(result.text).toContain(`60 万${VALUE_UNSOURCED}`);
+      expect(result.text).toContain('你说月薪 2 万，');
+    });
+  });
+
+  /**
+   * 【漏网这一列必须读真正文（2026-09-08 复审 minor）】把 orchestrator 里那行
+   * `statutes.leakedIn(text)` 换成 `[]`，全套 41 个文件 1476 条判据全绿——
+   * 成绩单上的漏网率从此恒 0，而**恒 0 的量正是靠"它不是 0 的那一天"才有意义的**。
+   *
+   * 这一轮真的会漏一处，而且漏在**免检态判错**上（`leaked` 的定性就是它）：
+   * 流上一见 `第N条　` 那个全角空格就把整行免检（它逐片跑，看不见这一行后面有多长），
+   * 而自检的 `insideOwnFormatQuote` 要求自家格式的正文 ≥10 字才算原文。
+   * 真语料里注入块的正文都远超 10 字，所以这个口径差只在模型自造一行极短的自家格式时露头
+   * ——它露的头正好是这条判据要的那一处：闸没标、自检报得出来。
+   */
+  it('漏网数来自对真正文的复查（把 leakedIn 的调用换成 [] → 红）', async () => {
+    const { result, notices, gateReport } = await turn([{ text: '第九十九条　第四十八条', tools: [CARD] }]);
+    // 打头那条判了、标了；同一行后半截那条落在流上的免检区里，没标
+    expect(result.text).toContain(`第九十九条${UNVERIFIED_STATUTE}`);
+    expect(result.text).toContain('　第四十八条');
+    expect(result.text).not.toContain(`第四十八条${UNVERIFIED_STATUTE}`);
+    expect(gateReport.leaked, '自检没数出这一处 → 漏网率这一列在成绩单上恒 0').toBe(1);
+    expect(gateReport.leak_rate).toBeGreaterThan(0);
+    // 漏了哪一处也要写进消息里：只报一个数，读的人没法去查
+    expect(notices.find((e) => e.data.code === 'GATE_REPORT')!.data.message).toContain('第四十八条');
   });
 
   it('开火轮的 gate_report 分子分母都对得上（分母恒 0 会让替换率永远报 0%）', async () => {

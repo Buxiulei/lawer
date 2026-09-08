@@ -579,8 +579,14 @@ function hasVerbatimNear(near: string, article: string): boolean {
  * 【为什么只有非对称的那三对能跨行】对称的 ASCII `"` 开闭同形，跨行配对必然出错
  *（见 quotedChunks 的注释：它会把两段正文之间的部分当成引文）。非对称引号的开与闭
  * 是**不同字符**，跨多少行都配得准——所以跨行豁免只给它们，`"` 仍按行内奇偶数。
+ *
+ * 【它同时是 ⑥ 流上那份免检态的开闭表（2026-09-08 复审 minor）】导出而不是各写一份：
+ * ⑥ 原先在流上只留一个"在不在引号里"的布尔，于是**内层的异类闭引号会把外层的免检关掉**
+ *（`「…第“四十”条…第四十七条…」` → 后半截引文里的交叉引用被标【条号待核验】），
+ * 而整段扫描这边是按**同一对**配对、跨过内层的。两边就此分叉的下场是闸在引文内部误伤，
+ * 且自检恒说没漏（它看的是整段）。一张表两处读，分叉这条路就不存在。
  */
-const ASYM_QUOTES: readonly (readonly [string, string])[] = [
+export const ASYM_QUOTES: readonly (readonly [string, string])[] = [
   ['「', '」'],
   ['『', '』'],
   ['“', '”'],
@@ -599,10 +605,15 @@ const ASYM_QUOTES: readonly (readonly [string, string])[] = [
  * 上限取 3000：真库 318 条 statute_quotes 最长 912 字，留三倍余量；
  * 上限低于最长原文的形态是 ⑧ 补进来的长条文尾段丢掉豁免，反而制造漏网。
  */
-const ASYM_QUOTE_CAP = 3000;
+export const ASYM_QUOTE_CAP = 3000;
 
-/** 文本里全部非对称引号豁免区（允许跨行；未闭合的按 `ASYM_QUOTE_CAP` 截断） */
-function asymQuoteSpans(text: string): { start: number; end: number }[] {
+/**
+ * 文本里全部非对称引号豁免区（允许跨行；未闭合的按 `ASYM_QUOTE_CAP` 截断）。
+ *
+ * `requireClosed` = **只认闭合成对的引号**，未闭合的一段豁免都不给。给 post 段的闸用
+ *（见 `insideVerbatim` 的第二个参数）。
+ */
+function asymQuoteSpans(text: string, requireClosed = false): { start: number; end: number }[] {
   const out: { start: number; end: number }[] = [];
   let i = 0;
   while (i < text.length) {
@@ -612,7 +623,13 @@ function asymQuoteSpans(text: string): { start: number; end: number }[] {
       continue;
     }
     const close = text.indexOf(pair[1], i + 1);
-    const end = close >= 0 && close - i <= ASYM_QUOTE_CAP ? close : Math.min(text.length, i + ASYM_QUOTE_CAP + 1);
+    const closed = close >= 0 && close - i <= ASYM_QUOTE_CAP;
+    // 未闭合 + 调用方要求成对 → 这个开引号不产生豁免区，从它的下一个字接着找
+    if (!closed && requireClosed) {
+      i += 1;
+      continue;
+    }
+    const end = closed ? close : Math.min(text.length, i + ASYM_QUOTE_CAP + 1);
     out.push({ start: i, end });
     i = end + 1;
   }
@@ -638,16 +655,31 @@ function asymQuoteSpans(text: string): { start: number; end: number }[] {
  * 【为什么是"再加一条豁免"而不是"改掉按行那条"】按行那条对**未闭合**的引号是宽容的
  *（前半行算在引号内）。改成只认成对，等于在一处无关的地方悄悄收紧闸，
  * 而收紧的方向是多标记——那是误伤。所以新旧两条**取并集**：只增不减。
+ *
+ * 【`requireClosed`：post 段的闸不该继承流上的宽容（2026-09-08 复审 minor）】
+ * 上面那份宽容（未闭合的引号照样罩住后文）是**为流上的 ⑥ 定的**：它逐片跑，
+ * 看不见后面有没有闭引号，只能开着走、走满 `ASYM_QUOTE_CAP` 再收回来；
+ * 自检（`leakedIn`）必须与它同口径，否则会出现"闸放行了、自检说漏了"。
+ * ⑨ 不在这个处境里：它是 post 闸、拿到的是**整段**正文，⑧ 补进来的原文又恒闭合。
+ * 继承那份宽容的下场是**纯漏拦面**——用户消息里一个漏打的 `”`（真实转录里
+ * 「HR 说：“你签了吧。」这种半个引号很常见），其后整篇回复的金额、倍数、百分比全部免检，
+ * 而 gate_report 会诚实地报「候选 0 处」。所以这个参数只放给 post 段的调用方。
  */
-export function insideVerbatim(text: string, at: number): boolean {
+export function insideVerbatim(text: string, at: number, opts?: { requireClosed?: boolean }): boolean {
+  const requireClosed = opts?.requireClosed === true;
   // 成对非对称引号内（可跨行）：引号本身不算在内，引号里的每一个字都算
-  for (const s of asymQuoteSpans(text)) if (at > s.start && at < s.end) return true;
+  for (const s of asymQuoteSpans(text, requireClosed)) if (at > s.start && at < s.end) return true;
   const lineStart = text.lastIndexOf('\n', at) + 1;
   if (/^\s*>/.test(text.slice(lineStart, at))) return true; // blockquote 行
   // 引号内：数该位置之前同一行有几个引号，奇数即在引号内
   const before = text.slice(lineStart, at);
   const marks = (before.match(/["「『“”」』]/g) ?? []).length;
-  return marks % 2 === 1;
+  if (marks % 2 === 0) return false;
+  if (!requireClosed) return true;
+  // 要求成对时，本行后面还得有一个引号来收口；没有就是"开了没关"，不给豁免
+  const lineEnd = text.indexOf('\n', at);
+  const after = text.slice(at, lineEnd < 0 ? text.length : lineEnd);
+  return (after.match(/["「『“”」』]/g) ?? []).length > 0;
 }
 
 /**
