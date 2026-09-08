@@ -24,6 +24,7 @@ import { EMOTION_REVOKED_NOTE, emotionRecordingRevoked } from '@/lib/lifecycle/c
 import type { ToolDef } from '@/lib/llm';
 import type { AgentEventSink } from './events';
 import { citationCorrectionDirective, type CitationGuard } from './citation-guard';
+import { statuteCorrectionDirective, type StatuteGuard } from './statute-guard';
 import { compactCrisisCard } from './crisis';
 import { unsupportedVerbatimQuotes } from './citation-block';
 import { coreArticleKeys, packCitationGuide, type CoreArticleSources } from './citation-block';
@@ -108,6 +109,19 @@ export interface TurnState {
   /** 本轮是否有过一次成功的计算并落库。有就说明重试成功了，前面的拒绝只是过程 */
   calcSucceeded: boolean;
   /**
+   * 本轮 `claim_calc` 每一次**成功**的出参（`persistCalc` 的 payload 原物）。
+   *
+   * 【为什么要留原物，而不是只留一个 `calcSucceeded` 布尔】⑨ ValueGuard 的放行判据是
+   *「正文里这个数 ∈ 本轮 claim_calc 出参」——布尔只答得出"算过没有"，答不出"算出来的是几"。
+   * 拿布尔当放行依据的形态是：模型算了 3.2 万、正文里写 6 万，闸照样放行，
+   * 因为"本轮算过钱"。**放行集必须是值的集合，不是事件的标志。**
+   *
+   * 留原物而不是自己抽几个字段：七种算法的 payload 形状各不相同（区间上限、封顶档、
+   * 各自的 steps），今天抽三个字段，明天加一种算法就漏一批数——而漏的方向是**误标**，
+   * 会把模型算对的数标成【数值无来源】。
+   */
+  calcPayloads: unknown[];
+  /**
    * 本轮 claim_calc 被拒时点名缺的入参（去重）。用来把用户侧告知从
    * 「算不出来」变成「还差这几项，补了我立刻重算」——报错没有出路等于没报。
    */
@@ -120,7 +134,7 @@ function missingFieldsFrom(rejectText: string): string[] {
 }
 
 export function newTurnState(): TurnState {
-  return { actionCards: 0, searches: 0, retrieved: [], drafts: 0, calcRejects: 0, calcSucceeded: false, calcMissingFields: new Set() };
+  return { actionCards: 0, searches: 0, retrieved: [], drafts: 0, calcRejects: 0, calcSucceeded: false, calcMissingFields: new Set(), calcPayloads: [] };
 }
 
 export interface AgentToolContext {
@@ -146,6 +160,12 @@ export interface AgentToolContext {
   searcher?: KnowledgeSearcher;
   /** 案号运行时闸门。文书落库前过一遍，查无此号的直接拒收 */
   citations: CitationGuard;
+  /**
+   * 条号运行时闸门（⑥）。与案号闸同一条纪律：正文里标记、**文书里拒收**。
+   * 文书是要递出去、要进仲裁卷宗的，一个【条号待核验】跟着材料进了卷宗，
+   * 比正文里多一处标记严重得多——所以两条出口的处置故意不同。
+   */
+  statutes: StatuteGuard;
   /**
    * 本案 24 小时内是否已给过危机资源卡。
    * knowledge_search 的返回要据此执行**同一套呈现规则**——见该 handler 内注释。
@@ -905,6 +925,22 @@ const HANDLERS: Record<string, Handler> = {
       return reject(citationCorrectionDirective(badCitations));
     }
 
+    // 【条号闸 · 文书通道】(设计稿 §7.3) 与案号同处置：拒收 + 回喂改正指令。
+    // 登记簿标注已修正/已废止的源**禁止进文书**——正文里标一下用户还能自己判断，
+    // 递出去之后那份材料就带着一条过期的法条走进了仲裁庭。
+    const badStatutes = ctx.statutes.check(content, `文书《${title}》`);
+    if (badStatutes.length) {
+      ctx.emit({
+        event: 'notice',
+        data: {
+          code: 'STATUTE_UNVERIFIED',
+          message: `文书里的条号 ${badStatutes.map((v) => v.cited).join('、')} 本轮拿不出原文（或来源已非现行），已拒绝落库`,
+          statute_marked: badStatutes.map((v) => ({ cited: v.cited, verdict: v.verdict })),
+        },
+      });
+      return reject(statuteCorrectionDirective(badStatutes, title));
+    }
+
     // 【第五闸 · 文书通道】伪逐字引用在文书里比在正文里更致命：文书是要**发出去**、
     // 要进仲裁卷宗的。与正文的「改口」不同，这里**拒收**——发出去的东西不能带伪引用出门，
     // 而模型完全可以在下一轮用真检索到的原文重写。
@@ -1020,6 +1056,9 @@ const HANDLERS: Record<string, Handler> = {
     // 算钱的全部逻辑在 lib/cases/claims：**MCP 那条路调的是同一个函数**，
     // 这里只把结构化结果翻译成回喂给模型的那段字符串。
     const res = claims.runClaimCalc(args, { ...ctx, calculatorKinds: packOfCtx(ctx).calculatorKinds });
+    // ⑨ ValueGuard 的放行集在这里长出来：**算出来的数才准出现在正文里**。
+    // 收口处（executeTool 末尾）只记 calcSucceeded，那是"算过没有"；这里记的是"算出来是几"。
+    if (res.ok) ctx.state.calcPayloads.push(res.payload);
     return res.ok ? ok(res.payload) : reject(res.error);
   },
 };

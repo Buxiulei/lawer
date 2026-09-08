@@ -144,6 +144,7 @@ describe('claim_calc 与站内 agent 是同一份算钱逻辑', () => {
         sourceMessageId: null,
         searcher: agent.createKnowledgeSearcher(),
         citations: { known: () => true } as never,
+        statutes: { check: () => [] } as never,
         crisisCardAlreadyGiven: false,
         state,
         emit: () => {},

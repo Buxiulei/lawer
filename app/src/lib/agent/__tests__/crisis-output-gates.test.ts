@@ -130,6 +130,29 @@ const CRISIS_OUTPUT_GATES = [
     enabled: true,
     note: '方向与其余五道相反：它往正文里加内容',
   },
+  {
+    fn: 'StatuteGuard',
+    what: '⑥ 条号闸：放行集外的条号在**流上**缀【条号待核验】，登记簿非现行的缀【已修正，见新版】',
+    enabled: true,
+    impl: 'statute-guard.ts',
+    note:
+      '**危机轮同样流经**，而且流经的方式与其余各道都不同：它挂在 `citations.push` 的下游，' +
+      '危机轮虽然不把正文即时下发（emitText=false），modelBody 收的仍是过完 ⑤⑥ 的文本。' +
+      '**它是增不是删**（条号原样保留、后面缀一个标记），所以不会喂大 CRISIS_SAFE_FALLBACK ' +
+      '那条级联——把整句删掉才会让"剥完一句不剩"更容易发生。' +
+      '误伤面已按三条免检态收窄：引号内、markdown 引用块行、自家注入块格式（`第N条　正文…`）。' +
+      '这三处的条号是**立法者写的交叉引用**，不是 agent 给的引用。',
+  },
+  {
+    fn: 'applyValueGuard',
+    what: '⑨ 数值闸：不在 claim_calc 出参与 facts.values 的金额/倍数/百分比缀【数值无来源】',
+    enabled: true,
+    impl: 'value-guard.ts',
+    note:
+      '**只判模型段**：与 D14/D15 同一条纪律，先 splitCrisisOpener 劈掉确定性首段再判。' +
+      '不劈的形态是它去判一段我们自己逐字定好的文本（热线号码、机构名），每轮凭空开火。' +
+      '同为**增不是删**，不喂级联。裸 `N` 刻意不捕（见 value-guard.ts 文件头的缺口声明）。',
+  },
 ] as const;
 
 /**
@@ -193,6 +216,10 @@ const NON_GATE_IMPORTS: Record<string, string> = {
   CORE_ARTICLE_MAP_PACK_ID: '常量 id',
   bareArticleCitations: '检测器',
   precedentContamination: '检测器',
+  quotedStatuteSpans: '检测器：数引号块的个数，给 gate_report 当第七道闸的分母；不碰正文',
+  // —— ./statute-guard、./value-guard ——
+  statuteNoticeMessage: '拼 notice 文案，不碰正文（闸的动作在 StatuteGuard 里）',
+  valueNoticeMessage: '拼 notice 文案，不碰正文（闸的动作在 applyValueGuard 里）',
 };
 
 /**
@@ -300,7 +327,15 @@ describe('危机轮输出流经的闸：登记册与漏登记检测', () => {
   });
 
   // ↓↓↓ 补 strip* 前缀扫不到的那一类（登记册六道里有两道不叫 strip）
-  const GATE_MODULES = [String.raw`\./crisis`, String.raw`\./citation-block`];
+  // 【扫描面必须跟着闸走】新闸落在新文件里，而这份名册只扫它认识的模块——
+  // 不把新模块加进来的形态是：闸接上了、清单是绿的，**因为检测器没在看那个文件**。
+  // 与 2026-09-06「首段文案搬进领域包、扫描面跟着搬」是同一件事的第二次。
+  const GATE_MODULES = [
+    String.raw`\./crisis`,
+    String.raw`\./citation-block`,
+    String.raw`\./statute-guard`,
+    String.raw`\./value-guard`,
+  ];
   const imported = GATE_MODULES.flatMap((m) => importedValuesFrom(SRC, m));
 
   it('★不许有未分类的导入：闸模块的每个导入，要么在登记册上，要么在非闸名册上', () => {

@@ -24,6 +24,11 @@ import {
   stripQuotedAndNegated,
   addressAssertion,
   globalAssertions,
+  statuteLeakAssertions,
+  gateRateAssertions,
+  statuteGateTrail,
+  gateReportTrail,
+  unmarkedCitations,
   crisisTurnAssertions,
   crisisOpenerCardAssertions,
   emotionalLeverageAssertions,
@@ -3212,6 +3217,8 @@ describe('★归档形状总闸：任何判据喂上「没有 events 的 turn」
     ['hasEvent', () => hasEvent(archivedTurn, 'notice')],
     ['gateStrippedArticles', () => gateStrippedArticles(archivedTurn)],
     ['injectionObservability', () => injectionObservability(archivedTurn)],
+    ['statuteLeakAssertions', () => statuteLeakAssertions(ts, 'S03')],
+    ['gateRateAssertions', () => gateRateAssertions(ts, 'S03')],
   ];
 
   it.each(CASES)('%s 喂归档形状不炸', (_name, run) => {
@@ -3242,4 +3249,143 @@ describe('★归档形状总闸：任何判据喂上「没有 events 的 turn」
     expect(injectionObservability(archivedTurn), 'null = 这层跑了、本轮没产出 ⇒ 仍是 undefined 给判据判 na').toBeUndefined();
     expect(injectionObservability(noLayer as unknown as TurnRecord), '缺失 = 这份转录没这一层').toBeUndefined();
   });
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * ⑥ 条号闸 · 运行时零泄漏 与 闸链两率（S2 闸链补齐 2026-09-08）
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/** 造一份带 ⑥ 留痕的转录（归档形状：没有 `events` 键） */
+function turnWithStatuteGate(text: string, allowed: string[], marked: { cited: string; verdict: string }[] = []): TurnRecord {
+  return JSON.parse(
+    JSON.stringify({
+      input: '问一句',
+      text,
+      actionCards: [],
+      drafts: [],
+      retrievedIds: [],
+      gateStrippedArticles: [],
+      crisisPaid: null,
+      leverage: null,
+      injection: null,
+      statuteGate: { marked, allowed },
+      gateReport: null,
+      model: 'deepseek-v4-pro',
+      degraded: false,
+      taskClass: 'critical',
+    }),
+  ) as TurnRecord;
+}
+
+describe('条号运行时零泄漏（S03/S15 用的那条 L1）', () => {
+  it('正对照：正文里的条号在放行集里 → PASS', () => {
+    const t = turnWithStatuteGate('依《某某某某法》第四十六条主张。', ['某某某某法|第46条']);
+    const v = statuteLeakAssertions([t], 'S03')[0];
+    expect(v.pass).toBe(true);
+    expect(v.tier).toBe('L1');
+    expect(v.na).toBeFalsy();
+  });
+
+  it('正对照：不在放行集但**带着闸的标记** → PASS（标了就不算泄漏）', () => {
+    const t = turnWithStatuteGate('依《某某某某法》第四十八条【条号待核验】主张。', ['某某某某法|第46条']);
+    expect(statuteLeakAssertions([t], 'S03')[0].pass).toBe(true);
+  });
+
+  it('负样本：既不在放行集、又没标记 → FAIL，且 detail 点名是哪一处（闸漏了一处 → 这条必须红）', () => {
+    const t = turnWithStatuteGate('依《某某某某法》第四十八条主张。', ['某某某某法|第46条']);
+    const v = statuteLeakAssertions([t], 'S03')[0];
+    expect(v.pass).toBe(false);
+    expect(v.detail).toContain('第四十八条');
+    expect(v.detail).toContain('某某某某法|第46条');
+  });
+
+  it('负样本：【已修正，见新版】同样算已标注（两种标记只认一种 → 红）', () => {
+    const t = turnWithStatuteGate('依《某某某某法》第四十六条【已修正，见新版】。', []);
+    expect(statuteLeakAssertions([t], 'S03')[0].pass).toBe(true);
+  });
+
+  it('裸条号按条号比（放行集里那一条的法名对不上，但用户没写法名）', () => {
+    const t = turnWithStatuteGate('前面说过的第四十六条同样适用。', ['某某某某法|第46条']);
+    expect(statuteLeakAssertions([t], 'S03')[0].pass).toBe(true);
+  });
+
+  it('留痕缺失 → N/A（observability_missing），**不计过不计挂**；判 PASS 就是拿"没记录"当"没问题"', () => {
+    const noLayer = JSON.parse(JSON.stringify(turnWithStatuteGate('依《某某某某法》第四十八条。', []))) as Record<string, unknown>;
+    delete noLayer.statuteGate;
+    const v = statuteLeakAssertions([noLayer as unknown as TurnRecord], 'S03')[0];
+    expect(v.na).toBe(true);
+    expect(v.naKind).toBe('observability_missing');
+    expect(v.detail).toContain('不等于没有泄漏');
+  });
+
+  it('三态可分：对象 / null（跑了没开火）/ 缺失（没这一层）', () => {
+    const withTrail = turnWithStatuteGate('无条号。', ['某某某某法|第46条']);
+    expect(statuteGateTrail(withTrail)).toEqual({ marked: [], allowed: ['某某某某法|第46条'] });
+    expect(statuteGateTrail({ ...withTrail, statuteGate: null })).toEqual({ marked: [], allowed: [] });
+    const noLayer = JSON.parse(JSON.stringify(withTrail)) as Record<string, unknown>;
+    delete noLayer.statuteGate;
+    expect(statuteGateTrail(noLayer as unknown as TurnRecord)).toBeUndefined();
+  });
+
+  it('取材面与产线同源：引用块里的交叉引用不算泄漏（判据自己另写一份正则 → 红）', () => {
+    const t = turnWithStatuteGate('> 第四十六条　……依照本法第九十九条的规定。\n', ['某某某某法|第46条']);
+    expect(unmarkedCitations(t.text).map((c) => c.raw)).not.toContain('第九十九条');
+  });
+});
+
+describe('闸链两率：替换率与漏网率并列', () => {
+  const report = (over: Partial<NonNullable<TurnRecord['gateReport']>> = {}) => ({
+    gates: { statute_guard: { seen: 10, fired: 0 } },
+    seen: 10,
+    fired: 0,
+    replace_rate: 0,
+    leaked: 0,
+    leak_rate: 0,
+    budget: 0.02,
+    over_budget: false,
+    source_status_unknown: 0,
+    ...over,
+  });
+  const turnWith = (gateReport: NonNullable<TurnRecord['gateReport']>) =>
+    ({ ...turnWithStatuteGate('随便', []), gateReport }) as TurnRecord;
+
+  it('两条断言一起产出（只报一个 → 另一个读不出意思）', () => {
+    const vs = gateRateAssertions([turnWith(report())], 'S03');
+    expect(vs.map((v) => v.id)).toEqual(['S03-轮1-替换率', 'S03-轮1-漏网率']);
+  });
+
+  it('超预算：替换率那条 FAIL 但只是 L3（点名不阻断）', () => {
+    const vs = gateRateAssertions([turnWith(report({ fired: 3, replace_rate: 0.03, over_budget: true }))], 'S03');
+    expect(vs[0].pass).toBe(false);
+    expect(vs[0].tier).toBe('L3');
+    expect(vs[0].detail).toContain('闸误伤');
+  });
+
+  it('漏网不为 0：L1 FAIL，且措辞把责任指向闸而不是模型', () => {
+    const vs = gateRateAssertions([turnWith(report({ leaked: 1, leak_rate: 0.1 }))], 'S03');
+    expect(vs[1].tier).toBe('L1');
+    expect(vs[1].pass).toBe(false);
+    expect(vs[1].detail).toContain('闸自己漏了');
+  });
+
+  it('留痕缺失 → N/A（不是 0%，也不是 PASS）', () => {
+    const noLayer = JSON.parse(JSON.stringify(turnWithStatuteGate('随便', []))) as Record<string, unknown>;
+    delete noLayer.gateReport;
+    const vs = gateRateAssertions([noLayer as unknown as TurnRecord], 'S03');
+    expect(vs).toHaveLength(1);
+    expect(vs[0].na).toBe(true);
+    expect(gateReportTrail(noLayer as unknown as TurnRecord)).toBeUndefined();
+  });
+});
+
+describe('⑨→⑩ 交互：闸的标记不许触发承诺闸（⑩ 上线那天不能对着自己人开火）', () => {
+  // ⑩ 承诺/边界字面表排在 ⑨ 之后，所以 ⑨ 插进正文的每个字都会被它看到。
+  // 这条用**评测侧真正在用的那条承诺正则**去验，而不是另写一个近似的。
+  it.each(['【数值无来源】', '【数值与来源卡不一致】', '【条号待核验】', '【已修正，见新版】', '【案号待核实】'])(
+    '标记「%s」不命中 OUTCOME_PROMISE',
+    (marker) => {
+      expect(OUTCOME_PROMISE.test(marker)).toBe(false);
+      expect(OUTCOME_PROMISE.test(`这一项大概 60 万${marker}。`)).toBe(false);
+    },
+  );
 });

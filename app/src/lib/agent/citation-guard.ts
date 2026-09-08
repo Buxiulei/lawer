@@ -81,6 +81,15 @@ export class CitationGuard {
   private allowed = new Set<string>();
   private pending = '';
   private readonly violations: CitationViolation[] = [];
+  /**
+   * 本轮**看过**多少个案号形态的串（放行的也算）。
+   *
+   * 【为什么加这一格】(S2 闸链补齐 2026-09-08) 它是 gate_report 里替换率的**分母**。
+   * 只有 `violations`（分子）的形态是：一轮里唯一那处引用被换掉，替换率 100%，
+   * 与一轮里 50 处引用换掉 1 处在报表上长得一模一样——而前者是闸误伤的典型信号，
+   * 后者是闸正常工作。**分子单独存在时说不出任何事。**
+   */
+  private seenCount = 0;
 
   /** 把这些 pack 正文里出现的案号并入白名单 */
   allowFrom(packs: { id: string; body: string; title?: string }[]): void {
@@ -106,12 +115,19 @@ export class CitationGuard {
     return this.violations;
   }
 
+  /** 本轮看过多少处案号引用（gate_report 的分母，放行的也计） */
+  get seen(): number {
+    return this.seenCount;
+  }
+
   /**
    * 检查一整段文本（文书正文用）。返回查无此号的案号列表，空数组即通过。
    * 不改写内容——文书是要落库的东西，该由模型改正后重写，而不是我们替它打补丁。
    */
   check(text: string, where: string): string[] {
-    const bad = extractCaseNumbers(text).filter((n) => !this.isSupported(n));
+    const all = extractCaseNumbers(text);
+    this.seenCount += all.length;
+    const bad = all.filter((n) => !this.isSupported(n));
     for (const cited of bad) this.violations.push({ cited, where });
     return bad;
   }
@@ -141,6 +157,7 @@ export class CitationGuard {
 
   private sanitize(text: string): string {
     return text.replace(new RegExp(CASE_NO_SOURCE, 'g'), (cited) => {
+      this.seenCount += 1;
       if (this.isSupported(cited)) return cited;
       this.violations.push({ cited, where: '正文' });
       return UNVERIFIED_CITATION;

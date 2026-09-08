@@ -3,7 +3,14 @@ import { describe, expect, it } from 'vitest';
 import type { AgentEvent } from '../../app/src/lib/agent';
 
 import type { Verdict } from './assertions';
-import { archiveCrisisPaid, archiveLeverage, renderMarkdown, type RunEvidence } from './report';
+import {
+  archiveCrisisPaid,
+  archiveGateReport,
+  archiveLeverage,
+  archiveStatuteGate,
+  renderMarkdown,
+  type RunEvidence,
+} from './report';
 
 /**
  * 看门测试：**markdown 成绩单不许把第三态渲染成绿勾。**
@@ -123,5 +130,132 @@ describe('闸留痕 → 转录的映射（三态；抽成纯函数才测得到�
     const got = archiveLeverage([notice('EMOTIONAL_LEVERAGE_DETECTED')]);
     expect(got).toMatchObject({ outcome: '未记', stripped: [] });
     expect(got!.bodyRaw, 'bodyRaw 缺失是"不知道"，不能被兜成空串').toBeUndefined();
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * ⑥ 条号闸留痕 + 闸链两率列（S2 闸链补齐 2026-09-08）
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+function gateNotice(code: string, data: Record<string, unknown>): AgentEvent {
+  return { event: 'notice', data: { code, message: '', ...data } } as AgentEvent;
+}
+
+describe('归档映射：⑥ 与闸链汇总的三态', () => {
+  it('闸没开火 → null（不是 undefined）：否则"没开火"与"没这一层"在归档里长得一样', () => {
+    expect(archiveStatuteGate([])).toBeNull();
+    expect(archiveGateReport([])).toBeNull();
+  });
+
+  it('别的 notice 不算数（按 code 取，不按顺序取）', () => {
+    expect(archiveStatuteGate([gateNotice('CITATION_BLOCKED', {})])).toBeNull();
+  });
+
+  it('开火 → 标注清单**与放行集**一起落盘（放行集丢了，漏网率就永远重算不出来）', () => {
+    const got = archiveStatuteGate([
+      gateNotice('STATUTE_UNVERIFIED', {
+        statute_marked: [{ cited: '《某某某某法》第四十八条', verdict: 'unverified' }],
+        statute_allowed: ['某某某某法|第46条'],
+      }),
+    ]);
+    expect(got).toEqual({
+      marked: [{ cited: '《某某某某法》第四十八条', verdict: 'unverified' }],
+      allowed: ['某某某某法|第46条'],
+    });
+  });
+
+  it('闸链汇总原样落盘（率在服务端算好，报告不重算——重算就是第二个真源）', () => {
+    const gr = {
+      gates: { statute_guard: { seen: 10, fired: 1 } },
+      seen: 10,
+      fired: 1,
+      replace_rate: 0.1,
+      leaked: 0,
+      leak_rate: 0,
+      budget: 0.02,
+      over_budget: true,
+      source_status_unknown: 3,
+    };
+    expect(archiveGateReport([gateNotice('GATE_REPORT', { gate_report: gr })])).toEqual(gr);
+  });
+});
+
+describe('成绩单：替换率与漏网率并列成两列', () => {
+  const withTurns = (gateReport: unknown): RunEvidence =>
+    ({
+      runId: 'TEST',
+      startedAt: '2026-09-08T00:00:00Z',
+      finishedAt: '2026-09-08T00:01:00Z',
+      plan: 'pro',
+      routing: [{ taskClass: 'critical', model: 'deepseek/deepseek-v4-pro' }],
+      judgeEnabled: false,
+      runNotes: [],
+      scenarios: [
+        {
+          id: 'S03',
+          title: '两率',
+          redline: false,
+          pass: true,
+          turns: [
+            {
+              input: '问',
+              text: '答',
+              actionCards: [],
+              retrievedIds: [],
+              gateStrippedArticles: [],
+              model: 'deepseek-v4-pro',
+              degraded: false,
+              taskClass: 'critical',
+              gateReport,
+            },
+          ],
+          mechanical: [],
+          semantic: [],
+        },
+      ],
+    }) as unknown as RunEvidence;
+
+  const BASE = {
+    gates: { statute_guard: { seen: 10, fired: 1 } },
+    seen: 10,
+    fired: 1,
+    replace_rate: 0.1,
+    leaked: 0,
+    leak_rate: 0,
+    budget: 0.02,
+    over_budget: false,
+    source_status_unknown: 0,
+  };
+
+  it('两个率都出现在同一张表里（只渲染替换率 → 红）', () => {
+    const md = renderMarkdown(withTurns(BASE));
+    expect(md).toContain('闸链替换率 / 漏网率');
+    expect(md).toContain('| 轮 | 候选 | 动手 | 替换率 | 漏网 | 漏网率 | 逐闸（seen/fired） |');
+    expect(md).toContain('10.0%');
+    expect(md).toContain('statute_guard 10/1');
+  });
+
+  it('超预算被点名，且明写「按闸误伤处理」（改成阻断口径或删掉点名 → 红）', () => {
+    const md = renderMarkdown(withTurns({ ...BASE, over_budget: true }));
+    expect(md).toContain('超预算');
+    expect(md).toContain('按闸误伤处理');
+    expect(md).toContain('不阻断发版');
+  });
+
+  it('漏网不为 0 打叉（0 与非 0 在纸上必须一眼可分）', () => {
+    const md = renderMarkdown(withTurns({ ...BASE, leaked: 2, leak_rate: 0.2 }));
+    expect(md).toContain('| 2 ❌ |');
+  });
+
+  it('登记簿未接上的条目单列一行（合进"没问题"就等于接上那天报表一个字不变）', () => {
+    const md = renderMarkdown(withTurns({ ...BASE, source_status_unknown: 4 }));
+    expect(md).toContain('`source_status` 未接上的条目共 4 处');
+    expect(md).toContain('不是"它是现行"');
+  });
+
+  it('留痕缺失的那一轮显示 —，**不显示 0**（"不知道"与"一处都没动"不许同形）', () => {
+    const md = renderMarkdown(withTurns(null));
+    // 整节不出现（本场没有任何一轮有 gate_report）
+    expect(md).not.toContain('闸链替换率 / 漏网率');
   });
 });

@@ -49,10 +49,17 @@ function withMoney(text: string, key: string): ReactNode[] {
 }
 
 /**
- * 【案号待核实】：服务端拦下编造案号后留的占位（notice: CITATION_BLOCKED）。
- * 淡色标注表示"此处引用待核实"，不用警报色。
+ * 出口闸留在正文里的占位标记。淡色标注表示"此处待核实"，**不用警报色**——
+ * 这些标记是给用户看的"这一处别照抄"，不是错误提示。
+ *
+ * 五个真源分别在服务端：`citation-guard.ts` 的 `UNVERIFIED_CITATION`（⑤ 案号）、
+ * `statute-guard.ts` 的 `UNVERIFIED_STATUTE` / `SUPERSEDED_STATUTE`（⑥ 条号）、
+ * `value-guard.ts` 的 `VALUE_UNSOURCED` / `VALUE_MISMATCH`（⑨ 数值）。
+ * **这里照抄字面而不 import**：那几个模块各自带着上千行纯函数（条号归一、引用块拼装），
+ * 为了五个字符串把它们拉进客户端包不值得。代价是这份字面要跟着改——
+ * `RichText.test.tsx` 里那条判据拿服务端常量逐字对，改漏一个就红。
  */
-const CITE_PENDING = /(【案号待核实】)/g;
+const CITE_PENDING = /(【案号待核实】|【条号待核验】|【已修正，见新版】|【数值无来源】|【数值与来源卡不一致】)/g;
 
 function withMarks(text: string, key: string): ReactNode[] {
   return text.split(CITE_PENDING).flatMap((part, i) =>

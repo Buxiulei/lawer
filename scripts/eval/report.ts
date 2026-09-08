@@ -84,6 +84,24 @@ export function archiveCrisisPaid(events: AgentEvent[]): ScenarioEvidence['turns
   return ev ? { message: ev.data.message } : null;
 }
 
+/**
+ * ⑥ 条号闸的留痕（S2 闸链补齐 2026-09-08）。**放行集必须跟着落盘**：
+ * 「当时放行的是哪几条」从归档正文里反推不出来——正文里只剩没被标记的那些，
+ * 它们看起来都一样。不落盘的形态是：零泄漏判据只能拿"有没有标记"当依据，
+ * 于是**闸整层失效时它照样全绿**（一处都没标 = 一处都没漏）。
+ * 这是「留痕不进归档」的第五处，前四处见 archiveInjection 的注释。
+ */
+export function archiveStatuteGate(events: AgentEvent[]): ScenarioEvidence['turns'][number]['statuteGate'] {
+  const ev = findNotice(events, 'STATUTE_UNVERIFIED');
+  if (!ev) return null;
+  return { marked: ev.data.statute_marked ?? [], allowed: ev.data.statute_allowed ?? [] };
+}
+
+/** 闸链汇总的留痕。替换率/漏网率两列从它来，不从 message 里解析中文数字。 */
+export function archiveGateReport(events: AgentEvent[]): ScenarioEvidence['turns'][number]['gateReport'] {
+  return findNotice(events, 'GATE_REPORT')?.data.gate_report ?? null;
+}
+
 export interface ScenarioEvidence {
   id: string;
   title: string;
@@ -122,6 +140,20 @@ export interface ScenarioEvidence {
      * 而后者当天刚被评测官在 `nbdpsyPitchAssertions` 上实证发生过一次（登记+单测+import 齐全，唯独没接线）。
      */
     crisisPaid?: { message: string } | null;
+    /** ⑥ 条号闸的留痕（三态同 `leverage`）：闸标了哪几处 + **当时的放行集** */
+    statuteGate?: { marked: { cited: string; verdict: string }[]; allowed: string[] } | null;
+    /** 闸链汇总（三态同上）：替换率与漏网率并列的那两个数就从这里来 */
+    gateReport?: {
+      gates: Record<string, { seen: number; fired: number }>;
+      seen: number;
+      fired: number;
+      replace_rate: number;
+      leaked: number;
+      leak_rate: number;
+      budget: number;
+      over_budget: boolean;
+      source_status_unknown: number;
+    } | null;
     /**
      * ⭐注入产物可观测的留痕（2026-08-28 补）。没有它，`injectionObservability` 的判定
      * **在任何归档转录上都重放不出来**——它读 `t.events`，而 `events` 不进归档。
@@ -282,6 +314,47 @@ export function renderMarkdown(run: RunEvidence): string {
         '',
       );
     }
+    // ═══ 剥除率与漏网率**并列**（设计稿 §4.3）═══
+    // 只报一个的形态：闸把什么都替换掉（率高得离谱、漏网恒 0）看起来"守得很严"；
+    // 或者闸一处都不换（率 0）而漏网全靠没人看。两个数缺一个，另一个读不出意思。
+    const reported = s.turns.filter((t) => t.gateReport);
+    if (reported.length) {
+      lines.push('### 闸链替换率 / 漏网率（质量指标，替换率超预算只点名不阻断）', '');
+      lines.push('| 轮 | 候选 | 动手 | 替换率 | 漏网 | 漏网率 | 逐闸（seen/fired） |', '|---|---|---|---|---|---|---|');
+      for (const [i, t] of s.turns.entries()) {
+        const r = t.gateReport;
+        if (!r) {
+          // 三态：**缺留痕不写 0**——"这一轮不知道"与"这一轮一处都没动"必须分得开
+          lines.push(`| ${i + 1} | — | — | — | — | — | 无 gate_report 留痕（旧产物或跑在旧代码上） |`);
+          continue;
+        }
+        const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+        const per = Object.entries(r.gates)
+          .map(([id, g]) => `${id} ${g.seen}/${g.fired}`)
+          .join('；');
+        lines.push(
+          `| ${i + 1} | ${r.seen} | ${r.fired} | ${pct(r.replace_rate)}${r.over_budget ? ' ⚠️**超预算**' : ''} | ` +
+            `${r.leaked}${r.leaked ? ' ❌' : ''} | ${pct(r.leak_rate)} | ${per || '（无）'} |`,
+        );
+      }
+      const over = reported.filter((t) => t.gateReport!.over_budget).length;
+      lines.push('');
+      lines.push(
+        over
+          ? `> ⚠️ **本场 ${over} 轮替换率超预算（${(reported[0].gateReport!.budget * 100).toFixed(0)}%）——按闸误伤处理**：` +
+              '先查闸的判据（放行集取材面、免检态），**不是先去调提示词**。不阻断发版。'
+          : '> 替换率在预算内。漏网率恒 0 是结构应然，不为 0 即闸自身缺陷，按缺陷查。',
+      );
+      const unknown = reported.reduce((n, t) => n + t.gateReport!.source_status_unknown, 0);
+      if (unknown > 0) {
+        lines.push(
+          `> 📌 登记簿 \`source_status\` 未接上的条目共 ${unknown} 处（设计稿 §7.3 待接项）：` +
+            '这些条**按现行处理**，但那是"我们不知道"而不是"它是现行"——知识层接上 source_id 之后这个数应归零。',
+        );
+      }
+      lines.push('');
+    }
+
     lines.push('### 机械断言', '');
     lines.push('| 层 | 结果 | 断言 | 说明 |', '|---|---|---|---|');
     // 按层排序：L1 在最上面。看成绩单的人第一眼该看到的是安全红线的状态

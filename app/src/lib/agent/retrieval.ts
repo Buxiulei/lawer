@@ -39,7 +39,23 @@ export interface KnowledgePack {
   facts?: {
     hotlines?: Array<{ name: string; phone: string; status: 'usable' | 'forbidden'; hours?: string; note?: string }>;
     values?: Array<{ key: string; value: number; unit: string; effective_from: string; confidence: string }>;
-    statute_quotes?: Array<{ law: string; article: string; text: string }>;
+    /**
+     * 逐字条文。`source_status` 是**法源登记簿**（`knowledge/sources.json`）里那条源的
+     * `status`，由知识层在导出时带下来。
+     *
+     * 【为什么是可选的，以及现在是什么状态】(设计稿 §7.3 / S2 落地 2026-09-08)
+     * 登记簿本身已在树上并带 `status: 现行|已修正|已废止|待核实`，但 `statute_quotes`
+     * **还没有 `source_id`**，所以这一格现在恒为 `undefined`——**待知识层接上**。
+     * 闸对三态的处置是分开的：
+     *   · `undefined` → **按现行处理**（不标记）。这是「我们不知道」，不是「它是现行」，
+     *     所以 gate_report 里单列一个计数，让"没接上"看得见，而不是静静地被当成全绿；
+     *   · `'现行'`     → 放行；
+     *   · 其余（已修正/已废止/待核实）→ 输出侧替换为【已修正，见新版】且**禁止进文书**。
+     *
+     * **不要把它 `?? '现行'` 掉**：那正是把"看不见"读成"不存在"的那个动作，
+     * 接上登记簿的那天会静默地什么都不发生。
+     */
+    statute_quotes?: Array<{ law: string; article: string; text: string; source_status?: string }>;
     /**
      * 判例卡的结构化案情。判例段一律由这些字段拼装，**不许模型自由复述**——
      * 自由复述会把对话里的用户事实织进判例案情（ISSUE-03：案号是真的、细节是编的，

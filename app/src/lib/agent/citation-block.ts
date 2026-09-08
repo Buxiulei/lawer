@@ -381,6 +381,15 @@ export function packCitationGuide(pack: KnowledgePack, core: Set<string> = new S
 
 /** 条号形态：《X法》第Y条 / 第Y条 / 第Y款。 */
 const ARTICLE = /(?:《[^》\n]{2,30}》\s*)?第\s*[一二三四五六七八九十百零〇0-9]{1,6}\s*条(?:第\s*[一二三四五六七八九十0-9]{1,3}\s*[款项])?/g;
+/**
+ * 上面那条正则的**源串**，给 StatuteGuard（⑥）在流上另建一份 lastIndex 独立的实例用。
+ *
+ * 【为什么导出源串而不是导出 `ARTICLE` 本身】带 `g` 的正则**自带可变的 `lastIndex`**：
+ * 两个消费者共用一个实例，谁先 `exec` 一半，另一个就从半截开始扫——错的方向是**漏捕**，
+ * 而漏捕在闸上等于放行。导出源串让每个消费者各持一份状态，同时仍然只有**一份形态定义**
+ *（教训 1：两边各写一份正则，判据侧改了行为侧没跟上，静默漂移）。
+ */
+export const ARTICLE_PATTERN = ARTICLE.source;
 /** 引号内的一段（中文/直角/英文引号通吃） */
 const QUOTED = /[「“"]([^」”"\n]{1,200})[」”"]/g;
 /**
@@ -666,10 +675,15 @@ export function citationSite(text: string, at: number, windowSize = 60): Citatio
  *   · 判据（`bareArticleSpans`）再过一道**归属**过滤 —— 它问的是「模型有没有给依据」；
  *   · 渲染（`renderCoreArticleFallback`）过的是**内容**过滤 —— 它问的是「原文在不在正文里」。
  * 两者从这里分岔，而不是让渲染去消费判据的结论。
+ *
+ * 【第三个消费者：⑥ StatuteGuard 的漏网自检（2026-09-08）】闸跑完之后要回答
+ *「用户面还剩几处不在放行集里的条号」。它必须与渲染共用**同一个取材面**——
+ * 法条原文自己的交叉引用（`insideVerbatim` / `insideOwnFormatQuote` 过滤掉的那些）
+ * 不是 agent 写下的引用，把它们算进漏网就会把 ⑧ 补进来的原文记成闸的失守。
  */
-function authoredCitationSpans(
+export function authoredCitationSpans(
   text: string,
-  windowSize: number,
+  windowSize = 60,
 ): { raw: string; at: number; end: number; article: string; site: CitationSite }[] {
   const out: { raw: string; at: number; end: number; article: string; site: CitationSite }[] = [];
   for (const m of text.matchAll(ARTICLE)) {

@@ -53,7 +53,16 @@ import {
 import { judgeAvailable, judgeItem, type JudgeResult } from './eval/judge';
 import { collectPending, PENDING_ESCALATE_BATCHES, writePendingCardList } from './eval/pending-cards';
 import { lawsInLibrary } from './eval/assertions';
-import { archiveCrisisPaid, archiveInjection, archiveLeverage, newRunId, writeEvidence, type ScenarioEvidence } from './eval/report';
+import {
+  archiveCrisisPaid,
+  archiveGateReport,
+  archiveInjection,
+  archiveLeverage,
+  archiveStatuteGate,
+  newRunId,
+  writeEvidence,
+  type ScenarioEvidence,
+} from './eval/report';
 import { listPacks } from '../app/src/lib/knowledge';
 import { findScenarios, type Scenario } from './eval/scenarios';
 
@@ -531,6 +540,10 @@ async function main() {
         crisisPaid: archiveCrisisPaid(t.events),
         injection: archiveInjection(t.events),
         leverage: archiveLeverage(t.events),
+        // ⑥ 与闸链汇总同理：**无条件写（null 也写）**，否则"闸没开火"与"这份转录没有这一层"
+        // 在归档里长得一模一样，而离线回放只剩这一格可依。
+        statuteGate: archiveStatuteGate(t.events),
+        gateReport: archiveGateReport(t.events),
         model: t.model,
         degraded: t.degraded,
         taskClass: t.taskClass,
