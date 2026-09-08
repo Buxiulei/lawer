@@ -167,6 +167,9 @@ export interface ScenarioEvidence {
       source_status_unknown: number;
       /** ⑥ 形态歧义放过去的处数（故意留的洞，但洞有多大要看得见） */
       statute_ambiguous?: number;
+      /** 上一项的两个分项：载体排除 / 序数量词。处置方向不同，故分列 */
+      statute_ambiguous_carrier?: number;
+      statute_ambiguous_ordinal?: number;
       /** ⑥ 在文书通道拒收的处数（不进替换率：拒收不是替换） */
       statute_doc_rejected?: number;
       /** 本轮 ⑥ 的放行集（`法名|第N条`），供离线回放重算漏网率 */
@@ -365,9 +368,17 @@ export function renderMarkdown(run: RunEvidence): string {
       );
       const ambiguous = reported.reduce((n, t) => n + (t.gateReport!.statute_ambiguous ?? 0), 0);
       if (ambiguous > 0) {
+        // 【两个分项各占一列（2026-09-08 第三轮复审 minor）】只报总数的形态是：
+        // 读报表的人看得出洞变大了，看不出该去动哪一条——载体排除涨要动载体词表，
+        // 序数量词涨要重看 ORDINAL_MAX，两条的处置方向不同。
+        const carrier = reported.reduce((n, t) => n + (t.gateReport!.statute_ambiguous_carrier ?? 0), 0);
+        const ordinal = reported.reduce((n, t) => n + (t.gateReport!.statute_ambiguous_ordinal ?? 0), 0);
         lines.push(
-          `> 📌 ⑥ 本场放过 ${ambiguous} 处形态分不清「条号」与「第三条建议」那种序数用法的裸条号——` +
-            '**这是明说的洞**（判它的代价是把正确的话弄脏并计进替换率）。数字在涨说明这条口径要重新看，不是闸坏了。',
+          `> 📌 ⑥ 本场放过 ${ambiguous} 处形态判不了的裸条号` +
+            `（**载体排除** ${carrier} 处：合同/手册/制度那类用户自己的文件；` +
+            `**序数量词** ${ordinal} 处：「第三条建议」那种用法）——` +
+            '**这是明说的洞**（判它的代价是把正确的话弄脏并计进替换率）。' +
+            '载体排除在涨说明载体词表要重看，序数量词在涨说明 ORDINAL_MAX 那条口径要重看，不是闸坏了。',
         );
       }
       const docRejected = reported.reduce((n, t) => n + (t.gateReport!.statute_doc_rejected ?? 0), 0);

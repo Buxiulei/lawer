@@ -727,21 +727,61 @@ const NON_STATUTE_CARRIER = /合同|协议|手册|制度|章程|规定|通知|�
 const CARRIER_WINDOW = 6;
 
 /**
+ * 窗口末尾是不是一个**法名**（而不是载体）。
+ *
+ * 【它挡的是载体排除的反向误伤（2026-09-08 第三轮复审 minor）】法名不带《》写出来是真语料
+ * 里的常态：「劳动合同法第四十七条」「北京市工资支付规定第十四条」。这两处的窗口里分别有
+ *「合同」与「规定」——`NON_STATUTE_CARRIER` 一命中就整处静默放过：不判、不标、不计分母，
+ * 只在 `ambiguousCarrier` 里加一。于是**⑥ 最该看的那两条**（46/47 与工资支付规定十四条，
+ * 正是本行当引用频次最高的条）在不带书名号时**一处都进不了闸**，而报表上只显示"载体排除若干处"。
+ *
+ * 【判据：末尾是法规后缀 + 它前面连读成名】「劳动合同」+「法」、「工资支付」+「规定」——
+ * 后缀前面得有 ≥2 个连读的汉字（无标点、无空白）才算法名形态。
+ * 「你劳动合同」末字是「同」、「员工手册」末字是「册」、「公司规章制度」末字是「度」，
+ * 三者都不是法规后缀，载体排除照旧生效。
+ *
+ * 【留着的缺口】「公司规定第二十条」同样满足这个形态（「公司」+「规定」），会被当法条判。
+ * 收窄它得先能分辨"这份规定是不是国家机关发布的"——那要一份法规名录，不是一条正则能办的事。
+ * 方向上它与载体排除相反：这里多判一处，那里少判一处，而少判的那两条是高频真法条。
+ */
+const STATUTE_NAME_TAIL = /[一-鿿]{2,}(?:条例|规定|办法|解释|细则|规程|法)$/;
+
+/**
  * @param before 这处引用**之前**的正文（**只看末 `CARRIER_WINDOW` 字，回看多远由本函数一处定**）。
  *   调用方给的是"本行行首到它为止"——流上是逐片累积的当前行，整段扫描是 `lineBefore()`，
  *   两条路给的是同一份上文（口径分叉的后果见 statute-guard.ts 的 `lineBefore`）。
  *   缺省空串 = 不问上文，与旧行为逐字相同。
  */
 export function isStatuteCitationForm(raw: string, before = ''): boolean {
+  return citationFormOf(raw, before) === '法条';
+}
+
+/**
+ * 这处引用的形态判定，**连"为什么不判"一起返回**。
+ *
+ * 【为什么不是一个布尔（2026-09-08 第三轮复审 minor）】布尔的形态是：⑥ 把两种完全不同的
+ * 放过合并进一个 `ambiguous` 计数——「你劳动合同第十二条」（载体排除，条数上百的用户文件）
+ * 与「第三条建议」（序数量词）。两者的处置方向相反：载体排除涨了是**载体词表要扩**，
+ * 序数量词涨了是 `ORDINAL_MAX` 那条口径要重看。合成一个数，报表上只能看出"洞变大了"，
+ * 看不出该去动哪一条——而这个数存在的全部理由就是"洞有多大必须看得见"。
+ */
+export function citationFormOf(raw: string, before = ''): CitationForm {
   const flat = raw.replace(/\s+/g, '');
-  if (/《[^》]{2,40}》/.test(flat)) return true;
+  if (/《[^》]{2,40}》/.test(flat)) return '法条';
   // 带《》的先放行：《劳动合同法》第十二条 里那个「合同」是法名的一部分，不是载体
-  if (NON_STATUTE_CARRIER.test(before.replace(/\s+/g, '').slice(-CARRIER_WINDOW))) return false;
-  if (/第[一二三四五六七八九十0-9]{1,3}[款项]/.test(flat)) return true;
+  const tail = before.replace(/\s+/g, '').slice(-CARRIER_WINDOW);
+  if (NON_STATUTE_CARRIER.test(tail) && !STATUTE_NAME_TAIL.test(tail)) return '载体排除';
+  if (/第[一二三四五六七八九十0-9]{1,3}[款项]/.test(flat)) return '法条';
   const m = /第([一二三四五六七八九十百零〇两]+|[0-9]+)条/.exec(flat);
   const n = m ? cnNumeral(m[1]) : null;
-  return n === null ? true : n > ORDINAL_MAX;
+  return n === null || n > ORDINAL_MAX ? '法条' : '序数量词';
 }
+
+/**
+ * 形态判定的三态。`法条` 之外的两种都是**明说不判**的缺口，各自单独计数
+ *（见 `StatuteGuard.ambiguousCarrier` / `ambiguousOrdinal`）。
+ */
+export type CitationForm = '法条' | '载体排除' | '序数量词';
 
 /**
  * 找出正文里**只给了条号、附近没有逐字原文**的引用（G4 失败的主形态）。

@@ -313,6 +313,38 @@ function ratiosIn(value: unknown, marked: boolean, out: Set<string>, nums: numbe
   }
 }
 
+/**
+ * calc 出参的**字符串**里写着的百分号字面量（`× 150%`、`×200%`、`×300%`）。
+ *
+ * 【它挡的是闸误伤自己的主路（2026-09-08 第三轮复审 major）】加班费的 `formula` 与 `steps`
+ * 里逐字写着「延时 …×150% + 休息日 …×200% + 法定节假日 …×300%」——这三个数是**法定倍率**，
+ * 由算钱器写进出参、再由模型照抄进正文（「工作日延时按 150% 算」）。而出参里的数字走的是
+ * `numbersIn`，它把 150 收进**金额**那一格；百分比那一格只收 `ratiosIn` 认出来的比率字段
+ *（`rate: 0.3`），出参里没有 `rate: 1.5` 这种字段。于是三处全被标【数值无来源】，出路还叫他
+ *「回我一句帮我算一下」——他复述的正是这一轮算钱器自己写下的那三个数。
+ * 加班费是本行当高频诉求，每算一次就开三次火，2% 的替换率预算被顶穿在**最该干净的那一轮**。
+ *
+ * 【为什么百分号字面量可以单独收，而整份出参不行】`%` 本身就是类别标记：
+ * 一个数后面写着 `%`，它断言的就是一个比率，不会是月数、条号或以分为单位的金额
+ *（`ratiosIn` 那条注释里点名的正是这些）。所以这条放行**只放行同一个类别**，
+ * 不会像"整份出参进百分比格"那样让 `months: 3` 去放行「税后扣 3%」。
+ */
+const PERCENT_LITERAL = /\d+(?:\.\d+)?\s*%/g;
+
+function percentLiteralsIn(value: unknown, out: Set<string>): void {
+  if (typeof value === 'string') {
+    for (const m of value.match(PERCENT_LITERAL) ?? []) out.add(normNumber(m.replace('%', '')));
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const v of value) percentLiteralsIn(v, out);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const v of Object.values(value as Record<string, unknown>)) percentLiteralsIn(v, out);
+  }
+}
+
 interface Allowed {
   /**
    * 逐字放行的数字串（归一后），**按类别分格**。
@@ -363,6 +395,8 @@ function collect(sources: ValueSources): Allowed {
     // ——那是另一片的事。这里先把**跨类别**那条堵死：12 个月不再放行「12 倍」。
     numbersIn(p, exact.金额, calcValues.金额);
     ratiosIn(p, false, exact.百分比, calcValues.百分比);
+    // 出参散文里写着的 `×150%` 这类**法定倍率**：`%` 是类别标记，只进百分比那一格
+    percentLiteralsIn(p, exact.百分比);
     const kind = (p as { kind?: unknown } | null)?.kind;
     if (typeof kind === 'string' && kind.trim()) calcKinds.add(nFormKey(kind));
   }

@@ -32,7 +32,9 @@ import {
   normalizeArticle,
   normLaw,
   authoredCitationSpans,
+  citationFormOf,
   isStatuteCitationForm,
+  type CitationForm,
 } from './citation-block';
 import type { KnowledgePack } from './retrieval';
 
@@ -130,8 +132,16 @@ export class StatuteGuard {
   private readonly byArticle = new Map<string, string | undefined>();
   /** 本轮见过多少处 agent 自己写下的**正文**条号引用（gate_report 的分母） */
   private seenCount = 0;
-  /** 形态上分不清是条号还是序数量词、按缺口声明放过去的处数（`isStatuteCitationForm` 那条） */
-  private ambiguousCount = 0;
+  /**
+   * 形态上判不了、按缺口声明放过去的处数——**两个洞分开数**（2026-09-08 第三轮复审 minor）。
+   *
+   * 【为什么不能合成一个数】合成的形态是：报表上只看得出"洞变大了"，看不出该去动哪一条。
+   * 载体排除涨了要动的是 `NON_STATUTE_CARRIER` 那张词表（多了一种用户文件在被当成法条，
+   * 或者反过来法名被当成载体）；序数量词涨了要重看的是 `ORDINAL_MAX` 那条口径。
+   * 两条的处置方向不同，而"洞有多大必须看得见"这句话的落点恰恰是**看得见该去哪儿看**。
+   */
+  private ambiguousCarrierCount = 0;
+  private ambiguousOrdinalCount = 0;
   private pending = '';
   private readonly violations: StatuteViolation[] = [];
   /**
@@ -219,7 +229,26 @@ export class StatuteGuard {
    * 而后者是一个需要有人盯着的缺口（见 `isStatuteCitationForm`）。
    */
   get ambiguous(): number {
-    return this.ambiguousCount;
+    return this.ambiguousCarrierCount + this.ambiguousOrdinalCount;
+  }
+
+  /** 其中：上文是合同/手册/制度这类**载体**、按载体排除放过去的处数 */
+  get ambiguousCarrier(): number {
+    return this.ambiguousCarrierCount;
+  }
+
+  /** 其中：裸条号 ≤ `ORDINAL_MAX`、分不清「第三条」是条号还是量词而放过去的处数 */
+  get ambiguousOrdinal(): number {
+    return this.ambiguousOrdinalCount;
+  }
+
+  /**
+   * 记一处"没敢判"。**入口只有这一个**：流上、文书通道两条路都从这里过，
+   * 各自 `+= 1` 的形态是加了第三条通道那天漏掉一处，而漏掉的表现是报表上少一个数、不报错。
+   */
+  private tallyAmbiguous(form: CitationForm): void {
+    if (form === '载体排除') this.ambiguousCarrierCount += 1;
+    else if (form === '序数量词') this.ambiguousOrdinalCount += 1;
   }
 
   /** 登记簿状态未接上的条数（放行集里 `source_status` 为 undefined 的） */
@@ -263,8 +292,9 @@ export class StatuteGuard {
   check(text: string, where: string): StatuteViolation[] {
     const bad: StatuteViolation[] = [];
     for (const span of authoredCitationSpans(text)) {
-      if (!isStatuteCitationForm(span.raw, lineBefore(text, span.at))) {
-        this.ambiguousCount += 1;
+      const form = citationFormOf(span.raw, lineBefore(text, span.at));
+      if (form !== '法条') {
+        this.tallyAmbiguous(form);
         continue;
       }
       this.docSeenCount += 1;
@@ -369,16 +399,20 @@ export class StatuteGuard {
         const mark = marks[head];
         if (this.asymClose || this.inQuote || this.lineExempt) {
           mark.verdict = 'allowed'; // 免检：立法者写的交叉引用，不计分母也不计分子
-        } else if (!isStatuteCitationForm(mark.raw, this.lineSoFar)) {
-          // 形态上分不清条号与序数量词（「第三条路」「第一条建议」）——明说的缺口，
-          // 单独计数、不判、不计分母。判它的代价是把一段正确的话弄脏（见 citation-block）。
-          mark.verdict = 'allowed';
-          this.ambiguousCount += 1;
         } else {
-          this.seenCount += 1;
-          mark.verdict = this.verdict(mark.raw);
-          if (mark.verdict !== 'allowed') {
-            this.violations.push({ cited: mark.raw, where: '正文', verdict: mark.verdict });
+          const form = citationFormOf(mark.raw, this.lineSoFar);
+          if (form !== '法条') {
+            // 形态上判不了（载体是合同/手册的「第十二条」、序数用法的「第一条建议」）——
+            // 明说的缺口，按类分开计数、不判、不计分母。
+            // 判它的代价是把一段正确的话弄脏（见 citation-block）。
+            mark.verdict = 'allowed';
+            this.tallyAmbiguous(form);
+          } else {
+            this.seenCount += 1;
+            mark.verdict = this.verdict(mark.raw);
+            if (mark.verdict !== 'allowed') {
+              this.violations.push({ cited: mark.raw, where: '正文', verdict: mark.verdict });
+            }
           }
         }
         head += 1;

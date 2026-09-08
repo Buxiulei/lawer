@@ -326,6 +326,12 @@ export type AgentEvent =
            * 故意留的洞，但洞有多大必须每轮看得见——只写在注释里的缺口，在报表上与"没有这个缺口"同形。
            */
           statute_ambiguous?: number;
+          /**
+           * 上一行的两个分项：载体排除（合同/手册/制度的条号）与序数量词（「第三条建议」）。
+           * 分开报是因为**处置方向不同**——前者动载体词表，后者动 ORDINAL_MAX 的口径。
+           */
+          statute_ambiguous_carrier?: number;
+          statute_ambiguous_ordinal?: number;
           /** ⑥ 在文书通道**拒收**的处数。不进替换率：拒收不是替换，那一处从未到达用户面 */
           statute_doc_rejected?: number;
           /**

@@ -324,10 +324,14 @@ describe('要件 K · 序数量词不是条号（「三条建议」不许被写�
     expect(g.seen, '它也不该进替换率的分母').toBe(0);
   });
 
-  it('缺口有计数：放过去几处必须报得出来（把 ambiguousCount 删掉 → 洞变成隐形 → 红）', () => {
+  it('缺口有计数：放过去几处必须报得出来（把计数删掉 → 洞变成隐形 → 红）', () => {
     const g = guardWithTwo();
     run(g, '第一条，先别签字。第二条，把通知拍照。');
     expect(g.ambiguous).toBe(2);
+    // 【分项判据 ①（2026-09-08 第三轮复审 minor）】序数量词只进 ordinal 那一格：
+    // 两个洞合成一个数，报表只报得出"洞变大了"，报不出该去动 ORDINAL_MAX 还是载体词表
+    expect(g.ambiguousOrdinal).toBe(2);
+    expect(g.ambiguousCarrier, '序数用法不是载体排除（两格串了 → 红）').toBe(0);
   });
 
   it.each([
@@ -370,6 +374,29 @@ describe('要件 K2 · 载体是合同/手册/制度时，裸条号不是法条'
     const g = guardWithTwo();
     run(g, '劳动合同第十二条与员工手册第三十五条都要留一份。');
     expect(g.ambiguous).toBe(2);
+    // 【分项判据 ②】载体排除只进 carrier 那一格（两格串了 → 红）
+    expect(g.ambiguousCarrier).toBe(2);
+    expect(g.ambiguousOrdinal, '第十二条/第三十五条都 > ORDINAL_MAX，不是序数用法').toBe(0);
+  });
+
+  /**
+   * 【不带《》的法名不是载体（2026-09-08 第三轮复审 minor）】真语料里法名常常裸写：
+   *「劳动合同法第四十七条」「北京市工资支付规定第十四条」。两处窗口里分别有「合同」「规定」，
+   * 载体排除一命中就整处静默放过——不判、不标、不计分母，只在 ambiguousCarrier 里加一。
+   * 于是**本行当引用频次最高的那两条**在不带书名号时一处都进不了闸，而报表上只看到
+   *「载体排除若干处」。判据是"末尾是法规后缀 + 前面连读成名"，与合同/手册/制度分得开。
+   */
+  it.each([
+    ['劳动合同法第四十七条按工作年限算补偿。', '劳动合同法'],
+    ['北京市工资支付规定第十四条写了加班费倍数。', '北京市工资支付规定'],
+  ])('负对照：不带《》的法名「%s」仍按法条判（删掉法名后缀那条例外 → 红）', (text) => {
+    // 放行集里只有某某某某法 §10——下面两条的条号都不在其中，落进闸就该被标
+    const g = new StatuteGuard();
+    g.allowFrom([pack([{ law: '某某某某法', article: '第十条', text: '本法自公布之日起施行。' }])]);
+    const out = run(g, text);
+    expect(out, '法名末字是「法」/「规定」，它前面连读成名——不是载体').toContain(UNVERIFIED_STATUTE);
+    expect(g.seen, '它该进替换率的分母（被静默放过时这里是 0）').toBe(1);
+    expect(g.ambiguousCarrier, '不许再记成载体排除').toBe(0);
   });
 
   it('正对照：带《》的法名不受影响——《劳动合同法》里的「合同」是法名的一部分', () => {

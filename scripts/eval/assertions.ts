@@ -103,6 +103,9 @@ export interface TurnRecord {
     source_status_unknown: number;
     /** ⑥ 形态歧义放过去的处数（明说的洞；数字在涨说明口径要重看，不是闸坏了） */
     statute_ambiguous?: number;
+    /** 上一项的两个分项：载体排除 / 序数量词。处置方向不同，故分列 */
+    statute_ambiguous_carrier?: number;
+    statute_ambiguous_ordinal?: number;
     /** ⑥ 文书通道拒收数。**不在替换率里**：拒收不是替换，那一处从未到达用户面 */
     statute_doc_rejected?: number;
     /** 本轮 ⑥ 的放行集（`法名|第N条`）。零泄漏判据读它，不在评测侧另建一份 */

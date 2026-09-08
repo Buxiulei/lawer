@@ -1394,6 +1394,8 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
     gateReport.leaked = leakedCitations.length;
     gateReport.sourceStatusUnknown = statutes.sourceStatusUnknown;
     gateReport.ambiguousBareArticles = statutes.ambiguous;
+    gateReport.ambiguousCarrier = statutes.ambiguousCarrier;
+    gateReport.ambiguousOrdinal = statutes.ambiguousOrdinal;
     gateReport.docRejected = statutes.docFound.length + citations.docFound.length;
     const sum = summarizeGateReport(gateReport);
     emit({
@@ -1418,6 +1420,8 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
           over_budget: sum.overBudget,
           source_status_unknown: gateReport.sourceStatusUnknown,
           statute_ambiguous: gateReport.ambiguousBareArticles,
+          statute_ambiguous_carrier: gateReport.ambiguousCarrier,
+          statute_ambiguous_ordinal: gateReport.ambiguousOrdinal,
           statute_doc_rejected: gateReport.docRejected,
           /**
            * 【放行集挂在**无条件发**的这一条上，不挂 STATUTE_UNVERIFIED】(2026-09-08 修)

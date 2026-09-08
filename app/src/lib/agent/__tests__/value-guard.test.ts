@@ -5,6 +5,7 @@
 // 一处误伤 = 在一个算对了的金额旁边写上【数值无来源】，用户会因此不敢用那个数。
 import { describe, expect, it } from 'vitest';
 
+import { calcOvertimePay } from '../calc';
 import { applyValueGuard, VALUE_MISMATCH, VALUE_UNSOURCED, valueNoticeMessage, type ValueSources } from '../value-guard';
 
 /** 卡里有一个数：47103.25 元/年 */
@@ -312,6 +313,54 @@ describe('要件 K · 算出来的数与卡里的数一视同仁（2026-09-08 �
     expect(msg).toContain('claim_calc');
     expect(msg).toContain('算式');
     expect(msg).not.toContain('生效期间');
+  });
+});
+
+describe('要件 K3 · 出参散文里写着的法定倍率（2026-09-08 第三轮复审 major）', () => {
+  /**
+   * 【它误伤的是算钱器自己写下的数】加班费的 `formula` / `steps` 里逐字写着
+   *「×150%」「×200%」「×300%」——三档法定倍率由 calcOvertimePay 产出，模型照抄进正文
+   *（「工作日延时按 150% 算」）。而出参里的数字走 `numbersIn` 落进**金额**那一格，
+   * 百分比那一格只收 `ratiosIn` 认得出的比率字段，出参里没有 `rate: 1.5` 这种字段。
+   * 于是三处全被标【数值无来源】，出路还叫他"回我一句帮我算一下"——他复述的正是这一轮
+   * 算出来的东西。加班费是高频诉求，每算一次开三次火，替换率预算被顶在最该干净的那一轮。
+   *
+   * **来源必须是真出参**：手写一个 `{ formula: '…150%…' }` 的假 payload，
+   * 只证明这条代码路径通，证明不了产线那三个百分号确实写在出参里
+   *（算钱器哪天把 `×150%` 改写成 `×1.5`，假 payload 的测试照样绿）。
+   */
+  const OT = calcOvertimePay({ monthlyBaseFen: 1_087_500, weekdayOvertimeHours: 10, restDayDays: 1, holidayDays: 1 });
+  /** 形状同 claims.persistCalc 的 payload（只取 ⑨ 读得到的那几个字段） */
+  const OT_PAYLOAD = {
+    kind: OT.kind,
+    amount_fen: OT.amountFen,
+    amount_yuan: (OT.amountFen / 100).toFixed(2),
+    formula: OT.formula,
+    steps: OT.steps,
+    inputs: OT.inputs,
+  };
+
+  it('前置：真出参的 formula 里确实逐字写着三档倍率（算钱器改写法 → 这条先红）', () => {
+    expect(OT.formula).toContain('150%');
+    expect(OT.formula).toContain('200%');
+    expect(OT.formula).toContain('300%');
+  });
+
+  it('正对照：150% / 200% / 300% 三处放行（删掉 percentLiteralsIn 那一行收集 → 红）', () => {
+    const text = '工作日延时按 150% 算，休息日未补休按 200%，法定节假日按 300%。';
+    const r = mark(text, { calcPayloads: [OT_PAYLOAD] });
+    expect(r.text, `被标的：${r.violations.map((v) => v.token).join('、')}`).toBe(text);
+    expect(r.seen).toBe(3);
+  });
+
+  it('对照臂：出参里没有的「350%」照标（否则等于"算过加班费就百分比全放行"）', () => {
+    const r = mark('还有 350% 那一档。', { calcPayloads: [OT_PAYLOAD] });
+    expect(r.text).toContain(VALUE_UNSOURCED);
+    expect(r.violations[0]).toMatchObject({ token: '350%', kind: '百分比', mark: 'unsourced' });
+  });
+
+  it('不串类别：`%` 是类别标记，收进来的 150 不放行「150 倍」（把它并进金额格 → 红）', () => {
+    expect(mark('按 150 倍赔。', { calcPayloads: [OT_PAYLOAD] }).text).toContain(VALUE_UNSOURCED);
   });
 });
 

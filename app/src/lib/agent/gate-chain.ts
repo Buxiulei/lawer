@@ -317,6 +317,14 @@ export interface GateReport {
    */
   ambiguousBareArticles: number;
   /**
+   * `ambiguousBareArticles` 的**两个分项**（2026-09-08 第三轮复审 minor）。
+   * 合成一个数只报得出"洞变大了"，报不出该去动哪一条：
+   * `ambiguousCarrier` 涨 → 载体词表（合同/手册/制度…）要重看；
+   * `ambiguousOrdinal` 涨 → `ORDINAL_MAX` 那条口径要重看。两条的处置方向不同。
+   */
+  ambiguousCarrier: number;
+  ambiguousOrdinal: number;
+  /**
    * ⑤⑥ 在**文书通道**拒收的处数。**不进替换率**：文书是拒收不是替换，
    * 那一处从来没有出现在用户面前，把它算进"闸动了正文几处"就是把两件事混成一件
    *（实测：一份文书引错 1 处 + 正文 1 处引用 → 替换率报 50% → 成绩单点名"闸误伤"）。
@@ -325,7 +333,15 @@ export interface GateReport {
 }
 
 export function newGateReport(): GateReport {
-  return { gates: {}, leaked: 0, sourceStatusUnknown: 0, ambiguousBareArticles: 0, docRejected: 0 };
+  return {
+    gates: {},
+    leaked: 0,
+    sourceStatusUnknown: 0,
+    ambiguousBareArticles: 0,
+    ambiguousCarrier: 0,
+    ambiguousOrdinal: 0,
+    docRejected: 0,
+  };
 }
 
 /** 记一道闸的工作量。同一道闸多次记账**累加**（文书通道与正文通道各记各的）。 */
