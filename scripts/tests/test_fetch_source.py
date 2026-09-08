@@ -408,3 +408,76 @@ def test_reextract_is_idempotent_when_the_archive_contains_crlf(fetch, tmp_path,
     assert fetch.main(["--reextract", "--knowledge-dir", str(tmp_path)]) == 0
     printed = capsys.readouterr().out
     assert "未变化" in printed and "重抽" not in printed, printed
+
+
+# ── download 的四档梯子：fetch_method 说的是实际用了哪个 scheme ─────────────
+def _recording_curl(fetch, monkeypatch, fail_https: bool = False):
+    """把 _curl 换成录音机（**不打网络**）。返回被调用过的 (url, kwargs) 列表。"""
+    calls: list[tuple[str, dict]] = []
+
+    def fake(url, **kw):
+        calls.append((url, kw))
+        if fail_https and url.startswith("https://"):
+            raise RuntimeError("模拟：TLS 握手失败")
+        return "<html><body>正文</body></html>".encode(), {"http_status": 200, "content_type": "text/html"}
+
+    monkeypatch.setattr(fetch, "_curl", fake)
+    return calls
+
+
+def _scheme_of_method(method: str) -> str:
+    """`https+tlsv1.2+insecure`→https、`http-fallback`→http。与 audit-sources ⑥ 同一口径。"""
+    return method.split("+")[0].split("-")[0]
+
+
+def test_http_url_is_recorded_as_http_not_https(fetch, monkeypatch):
+    """传进来就是 http:// 的 URL，fetch_method 必须记 `http`。
+
+    梯子的三档全是 TLS 上的退让，只有 https 走得上；首档硬编码成 "https" 时，
+    一个 http:// 的 URL 会被记成"走了完整 TLS 校验"——meta.json 于是记着一次
+    **没发生过的抓取**，而 sha256/正文/host 全对，别处一处都看不出来。
+    （2026-09-07 现库实见 16 份 meta 这么记着。）
+    """
+    calls = _recording_curl(fetch, monkeypatch)
+    _, meta = fetch.download("http://www.bjchy.gov.cn/x.html")
+    assert meta["fetch_method"] == "http"
+    assert meta["fetch_url"] == "http://www.bjchy.gov.cn/x.html"
+    assert len(calls) == 1, f"http 的 URL 没有 TLS 可退，不该重试三次：{calls}"
+
+
+def test_https_url_still_records_the_tls_rung_it_used(fetch, monkeypatch):
+    """正向对照：https 的 URL 照旧记 `https`。
+
+    没有这条，把首档标签改成常量 "http" 也能让上一条绿——而那会让全库
+    99 份走完整 TLS 的原件都记成走了明文。
+    """
+    _recording_curl(fetch, monkeypatch)
+    _, meta = fetch.download("https://flk.npc.gov.cn/x.html")
+    assert meta["fetch_method"] == "https"
+    assert meta["fetch_url"] == "https://flk.npc.gov.cn/x.html"
+
+
+def test_http_fallback_still_records_the_http_url_it_actually_used(fetch, monkeypatch):
+    """https 三档全败后退到明文：fetch_method=http-fallback，fetch_url 换成 http://。
+
+    这一档本来就是自洽的（它是 fetch_url 会被改写的唯一一处），钉住是为了
+    上面那条修改不把它一起改坏——本项目真有只有 http 可达的政府站。
+    """
+    calls = _recording_curl(fetch, monkeypatch, fail_https=True)
+    _, meta = fetch.download("https://www.bjchy.gov.cn/x.html")
+    assert meta["fetch_method"] == "http-fallback"
+    assert meta["fetch_url"] == "http://www.bjchy.gov.cn/x.html"
+    assert [c[0].split("://")[0] for c in calls] == ["https", "https", "https", "http"]
+
+
+@pytest.mark.parametrize(
+    "url", ["http://www.bjchy.gov.cn/x.html", "https://flk.npc.gov.cn/x.html"]
+)
+def test_download_never_writes_a_method_that_contradicts_its_url(fetch, monkeypatch, url):
+    """把 audit-sources ⑥ 那条不变式钉在写入端：写出来的 meta 本来就不该需要事后修。
+
+    审计是"发现没人在审"的那道闸，但让审计永远无事可做的是这一条。
+    """
+    _recording_curl(fetch, monkeypatch)
+    _, meta = fetch.download(url)
+    assert _scheme_of_method(meta["fetch_method"]) == meta["fetch_url"].split("://")[0]

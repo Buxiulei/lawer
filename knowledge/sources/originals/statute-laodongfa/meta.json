@@ -16,7 +16,7 @@
   "effective_from": "2018-12-29",
   "http_status": 200,
   "content_type": "text/html",
-  "fetch_method": "https",
+  "fetch_method": "http",
   "fetch_url": "http://www.npc.gov.cn/zgrdw/npc/xinwen/2019-01/07/content_2070261.htm",
   "bytes": 36872
 }

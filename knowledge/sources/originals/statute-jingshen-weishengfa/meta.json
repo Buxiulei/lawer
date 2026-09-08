@@ -16,7 +16,7 @@
   "effective_from": "2013-05-01",
   "http_status": 200,
   "content_type": "text/html",
-  "fetch_method": "https",
+  "fetch_method": "http",
   "fetch_url": "http://www.npc.gov.cn/npc/c2/c12435/c12488/201905/t20190522_74839.html",
   "bytes": 47920
 }

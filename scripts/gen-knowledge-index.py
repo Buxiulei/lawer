@@ -23,6 +23,11 @@ status=forbidden 的号码不得出现在其他任何卡正文。失败即退出
       法条卡/判例卡/SOP/计算规则引它即红；
   (h) 隔离区里的卡不许挂「原文核实」「无外部断言」这两个"可进索引"的标签——
       它进隔离区的全部理由就是没核动，标签撒谎会让下一个人误把它搬回去。
+  (i) 卡里出现的每一条 http(s) 出处，若与登记簿某条目**同 host+path**，scheme 必须相同——
+      登记簿的 url 是实际抓到正文的那一个，卡里换个 scheme 写等于让读者去取一个
+      我们从没取到过的地址（本项目实见 bjchy.gov.cn 只有 http 可达、npc.gov.cn 只有 https 可达）。
+      这道闸看的是**整张卡的正文**，不只是 frontmatter 的 sources：
+      正文里"来源：<…>"那一行与 sources 里那一行分叉时，读者点的是正文那一个。
 
 **`--no-strict` 把这几道整体降为警告**，只在核实作业期间用。
 降的是这几道，**前面那批卡片自洽的校验一条不降**——
@@ -265,6 +270,44 @@ def quarantine_labels() -> list[str]:
     return bad
 
 
+#: 卡里出现的 http(s) URL。右界排除 Markdown 的括号/尖括号与中文句读——
+#: 正文里的出处多写成 `来源：<https://…>` 或 `[名](https://…)`。
+#: 半角 `.` `,` 不排除：吃进一个句末的点只会让这条 URL 与登记簿**对不上 path**，
+#: 于是这道闸沉默——朝"漏报"错，不朝"把好卡判红"错。
+_URL_IN_CARD = re.compile(r"https?://[^\s()\[\]{}<>\"'，、。；：）】》]+")
+
+
+def scheme_mismatches(entries: list[dict], registry: list[dict]) -> list[str]:
+    """守卫 (i)：卡里的出处与登记簿同 host+path 却换了 scheme。
+
+    比 host 更细、比整条 URL 更粗，是因为这一层要回答的正是"同一页、不同取法"：
+    只比 host 会把同站不同页当成一回事；整条 URL 相等则退化成"必须一字不差"，
+    而登记簿里带 `?big=fan` 之类参数的条目会让每张引它的卡无故判红。
+    """
+    schemes = ks.registry_schemes(registry)
+    bad = []
+    for e in entries:
+        text = (ROOT / e["path"]).read_text(encoding="utf-8")
+        # 逐行点名而不是逐卡：同一张卡常常在 sources 与正文"来源："里各写一遍，
+        # 只报一次的话，改完那一处再跑还是红，而报告看起来没变。
+        for lineno, line in enumerate(text.splitlines(), 1):
+            for url in _URL_IN_CARD.findall(line):
+                page = ks.page_of(url)
+                if not page:
+                    continue
+                scheme, host_path = page
+                registered = schemes.get(host_path)
+                if not registered or scheme in registered:
+                    continue
+                want, sid = sorted(registered.items())[0]
+                bad.append(
+                    f"  · {e['id']}（{e['path']}:{lineno}）：{url}"
+                    f" —— 登记簿 {sid} 记的是 {want}://{host_path}"
+                    f"（那是实际抓到正文的 scheme）。改卡里这一处的 scheme，别改登记簿"
+                )
+    return bad
+
+
 def grounding_guards(entries: list[dict], strict: bool) -> None:
     """扎根守卫（(b) 官方 host / (c) 引文对得上原件 / (d) 全库原文核实 / (e) D 类自证 /
     (f) 判例卡的 case_quotes / (g) 机构官网只给数据卡用 / (h) 隔离区标签不撒谎）。
@@ -409,6 +452,11 @@ def grounding_guards(entries: list[dict], strict: bool) -> None:
             inst_misuse,
         ),
         ("(h) 隔离区里的卡挂着「可进索引」的 confidence（标签不能撒谎）", quarantine_labels()),
+        (
+            "(i) 卡里的出处与登记簿同 host+path 却换了 scheme"
+            "（登记簿的 url 是实际抓到正文的那一个）",
+            scheme_mismatches(entries, registry),
+        ),
     ]
     if not any(rows for _, rows in groups):
         return

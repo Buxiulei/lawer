@@ -15,7 +15,7 @@
   },
   "http_status": 200,
   "content_type": "text/html; charset=utf-8",
-  "fetch_method": "https",
+  "fetch_method": "http",
   "fetch_url": "http://cyqfy.bjcourt.gov.cn/article/detail/2024/08/id/8071059.shtml",
   "bytes": 18328
 }

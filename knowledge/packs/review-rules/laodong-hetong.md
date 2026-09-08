@@ -9,7 +9,7 @@ related: [statute-jgf-2024-534-jieda-1, statute-fashi-2025-12-jieshi-2, statute-
 region: 北京
 sources:
   - http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm
-  - http://www.gov.cn/zhengce/zhengceku/2008-09/19/content_6630.htm
+  - https://www.gov.cn/zhengce/zhengceku/2008-09/19/content_6630.htm
   - https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf
   - https://www.court.gov.cn/zixun/xiangqing/472691.html
   - https://rsj.beijing.gov.cn/xxgk/2024zcwj/202507/t20250725_4158456.html

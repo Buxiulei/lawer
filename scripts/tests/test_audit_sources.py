@@ -22,8 +22,13 @@ BODY = "<html><body>第四十七条　经济补偿按劳动者在本单位工作
 SHELL = '<!doctype html><html><head><title>国家法律法规数据库</title></head><body><div id="app"></div></body></html>'
 
 
-def make_entry(root, source_id="s1", *, raw: str = BODY, text: str | None = None, ext="html", **overrides):
-    """在临时知识库里造一条**自洽**的登记（raw/text/sha 三者对得上），再按 overrides 弄坏它。"""
+def make_entry(root, source_id="s1", *, raw: str = BODY, text: str | None = None, ext="html",
+               meta: dict | None = None, **overrides):
+    """在临时知识库里造一条**自洽**的登记（raw/text/sha/meta 四者对得上），再按 overrides 弄坏它。
+
+    `meta` 传 None 用与 url 同 scheme 的抓取现场（即"本来就该长这样"）；
+    传 False 表示**不写 meta.json**（审计⑥的缺件用例）；传 dict 则原样写进去。
+    """
     outdir = root / "sources" / "originals" / source_id
     outdir.mkdir(parents=True, exist_ok=True)
     raw_bytes = raw.encode("utf-8")
@@ -50,6 +55,12 @@ def make_entry(root, source_id="s1", *, raw: str = BODY, text: str | None = None
     if text is not False:
         (outdir / "text.txt").write_text(text, encoding="utf-8")
     entry.update(overrides)
+    if meta is not False:
+        url = str(entry["url"])
+        meta = meta if meta is not None else {"fetch_method": url.split("://")[0], "fetch_url": url}
+        (outdir / "meta.json").write_text(
+            json.dumps({**entry, **meta}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
     return entry
 
 
@@ -202,6 +213,77 @@ def test_institution_kind_without_justification_refuses_to_load(audit, tmp_path)
     write_registry(tmp_path, [entry])
     with pytest.raises(ValueError, match="justification"):
         audit.main(["--knowledge-dir", str(tmp_path)])
+
+
+# ── ⑥ 抓取现场自洽（meta.fetch_method ↔ fetch_url 的 scheme）────────────
+def test_fetch_method_contradicting_fetch_url_scheme_is_red(audit, tmp_path, capsys):
+    """`fetch_method: https` 配一个 `http://` 的 fetch_url ⇒ 判红。
+
+    2026-09-07 实见 16 份 meta 这么记着（download 的梯子把首档硬编码成 "https"，
+    传进来是 http:// 的 URL 也照记）。这种记错**从别处一处都看不出来**：
+    sha256 对得上、正文抽得出、host 也对——只有"这份原件是走 TLS 拿到的吗"会被答错，
+    而那正是 meta.json 存在的唯一理由。
+    """
+    entry = make_entry(tmp_path, meta={"fetch_method": "https", "fetch_url": "http://flk.npc.gov.cn/x.html"})
+    write_registry(tmp_path, [entry])
+    assert run(audit, tmp_path) == 1
+    printed = out(capsys)
+    assert "fetch_method" in printed and "矛盾" in printed
+
+
+@pytest.mark.parametrize(
+    "method,furl",
+    [
+        ("https", "https://flk.npc.gov.cn/x.html"),
+        ("https+tlsv1.2", "https://flk.npc.gov.cn/x.html"),
+        ("https+tlsv1.2+insecure", "https://flk.npc.gov.cn/x.html"),
+        ("http", "http://www.bjchy.gov.cn/x.html"),
+        ("http-fallback", "http://www.bjchy.gov.cn/x.html"),
+    ],
+)
+def test_every_real_fetch_method_label_passes(audit, tmp_path, method, furl):
+    """正向对照：download 会写出的每一个 fetch_method 取值都必须放行。
+
+    这一关比的是**标签的 scheme 前缀**，不是整个标签：写成"必须字面相等"的话，
+    `https+tlsv1.2+insecure` 与 `http-fallback` 这两个真实取值会当场全库判红——
+    而那是把"记了一次没发生的抓取"这件事，换成了"标签不够短"。
+    """
+    write_registry(tmp_path, [make_entry(tmp_path, meta={"fetch_method": method, "fetch_url": furl})])
+    assert run(audit, tmp_path) == 0
+
+
+def test_missing_meta_json_is_red(audit, tmp_path, capsys):
+    """没有 meta.json ⇒ 判红。"没量"不许长得像"量过了"（本文件③④两关同一条理）。"""
+    write_registry(tmp_path, [make_entry(tmp_path, meta=False)])
+    assert run(audit, tmp_path) == 1
+    assert "meta.json" in out(capsys)
+
+
+def test_meta_without_fetch_fields_is_red(audit, tmp_path, capsys):
+    """meta.json 在、但没有 fetch_method / fetch_url ⇒ 判红。
+
+    没有这条，把⑥写成"两个字段都取得到才比"就能让上面那条红照常红、而这种 meta 静默放行——
+    于是"抓取现场没记"与"抓取现场自洽"在退出码上又长得一样了。
+    """
+    write_registry(tmp_path, [make_entry(tmp_path, meta={"http_status": 200})])
+    assert run(audit, tmp_path) == 1
+    assert "缺 fetch_method" in out(capsys)
+
+
+def test_real_library_meta_matches_fetch_url_scheme(audit):
+    """现库 101 份 meta 全部自洽（本轮修 16 份的落地面）。
+
+    下面那条 test_real_registry_is_green 只会说"现库红了"，红的原因可能是任意一关；
+    这条直接点住⑥这一维，好让"又有人把 fetch_method 记成没发生过的那一档"以自己的名字失败。
+    """
+    from conftest import REAL_KNOWLEDGE
+
+    bad = {
+        e["source_id"]: audit._meta_problems(REAL_KNOWLEDGE, e["source_id"])
+        for e in json.loads((REAL_KNOWLEDGE / "sources.json").read_text(encoding="utf-8"))
+    }
+    bad = {k: v for k, v in bad.items() if v}
+    assert bad == {}, f"现库 meta 与 fetch_url 的 scheme 又分叉了：{bad}"
 
 
 # ── CLI 面 ─────────────────────────────────────────────────────────────

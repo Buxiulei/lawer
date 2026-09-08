@@ -300,6 +300,34 @@ def host_of(url: str) -> str | None:
     return u.hostname.lower()
 
 
+def page_of(url: str) -> tuple[str, str] | None:
+    """(scheme, host+path)——"是不是同一个页面"与"用哪个 scheme 取到的"分开的那把尺。
+
+    query/fragment 不进 host+path：同一份原件的 `?big=fan` 之类参数不改变它是哪一页。
+    """
+    try:
+        u = urlparse(str(url))
+    except ValueError:
+        return None
+    if u.scheme not in ("http", "https") or not u.hostname:
+        return None
+    return u.scheme, f"{u.hostname.lower()}{u.path}"
+
+
+def registry_schemes(entries: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
+    """host+path → {scheme: 用这个 scheme 登记它的 source_id}。
+
+    登记簿的 `url` 是**实际抓到正文的那一个**（见 fetch-source.download 的四档退让），
+    所以它同时是"这一页用哪个 scheme 取得到"的唯一记录。守卫 (i) 拿它当基准。
+    """
+    out: dict[str, dict[str, str]] = {}
+    for e in entries:
+        page = page_of(str(e.get("url", "")))
+        if page:
+            out.setdefault(page[1], {}).setdefault(page[0], str(e.get("source_id", "?")))
+    return out
+
+
 def is_official_host(host: str, extra: set[str]) -> bool:
     return host == "gov.cn" or host.endswith(".gov.cn") or host in extra
 

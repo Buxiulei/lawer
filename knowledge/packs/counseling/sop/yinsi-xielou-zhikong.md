@@ -9,7 +9,7 @@ related: [statute-grxxbhf-28-31-mingan-xinxi, statute-mfd-1032-1033-yinsi, ethic
 region: 全国
 domain: counseling
 sources:
-  - http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html
+  - https://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html
   - https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm
 confidence: 原文核实
 updated: 2026-09-07

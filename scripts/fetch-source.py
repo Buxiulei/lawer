@@ -157,12 +157,21 @@ def download(url: str) -> tuple[bytes, dict]:
     证书链缺中间证、以及 bjchy.gov.cn 那种只有 http 可达的站。
     **退到哪一档必须记进 meta.json**：走过 -k 的原件与走过完整校验的原件，
     可信度不是一回事，而事后从 sha256 上完全看不出来。
+    传进来就是 http:// 的 URL 只有一档（`http`）——TLS 那三档对它无意义。
     """
-    ladder = [
-        ("https", dict()),
-        ("https+tlsv1.2", dict(tls12=True)),
-        ("https+tlsv1.2+insecure", dict(tls12=True, insecure=True)),
-    ]
+    # 【fetch_method 说的是"实际用了哪个 scheme + 哪一档 TLS"，不是"我们打算用 https"】
+    # 这三档全是 TLS 上的退让，只有 https 的 URL 走得上；传进来的就是 http:// 时，
+    # curl 压根不做 TLS，把它记成 `https` 是**记了一件没发生的事**——
+    # 而 meta.json 里 fetch_method=https 配一个 http:// 的 fetch_url，
+    # 事后没有任何一处会打架（实见 16 份 meta 这么记着，audit-sources 那一关就是为它加的）。
+    if url.startswith("http://"):
+        ladder = [("http", dict())]
+    else:
+        ladder = [
+            ("https", dict()),
+            ("https+tlsv1.2", dict(tls12=True)),
+            ("https+tlsv1.2+insecure", dict(tls12=True, insecure=True)),
+        ]
     errors = []
     for method, kw in ladder:
         try:

@@ -41,6 +41,8 @@
   ⑤ 量级：text 的字符数不得超过 raw 的字节数。压缩件（docx/pdf/zip）与网页抽出的正文
      恒小于原件本身；反过来只可能是 text 与 raw 不是一回事——上面那条 552 字节 raw
      配 23874 字 text 的记录，正是被这条抓住的第二重保险。
+  ⑥ 抓取现场自洽：`meta.json` 必须在，且 `fetch_method` 与 `fetch_url` 的 scheme 是同一件事
+     （挡"meta 记着一次没发生过的抓取"——走没走 TLS 是这份文件存在的唯一理由）。
 
 【与 verify-quotes 的分工】那个问"卡里这句话是不是原件里的话"，这个问"这份原件是不是
 它自称的那份文件"。两把尺量的不是一件事，缺哪一把，另一把量出来的都可能是好看的假数。
@@ -96,6 +98,41 @@ def _ext_of(rel_raw: str) -> str:
     return Path(rel_raw).suffix.lower().lstrip(".")
 
 
+def _meta_problems(root: Path, sid: str) -> list[str]:
+    """⑥ 抓取现场自洽：`meta.fetch_method` 与 `meta.fetch_url` 的 scheme 必须是同一件事。
+
+    fetch_method 是"走了哪一档"（https / https+tlsv1.2 / …+insecure / http / http-fallback），
+    fetch_url 是"最后拿哪个地址取到的"。两者分叉时，meta.json 记的是一次没发生过的抓取：
+    2026-09-07 实见 16 份 meta 写着 `fetch_method: https` 配一个 `http://` 的 fetch_url
+    （download 的四档梯子把首档硬编码成 "https"，传进来是 http:// 的 URL 也照记）。
+    这种记错**事后从任何别的地方都看不出来**——sha256 对得上、正文抽得出、host 也对，
+    只有"这份原件是走 TLS 拿到的吗"这个问题会被答错，而那正是 meta.json 存在的唯一理由。
+    """
+    path = root / ks.ORIGINALS_DIR / sid / "meta.json"
+    if not path.exists():
+        return [
+            f"缺 {ks.ORIGINALS_DIR}/{sid}/meta.json：这条登记没有抓取现场，"
+            "无从判断原件是走完整 TLS 校验拿到的还是退到 -k / http 拿到的。"
+            "重跑 fetch-source.py 让它自己写这份文件"
+        ]
+    try:
+        meta = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        return [f"{path.name} 读不出来：{e}"]
+    method, furl = meta.get("fetch_method"), meta.get("fetch_url")
+    if not method or not furl:
+        return [f"{path.name} 缺 fetch_method / fetch_url（现有：{method!r} / {str(furl)[:60]!r}）"]
+    used = str(method).split("+")[0].split("-")[0]  # https+tlsv1.2+insecure→https；http-fallback→http
+    scheme = str(furl).split("://")[0]
+    if used != scheme:
+        return [
+            f"meta.fetch_method「{method}」与 fetch_url 的 scheme「{scheme}」矛盾"
+            f"（{furl}）：两句话必有一句是假的。重跑 fetch-source.py 重抓，"
+            f"或把 fetch_method 改成实际用上的那个 scheme"
+        ]
+    return []
+
+
 def audit_entry(root: Path, entry: dict[str, Any], fetch: Any) -> dict[str, Any]:
     """审一条登记。返回 {source_id, problems: [...], derived: 一致|未复算, ...}。"""
     sid = str(entry.get("source_id", "?"))
@@ -117,6 +154,8 @@ def audit_entry(root: Path, entry: dict[str, Any], fetch: Any) -> dict[str, Any]
             f"official_host「{entry.get('official_host')}」与 url 的 host「{url_host}」不一致"
             "——登记簿说的和它自己写的 url 说的不是同一个站"
         )
+
+    problems.extend(_meta_problems(root, sid))
 
     if not rel_raw:
         problems.append("files.raw 为空：这条登记没有原件")

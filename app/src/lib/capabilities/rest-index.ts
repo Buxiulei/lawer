@@ -139,7 +139,13 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'web', method: 'POST', path: '/api/v1/keys/{id}/rotate', auth: 'jwt', description: '轮换：换发新明文，旧明文立即失效；id / name / scopes 不变' },
   { category: 'web', method: 'DELETE', path: '/api/v1/keys/{id}', auth: 'jwt', description: '吊销 api key（置 enabled=0，留行保审计线索）' },
   { category: 'web', method: 'POST', path: '/api/v1/consents', auth: 'jwt', description: '记一次单独同意（realname_adopt / emotion）。协议、年龄、实名、境外模型四类各有自己的采集点，不从这条收' },
-  { category: 'web', method: 'POST', path: '/api/v1/me/preferences', auth: 'jwt', description: '境外模型与评测授权两个开关；开启境外模型要带 consent:true（读过 /terms/overseas 之后）' },
+  // 【TERMS_NOT_LIVE 为什么只写在这条描述里、不进 error-codes.ts】那张表收的是**对方 agent
+  // 会拿到并需要分支处理**的码（见该文件抬头），而本条是 web 面：api key 一律拒，
+  // 走 key 的调用在这道闸之前就已经拿到 WEB_SESSION_REQUIRED 了，永远碰不到 TERMS_NOT_LIVE。
+  // 登记进去的形态是：接入说明里多一句对方永远读不到的错误处理指引。
+  // 描述里不写那个环境变量的名字，是因为它只允许出现在唯一读取口 lib/auth/consent.ts
+  // 与 .env.example / docs（由 lib/__tests__/terms-live-single-read.test.ts 机检）。
+  { category: 'web', method: 'POST', path: '/api/v1/me/preferences', auth: 'jwt', description: '境外模型与评测授权两个开关；开启境外模型要带 consent:true（读过 /terms/overseas 之后）。协议未生效期间（服务端的协议生效旗关着，见 lib/auth/consent.termsLive）开境外一律 400 TERMS_NOT_LIVE：开关不动、台账不落行；关闭境外任何时候都不受这道闸影响' },
   { category: 'web', method: 'POST', path: '/api/v1/realname/init', auth: 'jwt', description: '发起实人认证，返回 H5 活体认证页 URL；要带 consent:true（收证件号前的单独同意）' },
   { category: 'web', method: 'POST', path: '/api/v1/realname/passport', auth: 'jwt', description: '护照实名提交（multipart，含 consent=true），落「待审」等人工核；只有护照的人走这条' },
   { category: 'web', method: 'GET', path: '/api/v1/me/consents', auth: 'jwt', description: '本人的单独同意清单与此刻状态（每项带「撤回之后会发生什么」）' },

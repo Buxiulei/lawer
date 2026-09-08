@@ -9,7 +9,7 @@ related: [sop-jianyi-zhuxiao-yiyi, case-hunton-zhuxiao-gudong-16816, case-tiqian
 region: 北京
 sources:
   - http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm
-  - http://www.gov.cn/gongbao/content/2006/content_413952.htm
+  - https://www.gov.cn/gongbao/content/2006/content_413952.htm
   - https://www.court.gov.cn/fabu/xiangqing/282121.html
   - https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf
   - https://www.court.gov.cn/zixun/xiangqing/472691.html
@@ -209,7 +209,7 @@ facts:
 ## 依据
 
 - 《劳动合同法》第 44 条第 4、5 项，第 46 条第 6 项（逐字见上）。来源：<http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm>
-- 《企业破产法》（主席令第五十四号，2007-06-01 施行）第 48 条、第 113 条（逐字见上）。来源：国务院公报 <http://www.gov.cn/gongbao/content/2006/content_413952.htm>
+- 《企业破产法》（主席令第五十四号，2007-06-01 施行）第 48 条、第 113 条（逐字见上）。来源：国务院公报 <https://www.gov.cn/gongbao/content/2006/content_413952.htm>
 - 《劳动争议司法解释（一）》（法释〔2020〕26号）第 29、30、48、49 条（逐字见上）。来源：<https://www.chinacourt.cn/law/detail/2021/01/id/150222.shtml>
 - 《劳动争议司法解释（二）》第 16 条第 3、4 项，见 [[statute-fashi-2025-12-jieshi-2]]。
 - 京高法发〔2024〕534号《解答（一）》第 27、28、36、37 问（见上）。来源：<https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf>

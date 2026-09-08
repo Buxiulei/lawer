@@ -10,7 +10,7 @@ region: 全国
 domain: counseling
 sources:
   - http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm
-  - http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html
+  - https://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html
 confidence: 原文核实
 updated: 2026-09-07
 ---

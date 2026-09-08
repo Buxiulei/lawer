@@ -15,7 +15,7 @@
 import crypto from 'node:crypto';
 
 import Database from 'better-sqlite3';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { CitationGuard } from '@/lib/agent/citation-guard';
 import { executeTool, newTurnState, type AgentToolContext } from '@/lib/agent/tools';
@@ -45,6 +45,15 @@ let caseId: number;
 beforeAll(() => {
   process.env[TERMS_LIVE_ENV] = '1';
   process.env.LAWER_DATA_KEY = crypto.randomBytes(32).toString('base64');
+});
+
+afterAll(() => {
+  // 【为什么整组开着旗还要收尾】进程内的 process.env **跨文件共享**（同一个 worker 顺跑多个
+  // 测试文件）：本文件留下的 '1' 会被排在后面、又没自己显式设旗的那些用例吃掉——
+  // 旗关那一臂的判据于是在开臂上跑，而且全绿。
+  // terms-live-flag / terms-live-ui 那两组各自 delete 过一次，所以它们看不见这条泄漏；
+  // 会被咬到的是将来新写的、以为"默认关就不用管"的那一组。
+  delete process.env[TERMS_LIVE_ENV];
 });
 
 beforeEach(() => {

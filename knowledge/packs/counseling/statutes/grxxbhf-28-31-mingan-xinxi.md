@@ -9,7 +9,7 @@ related: [statute-mfd-1032-1033-yinsi, ethic-lunli-3-2-baomi-liwai, sop-yinsi-xi
 region: 全国
 domain: counseling
 sources:
-  - http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html
+  - https://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html
 confidence: 原文核实
 updated: 2026-09-06
 facts:
@@ -46,7 +46,7 @@ facts:
 > 个人信息处理者处理不满十四周岁未成年人个人信息的，应当制定专门的个人信息处理规则。
 
 取回日期 2026-09-06，来源 中国人大网
-http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html
+https://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html
 
 ## 适用要点
 

@@ -15,7 +15,7 @@
   },
   "http_status": 200,
   "content_type": "text/html",
-  "fetch_method": "https",
+  "fetch_method": "http",
   "fetch_url": "http://www.bjchy.gov.cn/affair/ldwq/tjzc/8a24fe9767393e2d01673f3dbdc70a21.html",
   "bytes": 5379
 }

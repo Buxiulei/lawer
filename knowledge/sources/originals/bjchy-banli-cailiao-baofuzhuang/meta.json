@@ -15,7 +15,7 @@
   },
   "http_status": 200,
   "content_type": "application/zip",
-  "fetch_method": "https",
+  "fetch_method": "http",
   "fetch_url": "http://www.bjchy.gov.cn/UserFiles/File/2bb0130a4e614ecdbb06bf2b7933ab77.zip",
   "bytes": 5893182
 }

@@ -144,7 +144,7 @@ updated: 2026-08-19
 - 《劳动合同法》第 40 条第 3 项、第 41 条、第 44 条第 5 项、第 46 条、第 50 条、第 87 条。来源：<http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm>
 - 《劳动争议司法解释（二）》第 4、5 条（逐字见上），2025-09-01 起施行；全文见 [[statute-fashi-2025-12-jieshi-2]]。
 - 京高法发〔2024〕534号《解答（一）》第 23、24 问（逐字见上）、第 79 问（原文见 [[statute-jgf-2024-534-jieda-1]]）、第 55 问第 4 项（补偿基数）。来源：<https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf>
-- 《劳务派遣暂行规定》第 25 条（代表处使用派遣工不受三性与比例限制）。来源：<http://www.gov.cn/gongbao/content/2014/content_2667613.htm>
+- 《劳务派遣暂行规定》第 25 条（代表处使用派遣工不受三性与比例限制）。来源：<https://www.gov.cn/gongbao/content/2014/content_2667613.htm>
 - 北京官方裁例：涉外企业群体性争议走多元调处 [[case-qunti-zhengyi-duoyuan-tiaochu-bjzc25-9]]（来源 <https://rsj.beijing.gov.cn/bm/ztzl/dxal/202512/t20251226_4366546.html>）；AI 替代岗位不属客观情况重大变化 [[case-ai-tidai-gangwei-2025-zhongcai]]；"决定提前解散"终止的补偿起算 [[case-tiqian-jiesan-buchang-qisuan-20285]]。
 - 【口径存在张力，需个案确认】解答一第 24 问与司法解释二第 5 条的衔接（见上）。
 

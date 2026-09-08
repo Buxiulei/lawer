@@ -16,7 +16,7 @@
   "effective_from": "2022-01-01",
   "http_status": 200,
   "content_type": "text/html",
-  "fetch_method": "https",
+  "fetch_method": "http",
   "fetch_url": "http://www.mod.gov.cn/gfbw/fgwx/flfg/4892498.html?big=fan",
   "bytes": 34715
 }

@@ -10,7 +10,7 @@ region: 北京
 sources:
   - http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm
   - https://www.gov.cn/zhengce/zhengceku/2008-09/19/content_6630.htm
-  - http://www.gov.cn/gongbao/content/2006/content_413952.htm
+  - https://www.gov.cn/gongbao/content/2006/content_413952.htm
   - https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf
   - https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html
 confidence: 原文核实
@@ -181,7 +181,7 @@ facts:
 ## 依据
 
 - 《劳动合同法实施条例》第 3 条（逐字见上）。来源：<https://www.gov.cn/zhengce/zhengceku/2008-09/19/content_6630.htm>
-- 《企业破产法》第 113 条末款（逐字见上）。来源：<http://www.gov.cn/gongbao/content/2006/content_413952.htm>
+- 《企业破产法》第 113 条末款（逐字见上）。来源：<https://www.gov.cn/gongbao/content/2006/content_413952.htm>
 - 京高法发〔2024〕534号《解答（一）》第 21、29、34、44 问（逐字见上）、第 76 问第（4）项与第 63 问（原文见 [[statute-jgf-2024-534-jieda-1]]）。来源：<https://rsj.beijing.gov.cn/xxgk/tzgg/202404/t20240430_3648905.html>；备份 <https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf>
 - 《劳动合同法》第 39、48、87 条。来源：<http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm>
 - 判例：高管隐瞒利益冲突被解除获支持 [[case-gaoguan-yinman-liyi-chongtu-2024]]（来源 <https://rsj.beijing.gov.cn/bm/ztzl/dxal/202412/t20241217_3968004.html>）；在职持股任职竞争公司被解除 [[case-zaizhi-jingshang-chigu-18348]]；指导性案例 239 号主播不构成劳动关系 [[case-zhidao-239-zhubo-laodongguanxi]]；私自安排顶班违反人格从属性 [[case-sizi-tigang-rengge-congshuxing-2025]]。

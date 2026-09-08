@@ -772,3 +772,92 @@ def test_numeric_facts_still_tolerate_thousands_separators(gen, kb):
     code, data = run(gen, kb)
     assert code == 0, code
     assert [e["id"] for e in data] == ["data-num"]
+
+
+# ── (i) 卡内出处的 scheme 必须与登记簿一致 ──────────────────────────────
+#: 与 kb 夹具里那条登记（write_original 的 url）同 host+path，只差 scheme。
+REGISTERED_PAGE_HTTP = "http://flk.npc.gov.cn/detail.html?id=lhtf"
+REGISTERED_PAGE_HTTPS = "https://flk.npc.gov.cn/detail.html?id=lhtf"
+
+
+def test_source_scheme_must_match_the_registry(gen, kb):
+    """卡里把登记簿记作 https 的那一页写成 http ⇒ 拒绝生成并点到行。
+
+    登记簿的 url 是**实际抓到正文的那一个**（fetch-source 的四档退让写进 meta）。
+    卡里换个 scheme 写，读者点过去取的是一个我们从没取到过的地址——
+    而两处都是 .gov.cn，(b) 的 host 闸一声不吭地放行。
+    """
+    write_card(kb, "packs/statutes/scheme.md", card_id="statute-scheme", sources=[REGISTERED_PAGE_HTTP])
+    code, data = run(gen, kb)
+    assert code != 0, "登记簿记 https、卡里写 http，守卫必须拦"
+    assert "(i)" in str(code) and "statute-scheme" in str(code)
+    assert "scheme.md:" in str(code), f"要点到行号，否则同一张卡改一处还是红：\n{code}"
+    assert data is None, "守卫不过时不该留下一份看起来正常的索引"
+
+
+def test_scheme_guard_reads_the_whole_card_not_just_frontmatter(gen, kb):
+    """正文里「来源：<…>」那一行同样要拦——读者点的是正文那一个。
+
+    【为什么单独钉】把守卫写成只扫 frontmatter 的 sources 是最省事的实现，
+    而现库 13 处不一致里有 5 处只出现在正文。只扫 sources 时这条会绿，
+    上一条仍然红——两条合起来才说得清闸的量程。
+    """
+    write_card(
+        kb, "packs/statutes/body.md", card_id="statute-body",
+        sources=[REGISTERED_PAGE_HTTPS],
+        body=f"正文占位。\n\n- 《劳动合同法》第 47 条。来源：<{REGISTERED_PAGE_HTTP}>\n",
+    )
+    code, _ = run(gen, kb)
+    assert code != 0 and "(i)" in str(code) and "statute-body" in str(code), code
+
+
+def test_matching_scheme_passes(gen, kb):
+    """正向对照：scheme 与登记簿相同 ⇒ 放行。
+
+    没有这条，把 (i) 写成"引了登记在册的页面就红"也能让上面两条绿。
+    """
+    write_card(kb, "packs/statutes/ok.md", card_id="statute-ok", sources=[REGISTERED_PAGE_HTTPS])
+    code, data = run(gen, kb)
+    assert code == 0, code
+    assert [e["id"] for e in data] == ["statute-ok"]
+
+
+def test_scheme_guard_compares_host_and_path_not_the_whole_url(gen, kb):
+    """正向对照：同 host+path、query 不同 ⇒ 仍算同一页，scheme 相同就放行。
+
+    闸若退化成"整条 URL 必须与登记簿一字不差"，登记簿里带 `?big=fan` 之类参数的条目
+    会让每一张引它的卡无故判红——那是把"取不到的地址"这件事换成了"抄得不够像"。
+    """
+    write_card(kb, "packs/statutes/query.md", card_id="statute-query",
+               sources=["https://flk.npc.gov.cn/detail.html?id=别的参数&x=1"])
+    code, data = run(gen, kb)
+    assert code == 0, code
+    assert [e["id"] for e in data] == ["statute-query"]
+
+
+def test_scheme_guard_is_silent_on_unregistered_pages(gen, kb):
+    """负对照：登记簿里没有这一页 ⇒ (i) 不管它。
+
+    "这个 host 算不算官方"是 (b) 的事，(i) 只回答"同一页我们用哪个 scheme 取到过"。
+    没有登记就没有基准，此时判红等于凭空规定所有卡只能写 https。
+    """
+    write_card(kb, "packs/statutes/other.md", card_id="statute-other",
+               sources=["http://www.bjchy.gov.cn/affair/ldwq/x.html"])
+    code, data = run(gen, kb)
+    assert code == 0, code
+    assert [e["id"] for e in data] == ["statute-other"]
+
+
+def test_real_library_has_no_scheme_mismatch(gen):
+    """现库 0 违规（本轮改齐 13 处的落地面）。
+
+    上面那条 test_real_library_is_green_under_strict 只会说"现库红了"，
+    红的原因可能是任意一条守卫；这条直接点住 (i) 这一维，
+    好让"有人又把某张卡的 https 改回 http"以自己的名字失败。
+    """
+    from conftest import REAL_KNOWLEDGE as RK
+
+    gen.ROOT = RK
+    entries = json.loads((RK / "index.json").read_text(encoding="utf-8"))
+    bad = gen.scheme_mismatches(entries, ks.load_registry(RK))
+    assert bad == [], "现库卡内出处与登记簿的 scheme 又分叉了：\n" + "\n".join(bad)

@@ -16,7 +16,7 @@
   "effective_from": "2013-07-01",
   "http_status": 200,
   "content_type": "text/html",
-  "fetch_method": "https",
+  "fetch_method": "http",
   "fetch_url": "http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm",
   "bytes": 47481
 }

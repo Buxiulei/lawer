@@ -25,6 +25,7 @@ import path from 'node:path';
 import type { Database } from 'better-sqlite3';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 
+import { REST_INDEX } from '@/lib/capabilities/rest-index';
 import { CONSENT_KINDS } from '@/lib/consent';
 import { consentedKinds, recordConsent } from '@/lib/db/consents';
 import * as store from '@/lib/db/otp';
@@ -284,6 +285,19 @@ describe('旗关：POST /api/v1/me/preferences 开不动境外', () => {
     expect(consentedKinds(db, uid), '拒了却还是把同意行落了下去').toEqual([]);
   });
 
+  test('这个码在对外清单里说得出来：/api/manifest 的端点描述提到它', () => {
+    // 【为什么这条判据在这里】拒得对、但外面读不到"什么时候会拒"，形态是：
+    // 用户的客户端拿到一个 400 与一个没见过的 error_code，只能猜是自己填错了参数，
+    // 于是改参数重试——而这道闸永远不会因为重试而放行。
+    const ep = REST_INDEX.find((e) => e.method === 'POST' && e.path === '/api/v1/me/preferences');
+    expect(ep, '清单里没有这条端点了——描述判据无从谈起').toBeDefined();
+    expect(ep!.description, '路由会抛这个码，而对外清单一个字都没提').toContain('TERMS_NOT_LIVE');
+    // 它没进 error-codes.ts：那张表收的是**对方 agent 会拿到**的码，而本条是 web 面
+    // （api key 一律拒，走 key 的调用在这道闸之前就已经拿到 WEB_SESSION_REQUIRED）。
+    // 这一位钉住那个前提——哪天它被挪进 agent 面，这条会红，届时该重新问要不要登记。
+    expect(ep!.category, 'category 变了：TERMS_NOT_LIVE 从此 agent 也拿得到').toBe('web');
+  });
+
   test('关掉境外、以及评测授权那一项，照常可用（旗只挡"开境外"这一件事）', async () => {
     const { uid, token } = webUser();
     const off = await preferencesPost(prefPost(token, { overseas_models: false }));
@@ -336,7 +350,10 @@ describe('旗关：情绪同意与实名同意不受影响', () => {
   });
 });
 
-// 【变异矩阵】2026-09-07 逐条实跑（改产线代码 → 跑判据 → 改回），本文件 18 例，基线 18 通过：
+// 【变异矩阵】2026-09-07 逐条实跑（改产线代码 → 跑判据 → 改回），当时本文件 18 例，基线 18 通过。
+// 2026-09-08 加了第 19 例（清单描述那条），M-1…M-6 的**失败数原样保留、没有重跑**：
+// 新增那一例只读 REST_INDEX 常量、不经过 termsLive，六条变异都碰不到它
+// （M-4 下实测 1 失败 / 18 通过，与它 18 例时的 1 失败一致）。下面各行的通过数是当时的基线数。
 //  · M-1 registrationConsentFailure 删掉 `if (!termsLive()) return null;`  ⇒ 1 失败 / 17 通过。
 //  · M-2 recordRegistrationConsent 删掉 `if (!termsLive()) return;`       ⇒ 1 失败 / 17 通过。
 //  · M-3 overseasModelsAllowed 删掉 `if (!termsLive()) return false;`     ⇒ 3 失败 / 15 通过。
@@ -347,5 +364,7 @@ describe('旗关：情绪同意与实名同意不受影响', () => {
 //    M-5/M-6 的改法要写明，否则数字对不上：**保留读 env 那一行、只把返回值钉死**。
 //    连那一行一起删的形态是——单一读取口守卫也跟着红一条，凑成 18，
 //    而那一条红说的是"读取口没走常量"，与"旗判反了"是两件事。
+//  · M-7 rest-index 里那条端点描述删掉 TERMS_NOT_LIVE 字样 ⇒ 1 失败 / 18 通过（2026-09-08 实跑）。
+//        它守的是另一半：拒得对、外面却读不到"什么时候会拒"，对方只能猜是自己参数填错了。
 //  上述每一条变异下，开臂那三组（consent-gate / consent-routes / lifecycle-consents）
 //  除 M-6 外全部照旧 50 通过——旗这件事的牙齿全长在关臂这一组身上。

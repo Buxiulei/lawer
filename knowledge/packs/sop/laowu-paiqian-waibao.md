@@ -9,7 +9,7 @@ related: [case-weifa-tuihui-paiqian-cy24-2, case-waibao-qixin-juzheng-cy24-3, ca
 region: 北京
 sources:
   - http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm
-  - http://www.gov.cn/gongbao/content/2014/content_2667613.htm
+  - https://www.gov.cn/gongbao/content/2014/content_2667613.htm
   - https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf
   - https://www.ssf.gov.cn/portal/rootfiles/2025/09/01/1758444945387751-1758444945395746.pdf
 confidence: 原文核实
@@ -165,7 +165,7 @@ updated: 2026-08-19
 ## 依据
 
 - 《劳动合同法》第 58、62、63、65、66、67 条，第 92 条第 2 款（逐字见上）。来源：<http://www.npc.gov.cn/zgrdw/wxzl/gongbao/2013-04/15/content_1811058.htm>
-- 《劳务派遣暂行规定》（人社部令第22号，2014-03-01 施行）第 4、12、13、15、17、18、25、27 条（逐字见上）。来源：国务院公报 <http://www.gov.cn/gongbao/content/2014/content_2667613.htm>
+- 《劳务派遣暂行规定》（人社部令第22号，2014-03-01 施行）第 4、12、13、15、17、18、25、27 条（逐字见上）。来源：国务院公报 <https://www.gov.cn/gongbao/content/2014/content_2667613.htm>
 - 《劳动争议司法解释（二）》第 1、2 条（逐字见上），2025-09-01 起施行；全文见 [[statute-fashi-2025-12-jieshi-2]]。
 - 京高法发〔2024〕534号《解答（一）》第 5、30、31、32 问（逐字见上）。来源：<https://www.beijing.gov.cn/zhengce/fygfxwj/202405/W020240530575736715599.pdf>
 - 判例：违法退回派遣工，用工单位与派遣单位连带担责 [[case-weifa-tuihui-paiqian-cy24-2]]；"外包合同"不是防火墙 [[case-waibao-qixin-juzheng-cy24-3]]；派遣协议未约定公积金责任按过错分担 [[case-paiqian-gongjijin-guocuo-cy24-6]]。

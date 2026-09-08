@@ -16,7 +16,7 @@
   "justification": "证据保全公证在北京是市场调节价，各公证处自主定价并须在自己官网公示；这份收费标准就是该公证处对自己收费的公示，只作为数据卡里「这一家收多少钱」的样本出处，不代表北京行情、更不作为任何法律规则的依据",
   "http_status": 200,
   "content_type": "text/html",
-  "fetch_method": "https",
+  "fetch_method": "http",
   "fetch_url": "http://www.bcnpo.cn/bjjcgzw/web/bzzn/sfbz/8307.html",
   "bytes": 45550
 }

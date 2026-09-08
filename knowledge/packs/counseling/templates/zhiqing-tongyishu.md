@@ -10,7 +10,7 @@ region: 全国
 domain: counseling
 sources:
   - https://www.gov.cn/guoqing/2021-10/29/content_5647635.htm
-  - http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html
+  - https://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html
   - http://www.npc.gov.cn/zgrdw/npc/xinwen/2013-10/26/content_1811773.htm
 confidence: 原文核实
 updated: 2026-09-07

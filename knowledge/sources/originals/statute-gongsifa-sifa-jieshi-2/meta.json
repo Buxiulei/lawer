@@ -15,7 +15,7 @@
   },
   "http_status": 200,
   "content_type": "text/html; charset=utf-8",
-  "fetch_method": "https",
+  "fetch_method": "http",
   "fetch_url": "http://gongbao.court.gov.cn/Details/9215381727e7b8bcd7a5006b0afbdc.html",
   "bytes": 21236
 }
