@@ -293,8 +293,6 @@ export type AgentEvent =
          * 还是我们这一轮没把那张卡检索回来（两者的修法一个是提示词、一个是召回）。
          */
         statute_marked?: { cited: string; verdict: 'unverified' | 'superseded' }[];
-        /** STATUTE_UNVERIFIED 专用：本轮的放行集（`法名|第N条`），供离线回放重算漏网率 */
-        statute_allowed?: string[];
         /** VALUE_UNSOURCED 专用：被标注的数值 token + 判定 + 卡里最接近的那个数 */
         value_marked?: { token: string; kind: string; mark: 'unsourced' | 'mismatch'; nearest?: string }[];
         /**
@@ -319,6 +317,19 @@ export type AgentEvent =
           over_budget: boolean;
           /** 登记簿 `source_status` 未接上的条数（设计稿 §7.3 待接项，见 retrieval.ts） */
           source_status_unknown: number;
+          /**
+           * ⑥ 形态上分不清条号与序数量词、**明说不判**而放过去的处数（见 isStatuteCitationForm）。
+           * 故意留的洞，但洞有多大必须每轮看得见——只写在注释里的缺口，在报表上与"没有这个缺口"同形。
+           */
+          statute_ambiguous?: number;
+          /** ⑥ 在文书通道**拒收**的处数。不进替换率：拒收不是替换，那一处从未到达用户面 */
+          statute_doc_rejected?: number;
+          /**
+           * 本轮 ⑥ 的放行集（`法名|第N条`）。**挂在这条无条件发的 notice 上**：
+           * 挂在 STATUTE_UNVERIFIED（只在开火时发）的形态是——干净轮归档里没有放行集，
+           * 判据读成空集，于是用户面每一处真放行的裸条号都被判成漏网。
+           */
+          statute_allowed?: string[];
         };
         /** CALC_FAILED 专用：恒 true——补齐信息后可以直接再算一次，不是功能坏了 */
         retriable?: boolean;

@@ -3318,13 +3318,52 @@ describe('条号运行时零泄漏（S03/S15 用的那条 L1）', () => {
     expect(v.detail).toContain('不等于没有泄漏');
   });
 
-  it('三态可分：对象 / null（跑了没开火）/ 缺失（没这一层）', () => {
+  it('两态可分：对象 = 跑了；null 与缺失都是**不可判**（把 null 补成空放行集 → 下一条红）', () => {
     const withTrail = turnWithStatuteGate('无条号。', ['某某某某法|第46条']);
     expect(statuteGateTrail(withTrail)).toEqual({ marked: [], allowed: ['某某某某法|第46条'] });
-    expect(statuteGateTrail({ ...withTrail, statuteGate: null })).toEqual({ marked: [], allowed: [] });
+    expect(statuteGateTrail({ ...withTrail, statuteGate: null }), 'null 是"没这一层"，不是"放行集为空"').toBeUndefined();
     const noLayer = JSON.parse(JSON.stringify(withTrail)) as Record<string, unknown>;
     delete noLayer.statuteGate;
     expect(statuteGateTrail(noLayer as unknown as TurnRecord)).toBeUndefined();
+  });
+
+  /**
+   * 【干净轮不许被判红】(2026-09-08 复审 major) 原先放行集只随 STATUTE_UNVERIFIED 落盘，
+   * 而那条 notice **只在闸开火时发**。于是模型全引对的那一轮 `statuteGate: null` →
+   * 判据读成"放行集为空" → 用户面每一处真放行的条号都成了漏网，L1 在最理想的一轮恒红，
+   * 同一轮的 `gate_report.leaked` 却是 0。**两条判据当场打架就是判据错了，不是产品错了。**
+   */
+  it('干净轮（闸一处都没标）照样判得出、且 PASS——放行集挂在无条件发的 GATE_REPORT 上', () => {
+    const t = turnWithStatuteGate('依《某某某某法》第四十七条，另见第四十六条。', ['某某某某法|第46条', '某某某某法|第47条']);
+    const v = statuteLeakAssertions([t], 'S03')[0];
+    expect(v.na).toBeFalsy();
+    expect(v.pass, v.detail).toBe(true);
+  });
+
+  it('放行集从 events 取时同样读 GATE_REPORT（只认 STATUTE_UNVERIFIED → 干净轮红）', () => {
+    const t = {
+      ...turnWithStatuteGate('依《某某某某法》第四十七条。', []),
+      statuteGate: undefined,
+      events: [
+        {
+          event: 'notice',
+          data: { code: 'GATE_REPORT', message: '', gate_report: { statute_allowed: ['某某某某法|第47条'] } },
+        },
+      ],
+    } as unknown as TurnRecord;
+    expect(statuteGateTrail(t)).toEqual({ marked: [], allowed: ['某某某某法|第47条'] });
+    expect(statuteLeakAssertions([t], 'S03')[0].pass).toBe(true);
+  });
+
+  /**
+   * 【判据的取材面必须与 ⑥ 明说不判的那条口径一致】⑥ 对裸的「第三条建议」不判
+   *（形态上分不清条号与序数量词）。判据这边不跟着过滤，就会把闸按口径放行的东西
+   * 记成漏网——两边各自都在做对的事，L1 却红。
+   */
+  it('序数量词用法不算条号引用（判据自己不做形态过滤 → 红）', () => {
+    const t = turnWithStatuteGate('我给你三条建议。第一条，先别签字。第三条路是走仲裁。', []);
+    expect(unmarkedCitations(t.text)).toEqual([]);
+    expect(statuteLeakAssertions([t], 'S03')[0].pass).toBe(true);
   });
 
   it('取材面与产线同源：引用块里的交叉引用不算泄漏（判据自己另写一份正则 → 红）', () => {

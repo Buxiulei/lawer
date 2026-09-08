@@ -121,6 +121,80 @@ describe('要件 D · 百分比与倍数', () => {
   });
 });
 
+describe('要件 I · 来源不止两份：法条原文、档案事实、用户自述（2026-09-08 复审 major）', () => {
+  /**
+   * 【为什么设计稿字面的两份不够】照字面只认 calc 出参 ∪ facts.values 跑出来的形态是：
+   * 用户说「我月薪 2 万、公司裁了 3 万人里的 1%」，模型**复述**这几个数，三处全被标
+   *【数值无来源】——而这正是本文件在日期那一段明说要避免的事：
+   * **系统去质疑用户对自己的事的陈述。** 法定倍数同理：「2 倍工资」的来源是条文本身，
+   * 而给出的出路「用 claim_calc 算」根本算不出一个法定倍数。
+   * 它们是每轮几乎必现的数字类别，漏掉就会把 2% 的替换率预算顶穿，
+   * 而超预算的处置是"按闸误伤查闸"——闸每天给自己制造一次复查。
+   */
+  const STATUTE_CARD = {
+    facts: {
+      statute_quotes: [
+        { law: '某某某某法', article: '第八十二条', text: '用工方应当向劳动者每月支付二倍的工资。' },
+        { law: '某某税法', article: '第三条', text: '适用百分之三至百分之四十五的超额累进税率。' },
+      ],
+    },
+  };
+
+  it('法条原文里的法定倍数：模型写阿拉伯「2 倍」放行（删掉 statute_quotes 那段收集 → 红）', () => {
+    expect(mark('未签合同可以主张 2 倍工资。', { retrieved: [STATUTE_CARD] }).violations).toHaveLength(0);
+  });
+
+  it('跨数字体系：条文写「百分之四十五」，模型写「45%」放行（删掉 cnNumeral 那一支 → 红）', () => {
+    expect(mark('最高一档是 45%。', { retrieved: [STATUTE_CARD] }).violations).toHaveLength(0);
+  });
+
+  it('负样本：条文里没有的倍数照标（否则"有卡就全放行"，闸等于关掉）', () => {
+    expect(mark('可以主张 5 倍工资。', { retrieved: [STATUTE_CARD] }).text).toContain(VALUE_UNSOURCED);
+  });
+
+  it('档案事实：月工资来自档案 → 复述它放行（删掉 caseFacts 那段 → 红）', () => {
+    expect(mark('你月薪 20000 元。', { caseFacts: [20000] }).violations).toHaveLength(0);
+    expect(mark('你月薪 2 万。', { caseFacts: [20000] }).violations).toHaveLength(0);
+  });
+
+  it('用户自述：他自己说过的数，模型复述不算编造（删掉 userTurns 那段 → 红）', () => {
+    const said = ['我们全公司三万人，这次裁了 1%，我月薪 2 万。'];
+    const r = mark('你说全公司 3 万人、裁了 1%、月薪 2 万——先把这三件事记下来。', { userTurns: said });
+    expect(r.text, `被标的：${r.violations.map((v) => v.token).join('、')}`).not.toContain(VALUE_UNSOURCED);
+  });
+
+  it('负样本：用户没说过的数照标（把 userTurns 当"有就全放行" → 红）', () => {
+    const r = mark('你大概能拿到 60 万。', { userTurns: ['我月薪 2 万。'] });
+    expect(r.text).toContain(VALUE_UNSOURCED);
+  });
+
+  it('类别不许串：卡里有「2 倍」，正文写「2 元」仍要判（只比数字不比类别 → 红）', () => {
+    expect(mark('赔你 2 元。', { retrieved: [STATUTE_CARD] }).text).toContain(VALUE_UNSOURCED);
+  });
+});
+
+describe('要件 J · 约写：按自己写的位数四舍五入后相等 → 放行，不是「不一致」', () => {
+  /**
+   * 封顶数在真语料里几乎总以万元约写出现（卡里 47103.25，正文写「约 4.71 万元」）。
+   * 按容差判它落在 ±0.5% 内却不相等 → 【数值与来源卡不一致】，
+   * 而那句标记对读者说的是"你抄错了"——他抄对了，只是四舍五入。
+   */
+  it('「4.71 万元」「4.7 万」是 47103.25 的约写 → 放行（删掉 isRoundedForm → 红，会变成"不一致"）', () => {
+    const r = mark('封顶是 47103.25 元，约 4.71 万元，也就是 4.7 万。', { retrieved: [CARD] });
+    expect(r.text, `被标的：${r.violations.map((v) => v.token).join('、')}`).toBe(
+      '封顶是 47103.25 元，约 4.71 万元，也就是 4.7 万。',
+    );
+  });
+
+  it('负对照：写到个位却不等（47100 元）仍是【不一致】——它声称的精度就是个位', () => {
+    expect(mark('上限基数是 47100 元。', { retrieved: [CARD] }).text).toContain(VALUE_MISMATCH);
+  });
+
+  it('负对照：位数对了但数不对（4.72 万元）照样【不一致】（把判据写成"只要带万就放行" → 红）', () => {
+    expect(mark('大约 4.72 万元。', { retrieved: [CARD] }).text).toContain(VALUE_MISMATCH);
+  });
+});
+
 describe('要件 E · 免检：引号内、引用块、闸自己的标记', () => {
   it('引号内的原文数字免检（删掉 exempt 的引号计数 → 红）', () => {
     const r = mark('原文写的是「……按 300% 支付，且不超过 24000 元」。');

@@ -8,7 +8,10 @@
 //
 // 【判据】(设计稿 §1.2「数值有来源」，目标 100%)
 //   带单位的金额/倍数/百分比 ∈ 本轮 claim_calc 出参 ∪ 本轮 retrieved 的 facts.values
-// 两个来源都是**结构化事实**，不是"看起来像真的"。
+//     ∪ 本轮 retrieved 的 statute_quotes 原文里写着的数（法定倍数/比例）
+//     ∪ 档案里的结构化事实 ∪ 用户自己说过的话
+// 前三份是**结构化事实**，后两份是**用户自己的事实**——模型复述它们不是编造，
+// 判它们无来源就是系统在质疑用户对自己的事的陈述（见 ValueSources 的注释）。
 //
 // ── 捕获面：一条明说的缺口（不是遗漏）──
 // 捕：`12345 元` `3.5 万元` `1.5 倍` `30%` `百分之三十` `2N` `3N` `N+1`
@@ -23,6 +26,9 @@
 //     （「不超过……三倍」「二倍工资」）。判它无来源等于要求法条自己带来源。
 //   · ⑧ 核心位保底渲染补进来的原文段：它以 `「…」` 形态插入，天然落在上一条里。
 //     这是 ⑧→⑨ 那条交互用例钉住的不变量——**⑧ 补一条原文，⑨ 不许因此多开一次火**。
+//     **必须跨行**：真库 318 条 statute_quotes 有 164 条是多行的，按行算免检的形态是
+//     不变量只在单行原文上成立，而多行原文从第 2 行起条条开火。免检面用共用实现
+//     （citation-block 的 `insideVerbatim`），不在这里另抄一份。
 //
 // **不做**闸标记内的免检：上游三种标记（【案号待核实】【条号待核验】【已修正，见新版】）
 // 里一个数字都没有，⑨ 自己的标记又是一次性批量插入、不回读。写一层免检去挡一个不存在的
@@ -33,6 +39,7 @@
 // 标记保留了数、同时告诉用户"这个数没有来源"，并给出出路（用 claim_calc 算）。
 // 禁令必配出路（设计稿 §7.7）。
 
+import { cnNumeral, insideVerbatim } from './citation-block';
 import type { KnowledgePack } from './retrieval';
 
 /** 不在任何来源里 */
@@ -84,17 +91,41 @@ export interface ValueViolation {
   nearest?: string;
 }
 
-/** ⑨ 的放行原料。三份都是**结构化事实**，没有一份靠解析正文得来。 */
+/**
+ * ⑨ 的放行原料。**没有一份靠解析模型自己的正文得来**——那样闸就是拿被审的东西当依据。
+ *
+ * 【为什么是五份而不是设计稿字面的两份（2026-09-08 修）】设计稿写的判据是
+ *「∈ claim_calc 出参 ∪ retrieved 的 facts.values」。照字面实现跑出来的形态是：
+ * 用户说「我月薪 2 万、公司裁了 3 万人里的 1%」，模型把这几个数**复述**回去，
+ * 三处全被标【数值无来源】——而 value-guard 自己在日期那一段写着要避免的正是这件事：
+ * **系统去质疑用户对自己的事的陈述**。同理，「未签合同可主张 2 倍工资」里的 2 倍
+ * 是法条原文里的数，不是模型编的。
+ *
+ * 漏这两类的代价不是"多标几处"：它们是每一轮几乎必现的数字类别，
+ * 2% 的替换率预算会被顶穿，而超预算的处置是"按闸误伤查闸"——
+ * 于是闸每天都在给自己制造一次复查。
+ */
 export interface ValueSources {
   /**
    * 本轮 `claim_calc` 的出参（`persistCalc` 的 payload）。**没算过就是空数组**——
    * 空 ≠ 放行，空就是"本轮没有任何算出来的数"，正文里的金额一律无来源。
    */
   calcPayloads: unknown[];
-  /** 本轮检索到的卡（读 `facts.values`） */
+  /** 本轮检索到的卡（读 `facts.values` 与 `facts.statute_quotes` 的逐字原文） */
   retrieved: Pick<KnowledgePack, 'facts'>[];
   /** 本案生效中的期限（`deadlines.due_at`）。日期类只认它 */
   deadlines: { due_at: string }[];
+  /**
+   * 档案里的结构化数值（如月工资，**已折成正文单位**）。
+   * 它们是用户自己填进档案的事实，模型复述它不是编造。
+   */
+  caseFacts?: number[];
+  /**
+   * 用户自己说过的话（本轮原话 + 本 thread 的历史用户消息）。
+   * **取材面与杠杆闸的 `userTurns` 是同一份**：复述用户原话在那边不算杠杆，
+   * 在这边同样不算无来源——两道闸对"用户自己说的"给出相反判断是产品自相矛盾。
+   */
+  userTurns?: string[];
 }
 
 /** 归一：抹掉千分位与空白，好让「47,103.25」与「47103.25」是同一个数 */
@@ -131,10 +162,58 @@ function canonical(n: number): string {
   return String(n);
 }
 
+/**
+ * 汉字写法的数值 token。**只用来读来源语料，不进捕获面**——
+ * 法条原文写「二倍」「百分之四十五」，用户说「我们全公司三万人」，
+ * 而模型转手写成「2 倍」「45%」「3 万」。不认汉字写法的形态是：
+ * **模型逐字抄对了，闸把它标成无来源**，因为两边用的是两套数字体系。
+ * 捕获面（`VALUE_TOKEN`）不动：那边多捕一种形态就是多一类误伤，两件事的方向相反。
+ */
+const CN_DIGITS = '[一二三四五六七八九十百零〇两]';
+const CORPUS_CN_TOKEN = new RegExp(`${CN_DIGITS}{1,8}\\s*(?:万元|万|元)|${CN_DIGITS}{1,6}\\s*倍`, 'g');
+
+/**
+ * 一个数值 token 的**归一身份**：`类别:数`（金额一律折到「元」）。
+ * 取不到数（形态不是数值）返回 null。
+ *
+ * 【为什么要带类别】`3 元` 与 `3 倍` 与 `3%` 是三件事。只比数字的形态是：
+ * 卡里有个「3 倍」，模型写「3 元」也放行——闸变成了一张只看数字的白名单。
+ */
+function canonicalId(token: string): string | null {
+  const kind = kindOf(token);
+  const flat = token.replace(/[\s　,]/g, '');
+  const cn = /^百分之(.+)$/.exec(flat);
+  let n: number | null;
+  if (cn) n = cnNumeral(cn[1]);
+  else {
+    const ar = /\d+(?:\.\d+)?/.exec(flat);
+    n = ar ? Number(ar[0]) : cnNumeral(flat.replace(/(万元|万|元|倍|%)/g, ''));
+  }
+  if (n === null || !Number.isFinite(n)) return null;
+  if (kind === '金额') return `金额:${canonical(/万/.test(flat) ? n * 10000 : n)}`;
+  if (kind === '百分比') return `百分比:${canonical(n)}`;
+  if (kind === '倍数') return `倍数:${canonical(n)}`;
+  return null;
+}
+
+/** 从一段来源语料里收全部数值 token 的归一身份（阿拉伯与汉字两套写法都收） */
+function idsInCorpus(text: string, out: Set<string>): void {
+  for (const m of text.matchAll(VALUE_TOKEN)) {
+    const id = canonicalId(m[0]);
+    if (id) out.add(id);
+  }
+  for (const m of text.matchAll(CORPUS_CN_TOKEN)) {
+    const id = canonicalId(m[0]);
+    if (id) out.add(id);
+  }
+}
+
 interface Allowed {
   /** 逐字放行的数字串（归一后） */
   exact: Set<string>;
-  /** 卡里的数值，用来算容差 */
+  /** 归一身份放行集（`类别:数`）：来自法条原文与用户自述这两份**语料型**来源 */
+  ids: Set<string>;
+  /** 卡里的数值，用来算容差与约写判定 */
   cardValues: number[];
   /** 本轮算过钱没有。倍数记号（2N/3N）只认这个 */
   calcRan: boolean;
@@ -150,6 +229,7 @@ function collect(sources: ValueSources): Allowed {
   const exact = new Set<string>();
   for (const p of sources.calcPayloads) numbersIn(p, exact);
   const cardValues: number[] = [];
+  const ids = new Set<string>();
   for (const p of sources.retrieved) {
     for (const v of p.facts?.values ?? []) {
       if (typeof v?.value !== 'number') continue;
@@ -159,23 +239,58 @@ function collect(sources: ValueSources): Allowed {
       // 卡里存「47103.25 元」，正文常写「4.71 万元」——万元换算同收，理由同分/元
       exact.add(canonical(v.value / 10000));
     }
+    // 【本轮取到的法条原文里写着的数】法定倍数/比例（「二倍」「百分之四十五」）的来源
+    // 就是条文本身。不收它的形态是：模型引对了条、也抄对了数，闸照样标【数值无来源】，
+    // 而给出的出路是「用 claim_calc 算」——算钱器算不出一个法定倍数。
+    for (const q of p.facts?.statute_quotes ?? []) if (q?.text) idsInCorpus(q.text, ids);
   }
+  // 档案里的结构化事实（工资等）。**这是用户自己填的**，复述它不是编造。
+  for (const n of sources.caseFacts ?? []) {
+    if (!Number.isFinite(n)) continue;
+    cardValues.push(n);
+    exact.add(canonical(n));
+    exact.add(n.toFixed(2));
+    ids.add(`金额:${canonical(n)}`);
+  }
+  // 用户自己说过的话。取材面与杠杆闸的 userTurns 同源。
+  for (const t of sources.userTurns ?? []) if (t) idsInCorpus(t, ids);
   const dueDates = new Set<string>();
   for (const d of sources.deadlines) {
     const m = /(\d{4})-(\d{1,2})-(\d{1,2})/.exec(d.due_at ?? '');
     if (m) dueDates.add(normDate(m[1], m[2], m[3]));
   }
-  return { exact, cardValues, calcRan: sources.calcPayloads.length > 0, dueDates };
+  return { exact, ids, cardValues, calcRan: sources.calcPayloads.length > 0, dueDates };
 }
 
-/** 这处 token 在不在免检区（引号内 / 引用块行 / 闸自己写下的【…】里） */
+/**
+ * 这个 token 是不是卡里那个数的**约写**（按它自己写的位数四舍五入后逐字相等）。
+ *
+ * 【为什么约写必须放行】封顶数在真语料里几乎总以万元约写出现：卡里 47103.25，
+ * 正文写「约 4.71 万元」「4.7 万」。按容差判，它们落在 ±0.5% 内却不相等 →
+ * 【数值与来源卡不一致】。那句标记对读者说的是"你抄错了"，而他抄对了、只是四舍五入。
+ * **每提一次封顶就开一次火**，这是把正确写法判成错误。
+ *
+ * 判据是位数而不是"差得少"：`47100 元`（写到个位却不等于 47103）仍然是不一致——
+ * 它声称的精度就是个位，那一位是错的。约写声称的精度是它写出来的那几位。
+ */
+function isRoundedForm(token: string, n: number, values: readonly number[]): boolean {
+  const dec = /\.(\d+)/.exec(token.replace(/[\s　,]/g, ''))?.[1].length ?? 0;
+  const scale = /万/.test(token) ? 10000 : 1;
+  return values.some((v) => Number((v / scale).toFixed(dec)) === n);
+}
+
+/**
+ * 这处 token 在不在免检区（引号内 / markdown 引用块行）。
+ *
+ * 【为什么直接用 ⑥⑦⑧ 那个函数，不再在这里写第二份（2026-09-08 修）】
+ * 原先这里手抄了一份"按行数引号奇偶"的同款实现。抄出来的那份漏掉了**跨行**：
+ * ⑧ 是把卡内原文以 `「…」` 内联插进正文的，而真库 318 条 statute_quotes 里 164 条是多行的。
+ * 于是「⑧ 补进来的原文段 ⑨ 免检」这条不变量**只在单行原文上成立**，
+ * 多行原文从第 2 行起，条文里立法者写的每一个数字都会被标【数值无来源】。
+ * 免检面是三道闸共用的判断，它只能有一份实现。
+ */
 function exempt(text: string, at: number): boolean {
-  const lineStart = text.lastIndexOf('\n', at) + 1;
-  const before = text.slice(lineStart, at);
-  if (/^\s*>/.test(before)) return true; // markdown 引用块行
-  // 引号内：同一行里之前有奇数个引号标记（与 citation-block 的 insideVerbatim 同口径）
-  if ((before.match(/["「『“”」』]/g) ?? []).length % 2 === 1) return true;
-  return false;
+  return insideVerbatim(text, at);
 }
 
 function kindOf(token: string): ValueKind {
@@ -226,9 +341,12 @@ export function applyValueGuard(
     }
     const raw = normNumber(token.replace(/[^\d.,]/g, ''));
     if (raw && allow.exact.has(raw)) continue;
+    // 归一身份放行：法条原文与用户自述这两份语料型来源，跨数字体系、跨单位写法比对
+    const id = canonicalId(token);
+    if (id && allow.ids.has(id)) continue;
     const n = numberOf(token);
     if (n === null) {
-      // 汉字数字（「百分之三十」）：拿不到数就没法比，按无来源处理。
+      // 汉字数字（「百分之三十」）：来源语料里也没有这个写法 → 按无来源处理。
       // **宁可标记也不放行**——闸漏拦是把编造的数交到用户手上（citation-guard 同一条纪律）
       violations.push({ token, kind, mark: 'unsourced' });
       inserts.push({ at: at + token.length, mark: VALUE_UNSOURCED });
@@ -237,6 +355,8 @@ export function applyValueGuard(
     // 万元/万：正文的单位换算回卡的口径再比一次
     const scaled = /万/.test(token) ? n * 10000 : n;
     if (allow.exact.has(canonical(scaled)) || allow.exact.has(scaled.toFixed(2))) continue;
+    // 约写（「约 4.71 万元」之于 47103.25）：按它自己写的位数四舍五入后相等即放行
+    if (isRoundedForm(token, n, allow.cardValues)) continue;
     const near = allow.cardValues.find(
       (v) => v !== 0 && (Math.abs(v - n) / Math.abs(v) <= TOLERANCE || Math.abs(v - scaled) / Math.abs(v) <= TOLERANCE),
     );

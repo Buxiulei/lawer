@@ -1250,6 +1250,13 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
       calcPayloads: state.calcPayloads,
       retrieved: state.retrieved,
       deadlines: snapshot.deadlines,
+      // 【档案里的结构化事实】月工资是用户自己填进档案的，模型复述它不是编造。
+      // 库里存「分」，正文里说的是「元」——在这里折一次，闸内不认识业务单位。
+      caseFacts: snapshot.case.monthly_wage_fen == null ? [] : [snapshot.case.monthly_wage_fen / 100],
+      // 【用户自己说过的话】取材面与杠杆闸的 userTurns **逐字同源**：
+      // 复述用户原话在那边不算杠杆，在这边同样不算无来源。两道闸对同一段话给相反判断，
+      // 用户看到的就是一个自相矛盾的产品。
+      userTurns: [message, ...history.filter((h) => h.role === 'user').map((h) => h.content)],
     });
     tallyGate(gateReport, 'value_guard', { seen: valueGate.seen, fired: valueGate.violations.length });
     if (valueGate.violations.length > 0) {
@@ -1354,9 +1361,6 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
         code: 'STATUTE_UNVERIFIED',
         message: statuteNoticeMessage(statutes.found),
         statute_marked: statutes.found.map((v) => ({ cited: v.cited, verdict: v.verdict })),
-        // 放行集随痕落盘：离线回放要重算漏网率，就必须知道当时放行的是哪几条。
-        // 从归档正文反推放行集是做不到的（正文里只剩没被标记的那些）。
-        statute_allowed: statutes.allowedKeys(),
       },
     });
   }
@@ -1371,11 +1375,15 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   // 不为 0 就是闸自己漏了（缓冲边界、免检态判错），**不是模型变差**——
   // 这条定性写在这里，因为它决定超标之后去查哪一边。
   {
+    // 【只记正文通道】文书通道是**拒收**：那一处从未到达用户面，也没有任何东西被替换。
+    // 把它算进替换率的形态是：一份文书引错 1 处 + 正文 1 处引用 → 报 50%、点名"闸误伤"。
     tallyGate(gateReport, 'citation_guard', { seen: citations.seen, fired: citations.found.length });
     tallyGate(gateReport, 'statute_guard', { seen: statutes.seen, fired: statutes.found.length });
     const leakedCitations = statutes.leakedIn(text);
     gateReport.leaked = leakedCitations.length;
     gateReport.sourceStatusUnknown = statutes.sourceStatusUnknown;
+    gateReport.ambiguousBareArticles = statutes.ambiguous;
+    gateReport.docRejected = statutes.docFound.length;
     const sum = summarizeGateReport(gateReport);
     emit({
       event: 'notice',
@@ -1398,6 +1406,16 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
           budget: REPLACE_RATE_BUDGET,
           over_budget: sum.overBudget,
           source_status_unknown: gateReport.sourceStatusUnknown,
+          statute_ambiguous: gateReport.ambiguousBareArticles,
+          statute_doc_rejected: gateReport.docRejected,
+          /**
+           * 【放行集挂在**无条件发**的这一条上，不挂 STATUTE_UNVERIFIED】(2026-09-08 修)
+           * 挂在 ⑥ 自己那条 notice 上的形态是：那条只在开火时发，于是**模型全引对的干净轮**
+           * 归档里没有放行集，判据把它读成"放行集为空"，用户面每一处**真放行**的裸条号
+           * 都被判成漏网——L1 在最理想的那一轮恒红，还与同轮 `leaked: 0` 自相矛盾。
+           * 恒为 0 的量要发，恒非空的集合同样要发。
+           */
+          statute_allowed: statutes.allowedKeys(),
         },
       },
     });

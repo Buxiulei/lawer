@@ -39,7 +39,14 @@ import {
  * `citationKey` 是产线 `articleKey` 的别名——保留旧名以免call site 与既有测试大面积改名，
  * **实现是同一个函数**，不是同名两份。
  */
-import { normalizeArticle, normLaw, articleKey as citationKey, packCorpus, bareArticleSpans } from '../../app/src/lib/agent/citation-block';
+import {
+  normalizeArticle,
+  normLaw,
+  articleKey as citationKey,
+  packCorpus,
+  bareArticleSpans,
+  isStatuteCitationForm,
+} from '../../app/src/lib/agent/citation-block';
 // 【标记字面从产线常量来，不在判据里手抄】抄一份的形态是：产线改了标记文案，
 // 判据仍按旧字面去找，于是「每一处都没带标记」→ **零泄漏判据整片翻红**，而闸完全正常。
 import {
@@ -68,8 +75,14 @@ export interface TurnRecord {
     substantiveHitCount: number;
   } | null;
   /**
-   * ⑥ 条号闸的归档留痕（三态同 `leverage`）：**对象** = 这一层跑了（`marked` 可能为空）；
-   * **`null`** = 这一层跑了、闸没开火；**`undefined`** = 这份转录没有这一层（旧产物）。
+   * ⑥ 条号闸的归档留痕：**对象** = 这一层跑了（`marked` 可能为空、`allowed` 一定在）；
+   * **`null` 与 `undefined`** = 这份转录没有这一层（旧产物 / 跑在旧代码上）→ 不可判。
+   *
+   * 【为什么这里只有两态，而 `leverage` 有三态】(2026-09-08 修) 原先照抄了三态，
+   * 把 `null` 读成"跑了、闸没开火"并补成 `{ allowed: [] }`。而**空放行集不是中性值**：
+   * 它是最强的判定前提——用户面每一处条号都因此成为漏网。于是模型全引对的干净轮
+   * L1 恒红，同一轮的 `gate_report.leaked` 却是 0，两条判据当场打架。
+   * ⑥ 的放行集挂在**无条件发**的 GATE_REPORT 上，所以"跑了"必有对象，第三态不存在。
    *
    * 【为什么 `allowed` 必须落盘】漏网率要离线重算，而"当时放行的是哪几条"**从归档正文里
    * 反推不出来**——正文里只剩没被标记的那些，它们看起来都一样。
@@ -77,7 +90,7 @@ export interface TurnRecord {
    *（一处都没标 = 一处都没漏）。这与 08-26「杠杆闸那条 L1 结构上只能绿」是同一个形状。
    */
   statuteGate?: { marked: { cited: string; verdict: string }[]; allowed: string[] } | null;
-  /** 闸链汇总的归档留痕（三态同上）。替换率/漏网率两列从它来，不从 message 里解析中文数字。 */
+  /** 闸链汇总的归档留痕（三态同 `leverage`）。替换率/漏网率两列从它来，不从 message 里解析中文数字。 */
   gateReport?: {
     gates: Record<string, { seen: number; fired: number }>;
     seen: number;
@@ -88,6 +101,12 @@ export interface TurnRecord {
     budget: number;
     over_budget: boolean;
     source_status_unknown: number;
+    /** ⑥ 形态歧义放过去的处数（明说的洞；数字在涨说明口径要重看，不是闸坏了） */
+    statute_ambiguous?: number;
+    /** ⑥ 文书通道拒收数。**不在替换率里**：拒收不是替换，那一处从未到达用户面 */
+    statute_doc_rejected?: number;
+    /** 本轮 ⑥ 的放行集（`法名|第N条`）。零泄漏判据读它，不在评测侧另建一份 */
+    statute_allowed?: string[];
   } | null;
   /** 本轮检索到的全部 pack（含预检索与工具检索） */
   retrieved: KnowledgePack[];
@@ -1881,12 +1900,21 @@ export interface CoreMechanismState {
  *（08-26 leverage / 08-28 crisisPaid / 08-28 injection），这里是第四次遇到它。
  */
 export function statuteGateTrail(t: TurnRecord): { marked: { cited: string; verdict: string }[]; allowed: string[] } | undefined {
-  if (t.statuteGate !== undefined) return t.statuteGate ?? { marked: [], allowed: [] };
+  // 【`null` 是"这份转录里没有 ⑥ 这一层"，不是"跑了没开火"】(2026-09-08 修)
+  // 原先 `?? { marked: [], allowed: [] }` 把 null 补成"跑了、放行集为空"——
+  // 而放行集为空是**最强的判定前提**：它让用户面每一处条号都成为漏网。
+  // 一个观测缺口被当成了一条断言的依据，方向恰好是把干净轮判红。
+  if (t.statuteGate === null) return undefined;
+  if (t.statuteGate) return t.statuteGate;
+  const marked: { cited: string; verdict: string }[] = [];
+  let allowed: string[] | undefined;
   for (const e of t.events ?? []) {
-    if (e.event !== 'notice' || e.data.code !== 'STATUTE_UNVERIFIED') continue;
-    return { marked: e.data.statute_marked ?? [], allowed: e.data.statute_allowed ?? [] };
+    if (e.event !== 'notice') continue;
+    if (e.data.code === 'STATUTE_UNVERIFIED') marked.push(...(e.data.statute_marked ?? []));
+    // 放行集跟着**无条件发**的那条走（干净轮也有），不跟着只在开火时发的那条
+    if (e.data.code === 'GATE_REPORT') allowed = e.data.gate_report?.statute_allowed ?? [];
   }
-  return undefined;
+  return allowed === undefined ? undefined : { marked, allowed };
 }
 
 /** 闸链汇总的归档留痕（三态同上）。替换率/漏网率两列读它。 */
@@ -1899,9 +1927,17 @@ export function gateReportTrail(t: TurnRecord): TurnRecord['gateReport'] | undef
   return undefined;
 }
 
-/** 用户面还没被标记的条号引用（取材面与产线 ⑥⑧ 同源，法条原文内部的交叉引用不算） */
+/**
+ * 用户面还没被标记的条号引用（取材面与产线 ⑥⑧ 同源，法条原文内部的交叉引用不算）。
+ *
+ * 【形态过滤必须与产线同一个函数】`isStatuteCitationForm` 是 ⑥ **明说不判**的那条口径
+ *（裸的「第三条建议」分不清条号与序数量词）。判据这边不跟着过滤的形态是：
+ * 闸按口径放行 → 判据按另一套口径判它漏网 → L1 红，而两边各自都在做对的事。
+ * 这正是教训 1（两处各写一份必然分叉），所以这里 import 而不是重写。
+ */
 export function unmarkedCitations(text: string): { raw: string; article: string; law: string }[] {
   return bareArticleSpans(text)
+    .filter((span) => isStatuteCitationForm(span.raw))
     .filter((span) => {
       const at = text.indexOf(span.raw, Math.max(0, span.at - 2));
       const end = (at < 0 ? span.at : at) + span.raw.length;

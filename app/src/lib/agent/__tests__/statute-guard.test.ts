@@ -216,10 +216,32 @@ describe('要件 F · 免检态：立法者写的交叉引用不算 agent 的引
     expect(out).not.toContain(`第九十九条${UNVERIFIED_STATUTE}`);
   });
 
-  it('免检态不跨行：上一行的引号没闭合，不许把下一行整段放掉（删掉换行处的 inQuote=false → 红）', () => {
+  it('**对称**引号（"）的免检不跨行：它开闭同形，跨行配对必然配错（删掉换行处的 inQuote=false → 红）', () => {
     const g = guardWithTwo();
-    const out = run(g, '他说「这句没闭合\n《某某某某法》第四十八条也适用。');
+    const out = run(g, '他说"这句没闭合\n《某某某某法》第四十八条也适用。');
     expect(out).toContain(UNVERIFIED_STATUTE);
+  });
+
+  /**
+   * 【非对称引号的免检**必须跨行**（2026-09-08 复审 blocker）】⑧ 是把卡内原文以
+   * `「…」` **内联**插进正文的，而真库 318 条 statute_quotes 里 164 条是多行的。
+   * 按行清空免检态的形态是：原文第 1 行豁免、第 2 行起不豁免 →
+   * 闸对着**自己刚补进来的原文**里立法者的交叉引用开火，且漏网自检把它记成漏网。
+   * 非对称引号开闭是不同字符，跨多少行都配得准，所以豁免只给它们。
+   */
+  it('**非对称**引号（「」）的免检跨行：多行原文第 2 行起的交叉引用同样免检', () => {
+    const g = guardWithTwo();
+    const out = run(g, '原文是「有下列情形之一的：\n（一）依照本法第九十九条解除的；\n（二）其他情形。」');
+    expect(out).not.toContain(UNVERIFIED_STATUTE);
+    expect(g.seen).toBe(0);
+  });
+
+  it('未闭合的非对称引号只罩一段就收回免检态（不设上限 → 漏一个「就把整轮的闸关掉）', () => {
+    const g = guardWithTwo();
+    const out = run(g, `他说「这句没闭合${'啊'.repeat(3200)}《某某某某法》第四十八条也适用。`);
+    expect(out, '免检态一直开着 → 后面所有条号全部放行，而 gate_report 会诚实地报「候选 0 处」').toContain(
+      UNVERIFIED_STATUTE,
+    );
   });
 
   it('免检态跨 chunk 保持：引号开在上一片、条号落在下一片（把三个状态字段改成方法内局部变量 → 红）', () => {
@@ -263,6 +285,67 @@ describe('要件 G · 登记簿 status（设计稿 §7.3）', () => {
   });
 });
 
+describe('要件 K · 序数量词不是条号（「三条建议」不许被写成【条号待核验】）', () => {
+  /**
+   * 【这个歧义此前无害，⑥ 把它变成了用户面的错字】`ARTICLE` 只服务两个**只留痕**的
+   * 消费者时，把「第一条，先别签字」当条号至多多一条 notice。⑥ 改成 rewrite 之后，
+   * 同一处歧义直接写进用户面，还计进替换率——读报表的人会以为模型在编条号。
+   */
+  it.each([
+    ['我给你三条建议。第一条，先别签字。', '序数用法'],
+    ['第三条路是走仲裁。', '量词 + 名词'],
+    ['第二条，把通知拍照。', '列举'],
+  ])('不判：「%s」（%s）', (text) => {
+    const g = guardWithTwo();
+    const out = run(g, text);
+    expect(out, '把序数用法标成条号 = 在一段正确的话里插错字').toBe(text);
+    expect(g.seen, '它也不该进替换率的分母').toBe(0);
+  });
+
+  it('缺口有计数：放过去几处必须报得出来（把 ambiguousCount 删掉 → 洞变成隐形 → 红）', () => {
+    const g = guardWithTwo();
+    run(g, '第一条，先别签字。第二条，把通知拍照。');
+    expect(g.ambiguous).toBe(2);
+  });
+
+  it.each([
+    ['《某某某某法》第三条', '带法名 → 谁都不会读成量词'],
+    ['第三条第二项', '带款/项 → 序数用法不会这么说'],
+    ['第四十八条', '条号 > 10 → 中文里没人说「第四十八条建议」'],
+  ])('正对照：「%s」照判不误（%s）', (cited) => {
+    const g = guardWithTwo();
+    expect(run(g, `见${cited}。`)).toContain(UNVERIFIED_STATUTE);
+  });
+
+  it('漏网自检用同一条形态口径（自检自己另写一套 → 序数用法被记成漏网 → 红）', () => {
+    const g = guardWithTwo();
+    expect(g.leakedIn('我给你三条建议。第一条，先别签字。')).toEqual([]);
+  });
+});
+
+describe('要件 L · 多行原文：⑧ 内联补进来的那一段整段免检', () => {
+  const MULTI = ['有下列情形之一的：', '（一）依照本法第九十九条解除的；', '（二）依照本法第一百零一条解除的。'].join('\n');
+
+  it('漏网自检不把多行原文里第 2 行起的交叉引用记成漏网（按行算免检 → 红）', () => {
+    const g = guardWithTwo();
+    expect(g.leakedIn(`依据是第四十六条「${MULTI}」。`)).toEqual([]);
+  });
+
+  it('流上同样免检，且不计入 seen（流上按行清空免检态 → 红）', () => {
+    const g = guardWithTwo();
+    const out = run(g, `依据是《某某某某法》第四十六条「${MULTI}」。`);
+    expect(out).not.toContain(UNVERIFIED_STATUTE);
+    expect(g.seen, '第 2 行起的交叉引用被算进了分母 → 替换率的分母会随原文行数漂移').toBe(1);
+  });
+
+  it('负对照：同样两条交叉引用挪到引号外，一处不少地被标（证明上面的"零"不是没捕到）', () => {
+    const g = guardWithTwo();
+    const out = run(g, '另见第九十九条与第一百零一条。');
+    expect(out).toContain(`第九十九条${UNVERIFIED_STATUTE}`);
+    expect(out).toContain(`第一百零一条${UNVERIFIED_STATUTE}`);
+  });
+});
+
 describe('要件 H · 文书通道：标记 vs 拒收（两条出口的处置故意不同）', () => {
   it('check 不改写内容，只返回违规清单（让 check 去改写 → 红）', () => {
     const g = guardWithTwo();
@@ -275,6 +358,33 @@ describe('要件 H · 文书通道：标记 vs 拒收（两条出口的处置故
     const g = new StatuteGuard();
     g.allowFrom([pack([{ law: '某某某某法', article: '第四十六条', text: '旧版……', source_status: '已废止' }])]);
     expect(g.check('依《某某某某法》第四十六条。', '文书《某申请书》')).toHaveLength(1);
+  });
+
+  /**
+   * 【文书通道与正文通道必须分账（2026-09-08 复审 minor）】合账的形态有两处，都会说假话：
+   *   · 轮末那条 notice 对用户说「已标注【条号待核验】」——而文书是**拒收**，正文里
+   *     一个标记都没有；模型下一轮改对了，用户还收到一条说他"已被标注"的通知。
+   *   · 替换率把拒收算进分子分母：文书错 1 处 + 正文 1 处引用 → 报 50%，
+   *     成绩单点名「闸误伤，去查闸的判据」——而闸这一轮做的恰恰是它该做的事。
+   */
+  it('文书通道的拒收不进 found / seen（合账 → 轮末 notice 说的标注根本不存在 → 红）', () => {
+    const g = guardWithTwo();
+    g.check('本案依《某某某某法》第四十八条主张。', '文书《某申请书》');
+    expect(g.found, '文书拒收混进了正文违规').toHaveLength(0);
+    expect(g.seen, '文书拒收混进了替换率的分母').toBe(0);
+    expect(g.docFound).toHaveLength(1);
+    expect(g.docSeen).toBe(1);
+    // 正文那一处照常各记各的
+    run(g, '另见《某某某某法》第四十八条。');
+    expect(g.found).toHaveLength(1);
+    expect(g.seen).toBe(1);
+    expect(g.docFound, '正文的标记倒灌进了文书账').toHaveLength(1);
+  });
+
+  it('轮末 notice 只讲正文里真标了的那些（把 docFound 也喂进去 → 红）', () => {
+    const g = guardWithTwo();
+    g.check('本案依《某某某某法》第四十八条主张。', '文书《某申请书》');
+    expect(statuteNoticeMessage(g.found), '文书被拒的条号出现在"已标注"那句话里').toBe('');
   });
 
   it('回喂指令说清「哪一条、为什么、怎么办」（删掉指令里的任一段 → 红）', () => {

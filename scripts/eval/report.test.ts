@@ -142,7 +142,7 @@ function gateNotice(code: string, data: Record<string, unknown>): AgentEvent {
 }
 
 describe('归档映射：⑥ 与闸链汇总的三态', () => {
-  it('闸没开火 → null（不是 undefined）：否则"没开火"与"没这一层"在归档里长得一样', () => {
+  it('这一层根本没跑 → null（旧产物）：判据据此产 N/A，不计过不计挂', () => {
     expect(archiveStatuteGate([])).toBeNull();
     expect(archiveGateReport([])).toBeNull();
   });
@@ -151,12 +151,23 @@ describe('归档映射：⑥ 与闸链汇总的三态', () => {
     expect(archiveStatuteGate([gateNotice('CITATION_BLOCKED', {})])).toBeNull();
   });
 
-  it('开火 → 标注清单**与放行集**一起落盘（放行集丢了，漏网率就永远重算不出来）', () => {
+  /**
+   * 【放行集读的是 GATE_REPORT，不是 STATUTE_UNVERIFIED（2026-09-08 复审 major）】
+   * 后者**只在闸开火时发**。从它取放行集的形态是：模型全引对的干净轮没有这条 notice →
+   * 归档 `statuteGate: null` → 判据读成"放行集为空" → 用户面每一处**真放行**的条号
+   * 都被判成漏网，L1 在最理想的一轮恒红，还与同轮 `gate_report.leaked = 0` 打架。
+   */
+  it('干净轮（⑥ 没开火）照样落盘放行集，且 marked 为空（放行集挂在开火那条上 → 红）', () => {
+    const got = archiveStatuteGate([gateNotice('GATE_REPORT', { gate_report: { statute_allowed: ['某某某某法|第46条'] } })]);
+    expect(got).toEqual({ marked: [], allowed: ['某某某某法|第46条'] });
+  });
+
+  it('开火 → 标注清单来自 ⑥ 自己那条，放行集来自无条件发的那条（两条各管一半）', () => {
     const got = archiveStatuteGate([
       gateNotice('STATUTE_UNVERIFIED', {
         statute_marked: [{ cited: '《某某某某法》第四十八条', verdict: 'unverified' }],
-        statute_allowed: ['某某某某法|第46条'],
       }),
+      gateNotice('GATE_REPORT', { gate_report: { statute_allowed: ['某某某某法|第46条'] } }),
     ]);
     expect(got).toEqual({
       marked: [{ cited: '《某某某某法》第四十八条', verdict: 'unverified' }],
@@ -175,6 +186,9 @@ describe('归档映射：⑥ 与闸链汇总的三态', () => {
       budget: 0.02,
       over_budget: true,
       source_status_unknown: 3,
+      statute_ambiguous: 2,
+      statute_doc_rejected: 1,
+      statute_allowed: ['某某某某法|第46条'],
     };
     expect(archiveGateReport([gateNotice('GATE_REPORT', { gate_report: gr })])).toEqual(gr);
   });
@@ -251,6 +265,20 @@ describe('成绩单：替换率与漏网率并列成两列', () => {
     const md = renderMarkdown(withTurns({ ...BASE, source_status_unknown: 4 }));
     expect(md).toContain('`source_status` 未接上的条目共 4 处');
     expect(md).toContain('不是"它是现行"');
+  });
+
+  it('⑥ 形态歧义放过去的处数单列（缺口只写在注释里 = 与"没有这个缺口"在纸上同形）', () => {
+    const md = renderMarkdown(withTurns({ ...BASE, statute_ambiguous: 3 }));
+    expect(md).toContain('放过 3 处');
+    expect(md).toContain('明说的洞');
+    // 为 0 时不占版面（每一行都写会把真正要看的东西挤下去）
+    expect(renderMarkdown(withTurns(BASE))).not.toContain('明说的洞');
+  });
+
+  it('文书通道拒收数单列，并写明它不在替换率里（合进去 → 闸做对的事被记成误伤）', () => {
+    const md = renderMarkdown(withTurns({ ...BASE, statute_doc_rejected: 2 }));
+    expect(md).toContain('文书通道拒收** 2 处');
+    expect(md).toContain('不在上面的替换率里');
   });
 
   it('留痕缺失的那一轮显示 —，**不显示 0**（"不知道"与"一处都没动"不许同形）', () => {

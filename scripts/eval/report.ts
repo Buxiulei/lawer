@@ -91,10 +91,22 @@ export function archiveCrisisPaid(events: AgentEvent[]): ScenarioEvidence['turns
  * 于是**闸整层失效时它照样全绿**（一处都没标 = 一处都没漏）。
  * 这是「留痕不进归档」的第五处，前四处见 archiveInjection 的注释。
  */
+/**
+ * 【放行集读的是 GATE_REPORT，不是 STATUTE_UNVERIFIED】(2026-09-08 修)
+ * 后者**只在闸开火时发**。从它取放行集的形态是：模型全引对的那一轮没有这条 notice，
+ * 归档里 `statuteGate: null` → 判据把它读成"放行集为空" → 用户面每一处**真放行**的
+ * 条号都被判成漏网，L1 在最理想的一轮恒红，还与同轮 `gate_report.leaked = 0` 打架。
+ * 所以：**标了哪几处**从 ⑥ 自己那条来，**当时放行的是哪几条**从无条件发的那条来。
+ */
 export function archiveStatuteGate(events: AgentEvent[]): ScenarioEvidence['turns'][number]['statuteGate'] {
-  const ev = findNotice(events, 'STATUTE_UNVERIFIED');
-  if (!ev) return null;
-  return { marked: ev.data.statute_marked ?? [], allowed: ev.data.statute_allowed ?? [] };
+  const report = findNotice(events, 'GATE_REPORT');
+  const marks = findNotice(events, 'STATUTE_UNVERIFIED');
+  // 两条都没有 = 这份转录里根本没有 ⑥ 这一层（旧产物）→ null，判据据此产 N/A
+  if (!report && !marks) return null;
+  return {
+    marked: marks?.data.statute_marked ?? [],
+    allowed: report?.data.gate_report?.statute_allowed ?? [],
+  };
 }
 
 /** 闸链汇总的留痕。替换率/漏网率两列从它来，不从 message 里解析中文数字。 */
@@ -153,6 +165,12 @@ export interface ScenarioEvidence {
       budget: number;
       over_budget: boolean;
       source_status_unknown: number;
+      /** ⑥ 形态歧义放过去的处数（故意留的洞，但洞有多大要看得见） */
+      statute_ambiguous?: number;
+      /** ⑥ 在文书通道拒收的处数（不进替换率：拒收不是替换） */
+      statute_doc_rejected?: number;
+      /** 本轮 ⑥ 的放行集（`法名|第N条`），供离线回放重算漏网率 */
+      statute_allowed?: string[];
     } | null;
     /**
      * ⭐注入产物可观测的留痕（2026-08-28 补）。没有它，`injectionObservability` 的判定
@@ -345,6 +363,20 @@ export function renderMarkdown(run: RunEvidence): string {
               '先查闸的判据（放行集取材面、免检态），**不是先去调提示词**。不阻断发版。'
           : '> 替换率在预算内。漏网率恒 0 是结构应然，不为 0 即闸自身缺陷，按缺陷查。',
       );
+      const ambiguous = reported.reduce((n, t) => n + (t.gateReport!.statute_ambiguous ?? 0), 0);
+      if (ambiguous > 0) {
+        lines.push(
+          `> 📌 ⑥ 本场放过 ${ambiguous} 处形态分不清「条号」与「第三条建议」那种序数用法的裸条号——` +
+            '**这是明说的洞**（判它的代价是把正确的话弄脏并计进替换率）。数字在涨说明这条口径要重新看，不是闸坏了。',
+        );
+      }
+      const docRejected = reported.reduce((n, t) => n + (t.gateReport!.statute_doc_rejected ?? 0), 0);
+      if (docRejected > 0) {
+        lines.push(
+          `> 📌 ⑥ 本场在**文书通道拒收** ${docRejected} 处条号。它们不在上面的替换率里：` +
+            '拒收不是替换，那一处从未到达用户面，混进去会把闸做对的事记成误伤。',
+        );
+      }
       const unknown = reported.reduce((n, t) => n + t.gateReport!.source_status_unknown, 0);
       if (unknown > 0) {
         lines.push(

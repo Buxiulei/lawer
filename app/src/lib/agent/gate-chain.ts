@@ -262,10 +262,24 @@ export interface GateReport {
    * 合并的形态是接上登记簿的那天报表一个字都不变。
    */
   sourceStatusUnknown: number;
+  /**
+   * ⑥ 形态上分不清「条号」与「第三条建议」那种序数量词、**明说不判**而放过去的处数。
+   *
+   * 【为什么它必须有一个数，而不是只写在注释里】这是一个**故意留的洞**：
+   * 裸的第一条…第十条闸不碰。洞留着可以，但"洞有多大"必须每轮看得见——
+   * 只写在注释里的缺口与"这个缺口不存在"在报表上长得一模一样。
+   */
+  ambiguousBareArticles: number;
+  /**
+   * ⑥ 在**文书通道**拒收的处数。**不进替换率**：文书是拒收不是替换，
+   * 那一处从来没有出现在用户面前，把它算进"闸动了正文几处"就是把两件事混成一件
+   *（实测：一份文书引错 1 处 + 正文 1 处引用 → 替换率报 50% → 成绩单点名"闸误伤"）。
+   */
+  docRejected: number;
 }
 
 export function newGateReport(): GateReport {
-  return { gates: {}, leaked: 0, sourceStatusUnknown: 0 };
+  return { gates: {}, leaked: 0, sourceStatusUnknown: 0, ambiguousBareArticles: 0, docRejected: 0 };
 }
 
 /** 记一道闸的工作量。同一道闸多次记账**累加**（文书通道与正文通道各记各的）。 */

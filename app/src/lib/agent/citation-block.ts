@@ -136,7 +136,13 @@ export function packCorpus(pack: Pick<KnowledgePack, 'title' | 'body' | 'facts'>
 }
 
 /** 汉字数字 → 整数（覆盖 1–999：四十六=46、十九=19、二十=20、一百零八=108）。非法返回 null。 */
-function cnNumeral(s: string): number | null {
+/**
+ * 汉字数字 → 阿拉伯数字（`四十五` → 45）。取不到返回 null。
+ * **导出**是给 ⑨ 数值闸用的：法条原文写「二倍」「百分之四十五」，模型写「2 倍」「45%」，
+ * 不跨数字体系互认，闸就会把**逐字抄对了的数**标成【数值无来源】。
+ * 与条号那边同一条理由、同一个函数（教训 1：两处各写一份必然静默漂移）。
+ */
+export function cnNumeral(s: string): number | null {
   if (/^[0-9]+$/.test(s)) return Number(s);
   const D: Record<string, number> = { 〇: 0, 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
   let total = 0;
@@ -568,20 +574,110 @@ function hasVerbatimNear(near: string, article: string): boolean {
 }
 
 /**
+ * **非对称引号**（「」『』“”）的配对开闭表。
+ *
+ * 【为什么只有非对称的那三对能跨行】对称的 ASCII `"` 开闭同形，跨行配对必然出错
+ *（见 quotedChunks 的注释：它会把两段正文之间的部分当成引文）。非对称引号的开与闭
+ * 是**不同字符**，跨多少行都配得准——所以跨行豁免只给它们，`"` 仍按行内奇偶数。
+ */
+const ASYM_QUOTES: readonly (readonly [string, string])[] = [
+  ['「', '」'],
+  ['『', '』'],
+  ['“', '”'],
+];
+
+/**
+ * 一个开引号最远罩到哪里。闭引号在此之内 → 区间到闭引号为止；否则**认定它没闭合**，
+ * 区间就到这个上限为止（不是一直到文末）。
+ *
+ * 【为什么未闭合也要给一段豁免，而不是一点都不给】⑥ 在**流上**逐片跑，它看不到后面
+ * 有没有闭引号——只能开着走、走够远就收回来。而漏网自检（`leakedIn`）跑在整段上、
+ * 看得见闭引号。两边口径一旦不同，就会出现**闸放行了、自检说漏了**：
+ * 用户面没有任何标记，gate_report 却报「闸自己漏了」，去查闸只会发现闸做得对。
+ * 所以两边用同一条规则：**闭引号，或走满上限，先到者为准。**
+ *
+ * 上限取 3000：真库 318 条 statute_quotes 最长 912 字，留三倍余量；
+ * 上限低于最长原文的形态是 ⑧ 补进来的长条文尾段丢掉豁免，反而制造漏网。
+ */
+const ASYM_QUOTE_CAP = 3000;
+
+/** 文本里全部非对称引号豁免区（允许跨行；未闭合的按 `ASYM_QUOTE_CAP` 截断） */
+function asymQuoteSpans(text: string): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const pair = ASYM_QUOTES.find(([open]) => text[i] === open);
+    if (!pair) {
+      i += 1;
+      continue;
+    }
+    const close = text.indexOf(pair[1], i + 1);
+    const end = close >= 0 && close - i <= ASYM_QUOTE_CAP ? close : Math.min(text.length, i + ASYM_QUOTE_CAP + 1);
+    out.push({ start: i, end });
+    i = end + 1;
+  }
+  return out;
+}
+
+/**
  * 该位置是否落在**逐字原文内部**（引号内或 blockquote 行内）。
  *
  * 【为什么要排除】法条原文自己会**交叉引用**别的条：
  * §87 的原文里写着「应当依照本法**第四十七条**规定的经济补偿标准的二倍」。
  * 那个「第四十七条」是**立法者写的**，不是 agent 自己给的光秃引用——
  * 判它「没带原文」等于要求 agent 把被引法条的原文也一并附上，无限递归。
+ *
+ * 【为什么必须跨行（2026-09-08 修）】原本三条判据全按**行**算：blockquote 看本行行首、
+ * 引号看本行之前的引号奇偶。而 ⑧ `renderCoreArticleFallback` 是把卡内原文以
+ * `「…」` **内联**插进正文的，真库里 279 条 statute_quotes 有 153 条本身是多行的、
+ * 其中 29 条从第 2 行起才出现立法者的交叉引用（§46 的（一）…第三十八条… 就是其中之一）。
+ * 按行算的形态是：第 1 行豁免、第 2 行起不豁免 → ⑥ 的漏网自检把**闸自己刚补进来的原文**
+ * 记成漏网，gate_report 报「闸自己漏了」，而闸什么都没做错。
+ * 这条恰好发生在最主流的核心位路径上，所以它不是边角，是主路。
+ *
+ * 【为什么是"再加一条豁免"而不是"改掉按行那条"】按行那条对**未闭合**的引号是宽容的
+ *（前半行算在引号内）。改成只认成对，等于在一处无关的地方悄悄收紧闸，
+ * 而收紧的方向是多标记——那是误伤。所以新旧两条**取并集**：只增不减。
  */
-function insideVerbatim(text: string, at: number): boolean {
+export function insideVerbatim(text: string, at: number): boolean {
+  // 成对非对称引号内（可跨行）：引号本身不算在内，引号里的每一个字都算
+  for (const s of asymQuoteSpans(text)) if (at > s.start && at < s.end) return true;
   const lineStart = text.lastIndexOf('\n', at) + 1;
   if (/^\s*>/.test(text.slice(lineStart, at))) return true; // blockquote 行
   // 引号内：数该位置之前同一行有几个引号，奇数即在引号内
   const before = text.slice(lineStart, at);
   const marks = (before.match(/["「『“”」』]/g) ?? []).length;
   return marks % 2 === 1;
+}
+
+/**
+ * 这处 `第N条` 是**条号引用**，还是「三条建议」里的序数量词用法？
+ *
+ * 【这个歧义此前是无害的，现在不是】`ARTICLE` 只服务两个**只留痕**的消费者
+ *（G4 光秃条号 notice、⑧ 的补原文位）时，把「第一条，先别签字」当成条号至多多一条 notice。
+ * ⑥ 把它改成 `rewrite` 之后，同一处歧义直接写进用户面：
+ * 「第一条【条号待核验】，先别签字。第三条【条号待核验】路是走仲裁。」——
+ * 而且它会计进替换率，把 2% 的预算顶穿，读报表的人会以为模型在编条号。
+ *
+ * 【判据：形态而不是语境】三条里任一成立即按条号处置：
+ *   ① 带《法名》 —— 「《某某法》第三条」谁都不会读成量词；
+ *   ② 带款/项   —— 序数用法不会说「第三条第二项建议」；
+ *   ③ 条号 > `ORDINAL_MAX` —— 中文里没人说「第四十七条建议」。
+ *
+ * 【明说的缺口】裸的「第一条」…「第十条」**不判**。真语料里它们几乎总带着法名
+ *（`《某某法》第八条`），而序数用法几乎总是裸的；判不准时的方向由后果定：
+ * 误伤是把一段正确的话弄脏并计进闸的成绩，漏拦是少标一处——所以这里选漏拦，
+ * 且漏掉的条数由 `StatuteGuard.ambiguous` 单独计数，不许它静静地消失。
+ */
+const ORDINAL_MAX = 10;
+
+export function isStatuteCitationForm(raw: string): boolean {
+  const flat = raw.replace(/\s+/g, '');
+  if (/《[^》]{2,40}》/.test(flat)) return true;
+  if (/第[一二三四五六七八九十0-9]{1,3}[款项]/.test(flat)) return true;
+  const m = /第([一二三四五六七八九十百零〇两]+|[0-9]+)条/.exec(flat);
+  const n = m ? cnNumeral(m[1]) : null;
+  return n === null ? true : n > ORDINAL_MAX;
 }
 
 /**

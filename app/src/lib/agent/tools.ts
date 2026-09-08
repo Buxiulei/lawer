@@ -934,7 +934,13 @@ const HANDLERS: Record<string, Handler> = {
         event: 'notice',
         data: {
           code: 'STATUTE_UNVERIFIED',
-          message: `文书里的条号 ${badStatutes.map((v) => v.cited).join('、')} 本轮拿不出原文（或来源已非现行），已拒绝落库`,
+          // 禁令必配出路（设计稿 §7.7）：拒收对用户是**什么都没发生**——文书没生成、
+          // 正文里也没有任何标记。不给出路的形态是他只知道"有个东西被拒了"，
+          // 既不知道差什么、也不知道下一步该做什么。
+          message:
+            `文书里的条号 ${badStatutes.map((v) => v.cited).join('、')} 本轮拿不出原文（或来源已非现行），已拒绝落库。` +
+            '出路：我这就去把这几条的原文取回来再重写；你也可以回我一句「查一下这条」，' +
+            '或者先看回复里的来源卡——上面是我们这一轮手上确实有原文的那几条。',
           statute_marked: badStatutes.map((v) => ({ cited: v.cited, verdict: v.verdict })),
         },
       });

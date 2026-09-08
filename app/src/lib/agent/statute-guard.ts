@@ -24,7 +24,7 @@
 // **⑧ 能补原文的每一条，⑥ 都必须放行**，否则 ⑧ 会去给一个刚被标成【条号待核验】的
 // 位置补原文，两道闸在同一处各说各的。判据见 gate-chain.test.ts「⑥⑧ 交互」。
 
-import { ARTICLE_PATTERN, articleKey, normalizeArticle, normLaw, authoredCitationSpans } from './citation-block';
+import { ARTICLE_PATTERN, articleKey, normalizeArticle, normLaw, authoredCitationSpans, isStatuteCitationForm } from './citation-block';
 import type { KnowledgePack } from './retrieval';
 
 /** 验不过的条号后面缀这个。**不删条号**——用户要看得见这里本来引的是哪一条，好自己去查。 */
@@ -87,6 +87,14 @@ export interface StatuteViolation {
 }
 
 /**
+ * 未闭合的非对称引号最多罩住多少字。与 citation-block 的 `ASYM_QUOTE_CAP` 同一条理由，
+ * 只是流上没有"往后找闭引号"这回事——只能数着字，超了就当它没闭合、把免检态收回来。
+ * **不设这个上限的形态是**：模型漏打一个 `」`，从那个字起这一轮的闸全程关闭，
+ * 而 gate_report 会诚实地报「候选 0 处、动手 0 处」。
+ */
+const ASYM_QUOTE_CAP = 3000;
+
+/**
  * 条号闸门。allowed 集合随本轮检索到的 pack 增长——模型先检索再引用是正常顺序。
  */
 export class StatuteGuard {
@@ -94,13 +102,35 @@ export class StatuteGuard {
   private readonly keyed = new Map<string, string | undefined>();
   /** 只按条号索引，供**没写法名**的引用比对（与 isCoreBlock 同一套「两种键都比一遍」口径） */
   private readonly byArticle = new Map<string, string | undefined>();
-  /** 本轮见过多少处 agent 自己写下的条号引用（gate_report 的分母） */
+  /** 本轮见过多少处 agent 自己写下的**正文**条号引用（gate_report 的分母） */
   private seenCount = 0;
+  /** 形态上分不清是条号还是序数量词、按缺口声明放过去的处数（`isStatuteCitationForm` 那条） */
+  private ambiguousCount = 0;
   private pending = '';
   private readonly violations: StatuteViolation[] = [];
+  /**
+   * **文书通道**的违规，与正文分开存。
+   *
+   * 【为什么必须分开】(2026-09-08 修) 合在一起的形态有两处，都会说假话：
+   *   · 轮末那条 notice 对用户说「已标注【条号待核验】」——而文书通道是**拒收**，
+   *     正文里一个标记都没有；模型下一轮改对了，用户还收到一条说他"已被标注"的通知。
+   *   · 替换率把拒收算进分子分母：一份文书引错 1 处、正文 1 处引用，替换率报 50%，
+   *     成绩单点名"闸误伤、去查闸的判据"——而闸这一轮做的恰恰是它该做的事。
+   */
+  private readonly docViolations: StatuteViolation[] = [];
+  /** 文书通道看过多少处引用（与正文分账，不进替换率） */
+  private docSeenCount = 0;
 
   // ── 流上的免检态。跨 chunk 保持，因为引号和引用块都可能横跨好几片 ──
-  /** 正处在成对引号里（法条原文自己的交叉引用不算 agent 写的引用） */
+  /**
+   * 正处在**成对非对称引号**（「」『』“”）里。**跨行保持**——与 citation-block 的
+   * `asymQuoteSpans` 同口径：⑧ 内联补进来的原文有一半以上是多行的，按行清空免检态
+   * 就会在原文第 2 行起对着立法者的交叉引用开火。
+   */
+  private inAsymQuote = false;
+  /** 非对称引号已经开着走了多少字。超 `ASYM_QUOTE_CAP` 即认定它没闭合，收回免检态 */
+  private asymRun = 0;
+  /** 正处在成对**对称**引号（`"`）里。对称引号开闭同形，只能按行数奇偶，故不跨行 */
   private inQuote = false;
   /** 当前这一行整行免检：markdown 引用块（`> …`）或自家注入块格式（`第N条　正文…`） */
   private lineExempt = false;
@@ -130,14 +160,33 @@ export class StatuteGuard {
     return [...this.keyed.keys()];
   }
 
-  /** 本轮看过多少处引用（分母） */
+  /** 本轮**正文**看过多少处引用（替换率的分母；文书通道不在此列） */
   get seen(): number {
     return this.seenCount;
   }
 
-  /** 本轮拦下的全部违规（供 notice 与日志；空数组＝干净） */
+  /** 本轮在**正文**里标记的全部违规（供 notice 与日志；空数组＝干净） */
   get found(): readonly StatuteViolation[] {
     return this.violations;
+  }
+
+  /** 本轮在**文书通道**拒收的违规。它们不曾出现在用户面，故不进正文 notice 与替换率 */
+  get docFound(): readonly StatuteViolation[] {
+    return this.docViolations;
+  }
+
+  /** 文书通道看过多少处引用（单列，供 gate_report 记账） */
+  get docSeen(): number {
+    return this.docSeenCount;
+  }
+
+  /**
+   * 形态上分不清条号与序数量词、按缺口声明放过去的处数。
+   * **单列而不是并进 seen**：并进去就变成了"看过并放行"，与"我们没敢判"是两件事，
+   * 而后者是一个需要有人盯着的缺口（见 `isStatuteCitationForm`）。
+   */
+  get ambiguous(): number {
+    return this.ambiguousCount;
   }
 
   /** 登记簿状态未接上的条数（放行集里 `source_status` 为 undefined 的） */
@@ -181,12 +230,16 @@ export class StatuteGuard {
   check(text: string, where: string): StatuteViolation[] {
     const bad: StatuteViolation[] = [];
     for (const span of authoredCitationSpans(text)) {
-      this.seenCount += 1;
+      if (!isStatuteCitationForm(span.raw)) {
+        this.ambiguousCount += 1;
+        continue;
+      }
+      this.docSeenCount += 1;
       const v = this.verdict(span.raw);
       if (v === 'allowed') continue;
       const hit = { cited: span.raw, where, verdict: v };
       bad.push(hit);
-      this.violations.push(hit);
+      this.docViolations.push(hit);
     }
     return bad;
   }
@@ -226,6 +279,9 @@ export class StatuteGuard {
   leakedIn(text: string): string[] {
     return authoredCitationSpans(text)
       .filter((span) => {
+        // 形态上分不清条号与量词的那些，⑥ 在流上就没判（见 isStatuteCitationForm）。
+        // 漏网自检必须用**同一条**取材规则，否则它会把闸明说不判的东西记成闸漏了。
+        if (!isStatuteCitationForm(span.raw)) return false;
         const after = text.slice(span.end, span.end + UNVERIFIED_STATUTE.length + SUPERSEDED_STATUTE.length);
         if (after.startsWith(UNVERIFIED_STATUTE) || after.startsWith(SUPERSEDED_STATUTE)) return false;
         return !this.isSupported(span.raw);
@@ -256,17 +312,33 @@ export class StatuteGuard {
     for (let i = 0; i < text.length; i++) {
       const ch = text[i];
       if (ch === '\n') {
-        // 引号与整行免检态都不跨行（与 citation-block 的 QUOTED / insideVerbatim 同口径）
+        // 整行免检（blockquote / 自家格式）与**对称**引号都不跨行
+        //（与 citation-block 的 QUOTED / insideVerbatim 同口径）。
+        // **非对称引号刻意不清**：⑧ 内联补进来的原文多数是多行的，按行清空
+        // 会在原文第 2 行起对着立法者的交叉引用开火。
         this.lineExempt = false;
         this.inQuote = false;
         this.lineSoFar = '';
+      }
+      if (this.inAsymQuote) {
+        this.asymRun += 1;
+        // 走了这么远还没闭合 → 当它没闭合，把免检态收回来（否则闸从此永久关闭）
+        if (this.asymRun > ASYM_QUOTE_CAP) {
+          this.inAsymQuote = false;
+          this.asymRun = 0;
+        }
       }
 
       // 【判定在字符落定之前】此刻的免检态说的是"这个匹配的起点在不在免检区里"
       while (head < marks.length && marks[head].at === i) {
         const mark = marks[head];
-        if (this.inQuote || this.lineExempt) {
+        if (this.inAsymQuote || this.inQuote || this.lineExempt) {
           mark.verdict = 'allowed'; // 免检：立法者写的交叉引用，不计分母也不计分子
+        } else if (!isStatuteCitationForm(mark.raw)) {
+          // 形态上分不清条号与序数量词（「第三条路」「第一条建议」）——明说的缺口，
+          // 单独计数、不判、不计分母。判它的代价是把一段正确的话弄脏（见 citation-block）。
+          mark.verdict = 'allowed';
+          this.ambiguousCount += 1;
         } else {
           this.seenCount += 1;
           mark.verdict = this.verdict(mark.raw);
@@ -281,9 +353,17 @@ export class StatuteGuard {
       if (ch !== '\n') this.lineSoFar += ch;
 
       // 引号状态在字符落定**之后**翻转：开引号本身不在引号内，闭引号本身还算在里面
-      if (ch === '「' || ch === '『' || ch === '“') this.inQuote = true;
-      else if (ch === '」' || ch === '』' || ch === '”') this.inQuote = false;
-      else if (ch === '"') this.inQuote = !this.inQuote;
+      if (ch === '「' || ch === '『' || ch === '“') {
+        // 已经开着时**不重置计时**：重置会让引号里再出现一个开引号就把上限往后推，
+        // 而整段扫描那边（asymQuoteSpans）是跳过区间内的开引号的——两边会就此分叉。
+        if (!this.inAsymQuote) {
+          this.inAsymQuote = true;
+          this.asymRun = 0;
+        }
+      } else if (ch === '」' || ch === '』' || ch === '”') {
+        this.inAsymQuote = false;
+        this.asymRun = 0;
+      } else if (ch === '"') this.inQuote = !this.inQuote;
       // `>` 打头 = markdown 引用块整行免检
       else if (!this.lineExempt && ch === '>' && /^\s*>$/.test(this.lineSoFar)) this.lineExempt = true;
       // `第N条　` 打头 = 自家注入块格式，该条本身已判过，后面的正文整段免检
