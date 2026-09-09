@@ -1,10 +1,25 @@
 // app/src/lib/agent/prompt.ts
 // system prompt 组装（manager 契约）：charter 全文 + 案件事实卡 + 检索到的 packs 逐字原文。
 //
-// 【顺序是有讲究的】准则在最前、知识在最后：
-//   ① charter 定的是「怎么做人」，必须先于一切内容生效，包括在读到 pack 内容之后；
-//   ② 案件事实卡在中间，因为它是 charter 各条纪律的作用对象（跟踪上轮行动卡、别重复问已知的事）；
-//   ③ pack 原文放最后、紧挨用户消息，是让「引用依据」这件事离生成点最近。
+// 【顺序是按「变得多快」分的三段，不再按「重要不重要」分】(2026-09-10 提示缓存前缀改)
+//   ① 静态段：charter 全文 + 输出纪律 + 闭合清单段。**同一领域逐字恒定**，
+//      不含日期、案件 id、用户名、随机序——它就是提示缓存的前缀。
+//   ② 半静态段：本案本轮检索到的 packs 逐字原文，按卡 id 排序（同一批卡的渲染顺序恒定）。
+//   ③ 动态段：运行环境（含当前时刻）、案件事实卡、问诊/前情提要、危机与空包等本轮指令。
+//
+// 【为什么改这个顺序·中转账单实测】改之前是「charter → 本轮指令 → 事实卡 → 输出纪律 →
+// 闭合清单 → packs」：**每一轮变的那几段夹在恒定的几段中间**。上游按前缀缓存，
+// 前缀在第一个变动处就断了，于是账单每轮记 3–27 万 token 的「缓存写」、几乎零「缓存读」——
+// 我们每轮都在为同一段 charter 重新付一次全价，而三处（请求、账单、日志）都不会报错。
+// 把恒定的几段全部提到最前，**逐字节稳定的前缀从 2905 字（charter 一段）变成 5790 字**
+//（缺省领域实测），本案 packs 还在它后面另占一个断点。
+//
+// 【事实卡挪到静态段之后，是这次改动明说的代价】原注释写着「案件事实卡在中间，因为它是
+// charter 各条纪律的作用对象」。现在它仍然**先于用户消息**、仍然在 system prompt 里，
+// 只是排到了静态段与 packs 之后——**位置变了，在场性没变**。同族的还有危机指令与空包指令：
+// 它们原来靠「排在问诊清单/依据纪律之前」来压过那几条，现在靠**紧挨生成点**
+//（与本文件原来给 packs 的理由是同一条）。这一条口径变更由 2026-09-07 台账「提示缓存前缀
+// 稳定化」派单裁定，判据侧同步换向：case-facts.test.ts G-F7 与 empty-pack.test.ts 的顺序断言。
 //
 // 【不做的事】本文件不做任何摘要、压缩、改写。档案是事实，packs 是法条原文，
 // 任何一处「为了省 token 而转述」都会以「模型把转述当原文引用」的形式变成可信度事故。
@@ -15,7 +30,7 @@ import { CHARTER } from './charter';
 import { intakeDirective, recapBrief, type IntakeStage } from './intake';
 import { renderLawyerMandatory } from './lawyer-mandatory';
 import { MAX_ACTION_CARDS } from './tools';
-import { domainPackOrDefault } from '@/lib/domains/registry';
+import { domainPackOrDefault, type DomainPack } from '@/lib/domains/registry';
 import { coreArticleKeys, packCitationGuide, type CoreArticleSources } from './citation-block';
 import type { KnowledgePack } from './retrieval';
 import type { CaseSnapshot } from './snapshot';
@@ -42,14 +57,23 @@ export function beijingNow(now: Date): { readable: string; iso: string } {
 
 /** 检索到的 packs 逐字原文段。
  *  noteAfter：紧贴某张卡的正文之后追加一条指令——模型对**邻近**指令的依从性明显好于
- *  放在通用指令区的同一句话（实测：危机轮「别重印整张卡」写在开头时被无视，卡给了两轮）。 */
+ *  放在通用指令区的同一句话（实测：危机轮「别重印整张卡」写在开头时被无视，卡给了两轮）。
+ *
+ *  【渲染顺序按卡 id 排，不按检索名次】(2026-09-10 提示缓存前缀改) 同一案连着两轮
+ *  召回同一批卡是常态，而名次会因为一个词的权重微调而互换——**同样的几张卡、不同的顺序**
+ *  在上游眼里就是不同的前缀，缓存整段作废。按 id 排之后，这一段对同一批卡逐字恒定。
+ *  排序只作用于**渲染**：核心条取料（coreArticleKeys 的 S2 检索序补足）拿的仍是
+ *  调用方传进来的原序（见 buildSystemPrompt），两者不共用这一份数组。
+ *  比较用裸 `<`（码位序），不用 localeCompare——后者随运行环境的 locale 变，
+ *  那正是这一段要消灭的那种「看起来一样、字节不一样」。 */
 export function packsSection(
   packs: KnowledgePack[],
   noteAfter?: { packId: string; note: string },
   coreArticles: Set<string> = new Set(),
 ): string {
   if (packs.length === 0) return '';
-  const blocks = packs.map((p) =>
+  const ordered = [...packs].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const blocks = ordered.map((p) =>
     [
       `### [${p.id}] ${p.title}`,
       `类型：${p.type}｜适用地区：${p.region}｜可信度：${p.confidence}｜更新于 ${p.updated}`,
@@ -206,7 +230,43 @@ export interface BuildSystemPromptInput {
   emptyPack?: boolean;
 }
 
-export function buildSystemPrompt(input: BuildSystemPromptInput): string {
+/** 段与段之间的分隔符。**它自己也是前缀的一部分**，所以是常量不是模板串。 */
+export const SEGMENT_SEPARATOR = '\n\n---\n\n';
+
+/**
+ * system prompt 的三段（见文件头）。**缓存前缀就是 `staticPrefix`**，
+ * 第二个可缓存前缀是 `staticPrefix + 分隔符 + packs`。
+ *
+ * 【为什么把三段单独交出来，而不是只给拼好的串】断点要落在**字节位置**上
+ *（providers/anthropic.ts 按偏移切 system 块）。让调用方去拼好的串里找边界，
+ * 就是给同一条边界造了第二个真源——那一份会在某次改分隔符时静默失准，
+ * 而失准的表现只是「缓存不命中」：账单变贵，没有一处会报错。
+ */
+export interface SystemPromptSegments {
+  /** 静态段：charter + 输出纪律 + 闭合清单段。同一领域逐字恒定。 */
+  staticPrefix: string;
+  /** 半静态段：本案本轮的 packs 逐字原文（按卡 id 排序）。无卡时为空串。 */
+  packsBlock: string;
+  /** 动态段：本轮指令 + 运行环境 + 事实卡 + 问诊/前情提要。 */
+  dynamic: string;
+}
+
+/**
+ * 静态段。**入参只有领域包**——这是「不含日期、案件 id、用户名」这件事的机械保证：
+ * 拿不到 snapshot 就写不进案件信息，不必靠判据一条条去扫。
+ */
+export function staticPrefixOf(pack: DomainPack): string {
+  return [
+    CHARTER,
+    outputDiscipline(),
+    // 【它排在输出纪律之后，且每轮都在】它管的是**这一轮该由谁做**，
+    // 而上面那 11 条管的是"做出来的东西长什么样"——先定谁做，再定怎么做。
+    // 清单逐条来自领域包：共用层一个条目都不写死（设计稿 §13）。
+    renderLawyerMandatory(pack),
+  ].join(SEGMENT_SEPARATOR);
+}
+
+export function buildSystemPromptSegments(input: BuildSystemPromptInput): SystemPromptSegments {
   const { readable, iso } = beijingNow(input.now);
   // 危机指令与危机资源卡的 id 按**这个案件所属领域**取（设计稿 §13「危机」行）。
   // 取缺省领域的形态是：第二个领域的用户触发危机时，模型收到的是给上一个行当的指令
@@ -214,31 +274,40 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
   // 同一轮里两套口径并存，没有一处会报错。
   const pack = domainPackOrDefault(input.snapshot.case.domain);
   const crisisPack = pack.crisis;
-  const parts = [
-    CHARTER,
-    // 危机指令紧跟 charter，排在案件事实卡与问诊指令**之前**：
-    // 它要压过本轮其它一切安排（问诊清单、行动卡、依据纪律），放在后面会被前面的
-    // 「每轮必须问 1-3 个问题」「必须给行动卡」稀释成又一条并列要求。
+
+  const packsBlock = packsSection(
+    input.packs,
+    // 「别重印整张卡」这条**紧贴卡本身**下发，不放通用指令区：
+    // 实测放开头时模型照样把整张卡重印了两轮，指令离约束对象太远就被稀释了。
+    // （它是本轮态，落在半静态段里会在危机窗内让这一段的缓存作废一次——
+    //   代价是危机轮多写一次缓存，换的是这条指令仍然贴着那张卡，不换。）
+    input.crisis && input.crisisCardAlreadyGiven
+      ? {
+          packId: crisisPack.resourcePackId,
+          // 【这句话与号码都由领域包给，共用层一个数字都不认识】（设计稿 §13「危机」行）
+          // 号码原来写死在这里：第二个领域接进来之后，它的用户在危机窗内读到的是**上一个
+          // 行当**的三个号码——号码本身是对的，只是不属于他这件事，而这一轮回复照常生成、
+          // 格式完全正常、没有一处会报错。
+          note: crisisPack.repeatCardNote(markedCrisisNumbers(input.packs, crisisPack.resourcePackId)),
+        }
+      : undefined,
+    // 核心依据条**由结构化事实判定**，不让模型自己勾——见 citation-block.coreArticleKeys：
+    // S1 档案三来源恒优先；S1 空（首诊轮）时 S3 场景映射优先占上限、S2 检索序补足、
+    // S4 用户点名不占上限。取料面在 orchestrator 一处算清，这里只补本通路的注入包。
+    // **这里传的是调用方的原序**（检索名次），不是 packsSection 内部的渲染序：
+    // S2 那一档按名次补足，拿排过序的数组喂它等于把「第几名」换成「id 排第几」。
+    coreArticleKeys({ ...input.coreSources, retrieved: input.packs }),
+  );
+
+  const dynamic = [
+    // 危机指令排在动态段最前，仍在事实卡与问诊指令**之前**：
+    // 它要压过本轮其它一切安排（问诊清单、行动卡、依据纪律）。
+    // 它与整个动态段一起挪到了 packs 之后——**改的是它跟静态段的相对位置，
+    // 不是它跟本轮其它安排的相对位置**；靠「紧挨生成点」承重（见文件头）。
     input.crisis ? crisisPack.directive : '',
-    // 空包指令排在依据纪律**之前**：它改写的是「这一轮能引什么」这个前提，
-    // 放在后面会被「法条给条号 + 逐字原文」那套要求稀释成又一条并列建议
-    //（与危机指令同款位置理由：越是压过其它安排的指令，越要靠前）。
+    // 空包指令紧跟其后：它改写的是「这一轮能引什么」这个前提，
+    // 必须先于事实卡与问诊指令被读到。
     input.emptyPack ? EMPTY_PACK_DIRECTIVE : '',
-    [
-      '## 运行环境',
-      '',
-      `- 当前北京时间：${readable}（ISO8601：${iso}）。所有「今天/明天/下班前」按这个时刻换算。`,
-      `- 默认适用地区：${input.snapshot.case.district}区（北京市）。`,
-      `- 当前会话模式：${input.mode}。`,
-    ].join('\n'),
-    factsCardOf(input.snapshot),
-    // 陪跑/文书这类"回头继续"的模式先给前情提要；首诊(问诊)不需要，用户刚开口
-    input.mode === '问诊' ? intakeDirective(input.stage) : `${recapBrief(input.snapshot)}\n\n${intakeDirective(input.stage)}`,
-    outputDiscipline(),
-    // 【它排在输出纪律之后、依据之前，且每轮都在】它管的是**这一轮该由谁做**，
-    // 而上面那 11 条管的是"做出来的东西长什么样"——先定谁做，再定怎么做。
-    // 清单逐条来自领域包：共用层一个条目都不写死（设计稿 §13）。
-    renderLawyerMandatory(pack),
     // 【前置禁令 > 事后剥句】不够格时**在生成前就禁掉**，而不是等它说完再剥——
     // 普通轮是流式的，剥句只能清掉入库正文，用户早看见了。
     // 事后剥句仍保留作兜底，但真正管用的是这条前置约束。
@@ -247,6 +316,10 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
     // 「NBDpsy 那句由系统随资源卡给出，模型不得再自行添加或扩写付费咨询内容」——
     // 这里的通用禁令若再说一遍「不得以任何形式提及 NBDpsy」，就与随卡给出的那句合法文案
     // 直接打架（指令自相矛盾会稀释约束力）。所以危机轮不下发本块，由危机指令一处说清。
+    //
+    // 【为什么它在动态段而不在静态段】文本虽是常量，但**它有两态**（危机轮不下发）。
+    // 放进静态段的形态是：危机轮与非危机轮的前缀不一样，静态段的字节稳定性当场失守，
+    // 而两种前缀各自都读得通、账单也只是贵一点。
     input.nbdpsyEligible === false && !input.crisis
       ? [
           '## 本轮禁止提及付费心理咨询（硬性）',
@@ -258,25 +331,50 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
           '需要给支持资源时，给**免费公益资源**（心理援助热线、工会、法援），不要给我们的付费服务。',
         ].join('\n')
       : '',
-    packsSection(
-      input.packs,
-      // 「别重印整张卡」这条**紧贴卡本身**下发，不放通用指令区：
-      // 实测放开头时模型照样把整张卡重印了两轮，指令离约束对象太远就被稀释了。
-      input.crisis && input.crisisCardAlreadyGiven
-        ? {
-            packId: crisisPack.resourcePackId,
-            // 【这句话与号码都由领域包给，共用层一个数字都不认识】（设计稿 §13「危机」行）
-            // 号码原来写死在这里：第二个领域接进来之后，它的用户在危机窗内读到的是**上一个
-            // 行当**的三个号码——号码本身是对的，只是不属于他这件事，而这一轮回复照常生成、
-            // 格式完全正常、没有一处会报错。
-            note: crisisPack.repeatCardNote(markedCrisisNumbers(input.packs, crisisPack.resourcePackId)),
-          }
-        : undefined,
-      // 核心依据条**由结构化事实判定**，不让模型自己勾——见 citation-block.coreArticleKeys：
-      // S1 档案三来源恒优先；S1 空（首诊轮）时 S3 场景映射优先占上限、S2 检索序补足、
-      // S4 用户点名不占上限。取料面在 orchestrator 一处算清，这里只补本通路的注入包。
-      coreArticleKeys({ ...input.coreSources, retrieved: input.packs }),
-    ),
-  ];
-  return parts.filter((p) => p.trim()).join('\n\n---\n\n');
+    [
+      '## 运行环境',
+      '',
+      `- 当前北京时间：${readable}（ISO8601：${iso}）。所有「今天/明天/下班前」按这个时刻换算。`,
+      `- 默认适用地区：${input.snapshot.case.district}区（北京市）。`,
+      `- 当前会话模式：${input.mode}。`,
+    ].join('\n'),
+    factsCardOf(input.snapshot),
+    // 陪跑/文书这类"回头继续"的模式先给前情提要；首诊(问诊)不需要，用户刚开口
+    input.mode === '问诊' ? intakeDirective(input.stage) : `${recapBrief(input.snapshot)}\n\n${intakeDirective(input.stage)}`,
+  ]
+    .filter((p) => p.trim())
+    .join(SEGMENT_SEPARATOR);
+
+  return { staticPrefix: staticPrefixOf(pack), packsBlock, dynamic };
+}
+
+/**
+ * 拼好的 system prompt + **可缓存前缀的字节位置**。
+ *
+ * `breakpoints` 逐个是「到此为止的这一段可以整体缓存」的偏移：
+ *   [0] = 静态段末尾；[1] = 静态段 + 分隔符 + packs 末尾（packs 为空时只有 [0]）。
+ * 消费它的只有直连 Anthropic 那条路（providers/anthropic.ts 把 system 切成带
+ * cache_control 的块）；中转走 OpenAI 兼容协议，**请求形态一个字节都不改**。
+ */
+export function buildSystemPromptWithBreakpoints(input: BuildSystemPromptInput): {
+  system: string;
+  breakpoints: number[];
+} {
+  const segs = buildSystemPromptSegments(input);
+  const parts: string[] = [];
+  const breakpoints: number[] = [];
+  let len = 0;
+  // 静态段与半静态段各留一个断点；动态段末尾不留（它每轮都变，缓存它只是白写一次）
+  for (const [i, seg] of [segs.staticPrefix, segs.packsBlock, segs.dynamic].entries()) {
+    if (!seg.trim()) continue;
+    if (parts.length) len += SEGMENT_SEPARATOR.length;
+    parts.push(seg);
+    len += seg.length;
+    if (i < 2) breakpoints.push(len);
+  }
+  return { system: parts.join(SEGMENT_SEPARATOR), breakpoints };
+}
+
+export function buildSystemPrompt(input: BuildSystemPromptInput): string {
+  return buildSystemPromptWithBreakpoints(input).system;
 }

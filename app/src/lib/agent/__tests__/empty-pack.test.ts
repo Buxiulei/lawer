@@ -78,7 +78,19 @@ describe('空包告知指令：只在空包轮出现，且禁令配出路', () =
     expect(EMPTY_PACK_DIRECTIVE).toContain('超期是不可逆的');
   });
 
-  it('★指令排在依据纪律之前（放后面会被"法条给条号+逐字原文"稀释成并列建议）', () => {
+  /**
+   * 【这条判据的基线换于 2026-09-10，记账在此】
+   *
+   * 原基线是「空包指令排在**依据纪律之前**」（依据纪律是 packs 段的抬头那几行），理由是
+   * 放后面会被「法条给条号 + 逐字原文」稀释成并列建议。提示缓存前缀稳定化把 packs 提到了
+   * 动态段之前（静态段 → packs → 本轮指令 + 事实卡），于是这条空包指令现在排在依据纪律
+   * **之后**——**这一次红是预期的**，见 lib/agent/prompt.ts 文件头那段口径变更。
+   *
+   * 换成钉什么：**它仍然先于事实卡与问诊指令**——那两样才是它要改写的对象
+   *（"这一轮该问什么、该拿档案里的什么去答"），而它与依据纪律的先后现在靠
+   *「紧挨生成点」承重（与本文件原来给 packs 段的理由是同一条）。
+   */
+  it('★指令排在事实卡与问诊指令之前（它改写的是"这一轮能引什么"这个前提）', () => {
     // 必须带一张卡：packs 为空时依据纪律那段根本不存在，indexOf 返回 -1，
     // 于是"小于"这个比较会拿 -1 作参照——**测试看起来在比顺序，其实在比一个不存在的东西**。
     const p = buildSystemPrompt({
@@ -87,9 +99,13 @@ describe('空包告知指令：只在空包轮出现，且禁令配出路', () =
     });
     const directiveAt = p.indexOf('【本轮无可引用依据】');
     const disciplineAt = p.indexOf('引用纪律：法条给条号');
+    const factsAt = p.indexOf('## 案件事实卡');
     expect(directiveAt).toBeGreaterThanOrEqual(0);
-    expect(disciplineAt).toBeGreaterThanOrEqual(0); // 先自证两个锚点都真的在
-    expect(directiveAt).toBeLessThan(disciplineAt);
+    expect(disciplineAt).toBeGreaterThanOrEqual(0); // 先自证三个锚点都真的在
+    expect(factsAt).toBeGreaterThanOrEqual(0);
+    expect(directiveAt).toBeLessThan(factsAt);
+    // 依据纪律现在在它之前（packs 是半静态段，排在动态段之前）——基线换向，见上方注释
+    expect(disciplineAt).toBeLessThan(directiveAt);
   });
 });
 

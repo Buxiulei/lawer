@@ -66,6 +66,21 @@ export type NoticeCode =
    * 与 USAGE_UNREPORTED 同属**运维可见**档：前端 frames.ts 的词表里没有它，用户不看这条。
    */
   | 'SERVED_MODEL_MISMATCH'
+  /**
+   * 【提示缓存读数】本轮 system prompt 有多少输入 token 是从上游的提示缓存里读出来的、
+   * 又写进去了多少。与 USAGE_UNREPORTED / SERVED_MODEL_MISMATCH 同属**运维可见**档。
+   *
+   * 【为什么它必须每轮都发，哪怕全是 0】2026-09-07 台账那条 backlog 的形状正是
+   *「账单上每轮几万到二十几万的缓存写、几乎零缓存读」——**而系统里没有任何一处会为此出声**：
+   * 请求正常、回复正常、账本正常，只有月底的中转账单知道我们每轮都在为同一段 charter
+   * 重新付一次全价。恒为 0 的量看起来没用，直到它不是 0 的那天（与 gate_report 同款理由）。
+   *
+   * 【三态照 A3】notice 缺席 = 这份产物没有这一层（旧代码 / 旧归档）；
+   * 字段为 `null` = **上游没回报这一桶**；`0` = 上游报了，就是零。合并成 falsy
+   * 会把「中转不给缓存字段」与「缓存一次都没命中」判成同一件事，而两者的修法完全不同：
+   * 前者要去问中转要字段，后者要去查前缀为什么每轮都在变。
+   */
+  | 'PROMPT_CACHE'
   /** 模型请求的工具调用参数不合法，已回喂错误让它改正 */
   | 'TOOL_INPUT_REJECTED'
   /** 模型输出了知识库里不存在的案号，已被运行时闸门拦下（charter §7.1 零编造） */
@@ -340,6 +355,21 @@ export type AgentEvent =
            * 判据读成空集，于是用户面每一处真放行的裸条号都被判成漏网。
            */
           statute_allowed?: string[];
+        };
+        /**
+         * PROMPT_CACHE 专用：本轮输入侧的三桶与命中率（三态见 NoticeCode.PROMPT_CACHE）。
+         * 判据只读这一份结构化字段，**不从 message 里解析中文数字**——
+         * message 是给人看的、随时会改文案（与 gate_report 同一条纪律）。
+         */
+        prompt_cache?: {
+          /** 命中缓存被读出来的输入 token */
+          cached_read: number | null;
+          /** 写进缓存的 token（比标准输入贵；OpenAI 兼容三家结构性没有这一桶） */
+          cached_write: number | null;
+          /** 没命中也没写缓存的新鲜输入 token */
+          fresh: number | null;
+          /** cached_read ÷ 输入总量。分母为 0 或读桶未回报时为 null，**不用 0 冒充** */
+          hit_rate: number | null;
         };
         /** CALC_FAILED 专用：恒 true——补齐信息后可以直接再算一次，不是功能坏了 */
         retriable?: boolean;

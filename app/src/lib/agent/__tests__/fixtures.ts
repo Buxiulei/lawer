@@ -6,7 +6,7 @@
 import BetterSqlite3, { type Database } from 'better-sqlite3';
 
 import { runMigrations } from '@/lib/db/migrate';
-import type { ChatStreamResult, Provider, ProviderName, TokenUsage, ToolCall } from '@/lib/llm';
+import type { ChatStreamOptions, ChatStreamResult, Provider, ProviderName, TokenUsage, ToolCall } from '@/lib/llm';
 import { emptyUsage } from '@/lib/llm';
 import type { AgentEvent } from '../events';
 import type { KnowledgePack, KnowledgeSearcher } from '../retrieval';
@@ -65,6 +65,12 @@ export interface ScriptedRound {
 export interface ScriptedProvider extends Provider {
   /** 每次 chatStream 收到的完整消息数组，供断言上下文组装 */
   readonly calls: { role: string; content: string }[][];
+  /**
+   * 每次 chatStream 收到的 opts（与 `calls` 同下标）。
+   * 【为什么要单独收一份】提示缓存断点是**只在 opts 里**的东西：消息数组一个字节都不变，
+   * 断点算错了也照样跑完一轮、回复正常、账单只是贵一点。不收它就没有任何判据能碰到它。
+   */
+  readonly optsCalls: (ChatStreamOptions | undefined)[];
   /** 已消费的剧本轮数 */
   readonly rounds: number;
 }
@@ -85,6 +91,7 @@ export interface ScriptedIdentity {
 
 export function scriptedProvider(script: ScriptedRound[], identity?: ScriptedIdentity): ScriptedProvider {
   const calls: { role: string; content: string }[][] = [];
+  const optsCalls: (ChatStreamOptions | undefined)[] = [];
   let cursor = 0;
   const id: ScriptedIdentity = identity ?? {
     name: 'deepseek',
@@ -99,11 +106,15 @@ export function scriptedProvider(script: ScriptedRound[], identity?: ScriptedIde
     get calls() {
       return calls;
     },
+    get optsCalls() {
+      return optsCalls;
+    },
     get rounds() {
       return cursor;
     },
-    async chatStream(messages: { role: string; content: string }[]) {
+    async chatStream(messages: { role: string; content: string }[], opts?: ChatStreamOptions) {
       calls.push(messages.map((m) => ({ role: m.role, content: m.content })));
+      optsCalls.push(opts);
       const round: ScriptedRound = script[cursor++] ?? {};
       return (async function* (): AsyncGenerator<string, ChatStreamResult, void> {
         // 按字符切片 yield，顺带验证调用方对增量的拼接是对的

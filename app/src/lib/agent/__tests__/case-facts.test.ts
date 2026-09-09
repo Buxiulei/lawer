@@ -807,7 +807,19 @@ describe('G-F6 证据区：带简报的按简报说，没提取的明说没读�
 
 // ========== G-F7 不破既有防线 ==========
 
-describe('G-F7 注入位置：事实卡排在危机指令与空包指令之后、输出纪律之前', () => {
+/**
+ * G-F7 注入位置。**基线在 2026-09-10 换过一次，这里记账。**
+ *
+ * 原基线是「事实卡排在危机指令与空包指令之后、**输出纪律之前**」。提示缓存前缀稳定化
+ *（台账 2026-09-07 backlog）把 system prompt 改成三段：静态段（charter + 输出纪律 +
+ * 闭合清单，逐字节恒定）→ 半静态段（packs）→ 动态段（本轮指令 + 事实卡 + 问诊）。
+ * 于是输出纪律**排到了事实卡之前**——这一条判据红是**预期的**，不是有人偷偷动了注入位置。
+ *
+ * **没变的那两条仍然钉着**：事实卡仍在危机指令与空包指令**之后**（它是那两条指令的作用对象），
+ * 也仍然在 system prompt 里、先于用户消息。变的只是它与静态段的相对位置。
+ * 理由与判据都在 lib/agent/prompt.ts 文件头。
+ */
+describe('G-F7 注入位置：事实卡排在危机指令与空包指令之后、静态段之后（基线换于 2026-09-10）', () => {
   const prompt = buildSystemPrompt({
     snapshot: uid2Snapshot(),
     mode: '陪跑',
@@ -826,7 +838,10 @@ describe('G-F7 注入位置：事实卡排在危机指令与空包指令之后�
     expect(crisisAt).toBeGreaterThanOrEqual(0);
     expect(factsAt).toBeGreaterThan(crisisAt);
     expect(factsAt).toBeGreaterThan(emptyAt);
-    expect(disciplineAt).toBeGreaterThan(factsAt);
+    // 输出纪律属静态段，现在排在动态段（危机指令、空包指令、事实卡）**之前**
+    expect(disciplineAt).toBeGreaterThanOrEqual(0);
+    expect(disciplineAt).toBeLessThan(crisisAt);
+    expect(disciplineAt).toBeLessThan(factsAt);
   });
 
   it('事实卡整体仍在预算内（prompt 里那一段就是 renderCaseFacts 的产物）', () => {

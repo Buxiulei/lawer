@@ -114,6 +114,16 @@ export function archiveGateReport(events: AgentEvent[]): ScenarioEvidence['turns
   return findNotice(events, 'GATE_REPORT')?.data.gate_report ?? null;
 }
 
+/**
+ * 提示缓存读数的留痕（三态同 `leverage`）。**这是「留痕不进归档」的第六处防线**：
+ * 缓存命中率只出现在一条 notice 上，而 notice 不进归档——不落这一格，
+ * 「跑批里前缀到底稳不稳」永远只能靠月底的中转账单事后倒推。
+ * 内层字段自己还有一层三态（null=上游没给这一桶 / 0=上游报了就是 0），**两层都不许塌**。
+ */
+export function archivePromptCache(events: AgentEvent[]): ScenarioEvidence['turns'][number]['promptCache'] {
+  return findNotice(events, 'PROMPT_CACHE')?.data.prompt_cache ?? null;
+}
+
 export interface ScenarioEvidence {
   id: string;
   title: string;
@@ -186,6 +196,17 @@ export interface ScenarioEvidence {
       substantiveHitCount: number;
     } | null;
     leverage?: { outcome: string; stripped: string[]; bodyRaw?: string } | null;
+    /**
+     * 提示缓存读数（三态同上）。**内层四个字段还有一层三态**：
+     * `null` = 上游没回报这一桶（中转不给 cached_tokens 就是这一档）；`0` = 报了、就是 0。
+     * 合并成 falsy 会把「问中转要字段」与「查前缀为什么每轮都在变」判成同一件事。
+     */
+    promptCache?: {
+      cached_read: number | null;
+      cached_write: number | null;
+      fresh: number | null;
+      hit_rate: number | null;
+    } | null;
     /** 这一轮实际跑在哪个模型上——证据必须自证，不能靠「我记得是 deepseek」 */
     model: string;
     degraded: boolean;
@@ -396,6 +417,40 @@ export function renderMarkdown(run: RunEvidence): string {
         );
       }
       lines.push('');
+    }
+
+    // ═══ 提示缓存命中率（有数据才显示）═══
+    // 【为什么另起一张表，不并进上面那张】上面那张量的是闸链动了正文几处，这张量的是
+    // 我们为同一段 charter 付了几次全价——同一张表量两件事，两边的统计会同时失真（教训 11）。
+    // 【为什么"有数据才显示"】跑在没有这一层的旧代码上、或上游根本不回报缓存字段时，
+    // 印一张全是「—」的表只会让人以为命中率是 0；缺席本身才是那一档的正确表达。
+    const cached = s.turns.filter((t) => t.promptCache);
+    if (cached.length) {
+      lines.push('### 提示缓存命中率（运维指标，不计 FAIL）', '');
+      lines.push('| 轮 | 缓存读 | 缓存写 | 新鲜输入 | 缓存命中率 |', '|---|---|---|---|---|');
+      for (const [i, t] of s.turns.entries()) {
+        const c = t.promptCache;
+        if (!c) {
+          // 三态：**缺留痕不写 0**——"这一轮不知道"与"这一轮一个 token 都没命中"必须分得开
+          lines.push(`| ${i + 1} | — | — | — | 无 PROMPT_CACHE 留痕（旧产物或跑在旧代码上） |`);
+          continue;
+        }
+        // 内层三态：`null` 印「未回报」而不是 0——上游不给这一桶与真的零命中是两件事
+        const n = (x: number | null) => (x === null ? '未回报' : String(x));
+        lines.push(
+          `| ${i + 1} | ${n(c.cached_read)} | ${n(c.cached_write)} | ${n(c.fresh)} | ` +
+            `${c.hit_rate === null ? '不可算' : `${(c.hit_rate * 100).toFixed(1)}%`} |`,
+        );
+      }
+      lines.push('');
+      const anyRead = cached.some((t) => (t.promptCache!.cached_read ?? 0) > 0);
+      lines.push(
+        anyRead
+          ? '> 命中率是**前缀稳不稳**的直接度量：静态段（charter + 输出纪律 + 闭合清单）逐字节恒定时它才可能不为 0。'
+          : '> ⚠️ **本场缓存读全为 0 或未回报**：要么上游不给这一桶（去问中转要字段），' +
+              '要么 system prompt 的前缀每轮都在变（去查静态段里混进了什么本轮才有的东西）。**这两件事的修法不同，别混着查。**',
+        '',
+      );
     }
 
     lines.push('### 机械断言', '');

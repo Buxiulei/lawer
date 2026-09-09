@@ -314,7 +314,16 @@ describe('危机响应：心理危机资源卡强制注入（charter §5）', ()
     expect(codes).toContain('KNOWLEDGE_MISS');
   });
 
-  it('危机指令排在 charter 之后、案件事实卡之前（不能被问诊/行动卡纪律稀释）', async () => {
+  /**
+   * 【基线换于 2026-09-10，记账在此】原基线还钉着「危机指令排在**输出纪律之前**」。
+   * 提示缓存前缀稳定化把输出纪律并进了静态段（charter + 输出纪律 + 闭合清单，逐字节恒定、
+   * 严格排最前），危机指令属**本轮指令**，落在动态段——于是它现在排在输出纪律之后。
+   * 这一条红是预期的；口径变更与理由见 lib/agent/prompt.ts 文件头。
+   *
+   * **仍然钉着的是**：危机指令排在**动态段最前**，先于案件事实卡与问诊指令——
+   * 那几样才是它要压过的「本轮安排」。
+   */
+  it('危机指令排在动态段最前（先于案件事实卡与问诊指令，不能被它们稀释）', async () => {
     const { provider } = await turn([{ text: '我在。', tools: [GOOD_CARD] }], {
       message: CRISIS,
       searcher: idOnlySearcher,
@@ -322,7 +331,7 @@ describe('危机响应：心理危机资源卡强制注入（charter §5）', ()
     const system = provider.calls[0][0].content;
     expect(system).toContain('【危机响应 · 本轮最高优先级');
     expect(system.indexOf('【危机响应')).toBeLessThan(system.indexOf('## 案件事实卡'));
-    expect(system.indexOf('【危机响应')).toBeLessThan(system.indexOf('## 本轮输出纪律'));
+    expect(system.indexOf('【危机响应')).toBeLessThan(system.indexOf('## 运行环境'));
   });
 
   it('普通倾诉（没有自伤表述）不触发——资源卡一案只有一次，不能浪费在情绪低谷上', async () => {

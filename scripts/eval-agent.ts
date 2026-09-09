@@ -56,6 +56,7 @@ import { lawsInLibrary } from './eval/assertions';
 import {
   archiveCrisisPaid,
   archiveGateReport,
+  archivePromptCache,
   archiveInjection,
   archiveLeverage,
   archiveStatuteGate,
@@ -544,6 +545,9 @@ async function main() {
         // 在归档里长得一模一样，而离线回放只剩这一格可依。
         statuteGate: archiveStatuteGate(t.events),
         gateReport: archiveGateReport(t.events),
+        // 提示缓存读数同理：**无条件写（null 也写）**。不落这一格，「跑批里前缀稳不稳」
+        // 就只剩月底的中转账单可依，而那份账单说不出是哪一场、哪一轮把前缀弄断的。
+        promptCache: archivePromptCache(t.events),
         model: t.model,
         degraded: t.degraded,
         taskClass: t.taskClass,

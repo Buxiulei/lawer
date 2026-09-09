@@ -40,6 +40,13 @@ interface AnthropicMessage {
   content: string | AnthropicBlock[];
 }
 
+/** 顶层 system 的块形态（只有它能挂 cache_control；字符串形态挂不了）。 */
+interface AnthropicSystemBlock {
+  type: 'text';
+  text: string;
+  cache_control?: { type: 'ephemeral' };
+}
+
 interface AnthropicUsage {
   input_tokens?: number;
   output_tokens?: number;
@@ -106,6 +113,43 @@ export function toAnthropicRequest(messages: ChatMessage[]): { system?: string; 
   return { system: systems.length ? systems.join('\n\n') : undefined, messages: out };
 }
 
+/** Anthropic 允许的 cache_control 断点上限。超出会 400，所以在本层就截断。 */
+export const MAX_CACHE_BREAKPOINTS = 4;
+
+/**
+ * system 串 + 断点偏移 → 顶层 `system` 字段的值。
+ *
+ * 无断点时原样返回字符串（请求体与改动前逐字节相同——没有断点的调用不该因为这次改动
+ * 换一种请求形态）。有断点时切成 text 块数组，**除最后一块外每块带
+ * `cache_control: {type:'ephemeral'}`**：Anthropic 的语义是「缓存到这个块为止的全部前缀」。
+ *
+ * 【为什么非法断点是忽略而不是抛】它是**性能提示**，不是语义的一部分。
+ * 为一个算错的偏移把整轮对话打掉，是拿用户的这一轮去换一次缓存——
+ * 忽略的代价只是这轮不命中缓存（账单变贵，正文一个字不变）。
+ * 非法的定义：非有限数、非整数、≤0、≥ 串长、不严格递增。
+ */
+export function toAnthropicSystem(
+  system: string,
+  breakpoints: number[] | undefined,
+): string | AnthropicSystemBlock[] {
+  const cuts: number[] = [];
+  for (const raw of breakpoints ?? []) {
+    if (!Number.isInteger(raw) || raw <= 0 || raw >= system.length) continue;
+    if (cuts.length && raw <= cuts[cuts.length - 1]) continue; // 必须严格递增
+    cuts.push(raw);
+    if (cuts.length === MAX_CACHE_BREAKPOINTS) break;
+  }
+  if (cuts.length === 0) return system;
+  const blocks: AnthropicSystemBlock[] = [];
+  let from = 0;
+  for (const cut of cuts) {
+    blocks.push({ type: 'text', text: system.slice(from, cut), cache_control: { type: 'ephemeral' } });
+    from = cut;
+  }
+  blocks.push({ type: 'text', text: system.slice(from) });
+  return blocks;
+}
+
 /** tool_calls 里的 arguments 是 JSON 字符串（流式拼出来的），Anthropic 的 input 要对象。
  *  解析失败就地报错并带上工具名——比把畸形 JSON 塞给 API 换一个含糊的 400 强。 */
 function parseToolArguments(tc: ToolCall): unknown {
@@ -165,7 +209,9 @@ export function createAnthropic(o: ProviderOptions): Provider {
         thinking: { type: 'adaptive', display: 'summarized' },
         ...o.extraBody,
       };
-      if (system) body.system = system;
+      // 提示缓存断点只在这条路上生效（见 types.ChatStreamOptions.cacheBreakpoints）：
+      // 中转走 OpenAI 兼容协议，请求形态一个字节都不改。
+      if (system) body.system = toAnthropicSystem(system, opts.cacheBreakpoints);
       if (opts.tools?.length) body.tools = toAnthropicTools(opts.tools);
       // 注意：Claude 5 系（含 claude-sonnet-5）已移除采样参数，传 temperature 会 400。
       // 这里只在调用方显式指定时才下发，默认不传。

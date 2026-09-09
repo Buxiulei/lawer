@@ -7,6 +7,7 @@ import {
   archiveCrisisPaid,
   archiveGateReport,
   archiveLeverage,
+  archivePromptCache,
   archiveStatuteGate,
   renderMarkdown,
   type RunEvidence,
@@ -285,5 +286,77 @@ describe('成绩单：替换率与漏网率并列成两列', () => {
     const md = renderMarkdown(withTurns(null));
     // 整节不出现（本场没有任何一轮有 gate_report）
     expect(md).not.toContain('闸链替换率 / 漏网率');
+  });
+});
+
+/**
+ * 【缓存命中率那一列·2026-09-10】提示缓存前缀稳定化之后，「跑批里前缀稳不稳」需要一个
+ * 能被翻出来看的落点。它与 `leverage` / `crisisPaid` / `gateReport` 同族：
+ * **留痕在 notice 上，而 notice 不进归档**——不落这一格就只剩月底的中转账单可依，
+ * 而账单说不出是哪一场、哪一轮把前缀弄断的。
+ *
+ * 三态照旧（外层 null=这一层没跑过；内层 null=上游没给这一桶；0=报了就是 0），
+ * 且**内层的 null 不许在报表里渲染成 0**——那会把"去问中转要字段"读成"零命中，去查前缀"。
+ */
+describe('提示缓存命中率：留痕进归档、报表分得开三态', () => {
+  const notice = (prompt_cache: unknown): AgentEvent[] => [
+    { event: 'notice', data: { code: 'PROMPT_CACHE', message: 'x', prompt_cache } } as AgentEvent,
+  ];
+
+  const runWith = (turns: RunEvidence['scenarios'][number]['turns']): RunEvidence => ({
+    runId: 'TEST',
+    startedAt: '2026-09-10T00:00:00Z',
+    finishedAt: '2026-09-10T00:01:00Z',
+    plan: 'pro',
+    routing: [{ taskClass: 'critical', model: 'anthropic/claude-sonnet-5' }],
+    judgeEnabled: false,
+    runNotes: [],
+    scenarios: [{ id: 'S99', title: '缓存', redline: false, pass: true, turns, mechanical: [], semantic: [] }],
+  });
+
+  const turnOf = (promptCache: unknown) =>
+    ({
+      input: '问',
+      text: '答',
+      actionCards: [],
+      retrievedIds: [],
+      gateStrippedArticles: [],
+      model: 'claude-sonnet-5',
+      degraded: false,
+      taskClass: 'critical',
+      promptCache,
+    }) as unknown as RunEvidence['scenarios'][number]['turns'][number];
+
+  it('归档：有 notice 取值，没 notice 落 null（两态分得开）', () => {
+    expect(archivePromptCache(notice({ cached_read: 700, cached_write: null, fresh: 300, hit_rate: 0.7 }))).toEqual({
+      cached_read: 700,
+      cached_write: null,
+      fresh: 300,
+      hit_rate: 0.7,
+    });
+    expect(archivePromptCache([])).toBeNull();
+  });
+
+  it('报表：命中率成列印出，未回报的桶印「未回报」而不是 0', () => {
+    const md = renderMarkdown(
+      runWith([turnOf({ cached_read: 700, cached_write: null, fresh: 300, hit_rate: 0.7 })]),
+    );
+    expect(md).toContain('提示缓存命中率');
+    expect(md).toContain('70.0%');
+    expect(md).toContain('未回报');
+  });
+
+  it('报表：没有这一层的转录印「无 PROMPT_CACHE 留痕」，不印 0（不知道≠零）', () => {
+    const md = renderMarkdown(
+      runWith([turnOf({ cached_read: 0, cached_write: 0, fresh: 900, hit_rate: 0 }), turnOf(null)]),
+    );
+    expect(md).toContain('无 PROMPT_CACHE 留痕');
+    // 真的零命中要报警：这一场读全是 0，报表必须说「去查前缀，或去问中转要字段」
+    expect(md).toContain('本场缓存读全为 0 或未回报');
+  });
+
+  it('报表：一格留痕都没有时整节不出现（不印一张全是「—」的表）', () => {
+    const md = renderMarkdown(runWith([turnOf(null)]));
+    expect(md).not.toContain('提示缓存命中率');
   });
 });

@@ -3,7 +3,7 @@
 // 两块重点：①统一消息形态 → Anthropic 请求体的转换（system 提顶层、工具结果并轮）；
 // ②事件流解析与计量（input 在流首、output 在流末，缓存量单列）。
 import { describe, test, expect } from 'vitest';
-import { createAnthropic, toAnthropicRequest, toAnthropicTools } from '../providers/anthropic';
+import { createAnthropic, MAX_CACHE_BREAKPOINTS, toAnthropicRequest, toAnthropicSystem, toAnthropicTools } from '../providers/anthropic';
 import { drain, mockFetch, sseResponse } from './mock-fetch';
 
 const ev = (o: unknown) => `event: ${(o as { type: string }).type}\ndata: ${JSON.stringify(o)}\n\n`;
@@ -293,5 +293,84 @@ describe('实际服务模型回显（servedModel）', () => {
     const p = createAnthropic({ apiKey: 'k', model: 'claude-opus-5', fetchImpl });
     const { result } = await drain(await p.chatStream([{ role: 'user', content: 'x' }]));
     expect(result.usage.servedModel).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 提示缓存断点（2026-09-10）。system 只有切成块才挂得上 cache_control——
+// 字符串形态的 system 挂不了，于是「前缀恒定」这件事在直连这条路上一分钱都省不下来。
+// 断点从 agent/prompt.buildSystemPromptWithBreakpoints 来，本层只负责按偏移切。
+// ─────────────────────────────────────────────────────────────────────────────
+describe('toAnthropicSystem 提示缓存断点', () => {
+  const S = 'AAAA' + 'BBBB' + 'CCCC'; // 12 字符，断点落 4 与 8
+
+  test('无断点 → 原样是字符串（不带断点的调用不该因为这次改动换一种请求形态）', () => {
+    expect(toAnthropicSystem(S, undefined)).toBe(S);
+    expect(toAnthropicSystem(S, [])).toBe(S);
+  });
+
+  test('两个断点 → 三块，前两块带 ephemeral、最后一块不带', () => {
+    expect(toAnthropicSystem(S, [4, 8])).toEqual([
+      { type: 'text', text: 'AAAA', cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: 'BBBB', cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: 'CCCC' },
+    ]);
+  });
+
+  test('切出来的块拼回去与原串逐字节相同（切错一位就是发了一份不一样的 prompt）', () => {
+    const blocks = toAnthropicSystem(S, [4, 8]) as { text: string }[];
+    expect(blocks.map((b) => b.text).join('')).toBe(S);
+  });
+
+  test('非法断点被忽略而不是抛（它是性能提示，不该拿一轮对话去换一次缓存）', () => {
+    // 0 / 负数 / 非整数 / 越界 / 不递增，一个都不该切出块来
+    expect(toAnthropicSystem(S, [0])).toBe(S);
+    expect(toAnthropicSystem(S, [-3])).toBe(S);
+    expect(toAnthropicSystem(S, [2.5])).toBe(S);
+    expect(toAnthropicSystem(S, [S.length])).toBe(S);
+    expect(toAnthropicSystem(S, [999])).toBe(S);
+    // 合法的那个照切，不递增的那个被丢掉（不是整批丢）
+    expect((toAnthropicSystem(S, [8, 4]) as { text: string }[]).map((b) => b.text)).toEqual(['AAAABBBB', 'CCCC']);
+  });
+
+  test(`最多 ${MAX_CACHE_BREAKPOINTS} 个断点（多给的截断，超限会被 API 判 400）`, () => {
+    const long = 'x'.repeat(100);
+    const blocks = toAnthropicSystem(long, [10, 20, 30, 40, 50, 60]) as { cache_control?: unknown }[];
+    expect(blocks.filter((b) => b.cache_control).length).toBe(MAX_CACHE_BREAKPOINTS);
+    expect(blocks).toHaveLength(MAX_CACHE_BREAKPOINTS + 1);
+  });
+
+  test('chatStream 把断点落进请求体的 system 块（不传就仍是字符串）', async () => {
+    const sse = textStream(['好']);
+    const [fetchImpl, calls] = mockFetch(() => sseResponse(sse));
+    const p = createAnthropic({ apiKey: 'k', model: 'claude-sonnet-5', fetchImpl });
+    const msgs = [
+      { role: 'system' as const, content: '恒定段' },
+      { role: 'user' as const, content: '问题' },
+    ];
+    await drain(await p.chatStream(msgs, { cacheBreakpoints: [2] }));
+    expect(calls[0].body.system).toEqual([
+      { type: 'text', text: '恒定', cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: '段' },
+    ]);
+
+    const [fetchImpl2, calls2] = mockFetch(() => sseResponse(sse));
+    const p2 = createAnthropic({ apiKey: 'k', model: 'claude-sonnet-5', fetchImpl: fetchImpl2 });
+    await drain(await p2.chatStream(msgs));
+    expect(calls2[0].body.system).toBe('恒定段');
+  });
+
+  test('缓存读写量从 message_start 的 usage 进四桶（命中率的唯一数据源）', async () => {
+    const sse =
+      ev({
+        type: 'message_start',
+        message: { id: 'm', usage: { input_tokens: 120, output_tokens: 1, cache_read_input_tokens: 8800, cache_creation_input_tokens: 40 } },
+      }) +
+      ev({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 30 } }) +
+      ev({ type: 'message_stop' });
+    const [fetchImpl] = mockFetch(() => sseResponse(sse));
+    const p = createAnthropic({ apiKey: 'k', model: 'claude-sonnet-5', fetchImpl });
+    const { result } = await drain(await p.chatStream([{ role: 'user', content: 'x' }]));
+    expect(result.usage.usage).toEqual({ prompt: 120, completion: 30, cachedRead: 8800, cachedWrite: 40 });
   });
 });

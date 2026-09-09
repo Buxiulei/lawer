@@ -363,3 +363,56 @@ describe('done 帧带得出「实际是谁答的」（前端那行落款的唯�
     expect(done.served_mismatch).toBe(true);
   });
 });
+
+/**
+ * 【缓存两桶落不落账·两臂】(2026-09-10 提示缓存前缀改)
+ *
+ * 【为什么要有这一条】提示缓存的整件事只有一个可验证的落点：**上游报了缓存量，我们记没记**。
+ * 不记的形态**不会报错、不会崩、账也照扣**——只是每一笔都按 1.0× 的输入价算，
+ * 而缓存读的真实价是 0.1×。用户多付，账本上一行看不出异样（memory：往严重方向错更难被发现）。
+ * 两臂缺一不可：只验"有"的那臂，把 0 当成"上游没给"的写法照样绿。
+ */
+describe('缓存两桶进 token_usage（两臂：上游给了 / 没给）', () => {
+  const withCache: ScriptedRound[] = [
+    { text: 'x', tools: [CARD], usage: { prompt: 120, completion: 30, cachedRead: 8800, cachedWrite: 40 } },
+    { text: '好了。', usage: { prompt: 0, completion: 5, cachedRead: 0, cachedWrite: 0 } },
+  ];
+  const withoutCache: ScriptedRound[] = [
+    { text: 'x', tools: [CARD], usage: { prompt: 120, completion: 30, cachedRead: null, cachedWrite: null } },
+    { text: '好了。', usage: { prompt: 0, completion: 5, cachedRead: null, cachedWrite: null } },
+  ];
+
+  it('上游给了 → 两桶原样落库，且成本按缓存价算（比全按输入价便宜）', async () => {
+    const { f } = await turn(withCache);
+    const [u] = rows<{ prompt_tokens: number; cache_read_tokens: number; cache_write_tokens: number; cost_li: number }>(
+      f, 'SELECT * FROM token_usage',
+    );
+    expect(u.cache_read_tokens).toBe(8800);
+    expect(u.cache_write_tokens).toBe(40);
+    expect(u.prompt_tokens).toBe(120); // 四桶互斥：缓存量不再重复计进 prompt
+    // 同样 8960 个输入 token，全按 1.0× 记要贵得多——这就是这次改动要省的那笔钱
+    const rates = getRatesForModel(f.db, 'DeepSeek-V4-Pro-0813');
+    const allFresh = costLiOfUsage({ promptTokens: 8960, completionTokens: 35 }, rates);
+    expect(u.cost_li).toBeLessThan(allFresh);
+  });
+
+  it('上游没给 → 两桶记 0，而 tokens_json 里仍是 null（0 与"没给"不许在同一处混着看）', async () => {
+    const { f } = await turn(withoutCache);
+    const [u] = rows<{ cache_read_tokens: number; cache_write_tokens: number }>(f, 'SELECT * FROM token_usage');
+    // token_usage 的列是 NOT NULL DEFAULT 0：**结算口径**上「这一档结构性不存在」按 0 计，
+    // 上面那条 USAGE_UNREPORTED 已经保证了「整份计量未回报」不会走到这里来。
+    expect(u.cache_read_tokens).toBe(0);
+    expect(u.cache_write_tokens).toBe(0);
+    // 而**原始回报**留在 messages.tokens_json 里，仍是 null——回填那条路（billing/backfill.ts）
+    // 靠它分辨「上游没这一桶」与「上游说就是 0」。两处口径不同是设计如此，不是漂移。
+    const [m] = rows<{ tokens_json: string }>(f, "SELECT tokens_json FROM messages WHERE role='assistant'");
+    expect(JSON.parse(m.tokens_json).usage).toMatchObject({ cachedRead: null, cachedWrite: null });
+  });
+
+  it('两臂的差别真的落在账上（自证两条用例不是同一份输入跑了两遍）', async () => {
+    const a = await turn(withCache);
+    const b = await turn(withoutCache);
+    const li = (f: AgentFixture) => rows<{ cost_li: number }>(f, 'SELECT cost_li FROM token_usage')[0].cost_li;
+    expect(li(a.f)).not.toBe(li(b.f));
+  });
+});

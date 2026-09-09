@@ -5,6 +5,7 @@ import { describe, test, expect } from 'vitest';
 import { createDashScope } from '../providers/dashscope';
 import { createDeepSeek } from '../providers/deepseek';
 import { createOpenAI } from '../providers/openai';
+import { createRelay } from '../providers/relay';
 import { drain, mockFetch, sseResponse } from './mock-fetch';
 
 const dataLine = (o: unknown) => `data: ${JSON.stringify(o)}\n\n`;
@@ -393,5 +394,33 @@ describe('实际服务模型回显（servedModel）', () => {
 
     const { result } = await drain(await p.chatStream([{ role: 'user', content: 'x' }]));
     expect(result.usage.servedModel).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 提示缓存断点（2026-09-10）：**兼容层一个字节都不改**。
+// 这边的缓存是上游按前缀隐式做的，请求体里没有对应字段；硬塞一个未知字段会被某些网关判 400，
+// 而那种 400 的表现是「这条链路整个不可用」——为一次缓存优化换掉一整条中转，不划算。
+// ─────────────────────────────────────────────────────────────────────────────
+describe('cacheBreakpoints 在兼容层被忽略（中转请求形态不变）', () => {
+  const sse = textDelta('好') + dataLine({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) + 'data: [DONE]\n\n';
+  const msgs = [
+    { role: 'system' as const, content: '恒定段' },
+    { role: 'user' as const, content: '问题' },
+  ];
+
+  test('传与不传，请求体逐字节相同（中转与 deepseek 两条都验）', async () => {
+    for (const make of [createRelay, createDeepSeek]) {
+      const [f1, c1] = mockFetch(() => sseResponse(sse));
+      const [f2, c2] = mockFetch(() => sseResponse(sse));
+      const opt = { apiKey: 'k', model: 'deepseek-v4-pro', billingModel: 'DeepSeek-V4-Pro-0813', baseUrl: 'https://x/v1' };
+      await drain(await make({ ...opt, fetchImpl: f1 }).chatStream(msgs, { cacheBreakpoints: [2, 5] }));
+      await drain(await make({ ...opt, fetchImpl: f2 }).chatStream(msgs));
+      expect(JSON.stringify(c1[0].body)).toBe(JSON.stringify(c2[0].body));
+      // system 仍是普通消息轮，不是块数组；请求体里不许出现 cache_control 这几个字
+      expect(c1[0].body.messages).toEqual(msgs);
+      expect(JSON.stringify(c1[0].body)).not.toContain('cache_control');
+      expect(JSON.stringify(c1[0].body)).not.toContain('cacheBreakpoints');
+    }
   });
 });

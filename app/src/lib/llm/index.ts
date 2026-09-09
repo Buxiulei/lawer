@@ -19,7 +19,7 @@ export {
   type ModelSpec,
   type RouteTarget,
 } from './routing.config';
-export { emptyUsage } from './types';
+export { emptyUsage, promptCacheStats } from './types';
 export {
   createPiiSession,
   withPiiRedaction,

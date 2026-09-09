@@ -60,6 +60,29 @@ export function emptyUsage(): TokenUsage {
   return { prompt: null, completion: null, cachedRead: null, cachedWrite: null };
 }
 
+/**
+ * 输入侧三桶 + 提示缓存命中率。**四桶已经两两互斥**（见 TokenUsage），所以
+ * 输入总量 = prompt + cachedRead + cachedWrite，直接相除即可，不必再认识 provider。
+ *
+ * `hitRate` 只在**读桶真的回报过、且输入总量 > 0** 时给数；否则 null。
+ * 拿 0 冒充「上游没给这一桶」的形态是：中转某天不再回报 cached_tokens，
+ * 报表上的命中率从 60% 掉到 0%，读的人会去查前缀——而前缀一个字节都没变。
+ */
+export function promptCacheStats(u: TokenUsage): {
+  cachedRead: number | null;
+  cachedWrite: number | null;
+  fresh: number | null;
+  hitRate: number | null;
+} {
+  const total = (u.prompt ?? 0) + (u.cachedRead ?? 0) + (u.cachedWrite ?? 0);
+  return {
+    cachedRead: u.cachedRead,
+    cachedWrite: u.cachedWrite,
+    fresh: u.prompt,
+    hitRate: u.cachedRead === null || total === 0 ? null : u.cachedRead / total,
+  };
+}
+
 /** 一次调用的计量上报。model 是**计费键**而不是 API 调用串——
  *  见 routing.config.ts：两者是不同的命名空间，API 只认别名，计费要锁 dated 版本。
  *  含计费维度变体时形如 `qwen3.6-flash:nothink`（manager 2026-08-19 裁决）。
@@ -120,6 +143,17 @@ export interface ChatStreamOptions {
   idleTimeoutMs?: number;
   /** 总时长硬上限（默认 900s） */
   maxDurationMs?: number;
+  /**
+   * 提示缓存断点：system prompt 里「到此为止可整体缓存」的**字符偏移**，升序，最多 4 个
+   *（Anthropic 的 cache_control 块上限）。由 agent/prompt.buildSystemPromptWithBreakpoints 给出。
+   *
+   * **只有 Anthropic 直连认它**（providers/anthropic.ts 按偏移把 system 切成带
+   * `cache_control: ephemeral` 的块）。OpenAI 兼容四家（含中转）一律忽略：那边的缓存是
+   * 上游按前缀隐式做的，请求体里没有对应字段，**硬塞一个未知字段会被某些网关判 400**。
+   * 所以这不是「四家都该实现的接口」，是一个 provider 认得的可选提示——
+   * 忽略它的代价只是不命中缓存，绝不会改变生成结果。
+   */
+  cacheBreakpoints?: number[];
   /** 流末拿到 usage 时触发 */
   onUsage?: UsageCallback;
   /** 每解析到思考链增量时触发，参数为累计字符数（不进正文；节流由调用方做） */

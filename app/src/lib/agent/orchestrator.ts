@@ -23,6 +23,7 @@ import { fromSql } from '@/lib/db/time';
 import { toUserFacingError } from '@/lib/errors/user-facing';
 import {
   getProvider,
+  promptCacheStats,
   type ChatMessage,
   type Plan,
   type Provider,
@@ -34,7 +35,7 @@ import { domainPackOrDefault } from '@/lib/domains/registry';
 
 import type { AgentEventSink } from './events';
 import { intakeStage, type IntakeStage } from './intake';
-import { buildSystemPrompt } from './prompt';
+import { buildSystemPromptWithBreakpoints } from './prompt';
 import {
   assessCrisis,
   buildCrisisOpener,
@@ -821,7 +822,7 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   // 豁免了指令还把指标一起关掉，等于把问题连同告警一起藏起来。
   const emptyPack = emptyPackDetected && !crisis.triggered;
 
-  const system = buildSystemPrompt({
+  const { system, breakpoints: cacheBreakpoints } = buildSystemPromptWithBreakpoints({
     snapshot,
     mode,
     stage,
@@ -966,7 +967,15 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
     // §46 的原文、下一句逐字引用它，闸把它标成【条号待核验】——闸在惩罚模型做对的事。
     // （构造时那次收的是预检索包，收不到工具轮的卡；这一行才是"中途扩充"的那一行。）
     statutes.allowFrom(state.retrieved);
-    const gen = await routed.client.chatStream(messages, { tools: AGENT_TOOLS, idleTimeoutMs: IDLE_TIMEOUT_MS });
+    // cacheBreakpoints：system prompt 里两个可缓存前缀的字节位置（静态段、静态段+packs）。
+    // 只有 Anthropic 直连认它，其余四家忽略——见 llm/types.ChatStreamOptions.cacheBreakpoints。
+    // **偏移是相对 system 串开头的**，而收口补救轮会往 messages 末尾再 push 一条 system
+    //（anthropic 侧会把它接在 system 之后）：接在后面不动前缀，两个偏移照样有效。
+    const gen = await routed.client.chatStream(messages, {
+      tools: AGENT_TOOLS,
+      idleTimeoutMs: IDLE_TIMEOUT_MS,
+      cacheBreakpoints,
+    });
     let round = '';
     for (;;) {
       const step = await gen.next();
@@ -1631,6 +1640,33 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   progress.settled = true;
   store.touchThread(db, thread.id);
   chargeTurn({ db, userId, mode, messageId, usage, provider: routed.client, servedModel, emit });
+
+  // 提示缓存读数：与 GATE_REPORT / SERVED_MODEL_MISMATCH 同一条运维通道，**每轮都发**。
+  // 它是 2026-09-07 那条 backlog（每轮几万缓存写、几乎零缓存读）唯一的在线观测口——
+  // 在它之前，前缀每轮都在变这件事只有月底的中转账单知道。
+  // 三态见 events.ts：notice 缺席=旧代码；字段 null=上游没给这一桶；0=上游报了就是 0。
+  //
+  // 【它必须排在 usage 之前】**usage / done 恒为最后两帧**是帧序契约（三处判据钉着它：
+  // orchestrator / referral-d14-d15 / chat route）。插在这两帧中间的形态是：前端按
+  // 「倒数第二帧是 usage」取用量，取到一条 notice，而这一轮从头到尾没有一处会报错。
+  {
+    const c = promptCacheStats(usage);
+    emit({
+      event: 'notice',
+      data: {
+        code: 'PROMPT_CACHE',
+        message:
+          `提示缓存本轮：读 ${c.cachedRead ?? '未回报'}｜写 ${c.cachedWrite ?? '未回报'}｜` +
+          `新鲜输入 ${c.fresh ?? '未回报'}｜命中率 ${c.hitRate === null ? '不可算' : `${(c.hitRate * 100).toFixed(1)}%`}`,
+        prompt_cache: {
+          cached_read: c.cachedRead,
+          cached_write: c.cachedWrite,
+          fresh: c.fresh,
+          hit_rate: c.hitRate,
+        },
+      },
+    });
+  }
 
   emit({
     event: 'usage',
