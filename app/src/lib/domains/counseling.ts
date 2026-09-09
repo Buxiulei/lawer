@@ -496,6 +496,20 @@ export const COUNSELING_CAPABILITY_COPY = {
   citationCheckTitle: '核验法条、伦理守则与判例引用',
   deadlineListDescription:
     '列出案件的法定期限（诉讼时效、答辩期 15 日、举证期限等），默认只列生效中的，按到期时间升序。',
+  // 【本领域还没有要件卡（S8 才做）】这三句仍然要写：能力清单是**全领域并集**，
+  // 这几条工具在这个领域的用户那里照样看得见。缺了它们的形态是 tools/list 里
+  // 三条能力的说明在讲上一个行当的事，而工具本身照常可调、回包照常正确。
+  // 现在调用它们会拿到「本领域还没有要件卡」，所以说明里先说清这一点。
+  elementSheetGetDescription:
+    '读本案的要件表：每一项已登记的主张分别靠哪几个要件成立、每个要件现在是什么状态、该谁举证、缺的那几项要补什么。' +
+    '**本领域的要件卡还没有落地**，所以现在这条会回 rendered=false ——那是"还没有这张表"，' +
+    '不是"你一个要件都不成立"，不要据此对任何一项主张下结论。',
+  issueListDescription:
+    '读本案的争点表（由要件表派生）。**本领域的要件卡还没有落地**，现在回 rendered=false；' +
+    '在它落地之前，争点由你按档案里的事实自己说清楚，但不要把没有依据的推测写成争点。',
+  elementFillDescription:
+    '把用户这一轮说的一件事填进某个要件。**本领域的要件卡还没有落地**，现在会回 NO_ELEMENT_CARDS——' +
+    '在它落地之前，把用户说的事按原样记进时间线（timeline_add），那条路一直是通的。',
   intakeCompanyName: '对方的化名或来访编号（不要填真实姓名）',
   intakeTerminationNotice: '《知情同意书》',
   companyProfileUpsertDescription:

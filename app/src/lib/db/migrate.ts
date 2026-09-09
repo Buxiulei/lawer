@@ -1886,6 +1886,34 @@ export function runMigrations(db: Database.Database): void {
   addColumnIfMissing(db, 'evidence', 'brief_source_tier', "TEXT NOT NULL DEFAULT '自述'");
   addColumnIfMissing(db, 'evidence', 'brief_asserted_by', "TEXT NOT NULL DEFAULT 'user'");
 
+  // ───────────────── 要件填充留痕（设计稿 §4.4-6 element_fill）─────────────────
+  //
+  // 「这条时间线事件/这笔诉求是为了坐实哪一个要件写进来的」。**一张关系表，不是两张表上各加一列**：
+  // 同一条事实常常同时支撑几个要件（一份解除通知既坐实"公司作出了解除决定"，
+  // 也带来"解除理由"这一项的靶子），加列只放得下一个，第二个要件的来路就此丢掉，
+  // 而两边看起来都正常。
+  //
+  // 【为什么要留这条痕】要件三态是从**事实槽**推出来的（lib/cases/elements.ts），
+  // 推导本身不需要这张表。它答的是另一个问题：用户问「你凭什么说这一项成立」时，
+  // 指得出具体是哪一行。没有它，答案只能是"因为档案里有这类事实"——那句话
+  // 与"我猜的"在用户那里没有区别。
+  //
+  // 【唯一索引 = 幂等】同一个要件被同一行事实重复填时不再多一条，重放安全。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS element_fills (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id      INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+      element_id   TEXT NOT NULL,
+      slot         TEXT NOT NULL,                    -- <表>:<取值>，与要件卡 satisfiedBy 同一套寻址
+      target_table TEXT NOT NULL,                    -- timeline_events | claims
+      target_id    INTEGER NOT NULL,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_element_fills
+      ON element_fills (case_id, element_id, target_table, target_id);
+    CREATE INDEX IF NOT EXISTS idx_element_fills_case ON element_fills (case_id, element_id);
+  `);
+
   // ───────────────── 费率种子 ─────────────────
   // C01 核定的模型费率必须**在建表之后立刻播下去**：缺行时 getRatesForModel 会回落
   // DEFAULT_RATES（最便宜的 Flash 档），于是每一笔账都按兜底价少收——而账面看起来完全正常。

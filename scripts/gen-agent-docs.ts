@@ -53,6 +53,7 @@ const FAMILY_LABELS: Record<CapabilityFamily, string> = {
   emotion: '情绪与危机',
   docs: '来文与录音',
   report: '个案报告',
+  elements: '要件与争点',
   account: '身份与账户',
   referral: '转介',
 };

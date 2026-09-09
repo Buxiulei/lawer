@@ -574,6 +574,30 @@ export interface DomainPack {
    * 要件表渲染出来的是一列 `undefined`，而每一行的状态都是对的。
    */
   burdenLabels?: Readonly<Record<Burden, string>>;
+  /**
+   * 「对方的书面决定」在这个行当里落在**哪一个事实槽**（`<表>:<取值>` 形态，
+   * 与要件卡的 satisfiedBy 同一套寻址）。
+   *
+   * 【它只服务争点表的规则三】举证责任在对方是常态，光凭这一点就报争点的形态是：
+   * 那几行永远挂在争点表上，于是争点表永远读不完，它和没有争点表是同一个东西。
+   * 有了对方那份写着理由的书面决定在档，才有一个打得着的靶子
+   *（推导在 lib/cases/issue-table.ts，共用层不认识这个行当的文件叫什么）。
+   *
+   * **省略 = 本领域没有"对方的书面决定"这回事**（是结论不是待填项）：
+   * 规则三随之整条不生效，其余两条照常。
+   */
+  counterpartyDecisionSlot?: string;
+  /**
+   * 要件表那一节的抬头，用户可见。
+   *
+   * 【为什么它不在 factsSections 里】那份是**每节都必然渲染**的骨架（判据逐条比对抬头是否都在），
+   * 而要件表是有条件的：本领域没有要件卡时整节不出现。把它写进骨架的形态是——
+   * 一个永远画不出来的抬头挂在骨架上，判据要么改成"这一节可以没有"（于是别的节漏了也不报），
+   * 要么长红。它跟 `interpretationDisputed.title` 是同一类：**标题跟着那份可选内容一起走**。
+   *
+   * **声明了 elementCards 就必须给它**（assertDomainPack 两向机检）。
+   */
+  elementSheetTitle?: string;
   /** 对外文案（低调模式词典 + 能力文案 + 站内文案） */
   copy: DomainCopy;
 }
@@ -852,6 +876,42 @@ export function assertDomainPack(pack: DomainPack): void {
   }
   if (pack.burdenLabels && !(pack.elementCards && pack.elementCards.length > 0)) {
     missing.push('elementCards（给了 burdenLabels 却没有要件卡，那份措辞永远画不出来）');
+  }
+  // 抬头同理：有卡没抬头 ⇒ 事实卡里冒出一节没有标题的表；有抬头没卡 ⇒ 那个抬头永远画不出来。
+  if (pack.elementCards && pack.elementCards.length > 0 && !pack.elementSheetTitle) {
+    missing.push('elementSheetTitle（声明了 elementCards 就必须给要件表那一节的抬头）');
+  }
+  if (pack.elementSheetTitle && !(pack.elementCards && pack.elementCards.length > 0)) {
+    missing.push('elementSheetTitle 有了却没有要件卡，那个抬头永远画不出来');
+  }
+  // 逐张要件卡查四格。**不查条文内容**（那是 knowledge 那侧的事，由 verify-quotes 与
+  // domains/__tests__/labor-elements.test.ts 逐条核锚点），这里只查结构上"少一格就静默变形"的那几处：
+  //   · claimKind 不在本包 claimKinds 里 ⇒ 这张卡永远画不出来（按诉求过滤时一次都命中不了），
+  //     而要件表照常渲染、少一整项诉求，没有一处会报错；
+  //   · typicalEvidence 为空 ⇒ 这一行标着「缺失」却给不出出路，
+  //     「争点 → 行动卡/追问」链接率当场破口（设计稿 §7.7）；
+  //   · satisfiedBy 为空 ⇒ 推导直接落到「成立·待证」，一个没有任何事实支撑的要件在表上写着"成立"；
+  //   · basis 为空 ⇒ burden 会被压成 unverified（这是 elements.ts 的行为，不是错误），
+  //     但一张连锚点都没写的卡多半是漏填而不是结论，所以在装载时点名。
+  const seenElementIds = new Set<string>();
+  for (const [i, card] of (pack.elementCards ?? []).entries()) {
+    const at = card?.id ? `elementCards[${card.id}]` : `elementCards[#${i}]`;
+    str(`${at}.id`, card?.id);
+    str(`${at}.name`, card?.name);
+    str(`${at}.claimKind`, card?.claimKind);
+    if (card?.id && seenElementIds.has(card.id)) {
+      missing.push(`${at}.id 重复——要件 id 是争点表与报告两节对账用的主键，重了就对不上账`);
+    }
+    if (card?.id) seenElementIds.add(card.id);
+    if (card?.claimKind && !pack.claimKinds.includes(card.claimKind)) {
+      missing.push(
+        `${at}.claimKind「${card.claimKind}」不在本包 claimKinds 里——` +
+          '这张卡按诉求过滤时一次都命中不了，要件表会少一整项诉求而不报错',
+      );
+    }
+    arr(`${at}.basis`, card?.basis);
+    arr(`${at}.satisfiedBy`, card?.satisfiedBy);
+    arr(`${at}.typicalEvidence（「缺失」那一行的出路就是它，空了这条争点就没有下一步）`, card?.typicalEvidence);
   }
 
   // interpretationDisputed / sensitive 都是**可选**的（省略 = 本领域没有这回事）。但一旦声明，

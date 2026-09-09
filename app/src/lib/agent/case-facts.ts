@@ -22,6 +22,11 @@ import { crisisStatusMark } from '@/lib/cases/crisis-hits';
 import { isDocumented, noDocumentedFact, normalizeSourceTier, tierMark } from '@/lib/cases/source-tier';
 import { basicsMissing } from '@/lib/cases/report';
 import { BRIEF_SUMMARY_MAX, briefSummary, parseBrief } from '@/lib/evidence/brief';
+import {
+  buildElementSheet,
+  ELEMENT_STATUSES,
+  type ElementStatus,
+} from '@/lib/cases/elements';
 import { EVIDENCE_CATEGORIES } from '@/lib/evidence/categories';
 import { precedentLine } from '@/lib/knowledge/precedent-line';
 import { DEFAULT_DOMAIN, DOMAINS, domainPackOrDefault, type FactsSectionKey } from '@/lib/domains/registry';
@@ -48,6 +53,10 @@ const CLAIMS_MAX = 10;
 const DEADLINES_MAX = 6;
 const COMPANIES_MAX = 5;
 const EVIDENCE_ITEMS_MAX = 20;
+/** 要件表最多列几行。四项诉求全开时现有卡片一共 17 行，留一点余量；超出照样留痕。 */
+const ELEMENTS_MAX = 24;
+/** 「需补」那一列的单行上限：它是给人照着做的一句话，不是清单全文。 */
+const ELEMENT_NEED_MAX = 60;
 
 /**
  * 证据区免责句，常驻、一字不改。
@@ -453,6 +462,83 @@ function claimSection(s: CaseSnapshot): FactSection {
 }
 
 /**
+ * **P1 要件表**（设计稿 §3 中间产物 `element_sheet` / §6 S6）。
+ *
+ * 【为什么它是 P1 而不是 P2】它回答的是本产品目标函数里的第一件事——"我的诉求靠哪几条事实
+ * 成立、哪几条还缺"（设计稿 §1.1）。P2 的形态是：档案越厚它越先消失，而档案厚的案子
+ * 正是要件最多、最需要这张表的那些。它排在诉求之后：先说"我要什么"，再说"这几样各差什么"。
+ *
+ * 【只画已登记诉求的那几项】没有诉求就整节不出现（`rendered:false`）。
+ * 画全表的形态是：一个只主张欠薪的人读到一整屏别的要件全标着「缺失」——
+ * 他要么以为自己什么都不成立，要么去补一堆与他这件事无关的材料。
+ *
+ * 【〔未记录〕那一格只许说"需补什么"】这一节最贵的一条纪律：缺失 ≠ 不成立。
+ * 状态由来源档位程序推出（lib/cases/elements.ts），不是这一轮的判断；
+ * 缺失格的下一步恒是"补哪一张"，措辞来自要件卡的 typicalEvidence。
+ */
+function elementSection(s: CaseSnapshot): FactSection | null {
+  const pack = domainPackOrDefault(s.case.domain);
+  const cards = pack.elementCards ?? [];
+  const labels = pack.burdenLabels;
+  const title = pack.elementSheetTitle;
+  // 三样缺一个就把整节收掉。有卡没措辞（或反过来）在装载时已被 assertDomainPack 拦了；
+  // 这里再判一次是因为类型上三者都是可选的——渲染一列 undefined 比不渲染坏得多。
+  if (cards.length === 0 || !labels || !title) return null;
+
+  const kinds = [...new Set(s.claims.map((c) => c.kind))];
+  const sheet = buildElementSheet(s, cards, kinds);
+  // 【一项诉求都没登记时说一句话，不画空表】零行的表读起来像"你一个要件都不成立"；
+  // 整节消失又等于没人告诉他这里本来该有什么。所以给一句带出路的话（§7.7 禁令配出路）。
+  if (!sheet.rendered) {
+    return {
+      key: 'elements',
+      priority: 1,
+      heading: title,
+      stat:
+        '- 本案还没有登记任何诉求，所以这张表现在是空的。**这不是"你没有诉求"**——' +
+        '把用户想要的那几项登记进来（能算的走 claim_calc，只是登记名目的走 claims_upsert），' +
+        '这张表会自动列出每一项各靠哪几个要件成立、现在缺什么。',
+      detail: [],
+    };
+  }
+
+  const tally = new Map<ElementStatus, number>();
+  for (const r of sheet.rows) tally.set(r.status, (tally.get(r.status) ?? 0) + 1);
+  const tallyText = ELEMENT_STATUSES.filter((st) => tally.get(st)).map((st) => `${st} ${tally.get(st)}`).join('、');
+
+  const shown = sheet.rows.slice(0, ELEMENTS_MAX);
+  return {
+    key: 'elements',
+    priority: 1,
+    heading: title,
+    stat: [
+      `- 本表覆盖已登记的 ${kinds.length} 项诉求、${sheet.rows.length} 个要件：${tallyText}。` +
+        '每行的格式是「要件：状态｜谁来证｜下一步」。',
+      '- 状态由档案里那几条事实的**来源档位程序推出**（不是这一轮的判断，也不是模型的估计）：' +
+        '支撑它的事实全部在档且最弱一条有书证 ⇒ 成立；全部在档但含纯自述 ⇒ 成立·待证；' +
+        '有一条**档案里没有** ⇒ 缺失。',
+      '- **「缺失」是〔未记录〕，不是「不满足」**：档案里没有这一项 ≠ 事实上没有。' +
+        '这几行只允许说「需补什么」，**不许**写成「不满足 / 不成立 / 这一项你没有」，' +
+        '也不许据此说这项诉求提不了——照着「下一步」问用户或落一张行动卡。',
+    ].join('\n'),
+    detail: [
+      ...shown.map((r) => {
+        const need = r.typicalEvidence.filter((e) => e.trim()).join('、');
+        const unresolved = r.unresolvedSlots.length
+          ? `（这几个槽位系统不认识、已按缺失处理：${r.unresolvedSlots.join('、')}）`
+          : '';
+        const tail =
+          r.status === '成立'
+            ? '支撑它的事实都有书证，这一项不用再补'
+            : `需补：${trunc(need, ELEMENT_NEED_MAX)}`;
+        return `- 〔${r.claimKind}·${r.id}〕${r.name}：${r.status}｜${labels[r.burden]}｜${tail}${unresolved}`;
+      }),
+      ...(sheet.rows.length > shown.length ? [trimmedNote(sheet.rows.length, shown.length)] : []),
+    ],
+  };
+}
+
+/**
  * P2 时间线。裁剪时**永远保留最早 1 条**（入职/起点锚点）+ 最新若干条：
  * 最早那条是年限计算的起点，裁掉它，模型算工龄就只能从"最近发生的事"往回猜。
  */
@@ -725,6 +811,9 @@ export function buildCaseFacts(s: CaseSnapshot): FactCard {
       companySection(s),
       actionSection(s),
       claimSection(s),
+      // 要件表紧跟诉求。**可能整节不出现**（本领域还没有要件卡、或本案一项诉求都没登记）——
+      // 那时它不该是一张零行的表：用户读到"要件：（空）"，那看起来像"你一个要件都不成立"。
+      ...([elementSection(s)].filter((x): x is FactSection => x !== null)),
       timelineSection(s),
       evidenceSection(s),
       // 排在最后：前面每一节说的都是"手上有什么"，这一节说的是"哪几件事不许下结论"，

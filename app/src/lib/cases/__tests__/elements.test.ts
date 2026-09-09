@@ -34,10 +34,15 @@ function facts(over: Partial<ElementFactsView> = {}): ElementFactsView {
 function card(over: Partial<ElementCard> = {}): ElementCard {
   return {
     id: 'e1',
+    // S6 给要件卡加了「属于哪一项诉求」与「通常拿什么去证」两格：前者让要件表按诉求分组
+    // （不过滤的形态见 buildElementSheet 注释），后者是「缺失」那一行的出路。
+    // 本文件的用例只测三态与 burden 推导，所以两格都给一个中性缺省值。
+    claimKind: '某诉求',
     name: '要件一',
     burden: 'claimant',
-    basis: [{ anchor: 'law-x@art-1@2026', verified: true }],
+    basis: [{ anchor: 'law-x|art-1', verified: true }],
     satisfiedBy: ['claim:某项'],
+    typicalEvidence: ['某种材料'],
     ...over,
   };
 }

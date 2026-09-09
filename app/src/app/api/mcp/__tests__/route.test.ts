@@ -309,6 +309,10 @@ describe('tools/list', () => {
       'case_delete',
       'case_export',
       'referral_delete_request',
+      // 要件与争点（S6），同样**追加在末尾**
+      'element_sheet_get',
+      'issue_list',
+      'element_fill',
     ]);
     for (const tool of result.tools) {
       expect(tool.description).toBeTruthy();

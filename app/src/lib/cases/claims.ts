@@ -32,7 +32,10 @@ import {
   sanbeiCapFacts,
 } from '@/lib/cap/sanbei';
 import * as store from '@/lib/db/agent';
+import * as caseStore from '@/lib/db/cases';
 import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
+
+import { buildElementSheet, type ElementRow } from './elements';
 
 /**
  * **缺省领域**的算钱器清单（正本在 DomainPack.calculatorKinds）。
@@ -490,6 +493,106 @@ export function tierOfCalcInputs(inputSources: Record<string, InputSource>): Sou
   return weakest ?? DEFAULT_SOURCE_TIER;
 }
 
+/**
+ * **风险区间**（设计稿 §3 中间产物 `risk_band`）。**不给胜率**，也不编造一个下限数字。
+ *
+ * 【为什么下限常常是「算不出来」而不是一个数】把"按现有书证能撑的最低值"折成一个金额，
+ * 需要知道"没有书证的那个输入应该按多少算"——而那个数字不存在于任何地方，
+ * 只能由我们编一个。编出来的下限会被当成"最坏也有这么多"拿去跟对方谈。
+ * 所以这里的诚实形状是：**上限是算出来的那个数，下限只在全部关键输入都有书证时才等于它**；
+ * 否则如实说下限取决于哪几项补不补得上，并把每一项对应到具体的要件与该补的材料。
+ *
+ * 【为什么档位只有四档、且不叫"胜率"】四档来自设计稿：有依据可主张 / 需补证后可主张 /
+ * 依据不足 / 反向风险。它说的是**手上这套材料的状态**，不是结果的概率——
+ * 概率那句话我们没有任何数据支撑，说出来就是编。
+ */
+const RISK_BANDS = {
+  supported: '有依据可主张',
+  needsEvidence: '需补证后可主张',
+  insufficient: '依据不足',
+  adverse: '反向风险',
+} as const;
+
+function riskBandOf(
+  ctx: ClaimCalcEnv,
+  kind: string,
+  inputSources: Record<string, InputSource>,
+  amountFen: number,
+): Record<string, unknown> | null {
+  const caseRow = caseStore.findCaseById(ctx.db, ctx.caseId);
+  if (!caseRow) return null;
+  const pack = DOMAINS[caseRow.domain];
+  const cards = pack?.elementCards ?? [];
+  if (cards.length === 0) return null;
+
+  // 输入侧：哪几个输入还只有当事人的说法（系统默认值不算"没有支撑"，它是我们自己取的口径值）。
+  const selfReported = Object.entries(inputSources)
+    .filter(([, src]) => {
+      const tier = tierOfCalcInputSource(src);
+      return tier !== null && tier === '自述';
+    })
+    .map(([field]) => field);
+
+  // 要件侧：这一项诉求的要件表。**按整案取数**，不开窗（开窗的形态见 capabilities/families/elements）。
+  const sheet = buildElementSheet(
+    {
+      case: {
+        employed_from: caseRow.employed_from,
+        position: caseRow.position,
+        monthly_wage_fen: caseRow.monthly_wage_fen,
+        contract_count: caseRow.contract_count,
+      },
+      claims: store.listClaims(ctx.db, ctx.caseId),
+      timeline: caseStore.listTimelineEvents(ctx.db, ctx.caseId, 200),
+      companies: store.listCompanyProfiles(ctx.db, ctx.caseId),
+      evidence: caseStore.listEvidence(ctx.db, ctx.caseId),
+    },
+    cards,
+    [kind],
+  );
+  if (!sheet.rendered) return null;
+
+  const gapsOf = (rows: readonly ElementRow[]) =>
+    rows.map((r) => ({
+      element_id: r.id,
+      name: r.name,
+      status: r.status,
+      missing_slots: r.missingSlots,
+      typical_evidence: r.typicalEvidence,
+    }));
+  const adverse = sheet.rows.filter((r) => r.status === '不成立');
+  const missing = sheet.rows.filter((r) => r.status === '缺失');
+  const pending = sheet.rows.filter((r) => r.status === '成立·待证');
+
+  const band = adverse.length
+    ? RISK_BANDS.adverse
+    : missing.length
+      ? RISK_BANDS.insufficient
+      : pending.length || selfReported.length
+        ? RISK_BANDS.needsEvidence
+        : RISK_BANDS.supported;
+
+  const floorKnown = band === RISK_BANDS.supported;
+  return {
+    band,
+    // 上限：本次算出来的那个数（全部输入按用户自述采信）。
+    ceiling_fen: amountFen,
+    ceiling_yuan: (amountFen / 100).toFixed(2),
+    // 下限：只有"关键输入全有书证且要件全部成立"时才等于上限；否则**不给数**。
+    floor_fen: floorKnown ? amountFen : null,
+    floor_yuan: floorKnown ? (amountFen / 100).toFixed(2) : null,
+    floor_reason: floorKnown
+      ? '这一项的输入都有书面材料支撑、要件也都成立，所以上下限重合。'
+      : '按档案里现有的书面材料算不出一个下限：下面这几项补不补得上，直接决定这笔钱能主张多少。' +
+        '**不要自己编一个"最低能拿到多少"**——那个数没有任何依据。',
+    self_reported_inputs: selfReported,
+    gaps: gapsOf([...adverse, ...missing, ...pending]),
+    note:
+      '展示时给的是**区间与缺口**，不是胜率：本产品不预测结果概率（charter §1）。' +
+      '每一条 gaps 都要连着说"补什么"（typical_evidence），只报缺口不给出路等于把人堵在原地。',
+  };
+}
+
 export function persistCalc(
   kind: string,
   result: calc.CalcResult<object>,
@@ -526,6 +629,9 @@ export function persistCalc(
       basis: enrichBasisWithQuotes(result.basis, ctx),
       inputs: result.inputs,
       input_sources: inputSources,
+      // 【风险区间，不是胜率】设计稿 §3 risk_band：金额给区间，每个差额对应一条缺证要件。
+      // 本领域还没有要件卡时为 null——**不是**"没有风险"，是这张表还没接上。
+      risk_band: riskBandOf(ctx, kind, inputSources, result.amountFen),
       calc_version: result.calcVersion,
       note:
         '展示给用户时必须同时给出 formula 算式与各输入的来源；标「用户自述」的要明说待证据核实。' +

@@ -29,6 +29,7 @@ const FAMILIES = [
   'report',
   'account',
   'referral',
+  'elements',
 ];
 const SCOPES = ['case:read', 'case:write'];
 const KINDS = ['read', 'write', 'spend'];
@@ -175,6 +176,11 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
       //   一条无人执行的红线，与没有这条红线，在下一个读到它的人那里是同一件事。
       'lib/cases/source-tier.ts',
       'lib/cases/elements.ts',
+      // ↓ S6（2026-09-10）新落的一处共用层：争点表的派生规则与措辞模板。
+      //   **新写的文件必须当场进这份名单**——不进的形态是：守卫全绿，因为它没在看那个文件。
+      //   它的敞口是具体的：每一行争点的「争点」与「下一步」都会到用户眼前，
+      //   写死行当名词就等于对第二个行当的用户讲上一个行当的话，而争点表照常派生、照常有出路。
+      'lib/cases/issue-table.ts',
     ].map((f) => path.join(SRC_ROOT, f)),
   ];
 

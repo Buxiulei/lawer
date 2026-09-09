@@ -106,6 +106,8 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'agent', method: 'PATCH', path: '/api/v1/cases/{id}/actions/{actionId}', auth: 'jwt|api_key', scope: 'case:write', description: '把行动卡标为完成或放弃（对应工具 action_complete）' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/deadlines', auth: 'jwt|api_key', scope: 'case:read', description: '列出法定期限（对应工具 deadline_list）' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/claims', auth: 'jwt|api_key', scope: 'case:read', description: '列出诉求清单与合计金额（对应工具 claims_list）' },
+  { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/elements', auth: 'jwt|api_key', scope: 'case:read', description: '读要件表：每项已登记诉求各靠哪几个要件成立、状态、该谁举证、缺什么（对应工具 element_sheet_get）；?claim_kind= 只看一项' },
+  { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/issues', auth: 'jwt|api_key', scope: 'case:read', description: '读争点表：由要件表派生的争点与每条的下一步（对应工具 issue_list）' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/evidence', auth: 'jwt|api_key', scope: 'case:read', description: '列出案件下的证据条目，只给元数据（对应工具 evidence_list）；已作废的默认不列，传 ?include_voided=1 才回' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/drafts', auth: 'jwt|api_key', scope: 'case:read', description: '列出案件下的文书，正文一并返回' },
   { category: 'agent', method: 'GET', path: '/api/v1/cases/{id}/docs', auth: 'jwt|api_key', scope: 'case:read', description: '列出案件下已解读的对方来文，不含原文与逐条发现（对应工具 doc_list）' },

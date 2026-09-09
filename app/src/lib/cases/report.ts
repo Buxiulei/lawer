@@ -25,6 +25,9 @@ import * as caseStore from '@/lib/db/cases';
 import * as agentStore from '@/lib/db/agent';
 import { getDomainPack, type DomainPack, type ReportSectionSpec } from '@/lib/domains/registry';
 
+import { buildElementSheet, resolveSlot, type ElementRow } from './elements';
+import { buildIssueTable, issueMarker, issueMarkersIn, type IssueRow } from './issue-table';
+
 import {
   countStaleTally,
   formatStaleTally,
@@ -167,6 +170,8 @@ interface ReportInput {
   deadlines: caseStore.DeadlineRow[];
   actions: caseStore.ActionItemRow[];
   evidence: caseStore.EvidenceRow[];
+  /** 要件表要读它（对方主体那一张表也是事实槽的取数面之一，见 lib/cases/elements.resolveSlot） */
+  companies: agentStore.CompanyProfileRow[];
 }
 
 /** 生成初稿时一节最多列几条明细。超出的部分要留痕，不能只裁不说。 */
@@ -222,9 +227,30 @@ function draftSection(
       return trimmed(asc, (e) => `${dateOnly(e.happened_at)}　${e.title}${e.detail ? `——${e.detail}` : ''}`);
     }
     case 'disputes': {
+      // 【派生集，不是自由发挥】每一行由要件表按三条规则捞出来（lib/cases/issue-table.ts），
+      // 行首带 `〔争点 id〕` 标记；改这一节的措辞可以，增删条目会被 updateSection 拒掉。
+      const derived = derivedIssues(input, pack);
+      if (derived) {
+        if (!derived.rows.length) {
+          return (
+            `- 本案已登记诉求的 ${derived.elements.length} 个要件目前**全部成立**，派生不出争点。\n` +
+            '- 这不是"没有风险"：它只说明档案里这几项都有支撑，对方还没有在档案里主张过什么。'
+          );
+        }
+        return [
+          `- 下面 ${derived.rows.length} 条由要件表派生（要件没成立 / 对方主张过 / 举证责任在对方且其书面决定已在档）。`,
+          '- **条目只增不减地由服务端维护**：措辞可以改成人话，增删条目要先改档案，不能在这里改。',
+          ...derived.rows.flatMap(issueLines),
+        ].join('\n');
+      }
+      // 退回原来的写法：本领域还没有要件卡，或本案一项诉求都没登记。**明说它不是派生的**。
       if (!input.claims.length) return NONE;
       const total = input.claims.reduce((n, r) => n + r.amount_fen, 0);
-      return `${trimmed(input.claims, (r) => `${r.kind}：${fmtYuan(r.amount_fen)}${r.basis ? `（依据 ${r.basis}）` : ''}`)}\n- 合计：${fmtYuan(total)}`;
+      return (
+        `${trimmed(input.claims, (r) => `${r.kind}：${fmtYuan(r.amount_fen)}${r.basis ? `（依据 ${r.basis}）` : ''}`)}\n` +
+        `- 合计：${fmtYuan(total)}\n` +
+        '- （本节此刻列的是已登记的金额，**不是**派生的争点：这个领域还没有要件卡。）'
+      );
     }
     case 'positions':
       return bullets([`目标：${c.goal ?? NONE}`, `底线：${c.bottom_line ?? NONE}`]);
@@ -284,11 +310,71 @@ function draftSection(
       const gapText = gaps.length
         ? bullets(gaps)
         : '（初稿阶段没发现明显缺口；风险要靠人判断，别把这一行当成"没有风险"）';
-      return fixed ? `${fixed}\n\n${gapText}` : gapText;
+      // 【未定项 = 还没成立的那几个要件】同样是派生集，行首带同一个 `〔争点 id〕` 标记，
+      // 只收「缺失 / 不成立 / 成立·待证」那几行——已经成立的要件不是未定项。
+      // 它与上面「争议焦点」的分别：那一节是"在争什么"（含举证责任在对方的那几条），
+      // 这一节是"还立不住的那几条"，两节的下一步动作不同。
+      const derived = derivedIssues(input, pack);
+      const unsettled = (derived?.rows ?? []).filter((r) => r.reasons.includes('element_unsettled'));
+      const unsettledText = unsettled.length
+        ? [
+            `- 还没立住的要件 ${unsettled.length} 条（由要件表派生，措辞可改、条目不可增删）：`,
+            ...unsettled.flatMap(issueLines),
+          ].join('\n')
+        : '';
+      return [fixed, gapText, unsettledText].filter((x) => x).join('\n\n');
     }
     case 'changelog':
       return bullets([`${dateOnly(now.toISOString())}　system：从档案生成初稿`]);
   }
+}
+
+/**
+ * 报告里那两节的**派生源**：要件表 → 争点表（设计稿 §4.3-3）。
+ *
+ * 【为什么这两节改成派生】此前「争议焦点」印的是诉求金额清单、「风险与未定项」印的是几条缺口，
+ * 两节都不说"这一项凭什么成立、还差什么、该谁证"。而模型每一轮自由发挥出来的争点，
+ * 同一个案子这一轮说争 A、下一轮说争 B——判据「争点回声」（正文提到的争点 ⊆ 争点表）
+ * 要成立，前提是**有一张服务端说得清出处的争点表**。
+ *
+ * 取不到（本领域还没有要件卡 / 本案一项诉求都没登记）时回 null，两节各自退回原来的写法，
+ * 并在正文里说清这一节此刻不是派生的——静默退回的形态是：一节读起来完全正常，
+ * 而"它是机器派生的"这个前提已经不成立了。
+ */
+function derivedIssues(input: ReportInput, pack: DomainPack): { rows: readonly IssueRow[]; elements: readonly ElementRow[] } | null {
+  const cards = pack.elementCards ?? [];
+  if (cards.length === 0) return null;
+  const kinds = [...new Set(input.claims.map((c) => c.kind))];
+  const facts = {
+    case: {
+      employed_from: input.caseRow.employed_from,
+      position: input.caseRow.position,
+      monthly_wage_fen: input.caseRow.monthly_wage_fen,
+      contract_count: input.caseRow.contract_count,
+    },
+    claims: input.claims,
+    timeline: input.timeline,
+    companies: input.companies,
+    evidence: input.evidence,
+  };
+  const sheet = buildElementSheet(facts, cards, kinds);
+  if (!sheet.rendered) return null;
+  // 对方那份书面决定在不在档：槽位由领域包声明（共用层不认识它在这个行当里叫什么），
+  // 在不在档由**同一个 resolveSlot** 判——绕开它自己写一遍"这个槽有没有被填上"的形态是：
+  // 那份判断与要件表用的不是同一把尺，于是规则三会在要件表说"缺"的时候说"在档"。
+  const slot = pack.counterpartyDecisionSlot;
+  const onFile = slot !== undefined && resolveSlot(slot, facts) != null;
+  const table = buildIssueTable(sheet.rows, { counterpartyDecisionOnFile: onFile }, true);
+  return { rows: table.rows, elements: sheet.rows };
+}
+
+/** 一行争点的正文。**行首那个 `〔争点 id〕` 是派生标记**，改措辞可以，删掉它就对不上账了。 */
+function issueLines(row: IssueRow): string[] {
+  const anchors = row.anchors.length ? `｜依据 ${row.anchors.join('、')}` : '｜依据 待补';
+  return [
+    `- ${issueMarker(row.id)}${row.issue}（${row.claimKind}）：${row.status}${anchors}`,
+    `  - 下一步：${row.nextStep}`,
+  ];
 }
 
 /** 基本盘缺哪几项。事实卡首行的「基本盘缺 N 项」与报告的风险节共用这一份口径。 */
@@ -309,6 +395,7 @@ function loadInput(db: Database, caseRow: caseStore.CaseRow): ReportInput {
     deadlines: caseStore.listDeadlines(db, caseRow.id, true),
     actions: caseStore.listActionItems(db, caseRow.id, null),
     evidence: caseStore.listEvidence(db, caseRow.id),
+    companies: agentStore.listCompanyProfiles(db, caseRow.id),
   };
 }
 
@@ -543,6 +630,30 @@ export function updateSection(
   }
 
   const sections = parseSections(row.sections_json);
+
+  // 【派生集只许改措辞，不许增删条目】（设计稿 §4.3-3 / §1.2「争点回声」）
+  // 争点表是从要件表机械派生的：多一条 = 发明争点，少一条 = 漏答。
+  // 判定落在**不随措辞变**的 `〔争点 id〕` 标记上（不是比对整段文本）——
+  // 比文本的形态是：模型把机械句式写成人话就被判成"改了条目"，于是这道闸要么天天误报、
+  // 要么被关掉。要让某条争点消失，去改档案（补一份证据、登记一条诉求），报告会跟着重生成。
+  const before = issueMarkersIn(sections[title] ?? '');
+  if (before.size > 0) {
+    const after = issueMarkersIn(content);
+    const added = [...after].filter((id) => !before.has(id));
+    const removed = [...before].filter((id) => !after.has(id));
+    if (added.length || removed.length) {
+      return fail(
+        400,
+        'REPORT_SECTION_DERIVED',
+        `「${title}」的条目是服务端从要件表派生的，本次没有写入。` +
+          (added.length ? `多出来的条目：${added.map(issueMarker).join('、')}（凭空多一条争点＝发明争点）。` : '') +
+          (removed.length ? `被删掉的条目：${removed.map(issueMarker).join('、')}（少一条＝漏答）。` : '') +
+          '这一节允许你把机械句式改写成人话——把每个 〔争点 …〕 标记原样留在它那一条的行首即可；' +
+          '要让某一条真的消失或新增，去改档案（补证据、登记诉求、记一条对方的书面决定），这一节会跟着重生成。',
+      );
+    }
+  }
+
   sections[title] = content;
   if (changelogSpec) {
     const line = `- ${dateOnly(now.toISOString())}　${input.updatedBy}：更新「${title}」——${reason}`;

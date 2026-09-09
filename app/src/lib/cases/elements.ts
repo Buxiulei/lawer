@@ -80,9 +80,17 @@ export type FactSlotSource = (typeof FACT_SLOT_SOURCES)[number];
 export const BASICS_FIELDS = ['employed_from', 'position', 'monthly_wage_fen', 'contract_count'] as const;
 export type BasicsField = (typeof BASICS_FIELDS)[number];
 
-/** 一张要件卡。内容在 S6 由领域包给，本票只定形状。 */
+/** 一张要件卡。内容由领域包给（S6 已填 labor 四诉求），本文件只定形状。 */
 export interface ElementCard {
   id: string;
+  /**
+   * 这个要件属于**哪一项诉求**（取值须在该领域包的 claimKinds 里，assertDomainPack 机检）。
+   *
+   * 【为什么要件要挂在诉求上，而不是一张平表】要件表是按诉求读的：「我要 2N，还差哪几件事」。
+   * 平表的形态是——一个只主张欠薪的人，读到一整屏关于违法解除的要件全标着「缺失」，
+   * 于是他要么以为自己什么都不成立，要么去补一堆与他这件事无关的材料。
+   */
+  claimKind: string;
   /** 要件名，逐字对外（用户可见，措辞归领域包） */
   name: string;
   /** 卡片自报的举证责任；basis 未全部核实时**会被强制压成 unverified** */
@@ -93,11 +101,21 @@ export interface ElementCard {
   satisfiedBy: readonly string[];
   /** 命中即推翻这个要件的事实槽（省略 = 本要件没有可机械判定的反证） */
   negatedBy?: readonly string[];
+  /**
+   * 这一项**通常拿什么去证**（用户可见，措辞归领域包）。**不许为空**。
+   *
+   * 【为什么它是必填的】要件表最贵的一格是「缺失」：它告诉用户"这一项现在立不住"。
+   * 只说缺、不说补什么的形态是把人堵在原地（设计稿 §7.7 禁令配出路），而且
+   * 「争点 → 行动卡/追问」的链接率判据就是靠这一列做到 100% 的——空了那条争点就没有出路。
+   */
+  typicalEvidence: readonly string[];
 }
 
 /** 推导出来的一行。`note` 只在有话要说时出现（不认识的槽、被压过的 burden）。 */
 export interface ElementRow {
   id: string;
+  /** 这一行属于哪一项诉求（原样取自卡片，渲染按它分组） */
+  claimKind: string;
   name: string;
   status: ElementStatus;
   burden: Burden;
@@ -109,6 +127,10 @@ export interface ElementRow {
   selfReportedSlots: readonly string[];
   /** 寻址串解析不出来的槽。**不静默**：不认识的槽会连带把状态压成缺失并在这里点名 */
   unresolvedSlots: readonly string[];
+  /** 这一项通常拿什么去证（原样取自卡片）。「缺失」行的出路就是它 */
+  typicalEvidence: readonly string[];
+  /** 卡片声明的法条锚点（原样透传，供报告「依据清单」与争点表引用） */
+  basis: readonly ElementBasis[];
 }
 
 export interface ElementSheet {
@@ -219,16 +241,23 @@ export function basisVerified(basis: readonly ElementBasis[]): boolean {
  * 要件表推导。**纯函数**：同一份档案 + 同一批卡片恒得同一张表，不看时间、不看模型、不查库。
  *
  * @param facts 档案的结构化子集（CaseSnapshot 直接传得进来）
- * @param cards 本领域的要件卡。**空数组 = 本领域还没有要件卡**（S6 填），
+ * @param cards 本领域的要件卡。**空数组 = 本领域还没有要件卡**，
  *   回 `rendered:false`，调用方据此整节不渲染。
+ * @param only 只画这几项诉求的要件（省略 = 全画）。过滤后一行不剩时同样 `rendered:false`。
  */
 export function buildElementSheet(
   facts: ElementFactsView,
   cards: readonly ElementCard[],
+  only?: readonly string[],
 ): ElementSheet {
-  if (cards.length === 0) return { rows: [], rendered: false };
+  // 【为什么按诉求过滤，而不是恒画全表】要件表是"我这几项诉求各差什么"，
+  // 不是"这个行当一共有多少种要件"。不过滤的形态是：一个只主张欠薪的人读到一整屏
+  // 违法解除的要件全标着「缺失」——他要么以为自己什么都不成立，要么去补一堆无关材料。
+  // `only` 省略 = 不过滤（评测夹具与依据清单要的是全表）；给空数组 = 一项诉求都没有 ⇒ 整节不渲染。
+  const picked = only === undefined ? cards : cards.filter((c) => only.includes(c.claimKind));
+  if (picked.length === 0) return { rows: [], rendered: false };
 
-  const rows = cards.map((card): ElementRow => {
+  const rows = picked.map((card): ElementRow => {
     const unresolved: string[] = [];
     const missing: string[] = [];
     const selfReported: string[] = [];
@@ -269,6 +298,7 @@ export function buildElementSheet(
     const verified = basisVerified(card.basis);
     return {
       id: card.id,
+      claimKind: card.claimKind,
       name: card.name,
       status,
       burden: verified ? card.burden : 'unverified',
@@ -276,6 +306,8 @@ export function buildElementSheet(
       missingSlots: missing,
       selfReportedSlots: selfReported,
       unresolvedSlots: unresolved,
+      typicalEvidence: card.typicalEvidence,
+      basis: card.basis,
     };
   });
 

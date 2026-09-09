@@ -268,6 +268,21 @@ const MINIMAL_ARGS: Record<string, Record<string, unknown>> = {
   case_delete: { case_id: '#case' },
   case_export: { case_id: '#case' },
   referral_delete_request: { referral_id: 999_999 },
+  // 要件与争点。element_fill 走时间线那条路（它只落时间线事件与诉求项）：
+  // 要件 id 与槽位取的是**缺省领域包里真实存在的那一条**——写一个不存在的 id
+  // 只会拿到 ELEMENT_NOT_FOUND，那条用例就永远碰不到真正的写入路径。
+  element_sheet_get: { case_id: '#case' },
+  issue_list: { case_id: '#case' },
+  element_fill: {
+    case_id: '#case',
+    // 要件 id 取的是**缺省领域包里真实存在的那一条**：写一个不存在的 id 只会拿到
+    // ELEMENT_NOT_FOUND，这条用例就永远碰不到真正的写入路径。不点名 slot 走"记一句话"那条，
+    // 它是四诉求里唯一每个要件都走得通的一条（好几个要件只认一份材料，一句话填不进去）。
+    element_id: '2N-1',
+    timeline_kind: '我方动作',
+    happened_at: '2026-08-20T02:00:00Z',
+    title: '要件填充最小用例',
+  },
 };
 
 /** 把 '#case' / '#evidence' 换成本轮的真实 id */

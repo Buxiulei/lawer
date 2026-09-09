@@ -10,6 +10,7 @@ import {
   type CrisisOpenerText,
   type HotlineFact,
 } from '@/lib/agent/crisis-opener';
+import type { Burden, ElementBasis, ElementCard } from '@/lib/cases/elements';
 import { CASE_MILESTONES } from '@/lib/cases/milestones';
 import { CASE_STAGES } from '@/lib/cases/stages';
 
@@ -294,6 +295,23 @@ export const LABOR_CAPABILITY_COPY = {
   citationCheckTitle: '核验劳动法条与判例引用',
   deadlineListDescription:
     '列出案件的法定期限（仲裁时效、起诉 15 日、开庭等），默认只列生效中的，按到期时间升序。',
+  elementSheetGetDescription:
+    '读本案的要件表：每一项已登记的诉求（2N / N / 欠薪 / 双倍工资…）分别靠哪几个要件成立、' +
+    '每个要件现在是什么状态（成立 / 成立·待证 / 缺失 / 不成立）、该谁举证、缺的那几项要补什么材料。' +
+    '**状态是服务端从档案里那几条事实的来源档位程序推出来的**，不是判断，也不要在正文里改它。' +
+    '「缺失」的意思是档案里没有这一项〔未记录〕，**不是**「不满足」、更不是「这项诉求提不了」——' +
+    '照着每行的 typicalEvidence 去问用户或落一张行动卡。',
+  issueListDescription:
+    '读本案的争点表（由要件表派生）：要件还没成立的、对方主张过的、举证责任在公司且公司的书面决定已在档的，' +
+    '各成一条争点，每条带对应的法条锚点与下一步动作。' +
+    '**正文里提到的争点必须是这张表的子集**：多出来的是发明争点，少了的是漏答。',
+  elementFillDescription:
+    '把用户这一轮说的一件事，填进某个要件的某个事实槽（比如"HR 当面递了解除通知"→ 2N 的"公司单方解除"那一项）。' +
+    '服务端会校验：这个要件存不存在、这个槽属不属于它、来源档位合不合法，' +
+    '写入的同时记下"这条事实是为哪个要件写的"。' +
+    '**只落时间线事件与诉求项**：基本盘走 case_update、公司主体走 company_profile_upsert、' +
+    '证据必须真有文件（evidence_upload_url + evidence_register）——' +
+    '把一句自述写成一份材料，会让要件表把没有的东西显示成有。金额一律走 claim_calc，不在这里填数。',
   intakeCompanyName: '公司名称，就是仲裁里的被申请人',
   intakeTerminationNotice: '《解除劳动合同通知书》',
   companyProfileUpsertDescription:
@@ -514,6 +532,278 @@ export const LABOR_INTAKE_LIMITATION = {
     '确认后到期限页改成那天，日子会往后挪。】',
 } as const;
 
+
+// ========== 要件卡（设计稿 §4.1-3 / §6 S6）==========
+
+/**
+ * 法条锚点的书写形式：`法名|条号`。与 `lib/agent/citation-block.articleKey` 归一后的键同形
+ *（法名去掉《》与「中华人民共和国」前缀，条号中文数字转阿拉伯），所以**卡侧写全称即可**，
+ * 比对由那个函数一处归一。
+ *
+ * 【为什么每条 basis 都必须解析得到登记簿里的原件】主理人 2026-09-07 裁决③：本产品没有
+ * 律师签字，要件卡的内容由 AI 推导。推导可以错，能兜住它的只有一件事——
+ * **每一条依据都指到一份逐字核过的官方原文**，任何人（包括对方代理人）都能当场翻出来对。
+ * 解析不到原件的锚点，`basisVerified` 会把整条要件的 burden 压成 unverified
+ *（见 lib/cases/elements.ts），判据 `labor-elements.test.ts` 逐条比对 knowledge/index.json
+ * 与 `scripts/verify-quotes.py --json` 的核验状态。
+ */
+const LHT = '劳动合同法';
+const LHT_TL = '劳动合同法实施条例';
+const TJZCF = '劳动争议调解仲裁法';
+const BAGZ = '劳动人事争议仲裁办案规则';
+const JS1 = '最高人民法院关于审理劳动争议案件适用法律问题的解释（一）';
+const GZZF = '工资支付暂行规定';
+const BJGZ = '北京市工资支付规定';
+
+/** `法名|条号` → 锚点条目。`verified` 恒为 true 的理由见上：判据逐条核，核不过当场红。 */
+const anchor = (law: string, article: string): ElementBasis => ({
+  anchor: `${law}|${article}`,
+  verified: true,
+});
+
+/**
+ * 劳动争议四诉求的要件卡（2N 违法解除赔偿金 / N 经济补偿 / 欠薪 / 未签书面合同二倍工资）。
+ *
+ * 【为什么内容写在领域包里，而不是做成 knowledge 卡】（S6 派单要求二选一并写明理由）
+ * 三个理由，前两个是机械的：
+ *   ① **类型检查**。`burden` 是五值联合、`claimKind` 必须落在本包 claimKinds 里、
+ *      `satisfiedBy` 的表前缀只有五个——写在 .ts 里这些全由 tsc + assertDomainPack 当场拦；
+ *      写成 YAML 卡则要新造一套 schema 校验，而校验没覆盖到的那一格会静默漂移。
+ *   ② **依赖方向**。`lib/knowledge/index.ts` 已经 import 了 `lib/domains/registry`
+ *      （按领域过滤卡片）。要件卡若从知识库加载，就要反过来 registry → knowledge，
+ *      成环；绕开环的唯一办法是再造一个加载器，那就有了第二个真源。
+ *   ③ 法源**没有**因此留在代码里：每条 basis 都是指向 knowledge 卡里逐字原文的锚点，
+ *      条文一个字都不在本文件。本文件写的是「哪一条支撑哪一个要件」这层映射，
+ *      而这层映射本来就是领域包该管的事（DomainPack.elementCards，registry.ts 已声明）。
+ *
+ * 【为什么一条 negatedBy 都没有】`negatedBy` 命中会把要件直接判成「不成立」。四诉求里唯一
+ * 像样的候选是「档案里有合同类书证 ⇒ 二倍工资不成立」——而那正好是最不能自动判的一格：
+ * 补签的合同、竞业协议、offer 都会落在同一个类别下，判成「不成立」的后果是用户放弃一项
+ * 本来能主张的诉求。两个方向的错代价不对等（多提醒一次 vs 少主张一笔钱），所以这里一格都不填；
+ * 反证由用户与办案机构去认定，不由类别名去猜。
+ *
+ * 【满足条件是「与」不是「或」】`satisfiedBy` 的全部槽位都在档才谈得上成立
+ *（lib/cases/elements.ts 的推导规则），所以这里每个要件只挂它**最硬的那一路**证据槽：
+ * 解除事实挂「公司文件」而不是「公司文件或沟通记录」。少挂一路的代价是——只有微信记录的人
+ * 会看到这一项标「缺失」并被提示去补解除通知，多做一次功；多挂一路做不到（没有"或"），
+ * 而把两路都写进 satisfiedBy 会变成"两样都要有"，那才是真的错。
+ *
+ * 【为什么"计算基数"这类要件不再挂 basics 那一格】三态取 satisfiedBy 里**最弱**的那一档，
+ * 而 `basics:` 按 S4 的口径恒是「自述」（首诊四项是用户自己报的）。把它和证据槽并排挂上去，
+ * 这个要件就**永远**停在「成立·待证」——用户把工资流水传了上来，那一行一个字都不变，
+ * 而下面还写着「需补：工资流水」。所以同一件事既有证据类别、又有首诊字段时，
+ * 这里只挂证据类别；首诊那几项缺不缺，由事实卡首行的「基本盘缺 N 项」与 claim_calc 的
+ * 必填校验各自去管（那两处本来就在管它）。
+ *
+ * 【留下来的那个上限是真的，不是机制的锅】「劳动关系存在、工作年限起点可确定」这一项
+ * 只有 basics + company 两格，所以它的天花板就是「成立·待证」——只要入职日仍然只有
+ * 当事人自己的说法，这一项在庭上就是待证的，那句话是实话。它连带把这几项诉求的风险档位
+ * 压在「需补证后可主张」，同样是实话（见 lib/cases/claims.ts 的 riskBandOf）。
+ */
+const LABOR_ELEMENT_CARDS: readonly ElementCard[] = [
+  // ───────── 2N：违法解除赔偿金 ─────────
+  {
+    id: '2N-1',
+    claimKind: '2N',
+    name: '劳动关系存在，且工作年限的起点可确定',
+    burden: 'claimant',
+    basis: [anchor(LHT, '第十条')],
+    satisfiedBy: ['basics:employed_from', 'company:签约主体'],
+    typicalEvidence: ['劳动合同原件或照片', '社保缴纳记录（北京市社会保险网上服务平台可自助打印）', '工牌、考勤、公司邮箱等能证明实际用工的材料'],
+  },
+  {
+    id: '2N-2',
+    claimKind: '2N',
+    name: '公司单方解除或终止了劳动合同（不是你自己提出离职）',
+    burden: 'claimant',
+    basis: [anchor(LHT, '第八十七条')],
+    satisfiedBy: ['evidence:公司文件'],
+    typicalEvidence: ['《解除劳动合同通知书》原件', '离职证明', '公司在微信/邮件里通知解除的原始记录（截图带上下文与对方账号）'],
+  },
+  {
+    id: '2N-3',
+    claimKind: '2N',
+    name: '解除不具备第三十九条、第四十条、第四十一条的法定理由或法定程序',
+    // 司法解释（一）第四十四条把「用人单位作出的开除、除名、辞退、解除劳动合同、
+    // 减少劳动报酬、计算劳动者工作年限等决定」引发的争议整条压给用人单位——这是**限定事项的倒置**，
+    // 与下面几项「证据偏在」不是同一强度，两者不许互相顶替（statute-juzheng-zeren-fenpei 卡里并排放着原文）。
+    burden: 'reversed_interpretation',
+    basis: [
+      anchor(JS1, '第四十四条'),
+      anchor(LHT, '第三十九条'),
+      anchor(LHT, '第四十条'),
+      anchor(LHT, '第四十一条'),
+    ],
+    satisfiedBy: ['evidence:公司文件'],
+    typicalEvidence: ['写明解除理由的通知书原件', '公司据以解除的规章制度全文与你签收的记录', '经济性裁员的工会说明、职工大会记录与向劳动行政部门报告的回执'],
+  },
+  {
+    id: '2N-4',
+    claimKind: '2N',
+    name: '你选的是赔偿金，不是要求继续履行劳动合同',
+    burden: 'claimant',
+    basis: [anchor(LHT, '第四十八条')],
+    satisfiedBy: ['claim:2N'],
+    typicalEvidence: ['你选赔偿金而不是复职的书面表达（申请书里的请求事项、或你回复公司的原话）', '合同期已届满、岗位已撤销一类「没法继续履行」的材料'],
+  },
+  {
+    id: '2N-5',
+    claimKind: '2N',
+    name: '计算基数（解除前十二个月平均应得工资）可核',
+    // 工资支付记录法定由用人单位书面留存两年以上备查（工资支付暂行规定第六条），
+    // 所以它落在「与争议事项有关的证据属于用人单位掌握管理」那一格（调解仲裁法 §6 / 办案规则 §13）。
+    burden: 'reversed_procedure_rules',
+    basis: [
+      anchor(TJZCF, '第六条'),
+      anchor(BAGZ, '第十三条'),
+      anchor(GZZF, '第六条'),
+      anchor(LHT, '第四十七条'),
+      anchor(LHT_TL, '第二十七条'),
+    ],
+    satisfiedBy: ['evidence:工资'],
+    typicalEvidence: ['近十二个月银行工资流水（银行 App 导出带电子章的 PDF）', '工资条或工资支付表', '个税 App 里的收入纳税明细'],
+  },
+
+  // ───────── N：经济补偿 ─────────
+  {
+    id: 'N-1',
+    claimKind: 'N',
+    name: '劳动关系存在，且工作年限的起点可确定',
+    burden: 'claimant',
+    basis: [anchor(LHT, '第十条')],
+    satisfiedBy: ['basics:employed_from', 'company:签约主体'],
+    typicalEvidence: ['劳动合同原件或照片', '社保缴纳记录', '工牌、考勤、公司邮箱等能证明实际用工的材料'],
+  },
+  {
+    id: 'N-2',
+    claimKind: 'N',
+    name: '解除或终止落在第四十六条列举的情形里',
+    burden: 'reversed_interpretation',
+    basis: [anchor(JS1, '第四十四条'), anchor(LHT, '第四十六条')],
+    satisfiedBy: ['evidence:公司文件'],
+    typicalEvidence: ['《解除劳动合同通知书》或协商解除协议原件', '离职证明', '你以拖欠工资/未缴社保为由发出的被迫解除通知书与 EMS 送达回执'],
+  },
+  {
+    id: 'N-3',
+    claimKind: 'N',
+    name: '计算基数（解除前十二个月平均应得工资，含奖金津贴补贴）可核',
+    burden: 'reversed_procedure_rules',
+    basis: [
+      anchor(TJZCF, '第六条'),
+      anchor(BAGZ, '第十三条'),
+      anchor(GZZF, '第六条'),
+      anchor(LHT, '第四十七条'),
+      anchor(LHT_TL, '第二十七条'),
+    ],
+    satisfiedBy: ['evidence:工资'],
+    typicalEvidence: ['近十二个月银行工资流水', '工资条或工资支付表', '奖金、津贴、补贴的发放记录'],
+  },
+  {
+    id: 'N-4',
+    claimKind: 'N',
+    name: '这笔经济补偿至今没付，或者付得不足',
+    burden: 'claimant',
+    basis: [anchor(LHT, '第五十条')],
+    satisfiedBy: ['claim:N'],
+    typicalEvidence: ['离职后的银行流水（用来说明这笔钱没到账）', '公司给的结算单或补偿方案', '你就此向公司催要的书面记录'],
+  },
+
+  // ───────── 欠薪 ─────────
+  {
+    id: '欠薪-1',
+    claimKind: '欠薪',
+    name: '劳动关系存在（欠的这段期间你确实在为这家公司工作）',
+    burden: 'claimant',
+    basis: [anchor(LHT, '第十条')],
+    satisfiedBy: ['basics:employed_from', 'company:签约主体'],
+    typicalEvidence: ['劳动合同原件或照片', '社保缴纳记录', '考勤、排班、工作群记录'],
+  },
+  {
+    id: '欠薪-2',
+    claimKind: '欠薪',
+    name: '约定的工资标准与发薪日是什么',
+    burden: 'claimant',
+    basis: [anchor(LHT, '第三十条'), anchor(GZZF, '第七条')],
+    satisfiedBy: ['evidence:合同'],
+    typicalEvidence: ['劳动合同里写工资与发薪日的那几页', 'offer 或调薪通知', '过往按时发放的工资流水（用它反推约定的发薪日）'],
+  },
+  {
+    id: '欠薪-3',
+    claimKind: '欠薪',
+    name: '公司没有按期足额支付（到期未付或少付）',
+    burden: 'reversed_procedure_rules',
+    basis: [anchor(TJZCF, '第六条'), anchor(BAGZ, '第十三条'), anchor(GZZF, '第六条')],
+    satisfiedBy: ['evidence:工资'],
+    typicalEvidence: ['欠付期间的银行流水（有进账与没进账的月份都要）', '工资条或工资支付表', '公司承认欠薪的微信/邮件原话'],
+  },
+  {
+    id: '欠薪-4',
+    claimKind: '欠薪',
+    name: '欠付的期间与金额已经算清',
+    burden: 'claimant',
+    basis: [anchor(GZZF, '第九条'), anchor(BJGZ, '第十二条')],
+    satisfiedBy: ['claim:欠薪'],
+    typicalEvidence: ['按月份逐笔列出的欠付清单（哪个月该发多少、实发多少、差多少）', '公司出的结算单或对账表', '你就欠薪向公司催要的书面记录'],
+  },
+
+  // ───────── 双倍工资：未订立书面劳动合同的二倍工资差额 ─────────
+  {
+    id: '双倍工资-1',
+    claimKind: '双倍工资',
+    name: '用工之日（劳动关系建立之日）可确定',
+    burden: 'claimant',
+    basis: [anchor(LHT, '第十条')],
+    satisfiedBy: ['basics:employed_from'],
+    typicalEvidence: ['入职通知或 offer', '首月工资到账流水', '社保或公积金的首个缴纳月份', '工牌、门禁、公司邮箱的开通记录'],
+  },
+  {
+    id: '双倍工资-2',
+    claimKind: '双倍工资',
+    name: '自用工之日起满一个月仍没有订立书面劳动合同',
+    // 合同文本法定一式两份、双方各执一份（第十六条第二款），公司那份必然在公司手里——
+    // 「到底签没签」这件事的证据因此属于用人单位掌握管理（调解仲裁法 §6 / 办案规则 §13）。
+    burden: 'reversed_procedure_rules',
+    basis: [anchor(TJZCF, '第六条'), anchor(BAGZ, '第十三条'), anchor(LHT, '第十六条')],
+    satisfiedBy: ['basics:contract_count'],
+    typicalEvidence: ['你手上有没有合同（一份都没有也要如实记下来，这本身就是本项的事实）', '入职时公司给过哪些文件的清单', '你向公司要过合同的聊天记录'],
+  },
+  {
+    id: '双倍工资-3',
+    claimKind: '双倍工资',
+    name: '计算区间内每个月的工资标准可核',
+    burden: 'reversed_procedure_rules',
+    basis: [anchor(TJZCF, '第六条'), anchor(BAGZ, '第十三条'), anchor(GZZF, '第六条'), anchor(LHT, '第八十二条')],
+    satisfiedBy: ['evidence:工资'],
+    typicalEvidence: ['用工之日起逐月的银行工资流水', '工资条或工资支付表', '个税 App 收入纳税明细'],
+  },
+  {
+    id: '双倍工资-4',
+    claimKind: '双倍工资',
+    name: '请求期间落在仲裁时效之内（自主张之日起按日倒算）',
+    burden: 'claimant',
+    basis: [anchor(TJZCF, '第二十七条')],
+    satisfiedBy: ['claim:双倍工资'],
+    typicalEvidence: ['你第一次向公司或仲裁委正式主张这笔钱的日期与凭据（EMS 回执、仲裁申请受理回执、微信原话）'],
+  },
+];
+
+/**
+ * 举证责任编码 → 这个行当里用户看得懂的说法。
+ *
+ * 【为什么两条倒置要分开写，而不是都叫"由公司证"】它们的强度与适用范围不一样：
+ * 司法解释（一）第四十四条是**限定事项**的倒置（写的是"用人单位负举证责任"），
+ * 调解仲裁法第六条 / 办案规则第十三条是**证据偏在**（一般规则仍是谁主张谁举证，
+ * 只有东西在公司手里时公司要提供，不提供的承担不利后果）。合成一句的形态是：
+ * 用户拿着"公司要证"去开庭，而那一项其实还得他自己先举出个头。
+ */
+const LABOR_BURDEN_LABELS: Readonly<Record<Burden, string>> = {
+  claimant: '你来证',
+  respondent: '公司来证',
+  reversed_interpretation: '公司来证（司法解释把这类决定的举证责任整条压给公司）',
+  reversed_procedure_rules: '东西在公司手里：公司应当提供，不提供的由它承担不利后果',
+  unverified: '这一项的条号还没核实，现在说不出该谁证——先别按任何一边准备',
+};
+
 // ========== 领域包 ==========
 
 export const LABOR: DomainPack = {
@@ -609,6 +899,15 @@ export const LABOR: DomainPack = {
   // 算钱器：服务端**真能替你算**的那几项（lib/cases/claims 里有公式的）。
   // 与 claimKinds 刻意不同——能记一笔账的名目比能算的多。
   calculatorKinds: ['N', 'N+1', '2N', '年假', '双倍工资', '加班费', '待岗', '加付赔偿金', '竞业补偿', '病假工资'],
+
+  elementCards: LABOR_ELEMENT_CARDS,
+  burdenLabels: LABOR_BURDEN_LABELS,
+  elementSheetTitle: '要件表（每项诉求靠哪几件事成立）',
+
+  // 「对方的书面决定」在这个行当里就是公司发出的那张纸（解除通知、处分决定、
+  // 调岗降薪通知），落在证据库的「公司文件」类别下。争点表规则三要它：
+  // 举证责任在对方是常态，有了这张纸才有一个打得着的靶子（lib/cases/issue-table.ts）。
+  counterpartyDecisionSlot: 'evidence:公司文件',
 
   crisis: {
     lexicon: LABOR_CRISIS_TERMS,

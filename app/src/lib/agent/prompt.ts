@@ -288,6 +288,36 @@ export function staticPrefixOf(pack: DomainPack): string {
   ].join(SEGMENT_SEPARATOR);
 }
 
+/**
+ * 要件表与争点表的纪律（设计稿 §1.2「未记录误判」「争点回声」两行）。
+ *
+ * 【为什么它必须每轮下发，而不是写进 charter】charter 是**静态段**（同一领域逐字恒定，
+ * 缓存前缀就是它）。这一段有两态：本领域还没有要件卡时它必须整段不出现——
+ * 下发一段讲要件表纪律的指令、而事实卡里根本没有要件表，模型只会去发明一张。
+ *
+ * 【为什么纪律要贴着表下发】实测过的同族教训：「别重印整张卡」写在通用指令区被无视了两轮，
+ * 贴着那张卡下发才管用（见 packsSection 的注释）。这一段紧跟事实卡之后。
+ */
+function elementDiscipline(pack: DomainPack): string {
+  if (!pack.elementCards || pack.elementCards.length === 0) return '';
+  return [
+    '## 要件表与争点的纪律（本轮硬性）',
+    '',
+    '- 事实卡里的**要件表是服务端从档案推出来的**（每条事实的来源档位 → 要件状态），',
+    '  不是这一轮的判断。**不许在正文里改任何一行的状态**，也不许给出表上没有的状态。',
+    '- **标「缺失」的要件是〔未记录〕，不是「不满足」**：档案里没有这一项 ≠ 事实上没有。',
+    '  这几行只能说「还缺什么、先补哪一张」，**不许**写成「不满足 / 不成立 / 你没有 / 这项提不了」。',
+    '  用户手机里可能就有那份材料，只是还没上传——把它问出来，别替他判掉。',
+    '- **每提一个还没成立的要件，必须跟一句下一步**：一句具体的追问，或一张行动卡。',
+    '  只报缺口不给出路的回答，等于把人堵在原地。',
+    '- **争点回声**：正文里提到的争点必须是争点表（issue_list）的**子集**——',
+    '  多一条是发明争点，少一条是漏答。要新增一个争点，先把它依据的事实写进档案（element_fill /',
+    '  timeline_add / 证据登记），让它从要件表里派生出来，而不是在正文里直接写。',
+    '- **举证责任照要件表那一列讲，不要自己判**：标着「条号还没核实」的，就如实说还没核实，',
+    '  不要替用户选一边——举证责任讲反的代价是他据此认定"这件事我不用证"，而开庭那天没人替他证。',
+  ].join('\n');
+}
+
 export function buildSystemPromptSegments(input: BuildSystemPromptInput): SystemPromptSegments {
   const { readable, iso } = beijingNow(input.now);
   // 危机指令与危机资源卡的 id 按**这个案件所属领域**取（设计稿 §13「危机」行）。
@@ -364,6 +394,8 @@ export function buildSystemPromptSegments(input: BuildSystemPromptInput): System
       `- 当前会话模式：${input.mode}。`,
     ].join('\n'),
     factsCardOf(input.snapshot),
+    // 紧跟事实卡：这一段管的是"上面那张要件表怎么用"，离得远就被稀释了。
+    elementDiscipline(pack),
     // 陪跑/文书这类"回头继续"的模式先给前情提要；首诊(问诊)不需要，用户刚开口
     input.mode === '问诊' ? intakeDirective(input.stage) : `${recapBrief(input.snapshot)}\n\n${intakeDirective(input.stage)}`,
   ]
