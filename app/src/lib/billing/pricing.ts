@@ -102,10 +102,17 @@ export interface UsageTokens {
   /** 未命中缓存的输入 token（已扣除 cacheReadTokens）。 */
   promptTokens?: number;
   completionTokens?: number;
-  /** 命中缓存的输入 token，按 cacheRead 档（Anthropic/OpenAI 均为输入价 0.1×）。 */
-  cacheReadTokens?: number;
-  /** 写入缓存的 token，按 cacheWrite 档（比标准输入贵，Anthropic/OpenAI 5m 档 1.25×）。 */
-  cacheWriteTokens?: number;
+  /**
+   * 命中缓存的输入 token，按 cacheRead 档（Anthropic/OpenAI 均为输入价 0.1×）。
+   *
+   * **null / 省略 = 上游没回报这一桶，不是「就是 0」**（2026-09-10 裁决）。结算口径上两者
+   * 同价（都按 0 计，见下面的 `?? 0`），但落库时分得开：token_usage.cache_read_reported
+   * 记的就是这个差别。混成一个 0 的形态是——对账读出「这段时间一次缓存都没命中」，
+   * 一个听起来很确定、且朝着「我们没省到钱」方向错的假结论。
+   */
+  cacheReadTokens?: number | null;
+  /** 写入缓存的 token，按 cacheWrite 档（比标准输入贵，Anthropic/OpenAI 5m 档 1.25×）。null / 省略同上。 */
+  cacheWriteTokens?: number | null;
   embedTokens?: number;
 }
 

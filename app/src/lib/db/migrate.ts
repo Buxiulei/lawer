@@ -1886,6 +1886,57 @@ export function runMigrations(db: Database.Database): void {
   addColumnIfMissing(db, 'evidence', 'brief_source_tier', "TEXT NOT NULL DEFAULT '自述'");
   addColumnIfMissing(db, 'evidence', 'brief_asserted_by', "TEXT NOT NULL DEFAULT 'user'");
 
+  // ───────────────── agent_writes：这一行是从哪道门写进来的 ─────────────────
+  //
+  // 【为什么补这两列（2026-09-07 case 2）】此前台账只有 tool 一列，而 tool 是**工具名**——
+  // 于是「从 REST 端点直接写进来的那一批」在表里根本无从表达，实现上也就真的没记：
+  // 同一把 api key 走 MCP 写的查得到，走 REST 写的查不到，两边都返回 200。
+  // 补上 endpoint（REST 路径 / `mcp:<工具名>`）与 method 之后，两道门在同一张表里同形，
+  // 「这条是谁、从哪儿写的」不必再回应用日志里绕一圈。写入点只有一个：lib/audit/agent-writes。
+  //
+  // 两列都可空、**不回填**：本迁移框架没有事务，数据回填被 migrate-idempotency-guard 明令禁止
+  //（UPDATE-SET 规则）。本列落地之前的行全部来自能力壳（除了 MCP 没有第二个来源），
+  // 所以「老行读作 mcp:<tool> / POST」这件事放在**读侧**做，见下面的视图。
+  addColumnIfMissing(db, 'agent_writes', 'endpoint', 'TEXT');
+  addColumnIfMissing(db, 'agent_writes', 'method', 'TEXT');
+
+  // 审计读侧的归一视图。查台账一律读它，别直接读表——直接读表的形态是：
+  // 每个查询各写一遍 COALESCE，漏写的那个把老行的 endpoint 读成 NULL，
+  // 于是「这批写入没有来源」看起来像一个真实结论，而它只是那次查询忘了归一。
+  db.exec(`
+    CREATE VIEW IF NOT EXISTS agent_writes_audit AS
+      SELECT id, case_id, key_id, tool, client_ref, target_table, target_id, deduped, created_at,
+             COALESCE(endpoint, 'mcp:' || tool) AS endpoint,
+             COALESCE(method, 'POST')          AS method
+        FROM agent_writes;
+  `);
+
+  // ───────────────── token_usage：缓存两桶「未回报」≠「就是 0」 ─────────────────
+  //
+  // 【为什么要分开（2026-09-10 裁决）】cache_read_tokens / cache_write_tokens 是
+  // NOT NULL DEFAULT 0 的旧列，于是「上游根本没报这一桶」与「上游报了、值是 0」
+  // 在表里长得**一模一样**。对账时把前者读成后者，结论会变成「这段时间一次缓存都没命中」——
+  // 一个听起来很确定、且往「我们没省到钱」方向错的假结论。
+  //
+  // 旧列语义一个字节不动（结算口径照旧按 0 计，成本算式不变）；新增两列只记
+  // **上游到底报没报**：1 = 报了，0 = 没报，NULL = 本列落地之前的行（无从判断，不许当成 0）。
+  // 不改旧列为可空：SQLite 放宽 NOT NULL 要重建表，而本迁移框架没有事务。
+  addColumnIfMissing(db, 'token_usage', 'cache_read_reported', 'INTEGER');
+  addColumnIfMissing(db, 'token_usage', 'cache_write_reported', 'INTEGER');
+
+  // 「可空两桶」的读侧形态：未回报读作 NULL，回报了才读出数。
+  // 对账与分析读这个视图，结算仍读原表——两个口径各有各的正确答案，
+  // 混在一列里看才是错的（见 lib/db/reconcile.ts 的未回报探针）。
+  db.exec(`
+    CREATE VIEW IF NOT EXISTS token_usage_reported AS
+      SELECT id, user_id, feature, model, api_model, prompt_tokens, completion_tokens,
+             embed_tokens, cost_li, ref_id, created_at,
+             cache_read_reported, cache_write_reported,
+             CASE WHEN cache_read_reported  = 0 THEN NULL ELSE cache_read_tokens  END AS cache_read_tokens,
+             CASE WHEN cache_write_reported = 0 THEN NULL ELSE cache_write_tokens END AS cache_write_tokens
+        FROM token_usage;
+  `);
+
   // ───────────────── 费率种子 ─────────────────
   // C01 核定的模型费率必须**在建表之后立刻播下去**：缺行时 getRatesForModel 会回落
   // DEFAULT_RATES（最便宜的 Flash 档），于是每一笔账都按兜底价少收——而账面看起来完全正常。

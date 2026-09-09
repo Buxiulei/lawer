@@ -3,8 +3,10 @@
 // 网页与用户自己的 agent 走同一套闸门与同一套价，两个入口不该有两份实现。
 //
 // 两步同一个端点：body 不带 quote_id = 报价（免费、不扣任何费用）；带 quote_id = 确认扣费并排队。
+import { recordAgentWriteFromRest } from '@/lib/audit/agent-writes';
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
+import { findEvidenceDetail } from '@/lib/db/evidence';
 import { EXTRACTION_MODES, quoteExtraction, startExtraction } from '@/lib/evidence/extraction';
 import { apiJson } from '@/lib/http/json';
 import type { ExtractionMode } from '@/lib/jobs/extraction-worker';
@@ -58,5 +60,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   const started = startExtraction(getDb(), { evidenceId, userId, mode, quoteId });
   if (!started.ok) return domainFailure(started);
+
+  // 只有确认那一步记台账：上面那条报价分支明说「只出价、不动账」，
+  // 给它也记一行的形态是——台账里「发起过几次提取」比实际排进队的次数多。
+  const caseId = findEvidenceDetail(getDb(), evidenceId)?.case_id;
+  if (caseId !== undefined) {
+    recordAgentWriteFromRest(getDb(), guard.identity, {
+      endpoint: '/api/v1/evidence/{id}/extract',
+      method: 'POST',
+      caseId,
+      targetTable: 'extraction_jobs',
+      targetId: started.job_id,
+      deduped: started.deduped,
+    });
+  }
   return apiJson({ ok: true, job: started });
 }

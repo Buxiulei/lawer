@@ -74,7 +74,9 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  for (const table of ['api_keys', 'timeline_events', 'action_items', 'deadlines', 'cases', 'users']) {
+  // agent_writes 排在 api_keys 之前：台账的 key_id 是指向 api_keys 的真外键（吊销走软删，
+  // 生产上那行不会消失），先删 key 会撞 FOREIGN KEY constraint failed。
+  for (const table of ['agent_writes', 'api_keys', 'timeline_events', 'action_items', 'deadlines', 'cases', 'users']) {
     db.prepare(`DELETE FROM ${table}`).run();
   }
   const insertUser = db.prepare(

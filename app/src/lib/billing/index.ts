@@ -299,11 +299,17 @@ export function recordTokenUsage(
   db: Database.Database = getDb(),
 ): void {
   const rates = getRatesForModel(db, model);
+  // 「上游报没报这一桶」与「报的值是多少」分两列记（2026-09-10 裁决）。
+  // 旧的两列语义一个字节不动：结算口径上未回报按 0 计（费率算式不变）；
+  // 新的 *_reported 只回答「这个 0 是上游说的，还是我们兜的」——
+  // 少了它，对账没法把「一次缓存都没命中」和「上游根本没告诉我们」分开。
+  const reported = (v: number | null | undefined): number => (typeof v === 'number' ? 1 : 0);
   db.prepare(
     `INSERT INTO token_usage
        (user_id, feature, model, api_model, prompt_tokens, completion_tokens,
-        cache_read_tokens, cache_write_tokens, embed_tokens, cost_li, ref_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        cache_read_tokens, cache_write_tokens, embed_tokens, cost_li, ref_id,
+        cache_read_reported, cache_write_reported)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     userId,
     feature,
@@ -316,5 +322,7 @@ export function recordTokenUsage(
     tokens.embedTokens ?? 0,
     costLiOfUsage(tokens, rates),
     refId,
+    reported(tokens.cacheReadTokens),
+    reported(tokens.cacheWriteTokens),
   );
 }

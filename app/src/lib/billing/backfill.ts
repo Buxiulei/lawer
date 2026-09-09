@@ -90,8 +90,10 @@ function parseUsage(raw: string): { model: string; tokens: UsageTokens | null; s
     tokens: {
       promptTokens: four.promptTokens ?? 0,
       completionTokens: four.completionTokens ?? 0,
-      cacheReadTokens: four.cacheReadTokens ?? 0,
-      cacheWriteTokens: four.cacheWriteTokens ?? 0,
+      // 缓存两桶保留 null：tokens_json 里的 null 就是「当时上游没报这一桶」，
+      // 在这里补成 0 等于把「不知道」补记成「确定没有」（同 orchestrator 那处的理由）。
+      cacheReadTokens: four.cacheReadTokens,
+      cacheWriteTokens: four.cacheWriteTokens,
     },
   };
 }

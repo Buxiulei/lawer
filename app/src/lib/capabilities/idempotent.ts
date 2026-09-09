@@ -11,6 +11,8 @@
 // 已经在生产上跑着。把它改道过来换不到任何新保证，只换来一次可以不冒的迁移风险。
 import type { Database } from 'better-sqlite3';
 
+import { mcpEndpoint, recordAgentWrite } from '@/lib/audit/agent-writes';
+
 /** 这次写入落到了哪张表的哪一行。target_table 是弱引用，见 migrate.ts 建表注释。 */
 export interface AgentWriteTarget {
   table: string;
@@ -97,10 +99,21 @@ export function withClientRef(
     if (existing) return { target: existing, deduped: true };
 
     const target = insert();
-    db.prepare(
-      'INSERT INTO agent_writes (case_id, key_id, tool, client_ref, target_table, target_id, deduped)' +
-        ' VALUES (?, ?, ?, ?, ?, ?, 0)',
-    ).run(ctx.caseId, ctx.keyId ?? null, ctx.tool, clientRef, target.table, target.id);
+    // 台账那一行**在事务里**由唯一写入点插（lib/audit/agent-writes）。REST 面那十几条端点
+    // 调的是同一个函数——两处各写一条 INSERT 的形态，正是 2026-09-07 case 2：
+    // 一边记了、一边没记，而两边都返回 200。
+    // endpoint 走 mcp:<工具名>：这一行说的是「这次写入是那条能力干的」，
+    // 从 REST 把活交给能力注册表的那几条端点也算在内（同一条能力、同一份实现）。
+    recordAgentWrite(db, {
+      caseId: ctx.caseId,
+      keyId: ctx.keyId ?? null,
+      endpoint: mcpEndpoint(ctx.tool),
+      method: 'POST',
+      clientRef,
+      targetTable: target.table,
+      targetId: target.id,
+      deduped: false,
+    });
     return { target, deduped: false };
   });
 

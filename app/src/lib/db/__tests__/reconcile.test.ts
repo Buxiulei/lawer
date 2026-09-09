@@ -28,13 +28,56 @@ function makeDb() {
 }
 
 describe('reconcile', () => {
-  test('账目一致：零 problems；定额消耗只出警告', () => {
+  test('账目一致：零 problems；定额消耗与缓存未回报各出一条警告', () => {
     const { db } = makeDb();
     const r = reconcile(db);
     expect(r.problems).toEqual([]);
     expect(r.users).toBe(2);
-    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings).toHaveLength(2);
     expect(r.warnings[0]).toContain('attest-u2');
+    // 夹具那笔用量只报了 prompt/completion 两桶，缓存两桶上游没给。
+    // 这条警告说的就是「那两个 0 是我们兜的，不是上游说的」——见下面一节。
+    expect(r.warnings[1]).toContain('缓存计量未回报');
+  });
+
+  /**
+   * 缓存两桶「未回报 ≠ 0」（2026-09-10 裁决）。
+   *
+   * 【为什么要有这条】cache_read_tokens 是 NOT NULL DEFAULT 0 的旧列，于是
+   * 「上游根本没报这一桶」与「上游报了、值是 0」在表里长得一模一样。
+   * 照着它算缓存命中率会算出一个**听起来很确定**的 0%，而真相是我们没在看那一档。
+   * 两臂缺一不可：只验"有未回报会警告"的那臂，把 reported 恒写 0 的实现照样绿。
+   */
+  describe('缓存两桶未回报（两臂：上游给了 / 没给）', () => {
+    function usageDb(tokens: Parameters<typeof recordTokenUsage>[3]) {
+      const db = new Database(':memory:');
+      db.pragma('foreign_keys = ON');
+      runMigrations(db);
+      const uid = Number(db.prepare('INSERT INTO users (email) VALUES (?)').run('c@t.com').lastInsertRowid);
+      gongdaoGrant(uid, 1000, GONGDAO_LEDGER_TYPE.register, `reg-${uid}`, null, db);
+      recordTokenUsage(uid, 'intake', 'deepseek-v3', tokens, 'ref-c', null, db);
+      gongdaoSettle(uid, 3, 'ref-c', 'intake', null, db);
+      return db;
+    }
+
+    test('上游没给 ⇒ 警告点名「这些 0 不等于没命中缓存」', () => {
+      const r = reconcile(usageDb({ promptTokens: 100, completionTokens: 10 }));
+      expect(r.problems).toEqual([]);
+      const hit = r.warnings.find((w) => w.includes('缓存计量未回报'));
+      expect(hit, `没有那条警告，实得：\n${r.warnings.join('\n')}`).toBeDefined();
+      expect(hit).toContain('不等于');
+    });
+
+    test('上游报了（哪怕报的就是 0）⇒ 不出这条警告（变异：reported 恒写 0 ⇒ 本条红）', () => {
+      const r = reconcile(
+        usageDb({ promptTokens: 100, completionTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0 }),
+      );
+      expect(r.problems).toEqual([]);
+      expect(
+        r.warnings.filter((w) => w.includes('缓存计量未回报')),
+        '上游明说了两桶都是 0，这不是「不知道」，不该警告',
+      ).toEqual([]);
+    });
   });
 
   test('物化余额被改坏 → 报出差额', () => {
