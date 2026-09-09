@@ -244,6 +244,44 @@ describe('写路径落档位：档位收声明，断言人按身份判', () => {
     expect((db.prepare('SELECT COUNT(*) AS n FROM timeline_events').get() as { n: number }).n).toBe(0);
   });
 
+  /** 首诊的必填入参（param 名照 intake_submit 的说明书，月工资对 MCP 收「元」） */
+  const INTAKE_ARGS = {
+    stage: '已收通知',
+    company_name: '某某科技有限公司',
+    employed_from: '2021-04-12',
+    monthly_wage_yuan: 22_000,
+    goals: ['把该拿的拿到'],
+    events: [{ date: '2026-08-28', text: '开会宣布优化' }],
+  };
+
+  /**
+   * 【首诊是一次写十几行，所以这一格最贵】intake_submit 此前不填断言人，落 DDL 默认值 user：
+   * 一份由对方 agent 替用户填出来的档案，**每一行都标着「用户本人说过」**，展示层从此不标黄，
+   * 而回包 201、字段全对、没有一处会报错。
+   */
+  it('agent 经 API 做的首诊，落下的每一行都记 agent_inferred（变异：把 intake_submit 壳里的 assertedBy 去掉 → 红）', async () => {
+    const res = await call('intake_submit', INTAKE_ARGS);
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    expect(
+      db.prepare('SELECT DISTINCT source_tier, asserted_by FROM timeline_events WHERE case_id = ?').all(caseId),
+    ).toEqual([{ source_tier: '自述', asserted_by: 'agent_inferred' }]);
+    expect(
+      db.prepare('SELECT source_tier, asserted_by FROM company_profiles WHERE case_id = ?').get(caseId),
+    ).toEqual({ source_tier: '自述', asserted_by: 'agent_inferred' });
+  });
+
+  it('同一条首诊由网页登录态做则记 user（变异：把 assertedByOf 改成恒 agent_inferred → 红：本人亲手填的档案整份被标黄）', async () => {
+    const web: Identity = { uid: identity.uid, via: 'jwt', scopes: ['case:read', 'case:write'] };
+    const res = await invokeCapability(db, web, 'intake_submit', { case_id: caseId, ...INTAKE_ARGS });
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    expect(
+      db.prepare('SELECT DISTINCT source_tier, asserted_by FROM timeline_events WHERE case_id = ?').all(caseId),
+    ).toEqual([{ source_tier: '自述', asserted_by: 'user' }]);
+    expect(
+      db.prepare('SELECT source_tier, asserted_by FROM company_profiles WHERE case_id = ?').get(caseId),
+    ).toEqual({ source_tier: '自述', asserted_by: 'user' });
+  });
+
   it('claims_upsert 的档位随入参落库（变异：把 origin 丢掉 → 落 DDL 缺省档 → 红）', async () => {
     await call('claims_upsert', {
       kind: '欠薪',
@@ -255,6 +293,36 @@ describe('写路径落档位：档位收声明，断言人按身份判', () => {
       source_tier: '对方认可',
       asserted_by: 'agent_inferred',
     });
+  });
+});
+
+describe('说明书里「不传档位会怎样」按写入语义分开说', () => {
+  const tierDesc = (name: string) =>
+    (getCapability(name)!.inputSchema.properties as Record<string, { description: string }>).source_tier
+      .description;
+
+  /**
+   * 【为什么这一条要有】三条写能力的写入语义不同（追加 / 覆盖 / 补充），而"不传档位"在三处
+   * 是三件事。此前三处共用同一句「留空落最弱档」——那句话对**补充型**是假的：
+   * company_profile_upsert 命中已有行时不传，那两列一个字节都不动。
+   * 说明书是对方 agent 唯一能读到的用法说明，它照着那句话补一个统一社会信用代码，
+   * 以为自己把这一行降回了自述（或反过来，以为 claims_upsert 会沿用上一版的「裁审认定」），
+   * 而两种误解都读不出来：调什么都返回 200，只有档位那一列与它以为的不同。
+   */
+  it('覆盖型说"落最弱档"、补充型说"一个字节不动"（变异：把两句换回同一句 → 红）', () => {
+    expect(tierDesc('claims_upsert')).toContain('不传即落最弱档');
+    expect(tierDesc('claims_upsert')).toContain('覆盖这一条');
+    expect(tierDesc('company_profile_upsert')).toContain('一个字节不动');
+    // 两句真的不一样（都改成同一句时上面两条可能仍然凑巧过，这一条堵死它）
+    expect(tierDesc('claims_upsert')).not.toEqual(tierDesc('company_profile_upsert'));
+    expect(tierDesc('timeline_add')).not.toEqual(tierDesc('company_profile_upsert'));
+  });
+
+  it('四档的含义那一段仍然是同一份（变异：让某条能力自己抄一份档位定义 → 红：四档从此两个版本）', () => {
+    const meanings = '对方认可 = 对方书面认过（这一档不必再由本人举证）；裁审认定 = 办案机构认定过。';
+    for (const name of ['timeline_add', 'claims_upsert', 'company_profile_upsert']) {
+      expect(tierDesc(name), name).toContain(meanings);
+    }
   });
 });
 

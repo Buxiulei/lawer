@@ -198,7 +198,12 @@ export const claimsUpsert: Capability = {
       basis: { type: 'string', description: '依据（条号、来源卡 id 等），可省略' },
       calc_json: { type: 'string', description: '这个数从哪来、待证状态，JSON 串，可省略' },
       status: { type: 'string', enum: [...CLAIM_STATUSES], description: '默认 draft' },
-      ...sourceTierProp,
+      // 覆盖型：同案同 kind 只有一条，这次不点名档位就是"这一版没有支撑"
+      //（落库那一段的注释里写着同一件事，两处说的必须是同一句话）。
+      ...sourceTierProp(
+        '**不传即落最弱档「自述」**：同案同 kind 只有一条，再调一次是覆盖这一条，' +
+          '所以不点名档位＝这一版没有支撑，**不会**沿用上一版已有的档位。要保住原档位就把它原样传回来。',
+      ),
       ...clientRefProp,
       ...factsTokenProp,
     },

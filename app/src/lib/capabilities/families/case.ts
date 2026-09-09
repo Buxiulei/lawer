@@ -10,6 +10,7 @@ import { issueFactsToken } from '@/lib/cases/facts-token';
 import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
 
 import {
+  assertedByOf,
   caseIdProp,
   factsTokenProp,
   intakeArgsToInput,
@@ -228,5 +229,8 @@ export const intakeSubmit: Capability = {
       ...intakeArgsToInput(INTAKE_PACK, args),
       caseId: num(args.case_id),
       userId: identity.uid,
+      // 断言人由身份判，**不收入参**（见 shared.assertedByOf 的长注释）。首诊一次写十几行，
+      // 漏填这一格的形态是：对方 agent 替用户建的整份档案，每一行都标着「用户本人说过」。
+      assertedBy: assertedByOf(identity),
     } as Parameters<typeof cases.submitIntake>[1]),
 };

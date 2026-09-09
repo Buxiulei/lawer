@@ -8,11 +8,28 @@ import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
 
-import { addTimelineEvent, updateCase, upsertCompany } from '..';
+import { addTimelineEvent, ensureDefaultCase, submitIntake, updateCase, upsertCompany } from '..';
 import { makeFixture } from './fixtures';
 
 const GATE = DOMAINS[DEFAULT_DOMAIN].evidenceGate!;
 const GATE_STAGE = GATE.stages[0];
+/** 这个阶段的首诊种子有几条——回包条数要在它之上再加那张强制取证卡 */
+const GATE_STAGE_SEEDS = DOMAINS[DEFAULT_DOMAIN].intakeStageActions[GATE_STAGE].length;
+
+/** 走一次真首诊：**全程只有自述**（一条书证都不带），正是取证闸要开的那个形态 */
+function intakeAt(f: ReturnType<typeof makeFixture>, stage: string) {
+  return submitIntake(f.db, {
+    caseId: f.caseA,
+    userId: f.userA,
+    stage,
+    companyName: '某某科技有限公司',
+    employedFrom: '2021-04-12',
+    monthlyWageFen: 2_200_000,
+    goals: ['把该拿的拿到'],
+    events: [{ date: '2026-08-28', text: '开会宣布优化' }],
+    now: new Date('2026-09-02T10:00:00+08:00'),
+  } as Parameters<typeof submitIntake>[1]);
+}
 
 /** 本案有几张标题相同的待办 */
 function seeded(db: ReturnType<typeof makeFixture>['db'], caseId: number): number {
@@ -81,6 +98,38 @@ describe('取证闸的落卡', () => {
     expect(seeded(f.db, f.caseA)).toBe(1);
   });
 
+  /**
+   * 【这条盯的是首诊那条路】首诊落 stage 走的是 store.updateCaseFields，**绕开 updateCase**，
+   * 于是取证闸此前只挂在 case_update 上。形态是：用户在首诊第一步就选了「取证窗口里的那个阶段」
+   *（他本来就是走到那一步才来的），三件事照常落、回包 201，而**最需要那张卡的人一张都收不到**。
+   */
+  it('首诊直接选在取证窗口里的阶段 ⇒ 同样落那张卡（变异：删掉 submitIntake 里那一句 seedEvidenceGateAction → 红）', () => {
+    const f = makeFixture();
+    const res = intakeAt(f, GATE_STAGE);
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    expect(seeded(f.db, f.caseA)).toBe(1);
+    // 回包的条数把它算进去了：不算的形态是页面照着回包说「已为你安排 N 件事」，而库里躺着 N+1 件，
+    // 多出来的那一件恰恰是最急的那件。
+    if (res.ok) expect(res.result.actionsAdded).toBe(GATE_STAGE_SEEDS + 1);
+  });
+
+  it('首诊选的阶段不在窗口里 ⇒ 不落卡（变异：首诊无条件落卡 → 红：刚建档就被催取证）', () => {
+    const f = makeFixture();
+    const res = intakeAt(f, '已收通知');
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    expect(seeded(f.db, f.caseA)).toBe(0);
+  });
+
+  it('首诊与 case_update 共用同一段闸：重提首诊不会堆出第二张（变异：在首诊那条路上照抄一段落卡判定 → 红）', () => {
+    const f = makeFixture();
+    intakeAt(f, GATE_STAGE);
+    const again = intakeAt(f, GATE_STAGE);
+    updateCase(f.db, { caseId: f.caseA, userId: f.userA, stage: GATE_STAGE });
+    expect(seeded(f.db, f.caseA)).toBe(1);
+    // 第二次首诊一张新卡都没落，回包里就不该把它算进去
+    if (again.ok) expect(again.result.actionsAdded).toBe(0);
+  });
+
   it('只改 goal 不落卡（变异：把落卡挂在任意字段更新上 → 红）', () => {
     const f = makeFixture();
     selfReportedEvent(f);
@@ -133,6 +182,77 @@ describe('写入口的档位校验', () => {
     });
     expect(again.ok).toBe(false);
     if (!again.ok) expect(again.errorCode).toBe('INVALID_SOURCE_TIER');
+  });
+
+  it('注册时那条欢迎事件记 system（变异：建案时不传 origin → 落 DDL 默认 user → 红）', () => {
+    // 它是**服务端替用户建档时印上去的一句话**，那一刻用户一个字都还没打。
+    // 记成 user 的形态是：档案里第一条事件标着「用户本人说过」，在读侧与他亲口说的那些完全同形。
+    const f = makeFixture();
+    const uid = Number(
+      f.db.prepare("INSERT INTO users (phone_hash, auth_status) VALUES ('hash-c', '未认证')").run()
+        .lastInsertRowid,
+    );
+    const made = ensureDefaultCase(f.db, uid);
+    expect('ok' in made, JSON.stringify(made)).toBe(false);
+    if ('ok' in made) return;
+    expect(
+      f.db
+        .prepare('SELECT kind, source_tier, asserted_by FROM timeline_events WHERE case_id = ?')
+        .get(made.caseId),
+    ).toEqual({ kind: '系统动作', source_tier: '自述', asserted_by: 'system' });
+  });
+
+  it('首诊落下的行按外壳给的身份记断言人（变异：persist 丢掉 origin → 落 DDL 默认 user → 红）', () => {
+    // 领域层这一条钉的是「透传真的发生了」；两条外壳各自填对身份由
+    // lib/capabilities/__tests__/facts-token-gate.test.ts 那两条钉。
+    const f = makeFixture();
+    const res = submitIntake(f.db, {
+      caseId: f.caseA,
+      userId: f.userA,
+      stage: '已收通知',
+      companyName: '某某科技有限公司',
+      employedFrom: '2021-04-12',
+      monthlyWageFen: 2_200_000,
+      goals: ['把该拿的拿到'],
+      events: [{ date: '2026-08-28', text: '开会宣布优化' }],
+      assertedBy: 'agent_inferred',
+      now: new Date('2026-09-02T10:00:00+08:00'),
+    } as Parameters<typeof submitIntake>[1]);
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    expect(
+      f.db
+        .prepare('SELECT DISTINCT source_tier, asserted_by FROM timeline_events WHERE case_id = ?')
+        .all(f.caseA),
+    ).toEqual([{ source_tier: '自述', asserted_by: 'agent_inferred' }]);
+    expect(
+      f.db.prepare('SELECT source_tier, asserted_by FROM company_profiles WHERE case_id = ?').get(f.caseA),
+    ).toEqual({ source_tier: '自述', asserted_by: 'agent_inferred' });
+  });
+
+  it('重提首诊不改已有主体行的档位（变异：给 upsertCompanyProfileByRole 带上 overwriteOrigin → 红：证明力凭空掉几档）', () => {
+    const f = makeFixture();
+    upsertCompany(f.db, {
+      caseId: f.caseA,
+      userId: f.userA,
+      name: '某某科技有限公司',
+      role: '签约主体',
+      sourceTier: '裁审认定',
+      assertedBy: 'system',
+    });
+    submitIntake(f.db, {
+      caseId: f.caseA,
+      userId: f.userA,
+      stage: '已收通知',
+      companyName: '某某科技有限公司（订正）',
+      employedFrom: '2021-04-12',
+      monthlyWageFen: 2_200_000,
+      goals: ['把该拿的拿到'],
+      assertedBy: 'agent_inferred',
+      now: new Date('2026-09-02T10:00:00+08:00'),
+    } as Parameters<typeof submitIntake>[1]);
+    expect(
+      f.db.prepare('SELECT name, source_tier, asserted_by FROM company_profiles WHERE case_id = ?').get(f.caseA),
+    ).toEqual({ name: '某某科技有限公司（订正）', source_tier: '裁审认定', asserted_by: 'system' });
   });
 
   it('对方主体也带档位（变异：upsertCompany 丢掉 origin → 红）', () => {

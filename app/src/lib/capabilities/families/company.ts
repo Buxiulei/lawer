@@ -60,7 +60,11 @@ export const companyProfileUpsert: Capability = {
         type: 'string',
         description: '幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库',
       },
-      ...sourceTierProp,
+      // 补充型：命中既有行时不传 = 那两列一个字节不动（lib/db/agent.ts overwriteOrigin 的口径）。
+      ...sourceTierProp(
+        '新登记一行时不传即落最弱档「自述」；**命中已有行时不传 = 那一行的档位一个字节不动**' +
+          '（补一个统一社会信用代码不会把一行「裁审认定」降回「自述」）。要改档位必须点名传。',
+      ),
     },
     required: ['case_id', 'name'],
   },

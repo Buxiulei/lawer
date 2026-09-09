@@ -264,6 +264,10 @@ export function ensureDefaultCase(
       kind: '系统动作',
       title: copy.welcomeEventTitle,
       detail: copy.welcomeEventDetail,
+      // 这一条是**服务端自己写的**，用户那时一个字都还没打。走 DDL 默认值（user）的形态是：
+      // 档案里第一条事件标着「用户本人说过」，而它是我们替他建档时印上去的一句欢迎语——
+      // 一条谁都没说过的话，在读侧与他亲口说的那些完全同形。
+      origin: { tier: DEFAULT_TIER, assertedBy: 'system' },
     });
     return caseId;
   });
@@ -626,6 +630,11 @@ export function updateCase(
 /**
  * 进入取证窗口、而关键事实一条书证都没有 ⇒ 落一张**强制取证**行动卡（设计稿 §4.2-2）。
  *
+ * 【两条写 stage 的路都经它】case_update 与首诊 submitIntake 落的是**同一列**，
+ * 只挂在前者上的形态是：用户在首诊那一步就选了取证窗口里的阶段（他本来就是走到那一步才来的），
+ * 于是最需要这张卡的人一张都收不到，而回包 201、三件事照常落、没有一处会报错。
+ * 两处调**同一个函数**（不是各写一段判定），去重、判据、落卡条件才只有一份。
+ *
  * 【为什么由服务端在 stage 变更时落，而不是让模型自己想着建】陪跑节奏由服务端驱动
  *（设计稿 §4.4-7）：靠模型记得建的形态是——它这一轮忘了，用户就在最后一个能补证的窗口里
  * 什么都没被提醒，而那一轮的回复看起来与别的轮次没有任何区别。
@@ -637,6 +646,9 @@ export function updateCase(
  * 【与事实卡首行的取数差别，是刻意的】这里按 TIMELINE_MAX_LIMIT 条取时间线，
  * 事实卡按 snapshot 的 30 条窗口取。窗口外有一条带书证的老事件时，
  * **卡上会多说一句、而这里不落卡**——多一句提醒无害，多落一张用户已经做过的卡才烦人。
+ *
+ * @returns 这一次**真落了一张新卡**吗（不在窗口、已有书证、同题已有一张待办，三种都是 false）。
+ *   首诊那条路按它给回包计数：回包说落了三件事而库里躺着四件，多出来的恰恰是最急的那件。
  */
 function seedEvidenceGateAction(
   db: Database,
@@ -644,18 +656,18 @@ function seedEvidenceGateAction(
   stage: string,
   pack: DomainPack,
   now?: Date,
-): void {
+): boolean {
   const gate = pack.evidenceGate;
-  if (!gate || !gate.stages.includes(stage)) return;
+  if (!gate || !gate.stages.includes(stage)) return false;
 
   const groups = [
     store.listTimelineEvents(db, caseId, TIMELINE_MAX_LIMIT),
     listClaims(db, caseId),
     listCompanyProfiles(db, caseId),
   ].filter((rows) => rows.length > 0);
-  if (!noDocumentedFact(groups)) return;
+  if (!noDocumentedFact(groups)) return false;
 
-  insertActionItem(db, {
+  return insertActionItem(db, {
     caseId,
     title: gate.action.title,
     detail: gate.action.detail,
@@ -664,7 +676,7 @@ function seedEvidenceGateAction(
     // 给它首诊种子表的最高档（首诊每阶段最多三条，那张表的最大值就是 3）。
     priority: 3,
     sourceMessageId: null,
-  });
+  }).created;
 }
 
 /**
@@ -683,7 +695,22 @@ export function submitIntake(
 
   const done = submitIntakeInto(db, input.caseId, input, pack.pack);
   if (!done.ok) return done;
-  return { ok: true, result: done.result };
+
+  // 【首诊落完 stage 也要过取证闸】读的是**落库之后那一行**的 stage，不是入参：
+  // 归一化与领域校验都在 submitIntakeInto 里做完了，拿入参再判一次等于在这儿抄第二份口径。
+  const seeded = seedEvidenceGateAction(
+    db,
+    input.caseId,
+    store.findCaseById(db, input.caseId)!.stage,
+    pack.pack,
+    input.now,
+  );
+  // 落了那张卡就得**算进回包的条数**：不算的形态是回包说落了三件事、库里躺着四件，
+  // 而多出来的那一件恰恰是最急的那件——页面照着回包说"已为你安排 3 件事"，数目对不上。
+  return {
+    ok: true,
+    result: seeded ? { ...done.result, actionsAdded: done.result.actionsAdded + 1 } : done.result,
+  };
 }
 
 /**

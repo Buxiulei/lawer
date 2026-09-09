@@ -169,6 +169,12 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
       'lib/agent/gate-chain.ts',
       'lib/agent/statute-guard.ts',
       'lib/agent/value-guard.ts',
+      // ↓ S4 复审（2026-09-10）补进来的两处。两份文件的头注释都写着「本文件零领域内容」，
+      //   source-tier.ts 更是写着「**不许**往这里加任何行当名词」——而在此之前
+      //   **没有任何一处在守它**：那句话被写下的同一票里，它自己的注释里就躺着行当名词。
+      //   一条无人执行的红线，与没有这条红线，在下一个读到它的人那里是同一件事。
+      'lib/cases/source-tier.ts',
+      'lib/cases/elements.ts',
     ].map((f) => path.join(SRC_ROOT, f)),
   ];
 

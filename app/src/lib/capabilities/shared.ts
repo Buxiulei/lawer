@@ -188,18 +188,34 @@ export function assertedByOf(identity: { via: string }): AssertedBy {
   return identity.via === 'api_key' ? 'agent_inferred' : 'user';
 }
 
-/** 写能力上那一格「这条事实有多硬」。四档的含义逐字对外，与事实卡上的〔〕同一套。 */
-export const sourceTierProp = {
-  source_tier: {
-    type: 'string',
-    enum: [...SOURCE_TIERS],
-    description:
-      '这条事实的来源档位，默认「自述」。' +
-      '自述 = 只有当事人自己的说法；书证 = 有已上传的材料支撑；' +
-      '对方认可 = 对方书面认过（这一档不必再由本人举证）；裁审认定 = 办案机构认定过。' +
-      '**没有把握就不要传**：留空落最弱档只是多补一张材料，标高一档会让一句没有支撑的话看起来已经坐实。',
-  },
-} as const;
+/** 四档的含义逐字对外，与事实卡上的〔〕同一套。**每条能力各说各的「不传会怎样」**，见下。 */
+const SOURCE_TIER_MEANINGS =
+  '自述 = 只有当事人自己的说法；书证 = 有已上传的材料支撑；' +
+  '对方认可 = 对方书面认过（这一档不必再由本人举证）；裁审认定 = 办案机构认定过。' +
+  '**没有把握就不要传**：标高一档会让一句没有支撑的话看起来已经坐实。';
+
+/**
+ * 写能力上那一格「这条事实有多硬」。
+ *
+ * @param blankMeans **不传这一格会发生什么**，由调用点逐字给出。
+ *
+ * 【为什么这一句不能共用】三条写能力的写入语义不是一回事：时间线是**追加**（新行总要有个档位）、
+ * claims 是**覆盖**（同案同 kind 只有一条，再调一次是改这一条）、公司主体是**补充**
+ *（命中既有行就在那行上补字段）。于是"不传档位"在三处是三件事——落最弱档、宣告这一版没有支撑、
+ * 一个字节都不动已有的档位。此前三处共用同一句「留空落最弱档」，那句话对补充型是**假的**：
+ * 对方 agent 照着它以为自己把一行降回了自述（或反过来，以为覆盖型会沿用上一版的「裁审认定」），
+ * 而两种误解都读不出来——它调什么都返回 200，档位那一列只是与它以为的不同。
+ * 说明书是对方 agent 唯一能读到的用法说明，写一句对三分之二的能力才成立的话，等于没写。
+ */
+export function sourceTierProp(blankMeans: string) {
+  return {
+    source_tier: {
+      type: 'string',
+      enum: [...SOURCE_TIERS],
+      description: `这条事实的来源档位。${SOURCE_TIER_MEANINGS}${blankMeans}`,
+    },
+  } as const;
+}
 
 /** 高危写能力上那一格 facts_token。描述逐字对外——它是对方 agent 唯一能读到的用法说明。 */
 export const factsTokenProp = {

@@ -392,6 +392,13 @@ describe('labor 零变化守卫（基线取自 origin/main 4098805）', () => {
     };
     expect(mustExist('intake_submit').inputSchema).toEqual(BASELINE.schemas.intake_submit);
     // claims_upsert 的 kind 与 claim_calc / deadline_set 同口径，是**并集**，走同一个三条腿的比法
+    //
+    // 【基线动过第三次，记在这：2026-09-10 S4 复审】`source_tier` 那一格的说明换了。
+    // 换的理由不是润色：原来那句「留空落最弱档只是多补一张材料」被三条写能力共用，
+    // 而对**补充型**的 company_profile_upsert 它是假的（命中已有行时不传，那两列一个字节不动）。
+    // 现在按写入语义各说各的——claims_upsert 是覆盖，不传即落最弱档、不沿用上一版的档位。
+    // 这确实是**对外承诺变了**（说明书是对方 agent 唯一能读到的用法说明），所以才改基线；
+    // kind 枚举、必填清单、其余每一格的措辞一个字未动。
     expectUnionSchema(mustExist('claims_upsert').inputSchema, BASELINE.schemas.claims_upsert, (p) => p.claimKinds);
     // draft_write 的 kind 取的是 lib/cases/drafts 那一份（不是并集），逐字比
     expect(mustExist('draft_write').inputSchema).toEqual(BASELINE.schemas.draft_write);

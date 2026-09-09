@@ -7,6 +7,7 @@
 // 他只会觉得「我明明填了公司名」。事务在领域层（lib/cases/intake），这里只做壳。
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
+import { assertedByOf } from '@/lib/capabilities/shared';
 import * as cases from '@/lib/cases';
 import { getDb } from '@/lib/db/client';
 import { apiJson } from '@/lib/http/json';
@@ -35,6 +36,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     caseId,
     userId: guard.identity.uid,
     ...cases.intakeInputFromBody(body),
+    // 【展开之后填，与归属同一条理由】这条路 api key 也走得通（bearer + case:write），
+    // 所以断言人同样由外壳按身份判，与 MCP 那条共用 assertedByOf——两条路各判一次的形态是，
+    // 其中一条把 agent 写的东西标成用户本人说的，而两条的回包都是 201。
+    assertedBy: assertedByOf(guard.identity),
   });
   if (!result.ok) return domainFailure(result);
 

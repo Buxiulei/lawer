@@ -42,7 +42,8 @@ export const timelineAdd: Capability = {
         type: 'string',
         description: '幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库',
       },
-      ...sourceTierProp,
+      // 追加型：每条新事件本来就要有一个自己的档位，不传即落最弱档。
+      ...sourceTierProp('不传即落最弱档「自述」——时间线只追加，这条新事件从此带着这个档位。'),
     },
     required: ['case_id', 'happened_at', 'kind', 'title'],
   },

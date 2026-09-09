@@ -141,6 +141,28 @@ describe('首诊提交', () => {
     expect((await res.json()).error_code).toBe('FORBIDDEN_SCOPE');
   });
 
+  /**
+   * 【REST 这条路 api key 也走得通】所以断言人同样要由外壳按身份填。不填的形态是：
+   * 一份由对方 agent 替用户提交的首诊，库里每一行都标着「用户本人说过」，展示层从此不标黄，
+   * 而回包 201、读接口读出来的每个字段都对——没有一处会报错。
+   */
+  test('api key 提交的首诊，落下的每一行记 agent_inferred；网页登录态记 user（变异：路由不填 assertedBy → 红）', async () => {
+    const agentKey = issueKey(userA, ['case:read', 'case:write']);
+    expect((await postIntake(request(agentKey, BODY), ctx(caseA))).status).toBe(201);
+    expect(
+      db.prepare('SELECT DISTINCT asserted_by FROM timeline_events WHERE case_id = ?').all(caseA),
+    ).toEqual([{ asserted_by: 'agent_inferred' }]);
+    expect(
+      db.prepare('SELECT asserted_by FROM company_profiles WHERE case_id = ?').get(caseA),
+    ).toEqual({ asserted_by: 'agent_inferred' });
+
+    // 同一条路由、同一份请求体，换成网页登录态就该是 user（两条一起写，免得只钉住一个方向）
+    expect((await postIntake(request(signToken(userB), BODY), ctx(caseB))).status).toBe(201);
+    expect(
+      db.prepare('SELECT DISTINCT asserted_by FROM timeline_events WHERE case_id = ?').all(caseB),
+    ).toEqual([{ asserted_by: 'user' }]);
+  });
+
   test('必填项没过 → 400 且库里一个字都不写', async () => {
     const res = await postIntake(request(signToken(userA), { ...BODY, goals: [] }), ctx(caseA));
     expect(res.status).toBe(400);

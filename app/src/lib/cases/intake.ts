@@ -23,6 +23,7 @@ import * as store from '@/lib/db/cases';
 import { nowSql } from '@/lib/db/time';
 import { intakeActionDueAt, intakeActionPriority } from './intake-actions';
 import { INTAKE_BODY_PARAMS } from './intake-params';
+import { DEFAULT_ASSERTED_BY, DEFAULT_SOURCE_TIER, type AssertedBy } from './source-tier';
 import type { CaseStage } from './stages';
 
 /** 首诊里公司给过哪些文件的三问，键与前端 draft 同名 */
@@ -53,6 +54,16 @@ export interface IntakeInput {
   companyWording?: unknown;
   goals?: unknown;
   bottomLine?: unknown;
+  /**
+   * 这次首诊**是谁写进档案的**（落进各行的 asserted_by）。由外壳按身份填：
+   * 网页登录态 = `user`，一把 api key = `agent_inferred`（capabilities/shared.assertedByOf）。
+   *
+   * 【为什么不收调用方的声明、也不能省着不填】首诊是一次写十几行的批量写入。
+   * 不填就走 DDL 默认值 `user`，形态是：一份由对方 agent 替用户填出来的档案，
+   * **每一行都标着「用户本人说过」**，展示层从此不标黄——回包 201、字段全对、没有一处报错。
+   * 省略时仍取缺省值（与 DDL 同值），所以这一格必须由**每一个外壳**显式填。
+   */
+  assertedBy?: AssertedBy;
   /** 落库时刻，测试可注入 */
   now?: Date;
 }
@@ -239,6 +250,9 @@ function persist(
 ): IntakeResult {
   const nowIso = now.toISOString();
   const copy = pack.copy.site;
+  // 首诊落下的每一行都带上「谁写的」。档位一律是**最弱那一档**：首诊问下来的全是口述，
+  // 一个字都还没有材料支撑；断言人则按外壳给的身份走（见 IntakeInput.assertedBy 的注释）。
+  const origin = { tier: DEFAULT_SOURCE_TIER, assertedBy: input.assertedBy ?? DEFAULT_ASSERTED_BY };
 
   // ── 事件：用户自己记的那几条 + 整段自述 + 公司说法 + 公司给过哪些文件 ──
   const rawEvents = Array.isArray(input.events) ? (input.events as IntakeEventInput[]) : [];
@@ -343,6 +357,10 @@ function persist(
     // 不是又来了一家。按 name 收敛会留下改名前那一行，而 pickRespondent 同档取 id 最早的
     // 一条，正好取到用户刚改掉的错名——对方主体就此写错（lib/db/agent.ts 详述）。
     // 同上只改不删：本案其它角色的公司行（用工主体 / 关联，多是背调查出来的）一律不碰。
+    // 【为什么不带 overwriteOrigin】重提首诊改的是这一格的**名字**，不该动已有行的档位：
+    // 那一行可能已经由别的路径升到更强的档，一次重提把它降回最弱档，是把证明力凭空削掉几档，
+    // 而回包 200、那一行还在、每个字段看起来都对（与 upsertCompanyProfile 同一条口径）。
+    // 新建那一行时 origin 照落——那时本来就没有旧档位可保。
     upsertCompanyProfileByRole(db, {
       caseId,
       name: value.companyName,
@@ -351,11 +369,12 @@ function persist(
       legalRep: null,
       riskNotes: null,
       sourcesJson: JSON.stringify([{ source: copy.intakeCompanySource, at: nowSql() }]),
+      origin,
     });
 
     let timelineAdded = 0;
     for (const e of events) {
-      store.insertTimelineEvent(db, { caseId, ...e });
+      store.insertTimelineEvent(db, { caseId, ...e, origin });
       timelineAdded += 1;
     }
 
