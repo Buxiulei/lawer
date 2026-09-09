@@ -3,6 +3,7 @@
 // POST 追加一条时间线事件（对应 MCP 工具 timeline_add）。只追加，无改无删。
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
+import { assertedByOf } from '@/lib/capabilities/shared';
 import * as cases from '@/lib/cases';
 import { pageParams, pageResponse } from '@/lib/cases/paging';
 import { getDb } from '@/lib/db/client';
@@ -64,6 +65,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     title: body.title,
     detail: body.detail,
     clientRef: body.client_ref,
+    // 【这两格是 S4 加的，专用端点当时没跟上】说明书里 timeline_add 的 REST 列写的就是本端点，
+    // 而它此前既不读 source_tier、也不填断言人：
+    //  · source_tier 一路消失 —— 调用方照说明书传「书证」，回包 201，库里那行是「自述」；
+    //  · asserted_by 走 DDL 默认 user —— api key 写的事件标成用户本人说的，展示层不再标黄。
+    // 两种都没有一处会报错。档位收调用方声明（认不出由领域层回 INVALID_SOURCE_TIER），
+    // 断言人由外壳按身份判，与 MCP 那条共用 assertedByOf——两条路各判一次必然分叉。
+    sourceTier: body.source_tier,
+    assertedBy: assertedByOf(guard.identity),
   });
   if (!result.ok) return domainFailure(result);
 

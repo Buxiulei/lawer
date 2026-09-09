@@ -165,6 +165,64 @@ describe('写接口', () => {
   });
 });
 
+describe('专用端点也落来源四档与断言人', () => {
+  /**
+   * 【为什么这条要盯专用端点，而不是只盯 MCP】说明书里 timeline_add 的 REST 列写的就是
+   * 本端点（`POST /cases/{id}/timeline`），而它此前既不读 source_tier、也不填断言人：
+   * 调用方照说明书传「书证」，回包 201、事件也在，库里那行却是「自述」；
+   * api key 写的事件记成 user，展示层从此不给它标黄（设计稿 §4.4-5 的前提就是这一格）。
+   * 两种都没有一处会报错——只有档位那两列与调用方以为的不同。
+   */
+  test('api key 经专用端点写的事件记 agent_inferred，且 source_tier 照收（变异：路由不填 assertedBy / 不传 sourceTier → 红）', async () => {
+    const agentKey = issueKey(userA, ['case:read', 'case:write']);
+    const res = await postTimeline(
+      request('POST', agentKey, {
+        happened_at: '2026-08-15T09:30:00+08:00',
+        kind: '公司动作',
+        title: 'agent 记的一条',
+        source_tier: '书证',
+      }),
+      ctx(caseA),
+    );
+    expect(res.status).toBe(201);
+    expect(
+      db.prepare("SELECT source_tier, asserted_by FROM timeline_events WHERE title = 'agent 记的一条'").get(),
+    ).toEqual({ source_tier: '书证', asserted_by: 'agent_inferred' });
+  });
+
+  test('同一端点网页登录态写的记 user、不传档位落最弱档（变异：把 assertedByOf 改成恒 agent_inferred → 红）', async () => {
+    const res = await postTimeline(
+      request('POST', signToken(userA), {
+        happened_at: '2026-08-16T09:30:00+08:00',
+        kind: '我方动作',
+        title: '本人记的一条',
+      }),
+      ctx(caseA),
+    );
+    expect(res.status).toBe(201);
+    expect(
+      db.prepare("SELECT source_tier, asserted_by FROM timeline_events WHERE title = '本人记的一条'").get(),
+    ).toEqual({ source_tier: '自述', asserted_by: 'user' });
+  });
+
+  test('档位写错 ⇒ 400 INVALID_SOURCE_TIER 且零写入（变异：路由把它静默折成缺省档 → 红）', async () => {
+    const res = await postTimeline(
+      request('POST', signToken(userA), {
+        happened_at: '2026-08-17T09:30:00+08:00',
+        kind: '我方动作',
+        title: '档位写错的一条',
+        source_tier: '书面证据',
+      }),
+      ctx(caseA),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error_code).toBe('INVALID_SOURCE_TIER');
+    expect(
+      db.prepare("SELECT COUNT(*) n FROM timeline_events WHERE title = '档位写错的一条'").get(),
+    ).toEqual({ n: 0 });
+  });
+});
+
 describe('鉴权与红线', () => {
   test('无凭据 → 401', async () => {
     expect((await getCase(request('GET'), ctx(caseA))).status).toBe(401);
