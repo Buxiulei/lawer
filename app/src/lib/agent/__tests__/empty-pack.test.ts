@@ -12,7 +12,9 @@ import { assessCrisis, CRISIS_DIRECTIVE } from '../crisis';
 
 import { countSubstantiveHits, isSubstantiveHit } from '@/lib/knowledge';
 
-import { buildSystemPrompt, EMPTY_PACK_DIRECTIVE } from '../prompt';
+import { domainPackOrDefault } from '@/lib/domains/registry';
+
+import { buildSystemPrompt, EMPTY_PACK_DIRECTIVE, SEGMENT_SEPARATOR, staticPrefixOf } from '../prompt';
 import { loadCaseSnapshot } from '../snapshot';
 import { FIXTURE_PACK, makeAgentFixture } from './fixtures';
 
@@ -79,18 +81,18 @@ describe('空包告知指令：只在空包轮出现，且禁令配出路', () =
   });
 
   /**
-   * 【这条判据的基线换于 2026-09-10，记账在此】
+   * 【这条判据的基线在 2026-09-10 换过又换回，两次都记账在此】
    *
-   * 原基线是「空包指令排在**依据纪律之前**」（依据纪律是 packs 段的抬头那几行），理由是
-   * 放后面会被「法条给条号 + 逐字原文」稀释成并列建议。提示缓存前缀稳定化把 packs 提到了
-   * 动态段之前（静态段 → packs → 本轮指令 + 事实卡），于是这条空包指令现在排在依据纪律
-   * **之后**——**这一次红是预期的**，见 lib/agent/prompt.ts 文件头那段口径变更。
+   * 原基线：「空包指令排在**依据纪律之前**」（依据纪律是 packs 段的抬头那几行），理由是
+   * 放后面会被「法条给条号 + 逐字原文」稀释成并列建议。提示缓存前缀稳定化一度把 packs 提到
+   * 本轮指令之前（静态段 → packs → 本轮指令 + 事实卡），于是它排到了依据纪律**之后**。
    *
-   * 换成钉什么：**它仍然先于事实卡与问诊指令**——那两样才是它要改写的对象
-   *（"这一轮该问什么、该拿档案里的什么去答"），而它与依据纪律的先后现在靠
-   *「紧挨生成点」承重（与本文件原来给 packs 段的理由是同一条）。
+   * 同日裁决改回：**危机指令与空包指令回到首要位**——紧接静态段之后、packs 与事实卡之前
+   *（primacy 优先于 recency；代价是那几轮的 packs 缓存作废，见 lib/agent/prompt.ts 文件头）。
+   * 所以原基线的语义回来了，并且多钉一条**「紧接静态段之后」**：光说"排在前面"分不出
+   * "在首要位"与"夹在静态段中间某处"。
    */
-  it('★指令排在事实卡与问诊指令之前（它改写的是"这一轮能引什么"这个前提）', () => {
+  it('★指令排在首要位：紧接静态段之后，先于依据纪律、事实卡与问诊指令', () => {
     // 必须带一张卡：packs 为空时依据纪律那段根本不存在，indexOf 返回 -1，
     // 于是"小于"这个比较会拿 -1 作参照——**测试看起来在比顺序，其实在比一个不存在的东西**。
     const p = buildSystemPrompt({
@@ -103,9 +105,12 @@ describe('空包告知指令：只在空包轮出现，且禁令配出路', () =
     expect(directiveAt).toBeGreaterThanOrEqual(0);
     expect(disciplineAt).toBeGreaterThanOrEqual(0); // 先自证三个锚点都真的在
     expect(factsAt).toBeGreaterThanOrEqual(0);
+    expect(directiveAt).toBeLessThan(disciplineAt);
     expect(directiveAt).toBeLessThan(factsAt);
-    // 依据纪律现在在它之前（packs 是半静态段，排在动态段之前）——基线换向，见上方注释
-    expect(disciplineAt).toBeLessThan(directiveAt);
+    // 「紧接静态段之后」：静态段 + 分隔符之后**立刻**就是这段指令，中间不许再夹别的
+    expect(
+      p.startsWith(staticPrefixOf(domainPackOrDefault(snapshot.case.domain)) + SEGMENT_SEPARATOR + EMPTY_PACK_DIRECTIVE),
+    ).toBe(true);
   });
 });
 

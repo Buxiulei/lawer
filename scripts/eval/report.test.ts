@@ -346,6 +346,20 @@ describe('提示缓存命中率：留痕进归档、报表分得开三态', () =
     expect(md).toContain('未回报');
   });
 
+  /**
+   * 【读桶未回报 → 命中率印「不可算」，不许印 0.0%】(2026-09-10 minor)
+   * 上游那一侧的同款判据在 lib/agent/__tests__/prompt-prefix-stability.test.ts
+   *（promptCacheStats 在 cachedRead=null 时给 null）。两边必须同口径：
+   * 数据面给出 null 而报表把它渲染成 0.0%，读的人照样会去查前缀——而前缀没变。
+   */
+  it('报表：读桶未回报那一轮，命中率印「不可算」而不是 0.0%', () => {
+    const md = renderMarkdown(
+      runWith([turnOf({ cached_read: null, cached_write: null, fresh: 300, hit_rate: null })]),
+    );
+    expect(md).toContain('不可算');
+    expect(md).not.toContain('0.0%');
+  });
+
   it('报表：没有这一层的转录印「无 PROMPT_CACHE 留痕」，不印 0（不知道≠零）', () => {
     const md = renderMarkdown(
       runWith([turnOf({ cached_read: 0, cached_write: 0, fresh: 900, hit_rate: 0 }), turnOf(null)]),

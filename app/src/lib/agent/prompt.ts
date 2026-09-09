@@ -1,11 +1,12 @@
 // app/src/lib/agent/prompt.ts
 // system prompt 组装（manager 契约）：charter 全文 + 案件事实卡 + 检索到的 packs 逐字原文。
 //
-// 【顺序是按「变得多快」分的三段，不再按「重要不重要」分】(2026-09-10 提示缓存前缀改)
+// 【顺序：按「变得多快」分段，但**首要位留给危机与空包**】(2026-09-10 提示缓存前缀改)
 //   ① 静态段：charter 全文 + 输出纪律 + 闭合清单段。**同一领域逐字恒定**，
 //      不含日期、案件 id、用户名、随机序——它就是提示缓存的前缀。
-//   ② 半静态段：本案本轮检索到的 packs 逐字原文，按卡 id 排序（同一批卡的渲染顺序恒定）。
-//   ③ 动态段：运行环境（含当前时刻）、案件事实卡、问诊/前情提要、危机与空包等本轮指令。
+//   ② 首要位：危机指令与空包指令（**只在那几轮出现**，其余轮为空串）。
+//   ③ 半静态段：本案本轮检索到的 packs 逐字原文，按卡 id 排序（同一批卡的渲染顺序恒定）。
+//   ④ 动态段：运行环境（含当前时刻）、案件事实卡、问诊/前情提要。
 //
 // 【为什么改这个顺序·中转账单实测】改之前是「charter → 本轮指令 → 事实卡 → 输出纪律 →
 // 闭合清单 → packs」：**每一轮变的那几段夹在恒定的几段中间**。上游按前缀缓存，
@@ -16,10 +17,24 @@
 //
 // 【事实卡挪到静态段之后，是这次改动明说的代价】原注释写着「案件事实卡在中间，因为它是
 // charter 各条纪律的作用对象」。现在它仍然**先于用户消息**、仍然在 system prompt 里，
-// 只是排到了静态段与 packs 之后——**位置变了，在场性没变**。同族的还有危机指令与空包指令：
-// 它们原来靠「排在问诊清单/依据纪律之前」来压过那几条，现在靠**紧挨生成点**
-//（与本文件原来给 packs 的理由是同一条）。这一条口径变更由 2026-09-07 台账「提示缓存前缀
-// 稳定化」派单裁定，判据侧同步换向：case-facts.test.ts G-F7 与 empty-pack.test.ts 的顺序断言。
+// 只是排到了静态段与 packs 之后——**位置变了，在场性没变**。这一条口径变更由 2026-09-07
+// 台账「提示缓存前缀稳定化」派单裁定，判据侧同步换向：case-facts.test.ts G-F7。
+//
+// 【危机指令与空包指令留在首要位·2026-09-10 裁决】它们一度跟着事实卡一起被挪到 packs
+// 之后（理由是「紧挨生成点」），现在**改回紧接静态段之后、packs 之前**。
+//   · 为什么：**primacy 优先于 recency**。这两段改写的是「这一轮到底该干什么、能引什么」
+//     这个前提——危机轮要压过问诊清单与依据纪律，空包轮要在模型读到「法条给条号 + 逐字原文」
+//     那句抬头**之前**就把「你手上没有依据」立住。recency 那条理由是从 packsSection 的
+//     noteAfter 实测借来的（「别重印整张卡」贴着卡下发才管用），但那是**一句针对某张卡的
+//     限制**，与「整轮的前提」不是同一类指令；把一处实测结论推广到另一类指令上，
+//     **在没有真模型对照跑之前就是猜**。而这两条的错误代价不对称：危机轮说错话不可逆，
+//     缓存多写一次只是账单贵一点。不确定时按代价小的那边站。
+//   · 代价（明说）：危机轮与空包轮里，packs 段的前缀被这一段顶开，那几轮的 **packs 缓存
+//     作废**。危机轮很少，空包轮本来就没什么卡可缓存——用那几轮换指令的首要性，划算。
+//   · **不受影响的是**：静态段仍逐字节稳定（这两段在它之后），第一断点不变；
+//     第二断点仍落在 packs 段末尾。
+//   · 判据侧同步：orchestrator.test / empty-pack.test 的位序断言、prompt-prefix-stability
+//     的危机轮那一条。
 //
 // 【不做的事】本文件不做任何摘要、压缩、改写。档案是事实，packs 是法条原文，
 // 任何一处「为了省 token 而转述」都会以「模型把转述当原文引用」的形式变成可信度事故。
@@ -234,10 +249,10 @@ export interface BuildSystemPromptInput {
 export const SEGMENT_SEPARATOR = '\n\n---\n\n';
 
 /**
- * system prompt 的三段（见文件头）。**缓存前缀就是 `staticPrefix`**，
- * 第二个可缓存前缀是 `staticPrefix + 分隔符 + packs`。
+ * system prompt 的四段（见文件头）。**缓存前缀就是 `staticPrefix`**，
+ * 第二个可缓存前缀到 `packsBlock` 末尾为止（危机轮/空包轮里 `turnDirectives` 夹在中间）。
  *
- * 【为什么把三段单独交出来，而不是只给拼好的串】断点要落在**字节位置**上
+ * 【为什么把这几段单独交出来，而不是只给拼好的串】断点要落在**字节位置**上
  *（providers/anthropic.ts 按偏移切 system 块）。让调用方去拼好的串里找边界，
  * 就是给同一条边界造了第二个真源——那一份会在某次改分隔符时静默失准，
  * 而失准的表现只是「缓存不命中」：账单变贵，没有一处会报错。
@@ -245,9 +260,16 @@ export const SEGMENT_SEPARATOR = '\n\n---\n\n';
 export interface SystemPromptSegments {
   /** 静态段：charter + 输出纪律 + 闭合清单段。同一领域逐字恒定。 */
   staticPrefix: string;
+  /**
+   * 首要位：危机指令与空包指令。**只在那几轮非空**，其余轮为空串。
+   *
+   * 它排在 packs 之前，代价是那几轮的 packs 缓存作废（见文件头「首要位」那段）。
+   * 不给它留断点：每轮都可能变，缓存它只是白写一次。
+   */
+  turnDirectives: string;
   /** 半静态段：本案本轮的 packs 逐字原文（按卡 id 排序）。无卡时为空串。 */
   packsBlock: string;
-  /** 动态段：本轮指令 + 运行环境 + 事实卡 + 问诊/前情提要。 */
+  /** 动态段：运行环境 + 事实卡 + 问诊/前情提要。 */
   dynamic: string;
 }
 
@@ -299,15 +321,18 @@ export function buildSystemPromptSegments(input: BuildSystemPromptInput): System
     coreArticleKeys({ ...input.coreSources, retrieved: input.packs }),
   );
 
-  const dynamic = [
-    // 危机指令排在动态段最前，仍在事实卡与问诊指令**之前**：
-    // 它要压过本轮其它一切安排（问诊清单、行动卡、依据纪律）。
-    // 它与整个动态段一起挪到了 packs 之后——**改的是它跟静态段的相对位置，
-    // 不是它跟本轮其它安排的相对位置**；靠「紧挨生成点」承重（见文件头）。
+  // 【首要位】危机指令与空包指令：紧接静态段之后、packs 与事实卡之前（见文件头 2026-09-10 裁决）。
+  // 危机指令排最前——它要压过本轮其它一切安排（依据纪律、问诊清单、行动卡）；
+  // 空包指令紧跟其后——它改写的是「这一轮能引什么」这个前提，必须先于依据纪律那句抬头
+  // 与事实卡、问诊指令被读到。
+  const turnDirectives = [
     input.crisis ? crisisPack.directive : '',
-    // 空包指令紧跟其后：它改写的是「这一轮能引什么」这个前提，
-    // 必须先于事实卡与问诊指令被读到。
     input.emptyPack ? EMPTY_PACK_DIRECTIVE : '',
+  ]
+    .filter((p) => p.trim())
+    .join(SEGMENT_SEPARATOR);
+
+  const dynamic = [
     // 【前置禁令 > 事后剥句】不够格时**在生成前就禁掉**，而不是等它说完再剥——
     // 普通轮是流式的，剥句只能清掉入库正文，用户早看见了。
     // 事后剥句仍保留作兜底，但真正管用的是这条前置约束。
@@ -345,14 +370,16 @@ export function buildSystemPromptSegments(input: BuildSystemPromptInput): System
     .filter((p) => p.trim())
     .join(SEGMENT_SEPARATOR);
 
-  return { staticPrefix: staticPrefixOf(pack), packsBlock, dynamic };
+  return { staticPrefix: staticPrefixOf(pack), turnDirectives, packsBlock, dynamic };
 }
 
 /**
  * 拼好的 system prompt + **可缓存前缀的字节位置**。
  *
  * `breakpoints` 逐个是「到此为止的这一段可以整体缓存」的偏移：
- *   [0] = 静态段末尾；[1] = 静态段 + 分隔符 + packs 末尾（packs 为空时只有 [0]）。
+ *   [0] = 静态段末尾；[1] = **packs 段末尾**（packs 为空时只有 [0]）。
+ * 危机轮/空包轮里首要位那一段夹在两者之间，所以 [1] ≠ 静态段 + 分隔符 + packs 的长度和——
+ * 别按段长自己加，那正是「切错了不报错、只是不命中」的那种失准（见文件头「首要位」）。
  * 消费它的只有直连 Anthropic 那条路（providers/anthropic.ts 把 system 切成带
  * cache_control 的块）；中转走 OpenAI 兼容协议，**请求形态一个字节都不改**。
  */
@@ -364,13 +391,18 @@ export function buildSystemPromptWithBreakpoints(input: BuildSystemPromptInput):
   const parts: string[] = [];
   const breakpoints: number[] = [];
   let len = 0;
-  // 静态段与半静态段各留一个断点；动态段末尾不留（它每轮都变，缓存它只是白写一次）
-  for (const [i, seg] of [segs.staticPrefix, segs.packsBlock, segs.dynamic].entries()) {
+  // 静态段与半静态段各留一个断点；首要位（本轮指令）与动态段末尾不留——
+  // 那两段每轮都可能变，缓存它们只是白写一次。
+  // **首要位仍然计进 len**：它夹在两个断点之间，第二个断点必须把它的长度算上，
+  // 否则危机轮的第二块会切在 packs 中间（切错了不报错，只是不命中）。
+  const SEGS = [segs.staticPrefix, segs.turnDirectives, segs.packsBlock, segs.dynamic];
+  const CUT_AFTER = new Set([0, 2]); // 0=静态段末尾，2=packs 段末尾
+  for (const [i, seg] of SEGS.entries()) {
     if (!seg.trim()) continue;
     if (parts.length) len += SEGMENT_SEPARATOR.length;
     parts.push(seg);
     len += seg.length;
-    if (i < 2) breakpoints.push(len);
+    if (CUT_AFTER.has(i)) breakpoints.push(len);
   }
   return { system: parts.join(SEGMENT_SEPARATOR), breakpoints };
 }

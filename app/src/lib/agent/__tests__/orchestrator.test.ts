@@ -9,6 +9,8 @@ import { CRISIS_CARD_MARKER, CRISIS_RESOURCE_PACK_ID } from '../crisis';
 import { FIXTURE_PACK, fixtureSearcher, makeAgentFixture, makeSink, scriptedProvider, type ScriptedRound } from './fixtures';
 import { CORE_ARTICLE_MAP_PACK_ID } from '../citation-block';
 import { createKnowledgeSearcher } from '../knowledge-adapter';
+import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
+import { SEGMENT_SEPARATOR, staticPrefixOf } from '../prompt';
 
 const GOOD_CARD = {
   name: 'action_card',
@@ -315,23 +317,31 @@ describe('危机响应：心理危机资源卡强制注入（charter §5）', ()
   });
 
   /**
-   * 【基线换于 2026-09-10，记账在此】原基线还钉着「危机指令排在**输出纪律之前**」。
-   * 提示缓存前缀稳定化把输出纪律并进了静态段（charter + 输出纪律 + 闭合清单，逐字节恒定、
-   * 严格排最前），危机指令属**本轮指令**，落在动态段——于是它现在排在输出纪律之后。
-   * 这一条红是预期的；口径变更与理由见 lib/agent/prompt.ts 文件头。
+   * 【基线换过两次，都记账在此】
+   *   · 2026-09-10 提示缓存前缀稳定化：输出纪律并进了静态段（charter + 输出纪律 + 闭合清单，
+   *     逐字节恒定、严格排最前），所以原基线里那句「危机指令排在**输出纪律之前**」不再成立。
+   *   · 2026-09-10 同日裁决（primacy 优先于 recency）：危机指令一度跟着动态段一起排到
+   *     packs 之后，现在**改回首要位**——紧接静态段之后、packs 与事实卡之前。
    *
-   * **仍然钉着的是**：危机指令排在**动态段最前**，先于案件事实卡与问诊指令——
-   * 那几样才是它要压过的「本轮安排」。
+   * **现在钉的是**：危机指令在静态段之后的**第一段**，先于依据纪律（packs 段抬头）、
+   * 案件事实卡与运行环境。理由与代价见 lib/agent/prompt.ts 文件头「首要位」那段。
    */
-  it('危机指令排在动态段最前（先于案件事实卡与问诊指令，不能被它们稀释）', async () => {
+  it('危机指令排在首要位（紧接静态段之后，先于 packs、事实卡与问诊指令）', async () => {
     const { provider } = await turn([{ text: '我在。', tools: [GOOD_CARD] }], {
       message: CRISIS,
       searcher: idOnlySearcher,
     });
     const system = provider.calls[0][0].content;
     expect(system).toContain('【危机响应 · 本轮最高优先级');
-    expect(system.indexOf('【危机响应')).toBeLessThan(system.indexOf('## 案件事实卡'));
-    expect(system.indexOf('【危机响应')).toBeLessThan(system.indexOf('## 运行环境'));
+    const crisisAt = system.indexOf('【危机响应');
+    const packsAt = system.indexOf('引用纪律：法条给条号');
+    // 先自证锚点都在：packs 段不在场时 indexOf 回 -1，"小于"就成了拿 -1 当参照的空比较
+    expect(packsAt).toBeGreaterThanOrEqual(0);
+    expect(crisisAt).toBeLessThan(packsAt);
+    expect(crisisAt).toBeLessThan(system.indexOf('## 案件事实卡'));
+    expect(crisisAt).toBeLessThan(system.indexOf('## 运行环境'));
+    // 「紧接静态段之后」不是"排在前面"就够：静态段 + 分隔符之后必须**立刻**是它
+    expect(system.slice(0, crisisAt)).toBe(staticPrefixOf(DOMAINS[DEFAULT_DOMAIN]) + SEGMENT_SEPARATOR);
   });
 
   it('普通倾诉（没有自伤表述）不触发——资源卡一案只有一次，不能浪费在情绪低谷上', async () => {

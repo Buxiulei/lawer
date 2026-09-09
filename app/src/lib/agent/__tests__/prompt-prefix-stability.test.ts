@@ -17,12 +17,17 @@ import { describe, expect, it } from 'vitest';
 
 import type { CaseRow } from '@/lib/db/cases';
 import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
+import { listPacks, packDomain } from '@/lib/knowledge';
+import { createPiiSession, emptyUsage, withPiiRedaction } from '@/lib/llm';
+import type { ChatMessage, ChatStreamOptions, ChatStreamResult, Provider } from '@/lib/llm';
 
 import { CHARTER } from '../charter';
+import { createKnowledgeSearcher } from '../knowledge-adapter';
 import { LAWYER_MANDATORY_HEADING } from '../lawyer-mandatory';
 import {
   buildSystemPromptSegments,
   buildSystemPromptWithBreakpoints,
+  packsSection,
   SEGMENT_SEPARATOR,
   staticPrefixOf,
   type BuildSystemPromptInput,
@@ -201,14 +206,16 @@ describe('静态段：严格排最前，且逐字节恒定', () => {
     for (const leak of ['乙案-独一无二的串', '海淀', '8823']) expect(s).not.toContain(leak);
   });
 
-  it('危机轮 / 空包轮同样不动静态段（本轮指令全在动态段）', () => {
+  it('危机轮 / 空包轮同样不动静态段（本轮指令排在它之后的首要位）', () => {
     const crisisTurn = assemble({ crisis: true, emptyPack: false });
     const emptyTurn = assemble({ emptyPack: true });
     const plain = assemble({ nbdpsyEligible: false });
     expect(checkStaticStable([caseOne, crisisTurn, emptyTurn, plain])).toEqual([]);
-    // 自证这三种轮次真的改了 prompt，不是三次都走了同一条分支
-    expect(crisisTurn.dynamic).not.toBe(plain.dynamic);
-    expect(emptyTurn.dynamic).not.toBe(plain.dynamic);
+    // 自证这三种轮次真的改了 prompt，不是三次都走了同一条分支。
+    // 比 system 而不是 dynamic：本轮指令已经从动态段挪到了首要位（2026-09-10 裁决），
+    // 比 dynamic 会漏看它们，而"三份都一样"与"改动没生效"在这里长得一模一样。
+    expect(crisisTurn.system).not.toBe(plain.system);
+    expect(emptyTurn.system).not.toBe(plain.system);
   });
 });
 
@@ -230,6 +237,28 @@ describe('半静态段：packs 按卡 id 排，同一批卡逐字节相同', () 
   });
 });
 
+/**
+ * 【首要位·2026-09-10 裁决】危机指令与空包指令**紧接静态段之后、packs 与事实卡之前**。
+ * 理由（primacy 优先于 recency）与代价（那几轮 packs 缓存作废）见 lib/agent/prompt.ts 文件头。
+ * 这一节钉的是「它在哪」；「它在不在」由 empty-pack.test / orchestrator.test 钉。
+ */
+describe('首要位：危机与空包指令紧接静态段之后，先于 packs', () => {
+  const crisisWithPacks = inputOf({ packs: [PACK_A, PACK_B], crisis: true });
+
+  it('危机轮：静态段 + 分隔符之后立刻是危机指令，packs 排在它之后', () => {
+    const segs = buildSystemPromptSegments(crisisWithPacks);
+    const { system } = buildSystemPromptWithBreakpoints(crisisWithPacks);
+    expect(segs.turnDirectives, '危机轮的首要位是空的——那这一节什么都没验').not.toBe('');
+    expect(system.startsWith(segs.staticPrefix + SEGMENT_SEPARATOR + segs.turnDirectives)).toBe(true);
+    expect(system.indexOf(segs.turnDirectives)).toBeLessThan(system.indexOf(segs.packsBlock));
+    expect(system.indexOf(segs.packsBlock)).toBeLessThan(system.indexOf(segs.dynamic));
+  });
+
+  it('普通轮首要位为空串（条件触发不常驻——常驻会把静态段之后那一截也变成每轮都在的东西）', () => {
+    expect(buildSystemPromptSegments(inputOf({ packs: [PACK_A] })).turnDirectives).toBe('');
+  });
+});
+
 describe('缓存断点：落在静态段末尾与半静态段末尾', () => {
   it('有 packs 时两个断点，且切出来的第一块逐字就是静态段', () => {
     const input = inputOf({ packs: [PACK_A, PACK_B] });
@@ -240,6 +269,23 @@ describe('缓存断点：落在静态段末尾与半静态段末尾', () => {
     expect(system.slice(0, breakpoints[1])).toBe(segs.staticPrefix + SEGMENT_SEPARATOR + segs.packsBlock);
     expect(breakpoints[0]).toBeLessThan(breakpoints[1]);
     expect(breakpoints[1]).toBeLessThan(system.length); // 断点不许落在末尾（那样最后一块是空的）
+  });
+
+  /**
+   * 【危机轮的第二断点要把首要位那一段算进去】首要位夹在两个断点之间，第二断点若还按
+   * 「静态段 + 分隔符 + packs」的长度和去算，就会切在 packs 中间——**切错了不报错**，
+   * 只是这一块从此永远不命中，而账单上看不出是哪一段的问题。
+   */
+  it('危机轮：第一断点仍是静态段末尾，第二断点仍恰好在 packs 末尾', () => {
+    const input = inputOf({ packs: [PACK_A, PACK_B], crisis: true });
+    const { system, breakpoints } = buildSystemPromptWithBreakpoints(input);
+    const segs = buildSystemPromptSegments(input);
+    expect(breakpoints).toHaveLength(2);
+    expect(system.slice(0, breakpoints[0])).toBe(segs.staticPrefix);
+    expect(system.slice(0, breakpoints[1]).endsWith(segs.packsBlock)).toBe(true);
+    expect(system.slice(breakpoints[1])).toBe(SEGMENT_SEPARATOR + segs.dynamic);
+    // 自证首要位真的夹在中间（否则上面两条与普通轮那条是同一件事）
+    expect(breakpoints[1] - breakpoints[0]).toBeGreaterThan(SEGMENT_SEPARATOR.length + segs.packsBlock.length);
   });
 
   it('无 packs 时只有一个断点（不留一个切出空块的断点）', () => {
@@ -387,5 +433,157 @@ describe('★假上游：连着两轮，发出去的 system 前 N 字节逐字�
     expect(pc.cached_write).toBeNull();
     expect(pc.fresh).toBe(300);
     expect(pc.hit_rate).toBeCloseTo(0.7, 6);
+  });
+
+  /**
+   * 【读桶未回报 → 命中率必须是 null，不是 0】(2026-09-10 minor)
+   *
+   * 这是上一条的对照臂，两条只差 `cachedRead` 一个变量。拿 0 冒充"上游没给这一桶"的形态是：
+   * 中转某天不再回报 cached_tokens，报表上的命中率从 60% 掉到 0%，读的人照着
+   *「本场缓存读全为 0 → 去查前缀」那条指引去翻静态段——**而前缀一个字节都没变**。
+   * 两件事的修法完全不同（一个是去问中转要字段，一个是去查静态段混进了什么），
+   * 所以它们在数据面与文案面都必须分得开：`hit_rate: null` + 报表印「不可算」。
+   */
+  it('★对照：上游没回报缓存读 → hit_rate 为 null（不是 0），文案印「不可算」', async () => {
+    const f = makeAgentFixture();
+    const sink = makeSink();
+    const provider = scriptedProvider([
+      { text: 'x', tools: [CARD], usage: { prompt: 300, completion: 20, cachedRead: null, cachedWrite: null } },
+      { text: '好了。', usage: { prompt: 0, completion: 5, cachedRead: null, cachedWrite: null } },
+    ]);
+    await runTurn({
+      db: f.db,
+      caseId: f.caseId,
+      userId: f.userId,
+      message: '公司让我签自愿离职',
+      provider,
+      searcher: fixtureSearcher(),
+      emit: sink.emit,
+      now: new Date('2026-08-19T12:40:00Z'),
+    });
+    const notice = sink.events.find((e) => e.event === 'notice' && e.data.code === 'PROMPT_CACHE') as
+      | { data: { message: string; prompt_cache: Record<string, number | null> } }
+      | undefined;
+    expect(notice).toBeDefined();
+    expect(notice!.data.prompt_cache.cached_read).toBeNull();
+    expect(
+      notice!.data.prompt_cache.hit_rate,
+      'cachedRead 未回报却算出了一个命中率——0 会被读成"零命中，去查前缀"，而真相是"这一桶没给"',
+    ).toBeNull();
+    // 文案面同口径：不许印成 0.0%
+    expect(notice!.data.message).toContain('命中率 不可算');
+    // 自证这一轮确实有输入量（total > 0），"null" 不是被 total===0 那条分支顺带蒙对的
+    expect(notice!.data.prompt_cache.fresh).toBe(300);
+  });
+});
+
+/* ═══════════════════════════ 出境脱敏之后：前缀还在不在原处 ═══════════════════════════ */
+
+/**
+ * 【它守的是什么事故】(2026-09-10 minor) 断点是 `buildSystemPromptWithBreakpoints` 在
+ * **脱敏之前**的串上按字符偏移算出来的，而出境脱敏（lib/llm/pii）会把 18 位身份证换成
+ * 7 字的〔身份证#1〕。偏移不跟着改的形态是：第一块切在 charter 正文里、第二块切在某张卡的
+ * 半截上——**请求照常 200、回复照常生成**，只是从此永远不命中缓存。
+ * 这与它本来要修的那个病是同一种：**没有任何一处会报错，只有账单知道**。
+ *
+ * 【两条腿】
+ *   ① 前提：静态段与本域全部卡**脱敏前后逐字相同**——真是这样的话，绝大多数轮的偏移
+ *      根本不会动，这一条把"哪些卡不是这样"逐张列出来，而不是笼统地说"一般没事"；
+ *   ② 兜底：①里被吞掉的那几张卡真的在场时，**重映射后的断点仍恰好切在 packs 末尾**。
+ */
+describe('★出境脱敏：静态段与本域全部卡逐字不变；被吞的卡靠断点重映射兜住', () => {
+  const searcher = createKnowledgeSearcher();
+  /** 一次性会话的 redact，与 pii.redactMessage 对 content 做的是同一件事 */
+  const redactOnce = (text: string) => createPiiSession().redact(text);
+  const isMutated = (c: KnowledgePack) => {
+    const rendered = packsSection([c]);
+    return redactOnce(rendered) !== rendered;
+  };
+  const cardsOf = (domain: string): KnowledgePack[] =>
+    listPacks()
+      .filter((m) => packDomain(m) === domain)
+      .map((m) => searcher.get!(m.id, { domain: null }))
+      .filter((p): p is KnowledgePack => Boolean(p));
+
+  /**
+   * 【已知被吞的卡·逐张记账】银行卡规则是**刻意的过度替换**（16-19 位裸数字，不做 Luhn
+   * 校验——宁可多替不可漏替，见 pii.PII_PATTERNS）。下面这几张卡的正文里带着官方来源 URL，
+   * 而那些 URL 的路径 id 恰好就是 16/17 位数字，于是整段被换成〔银行卡#N〕。
+   * **这不是 bug，是那条口径明说的代价**；它在这里被列出来，是为了让"又多了一张"能红。
+   * 新增一张这样的卡时：确认那串数字确实不是 PII，把 id 加进来即可。
+   */
+  const KNOWN_SWALLOWED: Record<string, string[]> = {
+    counseling: [
+      // 正文引的来源 https://www.cac.gov.cn/2020-06/01/c_15925617772683193.htm —— 路径 id 是 17 位数字
+      'statute-mfd-1032-1033-yinsi',
+      // 正文引的来源 https://www.ssf.gov.cn/portal/rootfiles/2023/11/14/1701622126444477-1701622126462201.pdf
+      // —— 两串各 16 位数字（labor 域那批卡的同类 URL 只写在 frontmatter 的 sources 里，不进正文，所以不受影响）
+      'data-counseling-shixiao-qixian',
+    ],
+  };
+
+  for (const key of Object.keys(DOMAINS)) {
+    it(`[${key}] 静态段脱敏前后逐字相同（charter / 输出纪律 / 闭合清单里没有能被当成 PII 的串）`, () => {
+      const s = staticPrefixOf(DOMAINS[key]);
+      expect(redactOnce(s)).toBe(s);
+    });
+
+    it(`[${key}] 本域每张卡渲染后脱敏前后逐字相同；不相同的逐张列出`, () => {
+      const cards = cardsOf(key);
+      expect(cards.length, `${key} 域一张卡都没取到——这条判据什么都没验`).toBeGreaterThan(0);
+      expect(
+        cards.filter(isMutated).map((c) => c.id).sort(),
+        `${key} 域有卡在出境脱敏时被改写了。先确认被吞的那串数字确实不是 PII，` +
+          `再把它加进 KNOWN_SWALLOWED（断点重映射会兜住偏移，但这件事必须有人看见）。`,
+      ).toEqual((KNOWN_SWALLOWED[key] ?? []).slice().sort());
+    });
+  }
+
+  /** 只做记录的假上游：名字必须在 OUTBOUND_PROVIDERS 里，否则壳直接原样返回、什么都不脱敏。 */
+  function outboundSpy() {
+    const seen: { messages: ChatMessage[]; opts?: ChatStreamOptions }[] = [];
+    const p: Provider = {
+      name: 'anthropic',
+      model: 'x',
+      billingModel: 'x',
+      async chatStream(messages, opts) {
+        seen.push({ messages, opts });
+        return (async function* (): AsyncGenerator<string, ChatStreamResult, void> {
+          return { finishReason: 'stop', toolCalls: [], usage: { model: 'x', usage: emptyUsage(), servedModel: null } };
+        })();
+      },
+    };
+    return { p, seen };
+  }
+
+  it('★被吞的卡真的在场时，重映射后的第二块仍恰好切在 packs 末尾（变异：去掉重映射 → 红）', async () => {
+    const swallowed = Object.keys(DOMAINS).flatMap((k) => cardsOf(k).filter(isMutated));
+    expect(swallowed.length, '一张被吞的卡都没有——这条臂验不到重映射，只是在验"没变的串偏移也没变"').toBeGreaterThan(0);
+
+    const input = inputOf({ packs: swallowed });
+    const { system, breakpoints } = buildSystemPromptWithBreakpoints(input);
+    const segs = buildSystemPromptSegments(input);
+    // 自证动态段本身不含 PII：否则下面那条"尾巴逐字相同"会因为另一个原因红，指错方向
+    expect(redactOnce(segs.dynamic)).toBe(segs.dynamic);
+
+    const { p, seen } = outboundSpy();
+    await withPiiRedaction(p).chatStream(
+      [
+        { role: 'system', content: system },
+        { role: 'user', content: '继续' },
+      ],
+      { cacheBreakpoints: breakpoints },
+    );
+    const sentSystem = seen[0].messages[0].content;
+    const sentBp = seen[0].opts!.cacheBreakpoints!;
+
+    // 自证脱敏真的动了这一串、偏移真的被重算过（不重算就等于原值，下面两条会失去意义）
+    expect(sentSystem).not.toBe(system);
+    expect(sentBp[1]).toBeLessThan(breakpoints[1]);
+    // ① 第一块仍逐字是静态段（静态段没有 PII，所以它的长度不该变）
+    expect(sentBp[0]).toBe(breakpoints[0]);
+    expect(sentSystem.slice(0, sentBp[0])).toBe(segs.staticPrefix);
+    // ② 第二块的切口**恰好**在 packs 末尾：它之后剩下的正是分隔符 + 动态段，一个字不多
+    expect(sentSystem.slice(sentBp[1])).toBe(SEGMENT_SEPARATOR + segs.dynamic);
   });
 });

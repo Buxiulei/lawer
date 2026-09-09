@@ -10,6 +10,9 @@
 // tool 四种角色的 content，以及 assistant 历史轮里 tool_calls 的 arguments（起草类工具的参数
 // 本来就装着身份证号，漏掉它等于白拦）。deepseek / dashscope 为境内，原样发出不替换。
 //
+// 【连带重映射提示缓存断点】替换会改串长，而断点是**脱敏之前**算出来的字符偏移。
+// 壳里把 system 按断点切块顺序脱敏，用脱敏后的块长重算偏移（redactSystemWithBreakpoints）。
+//
 // 【映射不出站】value→占位符 的对照表只活在单次请求的闭包里，请求结束即随 GC 消失，
 // 既不落库也不进日志——出境的只有占位符。
 //
@@ -17,7 +20,7 @@
 // 否则用户拿到的《被迫解除劳动合同通知书》上写的是〔身份证#1〕。还原发生在两处：
 // 流式正文（分片可能把占位符切断，见 StreamRestorer）与工具调用 arguments（整段还原）。
 
-import type { ChatMessage, ChatStreamResult, Provider, ProviderName, ToolCall } from './types';
+import type { ChatMessage, ChatStreamOptions, ChatStreamResult, Provider, ProviderName, ToolCall } from './types';
 
 /** 出境供应商：其请求要经过脱敏。境内两家（deepseek/dashscope）直连时不在此列。
  *
@@ -208,6 +211,77 @@ function redactMessage(m: ChatMessage, session: PiiSession): ChatMessage {
   return next;
 }
 
+/**
+ * system 消息脱敏 + **提示缓存断点重映射**。
+ *
+ * 【为什么必须在这里重算】断点是 agent/prompt 在**脱敏之前**的串上按字符偏移算出来的，
+ * 而这一层会把 18 位身份证换成 7 字的〔身份证#1〕。偏移不跟着改的形态是：
+ * 第一块切在 charter 正文里、第二块切在某张卡的半截上——**请求照常 200、回复照常生成**，
+ * 只是缓存前缀每轮都对不上，账单贵而没有一处会报错（正是这条改动本来要修的那个病）。
+ * 生产上真的会发生：counseling 的两张卡正文里带着 16/17 位数字的官方 URL id，
+ * 被银行卡规则（刻意的过度替换，见 PII_PATTERNS）整段吞成占位符。
+ *
+ * 【为什么按块喂 redact，而不是整段脱敏后再找边界】占位符编号按**首现顺序**分配，
+ * 分块按序喂与整段喂产出逐字相同；而"脱敏后再去找边界"等于给同一条边界造第二个真源。
+ * 分块也不会切坏识别：断点落在段末，其后紧跟 7 字的段分隔符，而所有规则里
+ * 跨字符的连接位最多只有一个 `[\s-]`——**不可能有一条 PII 跨过分隔符**。
+ *
+ * 非法偏移（非整数 / ≤0 / ≥串长 / 不递增）就地丢弃，与 providers/anthropic.toAnthropicSystem
+ * 同一条口径：断点是性能提示，不是语义的一部分，不该为它把整轮对话打掉。
+ */
+function redactSystemWithBreakpoints(
+  m: ChatMessage,
+  breakpoints: number[],
+  session: PiiSession,
+): { message: ChatMessage; breakpoints: number[] } {
+  const parts: string[] = [];
+  const remapped: number[] = [];
+  let from = 0;
+  let len = 0;
+  for (const cut of breakpoints) {
+    if (!Number.isInteger(cut) || cut <= from || cut >= m.content.length) continue;
+    const piece = session.redact(m.content.slice(from, cut));
+    parts.push(piece);
+    len += piece.length;
+    remapped.push(len);
+    from = cut;
+  }
+  parts.push(session.redact(m.content.slice(from)));
+  const message: ChatMessage = { ...m, content: parts.join('') };
+  // 与 redactMessage 对齐：这条路径少走一步的形态是**漏脱敏**，而漏脱敏是合规事故。
+  // system 轮现在不带 tool_calls，但两条路径处理范围不一样这件事本身没有任何一处会报错。
+  if (m.tool_calls?.length) message.tool_calls = m.tool_calls.map((tc) => redactToolCall(tc, session));
+  return { message, breakpoints: remapped };
+}
+
+/**
+ * 出站方向的整批脱敏：消息**按数组顺序**逐条过（顺序即占位符编号顺序，打乱会换编号），
+ * 其中第一条 system 消息若带着缓存断点则走分块路径，把断点一起重映射。
+ */
+function redactOutbound(
+  messages: ChatMessage[],
+  opts: ChatStreamOptions | undefined,
+  session: PiiSession,
+): { messages: ChatMessage[]; opts: ChatStreamOptions | undefined } {
+  const bps = opts?.cacheBreakpoints;
+  // 偏移是相对**第一条 system 串开头**算的（providers/anthropic 把多条 system 拼在一起，
+  // 后面接上的那条不动前缀）。没有断点、或根本没有 system 消息时走原路，零改动。
+  const systemAt = bps?.length ? messages.findIndex((m) => m.role === 'system') : -1;
+  if (systemAt < 0) return { messages: messages.map((m) => redactMessage(m, session)), opts };
+  const out: ChatMessage[] = [];
+  let nextOpts = opts;
+  for (const [i, m] of messages.entries()) {
+    if (i !== systemAt) {
+      out.push(redactMessage(m, session));
+      continue;
+    }
+    const r = redactSystemWithBreakpoints(m, bps!, session);
+    out.push(r.message);
+    nextOpts = { ...opts, cacheBreakpoints: r.breakpoints };
+  }
+  return { messages: out, opts: nextOpts };
+}
+
 function redactToolCall(tc: ToolCall, session: PiiSession): ToolCall {
   return { ...tc, function: { ...tc.function, arguments: session.redact(tc.function.arguments) } };
 }
@@ -248,10 +322,9 @@ export function withPiiRedaction(provider: Provider): Provider {
     billingModel: provider.billingModel,
     async chatStream(messages, opts) {
       const session = createPiiSession();
-      const inner = await provider.chatStream(
-        messages.map((m) => redactMessage(m, session)),
-        opts,
-      );
+      // 断点随消息一起重映射：**脱敏改的是串，偏移必须跟着改**（见 redactSystemWithBreakpoints）。
+      const sent = redactOutbound(messages, opts, session);
+      const inner = await provider.chatStream(sent.messages, sent.opts);
       return restoreStream(inner, session);
     },
   };
