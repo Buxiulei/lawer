@@ -840,4 +840,30 @@ describe('存量迁移区', () => {
     }[];
     expect(row).toEqual([{ mode: '陪跑', intake_stage: null }]);
   });
+
+  /**
+   * 读侧视图建得起来，且**定义就是当前代码里的那一份**。
+   *
+   * 【这里只钉「新库是对的」】视图是 `CREATE ... IF NOT EXISTS` 建的，而幂等守卫不许写 DROP，
+   * 所以「已经建过视图的老库改不动」这件事本条判据管不了——它在 migrate.ts 那段注释里写着，
+   * 是一条留给派单方的裁决（放宽 DROP 规则给视图，还是换视图名）。
+   * 本条守的是另一半：**新库建出来的视图，语义要与代码一致**（未回报读 NULL，不读 0）。
+   */
+  it('读侧视图在新库上建得起来，且未回报读作 NULL', () => {
+    const db = newDb();
+    const views = (db.prepare("SELECT name FROM sqlite_master WHERE type='view'").all() as { name: string }[])
+      .map((v) => v.name);
+    expect(views).toContain('agent_writes_audit');
+    expect(views).toContain('token_usage_reported');
+
+    const uid = mkUser(db);
+    db.prepare(
+      `INSERT INTO token_usage (user_id, feature, model, prompt_tokens, cache_read_tokens, cache_read_reported)
+       VALUES (?, 'chat', 'm', 10, 7, NULL)`,
+    ).run(uid);
+    const [row] = db
+      .prepare('SELECT cache_read_tokens FROM token_usage_reported')
+      .all() as { cache_read_tokens: number | null }[];
+    expect(row.cache_read_tokens, '本列落地之前的存量行无从判断上游报没报，读 NULL 不读 0').toBeNull();
+  });
 });

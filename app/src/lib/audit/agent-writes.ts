@@ -92,9 +92,15 @@ export function recordAgentWrite(db: Database, input: AgentWriteInput): void {
 }
 
 /**
+ * REST 路由能填的字段。**没有 clientRef**——那一格在这一侧是禁区，理由见下面第 3 条；
+ * 类型上就不给，写了 tsc 当场顶回来（靠注释提醒的形态是：下一条端点照样会传）。
+ */
+export type RestAgentWriteInput = Omit<AgentWriteInput, 'keyId' | 'clientRef'>;
+
+/**
  * REST 路由记一行台账。**在写入成功之后调**，参数取真正落库的那一行。
  *
- * 两条与 recordAgentWrite 不同的规矩，都只在 REST 这一侧成立：
+ * 三条与 recordAgentWrite 不同的规矩，都只在 REST 这一侧成立：
  *
  * 1. **网页登录态（jwt）不落行**，与本表落地时的口径一致（key_id 可空是给 MCP 侧留的，
  *    不是给网页留的）。这张表回答的是「用户接进来的那个 agent 都写了什么」——
@@ -103,23 +109,34 @@ export function recordAgentWrite(db: Database, input: AgentWriteInput): void {
  * 2. **写台账失败不拖垮主流程**，只 console.error 点名。业务行此刻已经落库了：
  *    这里再抛出去，用户会拿到一个 500，然后重试——于是那次写入真的发生了两遍。
  *    台账少一行是可查的（对得上日志里这一句），业务多一行是查不回来的。
+ *
+ * 3. **client_ref 一律为空**（2026-09-10 复审 major#1）。uq_agent_writes_client_ref 是建在
+ *    (case_id, tool, client_ref) 上的**部分唯一索引**——那是能力壳拿来去重的键，不是一格
+ *    可以顺手抄一份的备注。REST 端点的幂等在它自己那儿（如 timeline_events 的 client_ref 列），
+ *    台账这一行只是审计。把同一个 client_ref 抄进来的形态是：调用方按说明书用 client_ref
+ *    重放一次，业务侧正确地回 deduped，而台账这一行撞上唯一索引 ⇒ 被下面那个 catch 吞掉
+ *    ⇒ **设计内的正常重放**天天在生产日志里报一条 error，且照那条日志去补记会补出一行
+ *    本不该存在的记录。重放要认，认在 deduped 这一列上。
  */
 export function recordAgentWriteFromRest(
   db: Database,
   identity: Identity,
-  input: Omit<AgentWriteInput, 'keyId'>,
+  input: RestAgentWriteInput,
 ): void {
   if (identity.via !== 'api_key') return;
   try {
-    recordAgentWrite(db, { ...input, keyId: identity.keyId ?? null });
+    recordAgentWrite(db, { ...input, keyId: identity.keyId ?? null, clientRef: null });
   } catch (err) {
-    // 点名到「哪条端点、哪个案子、哪一行」——只打一句 "audit failed" 的形态是：
-    // 事后拿着这句日志，既不知道漏了哪次写入，也没法把它补回去。
+    // 三段式：缺什么 / 为什么缺 / 怎么办。只打一句 "audit failed" 的形态是：
+    // 事后拿着这句日志，既不知道漏了哪次写入，也没法判断该不该补。
     console.error(
-      `[agent_writes] 台账未记入：${input.method} ${input.endpoint}` +
+      `[agent_writes] 台账少了一行：${input.method} ${input.endpoint}` +
         ` case_id=${input.caseId} target=${input.targetTable}#${input.targetId}` +
-        ` key_id=${identity.keyId ?? '-'}。业务写入已经成功，缺的只是审计行；` +
-        `补记要靠这条日志。原因：${err instanceof Error ? err.message : String(err)}`,
+        ` key_id=${identity.keyId ?? '-'} deduped=${input.deduped ? 1 : 0}。` +
+        `为什么：这一行的 INSERT 失败了（${err instanceof Error ? err.message : String(err)}），` +
+        `而业务写入此刻已经落库——台账少一行是可查的，业务多一行是查不回来的，所以这里不抛。` +
+        `怎么办：先照原因排查（这一行的全部字段都在本条日志里），确认是台账侧的故障再补记；` +
+        `**不要重放业务请求**，那一次写入是成功的。`,
     );
   }
 }

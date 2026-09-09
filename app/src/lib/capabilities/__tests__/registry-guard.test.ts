@@ -304,3 +304,125 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
     ]);
   });
 });
+
+// ═════════════════════ 写能力的台账缺口（2026-09-10 复审 major#2） ═════════════════════
+//
+// 【这条在钉什么】写能力的 agent_writes 那一行由能力壳记（withClientRef / writeOnce）。
+// 没走能力壳的写能力**一行都不留**——而它们不只经 MCP 那道门可达：
+// POST /api/v1/tools/{name} 走 resolveIdentity → invokeCapability，是一条 api key
+// 够得着的 REST 写路径。于是「REST 写路径平权」这一票在 tools 这道门上仍然是空的。
+//
+// 派单把 tools 面整体列进了白名单（见 api/v1/__tests__/rest-agent-writes-guard.test.ts），
+// 所以这条**不判红**当前这 13 条，而是把清单钉死：多一条（新写能力又忘了记账）红，
+// 少一条（某条补上了）也红——逼着来人顺手把这份清单和那张票一起改掉。
+// 只写在开放问题里的形态是：那条待办与"根本没有这条待办"在外部同形（memory：待办要绑可自查条件）。
+
+/** 台账机制的两个入口名。改名要连着这里一起改（改漏了下面整份清单会一起红）。 */
+const LEDGER_MARKERS = ['withClientRef(', 'writeOnce('];
+
+export interface CapLedgerFacts {
+  name: string;
+  kind: string | null;
+  /** 这条能力自己的定义段里出现了台账入口 */
+  records: boolean;
+}
+
+/**
+ * 纯函数：吃一个 families/*.ts 的源码，吐出「每条能力 → kind + 记不记台账」。
+ *
+ * 切片按 `name: '…'` 到下一个 `name: '…'`。这个切法可靠不是想当然的——
+ * 下面第一条判据拿它扫出来的**全部能力名**与注册表逐一对照，
+ * 切歪了（多切、少切、串段）会当场对不上。
+ */
+export function capLedgerFactsOf(src: string): CapLedgerFacts[] {
+  const out: CapLedgerFacts[] = [];
+  const re = /name:\s*'([a-z0-9_]+)'/g;
+  const starts: { name: string; at: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src)) !== null) starts.push({ name: m[1], at: m.index });
+  for (let i = 0; i < starts.length; i++) {
+    const chunk = src.slice(starts[i].at, i + 1 < starts.length ? starts[i + 1].at : src.length);
+    const kind = /kind:\s*'(read|write|spend)'/.exec(chunk)?.[1] ?? null;
+    out.push({
+      name: starts[i].name,
+      kind,
+      records: LEDGER_MARKERS.some((mk) => chunk.includes(mk)),
+    });
+  }
+  return out;
+}
+
+const FAMILY_DIR = path.join(CAP_ROOT, 'families');
+const CAP_FACTS: CapLedgerFacts[] = fs
+  .readdirSync(FAMILY_DIR)
+  .filter((f) => f.endsWith('.ts') && f !== 'index.ts')
+  .flatMap((f) => capLedgerFactsOf(fs.readFileSync(path.join(FAMILY_DIR, f), 'utf-8')));
+
+/**
+ * **零台账的写能力**（2026-09-10 实测 13 条）。这不是豁免名单，是缺口清单。
+ * 其中 timeline_add / evidence_attest / company_watch_set 这类会花钱或不可逆的动作，
+ * 经 POST /api/v1/tools/{name} 用 api key 调用，至今不留任何审计行。
+ */
+const KNOWN_LEDGER_GAP = [
+  'action_complete',
+  'case_delete',
+  'case_update',
+  'company_watch_set',
+  'evidence_attest',
+  'evidence_brief_regenerate',
+  'evidence_brief_update',
+  'evidence_upload_url',
+  'intake_submit',
+  'referral_delete_request',
+  'share_revoke',
+  'timeline_add',
+  'timeline_milestone',
+];
+
+describe('写能力的台账缺口', () => {
+  it('扫描与注册表对得上（切片方式本身是活的：能力名一一对应、kind 逐条相同）', () => {
+    expect([...CAP_FACTS.map((f) => f.name)].sort()).toEqual([...CAPABILITIES.map((c) => c.name)].sort());
+    for (const c of CAPABILITIES) {
+      expect(CAP_FACTS.find((f) => f.name === c.name)?.kind, `${c.name} 的 kind 扫串了`).toBe(c.kind);
+    }
+  });
+
+  it('零台账的写能力就是已知那 13 条（多一条 / 少一条都红）', () => {
+    const gap = CAP_FACTS.filter((f) => f.kind === 'write' && !f.records)
+      .map((f) => f.name)
+      .sort();
+    expect(
+      gap,
+      '写能力的 agent_writes 缺口清单变了。\n' +
+        '多出来的那条：它经 MCP 与 POST /api/v1/tools/{name}（api key 够得着）写库都不留台账——' +
+        '要么让它走 withClientRef / writeOnce，要么把它加进这份清单并同步那张票。\n' +
+        '少了一条：说明有人补上了，把它从清单里删掉。\n' +
+        '清单与 api/v1/__tests__/rest-agent-writes-guard.test.ts 里 tools 那一面的理由是同一件事。',
+    ).toEqual(KNOWN_LEDGER_GAP);
+  });
+
+  it('MUTATION 对照臂：切片函数分得出记与不记（否则上面那条"清单没变"可能只是没扫到）', () => {
+    const sample = `
+export const aCap: Capability = {
+  name: 'a_write_with_ledger',
+  kind: 'write',
+  run: (db, ctx) => writeOnce(db, ctx, () => insert(), (r) => ({ table: 't', id: r.id })),
+};
+export const bCap: Capability = {
+  name: 'b_write_no_ledger',
+  kind: 'write',
+  run: (db) => ({ ok: true }),
+};
+export const cCap: Capability = {
+  name: 'c_read',
+  kind: 'read',
+  run: (db) => ({ ok: true }),
+};
+`;
+    expect(capLedgerFactsOf(sample)).toEqual([
+      { name: 'a_write_with_ledger', kind: 'write', records: true },
+      { name: 'b_write_no_ledger', kind: 'write', records: false },
+      { name: 'c_read', kind: 'read', records: false },
+    ]);
+  });
+});

@@ -78,6 +78,29 @@ describe('reconcile', () => {
         '上游明说了两桶都是 0，这不是「不知道」，不该警告',
       ).toEqual([]);
     });
+
+    /**
+     * 第三态：**存量行**（reported IS NULL，本列落地之前写的那些）。
+     * 2026-09-10 复审 minor#1：视图曾把它们原样透出 0 —— 于是「本列落地之前一次缓存都没命中」
+     * 这个假结论从读侧口径里读得出来，而它恰恰是这张视图存在的理由。不知道就读 NULL。
+     */
+    test('存量行（reported IS NULL）⇒ 视图读出 NULL 而不是 0，且对账单独报一档「口径未知」', () => {
+      const db = usageDb({ promptTokens: 100, completionTokens: 10, cacheReadTokens: 7, cacheWriteTokens: 3 });
+      // 模拟本列落地之前的那些行：两列都是 NULL（迁移不回填，见 migrate.ts）
+      db.prepare('UPDATE token_usage SET cache_read_reported = NULL, cache_write_reported = NULL').run();
+
+      const [v] = db
+        .prepare('SELECT cache_read_tokens, cache_write_tokens FROM token_usage_reported')
+        .all() as { cache_read_tokens: number | null; cache_write_tokens: number | null }[];
+      expect(v.cache_read_tokens, '无从判断当时上游报没报 ⇒ 读 NULL（0 会留在分母里说谎）').toBeNull();
+      expect(v.cache_write_tokens).toBeNull();
+
+      const r = reconcile(db);
+      expect(r.problems).toEqual([]);
+      const hit = r.warnings.find((w) => w.includes('缓存计量口径未知'));
+      expect(hit, `没有那条警告，实得：\n${r.warnings.join('\n')}`).toBeDefined();
+      expect(hit).toContain('排除在分母之外');
+    });
   });
 
   test('物化余额被改坏 → 报出差额', () => {

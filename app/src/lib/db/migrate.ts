@@ -1903,6 +1903,12 @@ export function runMigrations(db: Database.Database): void {
   // 审计读侧的归一视图。查台账一律读它，别直接读表——直接读表的形态是：
   // 每个查询各写一遍 COALESCE，漏写的那个把老行的 endpoint 读成 NULL，
   // 于是「这批写入没有来源」看起来像一个真实结论，而它只是那次查询忘了归一。
+  //
+  // ⚠️【改这段 SQL 之前先读这一句】视图是 `CREATE ... IF NOT EXISTS` 建的，而本文件的
+  // 幂等守卫（migrate-idempotency-guard 的 DROP 规则）不许写 DROP。两条加起来的后果是：
+  // **改了这里的定义，已经建过视图的库一个字都不会变**——代码与库里的定义悄悄分叉，两边都不报错。
+  // 这两个视图都是本票新加的、还没上过任何生产库，所以这次改得动（minor#1 修的正是一处写错的
+  // 视图 SQL）。将来真要改它们的口径，得先有一条裁决：放宽 DROP 规则给视图，还是换个视图名。
   db.exec(`
     CREATE VIEW IF NOT EXISTS agent_writes_audit AS
       SELECT id, case_id, key_id, tool, client_ref, target_table, target_id, deduped, created_at,
@@ -1924,16 +1930,22 @@ export function runMigrations(db: Database.Database): void {
   addColumnIfMissing(db, 'token_usage', 'cache_read_reported', 'INTEGER');
   addColumnIfMissing(db, 'token_usage', 'cache_write_reported', 'INTEGER');
 
-  // 「可空两桶」的读侧形态：未回报读作 NULL，回报了才读出数。
+  // 「可空两桶」的读侧形态：**只有 reported = 1 才读出数**，其余一律 NULL。
   // 对账与分析读这个视图，结算仍读原表——两个口径各有各的正确答案，
   // 混在一列里看才是错的（见 lib/db/reconcile.ts 的未回报探针）。
+  //
+  // 【判据写成 `= 1` 而不是 `<> 0`（2026-09-10 复审 minor#1）】reported 有三态：
+  // 1 报了、0 没报、NULL 本列落地之前的存量行「无从判断」。写成「0 才读 NULL」的形态是：
+  // 存量行原样透出 cache_read_tokens = 0，而那个 0 从来就不是上游说的——
+  // 于是"这段时间一次缓存都没命中"这个假结论从视图里读出来，正是本视图要消灭的那一个。
+  // 不知道就读 NULL：NULL 会在 AVG/SUM 里自己退出分母，0 不会。
   db.exec(`
     CREATE VIEW IF NOT EXISTS token_usage_reported AS
       SELECT id, user_id, feature, model, api_model, prompt_tokens, completion_tokens,
              embed_tokens, cost_li, ref_id, created_at,
              cache_read_reported, cache_write_reported,
-             CASE WHEN cache_read_reported  = 0 THEN NULL ELSE cache_read_tokens  END AS cache_read_tokens,
-             CASE WHEN cache_write_reported = 0 THEN NULL ELSE cache_write_tokens END AS cache_write_tokens
+             CASE WHEN cache_read_reported  = 1 THEN cache_read_tokens  ELSE NULL END AS cache_read_tokens,
+             CASE WHEN cache_write_reported = 1 THEN cache_write_tokens ELSE NULL END AS cache_write_tokens
         FROM token_usage;
   `);
 

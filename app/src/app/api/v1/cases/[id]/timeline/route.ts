@@ -77,16 +77,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   });
   if (!result.ok) return domainFailure(result);
 
-  // 【client_ref 原样带进台账】timeline_add 的幂等走的是 timeline_events 自己那一列
-  //（早于 agent_writes 落地，见 lib/capabilities/idempotent.ts 抬头），台账这一行只是审计，
-  // 不参与去重——所以重放会留第二行，但那一行 deduped=1，读得出「这次什么都没新增」。
+  // 【client_ref 不进台账】timeline_add 的幂等走的是 timeline_events 自己那一列
+  //（早于 agent_writes 落地，见 lib/capabilities/idempotent.ts 抬头），台账这一行只是审计。
+  // 把同一个 client_ref 抄进台账会撞上 uq_agent_writes_client_ref——那把索引是能力壳的去重键，
+  // 于是**按说明书重放**这条设计内的路径会变成一条 error 日志（唯一入口里第 3 条讲的就是它）。
+  // 重放读 deduped 这一列：第二次仍留一行，deduped=1，读得出「这次什么都没新增」。
   recordAgentWriteFromRest(getDb(), guard.identity, {
     endpoint: '/api/v1/cases/{id}/timeline',
     method: 'POST',
     caseId,
     targetTable: 'timeline_events',
     targetId: result.event.id,
-    clientRef: typeof body.client_ref === 'string' ? body.client_ref : null,
     deduped: result.deduped,
   });
 

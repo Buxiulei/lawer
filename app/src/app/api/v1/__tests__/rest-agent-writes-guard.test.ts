@@ -11,13 +11,15 @@
 //
 // ── 覆盖判据长什么样 ──
 // 逐个 route.ts 扫：有写方法（POST/PATCH/PUT/DELETE）且 api key 够得着（requireIdentity）
-// 的，必须出现 recordAgentWriteFromRest( 的调用；漏掉的当场报出文件名。
+// 的，**每个写方法**都要有一处 recordAgentWriteFromRest( 调用；数不够的当场报出文件名与缺口。
 // **变异臂**：删掉任意一处 recordAgentWriteFromRest 调用 ⇒ 这条红（下方 MUTATION 一节
-// 用同一个纯函数在样本上证明了检查函数本身是活的）。
+// 用同一个纯函数在样本上证明了检查函数本身是活的，含"两个写方法只记一处"那个形态）。
 //
 // ── 三类不在覆盖内的路由，各有各的理由，都写在这儿 ──
-//  ① 面级白名单（auth/oauth/keys/tools/admin/consents）：这些口要么不带案件维度、
-//     要么本身就是凭据与后台管理，不属于"agent 替用户改档案"的那一类。
+//  ① 面级白名单（auth/oauth/keys/tools/admin/consents）：逐面写明理由，见 SURFACE_WHITELIST。
+//     其中 **tools 那一面 api key 够得着**（tools/{name} → invokeCapability），
+//     它的写入靠能力壳记台账——而仍有 13 条写能力没走能力壳、因此零台账，
+//     清单钉在 lib/capabilities/__tests__/registry-guard.test.ts。本面按派单豁免，缺口另开一票。
 //  ② 只认网页登录态（requireWebSession）：api key 一律 403，**结构上到不了**。
 //     不靠名单豁免、由代码形态判定——哪天它改成 requireIdentity，本守卫立刻要求它接台账。
 //  ③ EXEMPT 逐条列名并写明原因，且每一条都会被反查（见「豁免不许长草」一节）。
@@ -31,8 +33,30 @@ const V1_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 /** 台账的唯一 REST 调用点。文件里出现它才算接上了（改名要连着本常量一起改）。 */
 const MARKER = 'recordAgentWriteFromRest(';
 
-/** 面级白名单：整个子树都不在覆盖内。派单给定的那六个，不许再往里加。 */
-const SURFACE_WHITELIST = ['auth', 'oauth', 'keys', 'tools', 'admin', 'consents'] as const;
+/**
+ * 面级白名单：整个子树都不在覆盖内。**派单给定的那几个，不许再往里加**，
+ * 且每一面都要写清「为什么这一面整体不在覆盖内」——一个只有名字的白名单，
+ * 与"当时嫌麻烦"在下一个读到它的人那里同形（EXEMPT 那张表同理）。
+ *
+ * 【派单清单里的 oauth 不在这儿】它是 /api/**oauth**，不在 api/v1 之下，
+ * 本扫描的根（V1_ROOT）根本够不着它。留一条扫不到的白名单条目，会让人以为 v1 下有这么一面
+ * ——下面「每一面都真的存在」那条判据就是拿它红过一次才发现的。
+ */
+const SURFACE_WHITELIST: Record<string, string> = {
+  auth: '登录/注册/验证码：走的是凭据本身，此刻还没有 identity，更没有 api key。',
+  keys: 'api key 的自助管理（建/停/删）。只认网页登录态；让一把 key 用自己去开新 key 是提权。',
+  tools:
+    'POST /api/v1/tools/{name} 是能力注册表的通用桥（resolveIdentity → invokeCapability），' +
+    'api key **够得着**，写入由能力壳在事务里记台账。' +
+    '⚠️ 但只有走 withClientRef / writeOnce 的写能力才有那一行：' +
+    '截至 2026-09-10 仍有 13 条 kind:write 的能力零台账（清单与判据见 ' +
+    'lib/capabilities/__tests__/registry-guard.test.ts 的「写能力的台账缺口」一节）。' +
+    '本面按派单豁免，那 13 条另开一票——豁免的是「路由这一层不再记第二行」，不是那个缺口。',
+  admin: '后台管理面（requireAdmin），不是「agent 替用户改档案」的那一类；它的审计另有一套。',
+  consents: '同意书是用户本人的意思表示，只认网页登录态——一把 key 替用户点同意本身就不成立。',
+};
+
+const WHITELIST_FACES = Object.keys(SURFACE_WHITELIST);
 
 /**
  * 逐条豁免。**key 是相对 api/v1 的路径，value 是为什么**。
@@ -123,7 +147,7 @@ export function factsOf(rel: string, src: string): RouteFacts {
   return {
     rel,
     writeMethods,
-    whitelisted: (SURFACE_WHITELIST as readonly string[]).includes(head),
+    whitelisted: WHITELIST_FACES.includes(head),
     apiKeyReachable: hasIdentity,
     webSessionOnly: !hasIdentity && hasWebSession,
     records: s.includes(MARKER),
@@ -140,6 +164,20 @@ export function needsLedger(all: RouteFacts[]): RouteFacts[] {
       !f.webSessionOnly &&
       EXEMPT[f.rel] === undefined,
   );
+}
+
+/**
+ * 记漏了的那一批：**逐个写方法数，不是"这个文件里出现过那句调用"**。
+ *
+ * 【为什么按方法数（2026-09-10 复审 minor#2）】按文件判的形态是：cases/[id]/route.ts
+ * 同时导出 PATCH 与 DELETE，删掉 DELETE 那一处调用后文件里仍然有另一处，
+ * `records` 照旧为 true ⇒ 守卫全绿，而 DELETE 从此不留台账。
+ * 本仓当前每个覆盖到的文件都是「几个写方法就几处调用点」，所以下限取 writeMethods.length。
+ * 某个方法**确实**不该记（如两步确认里的第一步），那一处也仍然存在于另一个分支上——
+ * 真出现「一个文件里某个写方法整体不记」的形态，加的是一条带理由的豁免，不是放宽这条判据。
+ */
+export function underRecorded(all: RouteFacts[]): RouteFacts[] {
+  return needsLedger(all).filter((f) => f.recordCalls < f.writeMethods.length);
 }
 
 function walk(dir: string): string[] {
@@ -173,14 +211,21 @@ describe('REST 写路由都记 agent_writes', () => {
     expect(complaints?.webSessionOnly, 'complaints 只认网页登录态，注释里的 requireIdentity 不算数').toBe(true);
   });
 
-  test('每一条 api key 够得着的写路由都调了 recordAgentWriteFromRest（变异：删掉任意一处 ⇒ 红）', () => {
-    const missing = needsLedger(ALL).filter((f) => !f.records);
+  test('每一条 api key 够得着的写路由，每个写方法都调了 recordAgentWriteFromRest（变异：删掉任意一处 ⇒ 红）', () => {
+    const missing = underRecorded(ALL);
     expect(
-      missing.map((f) => `${f.rel} [${f.writeMethods.join(',')}]`),
-      '\n下面这些 REST 写路由 api key 够得着，却没有记 agent_writes：\n' +
-        missing.map((f) => `  ${f.rel}  方法：${f.writeMethods.join(',')}`).join('\n') +
+      missing.map((f) => `${f.rel} [${f.writeMethods.join(',')}] 调用点 ${f.recordCalls}/${f.writeMethods.length}`),
+      '\n下面这些 REST 写路由 api key 够得着，却没有把每个写方法都记进 agent_writes：\n' +
+        missing
+          .map(
+            (f) =>
+              `  ${f.rel}  方法：${f.writeMethods.join(',')}（${f.writeMethods.length} 个）` +
+              `  调用点：${f.recordCalls} 处`,
+          )
+          .join('\n') +
         `\n\n怎么办：在写入成功之后调 ${MARKER}db, guard.identity, {...})\n` +
         '（唯一入口在 app/src/lib/audit/agent-writes.ts；jwt 身份它自己会跳过，不必在路由里判）。\n' +
+        '数的是**调用点**不是文件：一个文件导出 PATCH + DELETE 就要有两处，少记一条也红。\n' +
         '这条端点确实不该记的话，把它连同原因加进本文件的 EXEMPT——但先读一遍那张表里已有的理由。\n',
     ).toEqual([]);
   });
@@ -194,8 +239,30 @@ describe('REST 写路由都记 agent_writes', () => {
       calls,
       `全站只剩 ${calls} 处台账调用点，少于下限 15。当前分布：\n  ${covered.join('\n  ')}\n` +
         '这不是"更干净了"：它意味着写入点被大面积摘掉，而摘掉之后每条路由照常返回 200。\n' +
-        '数的是调用点不是文件数——一个文件可以有 PATCH + DELETE 两条写方法，少记一条也要红。\n',
+        '单点删除由上一条判据（逐个写方法数调用点）管，这一条只拦"把机制整个撤掉"。\n',
     ).toBeGreaterThanOrEqual(15);
+  });
+});
+
+describe('面级白名单这张表本身', () => {
+  test('每一面都真的存在（改名/挪走 ⇒ 红，逼着连白名单一起改）', () => {
+    const stale = WHITELIST_FACES.filter((face) => !fs.existsSync(path.join(V1_ROOT, face)));
+    expect(stale, `白名单里这些面在 api/v1 下已经不在了：\n  ${stale.join('\n  ')}`).toEqual([]);
+  });
+
+  test('每一面都写了为什么整体不在覆盖内（只有名字的白名单与"当时嫌麻烦"同形）', () => {
+    for (const [face, why] of Object.entries(SURFACE_WHITELIST)) {
+      expect(why.length, `${face} 这一面没写清楚为什么整体豁免`).toBeGreaterThanOrEqual(20);
+    }
+  });
+
+  test('tools 那一面的理由必须点名它是 api key 够得着的（豁免的是记第二行，不是那个缺口）', () => {
+    // 2026-09-10 复审 major#2：tools/{name} 走 resolveIdentity → invokeCapability，
+    // 是一条 api key 够得着的 REST 写路径。它按派单豁免，但豁免的理由不许把这件事说没了——
+    // 「白名单里有它」与「那条路不存在」在只写名字的表里长得一模一样。
+    const why = SURFACE_WHITELIST.tools;
+    expect(why).toContain('api key');
+    expect(why, '要指得到那 13 条零台账的写能力在哪儿钉着').toContain('registry-guard');
   });
 });
 
@@ -276,7 +343,37 @@ export async function GET(req: Request) {
 }
 `;
 
+/** 一个文件两个写方法、只记了一处 —— minor#2 说的那个形态。 */
+const SAMPLE_TWO_METHODS_ONE_CALL = `
+import { requireIdentity } from '@/lib/auth/guard';
+export async function PATCH(req: Request) {
+  const guard = requireIdentity(getDb(), req, 'case:write');
+  recordAgentWriteFromRest(getDb(), guard.identity, { endpoint: '/x', method: 'PATCH', caseId: 1, targetTable: 't', targetId: 1 });
+  return apiJson({ ok: true });
+}
+export async function DELETE(req: Request) {
+  const guard = requireIdentity(getDb(), req, 'case:write');
+  return apiJson({ ok: true, deleted: true });
+}
+`;
+
 describe('MUTATION 对照臂', () => {
+  test('两个写方法只记一处 ⇒ 判为缺口（按文件判的旧口径在这里会放过去）', () => {
+    const f = factsOf('x/route.ts', SAMPLE_TWO_METHODS_ONE_CALL);
+    expect(f.writeMethods).toEqual(['DELETE', 'PATCH']);
+    expect(f.records, '按文件判：这个文件"有"调用，于是旧口径全绿').toBe(true);
+    expect(f.recordCalls).toBe(1);
+    expect(underRecorded([f]).map((r) => r.rel)).toEqual(['x/route.ts']);
+  });
+
+  test('补上第二处 ⇒ 不再是缺口（两个方向都会动）', () => {
+    const fixed = SAMPLE_TWO_METHODS_ONE_CALL.replace(
+      '  return apiJson({ ok: true, deleted: true });',
+      "  recordAgentWriteFromRest(getDb(), guard.identity, { endpoint: '/x', method: 'DELETE', caseId: 1, targetTable: 't', targetId: 1 });\n  return apiJson({ ok: true, deleted: true });",
+    );
+    expect(underRecorded([factsOf('x/route.ts', fixed)])).toEqual([]);
+  });
+
   test('写路由没接台账 ⇒ 判为缺口（这就是「删掉一处调用」的形态）', () => {
     const f = factsOf('x/route.ts', SAMPLE_UNCOVERED);
     expect(f.writeMethods).toEqual(['POST']);

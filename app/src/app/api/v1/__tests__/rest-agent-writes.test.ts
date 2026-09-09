@@ -19,6 +19,9 @@
 //  ② 把 recordAgentWriteFromRest 里的 `if (identity.via !== 'api_key') return` 删掉
 //     ⇒ 全部 jwt 臂当场红（行数 0→1）。
 //  ③ 把某条端点的 endpoint 字面量抄成邻居那条 ⇒ 该端点的 api_key 臂红（endpoint 不匹配）。
+//  ④ 让 REST 台账带上调用方的 client_ref（路由传一格 + 唯一入口去掉 `clientRef: null` 那句）
+//     ⇒「按 client_ref 重放」一条红：台账只剩 1 行，且日志里多一条
+//     UNIQUE constraint failed: agent_writes.case_id, agent_writes.tool, agent_writes.client_ref。
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -632,6 +635,59 @@ describe('转介面', () => {
         deduped: 0,
       };
     });
+  });
+});
+
+// ───────────────── 设计内的重放不许把台账变成报错源 ─────────────────
+
+/**
+ * 【为什么单钉这一条（2026-09-10 复审 major#1）】uq_agent_writes_client_ref 建在
+ * (case_id, tool, client_ref) 上。REST 路由若把调用方的 client_ref 原样抄进台账，
+ * 那么**按说明书重放**——agent 收不到回包、拿同一个 client_ref 再打一次，正是幂等约定
+ * 要求它做的事——第二次的台账 INSERT 必撞唯一索引，被唯一入口的 catch 吞掉，
+ * 于是生产日志里每一次正常重试都刷一条 [agent_writes] error。那条日志是**假警报**，
+ * 且它写着"补记"——照做会补出一行本不该存在的记录，不照做就学会了无视这个前缀的报错，
+ * 而这个前缀正是本模块唯一的求救信号。
+ *
+ * 变异臂（手工验过）：把 `clientRef: body.client_ref` 加回 timeline 路由的台账调用
+ * ⇒ 本条当场红（台账只剩 1 行，且 errors 里多一条 UNIQUE constraint failed）。
+ */
+describe('按 client_ref 重放', () => {
+  test('POST /cases/{id}/timeline 同 client_ref 打两次：业务回 deduped，台账留两行，一条错误日志都没有', async () => {
+    reset();
+    const errors: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => {
+      errors.push(a.map(String).join(' '));
+    });
+    const send = () =>
+      H.timeline(
+        jsonReq(`/api/v1/cases/${caseId}/timeline`, 'POST', 'api_key', {
+          happened_at: '2026-09-01T10:00:00+08:00',
+          kind: '公司动作',
+          title: 'HR 第一次约谈',
+          client_ref: 'retry-1',
+        }),
+        ctxId(caseId),
+      );
+
+    const first = (await okBody(await send())) as { event: { id: number }; deduped: boolean };
+    expect(first.deduped, '第一次是真写入').toBe(false);
+    const second = (await okBody(await send())) as { event: { id: number }; deduped: boolean };
+    expect(second.deduped, '同 client_ref 第二次必须是去重命中').toBe(true);
+    expect(second.event.id, '去重命中回的是同一行').toBe(first.event.id);
+    spy.mockRestore();
+
+    expect(
+      errors,
+      '重放是设计内的路径，不许在日志里报错——照这条日志去"补记"会补出一行本不该存在的记录',
+    ).toEqual([]);
+    expect(
+      db.prepare('SELECT client_ref, deduped, target_id FROM agent_writes ORDER BY id').all(),
+      'REST 台账不带 client_ref（那把索引是能力壳的去重键），两次调用各留一行，第二行 deduped=1',
+    ).toEqual([
+      { client_ref: null, deduped: 0, target_id: first.event.id },
+      { client_ref: null, deduped: 1, target_id: first.event.id },
+    ]);
   });
 });
 
