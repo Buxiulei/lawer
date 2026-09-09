@@ -19,7 +19,11 @@ import { hasScope, type Identity } from '@/lib/auth/identity';
 import { CONSENT_KINDS, REALNAME_EXITS } from '@/lib/consent';
 import { hasConsent } from '@/lib/db/consents';
 
+import { FACTS_TOKEN_WHY, issueFactsToken, verifyFactsToken } from '@/lib/cases/facts-token';
+
 import { ERROR_CODES } from './error-codes';
+import { isKnownReplay } from './idempotent';
+import { num, renderCurrentFacts } from './shared';
 import { getCapability, type Capability, type CapabilitySurface } from './registry';
 
 /**
@@ -90,6 +94,7 @@ export async function checkPreconditions(
   db: Database,
   capability: Capability,
   identity: Identity,
+  args: Record<string, unknown> = {},
 ): Promise<CapabilityFailure | null> {
   if (capability.precondition.includes('realname')) {
     const gate = await realnameGate(db, identity.uid);
@@ -119,7 +124,68 @@ export async function checkPreconditions(
         '同意要由用户本人在网页上给（设置 → 隐私与同意），不要替他点头，也不要改参数重试。',
     );
   }
+  if (capability.precondition.includes('facts_token')) {
+    const gate = checkFactsToken(db, capability, identity, args);
+    if (gate) return gate;
+  }
   return null;
+}
+
+/**
+ * facts_token 闸（设计稿 §4.2-4）。过了回 null。
+ *
+ * 【为什么错误体里要夹整张事实卡与一枚新令牌】只回一句「令牌过期」的形态是：
+ * 对方 agent 要么盲目重试（同一份内容再写一遍，照样过期），要么放弃这次写入并
+ * 告诉用户"系统不让写"。夹上事实卡它就能**当场**核对自己要写的东西还成不成立，
+ * 夹上新令牌它就能一次重试成功——禁令配出路（设计稿 §7.7），出路要在错误体里，
+ * 不在文档里。
+ *
+ * 【为什么新令牌就是照着当前事实卡签的】它证明的是"你手上这份认知等于当前状态"，
+ * 而这一刻我们刚把当前状态整份交给它。发一枚"要它再读一次才有效"的令牌没有任何多余保证，
+ * 只多一轮往返；而对方拿到卡之后不看就写，那是它的转述错误率问题（§4.5-4 专项在观测），
+ * 不是这道闸挡得住的东西。
+ */
+function checkFactsToken(
+  db: Database,
+  capability: Capability,
+  identity: Identity,
+  args: Record<string, unknown>,
+): CapabilityFailure | null {
+  // 只在点名的入参出现时开闸（省略 factsTokenArgs = 恒开）。
+  const watched = capability.factsTokenArgs;
+  if (watched && !watched.some((name) => args[name] !== undefined)) return null;
+
+  const caseId = num(args.case_id);
+  // case_id 不合法时**不在这里报错**：那是该能力自己的入参校验，由它回 INVALID_CASE_ID。
+  // 在这里抢先报一个 FACTS_STALE 的形态是：调用方照着"去读事实卡"的指引走，
+  // 读完再来，还是同一个错——而真正的问题从头到尾是那个 case_id。
+  if (!Number.isInteger(caseId) || caseId <= 0) return null;
+
+  // **已经写过的那个 client_ref 直接放行**：重放不改变任何东西，而它手上那枚令牌
+  // 正是被第一次写入弄失效的（理由见 idempotent.isKnownReplay 的长注释）。
+  if (isKnownReplay(db, { caseId, tool: capability.name, clientRef: args.client_ref })) return null;
+
+  const facts = renderCurrentFacts(db, caseId, identity.uid);
+  // 归属不过（案件不存在或不是本人的）同样让位给能力自己的 404：
+  // 这道闸不该成为第二个"这个案件号存不存在"的探针。
+  if (!facts.ok) return null;
+
+  const check = verifyFactsToken(args.facts_token, facts.text);
+  if (check.ok) return null;
+
+  const triggeredBy = watched?.length
+    ? `本次调用带了 ${watched.filter((n) => args[n] !== undefined).join(' / ')}，属于会覆盖档案的那一类动作。`
+    : '';
+  return fail(
+    statusForFailure({ errorCode: 'FACTS_STALE' }),
+    'FACTS_STALE',
+    `${capability.name} 这次**没有写入任何东西**。${triggeredBy}` +
+      `${FACTS_TOKEN_WHY[check.reason]}` +
+      '怎么办：下面 `case_facts` 是此刻档案的事实卡全文，`facts_token` 是配套的新令牌——' +
+      '先按这份事实卡核一遍你要写的内容还成不成立（变了就改，别原样重发），' +
+      '再带上这枚新令牌调一次。不要自己拼令牌，也不要换别的工具绕开这一步。',
+    { case_facts: facts.text, facts_token: issueFactsToken(facts.text) },
+  );
 }
 
 export type CapabilityOutcome =
@@ -149,7 +215,7 @@ export async function invokeCapability(
   if (!hasScope(identity, capability.scope)) {
     return fail(403, 'FORBIDDEN_SCOPE', `当前凭据缺少 ${capability.scope} 权限`);
   }
-  const gate = await checkPreconditions(db, capability, identity);
+  const gate = await checkPreconditions(db, capability, identity, args);
   if (gate) return gate;
 
   const outcome = await capability.run(db, identity, args);

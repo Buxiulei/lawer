@@ -33,7 +33,7 @@ const FAMILIES = [
 const SCOPES = ['case:read', 'case:write'];
 const KINDS = ['read', 'write', 'spend'];
 const SURFACES = ['mcp', 'site'];
-const PRECONDITIONS = ['realname', 'balance', 'emotion_consent'];
+const PRECONDITIONS = ['realname', 'balance', 'emotion_consent', 'facts_token'];
 
 describe('注册表结构守卫', () => {
   it('name 唯一（变异：复制一条能力改个别字段但留同名 → 红）', () => {

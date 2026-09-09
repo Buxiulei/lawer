@@ -67,6 +67,8 @@ import {
   type CoreArticleSources,
 } from './citation-block';
 import { bareArticleCitations, precedentContamination, quotedStatuteSpans } from './citation-block';
+import { issueFactsToken } from '@/lib/cases/facts-token';
+import { factsCardOf } from './facts-entry';
 import { StatuteGuard, statuteNoticeMessage } from './statute-guard';
 import { applyValueGuard, valueNoticeMessage } from './value-guard';
 import { newGateReport, REPLACE_RATE_BUDGET, summarizeGateReport, tallyGate, VALUE_GUARD_MODE, valueGuardText } from './gate-chain';
@@ -900,6 +902,11 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
     crisisCardAlreadyGiven: alreadyGiven,
     // 工具通道拿回来的卡也要标⭐（S2 取料面 = state.retrieved，现取）
     coreSources,
+    // 本轮事实令牌：按**这一轮注入进 system prompt 的那张事实卡**签发（设计稿 §4.2-4）。
+    // factsCardOf 是纯函数、且是全仓唯一的渲染入口（lib/agent/facts-entry），
+    // 所以这里签出来的令牌与 prompt.ts 注入进本轮上下文的那张卡是**同一串字节**。
+    // 站内这道闸挡什么、不挡什么，见 AgentToolContext.factsToken 的长注释。
+    factsToken: issueFactsToken(factsCardOf(snapshot)),
     state,
     emit,
   };

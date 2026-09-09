@@ -11,6 +11,8 @@
 //   ⑥ flags     —— 触发了哪些特殊档位（封顶、兜底、断崖），agent 据此提示用户；
 //   ⑦ calcVersion —— 口径会随社平/最低工资年度调整而变，历史结论要能追到当时的口径。
 
+import type { CalcInputSource } from '@/lib/cases/source-tier';
+
 /** 计算口径版本。任何影响金额的口径变更都要抬版本号（semver）。 */
 export const CALC_VERSION = '1.0.0';
 
@@ -190,8 +192,20 @@ export const CALC_FLAG = {
 } as const;
 export type CalcFlag = (typeof CALC_FLAG)[keyof typeof CALC_FLAG];
 
-/** 单个输入的可信度——agent 展示金额时要说明哪些数还只是用户自述、需要补证据。 */
-export type InputSource = '用户自述' | '证据佐证' | '系统默认';
+/**
+ * 单个输入的可信度——agent 展示金额时要说明哪些数还只是用户自述、需要补证据。
+ *
+ * 【它的取值集合正本已经搬走了】三个字面量现在长在 `lib/cases/source-tier.ts` 的
+ * `CALC_INPUT_SOURCE_TIER` 键上，本处只是原样再导出一次。**字面量一个字没变**
+ *（历史 calc_json、用户看过的算式说明、算钱器基线都靠它们），变的是它们从此
+ * 与来源四档同属一份枚举：`用户自述→自述`、`证据佐证→书证`、`系统默认→无档位`。
+ *
+ * 【为什么必须收成子集】此前这里是一份**独立**的三值联合，与档案侧那套"来源"没有任何
+ * 类型关系。两份枚举各自演化的形态是：档案侧把「证据佐证」升格成了「书证/对方认可」两档，
+ * 而算钱器仍然只认三个旧值——同一笔钱在事实卡上标着"对方已认可"、在算式说明里标着
+ * "用户自述待证"，两处都不报错，用户不知道该信哪一个。
+ */
+export type InputSource = CalcInputSource;
 
 /** 一步计算留痕。valueFen 只在该步产出金额时给。 */
 export interface CalcStep {

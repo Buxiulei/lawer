@@ -14,6 +14,13 @@ import type { Database } from 'better-sqlite3';
 
 import * as calc from '@/lib/agent/calc';
 import type { InputSource } from '@/lib/agent/calc';
+import {
+  DEFAULT_SOURCE_TIER,
+  tierOfCalcInputSource,
+  tierRank,
+  type AssertedBy,
+  type SourceTier,
+} from './source-tier';
 import type { AgentEventSink } from '@/lib/agent/events';
 import type { KnowledgeSearcher } from '@/lib/agent/retrieval';
 import {
@@ -62,6 +69,12 @@ export interface ClaimCalcEnv {
    * 省略时按缺省领域走——**只有拿不到案件领域的调用方才该省略它**。
    */
   calculatorKinds?: readonly string[];
+  /**
+   * 这次计算是**谁发起的**（落进 claims.asserted_by）。省略 ⇒ agent_inferred：
+   * claim_calc 的两条入口（站内工具循环、用户自己的 agent 走 MCP）都是模型发起的，
+   * 缺省取那一档才是实话；网页上人手触发的复算显式传 'user'。
+   */
+  assertedBy?: AssertedBy;
 }
 
 /**
@@ -456,6 +469,27 @@ function enrichBasisWithQuotes(
   });
 }
 
+/**
+ * 一笔算出来的钱有多硬 = **它最弱的那个输入有多硬**（设计稿 §4.2-1 的 InputSource 收敛）。
+ *
+ * 【为什么按最弱算】金额是一条推导出来的事实，链条上任何一环只是自述，整笔就只是自述：
+ * 工资有流水（书证）但工龄靠回忆（自述）算出来的 2N，拿到庭上被打掉的正是工龄那一环。
+ * 按最强算的形态是——这笔钱在事实卡上标着〔书证〕，用户以为它已经坐实了。
+ *
+ * 「系统默认」的输入（社平工资、最低工资这类服务端取的口径值）**不参与**：
+ * 它们不是当事人这边的证明力，把它们算进来只会让每一笔钱都被一个查表值拖到最低档。
+ * 一个带档位的输入都没有时回缺省档（自述）——不回"无档位"，因为这笔钱确实存在于档案里。
+ */
+export function tierOfCalcInputs(inputSources: Record<string, InputSource>): SourceTier {
+  let weakest: SourceTier | null = null;
+  for (const source of Object.values(inputSources)) {
+    const tier = tierOfCalcInputSource(source);
+    if (tier === null) continue;
+    if (weakest === null || tierRank(tier) < tierRank(weakest)) weakest = tier;
+  }
+  return weakest ?? DEFAULT_SOURCE_TIER;
+}
+
 export function persistCalc(
   kind: string,
   result: calc.CalcResult<object>,
@@ -470,6 +504,8 @@ export function persistCalc(
     calcJson: JSON.stringify(result),
     basis: result.basis.map((b) => `${b.law}${b.article}`).join('；'),
     status: 'draft',
+    // 档位由输入推出，**不收调用方声明**：这笔钱的证明力是算出来的，不是自称的。
+    origin: { tier: tierOfCalcInputs(inputSources), assertedBy: ctx.assertedBy ?? 'agent_inferred' },
   });
   ctx.emit?.({
     event: 'record',

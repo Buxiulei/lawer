@@ -110,9 +110,14 @@ describe('第五闸 · 分轨：正文改口，文书拒收', () => {
     statutes.allowFrom([
       { facts: { statute_quotes: [{ law: '劳动合同法实施条例', article: '第二十七条', text: '劳动合同法第四十七条规定的经济补偿的月工资……' }] } },
     ]);
+    // factsToken：站内每一轮由 orchestrator 签发（设计稿 §4.2-4）。夹具照做——
+    // 不给的话 draft_write 会先被"本轮没有事实令牌"拒掉，这条测试就测不到 ⑦ 了。
+    const { issueFactsToken } = await import('@/lib/cases/facts-token');
+    const { factsCardFor } = await import('../facts-entry');
     const ctx = {
       db: f.db, caseId: f.caseId, userId: f.userId, threadId: 1, sourceMessageId: null,
       citations: new CitationGuard(), statutes, crisisCardAlreadyGiven: false, searcher: fixtureSearcher(),
+      factsToken: issueFactsToken(factsCardFor(f.db, f.caseId)),
       state, emit: makeSink().emit,
     } as never;
     const res = executeTool(

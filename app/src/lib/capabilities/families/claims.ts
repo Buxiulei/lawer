@@ -9,10 +9,15 @@ import * as agent from '@/lib/agent';
 import * as cases from '@/lib/cases';
 import { listClaimsWithTotal, runClaimCalc } from '@/lib/cases/claims';
 import * as store from '@/lib/db/agent';
+import {
+  DEFAULT_SOURCE_TIER,
+  SOURCE_TIERS,
+  normalizeSourceTier,
+} from '@/lib/cases/source-tier';
 import { DOMAINS } from '@/lib/domains/registry';
 
 import { withClientRef } from '../idempotent';
-import { caseIdProp, num } from '../shared';
+import { assertedByOf, caseIdProp, factsTokenProp, num, sourceTierProp } from '../shared';
 import type { Capability } from '../registry';
 
 /** 诉求种类的对外枚举：各领域包 claimKinds 的并集（tools/list 拿不到案件上下文，
@@ -109,6 +114,9 @@ export const claimCalc: Capability = {
       caseId,
       searcher: agent.createKnowledgeSearcher(),
       calculatorKinds: calcPack.calculatorKinds,
+      // 这笔钱是**谁**算的（落 claims.asserted_by）。档位不收入参：它由输入的来源推出
+      // （lib/cases/claims.tierOfCalcInputs），自称没有意义。
+      assertedBy: assertedByOf(identity),
     };
 
     // 【为什么把计算也裹进事务】失败时不能留下台账行：留了的话同一个 client_ref
@@ -172,7 +180,9 @@ export const claimsUpsert: Capability = {
   kind: 'write',
   domains: ['*'],
   exposeTo: ['mcp'],
-  precondition: [],
+  // 覆盖式写入（同案同 kind 只有一条，再调是覆盖不是追加）⇒ 恒要 facts_token：
+  // 按几轮之前的印象把一笔已经改过的诉求盖回去，回包 200，用户下次读档看到的是它。
+  precondition: ['facts_token'],
   idempotency: { clientRef: true, naturalKey: '同案 + 同 kind 一条' },
   title: '登记一条诉求',
   description:
@@ -188,7 +198,9 @@ export const claimsUpsert: Capability = {
       basis: { type: 'string', description: '依据（条号、来源卡 id 等），可省略' },
       calc_json: { type: 'string', description: '这个数从哪来、待证状态，JSON 串，可省略' },
       status: { type: 'string', enum: [...CLAIM_STATUSES], description: '默认 draft' },
+      ...sourceTierProp,
       ...clientRefProp,
+      ...factsTokenProp,
     },
     required: ['case_id', 'kind'],
   },
@@ -232,12 +244,26 @@ export const claimsUpsert: Capability = {
       };
     }
 
+    // 【与 company_profile_upsert 的差别是刻意的】那条是"补充"（不点名就不动已有档位），
+    // 这条按说明书是**覆盖**（同案同 kind 只有一条，再调是覆盖不是追加）——
+    // 所以不点名档位就是"这一版没有支撑"，落最弱档，而不是沿用上一版的档位。
+    const tier = normalizeSourceTier(args.source_tier ?? DEFAULT_SOURCE_TIER);
+    if (!tier) {
+      return {
+        ok: false as const,
+        status: 400,
+        errorCode: 'INVALID_SOURCE_TIER',
+        message: `source_tier 只能是 ${SOURCE_TIERS.join(' / ')}；没有把握就整个不传（落最弱档）。`,
+      };
+    }
+
     let created = false;
     const done = withClientRef(
       db,
       { caseId, tool: 'claims_upsert', clientRef: args.client_ref, keyId: identity.keyId ?? null },
       () => {
         const row = store.upsertClaim(db, {
+          origin: { tier, assertedBy: assertedByOf(identity) },
           caseId,
           kind,
           amountFen,

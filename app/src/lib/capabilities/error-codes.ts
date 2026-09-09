@@ -46,6 +46,10 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
   { code: 'REFERRAL_UNAVAILABLE', group: 'gate', status: 500, when: '服务端这会儿生成不了要外发的数据包（本机加密配置缺失），本次零外发', recovery: '这是我们的运维问题，不是用户填错了；如实告诉用户稍后再试，不要改参数重试' },
   { code: 'CONSENT_REVOKED', group: 'gate', status: 403, when: '这个账号已经撤回了这一类信息的单独同意，服务端不再写入该类记录（本次零写入）', recovery: '不要换个工具绕开；如实告诉用户这一项已关，想重新开启要去网页设置页' },
 
+  { code: 'FACTS_STALE', group: 'gate', status: 409, when: '这条写能力要求先看档：facts_token 没带、不是服务端签发的形状、过了十分钟，或者档案在你读过之后又变了（你自己刚写的也算）。**本次零写入**', recovery: '不要重发同一份。错误体里 `case_facts` 是此刻的事实卡全文、`facts_token` 是配套的新令牌：先按这份事实卡核一遍你要写的内容还成不成立，成立就带上新令牌重试一次' },
+
+  { code: 'INVALID_SOURCE_TIER', group: 'input', status: 400, when: 'source_tier 不在四档里', recovery: '取值见该能力入参说明；没有把握就整个不传（落最弱档），不要猜一个' },
+
   { code: 'INVALID_CONFIRM_TOKEN', group: 'input', status: 400, when: 'confirm_token 与服务端算出的不一致（多为手抄错、或用了别的对象的令牌）', recovery: '重新不带 confirm_token 调一次拿新的确认单，不要自己拼一个令牌' },
 
   { code: 'CASE_NOT_FOUND', group: 'notfound', status: 404, when: '案件不存在，**或不属于本人**——两者刻意不区分', recovery: '先调 case_list 拿本人名下真实的 case_id，不要据此推断编号有效性' },

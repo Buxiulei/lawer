@@ -18,6 +18,9 @@ import {
 import { KNOWLEDGE_MISS_DIRECTIVE } from '../retrieval';
 import { DEFAULT_DOMAIN } from '@/lib/domains/registry';
 
+import { issueFactsToken } from '@/lib/cases/facts-token';
+
+import { factsCardFor } from '../facts-entry';
 import { FIXTURE_PACK, fixtureSearcher, makeAgentFixture, makeSink } from './fixtures';
 
 function makeCtx(over: Partial<AgentToolContext> = {}) {
@@ -34,6 +37,10 @@ function makeCtx(over: Partial<AgentToolContext> = {}) {
     statutes: new StatuteGuard(),
     crisisCardAlreadyGiven: false,
     searcher: fixtureSearcher(),
+    // 站内每一轮由 orchestrator 按本轮注入的事实卡签发（设计稿 §4.2-4）；
+    // 夹具照做，否则四条高危写工具会以「本轮上下文里没有事实令牌」被拒。
+    // 缺它时的行为本身有单独一条判据（见「facts_token 自动携带」那一组）。
+    factsToken: issueFactsToken(factsCardFor(f.db, f.caseId)),
     state: newTurnState(),
     emit: sink.emit,
     ...over,

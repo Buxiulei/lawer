@@ -363,6 +363,35 @@ export const LABOR_CAPABILITY_COPY = {
  * 所以这一份是原样搬过来的，lib/cases/__tests__/intake.test.ts 逐条钉着它落库的样子。
  * 没有种子的阶段给**空数组**——那是"这个阶段确实不给"，不是"忘了填"（assertDomainPack 分得开）。
  */
+/**
+ * 取证闸（设计稿 §4.2-2）。**只在「仲裁准备」这一格开**：那是最后一个还来得及补证的窗口——
+ * 立案之后再去公司要考勤、要工资条，对方没有任何理由配合，而举证期限已经在走。
+ *
+ * 【为什么这句话必须带出路】只说"你没有书证"的形态是把人堵在原地：他知道自己没有，
+ * 他不知道的是**先补哪一张**。所以第二句直接给顺序（工资、工龄、解除事实），
+ * 第三句给"拿不到怎么办"——三句话都在一行里说完（设计稿 §7.7 禁令配出路）。
+ *
+ * 【为什么不提"找律师"】主理人 2026-09-07 裁决：能由智能体完成的都由我们完成。
+ * 这一格要的是三份材料，不是一次转介。
+ */
+const LABOR_EVIDENCE_GATE = {
+  stages: ['仲裁准备'] as const,
+  notice:
+    '关键事实还没有书证：{n} 组（{groups}）目前只有你自己的说法。' +
+    '按顺序补三张——① 工资：银行流水或工资条；② 工龄：劳动合同或社保缴纳记录；' +
+    '③ 解除事实：解除通知、离职证明，或对方在微信/邮件里承认解除的原话。' +
+    '公司不给的，社保记录可在「北京市社会保险网上服务平台」自助打印，工资流水在银行 App 导带电子章的 PDF；' +
+    '一张都拿不到时如实说，不要用"应该有"代替"已经有"。',
+  action: {
+    title: '补齐工资、工龄、解除事实这三张书证',
+    detail:
+      '现在档案里这三件事只有你的口述。工资：银行流水或工资条；工龄：劳动合同或社保缴纳记录；' +
+      '解除事实：解除通知、离职证明，或对方承认解除的聊天记录原图。' +
+      '拿到一张就上传一张，不必等齐。',
+    dueInDays: 7,
+  },
+};
+
 const LABOR_INTAKE_STAGE_ACTIONS: Readonly<Record<string, readonly IntakeActionSeed[]>> = {
   风声: [
     {
@@ -523,6 +552,7 @@ export const LABOR: DomainPack = {
   intakeSchema: LABOR_INTAKE_SCHEMA,
   intakeStageActions: LABOR_INTAKE_STAGE_ACTIONS,
   intakeLimitation: LABOR_INTAKE_LIMITATION,
+  evidenceGate: LABOR_EVIDENCE_GATE,
 
   // 事实卡分节，顺序即 lib/agent/case-facts.ts 的渲染顺序；渲染器按 key 取标题，
   // 不写死中文字面（两处一致由 __tests__/labor-pack.test.ts 机检）。

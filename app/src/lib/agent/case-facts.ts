@@ -19,6 +19,7 @@
 // 先区内裁（条数上限 + 单条截断），再按 P3→P2→P1 把整区压成统计行，P0 永不降级。
 // 每一次裁剪都留痕——被裁掉的东西必须让模型知道「有但没给你」，否则它会当成「不存在」。
 import { crisisStatusMark } from '@/lib/cases/crisis-hits';
+import { isDocumented, noDocumentedFact, normalizeSourceTier, tierMark } from '@/lib/cases/source-tier';
 import { basicsMissing } from '@/lib/cases/report';
 import { BRIEF_SUMMARY_MAX, briefSummary, parseBrief } from '@/lib/evidence/brief';
 import { EVIDENCE_CATEGORIES } from '@/lib/evidence/categories';
@@ -105,8 +106,15 @@ export function buildFactsStatusLine(input: {
 const HEADER = [
   '## 案件事实卡（服务端从档案读出的当前事实，以此为准；用户说法与此矛盾时先核对再改档）',
   '',
-  '每处〔〕标的是来源与核验状态：〔已核验〕= 系统自己登记或推算的；' +
-    '〔用户自述待核实〕= 用户口述落档、没有第三方证据支撑，引用时要标出来；' +
+  // 【这段说明从「三种标签」改成「四档 + 两种非档位标记」】旧版把"这一区大概都是自述"
+  // 整段贴在区抬头上，是渲染时猜的；现在每条事实后面那一个〔〕是**从库里那一列读出来的**，
+  // 所以说明也必须逐档写清楚——四档的分别（尤其"对方认可"改变举证负担）是这套东西的全部作用。
+  '每条事实后面的〔〕是它的**来源档位**，由档案里的记录推出，不是措辞：' +
+    '〔自述〕= 只有当事人自己的说法，没有第三方支撑，引用时要标出来；' +
+    '〔书证#12〕= 有落库材料支撑，# 后面是那件材料的编号；' +
+    '〔对方认可·timeline#8〕= 对方书面认过这件事（· 后面是出处），**这一档的事实不必再由用户举证**；' +
+    '〔裁审认定〕= 办案机构已经认定过。',
+  '另有两种不是档位的标记：〔已核验〕= 系统自己登记或推算的（不是当事人主张的事实）；' +
     '〔未记录〕= **档案里没有这一项，不是"事实上没有"**——需要就直接问用户，' +
     '不许拿它当"不存在"来推理，更不许自己补一个值。',
   '',
@@ -145,6 +153,20 @@ export interface FactCard {
 
 function trunc(v: string, max: number): string {
   return v.length <= max ? v : `${v.slice(0, max)}……`;
+}
+
+/**
+ * 一行档案事实的档位后缀。**唯一入口**：三处（时间线、诉求、对方主体）都经它，
+ * 各写一遍 `tierMark(normalizeSourceTier(x))` 的形态是——某一处漏了归一，
+ * 一个写坏的档位值在那一处被原样印进 prompt，而它读起来像一个新档位。
+ *
+ * 【认不出档位时说的是实话】不折成〔自述〕、也不折成〔未记录〕：前者把故障伪装成事实，
+ * 后者把"这条事实存在但档位读不出"说成"档案里没有这条事实"——后一句会被模型读成"不存在"。
+ * 按最弱档处理是**行为**，那句话是**告知**，两者都要有。
+ */
+function rowTier(row: { source_tier: string }, ref?: string | number | null): string {
+  const tier = normalizeSourceTier(row.source_tier);
+  return tier ? tierMark(tier, ref) : '〔来源档位读不出，按最弱档处理〕';
 }
 
 /** goal/bottom_line 这类长自由文本：截断要说清截了多少，不然模型会把半句话当全句用 */
@@ -267,8 +289,10 @@ function caseHeadSection(s: CaseSnapshot): FactSection {
     stat: `- 案件：#${c.id}《${trunc(c.title, TITLE_MAX)}》 阶段：${c.stage} 地区：${c.district}区〔已核验〕`,
     detail: [
       ...(track ? [track] : []),
-      `- 用户目标：${c.goal ? truncField(c.goal, GOAL_MAX) : '未记录'}〔用户自述待核实〕`,
-      `- 用户底线：${c.bottom_line ? truncField(c.bottom_line, GOAL_MAX) : '未记录'}〔用户自述待核实〕`,
+      // 目标与底线**没有档位可言**（它们是意愿不是事实），所以走〔未记录〕/〔自述〕两态：
+      // 给一句"我想要 2N"盖上书证章是没有意义的，但"档案里根本没问过"必须说出来。
+      `- 用户目标：${c.goal ? `${truncField(c.goal, GOAL_MAX)}${tierMark('自述')}` : `未记录${tierMark(null)}`}`,
+      `- 用户底线：${c.bottom_line ? `${truncField(c.bottom_line, GOAL_MAX)}${tierMark('自述')}` : `未记录${tierMark(null)}`}`,
     ],
   };
 }
@@ -349,7 +373,7 @@ function employmentSection(s: CaseSnapshot): FactSection {
     key: 'basics',
     priority: 1,
     heading: heading(s, 'basics'),
-    stat: `- 首诊四项已记录 ${filled}/4〔用户自述待核实〕`,
+    stat: `- 首诊四项已记录 ${filled}/4${tierMark('自述')}——这四项是用户自己报的，没有材料支撑`,
     detail: [
       `- ${labels.employedFrom}：${hasValue(c.employed_from) ? c.employed_from : '未记录'}`,
       `- ${labels.position}：${hasValue(c.position) ? trunc(c.position!, 40) : '未记录'}`,
@@ -380,7 +404,7 @@ function companySection(s: CaseSnapshot): FactSection {
         ]
           .filter(Boolean)
           .join('，');
-        return `- ${trunc(p.name, 40)}（${bits}）${p.risk_notes ? ` 风险：${trunc(p.risk_notes, 60)}` : ''}`;
+        return `- ${trunc(p.name, 40)}（${bits}）${p.risk_notes ? ` 风险：${trunc(p.risk_notes, 60)}` : ''}${rowTier(p)}`;
       }),
       ...(rows.length > shown.length ? [trimmedNote(rows.length, shown.length)] : []),
     ],
@@ -421,7 +445,7 @@ function claimSection(s: CaseSnapshot): FactSection {
         const amount = cl.amount_fen > 0 ? `${(cl.amount_fen / 100).toFixed(2)} 元` : '待计算';
         return `- ${cl.kind}：${amount}${cl.basis ? `｜依据 ${trunc(cl.basis, 40)}` : ''}${
           cl.calc_json ? `｜算式 ${trunc(cl.calc_json, 80)}` : ''
-        }`;
+        }${rowTier(cl)}`;
       }),
       ...(rows.length > shown.length ? [trimmedNote(rows.length, shown.length)] : []),
     ],
@@ -471,16 +495,24 @@ function timelineDetail(lines: string[], room: number, total: number, anchor: st
 
 function timelineSection(s: CaseSnapshot): FactSection {
   const fmt = (e: CaseSnapshot['timeline'][number]) =>
-    `- ${toDisplayTime(e.happened_at)}｜${e.kind}｜${e.title}${e.detail ? `：${trunc(e.detail, TIMELINE_DETAIL_MAX)}` : ''}`;
+    `- ${toDisplayTime(e.happened_at)}｜${e.kind}｜${e.title}${e.detail ? `：${trunc(e.detail, TIMELINE_DETAIL_MAX)}` : ''}${rowTier(e)}`;
   const lines = s.timeline.map(fmt);
   // 真总数 / 真最早 1 条来自 timelineStats（独立取数），不从被窗口截过的 timeline 推。
   // 窗口已经含住最早那条时传 null：重复印一遍会让模型以为同一件事发生了两次。
   const { total, earliest } = s.timelineStats;
   const inWindow = earliest != null && s.timeline.some((e) => e.id === earliest.id);
   const anchor = earliest && !inWindow ? fmt(earliest) : null;
+  // 【这一行此前是渲染时猜的】原文是「〔用户自述待核实——全部是用户口述落档，没有第三方证据支撑〕」，
+  // 整段贴在区抬头上、与真实数据无关：哪怕整条时间线都由证据提取写入，它照样这么说。
+  // 现在数出来：有几条有书证及以上支撑，逐条的档位在每一行末尾。
+  const documented = s.timeline.filter((e) => {
+    const tier = normalizeSourceTier(e.source_tier);
+    return tier !== null && isDocumented(tier);
+  }).length;
   const stat = lines.length
-    ? `- 档案里最近的 ${lines.length} 条事件（倒序，最新在前）〔用户自述待核实——全部是用户口述落档，没有第三方证据支撑〕`
-    : '- 时间线：0 条〔未记录〕——还没有任何已落档的事件。';
+    ? `- 档案里最近的 ${lines.length} 条事件（倒序，最新在前）；其中有书证及以上支撑的 ${documented} 条，` +
+      `其余只有当事人的说法——逐条档位见每行末尾的〔〕`
+    : `- 时间线：0 条${tierMark(null)}——还没有任何已落档的事件。`;
 
   return {
     key: 'timeline',
@@ -573,7 +605,9 @@ const EXTRACTION_DONE = 'done';
  * 于是去催用户做提取，而提取早就做完了。
  */
 function evidenceReadState(e: CaseSnapshot['evidence'][number]): string {
-  if (parseBrief(e.brief_json)) return '已有简报（敏感级：正文不在卡里给，要用先 evidence_get 按 id 读）';
+  if (parseBrief(e.brief_json)) {
+    return `已有简报（敏感级：正文不在卡里给，要用先 evidence_get 按 id 读）${briefTier(e)}`;
+  }
   if (e.extraction_status === EXTRACTION_DONE) return '已提取内容、简报未生成（要用内容先 evidence_get 读全文）';
   return '未提取（没读过内容）';
 }
@@ -588,9 +622,22 @@ function evidenceReadState(e: CaseSnapshot['evidence'][number]): string {
  */
 function evidenceContentNote(e: CaseSnapshot['evidence'][number]): string {
   const brief = parseBrief(e.brief_json);
-  if (brief) return `简报：${briefSummary(brief, BRIEF_SUMMARY_MAX)}`;
+  if (brief) return `简报：${briefSummary(brief, BRIEF_SUMMARY_MAX)}${briefTier(e)}`;
   if (e.extraction_status === EXTRACTION_DONE) return '已提取内容、简报未生成（要用内容先 evidence_get 读全文）';
   return '未提取（没读过内容）';
+}
+
+/**
+ * **简报结论**的档位（不是这份材料本身的档位）。锚点用证据行 id，所以读到
+ *〔书证#12〕时可以直接 evidence_get 12 去核原文。
+ *
+ * 【为什么它必须标出来】简报有两种来源：读过原文写下的结论，与没读过原文、
+ * 按文件名和类别写下的推测。两者在卡上此前长得一模一样，而后者过两轮就被当成
+ * 这份材料里写着的话（migrate.ts brief_updated_by 那段注释讲的是同一件事）。
+ */
+function briefTier(e: CaseSnapshot['evidence'][number]): string {
+  const tier = normalizeSourceTier(e.brief_source_tier);
+  return tier ? tierMark(tier, e.id) : '〔来源档位读不出，按最弱档处理〕';
 }
 
 // ========== 组装与预算 ==========
@@ -620,6 +667,40 @@ function interpretationDisputedSection(s: CaseSnapshot): FactSection | null {
   };
 }
 
+/**
+ * **取证闸**（设计稿 §4.2-2）：进了取证窗口，而带档位的关键事实**一条书证都没有**时，
+ * 在事实卡首行说出来，并由服务端落一张强制取证的行动卡（落卡在 lib/cases.updateCase）。
+ *
+ * 【为什么按「组」数而不是「条」数】按条数报的形态是：一个记了三十条时间线的案子
+ * 读到"30 项关键事实仍无书证"，那句话读起来像在骂人，而它要传达的是
+ *「哪几类事实还立不住」。组 = 事实卡里带档位的那三节（时间线 / 金额主张 / 对方主体），
+ * 上限三组，名字从领域包取（factsSections），共用层不写行当名词。
+ *
+ * 【已知的取数缺口，方向是"宁可多报"】时间线只看得到窗口内最近 TIMELINE_WINDOW 条
+ *（snapshot 就是这么取的）。窗口外有一条带书证的老事件时，这里会误判成"全无书证"而多报一次。
+ * 误差方向是刻意的：多提醒一次的代价是用户多看一行字，少提醒一次的代价是他带着
+ * 一堆只有自己说法的事实进入取证窗口（评测官口径：取不准时一律偏向报警）。
+ *
+ * @returns 首行要追加的那句话；不该开闸时 null（整句不出现，不写"证据充分"那类常驻噪音）
+ */
+export function evidenceGapMark(s: CaseSnapshot): string | null {
+  const gate = domainPackOrDefault(s.case.domain).evidenceGate;
+  if (!gate || !gate.stages.includes(s.case.stage)) return null;
+
+  const groups: { key: FactsSectionKey; rows: readonly { source_tier: string }[] }[] = [
+    { key: 'timeline', rows: s.timeline },
+    { key: 'claims', rows: s.claims },
+    { key: 'counterparts', rows: s.companies },
+  ];
+  const present = groups.filter((g) => g.rows.length > 0);
+  // 判据本身在 lib/cases/source-tier.noDocumentedFact（写侧的落卡条件读的是同一个函数）
+  if (!noDocumentedFact(present.map((g) => g.rows))) return null;
+
+  return gate.notice
+    .replace('{n}', String(present.length))
+    .replace('{groups}', present.map((g) => heading(s, g.key)).join('、'));
+}
+
 /** 取值 + 标注来源，不做裁剪（裁剪归 renderCaseFacts）。 */
 export function buildCaseFacts(s: CaseSnapshot): FactCard {
   const status = buildFactsStatusLine({
@@ -628,7 +709,9 @@ export function buildCaseFacts(s: CaseSnapshot): FactCard {
     // 危机标记排在报告过期与基本盘缺项之后（extra 原样按序追加）：前两项讲的是
     // "手上这份东西还能不能用"，这一项讲的是"跟你说话的这个人最近怎么样"——
     // 后者不该被前者挤掉，也不该把前者顶开，两句都在同一行里说完。
-    extra: [crisisStatusMark(s.crisisHits72h) ?? ''],
+    // 取证闸排在危机标记之后：前一句讲"跟你说话的这个人最近怎么样"，
+    // 这一句讲"手上这套事实还立不立得住"。两句都在同一行里说完，谁都不顶开谁。
+    extra: [crisisStatusMark(s.crisisHits72h) ?? '', evidenceGapMark(s) ?? ''],
   });
   return {
     // 状态区在抬头之上：它是"先别急着答"的那句话，排在使用说明后面就没人先读到了

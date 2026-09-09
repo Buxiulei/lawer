@@ -10,7 +10,7 @@ import * as store from '@/lib/db/agent';
 import { DOMAINS } from '@/lib/domains/registry';
 
 import { withClientRef } from '../idempotent';
-import { caseIdProp, num } from '../shared';
+import { caseIdProp, factsTokenProp, num } from '../shared';
 import type { Capability } from '../registry';
 
 /** 对外枚举：各领域包 deadlineKinds 的并集（tools/list 拿不到案件上下文）。
@@ -36,7 +36,9 @@ export const deadlineSet: Capability = {
   kind: 'write',
   domains: ['*'],
   exposeTo: ['mcp'],
-  precondition: [],
+  // 期限是**权利灭失点**：按一个过期的锚点落一条，用户会照着一个不存在的日子安排举证，
+  // 而那一天到了没有任何东西能补救。恒要 facts_token。
+  precondition: ['facts_token'],
   idempotency: { clientRef: true, naturalKey: '同案 + 同 kind + 同锚点日（到期日由前两者唯一决定）' },
   title: '推算并登记一条法定期限',
   description:
@@ -59,6 +61,7 @@ export const deadlineSet: Capability = {
         type: 'string',
         description: '幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库',
       },
+      ...factsTokenProp,
     },
     required: ['case_id', 'kind', 'anchor_date'],
   },

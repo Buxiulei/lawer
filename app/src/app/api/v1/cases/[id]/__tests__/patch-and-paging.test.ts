@@ -18,7 +18,9 @@ import os from 'node:os';
 import type { Database } from 'better-sqlite3';
 import { beforeAll, beforeEach, describe, expect, test } from 'vitest';
 
+import { factsCardFor } from '@/lib/agent';
 import { generateApiKey, hashApiKey } from '@/lib/auth/api-key';
+import { issueFactsToken } from '@/lib/cases/facts-token';
 
 type Handler = (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response>;
 
@@ -127,7 +129,11 @@ describe('PATCH /cases/{id}：用工基本盘四项真落库', () => {
   });
 
   test('老三样照旧可改（不许为了加四项把原来的挤掉）', async () => {
-    const res = await patch({ stage: '已收通知', goal: '拿到 2N', bottom_line: '不低于 N+1' }, keyA);
+    // stage 是高危入参：要带 facts_token（其余字段不必，见 registry.factsTokenArgs）
+    const res = await patch(
+      { stage: '已收通知', goal: '拿到 2N', bottom_line: '不低于 N+1', facts_token: issueFactsToken(factsCardFor(db, caseA)) },
+      keyA,
+    );
     expect(res.status).toBe(200);
     const row = db.prepare('SELECT stage, goal, bottom_line FROM cases WHERE id = ?').get(caseA) as Record<string, unknown>;
     expect(row).toEqual({ stage: '已收通知', goal: '拿到 2N', bottom_line: '不低于 N+1' });

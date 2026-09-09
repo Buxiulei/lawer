@@ -44,6 +44,10 @@ export interface ClaimRow {
   calc_json: string | null;
   basis: string | null;
   status: string;
+  /** 来源四档（lib/cases/source-tier.ts）。存量行由迁移回填「自述」 */
+  source_tier: string;
+  /** 谁写进来的（user / agent_inferred / doc_extract / system）。存量行回填 user */
+  asserted_by: string;
   created_at: string;
 }
 
@@ -56,6 +60,10 @@ export interface CompanyProfileRow {
   legal_rep: string | null;
   risk_notes: string | null;
   sources_json: string | null;
+  /** 来源四档（lib/cases/source-tier.ts）。存量行由迁移回填「自述」 */
+  source_tier: string;
+  /** 谁写进来的（user / agent_inferred / doc_extract / system）。存量行回填 user */
+  asserted_by: string;
   created_at: string;
 }
 
@@ -439,27 +447,64 @@ export function upsertClaim(
     calcJson: string | null;
     basis: string | null;
     status: string;
+    /**
+     * 来源四档与断言人，成对给或成对不给（见 lib/db/cases.insertTimelineEvent 同名参数）。
+     * **改一笔已有诉求时不给它，就一个字节都不动那两列**：给「不知道来源变没变」
+     * 安一个缺省值，等于每次补一句依据都把档位悄悄降回自述。
+     */
+    origin?: { tier: string; assertedBy: string };
   },
 ): { id: number; created: boolean } {
+  const { origin } = params;
   const found = db
     .prepare('SELECT id FROM claims WHERE case_id = ? AND kind = ? ORDER BY id DESC LIMIT 1')
     .get(params.caseId, params.kind) as { id: number } | undefined;
   if (found) {
-    db.prepare('UPDATE claims SET amount_fen = ?, calc_json = ?, basis = ?, status = ? WHERE id = ?').run(
-      params.amountFen,
-      params.calcJson,
-      params.basis,
-      params.status,
-      found.id,
-    );
+    if (origin) {
+      db.prepare(
+        'UPDATE claims SET amount_fen = ?, calc_json = ?, basis = ?, status = ?, source_tier = ?, asserted_by = ? WHERE id = ?',
+      ).run(
+        params.amountFen,
+        params.calcJson,
+        params.basis,
+        params.status,
+        origin.tier,
+        origin.assertedBy,
+        found.id,
+      );
+    } else {
+      db.prepare('UPDATE claims SET amount_fen = ?, calc_json = ?, basis = ?, status = ? WHERE id = ?').run(
+        params.amountFen,
+        params.calcJson,
+        params.basis,
+        params.status,
+        found.id,
+      );
+    }
     markReportStale(db, params.caseId, '金额主张');
     return { id: found.id, created: false };
   }
   const id = Number(
-    db
-      .prepare('INSERT INTO claims (case_id, kind, amount_fen, calc_json, basis, status) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(params.caseId, params.kind, params.amountFen, params.calcJson, params.basis, params.status)
-      .lastInsertRowid,
+    (origin
+      ? db
+          .prepare(
+            'INSERT INTO claims (case_id, kind, amount_fen, calc_json, basis, status, source_tier, asserted_by)' +
+              ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          )
+          .run(
+            params.caseId,
+            params.kind,
+            params.amountFen,
+            params.calcJson,
+            params.basis,
+            params.status,
+            origin.tier,
+            origin.assertedBy,
+          )
+      : db
+          .prepare('INSERT INTO claims (case_id, kind, amount_fen, calc_json, basis, status) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(params.caseId, params.kind, params.amountFen, params.calcJson, params.basis, params.status)
+    ).lastInsertRowid,
   );
   markReportStale(db, params.caseId, '金额主张');
   return { id, created: true };
@@ -555,25 +600,68 @@ export interface CompanyProfileInput {
   legalRep: string | null;
   riskNotes: string | null;
   sourcesJson: string | null;
+  /** 新建行要落的来源四档与断言人（省略 ⇒ 走 DDL 默认值） */
+  origin?: { tier: string; assertedBy: string };
+  /**
+   * 命中既有行时，**要不要把 origin 也写上去**。默认 false = 一个字节不动那两列。
+   *
+   * 【为什么默认不动】upsert 的语义是"补充"：不点名档位地补一个统一社会信用代码，
+   * 把一行「裁审认定」降回「自述」的形态是——回包 200、那一行还在、每个字段看起来都对，
+   * 只有证明力凭空掉了三档。与其余字段的 COALESCE 同一条规矩：这次没提 ≠ 这次要清空。
+   */
+  overwriteOrigin?: boolean;
 }
 
 /** 两个 upsert 共用的插入语句。写第二份的话，加一列时必然只改到其中一份。 */
 function insertCompanyProfile(db: Database, params: CompanyProfileInput): number {
+  const { origin } = params;
   return Number(
-    db
-      .prepare(
-        `INSERT INTO company_profiles (case_id, name, uscc, role, legal_rep, risk_notes, sources_json, investigated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-      )
-      .run(
-        params.caseId,
-        params.name,
-        params.uscc,
-        params.role,
-        params.legalRep,
-        params.riskNotes,
-        params.sourcesJson,
-      ).lastInsertRowid,
+    (origin
+      ? db
+          .prepare(
+            `INSERT INTO company_profiles (case_id, name, uscc, role, legal_rep, risk_notes, sources_json, investigated_at, source_tier, asserted_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)`,
+          )
+          .run(
+            params.caseId,
+            params.name,
+            params.uscc,
+            params.role,
+            params.legalRep,
+            params.riskNotes,
+            params.sourcesJson,
+            origin.tier,
+            origin.assertedBy,
+          )
+      : db
+          .prepare(
+            `INSERT INTO company_profiles (case_id, name, uscc, role, legal_rep, risk_notes, sources_json, investigated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+          )
+          .run(
+            params.caseId,
+            params.name,
+            params.uscc,
+            params.role,
+            params.legalRep,
+            params.riskNotes,
+            params.sourcesJson,
+          )
+    ).lastInsertRowid,
+  );
+}
+
+/**
+ * 已有主体行的档位改写。**两个 upsert 共用**：只有 overwriteOrigin 为真时才动那两列。
+ * 与其余字段的 COALESCE 语义一致——"这次没提"不等于"这次要清空"。
+ */
+function updateCompanyOrigin(db: Database, id: number, params: CompanyProfileInput): void {
+  const origin = params.overwriteOrigin ? params.origin : undefined;
+  if (!origin) return;
+  db.prepare('UPDATE company_profiles SET source_tier = ?, asserted_by = ? WHERE id = ?').run(
+    origin.tier,
+    origin.assertedBy,
+    id,
   );
 }
 
@@ -591,6 +679,7 @@ export function upsertCompanyProfile(
        risk_notes = COALESCE(?, risk_notes), sources_json = COALESCE(?, sources_json),
        investigated_at = datetime('now') WHERE id = ?`,
     ).run(params.uscc, params.role, params.legalRep, params.riskNotes, params.sourcesJson, found.id);
+    updateCompanyOrigin(db, found.id, params);
     return { id: found.id, created: false };
   }
   return { id: insertCompanyProfile(db, params), created: true };
@@ -626,6 +715,7 @@ export function upsertCompanyProfileByRole(
        risk_notes = COALESCE(?, risk_notes), sources_json = COALESCE(?, sources_json),
        investigated_at = datetime('now') WHERE id = ?`,
     ).run(params.name, params.uscc, params.legalRep, params.riskNotes, params.sourcesJson, found.id);
+    updateCompanyOrigin(db, found.id, params);
     return { id: found.id, created: false };
   }
   return { id: insertCompanyProfile(db, params), created: true };

@@ -70,10 +70,13 @@ export { buildSystemPrompt, packsSection, beijingNow } from './prompt';
 export {
   buildCaseFacts,
   buildFactsStatusLine,
+  evidenceGapMark,
   renderCaseFacts,
   CASE_FACTS_BUDGET,
   EVIDENCE_DISCLAIMER,
 } from './case-facts';
+// 事实卡的**唯一渲染入口**（站内 prompt、MCP case_facts、facts_token 三个读者共用）
+export { factsCardFor, factsCardOf } from './facts-entry';
 export {
   AGENT_TOOLS,
   executeTool,

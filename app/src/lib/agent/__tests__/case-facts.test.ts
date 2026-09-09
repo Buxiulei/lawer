@@ -56,6 +56,8 @@ function evidence(n: number, category = '考勤', extra: Partial<EvidenceRow> = 
     brief_error: null,
     void_reason: null,
     voided_at: null,
+    brief_source_tier: '自述',
+    brief_asserted_by: 'user',
     ...extra,
   }));
 }
@@ -70,6 +72,8 @@ function timeline(n: number): TimelineEventRow[] {
     title: `第 ${n - i} 号事件`,
     detail: `事件明细 ${n - i}：`.padEnd(60, '细'),
     milestone: null,
+    source_tier: '自述',
+    asserted_by: 'user',
     created_at: '2026-08-20 09:00:00',
   }));
 }
@@ -229,18 +233,21 @@ describe('G-F0 单一入口：事实卡是纯函数，且只在一处注入', ()
   });
 
   /**
-   * 事实卡有**两个出口**，一个都不许多：
-   *   ① 站内 agent 的 system prompt（lib/agent/prompt.ts）
-   *   ② 用户自己的 agent 走 MCP 的 case_facts 能力（lib/capabilities/families/case.ts；
-   *      lib/mcp/tools.ts 已退成注册表的薄视图，本身不再渲染任何东西）
-   * 出口可以有两个，**口径只能有一个**——所以下面不只点名文件，还要求每一处都写成
-   * `renderCaseFacts(buildCaseFacts(…))`：谁想自己拼一份事实卡（跳过 buildCaseFacts、
-   * 或绕过 renderCaseFacts 的预算裁剪直接 JSON 化 snapshot），这条就红。
-   * 那种分叉的形态是：同一个案子在网页里和在用户助手里，「当前事实」不是同一份。
+   * 事实卡的渲染**只剩一处**（S4 从两处收成一处）：`lib/agent/facts-entry.ts`。
+   *
+   * 【为什么从"两个出口"改成"一个入口"】原来两处出口各自写着
+   * `renderCaseFacts(buildCaseFacts(…))`：站内 prompt 一处、MCP case_facts 一处。
+   * S4 又添了两个读者（facts_token 的签发与核验），四处各拼一遍的失败形态**不是崩溃**——
+   * 某一处渲染出来的字与另一处差一个空格，于是每一次令牌核验都判 stale，
+   * 调用方照着提示重读、再写、再 stale，而两边看起来都在正常工作。
+   * 所以渲染收成 factsCardOf / factsCardFor 两个薄壳（同一个文件、同一段代码），
+   * 出口仍然是那几个，但**口径只有一份、而且是机械保证的一份**。
+   *
+   * 变异：在别的文件里再写一次 `renderCaseFacts(` → 红。
    */
-  const RENDER_SITES = ['lib/agent/prompt.ts', 'lib/capabilities/families/case.ts'];
+  const RENDER_SITES = ['lib/agent/facts-entry.ts'];
 
-  it('renderCaseFacts 只有两处出口，且两处都经 buildCaseFacts（变异：别处再调一次 → 红）', () => {
+  it('renderCaseFacts 只在唯一入口里被调用，且经 buildCaseFacts（变异：别处再调一次 → 红）', () => {
     const callers: string[] = [];
     for (const file of walk(SRC_ROOT)) {
       if (file.endsWith('case-facts.ts')) continue; // 定义处自身不算调用
@@ -252,14 +259,13 @@ describe('G-F0 单一入口：事实卡是纯函数，且只在一处注入', ()
 
     for (const rel of RENDER_SITES) {
       const text = fs.readFileSync(path.join(SRC_ROOT, rel), 'utf-8');
-      // 允许命名空间前缀（lib/mcp 那侧是 `agent.renderCaseFacts(agent.buildCaseFacts(…))`）
       expect(text, rel).toMatch(/renderCaseFacts\(\s*(?:[\w$]+\.)?buildCaseFacts\(/);
     }
 
     // 注入侧还要钉在 buildSystemPrompt 里：换个函数注入等于换了注入时机
     const prompt = fs.readFileSync(path.join(SRC_ROOT, 'lib/agent/prompt.ts'), 'utf-8');
     const body = prompt.slice(prompt.indexOf('export function buildSystemPrompt'));
-    expect(body).toContain('renderCaseFacts(buildCaseFacts(input.snapshot))');
+    expect(body).toContain('factsCardOf(input.snapshot)');
   });
 });
 
@@ -765,7 +771,12 @@ describe('G-F6 证据区：带简报的按简报说，没提取的明说没读�
       }),
     });
     const line = text.split('\n').find((l) => l.includes('简报：'))!;
-    const summary = line.slice(line.indexOf('简报：') + 3);
+    // S4 起每条简报后面带一个来源档位后缀〔…〕（由 brief_source_tier 推出）。
+    // 摘要长度判的是**摘要本身**，所以先把那个后缀摘掉；顺带把它钉住——
+    // 只裁不判的形态是：哪天后缀没了，这条照样绿。
+    const withTier = line.slice(line.indexOf('简报：') + 3);
+    expect(withTier, '简报后面要带来源档位后缀').toMatch(/〔[^〕]+〕$/);
+    const summary = withTier.replace(/〔[^〕]+〕$/, '');
     expect(summary.length).toBeLessThanOrEqual(60);
     expect(summary.endsWith('…')).toBe(true);
   });

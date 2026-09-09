@@ -8,7 +8,7 @@ import * as cases from '@/lib/cases';
 import { DRAFT_KINDS, OUTBOUND_DRAFT_KINDS } from '@/lib/cases/drafts';
 import { LABOR_CAPABILITY_COPY } from '@/lib/domains/labor';
 
-import { caseIdProp, num, writeOnce } from '../shared';
+import { caseIdProp, factsTokenProp, num, writeOnce } from '../shared';
 import type { Capability } from '../registry';
 
 /** 对外那几类的名字从清单现取，不在这里抄第二份（抄了就会与闸门用的那份分叉） */
@@ -101,7 +101,9 @@ export const draftWrite: Capability = {
   kind: 'write',
   domains: ['*'],
   exposeTo: ['mcp'],
-  precondition: [],
+  // 文书是要递出去、要进卷宗的东西：照一份过期的档案起草，错的是**已经发出去的那一份**。
+  // 恒要 facts_token。
+  precondition: ['facts_token'],
   idempotency: { clientRef: true, naturalKey: '同案 + 同 kind + 同 title ⇒ 落成新版本，不另起一份' },
   title: '起草文书',
   description:
@@ -130,6 +132,7 @@ export const draftWrite: Capability = {
         type: 'string',
         description: '幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库',
       },
+      ...factsTokenProp,
     },
     required: ['case_id', 'kind', 'title', 'body'],
   },

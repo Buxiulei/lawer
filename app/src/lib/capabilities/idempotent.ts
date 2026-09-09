@@ -31,6 +31,32 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 /**
+ * 这个 (案件, 工具, client_ref) 之前**已经写过一次**了吗。
+ *
+ * 【它是给 facts_token 闸用的豁免判据，不是给写路径用的】写路径的去重在 withClientRef
+ * 的事务里（先查后写，见下）。这里单独暴露一个只读判定，是因为 facts_token 闸排在
+ * 能力的 run 之前——而**一次重放本来就不会改变任何东西**。
+ *
+ * 不豁免的形态是：agent 发出 deadline_set，网络抖了一下没收到回包，它按幂等约定
+ * 拿**同一份参数**重试——而那份参数里的令牌已经因为第一次写入而失效了。于是它拿到
+ * FACTS_STALE，得重读一次事实卡、换一枚新令牌、再打一次，最后收到 deduped:true。
+ * 三次往返换来一个"什么都没发生"，而中间那一次失败读起来像"你的认知过期了"，
+ * 会诱使模型去改内容重发——那才是真正危险的下一步。
+ */
+export function isKnownReplay(
+  db: Database,
+  ctx: { caseId: number; tool: string; clientRef: unknown },
+): boolean {
+  const clientRef =
+    typeof ctx.clientRef === 'string' && ctx.clientRef.trim() ? ctx.clientRef.trim() : null;
+  if (clientRef === null) return false;
+  const row = db
+    .prepare('SELECT 1 AS hit FROM agent_writes WHERE case_id = ? AND tool = ? AND client_ref = ?')
+    .get(ctx.caseId, ctx.tool, clientRef) as { hit: number } | undefined;
+  return row !== undefined;
+}
+
+/**
  * 幂等地执行一次写入并记账。
  *
  * - 带 client_ref 且已经写过 ⇒ **不再执行 insert**，回既有 target + `deduped: true`；

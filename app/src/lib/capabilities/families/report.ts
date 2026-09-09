@@ -4,9 +4,10 @@
 // 【为什么是两条而不是一条"写整份"】整份覆盖的形态是：agent 读到十节、只想改一节，
 // 却要把另外九节原样重发一遍——中间任何一次转述失真都会把它没打算动的部分改掉，
 // 而返回 200。按节改，没点名的节一个字都不会动。
+import { issueFactsToken } from '@/lib/cases/facts-token';
 import * as report from '@/lib/cases/report';
 
-import { caseIdProp, num, writeOnce } from '../shared';
+import { caseIdProp, num, renderCurrentFacts, writeOnce } from '../shared';
 import type { Capability } from '../registry';
 
 /** 写侧作者标识：走 api key 的记 agent:<key_id>，网页登录态记 web（设计稿 §4.3 updated_by 值集）。 */
@@ -28,7 +29,9 @@ export const caseReportGet: Capability = {
     '读这个案子的**长期记忆**：整理过的分节报告 + 渲染稿 + 最后由谁在什么时候更新 + 过期标记。' +
     '开工先读它——它是历次整理的结论，比现拼一遍档案更完整。第一次读会自动从档案生成初稿。' +
     '回包里的 version 是改写时要回传的那个版本号；stale 非空表示档案在报告之后又变过，' +
-    '**这时先整理报告再回答用户**，别拿一份过期的结论去下判断。',
+    '**这时先整理报告再回答用户**，别拿一份过期的结论去下判断。' +
+    '回包同时带 facts_token（改档案时的通行证，十分钟内有效）——' +
+    '开工先读它就等于同时拿到了看档回执，不必再单调一次 case_facts。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -40,12 +43,21 @@ export const caseReportGet: Capability = {
     },
     required: ['case_id'],
   },
-  run: (db, identity, args) =>
-    report.getReport(db, {
-      caseId: num(args.case_id),
+  run: (db, identity, args) => {
+    const caseId = num(args.case_id);
+    const got = report.getReport(db, {
+      caseId,
       userId: identity.uid,
       section: typeof args.section === 'string' ? args.section : null,
-    }),
+    });
+    if (!got.ok) return got;
+    // 【为什么这条读能力也签令牌】设计稿 §4.2-4 说"开工先读报告"。只让 case_facts 签的形态是：
+    // 照着说明书先读报告的 agent，到了要写的那一步才发现自己没有令牌，于是**再读一遍**
+    // 同一个案子——每一次写入都要两轮往返，而两轮读到的是同一份东西。
+    // 签发按事实卡的字节算（renderCurrentFacts 是全站唯一取法），与 case_facts 签出来的一致。
+    const facts = renderCurrentFacts(db, caseId, identity.uid);
+    return facts.ok ? { ...got, facts_token: issueFactsToken(facts.text) } : got;
+  },
 };
 
 export const caseReportUpdate: Capability = {

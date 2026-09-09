@@ -13,7 +13,9 @@ import type { Database } from 'better-sqlite3';
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 
 import { generateApiKey, hashApiKey } from '@/lib/auth/api-key';
+import { factsCardFor } from '@/lib/agent';
 import { getCapability, listCapabilities } from '@/lib/capabilities';
+import { issueFactsToken } from '@/lib/cases/facts-token';
 import { CONSENT_KINDS } from '@/lib/consent';
 import { decryptField, encryptField } from '@/lib/crypto';
 import { recordConsent } from '@/lib/db/consents';
@@ -204,10 +206,10 @@ const MINIMAL_ARGS: Record<string, Record<string, unknown>> = {
     kind: 'N',
     inputs: { avg_monthly_wage_fen: 2_000_000, employed_from: '2020-03-01', terminated_at: '2026-03-01' },
   },
-  claims_upsert: { case_id: '#case', kind: '欠薪', amount_fen: 123_400 },
+  claims_upsert: { case_id: '#case', kind: '欠薪', amount_fen: 123_400, facts_token: '#facts' },
   claims_list: { case_id: '#case' },
   deadline_list: { case_id: '#case' },
-  deadline_set: { case_id: '#case', kind: '起诉15日', anchor_date: '2026-03-02' },
+  deadline_set: { case_id: '#case', kind: '起诉15日', anchor_date: '2026-03-02', facts_token: '#facts' },
   deadline_resolve: { case_id: '#case', deadline_id: 999_999 },
   draft_list: { case_id: '#case' },
   draft_get: { draft_id: 999_999 },
@@ -217,6 +219,7 @@ const MINIMAL_ARGS: Record<string, Record<string, unknown>> = {
     title: '异议函',
     body: '本人对调岗决定提出异议。',
     send_consequences: '发出后视为明确表态，公司可能据此推进解除；这一步不可逆。',
+    facts_token: '#facts',
   },
   company_profile_upsert: { case_id: '#case', name: '某某科技有限公司' },
   emotion_log: { case_id: '#case', level: '平稳' },
@@ -272,6 +275,9 @@ function fill(args: Record<string, unknown>, ids: { caseId: number; evidenceId: 
   const swap = (v: unknown): unknown => {
     if (v === '#case') return ids.caseId;
     if (v === '#evidence') return ids.evidenceId;
+    // 四条高危写能力的事实令牌（设计稿 §4.2-4）。**每次 fill 现签一枚**：
+    // 上一条写入会让旧令牌失效，写死一枚的形态是——后面每条用例都在测 FACTS_STALE。
+    if (v === '#facts') return issueFactsToken(factsCardFor(db, ids.caseId));
     if (Array.isArray(v)) return v.map(swap);
     return v;
   };

@@ -118,6 +118,8 @@ function snapshot(): CaseSnapshot {
         brief_error: null,
         void_reason: null,
         voided_at: null,
+        brief_source_tier: '自述',
+        brief_asserted_by: 'user',
       },
     ],
     historyStats: { total: 4, firstAt: '2026-08-19 11:00:00' },
@@ -130,6 +132,11 @@ function snapshot(): CaseSnapshot {
         title: '收到解除通知',
         detail: 'HR 当面递交',
         milestone: null,
+        // 【S4 新增：夹具里两条事件的档位故意不同】一条有书证支撑、一条只有当事人的说法——
+        // 逐条档位由数据推出（不再整段贴一句"全部是自述"），这两行就是它的样本：
+        // 把 rowTier 的实参写死成同一个值，基线立刻照出来。
+        source_tier: '书证',
+        asserted_by: 'doc_extract',
         created_at: '2026-08-20 09:00:00',
       },
       {
@@ -140,6 +147,8 @@ function snapshot(): CaseSnapshot {
         title: 'HR 约谈',
         detail: null,
         milestone: null,
+        source_tier: '自述',
+        asserted_by: 'user',
         created_at: '2026-08-18 09:00:00',
       },
     ],
@@ -152,6 +161,8 @@ function snapshot(): CaseSnapshot {
         amount_fen: 9000000,
         basis: '劳动合同法第 87 条',
         status: 'draft',
+        source_tier: '自述',
+        asserted_by: 'agent_inferred',
         created_at: '2026-08-20 09:00:00',
       },
     ],
@@ -165,6 +176,8 @@ function snapshot(): CaseSnapshot {
         legal_rep: null,
         risk_notes: null,
         sources_json: '[]',
+        source_tier: '自述',
+        asserted_by: 'user',
         created_at: '2026-08-20 09:00:00',
       },
     ],

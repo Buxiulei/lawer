@@ -16,6 +16,12 @@
 // 对不上就把那句 quote 抹成空串而不是丢掉整条事实——事实可能是真的，编的是那句引号里的话。
 import type { Database } from 'better-sqlite3';
 
+import {
+  DEFAULT_ASSERTED_BY,
+  DEFAULT_SOURCE_TIER,
+  DOC_EXTRACT_ORIGIN,
+  type AssertedBy,
+} from '@/lib/cases/source-tier';
 import { nowSql } from '@/lib/db/time';
 import type { ChatMessage } from '@/lib/llm';
 
@@ -271,6 +277,8 @@ export function saveBrief(
     brief: EvidenceBrief;
     updatedBy: BriefAuthor;
     baseVersion?: number;
+    /** 谁改的（落 brief_asserted_by）。由外壳按身份填；省略 ⇒ user */
+    assertedBy?: AssertedBy;
   },
 ): SaveBriefResult {
   const row = db
@@ -283,13 +291,25 @@ export function saveBrief(
   }
 
   const next = row.v + 1;
+  // 人手改写过的简报**一律落自述档**：改写的那句话是人（或对方 agent）自己下的判断，
+  // 不再是"从原件里读出来的"。沿用上一版的书证档的形态是——一句被改过的结论
+  // 顶着上一版的书证章，而库里没有任何一处记得它被改过。
   const res = db
     .prepare(
       `UPDATE evidence
-          SET brief_json=?, brief_version=?, brief_updated_by=?
+          SET brief_json=?, brief_version=?, brief_updated_by=?,
+              brief_source_tier=?, brief_asserted_by=?
         WHERE id=? AND brief_version=?`,
     )
-    .run(JSON.stringify(input.brief), next, input.updatedBy, input.evidenceId, row.v);
+    .run(
+      JSON.stringify(input.brief),
+      next,
+      input.updatedBy,
+      DEFAULT_SOURCE_TIER,
+      input.assertedBy ?? DEFAULT_ASSERTED_BY,
+      input.evidenceId,
+      row.v,
+    );
   // changes=0 = 读到版本号与真正更新之间有人抢先写了一版（同一进程内的并发请求）。
   // 不重试、不覆盖：回冲突，让调用方重读。
   if (res.changes === 0) {
@@ -600,13 +620,22 @@ export async function ensureBrief(
   }
   if (!sections) return 'declined';
 
+  // 【这份简报的档位由「有没有读过原文」决定，不由"是系统写的"决定】
+  // 提取完成、手上有 extracted_text 时写下的结论**是从原件里读出来的**——书证 / doc_extract。
+  // 提取还没做（扫描件排队中、失败）时生成器只能按文件名与元数据写，那是**推测**：
+  // 给它盖上书证章的形态是，两轮之后没人分得清哪一句读过原文、哪一句是猜的
+  //（brief_updated_by 那一列的长注释讲的是同一件事，这里补上"有多硬"那一半）。
+  const origin = row.extracted_text && row.extracted_text.trim() !== ''
+    ? DOC_EXTRACT_ORIGIN
+    : { tier: DEFAULT_SOURCE_TIER, assertedBy: 'system' as const };
   const changed = db
     .prepare(
       `UPDATE evidence
-          SET brief_json = ?, brief_version = 1, brief_updated_by = ?, brief_updated_at = ?
+          SET brief_json = ?, brief_version = 1, brief_updated_by = ?, brief_updated_at = ?,
+              brief_source_tier = ?, brief_asserted_by = ?
         WHERE id = ? AND brief_version = 0`,
     )
-    .run(JSON.stringify(sections), updatedBy, nowSql(), evidenceId).changes;
+    .run(JSON.stringify(sections), updatedBy, nowSql(), origin.tier, origin.assertedBy, evidenceId).changes;
   if (changed === 1) clearBriefError(db, evidenceId);
   return changed === 1 ? 'written' : 'already';
 }

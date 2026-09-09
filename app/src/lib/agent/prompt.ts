@@ -9,7 +9,7 @@
 // 【不做的事】本文件不做任何摘要、压缩、改写。档案是事实，packs 是法条原文，
 // 任何一处「为了省 token 而转述」都会以「模型把转述当原文引用」的形式变成可信度事故。
 
-import { buildCaseFacts, renderCaseFacts } from './case-facts';
+import { factsCardOf } from './facts-entry';
 import { extractHotlines, isLandlineOnly, LANDLINE_MARK } from './crisis-opener';
 import { CHARTER } from './charter';
 import { intakeDirective, recapBrief, type IntakeStage } from './intake';
@@ -231,7 +231,7 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
       `- 默认适用地区：${input.snapshot.case.district}区（北京市）。`,
       `- 当前会话模式：${input.mode}。`,
     ].join('\n'),
-    renderCaseFacts(buildCaseFacts(input.snapshot)),
+    factsCardOf(input.snapshot),
     // 陪跑/文书这类"回头继续"的模式先给前情提要；首诊(问诊)不需要，用户刚开口
     input.mode === '问诊' ? intakeDirective(input.stage) : `${recapBrief(input.snapshot)}\n\n${intakeDirective(input.stage)}`,
     outputDiscipline(),

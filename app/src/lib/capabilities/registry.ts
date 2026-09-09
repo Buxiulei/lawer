@@ -50,8 +50,13 @@ export type CapabilityKind = 'read' | 'write' | 'spend';
  * emotion_consent：这条能力要写的是敏感个人信息，用户必须**单独同意过**才放行
  * （协议 五.2（2）/ 附一 #4）。与 realname 同样由注册表驱动、在 invoke 一处拦——
  * 让各能力在自己的 run 里各写一句的形态见 checkPreconditions 抬头。
+ *
+ * facts_token：这条能力会**按调用方的认知覆盖档案**，所以要先证明它读过当前档案
+ * （设计稿 §4.2-4）。只挂在四条高危写能力上；追加/低危写（时间线、情绪）不挂——
+ * 挂上去的形态是：一条本该"随手就能记一笔"的路变成了两步，于是模型干脆不记，
+ * 而"不落库"正是这套档案最早的那类事故。
  */
-export type CapabilityPrecondition = 'realname' | 'balance' | 'emotion_consent';
+export type CapabilityPrecondition = 'realname' | 'balance' | 'emotion_consent' | 'facts_token';
 
 export interface Capability {
   name: string;
@@ -65,6 +70,15 @@ export interface Capability {
   precondition: readonly CapabilityPrecondition[];
   /** 有幂等约定的写能力才填；读能力恒省略 */
   idempotency?: { clientRef?: boolean; naturalKey?: string };
+  /**
+   * facts_token 闸**只在这几个入参出现时才开**（省略 = 声明了 facts_token 就恒开）。
+   *
+   * 【为什么要这一格】有的能力身兼两种动作：case_update 既能改 stage（把案子推进到
+   * 下一个程序节点，改错要人工回退），也能补一句 goal 的错别字。整条能力一律挂闸的形态是：
+   * 补一个岗位名也要先读一遍事实卡，于是调用方要么多跑一轮，要么干脆绕开这条能力。
+   * 只在真正高危的那个入参上开闸，闸才留得住。
+   */
+  factsTokenArgs?: readonly string[];
   /** 给人看的短名（MCP tools/list 与 /api/manifest 都带它） */
   title: string;
   description: string;

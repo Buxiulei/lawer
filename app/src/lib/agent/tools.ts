@@ -30,6 +30,9 @@ import { unsupportedVerbatimQuotes } from './citation-block';
 import { coreArticleKeys, packCitationGuide, type CoreArticleSources } from './citation-block';
 import * as deadline from '@/lib/deadline';
 import { KNOWLEDGE_TYPES } from '@/lib/knowledge/types';
+import { FACTS_TOKEN_TOOLS } from '@/lib/cases/facts-token';
+import { DEFAULT_SOURCE_TIER } from '@/lib/cases/source-tier';
+
 import type { InputSource } from './calc';
 import {
   KNOWLEDGE_MISS_DIRECTIVE,
@@ -181,6 +184,24 @@ export interface AgentToolContext {
    * （预检索 6 张全是话术/SOP/判例卡，一条逐字原文都没有）。少堵一个通道，模型就从那个通道绕过去。
    */
   coreSources?: CoreArticleSources;
+  /**
+   * 本轮的事实令牌：由 orchestrator 按**这一轮注入进 system prompt 的那张事实卡**签发
+   *（设计稿 §4.2-4「站内 runTurn 由 orchestrator 自动携带」）。
+   *
+   * 【站内这道闸挡的到底是什么——写清楚，免得被当成比它更强的东西】
+   * MCP/REST 那面，令牌证明的是「**调用方**读过当前档案」；站内**读档的就是服务端自己**，
+   * 事实卡每一轮都由 prompt.ts 渲染进上下文，所以那条性质在这里是构造性成立的，
+   * 不需要（也不可能）靠核验哈希再证一遍。
+   *
+   * **所以站内不重算哈希**：本轮里模型先 timeline_add 再 claims_upsert 是完全正常的顺序，
+   * 而第一次写入就让快照变了——重算哈希会让第二个工具无理由地失败，
+   * 那是给自己造一个生产故障来换一条看起来更严格的判据。
+   *
+   * 站内这道闸真正挡得住的是：**某条根本没建过事实卡的通路**（新入口、后台任务、
+   * 将来某个绕过 runTurn 的调用点）去调高危写工具。那条路上 factsToken 是空的，
+   * executeTool 当场拒收并说清原因，而不是安安静静地写进档案。
+   */
+  factsToken?: string;
   state: TurnState;
   emit: AgentEventSink;
 }
@@ -714,6 +735,11 @@ const HANDLERS: Record<string, Handler> = {
       kind,
       title,
       detail: str(args.detail),
+      // 站内这一条是**模型转述**用户在对话里说的话，不是用户亲手在表单里打的字：
+      // 标 user 的形态是——展示层不再标黄，一句模型听岔了的话看起来像本人确认过的。
+      // 档位不收模型的声明（工具 schema 里没有这个参数）：它没有能力判断有没有书证，
+      // 一律落最弱档，要升档得由真的挂上材料的那条路来做。
+      assertedBy: 'agent_inferred',
     });
     if (!res.ok) return reject(res.message);
     ctx.emit({ event: 'record', data: { tool: 'timeline_add', id: res.event.id, summary: `${kind}：${title}` } });
@@ -748,6 +774,8 @@ const HANDLERS: Record<string, Handler> = {
       calcJson: str(args.calc_json),
       basis: str(args.basis),
       status: inEnum(args.status, ['draft', 'confirmed']) ?? 'draft',
+      // 同 timeline_add：站内是模型转述，档位落最弱档、断言人如实记 agent_inferred
+      origin: { tier: DEFAULT_SOURCE_TIER, assertedBy: 'agent_inferred' },
     });
     ctx.emit({
       event: 'record',
@@ -898,6 +926,8 @@ const HANDLERS: Record<string, Handler> = {
       legalRep: str(args.legal_rep),
       riskNotes: str(args.risk_notes),
       sourcesJson: str(args.sources) ? JSON.stringify([str(args.sources)]) : null,
+      // 同 timeline_add：站内是模型转述，档位落最弱档、断言人如实记 agent_inferred
+      origin: { tier: DEFAULT_SOURCE_TIER, assertedBy: 'agent_inferred' },
     });
     ctx.emit({
       event: 'record',
@@ -1091,6 +1121,23 @@ export function executeTool(name: string, rawArguments: string, ctx: AgentToolCo
     args = rawArguments.trim() ? (JSON.parse(rawArguments) as Record<string, unknown>) : {};
   } catch {
     return reject(`${name} 的参数不是合法 JSON，请重新生成`);
+  }
+
+  // 高危写工具的事实令牌：**由服务端自动携带**，模型不必也不该自己填
+  //（它的 schema 里根本没有这个参数，见 AGENT_TOOLS）。挂在 executeTool 这个唯一入口上，
+  // 新加第十几个工具时不必记得抄一句。
+  if ((FACTS_TOKEN_TOOLS as readonly string[]).includes(name)) {
+    if (!ctx.factsToken) {
+      // 三段式：缺什么 / 为什么缺 / 怎么办。裸报「令牌缺失」会让读日志的人重推一遍
+      // 我们已经推过的那一遍——而这条错只可能由接线漏掉引起，不可能由模型的参数引起。
+      return reject(
+        `${name} 这次**没有写进档案**：本轮上下文里没有事实令牌（facts_token）。` +
+          '为什么缺：这条通路没有先建事实卡就来调高危写工具——站内每一轮都该由 orchestrator ' +
+          '渲染事实卡并签发令牌，缺它意味着调用点绕过了那一步（不是你的参数写错了）。' +
+          '怎么办：不要重试本工具，也不要换别的工具绕开；在正文里如实告诉用户这一条没能记进档案。',
+      );
+    }
+    args.facts_token = ctx.factsToken;
   }
 
   let outcome: ToolOutcome;

@@ -8,7 +8,9 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Database } from 'better-sqlite3';
 
+import { factsCardFor } from '@/lib/agent';
 import { generateApiKey, hashApiKey } from '@/lib/auth/api-key';
+import { issueFactsToken } from '@/lib/cases/facts-token';
 import { signToken } from '@/lib/auth/jwt';
 
 type CaseHandler = (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response>;
@@ -131,7 +133,16 @@ describe('写接口', () => {
   test('PATCH 改档案、POST 加时间线、PATCH 完成行动卡', async () => {
     const token = signToken(userA);
 
-    const patched = await patchCase(request('PATCH', token, { stage: '已收通知', goal: '拿 2N' }), ctx(caseA));
+    // 改 stage 属于高危写：要带 facts_token（设计稿 §4.2-4）。改 goal 一项则不必——
+    // 闸只在 case_update 的 stage 那个入参上开（registry.factsTokenArgs）。
+    const patched = await patchCase(
+      request('PATCH', token, {
+        stage: '已收通知',
+        goal: '拿 2N',
+        facts_token: issueFactsToken(factsCardFor(db, caseA)),
+      }),
+      ctx(caseA),
+    );
     expect((await patched.json()).case).toMatchObject({ stage: '已收通知', goal: '拿 2N' });
 
     const added = await postTimeline(

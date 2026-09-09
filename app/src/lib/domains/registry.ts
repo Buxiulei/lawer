@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────
 
 import type { CrisisOpenerText, HotlineFact } from '@/lib/agent/crisis-opener';
+import type { Burden, ElementCard } from '@/lib/cases/elements';
 
 import { COUNSELING } from './counseling';
 import { LABOR } from './labor';
@@ -546,8 +547,53 @@ export interface DomainPack {
   lawyerMandatory: readonly LawyerMandatoryItem[];
   /** 敏感级。**省略 = 本领域不按敏感级处理**（同上，是结论不是待填项）。 */
   sensitive?: DomainSensitivity;
+  /**
+   * **取证闸**（设计稿 §4.2-2）：进了取证窗口，而档案里带档位的关键事实一条书证都没有时，
+   * 事实卡首行说一句、并落一张强制取证的行动卡。
+   *
+   * **省略 = 本领域没有取证窗口这回事**（是结论不是待填项）：不是每个行当都有一个
+   * 「过了这个点再没证据就来不及了」的节点，硬给一个的形态是——用户在一个根本不需要
+   * 举证的阶段被反复催着去取证。
+   */
+  evidenceGate?: DomainEvidenceGate;
+  /**
+   * 要件卡（设计稿 §4.1-3 / §4.7 的 elementSheets 骨架）。三态与举证责任由
+   * lib/cases/elements.buildElementSheet 从来源档位程序推导，本字段只给卡片本身。
+   *
+   * **省略 = 本领域还没有要件卡**（内容在 S6，要走"多路独立推导 + 官方原文机械比对 +
+   * 对抗复审"）。此时要件表**整节不渲染**——渲染一张零行的表的形态是，
+   * 用户读到"要件：（空）"，那看起来像"你一个要件都不成立"。
+   */
+  elementCards?: readonly ElementCard[];
+  /**
+   * 要件表的**用户可见措辞**。举证责任的编码是中立的（claimant / respondent / …），
+   * 而每个行当对这两方的叫法完全不同——写死一份的形态是：第二个行当的用户读到的
+   * 每一格举证责任都在讲另一个行当的当事人。
+   *
+   * **声明了 elementCards 就必须给它**（assertDomainPack 两向机检）：只有卡没有措辞时
+   * 要件表渲染出来的是一列 `undefined`，而每一行的状态都是对的。
+   */
+  burdenLabels?: Readonly<Record<Burden, string>>;
   /** 对外文案（低调模式词典 + 能力文案 + 站内文案） */
   copy: DomainCopy;
+}
+
+/**
+ * 取证闸的三格。`stages` 之外的阶段一律不开闸——「什么时候该催取证」是行当知识，
+ * 共用层只提供"全无书证时说一句"这个机制。
+ */
+export interface DomainEvidenceGate {
+  /** 进了这几个阶段才开闸（取值须是本领域的 stage） */
+  stages: readonly string[];
+  /**
+   * 事实卡首行那句话，逐字对外。两个占位符：
+   * `{n}` = 仍然一条书证都没有的事实组数（1–3）；`{groups}` = 那几组的名字（顿号连接）。
+   * **必须给出路**（设计稿 §7.7「禁令配出路」）：这句话后面要接"先补哪张证"，
+   * 只报"你没有证据"的形态是把用户堵在原地。
+   */
+  notice: string;
+  /** 强制取证行动卡。同题去重（lib/db/agent.insertActionItem），反复触发只会有一张 */
+  action: IntakeActionSeed;
 }
 
 /** key → 领域包。加一个领域 = 加一个包 + 在这里挂一行。 */
@@ -768,6 +814,45 @@ export function assertDomainPack(pack: DomainPack): void {
     str(`lawyerMandatory[${at}].why`, item?.why);
     str(`lawyerMandatory[${at}].basis`, item?.basis);
   });
+
+  // 取证闸可选（省略 = 本领域没有取证窗口）。一旦声明就不许半张：
+  //  · stages 为空 ⇒ 这道闸永远不开，而它看起来是配好了的；
+  //  · stages 里有一个不是本领域的 stage ⇒ 那一格永远对不上，同样静静地不工作；
+  //  · notice 少了 {n} / {groups} 任一占位符 ⇒ 首行那句话缺半截（"有 组关键事实"），
+  //    而句子照常渲染、没有一处会报错。
+  if (pack.evidenceGate) {
+    arr('evidenceGate.stages', pack.evidenceGate.stages);
+    for (const stage of pack.evidenceGate.stages ?? []) {
+      if (Array.isArray(pack.stages) && !pack.stages.includes(stage)) {
+        missing.push(`evidenceGate.stages 里的「${stage}」不是本领域的阶段`);
+      }
+    }
+    str('evidenceGate.notice', pack.evidenceGate.notice);
+    for (const token of ['{n}', '{groups}']) {
+      if (typeof pack.evidenceGate.notice === 'string' && !pack.evidenceGate.notice.includes(token)) {
+        missing.push(`evidenceGate.notice 缺占位符 ${token}`);
+      }
+    }
+    str('evidenceGate.action.title', pack.evidenceGate.action?.title);
+    str('evidenceGate.action.detail', pack.evidenceGate.action?.detail);
+    if (
+      pack.evidenceGate.action !== undefined &&
+      pack.evidenceGate.action.dueInDays !== null &&
+      typeof pack.evidenceGate.action.dueInDays !== 'number'
+    ) {
+      missing.push('evidenceGate.action.dueInDays（不设期限就明写 null）');
+    }
+  }
+
+  // 要件卡与它的举证责任措辞**必须同时在场或同时不在场**：
+  // 有卡没措辞 ⇒ 要件表渲染出一列 undefined，而每一行的状态都是对的；
+  // 有措辞没卡 ⇒ 那份措辞永远画不出来，而它读起来像已经生效了。
+  if (pack.elementCards && pack.elementCards.length > 0 && !pack.burdenLabels) {
+    missing.push('burdenLabels（声明了 elementCards 就必须给用户可见的举证责任措辞）');
+  }
+  if (pack.burdenLabels && !(pack.elementCards && pack.elementCards.length > 0)) {
+    missing.push('elementCards（给了 burdenLabels 却没有要件卡，那份措辞永远画不出来）');
+  }
 
   // interpretationDisputed / sensitive 都是**可选**的（省略 = 本领域没有这回事）。但一旦声明，
   // 就不许半张：空的 items = 一节只有抬头没有内容；空的 discipline = 列了四件事却没说

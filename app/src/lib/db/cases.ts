@@ -51,6 +51,10 @@ export interface TimelineEventRow {
   detail: string | null;
   /** 达成的里程碑（批 6 驾驶舱）。null = 这条事件不构成任何里程碑，绝大多数事件都是 null。 */
   milestone: string | null;
+  /** 来源四档（lib/cases/source-tier.ts）。存量行由迁移回填「自述」 */
+  source_tier: string;
+  /** 谁写进来的（user / agent_inferred / doc_extract / system）。存量行回填 user */
+  asserted_by: string;
   created_at: string;
 }
 
@@ -95,6 +99,14 @@ export interface EvidenceRow {
   void_reason: string | null;
   /** 作废时刻（canonical 串）；null = 没作废 */
   voided_at: string | null;
+  /**
+   * **简报结论**的来源四档与断言人（不是这份材料本身的档位）。
+   * 由内容提取写出来的简报是「书证 / doc_extract」；人手改写过的是「自述 / user」。
+   * 存量行由迁移回填「自述 / user」——旧简报里有一部分是按元数据写成的推测，
+   * 一律按最弱档处理才不会把推测当成读过原文的结论。
+   */
+  brief_source_tier: string;
+  brief_asserted_by: string;
 }
 
 // ========== cases ==========
@@ -218,6 +230,19 @@ export function updateCaseFields(
 // ========== timeline_events ==========
 
 /**
+ * 时间线读侧的列清单。**五处 SELECT 共用这一份**（按 client_ref 找、同日同类、
+ * 窗口取、分页取、取最早一条）。
+ *
+ * 【为什么提成常量】这张表加一列时要同时改五处 SELECT，而漏掉其中一处的形态是：
+ * 那一条读路径回来的行**少一个字段**，TypeScript 照样过（它信 `as TimelineEventRow`），
+ * 读侧拿到 `undefined` 当作"这条没有档位"——于是一条有书证的事件在某一个入口里
+ * 被渲染成〔未记录〕，而没有任何一处会报错。S4 加 source_tier / asserted_by 时
+ * 正是踩在这个形状上，所以先把入口收成一个。
+ */
+const TIMELINE_COLUMNS =
+  'id, case_id, happened_at, kind, title, detail, milestone, source_tier, asserted_by, created_at';
+
+/**
  * 只追加，修正靠补一条新事件（spec §7）——本文件不提供 update/delete。
  *
  * 时间列按 ADR-002 走 canonical 格式：created_at 交给列 DEFAULT；
@@ -235,13 +260,40 @@ export function insertTimelineEvent(
     detail: string | null;
     /** 调用方自带的幂等键；null = 不带（首诊批量写、站内 agent 都不带） */
     clientRef?: string | null;
+    /**
+     * 来源四档与断言人，**成对给或成对不给**（省略 ⇒ 走 DDL 默认值：自述 / user）。
+     *
+     * 【为什么是一个 pair 而不是两个独立可选参数】两个独立参数允许"只给档位不给断言人"，
+     * 而那种行只写了一半：一条标着「书证」却记着 user 的事件，读起来像用户自己上传了原件，
+     * 实际是提取器写的。成对入参在**类型上**堵掉这种半行。
+     * 值域校验在 lib/cases（本层不认识业务枚举，同 kind / status 的既定分工）；
+     * 默认字面量的唯一正本在 DDL，本层不再抄一份。
+     */
+    origin?: { tier: string; assertedBy: string };
   },
 ): number {
-  const info = db
-    .prepare(
-      'INSERT INTO timeline_events (case_id, happened_at, kind, title, detail, client_ref) VALUES (?, datetime(?), ?, ?, ?, ?)',
-    )
-    .run(params.caseId, params.happenedAt, params.kind, params.title, params.detail, params.clientRef ?? null);
+  const { origin } = params;
+  const info = origin
+    ? db
+        .prepare(
+          'INSERT INTO timeline_events (case_id, happened_at, kind, title, detail, client_ref, source_tier, asserted_by)' +
+            ' VALUES (?, datetime(?), ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          params.caseId,
+          params.happenedAt,
+          params.kind,
+          params.title,
+          params.detail,
+          params.clientRef ?? null,
+          origin.tier,
+          origin.assertedBy,
+        )
+    : db
+        .prepare(
+          'INSERT INTO timeline_events (case_id, happened_at, kind, title, detail, client_ref) VALUES (?, datetime(?), ?, ?, ?, ?)',
+        )
+        .run(params.caseId, params.happenedAt, params.kind, params.title, params.detail, params.clientRef ?? null);
   return Number(info.lastInsertRowid);
 }
 
@@ -253,7 +305,7 @@ export function findTimelineByClientRef(
 ): TimelineEventRow | undefined {
   return db
     .prepare(
-      'SELECT id, case_id, happened_at, kind, title, detail, milestone, created_at FROM timeline_events WHERE case_id = ? AND client_ref = ? LIMIT 1',
+      `SELECT ${TIMELINE_COLUMNS} FROM timeline_events WHERE case_id = ? AND client_ref = ? LIMIT 1`,
     )
     .get(caseId, clientRef) as TimelineEventRow | undefined;
 }
@@ -271,7 +323,7 @@ export function listTimelineSameDayKind(
 ): TimelineEventRow[] {
   return db
     .prepare(
-      `SELECT id, case_id, happened_at, kind, title, detail, milestone, created_at
+      `SELECT ${TIMELINE_COLUMNS}
          FROM timeline_events
         WHERE case_id = ? AND kind = ? AND date(happened_at) = date(?)`,
     )
@@ -281,7 +333,7 @@ export function listTimelineSameDayKind(
 export function listTimelineEvents(db: Database, caseId: number, limit: number): TimelineEventRow[] {
   return db
     .prepare(
-      'SELECT id, case_id, happened_at, kind, title, detail, milestone, created_at FROM timeline_events WHERE case_id = ? ORDER BY happened_at DESC, id DESC LIMIT ?',
+      `SELECT ${TIMELINE_COLUMNS} FROM timeline_events WHERE case_id = ? ORDER BY happened_at DESC, id DESC LIMIT ?`,
     )
     .all(caseId, limit) as TimelineEventRow[];
 }
@@ -319,7 +371,7 @@ export function listTimelinePage(
   );
   const events = db
     .prepare(
-      `SELECT id, case_id, happened_at, kind, title, detail, milestone, created_at
+      `SELECT ${TIMELINE_COLUMNS}
          FROM timeline_events WHERE ${clause}
         ORDER BY happened_at DESC, id DESC LIMIT ? OFFSET ?`,
     )
@@ -343,7 +395,7 @@ export function timelineStats(
   const earliest =
     (db
       .prepare(
-        'SELECT id, case_id, happened_at, kind, title, detail, milestone, created_at FROM timeline_events WHERE case_id = ? ORDER BY happened_at ASC, id ASC LIMIT 1',
+        `SELECT ${TIMELINE_COLUMNS} FROM timeline_events WHERE case_id = ? ORDER BY happened_at ASC, id ASC LIMIT 1`,
       )
       .get(caseId) as TimelineEventRow | undefined) ?? null;
   return { total, earliest };
@@ -425,7 +477,7 @@ export function listEvidence(
 ): EvidenceRow[] {
   const columns = `id, case_id, name, category, prove_purpose, status, created_at,
               extraction_status, extracted_at, brief_json, brief_version, brief_error,
-              void_reason, voided_at`;
+              void_reason, voided_at, brief_source_tier, brief_asserted_by`;
   return db
     .prepare(
       `SELECT ${columns}

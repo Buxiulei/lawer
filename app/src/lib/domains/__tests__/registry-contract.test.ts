@@ -60,6 +60,17 @@ const FULL_SENSITIVE = {
   aliasRoles: ['签约主体'],
 } as const;
 
+/**
+ * 一张**完整**的取证闸。负样本要先把它声明齐、再打坏其中一项——
+ * 直接打坏一个没声明的闸，守卫本来就该放过（可选字段省略 = 本领域没有取证窗口）。
+ * stage 取 labor 自己那一格：assertDomainPack 还查「stages 里每个值都得是本领域的阶段」。
+ */
+const FULL_EVIDENCE_GATE = {
+  stages: [LABOR.stages[0]],
+  notice: '关键事实还没有书证：{n} 组（{groups}）目前只有你自己的说法。先补哪张证：……',
+  action: { title: '补齐三张书证', detail: '拿到一张就上传一张，不必等齐。', dueInDays: 7 },
+} as const;
+
 const ORIGINAL_ENV = process.env[DOMAINS_ENABLED_ENV];
 
 afterEach(() => {
@@ -152,6 +163,20 @@ describe('assertDomainPack：包必须实现全部字段', () => {
     // 空清单读起来像"这个行当没有这类事项"，而它与漏填在产出上完全同形——
     // 那一段渲染不出来，于是"什么时候可以把用户指向律师"重新变成没人管的事。
     ['lawyerMandatory', { lawyerMandatory: [] }],
+    // 取证闸也是**可选**的（省略 = 本领域没有取证窗口），一旦声明就不许半张：
+    //  · stages 空 ⇒ 这道闸永远不开，而它看起来是配好了的；
+    //  · notice 空 ⇒ 事实卡首行那句话整句消失，取证卡照落，用户读不到"为什么突然让我补证"；
+    //  · action.title / detail 空 ⇒ 落进 action_items 的是一张没有标题/没有做法的卡。
+    ['evidenceGate.stages', { evidenceGate: { ...FULL_EVIDENCE_GATE, stages: [] } }],
+    ['evidenceGate.notice', { evidenceGate: { ...FULL_EVIDENCE_GATE, notice: '' } }],
+    [
+      'evidenceGate.action.title',
+      { evidenceGate: { ...FULL_EVIDENCE_GATE, action: { ...FULL_EVIDENCE_GATE.action, title: '' } } },
+    ],
+    [
+      'evidenceGate.action.detail',
+      { evidenceGate: { ...FULL_EVIDENCE_GATE, action: { ...FULL_EVIDENCE_GATE.action, detail: '  ' } } },
+    ],
     // interpretationDisputed / sensitive 是**可选**的（省略 = 本领域没这回事），但一旦声明就不许半张。
     // 所以负样本要先把它声明齐、再打坏其中一项——否则打坏的是"没声明"，守卫本来就该放过。
     ['interpretationDisputed.title', { interpretationDisputed: { ...FULL_INTERPRETATION_DISPUTED, title: '' } }],

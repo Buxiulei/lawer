@@ -1858,6 +1858,34 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_complaints_user ON complaints (user_id, id DESC);
   `);
 
+  // ───────────────── 来源四档与断言人（设计稿 §4.2-1）─────────────────
+  //
+  // 四张表各加两列：`source_tier`（这条事实有多硬）与 `asserted_by`（谁写进来的）。
+  // 值域与语义的**唯一正本**是 lib/cases/source-tier.ts（SOURCE_TIERS / ASSERTED_BY），
+  // 下面 DDL 默认值里那两个字面量与它的 DEFAULT_SOURCE_TIER / DEFAULT_ASSERTED_BY 同值，
+  // 由 __tests__/source-tier-migration.test.ts 逐列比对——两处漂开时当场红。
+  //
+  // 【为什么存量行一律回填「自述 / user」而不是「未知」】
+  // 「不知道有多硬」在下游推理里与「很硬」无法区分：模型看到一个不认识的档位只会跳过它，
+  // 于是那条事实照常被当成已坐实的。往最弱处默认的代价是用户多补一张证；
+  // 往「未知」默认的代价是他带着一句没有支撑的话上庭。**这不是数据洁癖，是方向选择**。
+  //
+  // 【为什么可以带 NOT NULL】SQLite 的 ADD COLUMN 允许 NOT NULL **只要给了非空默认值**
+  //（存量行当场按默认值填满）。这仍是纯加法、可重跑，符合本文件抬头那三条。
+  // 不加 DB 级 CHECK：改 CHECK 要重建表，而本迁移框架没有事务（同 intake_stage / milestone 既定裁决）；
+  // 值域由 lib/cases/source-tier.ts 一处把关。
+  //
+  // 【evidence 上这两列说的是「简报结论」，不是文件本身】文件在不在档是 status 那一列的事；
+  // 这两列记的是**读过文件之后写下的那句结论**从哪来——由内容提取产出的是「书证 / doc_extract」，
+  // 由人手改写的是「自述 / user」。合成一列的形态是：一句模型自己推测出来的简报，
+  // 过两轮就被当成了这份材料原文里写着的话（brief_updated_by 那一列的长注释讲的是同一件事）。
+  for (const table of ['timeline_events', 'claims', 'company_profiles'] as const) {
+    addColumnIfMissing(db, table, 'source_tier', "TEXT NOT NULL DEFAULT '自述'");
+    addColumnIfMissing(db, table, 'asserted_by', "TEXT NOT NULL DEFAULT 'user'");
+  }
+  addColumnIfMissing(db, 'evidence', 'brief_source_tier', "TEXT NOT NULL DEFAULT '自述'");
+  addColumnIfMissing(db, 'evidence', 'brief_asserted_by', "TEXT NOT NULL DEFAULT 'user'");
+
   // ───────────────── 费率种子 ─────────────────
   // C01 核定的模型费率必须**在建表之后立刻播下去**：缺行时 getRatesForModel 会回落
   // DEFAULT_RATES（最便宜的 Flash 档），于是每一笔账都按兜底价少收——而账面看起来完全正常。

@@ -14,7 +14,7 @@ import { LABOR_CAPABILITY_COPY } from '@/lib/domains/labor';
 import { getCaseDossier } from '@/lib/dossier/case-dossier';
 import { buildCompanyGraph } from '@/lib/graph/build';
 
-import { caseIdProp, num, writeOnce } from '../shared';
+import { assertedByOf, caseIdProp, num, writeOnce, sourceTierProp } from '../shared';
 import type { Capability } from '../registry';
 
 /**
@@ -60,6 +60,7 @@ export const companyProfileUpsert: Capability = {
         type: 'string',
         description: '幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库',
       },
+      ...sourceTierProp,
     },
     required: ['case_id', 'name'],
   },
@@ -83,6 +84,8 @@ export const companyProfileUpsert: Capability = {
           legalRep: args.legal_rep,
           note: args.note,
           sources: args.sources,
+          sourceTier: args.source_tier,
+          assertedBy: assertedByOf(identity),
         }),
       (res) => ({ table: 'company_profiles', id: res.id }),
     );

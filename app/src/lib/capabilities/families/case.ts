@@ -5,11 +5,19 @@
 // 领域校验（枚举、归属）一律在 lib/cases，**不在这里重复实现**——REST 面走的是同一批
 // lib 函数，两条入口的行为必须逐字一致，否则 agent 走 MCP 能干的事和用户在网页上能干的
 // 事就会悄悄分叉。
-import * as agent from '@/lib/agent';
 import * as cases from '@/lib/cases';
+import { issueFactsToken } from '@/lib/cases/facts-token';
 import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
 
-import { caseIdProp, intakeArgsToInput, intakeInputSchema, num, yuanToFen } from '../shared';
+import {
+  caseIdProp,
+  factsTokenProp,
+  intakeArgsToInput,
+  intakeInputSchema,
+  num,
+  renderCurrentFacts,
+  yuanToFen,
+} from '../shared';
 import type { Capability } from '../registry';
 
 /** 阶段枚举的对外并集（tools/list 拿不到案件上下文）；落库前按案件领域的词表再校验一次。 */
@@ -66,7 +74,11 @@ export const caseUpdate: Capability = {
   kind: 'write',
   domains: ['*'],
   exposeTo: ['mcp'],
-  precondition: [],
+  // **只有改 stage 才要 facts_token**（factsTokenArgs）：改阶段是把案子推到下一个程序节点，
+  // 服务端据此落期限、开取证闸、把报告标过期——按几轮之前的印象改错一次，用户要人工回退。
+  // 补一句 goal 或岗位名不在此列；整条能力一律挂闸的形态见 registry.factsTokenArgs 注释。
+  precondition: ['facts_token'],
+  factsTokenArgs: ['stage'],
   rest: { method: 'PATCH', path: '/api/v1/cases/{id}' },
   title: '更新案件档案',
   description:
@@ -78,7 +90,11 @@ export const caseUpdate: Capability = {
     type: 'object',
     properties: {
       ...caseIdProp,
-      stage: { type: 'string', enum: ALL_STAGES, description: '案件所处阶段' },
+      stage: {
+        type: 'string',
+        enum: ALL_STAGES,
+        description: '案件所处阶段。**改它必须同时带 facts_token**（见下），其余字段不必',
+      },
       goal: { type: 'string', description: '用户自述的诉求目标' },
       bottom_line: { type: 'string', description: '用户自述的底线' },
       employed_from: { type: 'string', description: '入职时间，YYYY-MM-DD，不能晚于今天；工龄年限的起点' },
@@ -93,6 +109,7 @@ export const caseUpdate: Capability = {
           '**它不覆盖 stage**——进轨时主线走到哪一步不变。' +
           '不是每个领域都有并行轨；这个案子所属领域没有的话，只能传 null。',
       },
+      ...factsTokenProp,
     },
     required: ['case_id'],
   },
@@ -135,23 +152,22 @@ export const caseFacts: Capability = {
   description:
     '一次拿全这个案子的当前事实：当事人、案件抬头、法定期限、用工基本盘（入职时间/月薪/岗位）、' +
     '公司主体、行动卡、诉求金额、时间线、证据清单。**回答任何与案情有关的问题之前先调它**。' +
-    '档案里没有的项会明写「未记录」——那是「档案里没有这一项」，不是「不存在」，不要自己脑补一个值。',
+    '档案里没有的项会明写「未记录」——那是「档案里没有这一项」，不是「不存在」，不要自己脑补一个值。' +
+    '每条事实后面的〔〕是它的来源档位（自述 / 书证#n / 对方认可·n / 裁审认定），照卡头的说明读。' +
+    '回包里的 facts_token 是**改档案时的通行证**：case_update(stage) / claims_upsert / ' +
+    'deadline_set / draft_write 四条要带上它，十分钟内有效。',
   inputSchema: {
     type: 'object',
     properties: { ...caseIdProp },
     required: ['case_id'],
   },
   run: (db, identity, args) => {
-    const caseId = num(args.case_id);
-    // 【归属校验必须走 lib/cases】直接 loadCaseSnapshot 是能跑通的——它只按 caseId 取数，
-    // 不认识 user_id。那样这个工具会把**别人的**事实卡整张交出去，而且返回 200、
-    // 格式完全正常。这里借 getCase 的门（同一批领域校验，不在本文件重写一遍）。
-    const owned = cases.getCase(db, { caseId, userId: identity.uid, timelineLimit: 1 });
-    if (!owned.ok) return owned;
-    const snapshot = agent.loadCaseSnapshot(db, caseId);
-    // 渲染与预算裁剪一律复用 lib/agent/case-facts：站内 agent 每轮看到的事实卡
-    // 与 MCP 这边拿到的必须逐字是同一份，否则同一个案子会有两套"当前事实"。
-    return { case_facts: agent.renderCaseFacts(agent.buildCaseFacts(snapshot)) };
+    // 归属校验、快照、渲染与预算裁剪全在 renderCurrentFacts（共用层唯一取法）：
+    // 站内 agent 每轮看到的事实卡、MCP 这边拿到的、以及 facts_token 核验时比对的那一份，
+    // **必须逐字是同一串**——差一个空格就会让每一次核验都判 stale，而两边看起来都正常。
+    const facts = renderCurrentFacts(db, num(args.case_id), identity.uid);
+    if (!facts.ok) return facts;
+    return { case_facts: facts.text, facts_token: issueFactsToken(facts.text) };
   },
 };
 

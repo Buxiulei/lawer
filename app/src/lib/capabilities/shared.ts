@@ -2,7 +2,10 @@
 // 各族能力共用的入参小工具与片段。从 lib/mcp/tools.ts 原样搬来，行为逐字不变。
 import type { Database } from 'better-sqlite3';
 
+import { factsCardFor } from '@/lib/agent';
+import * as cases from '@/lib/cases';
 import type { DomainFailure } from '@/lib/cases';
+import { SOURCE_TIERS, type AssertedBy } from '@/lib/cases/source-tier';
 import type { DomainPack } from '@/lib/domains/registry';
 
 import { withClientRef, type AgentWriteTarget } from './idempotent';
@@ -169,4 +172,62 @@ export function intakeArgsToInput(
           : raw;
   }
   return input;
+}
+
+// ───────────────────────── 来源档位与事实令牌 ─────────────────────────
+
+/**
+ * 这次写入是**谁**写的（落进 source_tier 那一对列里的 asserted_by）。
+ *
+ * 【为什么由这一层判，而不是收调用方的入参】asserted_by 回答的是「这句话是谁写进档案的」，
+ * 服务端自己就知道（网页登录态 / 一把 api key）。开成入参的形态是：调用方把自己推断出来的
+ * 东西标成 `user`，展示层于是不再标黄，那句话从此看起来像本人说过的——
+ * 回包 200、字段合法、没有一处会报错（设计稿 §4.4-5「对方 agent 写入标黄」的前提就是它）。
+ */
+export function assertedByOf(identity: { via: string }): AssertedBy {
+  return identity.via === 'api_key' ? 'agent_inferred' : 'user';
+}
+
+/** 写能力上那一格「这条事实有多硬」。四档的含义逐字对外，与事实卡上的〔〕同一套。 */
+export const sourceTierProp = {
+  source_tier: {
+    type: 'string',
+    enum: [...SOURCE_TIERS],
+    description:
+      '这条事实的来源档位，默认「自述」。' +
+      '自述 = 只有当事人自己的说法；书证 = 有已上传的材料支撑；' +
+      '对方认可 = 对方书面认过（这一档不必再由本人举证）；裁审认定 = 办案机构认定过。' +
+      '**没有把握就不要传**：留空落最弱档只是多补一张材料，标高一档会让一句没有支撑的话看起来已经坐实。',
+  },
+} as const;
+
+/** 高危写能力上那一格 facts_token。描述逐字对外——它是对方 agent 唯一能读到的用法说明。 */
+export const factsTokenProp = {
+  facts_token: {
+    type: 'string',
+    description:
+      '事实令牌：从 case_facts 或 case_report_get 的回包里原样取走再传回来，证明这次写入基于当前档案。' +
+      '十分钟内有效；档案在这期间变过（你自己刚写的也算）就要重新读一次。' +
+      '缺失或过期会拿到 FACTS_STALE，**错误体里直接夹着最新的事实卡与一枚新令牌**，照着重试一次即可。',
+  },
+} as const;
+
+/**
+ * 此刻这个案子的事实卡逐字内容。**全站只有这一个取法**（case_facts 能力、
+ * facts_token 的签发与核验都经它）。
+ *
+ * 【本函数只负责归属那一道门】渲染本身在 lib/agent/facts-entry（全仓唯一入口，
+ * 理由见那个文件的头注释）。这里加的是「这个案子是不是这个人的」——
+ * 直接 factsCardFor 是能跑通的，那样会把**别人的**事实卡整张交出去，且返回 200。
+ */
+export function renderCurrentFacts(
+  db: Database,
+  caseId: number,
+  userId: number,
+): { ok: true; text: string } | DomainFailure {
+  // 归属校验借 lib/cases 的门：直接 loadCaseSnapshot 只按 caseId 取数、不认识 user_id，
+  // 那样会把**别人的**事实卡整张交出去，而且返回 200、格式完全正常。
+  const owned = cases.getCase(db, { caseId, userId, timelineLimit: 1 });
+  if (!owned.ok) return owned;
+  return { ok: true, text: factsCardFor(db, caseId) };
 }

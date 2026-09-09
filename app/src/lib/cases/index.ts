@@ -21,6 +21,15 @@ import {
 } from '@/lib/domains/registry';
 import { EMOTION_REVOKED_NOTE, emotionRecordingRevoked } from '@/lib/lifecycle/consents';
 import { normalizeDateOnly, submitIntakeInto, type IntakeInput, type IntakeResult } from './intake';
+import {
+  DEFAULT_ASSERTED_BY,
+  SOURCE_TIERS,
+  noDocumentedFact,
+  normalizeSourceTier,
+  type AssertedBy,
+  type SourceTier,
+} from './source-tier';
+import { intakeActionDueAt } from './intake-actions';
 import { markReportStale } from './report-stale';
 // 下面那张 MILESTONE_OF_STAGE 的值类型引它（词表本身在 ./milestones，此处只借类型）
 import type { CaseMilestone } from './milestones';
@@ -32,8 +41,10 @@ import { CASE_STAGES } from './stages';
 import {
   findDraftById,
   hasReferredNbdpsy,
+  insertActionItem,
   insertDraft,
   insertEmotionLog,
+  listClaims,
   listDrafts as listDraftRows,
   listCaseMessages,
   listCompanyProfiles,
@@ -114,6 +125,41 @@ function fail(status: number, errorCode: string, message: string): DomainFailure
 }
 
 const NOT_FOUND = () => fail(404, 'CASE_NOT_FOUND', '案件不存在');
+
+/**
+ * 写入一条事实时的「来源档位 + 谁写的」。
+ *
+ * 【为什么 assertedBy 由外壳给、不由调用方传】asserted_by 回答的是「这句话是谁写进档案的」，
+ * 而**这件事服务端自己知道**（网页登录态 / 某把 api key / 提取器 / 规则）。开成入参的形态是：
+ * 用户自己的 agent 把自己推断出来的东西标成 `user`，展示层于是不再标黄，
+ * 而那句话从此看起来像用户本人说过的——回包 200、字段合法、没有一处会报错。
+ * 所以 assertedBy 是**必填的函数参数**（各外壳按身份填），只有 sourceTier 收调用方的声明。
+ *
+ * @returns 归一后的一对 + `declared`（调用方**这次**有没有点名档位）；
+ *   `sourceTier` 认不出来时回字段级失败（不静默折成缺省档：
+ *   悄悄降档与悄悄升档一样，都是把一个写错的值伪装成一个正确的值）。
+ *
+ * 【`declared` 是给 upsert 那条路用的】不点名档位地补一句备注，**不该动已有的档位**：
+ * 一行「裁审认定」的对方主体，因为有人补了一个统一社会信用代码就被降回「自述」——
+ * 回包 200、那一行还在、每个字段看起来都对，只有证明力凭空掉了三档。
+ * 追加型写入（时间线）不看这一格：新行本来就要有一个档位，缺省即最弱那一档。
+ */
+function resolveOrigin(
+  sourceTier: unknown,
+  assertedBy: AssertedBy,
+): { tier: SourceTier; assertedBy: AssertedBy; declared: boolean } | DomainFailure {
+  if (sourceTier === undefined || sourceTier === null) {
+    return { tier: DEFAULT_TIER, assertedBy, declared: false };
+  }
+  const tier = normalizeSourceTier(sourceTier);
+  if (!tier) {
+    return fail(400, 'INVALID_SOURCE_TIER', `source_tier 只能是 ${SOURCE_TIERS.join(' / ')}`);
+  }
+  return { tier, assertedBy, declared: true };
+}
+
+/** 缺省档位。**与 migrate.ts 的 DDL 默认值同值**，由 source-tier 那份枚举给。 */
+const DEFAULT_TIER: SourceTier = SOURCE_TIERS[0];
 
 /**
  * 这个案子该按哪套阶段枚举校验。**stage 校验的唯一词表入口**：
@@ -570,8 +616,55 @@ export function updateCase(
   // 阶段变了，报告的「基本盘」与「下一步」都可能不再成立（过期唯一入口，见 ./report-stale）。
   // 只认 stage：改一句 goal 的错别字不该把整份报告标成过期，那样它会一直是过期的，
   // 而"一直过期"与"从来不过期"对读的人是同一个信息量。
-  if (fields.stage !== undefined) markReportStale(db, input.caseId, '阶段变更');
+  if (fields.stage !== undefined) {
+    markReportStale(db, input.caseId, '阶段变更');
+    seedEvidenceGateAction(db, input.caseId, fields.stage, domainPackOrDefault(found.domain), input.now);
+  }
   return { ok: true, case: store.findCaseById(db, input.caseId)! };
+}
+
+/**
+ * 进入取证窗口、而关键事实一条书证都没有 ⇒ 落一张**强制取证**行动卡（设计稿 §4.2-2）。
+ *
+ * 【为什么由服务端在 stage 变更时落，而不是让模型自己想着建】陪跑节奏由服务端驱动
+ *（设计稿 §4.4-7）：靠模型记得建的形态是——它这一轮忘了，用户就在最后一个能补证的窗口里
+ * 什么都没被提醒，而那一轮的回复看起来与别的轮次没有任何区别。
+ *
+ * 【为什么可以反复调】insertActionItem 按标题在**待办态**去重：同一张卡不会因为
+ * 反复改 stage 而堆成三张；用户做完标了「完成」之后再退回这个阶段，会重新长出一张——
+ * 那是对的，因为那时它确实又是一件没做的事。
+ *
+ * 【与事实卡首行的取数差别，是刻意的】这里按 TIMELINE_MAX_LIMIT 条取时间线，
+ * 事实卡按 snapshot 的 30 条窗口取。窗口外有一条带书证的老事件时，
+ * **卡上会多说一句、而这里不落卡**——多一句提醒无害，多落一张用户已经做过的卡才烦人。
+ */
+function seedEvidenceGateAction(
+  db: Database,
+  caseId: number,
+  stage: string,
+  pack: DomainPack,
+  now?: Date,
+): void {
+  const gate = pack.evidenceGate;
+  if (!gate || !gate.stages.includes(stage)) return;
+
+  const groups = [
+    store.listTimelineEvents(db, caseId, TIMELINE_MAX_LIMIT),
+    listClaims(db, caseId),
+    listCompanyProfiles(db, caseId),
+  ].filter((rows) => rows.length > 0);
+  if (!noDocumentedFact(groups)) return;
+
+  insertActionItem(db, {
+    caseId,
+    title: gate.action.title,
+    detail: gate.action.detail,
+    dueAt: intakeActionDueAt(gate.action, now ?? new Date()),
+    // 强制取证卡是这一刻最急的一件事：action_items 按 priority 降序取，
+    // 给它首诊种子表的最高档（首诊每阶段最多三条，那张表的最大值就是 3）。
+    priority: 3,
+    sourceMessageId: null,
+  });
 }
 
 /**
@@ -614,6 +707,13 @@ export function addTimelineEvent(
     title: unknown;
     detail?: unknown;
     clientRef?: unknown;
+    /** 调用方声明的来源档位（省略 ⇒ 自述）。值域 lib/cases/source-tier.SOURCE_TIERS */
+    sourceTier?: unknown;
+    /**
+     * 谁写进来的。**由外壳按身份填，不收调用方的值**（见 resolveOrigin 的长注释）。
+     * 省略 ⇒ user，那是网页登录态与首诊批量写的正确答案。
+     */
+    assertedBy?: AssertedBy;
   },
 ): Result<{ event: store.TimelineEventRow; deduped: boolean }> {
   const found = assertOwned(db, input.caseId, input.userId);
@@ -629,6 +729,10 @@ export function addTimelineEvent(
   const title = trimmedOrNull(input.title);
   if (!title) return fail(400, 'INVALID_TITLE', 'title 不能为空');
   const clientRef = trimmedOrNull(input.clientRef);
+  // 档位校验排在去重之前：一个写错的 source_tier 不该因为"这条正好去重命中了"就被放过——
+  // 那样同一份参数第一次被拒、第二次成功，而调用方看不出差别在哪。
+  const origin = resolveOrigin(input.sourceTier, input.assertedBy ?? DEFAULT_ASSERTED_BY);
+  if (isFailure(origin)) return origin;
 
   // ① 带 client_ref 且命中 ⇒ 直接回既有行（原有语义不变）。
   if (clientRef) {
@@ -651,6 +755,7 @@ export function addTimelineEvent(
     title,
     detail: trimmedOrNull(input.detail),
     clientRef,
+    origin,
   });
   const event = store.listTimelineEvents(db, input.caseId, TIMELINE_MAX_LIMIT).find((e) => e.id === id)!;
   // 去重命中的两条分支都在上面 return 掉了，走到这里的一定是真新增的一条
@@ -939,6 +1044,10 @@ export function upsertCompany(
     legalRep?: unknown;
     note?: unknown;
     sources?: unknown;
+    /** 调用方声明的来源档位（省略 ⇒ 自述） */
+    sourceTier?: unknown;
+    /** 谁写进来的；由外壳按身份填（省略 ⇒ user） */
+    assertedBy?: AssertedBy;
   },
 ): Result<{ id: number; created: boolean }> {
   const found = assertOwned(db, input.caseId, input.userId);
@@ -956,8 +1065,14 @@ export function upsertCompany(
   const role = resolveCompanyRole(db, { caseId: input.caseId, pack, name, role: input.role });
   if (typeof role !== 'string') return role;
 
+  const origin = resolveOrigin(input.sourceTier, input.assertedBy ?? DEFAULT_ASSERTED_BY);
+  if (isFailure(origin)) return origin;
+
   const sources = trimmedOrNull(input.sources);
   const res = upsertCompanyProfile(db, {
+    // 新行落这一对；**已有行只在这次点名了档位时才改**（见 resolveOrigin 的 declared）
+    origin: { tier: origin.tier, assertedBy: origin.assertedBy },
+    overwriteOrigin: origin.declared,
     caseId: input.caseId,
     name,
     uscc: trimmedOrNull(input.uscc),
