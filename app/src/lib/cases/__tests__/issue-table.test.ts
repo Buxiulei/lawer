@@ -188,7 +188,9 @@ describe('「对方的书面决定在不在档」的唯一入口', () => {
   ): ElementFactsView => ({
     case: { employed_from: null, position: null, monthly_wage_fen: null, contract_count: null },
     claims: [],
-    timeline: events,
+    // 【title / detail 在这里给空串】它们只给 slotChecks 的取值判定用，而
+    // counterpartyDecisionOnFile 走的是 resolveSlot（只判档位），一个字都不读它们。
+    timeline: events.map((e) => ({ ...e, title: '', detail: null })),
     companies: [],
     evidence: categories.map((category) => ({ category })),
   });

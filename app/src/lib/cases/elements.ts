@@ -83,10 +83,19 @@ export type BasicsField = (typeof BASICS_FIELDS)[number];
 /**
  * 一个事实槽的**取值判定**。
  *
- * 【为什么需要它】`resolveSlot` 对 `basics:` 只判**填没填**（首诊那几项是自由文本）。
+ * 【为什么需要它】`resolveSlot` 只判**有没有这条事实**，不看那条事实里写的是什么。
  * 于是「合同签订次数」填了「2 次」，也算「自用工之日起满一个月仍没有订立书面合同」
  * 这个要件有自述支撑——用户明说签过两次合同，要件表还写着这一项「成立·待证」。
- * **字段有值 ≠ 事实成立**：要看取值的槽在卡片里写一句怎么看，看不过按〔未记录〕算。
+ * **有取值 ≠ 事实成立**：要看取值的槽在卡片里写一句怎么看，看不过按〔未记录〕算。
+ *
+ * 【哪两类槽有"取值"这回事】`basics:`（那一格用户填的自由文本）与 `timeline:`
+ * （该类别下每条记录自带的那段字）。另外三张表的槽，冒号后面写的是筛选条件、
+ * 不是谁填进来的字，挂上判定会被当作配置错误点名（见 buildElementSheet）。
+ *
+ * 【一个类别下有好几条记录时怎么算】**任意一条过了判定**，这个槽就算有支撑；而档位只从
+ * **过了判定的那几条**里取（取最强的一条，与 resolveSlot 对这张表的方向一致）。
+ * 从全部记录里取档位的形态是——过了判定的那条只有当事人自己说，旁边那条没过判定的记录
+ * 带着书证，于是这个槽显示成书证档，而那份书证证的根本是另一件事。
  *
  * 【本文件零领域内容】`accepts` 怎么认那串字是行当知识，函数体在领域包里；
  * 这里只定义"有这么一格判定"，一个字面量都不认识。
@@ -118,9 +127,9 @@ export interface ElementCard {
   /** 支撑这个要件的事实槽（**全部**在档才谈得上成立） */
   satisfiedBy: readonly string[];
   /**
-   * 个别槽位的取值判定（省略 = 每个槽都只判"填没填"）。key 必须是 `satisfiedBy` 里的槽串，
-   * 且只有 `basics:` 那几格有"取值"这回事（其余四张表的槽，冒号后面写的是筛选条件，
-   * 不是用户填的字）——挂错地方会被当作配置错误点名，不静默。
+   * 个别槽位的取值判定（省略 = 每个槽都只判"有没有这条事实"）。key 必须是 `satisfiedBy` 里的
+   * 槽串，且只有 `basics:` 与 `timeline:` 两类槽有"取值"这回事（另外三张表的槽，冒号后面
+   * 写的是筛选条件，不是谁填进来的字）——挂错地方会被当作配置错误点名，不静默。
    */
   slotChecks?: Readonly<Record<string, SlotValueCheck>>;
   /**
@@ -198,7 +207,15 @@ export interface ElementFactsView {
     contract_count: string | null;
   };
   claims: readonly { kind: string; source_tier: string }[];
-  timeline: readonly { kind: string; source_tier: string }[];
+  /**
+   * 时间线。`title` / `detail` 是这条记录自带的那段字，**只给 slotChecks 的取值判定用**
+   *（没有判定的槽一个字都不看它们）。
+   *
+   * 【为什么这两格是必填的，哪怕调用方只想按类别筛】只挑几列取数的调用方会自然地少取一列，
+   * 而少了那一列的形态是：取值判定读到一段空字符串、判不过、整条要件落「缺失」——
+   * 方向保守，却没有任何一处说得出"是因为那段字没取回来"。必填让它在编译期红。
+   */
+  timeline: readonly { kind: string; source_tier: string; title: string; detail: string | null }[];
   companies: readonly { role: string; source_tier: string }[];
   /** 证据行本身就是**在档的材料**：有一件在这个类别下，这个槽就是书证档 */
   evidence: readonly { category: string; voided_at?: string | null }[];
@@ -275,18 +292,48 @@ export function resolveSlot(slot: string, facts: ElementFactsView): SourceTier |
 }
 
 /**
- * 一个槽的**原始取值**（只给 `slotChecks` 用）。
+ * 一个槽里**拿得去过取值判定**的那些条目：每条给一串原字与它的档位（只给 `slotChecks` 用）。
  *
- * @returns `undefined` = 这个槽没有"取值"这回事（不是 `basics:`，或列名不认识）——
- *   这是配置错误，与"用户还没填"要分开报；`null` = 认识这一格，但它还空着；否则是那串原字。
+ * @returns `undefined` = 这个槽没有"取值"这回事（既不是 `basics:` 也不是 `timeline:`，
+ *   或冒号后面那个名字不认识）——这是配置错误，与"档案里还没有"要分开报；
+ *   否则是候选条目，**空数组 = 认识这个槽，但档案里还没有可判的东西**
+ *   （那一格还空着 / 这个类别下一条记录都没有）。
  */
-function rawBasicsValue(slot: string, facts: ElementFactsView): string | null | undefined {
+function checkableEntries(
+  slot: string,
+  facts: ElementFactsView,
+): readonly { raw: string; tier: SourceTier }[] | undefined {
   const at = slot.indexOf(':');
-  if (at <= 0 || slot.slice(0, at) !== 'basics') return undefined;
-  const field = slot.slice(at + 1).trim();
-  if (!(BASICS_FIELDS as readonly string[]).includes(field)) return undefined;
-  const v = facts.case[field as BasicsField];
-  return basicsFilled(v) ? String(v) : null;
+  if (at <= 0) return undefined;
+  const source = slot.slice(0, at);
+  const value = slot.slice(at + 1).trim();
+  if (value === '') return undefined;
+
+  if (source === 'basics') {
+    if (!(BASICS_FIELDS as readonly string[]).includes(value)) return undefined;
+    const v = facts.case[value as BasicsField];
+    // 首诊那几项是用户自己报的，填了就恒是自述档（与 resolveSlot 同一口径）。
+    return basicsFilled(v) ? [{ raw: String(v), tier: '自述' }] : [];
+  }
+
+  if (source === 'timeline') {
+    const out: { raw: string; tier: SourceTier }[] = [];
+    for (const e of facts.timeline) {
+      if (e.kind !== value) continue;
+      const tier = normalizeSourceTier(e.source_tier);
+      // 档位认不出来的行跳过，与 weakestTier / strongestTier 同一条纪律：
+      // 一个写坏的档位值不该被当成"有支撑"。
+      if (tier === null) continue;
+      // 两段字之间放一个换行，**不是**直接接在一起：判定要不要把它们当一句连续的话读，
+      // 由领域包自己决定。接在一起的形态是——上一段的末尾与下一段的开头凑出一个
+      // 谁都没写过的词，而判定按那个词判过了。
+      const detail = e.detail?.trim();
+      out.push({ raw: detail ? `${e.title}\n${detail}` : e.title, tier });
+    }
+    return out;
+  }
+
+  return undefined;
 }
 
 /** 卡片的 basis 全部核实过了吗。空 basis 一律算没核实（"没有锚点"不比"锚点存疑"更可信）。 */
@@ -321,31 +368,43 @@ export function buildElementSheet(
     let weakest: SourceTier | null = null;
 
     for (const slot of card.satisfiedBy) {
-      const tier = resolveSlot(slot, facts);
-      if (tier === undefined) {
-        // 不认识的槽**不当作缺失静默处理**：它是配置错误，与"用户还没上传"是两回事。
-        // 两处都点名（unresolvedSlots 说是什么、missingSlots 说它挡住了哪一格）。
-        unresolved.push(slot);
-        missing.push(slot);
-        continue;
-      }
-      // 【取值判定优先于"填没填"】卡片给了 slotChecks 的槽，填了字不等于这件事成立
-      //（见 SlotValueCheck）。看不过就按〔未记录〕算，并以卡片给的名字点名——
+      // 【取值判定优先于"有没有这条事实"】卡片给了 slotChecks 的槽，有这条事实不等于
+      // 这件事成立（见 SlotValueCheck）。看不过就按〔未记录〕算，并以卡片给的名字点名——
       // 沿用槽串点名的形态是：用户读到「还差 basics:contract_count」，
       // 而他刚刚填过那一格，于是这行字读起来像系统没收到他的话。
       const check = card.slotChecks?.[slot];
+      let tier: SourceTier | null;
       if (check) {
-        const raw = rawBasicsValue(slot, facts);
-        if (raw === undefined) {
-          // 判定挂在一个没有"取值"的槽上 = 配置错误，与上面那一格同一条纪律：点名，不静默。
+        const entries = checkableEntries(slot, facts);
+        if (entries === undefined) {
+          // 判定挂在一个没有"取值"的槽上 = 配置错误，与下面那一格同一条纪律：点名，不静默。
           unresolved.push(slot);
           missing.push(slot);
           continue;
         }
-        if (raw === null || !check.accepts(raw)) {
+        // 档位只从**过了判定的那几条**里取（取最强的一条）。从全部条目里取的形态是——
+        // 过了判定的那条只有当事人自己说，旁边那条没过判定的带着书证，于是这个槽显示成书证档。
+        let best: SourceTier | null = null;
+        for (const e of entries) {
+          if (!check.accepts(e.raw)) continue;
+          if (best === null || tierRank(e.tier) > tierRank(best)) best = e.tier;
+        }
+        if (best === null) {
+          // 一条都没过（或这个槽下本来就一条都没有）⇒ 按〔未记录〕算，用卡片给的名字点名。
           missing.push(check.missingAs);
           continue;
         }
+        tier = best;
+      } else {
+        const resolved = resolveSlot(slot, facts);
+        if (resolved === undefined) {
+          // 不认识的槽**不当作缺失静默处理**：它是配置错误，与"用户还没上传"是两回事。
+          // 两处都点名（unresolvedSlots 说是什么、missingSlots 说它挡住了哪一格）。
+          unresolved.push(slot);
+          missing.push(slot);
+          continue;
+        }
+        tier = resolved;
       }
       if (tier === null) {
         missing.push(slot);

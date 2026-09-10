@@ -19,15 +19,28 @@ import {
   type ElementFactsView,
 } from '../elements';
 
-/** 一份空档案。每条用例只往里塞它要的那几行，别的一律〔未记录〕。 */
-function facts(over: Partial<ElementFactsView> = {}): ElementFactsView {
+/** 时间线一行；`title` / `detail` 只有挂了取值判定的用例才写，其余省略。 */
+type TimelineRow = ElementFactsView['timeline'][number];
+
+/**
+ * 一份空档案。每条用例只往里塞它要的那几行，别的一律〔未记录〕。
+ *
+ * 【时间线那两格为什么在这里补缺省】`title` / `detail` 只给 slotChecks 的取值判定用
+ *（见 elements.ts 的 ElementFactsView），而本文件绝大多数用例测的是三态推导、一条判定都不挂。
+ * 让它们逐个把这两格写出来，只会把每条用例真正在说的那件事淹掉。
+ */
+function facts(
+  over: Partial<Omit<ElementFactsView, 'timeline'>> & {
+    timeline?: readonly (Pick<TimelineRow, 'kind' | 'source_tier'> & Partial<TimelineRow>)[];
+  } = {},
+): ElementFactsView {
   return {
     case: { employed_from: null, position: null, monthly_wage_fen: null, contract_count: null },
     claims: [],
-    timeline: [],
     companies: [],
     evidence: [],
     ...over,
+    timeline: (over.timeline ?? []).map((e) => ({ title: '', detail: null, ...e })),
   };
 }
 
@@ -281,6 +294,95 @@ describe('槽位取值判定：字段有值 ≠ 事实成立', () => {
       [card({ satisfiedBy: ['basics:contract_count'] })],
     );
     expect(only(sheet).status).toBe('成立·待证');
+  });
+});
+
+describe('槽位取值判定：时间线那一类槽（一个类别下可以有好几条记录）', () => {
+  // 【它守什么】`timeline:` 在 resolveSlot 里只判**这个类别下有没有记录**。于是一条
+  // 与本要件无关的同类事件（记的是另一件事）照样把这个要件抬起来。领域包给了判定之后，
+  // 只有**那条记录自带的那段字**说得上本要件时才算数。共享层不认识任何一个行当的词，
+  // 判定函数由领域包给——本文件的判定全部现造。
+  const checked = (accepts: (raw: string) => boolean = (raw) => raw.includes('那件事')) =>
+    card({
+      satisfiedBy: ['timeline:某类动作'],
+      slotChecks: { 'timeline:某类动作': { accepts, missingAs: '那件事的记录' } },
+    });
+
+  it('同类别下任意一条过了判定就算有支撑（变异：改成"每条都要过" → 红）', () => {
+    const sheet = buildElementSheet(
+      facts({
+        timeline: [
+          { kind: '某类动作', source_tier: '自述', title: '别的事' },
+          { kind: '某类动作', source_tier: '自述', title: '那件事' },
+        ],
+      }),
+      [checked()],
+    );
+    expect(only(sheet).status).toBe('成立·待证');
+    expect(only(sheet).missingSlots).toEqual([]);
+  });
+
+  it('🔴 档位只从**过了判定的那几条**里取（变异：从全部条目里取最强 → 红）', () => {
+    // 【这条最贵】过了判定的那条只有当事人自己说，旁边那条带着书证的记的是另一件事。
+    // 从全部条目里取档位的形态是：这个槽显示成书证档 ⇒ 整条要件写着「成立」，
+    // 而那份书证证的根本不是这件事。
+    const sheet = buildElementSheet(
+      facts({
+        timeline: [
+          { kind: '某类动作', source_tier: '书证', title: '别的事' },
+          { kind: '某类动作', source_tier: '自述', title: '那件事' },
+        ],
+      }),
+      [checked()],
+    );
+    expect(only(sheet).status).toBe('成立·待证');
+    expect(only(sheet).selfReportedSlots).toEqual(['timeline:某类动作']);
+  });
+
+  it('过了判定的那条是书证档 ⇒「成立」（自证上面不是恒「待证」）', () => {
+    const sheet = buildElementSheet(
+      facts({ timeline: [{ kind: '某类动作', source_tier: '书证', title: '那件事' }] }),
+      [checked()],
+    );
+    expect(only(sheet).status).toBe('成立');
+  });
+
+  it('一条都没过（或这个类别下一条记录都没有）⇒「缺失」，用卡片给的名字点名', () => {
+    const none = buildElementSheet(
+      facts({ timeline: [{ kind: '某类动作', source_tier: '书证', title: '别的事' }] }),
+      [checked()],
+    );
+    expect(only(none).status).toBe('缺失');
+    expect(only(none).missingSlots).toEqual(['那件事的记录']);
+    // 这个类别下一条记录都没有时是同一句话——用户读到的都是该补什么，不是一串槽串
+    const empty = buildElementSheet(facts(), [checked()]);
+    expect(only(empty).missingSlots).toEqual(['那件事的记录']);
+  });
+
+  it('title 与 detail 之间是换行，不是直接相接（变异：接在一起 → 红）', () => {
+    // 【为什么钉它】接在一起的形态是：上一段的末尾与下一段的开头凑出一个谁都没写过的词，
+    // 而判定按那个词判过了。领域包要不要把两段当一句连续的话读，是它自己的事。
+    const seen: string[] = [];
+    const sheet = buildElementSheet(
+      facts({ timeline: [{ kind: '某类动作', source_tier: '自述', title: '前段', detail: '后段' }] }),
+      [
+        checked((raw) => {
+          seen.push(raw);
+          return false;
+        }),
+      ],
+    );
+    expect(seen).toEqual(['前段\n后段']);
+    expect(only(sheet).status).toBe('缺失');
+  });
+
+  it('档位认不出来的行跳过，不当作"有支撑"（与 weakestTier / strongestTier 同一条纪律）', () => {
+    const sheet = buildElementSheet(
+      facts({ timeline: [{ kind: '某类动作', source_tier: '道听途说', title: '那件事' }] }),
+      [checked()],
+    );
+    expect(only(sheet).status).toBe('缺失');
+    expect(only(sheet).missingSlots).toEqual(['那件事的记录']);
   });
 });
 

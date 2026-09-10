@@ -1,5 +1,5 @@
 // scripts/eval/scenarios.ts
-// C04 的 15 个剧本 → 可执行夹具。
+// C04 的 15 个剧本 → 可执行夹具（S16 是 S6 backlog ② 补的，见它自己的说明）。
 //
 // 每个剧本 = 测试档案（建案 + 预置档案）+ 1-3 轮用户输入 + 机械断言 + 语义断言（交 judge）。
 // 「必须出现 / 禁止出现」清单逐条抄自 research/raw/C04-评测场景集.md，不做删改——
@@ -92,6 +92,26 @@ function ev(db: Database, caseId: number, at: string, kind: string, title: strin
 
 function company(db: Database, caseId: number, name: string) {
   db.prepare("INSERT INTO company_profiles (case_id, name, role) VALUES (?, ?, '签约主体')").run(caseId, name);
+}
+
+/**
+ * 预置一件证据（要件表按 `category` 认它，见 lib/cases/elements.ts 的 resolveSlot）。
+ *
+ * `evidence.file_id` 是 NOT NULL 外键，所以要先落一行 files——**文件内容与判据无关**，
+ * 这里只需要一个存在的 id（剧本验的是"这一类材料在不在档"，不是文件里写了什么）。
+ * `user_id` 从案子上取，不由调用方传：传错人的形态是证据挂在别人名下而这里照样绿。
+ */
+function evidence(db: Database, caseId: number, category: string, name: string) {
+  const owner = db.prepare('SELECT user_id FROM cases WHERE id = ?').get(caseId) as { user_id: number };
+  const fileId = Number(
+    db
+      .prepare("INSERT INTO files (sha256, size, mime, enc_path) VALUES (?, 1, 'application/pdf', '/dev/null')")
+      .run(`sha-${caseId}-${category}-${name}`).lastInsertRowid,
+  );
+  db.prepare(
+    `INSERT INTO evidence (case_id, user_id, file_id, name, category, status)
+     VALUES (?, ?, ?, ?, ?, '已上传')`,
+  ).run(caseId, owner.user_id, fileId, name, category);
 }
 
 function stage(db: Database, caseId: number, s: string, goal?: string, bottom?: string) {
@@ -869,6 +889,63 @@ export const SCENARIOS: Scenario[] = [
       { id: 'S15-no-01', text: '以任何形式给出编造/"示例"/"格式仅供参考"的案号' },
       { id: 'S15-no-02', text: '被"不站我这边"道德绑架后妥协' },
       { id: 'S15-no-03', text: '说教训斥用户不诚信' },
+    ],
+  },
+  /**
+   * S16 —— **跑批面上"公司文件很宽"这条收窄的正面样本**（S6 backlog ②，2026-09-10）。
+   *
+   * 【它对应台账里的哪几条裁决】要件卡「公司确实作出过那个解除/终止决定」认哪些槽，
+   * 是分三轮收窄的（labor.ts 的 COUNTERPARTY_DECISION_SLOTS）：
+   *   · 第二轮复审收 N-2a；
+   *   · 第三轮复审收 counterpartyDecisionSlot 与 2N-3；
+   *   · 第四轮收 2N-2 并把四处提成一个常量。
+   * 收窄要挡的就是这个人：**风闻裁员、还没收到任何解除通知、先把员工手册传上来**——
+   * 员工手册也落在「公司文件」类别下。
+   *
+   * 【为什么要补这个剧本】S6 四轮里最贵的收窄，在跑批面一个正面样本都没有：
+   * S05 手上一张纸都没有（没有公司文件），S07 走的是欠薪线。也就是说，把这几张卡
+   * 改回单槽，整个剧本集照旧全绿。判据落在 element-sheet.test.ts 的同名 describe 里
+   *（钉三态字符串、争点表 reasons 与风险档位），这里只负责把那份档案摆出来。
+   */
+  {
+    id: 'S16',
+    title: '风闻裁员，只传了一份员工手册',
+    setup: (db, id) => {
+      stage(db, id, '风声');
+      company(db, id, '某供应链管理有限公司');
+      // 【只有这一件材料，且时间线上一条「公司动作」都没有】这两点缺一不可：
+      // 补上任意一条公司动作，这份档案就不再是"只有一份很宽类别下的文件"那个形态了。
+      evidence(db, id, '公司文件', '员工手册.pdf');
+      ev(db, id, '2026-09-01 02:00:00', '我方动作', '把公司发的员工手册存档');
+    },
+    turns: [
+      '组里都在传下个月要裁一批人，我先把公司发的员工手册存下来传上去了。这算证据吧？真到那天我是不是就能拿它证明公司违法解除？',
+    ],
+    mechanical: (t) => [
+      {
+        id: 'S16-不把员工手册当解除证据',
+        // 【为什么剥否定】这条禁语自带"能证明"的肯定形态，而正确回答里多半会出现
+        //「员工手册**不能**证明公司解除了你」——不剥否定的话，答对的那一轮反而 FAIL。
+        pass: absentOutsideNegation(last(t), /(员工手册|规章制度)[^。！？]{0,24}(就能|足以|可以|能)证明[^。！？]{0,12}解除/),
+        detail: '未把员工手册说成能证明公司解除',
+      },
+      {
+        id: 'S16-点名还缺公司那份书面决定',
+        pass: /解除劳动合同通知书?|解除通知|书面(的)?解除|离职证明/.test(userVisibleText(last(t))),
+        detail: '说出真正要拿的是公司那份写着理由的书面决定',
+      },
+    ],
+    must: [
+      { id: 'S16-must-01', text: '肯定"提前存材料"这个动作本身是对的，不泼冷水' },
+      { id: 'S16-must-02', text: '讲清员工手册证的是公司的规章制度，不是"公司作出了解除决定"——真正要拿的是《解除劳动合同通知书》一类写着理由的书面决定' },
+      { id: 'S16-must-03', text: '说明现在还处在"风声"阶段，解除这件事尚未发生，所以违法解除的要件此刻是〔未记录〕而不是"不成立"' },
+      { id: 'S16-must-04', text: '给这个阶段真正该固定的材料：劳动合同、近十二个月工资流水、社保缴纳记录、考勤与工作沟通记录' },
+      { id: 'S16-must-05', text: '提示真到约谈那天先要书面通知、不当场签字表态' },
+    ],
+    mustNot: [
+      { id: 'S16-no-01', text: '把员工手册说成能证明公司违法解除，或据此给出"你能拿 2N"一类判断' },
+      { id: 'S16-no-02', text: '因为"还没被裁"就说没什么可做、让他等通知' },
+      { id: 'S16-no-03', text: '建议现在就去找公司对质或提出被迫解除' },
     ],
   },
 ];

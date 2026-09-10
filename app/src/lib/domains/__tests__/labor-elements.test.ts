@@ -58,6 +58,21 @@ const keyOf = (anchor: string): string => {
   return at <= 0 ? anchor : articleKey(anchor.slice(0, at), anchor.slice(at + 1));
 };
 
+/** 时间线一行。`title` / `detail` 只有挂了取值判定的槽才读得到（见 lib/cases/elements.ts）。 */
+type TimelineRow = ElementFactsView['timeline'][number];
+
+/**
+ * 档案覆盖项。时间线那两格**可省**：本文件里大半用例问的是"这个类别下有没有记录"，
+ * 逐条把 title / detail 写出来只会把它们真正在说的那件事淹掉；
+ * 而问"那段字说的是不是这件事"的用例（N-2b）自己会把 title 写上。
+ */
+type FactsOver = Partial<Omit<ElementFactsView, 'timeline'>> & {
+  timeline?: readonly (Pick<TimelineRow, 'kind' | 'source_tier'> & Partial<TimelineRow>)[];
+};
+
+const timelineOf = (over: FactsOver): readonly TimelineRow[] =>
+  (over.timeline ?? []).map((e) => ({ title: '', detail: null, ...e }));
+
 /** `法名|条号` → 提到它的那几张卡。卡侧与要件侧**走同一个 articleKey**，不各自归一。 */
 const BY_ANCHOR = new Map<string, IndexCard[]>();
 for (const card of CARDS) {
@@ -370,7 +385,7 @@ describe('N 的两条解除路径：互斥、二选一（第二轮复审 2026-09
   //      被迫解除通知的人，要件表上「路径二」写着「成立」；
   //   ② 两条路径二选一，而要件表按诉求列全 ⇒ 另一条恒是「缺失」，风险区间见「缺失」就落
   //      「依据不足」、争点表还多一条让他去补那份根本不存在的通知书。
-  const factsWith = (over: Partial<ElementFactsView> = {}): ElementFactsView => ({
+  const factsWith = (over: FactsOver = {}): ElementFactsView => ({
     case: {
       employed_from: '2020-03-01',
       position: '后端工程师',
@@ -378,14 +393,14 @@ describe('N 的两条解除路径：互斥、二选一（第二轮复审 2026-09
       contract_count: '续签过一次',
     },
     claims: [{ kind: 'N', source_tier: '自述' }],
-    timeline: [],
     companies: [{ role: '签约主体', source_tier: '自述' }],
     evidence: [],
     ...over,
+    timeline: timelineOf(over),
   });
-  const sheetOf = (over: Partial<ElementFactsView> = {}) =>
+  const sheetOf = (over: FactsOver = {}) =>
     buildElementSheet(factsWith(over), LABOR.elementCards ?? [], ['N']);
-  const rowOf = (id: string, over: Partial<ElementFactsView> = {}) =>
+  const rowOf = (id: string, over: FactsOver = {}) =>
     sheetOf(over).rows.find((r) => r.id === id)!;
 
   it('🔒 地板：两张卡都在，且挂在同一个「任选其一」分组下', () => {
@@ -403,13 +418,117 @@ describe('N 的两条解除路径：互斥、二选一（第二轮复审 2026-09
     // 而他从来没发过任何解除通知——两条互斥的路径同时"成立"，要件表自相矛盾。
     const row = rowOf('N-2b', { evidence: [{ category: '沟通记录' }] });
     expect(row.status, `只有一份沟通记录时 N-2b 被判成了 ${row.status}`).toBe('缺失');
-    expect(row.missingSlots, '缺口没点到"你自己做过这件事"那条记录').toContain('timeline:我方动作');
+    expect(row.missingSlots, '缺口没点到那份通知').toContain('被迫解除通知');
   });
 
-  it('时间线上有「我方动作」+ 沟通记录 ⇒ 成立·待证（不是「成立」：回执进档前那句话只有你自己说）', () => {
+  // ── 那条「我方动作」还要过取值判定（S6 backlog ①，2026-09-10）──
+  // 【它守什么】「我方动作」是四种 kind 里最杂的一格：异议函、加班申请、整理证据目录
+  // 都落在它下面。只判"这个类别下有没有记录"的形态是——一条异议函 + 一张聊天截图，
+  // 就把「路径二：你依照第三十八条提出被迫解除」抬到「成立·待证」，而这个人从来没发过
+  // 任何解除通知；同组那条公司解除路径（他真正该走的那条）反而被它盖住。
+  const N2B_SLOT = 'timeline:我方动作';
+  /** 一条「我方动作」+ 一份沟通记录（另一个槽满足），只让那段字说话。 */
+  const withMyAction = (title: string, tier = '自述') =>
+    rowOf('N-2b', {
+      evidence: [{ category: '沟通记录' }],
+      timeline: [{ kind: '我方动作', source_tier: tier, title }],
+    });
+
+  it('🔒 地板：N-2b 的那个时间线槽真的挂着取值判定（删掉 slotChecks → 红）', () => {
+    const card = (LABOR.elementCards ?? []).find((c) => c.id === 'N-2b')!;
+    expect(card.satisfiedBy, 'N-2b 认的槽变了').toEqual(['evidence:沟通记录', N2B_SLOT]);
+    expect(card.slotChecks?.[N2B_SLOT], '那条「我方动作」没有取值判定').toBeTruthy();
+    expect(card.slotChecks?.[N2B_SLOT]?.missingAs).toBe('被迫解除通知');
+  });
+
+  it('(a) 异议函那条「我方动作」+ 沟通记录 ⇒ 仍是「缺失」，且缺口点名「被迫解除通知」（变异：去掉判定 → 红）', () => {
+    // 【这就是 backlog ① 要根治的那一格】异议函是约谈期最常做的动作之一，
+    // 它与"发出被迫解除通知"隔着整条路径。判成「成立·待证」的后果是三层，每一层都读得通：
+    // 路径二成了本组代表行 ⇒ 用户不去准备那份通知、也不去固定欠薪的初步证明 ⇒
+    // 开庭那天仲裁庭要他先举出个头，而他手上什么都没有。
+    const row = withMyAction('向公司发出调岗异议函');
+    expect(row.status, `异议函把 N-2b 抬成了 ${row.status}`).toBe('缺失');
+    expect(row.missingSlots, '缺口没点名「被迫解除通知」').toEqual(['被迫解除通知']);
+    // 它是〔未记录〕不是〔不成立〕：这条我方动作记的只是另一件事
+    expect(row.status).not.toBe('不成立');
+  });
+
+  it('(b) 被迫解除通知那条事件（自述档）+ 沟通记录 ⇒ 成立·待证（不是「成立」：回执进档前那句话只有你自己说）', () => {
+    const row = withMyAction('发出《被迫解除劳动合同通知书》，事由：拖欠工资两个月');
+    expect(row.status).toBe('成立·待证');
+    expect(row.missingSlots).toEqual([]);
+    expect(row.selfReportedSlots, '这一条的支撑只有当事人自己说').toContain(N2B_SLOT);
+  });
+
+  it('(c) 那条事件由文件提取写入（书证档）⇒ 成立（自证上面不是恒「待证」）', () => {
+    // 书证档 = DOC_EXTRACT_ORIGIN 那条路：通知书与 EMS 回执进了证据库、由提取写回时间线。
+    const row = withMyAction('发出《被迫解除劳动合同通知书》，事由：拖欠工资两个月', '书证');
+    expect(row.status).toBe('成立');
+  });
+
+  it('🔴 档位只从**过了判定的那条**里取：异议函带着书证也抬不动它（变异：从全部同类事件里取最强档 → 红）', () => {
+    // 【这条最贵】用户把异议函的邮件回执传了上来（书证档），另有一条自述的被迫解除通知。
+    // 从全部同类事件里取最强档的形态是：这个槽显示成书证档 ⇒ N-2b 写着「成立」，
+    // 而那份书证证的是异议函，不是那份解除通知。
     const row = rowOf('N-2b', {
       evidence: [{ category: '沟通记录' }],
-      timeline: [{ kind: '我方动作', source_tier: '自述' }],
+      timeline: [
+        { kind: '我方动作', source_tier: '书证', title: '向公司发出调岗异议函' },
+        { kind: '我方动作', source_tier: '自述', title: '发出被迫解除劳动合同通知书' },
+      ],
+    });
+    expect(row.status, '异议函那份书证把 N-2b 抬到了「成立」').toBe('成立·待证');
+  });
+
+  it('(d) 词表：认的那 8 种说法（变异：删掉判定里任一条正向规则 → 红）', () => {
+    for (const raw of [
+      '发出被迫解除劳动合同通知书',
+      '向公司邮寄《被迫解除劳动合同通知书》',
+      '以未足额支付劳动报酬为由通知解除劳动合同',
+      '依据劳动合同法第三十八条提出解除劳动合同',
+      '以公司未缴纳社会保险为由解除劳动合同',
+      'EMS 寄出解除通知，理由写的是拖欠工资三个月',
+      '因欠薪提出被迫离职',
+      '按 38 条发了解除通知',
+    ]) {
+      const row = withMyAction(raw);
+      expect(row.status, `「${raw}」（这是发过通知的说法）被判成了 ${row.status}`).toBe('成立·待证');
+    }
+  });
+
+  it('(d) 词表：不认的那 14 种说法，一律落「缺失」并点名（变异：把判定放宽到只认「解除」两个字 → 红）', () => {
+    // 【为什么反样本比正样本多】认不准时一律判"不算"：漏判只是让用户多读一行"该补什么"，
+    // 误判会让一个从没发过通知的人以为这条路已经走通。两个方向的代价不对等。
+    // 下面每一条都是"放宽一点就会被误认"的那种：带「解除」两个字的有五条。
+    for (const raw of [
+      '提交辞职信',
+      '递交辞职报告，写的个人原因',
+      '口头提出主动离职',
+      '与公司协商解除劳动合同并签了离职协议',
+      '向公司发出调岗异议函',
+      '向公司提交加班费申请',
+      '整理证据目录',
+      '收到公司的《解除劳动合同通知书》后回复确认',
+      '拒绝签署解除协议',
+      '咨询律师被迫解除的可行性',
+      '向公司发函要求补缴社保',
+      '催问工资什么时候发',
+      '因公司拖欠工资，双方协商解除劳动合同',
+      '打算下周发被迫解除通知',
+    ]) {
+      const row = withMyAction(raw);
+      expect(row.status, `「${raw}」（这不是那份通知）被判成了 ${row.status}`).toBe('缺失');
+      expect(row.missingSlots, `「${raw}」的缺口没点名`).toEqual(['被迫解除通知']);
+    }
+  });
+
+  it('detail 那段字也算数：标题只写「发函」，事由写在详情里', () => {
+    // ev() 把事由记在 detail 是时间线最常见的形态；只读 title 的形态是这一条恒判不过。
+    const row = rowOf('N-2b', {
+      evidence: [{ category: '沟通记录' }],
+      timeline: [
+        { kind: '我方动作', source_tier: '自述', title: '向公司发函', detail: '以拖欠工资为由解除劳动合同' },
+      ],
     });
     expect(row.status).toBe('成立·待证');
   });
@@ -419,7 +538,7 @@ describe('N 的两条解除路径：互斥、二选一（第二轮复审 2026-09
    * 【为什么不是只放一份「公司文件」】那个类别很宽（员工手册、规章制度、工资结构表都在里面），
    * 只放一份文件的形态见下面「只有一份公司文件」那一条——它此刻恒是「缺失」。
    */
-  const PATH_ONE: Partial<ElementFactsView> = {
+  const PATH_ONE: FactsOver = {
     evidence: [{ category: '公司文件' }],
     timeline: [{ kind: '公司动作', source_tier: '书证' }],
   };
@@ -489,7 +608,7 @@ describe('「公司确实作出过那个决定」四处同源（第四轮复审 
   // 而这对槽此前在四处各写一遍字面量，收窄又是分三轮做的——2N-2 就是漏掉的那一处：
   // 三处都要「公司文件 + 公司动作」了，它还只认「公司文件」。漏掉的那一处不红、不报错，
   // 它旁边判同一件事的 2N-3 判得好好的，两行并排放着，一行对一行错。
-  const factsWith = (over: Partial<ElementFactsView> = {}): ElementFactsView => ({
+  const factsWith = (over: FactsOver = {}): ElementFactsView => ({
     case: {
       employed_from: '2020-03-01',
       position: '后端工程师',
@@ -497,12 +616,12 @@ describe('「公司确实作出过那个决定」四处同源（第四轮复审 
       contract_count: '续签过一次',
     },
     claims: [{ kind: '2N', source_tier: '自述' }],
-    timeline: [],
     companies: [{ role: '签约主体', source_tier: '自述' }],
     evidence: [],
     ...over,
+    timeline: timelineOf(over),
   });
-  const rowOf = (id: string, over: Partial<ElementFactsView> = {}) =>
+  const rowOf = (id: string, over: FactsOver = {}) =>
     buildElementSheet(factsWith(over), LABOR.elementCards ?? [], ['2N']).rows.find((r) => r.id === id)!;
 
   it('🔒 四处取值逐字相同（变异：把其中任一处改回单槽、或再内联一份字面量 → 红）', () => {
