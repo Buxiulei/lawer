@@ -1190,9 +1190,11 @@ const LABOR_TIMELINE_EVENT_TYPES = {
 function docAnswerAffirmative(raw: string | undefined): boolean | null {
   const s = (raw ?? '').replace(/\s+/g, '');
   if (s === '') return null;
-  // 否定式先判：「没有」里含着「有」，反过来会把每一个「没有」都读成给过。
+  // 认不准先判：「无法确定」「没法确定」「未必」都以否定字开头，而它们说的是"说不好"、
+  // 不是"没给"。先判否定式的形态是：一个明确说自己记不清的人，被当成了"公司什么纸都没给"。
+  if (/不确定|无法确定|没法确定|未必|说不清|记不清|不记得|不清楚|说不好|待确认|可能|也许/.test(s)) return null;
+  // 否定式再判：「没有」里含着「有」，放到肯定式后面会把每一个「没有」都读成给过。
   if (/^[没未无]有?$|^[没未无]/.test(s)) return false;
-  if (/不确定|不记得|不清楚|说不好|待确认|可能|也许/.test(s)) return null;
   if (/^有|收到|拿到|给了|给过|签了|已(?:收|签|拿)/.test(s)) return true;
   return null;
 }

@@ -374,6 +374,7 @@ describe('仲裁时效的推算依据：两态都要对', () => {
  *
  * 【变异臂】把 laborIntakeEventType 的 counterpartDocs 分支整段删掉 ⇒ ①②③ 红；
  * 把 docAnswerAffirmative 的否定式前置判断去掉（「没有」里含「有」）⇒ ② 红；
+ * 把认不准判定移回否定式**后面** ⇒ ⑦⑧ 红（「无法确定」以否定字开头，会被读成"没给"）；
  * 把 answers/counterpartWording 也定型 ⇒ ④ 红。
  */
 describe('首诊落档的事件类型', () => {
@@ -438,6 +439,43 @@ describe('首诊落档的事件类型', () => {
     const f = makeFixture();
     submitIntake(f.db, { caseId: f.caseA, userId: f.userA, ...fullIntake() });
     expect(typesOf(f)[LABOR.copy.site.intakeFreeTextTitle]).toBe('my_other');
+  });
+
+  it('🔴 ⑦ 「无法确定」是认不准，不是「没给」⇒ 落 null 回落到谓词', () => {
+    // 【它与 ② 只差一格的字】「无法确定」「没法确定」「未必」都以否定字开头，
+    // 而否定式先判的形态是：它们被读成明确的"没给"，这条记录当场落 company_other——
+    // 一个说自己记不清的人，被系统替他答成了"公司什么纸都没给"，
+    // 而类型一旦落下就压过谓词、连兜底都不再跑。MCP 那条路收的是自由文本，这几句正是它的常见写法。
+    const f = makeFixture();
+    submitIntake(f.db, {
+      caseId: f.caseA,
+      userId: f.userA,
+      ...fullIntake({
+        companyDocs: { terminationNotice: '无法确定', settlementAgreement: '没有', otherPaper: '没有' },
+      }),
+    });
+    expect(typesOf(f)[LABOR.copy.site.intakeCounterpartDocsTitle]).toBeNull();
+  });
+
+  it('🔴 ⑧ 三态逐句直探：认不准 ⇒ null、明确没给 ⇒ company_other、明确给过 ⇒ company_termination', () => {
+    // 逐句探的是**取值口径本身**，不经首诊那条落库路：③⑦ 各钉一句，这里钉的是整张表。
+    const docType = (terminationNotice: string) =>
+      LABOR.intakeEventType?.({
+        source: 'counterpartDocs',
+        kind: '公司动作',
+        title: LABOR.copy.site.intakeCounterpartDocsTitle,
+        answers: { terminationNotice, settlementAgreement: '没有', otherPaper: '没有' },
+      }) ?? null;
+
+    for (const s of ['不确定', '无法确定', '没法确定', '未必', '说不清', '记不清', '不记得']) {
+      expect(docType(s), `「${s}」是认不准，不是"没给"`).toBeNull();
+    }
+    for (const s of ['没有', '没', '未收到', '无']) {
+      expect(docType(s), `「${s}」是明确的"没给"`).toBe('company_other');
+    }
+    for (const s of ['有', '给过', '收到了', '签了']) {
+      expect(docType(s), `「${s}」是明确的"给过"`).toBe('company_termination');
+    }
   });
 
   it('🔴 ⑥ 包里的定型函数回了一个没声明过的 id ⇒ 落 null 并点名，不是带着它进库', () => {
