@@ -14,9 +14,10 @@ import {
   updateEvidenceBrief,
 } from '@/lib/evidence/extraction';
 import { briefStatusOf, briefSummary, parseBrief, validateBrief } from '@/lib/evidence/brief';
+import { findEvidenceDetail } from '@/lib/db/evidence';
 import type { ExtractionMode } from '@/lib/jobs/extraction-worker';
 
-import { caseIdProp, num } from '../shared';
+import { caseIdProp, idAt, num } from '../shared';
 import type { Capability } from '../registry';
 
 const evidenceIdProp = {
@@ -26,6 +27,15 @@ const evidenceIdProp = {
 /** 写工具身份串，落进 brief_updated_by：一张卡片是谁改的，事后要查得出来。 */
 function author(keyId: number | null | undefined): string {
   return keyId === undefined || keyId === null ? 'agent' : `agent:${keyId}`;
+}
+
+/**
+ * 台账那一行：证据 id → `[{ caseId, targetId }]`，取不到案件号就回空数组。
+ * 两条简报写能力共用（各写一遍的形态是：改了其中一处，另一处继续按老口径记）。
+ */
+function evidenceRow(db: Parameters<typeof findEvidenceDetail>[0], evidenceId: number) {
+  const caseId = findEvidenceDetail(db, evidenceId)?.case_id;
+  return caseId === undefined ? [] : [{ caseId, targetId: evidenceId }];
 }
 
 function asMode(raw: unknown): ExtractionMode | null {
@@ -201,6 +211,13 @@ export const evidenceBriefUpdate: Capability = {
   exposeTo: ['mcp'],
   precondition: [],
   idempotency: { naturalKey: '证据 id + base_version（乐观锁：版本对不上即拒，不覆盖）' },
+  // 入参里没有案件号（证据按自己的 id 定位）——回读那一行取。
+  // 读不到就回空数组，不拿一个猜出来的案件号占位。
+  // **不填 deduped**：乐观锁只有"写成了"与"版本冲突被拒"两种下场，没有重放语义。
+  ledger: {
+    targetTable: 'evidence',
+    rowsOf: (db, _args, result) => evidenceRow(db, idAt(result, 'evidence_id')),
+  },
   rest: { method: 'PUT', path: '/api/v1/evidence/{id}/brief' },
   title: '改写证据简报',
   description:
@@ -273,6 +290,13 @@ export const evidenceBriefRegenerate: Capability = {
   exposeTo: ['mcp'],
   precondition: [],
   idempotency: { naturalKey: '证据 id（已有简报的一律拒，不覆盖）' },
+  // 入参里没有案件号（证据按自己的 id 定位）——回读那一行取。
+  // 读不到就回空数组，不拿一个猜出来的案件号占位。
+  // **不填 deduped**：已有简报的一律拒（走失败路径），走到这里的都是真写了一版。
+  ledger: {
+    targetTable: 'evidence',
+    rowsOf: (db, _args, result) => evidenceRow(db, idAt(result, 'evidence_id')),
+  },
   rest: { method: 'POST', path: '/api/v1/evidence/{id}/brief/regenerate' },
   title: '重新生成证据简报',
   description:

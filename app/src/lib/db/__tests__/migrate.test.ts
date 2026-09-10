@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
-import { runMigrations } from '../migrate';
+import { READ_VIEW_SQL, runMigrations } from '../migrate';
 
 /**
  * 迁移**必须建成的表清单**（下方测试断言 sqlite_master ⊇ 本清单）。这是一份「至少要有这些」
@@ -844,10 +844,9 @@ describe('存量迁移区', () => {
   /**
    * 读侧视图建得起来，且**定义就是当前代码里的那一份**。
    *
-   * 【这里只钉「新库是对的」】视图是 `CREATE ... IF NOT EXISTS` 建的，而幂等守卫不许写 DROP，
-   * 所以「已经建过视图的老库改不动」这件事本条判据管不了——它在 migrate.ts 那段注释里写着，
-   * 是一条留给派单方的裁决（放宽 DROP 规则给视图，还是换视图名）。
-   * 本条守的是另一半：**新库建出来的视图，语义要与代码一致**（未回报读 NULL，不读 0）。
+   * 本条守「新库是对的」（未回报读 NULL，不读 0）；「老库改得动 / 被人改过能恢复」
+   * 由下面那两条守——2026-09-10 裁决：幂等守卫对 `DROP VIEW IF EXISTS` 放行，
+   * 视图改为 DROP + CREATE，并在开库时逐条比对 sqlite_master 与代码常量。
    */
   it('读侧视图在新库上建得起来，且未回报读作 NULL', () => {
     const db = newDb();
@@ -865,5 +864,94 @@ describe('存量迁移区', () => {
       .prepare('SELECT cache_read_tokens FROM token_usage_reported')
       .all() as { cache_read_tokens: number | null }[];
     expect(row.cache_read_tokens, '本列落地之前的存量行无从判断上游报没报，读 NULL 不读 0').toBeNull();
+  });
+});
+
+/**
+ * 读侧视图的**定义可更新**（2026-09-10 裁决）。
+ *
+ * 在此之前视图是 `CREATE VIEW IF NOT EXISTS` 建的、幂等守卫又不许写 DROP，两条加起来是：
+ * 改了代码里的定义，已经建过视图的库一个字都不会变——代码与库悄悄分叉，两边都不报错，
+ * 而读侧照常出数。现在 DROP VIEW IF EXISTS 放行，开库时逐条比对、不一致就点名重建。
+ */
+describe('读侧视图：库里那份与代码对不上就点名重建', () => {
+  /** 库里此刻这个视图的定义原文（sqlite_master 存的是原样语句，去分号、抹 IF NOT EXISTS）。 */
+  function viewSql(db: Database.Database, name: string): string | undefined {
+    return (
+      db.prepare("SELECT sql FROM sqlite_master WHERE type='view' AND name=?").get(name) as
+        | { sql: string }
+        | undefined
+    )?.sql;
+  }
+
+  it('新库建出来的视图定义与代码常量逐字相同（否则下面两条的"一致"是假的）', () => {
+    const db = newDb();
+    for (const [name, sql] of READ_VIEW_SQL) {
+      expect(viewSql(db, name), `${name} 与 READ_VIEWS 里的常量对不上`).toBe(sql);
+    }
+    expect(READ_VIEW_SQL.size, '正本表空了的话，本节每条判据都会无脑通过').toBeGreaterThanOrEqual(2);
+  });
+
+  it('手改视图 SQL → 开库后恢复成代码那份，并 console.error 点名（判据：改了要能自愈）', () => {
+    const db = newDb();
+    const name = 'agent_writes_audit';
+    const canonical = READ_VIEW_SQL.get(name)!;
+
+    // 模拟「有人在库上手动改过 / 上一版代码建的是另一份定义」：删掉重建成一份缺列的视图。
+    db.exec(`DROP VIEW ${name}`);
+    db.exec(`CREATE VIEW ${name} AS SELECT id, case_id FROM agent_writes`);
+    expect(viewSql(db, name)).not.toBe(canonical);
+
+    const errs: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => {
+      errs.push(a.map(String).join(' '));
+    });
+    try {
+      runMigrations(db);
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(viewSql(db, name), '开库没把视图恢复成代码里那份').toBe(canonical);
+    // 【为什么必须连日志一起钉】只恢复不点名的形态是：库被人改过与从没被改过，
+    // 开完机长得一模一样，于是"谁动过视图"永远查不出来。
+    const named = errs.filter((e) => e.includes(name));
+    expect(named.length, `恢复了却没点名。实际日志：\n${errs.join('\n')}`).toBe(1);
+    expect(named[0]).toContain('不一致');
+    expect(named[0], '要把库里原本那份原样贴出来，否则事后没法判断该不该改代码').toContain(
+      'SELECT id, case_id FROM agent_writes',
+    );
+  });
+
+  it('没被改过的库反复开机：视图不动，也不报一句"不一致"（对照臂：上一条不是恒报）', () => {
+    const db = newDb();
+    const errs: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => {
+      errs.push(a.map(String).join(' '));
+    });
+    try {
+      runMigrations(db);
+      runMigrations(db);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(errs.filter((e) => e.includes('不一致'))).toEqual([]);
+    for (const [name, sql] of READ_VIEW_SQL) expect(viewSql(db, name)).toBe(sql);
+  });
+
+  it('视图被整个删掉 → 悄悄建回来（少一个视图不是"被人改过"，不必点名）', () => {
+    const db = newDb();
+    db.exec('DROP VIEW token_usage_reported');
+    const errs: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => {
+      errs.push(a.map(String).join(' '));
+    });
+    try {
+      runMigrations(db);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(viewSql(db, 'token_usage_reported')).toBe(READ_VIEW_SQL.get('token_usage_reported'));
+    expect(errs.filter((e) => e.includes('不一致'))).toEqual([]);
   });
 });

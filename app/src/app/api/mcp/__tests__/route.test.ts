@@ -61,6 +61,10 @@ beforeAll(async () => {
 
 beforeEach(() => {
   for (const table of [
+    // agent_writes 排在最前：它的 key_id 外键指向 api_keys 且**没有级联**，
+    // 台账留着行时先删 api_keys 会 FOREIGN KEY constraint failed。
+    // （写能力经这道门跑完会落台账行——见 route.ts 里的 recordCapabilityWrite。）
+    'agent_writes',
     'api_keys', 'timeline_events', 'action_items', 'cases',
     // 余额闸那一轮之后，本组要造负余额；gongdao 两张表外键指向 users，得先于它清。
     // realname_verifications 同样外键指向 users 且无级联（互认那组会往里落行），也得先于 users 清。

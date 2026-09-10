@@ -31,9 +31,25 @@ import type { Identity } from '@/lib/auth/identity';
 /** MCP 面的 endpoint 前缀。REST 面写路径，MCP 面写工具名，靠这个前缀分辨。 */
 export const MCP_ENDPOINT_PREFIX = 'mcp:';
 
+/**
+ * 通用工具桥（POST /api/v1/tools/{name}）的 endpoint 前缀。
+ *
+ * 【为什么它不是一条 REST 路径】那条端点的路径里本来就带着工具名，写成
+ * `/api/v1/tools/timeline_add` 与写成 `rest-tools:timeline_add` 说的是同一件事；
+ * 而按前缀记的好处是**同一条能力在三道门下的 tool 列取值一样**（见 toolOfEndpoint）——
+ * 按路径记的形态是：查 `tool='timeline_add'` 的人漏掉从工具桥进来的那一批，
+ * 而查询照常返回结果，少了几行没有任何一处会说。
+ */
+export const REST_TOOLS_ENDPOINT_PREFIX = 'rest-tools:';
+
 /** 工具名 → MCP 面的 endpoint 串。别在调用点手拼前缀（拼错了两处对不上，且不会报错）。 */
 export function mcpEndpoint(tool: string): string {
   return `${MCP_ENDPOINT_PREFIX}${tool}`;
+}
+
+/** 工具名 → 通用工具桥的 endpoint 串。同上，别在调用点手拼。 */
+export function restToolsEndpoint(tool: string): string {
+  return `${REST_TOOLS_ENDPOINT_PREFIX}${tool}`;
 }
 
 /**
@@ -42,12 +58,15 @@ export function mcpEndpoint(tool: string): string {
  * tool 是这张表的**旧列且 NOT NULL**，幂等索引 uq_agent_writes_client_ref 建在
  * (case_id, tool, client_ref) 上，既有读侧（如 lib/drafts/export.ts 的 `tool='draft_export'`）
  * 也认它。所以能力壳那侧的取值必须**一个字节不变**：`mcp:x` 回 `x`。
- * REST 面没有工具名，用「方法 + 路径」当它——两条端点因此不会共用同一个 tool 值。
+ * 工具桥那侧同理（`rest-tools:x` 也回 `x`）：一条能力从哪道门进来记在 endpoint 上，
+ * tool 那一列答的是「哪条能力干的」，两道门必须同值。
+ * REST 路由面没有工具名，用「方法 + 路径」当它——两条端点因此不会共用同一个 tool 值。
  */
 export function toolOfEndpoint(endpoint: string, method: string): string {
-  return endpoint.startsWith(MCP_ENDPOINT_PREFIX)
-    ? endpoint.slice(MCP_ENDPOINT_PREFIX.length)
-    : `${method} ${endpoint}`;
+  for (const prefix of [MCP_ENDPOINT_PREFIX, REST_TOOLS_ENDPOINT_PREFIX]) {
+    if (endpoint.startsWith(prefix)) return endpoint.slice(prefix.length);
+  }
+  return `${method} ${endpoint}`;
 }
 
 export interface AgentWriteInput {

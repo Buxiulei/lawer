@@ -12,6 +12,9 @@
 //      （写了报 `near "EXISTS": syntax error`），裸写的那条第二次跑就报
 //      `duplicate column name`，runMigrations 抛错 ⇒ **应用直接起不来**。
 //      addColumnIfMissing 先 PRAGMA table_info 判断列在不在、不在才加，所以可重跑。
+//   ✅ 改读侧视图：把新定义写进 READ_VIEWS（`DROP VIEW IF EXISTS` + `CREATE VIEW`），不用问谁——
+//      视图不存数据，删掉再建回来一行用户数据都不动，中断在两句之间也只是下次开库再建一次。
+//      这是**唯一**被幂等守卫放行的 DROP；表、列、索引的 DROP 一概照旧禁止。
 //   ⛔ 改列类型、数据回填、拆表、加 NOT NULL 无默认值，以及任何不能靠 IF NOT EXISTS
 //      幂等的改动：**先找数据表管理（WS1）**，等事务化改造（外层 db.transaction() +
 //      PRAGMA user_version + 每步版本守卫）落地再动手。在那之前，这类迁移一旦中断，
@@ -35,6 +38,109 @@ function addColumnIfMissing(db: Database.Database, table: string, col: string, d
   type ColRow = { name: string };
   const exists = (db.prepare(`PRAGMA table_info(${table})`).all() as ColRow[]).some((r) => r.name === col);
   if (!exists) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${ddl}`);
+}
+
+/**
+ * 读侧归一视图的**定义正本**。库里那份与这里对不上时，以这里为准（见 ensureReadViews）。
+ *
+ * 【为什么视图可以 DROP，别的一概不许】视图不存数据：删掉再建回来，一行用户数据都不会动，
+ * 中断在两句之间也只是「下次开库再建一次」——而本文件里别的 DROP（表、列、索引）
+ * 都会让中断留下一个重跑也修不好的库。幂等守卫因此只对 `DROP VIEW IF EXISTS` 放行
+ *（migrate-idempotency-guard 的 DROP 与 CREATE-VIEW 两条规则）。
+ *
+ * 【为什么 dropSql 与 create 都写成字面量、名字写三遍】幂等守卫是按**源码文本**配对的：
+ * 「这条 CREATE VIEW 没带 IF NOT EXISTS，但同名的 DROP VIEW IF EXISTS 就在它前面」
+ * 这句话要成立，两处的视图名都得在源码里看得见——按 `${name}` 拼出来的 DROP，
+ * 守卫读到的是一个模板占位符，于是它只能全放行或全拦住。
+ * 三处写歪了由 ensureReadViews 开库当场抛（见那里的 assert），不靠人眼盯。
+ *
+ * 【为什么 create 不带 IF NOT EXISTS】SQLite 把 `IF NOT EXISTS` 从 sqlite_master.sql 里
+ * 抹掉再存，所以带着它的常量与库里那份**永远比不相等**——校验会每次开库都报一次「不一致」
+ * 并重建一次，而那不是真的不一致。前面已经 DROP 过，这里也不需要它。
+ */
+const READ_VIEWS: readonly { name: string; dropSql: string; create: string }[] = [
+  {
+    name: 'agent_writes_audit',
+    dropSql: 'DROP VIEW IF EXISTS agent_writes_audit',
+    // endpoint / method 两列是后加的、不回填（理由见存量迁移区）：老行在这里归一成
+    // 「mcp:<工具名> / POST」——它们本来就全是能力壳写的，除了 MCP 没有第二个来源。
+    create: `CREATE VIEW agent_writes_audit AS
+      SELECT id, case_id, key_id, tool, client_ref, target_table, target_id, deduped, created_at,
+             COALESCE(endpoint, 'mcp:' || tool) AS endpoint,
+             COALESCE(method, 'POST')          AS method
+        FROM agent_writes`,
+  },
+  {
+    name: 'token_usage_reported',
+    dropSql: 'DROP VIEW IF EXISTS token_usage_reported',
+    // 【判据写成 `= 1` 而不是 `<> 0`（2026-09-10 复审 minor#1）】reported 有三态：
+    // 1 报了、0 没报、NULL 本列落地之前的存量行「无从判断」。写成「0 才读 NULL」的形态是：
+    // 存量行原样透出 cache_read_tokens = 0，而那个 0 从来就不是上游说的——
+    // 于是"这段时间一次缓存都没命中"这个假结论从视图里读出来，正是本视图要消灭的那一个。
+    // 不知道就读 NULL：NULL 会在 AVG/SUM 里自己退出分母，0 不会。
+    create: `CREATE VIEW token_usage_reported AS
+      SELECT id, user_id, feature, model, api_model, prompt_tokens, completion_tokens,
+             embed_tokens, cost_li, ref_id, created_at,
+             cache_read_reported, cache_write_reported,
+             CASE WHEN cache_read_reported  = 1 THEN cache_read_tokens  ELSE NULL END AS cache_read_tokens,
+             CASE WHEN cache_write_reported = 1 THEN cache_write_tokens ELSE NULL END AS cache_write_tokens
+        FROM token_usage`,
+  },
+];
+
+/** 视图名 → 那份定义正本。测试与开库校验读同一份，不各自抄一遍。 */
+export const READ_VIEW_SQL: ReadonlyMap<string, string> = new Map(
+  READ_VIEWS.map((v) => [v.name, v.create]),
+);
+
+/**
+ * 建/校/重建两个读侧视图。**每次开库都跑**。
+ *
+ * 【为什么要校，不是无条件重建】无条件 DROP + CREATE 也能保证库里那份永远是对的，
+ * 但那样「谁动过视图」这件事从此没有任何一处会说出来——手改过的库与从没被改过的库
+ * 开完机长得一模一样。这里先比对：不一致就**点名报出来再重建**，
+ * 于是"库里那份被改过"是一条读得到的记录，不是一个没人知道发生过的事。
+ *
+ * 【为什么不一致时不抛】抛出去 = 应用起不来，而视图是读侧的、重建的代价是两句 SQL。
+ * 拿"起不来"去处理一个当场就能修好的偏差，代价比偏差本身大。
+ */
+function ensureReadViews(db: Database.Database): void {
+  for (const view of READ_VIEWS) {
+    // 三处名字写歪了当场抛：这是代码常量，跑一次就知道，不该等到线上比对永远不相等。
+    if (view.dropSql !== `DROP VIEW IF EXISTS ${view.name}` ||
+        !view.create.startsWith(`CREATE VIEW ${view.name} AS`)) {
+      throw new Error(
+        `READ_VIEWS 里 ${view.name} 这一条的 name / dropSql / create 三处名字对不上：` +
+          'dropSql 必须是 `DROP VIEW IF EXISTS <name>`，create 必须以 `CREATE VIEW <name> AS` 开头。' +
+          '三处都写成字面量是为了让幂等守卫按源码文本配得上（见 READ_VIEWS 抬头）。',
+      );
+    }
+
+    type SqlRow = { sql: string };
+    const row = db
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'view' AND name = ?")
+      .get(view.name) as SqlRow | undefined;
+
+    // sqlite_master.sql 存的是原样语句文本（去掉结尾分号、抹掉 IF NOT EXISTS），
+    // 所以这里直接与常量比字符串——空白与换行也算数，改一个缩进就会被判成"不一致"。
+    // 那不是误判：常量与库里那份逐字相同才叫一致，"看起来差不多"是没法机检的东西。
+    if (row?.sql === view.create) continue;
+
+    if (row) {
+      // 三段式：缺什么 / 为什么缺 / 怎么办。
+      console.error(
+        `[migrate] 视图 ${view.name} 与代码里的定义不一致，已按代码重建。\n` +
+          `库里原本是：\n${row.sql}\n` +
+          `代码正本是：\n${view.create}\n` +
+          '为什么：视图只在开库时建，谁在库上手动改过（或上一版代码建的是另一份定义），' +
+          '读侧就会按一份没人再维护的 SQL 出数——而查询照常返回结果，没有一处报错。\n' +
+          '怎么办：这次已经自动重建成代码里那份。若上面"库里原本是"那份才是你要的，' +
+          `请改 lib/db/migrate.ts 的 READ_VIEWS，别改库——改库的下一次开机会被这里再覆盖一次。`,
+      );
+    }
+    db.exec(view.dropSql);
+    db.exec(view.create);
+  }
 }
 
 export function runMigrations(db: Database.Database): void {
@@ -1900,22 +2006,10 @@ export function runMigrations(db: Database.Database): void {
   addColumnIfMissing(db, 'agent_writes', 'endpoint', 'TEXT');
   addColumnIfMissing(db, 'agent_writes', 'method', 'TEXT');
 
-  // 审计读侧的归一视图。查台账一律读它，别直接读表——直接读表的形态是：
-  // 每个查询各写一遍 COALESCE，漏写的那个把老行的 endpoint 读成 NULL，
-  // 于是「这批写入没有来源」看起来像一个真实结论，而它只是那次查询忘了归一。
-  //
-  // ⚠️【改这段 SQL 之前先读这一句】视图是 `CREATE ... IF NOT EXISTS` 建的，而本文件的
-  // 幂等守卫（migrate-idempotency-guard 的 DROP 规则）不许写 DROP。两条加起来的后果是：
-  // **改了这里的定义，已经建过视图的库一个字都不会变**——代码与库里的定义悄悄分叉，两边都不报错。
-  // 这两个视图都是本票新加的、还没上过任何生产库，所以这次改得动（minor#1 修的正是一处写错的
-  // 视图 SQL）。将来真要改它们的口径，得先有一条裁决：放宽 DROP 规则给视图，还是换个视图名。
-  db.exec(`
-    CREATE VIEW IF NOT EXISTS agent_writes_audit AS
-      SELECT id, case_id, key_id, tool, client_ref, target_table, target_id, deduped, created_at,
-             COALESCE(endpoint, 'mcp:' || tool) AS endpoint,
-             COALESCE(method, 'POST')          AS method
-        FROM agent_writes;
-  `);
+  // 读侧归一视图（agent_writes_audit）的定义正本在 READ_VIEWS，建/重建在 ensureReadViews。
+  // 查台账一律读它，别直接读表——直接读表的形态是：每个查询各写一遍 COALESCE，
+  // 漏写的那个把老行的 endpoint 读成 NULL，于是「这批写入没有来源」看起来像一个真实结论，
+  // 而它只是那次查询忘了归一。
 
   // ───────────────── token_usage：缓存两桶「未回报」≠「就是 0」 ─────────────────
   //
@@ -1930,24 +2024,12 @@ export function runMigrations(db: Database.Database): void {
   addColumnIfMissing(db, 'token_usage', 'cache_read_reported', 'INTEGER');
   addColumnIfMissing(db, 'token_usage', 'cache_write_reported', 'INTEGER');
 
-  // 「可空两桶」的读侧形态：**只有 reported = 1 才读出数**，其余一律 NULL。
-  // 对账与分析读这个视图，结算仍读原表——两个口径各有各的正确答案，
+  // 「可空两桶」的读侧视图（token_usage_reported）同样在 READ_VIEWS 里定义。
+  // 对账与分析读那个视图，结算仍读原表——两个口径各有各的正确答案，
   // 混在一列里看才是错的（见 lib/db/reconcile.ts 的未回报探针）。
-  //
-  // 【判据写成 `= 1` 而不是 `<> 0`（2026-09-10 复审 minor#1）】reported 有三态：
-  // 1 报了、0 没报、NULL 本列落地之前的存量行「无从判断」。写成「0 才读 NULL」的形态是：
-  // 存量行原样透出 cache_read_tokens = 0，而那个 0 从来就不是上游说的——
-  // 于是"这段时间一次缓存都没命中"这个假结论从视图里读出来，正是本视图要消灭的那一个。
-  // 不知道就读 NULL：NULL 会在 AVG/SUM 里自己退出分母，0 不会。
-  db.exec(`
-    CREATE VIEW IF NOT EXISTS token_usage_reported AS
-      SELECT id, user_id, feature, model, api_model, prompt_tokens, completion_tokens,
-             embed_tokens, cost_li, ref_id, created_at,
-             cache_read_reported, cache_write_reported,
-             CASE WHEN cache_read_reported  = 1 THEN cache_read_tokens  ELSE NULL END AS cache_read_tokens,
-             CASE WHEN cache_write_reported = 1 THEN cache_write_tokens ELSE NULL END AS cache_write_tokens
-        FROM token_usage;
-  `);
+
+  // 两个读侧视图一并建/校/重建。放在建表与加列之后：视图引用的每一列都得先在。
+  ensureReadViews(db);
 
   // ───────────────── 费率种子 ─────────────────
   // C01 核定的模型费率必须**在建表之后立刻播下去**：缺行时 getRatesForModel 会回落

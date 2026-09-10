@@ -18,8 +18,9 @@
 // ── 三类不在覆盖内的路由，各有各的理由，都写在这儿 ──
 //  ① 面级白名单（auth/oauth/keys/tools/admin/consents）：逐面写明理由，见 SURFACE_WHITELIST。
 //     其中 **tools 那一面 api key 够得着**（tools/{name} → invokeCapability），
-//     它的写入靠能力壳记台账——而仍有 13 条写能力没走能力壳、因此零台账，
-//     清单钉在 lib/capabilities/__tests__/registry-guard.test.ts。本面按派单豁免，缺口另开一票。
+//     它的写入记在能力那一层（能力壳的事务里，或这道门调 recordCapabilityWrite），
+//     判据钉在 lib/capabilities/__tests__/registry-guard.test.ts。
+//     本面豁免的是「路由这一层不再按路径记第二行」。
 //  ② 只认网页登录态（requireWebSession）：api key 一律 403，**结构上到不了**。
 //     不靠名单豁免、由代码形态判定——哪天它改成 requireIdentity，本守卫立刻要求它接台账。
 //  ③ EXEMPT 逐条列名并写明原因，且每一条都会被反查（见「豁免不许长草」一节）。
@@ -47,11 +48,12 @@ const SURFACE_WHITELIST: Record<string, string> = {
   keys: 'api key 的自助管理（建/停/删）。只认网页登录态；让一把 key 用自己去开新 key 是提权。',
   tools:
     'POST /api/v1/tools/{name} 是能力注册表的通用桥（resolveIdentity → invokeCapability），' +
-    'api key **够得着**，写入由能力壳在事务里记台账。' +
-    '⚠️ 但只有走 withClientRef / writeOnce 的写能力才有那一行：' +
-    '截至 2026-09-10 仍有 13 条 kind:write 的能力零台账（清单与判据见 ' +
-    'lib/capabilities/__tests__/registry-guard.test.ts 的「写能力的台账缺口」一节）。' +
-    '本面按派单豁免，那 13 条另开一票——豁免的是「路由这一层不再记第二行」，不是那个缺口。',
+    'api key **够得着**，写入照样记台账——只是记的人不是本守卫认的那句 ' +
+    'recordAgentWriteFromRest：走能力壳的能力在自己的事务里记，其余的由这道门调 ' +
+    'recordCapabilityWrite 记（endpoint = rest-tools:<能力名>）。' +
+    '路由再按路径记一行 = 同一次写入占两行，计数从此说谎。' +
+    '「每条写能力都记且只记一次」的判据在 lib/capabilities/__tests__/registry-guard.test.ts ' +
+    '的「写能力的台账」一节，那里也钉着这道门必须调 recordCapabilityWrite。',
   admin: '后台管理面（requireAdmin），不是「agent 替用户改档案」的那一类；它的审计另有一套。',
   consents: '同意书是用户本人的意思表示，只认网页登录态——一把 key 替用户点同意本身就不成立。',
 };
@@ -65,7 +67,7 @@ const WHITELIST_FACES = Object.keys(SURFACE_WHITELIST);
  */
 const EXEMPT: Record<string, string> = {
   'cases/[id]/actions/route.ts':
-    '写入交给能力注册表（runCapabilityRest → action_add），台账由能力壳 withClientRef 在事务里记。' +
+    '写入交给能力注册表（runCapabilityRest → action_create），台账由能力壳 withClientRef 在事务里记。' +
     '路由再记一行 = 同一次写入在台账里占两行，计数从此说谎。',
   'cases/[id]/chat/route.ts':
     '对话是 SSE 流，一轮里的写入全部发生在 lib/agent 编排层（工具调用经能力壳记台账）。' +
@@ -256,13 +258,15 @@ describe('面级白名单这张表本身', () => {
     }
   });
 
-  test('tools 那一面的理由必须点名它是 api key 够得着的（豁免的是记第二行，不是那个缺口）', () => {
+  test('tools 那一面的理由必须点名它是 api key 够得着的，并指到真正记账的那一处', () => {
     // 2026-09-10 复审 major#2：tools/{name} 走 resolveIdentity → invokeCapability，
-    // 是一条 api key 够得着的 REST 写路径。它按派单豁免，但豁免的理由不许把这件事说没了——
-    // 「白名单里有它」与「那条路不存在」在只写名字的表里长得一模一样。
+    // 是一条 api key 够得着的 REST 写路径。它豁免的只是「路由这一层按路径记第二行」，
+    // 而豁免的理由不许把这件事说没了——「白名单里有它」与「那条路不存在」
+    // 在只写名字的表里长得一模一样。
     const why = SURFACE_WHITELIST.tools;
     expect(why).toContain('api key');
-    expect(why, '要指得到那 13 条零台账的写能力在哪儿钉着').toContain('registry-guard');
+    expect(why, '要指得到「每条写能力都记且只记一次」的判据在哪儿钉着').toContain('registry-guard');
+    expect(why, '要点名这道门自己调的那个记账入口').toContain('recordCapabilityWrite');
   });
 });
 

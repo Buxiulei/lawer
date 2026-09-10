@@ -8,6 +8,8 @@
 // 在这里补写任何一句判定，就等于给同一条能力立了第二套规矩——而两套都不会报错。
 import { resolveIdentity } from '@/lib/auth/identity';
 import { invokeCapability } from '@/lib/capabilities/invoke';
+import { recordCapabilityWrite } from '@/lib/capabilities/ledger';
+import { getCapability } from '@/lib/capabilities/registry';
 import { getDb } from '@/lib/db/client';
 import { apiJson } from '@/lib/http/json';
 
@@ -37,7 +39,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ name: s
     }
   }
 
-  const outcome = await invokeCapability(getDb(), identity, (await params).name, args);
+  const name = (await params).name;
+  const outcome = await invokeCapability(getDb(), identity, name, args);
   if (!outcome.ok) {
     // extra 摊平在同一层，与 MCP 那条路 toolErrorResult 给出的键位逐字相同
     return apiJson(
@@ -45,6 +48,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ name: s
       { status: outcome.status },
     );
   }
+  // 【台账记在这道门上】这条桥是一条 api key 够得着的**写路径**：不记的形态是，
+  // 同一条能力走 MCP 写进去查得到、走这里写进去查不到，而两边都返回 200
+  //（2026-09-07 case 2 的同一个形态，那次漏的是 REST 路由这一面）。
+  // 走能力壳（withClientRef / writeOnce）的能力在自己的事务里记过了，
+  // recordCapabilityWrite 认注册表上的 ledger 字段、只记该由门记的那些，不会记出第二行。
+  const capability = getCapability(name);
+  if (capability) {
+    recordCapabilityWrite(getDb(), identity, capability, args, outcome.value, 'rest-tools');
+  }
+
   // 能力回包原样摊平，与 MCP tools/call 拿到的那份逐字相同（那边只是多包了一层文本外壳）
   return apiJson({ ok: true, ...outcome.value });
 }

@@ -7,6 +7,7 @@
 //   最后 attest_verify 给对方核。
 // 中间那步刻意不在 MCP 里：工具入参是 JSON，一段录音塞不进去也不该塞。
 import * as cases from '@/lib/cases';
+import { findAttestationByOrderNo, findEvidenceDetail } from '@/lib/db/evidence';
 import * as evidence from '@/lib/evidence';
 import { EVIDENCE_CATEGORIES } from '@/lib/evidence';
 import { maxUploadBytesFor } from '@/lib/evidence/upload-guard';
@@ -19,7 +20,7 @@ import {
 
 import { voidEvidence } from '@/lib/evidence/void';
 
-import { caseIdProp, num, writeOnce } from '../shared';
+import { caseIdProp, idAt, num, writeOnce } from '../shared';
 import type { Capability } from '../registry';
 
 const TTL_MINUTES = UPLOAD_TOKEN_TTL_MS / 60_000;
@@ -55,6 +56,17 @@ export const evidenceUploadUrl: Capability = {
   domains: ['*'],
   exposeTo: ['mcp'],
   precondition: ['realname'],
+  // 签一条一次性上传地址就是往 evidence_upload_tokens 落一行。回包里只有明文 token
+  // （行 id 不对外），所以回读一次取那一行——**不把 id 加进回包**：那是内部行号，
+  // 对方 agent 拿它做不了任何事，加出去就得一直兼容它。
+  ledger: {
+    targetTable: 'evidence_upload_tokens',
+    rowsOf: (db, args, result) => {
+      const token = typeof result.upload_token === 'string' ? result.upload_token : '';
+      const row = token ? findUploadToken(db, token) : null;
+      return row === null ? [] : [{ caseId: num(args.case_id), targetId: row.id }];
+    },
+  },
   title: '取一次性上传地址',
   description:
     '为一份要上传的材料签发一条一次性 PUT 地址与 upload_token。' +
@@ -230,6 +242,27 @@ export const evidenceAttest: Capability = {
   domains: ['*'],
   exposeTo: ['mcp'],
   precondition: ['realname'],
+  // **逐件一行**：一次调用最多出证 MAX_ATTEST_PER_CALL 件，逐件独立成败。
+  // 一次调用只记一行的形态是，台账里「出证过几件」永远是 1，而证明文件是 N 份。
+  // target 与 REST 那条端点同口径（attestations 那一行）；失败的件不记。
+  // 入参里没有案件号，逐件回读证据行取——读不到的那件跳过，不拿猜的案件号占位。
+  // **不填 deduped**：出证本身幂等（同一条反复发起只有一个订单号），但回包里没有
+  // 「这次是重放」这一格，猜一个出来的形态是台账里那一列写着没人算过的判断。
+  ledger: {
+    targetTable: 'attestations',
+    rowsOf: (db, _args, result) => {
+      const items = Array.isArray(result.results) ? result.results : [];
+      const rows: { caseId: number; targetId: number }[] = [];
+      for (const item of items as { ok?: unknown; evidence_id?: unknown; order_no?: unknown }[]) {
+        if (item.ok !== true || typeof item.order_no !== 'string') continue;
+        const caseId = findEvidenceDetail(db, num(item.evidence_id))?.case_id;
+        const attestationId = idAt(findAttestationByOrderNo(db, item.order_no), 'id');
+        if (caseId === undefined || attestationId === 0) continue;
+        rows.push({ caseId, targetId: attestationId });
+      }
+      return rows;
+    },
+  },
   title: '发起出证固化',
   description:
     '给已登记的条目盖可信时间戳、渲染《存证证明》PDF 并签名，回订单号。' +

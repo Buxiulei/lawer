@@ -305,17 +305,20 @@ describe('共用层不许写死领域内容（设计稿 §13-6）', () => {
   });
 });
 
-// ═════════════════════ 写能力的台账缺口（2026-09-10 复审 major#2） ═════════════════════
+// ═════════════════════ 每条写能力都记台账，且只记一次 ═════════════════════
 //
-// 【这条在钉什么】写能力的 agent_writes 那一行由能力壳记（withClientRef / writeOnce）。
-// 没走能力壳的写能力**一行都不留**——而它们不只经 MCP 那道门可达：
-// POST /api/v1/tools/{name} 走 resolveIdentity → invokeCapability，是一条 api key
-// 够得着的 REST 写路径。于是「REST 写路径平权」这一票在 tools 这道门上仍然是空的。
+// 【这条在钉什么】写能力的 agent_writes 那一行有且只有两种记法：
+//   · 走能力壳（withClientRef / writeOnce）—— 在业务写入的**同一个事务里**记；
+//   · 在注册表上声明 `ledger` 元数据 —— 由跑它的那道门统一记（lib/capabilities/ledger）。
+// 两者**互斥且必居其一**：
+//   · 都没有 ⇒ 这条能力经 MCP 与 POST /api/v1/tools/{name}（都是 api key 够得着的写路径）
+//     写库都不留任何审计行，而回包 200、没有一处报错。2026-09-10 复审 major#2 点的
+//     正是这个缺口，当时有 13 条；本票补齐后应为 0 条。
+//   · 都有   ⇒ 同一次写入在台账里占两行，此后「写过几次」这个数一直说谎，
+//     而多出来的那一行看起来与真的完全一样。
 //
-// 派单把 tools 面整体列进了白名单（见 api/v1/__tests__/rest-agent-writes-guard.test.ts），
-// 所以这条**不判红**当前这 13 条，而是把清单钉死：多一条（新写能力又忘了记账）红，
-// 少一条（某条补上了）也红——逼着来人顺手把这份清单和那张票一起改掉。
-// 只写在开放问题里的形态是：那条待办与"根本没有这条待办"在外部同形（memory：待办要绑可自查条件）。
+// 判据按**每条能力**判，不按总数判：写死一个数的形态是合并时五支各停在旧数
+//（memory：git 会静默给错答案）。
 
 /** 台账机制的两个入口名。改名要连着这里一起改（改漏了下面整份清单会一起红）。 */
 const LEDGER_MARKERS = ['withClientRef(', 'writeOnce('];
@@ -358,28 +361,15 @@ const CAP_FACTS: CapLedgerFacts[] = fs
   .filter((f) => f.endsWith('.ts') && f !== 'index.ts')
   .flatMap((f) => capLedgerFactsOf(fs.readFileSync(path.join(FAMILY_DIR, f), 'utf-8')));
 
-/**
- * **零台账的写能力**（2026-09-10 实测 13 条）。这不是豁免名单，是缺口清单。
- * 其中 timeline_add / evidence_attest / company_watch_set 这类会花钱或不可逆的动作，
- * 经 POST /api/v1/tools/{name} 用 api key 调用，至今不留任何审计行。
- */
-const KNOWN_LEDGER_GAP = [
-  'action_complete',
-  'case_delete',
-  'case_update',
-  'company_watch_set',
-  'evidence_attest',
-  'evidence_brief_regenerate',
-  'evidence_brief_update',
-  'evidence_upload_url',
-  'intake_submit',
-  'referral_delete_request',
-  'share_revoke',
-  'timeline_add',
-  'timeline_milestone',
-];
+/** 这条能力的台账走哪条路。两条都不走 / 两条都走，都是错。 */
+function ledgerRouteOf(name: string): { shell: boolean; declared: boolean } {
+  return {
+    shell: CAP_FACTS.find((f) => f.name === name)?.records === true,
+    declared: getCapability(name)?.ledger !== undefined,
+  };
+}
 
-describe('写能力的台账缺口', () => {
+describe('写能力的台账', () => {
   it('扫描与注册表对得上（切片方式本身是活的：能力名一一对应、kind 逐条相同）', () => {
     expect([...CAP_FACTS.map((f) => f.name)].sort()).toEqual([...CAPABILITIES.map((c) => c.name)].sort());
     for (const c of CAPABILITIES) {
@@ -387,18 +377,73 @@ describe('写能力的台账缺口', () => {
     }
   });
 
-  it('零台账的写能力就是已知那 13 条（多一条 / 少一条都红）', () => {
-    const gap = CAP_FACTS.filter((f) => f.kind === 'write' && !f.records)
-      .map((f) => f.name)
+  it('每条写能力都记台账：要么走能力壳，要么声明 ledger（一条都不许两头空）', () => {
+    const gap = CAPABILITIES.filter((c) => c.kind === 'write')
+      .filter((c) => {
+        const route = ledgerRouteOf(c.name);
+        return !route.shell && !route.declared;
+      })
+      .map((c) => c.name)
       .sort();
     expect(
       gap,
-      '写能力的 agent_writes 缺口清单变了。\n' +
-        '多出来的那条：它经 MCP 与 POST /api/v1/tools/{name}（api key 够得着）写库都不留台账——' +
-        '要么让它走 withClientRef / writeOnce，要么把它加进这份清单并同步那张票。\n' +
-        '少了一条：说明有人补上了，把它从清单里删掉。\n' +
-        '清单与 api/v1/__tests__/rest-agent-writes-guard.test.ts 里 tools 那一面的理由是同一件事。',
-    ).toEqual(KNOWN_LEDGER_GAP);
+      '下面这些写能力经 MCP 与 POST /api/v1/tools/{name}（都是 api key 够得着的写路径）' +
+        '写库都不留任何 agent_writes 行，而两边都返回 200：\n  ' +
+        gap.join('\n  ') +
+        '\n怎么办：有 client_ref 幂等的走 withClientRef / writeOnce（台账在事务里一起记）；' +
+        '其余的在注册表条目上加 ledger: { targetTable, rowsOf }，由门统一记' +
+        '（见 lib/capabilities/ledger.ts）。',
+    ).toEqual([]);
+  });
+
+  it('没有一条写能力两头都记（同一次写入占两行，此后计数一直说谎）', () => {
+    const doubled = CAPABILITIES.filter((c) => c.kind === 'write')
+      .filter((c) => {
+        const route = ledgerRouteOf(c.name);
+        return route.shell && route.declared;
+      })
+      .map((c) => c.name)
+      .sort();
+    expect(
+      doubled,
+      '下面这些写能力**既**在自己的定义里走了能力壳、**又**声明了 ledger：\n  ' +
+        doubled.join('\n  ') +
+        '\n能力壳在事务里已经记过一行，门再记一行 ⇒ 同一次写入两行。删掉其中一处。',
+    ).toEqual([]);
+  });
+
+  it('读 / 耗算力的能力不声明 ledger（它是写侧的东西，同 idempotency）', () => {
+    for (const c of CAPABILITIES) {
+      if (c.kind !== 'write') expect(c.ledger, `${c.name}.ledger`).toBeUndefined();
+    }
+  });
+
+  it('声明 ledger 的能力，targetTable 与 rowsOf 都填了（半份元数据记不出那一行）', () => {
+    const declared = CAPABILITIES.filter((c) => c.ledger !== undefined);
+    // 下限而非等号：新增写能力时不必回来改常数；为 0 说明整套元数据被摘了，那必须红。
+    expect(declared.length, '一条 ledger 都没有：本节每条判据都会无脑通过').toBeGreaterThanOrEqual(13);
+    for (const c of declared) {
+      expect(c.ledger!.targetTable, `${c.name}.ledger.targetTable`).toBeTruthy();
+      expect(typeof c.ledger!.rowsOf, `${c.name}.ledger.rowsOf`).toBe('function');
+    }
+  });
+
+  // 门只有两道，且两道都得记。少了这条，把某道门里那句 recordCapabilityWrite 删掉，
+  // 上面几条判据照样全绿——它们看的是注册表，不是门。
+  it('跑能力的两道门都调了 recordCapabilityWrite（删掉任一处 ⇒ 红）', () => {
+    const doors = [
+      'app/api/mcp/route.ts',
+      'app/api/v1/tools/[name]/route.ts',
+    ];
+    for (const rel of doors) {
+      const file = path.join(SRC_ROOT, rel);
+      expect(fs.existsSync(file), `${rel} 不在了：门挪了地方，把本条一起改`).toBe(true);
+      expect(
+        fs.readFileSync(file, 'utf-8'),
+        `${rel} 里没有 recordCapabilityWrite( —— 这道门跑完能力不记台账，` +
+          '而没走能力壳的那批写能力从此在这道门下零审计行。',
+      ).toContain('recordCapabilityWrite(');
+    }
   });
 
   it('MUTATION 对照臂：切片函数分得出记与不记（否则上面那条"清单没变"可能只是没扫到）', () => {

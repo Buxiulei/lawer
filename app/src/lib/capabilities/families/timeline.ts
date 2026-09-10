@@ -2,7 +2,7 @@
 // A 族里的时间线部分（设计稿 §2 A、P4：时间线只追加）。
 import * as cases from '@/lib/cases';
 
-import { assertedByOf, caseIdProp, num, sourceTierProp } from '../shared';
+import { assertedByOf, caseIdProp, idAt, num, sourceTierProp } from '../shared';
 import type { Capability } from '../registry';
 
 export const timelineAdd: Capability = {
@@ -19,6 +19,14 @@ export const timelineAdd: Capability = {
   idempotency: {
     clientRef: true,
     naturalKey: '同案 + 同日 + 同类别 + 标题去掉标点空白后相等',
+  },
+  // 不走能力壳（幂等在 timeline_events 自己的列上，见上一段），所以台账由门记。
+  // deduped 照实记：两道去重（client_ref / 自然键）任一命中时，这次没有新落一行。
+  ledger: {
+    targetTable: 'timeline_events',
+    rowsOf: (_db, args, result) => [
+      { caseId: num(args.case_id), targetId: idAt(result, 'event', 'id'), deduped: result.deduped === true },
+    ],
   },
   rest: { method: 'POST', path: '/api/v1/cases/{id}/timeline' },
   title: '追加时间线事件',
@@ -109,6 +117,15 @@ export const timelineMilestone: Capability = {
   // 幂等靠自然键而非 client_ref：盖章是把一行的 milestone 列设成某个值，
   // 同一事件同一里程碑再盖一次结果完全一样（不新增行、不改别的列）。
   idempotency: { naturalKey: '同一 event_id 盖同一 milestone ⇒ 结果不变' },
+  // 盖章改的是那条事件行的一列，target 就是它。**不填 deduped**：这条能力的回包里
+  // 没有"这次是重放"这一格（同一格盖两次结果完全相同，领域层也不区分），
+  // 猜一个出来的形态是台账里那一列写着一个没人算过的判断。
+  ledger: {
+    targetTable: 'timeline_events',
+    rowsOf: (_db, args, result) => [
+      { caseId: num(args.case_id), targetId: idAt(result, 'event', 'id') },
+    ],
+  },
   rest: { method: 'POST', path: '/api/v1/cases/{id}/timeline/{eventId}/milestone' },
   title: '确认里程碑',
   description:

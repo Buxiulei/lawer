@@ -6,6 +6,7 @@
 import { hasScope, resolveIdentity } from '@/lib/auth/identity';
 import { OAUTH_PATHS } from '@/lib/auth/oauth';
 import { checkPreconditions } from '@/lib/capabilities/invoke';
+import { recordCapabilityWrite } from '@/lib/capabilities/ledger';
 import { recordClientName } from '@/lib/db/api-keys';
 import { getDb } from '@/lib/db/client';
 import { findTool, TOOLS } from '@/lib/mcp/tools';
@@ -154,6 +155,20 @@ export async function POST(req: Request) {
         const failure = outcome as { errorCode: string; message: string } & Record<string, unknown>;
         return json(rpcResult(id, toolErrorResult(failure)));
       }
+
+      // 【台账记在这道门上】走能力壳（withClientRef / writeOnce）的写能力在自己的事务里
+      // 记过了；**没走能力壳的那一批此前一行都不留**——挂守望、出证、删档案这些会花钱或
+      // 不可逆的动作，经这道门写进去查不到是谁写的，而回包 200、没有一处报错
+      //（2026-09-10 复审 major#2）。recordCapabilityWrite 认注册表上的 ledger 字段，
+      // 只记该由门记的那些，不会给能力壳那批记出第二行。
+      recordCapabilityWrite(
+        getDb(),
+        identity,
+        tool,
+        (args ?? {}) as Record<string, unknown>,
+        outcome as Record<string, unknown>,
+        'mcp',
+      );
       return json(rpcResult(id, toolTextResult(outcome)));
     }
 

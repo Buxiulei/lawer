@@ -58,6 +58,56 @@ export type CapabilityKind = 'read' | 'write' | 'spend';
  */
 export type CapabilityPrecondition = 'realname' | 'balance' | 'emotion_consent' | 'facts_token';
 
+/**
+ * 一次能力调用是从**哪道门**进来的。只有这两道门会跑到注册表里的能力：
+ *   · `mcp`        —— POST /api/mcp 的 tools/call
+ *   · `rest-tools` —— POST /api/v1/tools/{name}（通用工具桥）
+ * 台账里 endpoint 那一列按它取值（mcp:<名> / rest-tools:<名>），tool 一列两道门同值。
+ *
+ * 【为什么不把它和 exposeTo 合成一个字段】exposeTo 答的是「谁看得见这条能力」，
+ * 它答的是「这一次是从哪儿调进来的」。合成一个的形态是：以后加一道新门（或某条能力
+ * 换了暴露面），台账里的来源跟着乱掉，而两处读起来都像对的。
+ */
+export type CapabilityEntrance = 'mcp' | 'rest-tools';
+
+/** 一次写入落在哪一行。target_table 是弱引用，见 migrate.ts 的建表注释。 */
+export interface CapabilityWriteRow {
+  /** agent_writes.case_id 是 NOT NULL 外键，取不到就别回这一行 */
+  caseId: number;
+  targetId: number;
+  /** 业务侧回了「这次是重放，没有新写入」（deduped / already_*）时为 true */
+  deduped?: boolean;
+}
+
+/**
+ * 写能力的**台账元数据**。声明它 = 「这条能力自己不记台账，由跑它的那道门统一记一行」。
+ *
+ * 走 withClientRef / writeOnce 的写能力**不声明**：它们在自己的事务里记，
+ * 再由外面补一行就是同一次写入占两行，计数从此说谎。
+ * 「声明 ledger」与「走能力壳」两者恰好互斥、且每条写能力必居其一，
+ * 由 __tests__/registry-guard.test.ts 机检——漏声明的形态是那条能力照常工作、
+ * 照常返回 200，只是它写进去的东西在台账里查不到，没有任何一处会报错。
+ */
+export interface CapabilityLedger {
+  /** 落到哪张表 */
+  targetTable: string;
+  /**
+   * 这次调用**真正写了哪几行**。
+   *
+   * 空数组 = 一行都没写（两步确认里只出确认单的那一步、逐件批量里一件都没成），
+   * 此时不记台账——给「什么都没发生」记一行的形态是：事后复盘时那个不可撤销的动作
+   * 在台账里比实际多发生过几次。
+   *
+   * 逐件批量的能力回多行：一次调用只记一行的形态是，台账里那个数永远是 1，
+   * 而文件与账单都是 N 件。
+   */
+  rowsOf(
+    db: Database,
+    args: Record<string, unknown>,
+    result: Record<string, unknown>,
+  ): CapabilityWriteRow[];
+}
+
 export interface Capability {
   name: string;
   family: CapabilityFamily;
@@ -70,6 +120,8 @@ export interface Capability {
   precondition: readonly CapabilityPrecondition[];
   /** 有幂等约定的写能力才填；读能力恒省略 */
   idempotency?: { clientRef?: boolean; naturalKey?: string };
+  /** 不走能力壳（withClientRef / writeOnce）的写能力填它，台账由门统一记。见 CapabilityLedger */
+  ledger?: CapabilityLedger;
   /**
    * facts_token 闸**只在这几个入参出现时才开**（省略 = 声明了 facts_token 就恒开）。
    *

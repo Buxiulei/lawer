@@ -20,6 +20,23 @@ export function num(value: unknown): number {
 }
 
 /**
+ * 从能力回包里按路径取一个正整数 id；取不到（路径断了、不是正整数）回 0。
+ *
+ * 台账元数据（Capability.ledger.rowsOf）拿它读 run 的结果——那一层看到的回包类型只剩
+ * `Record<string, unknown>`，各条能力自己写一遍 `(r.event as { id: number }).id` 的形态是：
+ * 哪天那条能力换了回包字段名，它照常返回 200，而台账那一行的 target_id 静默变成 undefined。
+ * 回 0 是个**读得出来的坏值**：记账那一层认它，点名报出来并跳过这一行，不写一行假的。
+ */
+export function idAt(source: unknown, ...path: string[]): number {
+  let cur: unknown = source;
+  for (const key of path) {
+    if (!cur || typeof cur !== 'object') return 0;
+    cur = (cur as Record<string, unknown>)[key];
+  }
+  return typeof cur === 'number' && Number.isInteger(cur) && cur > 0 ? cur : 0;
+}
+
+/**
  * 元 → 分。对着人给的是「元」，落库口径全仓是「分」（*_fen）。
  * 非数一律回 NaN，交给领域层的 INVALID_MONTHLY_WAGE 报字段级错，不在这里静默兜底成某个数。
  * 有些客户端把入参一律序列化成字符串，故数字串也认。
