@@ -568,6 +568,8 @@
 
 **2026-09-10 存疑判例第二轮调研结果（真实浏览器，约 90 分钟）**：三项官方案例均为 0。①强制报告主体：0 案例、1 官方站线索（spp.gov.cn 理论研究栏目 2026-01-21 地方检察官文章承认主体范围界定模糊，列举未纳入的新兴主体不含心理咨询机构）；2020-05-29 首批五起典型案例逐字核对，「心理咨询」均为事后救助手段，无一起义务主体是咨询机构。②记录年限：0/0，nhc.gov.cn 浏览器仍 400，结构性缺口不变。③许可备案：0 案例、1 擦边（广东市监局「心理咨询师」头衔虚假宣传案，反不正当竞争法 §8，主体是视力调理中心，不挂卡）。信源新增：spp.gov.cn 站内全文搜索（服务端直出，语料仍是新闻/理论）、samr.gov.cn 浏览器可达（curl 403）；rmfyalk 实锤需登录；12309 接口定位到但 405；spp 典型案例栏目静态分页存在。报告落盘 scratchpad/rd-precedents/report.md（调研员未落盘，经理转存）。裁定：三项判定不变；派 Opus（precedent-record，ws/precedent-record）把第二轮写进 TODO 核实清单同节、登记 spp 文章原件并以「理论文章非规范性文件」口径挂到 risk-qiangzhi-baogao-zhuti 分歧点（不改结论、不挂 precedents）、searchKeywords 加「强制报告 典型案例」。复活路径：12309 真实提交抓 body；bjgy「信息查询」与区法院分站检索。
 
+**2026-09-10 隔离区反向 scheme 票到位（021bd085，ws/quarantine-scheme）**：4 处卡内 https→http 只改 scheme（word-diff 核过）；scheme_mismatches 扩扫隔离区（main 4/4 → HEAD 0，不按 --strict 门控，非 strict 降为警告）+ pytest；fetch-source http 档补显式重试（新常量 HTTP_ATTEMPTS=3 / HTTP_RETRY_BACKOFF_SEC=2——https 档本无重试常量，「三次」对应 TLS 三档）；变异两臂各红一条；pytest 169、strict 207 packs、index diff 空、verify 387/0、audit 102/0、tsc 0、守卫绿。裁定：重试常数接受；第五处反向 scheme 在 quarantine/README.md:201——一并改齐但 README 仍不入守卫；隔离区扫描不门控——接受；http 回落档单次——backlog；守卫 (i) 隔离区路径谓词与 (h) 对齐（复用 quarantine_labels 谓词 + packs/**/quarantine/** 判据）；die()「四档都失败」文案改正。三处小改回给同一代理追加 commit。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
