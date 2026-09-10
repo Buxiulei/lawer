@@ -181,29 +181,74 @@ describe('红线：每条争点都有出路，且〔未记录〕不许写成不�
 describe('「对方的书面决定在不在档」的唯一入口', () => {
   // 【为什么它要有自己的判据】此前报告与要件族能力里各写了一遍同形的三行判断，
   // 而没有任何东西钉住它们：把其中一份换成常量 true，两侧的既有判据全绿（复审第三条）。
-  // 现在两边都调这一个函数，这里把它的四种入参各钉一条。
-  const withEvidence = (categories: string[]): ElementFactsView => ({
+  // 现在两边都调这一个函数，这里把它的入参形态逐个钉一条。
+  const facts = (
+    categories: string[],
+    events: { kind: string; source_tier: string }[] = [],
+  ): ElementFactsView => ({
     case: { employed_from: null, position: null, monthly_wage_fen: null, contract_count: null },
     claims: [],
-    timeline: [],
+    timeline: events,
     companies: [],
     evidence: categories.map((category) => ({ category })),
   });
 
   it('槽位没声明 ⇒ 恒 false（规则三整条不生效，而不是恒成立）', () => {
-    expect(counterpartyDecisionOnFile(undefined, withEvidence(['某类']))).toBe(false);
+    expect(counterpartyDecisionOnFile(undefined, facts(['某类']))).toBe(false);
+  });
+
+  it('空数组 ⇒ false（变异：删掉 length 那道判断、让 every 空真走成 true → 红）', () => {
+    // 半格的声明不许拿到"那份决定恒在档"：那比没声明更糟，它读起来像还没填。
+    expect(counterpartyDecisionOnFile([], facts(['某类']))).toBe(false);
   });
 
   it('档案里有那一类材料 ⇒ true', () => {
-    expect(counterpartyDecisionOnFile('evidence:某类', withEvidence(['某类']))).toBe(true);
+    expect(counterpartyDecisionOnFile(['evidence:某类'], facts(['某类']))).toBe(true);
   });
 
   it('有书证、但**不是**那一类 ⇒ false（变异：改成 evidence.length > 0 → 红）', () => {
-    expect(counterpartyDecisionOnFile('evidence:某类', withEvidence(['别的类', '再一类']))).toBe(false);
+    expect(counterpartyDecisionOnFile(['evidence:某类'], facts(['别的类', '再一类']))).toBe(false);
   });
 
   it('档案里什么都没有 ⇒ false（变异：改成常量 true → 红）', () => {
-    expect(counterpartyDecisionOnFile('evidence:某类', withEvidence([]))).toBe(false);
+    expect(counterpartyDecisionOnFile(['evidence:某类'], facts([]))).toBe(false);
+  });
+
+  // ↓ 第三轮复审（2026-09-10）收窄成双槽之后的两道门槛，各一正一反。
+  it('多槽：**全部**到位才算在档，少一格即 false（变异：every 改成 some → 红）', () => {
+    const slots = ['evidence:某类', 'timeline:某事件'];
+    const 书证事件 = [{ kind: '某事件', source_tier: '书证' }];
+    expect(counterpartyDecisionOnFile(slots, facts(['某类'], 书证事件)), '两格都在档').toBe(true);
+    expect(counterpartyDecisionOnFile(slots, facts(['某类'])), '只有那一类材料，没有那条事件').toBe(false);
+    expect(counterpartyDecisionOnFile(slots, facts([], 书证事件)), '只有那条事件，没有那类材料').toBe(false);
+  });
+
+  it('自述档不算"那张纸在档"（变异：门槛从 isDocumented 放回 != null → 红）', () => {
+    // 口头通知落进档案仍然只是当事人自己的说法：规则三那句「把他那份书面决定原样固定下来」
+    // 在这时指向一份不存在的纸。本票裁定的口径就是这一条（见 issue-table 的函数注释）。
+    const slots = ['evidence:某类', 'timeline:某事件'];
+    expect(
+      counterpartyDecisionOnFile(slots, facts(['某类'], [{ kind: '某事件', source_tier: '自述' }])),
+    ).toBe(false);
+    // 【反臂】同一条事件换成书证档当场翻真——证明上面那句不是"这个槽根本没解析出来"
+    expect(
+      counterpartyDecisionOnFile(slots, facts(['某类'], [{ kind: '某事件', source_tier: '书证' }])),
+    ).toBe(true);
+    // resolveSlot 对时间线取**最强**档：一自述 + 一书证 ⇒ 到得了书证，算在档
+    expect(
+      counterpartyDecisionOnFile(
+        slots,
+        facts(['某类'], [
+          { kind: '某事件', source_tier: '自述' },
+          { kind: '某事件', source_tier: '书证' },
+        ]),
+      ),
+    ).toBe(true);
+  });
+
+  it('认不出来的槽 ⇒ false（配置错误不静默兜成"在档"）', () => {
+    expect(counterpartyDecisionOnFile(['没有冒号的槽'], facts(['某类']))).toBe(false);
+    expect(counterpartyDecisionOnFile(['不认识的表:某类'], facts(['某类']))).toBe(false);
   });
 });
 

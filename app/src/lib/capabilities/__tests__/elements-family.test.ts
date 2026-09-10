@@ -13,10 +13,15 @@
 //  4) 〔未记录〕≠ 不成立：一个什么都没填的案子，要件状态是「缺失」而不是「不成立」，
 //     且回包里那句话不许把它说成"不满足"。
 //  5) 别人的案子一条都读不到、写不进。
+//  6) 「对方书面决定在档」只认双槽：一份员工手册（也归「公司文件」类）不许让 issue_list
+//     的回包带上 burden_on_other_side
+//     «counterpartyDecisionSlot 改回单槽 / 2N-3 去掉 timeline:公司动作 ⇒ 红»：
+//     模型据回包对一个还没收到任何通知的人说"公司那份书面决定已在档"，回包 200。
 import Database from 'better-sqlite3';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { Identity } from '@/lib/auth/identity';
+import { NEXT_STEP_FIX_DECISION } from '@/lib/cases/issue-table';
 import { runMigrations } from '@/lib/db/migrate';
 import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
 
@@ -143,11 +148,19 @@ describe('issue_list：争点表', () => {
     ).run(caseId, alice.uid, fileId, name, category);
   }
 
+  /** 往时间线记一条事件（要件表按 kind 认它，按 source_tier 定档）。 */
+  function addTimeline(kind: string, title: string, sourceTier = '书证'): void {
+    db.prepare(
+      `INSERT INTO timeline_events (case_id, happened_at, kind, title, source_tier)
+       VALUES (?, '2026-08-20', ?, ?, ?)`,
+    ).run(caseId, kind, title, sourceTier);
+  }
+
   it('规则三反臂：书证在档但类别 ≠ 领域包声明的「对方书面决定」⇒ 不算在档（把 onFile 改成常量 true / evidence.length>0 → 红）', () => {
     // 【它守什么】复审 2026-09-10 第三条：「在不在档」此前在报告与本能力里各写了一遍，
     // 而没有任何判据钉住它——换成常量 true，两侧的既有判据全绿。
     // 现在两侧共用 lib/cases/issue-table.counterpartyDecisionOnFile，这一条钉的就是那个入口。
-    expect(LABOR.counterpartyDecisionSlot).toBe('evidence:公司文件');
+    expect(LABOR.counterpartyDecisionSlot).toEqual(['evidence:公司文件', 'timeline:公司动作']);
     addEvidence('工资'); // 有书证，但不是那张写着理由的纸
     const before = (call('issue_list', alice, { case_id: caseId }).issues as {
       id: string;
@@ -159,12 +172,80 @@ describe('issue_list：争点表', () => {
       '档案里只有工资流水，却说"对方的书面决定已在档"——规则三凭空成立了',
     ).not.toContain('burden_on_other_side');
 
-    // 【正臂】换成「公司文件」当场就带上，证明上面那句不是"这条规则根本没接上"
+    // 【正臂】把那张纸与「公司确实作出过这个决定」一并落档，规则三当场就带上——
+    // 证明上面那句不是"这条规则根本没接上"。两格缺一不可，见下面那条判据。
     addEvidence('公司文件', '解除通知.pdf');
+    addTimeline('公司动作', '收到《解除劳动合同通知书》');
     const after = (call('issue_list', alice, { case_id: caseId }).issues as {
       id: string;
       reasons: string[];
     }[]).find((i) => i.id === '2N-3')!;
+    expect(after.reasons).toContain('burden_on_other_side');
+  });
+
+  /** 争点表里那一行（没有则 undefined）。 */
+  function issueOf(id: string) {
+    return (call('issue_list', alice, { case_id: caseId }).issues as {
+      id: string;
+      status: string;
+      reasons: string[];
+      nextStep: string;
+    }[]).find((i) => i.id === id);
+  }
+
+  it('一份员工手册不是解除决定：MCP 回包里 N-2a / 2N-3 都缺失，两行都不带 burden_on_other_side（第四轮 2026-09-10）', () => {
+    // 【它守什么】「公司文件」是个很宽的类别——员工手册、规章制度、工资结构表都在它下面。
+    // 收窄成双槽之前，这一份手册同时做成三件事，每件都返回 200：
+    //   ① N-2a 的 reasons 带上 burden_on_other_side，经本能力原样回包，
+    //      模型据此对一个还没收到任何通知的人说"公司那份书面决定已在档"；
+    //   ② 2N-3 整条「成立」并恒进争点表；
+    //   ③ nextStep 让他去把一份不存在的解除决定「原样固定下来」。
+    // 【变异臂】counterpartyDecisionSlot 改回单槽 ⇒ 下面两句 reasons 红；
+    //          2N-3 的 satisfiedBy 去掉 timeline:公司动作 ⇒ 它的状态断言红（会变成「成立」并整行离表）。
+    db.prepare("INSERT INTO claims (case_id, kind, amount_fen, status) VALUES (?, 'N', 0, 'draft')").run(caseId);
+    addEvidence('公司文件', '员工手册.pdf');
+
+    for (const id of ['N-2a', '2N-3']) {
+      const row = issueOf(id);
+      expect(row, `${id} 不在争点表里（只有一份手册时它该以「缺失」进表）`).toBeTruthy();
+      expect(row!.status, `${id} 被一份员工手册顶成了「${row!.status}」`).toBe('缺失');
+      expect(
+        row!.reasons,
+        `档案里只有一份员工手册，${id} 却说"对方那份书面决定已在档"`,
+      ).not.toContain('burden_on_other_side');
+    }
+    const all = call('issue_list', alice, { case_id: caseId }).issues as { nextStep: string }[];
+    for (const row of all) {
+      expect(row.nextStep, '没有那份决定，却让用户去把它「原样固定下来」').not.toContain(
+        NEXT_STEP_FIX_DECISION,
+      );
+    }
+  });
+
+  it('自述档的公司动作不算「那份书面决定在档」：2N-3 停在「成立·待证」，回包 reasons 不带 burden_on_other_side（第四轮口径）', () => {
+    // 【本票裁定的口径写在这里】规则三那句出路是「把他那份书面决定原样固定下来」；
+    // 当事人自述的一通口头通知里没有那份决定，所以门槛取书证及以上
+    //（理由见 lib/cases/issue-table.counterpartyDecisionOnFile 的函数注释）。
+    // 【为什么这条判据落在本层，而不是报告层】状态一旦是「成立·待证」，nextStep 就走
+    // 「只有你自己的说法」那一支，NEXT_STEP_FIX_DECISION 本来就印不出来——报告层只看得到
+    // 措辞，钉不住这件事。**reasons 只在这一面原样回包**，模型据它对用户说
+    // "公司那份书面决定已在档"，所以口径的牙必须长在这里。
+    // 【变异臂】把门槛从 isDocumented 放回 `!= null` ⇒ 下面那句 reasons 红。
+    addEvidence('公司文件', '解除通知.pdf');
+    addTimeline('公司动作', 'HR 口头通知我被裁了', '自述');
+    const row = issueOf('2N-3')!;
+    expect(row, '2N-3 不在争点表里').toBeTruthy();
+    expect(row.status, '两个槽里最弱的那一档是自述，这一条就该停在「成立·待证」').toBe('成立·待证');
+    expect(
+      row.reasons,
+      '只有一句口头通知，回包却说"对方那份书面决定已在档"',
+    ).not.toContain('burden_on_other_side');
+
+    // 【反臂】同一条事件换成书证档（由《解除通知》提取写入的那种）当场翻真——
+    // 没有这一臂，"规则三根本没接上"也会让上面那句绿。
+    addTimeline('公司动作', '收到《解除劳动合同通知书》', '书证');
+    const after = issueOf('2N-3')!;
+    expect(after.status).toBe('成立');
     expect(after.reasons).toContain('burden_on_other_side');
   });
 
@@ -174,12 +255,19 @@ describe('issue_list：争点表', () => {
     const card = (LABOR.elementCards ?? []).find((c) => c.id === '2N-5')!;
     expect(card.burden).toBe('reversed_procedure_rules');
     addEvidence('公司文件', '解除通知.pdf');
+    addTimeline('公司动作', '收到《解除劳动合同通知书》'); // 双槽都到位，规则三这才真的成立
     addEvidence('工资', '工资流水.pdf'); // 让 2N-5 变成「成立」，规则一不再捞它
     const rows = call('issue_list', alice, { case_id: caseId }).issues as {
       id: string;
       reasons: string[];
       nextStep: string;
     }[];
+    // 【前提要自证】没有这一句，"规则三根本没成立"也会让下面两句绿——
+    // 而收窄成双槽之后，前提正是最容易被漏掉的那一格（少记一条「公司动作」即不成立）。
+    expect(
+      rows.find((i) => i.id === '2N-3')?.reasons ?? [],
+      '前提不成立：那份决定没算在档，本条判据在空跑',
+    ).toContain('burden_on_other_side');
     const base = rows.find((i) => i.id === '2N-5');
     expect(base?.reasons ?? [], '偏在型被规则三捞进了争点表').not.toContain('burden_on_other_side');
     expect(base, '「计算基数」已经成立又没有别的理由，它就该整行不在表上').toBeUndefined();

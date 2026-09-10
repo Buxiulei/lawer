@@ -25,6 +25,7 @@ import {
   type ElementRow,
   type ElementStatus,
 } from './elements';
+import { isDocumented } from './source-tier';
 
 /**
  * 一行争点是被哪条规则捞进来的。**逐条留痕，不合并成一个 boolean**：
@@ -128,17 +129,41 @@ export interface IssueTableMarks {
  * 两份同形代码的失效方式是：判据钉住其中一份，另一份被改坏了没有任何东西会红——
  * 复审第三条点的正是这个（把 report 那份换成常量 `true`，report-derived 仍 9/9 绿）。
  *
- * @param slot 领域包声明的 `counterpartyDecisionSlot`。**共用层不认识它在某个行当里叫什么**，
- *   所以这里只收一个槽串；省略（领域没声明）⇒ 恒 false，规则三整条不生效。
+ * 【两道门槛，缺一条这个函数就会说谎】
+ *
+ * ① **列出来的槽全部到位**（语义与要件卡的 satisfiedBy 同款）。只认一个槽的形态是：
+ *    那个槽指向的材料类别往往很宽，同一类别下装着好几种性质完全不同的纸，
+ *    随便进来一份就让"对方那份写着理由的决定已在档"成立——而规则三给的下一步是
+ *    「把他那份书面决定原样固定下来」，用户照着做只能空转（第三轮复审点名、第四轮收窄，2026-09-10）。
+ *
+ * ② **每个槽都要到书证及以上**（`isDocumented`，与要件表判「成立」同一道门槛）。
+ *    【口径与理由，本票裁定】规则三那句出路要求档案里**真有那张纸**；只有当事人自己说
+ *    "对方那天口头通知过我"时，那张纸并不存在，而规则三会指示他去把它原样固定下来。
+ *    所以这里不取"解析得出来就算"：`resolveSlot` 对时间线取的是**最强档**，
+ *    那解决的是另一个问题——同一件事被记了两遍时按哪一条代表它，
+ *    它照样会把一组只有自述的记录解析成非 null（最强的自述仍是自述）。
+ *    "有没有记录"与"那条记录硬不硬"是两件事，只有后者分得开口头通知与那份书面决定。
+ *    档案里只有自述档时，这一条落回规则一：状态是「成立·待证」，
+ *    出路那句话说的是"目前只有你自己的说法"——那才是实话。
+ *
+ * @param slots 领域包声明的 `counterpartyDecisionSlot`。**共用层不认识这些槽在某个行当里
+ *   叫什么**，所以这里只收槽串；省略（领域没声明）或空数组 ⇒ 恒 false，规则三整条不生效。
+ *   空数组**不许**顺着 `every` 空真走成 true：那会让一个只写了半格的领域包
+ *   拿到"对方的书面决定恒在档"，而它读起来像是还没填。
  * @param facts 与要件表**同一份**档案子集：绕开 resolveSlot 自己写一遍"这个槽有没有被填上"的形态是，
  *   那份判断与要件表用的不是同一把尺，于是规则三会在要件表说"缺"的时候说"在档"。
  */
 export function counterpartyDecisionOnFile(
-  slot: string | undefined,
+  slots: readonly string[] | undefined,
   facts: ElementFactsView,
 ): boolean {
-  if (slot === undefined) return false;
-  return resolveSlot(slot, facts) != null;
+  if (slots === undefined || slots.length === 0) return false;
+  return slots.every((slot) => {
+    const tier = resolveSlot(slot, facts);
+    // 认不出来的槽（resolveSlot 回 undefined）与还没填的槽（回 null）在这里同判：
+    // 都还不到"那张纸在档"。配置错误由要件表的 unresolvedSlots 点名，不在这里静默兜底。
+    return tier != null && isDocumented(tier);
+  });
 }
 
 /**

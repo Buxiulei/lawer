@@ -111,22 +111,17 @@ describe('① 两节由要件表派生', () => {
 
   test('对方的书面决定进档之后，已经「成立」但举证责任在对方的那一条仍留在争点表（规则三）', () => {
     addClaim('2N');
-    // 传一份「公司文件」类的材料：领域包声明的 counterpartyDecisionSlot 就是它。
-    const fileId = Number(
-      db
-        .prepare("INSERT INTO files (sha256, size, mime, enc_path) VALUES ('sha-1', 1, 'application/pdf', '/dev/null')")
-        .run().lastInsertRowid,
-    );
-    db.prepare(
-      `INSERT INTO evidence (case_id, user_id, file_id, name, category, status)
-       VALUES (?, ?, ?, '解除通知.pdf', '公司文件', '已上传')`,
-    ).run(caseId, uid, fileId);
+    // 领域包声明的 counterpartyDecisionSlot 是**两个槽**（第四轮 2026-09-10）：
+    // 那张纸（「公司文件」类的材料）+ 公司确实作出过这个决定（时间线上的「公司动作」）。
+    // 只传前者的形态见下面那条判据：一份员工手册也归「公司文件」，不该算作解除决定。
+    addEvidence('公司文件', '解除通知.pdf');
+    addTimeline('公司动作', '收到《解除劳动合同通知书》');
     // 报告是惰性生成的，重生成一份才看得到新档案
-    db.prepare('DELETE FROM case_reports WHERE case_id = ?').run(caseId);
+    regenerate();
     const text = sections().sections[DISPUTES];
 
-    // 【这一条是三条规则里唯一分得开的那个样本】2N-3（解除理由）的槽位就是那份公司文件，
-    // 传进来之后它的状态变成「成立」——规则一不再捞它。它还留在表上，只可能是规则三捞的：
+    // 【这一条是三条规则里唯一分得开的那个样本】2N-3（解除理由）的槽位就是那两格，
+    // 都到位之后它的状态变成「成立」——规则一不再捞它。它还留在表上，只可能是规则三捞的：
     // 举证责任在对方 ∧ 对方那份写着理由的纸已经在档 ⇒ 那张纸上写的理由就是要打的那一点。
     const card = (LABOR.elementCards ?? []).find((c) => c.id === '2N-3')!;
     expect(card.burden).toBe('reversed_interpretation');
@@ -138,13 +133,58 @@ describe('① 两节由要件表派生', () => {
     // 2N-3 退回「缺失」并改由规则一捞——两种情形下它都在表上，但**理由不同**，
     // 而"理由不同"正是这条判据要分辨的东西（合并成一个 boolean 就分不出来了）。
     db.prepare("UPDATE evidence SET voided_at = datetime('now'), void_reason = '测试作废' WHERE case_id = ?").run(caseId);
-    db.prepare('DELETE FROM case_reports WHERE case_id = ?').run(caseId);
+    regenerate();
     expect(sections().sections[DISPUTES]).toMatch(new RegExp(`${issueMarker('2N-3')}[^\\n]*缺失`));
+  });
+
+  test('一份员工手册不是解除决定：只有「公司文件」而没有那条公司动作 ⇒ 2N-3 仍是「缺失」，正文不印「把他那份书面决定固定下来」（第四轮 2026-09-10）', () => {
+    // 【它守什么】「公司文件」是个很宽的类别（员工手册、规章制度、工资结构表都在它下面）。
+    // 收窄成双槽之前，这一份手册让 2N-3 整条「成立」并恒进争点表，正文跟着让用户去固定
+    // 一份档案里根本不存在的解除决定——报告返回 200，每一行都读得通。
+    // 【变异臂】counterpartyDecisionSlot 改回单槽 ⇒ 下面那句 NEXT_STEP_FIX_DECISION 红；
+    //          2N-3 的 satisfiedBy 去掉 timeline:公司动作 ⇒ 「缺失」那句红（它会变成「成立」）。
+    addClaim('2N');
+    addEvidence('公司文件', '员工手册.pdf');
+    regenerate();
+    const text = sections().sections[DISPUTES];
+    expect(text, '一份员工手册把「解除不具备法定理由」顶成了成立').toMatch(
+      new RegExp(`${issueMarker('2N-3')}[^\\n]*缺失`),
+    );
+    expect(text, '档案里没有那份解除决定，正文却让用户去把它「原样固定下来」').not.toContain(
+      NEXT_STEP_FIX_DECISION,
+    );
+
+    // 【正臂】把那条「公司动作」补上（书证档），两格齐了：状态翻「成立」、那句话当场出现。
+    // 没有这一臂，"规则三根本没接上"也会让上面两句绿。
+    addTimeline('公司动作', '收到《解除劳动合同通知书》');
+    regenerate();
+    const after = sections().sections[DISPUTES];
+    expect(after).toMatch(new RegExp(`${issueMarker('2N-3')}[^\\n]*成立`));
+    expect(after).toContain(NEXT_STEP_FIX_DECISION);
+  });
+
+  test('自述档的公司动作只把 2N-3 抬到「成立·待证」（第四轮口径的报告层这一面）', () => {
+    // 双槽取**最弱**的那一档：那张纸是书证、而"公司确实作出过这个决定"只有当事人自己说，
+    // 于是这一条停在「成立·待证」——那句话是实话。
+    //
+    // 【口径本身的牙不在这一层，记在这里】规则三在自述档下该不该触发，观察点是争点行的
+    // `reasons`（burden_on_other_side 在不在），而 reasons 只在 MCP 回包那一面原样露出；
+    // 报告层只印措辞，且状态一旦是「成立·待证」，nextStep 就走「只有你自己的说法」那一支，
+    // NEXT_STEP_FIX_DECISION 本来就印不出来——在这里写一句 not.toContain 是**空跑**。
+    // 那条判据落在 lib/capabilities/__tests__/elements-family.test.ts（同名用例）。
+    addClaim('2N');
+    addEvidence('公司文件', '解除通知.pdf');
+    addTimeline('公司动作', 'HR 口头通知我被裁了', '自述');
+    regenerate();
+    expect(
+      sections().sections[DISPUTES],
+      '两个槽里最弱的那一档是自述，这一条就该停在「成立·待证」',
+    ).toMatch(new RegExp(`${issueMarker('2N-3')}[^\\n]*成立·待证`));
   });
 
   test('规则三这根线在报告层是接着的：对方那份书面决定不在档时 N-2a 不进「争议焦点」（变异：report.ts 的 onFile 改成常量 true → 红）', () => {
     // 【为什么钉 N-2a，而不是上面那条用例里的 2N-3】2N-3 的 satisfiedBy 就是领域包声明的
-    // counterpartyDecisionSlot 那一个槽，于是"它成立"与"那份决定在档"永远同真同假：
+    // counterpartyDecisionSlot 那两个槽，于是"它成立"与"那份决定在档"永远同真同假：
     // 它恒在争点表上（不是被规则一捞的就是被规则三捞的），把 onFile 换成常量 true
     // 一个字都不会变。N-2a 不一样——它属于「任选其一」分组，同组那条路走通时它**不是代表行**，
     // 规则一捞不到它；这时它进不进表，只由规则三这一个条件决定。
