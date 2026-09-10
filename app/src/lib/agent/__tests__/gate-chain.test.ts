@@ -494,6 +494,25 @@ describe('五、端到端接线', () => {
    * 模型全引对 → 不发 STATUTE_UNVERIFIED → 归档里没有放行集 → 判据读成空集 →
    * **用户面每一处真放行的条号都被判成漏网**，L1 在最理想的一轮恒红。
    */
+  /**
+   * 【⑤ 也必须配出路】(设计稿 §7.7) ⑥⑨ 的 notice 一直写着第一人称出路句，唯独 ⑤ 只说了
+   *「已拦下、不作数」——用户读完知道这儿少了个案号，却不知道那个案子还找不找得回来、
+   * 该跟我们说什么。这条钉住三样：说清发生了什么、给出路、给一句他回一句就能推进的话。
+   *
+   * 变异臂：把 message 改回只报"已拦下…不作数"（或去掉 suggest）⇒ 这条红。
+   */
+  it('⑤ 的 notice 带出路句与一键回复（只报"已拦下"→ 红）', async () => {
+    const { result, notices } = await turn([
+      { text: '参考（2023）京0105民初88888号的口径，你可以主张。', tools: [CARD] },
+    ]);
+    expect(result.text, '假案号必须在用户面被换成标记').toContain(UNVERIFIED_CITATION);
+    const n = notices.find((e) => e.data.code === 'CITATION_BLOCKED');
+    expect(n, '⑤ 开了火却没发自己的 notice').toBeTruthy();
+    expect(n!.data.suggest, '没有 chip → 用户读完仍然不知道该说什么').toBeTruthy();
+    expect(n!.data.message, '出路句里引的那句话要与 chip 逐字相同').toContain(`「${n!.data.suggest}」`);
+    expect(n!.data.message, '要说清这一处现在长什么样').toContain(UNVERIFIED_CITATION);
+  });
+
   it('干净轮（⑥ 一处都没标）照样落盘放行集（挂在无条件发的那条 notice 上）', async () => {
     const { notices } = await turn([{ text: '先把材料理一理，别急着签字。', tools: [CARD] }]);
     expect(notices.find((e) => e.data.code === 'STATUTE_UNVERIFIED'), '这一轮不该开火').toBeUndefined();

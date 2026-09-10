@@ -46,12 +46,19 @@
 
 import { cnNumeral, insideVerbatim } from './citation-block';
 import type { ValueGuardMode } from './gate-chain';
+import {
+  SUGGEST_RECALC,
+  SUGGEST_REPEAT_CALC,
+  SUGGEST_USE_CARD,
+  VALUE_MISMATCH,
+  VALUE_UNSOURCED,
+} from './gate-marks';
 import type { KnowledgePack } from './retrieval';
 
-/** 不在任何来源里 */
-export const VALUE_UNSOURCED = '【数值无来源】';
+/** 不在任何来源里。字面住在 gate-marks.ts（正文标记 / 提示行 / 一键回复三处同源）。 */
+export { VALUE_UNSOURCED };
 /** 与来源卡差一点点（容差内但不相等）——比"无来源"更可疑：它像是抄错了一位 */
-export const VALUE_MISMATCH = '【数值与来源卡不一致】';
+export { VALUE_MISMATCH };
 
 /**
  * 容差（设计稿 §4.3）。**只用来分类，不用来放行**：
@@ -607,7 +614,7 @@ export function valueNoticeMessage(violations: readonly ValueViolation[], mode: 
   if (unsourced.length) {
     lines.push(
       `本轮有 ${unsourced.length} 处数字既不是这一轮算出来的、也不在来源卡里：${unsourced.join('、')}，${said(VALUE_UNSOURCED)}。` +
-        '出路：回我一句「帮我算一下」，我用 claim_calc 按你档案里的入职日期与工资重算一遍，' +
+        `出路：回我一句「${SUGGEST_RECALC}」，我用 claim_calc 按你档案里的入职日期与工资重算一遍，` +
         '算式、每一项输入的来源、依据条文会一起给你——那个数才是能拿去谈的数。',
     );
   }
@@ -615,16 +622,33 @@ export function valueNoticeMessage(violations: readonly ValueViolation[], mode: 
     lines.push(
       `本轮有 ${fromCard.length} 处数字与来源卡差了一点：` +
         fromCard.map((v) => `${v.token}（卡里是 ${v.nearest}）`).join('、') +
-        `，${said(VALUE_MISMATCH)}。出路：以来源卡的数为准，点开回复里的来源卡可以看到它的生效期间。`,
+        `，${said(VALUE_MISMATCH)}。出路：以来源卡的数为准，点开回复里的来源卡可以看到它的生效期间；` +
+        `回我一句「${SUGGEST_USE_CARD}」我照卡里的数改一遍。`,
     );
   }
   if (fromCalc.length) {
     lines.push(
       `本轮有 ${fromCalc.length} 处数字与这一轮算出来的数差了一点：` +
         fromCalc.map((v) => `${v.token}（算出来是 ${v.nearest}）`).join('、') +
-        `，${said(VALUE_MISMATCH)}。出路：以 claim_calc 的算式为准，回我一句「把算式再说一遍」；` +
+        `，${said(VALUE_MISMATCH)}。出路：以 claim_calc 的算式为准，回我一句「${SUGGEST_REPEAT_CALC}」；` +
         '要是输入写错了（工资、入职日期），说清改哪一项，我重算。',
     );
   }
   return lines.join('\n');
+}
+
+/**
+ * 一键回复 chip 的文本：**用户点一下就原样发出去的那句话**，与上面出路句里引的那句逐字相同。
+ *
+ * 【为什么三种判定给三句不同的话】三处的准数来源不同：没来源的要现算，与算式差一点的要复述算式，
+ * 与卡差一点的要照卡改。合成一句的形态是——模型把自己刚算的数写少了一位，
+ * 系统却让用户去翻一张与它无关的卡（这正是 2026-09-08 复审那条 major 的形状）。
+ *
+ * 优先级按"能当场推进多少"排：现算 > 复述算式 > 照卡改。
+ */
+export function valueNoticeSuggest(violations: readonly ValueViolation[]): string | undefined {
+  if (violations.some((v) => v.mark === 'unsourced')) return SUGGEST_RECALC;
+  if (violations.some((v) => v.mark === 'mismatch' && v.nearestFrom === 'calc')) return SUGGEST_REPEAT_CALC;
+  if (violations.some((v) => v.mark === 'mismatch')) return SUGGEST_USE_CARD;
+  return undefined;
 }

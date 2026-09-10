@@ -222,6 +222,11 @@ const NON_GATE_IMPORTS: Record<string, string> = {
   // —— ./statute-guard、./value-guard ——
   statuteNoticeMessage: '拼 notice 文案，不碰正文（闸的动作在 StatuteGuard 里）',
   valueNoticeMessage: '拼 notice 文案，不碰正文（闸的动作在 applyValueGuard 里）',
+  statuteNoticeSuggest:
+    '挑一句**一键回复的 chip 文案**（「查一下这条」/「取新版」），不碰正文。' +
+    '它读的是同一批 violations，只决定提示行上那枚按钮写什么。',
+  valueNoticeSuggest:
+    '同上：按 unsourced / 与算式不符 / 与卡不符三支各挑一句 chip 文案，不碰正文。',
 };
 
 /**

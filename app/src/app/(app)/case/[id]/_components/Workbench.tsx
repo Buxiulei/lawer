@@ -520,6 +520,7 @@ export function Workbench({ caseId }: { caseId: string }) {
                     caseId={caseId}
                     confirmedDrafts={confirmedDrafts}
                     onRequestConfirmDraft={setAskingDraft}
+                    onSuggest={send}
                     actions={(m.actionItemIds ?? [])
                       .map((id) => actionsById.get(id))
                       .filter((a): a is ActionItem => Boolean(a))}
@@ -540,6 +541,7 @@ export function Workbench({ caseId }: { caseId: string }) {
               caseId={caseId}
               confirmedDrafts={confirmedDrafts}
               onRequestConfirmDraft={setAskingDraft}
+              onSuggest={send}
               actions={[]}
               onToggleAction={toggleAction}
             />

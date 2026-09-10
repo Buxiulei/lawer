@@ -3,6 +3,7 @@
 import { Children, type ReactNode } from 'react';
 import Markdown, { defaultUrlTransform, type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { GATE_MARK_HINTS, GATE_MARKS, type GateMark } from '@/lib/agent/gate-marks';
 import { Sensitive } from '@/components/Sensitive';
 
 /**
@@ -52,20 +53,29 @@ function withMoney(text: string, key: string): ReactNode[] {
  * 出口闸留在正文里的占位标记。淡色标注表示"此处待核实"，**不用警报色**——
  * 这些标记是给用户看的"这一处别照抄"，不是错误提示。
  *
- * 五个真源分别在服务端：`citation-guard.ts` 的 `UNVERIFIED_CITATION`（⑤ 案号）、
- * `statute-guard.ts` 的 `UNVERIFIED_STATUTE` / `SUPERSEDED_STATUTE`（⑥ 条号）、
- * `value-guard.ts` 的 `VALUE_UNSOURCED` / `VALUE_MISMATCH`（⑨ 数值）。
- * **这里照抄字面而不 import**：那几个模块各自带着上千行纯函数（条号归一、引用块拼装），
- * 为了五个字符串把它们拉进客户端包不值得。代价是这份字面要跟着改——
- * `RichText.test.tsx` 里那条判据拿服务端常量逐字对，改漏一个就红。
+ * 【字面与解释都从 gate-marks.ts 取，不在这里另抄一份】那五个标记此前是手抄的字面，
+ * 理由是三个闸各带上千行纯函数、不值得为五个字符串拉进客户端包；代价是**闸那边改了
+ * 标记而这里没跟上时，标记原样摊在正文里、没有任何样式**——看起来只是排版丑了一点。
+ * 现在字面搬进了一个零依赖的叶子模块，两边共用同一份，手抄那一层因此撤掉。
+ *
+ * 【为什么每个标记要挂 title】在此之前用户看到的是一个裸的【条号待核验】：
+ * 它告诉他"这儿有问题"，却不告诉他这问题是什么、他能做什么。禁令配出路（设计稿 §7.7）
+ * 在正文这一面就是这一句悬停解释，另一面是回复底下那条闸提示行（GateHintLine）。
+ * 两者同源（gate-marks.ts），措辞改一处两处一起变。
  */
-const CITE_PENDING = /(【案号待核实】|【条号待核验】|【已修正，见新版】|【数值无来源】|【数值与来源卡不一致】)/g;
+const CITE_PENDING = new RegExp(`(${GATE_MARKS.join('|')})`, 'g');
+
+/** 这一段命中的是不是闸标记（`split` 的奇数位天然是，判一次是为了拿到 title 的类型） */
+function markHint(part: string): string | undefined {
+  return GATE_MARK_HINTS[part as GateMark];
+}
 
 function withMarks(text: string, key: string): ReactNode[] {
   return text.split(CITE_PENDING).flatMap((part, i) =>
     i % 2 === 1 ? (
       <span
         key={`${key}-c${i}`}
+        title={markHint(part)}
         className="rounded bg-surface-2 px-1 text-[0.92em] text-ink-2"
       >
         {part}

@@ -36,17 +36,26 @@ import {
   isStatuteCitationForm,
   type CitationForm,
 } from './citation-block';
+import {
+  SUGGEST_CHECK_STATUTE,
+  SUGGEST_FETCH_CURRENT,
+  SUPERSEDED_STATUTE,
+  UNVERIFIED_STATUTE,
+} from './gate-marks';
 import type { KnowledgePack } from './retrieval';
 
-/** 验不过的条号后面缀这个。**不删条号**——用户要看得见这里本来引的是哪一条，好自己去查。 */
-export const UNVERIFIED_STATUTE = '【条号待核验】';
+/**
+ * 验不过的条号后面缀这个。**不删条号**——用户要看得见这里本来引的是哪一条，好自己去查。
+ * 字面住在 gate-marks.ts（正文标记 / 提示行 / 一键回复三处同源，见那里的文件头）。
+ */
+export { UNVERIFIED_STATUTE };
 
 /**
  * 登记簿 status ≠ 现行的条（设计稿 §7.3）。与【条号待核验】分开，因为**两者的出路不同**：
  * 待核验是"我们没取到原文"（用户可以点开来源卡/让我们查），
  * 已修正是"这一条我们取到了、但它已经不是现行文本了"（用户要的是新版，不是这一条）。
  */
-export const SUPERSEDED_STATUTE = '【已修正，见新版】';
+export { SUPERSEDED_STATUTE };
 
 /** 登记簿里"这条源还作数"的那个取值。其余取值一律按已修正处置。 */
 const STATUS_CURRENT = '现行';
@@ -464,16 +473,32 @@ export function statuteNoticeMessage(violations: readonly StatuteViolation[]): s
   if (unverified.length) {
     lines.push(
       `本轮有 ${unverified.length} 处条号不在这一轮取到的原文里：${unverified.join('、')}，已标注${UNVERIFIED_STATUTE}。` +
-        '出路：点开回复里的来源卡看我们手上有哪几条，或直接回我一句「查一下这条」，我用 citation_check 把原文取回来再引给你。',
+        `出路：点开回复里的来源卡看我们手上有哪几条，或直接回我一句「${SUGGEST_CHECK_STATUTE}」，我用 citation_check 把原文取回来再引给你。`,
     );
   }
   if (superseded.length) {
     lines.push(
       `本轮有 ${superseded.length} 处条号的来源已不是现行文本：${superseded.join('、')}，已标注${SUPERSEDED_STATUTE}。` +
-        '出路：这一条不要再往文书里写；回我一句「取新版」，我按登记簿里的新版原文重新引。',
+        `出路：这一条不要再往文书里写；回我一句「${SUGGEST_FETCH_CURRENT}」，我按登记簿里的新版原文重新引。`,
     );
   }
   return lines.join('\n');
+}
+
+/**
+ * 一键回复 chip 的文本：**用户点一下就原样发出去的那句话**，与上面出路句里引的那句逐字相同。
+ *
+ * 【为什么由服务端给，而不是前端按 code 写死一句】两种判定的出路完全不同
+ *（没取到原文 → 去取；已不是现行文本 → 换新版），前端按 code 写死就只能给其中一句，
+ * 而它挑中的那句在另一半场景里会把用户指到错的地方。
+ *
+ * 两种判定同时命中时给「取原文」那一句：它是能当场推进的那条，
+ * 而「取新版」要等登记簿里真有新版。
+ */
+export function statuteNoticeSuggest(violations: readonly StatuteViolation[]): string | undefined {
+  if (violations.some((v) => v.verdict === 'unverified')) return SUGGEST_CHECK_STATUTE;
+  if (violations.some((v) => v.verdict === 'superseded')) return SUGGEST_FETCH_CURRENT;
+  return undefined;
 }
 
 /** 回喂给模型的改正指令（文书通道用）。说清违规的是哪一条、为什么不行、该怎么办。 */

@@ -13,6 +13,7 @@ import {
   splitCitation,
   statuteCorrectionDirective,
   statuteNoticeMessage,
+  statuteNoticeSuggest,
 } from '../statute-guard';
 import type { KnowledgePack } from '../retrieval';
 
@@ -516,6 +517,38 @@ describe('要件 I · 禁令必配出路（设计稿 §7.7）', () => {
 
   it('一条违规都没有时不产出文案（空字符串会被上游渲染成一个空提示行）', () => {
     expect(statuteNoticeMessage([])).toBe('');
+  });
+
+  /**
+   * 【出路句里引的那句话，必须与 chip 逐字相同】提示行叫他说 A、chip 发出去的是 B 的形态是：
+   * 用户点完之后，回复答的是另一件事，而他并不知道自己刚才发出去的是什么。
+   * 变异臂：改 suggest 而不改出路句（或反过来）⇒ 这两条红。
+   */
+  it('suggest 与出路句同一句话：待核验给「取原文」那句', () => {
+    const bad = [{ cited: '《某某某某法》第四十八条', where: '正文', verdict: 'unverified' as const }];
+    const suggest = statuteNoticeSuggest(bad)!;
+    expect(suggest).toBeTruthy();
+    expect(statuteNoticeMessage(bad)).toContain(`「${suggest}」`);
+  });
+
+  it('suggest 与出路句同一句话：已修正给「取新版」那句（两种判定共用一句 → 红）', () => {
+    const bad = [{ cited: '《某某某某法》第四十六条', where: '正文', verdict: 'superseded' as const }];
+    const suggest = statuteNoticeSuggest(bad)!;
+    expect(suggest).toBe('取新版');
+    expect(statuteNoticeMessage(bad)).toContain(`「${suggest}」`);
+  });
+
+  it('两种判定同时命中时给能当场推进的那句（取新版要等登记簿里真有新版）', () => {
+    expect(
+      statuteNoticeSuggest([
+        { cited: '《某某某某法》第四十六条', where: '正文', verdict: 'superseded' },
+        { cited: '《某某某某法》第四十八条', where: '正文', verdict: 'unverified' },
+      ]),
+    ).toBe('查一下这条');
+  });
+
+  it('零违规时没有 chip（空 chip 会渲染成一枚点了什么都不发生的按钮）', () => {
+    expect(statuteNoticeSuggest([])).toBeUndefined();
   });
 });
 

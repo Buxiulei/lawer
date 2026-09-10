@@ -6,7 +6,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { calcOvertimePay } from '../calc';
-import { applyValueGuard, VALUE_MISMATCH, VALUE_UNSOURCED, valueNoticeMessage, type ValueSources } from '../value-guard';
+import {
+  applyValueGuard,
+  VALUE_MISMATCH,
+  VALUE_UNSOURCED,
+  valueNoticeMessage,
+  valueNoticeSuggest,
+  type ValueSources,
+} from '../value-guard';
 
 /** 卡里有一个数：47103.25 元/年 */
 const CARD = {
@@ -458,4 +465,33 @@ describe('要件 H · 禁令必配出路（设计稿 §7.7）', () => {
   });
 
   it('零违规时不产出文案', () => expect(valueNoticeMessage([])).toBe(''));
+
+  /**
+   * 【出路句里引的那句话，必须与 chip 逐字相同】提示行叫他说 A、chip 发出去的是 B 的形态是：
+   * 用户点完之后，回复答的是另一件事，而他并不知道自己刚才发出去的是什么。
+   */
+  it.each([
+    [{ token: '60 万', kind: '金额' as const, mark: 'unsourced' as const }],
+    [{ token: '47100 元', kind: '金额' as const, mark: 'mismatch' as const, nearest: '47103.25', nearestFrom: 'calc' as const }],
+    [{ token: '47100 元', kind: '金额' as const, mark: 'mismatch' as const, nearest: '47103.25', nearestFrom: 'card' as const }],
+  ])('suggest 与出路句同一句话（%j）', (v) => {
+    const suggest = valueNoticeSuggest([v])!;
+    expect(suggest, '这一支没有 chip → 闸提示行整条不出现').toBeTruthy();
+    expect(valueNoticeMessage([v])).toContain(`「${suggest}」`);
+  });
+
+  it('三种判定给三句不同的话（合成一句 → 把用户指去一张与这个数无关的卡）', () => {
+    const one = valueNoticeSuggest([{ token: '60 万', kind: '金额' as const, mark: 'unsourced' as const }]);
+    const two = valueNoticeSuggest([
+      { token: '47100 元', kind: '金额' as const, mark: 'mismatch' as const, nearest: '47103.25', nearestFrom: 'calc' as const },
+    ]);
+    const three = valueNoticeSuggest([
+      { token: '47100 元', kind: '金额' as const, mark: 'mismatch' as const, nearest: '47103.25', nearestFrom: 'card' as const },
+    ]);
+    expect(new Set([one, two, three]).size).toBe(3);
+  });
+
+  it('零违规时没有 chip（空 chip 会渲染成一枚点了什么都不发生的按钮）', () => {
+    expect(valueNoticeSuggest([])).toBeUndefined();
+  });
 });

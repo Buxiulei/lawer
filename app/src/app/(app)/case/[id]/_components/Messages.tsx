@@ -7,12 +7,13 @@ import { formatDate } from '@/app/_ui/format';
 import { ActionGroup } from '@/components/case/ActionCard';
 import { LawRefCard } from '@/components/case/LawRefCard';
 import type { DraftFrame, NoticeFrame, RecordFrame } from '../_stream/frames';
-import { servedModelLabel } from '../_stream/frames';
+import { gateHints, servedModelLabel } from '../_stream/frames';
 import { lawCiteId } from './citations';
 import { MaskedText, RichText } from './RichText';
 import {
   DegradedBadge,
   DraftCard,
+  GateHintLine,
   InstantReplyCard,
   NoticeLine,
   RecordList,
@@ -98,6 +99,7 @@ export function AssistantMessage({
   caseId,
   confirmedDrafts,
   onRequestConfirmDraft,
+  onSuggest,
   streaming = false,
 }: {
   message: StreamedMessage;
@@ -106,6 +108,8 @@ export function AssistantMessage({
   caseId: string;
   confirmedDrafts: ReadonlySet<string>;
   onRequestConfirmDraft: (frame: DraftFrame) => void;
+  /** 闸提示行的一键回复：点一下就以服务端给的那句话发出一轮 */
+  onSuggest?: (text: string) => void;
   streaming?: boolean;
 }) {
   // deterministic 首段和模型正文共用一段文本，按前缀长度切开分别渲染
@@ -126,6 +130,9 @@ export function AssistantMessage({
       });
   const records = message.records ?? [];
   const notices = message.notices ?? [];
+  // 闸提示行与普通提示行是两种画法（见 StreamParts）。同一条 notice 只会落在其中一边：
+  // 词表里标 GATE_HINT 的那几个码在 noticeCopy 里返回 null，NoticeLine 自己就不画。
+  const hints = gateHints(notices);
   const drafts = message.drafts ?? [];
 
   return (
@@ -145,10 +152,19 @@ export function AssistantMessage({
           用户什么都没做却看见一片卡片飞进来，会以为刚才那一下点出了什么。 */}
       <RecordList frames={records} fresh={streaming} />
 
-      {notices.length > 0 && (
+      {(notices.length > 0 || hints.length > 0) && (
         <div className="mt-3 flex flex-col gap-2">
           {notices.map((notice, i) => (
             <NoticeLine key={`${notice.code}-${i}`} frame={notice} fresh={streaming} />
+          ))}
+          {/* 流式途中不给按钮：这一轮还在答，点下去只会撞上「上一轮还在答」那道门 */}
+          {hints.map((hint) => (
+            <GateHintLine
+              key={`hint-${hint.code}`}
+              frame={hint}
+              onSuggest={streaming ? undefined : onSuggest}
+              fresh={streaming}
+            />
           ))}
         </div>
       )}

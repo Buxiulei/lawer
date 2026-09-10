@@ -289,6 +289,50 @@ export function NoticeLine({
 }
 
 /**
+ * 闸提示行：一道出口闸开了火，这里给一句「下一步」。
+ *
+ * 【为什么它必须存在】⑥ 条号闸与 ⑨ 数值闸的 notice 里一直写着完整的第一人称出路句
+ *（「回我一句『查一下这条』，我用 citation_check 把原文取回来再引给你」），
+ * 而前端词表把这两个码映射成 null —— **那两句话从 2026-08 起每天都在生成、每天都被丢掉**，
+ * 用户屏幕上只剩正文里一个孤零零的【条号待核验】，没有任何地方告诉他该说什么。
+ *
+ * 【为什么 chip 的文案由服务端给】判定的分支只有闸自己知道（没取到原文 / 已废止 /
+ * 数字没来源 / 抄错一位），前端按 code 写死一句就只能给其中一句，
+ * 而它挑中的那句在其余分支里会把用户指到错的地方，且没有一处会报错。
+ *
+ * 【分量】比 draft 卡再轻一档：左细线 + 一行字 + 一枚 ghost chip，不用警报色。
+ * 这些标记是「这一处别照抄」，不是错误提示——用警报色会让用户怀疑整条回复。
+ */
+export function GateHintLine({
+  frame,
+  onSuggest,
+  fresh = false,
+}: {
+  frame: NoticeFrame;
+  /** 点 chip 就以 `frame.suggest` 原文发出一轮。缺席（流式途中）时只显示文字不给按钮 */
+  onSuggest?: (text: string) => void;
+  fresh?: boolean;
+}) {
+  const suggest = frame.suggest?.trim();
+  if (!suggest) return null;
+  return (
+    <div
+      data-veil=""
+      data-gate-hint={frame.code}
+      {...frameIn(fresh)}
+      className="prose-measure flex flex-wrap items-baseline gap-x-2 gap-y-1 border-l-2 border-line pl-3 text-[14px] leading-6 text-ink-2"
+    >
+      <span className="min-w-0 flex-1 whitespace-pre-line">{frame.message}</span>
+      {onSuggest && (
+        <Button size="sm" variant="ghost" onClick={() => onSuggest(suggest)}>
+          {suggest}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
  * draft 帧：只给「查看草稿」和「确认口径无误」。
  * 没有「直接发出」——发不发、什么时候发，永远是用户自己在文书页按的。
  */

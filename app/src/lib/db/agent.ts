@@ -327,15 +327,26 @@ export function findRetryTarget(db: Database, caseId: number, messageId: number)
   };
 }
 
-/** 流跑完后回填正文与用量。tokensJson 传 null 表示本次没拿到计量（不写 0 冒充） */
+/**
+ * 流跑完后回填正文、用量与本轮闸信号。
+ *
+ * `tokensJson` 传 null 表示本次没拿到计量（不写 0 冒充）；
+ * `gateJson` 传 null 表示这一轮**不知道**闸做了什么（跑在旧代码上、或调用方没收集），
+ * 与 `'{"v":1,"codes":[],"gate":null}'`（跑了、一条都没发）是两件事——
+ * 合并成 falsy 就把"这份产物没有这一层"与"闸这一轮一处都没动"判成同一件事，
+ * 而后者恰恰是最理想的那种轮。
+ *
+ * **一句 UPDATE 写三样**：按主键改这一行，重放/续流写第二遍得到同一个值，不追加不翻倍。
+ */
 export function finalizeMessage(
   db: Database,
   messageId: number,
-  params: { content: string; tokensJson: string | null },
+  params: { content: string; tokensJson: string | null; gateJson?: string | null },
 ): void {
-  db.prepare('UPDATE messages SET content = ?, tokens_json = ? WHERE id = ?').run(
+  db.prepare('UPDATE messages SET content = ?, tokens_json = ?, gate_json = ? WHERE id = ?').run(
     params.content,
     params.tokensJson,
+    params.gateJson ?? null,
     messageId,
   );
 }

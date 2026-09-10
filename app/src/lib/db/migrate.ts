@@ -1737,6 +1737,32 @@ export function runMigrations(db: Database.Database): void {
   //（SQLite 加无默认 NOT NULL 列会半途炸，改 CHECK 要重建表，本迁移框架无事务）。
   addColumnIfMissing(db, 'messages', 'failed_code', 'TEXT');
 
+  // messages.gate_json：这一轮**十道闸干了什么**（发出的 notice 码 + 闸链汇总），
+  // 形状见 lib/agent/orchestrator.ts 的 GateJson。NULL = 这一轮不知道（旧行/旧代码）。
+  //
+  // 【为什么必须落库】在此之前 notice 与 gate_report **只走 SSE**：浏览器读完即弃，
+  // 词表里标静默的连读都不读，服务端一行不留。于是这类问题在产线上无从回答——
+  //「⑨ 观察期的误标率是多少」「哪些轮的替换率超了预算」「事故级的
+  // CRISIS_PAID_CONTENT_BLOCKED 这个月开过几次火」。唯一有这些数的地方是离线跑批的
+  // 归档（scripts/eval/report.ts），而那是我们自己造的样本，不是真实用户那几轮。
+  //
+  // 【读法：⑨ 观察期的读数就从这一列取】（VALUE_GUARD_MODE 切 rewrite 前要的那个数）
+  //   SELECT
+  //     COUNT(*)                                                   AS turns,
+  //     SUM(json_extract(gate_json, '$.gate.gates.value_guard.seen'))  AS seen,
+  //     SUM(json_extract(gate_json, '$.gate.gates.value_guard.fired')) AS fired
+  //   FROM messages
+  //   WHERE role = 'assistant' AND gate_json IS NOT NULL
+  //     AND created_at >= '2026-09-10';
+  // 分母是 seen 不是 turns：误标率问的是"看过的数里标错了几个"。
+  // `gates` 里**没跑的闸不出现**（见 events.ts），所以取不到 value_guard 那一格
+  // 与"它跑了、一处都没看到"是两件事——按 IS NULL 与 = 0 分开数，别合并。
+  //
+  // 可空 TEXT、不回填、无 DB 级 CHECK：同 failed_code 的既定裁决
+  //（SQLite 加无默认 NOT NULL 列会半途炸，改 CHECK 要重建表，本迁移框架无事务）。
+  // 存量行没有这一层，塞一个 '{}' 上去等于宣称"那几轮闸一处都没动"，而真相是无从得知。
+  addColumnIfMissing(db, 'messages', 'gate_json', 'TEXT');
+
   // 存量库的 drafts 补两列（新建库已在建表段带上）。纯加法、可重跑。
   addColumnIfMissing(db, 'drafts', 'send_consequences', 'TEXT');
   addColumnIfMissing(db, 'drafts', 'based_on', 'INTEGER');

@@ -4,7 +4,7 @@
 // 危机轮是流式的，事后剥不回来；而 D15 是**新的 L1 红线，一票否决**。
 // 一条只靠"我们自己不生成"来保证的红线，在模型能绕过工具直接在正文里说的产品里，等于没有保证
 // （本仓已实测三次同形态绕过：危机卡自取检索、案号自取检索、正文直提 NBDpsy）。
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { runTurn } from '../orchestrator';
 import { CRISIS_NBDPSY_LINE, CRISIS_RESOURCE_PACK_ID, detectCrisisPaidContent, detectNbdpsyPitch } from '../crisis';
@@ -210,6 +210,34 @@ describe('D15 危机轮付费禁令（**新 L1 红线**，一票否决）', () =
     expect(result.text, '首段那句合法的 NBDpsy 引导语不该被误剥').toContain(CRISIS_NBDPSY_LINE);
     const codes = sink.events.filter((e) => e.event === 'notice').map((e) => (e as { data: { code: string } }).data.code);
     expect(codes).toContain('CRISIS_PAID_CONTENT_BLOCKED');
+  });
+
+  /**
+   * 【它一开火就是事故，所以服务端日志里必须有】
+   * 在此之前这条 L1 的全部痕迹是一条 notice——而那个码前端词表里没有（实测 2026-09-10），
+   * 于是它落进 `noticeCopy` 的"未知 code"分支：浏览器控制台一行 warn、服务端一个字都没有。
+   * **没有人在看**。三段式（缺什么／为什么缺／怎么办）：裸报错让下一个人把我们推过的这一遍再推一次。
+   *
+   * 变异臂：把 console.error 去掉、或换回一句不带处置的裸报错 ⇒ 这条红。
+   */
+  it('★事故级：开火时服务端落 console.error 三段式，且这一轮的闸信号进了 gate_json', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const f = makeAgentFixture();
+    pastIntakeOpening(f);
+    const { result } = await crisisTurn(f, CRISIS_INPUT, [
+      { text: '我在。如果想找人聊聊，一次 600 元。', tools: [CARD] },
+    ]);
+    const said = err.mock.calls.map((c) => String(c[0] ?? '')).find((m) => m.includes('危机轮出现付费'));
+    err.mockRestore();
+    expect(said, '事故开了火，服务端日志里一个字都没有').toBeTruthy();
+    expect(said, '缺什么：剥的是哪一句').toContain('600');
+    expect(said, '为什么：推荐段在危机轮不生成，只可能是绕过工具').toContain('绕过');
+    expect(said, '怎么办：去哪儿查').toContain('gate_json');
+    // 同一件事在库里也留得下：事后要数「这个月开过几次火」，靠的是这一列不是日志抓取
+    const row = f.db.prepare('SELECT gate_json FROM messages WHERE id = ?').get(result.messageId) as {
+      gate_json: string | null;
+    };
+    expect(JSON.parse(row.gate_json ?? '{}').codes).toContain('CRISIS_PAID_CONTENT_BLOCKED');
   });
 
   it('★危机轮：确定性首段给热线 + NBDpsy 工作室那句（2026-09-05 改规则），但不走产品推荐段、不占台账', async () => {

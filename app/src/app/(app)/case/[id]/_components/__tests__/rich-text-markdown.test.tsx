@@ -35,6 +35,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 // 闸标记的真源在服务端；这里 import 是为了给「手抄的那份字面」兜底
 import { UNVERIFIED_CITATION } from '@/lib/agent/citation-guard';
+import { GATE_MARK_HINTS, GATE_MARKS } from '@/lib/agent/gate-marks';
 import { SUPERSEDED_STATUTE, UNVERIFIED_STATUTE } from '@/lib/agent/statute-guard';
 import { VALUE_MISMATCH, VALUE_UNSOURCED } from '@/lib/agent/value-guard';
 
@@ -174,7 +175,8 @@ describe('三、不许回归：低调打码 / 引用占位 / 糊层锚点', () =
 
   it('【案号待核实】仍是淡色标注，不是警报色也不是裸文字', () => {
     const markup = html('参考【案号待核实】的口径。');
-    expect(markup).toMatch(/<span class="[^"]*text-ink-2[^"]*">【案号待核实】<\/span>/);
+    // 标记这一层现在还带一个 title（悬停解释），所以 class 前面可以有别的属性
+    expect(markup).toMatch(/<span [^>]*class="[^"]*text-ink-2[^"]*">【案号待核实】<\/span>/);
   });
 
   /**
@@ -195,8 +197,29 @@ describe('三、不许回归：低调打码 / 引用占位 / 糊层锚点', () =
     ]) {
       const markup = html(`前面一句${marker}后面一句。`);
       expect(markup, `${marker} 没被 CITE_PENDING 认出来`).toMatch(
-        new RegExp(`<span class="[^"]*text-ink-2[^"]*">${marker}</span>`),
+        new RegExp(`<span [^>]*class="[^"]*text-ink-2[^"]*">${marker}</span>`),
       );
+    }
+  });
+
+  /**
+   * 【标记必须自己说得清是什么意思】(禁令配出路，设计稿 §7.7)
+   *
+   * 在此之前用户看到的是一个裸的【条号待核验】：淡色底纹，没有 title、没有任何旁注。
+   * 它告诉他"这儿有问题"，却不告诉他这问题是什么、他能做什么——
+   * 而正文里那句话恰恰是他要抄进书状、当庭念出去的那一句。
+   *
+   * 【变异臂】withMarks 去掉 title ⇒ 这条红；
+   *          在组件里另写一份解释（不从 gate-marks.ts 取）⇒ 逐字相等那条红。
+   */
+  it('五个标记各挂一句悬停解释，且逐字来自共享常量（组件里另写一份 → 红）', () => {
+    for (const marker of GATE_MARKS) {
+      const markup = html(`前面一句${marker}后面一句。`);
+      const hint = GATE_MARK_HINTS[marker];
+      expect(hint, `${marker} 没有解释`).toBeTruthy();
+      expect(markup, `${marker} 的 title 没挂上或与共享常量对不上`).toContain(`title="${hint}"`);
+      // 每一句都要给「回我一句 X」——只说"这一处待核实"是把问题丢回给一个本来就不懂的人
+      expect(hint, `${marker} 的解释里没有出路`).toContain('回我一句');
     }
   });
 

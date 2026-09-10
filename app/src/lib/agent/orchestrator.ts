@@ -33,7 +33,7 @@ import {
 } from '@/lib/llm';
 import { domainPackOrDefault } from '@/lib/domains/registry';
 
-import type { AgentEventSink } from './events';
+import type { AgentEvent, AgentEventSink, NoticeCode } from './events';
 import { intakeStage, type IntakeStage } from './intake';
 import { buildSystemPromptWithBreakpoints } from './prompt';
 import {
@@ -56,7 +56,7 @@ import {
 } from './crisis';
 import { decideOffer, looksLikeDecline, referralScenesOf, renderReferral } from './referral';
 import * as referralOffers from '@/lib/db/referral-offers';
-import { CitationGuard } from './citation-guard';
+import { CitationGuard, UNVERIFIED_CITATION } from './citation-guard';
 import {
   articleKey,
   coreArticleKeys,
@@ -70,8 +70,9 @@ import {
 import { bareArticleCitations, precedentContamination, quotedStatuteSpans } from './citation-block';
 import { issueFactsToken } from '@/lib/cases/facts-token';
 import { factsCardOf } from './facts-entry';
-import { StatuteGuard, statuteNoticeMessage } from './statute-guard';
-import { applyValueGuard, valueNoticeMessage } from './value-guard';
+import { SUGGEST_FIND_CASE } from './gate-marks';
+import { StatuteGuard, statuteNoticeMessage, statuteNoticeSuggest } from './statute-guard';
+import { applyValueGuard, valueNoticeMessage, valueNoticeSuggest } from './value-guard';
 import { newGateReport, REPLACE_RATE_BUDGET, summarizeGateReport, tallyGate, VALUE_GUARD_MODE, valueGuardText } from './gate-chain';
 import { MAX_INJECTED_PACKS, type KnowledgePack, type KnowledgeSearcher } from './retrieval';
 import { loadCaseSnapshot } from './snapshot';
@@ -529,6 +530,24 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutcome> {
   }
 }
 
+/** GATE_REPORT 那条 notice 的结构化载荷（形状的真源在 events.ts，这里不另抄一份） */
+type GateReportPayload = NonNullable<Extract<AgentEvent, { event: 'notice' }>['data']['gate_report']>;
+
+/**
+ * 一轮的闸信号落盘形状（`messages.gate_json` 里那段 JSON）。
+ *
+ * 【为什么带 `v`】这一列是给**离线读数**用的（⑨ 观察期的误标率、替换率超预算的那些轮）。
+ * 读的人拿到的是几个月里攒下来的行，其中一部分写于本版之前——形状换过而没有版本号的形态是，
+ * 一份 SQL 同时在两种形状上跑，报出来的数看不出哪几行其实没参与统计。
+ */
+interface GateJson {
+  v: 1;
+  /** 本轮发出的 notice 码（**结清之前**的那些，见 gateCodes 的注释）。按发出顺序，不去重 */
+  codes: NoticeCode[];
+  /** 闸链汇总。GATE_REPORT 无条件发，所以它恒在；真取不到时写 null，不用 {} 冒充 */
+  gate: GateReportPayload | null;
+}
+
 async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise<RunTurnOutcome> {
   const { db, caseId, userId } = input;
   const now = input.now ?? new Date();
@@ -553,7 +572,29 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
    * 继续试只是把同一个异常重复吞 20 遍，还会掩盖真正第一现场的那条日志。
    */
   let sinkBroken = false;
+  /**
+   * 本轮闸信号的落盘料（→ `messages.gate_json`）。
+   *
+   * 【为什么采集点只有一个】notice 从十几处发出去，各处再顺手记一笔的形态是
+   * "记录这件事有十几处代码负责"——而记录只该有一处负责，否则加了一处 emit 忘了记，
+   * 归档里那一轮就少一个码，且没有任何一处会报错。这里搭在 `emit` 上，进出必经。
+   *
+   * 【为什么它必须落库】在此之前 notice 与 gate_report **只走 SSE**：
+   * 浏览器读完即弃、词表里标 null 的连读都不读，服务端一行不留。于是
+   * 「⑨ 观察期误标率是多少」「哪一轮的替换率超了预算」这类问题，在产线上无从回答——
+   * 只有离线跑批的归档里有（scripts/eval/report.ts），而那是我们自己造的样本。
+   *
+   * 【`codes` 到哪儿为止】收的是**结清（finalizeMessage）之前**发出的那些。
+   * 排在结清之后的 PROMPT_CACHE / usage / done 不在其中——它们是记账与传输信号，
+   * 不是闸信号。这条写在这里，免得下一个人拿这份码表去数"本轮一共发了几条 notice"。
+   */
+  const gateCodes: NoticeCode[] = [];
+  let gateReportSnapshot: GateReportPayload | undefined;
   const emit: AgentEventSink = (e) => {
+    if (e.event === 'notice') {
+      gateCodes.push(e.data.code);
+      if (e.data.gate_report) gateReportSnapshot = e.data.gate_report;
+    }
     if (sinkBroken) return;
     try {
       input.emit(e);
@@ -1196,6 +1237,17 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
       const emptied = !kept.trim();
       const fallback = crisisPack.safeFallback;
       text = opener ? `${opener}\n\n${emptied ? fallback : kept}` : (emptied ? fallback : kept);
+      // 【为什么这一条要进服务端日志，而别的闸不进】它一开火就是**事故**：
+      // 我们自己的推荐段在危机轮根本不生成，只可能是模型绕过工具直接在正文里说。
+      // 在此之前它唯一的痕迹是一条 notice，而那个码前端词表里没有——
+      // 浏览器控制台一行 warn，服务端一个字都没有，**没有人在看**。
+      // 三段式（缺什么／为什么缺／怎么办）：裸报错让下一个人把我们推过的这一遍再推一次。
+      console.error(
+        `[chat] 危机轮出现付费/预约内容「${paid}」，已整句剥除（消息 #${messageId}）。` +
+          '原因：危机轮的推荐段不生成，这段内容只可能是模型绕过工具直接写进正文的（本仓已实测三次同形态绕过）。' +
+          '处置：按事故查这一轮的模型段原文（messages.gate_json 记了本轮的闸信号，' +
+          'CRISIS_PAID_CONTENT_BLOCKED 在其 codes 里），并回到 CRISIS_DIRECTIVE 看禁令是不是被稀释了。',
+      );
       emit({
         event: 'notice',
         data: {
@@ -1298,6 +1350,7 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
         data: {
           code: 'VALUE_UNSOURCED',
           message: valueNoticeMessage(valueGate.violations, VALUE_GUARD_MODE),
+          suggest: valueNoticeSuggest(valueGate.violations),
           value_marked: valueGate.violations.map((v) => ({ token: v.token, kind: v.kind, mark: v.mark, nearest: v.nearest })),
         },
       });
@@ -1376,7 +1429,15 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
       event: 'notice',
       data: {
         code: 'CITATION_BLOCKED',
-        message: `已拦下知识库中不存在的案号 ${cited.join('、')}（相应位置显示为「案号待核实」）。这类引用一律不作数。`,
+        // 【为什么这条也要有出路句】(禁令配出路，设计稿 §7.7) ⑥⑨ 的 notice 一直写着
+        // 第一人称出路，唯独 ⑤ 只说了"已拦下、不作数"——用户读完知道这儿少了个案号，
+        // 却不知道那个案子还找不找得回来、该跟我们说什么。措辞与另外两闸同款：
+        // 说清我这边发生了什么（不推给用户"你自己去查"），再给一句他回一句就能推进的话。
+        message:
+          `我引的案号 ${cited.join('、')} 在本轮检索里没有原文，已经把它从正文里去掉` +
+          `（那几处现在显示为${UNVERIFIED_CITATION}）——没有原文的案号一律不作数，别照抄。` +
+          `出路：回我一句「${SUGGEST_FIND_CASE}」，我去把这个案子的原文找出来再引给你。`,
+        suggest: SUGGEST_FIND_CASE,
       },
     });
   }
@@ -1392,6 +1453,7 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
       data: {
         code: 'STATUTE_UNVERIFIED',
         message: statuteNoticeMessage(statutes.found),
+        suggest: statuteNoticeSuggest(statutes.found),
         statute_marked: statutes.found.map((v) => ({ cited: v.cited, verdict: v.verdict })),
       },
     });
@@ -1640,7 +1702,17 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
   }
 
   const usageReport: UsageReport = { model: routed.client.billingModel, usage, servedModel };
-  store.finalizeMessage(db, messageId, { content: text, tokensJson: JSON.stringify(usageReport) });
+  /**
+   * 闸信号与正文**同一句 UPDATE 落库**（不是另起一次写）。两条理由：
+   *  · 另起一次写就多一条会失手的链路，而它失手时正文照常落库、这一列静静地空着；
+   *  · UPDATE 按主键改这一行，**重放/续流写第二遍得到的是同一个值**，不追加、不翻倍。
+   */
+  const gateJson: GateJson = { v: 1, codes: gateCodes, gate: gateReportSnapshot ?? null };
+  store.finalizeMessage(db, messageId, {
+    content: text,
+    tokensJson: JSON.stringify(usageReport),
+    gateJson: JSON.stringify(gateJson),
+  });
   // 这一轮到此为止已经**结清**：往后再抛什么，都不许回头把这条回答改写成失败态
   progress.settled = true;
   store.touchThread(db, thread.id);
