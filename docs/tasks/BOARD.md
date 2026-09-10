@@ -572,6 +572,8 @@
 
 **2026-09-10 存疑判例记录票到位（1d2d299c，ws/precedent-record）+ 隔离区票收尾（6dd6b95e）**：TODO 核实清单新增「第二轮（2026-09-10，真实浏览器）」五段；counseling.ts ① searchKeywords 加「强制报告 典型案例」。线索登记停在登记簿 kind 枚举（十种无一能装官方站署名理论文章；机构官网受守卫 (g) 限数据卡）——探针取回 200 / sha 8b24ae832c03 / 摘句全部命中 text 第 424 行、署名核过，只写 scratchpad 未入 knowledge。**裁定：不入登记簿**（加「官方文章」等于给署名评论开「原文核实」口），线索只留 TODO 记录；风险卡 qiangzhi-baogao-zhuti 第 79-80 / 98 行「spp 无分页翻不到 2020 批次」已被第二轮证伪——改成与第二轮一致（不改结论/输出闸/标记，不挂 precedents），回给同一代理追加 commit。隔离区票收尾：README:201 改齐、in_quarantine 谓词三处共用（变异 4 红）、die() 按实际档数；pytest 170、strict 207、verify 387/0、audit 102/0、守卫绿。wt-int 已 ff 到 6dd6b95e，等记录票追加后合入一班上产。
 
+**2026-09-10 记录票收尾（1432082f）+ 两票合入 wt-int（aa89996b）**：风险卡 qiangzhi-baogao-zhuti「实测试过」改为两轮分述（2020-05-29 首批五起逐字核过，无咨询机构为义务主体）、建议路径换成两条活线索（12309 真实提交抓 body；bjgy/区法院分站检索）、判定句改口「第二轮检索能力提高后仍无官方案例，但 rmfyalk 需登录未检、12309 未打通，尚不能判结构性缺口」；knowledge/README.md 成文 `updated` 规则（只在外部事实面重核时进位，纯正文/记录改动不进位，本卡为例）。index.json 无 diff（正文改动不进索引，符合规则）。wt-int：ff 隔离区票 6dd6b95e → 三方合并记录票 1432082f = aa89996b，无冲突，闸链 + pytest 在跑。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
