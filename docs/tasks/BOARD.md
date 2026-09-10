@@ -606,6 +606,8 @@
 
 **2026-09-10 晚 事实卡预算票过审（36b62d2d，ws/facts-budget）**：要件表节挂 refit 逐行降级（缺失/不成立=0 永不丢、成立·待证=1、成立=3；同档最长先丢；两轮：原格式丢 P3/P2 → 压缩格式丢 P1；只剩 P0 放不下才整节丢 + console.error 三段式）；压缩档：burdenLabelsShort（领域包给，assertDomainPack 两向机检）、需补 60→36、去重复前缀；missingSlots 排进「需补」栏（此前事实卡不印 missingSlots，典型证据 60 字截断恰把真正差的那格截掉）；namedGaps 按 FACT_SLOT_SOURCES 前缀滤寻址串（无判定的槽会把 `evidence:工资` 原样进 prompt）。**实测**：施压期厚档案 2893 → 4579 字（余量 21），要件行 0/18 → 16/18，P0 五行全在带 missingAs，丢的两行是「成立」（2N-5、N-3），压缩档未启用；最长案件 4533 逐字不变（零快照更新）。变异四臂红；全量 7417。**基线按 SHA 36b62d2d 记：厚档案 4579 字 / 16 行**。裁定：missingSlots 进需补栏——追认；namedGaps 启发式——追认（ElementRow 人话/机器地址分格另票）；P2 档留空、状态标签不缩——接受；复审 minor：burdenLabelsShort 机检无负样本——延续现状记 backlog；判据 (a) 按满档前缀找行余量 21 下会误报——合入前改 id 定位（facts-budget-minor）。合入后单独上产，不等决定标记票。
 
+**2026-09-10 晚 预算票小修（af2a073c）+ 合入**：判据 (a) 改 id 定位（满档/压缩前缀都认），(c) 注释写实测失效条件——压缩档启用距离是 236 字（明细预算 1738 vs 满档 13 行 1503），21 字余量只管再丢一条「成立」行；两条变异如预期。顺带发现：vitest 给错路径会**静默只跑存在的文件并报绿**（labor-zero-change 实际在 lib/domains/__tests__），跑判据时要看文件计数。wt-int ff 到 af2a073c，折台账后跑闸。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
