@@ -538,7 +538,37 @@ describe('第三条跑道（runCapabilityRest）', () => {
     ).toEqual([]);
   });
 
-  it('MUTATION 对照臂：抽取函数确实抽得出名字（否则上面三条都只是没扫到）', () => {
+  /**
+   * 【为什么前置闸也要在这里拦（2026-09-10 复审后续）】precondition 是能力条目上的字段，
+   * 而这条跑道对它的判定与两道门**不是同一份**：
+   *   · realname —— rest-runner.ts 就地写了一句，判的是本地那一格；两道门走
+   *     invokeCapability → realnameGate（本地没实名时会去问一次 NBDpsy 做实名互认）。
+   *     同一个人、同一条能力，这条跑道 403、两道门 200，两边都不报错。
+   *   · emotion_consent / facts_token —— 这条跑道**一个字都不判**。
+   * 所以这条跑道今天只跑得起「不带前置闸」的能力，而那正好是一条读得出来的结构判据。
+   * 不点名的形态是：谁哪天把一条带闸的能力挂到这条路由上，闸悄悄没了，回包 200。
+   */
+  it('这条跑道上没有一条能力声明 precondition（变异：把某条路由改挂一条声明了 precondition 的能力 ⇒ 红）', () => {
+    const offenders = files.flatMap(([rel, names]) =>
+      names
+        .filter((n) => (getCapability(n)?.precondition.length ?? 0) > 0)
+        .map((n) => `${rel} → ${n}（precondition: ${getCapability(n)!.precondition.join(' / ')}）`),
+    );
+    expect(
+      offenders,
+      '下面这些能力声明了前置闸，而 runCapabilityRest 给不出与两道门相同的判定：\n  ' +
+        offenders.join('\n  ') +
+        '\n· realname：这条跑道就地写了一句，判的是本地实名那一格；两道门走 invokeCapability 的 ' +
+        'realnameGate（本地没实名时会去问一次 NBDpsy 做实名互认）。口径分叉的形态是：' +
+        '一个已在对面实名过的人，走这条路由 403、走 MCP 与通用工具桥 200，两边都不报错。\n' +
+        '· emotion_consent / facts_token：这条跑道根本不判——没单独同意过的人照样写得进敏感级信息，' +
+        '拿着几轮之前的印象也照样盖得掉档案，回包 200、没有一处报错。\n' +
+        '怎么办：要跑带前置闸的能力就改道 invokeCapability（判定的唯一那一份，两道门都从它过）；' +
+        '不要在这条跑道上再补一句闸——再补一句就是第三份口径，分叉只会多一处。',
+    ).toEqual([]);
+  });
+
+  it('MUTATION 对照臂：抽取函数确实抽得出名字（否则上面四条都只是没扫到）', () => {
     expect(
       restRunnerCapabilityNames(
         "return runCapabilityRest(req, 'case_facts', { case_id: caseId });\n" +

@@ -59,12 +59,22 @@ export const evidenceUploadUrl: Capability = {
   // 签一条一次性上传地址就是往 evidence_upload_tokens 落一行。回包里只有明文 token
   // （行 id 不对外），所以回读一次取那一行——**不把 id 加进回包**：那是内部行号，
   // 对方 agent 拿它做不了任何事，加出去就得一直兼容它。
+  // 回读不到（那一行在这一瞬被清了）**点名，不回空数组**：空数组的约定是「这次没写东西」，
+  // 而走到这里地址已经签出去了、对方拿着它就能写字节——两件事混成一件之后，
+  // 台账缺这一行与本来就没有这一行在事后长得一模一样（同 registry 的 CapabilityWriteUnresolved）。
   ledger: {
     targetTable: 'evidence_upload_tokens',
     rowsOf: (db, args, result) => {
       const token = typeof result.upload_token === 'string' ? result.upload_token : '';
       const row = token ? findUploadToken(db, token) : null;
-      return row === null ? [] : [{ caseId: num(args.case_id), targetId: row.id }];
+      return row === null
+        ? [
+            {
+              unresolved:
+                `upload_token=${token || '(回包里没有这一格)'} 回读不到 evidence_upload_tokens 那一行`,
+            },
+          ]
+        : [{ caseId: num(args.case_id), targetId: row.id }];
     },
   },
   title: '取一次性上传地址',

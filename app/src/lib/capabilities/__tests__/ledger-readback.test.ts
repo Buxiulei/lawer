@@ -6,7 +6,7 @@
 //   · 回读失败 ⇒ 0 行、**1 条 console.error**，三段式且点得出能力名与那个 id。
 //
 // ── 这组补的是哪个缺口（2026-09-10 复审）──
-// 有五处 rowsOf 的案件号要回读一次才知道（分享链接、转介、两条证据简报、逐件出证），
+// 有六处 rowsOf 的目标行要回读一次才知道（分享链接、转介、两条证据简报、逐件出证、一次性上传地址），
 // 回读不到时它们一律回空数组——而空数组的约定就是「这次没写东西」。于是：
 // 用户真的撤了一条链接、真的出了一份证（花了钱、不可撤销），台账里没有那一行，
 // 回包 200、日志干净、没有任何一处会说。缺一行与本来就没有那一行，事后长得一模一样。
@@ -21,12 +21,13 @@
 //     ⇒ 该条的「有日志」当场红。
 //  ② 反过来把 case_delete 确认单那一步也改成回 unresolved
 //     ⇒ 「没写就别报警」那条红（正常的两步确认每天报一条 error）。
-//  ③ 把 ledger.ts 里 `'unresolved' in entry` 那一段删掉 ⇒ 五条全红（回读失败重新变静默）。
+//  ③ 把 ledger.ts 里 `'unresolved' in entry` 那一段删掉 ⇒ 六条全红（回读失败重新变静默）。
 import BetterSqlite3, { type Database } from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Identity } from '@/lib/auth/identity';
 import { runMigrations } from '@/lib/db/migrate';
+import { issueUploadToken } from '@/lib/evidence/upload-token';
 
 import { getCapability } from '..';
 import { recordCapabilityWrite } from '../ledger';
@@ -38,6 +39,9 @@ let errors: string[];
 
 /** 库里绝不存在的 id：回读必然落空，正是要复现的那一刻 */
 const GONE = 999_999;
+
+/** 同上，按明文哈希查的那一条（evidence_upload_tokens 只存哈希，不存明文） */
+const TOKEN_GONE = 'tok-已经不在了';
 
 beforeEach(() => {
   db = new BetterSqlite3(':memory:');
@@ -84,7 +88,7 @@ function ledgerRows(): { tool: string; target_table: string; target_id: number }
     .all() as { tool: string; target_table: string; target_id: number }[];
 }
 
-/** 五条要回读案件号（或目标行）的能力，各配一份「那一行已经不在了」的真实回包形状。 */
+/** 六条要回读案件号（或目标行）的能力，各配一份「那一行已经不在了」的真实回包形状。 */
 const READBACK: [string, Record<string, unknown>, Record<string, unknown>, string][] = [
   ['share_revoke', { share_id: GONE }, { already_revoked: false }, `share_id=${GONE}`],
   [
@@ -100,6 +104,14 @@ const READBACK: [string, Record<string, unknown>, Record<string, unknown>, strin
     { evidence_ids: [GONE] },
     { results: [{ ok: true, evidence_id: GONE, order_no: 'ORD-1' }] },
     `evidence_id=${GONE}`,
+  ],
+  // 这一条按 token 明文回读（回包里不给行 id）。回读不到 = 地址已经签出去了、
+  // 对方拿着它就能往案卷里写字节，而台账里没有这一行。
+  [
+    'evidence_upload_url',
+    { case_id: GONE },
+    { upload_token: TOKEN_GONE },
+    `upload_token=${TOKEN_GONE}`,
   ],
 ];
 
@@ -159,6 +171,26 @@ describe('对照臂：回读得到时照常落行、不报警（否则上面几�
 
     expect(ledgerRows()).toEqual([
       { tool: 'share_revoke', target_table: 'share_links', target_id: shareId },
+    ]);
+    expect(errors).toEqual([]);
+  });
+
+  it('evidence_upload_url 那条 token 还在 ⇒ 台账一行，零日志', () => {
+    const issued = issueUploadToken(db, {
+      caseId,
+      userId: identity.uid,
+      filename: '面谈录音.m4a',
+      mime: 'audio/m4a',
+      size: 1024,
+    });
+    record('evidence_upload_url', { case_id: caseId }, { upload_token: issued.token });
+
+    expect(ledgerRows()).toEqual([
+      {
+        tool: 'evidence_upload_url',
+        target_table: 'evidence_upload_tokens',
+        target_id: issued.row.id,
+      },
     ]);
     expect(errors).toEqual([]);
   });
