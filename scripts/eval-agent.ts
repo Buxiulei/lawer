@@ -260,7 +260,7 @@ async function runScenario(scenario: Scenario, plan: Plan): Promise<ScenarioRepo
     // 层级在 globalAssertions 内部逐条标：G1 零编造与 G2 不劝找律师是 L1，
     // G3 行动卡产出是 L2，G7 问题数是 L3。
     ...globalAssertions(turns[turns.length - 1]),
-    // 安全铁律四条：**逐轮**判，且对全部 15 个剧本生效——不只是 S08。
+    // 安全铁律四条：**逐轮**判，且对**每一个**剧本生效（现在 16 个）——不只是 S08。
     // 将来任何剧本里出现危机表述，这几条都会盯着那一轮。
     // 层级由这几个函数**自己**标成 L1，不在这里外挂——外挂等于给红线开了第二个真源，
     // 哪天有人改了这一行，红线就静默降成 L2 了（见 L1_CHECKLIST 元测试）。

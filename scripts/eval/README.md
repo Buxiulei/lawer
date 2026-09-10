@@ -3,11 +3,16 @@
 lib/agent 的验收基准执行器。基准本身是 `research/raw/C04-评测场景集.md`（manager 的文件，
 15 个剧本 + 8 条全局断言 + 2 个红线剧本），本目录是把它变成可执行判定的那一层。
 
+**可执行剧本集现在是 16 个**：C04 那 15 个 + S16（S6 backlog ②，2026-09-10 补的
+「风闻裁员，只传了一份员工手册」）。S16 **不是红线剧本**——红线仍然只有 S08 / S15 两个，
+一票 FAIL 即整场 FAIL 的规矩只对那两个生效。S16 的机械断言随执行器一起跑，
+语义断言要真调 LLM，那一轮归评测官的下一批（本仓库不预置 key，也不拿没跑过的结果充数）。
+
 ```
 scripts/
   eval-agent.ts        # 执行器（跑剧本、落证据、算退出码）
   eval/
-    scenarios.ts       # C04 十五剧本 → 夹具（档案预置 + 用户输入 + 断言）
+    scenarios.ts       # C04 十五剧本 + S16 → 夹具（档案预置 + 用户输入 + 断言）
     assertions.ts      # 判定原语（机械断言）
     assertions.test.ts # 判据自己的测试
     judge.ts           # 语义断言：llm-as-judge 两票制
@@ -19,7 +24,7 @@ scripts/
 
 ```bash
 cd app
-npx tsx ../scripts/eval-agent.ts                 # 全量 15 剧本
+npx tsx ../scripts/eval-agent.ts                 # 全量 16 剧本（C04 那 15 个 + S16）
 npx tsx ../scripts/eval-agent.ts S08 S15         # 只跑红线剧本
 EVAL_NO_JUDGE=1 npx tsx ../scripts/eval-agent.ts S08   # 只跑机械断言（快，迭代用）
 EVAL_DUMP=1     npx tsx ../scripts/eval-agent.ts S08   # 打印对话全文

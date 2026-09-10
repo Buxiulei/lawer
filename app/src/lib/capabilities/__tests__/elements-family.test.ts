@@ -390,3 +390,85 @@ describe('element_fill：校验先于写入', () => {
     expect((db.prepare('SELECT COUNT(*) n FROM element_fills').get() as { n: number }).n).toBe(0);
   });
 });
+
+describe('首诊那段整段自述不算一条事件记录（S6 backlog ② 复审裁定，2026-09-10）', () => {
+  // 【它守什么】lib/cases/intake.ts 把首诊「把经过写下来」那一整段原样落成一条
+  // kind='我方动作' 的事件（标题恒是 copy.site.intakeFreeTextTitle）。那是**叙事**，
+  // 不是事件记录：里面写着"我已经发了被迫解除通知"，只说明他这么讲过，
+  // 不说明档案里记着这件事发生在哪天、怎么送达。认它的形态是——首诊填完当场，
+  //「路径二：你依照第三十八条提出被迫解除」就写着「成立·待证」，
+  // 而时间线上一条通知记录都没有、沟通记录那一格是几张随手传的聊天截图。
+  //
+  // 【为什么这条判据走真库、还要真过 intake_submit】判定那一边只认得"标题等于那句话"。
+  // 在判据里自己写一条同名事件的形态是：首诊哪天改了那句标题，判定静默失效，
+  // 而这条判据照旧全绿——它验的成了自己写的那句话。
+  //
+  // 【变异 → 红】判定里去掉那道排除 ⇒ 第一条当场变「成立·待证」。
+  const NARRATIVE = '我已经发了被迫解除通知，公司拖欠工资两个月';
+
+  /** 这个案子要主张 N（要件表按已登记的诉求过滤），另一格「沟通记录」也放一件材料。 */
+  beforeEach(() => {
+    db.prepare("INSERT INTO claims (case_id, kind, amount_fen, status) VALUES (?, 'N', 0, 'draft')").run(caseId);
+    const fileId = Number(
+      db
+        .prepare("INSERT INTO files (sha256, size, mime, enc_path) VALUES ('sha-chat', 1, 'image/png', '/dev/null')")
+        .run().lastInsertRowid,
+    );
+    db.prepare(
+      `INSERT INTO evidence (case_id, user_id, file_id, name, category, status)
+       VALUES (?, ?, ?, '与HR的聊天.png', '沟通记录', '已上传')`,
+    ).run(caseId, alice.uid, fileId);
+  });
+
+  function submitIntake(freeText: string) {
+    const res = call('intake_submit', alice, {
+      case_id: caseId,
+      stage: LABOR.stages[0],
+      company_name: '对面那家有限公司',
+      employed_from: '2020-03-01',
+      monthly_wage_yuan: 30000,
+      goals: ['把钱结清'],
+      free_text: freeText,
+    });
+    expect(res.ok, `首诊没提交成功：${JSON.stringify(res)}`).toBe(true);
+  }
+
+  function n2b() {
+    const rows = call('element_sheet_get', alice, { case_id: caseId }).rows as {
+      id: string;
+      status: string;
+      missingSlots: string[];
+    }[];
+    const row = rows.find((r) => r.id === 'N-2b');
+    expect(row, '要件表里没有 N-2b（这个案子没登记 N？本条判据在空跑）').toBeTruthy();
+    return row!;
+  }
+
+  it('🔴 首诊里写着"我已经发了被迫解除通知" ⇒ N-2b 仍是「缺失」（变异：判定里去掉这道排除 → 红）', () => {
+    submitIntake(`${NARRATIVE}。当时 HR 说会给个说法，到现在也没有。`);
+    // 【前提要自证】那条事件真的按「我方动作」落库了——否则本条判据验的是"根本没这条记录"
+    const ev = db
+      .prepare("SELECT kind, title FROM timeline_events WHERE case_id = ? AND kind = '我方动作'")
+      .all(caseId) as { kind: string; title: string }[];
+    expect(ev.length, '首诊那段自述没落成一条「我方动作」，本条判据在空跑').toBe(1);
+    expect(ev[0].title).toBe(LABOR.copy.site.intakeFreeTextTitle);
+
+    const row = n2b();
+    expect(row.status, `首诊那段自述把 N-2b 抬成了 ${row.status}`).toBe('缺失');
+    expect(row.missingSlots.join('｜'), '缺口没告诉他该把这件事记成一条时间线事件').toContain('时间线事件');
+  });
+
+  it('同一段话经 timeline_add 显式记成一条事件 ⇒ 成立·待证（这道排除不是"这句话一律不认"）', () => {
+    submitIntake(`${NARRATIVE}。当时 HR 说会给个说法，到现在也没有。`);
+    const added = call('timeline_add', alice, {
+      case_id: caseId,
+      happened_at: '2026-09-01T02:00:00Z',
+      kind: '我方动作',
+      title: NARRATIVE,
+    });
+    expect(added.ok, `事件没记进去：${JSON.stringify(added)}`).toBe(true);
+    const row = n2b();
+    expect(row.status, `显式记了那条事件，N-2b 还是 ${row.status}`).toBe('成立·待证');
+    expect(row.missingSlots).toEqual([]);
+  });
+});

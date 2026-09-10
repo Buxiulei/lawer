@@ -214,7 +214,7 @@ describe('S16 只传了员工手册：一份「公司文件」不算公司作出
     expect(missingOf('2N-3')).toEqual(['timeline:公司动作']);
     expect(missingOf('N-2b'), 'N-2b 的缺口没点名那份被迫解除通知').toEqual([
       'evidence:沟通记录',
-      '被迫解除通知',
+      '被迫解除通知（请把发出通知这件事记成一条时间线事件）',
     ]);
   });
 
