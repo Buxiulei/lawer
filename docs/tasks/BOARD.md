@@ -590,6 +590,8 @@
 
 **2026-09-10 晚 「公司动作」谓词票实现到位（a03680f9，ws/company-action，工作树 wt-company-action——执行者发现 wt-cap 是旧封顶线树自行改名；脚本复审阶段路径已改、停旧轮按 runId 续跑复审）**：共享层 CounterpartyDecision { slots, slotChecks? }（合成一格，两侧传不出半份）、resolveCheckedSlot 唯一入口（buildElementSheet 与 counterpartyDecisionOnFile 同走）、assertDomainPack 两道点名；labor.ts companyTerminationDecision（正 10 反 15）、公司一侧词表合一扩词（正 5 反 5）、欠薪口语事由（正 10 反 6）；十臂变异全红；全量 7395、eval 543、守卫 128。经理裁定 openQuestions：① 协商解除取「只排提议态（协商 + 提议/递来/催签/让我签/未签/方案），已签的协商一致解除算公司决定」——复审后落；② 事实卡预算余量 64 字、施压期厚档案会把要件表整节挤出（CASE_FACTS_BUDGET 4600 / 降级粒度整节丢）——**另票**；③ 字段升级 counterpartyDecision——接受；④ 认「裁员/被裁/裁掉」并交未定态排除——接受；⑤ 间隔仍 4 字——接受。
 
+**2026-09-10 晚 新增仓库根 CLAUDE.md（/init）**：给后续 Claude Code 实例的仓库指南——常用命令（app / 真模型跑批 / 知识库四脚本 + pytest / sidecar）、热路径验收口径（六套守卫 + 变异）、八条「读多个文件才看得出」的架构结论（闸链真源在 GATE_CHAIN 常量、通知码单一真源、能力三条调用路径且 rest-runner 不对等、领域包与共用层中立守卫、要件→争点→报告/风险机械派生链、知识层扎根纪律、无事务迁移规则、模型路由与出境同意）、部署形态（仓内 compose vs 生产裸 systemd）、项目纪律。依据 Sonnet 架构勘查（scratchpad/rd-claude-md/survey.md，逐条 file:line）；两处纠偏：sidecar 仓内缺省 8100（生产 8110 由 env 给）、deploy/README 是 compose 拓扑。随台账分支下一班合入主干。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
