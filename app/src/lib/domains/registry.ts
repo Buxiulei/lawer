@@ -576,6 +576,18 @@ export interface DomainPack {
    */
   burdenLabels?: Readonly<Record<Burden, string>>;
   /**
+   * 同一批举证责任编码的**短标签**：事实卡预算不够、要件表转压缩档时用这一份
+   *（满档那份带着括号里的解释，一行就要二三十个字）。
+   *
+   * **逐档与 burdenLabels 同义，只许更短，不许改口径**：短档写成另一个意思的形态是——
+   * 同一个案子在档案薄的那一轮读到「你来证」、档案厚的那一轮读到「公司来证」，
+   * 而两轮都言之凿凿，用户据此决定这件事自己准不准备。
+   *
+   * **声明了 elementCards 就必须给它**（assertDomainPack 两向机检）：缺它时压缩档省不下字，
+   * 于是同样的预算下要多丢几行要件——而那是静默的，没有一处会报错。
+   */
+  burdenLabelsShort?: Readonly<Record<Burden, string>>;
+  /**
    * 「对方的书面决定」在这个行当里落在**哪几个事实槽**、以及那几条记录里写的字**算不算这件事**
    *（`{ slots, slotChecks }`，寻址与判定都与要件卡同一套）。**语义与 satisfiedBy 同款：
    * 列出来的槽全部到位才算在档**，少一格就是不在档。共用层不认识这些槽在某个行当里叫什么。
@@ -891,6 +903,14 @@ export function assertDomainPack(pack: DomainPack): void {
   }
   if (pack.burdenLabels && !(pack.elementCards && pack.elementCards.length > 0)) {
     missing.push('elementCards（给了 burdenLabels 却没有要件卡，那份措辞永远画不出来）');
+  }
+  // 压缩档那份同理。它的缺失形态**是静默的**（压缩档省不下字 ⇒ 同样预算下多丢几行要件），
+  // 所以只能靠这里点名，不能靠"渲染出来看着不对"。
+  if (pack.elementCards && pack.elementCards.length > 0 && !pack.burdenLabelsShort) {
+    missing.push('burdenLabelsShort（声明了 elementCards 就必须给压缩档那份短标签）');
+  }
+  if (pack.burdenLabelsShort && !(pack.elementCards && pack.elementCards.length > 0)) {
+    missing.push('elementCards（给了 burdenLabelsShort 却没有要件卡，那份短标签永远画不出来）');
   }
   // 抬头同理：有卡没抬头 ⇒ 事实卡里冒出一节没有标题的表；有抬头没卡 ⇒ 那个抬头永远画不出来。
   if (pack.elementCards && pack.elementCards.length > 0 && !pack.elementSheetTitle) {

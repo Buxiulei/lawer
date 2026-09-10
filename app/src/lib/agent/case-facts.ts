@@ -25,6 +25,9 @@ import { BRIEF_SUMMARY_MAX, briefSummary, parseBrief } from '@/lib/evidence/brie
 import {
   buildElementSheet,
   ELEMENT_STATUSES,
+  FACT_SLOT_SOURCES,
+  type Burden,
+  type ElementRow,
   type ElementStatus,
 } from '@/lib/cases/elements';
 import { EVIDENCE_CATEGORIES } from '@/lib/evidence/categories';
@@ -57,6 +60,12 @@ const EVIDENCE_ITEMS_MAX = 20;
 const ELEMENTS_MAX = 24;
 /** 「需补」那一列的单行上限：它是给人照着做的一句话，不是清单全文。 */
 const ELEMENT_NEED_MAX = 60;
+/**
+ * 压缩档下「需补」那一列的上限。**只在预算装不下的那几轮启用**——
+ * 常开的形态是每一份档案都少看这 24 个字的下一步，而没有一条判据会红
+ *（判据 (c) 钉的就是"档案不厚时逐字不变"）。
+ */
+const ELEMENT_NEED_MAX_COMPACT = 36;
 
 /**
  * 证据区免责句，常驻、一字不改。
@@ -461,6 +470,150 @@ function claimSection(s: CaseSnapshot): FactSection {
   };
 }
 
+/** 要件表一行要用到的两份措辞（满档 / 压缩档）。两份都由领域包给，共用层不认识行当名词。 */
+interface ElementRowCopy {
+  labels: Readonly<Record<Burden, string>>;
+  labelsShort: Readonly<Record<Burden, string>>;
+}
+
+/**
+ * **一行要件在本节内部的降级档**（3 先丢、0 永不丢），由三态程序推出。
+ *
+ * 【为什么按状态分档】这一节回答的是「哪几样还差什么」。
+ *   · 「缺失」「不成立」——这一行现在立不住，后面跟着的那句「需补什么」正是用户的下一步；
+ *     丢掉它等于把人堵在原地，而卡上剩下的每一行都写着"这项不用再补"，
+ *     读起来像整个案子已经齐了。所以它是 0：**任何数据形态下都不丢**。
+ *   · 「成立·待证」——在档但只有当事人自己说，下一步是补一张证，比"什么都不用做"值钱。
+ *   · 「成立」——「支撑它的事实都有书证，这一项不用再补」，没有下一步；
+ *     预算不够时它是最先该让位的那一行。
+ *
+ * 【为什么这里没有 2 档】三态就是三类信息量，硬凑第四类只能靠发明一条语义。
+ * 梯子按档遍历（见 elementDetail），空一档不多写一行代码；真需要 2 档时在这里补映射即可。
+ */
+/**
+ * missingSlots 里**说得出名字**的那几条。
+ *
+ * 【为什么要滤一道】没挂取值判定的槽，missingSlots 里放的是**寻址串本身**
+ *（`evidence:<类别>` 这一类，见 elements.buildElementSheet 的 `check ? check.missingAs : slot`）。
+ * 那是给代码看的地址，不是给人看的话：原样印进 prompt 的形态是模型照着
+ *「需补：evidence:工资」去跟用户说话——一句机器地址被当成一件要去补的材料。
+ * 寻址串的形状是共用层常量（FACT_SLOT_SOURCES 那五个前缀），按它认；
+ * 认不出的一律当作领域包写的 missingAs 原样保留（宁可多留一句人话，不可少留）。
+ */
+function namedGaps(r: ElementRow): string[] {
+  return r.missingSlots.filter((m) => !FACT_SLOT_SOURCES.some((src) => m.startsWith(`${src}:`)));
+}
+
+function elementRowPriority(r: ElementRow): Priority {
+  if (r.status === '成立') return 3;
+  if (r.status === '成立·待证') return 1;
+  return 0;
+}
+
+/**
+ * 渲染一行要件。`compact` = 压缩档，三处收窄，**每一处都只动排版不动口径**：
+ *   ① 举证责任换成领域包的短标签（同义，只去掉括号里的解释）；
+ *   ② 「需补」那句从 60 字收到 36 字（照旧走 trunc，截了就带省略号）；
+ *   ③ 卡号本身已经带着诉求名时（`2N` / `2N-1`），`〔诉求·卡号〕`的前半截是同一串字印两遍，去掉。
+ *      带不带得着由 id 自己说了算——共用层不认识哪个行当的卡号长什么样。
+ *
+ * 【「需补」为什么先说缺的那一格、再说通常拿什么去证】missingSlots 是推导侧点名的
+ * **这一行到底差哪一格**（`slotChecks.missingAs`：「公司的那份决定还没记成一条事件」这一类），
+ * typicalEvidence 是这一项通常拿什么去证。只印后者的形态是——一行 60 字被通用清单占满，
+ * 而真正差的那一格恰好排在清单末尾被截掉：模型照着前半句让用户去传一份材料，
+ * 可档案里缺的根本不是材料，是那条记录。两者合到同一格里按同一个上限截，
+ * **一个字都没多占**，顺序按「缺什么 → 怎么办」。
+ */
+function elementRow(r: ElementRow, copy: ElementRowCopy, compact: boolean): string {
+  const need = [...namedGaps(r), ...r.typicalEvidence].filter((e) => e.trim()).join('、');
+  const unresolved = r.unresolvedSlots.length
+    ? `（这几个槽位系统不认识、已按缺失处理：${r.unresolvedSlots.join('、')}）`
+    : '';
+  const tail =
+    r.status === '成立'
+      ? '支撑它的事实都有书证，这一项不用再补'
+      : `需补：${trunc(need, compact ? ELEMENT_NEED_MAX_COMPACT : ELEMENT_NEED_MAX)}`;
+  const key = compact && r.id.startsWith(r.claimKind) ? r.id : `${r.claimKind}·${r.id}`;
+  const burden = (compact ? copy.labelsShort : copy.labels)[r.burden];
+  return `- 〔${key}〕${r.name}：${r.status}｜${burden}｜${tail}${unresolved}`;
+}
+
+/**
+ * 逐行降级的留痕。与 trimmedNote 同一条纪律：**丢了必须说丢了多少**，
+ * 而且要说清"不是没有这几项"——只写「未显示」会被读成「这几个要件不存在」，
+ * 接着就是"你这项诉求少了一个要件"。出路给到工具名（§7.7 禁令配出路）。
+ */
+function elementsHiddenNote(n: number): string {
+  return (
+    `- （另有 ${n} 条次要要件未显示——**不是没有这几项**，是本轮预算没装下；` +
+    '本节第一行的合计仍然是全表的数，要逐条看就调 element_sheet_get 取全表）'
+  );
+}
+
+/**
+ * 要件表明细按给定字符预算重裁。**逐行降级，不整节丢**。
+ *
+ * 【它替掉了什么】此前这一节没有 refit，于是预算不够时走的是"整节明细一起丢"：
+ * 18 行 1800 字一次性换成一句「明细因预算未注入」，事实卡从 4600 塌到 2900——
+ * 一千多字预算空置，而模型手上一个要件、一个缺口都没有。**厚档案恰恰是最需要这张表的那些**
+ *（复审 MF-1 在时间线上指的是同一件事，那里的解法也是 refit）。
+ *
+ * 【梯子的顺序】P3 行 → P2 行 → 压缩格式 → P1 行；P0 行两轮都丢不动。
+ * 压缩档排在丢 P1 行之前：把每一行都缩短，好过把整行拿走。
+ * 同一档里**最长的先丢**——同档各行的信息量是一样的，丢最长的那条能用最少的行数腾出预算。
+ *
+ * 【只剩 P0 也放不下时】才退回整节丢，并 console.error 三段式报数：
+ * 这一步意味着**这个预算装不下这个领域的要件表**，是要拿数字去定预算的事，
+ * 不是渲染器该自己放宽的事（CASE_FACTS_BUDGET 与提示缓存、成本口径绑在一起）。
+ *
+ * @param rows     已按 ELEMENTS_MAX 截过的行
+ * @param overflow ELEMENTS_MAX 截断的留痕（有就一直在，它说的是另一件事）
+ * @param room     本节明细可用的字符数；建卡时传 Infinity（那一轮不裁）
+ */
+function elementDetail(
+  rows: readonly ElementRow[],
+  copy: ElementRowCopy,
+  overflow: readonly string[],
+  room: number,
+): string[] {
+  const linesOf = (compact: boolean, hidden: ReadonlySet<string>): string[] => [
+    ...rows.filter((r) => !hidden.has(r.id)).map((r) => elementRow(r, copy, compact)),
+    ...(hidden.size ? [elementsHiddenNote(hidden.size)] : []),
+    ...overflow,
+  ];
+
+  const hidden = new Set<string>();
+  // 第一轮原格式（floor=2：只丢得动 P3 与 P2 行）；第二轮压缩格式（floor=1：这一轮才丢得动 P1 行）。
+  // 第一轮的第一次比对就是"什么都不裁"，所以 room 够用时返回的与不裁一字不差。
+  for (const [compact, floor] of [
+    [false, 2],
+    [true, 1],
+  ] as const) {
+    const order = rows
+      .map((r) => ({ id: r.id, p: elementRowPriority(r), len: elementRow(r, copy, compact).length }))
+      .filter((r) => r.p > 0)
+      .sort((a, b) => b.p - a.p || b.len - a.len);
+    for (;;) {
+      const lines = linesOf(compact, hidden);
+      if (sumLen(lines) <= room) return lines;
+      const next = order.find((r) => r.p >= floor && !hidden.has(r.id));
+      if (!next) break;
+      hidden.add(next.id);
+    }
+  }
+
+  const p0 = rows.filter((r) => elementRowPriority(r) === 0);
+  const p0Len = sumLen(p0.map((r) => elementRow(r, copy, true)));
+  console.error(
+    '[case-facts] 要件表明细一行都没进事实卡。' +
+      `缺什么：本轮模型看不到任何一个要件与缺口（本表 ${rows.length} 行，其中永不降级的 ${p0.length} 行）；` +
+      `为什么缺：留给这一节明细的预算只有 ${room} 字，而压缩档下光这 ${p0.length} 行就要 ${p0Len} 字；` +
+      `怎么办：把这两个数（${room} / ${p0Len}）连同 CASE_FACTS_BUDGET=${CASE_FACTS_BUDGET} 报给定预算的人，` +
+      '别在渲染器里自行放宽——这个常量与提示缓存、成本口径绑在一起。',
+  );
+  return [DETAIL_DROPPED];
+}
+
 /**
  * **P1 要件表**（设计稿 §3 中间产物 `element_sheet` / §6 S6）。
  *
@@ -480,10 +633,11 @@ function elementSection(s: CaseSnapshot): FactSection | null {
   const pack = domainPackOrDefault(s.case.domain);
   const cards = pack.elementCards ?? [];
   const labels = pack.burdenLabels;
+  const labelsShort = pack.burdenLabelsShort;
   const title = pack.elementSheetTitle;
-  // 三样缺一个就把整节收掉。有卡没措辞（或反过来）在装载时已被 assertDomainPack 拦了；
-  // 这里再判一次是因为类型上三者都是可选的——渲染一列 undefined 比不渲染坏得多。
-  if (cards.length === 0 || !labels || !title) return null;
+  // 四样缺一个就把整节收掉。有卡没措辞（或反过来）在装载时已被 assertDomainPack 拦了；
+  // 这里再判一次是因为类型上四者都是可选的——渲染一列 undefined 比不渲染坏得多。
+  if (cards.length === 0 || !labels || !labelsShort || !title) return null;
 
   const kinds = [...new Set(s.claims.map((c) => c.kind))];
   const sheet = buildElementSheet(s, cards, kinds);
@@ -507,6 +661,8 @@ function elementSection(s: CaseSnapshot): FactSection | null {
   const tallyText = ELEMENT_STATUSES.filter((st) => tally.get(st)).map((st) => `${st} ${tally.get(st)}`).join('、');
 
   const shown = sheet.rows.slice(0, ELEMENTS_MAX);
+  const overflow = sheet.rows.length > shown.length ? [trimmedNote(sheet.rows.length, shown.length)] : [];
+  const copy: ElementRowCopy = { labels, labelsShort };
   return {
     key: 'elements',
     priority: 1,
@@ -521,20 +677,11 @@ function elementSection(s: CaseSnapshot): FactSection | null {
         '这几行只允许说「需补什么」，**不许**写成「不满足 / 不成立 / 这一项你没有」，' +
         '也不许据此说这项诉求提不了——照着「下一步」问用户或落一张行动卡。',
     ].join('\n'),
-    detail: [
-      ...shown.map((r) => {
-        const need = r.typicalEvidence.filter((e) => e.trim()).join('、');
-        const unresolved = r.unresolvedSlots.length
-          ? `（这几个槽位系统不认识、已按缺失处理：${r.unresolvedSlots.join('、')}）`
-          : '';
-        const tail =
-          r.status === '成立'
-            ? '支撑它的事实都有书证，这一项不用再补'
-            : `需补：${trunc(need, ELEMENT_NEED_MAX)}`;
-        return `- 〔${r.claimKind}·${r.id}〕${r.name}：${r.status}｜${labels[r.burden]}｜${tail}${unresolved}`;
-      }),
-      ...(sheet.rows.length > shown.length ? [trimmedNote(sheet.rows.length, shown.length)] : []),
-    ],
+    detail: elementDetail(shown, copy, overflow, Number.POSITIVE_INFINITY),
+    // 【为什么它要 refit 而不是整节丢】整节丢的粒度是 1800 字：一丢，模型手上一个要件、
+    // 一个缺口都没有，而空出来的一千多字预算谁也没用上（复审 MF-1 在时间线上说的是同一件事）。
+    // 逐行降级把丢掉的东西缩到"最不用管的那几行"，缺口那几行任何数据形态下都在。
+    refit: (room: number) => elementDetail(shown, copy, overflow, room),
   };
 }
 

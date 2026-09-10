@@ -1508,6 +1508,19 @@ const LABOR_BURDEN_LABELS: Readonly<Record<Burden, string>> = {
   unverified: '这一项的条号还没核实，现在说不出该谁证——先别按任何一边准备',
 };
 
+/**
+ * 压缩档的短标签（事实卡预算不够时才用）。**逐档与上面那份同义，只去掉括号里的解释**：
+ * 落在谁身上这一个信息一个字都不许变，变了就是同一个案子在厚薄两种档案下被告知
+ * 两种相反的准备方式。
+ */
+const LABOR_BURDEN_LABELS_SHORT: Readonly<Record<Burden, string>> = {
+  claimant: '你来证',
+  respondent: '公司来证',
+  reversed_interpretation: '公司来证（司法解释倒置）',
+  reversed_procedure_rules: '东西在公司手里：公司不提供担后果',
+  unverified: '条号还没核实，先别按任何一边准备',
+};
+
 // ========== 领域包 ==========
 
 export const LABOR: DomainPack = {
@@ -1606,6 +1619,7 @@ export const LABOR: DomainPack = {
 
   elementCards: LABOR_ELEMENT_CARDS,
   burdenLabels: LABOR_BURDEN_LABELS,
+  burdenLabelsShort: LABOR_BURDEN_LABELS_SHORT,
   elementSheetTitle: '要件表（每项诉求靠哪几件事成立）',
 
   // 「对方的书面决定」在这个行当里就是公司发出的那张纸（解除通知、处分决定、
