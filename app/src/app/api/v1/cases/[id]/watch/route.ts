@@ -13,6 +13,7 @@
 //
 // 鉴权用 case:write：它会让这个账号在下个月产生一笔月费，与"会花钱的动作"同级。
 // 归属校验走 lib/cases 的既有入口——「非本人案件一律当作不存在」是条红线，复制第二份就开始各自演化。
+import { recordAgentWriteFromRest } from '@/lib/audit/agent-writes';
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { badRequest, readJsonBody, stringField } from '@/lib/auth/http';
 import { WATCH_TIER_GONGDAO } from '@/lib/billing/pricing';
@@ -57,6 +58,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     tier,
   });
   if (!result.ok) return domainFailure(result);
+
+  // created=false 是连点去重命中：台账照记一行，但标成 deduped——
+  // 不记的形态是「用户到底点了几次守望」在事后查不出来，而这条会产生月费。
+  recordAgentWriteFromRest(getDb(), guard.identity, {
+    endpoint: '/api/v1/cases/{id}/watch',
+    method: 'POST',
+    caseId,
+    targetTable: 'company_watches',
+    targetId: result.watch.id,
+    deduped: !result.watch.created,
+  });
 
   return apiJson({
     ok: true,

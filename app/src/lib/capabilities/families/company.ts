@@ -14,7 +14,7 @@ import { LABOR_CAPABILITY_COPY } from '@/lib/domains/labor';
 import { getCaseDossier } from '@/lib/dossier/case-dossier';
 import { buildCompanyGraph } from '@/lib/graph/build';
 
-import { assertedByOf, caseIdProp, num, writeOnce, sourceTierProp } from '../shared';
+import { assertedByOf, caseIdProp, idAt, num, writeOnce, sourceTierProp } from '../shared';
 import type { Capability } from '../registry';
 
 /**
@@ -272,6 +272,21 @@ export const companyWatchSet: Capability = {
   // 余额：这一次不扣钱，但它会让这个账号在下个月产生一笔月费，与「会花钱的动作」同级。
   precondition: ['balance'],
   idempotency: { naturalKey: '同案同主体只有一条活跃盯梢；再调即命中已有那条，且不改它的档位' },
+  // created:false = 连点去重命中了已有那条盯梢（不是失败，也没有新建行）——照实记成 deduped。
+  // 记成新建的形态是：台账里挂进守望的次数比真实的多，而每一条都对应下个月的一笔月费。
+  ledger: {
+    targetTable: 'company_watches',
+    rowsOf: (_db, args, result) => {
+      const watch = result.watch as { created?: unknown } | undefined;
+      return [
+        {
+          caseId: num(args.case_id),
+          targetId: idAt(result, 'watch', 'id'),
+          deduped: watch?.created !== true,
+        },
+      ];
+    },
+  },
   rest: { method: 'POST', path: '/api/v1/cases/{id}/watch' },
   title: '把对方主体挂进守望',
   description: LABOR_CAPABILITY_COPY.companyWatchSetDescription,

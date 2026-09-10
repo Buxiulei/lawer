@@ -141,7 +141,25 @@ export type Violation = { rule: string; line: number; text: string; matched: str
 type ScanCtx = {
   /** 该字符偏移是否落在 addColumnIfMissing 的函数体里 */
   inAddColumnHelper: (index: number) => boolean;
+  /** 这个视图名在该偏移**之前**被 `DROP VIEW IF EXISTS` 过 */
+  droppedViewBefore: (name: string, index: number) => boolean;
 };
+
+/**
+ * 源码里每个 `DROP VIEW IF EXISTS <名字>` 的**最早**出现位置。
+ *
+ * 只认字面量名字：`DROP VIEW IF EXISTS ${v.name}` 这种按变量拼的，守卫读到的是一个
+ * 模板占位符，配不上任何 CREATE——这是**故意的**，见 migrate.ts 的 READ_VIEWS 抬头：
+ * 要让「同名的 DROP 就在它前面」这句话机检得了，名字就得在源码里看得见。
+ */
+export function droppedViewPositions(scrubbed: string): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const m of scrubbed.matchAll(/\bDROP\s+VIEW\s+IF\s+EXISTS\s+([A-Za-z_][\w$]*)/gi)) {
+    const name = m[1];
+    if (!out.has(name)) out.set(name, m.index);
+  }
+  return out;
+}
 
 type Rule = {
   /** 规则名，出现在报错里 */
@@ -156,9 +174,15 @@ type Rule = {
 
 const RULES: Rule[] = [
   {
+    // 【为什么单给视图开一道口子（2026-09-10 裁决）】DROP 之所以被禁，是因为它**不可逆**：
+    // 中断后重跑，那张表 / 那一列要么已经没了、要么再也建不回来。视图不在此列——
+    // 它不存数据，删掉再建回来一行用户数据都不会动，中断在 DROP 与 CREATE 之间也只是
+    // 「下次开库再建一次」，而开库每次都走这段。
+    // 放行只给 `DROP VIEW IF EXISTS` 这一个写法：`DROP VIEW v`（不带 IF EXISTS）第二次跑
+    // 报 no such view，照样卡死迁移路径，所以它仍然要红。
     name: 'DROP',
-    re: /\bDROP\b/gi,
-    why: 'DROP 不可逆：中断后重跑要么已经没了要么再也建不回来',
+    re: /\bDROP\b(?!\s+VIEW\s+IF\s+EXISTS\b)/gi,
+    why: 'DROP 不可逆：中断后重跑要么已经没了要么再也建不回来（只有 DROP VIEW IF EXISTS 例外——视图不存数据，见 migrate.ts 的 READ_VIEWS）',
   },
   {
     // ALTER TABLE 只允许 ADD（ADD COLUMN 由 addColumnIfMissing 的 PRAGMA table_info 守卫，
@@ -200,9 +224,16 @@ const RULES: Rule[] = [
     why: '迁移里写数据要靠唯一索引兜幂等，很容易写漏；种子数据请走独立的 seed 函数',
   },
   {
+    // 视图是唯一的例外，且例外**有配对条件**：`CREATE VIEW v`（不带 IF NOT EXISTS）
+    // 只有在源码里同名的 `DROP VIEW IF EXISTS v` 排在它前面时才放行——那一对合起来才是幂等的。
+    // 为什么视图不能一律带 IF NOT EXISTS 了事：SQLite 把 IF NOT EXISTS 从 sqlite_master.sql
+    // 里抹掉再存，带着它的代码常量与库里那份**永远比不相等**，于是「视图定义与代码一致」
+    // 这条开库校验会每次都判不一致、每次都重建一次，而那不是真的不一致。
     name: 'CREATE-缺IF-NOT-EXISTS',
-    re: /\bCREATE\s+(?:TEMP(?:ORARY)?\s+)?(?:UNIQUE\s+)?(?:VIRTUAL\s+)?(?:TABLE|INDEX|VIEW|TRIGGER)\b(?!\s+IF\s+NOT\s+EXISTS\b)/gi,
-    why: '不带 IF NOT EXISTS 的 CREATE 第二次执行就报错，整条迁移路径从此卡死',
+    re: /\bCREATE\s+(?:TEMP(?:ORARY)?\s+)?(?:UNIQUE\s+)?(?:VIRTUAL\s+)?(TABLE|INDEX|VIEW|TRIGGER)\s+(?!IF\s+NOT\s+EXISTS\b)([A-Za-z_][\w$]*)/gi,
+    violates: (m, ctx) =>
+      !(m[1].toUpperCase() === 'VIEW' && ctx.droppedViewBefore(m[2], m.index)),
+    why: '不带 IF NOT EXISTS 的 CREATE 第二次执行就报错，整条迁移路径从此卡死（视图例外：前面有同名 DROP VIEW IF EXISTS 时放行）',
   },
   {
     // 超出派单清单的一条：ADD COLUMN 加 NOT NULL 而不给 DEFAULT。
@@ -227,8 +258,13 @@ export function scanForNonIdempotent(src: string): Violation[] {
   const found: Violation[] = [];
 
   const body = addColumnIfMissingBody(scrubbed);
+  const dropped = droppedViewPositions(scrubbed);
   const ctx: ScanCtx = {
     inAddColumnHelper: (i) => body !== null && i >= body.start && i < body.end,
+    droppedViewBefore: (name, i) => {
+      const at = dropped.get(name);
+      return at !== undefined && at < i;
+    },
   };
 
   for (const rule of RULES) {
@@ -313,6 +349,9 @@ const NON_IDEMPOTENT_SAMPLE = `
 // 对照臂样本。注释里的这些字样必须被剥掉、不能凑数：DROP TABLE / DELETE FROM / INSERT INTO
 export function badMigration(db: Database.Database): void {
   db.exec(\`DROP TABLE foo;\`);
+  db.exec(\`DROP VIEW bar_v;\`);
+  db.exec(\`DROP INDEX IF EXISTS idx_bar;\`);
+  db.exec(\`CREATE VIEW orphan_v AS SELECT 1;\`);
   db.exec(\`CREATE TABLE bar (id INTEGER PRIMARY KEY);\`);
   db.exec(\`CREATE UNIQUE INDEX idx_bar ON bar (id);\`);
   db.exec(\`ALTER TABLE bar RENAME COLUMN id TO bar_id;\`);
@@ -328,6 +367,9 @@ export function badMigration(db: Database.Database): void {
 /** 每一条都是合法写法，一条都不许误杀。 */
 const IDEMPOTENT_SAMPLE = `
 export function goodMigration(db: Database.Database): void {
+  // 视图那道口子的正对照：DROP VIEW IF EXISTS + 同名 CREATE VIEW，两句都必须放行。
+  db.exec(\`DROP VIEW IF EXISTS bar_audit\`);
+  db.exec(\`CREATE VIEW bar_audit AS SELECT id FROM bar\`);
   db.exec(\`
     CREATE TABLE IF NOT EXISTS bar (
       id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -361,6 +403,11 @@ describe('scanForNonIdempotent 对照臂', () => {
 
   test.each([
     ['DROP', 'DROP TABLE foo'],
+    // 视图的口子只开给 `DROP VIEW IF EXISTS`：少了 IF EXISTS 的、以及别的对象的 DROP，一律照旧红
+    ['DROP', 'DROP VIEW bar_v'],
+    ['DROP', 'DROP INDEX IF EXISTS idx_bar'],
+    // 没有同名 DROP 在前的裸 CREATE VIEW：第二次执行报 "view already exists"，照旧红
+    ['CREATE-缺IF-NOT-EXISTS', 'CREATE VIEW orphan_v'],
     ['CREATE-缺IF-NOT-EXISTS', 'CREATE TABLE bar'],
     ['CREATE-缺IF-NOT-EXISTS', 'CREATE UNIQUE INDEX idx_bar'],
     ['ALTER-TABLE-非ADD', 'ALTER TABLE bar RENAME'],
@@ -403,6 +450,49 @@ describe('scanForNonIdempotent 对照臂', () => {
     expect(
       v.filter((x) => x.rule === 'ALTER-TABLE-绕开-addColumnIfMissing'),
       `封装外的那条 ALTER 没被拦住：\n${formatViolations(v)}`,
+    ).toHaveLength(1);
+  });
+
+  // ── 视图那道口子：配对按**名字**给，且 DROP 必须排在 CREATE 前面 ──
+  //
+  // 这三条钉的是「例外不许被泛化」。少了它们，「CREATE VIEW 不带 IF NOT EXISTS 也放行」
+  // 会悄悄变成一条无条件的口子，而第二次开库时那句 CREATE 才报 "view already exists"。
+
+  const viewPair = (drop: string, create: string) =>
+    scanForNonIdempotent(`export function m(db) {\n  db.exec(\`${drop}\`);\n  db.exec(\`${create}\`);\n}\n`);
+
+  test('DROP VIEW IF EXISTS v + CREATE VIEW v ⇒ 两句都放行（这道口子确实开着）', () => {
+    expect(
+      formatViolations(viewPair('DROP VIEW IF EXISTS v', 'CREATE VIEW v AS SELECT 1 AS a')),
+    ).toBe('');
+  });
+
+  test('DROP 的是另一个视图 ⇒ CREATE VIEW v 照旧红（配对按名字，不是"文件里有过 DROP VIEW"）', () => {
+    const v = viewPair('DROP VIEW IF EXISTS other', 'CREATE VIEW v AS SELECT 1 AS a');
+    expect(
+      v.filter((x) => x.rule === 'CREATE-缺IF-NOT-EXISTS'),
+      `别名 DROP 把 CREATE 放行了：\n${formatViolations(v)}`,
+    ).toHaveLength(1);
+  });
+
+  test('DROP 排在 CREATE 后面 ⇒ 照旧红（顺序反了那一对不是幂等的）', () => {
+    const src =
+      'export function m(db) {\n' +
+      '  db.exec(`CREATE VIEW v AS SELECT 1 AS a`);\n' +
+      '  db.exec(`DROP VIEW IF EXISTS v`);\n}\n';
+    expect(
+      scanForNonIdempotent(src).filter((x) => x.rule === 'CREATE-缺IF-NOT-EXISTS'),
+    ).toHaveLength(1);
+  });
+
+  test('按变量拼的 DROP 配不上任何 CREATE（守卫读到的是模板占位符，不是名字）', () => {
+    const src =
+      'export function m(db, v) {\n' +
+      '  db.exec(`DROP VIEW IF EXISTS ${v.name}`);\n' +
+      '  db.exec(`CREATE VIEW v AS SELECT 1 AS a`);\n}\n';
+    expect(droppedViewPositions(stripComments(src)).has('v')).toBe(false);
+    expect(
+      scanForNonIdempotent(src).filter((x) => x.rule === 'CREATE-缺IF-NOT-EXISTS'),
     ).toHaveLength(1);
   });
 
@@ -470,6 +560,20 @@ describe('migrate.ts 不含非幂等迁移', () => {
     expect(body, '没定位到 function addColumnIfMissing（被改名或挪走了？）').not.toBeNull();
     expect(hits[0].index).toBeGreaterThanOrEqual(body!.start);
     expect(hits[0].index).toBeLessThan(body!.end);
+  });
+
+  // 视图那道口子在真文件上**确实被用着**，且用的就是「DROP 字面量 + 同名 CREATE」那一对。
+  // 少了这条，把 READ_VIEWS 整段删掉、或把 DROP 改成按变量拼，上面的规则测试照样全绿——
+  // 因为它们跑在样本上，而真文件里已经没有视图了。
+  test('migrate.ts 里的裸 CREATE VIEW 都配着同名的 DROP VIEW IF EXISTS 字面量', () => {
+    const dropped = droppedViewPositions(scrubbed);
+    const creates = [...scrubbed.matchAll(/\bCREATE\s+VIEW\s+(?!IF\s+NOT\s+EXISTS\b)([A-Za-z_][\w$]*)/gi)];
+    expect(creates.map((m) => m[1]).sort()).toEqual(['agent_writes_audit', 'token_usage_reported']);
+    for (const m of creates) {
+      const at = dropped.get(m[1]);
+      expect(at, `${m[1]} 没有同名的 DROP VIEW IF EXISTS 字面量`).not.toBeUndefined();
+      expect(at!, `${m[1]} 的 DROP 排在 CREATE 后面`).toBeLessThan(m.index);
+    }
   });
 
   test('全文没有非幂等语句', () => {

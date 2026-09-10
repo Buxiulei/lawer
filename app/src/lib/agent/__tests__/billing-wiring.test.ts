@@ -382,13 +382,17 @@ describe('缓存两桶进 token_usage（两臂：上游给了 / 没给）', () =
     { text: '好了。', usage: { prompt: 0, completion: 5, cachedRead: null, cachedWrite: null } },
   ];
 
-  it('上游给了 → 两桶原样落库，且成本按缓存价算（比全按输入价便宜）', async () => {
+  it('上游给了 → 两桶原样落库、标记为已回报，且成本按缓存价算（比全按输入价便宜）', async () => {
     const { f } = await turn(withCache);
-    const [u] = rows<{ prompt_tokens: number; cache_read_tokens: number; cache_write_tokens: number; cost_li: number }>(
-      f, 'SELECT * FROM token_usage',
-    );
+    const [u] = rows<{
+      prompt_tokens: number; cache_read_tokens: number; cache_write_tokens: number; cost_li: number;
+      cache_read_reported: number; cache_write_reported: number;
+    }>(f, 'SELECT * FROM token_usage');
     expect(u.cache_read_tokens).toBe(8800);
     expect(u.cache_write_tokens).toBe(40);
+    // 「这个数是上游说的」——与下面那臂的 0 分得开（2026-09-10 裁决）
+    expect(u.cache_read_reported).toBe(1);
+    expect(u.cache_write_reported).toBe(1);
     expect(u.prompt_tokens).toBe(120); // 四桶互斥：缓存量不再重复计进 prompt
     // 同样 8960 个输入 token，全按 1.0× 记要贵得多——这就是这次改动要省的那笔钱
     const rates = getRatesForModel(f.db, 'DeepSeek-V4-Pro-0813');
@@ -396,17 +400,48 @@ describe('缓存两桶进 token_usage（两臂：上游给了 / 没给）', () =
     expect(u.cost_li).toBeLessThan(allFresh);
   });
 
-  it('上游没给 → 两桶记 0，而 tokens_json 里仍是 null（0 与"没给"不许在同一处混着看）', async () => {
+  it('上游没给 → 结算列仍记 0，但同一行标着「未回报」，读侧视图把它读成 NULL', async () => {
     const { f } = await turn(withoutCache);
-    const [u] = rows<{ cache_read_tokens: number; cache_write_tokens: number }>(f, 'SELECT * FROM token_usage');
-    // token_usage 的列是 NOT NULL DEFAULT 0：**结算口径**上「这一档结构性不存在」按 0 计，
-    // 上面那条 USAGE_UNREPORTED 已经保证了「整份计量未回报」不会走到这里来。
+    const [u] = rows<{
+      cache_read_tokens: number; cache_write_tokens: number;
+      cache_read_reported: number; cache_write_reported: number;
+    }>(f, 'SELECT * FROM token_usage');
+    // token_usage 的旧列是 NOT NULL DEFAULT 0：**结算口径**上「这一档结构性不存在」按 0 计，
+    // 上面那条 USAGE_UNREPORTED 已经保证了「整份计量未回报」不会走到这里来。这两列语义没变。
     expect(u.cache_read_tokens).toBe(0);
     expect(u.cache_write_tokens).toBe(0);
+    // 【2026-09-10 裁决：未回报 ≠ 0】新的两列答的是「这个 0 是上游说的，还是我们兜的」。
+    // 少了它们，对账读出来的「这段时间一次缓存都没命中」是个假结论——而它听起来很确定，
+    // 且朝着「我们没省到钱」那个方向错（memory：往严重方向错更难被发现）。
+    expect(u.cache_read_reported).toBe(0);
+    expect(u.cache_write_reported).toBe(0);
+    // 读侧口径：视图把「未回报」读成 NULL，不读成 0。分析与对账读它，结算读原表。
+    const [v] = rows<{ cache_read_tokens: number | null; cache_write_tokens: number | null }>(
+      f, 'SELECT cache_read_tokens, cache_write_tokens FROM token_usage_reported',
+    );
+    expect(v.cache_read_tokens).toBeNull();
+    expect(v.cache_write_tokens).toBeNull();
     // 而**原始回报**留在 messages.tokens_json 里，仍是 null——回填那条路（billing/backfill.ts）
-    // 靠它分辨「上游没这一桶」与「上游说就是 0」。两处口径不同是设计如此，不是漂移。
+    // 靠它分辨「上游没这一桶」与「上游说就是 0」。三处口径各自成立，不是漂移。
     const [m] = rows<{ tokens_json: string }>(f, "SELECT tokens_json FROM messages WHERE role='assistant'");
     expect(JSON.parse(m.tokens_json).usage).toMatchObject({ cachedRead: null, cachedWrite: null });
+  });
+
+  it('「上游说就是 0」与「上游没给」在同一张表里分得开（两个 0 不许同形）', async () => {
+    // 这一臂钉的正是这次改动要消除的那个同形：两轮的 cache_read_tokens 都是 0，
+    // 只有 cache_read_reported 分得出哪一个是事实、哪一个是「不知道」。
+    const zeroReported: ScriptedRound[] = [
+      { text: 'x', tools: [CARD], usage: { prompt: 120, completion: 30, cachedRead: 0, cachedWrite: 0 } },
+      { text: '好了。', usage: { prompt: 0, completion: 5, cachedRead: 0, cachedWrite: 0 } },
+    ];
+    const said0 = await turn(zeroReported);
+    const gaveNothing = await turn(withoutCache);
+    const read = (fx: AgentFixture) =>
+      rows<{ cache_read_tokens: number; cache_read_reported: number }>(fx, 'SELECT * FROM token_usage')[0];
+    expect(read(said0.f).cache_read_tokens).toBe(0);
+    expect(read(gaveNothing.f).cache_read_tokens).toBe(0);
+    expect(read(said0.f).cache_read_reported).toBe(1);
+    expect(read(gaveNothing.f).cache_read_reported).toBe(0);
   });
 
   it('两臂的差别真的落在账上（自证两条用例不是同一份输入跑了两遍）', async () => {

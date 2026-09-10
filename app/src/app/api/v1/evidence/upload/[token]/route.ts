@@ -11,6 +11,7 @@
 // 读请求体 → 真实体积 → 抢占 token → 落盘。任何一档没过，盘上都不该多一个字节。
 import { NextResponse } from 'next/server';
 
+import { recordAgentWriteFromRest } from '@/lib/audit/agent-writes';
 import { requireIdentity, requireRealname } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
 import { storeBytes } from '@/lib/evidence/files';
@@ -158,6 +159,16 @@ export async function PUT(req: Request, { params }: { params: Promise<{ token: s
 
     const stored = storeBytes(db, bytes, row.mime);
     attachFile(db, claimed.id, stored.fileId);
+
+    // 这一步落的是**字节**，还没有 evidence 那一行（登记走 evidence_register），
+    // 所以 target 指向被用掉的那条上传票据——它是这次写入唯一已经存在的行。
+    recordAgentWriteFromRest(db, guard.identity, {
+      endpoint: '/api/v1/evidence/upload/{token}',
+      method: 'PUT',
+      caseId: row.case_id,
+      targetTable: 'evidence_upload_tokens',
+      targetId: claimed.id,
+    });
 
     return apiJson(
       {

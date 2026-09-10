@@ -73,7 +73,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  for (const t of ['api_keys', 'timeline_events', 'action_items', 'deadlines', 'company_profiles', 'cases', 'users']) {
+  for (const t of ['agent_writes', 'api_keys', 'timeline_events', 'action_items', 'deadlines', 'company_profiles', 'cases', 'users']) {
     db.prepare(`DELETE FROM ${t}`).run();
   }
   const insertUser = db.prepare(

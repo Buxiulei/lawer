@@ -23,6 +23,22 @@ export const caseDelete: Capability = {
   // 若因此再也删不掉自己的档案，那正是他最想删的时候。同 share_revoke 的理由。
   precondition: [],
   idempotency: { naturalKey: 'case_id（已删除的再删一次原样返回，首次删除时点与到期时点都不变）' },
+  // **只有真删了那一步记台账**：不带 confirm_token 的第一步回的是确认单，一行都没删。
+  // 给确认单也记一行的形态是——台账里「删过几次」比实际多，而删除不可撤销，
+  // 事后复盘时那个多出来的数正是最要命的。软删（deleted_at），case_id 外键仍然指得着。
+  ledger: {
+    targetTable: 'cases',
+    rowsOf: (_db, args, result) =>
+      result.stage === 'deleted'
+        ? [
+            {
+              caseId: num(args.case_id),
+              targetId: num(args.case_id),
+              deduped: result.already_deleted === true,
+            },
+          ]
+        : [],
+  },
   rest: { method: 'DELETE', path: '/api/v1/cases/{id}' },
   title: '删除案件档案',
   description:

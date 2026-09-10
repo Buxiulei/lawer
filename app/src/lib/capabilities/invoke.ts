@@ -74,6 +74,12 @@ export function statusForFailure(failure: { status?: unknown; errorCode: string 
 /**
  * 前置闸（注册表 precondition 字段驱动）。过了回 null。
  *
+ * 【为什么不导出（2026-09-10 复审）】它曾经是导出的，于是 MCP 那道门借走这一句、
+ * 自己拿着 tool.run 跑完整段——而 args 那一格当时还带着 `= {}` 缺省值，调用点漏传
+ * 不会报错，按入参开的闸（facts_token）于是在那道门上恒不开：同一把 key、同一份入参，
+ * 一道门 200 真写入、另一道门 409，两边都不报错。现在跑一条能力只有 invokeCapability
+ * 一条路，args 也是必填——少传一个参数就少一道闸这种缝，靠"记得传"是堵不住的。
+ *
  * 【为什么由注册表驱动而不是各能力自觉】让各能力在自己的 run 里各写一句的形态是：
  * 新加一条写能力时忘了抄那一句——它照常工作、照常返回 200，只是没过闸的人也能写进去，
  * 没有任何一处会报错。
@@ -90,11 +96,11 @@ export function statusForFailure(failure: { status?: unknown; errorCode: string 
  * 各写一份的形态是：一个已在对面实名过的人，在证据 REST 侧放行、在 MCP/通用桥侧被 403，
  * 而两边都不报错。判定只留这一份，两条入口自动同口径。
  */
-export async function checkPreconditions(
+async function checkPreconditions(
   db: Database,
   capability: Capability,
   identity: Identity,
-  args: Record<string, unknown> = {},
+  args: Record<string, unknown>,
 ): Promise<CapabilityFailure | null> {
   if (capability.precondition.includes('realname')) {
     const gate = await realnameGate(db, identity.uid);

@@ -13,6 +13,7 @@ import {
   assertedByOf,
   caseIdProp,
   factsTokenProp,
+  idAt,
   intakeArgsToInput,
   intakeInputSchema,
   num,
@@ -80,6 +81,14 @@ export const caseUpdate: Capability = {
   // 补一句 goal 或岗位名不在此列；整条能力一律挂闸的形态见 registry.factsTokenArgs 注释。
   precondition: ['facts_token'],
   factsTokenArgs: ['stage'],
+  // 改的是这一行档案本身。**不填 deduped**：同案覆盖就是覆盖，这条能力没有重放语义。
+  // 走 REST 的 PATCH /cases/{id} 由那条路由按自己的路径记（endpoint 不同、行数仍是一行）。
+  ledger: {
+    targetTable: 'cases',
+    rowsOf: (_db, args, result) => [
+      { caseId: num(args.case_id), targetId: idAt(result, 'case', 'id') },
+    ],
+  },
   rest: { method: 'PATCH', path: '/api/v1/cases/{id}' },
   title: '更新案件档案',
   description:
@@ -203,6 +212,13 @@ export const intakeSubmit: Capability = {
   exposeTo: ['mcp'],
   precondition: [],
   idempotency: { naturalKey: '时间线事件按同案 + 同日 + 同类别 + 标题规范化去重' },
+  // 首诊一次写十几行（档案本身 + 时间线 + 诉求 + 行动卡），台账记的是**这份档案**：
+  // 逐行记的形态是一次建档在表里炸出十几行，而它们答的是同一个问题「谁替他建的档」。
+  // 各行自己的去重在领域层（自然键），所以这里不填 deduped。
+  ledger: {
+    targetTable: 'cases',
+    rowsOf: (_db, args) => [{ caseId: num(args.case_id), targetId: num(args.case_id) }],
+  },
   rest: { method: 'POST', path: '/api/v1/cases/{id}/intake' },
   title: '首诊建档',
   description:

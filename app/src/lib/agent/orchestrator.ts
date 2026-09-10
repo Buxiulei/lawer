@@ -254,13 +254,18 @@ function chargeTurn(args: {
     });
     return;
   }
-  // 单桶 null 的常态是「厂商无此档」（如 DeepSeek 无缓存写），按 0 计入即可：
-  // 上面已确认本轮**确实回报过**计量，缺的那桶是结构性不存在，不是未知。
+  // 单桶 null 的常态是「厂商无此档」（如 DeepSeek 无缓存写），**结算**按 0 计即可：
+  // 上面已确认本轮确实回报过计量，缺的那桶是结构性不存在，不是整份未知。
+  //
+  // 【但缓存两桶的 null 要原样带下去（2026-09-10 裁决）】在这里 `?? 0` 掉的形态是：
+  // 「厂商没这一档」与「这一轮一次都没命中缓存」在 token_usage 里长得一模一样，
+  // 于是对账读出来的「缓存命中 0」是个假结论。结算仍按 0（recordTokenUsage 里的 `?? 0`），
+  // 只是把「报没报」这件事一并落进 *_reported 两列。
   const tokens: UsageTokens = {
     promptTokens: usage.prompt ?? 0,
     completionTokens: usage.completion ?? 0,
-    cacheReadTokens: usage.cachedRead ?? 0,
-    cacheWriteTokens: usage.cachedWrite ?? 0,
+    cacheReadTokens: usage.cachedRead,
+    cacheWriteTokens: usage.cachedWrite,
   };
   const refId = turnRefId(messageId);
   const feature = featureOfMode(mode);

@@ -4,6 +4,7 @@
 // req.formData() 把整个请求体读进内存这一步，进不了 lib 就晚了。
 import { NextResponse } from 'next/server';
 
+import { recordAgentWriteFromRest } from '@/lib/audit/agent-writes';
 import { domainFailure, requireIdentity, requireRealname } from '@/lib/auth/guard';
 import { getDb } from '@/lib/db/client';
 import * as evidence from '@/lib/evidence';
@@ -121,6 +122,16 @@ export async function POST(req: Request) {
       originalMedium: formString(form, 'original_medium'),
     });
     if (!result.ok) return domainFailure(result);
+
+    // 经 api key 的 REST 写入同样记台账（2026-09-07 case 2）：写入点只有 lib/audit/agent-writes 一处。
+    recordAgentWriteFromRest(getDb(), guard.identity, {
+      endpoint: '/api/v1/evidence',
+      method: 'POST',
+      caseId: result.evidence.case_id,
+      targetTable: 'evidence',
+      targetId: result.evidence.id,
+      deduped: result.deduped,
+    });
 
     return apiJson(
       { ok: true, evidence: result.evidence, deduped: result.deduped },

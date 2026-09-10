@@ -28,13 +28,79 @@ function makeDb() {
 }
 
 describe('reconcile', () => {
-  test('账目一致：零 problems；定额消耗只出警告', () => {
+  test('账目一致：零 problems；定额消耗与缓存未回报各出一条警告', () => {
     const { db } = makeDb();
     const r = reconcile(db);
     expect(r.problems).toEqual([]);
     expect(r.users).toBe(2);
-    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings).toHaveLength(2);
     expect(r.warnings[0]).toContain('attest-u2');
+    // 夹具那笔用量只报了 prompt/completion 两桶，缓存两桶上游没给。
+    // 这条警告说的就是「那两个 0 是我们兜的，不是上游说的」——见下面一节。
+    expect(r.warnings[1]).toContain('缓存计量未回报');
+  });
+
+  /**
+   * 缓存两桶「未回报 ≠ 0」（2026-09-10 裁决）。
+   *
+   * 【为什么要有这条】cache_read_tokens 是 NOT NULL DEFAULT 0 的旧列，于是
+   * 「上游根本没报这一桶」与「上游报了、值是 0」在表里长得一模一样。
+   * 照着它算缓存命中率会算出一个**听起来很确定**的 0%，而真相是我们没在看那一档。
+   * 两臂缺一不可：只验"有未回报会警告"的那臂，把 reported 恒写 0 的实现照样绿。
+   */
+  describe('缓存两桶未回报（两臂：上游给了 / 没给）', () => {
+    function usageDb(tokens: Parameters<typeof recordTokenUsage>[3]) {
+      const db = new Database(':memory:');
+      db.pragma('foreign_keys = ON');
+      runMigrations(db);
+      const uid = Number(db.prepare('INSERT INTO users (email) VALUES (?)').run('c@t.com').lastInsertRowid);
+      gongdaoGrant(uid, 1000, GONGDAO_LEDGER_TYPE.register, `reg-${uid}`, null, db);
+      recordTokenUsage(uid, 'intake', 'deepseek-v3', tokens, 'ref-c', null, db);
+      gongdaoSettle(uid, 3, 'ref-c', 'intake', null, db);
+      return db;
+    }
+
+    test('上游没给 ⇒ 警告点名「这些 0 不等于没命中缓存」', () => {
+      const r = reconcile(usageDb({ promptTokens: 100, completionTokens: 10 }));
+      expect(r.problems).toEqual([]);
+      const hit = r.warnings.find((w) => w.includes('缓存计量未回报'));
+      expect(hit, `没有那条警告，实得：\n${r.warnings.join('\n')}`).toBeDefined();
+      expect(hit).toContain('不等于');
+    });
+
+    test('上游报了（哪怕报的就是 0）⇒ 不出这条警告（变异：reported 恒写 0 ⇒ 本条红）', () => {
+      const r = reconcile(
+        usageDb({ promptTokens: 100, completionTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0 }),
+      );
+      expect(r.problems).toEqual([]);
+      expect(
+        r.warnings.filter((w) => w.includes('缓存计量未回报')),
+        '上游明说了两桶都是 0，这不是「不知道」，不该警告',
+      ).toEqual([]);
+    });
+
+    /**
+     * 第三态：**存量行**（reported IS NULL，本列落地之前写的那些）。
+     * 2026-09-10 复审 minor#1：视图曾把它们原样透出 0 —— 于是「本列落地之前一次缓存都没命中」
+     * 这个假结论从读侧口径里读得出来，而它恰恰是这张视图存在的理由。不知道就读 NULL。
+     */
+    test('存量行（reported IS NULL）⇒ 视图读出 NULL 而不是 0，且对账单独报一档「口径未知」', () => {
+      const db = usageDb({ promptTokens: 100, completionTokens: 10, cacheReadTokens: 7, cacheWriteTokens: 3 });
+      // 模拟本列落地之前的那些行：两列都是 NULL（迁移不回填，见 migrate.ts）
+      db.prepare('UPDATE token_usage SET cache_read_reported = NULL, cache_write_reported = NULL').run();
+
+      const [v] = db
+        .prepare('SELECT cache_read_tokens, cache_write_tokens FROM token_usage_reported')
+        .all() as { cache_read_tokens: number | null; cache_write_tokens: number | null }[];
+      expect(v.cache_read_tokens, '无从判断当时上游报没报 ⇒ 读 NULL（0 会留在分母里说谎）').toBeNull();
+      expect(v.cache_write_tokens).toBeNull();
+
+      const r = reconcile(db);
+      expect(r.problems).toEqual([]);
+      const hit = r.warnings.find((w) => w.includes('缓存计量口径未知'));
+      expect(hit, `没有那条警告，实得：\n${r.warnings.join('\n')}`).toBeDefined();
+      expect(hit).toContain('排除在分母之外');
+    });
   });
 
   test('物化余额被改坏 → 报出差额', () => {

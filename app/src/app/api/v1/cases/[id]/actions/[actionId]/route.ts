@@ -1,5 +1,6 @@
 // app/src/app/api/v1/cases/[id]/actions/[actionId]/route.ts
 // PATCH 把行动卡标成「完成」（默认）或「放弃」（对应 MCP 工具 action_complete）。
+import { recordAgentWriteFromRest } from '@/lib/audit/agent-writes';
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 import * as cases from '@/lib/cases';
@@ -38,6 +39,14 @@ export async function PATCH(
     status: body.status,
   });
   if (!result.ok) return domainFailure(result);
+
+  recordAgentWriteFromRest(getDb(), guard.identity, {
+    endpoint: '/api/v1/cases/{id}/actions/{actionId}',
+    method: 'PATCH',
+    caseId,
+    targetTable: 'action_items',
+    targetId: actionId,
+  });
 
   return apiJson({ ok: true, action: result.action });
 }

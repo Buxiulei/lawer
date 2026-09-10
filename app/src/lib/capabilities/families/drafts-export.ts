@@ -6,6 +6,7 @@
 // 实名闸**一个字都不在这里判**：它是条目上的 precondition，由 MCP 路由统一拦
 // （lib/capabilities/registry.ts 的说明）。各工具在 run 里各写一句的形态是
 // 新加一条能力时忘了抄那一句，而它照常返回 200。
+import { findById as findShareById } from '@/lib/db/share-links';
 import { exportDraft, DRAFT_EXPORT_FORMATS } from '@/lib/drafts/export';
 import {
   createShare,
@@ -93,6 +94,19 @@ export const shareRevoke: Capability = {
   // 他手上那些链接就再也撤不掉了，而那正是他最想撤的时候。
   precondition: [],
   idempotency: { naturalKey: 'share_id（已撤销的再撤一次原样返回，不改首次撤销时点）' },
+  // 入参里没有案件号（分享链接按自己的 id 定位，share_links 也不存 user_id）——
+  // 回读那一行取案件号。读不到**不拿猜的案件号占位，也不回空数组**：空数组说的是
+  // 「这次没写东西」，而撤销此刻已经生效了；回 unresolved 让记账层点名（见 registry）。
+  ledger: {
+    targetTable: 'share_links',
+    rowsOf: (db, args, result) => {
+      const shareId = num(args.share_id);
+      const caseId = findShareById(db, shareId)?.case_id;
+      return caseId === undefined
+        ? [{ unresolved: `share_id=${shareId} 回读不到 case_id（share_links 里已经没有这一行）` }]
+        : [{ caseId, targetId: shareId, deduped: result.already_revoked === true }];
+    },
+  },
   title: '撤销分享链接',
   description:
     '立刻作废一条分享链接：此后任何人打开它都只会看到「链接已失效」。' +

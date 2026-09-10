@@ -4,6 +4,7 @@
 //        与 MCP 工具调的是同一条能力，两条入口行为逐字一致。
 // DELETE 删除档案（对应 MCP 工具 case_delete）。同理走那一条能力：二次确认、软删、
 //        收回分享链接、幂等全在能力那一份实现里，本路由只把 confirm_token 递进去。
+import { recordAgentWriteFromRest } from '@/lib/audit/agent-writes';
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 import { invokeCapability } from '@/lib/capabilities/invoke';
@@ -58,6 +59,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   });
   if (!outcome.ok) return domainFailure(outcome);
 
+  // 【为什么这一行落在路由、不落在能力壳里】case_update 不走 withClientRef（它没有 client_ref
+  // 幂等，同案覆盖就是覆盖），所以能力壳那侧本来就不记台账——MCP 与 REST 在这条上同样是空的。
+  // 这里补的是 REST 这一道门；MCP 那道门的同一处缺口另票（见本次交付的开放问题）。
+  recordAgentWriteFromRest(getDb(), guard.identity, {
+    endpoint: '/api/v1/cases/{id}',
+    method: 'PATCH',
+    caseId,
+    targetTable: 'cases',
+    targetId: caseId,
+  });
+
   return apiJson({ ok: true, ...outcome.value });
 }
 
@@ -80,6 +92,20 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     confirm_token: new URL(req.url).searchParams.get('confirm_token') ?? undefined,
   });
   if (!outcome.ok) return domainFailure(outcome);
+
+  // 只有真的删了那一步记台账：不带 confirm_token 的第一步回的是确认单，一行都没删。
+  // 给确认单也记一行的形态是——台账里「删过几次」比实际删除次数多，而删除是不可撤销的动作，
+  // 事后复盘时那个多出来的数正是最要命的。删除是软删（deleted_at），case_id 外键仍然指得着。
+  if (outcome.value.stage === 'deleted') {
+    recordAgentWriteFromRest(getDb(), guard.identity, {
+      endpoint: '/api/v1/cases/{id}',
+      method: 'DELETE',
+      caseId,
+      targetTable: 'cases',
+      targetId: caseId,
+      deduped: outcome.value.already_deleted === true,
+    });
+  }
 
   return apiJson({ ok: true, ...outcome.value });
 }

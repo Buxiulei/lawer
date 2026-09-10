@@ -59,6 +59,81 @@ export type CapabilityKind = 'read' | 'write' | 'spend';
  */
 export type CapabilityPrecondition = 'realname' | 'balance' | 'emotion_consent' | 'facts_token';
 
+/**
+ * 一次能力调用是从**哪道门**进来的。只有这两道门会跑到注册表里的能力：
+ *   · `mcp`        —— POST /api/mcp 的 tools/call
+ *   · `rest-tools` —— POST /api/v1/tools/{name}（通用工具桥）
+ * 台账里 endpoint 那一列按它取值（mcp:<名> / rest-tools:<名>），tool 一列两道门同值。
+ *
+ * 【为什么不把它和 exposeTo 合成一个字段】exposeTo 答的是「谁看得见这条能力」，
+ * 它答的是「这一次是从哪儿调进来的」。合成一个的形态是：以后加一道新门（或某条能力
+ * 换了暴露面），台账里的来源跟着乱掉，而两处读起来都像对的。
+ */
+export type CapabilityEntrance = 'mcp' | 'rest-tools';
+
+/** 一次写入落在哪一行。target_table 是弱引用，见 migrate.ts 的建表注释。 */
+export interface CapabilityWriteRow {
+  /** agent_writes.case_id 是 NOT NULL 外键，取不到就别回这一行 */
+  caseId: number;
+  targetId: number;
+  /** 业务侧回了「这次是重放，没有新写入」（deduped / already_*）时为 true */
+  deduped?: boolean;
+}
+
+/**
+ * 「**写是写了，但定位不到那一行**」。与空数组（这次一行都没写）是两件事。
+ *
+ * 【为什么要把这两件事分开（2026-09-10 复审）】有几条能力的入参里没有案件号
+ * （分享链接、转介、证据都按自己的 id 定位），台账那一行的 case_id 要回读一次才知道。
+ * 回读不到时此前一律回空数组——而空数组的约定是「这次没写东西」，于是记账层照约定
+ * 什么都不做、也不说一句：业务侧真的撤销了一条链接 / 真的出了一份证，台账里没有那一行，
+ * 而回包 200、日志干净、没有任何一处报错。**未写**与**写了但记不上账**在事后
+ * 长得一模一样，那正是台账最不该含糊的地方。
+ *
+ * 回这个结构 = 请记账层点名（缺什么 / 为什么缺 / 怎么办），并且**不落那一行假的**。
+ */
+export interface CapabilityWriteUnresolved {
+  /** 缺什么：哪个 id 回读不到什么。进日志正文，要点得出名字，不能只说「失败了」 */
+  unresolved: string;
+}
+
+/** rowsOf 的每一项：要么是定位得到的那一行，要么是一句「回读失败」。 */
+export type CapabilityWriteOutcome = CapabilityWriteRow | CapabilityWriteUnresolved;
+
+/**
+ * 写能力的**台账元数据**。声明它 = 「这条能力自己不记台账，由跑它的那道门统一记一行」。
+ *
+ * 走 withClientRef / writeOnce 的写能力**不声明**：它们在自己的事务里记，
+ * 再由外面补一行就是同一次写入占两行，计数从此说谎。
+ * 「声明 ledger」与「走能力壳」两者恰好互斥、且每条写能力必居其一，
+ * 由 __tests__/registry-guard.test.ts 机检——漏声明的形态是那条能力照常工作、
+ * 照常返回 200，只是它写进去的东西在台账里查不到，没有任何一处会报错。
+ */
+export interface CapabilityLedger {
+  /** 落到哪张表 */
+  targetTable: string;
+  /**
+   * 这次调用**真正写了哪几行**。
+   *
+   * 空数组 = 一行都没写（两步确认里只出确认单的那一步、逐件批量里一件都没成），
+   * 此时不记台账、也不报警——给「什么都没发生」记一行的形态是：事后复盘时那个不可撤销的动作
+   * 在台账里比实际多发生过几次。
+   *
+   * **写了却定位不到那一行**（要回读的 id 查不着了）回 `{ unresolved }`，
+   * 不要拿空数组顶替：空数组是「没写」，两件事混成一件之后，台账缺一行与本来就没有那一行
+   * 在事后长得一模一样。见 CapabilityWriteUnresolved。
+   *
+   * 逐件批量的能力回多行：一次调用只记一行的形态是，台账里那个数永远是 1，
+   * 而文件与账单都是 N 件；其中某几件回读不到，就在那几件的位置上回 `{ unresolved }`，
+   * 成了的那几件照记。
+   */
+  rowsOf(
+    db: Database,
+    args: Record<string, unknown>,
+    result: Record<string, unknown>,
+  ): CapabilityWriteOutcome[];
+}
+
 export interface Capability {
   name: string;
   family: CapabilityFamily;
@@ -71,6 +146,8 @@ export interface Capability {
   precondition: readonly CapabilityPrecondition[];
   /** 有幂等约定的写能力才填；读能力恒省略 */
   idempotency?: { clientRef?: boolean; naturalKey?: string };
+  /** 不走能力壳（withClientRef / writeOnce）的写能力填它，台账由门统一记。见 CapabilityLedger */
+  ledger?: CapabilityLedger;
   /**
    * facts_token 闸**只在这几个入参出现时才开**（省略 = 声明了 facts_token 就恒开）。
    *

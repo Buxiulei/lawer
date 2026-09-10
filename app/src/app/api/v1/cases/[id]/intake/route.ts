@@ -5,6 +5,7 @@
 // 阶段、公司、金额输入、时间线、诉求、三件事要么一起进去，要么一件都别进。
 // 拆成五六个请求时，中间任何一条断了都会留下半截档案，而用户在屏幕上看不出断在哪儿——
 // 他只会觉得「我明明填了公司名」。事务在领域层（lib/cases/intake），这里只做壳。
+import { recordAgentWriteFromRest } from '@/lib/audit/agent-writes';
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 import { assertedByOf } from '@/lib/capabilities/shared';
@@ -42,6 +43,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     assertedBy: assertedByOf(guard.identity),
   });
   if (!result.ok) return domainFailure(result);
+
+  // 首诊是一次原子交付、写进的是若干张表；台账那一行按「这次动的是哪份档案」记，
+  // target 指案件本身——指其中任意一张子表都是在替读的人挑一个代表，而挑哪张都不对。
+  recordAgentWriteFromRest(getDb(), guard.identity, {
+    endpoint: '/api/v1/cases/{id}/intake',
+    method: 'POST',
+    caseId,
+    targetTable: 'cases',
+    targetId: caseId,
+  });
 
   return apiJson({ ok: true, case_id: caseId, saved: result.result }, { status: 201 });
 }

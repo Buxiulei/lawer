@@ -4,6 +4,7 @@
 // 【为什么是独立端点而不是 POST /timeline 的一个字段】契约 §六·二：通用写路径
 // （创建事件）在类型上就不该设得了 milestone，"无确认不写"才不是一条靠人记得的纪律。
 // 于是流程必然是两步：事件先存在，用户确认后再由本端点盖章。
+import { recordAgentWriteFromRest } from '@/lib/audit/agent-writes';
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 import * as cases from '@/lib/cases';
@@ -49,6 +50,14 @@ export async function POST(
     userConfirmed: body.user_confirmed,
   });
   if (!result.ok) return domainFailure(result);
+
+  recordAgentWriteFromRest(getDb(), guard.identity, {
+    endpoint: '/api/v1/cases/{id}/timeline/{eventId}/milestone',
+    method: 'POST',
+    caseId,
+    targetTable: 'timeline_events',
+    targetId: eventId,
+  });
 
   return apiJson({ ok: true, event: result.event });
 }

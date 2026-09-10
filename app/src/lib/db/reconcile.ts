@@ -111,6 +111,56 @@ function apiModelDriftWarnings(db: Database.Database): string[] {
 }
 
 /**
+ * 缓存两桶「未回报」探针（2026-09-10 裁决）。
+ *
+ * 【它答的是哪个问题】读 token_usage 的 cache_read_tokens 会看到一片 0。那个 0 有两种来历：
+ * 上游说「这一轮一次缓存都没命中」，或者上游**根本没报这一桶**（DeepSeek 无缓存写档、
+ * 中转吃掉了 usage 明细、我们把 prompt_tokens 当成不含缓存的净输入读错了……）。
+ * 两者在旧表里同形，于是「缓存没省到钱」这个结论既可能是事实，也可能是我们没在看。
+ *
+ * 【为什么只告警不判错】未回报不是账目不一致：这一轮的钱照 0 计、照扣、照对得上。
+ * 它是**读数可信度**的信号——量具本身没读到那一档，先别拿它下结论。
+ * 判成 problem 会让一台正常运转的对账器天天报红（多数厂商确实不报缓存写）。
+ *
+ * cache_read_reported IS NULL 的行是本列落地之前的存量，同样不许当成 0，单独一档报。
+ */
+const SQL_CACHE_UNREPORTED = `
+  SELECT COUNT(*)                                                        AS total,
+         SUM(CASE WHEN cache_read_reported  = 0 THEN 1 ELSE 0 END)       AS read_unreported,
+         SUM(CASE WHEN cache_write_reported = 0 THEN 1 ELSE 0 END)       AS write_unreported,
+         SUM(CASE WHEN cache_read_reported IS NULL THEN 1 ELSE 0 END)    AS legacy
+    FROM token_usage
+`;
+
+function cacheUnreportedWarnings(db: Database.Database): string[] {
+  const r = db.prepare(SQL_CACHE_UNREPORTED).get() as {
+    total: number;
+    read_unreported: number | null;
+    write_unreported: number | null;
+    legacy: number | null;
+  };
+  if (r.total === 0) return [];
+  const out: string[] = [];
+  const read = r.read_unreported ?? 0;
+  const write = r.write_unreported ?? 0;
+  const legacy = r.legacy ?? 0;
+  if (read > 0 || write > 0) {
+    out.push(
+      `缓存计量未回报：${r.total} 条 token_usage 里，缓存读 ${read} 条、缓存写 ${write} 条` +
+        `上游没有回报这一桶。**这些行的 0 不等于「没命中缓存」**，是「不知道」——` +
+        `按缓存命中率下结论前先排除它们（读侧口径见视图 token_usage_reported，未回报读作 NULL）`,
+    );
+  }
+  if (legacy > 0) {
+    out.push(
+      `缓存计量口径未知：${legacy} 条 token_usage 早于 cache_read_reported 这一列，` +
+        `无从判断当时上游报没报（不是 0，也不是未回报）。统计缓存命中率时应把它们排除在分母之外`,
+    );
+  }
+  return out;
+}
+
+/**
  * 空账本检查：**有模型回复产生的时间窗内，账本一行都没有 = 判错，不是"账目一致"**。
  *
  * 【为什么这条必须在，2026-08-25 生产冒烟】token_usage / gongdao_ledger / model_rates 三表
@@ -180,6 +230,7 @@ export function reconcile(db: Database.Database): ReconcileReport {
   }
 
   warnings.push(...apiModelDriftWarnings(db));
+  warnings.push(...cacheUnreportedWarnings(db));
 
   return { users: rows.length, problems, warnings };
 }

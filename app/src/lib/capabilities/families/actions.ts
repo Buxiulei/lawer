@@ -2,7 +2,7 @@
 // G 族：行动卡（设计稿 §2 G）。
 import * as cases from '@/lib/cases';
 
-import { caseIdProp, num } from '../shared';
+import { caseIdProp, idAt, num } from '../shared';
 import type { Capability } from '../registry';
 
 export const actionList: Capability = {
@@ -40,6 +40,14 @@ export const actionComplete: Capability = {
   domains: ['*'],
   exposeTo: ['mcp'],
   precondition: [],
+  // 改的是那张行动卡的 status 一列，target 就是它。
+  // **不填 deduped**：把一张已完成的卡再标一次完成，领域层不区分，猜不出来的判断不写。
+  ledger: {
+    targetTable: 'action_items',
+    rowsOf: (_db, args, result) => [
+      { caseId: num(args.case_id), targetId: idAt(result, 'action', 'id') },
+    ],
+  },
   rest: { method: 'PATCH', path: '/api/v1/cases/{id}/actions/{actionId}' },
   title: '完成行动卡',
   description: '把一条行动项标记为完成；也可以传 status 标记为放弃。',

@@ -1,6 +1,7 @@
 // app/src/app/api/v1/cases/[id]/timeline/route.ts
 // GET  分页读时间线，入参与 MCP 工具 timeline_list 一致（since / kind / limit / offset）。
 // POST 追加一条时间线事件（对应 MCP 工具 timeline_add）。只追加，无改无删。
+import { recordAgentWriteFromRest } from '@/lib/audit/agent-writes';
 import { domainFailure, parseId, requireIdentity } from '@/lib/auth/guard';
 import { readJsonBody } from '@/lib/auth/http';
 import { assertedByOf } from '@/lib/capabilities/shared';
@@ -75,6 +76,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     assertedBy: assertedByOf(guard.identity),
   });
   if (!result.ok) return domainFailure(result);
+
+  // 【client_ref 不进台账】timeline_add 的幂等走的是 timeline_events 自己那一列
+  //（早于 agent_writes 落地，见 lib/capabilities/idempotent.ts 抬头），台账这一行只是审计。
+  // 把同一个 client_ref 抄进台账会撞上 uq_agent_writes_client_ref——那把索引是能力壳的去重键，
+  // 于是**按说明书重放**这条设计内的路径会变成一条 error 日志（唯一入口里第 3 条讲的就是它）。
+  // 重放读 deduped 这一列：第二次仍留一行，deduped=1，读得出「这次什么都没新增」。
+  recordAgentWriteFromRest(getDb(), guard.identity, {
+    endpoint: '/api/v1/cases/{id}/timeline',
+    method: 'POST',
+    caseId,
+    targetTable: 'timeline_events',
+    targetId: result.event.id,
+    deduped: result.deduped,
+  });
 
   // deduped=true 时这条是既有行（同 client_ref 重放或近重复），没有新插入——回 200；
   // 真新增回 201。调用方据此知道「这条已经记过了」，不必再向用户复述一遍。
