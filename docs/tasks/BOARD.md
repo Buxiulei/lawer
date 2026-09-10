@@ -602,6 +602,8 @@
 
 **2026-09-10 上产 a8d8a4e9（「公司动作」谓词票五提交 + CLAUDE.md + 台账）**：闸链跑在折入后的树上全绿（全量 7405、eval 543、守卫含 terms-live-single-read 绿）；CI run 34476827977 success（前一版 f757001f 因 CLAUDE.md 含协议旗变量名被守卫拦红，已改指向读取口）；生产 PRE dcacd97b → POST a8d8a4e9，库备份，构建 rc=0，冒烟：首页/条款/登录 200、sidecar ok、两门 401、labor.ts 新谓词与 CLAUDE.md 在、app.log 游标 475 后零错误行。用户面变化：「公司作出解除/终止决定」只认解除/终止/辞退/开除/解聘/不续签类记录（被裁/裁掉/裁员名单里有我等已发生形态），调岗/降薪/约谈/警告/搬迁/协商提议/威胁/条件句/未定态/光杆裁员一律不算；争点表规则三与要件成立同真同假；公司一侧主语词表扩到部门与职务；口语化欠薪/社保说法认得出。当日第六版，生产 30fbfdcb → a8d8a4e9。**明日**：① 结构化「决定」标记设计（时间线事件带类型，正则退为兜底）；② 事实卡预算票（厚档案挤出要件表节）；③ 已协商一致签完字那一档、「说 + 时间词」未定态、标题只放未定态词——随①一并考虑。
 
+**2026-09-10 20:45 开工：两票并行派出（基线 a8d8a4e9）**：① 结构化「决定」标记 wf event-type-marker（ws/event-type）——timeline_events.event_type 可空列；DomainPack.timelineEventTypes 闭合枚举（labor：公司动作 company_termination / company_negotiation / company_notice / company_other；我方动作 my_forced_termination_notice / my_objection / my_resignation / my_other）；SlotValueCheck 扩 acceptsType，有类型只看类型、无类型才跑正则；四条入口（timeline_add 两门 + 400 同形、站内表单下拉、首诊自动落档取值口径、文件提取留 null）；事实卡与要件表带类型标签；协商解除不计入公司决定（沿用裁定）但文案引导。② 事实卡预算 wf facts-budget（ws/facts-budget）——要件表节按 P3→P2→压缩格式→P1 逐行降级、P0 永不丢、整节丢只在 P0 放不下并三段式报错；行格式压缩档（短标签、需补 60→36）只在预算不够时启用；不动 CASE_FACTS_BUDGET；新增「施压期厚档案」夹具。合并顺序：② 先（小）、① 后（若冲突由合并代理解）。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
