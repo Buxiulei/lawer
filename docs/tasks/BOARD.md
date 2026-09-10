@@ -547,6 +547,9 @@
 
 **2026-09-10 S6 第三轮 pass（e7b3f0db）+ 第四轮派单**：N-2a satisfiedBy 加 timeline:公司动作（现有 TIMELINE_KINDS 四种之一，未新增），仅公司文件 ⇒ N-2a/N-2b 双缺失、两条都进 gaps；报告层规则三反臂改钉 N-2a（2N-3 与 counterpartyDecisionSlot 同槽，在报告文本层不可证伪——执行者如实上报并换样本，复审核实成立）；issue-table 导出 NEXT_STEP_FIX_DECISION 供测试比对；变异 3 臂红，全量 7147 过。复审 1 major：判据 (a) 末句「争点表无 burden_on_other_side 的 N-2a 行」未达——规则三读的是 counterpartyDecisionSlot='evidence:公司文件' 宽类别，员工手册照样为真，reasons 经 MCP issue_list 原样回包；1 minor：2N-3 satisfiedBy 同病（任意公司文件 ⇒ 成立 + 恒进表 + 出路句让人固定不存在的决定）。经理裁定：派单自相矛盾属实，合入前第四轮 wf 一并修——counterpartyDecisionSlot 改槽数组（全部须解析），labor 取 ['evidence:公司文件','timeline:公司动作']，2N-3 同步；规则三对自述档公司动作是否触发由执行者定口径（经理倾向书证档才算）。另票 backlog：report 层导出 reasons 供判据观测。
 
+**2026-09-10 S6 第四轮 pass（9b10c615）+ 合主干派单**：共享层 counterpartyDecisionSlot 改 readonly string[]（全部槽到位才算在档），counterpartyDecisionOnFile 取「书证档才算书面决定在档」（isDocumented；自述档落回规则一「只有你自己的说法」）+ 空数组显式 false；labor 取 ['evidence:公司文件','timeline:公司动作']，2N-3 同步；判据 (a)(b)(c) 在 issue-table / elements-family（MCP issue_list 回包面）/ report-derived 三层，变异 5 臂红，全量 7155 过。复审 2 minor：2N-2 单槽同病；字段名单数配数组 + 三处同形槽对 + assertDomainPack 不校验空数组。经理裁定：2N-2 一并收窄并把槽对提成 labor.ts 内常量（合并单里做）；改名与 assertDomainPack 校验记 backlog；eval 剧本集缺「只传员工手册」形态——记评测官 backlog。
+合主干：S6 基于 9f13e2af，与 0809757c 恰两处加法冲突（migrate.ts 两侧各加一块；registry-guard 共用层名单两侧各加一项），保留两边；合并后 S6 的 element_fill 写能力须按审计票新守卫补 ledger 声明。派 Opus 单代理（s6-merge）合并 + 合规 + 2N-2，经理亲核 diff 后 wt-int ff → 闸链 → push → CI → 上产。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
