@@ -29,6 +29,7 @@ import { describe, expect, it } from 'vitest';
 
 import { articleKey } from '@/lib/agent/citation-block';
 import { BURDENS, buildElementSheet, type Burden, type ElementFactsView } from '@/lib/cases/elements';
+import { buildIssueTable } from '@/lib/cases/issue-table';
 
 import { LABOR } from '../labor';
 
@@ -308,6 +309,27 @@ describe('双倍工资-2：字段有值 ≠ 事实成立（复审 2026-09-10 第
     }
   });
 
+  it('**签过**的说法不许被判成"没签"（第二轮复审 2026-09-10；把 ④ 改回 /[没未无]/ → 红）', () => {
+    // 【这一组是上一版真的判错的那几个】旧实现最后一步是"剩下的看有没有否定词 /[没未无]/"，
+    // 于是下面每一个都被判成「没签」⇒ 二倍工资-2 印「成立·待证」。
+    // 「签了无固定期限合同」是北京老员工最常见的答案：合同签了，期限是无固定期限，
+    // 而要件表告诉他"仍没有订立书面合同，这一项成立·待证"——他据此去主张一笔提不了的钱。
+    for (const raw of [
+      '无固定期限',
+      '签了无固定期限合同',
+      '未续签',
+      '没续签',
+      '签过，后来没续签',
+      '签了但没盖章',
+      '一直没续签',
+      '签了合同但公司没给我',
+    ]) {
+      const row = rowOf(raw);
+      expect(row.status, `「${raw}」（这是签过的说法）被判成了 ${row.status}`).toBe('缺失');
+      expect(row.missingSlots, `「${raw}」的缺口没点名`).toEqual(['无合同期间']);
+    }
+  });
+
   it('认不准的答案一律偏向「缺失」（误差方向：多问一句 ≪ 让人去主张一笔提不了的钱）', () => {
     for (const raw of ['不记得了', '待确认', 'HR 说回头补']) {
       expect(rowOf(raw).status, raw).toBe('缺失');
@@ -338,5 +360,78 @@ describe('锚点不只要「在库里、核过了」，还要真的支撑那个�
     }
     expect(keys, '少了及时足额支付那一条').toContain(articleKey('中华人民共和国劳动合同法', '第三十条'));
     expect(keys, '少了约定发薪日那一条').toContain(articleKey('工资支付暂行规定', '第七条'));
+  });
+});
+
+
+describe('N 的两条解除路径：互斥、二选一（第二轮复审 2026-09-10 第三、四条）', () => {
+  // 【它守什么】N-2 拆成两张卡之后有两个新的错法，都是"回包 200、每行读起来都正常"：
+  //   ① N-2b 只认「沟通记录」——那是最常见的一类材料（微信截图），于是从没发过
+  //      被迫解除通知的人，要件表上「路径二」写着「成立」；
+  //   ② 两条路径二选一，而要件表按诉求列全 ⇒ 另一条恒是「缺失」，风险区间见「缺失」就落
+  //      「依据不足」、争点表还多一条让他去补那份根本不存在的通知书。
+  const factsWith = (over: Partial<ElementFactsView> = {}): ElementFactsView => ({
+    case: {
+      employed_from: '2020-03-01',
+      position: '后端工程师',
+      monthly_wage_fen: 2_500_000,
+      contract_count: '续签过一次',
+    },
+    claims: [{ kind: 'N', source_tier: '自述' }],
+    timeline: [],
+    companies: [{ role: '签约主体', source_tier: '自述' }],
+    evidence: [],
+    ...over,
+  });
+  const sheetOf = (over: Partial<ElementFactsView> = {}) =>
+    buildElementSheet(factsWith(over), LABOR.elementCards ?? [], ['N']);
+  const rowOf = (id: string, over: Partial<ElementFactsView> = {}) =>
+    sheetOf(over).rows.find((r) => r.id === id)!;
+
+  it('🔒 地板：两张卡都在，且挂在同一个「任选其一」分组下', () => {
+    const a = (LABOR.elementCards ?? []).find((c) => c.id === 'N-2a')!;
+    const b = (LABOR.elementCards ?? []).find((c) => c.id === 'N-2b')!;
+    expect(a, 'N-2a 不见了').toBeTruthy();
+    expect(b, 'N-2b 不见了').toBeTruthy();
+    expect(a.alternativeGroup, 'N-2a 没有分组').toBeTruthy();
+    expect(b.alternativeGroup, '两条路径不在同一组里').toBe(a.alternativeGroup);
+  });
+
+  it('一份「沟通记录」**不能**把被迫解除那条路抬成「成立」（变异：satisfiedBy 改回只认沟通记录 → 红）', () => {
+    // 微信截图是档案里最常见的一类材料。只认它的形态是：走公司解除那条路的用户
+    // 上传几张与 HR 的聊天记录，「路径二：你依照第三十八条提出被迫解除」就写着「成立」，
+    // 而他从来没发过任何解除通知——两条互斥的路径同时"成立"，要件表自相矛盾。
+    const row = rowOf('N-2b', { evidence: [{ category: '沟通记录' }] });
+    expect(row.status, `只有一份沟通记录时 N-2b 被判成了 ${row.status}`).toBe('缺失');
+    expect(row.missingSlots, '缺口没点到"你自己做过这件事"那条记录').toContain('timeline:我方动作');
+  });
+
+  it('时间线上有「我方动作」+ 沟通记录 ⇒ 成立·待证（不是「成立」：回执进档前那句话只有你自己说）', () => {
+    const row = rowOf('N-2b', {
+      evidence: [{ category: '沟通记录' }],
+      timeline: [{ kind: '我方动作', source_tier: '自述' }],
+    });
+    expect(row.status).toBe('成立·待证');
+  });
+
+  it('路径一走通时，路径二的「缺失」不进争点表（变异：规则一不按分组取代表行 → 红）', () => {
+    const sheet = sheetOf({ evidence: [{ category: '公司文件' }] });
+    expect(rowOf('N-2a', { evidence: [{ category: '公司文件' }] }).status, '这个案子走的是路径一').toBe('成立');
+    expect(rowOf('N-2b', { evidence: [{ category: '公司文件' }] }).status).toBe('缺失');
+    // 要件表**照旧两条都画**（用户要知道另一条路长什么样），进争点表的只有代表行
+    expect(sheet.rows.map((r) => r.id), '要件表不该把另一条路径藏起来').toContain('N-2b');
+    const issues = buildIssueTable(sheet.rows, {}, true);
+    expect(
+      issues.rows.map((r) => r.id),
+      '路径二的「缺失」进了争点表：用户会去准备一份他从没发过、也不需要发的被迫解除通知',
+    ).not.toContain('N-2b');
+  });
+
+  it('两条路都还没走通时，两条都留在争点表上（这道分组不是"藏起一条"）', () => {
+    const sheet = sheetOf();
+    const ids = buildIssueTable(sheet.rows, {}, true).rows.map((r) => r.id);
+    expect(ids, '什么材料都没有时，两条路径都该摆出来让用户自己认').toEqual(
+      expect.arrayContaining(['N-2a', 'N-2b']),
+    );
   });
 });

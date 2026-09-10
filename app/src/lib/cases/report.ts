@@ -379,25 +379,56 @@ function derivedIssues(input: ReportInput, pack: DomainPack): { rows: readonly I
 const DERIVED_SOURCES: readonly ReportSectionSpec['source'][] = ['disputes', 'risks'];
 
 /**
- * 派生节里那些**顶格 `- ` 却不带 `〔争点 id〕` 标记**的行——从第一条带标记的条目起算。
+ * 一段文本里**顶格 `- ` 却不带 `〔争点 id〕` 标记**的那些行。
  *
- * 【为什么从第一条标记起算，而不是整节数】派生节的初稿本来就以几行说明开头
- *（「下面 N 条由要件表派生……」「还没立住的要件 N 条……」「基本盘缺 2 项……」），
- * 整节数的形态是初稿自己就违规，于是这道闸从上线第一天起就得关掉。
- * 从第一条条目起算之后，说明照旧写在上面，而**条目区里多出来的那一条**跑不掉——
- * 复审第四条点的正是它：在有标记的节末追加一条「- 另外公司还涉嫌…」，此前 200 放行。
- *
- * 【为什么只看顶格】`  - 下一步：…` 是条目自己的子行，缩进着；把子行也算进来等于
- * 不许模型在某一条下面多写一句话，而那正是"改写成人话"要允许的事。
+ * 【为什么只看顶格】`  - 下一步：…` 是某一条派生条目自己的子行，缩进着；把子行也算进来
+ * 等于不许模型在某一条下面多写一句话，而那正是"改写成人话"要允许的事。
  */
-function strayDerivedBullets(text: string): string[] {
-  const lines = text.split('\n');
-  const first = lines.findIndex((l) => l.startsWith('-') && issueMarkersIn(l).size > 0);
-  if (first < 0) return [];
-  return lines
-    .slice(first + 1)
-    .filter((l) => /^-\s/.test(l) && issueMarkersIn(l).size === 0)
-    .map((l) => l.trim());
+const isUnmarkedBullet = (line: string): boolean => /^-\s/.test(line) && issueMarkersIn(line).size === 0;
+
+function unmarkedBullets(text: string): string[] {
+  return text.split('\n').filter(isUnmarkedBullet).map((l) => l.trim());
+}
+
+/** 第一条**带标记**的顶格条目在第几行（没有则 -1）。 */
+function firstMarkedBullet(text: string): number {
+  return text.split('\n').findIndex((l) => l.startsWith('-') && issueMarkersIn(l).size > 0);
+}
+
+/**
+ * 派生节里"多出来的条目"——**不带标记那一半**。两把尺，各拦一种绕路：
+ *
+ *   · `after`：第一条派生条目**之后**还有顶格无标记的条目 ⇒ 那是节末追加的一条争点。
+ *   · `extra`：整节的顶格无标记条目**比服务端初稿里的还多** ⇒ 那是插在条目区之前、
+ *     或者在一条派生争点都没有的那一段里凭空写出来的。
+ *
+ * 【为什么不是裁决字面的"整节计数 >0 即拒"】服务端初稿自己就带着几行顶格说明：
+ * 「下面 N 条由要件表派生……」「还没立住的要件 N 条……」「基本盘缺 2 项：……」，
+ * 以及本领域有要件卡、但本案登记的诉求恰好没有要件卡时（labor 的年假 / 加班费 / 年终奖
+ * 都是这一类）退回去印的那份金额清单。整节计数 >0 就拒的形态是**初稿自己违规**，
+ * 于是这道闸从上线第一天起就得关掉。所以基线取的是**服务端此刻会生成的那份初稿**里
+ * 有几条这样的行：允许照抄、允许改写、允许删，**就是不许比它多**。
+ * 复审 2026-09-10（第二轮）点名的两条绕路（空集里写无标记条目 / 插在第一条条目之前）
+ * 落在 `extra` 这把尺上；第一轮点名的节末追加落在 `after` 上。
+ *（这一处**与裁决第四条的字面不同**：字面是"整节计数 >0 即拒"。差别与上面这个理由
+ * 一并报给经理裁，不在这里替他定；判据「初稿原样写回恒放行」钉的就是这个理由本身。）
+ *
+ * 【剩下的那道缝，记在这里】"删掉一行说明、同时插进一条自造条目"总数不变，
+ * 若又落在第一条派生条目之前，两把尺都不响。堵死它要按行比对初稿，而按行比对
+ * 与"允许把机械句式改写成人话"是直接冲突的——那会让这道闸天天误报、然后被关掉。
+ *
+ * @param content 本次要写入的正文
+ * @param draft 服务端此刻按档案生成的这一节初稿（基线）
+ */
+function derivedBulletStrays(content: string, draft: string): { after: string[]; extra: string[] } {
+  const first = firstMarkedBullet(content);
+  const after =
+    first < 0
+      ? []
+      : content.split('\n').slice(first + 1).filter(isUnmarkedBullet).map((l) => l.trim());
+  const all = unmarkedBullets(content);
+  const allowed = unmarkedBullets(draft).length;
+  return { after, extra: all.length > allowed ? all : [] };
 }
 
 /** 一行争点的正文。**行首那个 `〔争点 id〕` 是派生标记**，改措辞可以，删掉它就对不上账了。 */
@@ -701,17 +732,23 @@ export function updateSection(
   }
   // 【标记对上了还不算完】增删条目那把尺只比标记集合，比不出**不带标记的新条目**：
   // 在有标记的节末追加一条「- 另外公司还涉嫌…」，标记集合一个字没变，而页面上多了一条争点。
+  // 两把尺见 derivedBulletStrays：节末追加（after）与"比初稿多"（extra）。
   if (derivedSection) {
-    const stray = strayDerivedBullets(content);
-    if (stray.length) {
+    const draft = draftSection(sectionSpec.source, loadInput(db, caseRow), now, pack);
+    const stray = derivedBulletStrays(content, draft);
+    const hit = stray.after.length ? stray.after : stray.extra;
+    if (hit.length) {
+      const where = stray.after.length
+        ? '这几条落在第一条派生条目之后'
+        : '这一节顶格、不带标记的条目比服务端初稿里的还多';
       return fail(
         400,
         'REPORT_SECTION_DERIVED',
-        `「${title}」的条目区里多了 ${stray.length} 条不带 〔争点 …〕 标记的条目，本次没有写入：` +
-          `${stray.slice(0, 3).map((s) => `「${s.slice(0, 40)}」`).join('、')}。` +
-          '缺什么：这几条没有派生出处。为什么缺：这一节的条目由服务端从要件表派生，' +
+        `「${title}」的条目区里多了不带 〔争点 …〕 标记的条目，本次没有写入：` +
+          `${hit.slice(0, 3).map((s) => `「${s.slice(0, 40)}」`).join('、')}（共 ${hit.length} 条）。` +
+          `缺什么：${where}，而它们没有派生出处。为什么缺：这一节的条目由服务端从要件表派生，` +
           '不带标记的条目说不出它是被哪条规则捞进来的——那就是发明争点。' +
-          '怎么办：要补一句说明，写在第一条条目**之前**，或缩进成某一条自己的子行（`  - …`）；' +
+          '怎么办：要补一句说明，就写成正文（不要顶格 `- `）或缩进成某一条自己的子行（`  - …`）；' +
           '要真的多一条争点，去改档案（补证据、登记诉求、记一条对方的书面决定），这一节会跟着重生成。',
       );
     }

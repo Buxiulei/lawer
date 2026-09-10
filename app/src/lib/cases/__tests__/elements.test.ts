@@ -13,6 +13,7 @@ import {
   buildElementSheet,
   BURDENS,
   ELEMENT_STATUSES,
+  representativeElementIds,
   resolveSlot,
   type ElementCard,
   type ElementFactsView,
@@ -300,5 +301,53 @@ describe('空要件卡的降级', () => {
     const f = facts({ claims: [{ kind: '某项', source_tier: '自述' }] });
     const cards = [card()];
     expect(buildElementSheet(f, cards)).toEqual(buildElementSheet(f, cards));
+  });
+});
+
+
+describe('「任选其一」分组：走通一条就算走通', () => {
+  // 【它守什么】有些要件是互斥的几条路径（同一项诉求，走通任一条即可）。
+  // 没有这一格的形态是：要件表按诉求列全，另一条路那张卡恒是「缺失」，
+  // 于是风险区间见「缺失」就落到最低那一档，争点表还多出一条让用户去补的材料——
+  // 一个材料齐全的案子被告知"依据不足"，并被指去准备一份根本不存在的文件。
+  const two = (a: Partial<ElementCard>, b: Partial<ElementCard>) => [
+    card({ id: 'p1', alternativeGroup: 'g', satisfiedBy: ['claim:甲'], ...a }),
+    card({ id: 'p2', alternativeGroup: 'g', satisfiedBy: ['claim:乙'], ...b }),
+  ];
+
+  it('组内有一条「成立」⇒ 只有它是代表行（变异：把分组当作不存在 → 红）', () => {
+    const sheet = buildElementSheet(facts({ claims: [{ kind: '甲', source_tier: '书证' }] }), two({}, {}));
+    expect(sheet.rows.map((r) => r.status)).toEqual(['成立', '缺失']);
+    // 两行都还在表上：另一条路是什么、用户走没走它，得让他自己看得到
+    expect(sheet.rows.length).toBe(2);
+    expect([...representativeElementIds(sheet.rows)]).toEqual(['p1']);
+  });
+
+  it('组内最好的是「成立·待证」⇒ 代表行是它，同组的「缺失」不参与', () => {
+    const sheet = buildElementSheet(facts({ claims: [{ kind: '甲', source_tier: '自述' }] }), two({}, {}));
+    expect(sheet.rows.map((r) => r.status)).toEqual(['成立·待证', '缺失']);
+    expect([...representativeElementIds(sheet.rows)]).toEqual(['p1']);
+  });
+
+  it('两条都还没走通 ⇒ 两条都是代表行（这道分组不是"藏起一条"）', () => {
+    const sheet = buildElementSheet(facts(), two({}, {}));
+    expect([...representativeElementIds(sheet.rows)]).toEqual(['p1', 'p2']);
+  });
+
+  it('「缺失」与「不成立」并列在最低那一档：两条都留着（变异：给不成立排一个高低 → 红）', () => {
+    // 一条被反证推翻、另一条只是〔未记录〕，对"这条路走没走通"给的是同一个答案。
+    // 排出高低的形态是：其中一条从争点表上消失——要么用户读不到那条缺失行的出路，
+    // 要么档案里那份指向相反结论的材料不再被提起。
+    const sheet = buildElementSheet(
+      facts({ claims: [{ kind: '丙', source_tier: '书证' }] }),
+      two({ negatedBy: ['claim:丙'] }, {}),
+    );
+    expect(sheet.rows.map((r) => r.status)).toEqual(['不成立', '缺失']);
+    expect([...representativeElementIds(sheet.rows)]).toEqual(['p1', 'p2']);
+  });
+
+  it('没有分组的行恒是代表行（不用这一格的领域一个字都不该变）', () => {
+    const sheet = buildElementSheet(facts(), [card({ id: 'a' }), card({ id: 'b', satisfiedBy: ['claim:乙'] })]);
+    expect([...representativeElementIds(sheet.rows)]).toEqual(['a', 'b']);
   });
 });

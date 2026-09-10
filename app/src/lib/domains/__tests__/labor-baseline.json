@@ -328,7 +328,7 @@
         },
         "contract_count": {
           "type": "string",
-          "description": "合同签署次数，用户自述原样记录，可省略"
+          "description": "合同签署次数，用户自述原样记录，可省略；一份都没签过的写「没签」（这一格会被二倍工资那一项读取）"
         },
         "events": {
           "type": "array",

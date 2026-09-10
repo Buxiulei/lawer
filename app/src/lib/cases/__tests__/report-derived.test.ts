@@ -210,7 +210,7 @@ describe('② 派生集只许改措辞，不许增删条目', () => {
     expect(sections().sections[DISPUTES]).toBe(before.sections[DISPUTES]);
   });
 
-  test('条目区里追加一条不带标记的 bullet ⇒ REPORT_SECTION_DERIVED（变异：删掉 strayDerivedBullets 那道闸 → 红）', () => {
+  test('条目区里追加一条不带标记的 bullet ⇒ REPORT_SECTION_DERIVED（变异：删掉 derivedBulletStrays 那两把尺 → 红）', () => {
     // 【为什么标记集合那把尺拦不住它】追加的那一条**没有标记**，所以增删比对一个字都没变，
     // 而页面上确实多了一条争点（复审 2026-09-10 第四条的第二个失败样本）。
     addClaim('2N');
@@ -236,12 +236,12 @@ describe('② 派生集只许改措辞，不许增删条目', () => {
     expect(sections().sections[DISPUTES]).toBe(before.sections[DISPUTES]);
   });
 
-  test('反臂：说明写在第一条条目之前、或缩进成子行 ⇒ 放行（这道闸不是"派生节从此不许写字"）', () => {
+  test('反臂：说明写成正文、或缩进成子行 ⇒ 放行（这道闸不是"派生节从此不许写字"）', () => {
     addClaim('2N');
     const before = sections();
     const ids = [...issueMarkersIn(before.sections[DISPUTES])];
     const content = [
-      '- 这一节的条目由服务端从要件表派生，我只把措辞改成了人话。',
+      '这一节的条目由服务端从要件表派生，我只把措辞改成了人话。',
       ...ids.map((id) => `- ${issueMarker(id)} 用大白话重写的一条\n  - 下一步：先去把那份材料找出来`),
     ].join('\n');
     const r = updateSection(db, {
@@ -249,11 +249,39 @@ describe('② 派生集只许改措辞，不许增删条目', () => {
       userId: uid,
       section: DISPUTES,
       content,
-      reason: '改写成人话，说明写在条目之前',
+      reason: '改写成人话，说明写成正文',
       baseVersion: before.version,
       updatedBy: 'agent',
     });
     expect(r.ok, r.ok ? '' : `${r.errorCode}：${r.message}`).toBe(true);
+  });
+
+  test('反臂：初稿原样写回恒放行（这一条塌了，上面每一条闸都得关掉）', () => {
+    // 【为什么必须有这一条】这道闸的基线是"服务端此刻会生成的那份初稿"。
+    // 基线取错的形态是：初稿自己就违规——那时唯一的收场是把闸关掉。
+    // 三种形态各走一遍：有派生条目的、一条派生条目都没有的、以及本案诉求没有要件卡的。
+    for (const [label, kind] of [
+      ['有派生条目', '2N'],
+      ['没有诉求', ''],
+      ['诉求没有要件卡（labor 的年假）', '年假'],
+    ] as const) {
+      db.prepare('DELETE FROM claims WHERE case_id = ?').run(caseId);
+      db.prepare('DELETE FROM case_reports WHERE case_id = ?').run(caseId);
+      if (kind) addClaim(kind);
+      for (const title of [DISPUTES, RISKS]) {
+        const before = sections();
+        const r = updateSection(db, {
+          caseId,
+          userId: uid,
+          section: title,
+          content: before.sections[title],
+          reason: '原样写回，验证初稿自己不违规',
+          baseVersion: before.version,
+          updatedBy: 'agent',
+        });
+        expect(r.ok, r.ok ? '' : `${label}／${title}：${r.errorCode} ${r.message}`).toBe(true);
+      }
+    }
   });
 
   test('「风险与未定项」也是派生节：初稿本身放行，节末追加无标记条目被拒', () => {
@@ -279,6 +307,128 @@ describe('② 派生集只许改措辞，不许增删条目', () => {
       section: RISKS,
       content: `${now.sections[RISKS]}\n- 另外我判断公司大概率会主张你自己辞职`,
       reason: '顺手补一条风险',
+      baseVersion: now.version,
+      updatedBy: 'agent',
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errorCode).toBe('REPORT_SECTION_DERIVED');
+  });
+
+  test('派生集为空时写入**不带标记**的自造争点 ⇒ 拒（第二轮复审 2026-09-10 第一条：A 样本）', () => {
+    // 【这一格此前是全开的】上一版的 stray 闸"从第一条带标记的条目起算"：
+    // 一条带标记的条目都没有时（本案还没登记诉求）它直接返回空，标记集合比对又是 ∅==∅，
+    // 于是模型往「争议焦点」里写两条不带标记的自造争点，200 落库。
+    const before = sections();
+    expect(issueMarkersIn(before.sections[DISPUTES]).size, '这个案子不该有派生争点').toBe(0);
+    const r = updateSection(db, {
+      caseId,
+      userId: uid,
+      section: DISPUTES,
+      content: '- 公司还涉嫌偷税漏税，这一点也要一起提\n- 公司还涉嫌未足额缴纳公积金',
+      reason: '把我判断出来的争点写进去',
+      baseVersion: before.version,
+      updatedBy: 'agent',
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errorCode).toBe('REPORT_SECTION_DERIVED');
+    expect(r.message).toContain('不带 〔争点 …〕 标记');
+    expect(sections().sections[DISPUTES]).toBe(before.sections[DISPUTES]);
+  });
+
+  test('把无标记条目插在第一条派生条目**之前** ⇒ 拒（第二轮复审 2026-09-10 第一条：B 样本）', () => {
+    // 上一版从第一条带标记的条目起算，于是插在它前面的那一条跑掉了。
+    addClaim('2N');
+    const before = sections();
+    expect(issueMarkersIn(before.sections[DISPUTES]).size).toBeGreaterThan(0);
+    const r = updateSection(db, {
+      caseId,
+      userId: uid,
+      section: DISPUTES,
+      content: `- 公司还涉嫌偷税漏税，这一点也要一起提\n${before.sections[DISPUTES]}`,
+      reason: '在最前面补一条',
+      baseVersion: before.version,
+      updatedBy: 'agent',
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errorCode).toBe('REPORT_SECTION_DERIVED');
+    expect(r.message, '没说清它比初稿多').toContain('比服务端初稿里的还多');
+    expect(sections().sections[DISPUTES]).toBe(before.sections[DISPUTES]);
+  });
+
+  test('「风险与未定项」在一条派生条目都没有时追加一条 ⇒ 拒（第二轮复审 2026-09-10 第一条：D 样本）', () => {
+    // 风险节的初稿本来就带着几行顶格说明（固定条目、缺口清单），所以基线不是"零条"，
+    // 而是**初稿里有几条**。多出一条就是发明争点，哪怕这一节此刻一个标记都没有。
+    const before = sections();
+    expect(issueMarkersIn(before.sections[RISKS]).size).toBe(0);
+    const r = updateSection(db, {
+      caseId,
+      userId: uid,
+      section: RISKS,
+      content: `${before.sections[RISKS]}\n- 我判断公司会主张你自己辞职`,
+      reason: '顺手补一条风险',
+      baseVersion: before.version,
+      updatedBy: 'agent',
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errorCode).toBe('REPORT_SECTION_DERIVED');
+    expect(sections().sections[RISKS]).toBe(before.sections[RISKS]);
+  });
+
+  test('删掉一行说明、同时在节末追加一条自造条目 ⇒ 仍然拒（总数没变，靠"第一条条目之后"那把尺）', () => {
+    // 【为什么要单钉这一条】"比初稿多"那把尺按条数比，条数一样它就不响。
+    // 只有它的形态是：模型删掉一行说明、腾出一个名额，再在条目区里塞一条自造争点，200 落库。
+    addClaim('2N');
+    const before = sections();
+    const lines = before.sections[DISPUTES].split('\n');
+    const firstExplain = lines.findIndex((l) => /^-\s/.test(l) && !l.includes('〔争点'));
+    expect(firstExplain, '初稿里没有顶格的说明行，这条用例的前提不成立').toBeGreaterThanOrEqual(0);
+    const content = [
+      ...lines.filter((_, i) => i !== firstExplain),
+      '- 另外公司还涉嫌未足额缴纳公积金，这一点也要一起提',
+    ].join('\n');
+    const r = updateSection(db, {
+      caseId,
+      userId: uid,
+      section: DISPUTES,
+      content,
+      reason: '删一行说明、补一条争点',
+      baseVersion: before.version,
+      updatedBy: 'agent',
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errorCode).toBe('REPORT_SECTION_DERIVED');
+    expect(r.message, '报的不是"落在第一条派生条目之后"这把尺').toContain('第一条派生条目之后');
+  });
+
+  test('本案诉求没有要件卡时，这一节退回金额清单——照抄放行、多一条被拒', () => {
+    // 【为什么不能按"整节里顶格无标记的行 >0 就拒"办】本领域有要件卡、而本案登记的诉求
+    // 恰好没有要件卡（labor 的年假 / 加班费 / 年终奖都是这一类）时，这一节退回去印的是
+    // 一份**顶格的金额清单**。整节计数 >0 就拒的形态是：这一节从上线第一天起就改不动。
+    addClaim('年假');
+    const before = sections();
+    const ok = updateSection(db, {
+      caseId,
+      userId: uid,
+      section: DISPUTES,
+      content: before.sections[DISPUTES],
+      reason: '原样写回',
+      baseVersion: before.version,
+      updatedBy: 'agent',
+    });
+    expect(ok.ok, ok.ok ? '' : `${ok.errorCode}：${ok.message}`).toBe(true);
+
+    const now = sections();
+    const r = updateSection(db, {
+      caseId,
+      userId: uid,
+      section: DISPUTES,
+      content: `${now.sections[DISPUTES]}\n- 另外公司还涉嫌未足额缴纳公积金`,
+      reason: '顺手补一条',
       baseVersion: now.version,
       updatedBy: 'agent',
     });

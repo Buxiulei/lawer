@@ -97,7 +97,7 @@ describe('② 不编下限', () => {
     expect(b.ceiling_fen).toBe(calc().amount_fen);
   });
 
-  test('材料补齐之后缺口确实变少（自证上一条不是恒 null），但档位仍停在「依据不足」', () => {
+  test('材料补齐之后档位往上走、缺口只剩说得出名字的那一条（自证上一条不是恒 null）', () => {
     const before = band()!;
     expect(before.band).toBe('依据不足'); // 什么材料都没有时是这一档
     addEvidence('公司文件', '解除通知.pdf');
@@ -107,23 +107,21 @@ describe('② 不编下限', () => {
     calc(backed);
     const after = band(backed)!;
 
-    // 输入侧不再有"只有你自己说"的项，缺口从 5 条降到 2 条（"补了材料什么都没变"是这条要拦的一半）
+    // 档位确实往上走了一档，且输入侧不再有"只有你自己说"的项
+    expect(after.band).toBe('需补证后可主张');
     expect(after.self_reported_inputs).toEqual([]);
     const gaps = after.gaps as { element_id: string; status: string }[];
     expect(gaps.length).toBeLessThan((before.gaps as unknown[]).length);
 
-    // ── 基线换过的那一次（S6 复审整改，2026-09-10）：'需补证后可主张' → '依据不足' ──
-    // 【为什么变了，而且这不是判据写松了】复审第一条把原 N-2 拆成两张卡：
-    //   · N-2a 公司作出的决定（协商解除 / 第四十条 / 第四十一条 / 期满终止，§44 倒置）
-    //   · N-2b 你依照第三十八条提出的被迫解除（第四十六条第一项，谁主张谁举证）
-    // 两条路径**二选一**，而要件表按诉求列全 ⇒ 本案走的是路径一（档案里有《解除通知》），
-    // 路径二那张卡恒是「缺失」＝〔未记录〕；riskBandOf 见到任何一条「缺失」就落到「依据不足」。
-    // 拆之前这个案子到得了「需补证后可主张」——**这是对外行为的真实变化，记在这里**。
-    // 要不要让 riskBandOf 认识"互斥路径"（或给要件卡一个"任选其一"的分组）是另一票，
-    // 已作为 openQuestion 报给经理，不由这一票偷偷改掉。
-    expect(after.band).toBe('依据不足');
-    expect(gaps.map((g) => g.element_id)).toEqual(['N-2b', 'N-1']);
-    expect(gaps.find((g) => g.element_id === 'N-2b')!.status).toBe('缺失');
+    // ── 互斥路径不许把档位拖下去（第二轮复审 2026-09-10 第四条）──
+    // 【为什么这条断言值钱】S6 复审第一条把原 N-2 拆成两张卡：N-2a 公司作出的决定
+    //（§44 倒置）与 N-2b 你依照第三十八条提出的被迫解除（谁主张谁举证）。两条路径**二选一**，
+    // 而要件表按诉求列全 ⇒ 本案走的是路径一（档案里有《解除通知》），路径二那张卡恒是
+    //「缺失」＝〔未记录〕。riskBandOf 若不认识这层分组，见到任何一条「缺失」就落到
+    //「依据不足」——一个《解除通知》与工资流水都在档的案子被告知"依据不足"，
+    // gaps 里还多一条让他去准备那份他从来没发过的被迫解除通知。
+    // 两张卡挂同一个 alternativeGroup 之后，走通一条即算走通（representativeElementIds）。
+    expect(gaps.map((g) => g.element_id), 'N-2b（没走的那条路）不该出现在缺口里').toEqual(['N-1']);
 
     // 【N-1 为什么到不了「成立」，而这不是 bug】「劳动关系存在、工作年限起点可确定」
     // 只由首诊填的入职日与登记的对方主体撑着，而首诊四项按 S4 的口径恒是「自述」。
@@ -131,6 +129,19 @@ describe('② 不编下限', () => {
     // 这一项在庭上就是待证的。要不要让一份社保或合同把首诊字段提档，是 S4 那一层的口径问题。
     expect(gaps.find((g) => g.element_id === 'N-1')!.status).toBe('成立·待证');
     expect(after.floor_fen).toBeNull();
+  });
+
+  test('反臂：两条路径都没走通时照旧落「依据不足」（分组不是"少一条缺口"的免检章）', () => {
+    // 【为什么要这条反臂】上一条把「路径二缺失」从缺口里摘掉了。只有它的话，
+    // 把分组做成"组内有一条缺失就整组不算缺"也是绿的——那等于这一项诉求再也报不出缺口。
+    // 这里不传任何材料：两条路径都是〔未记录〕，两条都该留在缺口里。
+    calc();
+    const b = band()!;
+    expect(b.band).toBe('依据不足');
+    const ids = (b.gaps as { element_id: string }[]).map((g) => g.element_id);
+    expect(ids, '两条路都没走通时，两条都该摆出来让用户自己认').toEqual(
+      expect.arrayContaining(['N-2a', 'N-2b']),
+    );
   });
 });
 

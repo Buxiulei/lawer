@@ -23,6 +23,7 @@ function row(over: Partial<ElementRow> = {}): ElementRow {
   return {
     id: 'e1',
     claimKind: '某诉求',
+    alternativeGroup: null,
     name: '要件一',
     status: '成立',
     burden: 'claimant',
@@ -43,6 +44,40 @@ describe('三条规则各自成立', () => {
       expect(table.rows.map((r) => r.id), status).toEqual(['e1']);
       expect(table.rows[0].reasons, status).toContain('element_unsettled');
     }
+  });
+
+  it('规则一按「任选其一」分组取代表行：同组另一条已经走通 ⇒ 这一条的「缺失」不进表（变异：不看分组 → 红）', () => {
+    const rows = [
+      row({ id: 'p1', alternativeGroup: 'g', status: '成立' }),
+      row({ id: 'p2', alternativeGroup: 'g', status: '缺失' }),
+    ];
+    expect(
+      buildIssueTable(rows).rows.map((r) => r.id),
+      '另一条路已经走通了，这一条的〔未记录〕不是争点——把它捞进来就是让用户去补一份他不需要的材料',
+    ).toEqual([]);
+  });
+
+  it('分组反臂：同组两条都没走通 ⇒ 两条都进表（这道分组不是"藏起一条"）', () => {
+    const rows = [
+      row({ id: 'p1', alternativeGroup: 'g', status: '缺失' }),
+      row({ id: 'p2', alternativeGroup: 'g', status: '成立·待证' }),
+    ];
+    // 组内最好的是「成立·待证」⇒ 只有它是代表行；把它也改成「缺失」则两条都进表
+    expect(buildIssueTable(rows).rows.map((r) => r.id)).toEqual(['p2']);
+    const bothMissing = rows.map((r) => ({ ...r, status: '缺失' as const }));
+    expect(buildIssueTable(bothMissing).rows.map((r) => r.id)).toEqual(['p1', 'p2']);
+  });
+
+  it('分组只管规则一：同组另一条走通了，规则二/三照旧把这一条捞进来', () => {
+    // 对方主张过什么、对方那份书面决定在不在档，与"我走的是哪条路"无关。
+    const rows = [
+      row({ id: 'p1', alternativeGroup: 'g', status: '成立' }),
+      row({ id: 'p2', alternativeGroup: 'g', status: '缺失', burden: 'reversed_interpretation' }),
+    ];
+    const table = buildIssueTable(rows, { counterpartyDecisionOnFile: true });
+    const p2 = table.rows.find((r) => r.id === 'p2');
+    expect(p2, '规则三被分组连坐了').toBeTruthy();
+    expect(p2!.reasons).toEqual(['burden_on_other_side']);
   });
 
   it('规则二：对方就这个要件主张过什么，即使要件已成立也进表', () => {

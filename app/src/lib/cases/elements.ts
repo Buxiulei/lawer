@@ -123,6 +123,22 @@ export interface ElementCard {
    * 不是用户填的字）——挂错地方会被当作配置错误点名，不静默。
    */
   slotChecks?: Readonly<Record<string, SlotValueCheck>>;
+  /**
+   * 「任选其一」分组的组名（省略 = 这一条要自己站住，与别的要件无关）。
+   *
+   * 【为什么要有这一格】有些要件是**互斥的几条路径**：走通任意一条，这一项诉求就立得住。
+   * 没有这一格的形态是——要件表按诉求列全，另一条路那张卡恒是「缺失」，
+   * 而「缺失」会把风险区间拉到最低那一档、并让争点表印一条用户根本不该去补的材料。
+   * 也就是：一个材料齐全的案子被告知「依据不足」，且被指去准备一份根本不存在的文件。
+   *
+   * 【组内怎么取数】只要组里有一条走通了，整组就算走通（riskBandOf 与争点表按
+   * `representativeElementIds` 取代表行）。**要件表本身仍然把两条都画出来**——
+   * 用户要知道自己走的是哪一条、另一条长什么样，卡名里的「路径一 / 路径二」就是给他分辨的。
+   *
+   * 同一组的卡必须属于同一项诉求，且**至少两张**（assertDomainPack 机检）：
+   * 组名打错一个字的形态是两张卡各自成组，于是这一格静默失效、行为退回到没有它的时候。
+   */
+  alternativeGroup?: string;
   /** 命中即推翻这个要件的事实槽（省略 = 本要件没有可机械判定的反证） */
   negatedBy?: readonly string[];
   /**
@@ -140,6 +156,8 @@ export interface ElementRow {
   id: string;
   /** 这一行属于哪一项诉求（原样取自卡片，渲染按它分组） */
   claimKind: string;
+  /** 「任选其一」分组名（原样取自卡片；null = 这一条要自己站住） */
+  alternativeGroup: string | null;
   name: string;
   status: ElementStatus;
   burden: Burden;
@@ -356,6 +374,7 @@ export function buildElementSheet(
     return {
       id: card.id,
       claimKind: card.claimKind,
+      alternativeGroup: card.alternativeGroup ?? null,
       name: card.name,
       status,
       burden: verified ? card.burden : 'unverified',
@@ -369,4 +388,35 @@ export function buildElementSheet(
   });
 
   return { rows, rendered: true };
+}
+
+/**
+ * 「任选其一」分组里，**哪几行代表本组**去参与后续判定（风险区间、争点表）。
+ *
+ * 【规则就一句】组内只要有一条路走得通，整组就算走得通：取组内最好的那一档
+ *（成立 ＞ 成立·待证 ＞ 缺失／不成立），处在那一档的行是代表行，其余的不参与。
+ * 没有分组的行**恒是代表行**——这个函数对不用分组的领域是个恒等式。
+ *
+ * 【为什么「缺失」与「不成立」并列在最低那一档，而不是分出高下】它们不是同一件事
+ *（〔未记录〕vs 有反证），但对"这条路走没走通"这个问题给的是同一个答案：没走通。
+ * 硬排出高下的形态是：一条「不成立」把同组那条「缺失」挤掉，于是用户读不到
+ * 那条缺失行的出路；反过来则是档案里那份指向相反结论的材料从争点表上消失。
+ * 并列则两条都留着——风险区间取其中最坏的那一档，争点表把两条都摆出来。
+ *
+ * @param rows 要件表的行（buildElementSheet 的产出）
+ * @returns 代表行的 id 集合
+ */
+export function representativeElementIds(rows: readonly ElementRow[]): ReadonlySet<string> {
+  const rank: Record<ElementStatus, number> = { 成立: 3, '成立·待证': 2, 缺失: 1, 不成立: 1 };
+  const best = new Map<string, number>();
+  for (const r of rows) {
+    if (!r.alternativeGroup) continue;
+    const cur = best.get(r.alternativeGroup);
+    if (cur === undefined || rank[r.status] > cur) best.set(r.alternativeGroup, rank[r.status]);
+  }
+  const out = new Set<string>();
+  for (const r of rows) {
+    if (!r.alternativeGroup || rank[r.status] === best.get(r.alternativeGroup)) out.add(r.id);
+  }
+  return out;
 }

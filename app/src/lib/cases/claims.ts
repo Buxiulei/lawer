@@ -35,7 +35,7 @@ import * as store from '@/lib/db/agent';
 import * as caseStore from '@/lib/db/cases';
 import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
 
-import { buildElementSheet, type ElementRow } from './elements';
+import { buildElementSheet, representativeElementIds, type ElementRow } from './elements';
 
 /**
  * **缺省领域**的算钱器清单（正本在 DomainPack.calculatorKinds）。
@@ -560,9 +560,15 @@ function riskBandOf(
       missing_slots: r.missingSlots,
       typical_evidence: r.typicalEvidence,
     }));
-  const adverse = sheet.rows.filter((r) => r.status === '不成立');
-  const missing = sheet.rows.filter((r) => r.status === '缺失');
-  const pending = sheet.rows.filter((r) => r.status === '成立·待证');
+  // 【互斥路径按"任选其一"取数】同一项诉求里有几条二选一的路径时（要件卡的 alternativeGroup），
+  // 走通任意一条这一项就立得住。不分组的形态是：另一条路那张卡恒是「缺失」，
+  // 而下面这段见到任何一条「缺失」就落到「依据不足」——一个《解除通知》与工资流水都在档的案子
+  // 被告知"依据不足"，gaps 里还多一条让他去准备那份他根本没发过的文书。
+  const represents = representativeElementIds(sheet.rows);
+  const rows = sheet.rows.filter((r) => represents.has(r.id));
+  const adverse = rows.filter((r) => r.status === '不成立');
+  const missing = rows.filter((r) => r.status === '缺失');
+  const pending = rows.filter((r) => r.status === '成立·待证');
 
   const band = adverse.length
     ? RISK_BANDS.adverse

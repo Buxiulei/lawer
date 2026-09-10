@@ -17,7 +17,14 @@
 // 【为什么是纯函数】同一张要件表 + 同一份档案标记恒得同一张争点表：不看时间、不看模型、不查库。
 // 掺一点运行时状态进来的形态是——回放同一轮对话得到不同的争点表，于是"模型发明了争点"
 // 与"派生逻辑当时给了这条"再也分不开。
-import { resolveSlot, type Burden, type ElementFactsView, type ElementRow, type ElementStatus } from './elements';
+import {
+  representativeElementIds,
+  resolveSlot,
+  type Burden,
+  type ElementFactsView,
+  type ElementRow,
+  type ElementStatus,
+} from './elements';
 
 /**
  * 一行争点是被哪条规则捞进来的。**逐条留痕，不合并成一个 boolean**：
@@ -25,6 +32,9 @@ import { resolveSlot, type Burden, type ElementFactsView, type ElementRow, type 
  * 合并的形态是争点表上每一行都对，而用户不知道该干什么。
  *
  * · element_unsettled     —— 这个要件还没成立（缺失 / 成立·待证 / 不成立）。
+ *                            **「任选其一」分组里只算代表行**：同组另一条路已经走通了，
+ *                            这一条的「缺失」＝〔那条路你没走〕，不是争点
+ *                            （见 lib/cases/elements.ts 的 representativeElementIds）。
  * · counterparty_asserted —— 对方就这个要件主张过什么（对方的说法与我方事实分开存，
  *                            见 §1.3「顺着用户的错误前提走」那一行）。
  * · burden_on_other_side  —— 举证责任**整条**在对方（对方举证 / 限定事项的倒置），
@@ -178,10 +188,17 @@ export function buildIssueTable(
 ): IssueTable {
   if (!rendered) return { rows: [], rendered: false };
 
+  // 【规则一按"任选其一"分组取代表行】互斥的几条路径里，已经有一条走通时，
+  // 另一条的「缺失」不是争点：把它捞进来的形态是——一个拿着《解除通知》的用户
+  // 在争议焦点里读到「路径二（你依照第三十八条被迫解除）：缺失」，
+  // 于是去准备一份他从来没发过、也不需要发的通知书。
+  // 规则二、三不看分组：对方主张过什么、对方那份书面决定在不在档，与走哪条路无关。
+  const represents = representativeElementIds(rows);
+
   const out: IssueRow[] = [];
   for (const row of rows) {
     const reasons: IssueReason[] = [];
-    if (row.status !== '成立') reasons.push('element_unsettled');
+    if (row.status !== '成立' && represents.has(row.id)) reasons.push('element_unsettled');
     const asserted = marks.counterpartyAssertions?.[row.id];
     if (asserted !== undefined && asserted.trim() !== '') reasons.push('counterparty_asserted');
     if (marks.counterpartyDecisionOnFile === true && DECISION_BURDENS.includes(row.burden)) {

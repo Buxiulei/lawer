@@ -914,6 +914,34 @@ export function assertDomainPack(pack: DomainPack): void {
     arr(`${at}.typicalEvidence（「缺失」那一行的出路就是它，空了这条争点就没有下一步）`, card?.typicalEvidence);
   }
 
+  // 【「任选其一」分组：打错一个字会静默失效】组名是自由串，写岔了的形态是两张卡各自成组，
+  // 于是"走通一条就算走通"这条规则对它们不再生效——风险区间悄悄掉一档、
+  // 争点表多出一条让用户去补的材料，而没有任何一处会报错。所以在装载时查两件事：
+  //   · 一组只有一张卡 ⇒ 多半是组名打错（真的只有一条路就别写这一格）；
+  //   · 同组的卡跨了诉求 ⇒ 这两条路径根本不在同一项诉求下，"二选一"无从谈起。
+  const groups = new Map<string, { id: string; claimKind: string }[]>();
+  for (const card of pack.elementCards ?? []) {
+    if (!card?.alternativeGroup) continue;
+    const list = groups.get(card.alternativeGroup) ?? [];
+    list.push({ id: card.id, claimKind: card.claimKind });
+    groups.set(card.alternativeGroup, list);
+  }
+  for (const [name, members] of groups) {
+    if (members.length < 2) {
+      missing.push(
+        `elementCards 的「任选其一」分组「${name}」只有一张卡（${members[0]?.id}）——` +
+          '组名多半是打错了；真的只有一条路径就把 alternativeGroup 整格去掉',
+      );
+    }
+    const kinds = [...new Set(members.map((m) => m.claimKind))];
+    if (kinds.length > 1) {
+      missing.push(
+        `elementCards 的「任选其一」分组「${name}」跨了诉求（${kinds.join(' / ')}）——` +
+          '二选一说的是同一项诉求下的两条路径，跨诉求的分组会让一项诉求的要件被另一项的状态盖掉',
+      );
+    }
+  }
+
   // interpretationDisputed / sensitive 都是**可选**的（省略 = 本领域没有这回事）。但一旦声明，
   // 就不许半张：空的 items = 一节只有抬头没有内容；空的 discipline = 列了四件事却没说
   // 「不许下结论」——而那句话才是这一节存在的理由，缺了它这一节读起来像四条待办。

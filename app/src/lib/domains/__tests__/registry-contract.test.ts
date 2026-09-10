@@ -286,6 +286,27 @@ describe('assertDomainPack：包必须实现全部字段', () => {
     expect(stray, '这些负样本对着的项 assertDomainPack 已经不查了，样本恒不红').toEqual([]);
   });
 
+  /**
+   * 「任选其一」分组的两种打坏法。**组名是自由串，打错一个字会静默失效**：
+   * 两张互斥路径的卡各自成组之后，"走通一条就算走通"这条规则对它们不再生效——
+   * 风险区间悄悄掉一档、争点表多出一条让用户去补的材料，而没有任何一处会报错。
+   */
+  it('「任选其一」分组只剩一张卡 ⇒ 点名（组名打错一个字就是这个形态）', () => {
+    const cards = (LABOR.elementCards ?? []).map((c) =>
+      c.id === 'N-2b' ? { ...c, alternativeGroup: `${c.alternativeGroup}x` } : c,
+    );
+    expect(() => assertDomainPack(clone({ elementCards: cards }))).toThrow(/任选其一/);
+    expect(() => assertDomainPack(clone())).not.toThrow();
+  });
+
+  it('「任选其一」分组跨了诉求 ⇒ 点名（二选一说的是同一项诉求下的两条路径）', () => {
+    const group = (LABOR.elementCards ?? []).find((c) => c.id === 'N-2a')!.alternativeGroup;
+    const cards = (LABOR.elementCards ?? []).map((c) =>
+      c.id === '欠薪-1' ? { ...c, alternativeGroup: group } : c,
+    );
+    expect(() => assertDomainPack(clone({ elementCards: cards }))).toThrow(/跨了诉求/);
+  });
+
   it('factsSections 某一节只有键没有抬头 ⇒ 点名那一节（那一节会顶着英文键名进 prompt）', () => {
     const bad = LABOR.factsSections.map((sec, i) => (i === 0 ? { ...sec, title: '' } : sec));
     expect(() => assertDomainPack(clone({ factsSections: bad }))).toThrow(
