@@ -615,6 +615,9 @@
 
 **2026-09-10 上产 ab9dc205（事实卡预算票 + 台账）**：闸链跑在折入后的树上全绿；CI run 34483304275 success；生产 PRE a8d8a4e9 → POST ab9dc205，库备份，构建 rc=0，冒烟：首页/条款/登录 200、sidecar ok、两门 401、case-facts 新降级逻辑在、app.log 游标 479 后零错误行。用户面变化：施压期厚档案的事实卡里要件表节不再整节消失（P0 缺口行永在，次要成立行按需让位并留「另有 N 条次要要件未显示」），缺口栏先印真正差的那一格。当日第七版。第二班 e7d758a4（决定标记票）主干已推、CI 在跑，绿即部署。
 
+**2026-09-10 上产 e7d758a4（决定标记票两提交 + 台账）**：闸链折入后全绿（411 文件）；CI run 34484071191 success；生产 PRE ab9dc205 → POST e7d758a4，库备份，构建 rc=0，冒烟：首页/条款/登录 200、sidecar ok、两门 401、timeline_events.event_type 列懒迁移建成、timeline-kinds.ts 在、app.log 游标 483 后零错误行。用户面变化：timeline_add（MCP / REST tools / 专用端点）可带 event_type（非法 400 列出该类允许值），有类型的记录要件判定不再猜；首诊「公司给过哪些文件」按答案自动定型（三格全没给 ⇒ 不再误抬三张卡）；事实卡时间线行带类型标签；skill 文档已含 event_type 说明。当日第八版，生产 30fbfdcb → e7d758a4。
+**明日序列**：① 「记一条」入口票（驾驶舱时间线登记：kind + 类型下拉 + 老行补选类型）；② 协商一致解除要件票（company_negotiation + 已签协议）；③ 新时间线写入点结构守卫（必须显式写 eventType 取值理由）与 burdenLabelsShort 机检负样本；④ element_fill 是否收类型——另议；⑤ 复查日不变（09-21 主理人八项事实；09-24 ValueGuard / PROMPT_CACHE 读数，来源 messages.gate_json）。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
