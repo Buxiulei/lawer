@@ -141,6 +141,16 @@ export function counterpartyDecisionOnFile(
   return resolveSlot(slot, facts) != null;
 }
 
+/**
+ * 规则三那一句出路的**固定前半段**（后半段是卡片带来的「补什么」）。
+ *
+ * 【为什么它要导出，而不是就地拼一个字符串】判据要问的是"这一句在什么情形下才该出现"，
+ * 而判据把这句话**抄一份**写进测试的形态是：措辞改了一个字，判据照样绿着，
+ * 它守的那件事却已经漂走了。导出一个常量，两边就只有一份字。
+ */
+export const NEXT_STEP_FIX_DECISION =
+  '这一项按法律该由对方举证。你要做的不是替他证，而是把他那份书面决定与上面写的理由原样固定下来。';
+
 /** 出路那一句的通用模板。行当名词由调用方从要件卡带进来，这里只管句式。 */
 function nextStepOf(row: ElementRow, reasons: readonly IssueReason[]): string {
   const evidence = row.typicalEvidence.filter((e) => e.trim()).join('、');
@@ -162,7 +172,7 @@ function nextStepOf(row: ElementRow, reasons: readonly IssueReason[]): string {
   if (reasons.includes('counterparty_asserted')) {
     return `这一项你这边是立得住的，争的是对方那套说法。把对方原话与你的反证并排列出来。${supply}`;
   }
-  return `这一项按法律该由对方举证。你要做的不是替他证，而是把他那份书面决定与上面写的理由原样固定下来。${supply}`;
+  return `${NEXT_STEP_FIX_DECISION}${supply}`;
 }
 
 /** 争点那一句。同样只管句式。 */

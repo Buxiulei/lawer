@@ -57,6 +57,14 @@ function addEvidence(category: string, name: string) {
   ).run(caseId, uid, fileId, name, category);
 }
 
+/** 往时间线记一条事件（要件表按 kind 认它，按 source_tier 定档）。 */
+function addTimeline(kind: string, title: string, sourceTier = '书证') {
+  db.prepare(
+    `INSERT INTO timeline_events (case_id, happened_at, kind, title, source_tier)
+     VALUES (?, '2026-08-20', ?, ?, ?)`,
+  ).run(caseId, kind, title, sourceTier);
+}
+
 beforeEach(() => {
   db = new BetterSqlite3(':memory:');
   db.pragma('foreign_keys = ON');
@@ -101,6 +109,10 @@ describe('② 不编下限', () => {
     const before = band()!;
     expect(before.band).toBe('依据不足'); // 什么材料都没有时是这一档
     addEvidence('公司文件', '解除通知.pdf');
+    // 【为什么还要记这条时间线事件】（第三轮小修 2026-09-10）「公司文件」是个很宽的类别，
+    // 一份员工手册也落在它下面。路径一因此不只要那份文件，还要一条**公司确实作出过这个决定**
+    // 的记录；只放文件的形态是下面那条反臂用例。
+    addTimeline('公司动作', '收到解除通知');
     addEvidence('工资', '工资流水.pdf');
     // 先算一次把 claim:N 登记进去，再算一次拿到补齐之后的那张表
     const backed = { evidence_backed: ['avg_monthly_wage_fen', 'employed_from', 'terminated_at'] };
@@ -129,6 +141,21 @@ describe('② 不编下限', () => {
     // 这一项在庭上就是待证的。要不要让一份社保或合同把首诊字段提档，是 S4 那一层的口径问题。
     expect(gaps.find((g) => g.element_id === 'N-1')!.status).toBe('成立·待证');
     expect(after.floor_fen).toBeNull();
+  });
+
+  test('只有一份「公司文件」不算走通路径一：两条路径都还在缺口里，档位不许往上走（变异：去掉 N-2a 的 timeline:公司动作 槽 → 红）', () => {
+    // 【它守什么】（第三轮小修 2026-09-10）风闻裁员、还没收到任何解除通知、先把员工手册
+    // 传上来的那个人——员工手册也落在「公司文件」类别下。路径一若靠它成立，就成了本组代表行，
+    // 于是同组那条被迫解除路径（他真正该走的那条）从缺口清单里消失，档位还跟着往上抬一档。
+    addEvidence('公司文件', '员工手册.pdf');
+    addEvidence('工资', '工资流水.pdf');
+    calc();
+    const b = band()!;
+    expect(b.band, '一份员工手册就把档位抬上去了').toBe('依据不足');
+    expect(
+      (b.gaps as { element_id: string }[]).map((g) => g.element_id),
+      '两条解除路径都还没走通，两条都该留在缺口里',
+    ).toEqual(expect.arrayContaining(['N-2a', 'N-2b']));
   });
 
   test('反臂：两条路径都没走通时照旧落「依据不足」（分组不是"少一条缺口"的免检章）', () => {
@@ -161,6 +188,7 @@ describe('③ 每个差额对应一条缺证要件', () => {
   test('档位随档案变：补上公司文件之后，缺口清单短一条（自证不是恒定文案）', () => {
     const before = (band()!.gaps as unknown[]).length;
     addEvidence('公司文件', '解除通知.pdf');
+    addTimeline('公司动作', '收到解除通知'); // 路径一要两样，见上面那条用例的注释
     const after = (band()!.gaps as unknown[]).length;
     expect(after).toBeLessThan(before);
   });

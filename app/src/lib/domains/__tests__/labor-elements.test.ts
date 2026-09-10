@@ -414,10 +414,20 @@ describe('N 的两条解除路径：互斥、二选一（第二轮复审 2026-09
     expect(row.status).toBe('成立·待证');
   });
 
+  /**
+   * **路径一真的走通**的那份档案：公司那份书面决定在档，且时间线上记着公司作出了这个决定。
+   * 【为什么不是只放一份「公司文件」】那个类别很宽（员工手册、规章制度、工资结构表都在里面），
+   * 只放一份文件的形态见下面「只有一份公司文件」那一条——它此刻恒是「缺失」。
+   */
+  const PATH_ONE: Partial<ElementFactsView> = {
+    evidence: [{ category: '公司文件' }],
+    timeline: [{ kind: '公司动作', source_tier: '书证' }],
+  };
+
   it('路径一走通时，路径二的「缺失」不进争点表（变异：规则一不按分组取代表行 → 红）', () => {
-    const sheet = sheetOf({ evidence: [{ category: '公司文件' }] });
-    expect(rowOf('N-2a', { evidence: [{ category: '公司文件' }] }).status, '这个案子走的是路径一').toBe('成立');
-    expect(rowOf('N-2b', { evidence: [{ category: '公司文件' }] }).status).toBe('缺失');
+    const sheet = sheetOf(PATH_ONE);
+    expect(rowOf('N-2a', PATH_ONE).status, '这个案子走的是路径一').toBe('成立');
+    expect(rowOf('N-2b', PATH_ONE).status).toBe('缺失');
     // 要件表**照旧两条都画**（用户要知道另一条路长什么样），进争点表的只有代表行
     expect(sheet.rows.map((r) => r.id), '要件表不该把另一条路径藏起来').toContain('N-2b');
     const issues = buildIssueTable(sheet.rows, {}, true);
@@ -425,6 +435,44 @@ describe('N 的两条解除路径：互斥、二选一（第二轮复审 2026-09
       issues.rows.map((r) => r.id),
       '路径二的「缺失」进了争点表：用户会去准备一份他从没发过、也不需要发的被迫解除通知',
     ).not.toContain('N-2b');
+  });
+
+  // ── 路径一不得靠任意一份「公司文件」成立（第三轮小修 2026-09-10）──
+  it('只有一份「公司文件」**不能**把公司决定那条路抬成「成立」（变异：去掉 timeline:公司动作 这个槽 → 红）', () => {
+    // 【它守什么】「公司文件」是个很宽的类别：员工手册、规章制度、工资结构表都落在里面。
+    // 只认它的形态是——风闻裁员、还没收到任何解除通知、先把员工手册传上来的那个人，
+    // 「路径一：公司作出的决定」当场写着「成立」，于是它成了本组的代表行，
+    // 而同组那条被迫解除路径（他真正该走的那条）从争点表与风险缺口里一起消失。
+    const only = { evidence: [{ category: '公司文件' }] };
+    const a = rowOf('N-2a', only);
+    expect(a.status, `只有一份公司文件时 N-2a 被判成了 ${a.status}`).toBe('缺失');
+    expect(a.missingSlots, '缺口没点到"公司确实作出过这个决定"那条记录').toContain('timeline:公司动作');
+    // 同组那一条也还没走通 ⇒ 两条都是代表行，两条都留在争点表上
+    expect(rowOf('N-2b', only).status).toBe('缺失');
+    expect(
+      buildIssueTable(sheetOf(only).rows, {}, true).rows.map((r) => r.id),
+      '被迫解除那条路被一份员工手册挤出了争点表',
+    ).toEqual(expect.arrayContaining(['N-2a', 'N-2b']));
+  });
+
+  it('公司文件 + 那条「公司动作」 ⇒ 路径一成立；事件只有自述时天花板是「成立·待证」', () => {
+    // 【为什么两档都要钉】只钉「成立」那一格，把新槽写成恒 true 也是绿的；
+    // 只钉「成立·待证」，两个槽取最强档（而不是最弱）同样绿。
+    expect(rowOf('N-2a', PATH_ONE).status).toBe('成立');
+    expect(
+      rowOf('N-2a', {
+        evidence: [{ category: '公司文件' }],
+        timeline: [{ kind: '公司动作', source_tier: '自述' }],
+      }).status,
+      '事件只有当事人自己说，这一条就到不了「成立」',
+    ).toBe('成立·待证');
+  });
+
+  it('只有那条「公司动作」、公司那份文件不在档 ⇒ 仍是「缺失」，且缺口点名那份文件', () => {
+    // satisfiedBy 是「与」不是「或」：新加一个槽不许把原来那个槽变成可选。
+    const row = rowOf('N-2a', { timeline: [{ kind: '公司动作', source_tier: '书证' }] });
+    expect(row.status).toBe('缺失');
+    expect(row.missingSlots).toContain('evidence:公司文件');
   });
 
   it('两条路都还没走通时，两条都留在争点表上（这道分组不是"藏起一条"）', () => {

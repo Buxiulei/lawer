@@ -15,7 +15,7 @@ import { encryptField } from '@/lib/crypto';
 import { runMigrations } from '@/lib/db/migrate';
 import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
 
-import { issueMarker, issueMarkersIn } from '../issue-table';
+import { NEXT_STEP_FIX_DECISION, issueMarker, issueMarkersIn } from '../issue-table';
 import { bootstrapReport, getReport, updateSection } from '../report';
 
 const LABOR = DOMAINS[DEFAULT_DOMAIN];
@@ -53,6 +53,32 @@ afterEach(() => db.close());
 /** 登记一条诉求（金额 0，登记本身就够触发要件表了）。 */
 function addClaim(kind: string) {
   db.prepare("INSERT INTO claims (case_id, kind, amount_fen, status) VALUES (?, ?, 0, 'draft')").run(caseId, kind);
+}
+
+/** 传一份某个类别的材料进证据库（要件表与 counterpartyDecisionSlot 都按类别认它）。 */
+function addEvidence(category: string, name: string) {
+  const fileId = Number(
+    db
+      .prepare("INSERT INTO files (sha256, size, mime, enc_path) VALUES (?, 1, 'application/pdf', '/dev/null')")
+      .run(`sha-${category}-${name}`).lastInsertRowid,
+  );
+  db.prepare(
+    `INSERT INTO evidence (case_id, user_id, file_id, name, category, status)
+     VALUES (?, ?, ?, ?, ?, '已上传')`,
+  ).run(caseId, uid, fileId, name, category);
+}
+
+/** 往时间线记一条事件（要件表按 kind 认它，按 source_tier 定档）。 */
+function addTimeline(kind: string, title: string, sourceTier = '书证') {
+  db.prepare(
+    `INSERT INTO timeline_events (case_id, happened_at, kind, title, source_tier)
+     VALUES (?, '2026-08-20', ?, ?, ?)`,
+  ).run(caseId, kind, title, sourceTier);
+}
+
+/** 报告是惰性生成的：改完档案要把上一份丢掉，下次读才看得到新的初稿。 */
+function regenerate() {
+  db.prepare('DELETE FROM case_reports WHERE case_id = ?').run(caseId);
 }
 
 function sections() {
@@ -114,6 +140,36 @@ describe('① 两节由要件表派生', () => {
     db.prepare("UPDATE evidence SET voided_at = datetime('now'), void_reason = '测试作废' WHERE case_id = ?").run(caseId);
     db.prepare('DELETE FROM case_reports WHERE case_id = ?').run(caseId);
     expect(sections().sections[DISPUTES]).toMatch(new RegExp(`${issueMarker('2N-3')}[^\\n]*缺失`));
+  });
+
+  test('规则三这根线在报告层是接着的：对方那份书面决定不在档时 N-2a 不进「争议焦点」（变异：report.ts 的 onFile 改成常量 true → 红）', () => {
+    // 【为什么钉 N-2a，而不是上面那条用例里的 2N-3】2N-3 的 satisfiedBy 就是领域包声明的
+    // counterpartyDecisionSlot 那一个槽，于是"它成立"与"那份决定在档"永远同真同假：
+    // 它恒在争点表上（不是被规则一捞的就是被规则三捞的），把 onFile 换成常量 true
+    // 一个字都不会变。N-2a 不一样——它属于「任选其一」分组，同组那条路走通时它**不是代表行**，
+    // 规则一捞不到它；这时它进不进表，只由规则三这一个条件决定。
+    // **本用例的变异臂就落在下面那句 `not.toContain('N-2a')` 上**：onFile 恒真时它当场进表。
+    addClaim('N');
+    // 这个案子走的是路径二：沟通记录 + 时间线上「我方动作」（发出被迫解除通知）
+    addEvidence('沟通记录', '与HR的聊天记录.pdf');
+    addTimeline('我方动作', '发出被迫解除通知', '自述');
+    regenerate();
+    const text = sections().sections[DISPUTES];
+    const marks = [...issueMarkersIn(text)];
+    expect(marks, '前提不成立：路径二没走通，N-2a 就还是代表行').toContain('N-2b');
+    expect(marks, '公司那份书面决定不在档，N-2a 却进了争点表').not.toContain('N-2a');
+    expect(text, '没有那份决定，正文却印着「把他那份书面决定固定下来」').not.toContain(
+      NEXT_STEP_FIX_DECISION,
+    );
+
+    // 【正臂】把那份决定与「公司动作」一并落档：路径一走通、由规则三留在表上，那句话当场出现。
+    // 没有这一臂，"这条规则根本没接上"也会让上面两句绿。
+    addEvidence('公司文件', '解除通知.pdf');
+    addTimeline('公司动作', '收到解除通知');
+    regenerate();
+    const after = sections().sections[DISPUTES];
+    expect([...issueMarkersIn(after)]).toContain('N-2a');
+    expect(after).toContain(NEXT_STEP_FIX_DECISION);
   });
 
   test('没有登记任何诉求时退回原写法，并明说这一节不是派生的', () => {
