@@ -149,7 +149,6 @@ function snapshot(): CaseSnapshot {
 const RENDERED = renderCaseFacts(buildCaseFacts(snapshot()));
 
 describe('最长案件（四项诉求 + 时间线 30 条）的事实卡预算', () => {
-
   it('🔒 地板：夹具真的是"最长案件"（缩了水的夹具会让下面每一条永远绿）', () => {
     const s = snapshot();
     for (const k of FOUR_KINDS) expect(s.claims.map((c) => c.kind), `${k} 不在夹具里`).toContain(k);
