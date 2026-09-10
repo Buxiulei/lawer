@@ -588,6 +588,8 @@
 
 **2026-09-10 晚 派「公司动作」对称谓词票（wf company-action-predicate，ws/company-action，基线 dcacd97b）**：① companyTerminationDecision 谓词（只认解除/终止/辞退/开除/解聘/不续签类决定；调岗/降薪/约谈/警告/搬迁/停工待岗/协商解除提议/未定态一律不认），COUNTERPARTY_DECISION_SLOTS 升级为 {slots, slotChecks} 三卡 + 领域包共用；共享层 registry 增谓词声明，counterpartyDecisionOnFile 也过谓词（「在档」与「成立」同真同假）；② 公司一侧主语词表一份共用并扩词（用人单位/人力资源部/法务/领导/经理/总经理/主管/甲方/老板娘…），五条复审叙事在 N-2b 归缺失，我方发出正例零回退；③ FORCED_CAUSE 口语化欠薪/社保形态。晚间汇总邮件已发主理人（覆盖第三至五版）。若复审在 Fable 限额（20:30 恢复）上死，按 runId 续跑。
 
+**2026-09-10 晚 「公司动作」谓词票实现到位（a03680f9，ws/company-action，工作树 wt-company-action——执行者发现 wt-cap 是旧封顶线树自行改名；脚本复审阶段路径已改、停旧轮按 runId 续跑复审）**：共享层 CounterpartyDecision { slots, slotChecks? }（合成一格，两侧传不出半份）、resolveCheckedSlot 唯一入口（buildElementSheet 与 counterpartyDecisionOnFile 同走）、assertDomainPack 两道点名；labor.ts companyTerminationDecision（正 10 反 15）、公司一侧词表合一扩词（正 5 反 5）、欠薪口语事由（正 10 反 6）；十臂变异全红；全量 7395、eval 543、守卫 128。经理裁定 openQuestions：① 协商解除取「只排提议态（协商 + 提议/递来/催签/让我签/未签/方案），已签的协商一致解除算公司决定」——复审后落；② 事实卡预算余量 64 字、施压期厚档案会把要件表整节挤出（CASE_FACTS_BUDGET 4600 / 降级粒度整节丢）——**另票**；③ 字段升级 counterpartyDecision——接受；④ 认「裁员/被裁/裁掉」并交未定态排除——接受；⑤ 间隔仍 4 字——接受。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
