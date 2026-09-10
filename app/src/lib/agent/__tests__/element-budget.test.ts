@@ -157,6 +157,16 @@ function elementRowsIn(text: string): number {
   return text.split('\n').filter((l) => l.startsWith('- 〔')).length;
 }
 
+/**
+ * 一行要件的卡号。满档前缀是 `- 〔诉求·卡号〕`；压缩档合法启用时，卡号自己已经带着诉求名的
+ * 那几行会把重复的前半截去掉，收成 `- 〔卡号〕`（case-facts.ts 的 `elementRow`）。
+ * **两种前缀都得认**：只按满档前缀找行的形态是——压缩档一启用，判据报的是"P0 行被裁掉了"，
+ * 而那几行明明都在，只是前缀短了一截。
+ */
+function elementRowId(line: string): string | undefined {
+  return /^- 〔(?:[^〕·]+·)?([^〕]+)〕/.exec(line)?.[1];
+}
+
 describe('最长案件（四项诉求 + 时间线 30 条）的事实卡预算', () => {
   it('🔒 地板：夹具真的是"最长案件"（缩了水的夹具会让下面每一条永远绿）', () => {
     const s = snapshot();
@@ -383,7 +393,7 @@ describe('施压期厚档案：要件表按行降级，缺口那几行永远在'
 
   it('(a) 全部 P0 行（缺失/不成立）都在，且每一行都带着 missingAs 那句缺口文案', () => {
     for (const r of PRESSURE_P0) {
-      const line = PRESSURE.split('\n').find((l) => l.startsWith(`- 〔${r.claimKind}·${r.id}〕`));
+      const line = PRESSURE.split('\n').find((l) => elementRowId(l) === r.id);
       expect(line, `P0 行 ${r.id} 被裁掉了——缺口行永不降级`).toBeTruthy();
       expect(line!, `${r.id} 只说了缺，没说补什么`).toContain('需补：');
     }
@@ -443,11 +453,7 @@ describe('要件表逐行降级的顺序（变异：把「缺失」的档从 0 �
   const FULL = SECTION.detail;
   const sumLen = (lines: readonly string[]) => lines.reduce((n, l) => n + l.length + 1, 0);
   const idsIn = (lines: readonly string[]) =>
-    new Set(
-      lines
-        .map((l) => /^- 〔(?:[^〕·]+·)?([^〕]+)〕/.exec(l)?.[1])
-        .filter((x): x is string => Boolean(x)),
-    );
+    new Set(lines.map((l) => elementRowId(l)).filter((x): x is string => Boolean(x)));
 
   it('要件表这一节确实带 refit（没有它就退回"整节明细一起丢"的旧粒度）', () => {
     expect(SECTION.refit, '要件表没有 refit ⇒ 预算不够时整节丢').toBeTruthy();
@@ -526,6 +532,14 @@ describe('压缩档只在预算不够时启用（变异：把压缩档常开 →
   });
 
   it('(c) 厚档案也只丢了行、没有开压缩档（P3 行让位就够了 ⇒ 压缩档不该启用）', () => {
+    // 【这条钉的是本夹具的读数，不是"压缩档永远不该开"】SHA 36b62d2d 实测：
+    // 事实卡 4579 字（预算 4600，余量 21），要件表 18 行里印出 16 行、丢了 2 条「成立」行；
+    // 这一节明细拿到的预算是 1738 字，而满档下 13 条保留行（5 缺失 + 8 成立·待证）连留痕
+    // 一共 1503 字 —— 压缩档在这一节预算 ≤1502 时才启用，也就是还差 236 字。
+    // 【失效条件】保留行文案合计再长 236 字（或卡上别处再长 236 字把这一节的预算挤到 1502），
+    // 压缩档就是**合法**启用，这条判据会红在一件对的事情上。届时该做的是把它改钉
+    // 「压缩档启用后 P0 行仍然全在」，不是把判据删掉 —— 删掉就等于放开了"压缩档常开"那条路。
+    //（余量那 21 字管的是行数不是格式：再长 22 字只会再丢一条「成立」行，这条仍然绿。）
     expect(PRESSURE).toContain(LABOR.burdenLabels!.reversed_interpretation);
     expect(PRESSURE, '还没到该压缩的那一档就把格式压了').not.toContain(
       LABOR.burdenLabelsShort!.reversed_interpretation,
