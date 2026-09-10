@@ -649,6 +649,29 @@ function noWrittenContract(raw: string): boolean {
  * 当事人自己的说法，这一项在庭上就是待证的，那句话是实话。它连带把这几项诉求的风险档位
  * 压在「需补证后可主张」，同样是实话（见 lib/cases/claims.ts 的 riskBandOf）。
  */
+/**
+ * 「公司确实作出过那个解除 / 终止决定」认哪两个槽。**四处共用这一份**：要件卡 2N-2、2N-3、
+ * N-2a 的 satisfiedBy，以及本包声明的 counterpartyDecisionSlot（争点表规则三据它判
+ *「对方的书面决定是否在档」）。四处说的是同一件事，取值必须同进同退。
+ *
+ * 【为什么是两个槽，不是只认「公司文件」】证据库的「公司文件」是一个**很宽的类别**：
+ * 员工手册、规章制度、工资结构表、通报表扬都落在它下面，而这些都不是公司的解除决定。
+ * 只认它的形态是——一个刚听到裁员风声、先把员工手册传上来的人，这几项当场写着「成立」，
+ * 争点表规则三跟着让他去把一份根本不存在的解除决定「原样固定下来」，而回包 200、
+ * 每一行都读得通。所以再要一条**公司确实作出过那个决定**的记录：时间线上现有的
+ *「公司动作」（cases.TIMELINE_KINDS 四种 kind 里记录对方动作 / 通知的就是它，不新造种类）。
+ * 两个槽都在档时按**最弱**的那一档算（satisfiedBy 是「与」）：事件只有当事人自己说
+ * ⇒「成立·待证」，事件由《解除通知》一类材料提取写入（书证档）⇒「成立」。
+ *
+ * 【为什么提成一个常量（第四轮复审，2026-09-10）】这对槽此前在四处各写一遍字面量，
+ * 而收窄是分三轮做的：第二轮收了 N-2a、第三轮收了 counterpartyDecisionSlot 与 2N-3，
+ * **2N-2 一直留着单槽**——于是「公司单方解除了劳动合同」这一项凭一份员工手册就成立，
+ * 而紧挨着它、判的是同一件事的 2N-3 判得好好的。独立写 N 次就会漏改其中某一次，
+ * 漏掉的那一处不红、不报错，两处读起来都像对的。改成一处取值、四处引用之后，
+ * 下一次调整这对槽只有一个地方可改。
+ */
+const COUNTERPARTY_DECISION_SLOTS = ['evidence:公司文件', 'timeline:公司动作'] as const;
+
 const LABOR_ELEMENT_CARDS: readonly ElementCard[] = [
   // ───────── 2N：违法解除赔偿金 ─────────
   {
@@ -666,8 +689,18 @@ const LABOR_ELEMENT_CARDS: readonly ElementCard[] = [
     name: '公司单方解除或终止了劳动合同（不是你自己提出离职）',
     burden: 'claimant',
     basis: [anchor(LHT, '第八十七条')],
-    satisfiedBy: ['evidence:公司文件'],
-    typicalEvidence: ['《解除劳动合同通知书》原件', '离职证明', '公司在微信/邮件里通知解除的原始记录（截图带上下文与对方账号）'],
+    // 【为什么这里也是两个槽】（第四轮复审收窄，2026-09-10）与 2N-3 / N-2a 判的是同一件事
+    // ——「公司确实作出过那个决定」——所以取值必须同进同退，见 COUNTERPARTY_DECISION_SLOTS。
+    // 此前只挂「公司文件」，而它是一个很宽的类别：一个还没收到任何解除通知、
+    // 先把员工手册传上来的人，「公司单方解除了劳动合同」这一项当场写着「成立」，
+    // 而紧挨着它、判同一件事的 2N-3 判得好好的——两行并排放着，一行对一行错。
+    satisfiedBy: COUNTERPARTY_DECISION_SLOTS,
+    typicalEvidence: [
+      '《解除劳动合同通知书》原件',
+      '离职证明',
+      '公司在微信/邮件里通知解除的原始记录（截图带上下文与对方账号）',
+      '把公司作出解除的那一刻记进时间线（哪天、谁通知的、怎么通知的）——员工手册、规章制度、工资结构表也归在「公司文件」类别下，但它们都不是公司的解除决定',
+    ],
   },
   {
     id: '2N-3',
@@ -692,7 +725,7 @@ const LABOR_ELEMENT_CARDS: readonly ElementCard[] = [
     // 所以再要一条**公司确实作出过那个解除决定**的记录：时间线上现有的「公司动作」。
     // 两个槽都在档时按**最弱**的那一档算：事件只有当事人自己说 ⇒ 「成立·待证」，
     // 事件由《解除通知》一类材料提取写入（书证档）⇒ 「成立」。
-    satisfiedBy: ['evidence:公司文件', 'timeline:公司动作'],
+    satisfiedBy: COUNTERPARTY_DECISION_SLOTS,
     typicalEvidence: [
       '写明解除理由的通知书原件',
       '公司据以解除的规章制度全文与你签收的记录',
@@ -774,7 +807,7 @@ const LABOR_ELEMENT_CARDS: readonly ElementCard[] = [
     // 现有的「公司动作」（cases.TIMELINE_KINDS 四种 kind 里记录对方动作/通知的就是它，
     // 这里不新造种类）。两个槽都在档时按**最弱**的那一档算：事件只有用户自己说 ⇒ 「成立·待证」，
     // 事件由《解除通知》一类材料提取写入（书证档）⇒ 「成立」。
-    satisfiedBy: ['evidence:公司文件', 'timeline:公司动作'],
+    satisfiedBy: COUNTERPARTY_DECISION_SLOTS,
     typicalEvidence: [
       '《解除劳动合同通知书》或协商解除协议原件',
       '离职证明',
@@ -1074,7 +1107,7 @@ export const LABOR: DomainPack = {
   // 再要一条**公司确实作出过那个决定**的记录——时间线上现有的「公司动作」
   //（cases.TIMELINE_KINDS 四种 kind 里记录对方动作/通知的就是它，这里不新造种类）。
   // 两个槽都要到书证及以上才算在档（门槛与判法都在 lib/cases/issue-table.ts）。
-  counterpartyDecisionSlot: ['evidence:公司文件', 'timeline:公司动作'],
+  counterpartyDecisionSlot: COUNTERPARTY_DECISION_SLOTS,
 
   crisis: {
     lexicon: LABOR_CRISIS_TERMS,

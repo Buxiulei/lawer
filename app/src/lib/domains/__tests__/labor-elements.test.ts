@@ -483,3 +483,71 @@ describe('N 的两条解除路径：互斥、二选一（第二轮复审 2026-09
     );
   });
 });
+
+describe('「公司确实作出过那个决定」四处同源（第四轮复审 2026-09-10）', () => {
+  // 【它守什么】2N-2、2N-3、N-2a 与本包的 counterpartyDecisionSlot 判的是**同一件事**，
+  // 而这对槽此前在四处各写一遍字面量，收窄又是分三轮做的——2N-2 就是漏掉的那一处：
+  // 三处都要「公司文件 + 公司动作」了，它还只认「公司文件」。漏掉的那一处不红、不报错，
+  // 它旁边判同一件事的 2N-3 判得好好的，两行并排放着，一行对一行错。
+  const factsWith = (over: Partial<ElementFactsView> = {}): ElementFactsView => ({
+    case: {
+      employed_from: '2020-03-01',
+      position: '后端工程师',
+      monthly_wage_fen: 2_500_000,
+      contract_count: '续签过一次',
+    },
+    claims: [{ kind: '2N', source_tier: '自述' }],
+    timeline: [],
+    companies: [{ role: '签约主体', source_tier: '自述' }],
+    evidence: [],
+    ...over,
+  });
+  const rowOf = (id: string, over: Partial<ElementFactsView> = {}) =>
+    buildElementSheet(factsWith(over), LABOR.elementCards ?? [], ['2N']).rows.find((r) => r.id === id)!;
+
+  it('🔒 四处取值逐字相同（变异：把其中任一处改回单槽、或再内联一份字面量 → 红）', () => {
+    const cardSlots = (id: string) => [...((LABOR.elementCards ?? []).find((c) => c.id === id)?.satisfiedBy ?? [])];
+    const pack = [...(LABOR.counterpartyDecisionSlot ?? [])];
+    expect(pack, 'counterpartyDecisionSlot 没声明').not.toEqual([]);
+    // 【为什么钉的是取值而不是"都引用了那个常量"】常量是不是被引用，判据看不见——
+    // 能看见的只有取值。四处取值相等，就把"再内联一份字面量"与"改了一处忘了另外三处"
+    // 一起挡在门外：那两种做法都会让下面这三行里的某一行对不上。
+    expect(cardSlots('2N-2'), '2N-2 与本包的 counterpartyDecisionSlot 对不上').toEqual(pack);
+    expect(cardSlots('2N-3'), '2N-3 与本包的 counterpartyDecisionSlot 对不上').toEqual(pack);
+    expect(cardSlots('N-2a'), 'N-2a 与本包的 counterpartyDecisionSlot 对不上').toEqual(pack);
+  });
+
+  it('只有一份「公司文件」**不能**把 2N-2 抬成「成立」（变异：2N-2 改回单槽 → 红）', () => {
+    // 风闻裁员、还没收到任何解除通知、先把员工手册传上来的那个人：
+    // 「公司单方解除或终止了劳动合同」当场写着「成立」，而他手上一份解除通知都没有。
+    const only = { evidence: [{ category: '公司文件' }] };
+    const row = rowOf('2N-2', only);
+    expect(row.status, `只有一份公司文件时 2N-2 被判成了 ${row.status}`).toBe('缺失');
+    expect(row.missingSlots, '缺口没点到"公司确实作出过这个决定"那条记录').toContain('timeline:公司动作');
+  });
+
+  it('公司文件 + 那条「公司动作」 ⇒ 2N-2 成立；事件只有自述时天花板是「成立·待证」', () => {
+    // 【为什么两档都要钉】只钉「成立」那一格，把新槽写成恒 true 也是绿的；
+    // 只钉「成立·待证」，两个槽取最强档（而不是最弱）同样绿。
+    expect(
+      rowOf('2N-2', {
+        evidence: [{ category: '公司文件' }],
+        timeline: [{ kind: '公司动作', source_tier: '书证' }],
+      }).status,
+    ).toBe('成立');
+    expect(
+      rowOf('2N-2', {
+        evidence: [{ category: '公司文件' }],
+        timeline: [{ kind: '公司动作', source_tier: '自述' }],
+      }).status,
+      '事件只有当事人自己说，这一条就到不了「成立」',
+    ).toBe('成立·待证');
+  });
+
+  it('只有那条「公司动作」、公司那份文件不在档 ⇒ 2N-2 仍是「缺失」，且缺口点名那份文件', () => {
+    // satisfiedBy 是「与」不是「或」：新加一个槽不许把原来那个槽变成可选。
+    const row = rowOf('2N-2', { timeline: [{ kind: '公司动作', source_tier: '书证' }] });
+    expect(row.status).toBe('缺失');
+    expect(row.missingSlots).toContain('evidence:公司文件');
+  });
+});
