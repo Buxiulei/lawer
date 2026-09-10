@@ -570,6 +570,8 @@
 
 **2026-09-10 隔离区反向 scheme 票到位（021bd085，ws/quarantine-scheme）**：4 处卡内 https→http 只改 scheme（word-diff 核过）；scheme_mismatches 扩扫隔离区（main 4/4 → HEAD 0，不按 --strict 门控，非 strict 降为警告）+ pytest；fetch-source http 档补显式重试（新常量 HTTP_ATTEMPTS=3 / HTTP_RETRY_BACKOFF_SEC=2——https 档本无重试常量，「三次」对应 TLS 三档）；变异两臂各红一条；pytest 169、strict 207 packs、index diff 空、verify 387/0、audit 102/0、tsc 0、守卫绿。裁定：重试常数接受；第五处反向 scheme 在 quarantine/README.md:201——一并改齐但 README 仍不入守卫；隔离区扫描不门控——接受；http 回落档单次——backlog；守卫 (i) 隔离区路径谓词与 (h) 对齐（复用 quarantine_labels 谓词 + packs/**/quarantine/** 判据）；die()「四档都失败」文案改正。三处小改回给同一代理追加 commit。
 
+**2026-09-10 存疑判例记录票到位（1d2d299c，ws/precedent-record）+ 隔离区票收尾（6dd6b95e）**：TODO 核实清单新增「第二轮（2026-09-10，真实浏览器）」五段；counseling.ts ① searchKeywords 加「强制报告 典型案例」。线索登记停在登记簿 kind 枚举（十种无一能装官方站署名理论文章；机构官网受守卫 (g) 限数据卡）——探针取回 200 / sha 8b24ae832c03 / 摘句全部命中 text 第 424 行、署名核过，只写 scratchpad 未入 knowledge。**裁定：不入登记簿**（加「官方文章」等于给署名评论开「原文核实」口），线索只留 TODO 记录；风险卡 qiangzhi-baogao-zhuti 第 79-80 / 98 行「spp 无分页翻不到 2020 批次」已被第二轮证伪——改成与第二轮一致（不改结论/输出闸/标记，不挂 precedents），回给同一代理追加 commit。隔离区票收尾：README:201 改齐、in_quarantine 谓词三处共用（变异 4 红）、die() 按实际档数；pytest 170、strict 207、verify 387/0、audit 102/0、守卫绿。wt-int 已 ff 到 6dd6b95e，等记录票追加后合入一班上产。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
