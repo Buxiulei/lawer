@@ -190,7 +190,7 @@ describe('「对方的书面决定在不在档」的唯一入口', () => {
     claims: [],
     // 【title 在这里默认给空串】没挂取值判定的槽一个字都不读它；挂了判定的那几条用例
     // 自己把 title 写上（下面「取值判定」那一组）。
-    timeline: events.map((e) => ({ title: '', ...e, detail: null })),
+    timeline: events.map((e) => ({ title: '', ...e, detail: null, event_type: null })),
     companies: [],
     evidence: categories.map((category) => ({ category })),
   });

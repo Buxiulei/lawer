@@ -32,7 +32,13 @@ import {
 } from '@/lib/cases/elements';
 import { EVIDENCE_CATEGORIES } from '@/lib/evidence/categories';
 import { precedentLine } from '@/lib/knowledge/precedent-line';
-import { DEFAULT_DOMAIN, DOMAINS, domainPackOrDefault, type FactsSectionKey } from '@/lib/domains/registry';
+import {
+  DEFAULT_DOMAIN,
+  DOMAINS,
+  domainPackOrDefault,
+  type DomainPack,
+  type FactsSectionKey,
+} from '@/lib/domains/registry';
 import { toDisplayDay, toDisplayTime } from '@/lib/time';
 
 import type { CaseSnapshot } from './snapshot';
@@ -726,9 +732,26 @@ function timelineDetail(lines: string[], room: number, total: number, anchor: st
   ];
 }
 
+/**
+ * 一条事件的**类型标签**（登记时选的那一格）。没选过 ⇒ 空串，那一行与本列落地前逐字相同。
+ *
+ * 【为什么认不出来的取值要印出来，而不是当作没选】那一格已经压过了谓词：判定不会再去读
+ * 这条记录写的字，也不会认它是任何一格（它不在任何 acceptsType 里），于是这个槽从此恒缺。
+ * 静默的形态是——要件表说缺、时间线上这条记录看起来好端端的，没有一处说得出为什么。
+ */
+function eventTypeMark(pack: DomainPack, kind: string, id: string | null): string {
+  const value = typeof id === 'string' && id.trim() ? id.trim() : null;
+  if (value === null) return '';
+  const spec = (pack.timelineEventTypes[kind] ?? []).find((t) => t.id === value);
+  return spec
+    ? `〔类型：${spec.label}〕`
+    : `〔类型：${value}——本领域已不认识这个取值，按类型的判定一条都不会认它〕`;
+}
+
 function timelineSection(s: CaseSnapshot): FactSection {
+  const pack = domainPackOrDefault(s.case.domain);
   const fmt = (e: CaseSnapshot['timeline'][number]) =>
-    `- ${toDisplayTime(e.happened_at)}｜${e.kind}｜${e.title}${e.detail ? `：${trunc(e.detail, TIMELINE_DETAIL_MAX)}` : ''}${rowTier(e)}`;
+    `- ${toDisplayTime(e.happened_at)}｜${e.kind}｜${e.title}${e.detail ? `：${trunc(e.detail, TIMELINE_DETAIL_MAX)}` : ''}${eventTypeMark(pack, e.kind, e.event_type)}${rowTier(e)}`;
   const lines = s.timeline.map(fmt);
   // 真总数 / 真最早 1 条来自 timelineStats（独立取数），不从被窗口截过的 timeline 推。
   // 窗口已经含住最早那条时传 null：重复印一遍会让模型以为同一件事发生了两次。

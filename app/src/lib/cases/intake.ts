@@ -17,7 +17,7 @@
 import type { Database } from 'better-sqlite3';
 
 import { computeDeadline } from '@/lib/deadline';
-import type { DomainPack, IntakeFieldSpec } from '@/lib/domains/registry';
+import type { DomainPack, IntakeEventSource, IntakeFieldSpec } from '@/lib/domains/registry';
 import { insertActionItem, insertDeadline, upsertCompanyProfileByRole } from '@/lib/db/agent';
 import * as store from '@/lib/db/cases';
 import { nowSql } from '@/lib/db/time';
@@ -104,6 +104,36 @@ export interface IntakeResult {
  */
 function docFieldsOf(pack: DomainPack, key: string): readonly { key: string; label: string }[] {
   return pack.intakeSchema.find((f) => f.key === key)?.fields ?? [];
+}
+
+/**
+ * 首诊这一条事件落什么类型。**问领域包，并把它的答案对着自己声明的枚举核一遍。**
+ *
+ * 【为什么要核】首诊这条路直接落库（store.insertTimelineEvent），不经 addTimelineEvent
+ * 那道校验。不核的形态是：包里的定型函数手误回了一个谁都不认的串，那条记录带着它进库——
+ * 判定对它既不按类型走（不在任何 acceptsType 里）、也不回落到谓词（它"有类型"），
+ * 于是这个槽从此恒缺，而每一处都返回 201。
+ *
+ * 【为什么核不过是落 null + 点名，不是抛】首诊是用户交出全部材料的那一步，
+ * 不该因为一处包配置错误而整体失败；落 null 等于回到定型之前的行为（判定读那段字），
+ * 方向保守。但它不许静默——静默与"这一格本来就定不下来"完全同形。
+ */
+function eventTypeOf(
+  pack: DomainPack,
+  source: IntakeEventSource,
+  kind: string,
+  title: string,
+  answers: Readonly<Record<string, string>> = {},
+): string | null {
+  const picked = pack.intakeEventType?.({ source, kind, title, answers }) ?? null;
+  if (picked === null) return null;
+  if ((pack.timelineEventTypes[kind] ?? []).some((t) => t.id === picked)) return picked;
+  console.error(
+    `[intake] 领域包「${pack.key}」的 intakeEventType 对 ${source}/${kind} 回了「${picked}」，` +
+      `而 timelineEventTypes[${kind}] 里没有这个 id。缺的是那一格声明：` +
+      '这条记录按"没选过类型"落库（判定回落到读那段字），把 id 补进 timelineEventTypes 或改掉定型函数即可。',
+  );
+  return null;
 }
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -256,27 +286,42 @@ function persist(
 
   // ── 事件：用户自己记的那几条 + 整段自述 + 公司说法 + 公司给过哪些文件 ──
   const rawEvents = Array.isArray(input.events) ? (input.events as IntakeEventInput[]) : [];
-  const events: { happenedAt: string; kind: string; title: string; detail: string | null }[] = [];
+  const events: {
+    happenedAt: string;
+    kind: string;
+    title: string;
+    detail: string | null;
+    /** 首诊这一格说得死时才有值；说不死一律 null（口径在领域包的 intakeEventType 上） */
+    eventType: string | null;
+  }[] = [];
   const datedDays: string[] = [];
   for (const e of rawEvents) {
     const text = trimmed(e?.text);
     if (!text) continue;
     const day = normalizeDateOnly(e?.date);
     if (day) datedDays.push(day);
+    const title = text.slice(0, 80);
     events.push({
       happenedAt: day ? dayNoonIso(day) : nowIso,
       // 首诊这一步问的是「公司那边发生了什么」（例子全是开会宣布、HR 约谈、收到通知），
       // 所以默认记成公司动作。用户后续在时间线里补的事件才逐条自选类别。
       kind: '公司动作',
-      title: text.slice(0, 80),
+      title,
       detail: text.length > 80 ? text : null,
+      eventType: eventTypeOf(pack, 'answers', '公司动作', title),
     });
   }
 
   const freeText = trimmed(input.freeText);
   if (freeText) {
     // 「把经过写下来」是用户自己做的一件事，正文进 detail，不硬塞进标题里
-    events.push({ happenedAt: nowIso, kind: '我方动作', title: copy.intakeFreeTextTitle, detail: freeText });
+    events.push({
+      happenedAt: nowIso,
+      kind: '我方动作',
+      title: copy.intakeFreeTextTitle,
+      detail: freeText,
+      eventType: eventTypeOf(pack, 'freeText', '我方动作', copy.intakeFreeTextTitle),
+    });
   }
 
   const companyWording = trimmed(input.companyWording);
@@ -286,13 +331,18 @@ function persist(
       kind: '公司动作',
       title: copy.intakeCounterpartWordingTitle,
       detail: companyWording,
+      eventType: eventTypeOf(pack, 'counterpartWording', '公司动作', copy.intakeCounterpartWordingTitle),
     });
   }
 
   const docs = (input.companyDocs ?? {}) as Record<string, unknown>;
+  // 逐格的答案原样留一份给定型用：拼好的那一行只剩「标签：答案；标签：答案」，
+  // 从里面再解析回"哪一格答了什么"就是第二把尺，而两把尺迟早会分叉。
+  const docAnswers: Record<string, string> = {};
   const docLine = docFieldsOf(pack, 'companyDocs')
     .map(({ key, label }) => {
       const answer = trimmed(docs[key]);
+      if (answer) docAnswers[key] = answer;
       return answer ? `${label}：${answer}` : null;
     })
     .filter((x): x is string => x !== null)
@@ -303,6 +353,7 @@ function persist(
       kind: '公司动作',
       title: copy.intakeCounterpartDocsTitle,
       detail: docLine,
+      eventType: eventTypeOf(pack, 'counterpartDocs', '公司动作', copy.intakeCounterpartDocsTitle, docAnswers),
     });
   }
 

@@ -97,15 +97,38 @@ export type BasicsField = (typeof BASICS_FIELDS)[number];
  * 从全部记录里取档位的形态是——过了判定的那条只有当事人自己说，旁边那条没过判定的记录
  * 带着书证，于是这个槽显示成书证档，而那份书证证的根本是另一件事。
  *
- * 【本文件零领域内容】`accepts` 怎么认那串字是行当知识，函数体在领域包里；
+ * 【类型优先于猜】（2026-09-10/11 台账「结构化决定」票）登记一条记录时可以顺手说清
+ * **这条记录是什么**（`timeline_events.event_type`，取值域由领域包按 kind 声明）。
+ * 带着类型的条目**只看类型**（在 `acceptsType` 里 ⇒ 过，不在 ⇒ 不过，`accepts` 不再跑）；
+ * 没有类型的条目才跑 `accepts`。
+ *
+ * 【为什么不是"两条任一命中即过"】那样一条明说了自己是别的类型的记录，仍会因为文本里
+ * 恰好有几个词而被谓词捞进来——登记的人已经说了这不是那件事，判定却当他没说。
+ * 反过来"两条都要过"则让类型形同虚设：谓词漏掉的那些变体照旧漏掉，而类型是来根治它的。
+ *
+ * 【为什么两格都可选，而"一格都不给"在类型上就写不出来】只给 `acceptsType` 是一条完全
+ * 合法的判定（本槽只认明确选过类型的记录）；只给 `accepts` 是本列落地前的既有形态
+ *（老行恒是 null 类型，全走谓词）。两格都不给则这条判定**恒判不过**，与"这个槽永远缺"
+ * 同形而不报错，所以由下面那个联合类型在编译期堵掉。
+ *
+ * 【本文件零领域内容】类型 id 与 `accepts` 怎么认那串字都是行当知识，取值与函数体在领域包里；
  * 这里只定义"有这么一格判定"，一个字面量都不认识。
  */
-export interface SlotValueCheck {
-  /** 这一格的取值算不算支撑本要件。收的是用户自述的那串原字（已确认非空） */
-  accepts: (raw: string) => boolean;
+export type SlotValueCheck = {
   /** 这一项在「还差什么」清单里的名字（用户可见，措辞归领域包）——看不过、或这一格还空着时都用它点名 */
   missingAs: string;
-}
+} & (
+  | {
+      /** 登记时选了这几个类型之一的条目 ⇒ 过。**取值是不透明串**，共用层不认识它们的含义 */
+      acceptsType: readonly string[];
+      /** 没选过类型的条目才跑它。收的是用户自述的那串原字（已确认非空） */
+      accepts?: (raw: string) => boolean;
+    }
+  | {
+      acceptsType?: readonly string[];
+      accepts: (raw: string) => boolean;
+    }
+);
 
 /** 一张要件卡。内容由领域包给（S6 已填 labor 四诉求），本文件只定形状。 */
 export interface ElementCard {
@@ -215,7 +238,20 @@ export interface ElementFactsView {
    * 而少了那一列的形态是：取值判定读到一段空字符串、判不过、整条要件落「缺失」——
    * 方向保守，却没有任何一处说得出"是因为那段字没取回来"。必填让它在编译期红。
    */
-  timeline: readonly { kind: string; source_tier: string; title: string; detail: string | null }[];
+  timeline: readonly {
+    kind: string;
+    source_tier: string;
+    title: string;
+    detail: string | null;
+    /**
+     * 登记时选的「这条记录是什么」；null = 没人选过 ⇒ 判定回落到谓词。
+     *
+     * 【为什么它和 title / detail 一样是必填的】少取一列的形态是：每条记录都读成"没选过类型"，
+     * 判定整批回落到谓词——方向看着保守，却没有任何一处说得出"是因为那一列没取回来"，
+     * 而这一票做的正是"别再猜"。必填让它在编译期红。
+     */
+    event_type: string | null;
+  }[];
   companies: readonly { role: string; source_tier: string }[];
   /** 证据行本身就是**在档的材料**：有一件在这个类别下，这个槽就是书证档 */
   evidence: readonly { category: string; voided_at?: string | null }[];
@@ -302,7 +338,7 @@ export function resolveSlot(slot: string, facts: ElementFactsView): SourceTier |
 function checkableEntries(
   slot: string,
   facts: ElementFactsView,
-): readonly { raw: string; tier: SourceTier }[] | undefined {
+): readonly { raw: string; tier: SourceTier; eventType: string | null }[] | undefined {
   const at = slot.indexOf(':');
   if (at <= 0) return undefined;
   const source = slot.slice(0, at);
@@ -313,11 +349,13 @@ function checkableEntries(
     if (!(BASICS_FIELDS as readonly string[]).includes(value)) return undefined;
     const v = facts.case[value as BasicsField];
     // 首诊那几项是用户自己报的，填了就恒是自述档（与 resolveSlot 同一口径）。
-    return basicsFilled(v) ? [{ raw: String(v), tier: '自述' }] : [];
+    // `eventType` 恒 null：基本盘那一格是一个**值**，没有"这条记录是什么"这回事
+    //（判定要认的就是那串字本身），所以它永远走谓词那一路。
+    return basicsFilled(v) ? [{ raw: String(v), tier: '自述', eventType: null }] : [];
   }
 
   if (source === 'timeline') {
-    const out: { raw: string; tier: SourceTier }[] = [];
+    const out: { raw: string; tier: SourceTier; eventType: string | null }[] = [];
     for (const e of facts.timeline) {
       if (e.kind !== value) continue;
       const tier = normalizeSourceTier(e.source_tier);
@@ -328,7 +366,10 @@ function checkableEntries(
       // 由领域包自己决定。接在一起的形态是——上一段的末尾与下一段的开头凑出一个
       // 谁都没写过的词，而判定按那个词判过了。
       const detail = e.detail?.trim();
-      out.push({ raw: detail ? `${e.title}\n${detail}` : e.title, tier });
+      // 空串按"没选过"算：一列写成空串与没写在语义上是同一件事，而按有类型处理会让
+      // 这条记录既过不了 acceptsType、也不再跑谓词——比落地前更严，且说不出原因。
+      const eventType = e.event_type?.trim() ? e.event_type.trim() : null;
+      out.push({ raw: detail ? `${e.title}\n${detail}` : e.title, tier, eventType });
     }
     return out;
   }
@@ -360,10 +401,25 @@ export function resolveCheckedSlot(
   if (entries === undefined) return undefined;
   let best: SourceTier | null = null;
   for (const e of entries) {
-    if (!check.accepts(e.raw)) continue;
+    if (!entryPasses(e, check)) continue;
     if (best === null || tierRank(e.tier) > tierRank(best)) best = e.tier;
   }
   return best;
+}
+
+/**
+ * 一个候选条目过不过这条判定。**类型优先，谓词兜底**（理由写在 SlotValueCheck 上）。
+ *
+ * · 条目**选过类型** ⇒ 只看它在不在 `acceptsType` 里；判定没声明 `acceptsType` 时一律不过
+ *   （这个槽还没接类型，而这条记录已经明说了自己是什么——按"少认"走）。谓词不再跑。
+ * · 条目**没选过类型** ⇒ 跑 `accepts`；判定没声明谓词时一律不过（同上，方向一致）。
+ */
+function entryPasses(
+  entry: { raw: string; eventType: string | null },
+  check: SlotValueCheck,
+): boolean {
+  if (entry.eventType !== null) return (check.acceptsType ?? []).includes(entry.eventType);
+  return check.accepts?.(entry.raw) ?? false;
 }
 
 /** 卡片的 basis 全部核实过了吗。空 basis 一律算没核实（"没有锚点"不比"锚点存疑"更可信）。 */

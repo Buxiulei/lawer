@@ -7,9 +7,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { submitIntake } from '@/lib/cases';
+import { submitIntakeInto } from '@/lib/cases/intake';
 import { LABOR } from '@/lib/domains/labor';
 // agent 侧的写法（按 name 收敛）——用它把「存量已有两行同角色」这个形态真造出来，
 // 而不是手写 INSERT 假装 agent 写过
@@ -358,5 +359,149 @@ describe('仲裁时效的推算依据：两态都要对', () => {
     expect(derived).toContain('第八十五条');
     // 到期日照算不误
     expect(derived).toContain('2027-08-30');
+  });
+});
+
+/**
+ * **首诊自动落档：说得死才定型，其余一律留 null**（2026-09-10/11 台账「结构化决定」票）。
+ *
+ * 【它守什么】首诊是绝大多数用户唯一一次批量写时间线的机会，而它走的是直落库那条路
+ *（store.insertTimelineEvent），不经 timeline_add 那道校验。两个方向的错都要拦住：
+ *   · 该定的没定 —— 用户在首诊里明确答过"公司给过《解除劳动合同通知书》"，
+ *     那条记录却仍要靠谓词去猜，而谓词认得的正是这一格里最不像自然语言的一段拼接文本；
+ *   · 不该定的硬定 —— 类型一旦落下就**压过**谓词、连兜底都不再跑，
+ *     猜错一次比没有类型更贵（用户以为自己已经说清楚了）。
+ *
+ * 【变异臂】把 laborIntakeEventType 的 counterpartDocs 分支整段删掉 ⇒ ①②③ 红；
+ * 把 docAnswerAffirmative 的否定式前置判断去掉（「没有」里含「有」）⇒ ② 红；
+ * 把认不准判定移回否定式**后面** ⇒ ⑦⑧ 红（「无法确定」以否定字开头，会被读成"没给"）；
+ * 把 answers/counterpartWording 也定型 ⇒ ④ 红。
+ */
+describe('首诊落档的事件类型', () => {
+  const typesOf = (f: ReturnType<typeof makeFixture>) =>
+    Object.fromEntries(
+      (
+        f.db
+          .prepare('SELECT title, event_type FROM timeline_events WHERE case_id = ? ORDER BY id')
+          .all(f.caseA) as { title: string; event_type: string | null }[]
+      ).map((r) => [r.title, r.event_type]),
+    );
+
+  it('① 答「有」的那份解除通知书 ⇒ 那条聚合记录落 company_termination', () => {
+    const f = makeFixture();
+    submitIntake(f.db, { caseId: f.caseA, userId: f.userA, ...fullIntake() });
+    expect(typesOf(f)[LABOR.copy.site.intakeCounterpartDocsTitle]).toBe('company_termination');
+  });
+
+  it('🔴 ② 三格全答「没有」⇒ company_other，不再被谓词当成公司作出了解除决定', () => {
+    // 【这是一处真的误判】那条记录的正文逐格写着「《解除劳动合同通知书》：没有」，
+    // 而谓词按小句判时，否定词落在决定动作**后面**、未定态那条压不住——
+    // 于是一个明确说"公司什么纸都没给"的人，三条要件当场写着「成立·待证」。
+    const f = makeFixture();
+    submitIntake(f.db, {
+      caseId: f.caseA,
+      userId: f.userA,
+      ...fullIntake({
+        companyDocs: { terminationNotice: '没有', settlementAgreement: '没有', otherPaper: '没有' },
+      }),
+    });
+    expect(typesOf(f)[LABOR.copy.site.intakeCounterpartDocsTitle]).toBe('company_other');
+  });
+
+  it('③ 只答了协商解除协议 ⇒ company_negotiation（协商是提议，不是单方决定）', () => {
+    const f = makeFixture();
+    submitIntake(f.db, {
+      caseId: f.caseA,
+      userId: f.userA,
+      ...fullIntake({
+        companyDocs: { terminationNotice: '没有', settlementAgreement: '有', otherPaper: '没有' },
+      }),
+    });
+    expect(typesOf(f)[LABOR.copy.site.intakeCounterpartDocsTitle]).toBe('company_negotiation');
+  });
+
+  it('🔴 ④ 认不准的那几格一律 null：用户自己记的那几句、对方口头说法、有一格「不确定」', () => {
+    const f = makeFixture();
+    submitIntake(f.db, {
+      caseId: f.caseA,
+      userId: f.userA,
+      ...fullIntake({
+        companyDocs: { terminationNotice: '不确定', settlementAgreement: '没有', otherPaper: '没有' },
+      }),
+    });
+    const types = typesOf(f);
+    expect(types['HR 约谈让我签自愿离职'], '用户自己记的那一句是自由叙事，不许替他挑').toBeNull();
+    expect(types[LABOR.copy.site.intakeCounterpartWordingTitle], '对方口头说法认不准').toBeNull();
+    expect(types[LABOR.copy.site.intakeCounterpartDocsTitle], '有一格答不出是有是无就别定').toBeNull();
+  });
+
+  it('⑤ 整段自述落 my_other：它是叙事不是事件记录（沿用裁定，不参与判定）', () => {
+    const f = makeFixture();
+    submitIntake(f.db, { caseId: f.caseA, userId: f.userA, ...fullIntake() });
+    expect(typesOf(f)[LABOR.copy.site.intakeFreeTextTitle]).toBe('my_other');
+  });
+
+  it('🔴 ⑦ 「无法确定」是认不准，不是「没给」⇒ 落 null 回落到谓词', () => {
+    // 【它与 ② 只差一格的字】「无法确定」「没法确定」「未必」都以否定字开头，
+    // 而否定式先判的形态是：它们被读成明确的"没给"，这条记录当场落 company_other——
+    // 一个说自己记不清的人，被系统替他答成了"公司什么纸都没给"，
+    // 而类型一旦落下就压过谓词、连兜底都不再跑。MCP 那条路收的是自由文本，这几句正是它的常见写法。
+    const f = makeFixture();
+    submitIntake(f.db, {
+      caseId: f.caseA,
+      userId: f.userA,
+      ...fullIntake({
+        companyDocs: { terminationNotice: '无法确定', settlementAgreement: '没有', otherPaper: '没有' },
+      }),
+    });
+    expect(typesOf(f)[LABOR.copy.site.intakeCounterpartDocsTitle]).toBeNull();
+  });
+
+  it('🔴 ⑧ 三态逐句直探：认不准 ⇒ null、明确没给 ⇒ company_other、明确给过 ⇒ company_termination', () => {
+    // 逐句探的是**取值口径本身**，不经首诊那条落库路：③⑦ 各钉一句，这里钉的是整张表。
+    const docType = (terminationNotice: string) =>
+      LABOR.intakeEventType?.({
+        source: 'counterpartDocs',
+        kind: '公司动作',
+        title: LABOR.copy.site.intakeCounterpartDocsTitle,
+        answers: { terminationNotice, settlementAgreement: '没有', otherPaper: '没有' },
+      }) ?? null;
+
+    for (const s of ['不确定', '无法确定', '没法确定', '未必', '说不清', '记不清', '不记得']) {
+      expect(docType(s), `「${s}」是认不准，不是"没给"`).toBeNull();
+    }
+    for (const s of ['没有', '没', '未收到', '无']) {
+      expect(docType(s), `「${s}」是明确的"没给"`).toBe('company_other');
+    }
+    for (const s of ['有', '给过', '收到了', '签了']) {
+      expect(docType(s), `「${s}」是明确的"给过"`).toBe('company_termination');
+    }
+  });
+
+  it('🔴 ⑥ 包里的定型函数回了一个没声明过的 id ⇒ 落 null 并点名，不是带着它进库', () => {
+    // 首诊走的是直落库那条路（store.insertTimelineEvent），不经 timeline_add 那道校验。
+    // 不核的形态是：那条记录带着一个谁都不认的取值进库——判定既不按类型走
+    //（不在任何 acceptsType 里）、也不回落到谓词（它"有类型"），这个槽从此恒缺，
+    // 而首诊回包 201、每一行都读得通。落 null 是回到定型之前的行为，方向保守；
+    // 但它不许静默——静默与"这一格本来就定不下来"完全同形。
+    const f = makeFixture();
+    const errors: unknown[][] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      errors.push(args);
+    });
+    try {
+      const res = submitIntakeInto(
+        f.db,
+        f.caseA,
+        { ...fullIntake(), userId: f.userA } as never,
+        { ...LABOR, intakeEventType: () => '压根没声明过的取值' },
+      );
+      expect(res.ok).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(Object.values(typesOf(f)).every((v) => v === null), '一个没声明过的取值被落进了库').toBe(true);
+    expect(errors.length, '落 null 了，却一句话都没说').toBeGreaterThan(0);
+    expect(String(errors[0][0])).toContain('压根没声明过的取值');
   });
 });

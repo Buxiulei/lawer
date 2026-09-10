@@ -55,6 +55,11 @@ export interface TimelineEventRow {
   source_tier: string;
   /** 谁写进来的（user / agent_inferred / doc_extract / system）。存量行回填 user */
   asserted_by: string;
+  /**
+   * 登记这条记录时选的「这是什么」（取值域按案件领域 + kind 由领域包声明）。
+   * null = 没人选过——存量行、以及登记方说不准的那些。判定据此回落到谓词。
+   */
+  event_type: string | null;
   created_at: string;
 }
 
@@ -240,7 +245,7 @@ export function updateCaseFields(
  * 正是踩在这个形状上，所以先把入口收成一个。
  */
 const TIMELINE_COLUMNS =
-  'id, case_id, happened_at, kind, title, detail, milestone, source_tier, asserted_by, created_at';
+  'id, case_id, happened_at, kind, title, detail, milestone, source_tier, asserted_by, event_type, created_at';
 
 /**
  * 只追加，修正靠补一条新事件（spec §7）——本文件不提供 update/delete。
@@ -270,14 +275,20 @@ export function insertTimelineEvent(
      * 默认字面量的唯一正本在 DDL，本层不再抄一份。
      */
     origin?: { tier: string; assertedBy: string };
+    /**
+     * 登记方选的「这是什么」；省略 / null = 没人选过（判定据此回落到谓词）。
+     * 值域校验在 lib/cases（本层不认识业务枚举，同 kind / source_tier 的既定分工）。
+     */
+    eventType?: string | null;
   },
 ): number {
   const { origin } = params;
+  const eventType = params.eventType ?? null;
   const info = origin
     ? db
         .prepare(
-          'INSERT INTO timeline_events (case_id, happened_at, kind, title, detail, client_ref, source_tier, asserted_by)' +
-            ' VALUES (?, datetime(?), ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO timeline_events (case_id, happened_at, kind, title, detail, client_ref, source_tier, asserted_by, event_type)' +
+            ' VALUES (?, datetime(?), ?, ?, ?, ?, ?, ?, ?)',
         )
         .run(
           params.caseId,
@@ -288,12 +299,22 @@ export function insertTimelineEvent(
           params.clientRef ?? null,
           origin.tier,
           origin.assertedBy,
+          eventType,
         )
     : db
         .prepare(
-          'INSERT INTO timeline_events (case_id, happened_at, kind, title, detail, client_ref) VALUES (?, datetime(?), ?, ?, ?, ?)',
+          'INSERT INTO timeline_events (case_id, happened_at, kind, title, detail, client_ref, event_type)' +
+            ' VALUES (?, datetime(?), ?, ?, ?, ?, ?)',
         )
-        .run(params.caseId, params.happenedAt, params.kind, params.title, params.detail, params.clientRef ?? null);
+        .run(
+          params.caseId,
+          params.happenedAt,
+          params.kind,
+          params.title,
+          params.detail,
+          params.clientRef ?? null,
+          eventType,
+        );
   return Number(info.lastInsertRowid);
 }
 

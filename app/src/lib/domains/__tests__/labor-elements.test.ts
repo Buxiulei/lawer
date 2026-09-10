@@ -71,7 +71,7 @@ type FactsOver = Partial<Omit<ElementFactsView, 'timeline'>> & {
 };
 
 const timelineOf = (over: FactsOver): readonly TimelineRow[] =>
-  (over.timeline ?? []).map((e) => ({ title: '', detail: null, ...e }));
+  (over.timeline ?? []).map((e) => ({ title: '', detail: null, event_type: null, ...e }));
 
 /** `法名|条号` → 提到它的那几张卡。卡侧与要件侧**走同一个 articleKey**，不各自归一。 */
 const BY_ANCHOR = new Map<string, IndexCard[]>();
@@ -116,7 +116,9 @@ const COVERED_KINDS = ['2N', 'N', '欠薪', '双倍工资'];
 
 /** 「公司确实作出过那个决定」那条时间线槽，与它判不过时缺口那一行的名字。 */
 const COMPANY_ACTION_SLOT = 'timeline:公司动作';
-const COMPANY_ACTION_MISSING = '公司的解除/终止决定（请把公司作出这个决定的那一刻记成一条时间线事件）';
+const COMPANY_ACTION_MISSING =
+  '公司的解除/终止决定（请把公司作出这个决定的那一刻记成一条时间线事件，' +
+  '并把类型选成「公司作出的解除/终止决定」——选了就不用靠那段字去猜）';
 /** 一条**过得了判定**的「公司动作」：判的是那段字，所以夹具必须把它写出来。 */
 const DECISION_EVENT = '公司送达《解除劳动合同通知书》';
 
@@ -434,7 +436,9 @@ describe('N 的两条解除路径：互斥、二选一（第二轮复审 2026-09
   // 任何解除通知；同组那条公司解除路径（他真正该走的那条）反而被它盖住。
   const N2B_SLOT = 'timeline:我方动作';
   /** 缺口那一行对外的名字。**带着出路**：缺的不是"一份文件"，是把发出通知这件事记成一条事件。 */
-  const N2B_MISSING = '被迫解除通知（请把发出通知这件事记成一条时间线事件）';
+  const N2B_MISSING =
+    '被迫解除通知（请把发出通知这件事记成一条时间线事件，' +
+    '并把类型选成「我发出的被迫解除通知」——选了就不用靠那段字去猜）';
   /** 一条「我方动作」+ 一份沟通记录（另一个槽满足），只让那段字说话。 */
   const withMyAction = (title: string, tier = '自述') =>
     rowOf('N-2b', {
@@ -1116,7 +1120,7 @@ describe('N-2b 方向：公司一侧的部门名 / 职务名 / 合同称谓也�
         claims: [{ kind: 'N', source_tier: '自述' }],
         companies: [{ role: '签约主体', source_tier: '自述' }],
         evidence: [{ category: '沟通记录' }],
-        timeline: [{ kind: '我方动作', source_tier: '自述', title, detail: null }],
+        timeline: [{ kind: '我方动作', source_tier: '自述', title, detail: null, event_type: null }],
       },
       LABOR.elementCards ?? [],
       ['N'],
@@ -1212,7 +1216,7 @@ describe('第三十八条那两项事由：口语说法也取得到', () => {
         claims: [{ kind: 'N', source_tier: '自述' }],
         companies: [{ role: '签约主体', source_tier: '自述' }],
         evidence: [{ category: '沟通记录' }],
-        timeline: [{ kind: '我方动作', source_tier: '自述', title, detail: null }],
+        timeline: [{ kind: '我方动作', source_tier: '自述', title, detail: null, event_type: null }],
       },
       LABOR.elementCards ?? [],
       ['N'],
@@ -1341,5 +1345,157 @@ describe('「公司确实作出过那个决定」四处同源（第四轮复审 
     });
     expect(row.status).toBe('缺失');
     expect(row.missingSlots).toContain('evidence:公司文件');
+  });
+});
+
+// ══ 结构化「决定」标记（2026-09-10/11 台账「结构化决定」票）══
+/**
+ * **登记时选过的类型压过谓词**：labor 这一侧的两个方向。
+ *
+ * 【它守什么】前面那几组（「公司动作」「我方动作」的词表用例）钉的是**谓词**：
+ * 用户没说清这条记录是什么时，靠那段字去认。五轮下来每一轮都还有新的漏网——
+ * 而那正是本票要绕开的那条路：让登记的人自己说。这一组钉的是"说了就算，不再猜"，
+ * 且**两个方向都钉**：
+ *   · 含糊到任何谓词都认不出来的一句话 + 对的类型 ⇒ 三张卡抬起来、规则三触发；
+ *   · 写满谓词认得的词的一句话 + 别的类型 ⇒ 三张卡照旧「缺失」、规则三不触发。
+ * 只钉前一个方向的形态是：把判定改成"类型或谓词任一命中即过"，它照样绿——
+ * 而那种改法等于类型形同虚设。
+ *
+ * 【回落那一组在哪】前面所有词表用例的时间线行都不带类型（夹具默认 event_type: null），
+ * 它们整体就是"没类型 ⇒ 回落到谓词"那一臂；下面第一条把这个前提本身钉住，
+ * 免得哪天夹具默认值改了，那几十条用例悄悄变成在测别的东西。
+ */
+describe('结构化「决定」标记：选过类型就不猜', () => {
+  const factsWith = (over: FactsOver = {}): ElementFactsView => ({
+    case: {
+      employed_from: '2020-03-01',
+      position: '后端工程师',
+      monthly_wage_fen: 2_500_000,
+      contract_count: '续签过一次',
+    },
+    claims: [
+      { kind: 'N', source_tier: '自述' },
+      { kind: '2N', source_tier: '自述' },
+    ],
+    companies: [{ role: '签约主体', source_tier: '自述' }],
+    evidence: [],
+    ...over,
+    timeline: timelineOf(over),
+  });
+  const rowOf = (id: string, over: FactsOver = {}) =>
+    buildElementSheet(factsWith(over), LABOR.elementCards ?? [], ['N', '2N']).rows.find((r) => r.id === id)!;
+  const onFile = (over: FactsOver) => counterpartyDecisionOnFile(LABOR.counterpartyDecision, factsWith(over));
+  const DECISION_CARDS = ['N-2a', '2N-2', '2N-3'] as const;
+  /** 员工手册（「公司文件」类）+ 一条带类型的「公司动作」。 */
+  const companyAction = (title: string, eventType: string | null, tier = '自述'): FactsOver => ({
+    evidence: [{ category: '公司文件' }],
+    timeline: [{ kind: '公司动作', source_tier: tier, title, event_type: eventType }],
+  });
+
+  it('🔒 地板：前面那几十条词表用例确实一条类型都没带（夹具默认值变了 → 红）', () => {
+    expect(timelineOf({ timeline: [{ kind: '公司动作', source_tier: '自述' }] })[0].event_type).toBeNull();
+  });
+
+  it('🔒 地板：四处共用的那格判定真的挂着 acceptsType（去掉 → 红）', () => {
+    for (const id of DECISION_CARDS) {
+      const card = (LABOR.elementCards ?? []).find((c) => c.id === id)!;
+      expect(card.slotChecks?.[COMPANY_ACTION_SLOT]?.acceptsType, `${id} 的「公司动作」没有类型判定`).toEqual([
+        'company_termination',
+      ]);
+    }
+    expect(LABOR.counterpartyDecision?.slotChecks?.[COMPANY_ACTION_SLOT]?.acceptsType).toEqual([
+      'company_termination',
+    ]);
+    const n2b = (LABOR.elementCards ?? []).find((c) => c.id === 'N-2b')!;
+    expect(n2b.slotChecks?.['timeline:我方动作']?.acceptsType).toEqual(['my_forced_termination_notice']);
+  });
+
+  it('🔴 含糊文本 + company_termination ⇒ 三张卡抬起来、规则三触发（变异：去掉类型优先 → 红）', () => {
+    // 「上周三那个事」——谓词一个决定动词都认不出来，而登记的人已经说了它是哪一格。
+    const over = companyAction('上周三那个事', 'company_termination');
+    for (const id of DECISION_CARDS) {
+      expect(rowOf(id, over).status, `${id} 没有按类型认下来`).toBe('成立·待证');
+      expect(rowOf(id, over).missingSlots).toEqual([]);
+    }
+    expect(onFile(over), '事件只有自述档 ⇒ 那张纸还不算在档（门槛②不变）').toBe(false);
+    // 由《解除通知》一类材料提取写入（书证档）⇒ 「成立」，规则三这才触发
+    const doc = companyAction('上周三那个事', 'company_termination', '书证');
+    expect(rowOf('2N-2', doc).status).toBe('成立');
+    expect(onFile(doc)).toBe(true);
+  });
+
+  it('🔴 带「解除」字样 + company_notice ⇒ 仍是「缺失」，谓词不再跑（变异：改成"任一命中即过" → 红）', () => {
+    // 这一句谓词认得（「公司送达《解除劳动合同通知书》」是它的头号正样本），
+    // 但登记的人把它选成了「其他通知」。当他没说的形态是：系统按几个词覆盖掉本人的判断。
+    const over = companyAction(DECISION_EVENT, 'company_notice', '书证');
+    for (const id of DECISION_CARDS) {
+      const row = rowOf(id, over);
+      expect(row.status, `${id} 被谓词绕过类型抬成了 ${row.status}`).toBe('缺失');
+      expect(row.missingSlots).toEqual([COMPANY_ACTION_MISSING]);
+    }
+    expect(onFile(over)).toBe(false);
+  });
+
+  it('🔴 协商解除提议 / 协议**不计入**公司单方决定（沿用裁定：协商不是单方决定）', () => {
+    const over = companyAction('HR 递来《协商解除协议》，补偿写 N', 'company_negotiation', '书证');
+    for (const id of DECISION_CARDS) {
+      expect(rowOf(id, over).status, `${id} 把一份协商提议当成了公司作出的决定`).toBe('缺失');
+    }
+    expect(onFile(over)).toBe(false);
+  });
+
+  it('N-2a 的出路里说得出"已经签完字了怎么办"（禁令配出路，§7.7）', () => {
+    // 协商一致解除确实是第四十六条第二项那一档，而它不由 company_termination 承载。
+    // 不说的形态是：一个已经签完协议的人读到「缺失」，而清单从头到尾只在讲解除通知书。
+    const card = (LABOR.elementCards ?? []).find((c) => c.id === 'N-2a')!;
+    const line = card.typicalEvidence.find((e) => e.includes('协商一致'));
+    expect(line, 'N-2a 的出路里没有一句讲协商一致解除').toBeTruthy();
+    // 那句话要同时说清两件事：把已签的那份登记为证据、事件那一格选哪个类型。
+    expect(line).toContain('协商解除提议或协议');
+  });
+
+  it('🔴 我方动作同款双向：含糊 + 对的类型 ⇒ 过；写着「被迫解除」+ 异议函 ⇒ 不过', () => {
+    const n2b = (over: FactsOver) =>
+      buildElementSheet(
+        {
+          case: {
+            employed_from: '2020-03-01',
+            position: '后端工程师',
+            monthly_wage_fen: 2_500_000,
+            contract_count: '续签过一次',
+          },
+          claims: [{ kind: 'N', source_tier: '自述' }],
+          companies: [{ role: '签约主体', source_tier: '自述' }],
+          evidence: [{ category: '沟通记录' }],
+          timeline: timelineOf(over),
+        },
+        LABOR.elementCards ?? [],
+        ['N'],
+      ).rows.find((r) => r.id === 'N-2b')!;
+
+    expect(
+      n2b({
+        timeline: [
+          { kind: '我方动作', source_tier: '自述', title: '上周寄出去那份', event_type: 'my_forced_termination_notice' },
+        ],
+      }).status,
+    ).toBe('成立·待证');
+    const wrong = n2b({
+      timeline: [
+        { kind: '我方动作', source_tier: '书证', title: '发出被迫解除劳动合同通知书', event_type: 'my_objection' },
+      ],
+    });
+    expect(wrong.status, '谓词绕过了本人选的类型').toBe('缺失');
+  });
+
+  it('🔒 首诊那段整段自述落成 my_other ⇒ 照旧不参与判定（沿用裁定）', () => {
+    // 落地前靠标题字串把它摘出去（forcedTerminationNotice 的⓪，那道仍管着存量行）；
+    // 新行连谓词都不必跑——两条路都要通向同一个答案。
+    expect(LABOR.intakeEventType?.({
+      source: 'freeText',
+      kind: '我方动作',
+      title: LABOR.copy.site.intakeFreeTextTitle,
+      answers: {},
+    })).toBe('my_other');
   });
 });

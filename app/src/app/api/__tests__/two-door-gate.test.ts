@@ -290,6 +290,78 @@ describe.each(UNGATED.map((a) => [a.name, a] as const))('%s：不锁的能力两
 });
 
 /**
+ * **入参校验也要两门同形**（2026-09-10/11 台账「结构化决定」票）。
+ *
+ * 【为什么它值得一条判据】`event_type` 有四条写入路径，而这两道门是唯二"对方 agent 会照着
+ * 说明书打"的。校验只落在其中一门的形态是——同一份参数在 MCP 那侧被拒、在 REST 那侧
+ * 收下并落库（或反过来），两边都返回得体、都不报错，而错的那一边把一个谁都不认的取值写进了
+ * 时间线：判定对它既不按类型走（不在任何 acceptsType 里）、也不回落到谓词（它"有类型"），
+ * 于是那个槽从此恒缺，没有一处说得出为什么。
+ *
+ * 【变异臂】把 lib/cases/index.ts 里 resolveEventType 的校验去掉（认不出就落 null）
+ * ⇒ 第一条红（两门都回 201）；只在 REST 路由那侧读 body.event_type、MCP 那侧不读
+ * ⇒ 第二条红（落库那一列一门有值一门为 null）。
+ */
+describe('timeline_add 的 event_type：两门同判、错误体同形', () => {
+  const base = {
+    happened_at: '2026-09-02T10:00:00+08:00',
+    kind: '公司动作',
+    title: '收到解除通知书',
+  };
+
+  test('① 非法取值 ⇒ 两门都 400 INVALID_EVENT_TYPE、错误体逐字段一致，且都零写入', async () => {
+    const shared = caseOf.mcp;
+    const reply = {} as Record<Door, DoorReply>;
+    for (const door of DOORS) {
+      reply[door] = await callDoor(door, 'timeline_add', {
+        case_id: shared,
+        ...base,
+        event_type: '我自己拼的一个值',
+      });
+      expect(reply[door].ok, `${door} 这道门收下了一个谁都不认的取值`).toBe(false);
+      expect(reply[door].payload.error_code, door).toBe('INVALID_EVENT_TYPE');
+      // 三段式的第三段：把这一类允许的取值连同它们的说法一起列出来，
+      // 只回一句「取值非法」的形态是调用方原样重试、再收到同一句。
+      expect(String(reply[door].payload.message), `${door} 的错误体没有列出允许值`).toContain(
+        'company_termination',
+      );
+    }
+    expect(stable(reply.mcp.payload)).toEqual(stable(reply['rest-tools'].payload));
+    expect(
+      db.prepare('SELECT id FROM timeline_events WHERE case_id = ?').all(shared),
+      '被校验拦下时一行都不许落库',
+    ).toEqual([]);
+  });
+
+  test('② 合法取值 ⇒ 两门都写成功，落库那一列逐字段一致（变异：某一门不读这一格 → 红）', async () => {
+    const rows = (caseId: number) =>
+      db.prepare('SELECT kind, title, event_type FROM timeline_events WHERE case_id = ?').all(caseId);
+    for (const door of DOORS) {
+      const reply = await callDoor(door, 'timeline_add', {
+        case_id: caseOf[door],
+        ...base,
+        event_type: 'company_termination',
+      });
+      expect(reply.ok, `${door}：${JSON.stringify(reply.payload)}`).toBe(true);
+    }
+    expect(rows(caseOf.mcp)).toEqual(rows(caseOf['rest-tools']));
+    expect(rows(caseOf.mcp)).toEqual([
+      { kind: '公司动作', title: '收到解除通知书', event_type: 'company_termination' },
+    ]);
+  });
+
+  test('③ 不传这一格照旧落库、那一列为 null（判定回落到谓词，与本列落地前同行为）', async () => {
+    for (const door of DOORS) {
+      const reply = await callDoor(door, 'timeline_add', { case_id: caseOf[door], ...base });
+      expect(reply.ok, `${door}：${JSON.stringify(reply.payload)}`).toBe(true);
+      expect(
+        db.prepare('SELECT event_type FROM timeline_events WHERE case_id = ?').all(caseOf[door]),
+      ).toEqual([{ event_type: null }]);
+    }
+  });
+});
+
+/**
  * 重放豁免（设计稿 §4.2-4 / idempotent.isKnownReplay 抬头）。
  *
  * agent 按幂等约定重发**同一份参数**时，那枚令牌已经被第一次写入弄失效了。

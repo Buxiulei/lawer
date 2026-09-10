@@ -68,8 +68,11 @@ export { intakeInputFromBody } from './intake';
 // 发出去之前剥掉「发出前必读」尾注：导出（lib/drafts/export）与分享（lib/shares）都从这里取
 export { stripConfirmationFooter } from './drafts';
 
-/** 与 migrate.ts timeline_events.kind 注释逐字对齐 */
-export const TIMELINE_KINDS = ['公司动作', '我方动作', '系统动作', '期限'] as const;
+// 事件类别词表同样单独成文件（lib/cases/timeline-kinds.ts）：领域注册表要按这四个键
+// 校验各领域包声明的事件类型分组，而注册表被页面引用，从这里取会把整个 lib/db 拖进浏览器包。
+// 此处原样再导出，引用方不必改。
+export { TIMELINE_KINDS, type TimelineKind } from './timeline-kinds';
+import { TIMELINE_KINDS } from './timeline-kinds';
 
 // 里程碑词表同样单独成文件（lib/cases/milestones.ts）：领域包与驾驶舱轨道都要读它，
 // 而那两处引 lib/cases 会把整个 lib/db 拖进浏览器包。此处原样再导出，引用方不必改。
@@ -714,6 +717,45 @@ export function submitIntake(
 }
 
 /**
+ * 调用方声明的「这条记录是什么」→ 落库值。**四条写入路径共用的唯一校验点。**
+ *
+ * 【为什么是校验而不是"认不出就落 null"】落 null 的形态是：调用方照着自己拼的取值发过来、
+ * 回包 201，而这条记录在要件表上与"一格都没选"完全一样——他以为已经说清楚了，
+ * 判定却仍在猜那段字，且没有任何一处说得出为什么。这一列存在的理由就是"别再猜"。
+ *
+ * 【空串按"没选过"算，不算非法】表单里那个下拉不选时提交的就是空串，
+ * 与"整个字段没传"在语义上是同一件事；把它拒掉等于让不选类型这条路走不通。
+ *
+ * @param pack 这个案子所属领域的包（值域是它按 kind 声明的，共用层不认识任何取值）
+ * @param kind 已经校验过的事件类别
+ * @returns `eventType` 落库值；null = 没选过
+ */
+function resolveEventType(
+  pack: DomainPack,
+  kind: string,
+  raw: unknown,
+): Result<{ eventType: string | null }> {
+  if (raw === undefined || raw === null) return { ok: true, eventType: null };
+  const allowed = pack.timelineEventTypes[kind] ?? [];
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  if (value === '') return { ok: true, eventType: null };
+  if (allowed.some((t) => t.id === value)) return { ok: true, eventType: value };
+  // 三段式：缺什么 / 为什么缺 / 怎么办。**把这一类的允许值连同它们的说法一起列出来**——
+  // 只回一句「取值非法」的形态是，调用方原样重试一次，然后再收到同一句。
+  const options = allowed.map((t) => `${t.id}（${t.label}）`).join('、');
+  return fail(
+    400,
+    'INVALID_EVENT_TYPE',
+    allowed.length === 0
+      ? `event_type 传了「${value}」，而「${kind}」这一类在本案所属领域里不分型：一个取值都没有。` +
+          '这一类的记录不参与任何按类型的判定，把 event_type 整个不传即可（那条记录照样落库）。'
+      : `event_type 只能是「${kind}」这一类下的取值，「${value}」不在其中。` +
+          `取值域按案件所属领域与事件类别定，不是自由文本——现在可选的是：${options}。` +
+          '挑不准就整个不传（那条记录照样落库，只是要件判定会回去读你写的那段字）。',
+  );
+}
+
+/**
  * 加一条时间线事件。只追加，写错了补一条新的（spec §7），本模块不提供改/删。
  *
  * 【幂等】写接口无幂等、agent 重试即双写（生产 case2 实测）。两道去重都在这一个写入口上，
@@ -736,6 +778,13 @@ export function addTimelineEvent(
     clientRef?: unknown;
     /** 调用方声明的来源档位（省略 ⇒ 自述）。值域 lib/cases/source-tier.SOURCE_TIERS */
     sourceTier?: unknown;
+    /**
+     * 登记方声明的「这条记录是什么」（省略 / 空串 ⇒ 没选过，判定回落到谓词）。
+     * 值域按**案件领域 + kind** 取自领域包，非法值一律 400，不静默落 null——
+     * 静默的形态是：调用方照说明书填了一个自己拼的取值，回包 201，
+     * 而那条记录在要件表上与"什么都没选"完全一样，没有一处说得出为什么。
+     */
+    eventType?: unknown;
     /**
      * 谁写进来的。**由外壳按身份填，不收调用方的值**（见 resolveOrigin 的长注释）。
      * 省略 ⇒ user，那是网页登录态与首诊批量写的正确答案。
@@ -760,6 +809,12 @@ export function addTimelineEvent(
   // 那样同一份参数第一次被拒、第二次成功，而调用方看不出差别在哪。
   const origin = resolveOrigin(input.sourceTier, input.assertedBy ?? DEFAULT_ASSERTED_BY);
   if (isFailure(origin)) return origin;
+  // 事件类型的值域按**这个案子所属领域**取（同 stage / milestone 的既定分工）：
+  // 引死一份词表的形态是——第二个领域的案子只能选上一个领域的类型，而错误信息读起来完全正常。
+  const packed = packForCase(found);
+  if (isFailure(packed)) return packed;
+  const eventType = resolveEventType(packed.pack, input.kind, input.eventType);
+  if (isFailure(eventType)) return eventType;
 
   // ① 带 client_ref 且命中 ⇒ 直接回既有行（原有语义不变）。
   if (clientRef) {
@@ -783,6 +838,7 @@ export function addTimelineEvent(
     detail: trimmedOrNull(input.detail),
     clientRef,
     origin,
+    eventType: eventType.eventType,
   });
   const event = store.listTimelineEvents(db, input.caseId, TIMELINE_MAX_LIMIT).find((e) => e.id === id)!;
   // 去重命中的两条分支都在上面 return 掉了，走到这里的一定是真新增的一条

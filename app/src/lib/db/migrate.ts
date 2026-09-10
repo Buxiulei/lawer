@@ -1566,6 +1566,20 @@ export function runMigrations(db: Database.Database): void {
       ON timeline_events (case_id, client_ref) WHERE client_ref IS NOT NULL;
   `);
 
+  // timeline_events.event_type：**这条记录是什么**——登记时由用户（或他的 agent）从一份
+  // 闭合枚举里选的那一格。取值域由案件所属领域包按 kind 声明（DomainPack.timelineEventTypes），
+  // 本层不认识任何一个取值，校验在 lib/cases 的 addTimelineEvent（同 kind / source_tier 的既定分工）。
+  //
+  // 【为什么要它】要件判定此前只能读那条记录自带的一段自由文本，靠谓词去猜它说的是不是这件事。
+  // 用户叙事的变体无穷，谓词每收一轮都还有漏网；而登记的人本来就知道自己记的是什么。
+  // 有这一格就不猜（判定优先读它），没有才回落到谓词。
+  //
+  // 【为什么可空、不回填】存量行没有人选过这一格，回填等于替他们做了一次判断——
+  // 而那正是这一列要取代的那件事。NULL 是**语义正确**的取值：它说的是"这条没人说过是什么"，
+  // 判定据此走回落，与本列落地前逐字同行为。不加 DB 级 CHECK（改 CHECK 要重建表，
+  // 且取值域按领域变，库里锁不住），同 milestone / intake_stage。
+  addColumnIfMissing(db, 'timeline_events', 'event_type', 'TEXT');
+
   // cases 的首诊四列：**首诊填的那几个数字要有地方落**。
   //
   // 【为什么非加不可】首诊六步里，入职日期与月工资是 N/2N/N+1 的**计算输入**，

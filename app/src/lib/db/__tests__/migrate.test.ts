@@ -815,6 +815,49 @@ describe('存量迁移区', () => {
     ).toEqual({ domain: 'labor' });
   });
 
+  /**
+   * `timeline_events.event_type`（2026-09-10/11 台账「结构化决定」票）。
+   *
+   * 【这一列的判据要盯的三件事】它是可空、不回填、无 CHECK 的一列——
+   *   · **不回填**：回填等于替存量行做了一次判断，而那正是这一列要取代的那件事；
+   *     NULL 说的是"这条没人说过是什么"，判定据此回落到谓词，与落地前逐字同行为。
+   *     回填一个值的形态是：那几行从此**压过**谓词、连兜底都不再跑，而库里每一行都读得通。
+   *   · **可空**：这个迁移框架没有事务，加无默认值的 NOT NULL 列会半途炸。
+   *   · **可重入**：裸 ALTER 第二遍会 duplicate column name。
+   */
+  it('timeline_events.event_type：老库补列可重入、可空、存量行一律 NULL（变异：加一句回填 → 红）', () => {
+    const db = newDb();
+    db.exec('ALTER TABLE timeline_events DROP COLUMN event_type');
+    const caseId = mkCase(db, mkUser(db));
+    db.prepare(
+      "INSERT INTO timeline_events (case_id, happened_at, kind, title) VALUES (?, '2026-08-20 09:00:00', '公司动作', '收到解除通知')",
+    ).run(caseId);
+
+    const cols = () =>
+      (db.prepare('PRAGMA table_info(timeline_events)').all() as { name: string; notnull: number }[]).filter(
+        (c) => c.name === 'event_type',
+      );
+    expect(cols()).toHaveLength(0);
+
+    runMigrations(db);
+    expect(cols()).toHaveLength(1);
+    expect(cols()[0].notnull, '这一列必须可空：无事务迁移加 NOT NULL 会半途炸').toBe(0);
+    runMigrations(db); // 二次幂等：裸 ALTER 会在这里报 duplicate column name
+    expect(cols()).toHaveLength(1);
+
+    // 存量行一律 NULL——不回填任何值（理由见上）
+    expect(db.prepare('SELECT title, event_type FROM timeline_events').all()).toEqual([
+      { title: '收到解除通知', event_type: null },
+    ]);
+    // 新插入的行不传这一格时同样是 NULL（没有 DDL 默认值替调用方选一个）
+    db.prepare(
+      "INSERT INTO timeline_events (case_id, happened_at, kind, title) VALUES (?, '2026-08-21 09:00:00', '我方动作', '发了异议函')",
+    ).run(caseId);
+    expect(
+      db.prepare("SELECT event_type FROM timeline_events WHERE title = '发了异议函'").get(),
+    ).toEqual({ event_type: null });
+  });
+
   it('老库补列幂等：跑两遍只补一次，原有行数据不丢', () => {
     // 模拟一个 intake_stage 落地之前的老库：建全量表后把该列摘掉，再灌一条存量线程
     const db = newDb();
