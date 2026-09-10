@@ -586,6 +586,8 @@
 
 **2026-09-10 上产 dcacd97b（S6 backlog ①② 四提交 + 台账）**：wt-int d12f2983 闸链全绿（全量 7380、eval 543、索引/引文/原件/gen:docs 无 diff）；CI run 34464416124 success；生产 PRE 9d8f9557 → POST dcacd97b，库备份，构建 rc=0，冒烟：首页/条款/登录 200、sidecar ok、两门 401、labor.ts 新谓词在、app.log 游标 471 后零错误行。用户面变化：N-2b 被迫解除路径只认「我方发出的被迫解除/§38/因欠薪未缴社保解除通知」（收件与格「给/向 HR·单位·老板·人事·用人单位」照认；公司作出的解除、协商解除、被迫离职无事由、异议函/催薪函一律不算；首诊自由文本自动落档不参与判定，缺口提示「请把发出通知记成一条时间线事件」）；eval 快集 16 剧本（S16「风闻裁员只传员工手册」两幕，非红线，LLM 真跑归评测官下一批）。当日第五版，生产 30fbfdcb → dcacd97b。
 
+**2026-09-10 晚 派「公司动作」对称谓词票（wf company-action-predicate，ws/company-action，基线 dcacd97b）**：① companyTerminationDecision 谓词（只认解除/终止/辞退/开除/解聘/不续签类决定；调岗/降薪/约谈/警告/搬迁/停工待岗/协商解除提议/未定态一律不认），COUNTERPARTY_DECISION_SLOTS 升级为 {slots, slotChecks} 三卡 + 领域包共用；共享层 registry 增谓词声明，counterpartyDecisionOnFile 也过谓词（「在档」与「成立」同真同假）；② 公司一侧主语词表一份共用并扩词（用人单位/人力资源部/法务/领导/经理/总经理/主管/甲方/老板娘…），五条复审叙事在 N-2b 归缺失，我方发出正例零回退；③ FORCED_CAUSE 口语化欠薪/社保形态。晚间汇总邮件已发主理人（覆盖第三至五版）。若复审在 Fable 限额（20:30 恢复）上死，按 runId 续跑。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
