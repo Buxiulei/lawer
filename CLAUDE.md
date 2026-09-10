@@ -58,7 +58,7 @@ cd sidecar && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 **数据库迁移没有事务。** `lib/db/migrate.ts` 是一串裸 `db.exec()`，首个请求时懒执行。允许：`CREATE TABLE IF NOT EXISTS`、新列走 `addColumnIfMissing`（可空、不回填）、读侧视图走 `READ_VIEWS` + `ensureReadViews`（唯一放行的 `DROP VIEW IF EXISTS`，开库时比对 `sqlite_master` 不一致点名重建）。禁止：改列类型、数据回填、拆表、加无默认值的 `NOT NULL`——`migrate-idempotency-guard` 静态扫源码拦。
 
-**模型路由与出境。** `lib/llm/routing.config.ts` 是策略契约（型号、档位、降级链），`router.ts` 只查表；`providers/` 有 anthropic / openai / deepseek / dashscope / relay。PII 脱敏拦在 `createProvider` 工厂出口，出境供应商（anthropic、openai、relay）把身份证/手机/银行卡换占位符，映射只活在单次请求闭包。是否允许境外模型由 `lib/auth/consent.ts` 的 `overseasModelsAllowed` 唯一裁定（开关 ∧ 有效同意 ∧ `termsLive()`），`RouteOptions.overseasAllowed` 缺省 `false`。协议生效旗 `LAWER_TERMS_LIVE` 默认关。
+**模型路由与出境。** `lib/llm/routing.config.ts` 是策略契约（型号、档位、降级链），`router.ts` 只查表；`providers/` 有 anthropic / openai / deepseek / dashscope / relay。PII 脱敏拦在 `createProvider` 工厂出口，出境供应商（anthropic、openai、relay）把身份证/手机/银行卡换占位符，映射只活在单次请求闭包。是否允许境外模型由 `lib/auth/consent.ts` 的 `overseasModelsAllowed` 唯一裁定（开关 ∧ 有效同意 ∧ `termsLive()`），`RouteOptions.overseasAllowed` 缺省 `false`。协议生效旗默认关，唯一读取口是 `termsLive()`（`lib/auth/consent.ts`），别处不得再读那个环境变量（有守卫钉住，连文档里写它的名字都会红）。
 
 **sidecar 与部署。** app 经 `lib/evidence/sidecar-client.ts` 调 `SIDECAR_URL`（仓内缺省 `http://sidecar:8100`）；接口 `/health /tsa /pades /signer /evidence-pdf /draft-pdf /verify /ocr /asr /video`，OCR 模型由 `OCR_MODEL` 决定（默认 `qwen3-vl-plus`），凭据 `DASHSCOPE_API_KEY`。`deploy/` 描述的是 docker-compose 三容器拓扑（caddy → web → sidecar）；当前生产实际是裸 systemd（`lawer-app` :3010 / `lawer-sidecar` :8110，路径 `/data/lawer/…`，应用日志在 `/data/lawer/logs/app.log` 而非 journalctl），滚版流程与每次冒烟记录在 `docs/tasks/BOARD.md`。`deploy/node-backlog-preload.js` 是直接上生产的可执行代码，它的测试跟主套件一起跑。
 
