@@ -231,6 +231,58 @@ describe('事实槽的寻址', () => {
   });
 });
 
+describe('槽位取值判定：字段有值 ≠ 事实成立', () => {
+  // 【它守什么】复审 2026-09-10 第二条：`basics:` 在 resolveSlot 里只判**填没填**，
+  // 于是任何非空取值都算这个要件有自述支撑。领域包给了 slotChecks 的槽，取值说了不算数时
+  // 要按〔未记录〕走，并以卡片给的名字点名——否则用户明说"签过两次合同"，
+  // 要件表还写着「仍没有订立书面合同：成立·待证」。
+  const checked = (over: Partial<ElementCard> = {}) =>
+    card({
+      satisfiedBy: ['basics:contract_count'],
+      slotChecks: { 'basics:contract_count': { accepts: (raw) => raw.includes('没'), missingAs: '无合同期间' } },
+      ...over,
+    });
+
+  it('取值判得过 ⇒ 照旧「成立·待证」（首诊那几项恒是自述档）', () => {
+    const sheet = buildElementSheet(facts({ case: { employed_from: null, position: null, monthly_wage_fen: null, contract_count: '没签' } }), [checked()]);
+    expect(only(sheet).status).toBe('成立·待证');
+    expect(only(sheet).missingSlots).toEqual([]);
+    expect(only(sheet).selfReportedSlots).toEqual(['basics:contract_count']);
+  });
+
+  it('取值判不过 ⇒「缺失」，且 missingSlots 点的是卡片给的那个名字（变异：只判填没填 → 红）', () => {
+    const sheet = buildElementSheet(facts({ case: { employed_from: null, position: null, monthly_wage_fen: null, contract_count: '2 次' } }), [checked()]);
+    expect(only(sheet).status).toBe('缺失');
+    expect(only(sheet).missingSlots).toEqual(['无合同期间']);
+    // 它是〔未记录〕不是〔不成立〕：这一格填了字，只是填的不是这件事
+    expect(only(sheet).selfReportedSlots).toEqual([]);
+  });
+
+  it('这一格还空着 ⇒ 同样用卡片给的名字点名（沿用槽串的形态是用户读到 basics:contract_count）', () => {
+    const sheet = buildElementSheet(facts(), [checked()]);
+    expect(only(sheet).status).toBe('缺失');
+    expect(only(sheet).missingSlots).toEqual(['无合同期间']);
+  });
+
+  it('判定挂在一个没有"取值"的槽上 = 配置错误，点名不静默（变异：当作判过了 → 红）', () => {
+    const sheet = buildElementSheet(
+      facts({ claims: [{ kind: '某项', source_tier: '书证' }] }),
+      [card({ satisfiedBy: ['claim:某项'], slotChecks: { 'claim:某项': { accepts: () => true, missingAs: '某物' } } })],
+    );
+    expect(only(sheet).status).toBe('缺失');
+    expect(only(sheet).unresolvedSlots).toEqual(['claim:某项']);
+    expect(only(sheet).missingSlots).toEqual(['claim:某项']);
+  });
+
+  it('没给 slotChecks 的槽一个字都不变（变异：对所有 basics 槽都跑判定 → 红）', () => {
+    const sheet = buildElementSheet(
+      facts({ case: { employed_from: null, position: null, monthly_wage_fen: null, contract_count: '2 次' } }),
+      [card({ satisfiedBy: ['basics:contract_count'] })],
+    );
+    expect(only(sheet).status).toBe('成立·待证');
+  });
+});
+
 describe('空要件卡的降级', () => {
   it('没有卡片 ⇒ rendered=false 且零行（变异：回 rendered:true → 用户读到"要件：（空）"，像"一个要件都不成立"）', () => {
     const sheet = buildElementSheet(facts(), []);

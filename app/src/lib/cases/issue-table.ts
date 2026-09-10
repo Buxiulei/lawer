@@ -17,7 +17,7 @@
 // 【为什么是纯函数】同一张要件表 + 同一份档案标记恒得同一张争点表：不看时间、不看模型、不查库。
 // 掺一点运行时状态进来的形态是——回放同一轮对话得到不同的争点表，于是"模型发明了争点"
 // 与"派生逻辑当时给了这条"再也分不开。
-import type { Burden, ElementRow, ElementStatus } from './elements';
+import { resolveSlot, type Burden, type ElementFactsView, type ElementRow, type ElementStatus } from './elements';
 
 /**
  * 一行争点是被哪条规则捞进来的。**逐条留痕，不合并成一个 boolean**：
@@ -27,8 +27,8 @@ import type { Burden, ElementRow, ElementStatus } from './elements';
  * · element_unsettled     —— 这个要件还没成立（缺失 / 成立·待证 / 不成立）。
  * · counterparty_asserted —— 对方就这个要件主张过什么（对方的说法与我方事实分开存，
  *                            见 §1.3「顺着用户的错误前提走」那一行）。
- * · burden_on_other_side  —— 举证责任在对方（含两种倒置），而档案里已经有对方的书面决定：
- *                            那份决定里写的理由就是庭上要打的那一点。
+ * · burden_on_other_side  —— 举证责任**整条**在对方（对方举证 / 限定事项的倒置），
+ *                            而档案里已经有对方的书面决定：那份决定里写的理由就是庭上要打的那一点。
  */
 export const ISSUE_REASONS = [
   'element_unsettled',
@@ -37,12 +37,17 @@ export const ISSUE_REASONS = [
 ] as const;
 export type IssueReason = (typeof ISSUE_REASONS)[number];
 
-/** 举证责任落在对方身上的三种编码（含两种倒置）。规则三只认这三个值。 */
-const OTHER_SIDE_BURDENS: readonly Burden[] = [
-  'respondent',
-  'reversed_interpretation',
-  'reversed_procedure_rules',
-];
+/**
+ * 规则三只认这两个编码：**举证责任整条落在对方**的那两种。
+ *
+ * 【为什么 reversed_procedure_rules（证据偏在）不在里面】规则三给的下一步是
+ * 「把他那份书面决定与上面写的理由原样固定下来」——那句话只有在"这件事该由对方证"时成立。
+ * 偏在讲的是另一件事：一般规则仍是谁主张谁举证，只不过**那份记录**在对方手里、
+ * 他应当提供、不提供的承担不利后果。把它一起捞进来的形态是：
+ * 档案里随便有一份公司文件，「计算基数（工资流水）」也进争点表并被指示去固定那份书面决定——
+ * 而那份决定上一个字都不会写工资基数，用户照着做等于白跑一趟。
+ */
+const DECISION_BURDENS: readonly Burden[] = ['respondent', 'reversed_interpretation'];
 
 export interface IssueRow {
   /** 稳定 id = 要件 id（一个要件最多一行争点）。报告与正文按它对账，不认中文措辞 */
@@ -105,6 +110,27 @@ export interface IssueTableMarks {
   counterpartyDecisionOnFile?: boolean;
 }
 
+/**
+ * 对方那份书面决定在不在档（规则三的第二个条件）。**唯一入口**。
+ *
+ * 【为什么它在这里，而不是在两个调用方各写一遍】此前报告（lib/cases/report.ts）与
+ * 要件族能力（lib/capabilities/families/elements.ts）各有一份同形的三行判断。
+ * 两份同形代码的失效方式是：判据钉住其中一份，另一份被改坏了没有任何东西会红——
+ * 复审第三条点的正是这个（把 report 那份换成常量 `true`，report-derived 仍 9/9 绿）。
+ *
+ * @param slot 领域包声明的 `counterpartyDecisionSlot`。**共用层不认识它在某个行当里叫什么**，
+ *   所以这里只收一个槽串；省略（领域没声明）⇒ 恒 false，规则三整条不生效。
+ * @param facts 与要件表**同一份**档案子集：绕开 resolveSlot 自己写一遍"这个槽有没有被填上"的形态是，
+ *   那份判断与要件表用的不是同一把尺，于是规则三会在要件表说"缺"的时候说"在档"。
+ */
+export function counterpartyDecisionOnFile(
+  slot: string | undefined,
+  facts: ElementFactsView,
+): boolean {
+  if (slot === undefined) return false;
+  return resolveSlot(slot, facts) != null;
+}
+
 /** 出路那一句的通用模板。行当名词由调用方从要件卡带进来，这里只管句式。 */
 function nextStepOf(row: ElementRow, reasons: readonly IssueReason[]): string {
   const evidence = row.typicalEvidence.filter((e) => e.trim()).join('、');
@@ -158,7 +184,7 @@ export function buildIssueTable(
     if (row.status !== '成立') reasons.push('element_unsettled');
     const asserted = marks.counterpartyAssertions?.[row.id];
     if (asserted !== undefined && asserted.trim() !== '') reasons.push('counterparty_asserted');
-    if (marks.counterpartyDecisionOnFile === true && OTHER_SIDE_BURDENS.includes(row.burden)) {
+    if (marks.counterpartyDecisionOnFile === true && DECISION_BURDENS.includes(row.burden)) {
       reasons.push('burden_on_other_side');
     }
     if (reasons.length === 0) continue;

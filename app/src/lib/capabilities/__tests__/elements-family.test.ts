@@ -92,6 +92,26 @@ describe('element_sheet_get：读要件表', () => {
     );
   });
 
+  it('§38 被迫解除那条路的 burden_label **不许**是「公司来证」（复审 2026-09-10 第一条）', () => {
+    // REST/MCP 这一面回的是 burden_label 原文，模型据它对用户说"这件事谁来证"。
+    // 印成「公司来证」的后果与事实卡那一面一样：走 §38 的用户不去备欠薪/未缴社保的初步证明。
+    db.prepare("INSERT INTO claims (case_id, kind, amount_fen, status) VALUES (?, 'N', 0, 'draft')").run(caseId);
+    const rows = call('element_sheet_get', alice, { case_id: caseId, claim_kind: 'N' }).rows as {
+      id: string;
+      burden: string;
+      burden_label: string;
+    }[];
+    const forced = rows.find((r) => r.id === 'N-2b');
+    expect(forced, '回包里没有 N-2b（§38 被迫解除）').toBeTruthy();
+    expect(forced!.burden).toBe('claimant');
+    expect(forced!.burden_label, '§38 那条路被印成了对方举证').not.toContain('公司来证');
+    // 【反臂】N-2a（用人单位作出的决定）必须仍是「公司来证」——
+    // 没有它，"整列 burden_label 都空了"也会让上面那句绿。
+    const decided = rows.find((r) => r.id === 'N-2a');
+    expect(decided, '回包里没有 N-2a（用人单位决定型）').toBeTruthy();
+    expect(decided!.burden_label).toContain('公司来证');
+  });
+
   it('别人的案子读不到', () => {
     const res = call('element_sheet_get', bob, { case_id: caseId });
     expect(res.ok).toBe(false);
@@ -108,6 +128,61 @@ describe('issue_list：争点表', () => {
       expect(i.nextStep.trim(), `${i.id} 没有下一步`).not.toBe('');
       expect(i.anchors.length, `${i.id} 没有依据锚点`).toBeGreaterThan(0);
     }
+  });
+
+  /** 往档案里放一件某类别的材料（真走 files + evidence 两张表，与上传那条路同形）。 */
+  function addEvidence(category: string, name = `${category}.pdf`): void {
+    const fileId = Number(
+      db
+        .prepare("INSERT INTO files (sha256, size, mime, enc_path) VALUES (?, 1, 'application/pdf', '/dev/null')")
+        .run(`sha-${category}-${name}`).lastInsertRowid,
+    );
+    db.prepare(
+      `INSERT INTO evidence (case_id, user_id, file_id, name, category, status)
+       VALUES (?, ?, ?, ?, ?, '已上传')`,
+    ).run(caseId, alice.uid, fileId, name, category);
+  }
+
+  it('规则三反臂：书证在档但类别 ≠ 领域包声明的「对方书面决定」⇒ 不算在档（把 onFile 改成常量 true / evidence.length>0 → 红）', () => {
+    // 【它守什么】复审 2026-09-10 第三条：「在不在档」此前在报告与本能力里各写了一遍，
+    // 而没有任何判据钉住它——换成常量 true，两侧的既有判据全绿。
+    // 现在两侧共用 lib/cases/issue-table.counterpartyDecisionOnFile，这一条钉的就是那个入口。
+    expect(LABOR.counterpartyDecisionSlot).toBe('evidence:公司文件');
+    addEvidence('工资'); // 有书证，但不是那张写着理由的纸
+    const before = (call('issue_list', alice, { case_id: caseId }).issues as {
+      id: string;
+      reasons: string[];
+    }[]).find((i) => i.id === '2N-3');
+    expect(before, '2N-3 不在争点表里（它此刻应当因"缺失"进表）').toBeTruthy();
+    expect(
+      before!.reasons,
+      '档案里只有工资流水，却说"对方的书面决定已在档"——规则三凭空成立了',
+    ).not.toContain('burden_on_other_side');
+
+    // 【正臂】换成「公司文件」当场就带上，证明上面那句不是"这条规则根本没接上"
+    addEvidence('公司文件', '解除通知.pdf');
+    const after = (call('issue_list', alice, { case_id: caseId }).issues as {
+      id: string;
+      reasons: string[];
+    }[]).find((i) => i.id === '2N-3')!;
+    expect(after.reasons).toContain('burden_on_other_side');
+  });
+
+  it('规则三不碰偏在型：对方书面决定在档时，「计算基数」不被指示去固定那份决定（复审第三条 b）', () => {
+    // 2N-5 是 reversed_procedure_rules（工资支付记录在公司手里），不是"这件事该由公司证"。
+    // 把它一起捞进来的形态是：用户被指示去固定那份解除通知——而那张纸上一个字都不会写工资基数。
+    const card = (LABOR.elementCards ?? []).find((c) => c.id === '2N-5')!;
+    expect(card.burden).toBe('reversed_procedure_rules');
+    addEvidence('公司文件', '解除通知.pdf');
+    addEvidence('工资', '工资流水.pdf'); // 让 2N-5 变成「成立」，规则一不再捞它
+    const rows = call('issue_list', alice, { case_id: caseId }).issues as {
+      id: string;
+      reasons: string[];
+      nextStep: string;
+    }[];
+    const base = rows.find((i) => i.id === '2N-5');
+    expect(base?.reasons ?? [], '偏在型被规则三捞进了争点表').not.toContain('burden_on_other_side');
+    expect(base, '「计算基数」已经成立又没有别的理由，它就该整行不在表上').toBeUndefined();
   });
 
   it('回包里那句纪律说清了「正文提到的争点 ⊆ 争点表」', () => {

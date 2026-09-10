@@ -25,8 +25,14 @@ import * as caseStore from '@/lib/db/cases';
 import * as agentStore from '@/lib/db/agent';
 import { getDomainPack, type DomainPack, type ReportSectionSpec } from '@/lib/domains/registry';
 
-import { buildElementSheet, resolveSlot, type ElementRow } from './elements';
-import { buildIssueTable, issueMarker, issueMarkersIn, type IssueRow } from './issue-table';
+import { buildElementSheet, type ElementRow } from './elements';
+import {
+  buildIssueTable,
+  counterpartyDecisionOnFile,
+  issueMarker,
+  issueMarkersIn,
+  type IssueRow,
+} from './issue-table';
 
 import {
   countStaleTally,
@@ -360,12 +366,38 @@ function derivedIssues(input: ReportInput, pack: DomainPack): { rows: readonly I
   const sheet = buildElementSheet(facts, cards, kinds);
   if (!sheet.rendered) return null;
   // 对方那份书面决定在不在档：槽位由领域包声明（共用层不认识它在这个行当里叫什么），
-  // 在不在档由**同一个 resolveSlot** 判——绕开它自己写一遍"这个槽有没有被填上"的形态是：
-  // 那份判断与要件表用的不是同一把尺，于是规则三会在要件表说"缺"的时候说"在档"。
-  const slot = pack.counterpartyDecisionSlot;
-  const onFile = slot !== undefined && resolveSlot(slot, facts) != null;
+  // 判定走 issue-table 的唯一入口（那里说明了为什么不许在这里再写一遍同形的三行）。
+  const onFile = counterpartyDecisionOnFile(pack.counterpartyDecisionSlot, facts);
   const table = buildIssueTable(sheet.rows, { counterpartyDecisionOnFile: onFile }, true);
   return { rows: table.rows, elements: sheet.rows };
+}
+
+/**
+ * 从要件表派生的那几节（**source 英文键**，不是标题——标题归领域包，本文件不认识它）。
+ * 与 draftSection 里调 derivedIssues 的那两个分支同值：多一节少一节都要有人来改这一行。
+ */
+const DERIVED_SOURCES: readonly ReportSectionSpec['source'][] = ['disputes', 'risks'];
+
+/**
+ * 派生节里那些**顶格 `- ` 却不带 `〔争点 id〕` 标记**的行——从第一条带标记的条目起算。
+ *
+ * 【为什么从第一条标记起算，而不是整节数】派生节的初稿本来就以几行说明开头
+ *（「下面 N 条由要件表派生……」「还没立住的要件 N 条……」「基本盘缺 2 项……」），
+ * 整节数的形态是初稿自己就违规，于是这道闸从上线第一天起就得关掉。
+ * 从第一条条目起算之后，说明照旧写在上面，而**条目区里多出来的那一条**跑不掉——
+ * 复审第四条点的正是它：在有标记的节末追加一条「- 另外公司还涉嫌…」，此前 200 放行。
+ *
+ * 【为什么只看顶格】`  - 下一步：…` 是条目自己的子行，缩进着；把子行也算进来等于
+ * 不许模型在某一条下面多写一句话，而那正是"改写成人话"要允许的事。
+ */
+function strayDerivedBullets(text: string): string[] {
+  const lines = text.split('\n');
+  const first = lines.findIndex((l) => l.startsWith('-') && issueMarkersIn(l).size > 0);
+  if (first < 0) return [];
+  return lines
+    .slice(first + 1)
+    .filter((l) => /^-\s/.test(l) && issueMarkersIn(l).size === 0)
+    .map((l) => l.trim());
 }
 
 /** 一行争点的正文。**行首那个 `〔争点 id〕` 是派生标记**，改措辞可以，删掉它就对不上账了。 */
@@ -636,8 +668,19 @@ export function updateSection(
   // 判定落在**不随措辞变**的 `〔争点 id〕` 标记上（不是比对整段文本）——
   // 比文本的形态是：模型把机械句式写成人话就被判成"改了条目"，于是这道闸要么天天误报、
   // 要么被关掉。要让某条争点消失，去改档案（补一份证据、登记一条诉求），报告会跟着重生成。
+  // 【为什么"本领域有要件卡"也要开闸，而不是只看已存内容里有没有标记】
+  // 派生集**可以是空的**：本案要件全部成立那一段，这一节写的是「全部成立，派生不出争点」。
+  // 只在 before.size>0 时开闸的形态是——正是那一段，模型可以任意写入三条自造争点
+  //（哪怕带着伪标记），回包 200 落库。空集不是"这道闸不适用"，它是**一个要对齐的集合**。
+  const sectionSpec = spec.specs.find((s) => s.title === title);
+  const pack = getDomainPack(caseRow.domain)!; // specsFor 已经拦过取不到包的情况
+  const derivedSection =
+    sectionSpec !== undefined &&
+    DERIVED_SOURCES.includes(sectionSpec.source) &&
+    (pack.elementCards?.length ?? 0) > 0;
+
   const before = issueMarkersIn(sections[title] ?? '');
-  if (before.size > 0) {
+  if (before.size > 0 || derivedSection) {
     const after = issueMarkersIn(content);
     const added = [...after].filter((id) => !before.has(id));
     const removed = [...before].filter((id) => !after.has(id));
@@ -648,8 +691,28 @@ export function updateSection(
         `「${title}」的条目是服务端从要件表派生的，本次没有写入。` +
           (added.length ? `多出来的条目：${added.map(issueMarker).join('、')}（凭空多一条争点＝发明争点）。` : '') +
           (removed.length ? `被删掉的条目：${removed.map(issueMarker).join('、')}（少一条＝漏答）。` : '') +
+          (before.size === 0
+            ? '本案这一节此刻**一条派生争点都没有**（要件全部成立，或还没登记诉求），所以它只能是空集。'
+            : '') +
           '这一节允许你把机械句式改写成人话——把每个 〔争点 …〕 标记原样留在它那一条的行首即可；' +
           '要让某一条真的消失或新增，去改档案（补证据、登记诉求、记一条对方的书面决定），这一节会跟着重生成。',
+      );
+    }
+  }
+  // 【标记对上了还不算完】增删条目那把尺只比标记集合，比不出**不带标记的新条目**：
+  // 在有标记的节末追加一条「- 另外公司还涉嫌…」，标记集合一个字没变，而页面上多了一条争点。
+  if (derivedSection) {
+    const stray = strayDerivedBullets(content);
+    if (stray.length) {
+      return fail(
+        400,
+        'REPORT_SECTION_DERIVED',
+        `「${title}」的条目区里多了 ${stray.length} 条不带 〔争点 …〕 标记的条目，本次没有写入：` +
+          `${stray.slice(0, 3).map((s) => `「${s.slice(0, 40)}」`).join('、')}。` +
+          '缺什么：这几条没有派生出处。为什么缺：这一节的条目由服务端从要件表派生，' +
+          '不带标记的条目说不出它是被哪条规则捞进来的——那就是发明争点。' +
+          '怎么办：要补一句说明，写在第一条条目**之前**，或缩进成某一条自己的子行（`  - …`）；' +
+          '要真的多一条争点，去改档案（补证据、登记诉求、记一条对方的书面决定），这一节会跟着重生成。',
       );
     }
   }

@@ -184,6 +184,109 @@ describe('② 派生集只许改措辞，不许增删条目', () => {
     expect(r.message).toContain('漏答');
   });
 
+  test('派生集为空时也要比对：本案一条派生争点都没有 ⇒ 写入自造争点被拒（变异：把闸改回 if (before.size > 0) → 红）', () => {
+    // 【为什么这一格此前是空的】原来的闸只在"已存内容里 ≥1 个标记"时才启动。
+    // 派生集为空的那一段（本案还没登记诉求，或要件全部成立）已存内容里一个标记都没有，
+    // 于是模型可以往「争议焦点」里写三条自造争点、带上伪标记，200 落库。
+    // **空集不是"这道闸不适用"，它是一个要对齐的集合。**
+    // 这里用"还没登记诉求"这一形态：labor 的 2N-1/N-1 挂着 basics:employed_from（恒自述档），
+    // 所以"要件全部成立"在本领域今天到不了，两者走的是同一个分支（before.size === 0）。
+    const before = sections();
+    expect(issueMarkersIn(before.sections[DISPUTES]).size, '这个案子不该有派生争点').toBe(0);
+    const r = updateSection(db, {
+      caseId,
+      userId: uid,
+      section: DISPUTES,
+      content: `- ${issueMarker('我自己想出来的争点')}公司还涉嫌偷税漏税\n- ${issueMarker('2N-3')}解除理由存疑`,
+      reason: '把我判断出来的争点写进去',
+      baseVersion: before.version,
+      updatedBy: 'agent',
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errorCode).toBe('REPORT_SECTION_DERIVED');
+    expect(r.message).toContain('发明争点');
+    expect(r.message, '没说清这一节此刻只能是空集').toContain('空集');
+    expect(sections().sections[DISPUTES]).toBe(before.sections[DISPUTES]);
+  });
+
+  test('条目区里追加一条不带标记的 bullet ⇒ REPORT_SECTION_DERIVED（变异：删掉 strayDerivedBullets 那道闸 → 红）', () => {
+    // 【为什么标记集合那把尺拦不住它】追加的那一条**没有标记**，所以增删比对一个字都没变，
+    // 而页面上确实多了一条争点（复审 2026-09-10 第四条的第二个失败样本）。
+    addClaim('2N');
+    const before = sections();
+    expect(issueMarkersIn(before.sections[DISPUTES]).size).toBeGreaterThan(0);
+    const r = updateSection(db, {
+      caseId,
+      userId: uid,
+      section: DISPUTES,
+      content: `${before.sections[DISPUTES]}\n- 另外公司还涉嫌未足额缴纳公积金，这一点也要一起提`,
+      reason: '顺手补一条',
+      baseVersion: before.version,
+      updatedBy: 'agent',
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errorCode).toBe('REPORT_SECTION_DERIVED');
+    expect(r.message).toContain('不带 〔争点 …〕 标记');
+    // 三段式：缺什么 / 为什么缺 / 怎么办
+    for (const part of ['缺什么', '为什么缺', '怎么办']) {
+      expect(r.message, `错误里没有「${part}」这一段`).toContain(part);
+    }
+    expect(sections().sections[DISPUTES]).toBe(before.sections[DISPUTES]);
+  });
+
+  test('反臂：说明写在第一条条目之前、或缩进成子行 ⇒ 放行（这道闸不是"派生节从此不许写字"）', () => {
+    addClaim('2N');
+    const before = sections();
+    const ids = [...issueMarkersIn(before.sections[DISPUTES])];
+    const content = [
+      '- 这一节的条目由服务端从要件表派生，我只把措辞改成了人话。',
+      ...ids.map((id) => `- ${issueMarker(id)} 用大白话重写的一条\n  - 下一步：先去把那份材料找出来`),
+    ].join('\n');
+    const r = updateSection(db, {
+      caseId,
+      userId: uid,
+      section: DISPUTES,
+      content,
+      reason: '改写成人话，说明写在条目之前',
+      baseVersion: before.version,
+      updatedBy: 'agent',
+    });
+    expect(r.ok, r.ok ? '' : `${r.errorCode}：${r.message}`).toBe(true);
+  });
+
+  test('「风险与未定项」也是派生节：初稿本身放行，节末追加无标记条目被拒', () => {
+    // 风险节的初稿本来就以几行说明开头（固定条目、缺口清单），所以这道闸必须
+    // 从**第一条带标记的条目**起算——整节数的形态是初稿自己就违规，闸从上线第一天起就得关掉。
+    addClaim('欠薪');
+    const before = sections();
+    const passthrough = updateSection(db, {
+      caseId,
+      userId: uid,
+      section: RISKS,
+      content: before.sections[RISKS],
+      reason: '原样写回，验证初稿自己不违规',
+      baseVersion: before.version,
+      updatedBy: 'agent',
+    });
+    expect(passthrough.ok, passthrough.ok ? '' : `${passthrough.errorCode}：${passthrough.message}`).toBe(true);
+
+    const now = sections();
+    const r = updateSection(db, {
+      caseId,
+      userId: uid,
+      section: RISKS,
+      content: `${now.sections[RISKS]}\n- 另外我判断公司大概率会主张你自己辞职`,
+      reason: '顺手补一条风险',
+      baseVersion: now.version,
+      updatedBy: 'agent',
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errorCode).toBe('REPORT_SECTION_DERIVED');
+  });
+
   test('不带标记的普通节照旧可改（这把尺只管派生集，不是把整份报告锁死）', () => {
     addClaim('2N');
     const before = sections();

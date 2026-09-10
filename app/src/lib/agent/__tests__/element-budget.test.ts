@@ -166,6 +166,22 @@ describe('最长案件（四项诉求 + 时间线 30 条）的事实卡预算', 
     }
   });
 
+  it('§38 被迫解除那条路在事实卡上**不许**印「公司来证」（复审 2026-09-10 第一条）', () => {
+    // 【它守什么】司法解释（一）第四十四条倒置的是「用人单位作出的……决定」引发的争议；
+    // 被迫解除是劳动者自己发出的解除，那条原文管不到它。事实卡是模型每一轮都读的那张纸——
+    // 这一行印成「公司来证」的后果是：走这条路的用户被告知这件事不用他证，
+    // 于是不去准备欠薪/未缴社保的初步证明，而仲裁庭按谁主张谁举证要他先举出个头。
+    const forced = RENDERED.split('\n').find((l) => l.includes('〔N·N-2b〕'));
+    expect(forced, '事实卡上没有 N-2b（§38 被迫解除）那一行').toBeTruthy();
+    expect(forced!, '§38 那条路被印成了对方举证').not.toContain('公司来证');
+    expect(forced!).toContain(LABOR.burdenLabels!.claimant);
+    // 【反臂】同一张表上 N-2a（公司作出的决定）**必须**印着「公司来证」——
+    // 没有这一条，整张卡都不印举证责任时上面那句照样绿。
+    const decided = RENDERED.split('\n').find((l) => l.includes('〔N·N-2a〕'));
+    expect(decided, '事实卡上没有 N-2a（用人单位决定型）那一行').toBeTruthy();
+    expect(decided!).toContain('公司来证');
+  });
+
   it('P0 那几节一个都没丢（要件表不许把"我是谁/期限还剩几天"挤掉）', () => {
     for (const key of ['parties', 'header', 'history', 'deadlines'] as const) {
       const title = LABOR.factsSections.find((s) => s.key === key)!.title;

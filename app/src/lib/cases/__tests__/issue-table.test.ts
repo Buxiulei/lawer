@@ -10,8 +10,13 @@
 //   · 让 nextStep 在某条分支上返回空串 ⇒ 链接率那条红。
 import { describe, expect, it } from 'vitest';
 
-import type { ElementRow } from '../elements';
-import { buildIssueTable, issueMarker, issueMarkersIn } from '../issue-table';
+import type { ElementFactsView, ElementRow } from '../elements';
+import {
+  buildIssueTable,
+  counterpartyDecisionOnFile,
+  issueMarker,
+  issueMarkersIn,
+} from '../issue-table';
 
 /** 一行要件表。默认是"已经成立、我方举证、什么都不缺"——最不该进争点表的那一行。 */
 function row(over: Partial<ElementRow> = {}): ElementRow {
@@ -53,11 +58,22 @@ describe('三条规则各自成立', () => {
     expect(buildIssueTable([row()], { counterpartyAssertions: { e1: '   ' } }).rows).toEqual([]);
   });
 
-  it('规则三：举证责任在对方 + 对方的书面决定已在档 ⇒ 进表', () => {
-    for (const burden of ['respondent', 'reversed_interpretation', 'reversed_procedure_rules'] as const) {
+  it('规则三：举证责任**整条**在对方 + 对方的书面决定已在档 ⇒ 进表', () => {
+    for (const burden of ['respondent', 'reversed_interpretation'] as const) {
       const table = buildIssueTable([row({ burden })], { counterpartyDecisionOnFile: true });
       expect(table.rows.map((r) => r.reasons), burden).toEqual([['burden_on_other_side']]);
     }
+  });
+
+  it('规则三反样本三：证据偏在型不进表（复审 2026-09-10 第三条 b；把它加回 DECISION_BURDENS → 红）', () => {
+    // 【为什么偏在型不算】规则三给的下一步是「把他那份书面决定与上面写的理由原样固定下来」。
+    // 偏在讲的是另一件事：一般规则仍是谁主张谁举证，只是那份**记录**在对方手里。
+    // 一起捞进来的形态是：档案里随便有一份对方的书面决定，「计算基数」也被挂上争点表
+    // 并指示用户去固定那份决定——而那张纸上一个字都不会写工资基数。
+    const table = buildIssueTable([row({ burden: 'reversed_procedure_rules' })], {
+      counterpartyDecisionOnFile: true,
+    });
+    expect(table.rows).toEqual([]);
   });
 
   it('规则三反样本一：举证责任在对方、但书面决定不在档 ⇒ 不进表（否则这几行永远挂着，争点表读不完）', () => {
@@ -124,6 +140,35 @@ describe('红线：每条争点都有出路，且〔未记录〕不许写成不�
 
   it('锚点原样透传（争点要能点回到那一条原文）', () => {
     for (const r of all.rows) expect(r.anchors).toEqual(['某法|第一条']);
+  });
+});
+
+describe('「对方的书面决定在不在档」的唯一入口', () => {
+  // 【为什么它要有自己的判据】此前报告与要件族能力里各写了一遍同形的三行判断，
+  // 而没有任何东西钉住它们：把其中一份换成常量 true，两侧的既有判据全绿（复审第三条）。
+  // 现在两边都调这一个函数，这里把它的四种入参各钉一条。
+  const withEvidence = (categories: string[]): ElementFactsView => ({
+    case: { employed_from: null, position: null, monthly_wage_fen: null, contract_count: null },
+    claims: [],
+    timeline: [],
+    companies: [],
+    evidence: categories.map((category) => ({ category })),
+  });
+
+  it('槽位没声明 ⇒ 恒 false（规则三整条不生效，而不是恒成立）', () => {
+    expect(counterpartyDecisionOnFile(undefined, withEvidence(['某类']))).toBe(false);
+  });
+
+  it('档案里有那一类材料 ⇒ true', () => {
+    expect(counterpartyDecisionOnFile('evidence:某类', withEvidence(['某类']))).toBe(true);
+  });
+
+  it('有书证、但**不是**那一类 ⇒ false（变异：改成 evidence.length > 0 → 红）', () => {
+    expect(counterpartyDecisionOnFile('evidence:某类', withEvidence(['别的类', '再一类']))).toBe(false);
+  });
+
+  it('档案里什么都没有 ⇒ false（变异：改成常量 true → 红）', () => {
+    expect(counterpartyDecisionOnFile('evidence:某类', withEvidence([]))).toBe(false);
   });
 });
 

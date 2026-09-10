@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { articleKey } from '@/lib/agent/citation-block';
-import { BURDENS, type Burden } from '@/lib/cases/elements';
+import { BURDENS, buildElementSheet, type Burden, type ElementFactsView } from '@/lib/cases/elements';
 
 import { LABOR } from '../labor';
 
@@ -204,11 +204,36 @@ describe('要件卡：举证责任两条规则不许互相顶替', () => {
     // 【为什么钉计数而不是"都合法"】"都合法"是恒真的（类型已经限死取值）。
     // 计数变了就意味着有人挪动了某一项的举证责任——那是本产品最贵的一类改动，
     // 必须经过一次停顿（改判据 = 记账），而不是安静地跟着代码走。
+    //
+    // ── 记账：10/2/5 → 11/2/5（复审 2026-09-10 第一条，N-2 拆成两张卡）──
+    // 原 N-2「解除或终止落在第四十六条列举的情形里」整条标 reversed_interpretation，
+    // 而第四十六条第一项是「劳动者依照本法第三十八条规定解除劳动合同」——那份解除是
+    // **劳动者自己发出的**，不是司法解释（一）第四十四条说的「用人单位作出的……决定」，
+    // 那条原文管不到它。拆成 N-2a（用人单位决定型，仍倒置）与 N-2b（§38 被迫解除型，
+    // 谁主张谁举证）之后，多出来的那一条落在 claimant 上。
     expect(Object.fromEntries([...tally].sort())).toEqual({
-      claimant: 10,
+      claimant: 11,
       reversed_interpretation: 2,
       reversed_procedure_rules: 5,
     });
+  });
+
+  it('§38 被迫解除那条路**不许**标成对方举证（复审 2026-09-10 第一条；改回 reversed_* 即红）', () => {
+    // 【为什么单钉这一条，而不是只靠上面的计数】计数只说"有 11 条 claimant"，
+    // 不说是哪 11 条：把 N-2b 改回倒置、同时把另一张卡改成 claimant，计数照样对得上。
+    const forced = cards.find((c) => c.id === 'N-2b');
+    expect(forced, '要件卡里没有 N-2b（§38 被迫解除那条路）').toBeTruthy();
+    expect(forced!.burden).toBe('claimant');
+    // 它的锚点里**不许**出现司法解释（一）第四十四条：那条是限定事项倒置的唯一出处，
+    // 挂上去就等于说"这件事公司来证"。
+    expect(forced!.basis.map((b) => keyOf(b.anchor))).not.toContain(INTERPRETATION_ANCHOR);
+    // 而第三十八条与第四十六条必须在（这条路的实体依据）
+    for (const article of ['第三十八条', '第四十六条']) {
+      expect(
+        forced!.basis.map((b) => keyOf(b.anchor)),
+        `N-2b 少了劳动合同法${article}`,
+      ).toContain(articleKey('中华人民共和国劳动合同法', article));
+    }
   });
 
   it('标 reversed_interpretation 的，basis 里必须有司法解释（一）第四十四条（限定事项那一条）', () => {
@@ -242,5 +267,76 @@ describe('要件卡：举证责任两条规则不许互相顶替', () => {
       .filter((c) => c.basis.every((b) => PROCEDURE_ANCHORS.includes(keyOf(b.anchor))))
       .map((c) => c.id);
     expect(bad).toEqual([]);
+  });
+});
+
+describe('双倍工资-2：字段有值 ≠ 事实成立（复审 2026-09-10 第二条）', () => {
+  // 【它守什么】首诊「合同签订次数」是自由文本，resolveSlot 对 basics 只判填没填。
+  // 于是用户报「2 次」也算这个要件有自述支撑——要件表写着「仍没有订立书面劳动合同：成立·待证」，
+  // 而他刚刚亲口说签过两次。判据钉的是**取值**这一格，不是"填了没填"。
+  const factsWith = (contractCount: string | null): ElementFactsView => ({
+    case: { employed_from: '2024-01-01', position: null, monthly_wage_fen: null, contract_count: contractCount },
+    claims: [{ kind: '双倍工资', source_tier: '自述' }],
+    timeline: [],
+    companies: [],
+    evidence: [],
+  });
+  const rowOf = (contractCount: string | null) =>
+    buildElementSheet(factsWith(contractCount), LABOR.elementCards ?? [], ['双倍工资']).rows.find(
+      (r) => r.id === '双倍工资-2',
+    )!;
+
+  it('🔒 地板：这张卡还在，且它认的就是那一格', () => {
+    const card = (LABOR.elementCards ?? []).find((c) => c.id === '双倍工资-2');
+    expect(card, '双倍工资-2 不见了').toBeTruthy();
+    expect(card!.satisfiedBy).toEqual(['basics:contract_count']);
+    expect(card!.slotChecks?.['basics:contract_count'], '这一格没有取值判定').toBeTruthy();
+  });
+
+  it('「没签 / 无 / 0 / 一份都没有」这一类 ⇒ 成立·待证', () => {
+    for (const raw of ['没签', '一次都没签', '一份都没有', '无', '0', '0 次', '零次', '从来没有签过书面合同']) {
+      const row = rowOf(raw);
+      expect(row.status, `「${raw}」被判成了 ${row.status}`).toBe('成立·待证');
+    }
+  });
+
+  it('「2 次」这一类表示签过 ⇒ **不许**成立·待证，而是缺失并点名「无合同期间」（变异：改回只判填没填 → 红）', () => {
+    for (const raw of ['2 次', '两次', '续签过一次', '签了1次', '2']) {
+      const row = rowOf(raw);
+      expect(row.status, `「${raw}」被判成了 ${row.status}`).toBe('缺失');
+      expect(row.missingSlots, `「${raw}」的缺口没点名`).toEqual(['无合同期间']);
+    }
+  });
+
+  it('认不准的答案一律偏向「缺失」（误差方向：多问一句 ≪ 让人去主张一笔提不了的钱）', () => {
+    for (const raw of ['不记得了', '待确认', 'HR 说回头补']) {
+      expect(rowOf(raw).status, raw).toBe('缺失');
+    }
+    // 这一格还空着时也是缺失，且点的是同一个名字（不是 basics:contract_count）
+    expect(rowOf(null).missingSlots).toEqual(['无合同期间']);
+  });
+});
+
+describe('锚点不只要「在库里、核过了」，还要真的支撑那个要件（复审 2026-09-10 第五条）', () => {
+  // 【为什么单钉这一条】上面 ①②③ 查的是"这条原文在不在、可信度够不够、逐字对不对得上"——
+  // **选条松照样全绿**：欠薪-4「欠付的期间与金额已经算清」此前挂的是工资支付暂行规定第九条与
+  // 北京市工资支付规定第十二条，两条原文都在库里、都核过、都一致，而它们讲的是
+  // 「劳动关系双方依法解除或终止劳动合同时，用人单位应在解除或终止劳动合同时一次付清」——
+  // 那是**离职结算**，与"哪个月该发多少、实发多少、差多少"没有支撑关系。
+  // 在职欠薪（还没解除）的案子里它们根本不适用，而争点行照样印着「依据 工资支付暂行规定|第九条」。
+  it('欠薪-4 不挂「解除/终止时一次付清」那两条，挂的是及时足额支付与约定的发薪日（变异：换回 §9 / 北京§12 → 红）', () => {
+    const card = (LABOR.elementCards ?? []).find((c) => c.id === '欠薪-4');
+    expect(card, '欠薪-4 不见了').toBeTruthy();
+    const keys = card!.basis.map((b) => keyOf(b.anchor));
+    for (const [law, article] of [
+      ['工资支付暂行规定', '第九条'],
+      ['北京市工资支付规定', '第十二条'],
+    ] as const) {
+      expect(keys, `欠薪-4 又挂上了「一次付清」那一条（${law}${article}）`).not.toContain(
+        articleKey(law, article),
+      );
+    }
+    expect(keys, '少了及时足额支付那一条').toContain(articleKey('中华人民共和国劳动合同法', '第三十条'));
+    expect(keys, '少了约定发薪日那一条').toContain(articleKey('工资支付暂行规定', '第七条'));
   });
 });

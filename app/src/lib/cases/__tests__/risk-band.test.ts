@@ -97,7 +97,7 @@ describe('② 不编下限', () => {
     expect(b.ceiling_fen).toBe(calc().amount_fen);
   });
 
-  test('材料补齐之后档位往上走、缺口只剩说得出名字的那一条（自证上一条不是恒 null）', () => {
+  test('材料补齐之后缺口确实变少（自证上一条不是恒 null），但档位仍停在「依据不足」', () => {
     const before = band()!;
     expect(before.band).toBe('依据不足'); // 什么材料都没有时是这一档
     addEvidence('公司文件', '解除通知.pdf');
@@ -107,22 +107,30 @@ describe('② 不编下限', () => {
     calc(backed);
     const after = band(backed)!;
 
-    // 档位确实往上走了一档，且输入侧不再有"只有你自己说"的项
-    expect(after.band).toBe('需补证后可主张');
+    // 输入侧不再有"只有你自己说"的项，缺口从 5 条降到 2 条（"补了材料什么都没变"是这条要拦的一半）
     expect(after.self_reported_inputs).toEqual([]);
-
-    // 【为什么到不了「有依据可主张」，而这不是 bug】剩下的那一条是「劳动关系存在、
-    // 工作年限起点可确定」——它只由首诊填的入职日与登记的对方主体撑着，而首诊四项按
-    // S4 的口径恒是「自述」。所以它的天花板就是「成立·待证」，风险档位跟着停在这一档。
-    // 这句话是实话：只要入职日仍然只有当事人自己的说法，这一项在庭上就是待证的。
-    // 它同时是这套东西的一个已知边界（见 notDone / openQuestions：要不要让一份社保或合同
-    // 把首诊字段提档，是 S4 那一层的口径问题，不该由本片偷偷改掉）。
     const gaps = after.gaps as { element_id: string; status: string }[];
-    expect(gaps.map((g) => g.element_id)).toEqual(['N-1']);
-    expect(gaps[0].status).toBe('成立·待证');
-    expect(after.floor_fen).toBeNull();
-    // 缺口比之前少（"补了材料什么都没变"是这条要拦的另一半）
     expect(gaps.length).toBeLessThan((before.gaps as unknown[]).length);
+
+    // ── 基线换过的那一次（S6 复审整改，2026-09-10）：'需补证后可主张' → '依据不足' ──
+    // 【为什么变了，而且这不是判据写松了】复审第一条把原 N-2 拆成两张卡：
+    //   · N-2a 公司作出的决定（协商解除 / 第四十条 / 第四十一条 / 期满终止，§44 倒置）
+    //   · N-2b 你依照第三十八条提出的被迫解除（第四十六条第一项，谁主张谁举证）
+    // 两条路径**二选一**，而要件表按诉求列全 ⇒ 本案走的是路径一（档案里有《解除通知》），
+    // 路径二那张卡恒是「缺失」＝〔未记录〕；riskBandOf 见到任何一条「缺失」就落到「依据不足」。
+    // 拆之前这个案子到得了「需补证后可主张」——**这是对外行为的真实变化，记在这里**。
+    // 要不要让 riskBandOf 认识"互斥路径"（或给要件卡一个"任选其一"的分组）是另一票，
+    // 已作为 openQuestion 报给经理，不由这一票偷偷改掉。
+    expect(after.band).toBe('依据不足');
+    expect(gaps.map((g) => g.element_id)).toEqual(['N-2b', 'N-1']);
+    expect(gaps.find((g) => g.element_id === 'N-2b')!.status).toBe('缺失');
+
+    // 【N-1 为什么到不了「成立」，而这不是 bug】「劳动关系存在、工作年限起点可确定」
+    // 只由首诊填的入职日与登记的对方主体撑着，而首诊四项按 S4 的口径恒是「自述」。
+    // 所以它的天花板就是「成立·待证」。这句话是实话：只要入职日仍然只有当事人自己的说法，
+    // 这一项在庭上就是待证的。要不要让一份社保或合同把首诊字段提档，是 S4 那一层的口径问题。
+    expect(gaps.find((g) => g.element_id === 'N-1')!.status).toBe('成立·待证');
+    expect(after.floor_fen).toBeNull();
   });
 });
 

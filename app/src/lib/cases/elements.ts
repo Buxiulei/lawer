@@ -80,6 +80,24 @@ export type FactSlotSource = (typeof FACT_SLOT_SOURCES)[number];
 export const BASICS_FIELDS = ['employed_from', 'position', 'monthly_wage_fen', 'contract_count'] as const;
 export type BasicsField = (typeof BASICS_FIELDS)[number];
 
+/**
+ * 一个事实槽的**取值判定**。
+ *
+ * 【为什么需要它】`resolveSlot` 对 `basics:` 只判**填没填**（首诊那几项是自由文本）。
+ * 于是「合同签订次数」填了「2 次」，也算「自用工之日起满一个月仍没有订立书面合同」
+ * 这个要件有自述支撑——用户明说签过两次合同，要件表还写着这一项「成立·待证」。
+ * **字段有值 ≠ 事实成立**：要看取值的槽在卡片里写一句怎么看，看不过按〔未记录〕算。
+ *
+ * 【本文件零领域内容】`accepts` 怎么认那串字是行当知识，函数体在领域包里；
+ * 这里只定义"有这么一格判定"，一个字面量都不认识。
+ */
+export interface SlotValueCheck {
+  /** 这一格的取值算不算支撑本要件。收的是用户自述的那串原字（已确认非空） */
+  accepts: (raw: string) => boolean;
+  /** 这一项在「还差什么」清单里的名字（用户可见，措辞归领域包）——看不过、或这一格还空着时都用它点名 */
+  missingAs: string;
+}
+
 /** 一张要件卡。内容由领域包给（S6 已填 labor 四诉求），本文件只定形状。 */
 export interface ElementCard {
   id: string;
@@ -99,6 +117,12 @@ export interface ElementCard {
   basis: readonly ElementBasis[];
   /** 支撑这个要件的事实槽（**全部**在档才谈得上成立） */
   satisfiedBy: readonly string[];
+  /**
+   * 个别槽位的取值判定（省略 = 每个槽都只判"填没填"）。key 必须是 `satisfiedBy` 里的槽串，
+   * 且只有 `basics:` 那几格有"取值"这回事（其余四张表的槽，冒号后面写的是筛选条件，
+   * 不是用户填的字）——挂错地方会被当作配置错误点名，不静默。
+   */
+  slotChecks?: Readonly<Record<string, SlotValueCheck>>;
   /** 命中即推翻这个要件的事实槽（省略 = 本要件没有可机械判定的反证） */
   negatedBy?: readonly string[];
   /**
@@ -232,6 +256,21 @@ export function resolveSlot(slot: string, facts: ElementFactsView): SourceTier |
   }
 }
 
+/**
+ * 一个槽的**原始取值**（只给 `slotChecks` 用）。
+ *
+ * @returns `undefined` = 这个槽没有"取值"这回事（不是 `basics:`，或列名不认识）——
+ *   这是配置错误，与"用户还没填"要分开报；`null` = 认识这一格，但它还空着；否则是那串原字。
+ */
+function rawBasicsValue(slot: string, facts: ElementFactsView): string | null | undefined {
+  const at = slot.indexOf(':');
+  if (at <= 0 || slot.slice(0, at) !== 'basics') return undefined;
+  const field = slot.slice(at + 1).trim();
+  if (!(BASICS_FIELDS as readonly string[]).includes(field)) return undefined;
+  const v = facts.case[field as BasicsField];
+  return basicsFilled(v) ? String(v) : null;
+}
+
 /** 卡片的 basis 全部核实过了吗。空 basis 一律算没核实（"没有锚点"不比"锚点存疑"更可信）。 */
 export function basisVerified(basis: readonly ElementBasis[]): boolean {
   return basis.length > 0 && basis.every((b) => b.verified && b.anchor.trim() !== '');
@@ -271,6 +310,24 @@ export function buildElementSheet(
         unresolved.push(slot);
         missing.push(slot);
         continue;
+      }
+      // 【取值判定优先于"填没填"】卡片给了 slotChecks 的槽，填了字不等于这件事成立
+      //（见 SlotValueCheck）。看不过就按〔未记录〕算，并以卡片给的名字点名——
+      // 沿用槽串点名的形态是：用户读到「还差 basics:contract_count」，
+      // 而他刚刚填过那一格，于是这行字读起来像系统没收到他的话。
+      const check = card.slotChecks?.[slot];
+      if (check) {
+        const raw = rawBasicsValue(slot, facts);
+        if (raw === undefined) {
+          // 判定挂在一个没有"取值"的槽上 = 配置错误，与上面那一格同一条纪律：点名，不静默。
+          unresolved.push(slot);
+          missing.push(slot);
+          continue;
+        }
+        if (raw === null || !check.accepts(raw)) {
+          missing.push(check.missingAs);
+          continue;
+        }
       }
       if (tier === null) {
         missing.push(slot);

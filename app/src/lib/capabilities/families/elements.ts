@@ -6,8 +6,8 @@
 // 放在 lib/domains/<key>.ts 的 capabilities 一节，由这里引用。
 // ─────────────────────────────────────────────────────
 import * as cases from '@/lib/cases';
-import { buildElementSheet, resolveSlot, type ElementFactsView } from '@/lib/cases/elements';
-import { buildIssueTable } from '@/lib/cases/issue-table';
+import { buildElementSheet, type ElementFactsView } from '@/lib/cases/elements';
+import { buildIssueTable, counterpartyDecisionOnFile } from '@/lib/cases/issue-table';
 import { SOURCE_TIERS, normalizeSourceTier } from '@/lib/cases/source-tier';
 import * as store from '@/lib/db/agent';
 import * as caseStore from '@/lib/db/cases';
@@ -66,16 +66,6 @@ function sheetOf(db: Parameters<Capability['run']>[0], ctx: Ctx, caseId: number)
   };
   const kinds = [...new Set(claims.map((c) => c.kind))];
   return { facts, kinds, sheet: buildElementSheet(facts, ctx.pack.elementCards ?? [], kinds) };
-}
-
-/**
- * 对方那份书面决定在不在档。槽位由领域包声明（`counterpartyDecisionSlot`）——
- * 共用层不认识它在某个行当里叫什么名字。声明省略 ⇒ 恒 false，争点表规则三整条不生效。
- */
-function decisionOnFile(pack: DomainPack, facts: ElementFactsView): boolean {
-  const slot = pack.counterpartyDecisionSlot;
-  if (!slot) return false;
-  return resolveSlot(slot, facts) != null;
 }
 
 export const elementSheetGet: Capability = {
@@ -151,7 +141,9 @@ export const issueList: Capability = {
     const { sheet, facts } = sheetOf(db, ctx, caseId);
     const table = buildIssueTable(
       sheet.rows,
-      { counterpartyDecisionOnFile: decisionOnFile(ctx.pack, facts) },
+      // 在不在档走 lib/cases/issue-table 的唯一入口：此前这里与报告那侧各有一份同形的判断，
+      // 而判据只钉得住其中一份（复审第三条）。
+      { counterpartyDecisionOnFile: counterpartyDecisionOnFile(ctx.pack.counterpartyDecisionSlot, facts) },
       sheet.rendered,
     );
     return {
