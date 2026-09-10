@@ -56,7 +56,7 @@ import {
 } from './crisis';
 import { decideOffer, looksLikeDecline, referralScenesOf, renderReferral } from './referral';
 import * as referralOffers from '@/lib/db/referral-offers';
-import { CitationGuard, UNVERIFIED_CITATION } from './citation-guard';
+import { CitationGuard } from './citation-guard';
 import {
   articleKey,
   coreArticleKeys,
@@ -70,7 +70,7 @@ import {
 import { bareArticleCitations, precedentContamination, quotedStatuteSpans } from './citation-block';
 import { issueFactsToken } from '@/lib/cases/facts-token';
 import { factsCardOf } from './facts-entry';
-import { SUGGEST_FIND_CASE } from './gate-marks';
+import { citationNoticeMessage, SUGGEST_FIND_CASE } from './gate-marks';
 import { StatuteGuard, statuteNoticeMessage, statuteNoticeSuggest } from './statute-guard';
 import { applyValueGuard, valueNoticeMessage, valueNoticeSuggest } from './value-guard';
 import { newGateReport, REPLACE_RATE_BUDGET, summarizeGateReport, tallyGate, VALUE_GUARD_MODE, valueGuardText } from './gate-chain';
@@ -1343,14 +1343,15 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
     // 而切换到 rewrite 的判据（误标率 < 2%）恰恰要靠这段观察期的数才算得出来。
     tallyGate(gateReport, 'value_guard', { seen: valueGate.seen, fired: valueGate.violations.length });
     if (valueGate.violations.length > 0) {
-      // 上线口径见 gate-chain.ts 的 VALUE_GUARD_MODE：observe 只记账、正文一个字不动。
+      // 上线口径见 gate-chain.ts 的 VALUE_GUARD_MODE：observe 只记账、正文一个字不动，
+      // 提示行也不出（没有 suggest，GateHintLine 整条不画）——正文里没有的东西不该被指着说。
       text = valueGuardText(VALUE_GUARD_MODE, text, opener ? `${opener}\n\n${valueGate.text}` : valueGate.text);
       emit({
         event: 'notice',
         data: {
           code: 'VALUE_UNSOURCED',
           message: valueNoticeMessage(valueGate.violations, VALUE_GUARD_MODE),
-          suggest: valueNoticeSuggest(valueGate.violations),
+          suggest: valueNoticeSuggest(valueGate.violations, VALUE_GUARD_MODE),
           value_marked: valueGate.violations.map((v) => ({ token: v.token, kind: v.kind, mark: v.mark, nearest: v.nearest })),
         },
       });
@@ -1433,10 +1434,8 @@ async function runTurnCore(input: RunTurnInput, progress: TurnProgress): Promise
         // 第一人称出路，唯独 ⑤ 只说了"已拦下、不作数"——用户读完知道这儿少了个案号，
         // 却不知道那个案子还找不找得回来、该跟我们说什么。措辞与另外两闸同款：
         // 说清我这边发生了什么（不推给用户"你自己去查"），再给一句他回一句就能推进的话。
-        message:
-          `我引的案号 ${cited.join('、')} 在本轮检索里没有原文，已经把它从正文里去掉` +
-          `（那几处现在显示为${UNVERIFIED_CITATION}）——没有原文的案号一律不作数，别照抄。` +
-          `出路：回我一句「${SUGGEST_FIND_CASE}」，我去把这个案子的原文找出来再引给你。`,
+        // 那句话本身住在 gate-marks.ts（与标记、chip 同源，且落在同一张律师红线扫描面里）。
+        message: citationNoticeMessage(cited),
         suggest: SUGGEST_FIND_CASE,
       },
     });

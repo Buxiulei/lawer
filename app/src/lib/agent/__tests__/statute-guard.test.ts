@@ -503,16 +503,18 @@ describe('要件 H · 文书通道：标记 vs 拒收（两条出口的处置故
 });
 
 describe('要件 I · 禁令必配出路（设计稿 §7.7）', () => {
-  it('待核验的 notice 给得出两条具体出路：来源卡 与 citation_check（删掉出路句 → 红）', () => {
+  it('待核验的 notice 给得出两条具体出路：来源卡 与「我去取原文」（删掉出路句 → 红）', () => {
     const msg = statuteNoticeMessage([{ cited: '《某某某某法》第四十八条', where: '正文', verdict: 'unverified' }]);
     expect(msg).toContain('来源卡');
-    expect(msg).toContain('citation_check');
+    // 【为什么这里不点名工具（2026-09-10 复审 minor）】用户面上的出路句用不带标识符的
+    // 第一人称说；工具名不出现在这几句话里，由 gate-notice-copy.test.ts 按形态守。
+    expect(msg).toContain('我去把原文取回来');
   });
 
   it('已修正的 notice 给的是另一条出路（两种标记共用一句话 → 红）', () => {
     const msg = statuteNoticeMessage([{ cited: '《某某某某法》第四十六条', where: '正文', verdict: 'superseded' }]);
     expect(msg).toContain('取新版');
-    expect(msg).not.toContain('citation_check');
+    expect(msg).not.toContain('我去把原文取回来');
   });
 
   it('一条违规都没有时不产出文案（空字符串会被上游渲染成一个空提示行）', () => {

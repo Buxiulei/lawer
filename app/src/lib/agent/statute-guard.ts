@@ -473,7 +473,7 @@ export function statuteNoticeMessage(violations: readonly StatuteViolation[]): s
   if (unverified.length) {
     lines.push(
       `本轮有 ${unverified.length} 处条号不在这一轮取到的原文里：${unverified.join('、')}，已标注${UNVERIFIED_STATUTE}。` +
-        `出路：点开回复里的来源卡看我们手上有哪几条，或直接回我一句「${SUGGEST_CHECK_STATUTE}」，我用 citation_check 把原文取回来再引给你。`,
+        `出路：点开回复里的来源卡看我们手上有哪几条，或直接回我一句「${SUGGEST_CHECK_STATUTE}」，我去把原文取回来再引给你。`,
     );
   }
   if (superseded.length) {

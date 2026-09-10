@@ -183,7 +183,8 @@ export const GATE_CHAIN: readonly GateSpec[] = [
     anchor: 'applyValueGuard(',
     guards:
       '编造数字（「封顶 60 万」「按 3N」）：不在 claim_calc 出参与 facts.values 的标记出来。' +
-      '**上线口径见 VALUE_GUARD_MODE**——现在是观察模式，只记 notice 与 gate_report，正文不动。',
+      '**上线口径见 VALUE_GUARD_MODE**——现在是观察模式，只记 notice 与 gate_report，' +
+      '正文不动、提示行也不出。',
   },
   {
     order: 10,
@@ -206,6 +207,11 @@ export const GATE_CHAIN: readonly GateSpec[] = [
 
 /**
  * `observe` = 只记 notice 与 gate_report，**正文一个字不改**；`rewrite` = 就地缀标记。
+ *
+ * 【观察期连提示行都不出（2026-09-10 复审）】正文里一个标记都没有，而提示行指着一处
+ * 用户看不见的东西说"这个数没有来源"——他回头去正文里找，找不到。所以 `observe` 下
+ * `valueNoticeSuggest` 交出 undefined，GateHintLine 整条不画。**读数不受影响**：
+ * notice 照发、`value_marked` 照带、gate_json 照落，误标率就是从那几列取的。
  *
  * 【为什么先观察再改写（manager 2026-09-08 裁定）】⑨ 的标记是**写进用户面**的：
  * 一处误伤就是在一个算对了的数旁边写上【数值无来源】，用户会因此不敢用那个数——

@@ -3,7 +3,7 @@
  *
  * ─────────────── 这组补的是哪个缺口 ───────────────
  * ⑥ 条号闸与 ⑨ 数值闸的 notice 里一直写着完整的第一人称出路句
- *（statute-guard.ts「回我一句『查一下这条』，我用 citation_check 把原文取回来再引给你」、
+ *（statute-guard.ts「回我一句『查一下这条』，我去把原文取回来再引给你」、
  *  value-guard.ts「回我一句『帮我算一下』」），而前端词表把这两个码映射成 null。
  * **那两句话每天都在生成、每天都被丢掉**：用户屏幕上只剩正文里一个孤零零的
  * 【条号待核验】，没有任何地方告诉他该说什么。⑤ 案号闸更彻底——它的 notice 连出路句都没写。
@@ -26,6 +26,8 @@ import { isValidElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { NoticeCode, NoticeFrame } from '../../_stream/frames';
+import { VALUE_GUARD_MODE } from '@/lib/agent/gate-chain';
+import { valueNoticeMessage, valueNoticeSuggest } from '@/lib/agent/value-guard';
 
 vi.mock('next/link', () => ({
   default: ({ children, href }: { children: ReactNode; href: string }) => <a href={href}>{children}</a>,
@@ -111,6 +113,36 @@ describe('该不出现的时候不出现', () => {
     const html = renderToStaticMarkup(<GateHintLine frame={frame('STATUTE_UNVERIFIED', '出路在这里。', '查一下这条')} />);
     expect(visible(html)).toContain('出路在这里。');
     expect(html).not.toContain('<button');
+  });
+
+  /**
+   * 【⑨ 观察期整条提示行不出现（2026-09-10 复审 minor）】observe 下正文里一个标记都没有，
+   * 而提示行照样指着一处用户看不见的东西说"这个数没有来源"——他回头去正文里找，找不到。
+   *
+   * **frame 里的两个字段都从产线函数取**，不手写一个 undefined：手写的形态是，
+   * 产线哪天把观察期那一支去掉，这条判据照样绿（它验的是自己造的那份数据）。
+   *
+   * 【变异臂】value-guard.ts 里 `if (mode !== 'rewrite') return undefined` 删掉 ⇒ 第一条红。
+   */
+  describe('⑨ 观察期：没有 chip 就整条不画', () => {
+    const V = [{ token: '60 万', kind: '金额' as const, mark: 'unsourced' as const }];
+    const frameFor = (mode: 'observe' | 'rewrite') =>
+      frame('VALUE_UNSOURCED', valueNoticeMessage(V, mode), valueNoticeSuggest(V, mode));
+
+    it('上线口径仍是 observe（切到 rewrite 要连这一组一起改）', () => {
+      expect(VALUE_GUARD_MODE).toBe('observe');
+    });
+
+    it('observe：整条提示行不出现（正文里没有的标记，不该有另一处指着它说话）', () => {
+      const html = renderToStaticMarkup(<GateHintLine frame={frameFor('observe')} onSuggest={() => {}} />);
+      expect(html, '观察期弹出了一条指向不存在标记的提示行').toBe('');
+    });
+
+    it('rewrite：同一批违规照常出提示行与 chip（上一条不是把 ⑨ 整条废掉）', () => {
+      const html = renderToStaticMarkup(<GateHintLine frame={frameFor('rewrite')} onSuggest={() => {}} />);
+      expect(visible(html)).toContain('60 万');
+      expect(visible(html)).toContain('帮我算一下');
+    });
   });
 
   it('不用警报色：这些标记是「这一处别照抄」，不是错误提示', () => {

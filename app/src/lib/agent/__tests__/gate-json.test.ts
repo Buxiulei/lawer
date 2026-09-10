@@ -113,6 +113,24 @@ describe('一、一轮命中两闸 → 这一行记着两个码与闸链摘要',
     expect(read.fired).toBeGreaterThan(0);
   });
 
+  /**
+   * 【观察期"用户面静默"与"读数"是两件事（2026-09-10 复审 minor）】⑨ 在 observe 下
+   * 不给 chip，于是整条提示行不出现——用户面上一个字都看不到。
+   * 那正是这一列存在的理由：**看不见的信号必须落库**，否则它只活在一条转瞬即逝的 SSE 帧里，
+   * 而切 rewrite 的判据（误标率 < 2%）恰恰要靠这几轮的读数算。
+   *
+   * 变异臂：把观察期那一支从"不给 suggest"写成"不发 notice" ⇒ 这一条红（码没了、读数也没了）。
+   */
+  it('⑨ 观察期用户面静默，但这一行照样记着它开过火（把 notice 一起吞掉 → 红）', async () => {
+    expect(VALUE_GUARD_MODE, '这条判据钉的是观察期那一臂').toBe('observe');
+    const { gate, notices } = await turn(TWO_GATES);
+    const n = notices.find((e) => e.data.code === 'VALUE_UNSOURCED');
+    expect(n, '⑨ 开了火却没发 notice').toBeTruthy();
+    expect(n!.data.suggest, '观察期不该有 chip（有 chip 就会画出一条提示行）').toBeUndefined();
+    expect(gate!.codes, '用户面看不见的那一条，库里必须有').toContain('VALUE_UNSOURCED');
+    expect(gate!.gate!.gates.value_guard.fired, '开过火的读数不许跟着静默一起消失').toBeGreaterThan(0);
+  });
+
   it('干净轮也落盘（"闸一处都没动"与"这一轮不知道闸干了什么"是两件事）', async () => {
     const { gate } = await turn('先把材料理一理，别急着签字。');
     expect(gate, '干净轮没有这一层 → 统计时这几轮会被整段跳过').toBeTruthy();

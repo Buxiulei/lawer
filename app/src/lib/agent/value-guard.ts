@@ -36,7 +36,9 @@
 //
 // ── 标记会不会到用户面前，由上线口径定 ──
 // 本文件只负责**判**与**产出标注后的正文**；那份正文用不用，看 gate-chain.ts 的
-// `VALUE_GUARD_MODE`。现在是 `observe`：violations 与 seen 照常交出去记账，正文不换。
+// `VALUE_GUARD_MODE`。现在是 `observe`：violations 与 seen 照常交出去记账，正文不换，
+// 用户面上那条提示行也不出（`valueNoticeSuggest` 观察期交出 undefined）——
+// 正文里没有的标记，不该有另一处指着它说话。
 // 写在这里是因为读这个文件的人会以为下面每一处 `inserts.push` 都会出现在用户屏幕上。
 //
 // ── 为什么是标记而不是剥除 ──
@@ -110,7 +112,7 @@ export interface ValueViolation {
   /**
    * 那个数是从哪儿来的：来源卡/档案（`card`）还是本轮算出来的（`calc`）。
    * **出路不同才要分**：卡的出路是"点开来源卡看生效期间"，算出来的那个的出路是
-   * "以 claim_calc 的算式为准"。合成一句的形态是：模型把刚算出来的数抄错一位，
+   * "以我这一轮算出来的算式为准"。合成一句的形态是：模型把刚算出来的数抄错一位，
    * 系统让他去翻一张与这个数无关的来源卡。
    */
   nearestFrom?: 'card' | 'calc';
@@ -602,7 +604,7 @@ export function applyValueGuard(
 export function valueNoticeMessage(violations: readonly ValueViolation[], mode: ValueGuardMode = 'rewrite'): string {
   // 【观察模式下这句话不许说「已标注」（同 ⑥ 文书通道那条教训）】正文里一个标记都没有，
   // 而这句话告诉用户"已经标注了"——他会去正文里找那个标记，找不到。留痕说假话比不留痕更贵。
-  const said = (m: string) => (mode === 'rewrite' ? `已标注${m}` : '本轮只在这条提醒里点名，正文未改动');
+  const said = (m: string) => (mode === 'rewrite' ? `已标注${m}` : '正文里我没有另加标记');
   const unsourced = [...new Set(violations.filter((v) => v.mark === 'unsourced').map((v) => v.token))];
   const mismatch = violations.filter((v) => v.mark === 'mismatch');
   // 【出路按"那个准数是哪儿来的"分（2026-09-08 复审 major 的连带修）】
@@ -614,7 +616,7 @@ export function valueNoticeMessage(violations: readonly ValueViolation[], mode: 
   if (unsourced.length) {
     lines.push(
       `本轮有 ${unsourced.length} 处数字既不是这一轮算出来的、也不在来源卡里：${unsourced.join('、')}，${said(VALUE_UNSOURCED)}。` +
-        `出路：回我一句「${SUGGEST_RECALC}」，我用 claim_calc 按你档案里的入职日期与工资重算一遍，` +
+        `出路：回我一句「${SUGGEST_RECALC}」，我按你档案里的入职日期与工资重算一遍，` +
         '算式、每一项输入的来源、依据条文会一起给你——那个数才是能拿去谈的数。',
     );
   }
@@ -630,7 +632,7 @@ export function valueNoticeMessage(violations: readonly ValueViolation[], mode: 
     lines.push(
       `本轮有 ${fromCalc.length} 处数字与这一轮算出来的数差了一点：` +
         fromCalc.map((v) => `${v.token}（算出来是 ${v.nearest}）`).join('、') +
-        `，${said(VALUE_MISMATCH)}。出路：以 claim_calc 的算式为准，回我一句「${SUGGEST_REPEAT_CALC}」；` +
+        `，${said(VALUE_MISMATCH)}。出路：以我这一轮算出来的算式为准，回我一句「${SUGGEST_REPEAT_CALC}」；` +
         '要是输入写错了（工资、入职日期），说清改哪一项，我重算。',
     );
   }
@@ -645,8 +647,22 @@ export function valueNoticeMessage(violations: readonly ValueViolation[], mode: 
  * 系统却让用户去翻一张与它无关的卡（这正是 2026-09-08 复审那条 major 的形状）。
  *
  * 优先级按"能当场推进多少"排：现算 > 复述算式 > 照卡改。
+ *
+ * 【观察期一句都不给（2026-09-10 复审）】`observe` 下正文里一个标记都没有，
+ * 而提示行会指着一处用户根本看不见的东西说"这个数没有来源"——他回头去正文里找，
+ * 找不到。所以观察期整条提示行不出现：**没有 suggest，GateHintLine 就不画**
+ *（那条判据在 gate-hint-line.test.tsx）。记账不受影响——notice 照发、`value_marked`
+ * 照带、gate_json 照落，误标率的读数就是从那几列取的。
+ *
+ * 【为什么 `mode` 没有缺省值】缺省的形态是：调用点忘了传，观察期照旧弹出提示行，
+ * 而 tsc 绿、这个文件的判据也绿（它们各自传了自己那一臂）。同一条理由见 gate-chain.ts
+ * 的 `valueGuardText`——上线口径不许有看不见的契约。
  */
-export function valueNoticeSuggest(violations: readonly ValueViolation[]): string | undefined {
+export function valueNoticeSuggest(
+  violations: readonly ValueViolation[],
+  mode: ValueGuardMode,
+): string | undefined {
+  if (mode !== 'rewrite') return undefined;
   if (violations.some((v) => v.mark === 'unsourced')) return SUGGEST_RECALC;
   if (violations.some((v) => v.mark === 'mismatch' && v.nearestFrom === 'calc')) return SUGGEST_REPEAT_CALC;
   if (violations.some((v) => v.mark === 'mismatch')) return SUGGEST_USE_CARD;

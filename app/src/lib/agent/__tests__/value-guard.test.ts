@@ -317,7 +317,6 @@ describe('要件 K · 算出来的数与卡里的数一视同仁（2026-09-08 �
     const msg = valueNoticeMessage([
       { token: '47103 元', kind: '金额', mark: 'mismatch', nearest: '47103.25', nearestFrom: 'calc' },
     ]);
-    expect(msg).toContain('claim_calc');
     expect(msg).toContain('算式');
     expect(msg).not.toContain('生效期间');
   });
@@ -452,13 +451,13 @@ describe('要件 G · 标记是增不是删：原文一个字都不能少', () =
 });
 
 describe('要件 H · 禁令必配出路（设计稿 §7.7）', () => {
-  it('无来源的出路点名 claim_calc（删掉出路句 → 红）', () => {
+  it('无来源的出路是「我按你档案里的数重算」（删掉出路句 → 红）', () => {
     const msg = valueNoticeMessage([{ token: '60 万', kind: '金额', mark: 'unsourced' }]);
-    expect(msg).toContain('claim_calc');
+    expect(msg).toContain('重算');
     expect(msg).toContain('算式');
   });
 
-  it('不一致的出路是来源卡，不是 claim_calc（两种标记共用一句 → 红）', () => {
+  it('不一致的出路是来源卡，不是算式（两种标记共用一句 → 红）', () => {
     const msg = valueNoticeMessage([{ token: '47100 元', kind: '金额', mark: 'mismatch', nearest: '47103.25' }]);
     expect(msg).toContain('来源卡');
     expect(msg).toContain('47103.25');
@@ -475,23 +474,68 @@ describe('要件 H · 禁令必配出路（设计稿 §7.7）', () => {
     [{ token: '47100 元', kind: '金额' as const, mark: 'mismatch' as const, nearest: '47103.25', nearestFrom: 'calc' as const }],
     [{ token: '47100 元', kind: '金额' as const, mark: 'mismatch' as const, nearest: '47103.25', nearestFrom: 'card' as const }],
   ])('suggest 与出路句同一句话（%j）', (v) => {
-    const suggest = valueNoticeSuggest([v])!;
+    const suggest = valueNoticeSuggest([v], 'rewrite')!;
     expect(suggest, '这一支没有 chip → 闸提示行整条不出现').toBeTruthy();
     expect(valueNoticeMessage([v])).toContain(`「${suggest}」`);
   });
 
   it('三种判定给三句不同的话（合成一句 → 把用户指去一张与这个数无关的卡）', () => {
-    const one = valueNoticeSuggest([{ token: '60 万', kind: '金额' as const, mark: 'unsourced' as const }]);
-    const two = valueNoticeSuggest([
-      { token: '47100 元', kind: '金额' as const, mark: 'mismatch' as const, nearest: '47103.25', nearestFrom: 'calc' as const },
-    ]);
-    const three = valueNoticeSuggest([
-      { token: '47100 元', kind: '金额' as const, mark: 'mismatch' as const, nearest: '47103.25', nearestFrom: 'card' as const },
-    ]);
+    const one = valueNoticeSuggest([{ token: '60 万', kind: '金额' as const, mark: 'unsourced' as const }], 'rewrite');
+    const two = valueNoticeSuggest(
+      [{ token: '47100 元', kind: '金额' as const, mark: 'mismatch' as const, nearest: '47103.25', nearestFrom: 'calc' as const }],
+      'rewrite',
+    );
+    const three = valueNoticeSuggest(
+      [{ token: '47100 元', kind: '金额' as const, mark: 'mismatch' as const, nearest: '47103.25', nearestFrom: 'card' as const }],
+      'rewrite',
+    );
     expect(new Set([one, two, three]).size).toBe(3);
   });
 
   it('零违规时没有 chip（空 chip 会渲染成一枚点了什么都不发生的按钮）', () => {
-    expect(valueNoticeSuggest([])).toBeUndefined();
+    expect(valueNoticeSuggest([], 'rewrite')).toBeUndefined();
+  });
+});
+
+/**
+ * 要件 H2 · 观察期整条提示行不出现（2026-09-10 复审 minor）
+ *
+ * 【缺这条判据的形态】`observe` 下正文里一个标记都没有，而提示行照样弹出来
+ * 指着一处用户看不见的东西说"这个数没有来源"——他回头去正文里找，找不到。
+ * 两件事都不报错：notice 照发、chip 照点、正文照旧。
+ *
+ * 【为什么"没有 chip"就等于"整条不出现"】GateHintLine 的第一行是
+ * `if (!suggest) return null`（判据在 gate-hint-line.test.tsx）。这里钉的是产线那一半：
+ * 观察期交出去的 suggest 必须是 undefined。
+ *
+ * 【变异臂】把 `if (mode !== 'rewrite') return undefined` 删掉 ⇒ 下面第一条红。
+ */
+describe('要件 H2 · 观察期不出提示行（上线口径见 gate-chain.ts 的 VALUE_GUARD_MODE）', () => {
+  const UNSOURCED = [{ token: '60 万', kind: '金额' as const, mark: 'unsourced' as const }];
+  const MISMATCH = [
+    { token: '47100 元', kind: '金额' as const, mark: 'mismatch' as const, nearest: '47103.25', nearestFrom: 'card' as const },
+  ];
+
+  it.each([
+    ['无来源', UNSOURCED],
+    ['与来源卡不一致', MISMATCH],
+  ])('observe：%s 也不给 chip（正文里没有的标记，不该有另一处指着它说话）', (_label, violations) => {
+    expect(valueNoticeSuggest(violations, 'observe')).toBeUndefined();
+  });
+
+  it('rewrite：同一批违规照常给 chip（上一条不是把 chip 整个废掉）', () => {
+    expect(valueNoticeSuggest(UNSOURCED, 'rewrite')).toBe('帮我算一下');
+    expect(valueNoticeSuggest(MISMATCH, 'rewrite')).toBe('按卡里的数改一遍');
+  });
+
+  /**
+   * 【读数不受影响】观察期存在的全部意义就是继续量 seen / fired 与误标率
+   *（切 rewrite 的判据），所以 message 与 value_marked 一个都不许跟着消失——
+   * 它们落进 messages.gate_json，离线统计读的就是那一列。
+   */
+  it('observe：message 照常产出、照常点名那个数（连 message 一起吞掉 → 读数断了）', () => {
+    const msg = valueNoticeMessage(UNSOURCED, 'observe');
+    expect(msg).toContain('60 万');
+    expect(msg, '正文里没有标记，这句话不许说"已标注"').not.toContain('已标注');
   });
 });

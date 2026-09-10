@@ -63,7 +63,7 @@ export const GATE_MARK_HINTS: Record<GateMark, string> = {
   [UNVERIFIED_CITATION]:
     `这里本来引了一个案号，本轮检索里没有它的原文，已经换成这个标记——别照抄；回我一句「${SUGGEST_FIND_CASE}」我去查。`,
   [UNVERIFIED_STATUTE]:
-    `这一条的条号我这轮没取到原文，条号原样留着好让你自己去查；回我一句「${SUGGEST_CHECK_STATUTE}」我把原文取回来再引给你。`,
+    `这一条的条号我这轮没取到原文，条号原样留着，好让你对得上是哪一条；回我一句「${SUGGEST_CHECK_STATUTE}」我把原文取回来再引给你。`,
   [SUPERSEDED_STATUTE]:
     `这一条的来源已经不是现行文本，别再往正式材料里写；回我一句「${SUGGEST_FETCH_CURRENT}」我按登记簿里的新版原文重新引。`,
   [VALUE_UNSOURCED]:
@@ -71,3 +71,25 @@ export const GATE_MARK_HINTS: Record<GateMark, string> = {
   [VALUE_MISMATCH]:
     `这个数与来源差了一点（像是抄错了一位），以来源为准；回我一句「${SUGGEST_USE_CARD}」我照来源改。`,
 };
+
+/**
+ * ⑤ 案号闸发给用户的那条 notice 的正文（`CITATION_BLOCKED.message`）。
+ *
+ * 【为什么这句话住在这里，而不是在 orchestrator 的 emit 里】两条理由：
+ *  · **与标记、chip 同源**——这一句要说清"那几处现在显示为什么"、"回我一句什么"，
+ *    而那两样都是本文件里的常量。写在调用点的形态是：标记改了、chip 改了，
+ *    这句话还在讲上一版的样子，三处都不会报错。
+ *  · **落进同一张扫描面**——lawyer-referral-guard 按文件扫产品面上的字。
+ *    这句是用户读得到的话，写在 orchestrator（一个不在扫描面里的大文件）里，
+ *    等于给"把用户支出去"留了一处闸看不见的地方。
+ *
+ * 【为什么是函数不是裸常量】案号要报出来（用户得知道我拿掉的是哪一个），
+ * 拆成几段字面让调用点去拼的形态是：拼装顺序与连接词又回到了 orchestrator 里。
+ */
+export function citationNoticeMessage(cited: readonly string[]): string {
+  return (
+    `我引的案号 ${cited.join('、')} 在本轮检索里没有原文，已经把它从正文里去掉` +
+    `（那几处现在显示为${UNVERIFIED_CITATION}）——没有原文的案号一律不作数，别照抄。` +
+    `出路：回我一句「${SUGGEST_FIND_CASE}」，我去把这个案子的原文找出来再引给你。`
+  );
+}

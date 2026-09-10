@@ -142,18 +142,27 @@ function walk(dir: string, out: string[] = []): string[] {
 /**
  * 扫描面 = 产品面（用户看得见的字）+ 写给模型的那三份纪律文案。
  *
- * 【为什么 lib 那侧只点这四个文件，而不是整个 lib】"律师"这两个字在 lib 里到处都是，
+ * 【为什么 lib 那侧只点这几个文件，而不是整个 lib】"律师"这两个字在 lib 里到处都是，
  * 而绝大多数是**内部叙述**（模块头注释、变量名、解释存疑那套机制）。
  * 整个 lib 一起扫的形态是：判据一片红，于是有人给它加一张长长的豁免名单，
- * 而豁免名单一长就没人看得懂它到底还在拦什么。这四个文件是**对外说话的那几份**：
- * 准则、system prompt、无工具模式开场白、闭合清单渲染。
+ * 而豁免名单一长就没人看得懂它到底还在拦什么。这几个文件是**对外说话的那几份**：
+ * 准则、system prompt、无工具模式开场白、闭合清单渲染、闸标记的那几句出路话术。
+ *
+ * 【2026-09-10 补进 gate-marks.ts，理由】三道出口闸开火之后给用户的那几句话都住在那里
+ *（正文标记的悬停解释、提示行的 notice 文案、一键回复 chip）。它们与本闸要拦的东西
+ * 正好同型——都是"这一处有问题"之后紧接着的那半句，而**最省力的那半句就是把人支出去**。
+ * 不进扫描面的形态是：那几句话每天都在用户眼前，而这道闸从没看过它们。
  */
 const SCANNED = [
   ...walk(path.join(SRC_ROOT, 'app')),
   ...walk(path.join(SRC_ROOT, 'components')),
-  ...['lib/agent/charter.ts', 'lib/agent/prompt.ts', 'lib/agent/lawyer-mandatory.ts', 'lib/paste/guide.ts'].map(
-    (f) => path.join(SRC_ROOT, f),
-  ),
+  ...[
+    'lib/agent/charter.ts',
+    'lib/agent/prompt.ts',
+    'lib/agent/lawyer-mandatory.ts',
+    'lib/agent/gate-marks.ts',
+    'lib/paste/guide.ts',
+  ].map((f) => path.join(SRC_ROOT, f)),
 ];
 const rel = (file: string) => path.relative(SRC_ROOT, file);
 
@@ -430,7 +439,7 @@ describe('产品面与 charter 只在三个位置提「律师」（主理人 202
   it('扫到的确实是那一堆文件（空名单会让上面那条永远绿）', () => {
     expect(SCANNED.length).toBeGreaterThan(200);
     expect(SCANNED.map(rel)).toContain('app/page.tsx');
-    for (const f of ['lib/agent/charter.ts', 'lib/agent/prompt.ts', 'lib/paste/guide.ts']) {
+    for (const f of ['lib/agent/charter.ts', 'lib/agent/prompt.ts', 'lib/agent/gate-marks.ts', 'lib/paste/guide.ts']) {
       expect(SCANNED.map(rel)).toContain(f);
     }
   });

@@ -485,8 +485,8 @@ describe('五、端到端接线', () => {
     // 放行集挂在**无条件发**的 GATE_REPORT 上，不挂只在开火时发的这一条
     const g = notices.find((e) => e.data.code === 'GATE_REPORT');
     expect(g!.data.gate_report?.statute_allowed, '放行集没落盘 → 漏网率离线重算不出来').toBeDefined();
-    // 禁令必配出路
-    expect(n!.data.message).toContain('citation_check');
+    // 禁令必配出路（措辞不带工具名，见 gate-notice-copy.test.ts）
+    expect(n!.data.message).toContain('我去把原文取回来');
   });
 
   /**
@@ -537,11 +537,15 @@ describe('五、端到端接线', () => {
     // 但闸确实开了火：notice 逐条点名 + gate_report 照常进替换率的分子
     const n = notices.find((e) => e.data.code === 'VALUE_UNSOURCED');
     expect(n, '⑨ 开了火却没发自己的 notice').toBeTruthy();
-    expect(n!.data.message).toContain('claim_calc');
+    expect(n!.data.message).toContain('60 万');
     expect(n!.data.value_marked?.[0]).toMatchObject({ token: '60 万', kind: '金额', mark: 'unsourced' });
     expect(gateReport.gates.value_guard).toEqual({ seen: 1, fired: 1 });
     // 观察模式下这句话不许说「已标注」——正文里没有那个标记，用户会去找而找不到
     expect(n!.data.message, '留痕说了一件没发生的事').not.toContain('已标注');
+    // 同一条理由的第二半（2026-09-10 复审 minor）：**连提示行都不出**。
+    // 没有 suggest ⇒ GateHintLine 整条不画（渲染那一半在 gate-hint-line.test.tsx）。
+    // 变异：value-guard.ts 里去掉观察期那一支 ⇒ 这一行红。
+    expect(n!.data.suggest, '观察期弹出了一枚指向不存在标记的 chip').toBeUndefined();
   });
 
   /**
