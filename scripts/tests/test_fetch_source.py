@@ -442,7 +442,48 @@ def test_http_url_is_recorded_as_http_not_https(fetch, monkeypatch):
     _, meta = fetch.download("http://www.bjchy.gov.cn/x.html")
     assert meta["fetch_method"] == "http"
     assert meta["fetch_url"] == "http://www.bjchy.gov.cn/x.html"
-    assert len(calls) == 1, f"http 的 URL 没有 TLS 可退，不该重试三次：{calls}"
+    assert len(calls) == 1, f"第一次就成功，不该再打：重试只在失败时发生：{calls}"
+
+
+def test_http_only_url_retries_before_giving_up(fetch, monkeypatch):
+    """http 单档：前两次连接失败、第三次成功 ⇒ 照常抓到，fetch_method 仍记 `http`。
+
+    https 的 URL 有三格 TLS 可退、再加一格 http-fallback；http:// 的 URL 梯子只有一格，
+    不重试就等于同一次网络抖动下 https 的源抓得到、http-only 的源抓不到——
+    差的是梯子的长度，不是源的质量（本库真有只走 http 的政府站）。
+    """
+    slept: list[float] = []
+    monkeypatch.setattr(fetch.time, "sleep", lambda s: slept.append(s))
+    calls: list[tuple[str, dict]] = []
+
+    def fake(url, **kw):
+        calls.append((url, kw))
+        if len(calls) < 3:
+            raise RuntimeError("模拟：连接被重置")
+        return "<html><body>正文</body></html>".encode(), {"http_status": 200, "content_type": "text/html"}
+
+    monkeypatch.setattr(fetch, "_curl", fake)
+    _, meta = fetch.download("http://www.bjchy.gov.cn/x.html")
+    assert meta["fetch_method"] == "http", meta
+    assert meta["fetch_url"] == "http://www.bjchy.gov.cn/x.html"
+    assert len(calls) == 3, f"前两次失败后必须再打，直到 HTTP_ATTEMPTS 用完：{calls}"
+    assert [c[0] for c in calls] == ["http://www.bjchy.gov.cn/x.html"] * 3, calls
+    assert slept == [fetch.HTTP_RETRY_BACKOFF_SEC] * 2, f"两次重试之间要退避：{slept}"
+
+
+def test_https_ladder_does_not_sleep_between_rungs(fetch, monkeypatch):
+    """正向对照：https 的三档各打各的，不退避。
+
+    没有这条，把退避写成"每退一格都睡"也能让上一条绿——而那会给全库
+    每一次 https 抓取平白加上几秒，且失败时才看得出来。
+    """
+    slept: list[float] = []
+    monkeypatch.setattr(fetch.time, "sleep", lambda s: slept.append(s))
+    calls = _recording_curl(fetch, monkeypatch, fail_https=True)
+    _, meta = fetch.download("https://www.bjchy.gov.cn/x.html")
+    assert meta["fetch_method"] == "http-fallback"
+    assert [c[0].split("://")[0] for c in calls] == ["https", "https", "https", "http"]
+    assert slept == [], f"TLS 三档之间不该退避：{slept}"
 
 
 def test_https_url_still_records_the_tls_rung_it_used(fetch, monkeypatch):

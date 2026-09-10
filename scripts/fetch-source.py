@@ -50,6 +50,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
@@ -69,6 +70,15 @@ ROOT = Path(__file__).resolve().parent.parent / "knowledge"
 # "Mozilla/5.0 (X11; Linux x86_64) lawer-fetch-source/1.0" 即可，其余逻辑不受影响。
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 CST = timezone(timedelta(hours=8))
+
+#: http:// 的 URL 打几次、每两次之间等几秒。
+#: https 的 URL 天然有三次机会（三档 TLS 退让）外加一格 http-fallback，
+#: 而 http:// 没有 TLS 可退、梯子只有一格——**一次瞬时失败就是整次抓取失败**。
+#: 于是同一次网络抖动下 https 的源抓得到、http-only 的源抓不到，
+#: 差别不在源的质量，只在梯子的长度（本库真有只走 http 的政府站）。
+#: 三次是照着 https 那三档的次数配的，不是另立一套。
+HTTP_ATTEMPTS = 3
+HTTP_RETRY_BACKOFF_SEC = 2
 
 
 def die(msg: str) -> None:
@@ -157,15 +167,18 @@ def download(url: str) -> tuple[bytes, dict]:
     证书链缺中间证、以及 bjchy.gov.cn 那种只有 http 可达的站。
     **退到哪一档必须记进 meta.json**：走过 -k 的原件与走过完整校验的原件，
     可信度不是一回事，而事后从 sha256 上完全看不出来。
-    传进来就是 http:// 的 URL 只有一档（`http`）——TLS 那三档对它无意义。
+    传进来就是 http:// 的 URL 只有一档（`http`）——TLS 那三档对它无意义；
+    这一档打 HTTP_ATTEMPTS 次（见该常量：只打一次的话，一次瞬时失败就没有后手了）。
     """
     # 【fetch_method 说的是"实际用了哪个 scheme + 哪一档 TLS"，不是"我们打算用 https"】
     # 这三档全是 TLS 上的退让，只有 https 的 URL 走得上；传进来的就是 http:// 时，
     # curl 压根不做 TLS，把它记成 `https` 是**记了一件没发生的事**——
     # 而 meta.json 里 fetch_method=https 配一个 http:// 的 fetch_url，
     # 事后没有任何一处会打架（实见 16 份 meta 这么记着，audit-sources 那一关就是为它加的）。
-    if url.startswith("http://"):
-        ladder = [("http", dict())]
+    http_only = url.startswith("http://")
+    if http_only:
+        # 同一档打 HTTP_ATTEMPTS 次（见常量处：这一档没有 TLS 可退，不重试就只有一次机会）。
+        ladder = [("http", dict())] * HTTP_ATTEMPTS
     else:
         ladder = [
             ("https", dict()),
@@ -173,12 +186,16 @@ def download(url: str) -> tuple[bytes, dict]:
             ("https+tlsv1.2+insecure", dict(tls12=True, insecure=True)),
         ]
     errors = []
-    for method, kw in ladder:
+    for i, (method, kw) in enumerate(ladder):
+        # 只有 http 那一档是"同一件事再打一次"，才需要退避；TLS 三档各打各的，立刻退下一格。
+        if http_only and i:
+            time.sleep(HTTP_RETRY_BACKOFF_SEC)
         try:
             data, meta = _curl(url, **kw)
             return data, {**meta, "fetch_method": method, "fetch_url": url}
         except Exception as e:  # noqa: BLE001 —— 逐档记账后继续退，最后一起报
-            errors.append(f"{method}: {e}")
+            # http 那三次是同一档重打，不编号的话失败报告是三行长得一样的字，读者会以为闸坏了。
+            errors.append(f"{method}（第 {i + 1} 次）: {e}" if http_only else f"{method}: {e}")
     if url.startswith("https://"):
         http_url = "http://" + url[len("https://") :]
         try:
