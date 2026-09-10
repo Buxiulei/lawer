@@ -277,34 +277,60 @@ def quarantine_labels() -> list[str]:
 _URL_IN_CARD = re.compile(r"https?://[^\s()\[\]{}<>\"'，、。；：）】》]+")
 
 
+def _scheme_rows(name: str, rel: str, text: str, schemes: dict) -> list[str]:
+    """一份卡文里所有"与登记簿同 host+path 异 scheme"的行。
+
+    逐行点名而不是逐卡：同一张卡常常在 sources 与正文"来源："里各写一遍，
+    只报一次的话，改完那一处再跑还是红，而报告看起来没变。
+    """
+    bad = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        for url in _URL_IN_CARD.findall(line):
+            page = ks.page_of(url)
+            if not page:
+                continue
+            scheme, host_path = page
+            registered = schemes.get(host_path)
+            if not registered or scheme in registered:
+                continue
+            want, sid = sorted(registered.items())[0]
+            bad.append(
+                f"  · {name}（{rel}:{lineno}）：{url}"
+                f" —— 登记簿 {sid} 记的是 {want}://{host_path}"
+                f"（那是实际抓到正文的 scheme）。改卡里这一处的 scheme，别改登记簿"
+            )
+    return bad
+
+
+#: 隔离区的说明文，不是卡：它成段引用各站的 URL 来记"试过什么、为什么不算数"，
+#: 那是叙事而不是出处，按卡的尺子量它只会逼人把记录改成不像记录的样子。
+QUARANTINE_README = "README.md"
+
+
 def scheme_mismatches(entries: list[dict], registry: list[dict]) -> list[str]:
     """守卫 (i)：卡里的出处与登记簿同 host+path 却换了 scheme。
 
     比 host 更细、比整条 URL 更粗，是因为这一层要回答的正是"同一页、不同取法"：
     只比 host 会把同站不同页当成一回事；整条 URL 相等则退化成"必须一字不差"，
     而登记簿里带 `?big=fan` 之类参数的条目会让每张引它的卡无故判红。
+
+    量程含隔离区（`knowledge/quarantine/**`，README 除外），尽管那些卡不进索引：
+    隔离卡是**复活时逐字抄回 `packs/` 的那份底稿**，写反的 scheme 会跟着卡一起回来，
+    而回来那一刻它已经算"核过的卡"——索引侧这道闸扫到的是抄回来的结果，不是源头。
+    只扫索引时隔离区里的分叉一路绿到复活当天（扩量程当天现库实见 4 处，
+    全落在同一份朝阳法院原件上，而索引侧当时是 0 条）。
     """
     schemes = ks.registry_schemes(registry)
     bad = []
     for e in entries:
-        text = (ROOT / e["path"]).read_text(encoding="utf-8")
-        # 逐行点名而不是逐卡：同一张卡常常在 sources 与正文"来源："里各写一遍，
-        # 只报一次的话，改完那一处再跑还是红，而报告看起来没变。
-        for lineno, line in enumerate(text.splitlines(), 1):
-            for url in _URL_IN_CARD.findall(line):
-                page = ks.page_of(url)
-                if not page:
-                    continue
-                scheme, host_path = page
-                registered = schemes.get(host_path)
-                if not registered or scheme in registered:
-                    continue
-                want, sid = sorted(registered.items())[0]
-                bad.append(
-                    f"  · {e['id']}（{e['path']}:{lineno}）：{url}"
-                    f" —— 登记簿 {sid} 记的是 {want}://{host_path}"
-                    f"（那是实际抓到正文的 scheme）。改卡里这一处的 scheme，别改登记簿"
-                )
+        bad += _scheme_rows(e["id"], str(e["path"]), (ROOT / e["path"]).read_text(encoding="utf-8"), schemes)
+    for path in sorted(ROOT.glob(f"{QUARANTINE}/**/*.md")):
+        if path.name == QUARANTINE_README:
+            continue
+        rel = str(path.relative_to(ROOT))
+        # 点明"隔离区卡"：它没有索引 id 可报，而不说这一句的话，读者会拿着一条
+        # 报错去 index.json 里找那张卡，找不到，然后以为闸坏了。
+        bad += _scheme_rows("隔离区卡", rel, path.read_text(encoding="utf-8"), schemes)
     return bad
 
 

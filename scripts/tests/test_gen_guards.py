@@ -848,8 +848,44 @@ def test_scheme_guard_is_silent_on_unregistered_pages(gen, kb):
     assert [e["id"] for e in data] == ["statute-other"]
 
 
+def test_scheme_guard_reaches_into_quarantine(gen, kb):
+    """隔离区的卡不进索引，但它的出处同样要与登记簿同 scheme。
+
+    隔离卡是**复活时逐字抄回 packs/ 的那份底稿**：写反的 scheme 会跟着卡一起回来，
+    而回来那一刻它已经算"核过的卡"——索引侧这道闸扫到的是抄回来的结果，不是源头。
+    只扫索引时隔离区里的分叉一路绿到复活当天（2026-09-08 复审在现库实见）。
+    """
+    write_card(kb, "packs/statutes/ok.md", card_id="statute-ok", sources=[REGISTERED_PAGE_HTTPS])
+    # 隔离卡的 confidence 只能是「待核实」/「二手转述」——见 (h)，这里不是在绕开它。
+    write_card(kb, "quarantine/cases/scheme.md", card_id="case-q-scheme", confidence="待核实",
+               sources=[REGISTERED_PAGE_HTTP])
+    code, data = run(gen, kb)
+    assert code != 0, "隔离卡里的反向 scheme 必须拦"
+    assert "(i)" in str(code) and "隔离区卡" in str(code), f"报错要点明这是隔离区卡：\n{code}"
+    assert "quarantine/cases/scheme.md:" in str(code), f"要点到行号：\n{code}"
+    assert data is None, "守卫不过时不该留下一份看起来正常的索引"
+
+
+def test_quarantine_readme_is_not_a_card(gen, kb):
+    """正向对照：隔离区里 scheme 对得上的卡放行，README 整份不进这把尺。
+
+    没有这条，把量程写成"隔离区任何 .md 里出现登记在册的页面就红"也能让上一条绿——
+    而 README 正是成段引用各站 URL 记"试过什么、为什么不算数"的那份文档，
+    按卡的尺子量它只会逼人把记录改成不像记录的样子。
+    """
+    write_card(kb, "packs/statutes/ok.md", card_id="statute-ok", sources=[REGISTERED_PAGE_HTTPS])
+    write_card(kb, "quarantine/cases/ok.md", card_id="case-q-ok", confidence="待核实",
+               sources=[REGISTERED_PAGE_HTTPS])
+    (kb / "quarantine" / "README.md").write_text(
+        f"# 隔离区\n\n试过 <{REGISTERED_PAGE_HTTP}>，取回来的是挑战页。\n", encoding="utf-8"
+    )
+    code, data = run(gen, kb)
+    assert code == 0, code
+    assert [e["id"] for e in data] == ["statute-ok"]
+
+
 def test_real_library_has_no_scheme_mismatch(gen):
-    """现库 0 违规（本轮改齐 13 处的落地面）。
+    """现库 0 违规（本轮改齐 13 处的落地面；量程后来扩到隔离区，这里一并盖住）。
 
     上面那条 test_real_library_is_green_under_strict 只会说"现库红了"，
     红的原因可能是任意一条守卫；这条直接点住 (i) 这一维，

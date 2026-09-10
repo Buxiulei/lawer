@@ -27,7 +27,7 @@ updated: 2026-08-19
 > 本次实测：
 > · 朝阳法院的真实官网子域是 `cyqfy.bjcourt.gov.cn`（不是猜测的 `bjchy.bjcourt.gov.cn`，后者确实 DNS 不解析，
 >   但这不代表朝阳法院没有官网）。用其"朝法案例调研"栏目按日期范围检索到官方发布页：
->   <https://cyqfy.bjcourt.gov.cn/article/detail/2024/08/id/8071059.shtml>
+>   <http://cyqfy.bjcourt.gov.cn/article/detail/2024/08/id/8071059.shtml>
 >   《朝阳法院召开涉多元用工劳动争议案件审理情况及典型案例新闻通报会》（发布时间 2024-07-25）；
 >   已登记在 `knowledge/sources.json`（`source_id: cases-cyqfy-2024-duoyuanyonggong-tongbaohui`，
 >   另一批次核实同批案例时登记，同一篇原件，本卡直接复用不重复登记）。

@@ -28,7 +28,7 @@ updated: 2026-08-19
 > · `www.bjcourt.gov.cn`（北京法院审判信息网，朝阳法院栏目的上级站）https 与 http 均 `HTTP 521`（WAF JS 挑战）。
 > · `www.court.gov.cn` 未见该批典型案例的转发页。
 > · 本会话 WebSearch 配额已用尽（200/200）。
-> · 【第 9 批复查】**朝阳法院官方域名已找到**：`cyqfy.bjcourt.gov.cn`（`bjchy.bjcourt.gov.cn` 不解析是因为猜错了子域名，真实子域是 `cyqfy`），浏览器 UA 可正常访问（非一直不可达）。用该站 `/article/essearch.shtml` 站内检索（宽日期范围，默认只搜近一年，日期条件不放宽会把 2024 年的东西全部漏检）命中官方原件：<https://cyqfy.bjcourt.gov.cn/article/detail/2024/08/id/8071059.shtml>《朝阳法院召开涉多元用工劳动争议案件审理情况及典型案例新闻通报会》（发布 2024-07-25，已登记 `cases-cyqfy-2024-duoyuanyonggong-tongbaohui`）——**但该文只叙述"通报会开了、领导讲了话"，未列出任何一件具体典型案例的案情或裁判理由，本卡涉及的细节仍无处可核**。
+> · 【第 9 批复查】**朝阳法院官方域名已找到**：`cyqfy.bjcourt.gov.cn`（`bjchy.bjcourt.gov.cn` 不解析是因为猜错了子域名，真实子域是 `cyqfy`），浏览器 UA 可正常访问（非一直不可达）。用该站 `/article/essearch.shtml` 站内检索（宽日期范围，默认只搜近一年，日期条件不放宽会把 2024 年的东西全部漏检）命中官方原件：<http://cyqfy.bjcourt.gov.cn/article/detail/2024/08/id/8071059.shtml>《朝阳法院召开涉多元用工劳动争议案件审理情况及典型案例新闻通报会》（发布 2024-07-25，已登记 `cases-cyqfy-2024-duoyuanyonggong-tongbaohui`）——**但该文只叙述"通报会开了、领导讲了话"，未列出任何一件具体典型案例的案情或裁判理由，本卡涉及的细节仍无处可核**。
 > 复活条件：拿到该批典型案例的 `.gov.cn` 原件（朝阳法院或北京高院发布页）并逐字核过。
 
 # 派遣公司与用工单位之间的公积金责任分担
