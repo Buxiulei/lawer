@@ -739,6 +739,11 @@ const HANDLERS: Record<string, Handler> = {
       // 标 user 的形态是——展示层不再标黄，一句模型听岔了的话看起来像本人确认过的。
       // 档位不收模型的声明（工具 schema 里没有这个参数）：它没有能力判断有没有书证，
       // 一律落最弱档，要升档得由真的挂上材料的那条路来做。
+      // 【event_type 同理，这一格是刻意不收的，不是漏了】（2026-09-10/11 结构化「决定」标记票）
+      // 那一格一旦落下就**压过**谓词、连兜底都不再跑，等于让模型的一次归类替用户拍板；
+      // 而这条路上落的正是"模型听来的话"（asserted_by=agent_inferred）。
+      // 收谁的声明是一条裁决，不在本票范围内——记在本票 openQuestions 里，由经理定。
+      // 用户自己的 agent 走 MCP / REST 那两道门时是收的（那侧是用户授权的调用方）。
       assertedBy: 'agent_inferred',
     });
     if (!res.ok) return reject(res.message);

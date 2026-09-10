@@ -15,7 +15,7 @@ import type { CounterpartyDecision } from '@/lib/cases/issue-table';
 import { CASE_MILESTONES } from '@/lib/cases/milestones';
 import { CASE_STAGES } from '@/lib/cases/stages';
 
-import type { DomainPack, IntakeActionSeed } from './registry';
+import type { DomainPack, IntakeActionSeed, IntakeEventTypeInput } from './registry';
 
 /**
  * 本领域的当事人称呼。**先于 LABOR 定义**，因为下面那些对外文案由它拼出来——
@@ -1121,9 +1121,138 @@ function forcedTerminationNotice(raw: string): boolean {
  * 当事人自己的说法，这一项在庭上就是待证的，那句话是实话。它连带把这几项诉求的风险档位
  * 压在「需补证后可主张」，同样是实话（见 lib/cases/claims.ts 的 riskBandOf）。
  */
+/**
+ * 每一类时间线事件底下，登记时可以选的那几个**「这条记录是什么」**
+ *（DomainPack.timelineEventTypes；机制与理由见 registry.ts 的 TimelineEventTypeSpec）。
+ *
+ * 【为什么本行当非要这一格不可】「公司动作」与「我方动作」是四类里最杂的两格：
+ * 公司这段时间做的事大多不是解除（调岗、降薪、约谈、警告、PIP、停工、搬迁），
+ * 我方做的事大多不是那份被迫解除通知（异议函、催薪函、加班申请、整理证据目录）。
+ * 判定此前只能读那段自由文本去认，而**用户叙事的变体是无穷的**：
+ * 收窄一轮就误杀一批真事件，放宽一轮就把一份调岗通知当成解除决定，
+ * 五轮下来每一轮都还有新的漏网（词表与样本见 companyTerminationDecision / forcedTerminationNotice）。
+ * 登记的人本来就知道自己记的是什么——给他这份枚举，判定就不必猜。
+ *
+ * 【id 全是拼音/英文串，不是中文】它落进库、进接口、进要件卡的 acceptsType，是**数据契约**；
+ * 用中文当 id 的形态是：哪天想把「其他通知」改叫别的名字，改的同时就改了库里既有行的取值域，
+ * 而两边都读得通。label / hint 才是给人读的那一份，随时可改。
+ *
+ * 【系统动作与期限为什么是空数组】这两类不是用户叙事：系统动作由服务端自己落痕
+ *（闸留痕、进度记录），期限是推算出来的日子。它们底下**没有任何要件判定在读**，
+ * 给一份枚举等于让登记的人去回答一个没有人会读的问题。空数组是结论，不是待填项。
+ */
+const LABOR_TIMELINE_EVENT_TYPES = {
+  公司动作: [
+    {
+      id: 'company_termination',
+      label: '公司作出的解除/终止/辞退决定',
+      hint: '公司已经把这件事定下来了：解除通知书、辞退通知、合同到期不再续签；口头通知你被解除也算——但要在标题里写明是「解除」。还在威胁、还在放风、还没轮到你的，选下面的「其他通知」。',
+    },
+    {
+      id: 'company_negotiation',
+      label: '协商解除提议或协议',
+      hint: '公司递来《协商解除协议》、催你签字、谈补偿方案。协商是提议不是单方决定，所以它与上一格分开记。',
+    },
+    {
+      id: 'company_notice',
+      label: '其他通知（调岗、降薪、警告、约谈、搬迁、停工）',
+      hint: '公司做了一件事、但还不是解除决定。这些常常是解除前的铺垫，值得逐条记下来。',
+    },
+    { id: 'company_other', label: '其他' },
+  ],
+  我方动作: [
+    {
+      id: 'my_forced_termination_notice',
+      label: '我发出的被迫解除通知（依第三十八条）',
+      hint: '你以公司的过错（拖欠工资、未缴社保等）为由，发出解除劳动合同的那一份通知。只有这一格算数——异议函、催薪函、辞职信都不是它。',
+    },
+    { id: 'my_objection', label: '异议函 / 催薪函 / 申诉' },
+    {
+      id: 'my_resignation',
+      label: '辞职 / 离职申请',
+      hint: '你自己提出走人。被逼着签的辞职信也记在这里，逼迫的经过写进详情。',
+    },
+    { id: 'my_other', label: '其他' },
+  ],
+  系统动作: [],
+  期限: [],
+} as const;
+
+/**
+ * 「对方给过哪些文件」那一问的子答案里，**这一格答的是"给过"还是"没给"**。
+ *
+ * 【为什么要分三态，而不是"填了就算有"】站内首诊那三问是单选（有 / 没有 / 不确定），
+ * 而 MCP 那条路收的是自由文本。只判"填没填"的形态是——一个逐格答了「没有」的人，
+ * 那条聚合事件里每一格都非空，于是它被当成"公司给过解除通知书"。
+ *
+ * @returns true = 给过；false = 没给；null = 认不准（"不确定"、以及自由文本里说不清的那些）
+ */
+function docAnswerAffirmative(raw: string | undefined): boolean | null {
+  const s = (raw ?? '').replace(/\s+/g, '');
+  if (s === '') return null;
+  // 否定式先判：「没有」里含着「有」，反过来会把每一个「没有」都读成给过。
+  if (/^[没未无]有?$|^[没未无]/.test(s)) return false;
+  if (/不确定|不记得|不清楚|说不好|待确认|可能|也许/.test(s)) return null;
+  if (/^有|收到|拿到|给了|给过|签了|已(?:收|签|拿)/.test(s)) return true;
+  return null;
+}
+
+/**
+ * 首诊落档时给每条事件定型（DomainPack.intakeEventType）。**取值口径写在下面，逐条有判据。**
+ *
+ * 【① 用户自己记的那几件事（answers）⇒ 恒 null】那一步问的是"你记得发生过什么"，
+ * 一条一句自述，写法完全自由（「HR 第一次找我谈」「权限被收走」「收到通知书」都在里面）。
+ * 这正是**类型要取代猜测**的那一类文本——替他挑一个的形态是：系统按几个词猜了一个类型，
+ * 而类型一旦落下就**压过**谓词、连兜底都不再跑，比猜错一次更贵。留 null，判定照旧读那段字。
+ *
+ * 【② 整段自述（freeText）⇒ my_other】它是**叙事**，不是一条事件记录：里面写着
+ *「我已经发了被迫解除通知」只说明他这么讲过，不说明档案里记着这件事发生在哪天、怎么送达
+ *（沿用经理裁定：首诊自由文本那条不参与判定）。选「其他」正是把这句话说清楚——
+ * 它是我方做的一件事，但不是那份通知。此前靠标题字串把它摘出去（forcedTerminationNotice 的⓪），
+ * 那道仍然留着管存量行；新行则连谓词都不必跑。
+ *
+ * 【③ 对方口头说了什么（counterpartWording）⇒ 恒 null】「说是业务调整，给 N+1，当天签当天走」
+ * 与「说绩效不合格，让我自己考虑」在这一格里同形，而前者多半已是那个决定、后者多半还没有。
+ * 它恰恰是谓词那套小句判定在处理的东西，交给它。
+ *
+ * 【④ 对方给过哪些文件（counterpartDocs）⇒ 按答案定，说得死才定】这一格是**单选式子问**，
+ * 是首诊里唯一一处用户明确回答过"给没给那张纸"的地方：
+ *   · 解除通知书答"给过" ⇒ company_termination（公司已经作出了那个决定）；
+ *   · 否则协商解除协议答"给过" ⇒ company_negotiation（协商是提议，不是单方决定，沿用裁定）；
+ *   · 否则其他文书答"给过" ⇒ company_notice（铺垫，不是决定）；
+ *   · **三格全答"没给" ⇒ company_other**——这条记录说的就是"公司什么纸都还没给"，
+ *     它明确**不是**那个决定。此前这条落 null、走谓词：而那段字里逐格写着
+ *     「《解除劳动合同通知书》：没有」，谓词按"解除"两个字判成公司作出了解除决定
+ *     （否定词在决定动作**后面**，未定态那条压不住），三条要件当场写着「成立·待证」。
+ *     这一格正是那处误判的解药，也是本票判据①反方向的那一臂。
+ *   · 只要还有一格是"不确定"或答不出是有是无 ⇒ null，回落到谓词（认不准就别定）。
+ *
+ * 【为什么优先级是"解除 > 协商 > 其他"，而不是报错】一条事件只有一个类型，而这一格
+ * 可能同时答了好几个"给过"。取**最强的那一格**：它是真的（用户确实说了公司给过解除通知书），
+ * 而另外两格记的事也确实发生过——它们各自的意义在这条聚合记录里本来就说不全，
+ * 要说全得把这一问拆成三条事件，那是另一票的事（记在 openQuestions）。
+ */
+function laborIntakeEventType(input: IntakeEventTypeInput): string | null {
+  if (input.source === 'freeText') return 'my_other';
+  if (input.source !== 'counterpartDocs') return null;
+
+  const answers = ['terminationNotice', 'settlementAgreement', 'otherPaper'].map((k) =>
+    docAnswerAffirmative(input.answers[k]),
+  );
+  const [notice, settlement, other] = answers;
+  if (notice === true) return 'company_termination';
+  if (settlement === true) return 'company_negotiation';
+  if (other === true) return 'company_notice';
+  // 全部明确答"没给"才敢说这条记录不是那个决定；有一格认不准就不定（回落到谓词）。
+  if (answers.every((a) => a === false)) return 'company_other';
+  return null;
+}
+
 /** 「公司动作」那个槽判不过时，缺口清单里那一行的名字。**带着出路**：缺的不是一份文件，
  * 是把公司作出这个决定的那一刻记成一条事件（与 N-2b 那条 missingAs 同一条纪律）。 */
-const COMPANY_DECISION_MISSING_AS = '公司的解除/终止决定（请把公司作出这个决定的那一刻记成一条时间线事件）';
+const COMPANY_DECISION_MISSING_AS =
+  '公司的解除/终止决定（请把公司作出这个决定的那一刻记成一条时间线事件，' +
+  '并把类型选成「公司作出的解除/终止决定」——选了就不用靠那段字去猜）';
 
 /**
  * 「公司确实作出过那个解除 / 终止决定」认哪两个槽、以及那条记录**说的是不是这件事**。
@@ -1157,6 +1286,14 @@ const COUNTERPARTY_DECISION = {
   slots: ['evidence:公司文件', 'timeline:公司动作'],
   slotChecks: {
     'timeline:公司动作': {
+      // 【类型优先，谓词兜底】（2026-09-10/11 台账「结构化决定」票）登记时选过类型的记录
+      // **只按类型判**：选了这一格就是公司作出的那个决定，选了别的（协商提议、其他通知）
+      // 就不是，谓词不再跑。没选过的（存量行、以及文件提取一类不猜的写入）才走谓词。
+      //
+      // 【协商解除为什么不在这里】（沿用经理裁定，2026-09-10）协商是对方提了个方案，
+      // 不是对方单方作出了那个决定——`company_negotiation` 与本格分开正是为了让这两件事
+      // 在登记时就分得开，而不是靠 COMPANY_DECISION_NEGOTIATED 去从文本里摘。
+      acceptsType: ['company_termination'],
       accepts: companyTerminationDecision,
       missingAs: COMPANY_DECISION_MISSING_AS,
     },
@@ -1300,6 +1437,13 @@ const LABOR_ELEMENT_CARDS: readonly ElementCard[] = [
     // 现有的「公司动作」（cases.TIMELINE_KINDS 四种 kind 里记录对方动作/通知的就是它，
     // 这里不新造种类）。两个槽都在档时按**最弱**的那一档算：事件只有用户自己说 ⇒ 「成立·待证」，
     // 事件由《解除通知》一类材料提取写入（书证档）⇒ 「成立」。
+    // 【协商一致解除这一档现在落在哪】（沿用经理裁定，2026-09-10）时间线上那条
+    // 「协商解除提议或协议」（company_negotiation）**不计入**公司单方作出的那个决定——
+    // 协商是对方提了个方案，签字之前它什么都不是。而第四十六条第二项的协商解除
+    // 确实是本卡覆盖的一档，所以出路那一列要把「已经签完字了怎么办」说清楚：
+    // 把已签的那份协议按材料登记进来，事件那一格照旧选「协商解除提议或协议」。
+    // 不说的形态是——一个已经签完协商解除协议的人读到这一项「缺失」，
+    // 而清单从头到尾只在讲解除通知书，他手上那份协议一个字都没被提到。
     satisfiedBy: COUNTERPARTY_DECISION.slots,
     slotChecks: COUNTERPARTY_DECISION.slotChecks,
     typicalEvidence: [
@@ -1307,6 +1451,7 @@ const LABOR_ELEMENT_CARDS: readonly ElementCard[] = [
       '离职证明',
       '合同期满不再续签的书面通知',
       '把公司作出解除/终止的那一刻记进时间线（哪天、谁通知的、怎么通知的）——员工手册、规章制度、工资结构表也归在「公司文件」类别下，但它们都不是公司的解除决定',
+      '已经协商一致签完字的：把那份已签协议按「公司文件」登记为证据，事件类型选「协商解除提议或协议」——协商在签字之前只是提议，所以它不算公司单方作出的那个决定',
     ],
   },
   {
@@ -1356,8 +1501,13 @@ const LABOR_ELEMENT_CARDS: readonly ElementCard[] = [
     satisfiedBy: ['evidence:沟通记录', 'timeline:我方动作'],
     slotChecks: {
       'timeline:我方动作': {
+        // 类型优先，谓词兜底（同 COUNTERPARTY_DECISION 那一格，理由写在那里）：
+        // 登记时选了「我发出的被迫解除通知」就是它，选了异议函 / 辞职就不是。
+        acceptsType: ['my_forced_termination_notice'],
         accepts: forcedTerminationNotice,
-        missingAs: '被迫解除通知（请把发出通知这件事记成一条时间线事件）',
+        missingAs:
+          '被迫解除通知（请把发出通知这件事记成一条时间线事件，' +
+          '并把类型选成「我发出的被迫解除通知」——选了就不用靠那段字去猜）',
       },
     },
     typicalEvidence: [
@@ -1621,6 +1771,13 @@ export const LABOR: DomainPack = {
   //（cases.TIMELINE_KINDS 四种 kind 里记录对方动作/通知的就是它，这里不新造种类）。
   // 两个槽都要到书证及以上才算在档（门槛与判法都在 lib/cases/issue-table.ts）。
   counterpartyDecision: COUNTERPARTY_DECISION,
+
+  // 登记一条事件时可以顺手选的「这条记录是什么」。**有就不猜**：要件判定优先读它，
+  // 没选过才回落到上面那几个谓词（理由与取值见 LABOR_TIMELINE_EVENT_TYPES）。
+  timelineEventTypes: LABOR_TIMELINE_EVENT_TYPES,
+
+  // 首诊落档时哪几格定得下类型、哪几格一律留 null（取值口径逐条写在函数上）。
+  intakeEventType: laborIntakeEventType,
 
   crisis: {
     lexicon: LABOR_CRISIS_TERMS,

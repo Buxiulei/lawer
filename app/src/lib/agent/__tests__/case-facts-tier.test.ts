@@ -41,6 +41,7 @@ function event(over: Partial<TimelineEventRow> = {}): TimelineEventRow {
     milestone: null,
     source_tier: '自述',
     asserted_by: 'user',
+    event_type: null,
     created_at: '2026-09-01 10:00:00',
     ...over,
   };
@@ -254,5 +255,45 @@ describe('取证闸：进了取证窗口而一条书证都没有', () => {
       snapshot({ case: { ...CASE_BASE, stage: gateStage }, companies: [company()] }),
     )!;
     expect(mark).toContain(pack.factsSections.find((s) => s.key === 'counterparts')!.title);
+  });
+});
+
+/**
+ * **事件类型标签**（2026-09-10/11 台账「结构化决定」票）。
+ *
+ * 【为什么它要出现在事实卡上】那一格决定了要件表怎么判这条记录：选了「其他通知」的
+ * 一条解除通知书，三张卡照旧写着「缺失」。卡上不印的形态是——模型（与读事实卡的人）
+ * 看到的是一条读起来像解除决定的记录，与一张说它缺失的要件表并排放着，
+ * 而没有任何一处说得出这两者为什么不一致。
+ *
+ * 【本文件不认识 labor 的类型 id】标签逐字取自领域包，这里只验"取的是它"。
+ */
+describe('时间线的事件类型标签', () => {
+  const COMPANY_TYPES = DOMAINS[DEFAULT_DOMAIN].timelineEventTypes['公司动作'];
+
+  it('选过类型 ⇒ 那一行带领域包给的 label（变异：把标签写死一份 → 随包改名而红）', () => {
+    const spec = COMPANY_TYPES[0];
+    const rows = [event({ id: 2, title: '上周三那个事', event_type: spec.id })];
+    const line = lineWith(render({ timeline: rows, timelineStats: { total: 1, earliest: rows[0] } }), '上周三那个事');
+    expect(line).toContain(`〔类型：${spec.label}〕`);
+    // 档位那一格还在原处：新标签不许把它挤掉
+    expect(line).toContain('〔自述〕');
+  });
+
+  it('没选过 ⇒ 那一行与本列落地前逐字相同（变异：给 null 也印一个标签 → 红）', () => {
+    const rows = [event({ id: 2, title: 'HR 第一次约谈' })];
+    expect(
+      lineWith(render({ timeline: rows, timelineStats: { total: 1, earliest: rows[0] } }), 'HR 第一次约谈'),
+    ).not.toContain('〔类型：');
+  });
+
+  it('🔴 认不出来的取值照实印出来，并说明它不会被任何判定认下（变异：当作没选过 → 红）', () => {
+    // 领域包改过枚举、库里还躺着按旧枚举选过的行：那一格已经压过谓词，
+    // 判定既不认它是任何一格、也不回去读那段字，于是这个槽从此恒缺。
+    // 静默的形态是——要件表说缺，时间线上这条记录看起来好端端的。
+    const rows = [event({ id: 2, title: '收到解除通知', event_type: '早就删掉的取值' })];
+    const line = lineWith(render({ timeline: rows, timelineStats: { total: 1, earliest: rows[0] } }), '收到解除通知');
+    expect(line).toContain('早就删掉的取值');
+    expect(line).toContain('不会认它');
   });
 });

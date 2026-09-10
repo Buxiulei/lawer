@@ -110,7 +110,7 @@ GET /api/v1/cases/{id}/messages	get_v1_cases_by_id_messages	bearer	[path:id!]	{}
 POST /api/v1/cases/{id}/chat	post_v1_cases_by_id_chat	bearer	[path:id!]	{}
 GET /api/v1/cases/{id}/report	case_report_get	bearer	[path:id!,query:section]	{}
 GET /api/v1/cases/{id}/timeline	timeline_list	bearer	[path:id!,query:since,query:kind,query:limit,query:offset]	{}
-POST /api/v1/cases/{id}/timeline	timeline_add	bearer	[path:id!]	{happened_at,kind,title,detail,client_ref,source_tier}
+POST /api/v1/cases/{id}/timeline	timeline_add	bearer	[path:id!]	{happened_at,kind,title,detail,client_ref,event_type,source_tier}
 POST /api/v1/cases/{id}/timeline/{eventId}/milestone	timeline_milestone	bearer	[path:id!,path:eventId!]	{milestone,user_confirmed}
 GET /api/v1/cases/{id}/actions	action_list	bearer	[path:id!,query:status]	{}
 POST /api/v1/cases/{id}/actions	action_create	bearer	[path:id!]	{items,client_ref}

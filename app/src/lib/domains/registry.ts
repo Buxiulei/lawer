@@ -13,6 +13,9 @@
 import type { CrisisOpenerText, HotlineFact } from '@/lib/agent/crisis-opener';
 import type { Burden, ElementCard } from '@/lib/cases/elements';
 import type { CounterpartyDecision } from '@/lib/cases/issue-table';
+// 零依赖词表，单独成文件正是为了能在这里当值用（见 lib/cases/timeline-kinds.ts 抬头）：
+// 从 lib/cases/index.ts 取会把整个 lib/db 拖进浏览器包，而本文件被页面引用。
+import { TIMELINE_KINDS } from '@/lib/cases/timeline-kinds';
 
 import { COUNSELING } from './counseling';
 import { LABOR } from './labor';
@@ -65,6 +68,54 @@ export const FACTS_SECTION_KEYS = [
 export type FactsSectionKey = (typeof FACTS_SECTION_KEYS)[number];
 
 /** 事实卡的一节：给人看的标题 + 给渲染器看的键。 */
+/**
+ * 一条时间线记录**是什么**的一个可选项（用户在登记时从下拉里选的那一格）。
+ *
+ * 【为什么要它，而不是继续让判定去猜那段自由文本】要件判定此前只能读记录自带的那段字，
+ * 靠领域包里的谓词去认它说的是不是这件事。用户叙事的变体无穷，谓词每收一轮都还有漏网，
+ * 且收窄与放宽互为代价（收紧就误杀真事件，放松就把调岗通知当成解除决定）。
+ * 而**登记的人本来就知道自己记的是什么**：给他一份闭合枚举，有就不用猜。
+ *
+ * 【为什么 id 与 label 分开】id 进库、进接口、进判定，改一个字就是改数据契约；
+ * label 是给人读的，随时可改。合成一格的形态是——改一句措辞，
+ * 库里既有行的那一格与新写入的那一格从此对不上，而两边都读得通。
+ */
+export interface TimelineEventTypeSpec {
+  /** 落库与判定认的那个不透明串（本领域内唯一，assertDomainPack 机检） */
+  id: string;
+  /** 下拉里显示的那一行，用户可见 */
+  label: string;
+  /** 选项下面那句解释，可省略（挑不准时看它） */
+  hint?: string;
+}
+
+/**
+ * 首诊落档时，一条事件是**首诊哪一格**写出来的。共用层的结构口径，一个行当名词都不含：
+ * 首诊表里问什么由领域包的 intakeSchema 说，这里说的只是"这条事件的字是从哪一格来的"。
+ *
+ * · answers            —— 用户逐条记下来的那几件事（每条一句自述）
+ * · freeText           —— 「把经过整段写下来」那一整段
+ * · counterpartWording —— 对方口头给的说法
+ * · counterpartDocs    —— 「对方给过哪些文件」那一问的全部子答案，合成一条事件
+ */
+export const INTAKE_EVENT_SOURCES = ['answers', 'freeText', 'counterpartWording', 'counterpartDocs'] as const;
+export type IntakeEventSource = (typeof INTAKE_EVENT_SOURCES)[number];
+
+/** 首诊定型时能看到的东西。**只有首诊自己填过的那几格**，不含任何推断。 */
+export interface IntakeEventTypeInput {
+  source: IntakeEventSource;
+  /** 这条事件落成哪一类（首诊各格恒定，见领域包的落档口径） */
+  kind: string;
+  /** 这条事件的标题（首诊各格的标题恒定，措辞在 copy.site） */
+  title: string;
+  /**
+   * 子问的答案，键取自 intakeSchema 里那一项的 `fields[].key`，值已去空白且非空。
+   * 只有 `counterpartDocs` 这一格有内容，其余来源恒是空对象——
+   * 它们的字是一整段自述，没有"哪个子问答了什么"这回事。
+   */
+  answers: Readonly<Record<string, string>>;
+}
+
 export interface FactsSectionSpec {
   key: FactsSectionKey;
   title: string;
@@ -603,6 +654,34 @@ export interface DomainPack {
    */
   counterpartyDecision?: CounterpartyDecision;
   /**
+   * 每一类时间线事件底下**可以选的那几个「这条记录是什么」**（键 = 事件类别，
+   * 取值须**恰好**覆盖 TIMELINE_KINDS 的每一个，assertDomainPack 两向机检）。
+   *
+   * **某一类给空数组 = 这一类不分型**（是结论不是待填项）：那一类底下的记录一律没有类型，
+   * 判定对它们照旧走谓词回落。缺一个键则是漏填——那一类的登记表单画不出下拉、
+   * 写入校验也认不出任何取值，而两处都不报错，所以在装载时点名。
+   *
+   * 【共用层只把 id 当不透明串】哪几个类型、各自叫什么、什么时候该选哪个，全是行当知识；
+   * 判定侧（要件卡的 `slotChecks.acceptsType`）拿到的也只是这串字。
+   */
+  timelineEventTypes: Readonly<Record<string, readonly TimelineEventTypeSpec[]>>;
+  /**
+   * 首诊落档时给每条事件定型。**省略 = 本领域首诊一条都不定型**（全落 null，判定照旧
+   * 回落到谓词，与本列落地前逐字同行为）——这是一个结论，不是待填项。
+   *
+   * @returns `timelineEventTypes[input.kind]` 里的一个 id，或 **null = 这一格定不下来**。
+   *
+   * 【为什么"定不下来"必须能表达，而不是硬挑一个】首诊那几格里真正说得死的只有少数几处；
+   * 其余（用户自己记的那几句、对方口头说了什么）本来就是自由叙事，
+   * 硬给一个类型的形态是——系统替用户回答了一个他没被问到的问题，而那一格从此**压过**谓词，
+   * 连兜底都不再跑。null 是实话：没人说过这条是什么。
+   *
+   * 【回一个没声明过的 id 会怎样】落库前按 `timelineEventTypes` 查一遍，查不到按 null 落
+   * 并在服务端日志里点名（首诊不因一处包配置错误而整体失败）。它不是静默——
+   * 静默的形态是那条记录带着一个谁都不认的取值进库，而判定对它既不按类型走、也不回落。
+   */
+  intakeEventType?(input: IntakeEventTypeInput): string | null;
+  /**
    * 要件表那一节的抬头，用户可见。
    *
    * 【为什么它不在 factsSections 里】那份是**每节都必然渲染**的骨架（判据逐条比对抬头是否都在），
@@ -927,6 +1006,92 @@ export function assertDomainPack(pack: DomainPack): void {
     arr(`${at}.basis`, card?.basis);
     arr(`${at}.satisfiedBy`, card?.satisfiedBy);
     arr(`${at}.typicalEvidence（「缺失」那一行的出路就是它，空了这条争点就没有下一步）`, card?.typicalEvidence);
+  }
+
+  // 时间线事件类型：**键必须恰好是四类事件类别**，且同一个包内 id 不许重复。
+  //   · 缺一个键 ⇒ 那一类的登记表单画不出下拉、写入校验也认不出任何取值，
+  //     而登记照常成功、判定照常回落到谓词——"接了类型"这件事对那一类静默失效；
+  //   · 多一个键 ⇒ 那份声明永远画不出来，而它读起来像已经生效了；
+  //   · id 重复 ⇒ 两个不同含义的选项共用一个落库值，判定按其中一个的口径认另一个的记录，
+  //     而下拉里两行各自都读得通（这是本项守的第一件事）；
+  //   · id / label 为空 ⇒ 落库存进一个空串（判定按"没选过"回落），或下拉里一行没有字。
+  if (!pack.timelineEventTypes || typeof pack.timelineEventTypes !== 'object') {
+    missing.push('timelineEventTypes（不分型的类别给空数组，别整项省略）');
+  } else {
+    const declared = Object.keys(pack.timelineEventTypes);
+    for (const kind of TIMELINE_KINDS) {
+      if (!declared.includes(kind)) {
+        missing.push(`timelineEventTypes 缺类别「${kind}」（这一类不分型就给空数组）`);
+      }
+    }
+    for (const key of declared) {
+      if (!(TIMELINE_KINDS as readonly string[]).includes(key)) {
+        missing.push(`timelineEventTypes 多出「${key}」——它不是一个事件类别`);
+      }
+    }
+    const seenTypeIds = new Set<string>();
+    for (const [kind, specs] of Object.entries(pack.timelineEventTypes)) {
+      if (!Array.isArray(specs)) {
+        missing.push(`timelineEventTypes[${kind}] 不是数组（不分型给空数组）`);
+        continue;
+      }
+      specs.forEach((spec, i) => {
+        const at = spec?.id ? `timelineEventTypes[${kind}][${spec.id}]` : `timelineEventTypes[${kind}][#${i}]`;
+        str(`${at}.id`, spec?.id);
+        str(`${at}.label`, spec?.label);
+        if (spec?.id && seenTypeIds.has(spec.id)) {
+          missing.push(
+            `${at}.id 重复——它是落库值与判定认的那把键，重了就等于两个不同的选项共用一个含义`,
+          );
+        }
+        if (spec?.id) seenTypeIds.add(spec.id);
+      });
+    }
+  }
+
+  // 判定里点名的类型 id 必须**是本包在那一类事件下真声明过的**。
+  //
+  // 【为什么按 kind 逐个对，不是"在本包某处声明过就行"】槽串是 `timeline:<类别>`，
+  // 而写入校验按 kind 取该类别的枚举——一条判定点了另一个类别的 id，那个 id 永远不会
+  // 出现在这个槽的记录上：判定**一次都不会命中**，这个槽从此恒缺，而收窄看起来做了。
+  // 打错一个字与整条没写，在产出上完全同形。
+  const typeIdsOfSlot = (slot: string): readonly string[] | null => {
+    const at = slot.indexOf(':');
+    if (at <= 0 || slot.slice(0, at) !== 'timeline') return null;
+    const kind = slot.slice(at + 1).trim();
+    const specs = pack.timelineEventTypes?.[kind];
+    return Array.isArray(specs) ? specs.map((x) => x?.id) : [];
+  };
+  const checkAcceptsType = (where: string, slot: string, accepts: readonly string[] | undefined) => {
+    if (!accepts) return;
+    const known = typeIdsOfSlot(slot);
+    if (known === null) {
+      missing.push(`${where} 的「${slot}」不是事件类别槽，却挂了 acceptsType（那格判定读不到任何类型）`);
+      return;
+    }
+    for (const id of accepts) {
+      if (!known.includes(id)) {
+        missing.push(
+          `${where} 的「${slot}」点了类型「${id}」，而 timelineEventTypes 里这一类下没有它——` +
+            '这条判定一次都不会命中，而收窄看起来已经做了',
+        );
+      }
+    }
+  };
+  for (const card of pack.elementCards ?? []) {
+    for (const [slot, check] of Object.entries(card?.slotChecks ?? {})) {
+      // 判定挂在一个不属于本卡的槽上 ⇒ 一次都不会被调用（同 counterpartyDecision 那条的理由）
+      if (!(card.satisfiedBy ?? []).includes(slot)) {
+        missing.push(
+          `elementCards[${card.id}].slotChecks 的「${slot}」不在 satisfiedBy 里——` +
+            '这条取值判定一次都不会被调用，而它看起来已经生效了',
+        );
+      }
+      checkAcceptsType(`elementCards[${card.id}].slotChecks`, slot, check?.acceptsType);
+    }
+  }
+  for (const [slot, check] of Object.entries(pack.counterpartyDecision?.slotChecks ?? {})) {
+    checkAcceptsType('counterpartyDecision.slotChecks', slot, check?.acceptsType);
   }
 
   // 「对方的书面决定」：可选（省略 = 本领域没有这回事）。一旦声明就不许半张——

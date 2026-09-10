@@ -40,7 +40,7 @@ function facts(
     companies: [],
     evidence: [],
     ...over,
-    timeline: (over.timeline ?? []).map((e) => ({ title: '', detail: null, ...e })),
+    timeline: (over.timeline ?? []).map((e) => ({ title: '', detail: null, event_type: null, ...e })),
   };
 }
 
@@ -451,5 +451,146 @@ describe('「任选其一」分组：走通一条就算走通', () => {
   it('没有分组的行恒是代表行（不用这一格的领域一个字都不该变）', () => {
     const sheet = buildElementSheet(facts(), [card({ id: 'a' }), card({ id: 'b', satisfiedBy: ['claim:乙'] })]);
     expect([...representativeElementIds(sheet.rows)]).toEqual(['a', 'b']);
+  });
+});
+
+/**
+ * **类型优先，谓词兜底**（2026-09-10/11 台账「结构化决定」票，机制见 elements.ts 的 SlotValueCheck）。
+ *
+ * 【它守什么】判定此前只有一条路：读那条记录自带的那段字，靠谓词认它说的是不是这件事。
+ * 登记的人明明知道自己记的是什么，却没有一处能让他说出来。加了 `event_type` 之后，
+ * **选过类型的条目只按类型判**——这条判据钉的正是"只"字：
+ *   · 类型对上 ⇒ 过，哪怕那段字含糊到任何谓词都认不出来；
+ *   · 类型没对上 ⇒ 不过，哪怕那段字里写满了谓词认得的词（谓词不再跑）；
+ *   · 没选过类型 ⇒ 才跑谓词，行为与本列落地前逐字相同。
+ *
+ * 【变异臂】把 resolveCheckedSlot 里的 entryPasses 换回 `check.accepts(e.raw)`
+ *（即去掉类型优先）⇒ 前两条红；换成恒走 acceptsType（去掉回落）⇒ 第三组红。
+ *
+ * 【本文件零领域内容】类型 id 全是现造的不透明串，共用层不认识它们的含义。
+ */
+describe('槽位取值判定：条目自带的类型优先于谓词', () => {
+  /** 谓词只认「那件事」三个字；类型只认 't-yes' 这一格。两者刻意给出相反的答案。 */
+  const typed = () =>
+    card({
+      satisfiedBy: ['timeline:某类动作'],
+      slotChecks: {
+        'timeline:某类动作': {
+          acceptsType: ['t-yes'],
+          accepts: (raw) => raw.includes('那件事'),
+          missingAs: '那件事的记录',
+        },
+      },
+    });
+
+  it('🔴 含糊文本 + 对的类型 ⇒ 过（变异：去掉类型优先 → 红）', () => {
+    // 谓词一个字都认不出来的一句话，登记的人却明说了它是哪一格——这正是这一列存在的理由。
+    const sheet = buildElementSheet(
+      facts({
+        timeline: [{ kind: '某类动作', source_tier: '自述', title: '上周三下午的事', event_type: 't-yes' }],
+      }),
+      [typed()],
+    );
+    expect(only(sheet).status).toBe('成立·待证');
+    expect(only(sheet).missingSlots).toEqual([]);
+  });
+
+  it('🔴 谓词认得的文本 + 别的类型 ⇒ 不过，且谓词不再跑（变异：改成"两条任一命中即过" → 红）', () => {
+    // 登记的人已经说了这不是那件事，判定却当他没说——那是这套东西最贵的一种失效：
+    // 它比没有类型更糟，因为用户以为自己已经说清楚了。
+    const sheet = buildElementSheet(
+      facts({
+        timeline: [{ kind: '某类动作', source_tier: '书证', title: '那件事发生了', event_type: 't-no' }],
+      }),
+      [typed()],
+    );
+    expect(only(sheet).status).toBe('缺失');
+    expect(only(sheet).missingSlots).toEqual(['那件事的记录']);
+  });
+
+  it('没选过类型 ⇒ 回落到谓词，两个方向都与落地前逐字相同（变异：去掉回落 → 红）', () => {
+    const hit = buildElementSheet(
+      facts({ timeline: [{ kind: '某类动作', source_tier: '自述', title: '那件事', event_type: null }] }),
+      [typed()],
+    );
+    expect(only(hit).status).toBe('成立·待证');
+    const miss = buildElementSheet(
+      facts({ timeline: [{ kind: '某类动作', source_tier: '书证', title: '别的事', event_type: null }] }),
+      [typed()],
+    );
+    expect(only(miss).status).toBe('缺失');
+  });
+
+  it('空串按"没选过"算（一列写成空串与没写是同一件事）', () => {
+    const sheet = buildElementSheet(
+      facts({ timeline: [{ kind: '某类动作', source_tier: '自述', title: '那件事', event_type: '  ' }] }),
+      [typed()],
+    );
+    expect(only(sheet).status).toBe('成立·待证');
+  });
+
+  it('🔴 认不出来的类型一律不过（变异：认不出时回落到谓词 → 红）', () => {
+    // 领域包改过枚举、而库里躺着按旧枚举选过的行。回落的形态是：那条记录按它写的字
+    // 又被谓词捞了回来——而它明说过自己是另一格。方向一律偏「少认」。
+    const sheet = buildElementSheet(
+      facts({
+        timeline: [{ kind: '某类动作', source_tier: '书证', title: '那件事发生了', event_type: 't-gone' }],
+      }),
+      [typed()],
+    );
+    expect(only(sheet).status).toBe('缺失');
+  });
+
+  it('判定只声明了类型、没有谓词 ⇒ 没选过类型的条目一律不过（这个槽只认明说过的记录）', () => {
+    const typeOnly = card({
+      satisfiedBy: ['timeline:某类动作'],
+      slotChecks: { 'timeline:某类动作': { acceptsType: ['t-yes'], missingAs: '那件事的记录' } },
+    });
+    const sheet = buildElementSheet(
+      facts({ timeline: [{ kind: '某类动作', source_tier: '书证', title: '那件事', event_type: null }] }),
+      [typeOnly],
+    );
+    expect(only(sheet).status).toBe('缺失');
+    expect(
+      only(
+        buildElementSheet(
+          facts({ timeline: [{ kind: '某类动作', source_tier: '书证', title: '随便写的', event_type: 't-yes' }] }),
+          [typeOnly],
+        ),
+      ).status,
+    ).toBe('成立');
+  });
+
+  it('档位仍只从**过了判定的那几条**里取（类型这一路也一样）', () => {
+    const sheet = buildElementSheet(
+      facts({
+        timeline: [
+          { kind: '某类动作', source_tier: '书证', title: '别的事', event_type: 't-no' },
+          { kind: '某类动作', source_tier: '自述', title: '含糊', event_type: 't-yes' },
+        ],
+      }),
+      [typed()],
+    );
+    expect(only(sheet).status).toBe('成立·待证');
+    expect(only(sheet).selfReportedSlots).toEqual(['timeline:某类动作']);
+  });
+
+  it('basics 那一类槽一个字都不变：它没有"类型"这回事，恒走谓词', () => {
+    const sheet = buildElementSheet(
+      facts({ case: { employed_from: null, position: null, monthly_wage_fen: null, contract_count: '没签过' } }),
+      [
+        card({
+          satisfiedBy: ['basics:contract_count'],
+          slotChecks: {
+            'basics:contract_count': {
+              acceptsType: ['t-yes'],
+              accepts: (raw) => raw.includes('没'),
+              missingAs: '无合同期间',
+            },
+          },
+        }),
+      ],
+    );
+    expect(only(sheet).status).toBe('成立·待证');
   });
 });

@@ -69,16 +69,18 @@ function factsOf(db: Db, caseId: number) {
       kind: string;
       source_tier: string;
     }[],
-    // 【title / detail 必须一并取回】挂了取值判定的时间线槽读的就是这两段字
-    //（lib/cases/elements.ts 的 ElementFactsView）。少取一列的形态是：判定读到一段空字符串、
-    // 判不过、整条要件落「缺失」——方向保守，却没有任何一处说得出是因为那段字没取回来。
+    // 【title / detail / event_type 必须一并取回】挂了取值判定的时间线槽读的就是这几列
+    //（lib/cases/elements.ts 的 ElementFactsView）。少取一列的形态是：判定读到一段空字符串
+    // 或一个恒 null 的类型、判不过、整条要件落「缺失」——方向保守，
+    // 却没有任何一处说得出是因为那一列没取回来。
     timeline: db
-      .prepare('SELECT kind, source_tier, title, detail FROM timeline_events WHERE case_id = ?')
+      .prepare('SELECT kind, source_tier, title, detail, event_type FROM timeline_events WHERE case_id = ?')
       .all(caseId) as {
       kind: string;
       source_tier: string;
       title: string;
       detail: string | null;
+      event_type: string | null;
     }[],
     companies: db.prepare('SELECT role, source_tier FROM company_profiles WHERE case_id = ?').all(caseId) as {
       role: string;
@@ -211,13 +213,16 @@ describe('S16 只传了员工手册：一份「公司文件」不算公司作出
     // 沿用槽串的形态是用户读到「还差 timeline:公司动作」，而他刚记过一条公司动作（约谈、调岗）。
     // N-2b 缺的是它自己那两格（沟通记录 + 那份被迫解除通知，后者同样按 missingAs 点名）。
     const missingOf = (id: string) => sheet.rows.find((r) => r.id === id)!.missingSlots;
-    const COMPANY_DECISION_MISSING = '公司的解除/终止决定（请把公司作出这个决定的那一刻记成一条时间线事件）';
+    const COMPANY_DECISION_MISSING =
+      '公司的解除/终止决定（请把公司作出这个决定的那一刻记成一条时间线事件，' +
+      '并把类型选成「公司作出的解除/终止决定」——选了就不用靠那段字去猜）';
     expect(missingOf('N-2a')).toEqual([COMPANY_DECISION_MISSING]);
     expect(missingOf('2N-2')).toEqual([COMPANY_DECISION_MISSING]);
     expect(missingOf('2N-3')).toEqual([COMPANY_DECISION_MISSING]);
     expect(missingOf('N-2b'), 'N-2b 的缺口没点名那份被迫解除通知').toEqual([
       'evidence:沟通记录',
-      '被迫解除通知（请把发出通知这件事记成一条时间线事件）',
+      '被迫解除通知（请把发出通知这件事记成一条时间线事件，' +
+        '并把类型选成「我发出的被迫解除通知」——选了就不用靠那段字去猜）',
     ]);
   });
 

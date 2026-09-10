@@ -74,6 +74,7 @@ function timeline(n: number): TimelineEventRow[] {
     milestone: null,
     source_tier: '自述',
     asserted_by: 'user',
+    event_type: null,
     created_at: '2026-08-20 09:00:00',
   }));
 }

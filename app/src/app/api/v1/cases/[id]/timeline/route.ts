@@ -73,6 +73,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // 两种都没有一处会报错。档位收调用方声明（认不出由领域层回 INVALID_SOURCE_TIER），
     // 断言人由外壳按身份判，与 MCP 那条共用 assertedByOf——两条路各判一次必然分叉。
     sourceTier: body.source_tier,
+    // 【与 MCP 那道门同形】两门共用 cases.addTimelineEvent 的校验（值域按案件领域 + kind），
+    // 这里不读就等于本端点静默丢掉这一格：调用方照说明书选了类型、回包 201，
+    // 而那条记录在要件表上与"一格都没选"完全一样——与 source_tier 当年那道缺口同款。
+    eventType: body.event_type,
     assertedBy: assertedByOf(guard.identity),
   });
   if (!result.ok) return domainFailure(result);

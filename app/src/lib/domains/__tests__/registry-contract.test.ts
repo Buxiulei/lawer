@@ -290,6 +290,90 @@ describe('assertDomainPack：包必须实现全部字段', () => {
   });
 
   /**
+   * **时间线事件类型这一格的每一种坏法**（2026-09-10/11 台账「结构化决定」票）。
+   *
+   * 【为什么不写进上面那张表】那张表按**字段名**点名，而这几道守卫报的是模板串
+   *（键名、下标、id 都是运行时拼的），静态扫不到——同 factsSections 缺键 / 任选其一分组，
+   * 各自单独一条。
+   *
+   * 【每一种坏法都是静默的】
+   *   · 少一个类别的键 ⇒ 那一类的登记表单画不出下拉、写入校验认不出任何取值，
+   *     而登记照常成功、判定照常回落到谓词——"接了类型"这件事对那一类静默失效；
+   *   · 多一个不是类别的键 ⇒ 那份声明永远画不出来，而它读起来像已经生效了；
+   *   · id 重复 ⇒ 两个不同含义的选项共用一个落库值，判定按其中一个的口径认另一个的记录，
+   *     而下拉里两行各自都读得通；
+   *   · 判定点了一个没声明过的 id ⇒ 那条判定**一次都不会命中**，这个槽从此恒缺，
+   *     而收窄看起来做了（打错一个字与整条没写，在产出上完全同形）。
+   */
+  it('timelineEventTypes 缺一个类别的键 ⇒ 点名那一类（变异：删掉那道键集合守卫 → 红）', () => {
+    const { 期限: _dropped, ...rest } = LABOR.timelineEventTypes;
+    void _dropped;
+    expect(() => assertDomainPack(clone({ timelineEventTypes: rest }))).toThrow(/缺类别「期限」/);
+    expect(() => assertDomainPack(clone())).not.toThrow();
+  });
+
+  it('timelineEventTypes 整项省略 ⇒ 点名（"不分型"的表达方式是给空数组，不是不写）', () => {
+    // 类型上它必填，所以这种包只可能来自手写 JSON 或 `as` 过的旧代码——
+    // 类型闸与运行期闸是两道，这条验的是后一道（同 copy.pages 那条）。
+    const { timelineEventTypes: _dropped, ...rest } = LABOR;
+    void _dropped;
+    expect(() => assertDomainPack(rest as DomainPack)).toThrow(/timelineEventTypes/);
+  });
+
+  it('timelineEventTypes 多出一个不是类别的键 ⇒ 点名（那份声明永远画不出来）', () => {
+    expect(() =>
+      assertDomainPack(clone({ timelineEventTypes: { ...LABOR.timelineEventTypes, 别的类别: [] } })),
+    ).toThrow(/多出「别的类别」/);
+  });
+
+  it('🔴 同一个包里的类型 id 重复 ⇒ 点名（两个选项共用一个落库值）', () => {
+    expect(() =>
+      assertDomainPack(
+        clone({
+          timelineEventTypes: {
+            ...LABOR.timelineEventTypes,
+            我方动作: [
+              { id: 'dup', label: '甲' },
+              { id: 'dup', label: '乙' },
+            ],
+          },
+        }),
+      ),
+    ).toThrow(/id 重复/);
+  });
+
+  it('类型没有 label ⇒ 点名（下拉里会出现一行没有字的选项）', () => {
+    expect(() =>
+      assertDomainPack(
+        clone({ timelineEventTypes: { ...LABOR.timelineEventTypes, 公司动作: [{ id: 'x', label: '  ' }] } }),
+      ),
+    ).toThrow(/timelineEventTypes\[公司动作\]\[x\]\.label/);
+  });
+
+  it('🔴 判定点了一个本类别下没声明过的类型 id ⇒ 点名（那条判定一次都不会命中）', () => {
+    // 把「公司动作」那一格的枚举整段换掉：四张卡与 counterpartyDecision 里的
+    // acceptsType 就都落了空，而每一处看起来都还配着收窄。
+    const bad = { ...LABOR.timelineEventTypes, 公司动作: [{ id: '别的值', label: '甲' }] };
+    expect(() => assertDomainPack(clone({ timelineEventTypes: bad }))).toThrow(
+      /counterpartyDecision\.slotChecks 的「timeline:公司动作」点了类型「company_termination」/,
+    );
+    expect(() => assertDomainPack(clone({ timelineEventTypes: bad }))).toThrow(
+      /elementCards\[N-2a\]\.slotChecks/,
+    );
+  });
+
+  it('取值判定挂在一个不属于本卡的槽上 ⇒ 点名（那条判定一次都不会被调用）', () => {
+    const cards = (LABOR.elementCards ?? []).map((c) =>
+      c.id === 'N-2b'
+        ? { ...c, slotChecks: { 'timeline:系统动作': { accepts: () => true, missingAs: '某物' } } }
+        : c,
+    );
+    expect(() => assertDomainPack(clone({ elementCards: cards }))).toThrow(
+      /elementCards\[N-2b\]\.slotChecks 的「timeline:系统动作」不在 satisfiedBy 里/,
+    );
+  });
+
+  /**
    * 「任选其一」分组的两种打坏法。**组名是自由串，打错一个字会静默失效**：
    * 两张互斥路径的卡各自成组之后，"走通一条就算走通"这条规则对它们不再生效——
    * 风险区间悄悄掉一档、争点表多出一条让用户去补的材料，而没有任何一处会报错。

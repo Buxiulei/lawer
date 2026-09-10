@@ -1,9 +1,33 @@
 // app/src/lib/capabilities/families/timeline.ts
 // A 族里的时间线部分（设计稿 §2 A、P4：时间线只追加）。
 import * as cases from '@/lib/cases';
+import { DOMAINS } from '@/lib/domains/registry';
 
 import { assertedByOf, caseIdProp, idAt, num, sourceTierProp } from '../shared';
 import type { Capability } from '../registry';
+
+/**
+ * 「这条记录是什么」的对外说明：**按事件类别列出各领域包声明的取值并集**
+ *（tools/list 拿不到案件上下文，只能给并集；真正落库前按该案件所属领域的那一份再校验一次，
+ * 与 claim / deadline 的 kind 同一条既定分工）。
+ *
+ * 【为什么是一段说明而不是一个 enum】取值域是**按 kind 分组**的：同一个串在另一类事件下
+ * 不合法。摊平成一个 enum 的形态是——说明书说这个值可以传，服务端按 kind 一查就拒，
+ * 而调用方照着说明书填齐了仍被拒（同 intakeSchema 的 required/errorCode 两向那条）。
+ * 不分型的类别整条不列：列一个"（无）"只会让人以为要传点什么。
+ */
+const EVENT_TYPE_GUIDE = cases.TIMELINE_KINDS.map((kind) => {
+  const specs = [
+    ...new Map(
+      Object.values(DOMAINS)
+        .flatMap((p) => p.timelineEventTypes[kind] ?? [])
+        .map((t) => [t.id, t]),
+    ).values(),
+  ];
+  return specs.length === 0 ? null : `${kind}：${specs.map((t) => `${t.id}（${t.label}）`).join('、')}`;
+})
+  .filter((line): line is string => line !== null)
+  .join('；');
 
 export const timelineAdd: Capability = {
   name: 'timeline_add',
@@ -50,6 +74,15 @@ export const timelineAdd: Capability = {
         type: 'string',
         description: '幂等键，一次业务操作给一个稳定值；重试用同一个 ref，服务端不会重复落库',
       },
+      event_type: {
+        type: 'string',
+        description:
+          '这条记录**是什么**——从下面这份闭合枚举里挑一个 id。**有就填，判定不再猜**：' +
+          '要件判定优先读这一格，只有没填时才回去读你写的那段字并按谓词猜它说的是不是那件事，' +
+          '而叙事的写法是无穷的，猜就一定有猜错的时候。挑不准就整个不传（记录照样落库）。' +
+          `按事件类别分组，传错会拿到 400 INVALID_EVENT_TYPE 并列出该类别的全部允许值——${EVENT_TYPE_GUIDE}。` +
+          '（取值域按案件所属领域定，这里列的是各领域的并集。）',
+      },
       // 追加型：每条新事件本来就要有一个自己的档位，不传即落最弱档。
       ...sourceTierProp('不传即落最弱档「自述」——时间线只追加，这条新事件从此带着这个档位。'),
     },
@@ -65,6 +98,7 @@ export const timelineAdd: Capability = {
       detail: args.detail,
       clientRef: args.client_ref,
       sourceTier: args.source_tier,
+      eventType: args.event_type,
       // 断言人由身份判，**不收入参**（见 shared.assertedByOf 的长注释）
       assertedBy: assertedByOf(identity),
     }),
