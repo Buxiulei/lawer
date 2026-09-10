@@ -11,11 +11,11 @@ import { buildIssueTable, counterpartyDecisionOnFile } from '@/lib/cases/issue-t
 import { SOURCE_TIERS, normalizeSourceTier } from '@/lib/cases/source-tier';
 import * as store from '@/lib/db/agent';
 import * as caseStore from '@/lib/db/cases';
-import { listElementFills, recordElementFill } from '@/lib/db/elements';
+import { findElementFill, listElementFills, recordElementFill } from '@/lib/db/elements';
 import { DOMAINS, type DomainPack } from '@/lib/domains/registry';
 import { LABOR_CAPABILITY_COPY } from '@/lib/domains/labor';
 
-import { assertedByOf, caseIdProp, num, sourceTierProp } from '../shared';
+import { assertedByOf, caseIdProp, idAt, num, sourceTierProp } from '../shared';
 import type { Capability } from '../registry';
 
 /** 归属校验 + 取领域包，三条能力共用的那一段。 */
@@ -181,6 +181,47 @@ export const elementFill: Capability = {
   idempotency: {
     clientRef: false,
     naturalKey: '同案 + 同要件 + 同一行事实只留一条留痕；事实本身的去重沿用它那张表的自然键',
+  },
+  // 不走能力壳（withClientRef / writeOnce），所以台账由门统一记（见 lib/capabilities/ledger.ts）。
+  //
+  // 【为什么 target 记 element_fills，而不是 timeline_events / claims】这条能力一次调用
+  // 落两处：一条事实（时间线事件或诉求项）+ 一条「这条事实是为了坐实哪个要件」的留痕。
+  // 前者两张表二选一，写死任一张的形态是——走另一条路的那半数调用在台账里指着一张
+  // 根本没有这个行号的表。**只有留痕这一条是每次成功调用都恰好写一条**，且它自己就带着
+  // 「填的哪个要件、指向哪条事实」，从它出发那两处都找得回来。
+  // 事实那一行不会因此漏账：它由写它的那条能力（timeline_add / claim_*）自己记。
+  //
+  // 【为什么要回读】recordElementFill 走 INSERT OR IGNORE、不回行号，回包里也没有它。
+  // 回读不到就**点名**（unresolved），不回空数组：空数组的约定是「这次没写东西」，
+  // 而走到这里事实与留痕都已经落库了。
+  //
+  // 【为什么不填 deduped】回包里那两格说的都是**事实那一行**的下场（时间线撞自然键
+  // deduped、诉求项已登记 created:false），而这里记的是**留痕那一行**。拿它顶替的形态是：
+  // 头一回把一条早就在档的老事件挂到某个要件名下——留痕是新写的，台账却记成一次重放。
+  // 留痕自己那一格（INSERT OR IGNORE 到底插没插）领域层没有回报，猜不出来的判断不写。
+  ledger: {
+    targetTable: 'element_fills',
+    rowsOf: (db, args, result) => {
+      const caseId = num(args.case_id);
+      const elementId = typeof result.element_id === 'string' ? result.element_id : '';
+      const wrote = result.wrote as { table?: unknown } | undefined;
+      const targetTable = typeof wrote?.table === 'string' ? wrote.table : '';
+      const targetId = idAt(result, 'wrote', 'id');
+      const fill =
+        elementId && targetTable && targetId > 0
+          ? findElementFill(db, { caseId, elementId, targetTable, targetId })
+          : null;
+      return fill === null
+        ? [
+            {
+              unresolved:
+                `case_id=${caseId} 要件「${elementId || '(回包里没有 element_id)'}」` +
+                `指向 ${targetTable || '(回包里没有 wrote.table)'}#${targetId} 的那条留痕回读不到` +
+                '（多半是 element_fill 的回包字段改了名，或那一行在这一瞬被清了）',
+            },
+          ]
+        : [{ caseId, targetId: fill.id }];
+    },
   },
   title: '把这一轮的话填进某个要件',
   description: LABOR_CAPABILITY_COPY.elementFillDescription,

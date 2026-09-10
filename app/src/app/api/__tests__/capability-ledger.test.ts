@@ -246,6 +246,27 @@ function mkTimelineEvent(): number {
   );
 }
 
+/**
+ * 留痕那一行的行号（按 uq_element_fills 的四列定位）。
+ * 取不到当场抛，别回 0 让断言去猜：0 在 target_id 那一列看起来只是「取空了」，
+ * 而它掩掉的是「这条能力压根没落留痕」——那正是本条判据要钉的东西。
+ */
+function fillIdOf(elementId: string, targetTable: string, targetId: number): number {
+  const row = db
+    .prepare(
+      `SELECT id FROM element_fills
+        WHERE case_id = ? AND element_id = ? AND target_table = ? AND target_id = ?`,
+    )
+    .get(caseId, elementId, targetTable, targetId) as { id: number } | undefined;
+  if (!row) {
+    throw new Error(
+      `element_fills 里没有「${elementId} → ${targetTable}#${targetId}」这条留痕：` +
+        'element_fill 这次没有落留痕，或者它落的键与这里找的对不上。',
+    );
+  }
+  return row.id;
+}
+
 function mkActionItem(): number {
   return Number(
     db
@@ -474,6 +495,44 @@ describe.each(DOORS)('%s 这道门', (door) => {
       return { case_id: caseId, target_table: 'evidence', target_id: evidenceId, deduped: 0 };
     });
   });
+
+  // 【为什么这一条要钉两次】element_fill 一次调用落两处：一条事实 + 一条「这条事实是为了
+  // 坐实哪个要件」的留痕。事实那一行按走的哪个槽落在 timeline_events 或 claims，
+  // 而台账记的是**留痕**那一行（两条路都恰好写一条）。只钉一条路的形态是：
+  // 另一条路的 target 取成了事实那张表的行号，判据照绿，而台账里那一行指着
+  // element_fills 里一个属于别人的行号——两张表的行号都是小整数，指错了也像个正常记录。
+  test('element_fill（target 指留痕那一行，时间线路与诉求路各钉一次）', async () => {
+    await bothArms(door, 'element_fill', async (via) => {
+      const body = await callTool(
+        door,
+        'element_fill',
+        {
+          case_id: caseId,
+          element_id: '2N-3',
+          slot: 'timeline:公司动作',
+          happened_at: '2026-09-01T10:00:00+08:00',
+          title: 'HR 当面通知解除',
+        },
+        via,
+      );
+      return {
+        case_id: caseId,
+        target_table: 'element_fills',
+        target_id: fillIdOf('2N-3', 'timeline_events', (body.wrote as { id: number }).id),
+        deduped: 0,
+      };
+    });
+
+    await bothArms(door, 'element_fill', async (via) => {
+      const body = await callTool(door, 'element_fill', { case_id: caseId, element_id: '2N-4', slot: 'claim:2N' }, via);
+      return {
+        case_id: caseId,
+        target_table: 'element_fills',
+        target_id: fillIdOf('2N-4', 'claims', (body.wrote as { id: number }).id),
+        deduped: 0,
+      };
+    });
+  });
 });
 
 // ───────────────────────── 重放：认在 deduped 那一列上 ─────────────────────────
@@ -559,9 +618,9 @@ describe('覆盖面', () => {
   test('声明了 ledger 的写能力都在本文件里逐条验过（新增一条忘了写判据 ⇒ 红）', () => {
     const declared = CAPABILITIES.filter((c) => c.ledger !== undefined).map((c) => c.name).sort();
     const covered = [
-      'action_complete', 'case_delete', 'case_update', 'company_watch_set', 'evidence_attest',
-      'evidence_brief_regenerate', 'evidence_brief_update', 'evidence_upload_url', 'intake_submit',
-      'referral_delete_request', 'share_revoke', 'timeline_add', 'timeline_milestone',
+      'action_complete', 'case_delete', 'case_update', 'company_watch_set', 'element_fill',
+      'evidence_attest', 'evidence_brief_regenerate', 'evidence_brief_update', 'evidence_upload_url',
+      'intake_submit', 'referral_delete_request', 'share_revoke', 'timeline_add', 'timeline_milestone',
     ].sort();
     expect(
       declared,

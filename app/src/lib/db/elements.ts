@@ -34,6 +34,27 @@ export function recordElementFill(
   ).run(input.caseId, input.elementId, input.slot, input.targetTable, input.targetId);
 }
 
+/**
+ * 按唯一键取回那一条留痕（uq_element_fills 的四列）。取不到回 null。
+ *
+ * 【谁用它】台账元数据（能力 element_fill 的 ledger.rowsOf）：recordElementFill 走的是
+ * INSERT OR IGNORE、不回行号，而台账那一行要指得出**具体是哪一条留痕**。
+ * 不回读、拿业务侧那张表的行号顶替的形态是：agent_writes 说 target_table=element_fills
+ * 而 target_id 是一条时间线事件的号——两张表的行号都是小整数，指错了也照样像个正常记录。
+ */
+export function findElementFill(
+  db: Database,
+  key: { caseId: number; elementId: string; targetTable: string; targetId: number },
+): ElementFillRow | null {
+  const row = db
+    .prepare(
+      `SELECT * FROM element_fills
+        WHERE case_id = ? AND element_id = ? AND target_table = ? AND target_id = ?`,
+    )
+    .get(key.caseId, key.elementId, key.targetTable, key.targetId) as ElementFillRow | undefined;
+  return row ?? null;
+}
+
 /** 本案的全部填充留痕（按 id 升序，即写入先后）。 */
 export function listElementFills(db: Database, caseId: number): ElementFillRow[] {
   return db
