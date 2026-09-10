@@ -562,6 +562,8 @@
 
 **2026-09-10 上产 194647a0（出路话术 v1 两提交 + 台账）**：e06f9145 收尾（lawyer-referral-guard 扫描面加 gate-marks.ts、⑤ 通知文案 citationNoticeMessage 同源、条号提示改说明句、去 citation_check / claim_calc 与运维口吻 + gate-notice-copy 守卫、valueNoticeSuggest 必填 mode：observe 静默但 gate_json 照记）；wt-int ff 闸链全绿（全量 7355 过，未复现执行者报的一次未具名偶发红——记为待观察，再现时截用例名）；CI run 34444573209 success；生产 PRE c23d6edc → POST 194647a0，库备份，构建 rc=0，冒烟：首页/条款/登录 200、sidecar ok、两门 401、messages.gate_json 列懒迁移建成、app.log 游标 463 后零错误行。用户面变化：条号闸与案号闸开火后对话里出现一行低调提示 + 一键回复 chip；正文标记悬停有解释；ValueGuard 观察期不上屏。09-24 ValueGuard 读数来源：messages.gate_json（SQL 示例在 migrate.ts 注释）。当日第三版，生产从 30fbfdcb → 194647a0。backlog：刷新后从 gate_json 还原提示行；MCP/REST 回包 flags（agent 面出路）；粘贴回贴跑三闸；valueNoticeMessage 的 mode 缺省与 suggest 不一致（wart）。
 
+**2026-09-10 隔离区反向 scheme 票派单**：经理在 wt-int（194647a0）用 scheme_mismatches 实扫 knowledge/quarantine 62 张卡：4 行不一致（09-08 记 5，现 4），全部是 cy24 系列四张卡（nongmingong-zongbao-qingchang-cy24-5 / paiqian-gongjijin-guocuo-cy24-6 / pingtai-yonggong-qunti-tiaojie-cy24-7 / hunton-liandai-cy24-1）写 https://cyqfy.bjcourt.gov.cn/article/detail/2024/08/id/8071059.shtml，登记簿 cases-cyqfy-2024-duoyuanyonggong-tongbaohui 抓到的是 http。派 Opus 单代理（quarantine-scheme，ws/quarantine-scheme）：4 处只改 scheme；守卫 (i) --strict 扩扫隔离区（隔离卡仍不进索引）+ pytest；fetch-source http 档补显式三次重试 + pytest（09-08 minor）。经理核 diff 后走闸上产。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
