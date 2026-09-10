@@ -564,6 +564,8 @@
 
 **2026-09-10 隔离区反向 scheme 票派单**：经理在 wt-int（194647a0）用 scheme_mismatches 实扫 knowledge/quarantine 62 张卡：4 行不一致（09-08 记 5，现 4），全部是 cy24 系列四张卡（nongmingong-zongbao-qingchang-cy24-5 / paiqian-gongjijin-guocuo-cy24-6 / pingtai-yonggong-qunti-tiaojie-cy24-7 / hunton-liandai-cy24-1）写 https://cyqfy.bjcourt.gov.cn/article/detail/2024/08/id/8071059.shtml，登记簿 cases-cyqfy-2024-duoyuanyonggong-tongbaohui 抓到的是 http。派 Opus 单代理（quarantine-scheme，ws/quarantine-scheme）：4 处只改 scheme；守卫 (i) --strict 扩扫隔离区（隔离卡仍不进索引）+ pytest；fetch-source http 档补显式三次重试 + pytest（09-08 minor）。经理核 diff 后走闸上产。
 
+**2026-09-10 存疑判例真实浏览器调研派单（precedent-research，Sonnet + Playwright）**：对 counseling 三项缺口按优先级 ①强制报告主体（spp.gov.cn 典型案例翻 2020–2022 批次、省检、12309 抓接口）→ ③许可备案（真实浏览器过 samr / creditchina / 省局，各省高院逐站定位检索）→ ②记录年限（nhc.gov.cn 确认有无规范性文件即止），另确认 rmfyalk 是否真需登录。硬规则：只认 .gov.cn 官方发布页、逐字摘句、擦边/线索单列、每站记状态与命中数、不登录不绕验证码、不引用记忆中的案例名。只读不建卡；候选案例经经理判定后另派 Opus 按 README §2.1 登记原件 + 建卡 + 挂 precedents。报告：scratchpad/rd-precedents/report.md。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
