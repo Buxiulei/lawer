@@ -866,6 +866,22 @@ def test_scheme_guard_reaches_into_quarantine(gen, kb):
     assert data is None, "守卫不过时不该留下一份看起来正常的索引"
 
 
+def test_scheme_guard_reaches_both_quarantine_layouts(gen, kb):
+    """第二种摆法 packs/**/quarantine/** 同样要拦——与 (h) 用同一个谓词（in_quarantine）。
+
+    只认 knowledge/quarantine/** 的话，把卡挪进 packs/<包>/quarantine/ 就能带着
+    反向 scheme 躺着，而两道闸（标签闸 (h) 与这道 scheme 闸）看起来都在管隔离区。
+    """
+    write_card(kb, "packs/statutes/ok.md", card_id="statute-ok", sources=[REGISTERED_PAGE_HTTPS])
+    write_card(kb, "packs/statutes/quarantine/scheme.md", card_id="statute-q2-scheme",
+               confidence="待核实", sources=[REGISTERED_PAGE_HTTP])
+    code, data = run(gen, kb)
+    assert code != 0, "packs/**/quarantine/** 里的反向 scheme 必须拦"
+    assert "(i)" in str(code) and "隔离区卡" in str(code), f"报错要点明这是隔离区卡：\n{code}"
+    assert "packs/statutes/quarantine/scheme.md:" in str(code), f"要点到行号：\n{code}"
+    assert data is None, "守卫不过时不该留下一份看起来正常的索引"
+
+
 def test_quarantine_readme_is_not_a_card(gen, kb):
     """正向对照：隔离区里 scheme 对得上的卡放行，README 整份不进这把尺。
 

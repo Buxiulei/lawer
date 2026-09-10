@@ -203,7 +203,10 @@ def download(url: str) -> tuple[bytes, dict]:
             return data, {**meta, "fetch_method": "http-fallback", "fetch_url": http_url}
         except Exception as e:  # noqa: BLE001
             errors.append(f"http-fallback: {e}")
-    die("取不到原件，四档都失败（原文如下，未做任何转述）：\n  " + "\n  ".join(errors))
+    # 档数按实际打过的次数报：http:// 走 HTTP_ATTEMPTS 次同一档、https:// 走三档 TLS
+    # 外加一格 http-fallback。写死"四档"会在 http 那条路上报一个没发生过的数，
+    # 而读者是拿着这行字去数下面列了几条的。
+    die(f"取不到原件，{len(errors)} 次尝试全失败（原文如下，未做任何转述）：\n  " + "\n  ".join(errors))
     raise AssertionError("unreachable")
 
 

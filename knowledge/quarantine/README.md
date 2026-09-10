@@ -198,7 +198,7 @@ knowledge/quarantine/<原子目录>/<原卡文件名>.md
 - `case-qianfu-yongjin-38-jiechu-16097`（焦某）、`case-lirun-20-jixiao-weiyuejin-11114`（苏某）、`case-lizhi-zhengming-jianli-riqi-72152`（郭某）、`case-luyin-lihai-guanxi-bucaina-14444`（姚某）、`case-nianzhongjiang-jishu-2n-jing0105-33722`（钟奇燕/楷亚锐衡）、`case-qingjia-benshang-jing03-9422`（乔某伟）：`bj3zy.bjcourt.gov.cn` 与 `cyqfy.bjcourt.gov.cn` 站内检索当事人姓名均 0 命中或只命中同名他案。
 - `case-nianzhongjiang-beijing-koujing`（8 案汇编卡）：其中 2 案已在上面确认查无官方专文，其余 6 案本批预算内未逐一复查。
 - `case-peichanjia-shijia-koufa-sz25-7`、`case-nianjia-guoqi-zuofei-wuxiao-sz25-2`、`case-nianjia-yuerjia-gongzi-sz25-8`（均属北京三中院 2025-05-13 发布会 9 件典型案例之一）：除已登记的通稿 `cases-bj3zy-2025-dxal` 外，本批另找到并登记了同一发布会的调研版报道 `cases-bj3zy-2025-xiuxijiajiaquan-diaoyan`（<https://bj3zy.bjcourt.gov.cn/article/detail/2025/06/id/8865668.shtml>），比通稿多一两句案情，但仍**未逐案给出本卡引用级别的案情细节与裁判理由原文**，核不动。
-- `case-nongmingong-zongbao-qingchang-cy24-5`、`case-paiqian-gongjijin-guocuo-cy24-6`、`case-pingtai-yonggong-qunti-tiaojie-cy24-7`（均属朝阳法院 2024-07-25 涉多元用工典型案例通报会）：找到并登记了朝阳法院官方原件 `cases-cyqfy-2024-duoyuanyonggong-tongbaohui`（<https://cyqfy.bjcourt.gov.cn/article/detail/2024/08/id/8071059.shtml>），但该文**只叙述通报会本身，未列出任何一件具体典型案例的案情**，核不动。
+- `case-nongmingong-zongbao-qingchang-cy24-5`、`case-paiqian-gongjijin-guocuo-cy24-6`、`case-pingtai-yonggong-qunti-tiaojie-cy24-7`（均属朝阳法院 2024-07-25 涉多元用工典型案例通报会）：找到并登记了朝阳法院官方原件 `cases-cyqfy-2024-duoyuanyonggong-tongbaohui`（<http://cyqfy.bjcourt.gov.cn/article/detail/2024/08/id/8071059.shtml>），但该文**只叙述通报会本身，未列出任何一件具体典型案例的案情**，核不动。
 
 复活条件同上：拿到判决全文或典型案例逐案全文的 `.gov.cn` 原件并核过引文；
 汇编/通报会类通稿不算——只有一句话要旨的官方页不足以核实本卡断言的具体案情与裁判理由原文。

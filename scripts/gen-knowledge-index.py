@@ -237,6 +237,18 @@ def domain_of(path: Path, fm: dict) -> str:
 QUARANTINE = "quarantine"
 
 
+def in_quarantine(path: Path) -> bool:
+    """这份文件在不在隔离区。**认路径段，不认前缀**。
+
+    隔离区有两种摆法（`knowledge/quarantine/**` 与 `packs/**/quarantine/**`），
+    而认得出几种，就是这道口径的全部内容——生成器的排除逻辑、(h) 的标签闸、
+    (i) 的 scheme 闸必须是同一个谓词：只认其中一种的话，另一种摆法下的卡
+    可以挂着「原文核实」、写着反向 scheme 躺在那儿，而三处代码看起来都在做同一件事。
+    （所以是一个函数、三处调用，不是三行长得一样的 `in ... .parts`。）
+    """
+    return QUARANTINE in path.relative_to(ROOT).parts
+
+
 CASE_TYPE = "判例卡"
 CASES_DIR = "cases"
 
@@ -251,11 +263,8 @@ def quarantine_labels() -> list[str]:
     （它有断言、只是追不到源）。这两档之外（`待核实`／`二手转述`）都放行。
     """
     bad = []
-    # 隔离区有两种摆法（knowledge/quarantine/** 与 packs/**/quarantine/**），
-    # 生成器的排除逻辑认的是**目录段**，这里必须用同一个口径——只认其中一种的话，
-    # 另一种摆法下的卡可以挂着「原文核实」躺着，而两处代码看起来都在做同一件事。
     for path in sorted(ROOT.glob("**/*.md")):
-        if QUARANTINE not in path.relative_to(ROOT).parts:
+        if not in_quarantine(path):
             continue
         text = path.read_text(encoding="utf-8")
         m = re.match(r"\A---\n(.*?)\n---\n", text, re.DOTALL)
@@ -314,7 +323,7 @@ def scheme_mismatches(entries: list[dict], registry: list[dict]) -> list[str]:
     只比 host 会把同站不同页当成一回事；整条 URL 相等则退化成"必须一字不差"，
     而登记簿里带 `?big=fan` 之类参数的条目会让每张引它的卡无故判红。
 
-    量程含隔离区（`knowledge/quarantine/**`，README 除外），尽管那些卡不进索引：
+    量程含隔离区（两种摆法都算，见 in_quarantine；README 除外），尽管那些卡不进索引：
     隔离卡是**复活时逐字抄回 `packs/` 的那份底稿**，写反的 scheme 会跟着卡一起回来，
     而回来那一刻它已经算"核过的卡"——索引侧这道闸扫到的是抄回来的结果，不是源头。
     只扫索引时隔离区里的分叉一路绿到复活当天（扩量程当天现库实见 4 处，
@@ -324,8 +333,8 @@ def scheme_mismatches(entries: list[dict], registry: list[dict]) -> list[str]:
     bad = []
     for e in entries:
         bad += _scheme_rows(e["id"], str(e["path"]), (ROOT / e["path"]).read_text(encoding="utf-8"), schemes)
-    for path in sorted(ROOT.glob(f"{QUARANTINE}/**/*.md")):
-        if path.name == QUARANTINE_README:
+    for path in sorted(ROOT.glob("**/*.md")):
+        if not in_quarantine(path) or path.name == QUARANTINE_README:
             continue
         rel = str(path.relative_to(ROOT))
         # 点明"隔离区卡"：它没有索引 id 可报，而不说这一句的话，读者会拿着一条
@@ -527,7 +536,7 @@ def main(argv: list[str] | None = None) -> None:
         # 【隔离区不进索引】追不到一手源的卡整张移进 knowledge/quarantine/，
         # 它仍是一份存档（写着原因与试过的信源），但**绝不能被检索到**——
         # 一张进了索引的隔离卡与一张正常卡，在 agent 那里长得一模一样。
-        if QUARANTINE in path.relative_to(ROOT).parts:
+        if in_quarantine(path):
             continue
         fm, body = parse(path)
         for field in REQUIRED:
