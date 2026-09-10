@@ -470,8 +470,18 @@ describe('tools/call', () => {
     expect((await res.json()).error.code).toBe(-32602);
   });
 
+  /**
+   * 【为什么这条要先取 facts_token（2026-09-10 改）】改 stage 挂着 facts_token 闸，
+   * 而闸排在能力的入参校验之前——这道门此前不把 args 交给前置闸，于是闸恒不开，
+   * 这条判据当时验的是「闸不在」时的顺序。闸接上之后不带令牌的同一次调用回的是
+   * FACTS_STALE，**不能为了保住这条判据反过来让 stage 校验插到闸前面**：
+   * 那样的话一份过期认知照样能把非法阶段推到服务端跟前，两道门的顺序也就分叉了。
+   * 所以这里照通用桥的走法先读一次事实卡，再验枚举错仍走 isError。
+   */
   test('业务参数非法（枚举值不对）走 isError，让模型能自己纠正', async () => {
-    const { body } = await call('case_update', { case_id: caseA, stage: '瞎写的阶段' }, keyA);
+    const facts = await call('case_facts', { case_id: caseA }, keyA);
+    const { facts_token } = JSON.parse(facts.body.result.content[0].text) as { facts_token: string };
+    const { body } = await call('case_update', { case_id: caseA, stage: '瞎写的阶段', facts_token }, keyA);
     expect(body.error).toBeUndefined();
     expect(body.result.isError).toBe(true);
     expect(JSON.parse(body.result.content[0].text).error_code).toBe('INVALID_STAGE');

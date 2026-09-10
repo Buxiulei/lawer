@@ -32,7 +32,7 @@ import { mcpEndpoint, recordAgentWrite, restToolsEndpoint } from '@/lib/audit/ag
 import type { Identity } from '@/lib/auth/identity';
 
 import { isKnownReplay } from './idempotent';
-import type { Capability, CapabilityEntrance, CapabilityWriteRow } from './registry';
+import type { Capability, CapabilityEntrance, CapabilityWriteOutcome } from './registry';
 
 /** 门 → endpoint 串。别在调用点手拼前缀。 */
 function endpointOf(entrance: CapabilityEntrance, tool: string): string {
@@ -84,7 +84,7 @@ export function recordCapabilityWrite(
   const endpoint = endpointOf(entrance, capability.name);
   const clientRef = clientRefOf(capability, args);
 
-  let rows: CapabilityWriteRow[];
+  let rows: CapabilityWriteOutcome[];
   try {
     rows = ledger.rowsOf(db, args, result);
   } catch (err) {
@@ -92,7 +92,24 @@ export function recordCapabilityWrite(
     return;
   }
 
-  for (const row of rows) {
+  for (const entry of rows) {
+    // 【回读失败要出声（2026-09-10 复审）】几条按自己的 id 定位的能力（分享链接、转介、
+    // 证据）要回读一次才知道案件号。回读不到时它们此前回空数组，而空数组的约定是
+    // 「这次没写东西」——于是这一层照约定什么都不做、一个字都不说：业务侧真的撤销了、
+    // 真的出了证，台账里没有那一行，回包 200、日志干净。**未写**与**写了但记不上账**
+    // 在事后长得一模一样，那正是台账最不该含糊的地方。所以这两件事在类型上就是两个东西，
+    // 到这里分开处理：空数组静默，unresolved 点名。
+    if ('unresolved' in entry) {
+      console.error(
+        ledgerFailureNote(
+          capability.name,
+          endpoint,
+          `${entry.unresolved}——业务侧这次**确实写了**，只是台账定位不到那一行`,
+        ),
+      );
+      continue;
+    }
+    const row = entry;
     // 定位不到行就**点名**，别静默跳过：rowsOf 已经声明「这次没写东西就回空数组」，
     // 所以走到这里却拿着一个坏 id，说明那份元数据与能力回包对不上了（多半是字段改了名）。
     // 静默跳过的形态是：台账从此少一类行，而没有任何一处会说。

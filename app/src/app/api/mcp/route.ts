@@ -5,7 +5,7 @@
 // 路由照例是薄的：鉴权 → 解析 JSON-RPC → 分发到 lib/mcp/tools 的注册表 → 包壳返回。
 import { hasScope, resolveIdentity } from '@/lib/auth/identity';
 import { OAUTH_PATHS } from '@/lib/auth/oauth';
-import { checkPreconditions } from '@/lib/capabilities/invoke';
+import { invokeCapability } from '@/lib/capabilities/invoke';
 import { recordCapabilityWrite } from '@/lib/capabilities/ledger';
 import { recordClientName } from '@/lib/db/api-keys';
 import { getDb } from '@/lib/db/client';
@@ -132,28 +132,33 @@ export async function POST(req: Request) {
         );
       }
 
-      // 【前置闸由注册表驱动，不由各工具自觉】precondition 是能力条目上的一个字段，
-      // 判定本身在 lib/capabilities/invoke.ts，**REST 通用桥调的是同一份**——
-      // 两条入口各写一句的形态是：一边拦住了、另一边放行，而两边都不报错。
+      // 【前置闸 + 执行整段改道唯一入口（2026-09-10 复审）】判定顺序（暴露面 → scope →
+      // 前置闸 → run → 失败归一）只长在 lib/capabilities/invoke.ts 的 invokeCapability 里，
+      // **REST 通用桥调的是同一句**。这道门此前只借走其中的 checkPreconditions 一句、
+      // 自己拿着 tool.run 跑，而那一句要收 args 才判得了「按入参开」的闸——漏传 args 的形态是：
+      // 同一把 key、同一份入参，走这道门改 stage 回 200 真写入，走 POST /api/v1/tools/case_update
+      // 回 409 FACTS_STALE，两边都不报错。少传一个参数就少一道闸，这种缝只有把整段收回
+      // 同一个入口才不会再开（同「修入口不修五处」）。
       // 【为什么 await】realname 闸走 realnameVerifiedOrLinked，本地没实名时会去问一次
-      // NBDpsy（实名互认）——那一步是异步的。不 await 的形态是：gate 恒为一个 truthy 的
-      // Promise，于是每一条带 realname 前置的工具都被这条 403 拦死，而没有任何一处报错。
-      const gate = await checkPreconditions(getDb(), tool, identity);
-      if (gate) {
-        return json(rpcResult(id, toolErrorResult({ ...gate })));
-      }
-
-      // 业务失败（案件不存在、枚举非法）走 isError=true，让模型能读到原因自行纠正
-      // 【为什么 await】出证一类能力要调外部服务，run 返回的是 Promise。
-      // 不 await 的形态是：回包里是一个 {} （序列化后的 Promise），HTTP 200，没有任何报错。
-      const outcome = (await tool.run(getDb(), identity, (args ?? {}) as Record<string, unknown>)) as
-        | { ok: false; errorCode: string; message: string }
-        | Record<string, unknown>;
-      if (outcome && (outcome as { ok?: boolean }).ok === false) {
-        // 【整个失败对象交给 toolErrorResult】能力挂在失败对象上的结构化清单要跟着出去，
-        // 挑字段转交的形态是：新加一张表的那个能力在描述里承诺了它，回包却少那几个键。
-        const failure = outcome as { errorCode: string; message: string } & Record<string, unknown>;
-        return json(rpcResult(id, toolErrorResult(failure)));
+      // NBDpsy（实名互认）；出证一类能力还要调外部服务。不 await 的形态是：回包里是一个
+      // {}（序列化后的 Promise），HTTP 200，没有任何报错。
+      const callArgs = (args ?? {}) as Record<string, unknown>;
+      const outcome = await invokeCapability(getDb(), identity, tool.name, callArgs, 'mcp');
+      if (!outcome.ok) {
+        // 【extra 摊平在同一层】能力（与前置闸）挂在失败对象上的结构化清单要跟着出去，
+        // 且与通用桥摊平后的键位逐字相同——挑字段转交的形态是：新加一张表的那个能力
+        // 在描述里承诺了它，回包却少那几个键；嵌一层 extra 的形态是：两道门的错误体
+        // 形状不一样，照说明书读的 agent 在其中一边读到 undefined。
+        return json(
+          rpcResult(
+            id,
+            toolErrorResult({
+              errorCode: outcome.errorCode,
+              message: outcome.message,
+              ...outcome.extra,
+            }),
+          ),
+        );
       }
 
       // 【台账记在这道门上】走能力壳（withClientRef / writeOnce）的写能力在自己的事务里
@@ -161,15 +166,8 @@ export async function POST(req: Request) {
       // 不可逆的动作，经这道门写进去查不到是谁写的，而回包 200、没有一处报错
       //（2026-09-10 复审 major#2）。recordCapabilityWrite 认注册表上的 ledger 字段，
       // 只记该由门记的那些，不会给能力壳那批记出第二行。
-      recordCapabilityWrite(
-        getDb(),
-        identity,
-        tool,
-        (args ?? {}) as Record<string, unknown>,
-        outcome as Record<string, unknown>,
-        'mcp',
-      );
-      return json(rpcResult(id, toolTextResult(outcome)));
+      recordCapabilityWrite(getDb(), identity, tool, callArgs, outcome.value, 'mcp');
+      return json(rpcResult(id, toolTextResult(outcome.value)));
     }
 
     default:

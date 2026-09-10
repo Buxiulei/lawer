@@ -471,3 +471,80 @@ export const cCap: Capability = {
     ]);
   });
 });
+
+// ═════════════════ 第三条跑道：runCapabilityRest 只许跑自己记账的能力 ═════════════════
+//
+// 【核过的事实（2026-09-10）】lib/capabilities/rest-runner.ts 的 runCapabilityRest 是
+// 除两道门以外**第三条把注册表能力跑起来的路**。经它跑的路由与能力，逐条核过：
+//   · POST /api/v1/cases/{id}/actions        → action_create   （写，走能力壳 withClientRef）
+//   · GET  /api/v1/cases/{id}/claims         → claims_list     （读）
+//   · GET  /api/v1/cases/{id}/facts          → case_facts      （读）
+//   · GET  /api/v1/knowledge/search          → knowledge_search（读）
+// 四条路由**都不调 recordAgentWriteFromRest**，唯一那条写能力的台账行由能力壳在自己的
+// 事务里记（行为判据在 __tests__/rest-runner.test.ts：那条路由写完 agent_writes 恰好一行）。
+// 所以今天零缺口。
+//
+// 【为什么补的是守卫，不是让 runCapabilityRest 也调 recordCapabilityWrite】
+// recordCapabilityWrite 只记**声明了 ledger** 的能力，而这条跑道上一条都没有——
+// 加上那一句今天一行都不会多记，是一句跑不到的代码；真要跑到它，还得先给
+// CapabilityEntrance 添一个第三种取值、给 agent_writes.endpoint 添一套新前缀
+// （这几条路由有自己的对外路径，记成 `rest-tools:` 是记错了门），
+// 那是为一个还不存在的调用发明一套台账词汇。
+// 而这条跑道真正的敞口是**它跑得起 ledger 那批能力却不记账**——那正好是一条读得出来的
+// 结构判据：谁哪天把一条不走能力壳的写能力挂到这条路由上，这里当场点名，
+// 由那时的人决定是给路由补 recordAgentWriteFromRest（与另外十几条 REST 端点同口径）
+// 还是把这条跑道升格成第三道门。不点名的形态是：那条能力照常 200、照常落库，
+// 台账零行，而三道门的判据都全绿——因为没有一条在看这条路。
+
+/** 从一份路由源码里抽出它交给 runCapabilityRest 的能力名字面量。 */
+export function restRunnerCapabilityNames(src: string): string[] {
+  return [...src.matchAll(/runCapabilityRest\(\s*[A-Za-z_$][\w$]*\s*,\s*'([a-z0-9_]+)'/g)].map(
+    (m) => m[1],
+  );
+}
+
+describe('第三条跑道（runCapabilityRest）', () => {
+  const files = walk(path.join(SRC_ROOT, 'app'))
+    .filter((f) => fs.readFileSync(f, 'utf-8').includes('runCapabilityRest('))
+    .map((f) => [path.relative(SRC_ROOT, f), restRunnerCapabilityNames(fs.readFileSync(f, 'utf-8'))] as const);
+
+  it('扫得到路由，且每个文件都抽得出能力名（空名单会让下面那条永远绿）', () => {
+    expect(files.length, '一条用 runCapabilityRest 的路由都没扫到：这条跑道挪了地方，把本节一起改').toBeGreaterThan(0);
+    for (const [rel, names] of files) {
+      expect(names, `${rel} 里有 runCapabilityRest( 却抽不出能力名：抽法与写法对不上了`).not.toEqual([]);
+    }
+  });
+
+  it('跑的能力名都在注册表里（抄错名字这条路由要到线上被调用时才抛）', () => {
+    for (const [rel, names] of files) {
+      for (const name of names) {
+        expect(getCapability(name), `${rel} 跑的 ${name} 不在注册表里`).toBeDefined();
+      }
+    }
+  });
+
+  it('这条跑道上没有一条能力声明 ledger（变异：把某条路由改挂一条声明了 ledger 的写能力 ⇒ 红）', () => {
+    const offenders = files.flatMap(([rel, names]) =>
+      names.filter((n) => getCapability(n)?.ledger !== undefined).map((n) => `${rel} → ${n}`),
+    );
+    expect(
+      offenders,
+      '下面这些能力靠「跑它的那道门」记台账，而 runCapabilityRest 不是门、它不记：\n  ' +
+        offenders.join('\n  ') +
+        '\n于是这条路上的写入会零审计行，回包 200、没有一处报错。\n' +
+        '怎么办（二选一，别再加第三种记法）：给这条路由补 recordAgentWriteFromRest' +
+        '（endpoint 记它自己的对外路径，与另外十几条 REST 端点同口径）；' +
+        '或者把这条能力改成走能力壳（withClientRef / writeOnce），台账在它自己的事务里记。',
+    ).toEqual([]);
+  });
+
+  it('MUTATION 对照臂：抽取函数确实抽得出名字（否则上面三条都只是没扫到）', () => {
+    expect(
+      restRunnerCapabilityNames(
+        "return runCapabilityRest(req, 'case_facts', { case_id: caseId });\n" +
+          "  return runCapabilityRest(request, 'action_create', args);\n" +
+          '  // 不是调用点：runCapabilityRest 这个名字出现在注释里\n',
+      ),
+    ).toEqual(['case_facts', 'action_create']);
+  });
+});

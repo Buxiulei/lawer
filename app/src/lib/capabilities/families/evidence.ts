@@ -18,7 +18,7 @@ import { findEvidenceDetail } from '@/lib/db/evidence';
 import type { ExtractionMode } from '@/lib/jobs/extraction-worker';
 
 import { caseIdProp, idAt, num } from '../shared';
-import type { Capability } from '../registry';
+import type { Capability, CapabilityWriteOutcome } from '../registry';
 
 const evidenceIdProp = {
   evidence_id: { type: 'integer', description: '证据 id（取自 evidence_list）' },
@@ -30,12 +30,20 @@ function author(keyId: number | null | undefined): string {
 }
 
 /**
- * 台账那一行：证据 id → `[{ caseId, targetId }]`，取不到案件号就回空数组。
+ * 台账那一行：证据 id → `[{ caseId, targetId }]`。
  * 两条简报写能力共用（各写一遍的形态是：改了其中一处，另一处继续按老口径记）。
+ *
+ * **取不到案件号回 unresolved，不回空数组**：空数组的约定是「这次没写东西」，
+ * 而走到这里那一版简报已经落库了——两件事混成一件，台账缺一行就没有任何一处会说。
  */
-function evidenceRow(db: Parameters<typeof findEvidenceDetail>[0], evidenceId: number) {
+function evidenceRow(
+  db: Parameters<typeof findEvidenceDetail>[0],
+  evidenceId: number,
+): CapabilityWriteOutcome[] {
   const caseId = findEvidenceDetail(db, evidenceId)?.case_id;
-  return caseId === undefined ? [] : [{ caseId, targetId: evidenceId }];
+  return caseId === undefined
+    ? [{ unresolved: `evidence_id=${evidenceId} 回读不到 case_id（evidence 里没有这一行）` }]
+    : [{ caseId, targetId: evidenceId }];
 }
 
 function asMode(raw: unknown): ExtractionMode | null {
@@ -212,7 +220,7 @@ export const evidenceBriefUpdate: Capability = {
   precondition: [],
   idempotency: { naturalKey: '证据 id + base_version（乐观锁：版本对不上即拒，不覆盖）' },
   // 入参里没有案件号（证据按自己的 id 定位）——回读那一行取。
-  // 读不到就回空数组，不拿一个猜出来的案件号占位。
+  // 读不到既不拿猜的案件号占位，也不回空数组（那说的是「这次没写」）：见 evidenceRow。
   // **不填 deduped**：乐观锁只有"写成了"与"版本冲突被拒"两种下场，没有重放语义。
   ledger: {
     targetTable: 'evidence',
@@ -291,7 +299,7 @@ export const evidenceBriefRegenerate: Capability = {
   precondition: [],
   idempotency: { naturalKey: '证据 id（已有简报的一律拒，不覆盖）' },
   // 入参里没有案件号（证据按自己的 id 定位）——回读那一行取。
-  // 读不到就回空数组，不拿一个猜出来的案件号占位。
+  // 读不到既不拿猜的案件号占位，也不回空数组（那说的是「这次没写」）：见 evidenceRow。
   // **不填 deduped**：已有简报的一律拒（走失败路径），走到这里的都是真写了一版。
   ledger: {
     targetTable: 'evidence',

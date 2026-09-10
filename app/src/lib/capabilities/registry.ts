@@ -80,6 +80,26 @@ export interface CapabilityWriteRow {
 }
 
 /**
+ * 「**写是写了，但定位不到那一行**」。与空数组（这次一行都没写）是两件事。
+ *
+ * 【为什么要把这两件事分开（2026-09-10 复审）】有几条能力的入参里没有案件号
+ * （分享链接、转介、证据都按自己的 id 定位），台账那一行的 case_id 要回读一次才知道。
+ * 回读不到时此前一律回空数组——而空数组的约定是「这次没写东西」，于是记账层照约定
+ * 什么都不做、也不说一句：业务侧真的撤销了一条链接 / 真的出了一份证，台账里没有那一行，
+ * 而回包 200、日志干净、没有任何一处报错。**未写**与**写了但记不上账**在事后
+ * 长得一模一样，那正是台账最不该含糊的地方。
+ *
+ * 回这个结构 = 请记账层点名（缺什么 / 为什么缺 / 怎么办），并且**不落那一行假的**。
+ */
+export interface CapabilityWriteUnresolved {
+  /** 缺什么：哪个 id 回读不到什么。进日志正文，要点得出名字，不能只说「失败了」 */
+  unresolved: string;
+}
+
+/** rowsOf 的每一项：要么是定位得到的那一行，要么是一句「回读失败」。 */
+export type CapabilityWriteOutcome = CapabilityWriteRow | CapabilityWriteUnresolved;
+
+/**
  * 写能力的**台账元数据**。声明它 = 「这条能力自己不记台账，由跑它的那道门统一记一行」。
  *
  * 走 withClientRef / writeOnce 的写能力**不声明**：它们在自己的事务里记，
@@ -95,17 +115,22 @@ export interface CapabilityLedger {
    * 这次调用**真正写了哪几行**。
    *
    * 空数组 = 一行都没写（两步确认里只出确认单的那一步、逐件批量里一件都没成），
-   * 此时不记台账——给「什么都没发生」记一行的形态是：事后复盘时那个不可撤销的动作
+   * 此时不记台账、也不报警——给「什么都没发生」记一行的形态是：事后复盘时那个不可撤销的动作
    * 在台账里比实际多发生过几次。
    *
+   * **写了却定位不到那一行**（要回读的 id 查不着了）回 `{ unresolved }`，
+   * 不要拿空数组顶替：空数组是「没写」，两件事混成一件之后，台账缺一行与本来就没有那一行
+   * 在事后长得一模一样。见 CapabilityWriteUnresolved。
+   *
    * 逐件批量的能力回多行：一次调用只记一行的形态是，台账里那个数永远是 1，
-   * 而文件与账单都是 N 件。
+   * 而文件与账单都是 N 件；其中某几件回读不到，就在那几件的位置上回 `{ unresolved }`，
+   * 成了的那几件照记。
    */
   rowsOf(
     db: Database,
     args: Record<string, unknown>,
     result: Record<string, unknown>,
-  ): CapabilityWriteRow[];
+  ): CapabilityWriteOutcome[];
 }
 
 export interface Capability {

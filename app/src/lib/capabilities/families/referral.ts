@@ -107,15 +107,16 @@ export const referralDeleteRequest: Capability = {
   precondition: [],
   idempotency: { naturalKey: 'referral_id（同一条转介再提一次原样返回，首次提出时刻不变）' },
   // 入参里没有案件号（转介按自己的 id 定位），而 agent_writes.case_id 是 NOT NULL 外键——
-  // 回读那条转介取案件号。**读不到就回空数组**（那条转介在这一瞬被清了），
-  // 不拿一个猜出来的案件号占位：占位的那一行会指向别人的案子。
+  // 回读那条转介取案件号。**读不到就点名**（那条转介在这一瞬被清了）：不拿一个猜出来的
+  // 案件号占位（占位的那一行会指向别人的案子），也不回空数组（那说的是「这次没写东西」，
+  // 而这条删除请求已经提出去了）。
   ledger: {
     targetTable: 'referrals',
     rowsOf: (db, args, result) => {
       const referralId = num(args.referral_id);
       const caseId = findReferralById(db, referralId)?.case_id;
       return caseId === undefined
-        ? []
+        ? [{ unresolved: `referral_id=${referralId} 回读不到 case_id（referrals 里已经没有这一行）` }]
         : [{ caseId, targetId: referralId, deduped: result.already_requested === true }];
     },
   },

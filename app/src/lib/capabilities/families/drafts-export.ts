@@ -95,14 +95,15 @@ export const shareRevoke: Capability = {
   precondition: [],
   idempotency: { naturalKey: 'share_id（已撤销的再撤一次原样返回，不改首次撤销时点）' },
   // 入参里没有案件号（分享链接按自己的 id 定位，share_links 也不存 user_id）——
-  // 回读那一行取案件号。读不到就回空数组，不拿一个猜出来的案件号占位。
+  // 回读那一行取案件号。读不到**不拿猜的案件号占位，也不回空数组**：空数组说的是
+  // 「这次没写东西」，而撤销此刻已经生效了；回 unresolved 让记账层点名（见 registry）。
   ledger: {
     targetTable: 'share_links',
     rowsOf: (db, args, result) => {
       const shareId = num(args.share_id);
       const caseId = findShareById(db, shareId)?.case_id;
       return caseId === undefined
-        ? []
+        ? [{ unresolved: `share_id=${shareId} 回读不到 case_id（share_links 里已经没有这一行）` }]
         : [{ caseId, targetId: shareId, deduped: result.already_revoked === true }];
     },
   },

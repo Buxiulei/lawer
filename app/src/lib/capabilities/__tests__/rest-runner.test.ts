@@ -185,6 +185,15 @@ describe('本人调得通，且走的是注册表那一份实现', () => {
     expect(res.status).toBe(200);
     const rows = db.prepare('SELECT case_id FROM action_items').all() as { case_id: number }[];
     expect(rows.map((r) => r.case_id)).toEqual([caseA]);
+
+    // 【这条跑道上的写入也要留台账】runCapabilityRest 自己不记账（理由见 registry-guard
+    // 「第三条跑道」那一节）——它跑得起来的写能力必须自己在事务里记过。不验这一句的形态是：
+    // 把一条不走能力壳的写能力挂到这条路由上，它照常 200、照常落库，而台账里零行，
+    // 结构守卫那侧也只证明得了"注册表上没声明 ledger"，证明不了这条路真的留了痕。
+    expect(
+      db.prepare('SELECT tool, target_table FROM agent_writes').all(),
+      '经 POST /cases/{id}/actions 的写入没留台账行',
+    ).toEqual([{ tool: 'action_create', target_table: 'action_items' }]);
   });
 
   test('时间线端点接受分页入参并回 events', async () => {

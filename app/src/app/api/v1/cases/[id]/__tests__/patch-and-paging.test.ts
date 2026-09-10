@@ -199,14 +199,24 @@ describe('结构守卫：PATCH 走的是能力本体，不是路由里的第二�
     expect(bridge).toMatch(/import\s*\{[^}]*\binvokeCapability\b[^}]*\}\s*from\s*'@\/lib\/capabilities\/invoke'/);
   });
 
-  test('MCP 路由与桥共用同一份前置闸判定', () => {
+  /**
+   * 【本条 2026-09-10 收紧】此前只钉「MCP 路由 import 了 checkPreconditions」。
+   * 那句话是真的，闸却漏了一道：那道门自己拿着 tool.run 跑，只借走前置闸那一句，
+   * 且**没把 args 传进去**——按入参开的闸（case_update 的 stage → facts_token）
+   * 于是在 MCP 这一侧恒不开：同一把 key、同一份入参，这道门 200 真写入，
+   * 通用桥 409 FACTS_STALE，两边都不报错。借一句话与走同一条路不是一回事，
+   * 所以这里改钉「整段调用都经 invokeCapability」，并堵死回到自跑 run 的退路。
+   */
+  test('MCP 路由与桥走同一条调用路径（不是各自借一句前置闸）', () => {
     const mcp = fs.readFileSync(
       path.join(ROUTE_DIR, '..', '..', '..', 'mcp', 'route.ts'),
       'utf-8',
     );
-    expect(mcp).toMatch(/import\s*\{[^}]*\bcheckPreconditions\b[^}]*\}\s*from\s*'@\/lib\/capabilities\/invoke'/);
+    expect(mcp).toMatch(/import\s*\{[^}]*\binvokeCapability\b[^}]*\}\s*from\s*'@\/lib\/capabilities\/invoke'/);
     // 路由里不许再就地判一次实名——那就是第二份闸门
     expect(mcp).not.toContain('isRealnameVerified');
+    // 也不许绕开入口自己跑能力：那正是漏掉一道闸而不报错的形态
+    expect(mcp).not.toMatch(/\btool\.run\s*\(/);
   });
 });
 

@@ -21,7 +21,7 @@ import {
 import { voidEvidence } from '@/lib/evidence/void';
 
 import { caseIdProp, idAt, num, writeOnce } from '../shared';
-import type { Capability } from '../registry';
+import type { Capability, CapabilityWriteOutcome } from '../registry';
 
 const TTL_MINUTES = UPLOAD_TOKEN_TTL_MS / 60_000;
 
@@ -245,19 +245,29 @@ export const evidenceAttest: Capability = {
   // **逐件一行**：一次调用最多出证 MAX_ATTEST_PER_CALL 件，逐件独立成败。
   // 一次调用只记一行的形态是，台账里「出证过几件」永远是 1，而证明文件是 N 份。
   // target 与 REST 那条端点同口径（attestations 那一行）；失败的件不记。
-  // 入参里没有案件号，逐件回读证据行取——读不到的那件跳过，不拿猜的案件号占位。
+  // 入参里没有案件号，逐件回读证据行取——**回读不到的那件点名，不静默跳过**：
+  // 跳过的形态是这一件真出了证（钱花了、文件签了、不可撤销），台账里没有它，
+  // 而回包 200、日志干净。失败的件本来就不该记，与"成了却记不上账"是两件事。
   // **不填 deduped**：出证本身幂等（同一条反复发起只有一个订单号），但回包里没有
   // 「这次是重放」这一格，猜一个出来的形态是台账里那一列写着没人算过的判断。
   ledger: {
     targetTable: 'attestations',
     rowsOf: (db, _args, result) => {
       const items = Array.isArray(result.results) ? result.results : [];
-      const rows: { caseId: number; targetId: number }[] = [];
+      const rows: CapabilityWriteOutcome[] = [];
       for (const item of items as { ok?: unknown; evidence_id?: unknown; order_no?: unknown }[]) {
+        // 这一件本来就没成 ⇒ 没写东西，不记也不报警
         if (item.ok !== true || typeof item.order_no !== 'string') continue;
         const caseId = findEvidenceDetail(db, num(item.evidence_id))?.case_id;
         const attestationId = idAt(findAttestationByOrderNo(db, item.order_no), 'id');
-        if (caseId === undefined || attestationId === 0) continue;
+        if (caseId === undefined || attestationId === 0) {
+          rows.push({
+            unresolved:
+              `evidence_id=${num(item.evidence_id)} order_no=${item.order_no} 这一件回读不到` +
+              `${caseId === undefined ? ' case_id' : ''}${attestationId === 0 ? ' attestations 行' : ''}`,
+          });
+          continue;
+        }
         rows.push({ caseId, targetId: attestationId });
       }
       return rows;
