@@ -207,11 +207,14 @@ describe('S16 只传了员工手册：一份「公司文件」不算公司作出
       expect(row.unresolvedSlots, `${id} 有认不出来的槽位（配置错了）`).toEqual([]);
     }
     // 「公司文件」这个槽已经被员工手册填上了，所以三张公司决定卡缺的只剩那条时间线记录；
-    // N-2b 缺的是它自己那两格（沟通记录 + 那份被迫解除通知，后者按 missingAs 点名）。
+    // 它同样按 missingAs 点名（2026-09-10「公司动作」票：那个槽也过取值判定了）——
+    // 沿用槽串的形态是用户读到「还差 timeline:公司动作」，而他刚记过一条公司动作（约谈、调岗）。
+    // N-2b 缺的是它自己那两格（沟通记录 + 那份被迫解除通知，后者同样按 missingAs 点名）。
     const missingOf = (id: string) => sheet.rows.find((r) => r.id === id)!.missingSlots;
-    expect(missingOf('N-2a')).toEqual(['timeline:公司动作']);
-    expect(missingOf('2N-2')).toEqual(['timeline:公司动作']);
-    expect(missingOf('2N-3')).toEqual(['timeline:公司动作']);
+    const COMPANY_DECISION_MISSING = '公司的解除/终止决定（请把公司作出这个决定的那一刻记成一条时间线事件）';
+    expect(missingOf('N-2a')).toEqual([COMPANY_DECISION_MISSING]);
+    expect(missingOf('2N-2')).toEqual([COMPANY_DECISION_MISSING]);
+    expect(missingOf('2N-3')).toEqual([COMPANY_DECISION_MISSING]);
     expect(missingOf('N-2b'), 'N-2b 的缺口没点名那份被迫解除通知').toEqual([
       'evidence:沟通记录',
       '被迫解除通知（请把发出通知这件事记成一条时间线事件）',
@@ -222,7 +225,7 @@ describe('S16 只传了员工手册：一份「公司文件」不算公司作出
     // 【它守什么】规则三给的出路是「把公司那份书面决定与上面写的理由原样固定下来」。
     // 档案里根本没有那份决定时报这一条，用户照着做只能空转（issue-table.ts 的
     // counterpartyDecisionOnFile 抬头）。而"举证责任在对方"本身是常态，不是触发条件。
-    const onFile = counterpartyDecisionOnFile(LABOR.counterpartyDecisionSlot, factsOf(fixture.db, fixture.caseId));
+    const onFile = counterpartyDecisionOnFile(LABOR.counterpartyDecision, factsOf(fixture.db, fixture.caseId));
     expect(onFile, '一份员工手册就让"对方那份书面决定在档"成立了').toBe(false);
     const table = buildIssueTable(sheet.rows, { counterpartyDecisionOnFile: onFile }, sheet.rendered);
     for (const id of DECISION_ROWS) {
@@ -281,7 +284,7 @@ describe('S16 只传了员工手册：一份「公司文件」不算公司作出
     expect(after.rows.find((r) => r.id === 'N-2b')!.status).toBe('缺失');
 
     const onFile = counterpartyDecisionOnFile(
-      LABOR.counterpartyDecisionSlot,
+      LABOR.counterpartyDecision,
       factsOf(fixture.db, fixture.caseId),
     );
     expect(onFile, '那份书面决定已在档，规则三的第二个条件该成立了').toBe(true);

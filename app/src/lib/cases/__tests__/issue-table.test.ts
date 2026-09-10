@@ -10,7 +10,7 @@
 //   · 让 nextStep 在某条分支上返回空串 ⇒ 链接率那条红。
 import { describe, expect, it } from 'vitest';
 
-import type { ElementFactsView, ElementRow } from '../elements';
+import { buildElementSheet, type ElementFactsView, type ElementRow, type SlotValueCheck } from '../elements';
 import {
   buildIssueTable,
   counterpartyDecisionOnFile,
@@ -184,16 +184,18 @@ describe('「对方的书面决定在不在档」的唯一入口', () => {
   // 现在两边都调这一个函数，这里把它的入参形态逐个钉一条。
   const facts = (
     categories: string[],
-    events: { kind: string; source_tier: string }[] = [],
+    events: { kind: string; source_tier: string; title?: string }[] = [],
   ): ElementFactsView => ({
     case: { employed_from: null, position: null, monthly_wage_fen: null, contract_count: null },
     claims: [],
-    // 【title / detail 在这里给空串】它们只给 slotChecks 的取值判定用，而
-    // counterpartyDecisionOnFile 走的是 resolveSlot（只判档位），一个字都不读它们。
-    timeline: events.map((e) => ({ ...e, title: '', detail: null })),
+    // 【title 在这里默认给空串】没挂取值判定的槽一个字都不读它；挂了判定的那几条用例
+    // 自己把 title 写上（下面「取值判定」那一组）。
+    timeline: events.map((e) => ({ title: '', ...e, detail: null })),
     companies: [],
     evidence: categories.map((category) => ({ category })),
   });
+  /** 领域包声明的那一格。共用层只认这个形状，不认识槽在某个行当里叫什么。 */
+  const decl = (slots: string[], slotChecks?: Record<string, SlotValueCheck>) => ({ slots, slotChecks });
 
   it('槽位没声明 ⇒ 恒 false（规则三整条不生效，而不是恒成立）', () => {
     expect(counterpartyDecisionOnFile(undefined, facts(['某类']))).toBe(false);
@@ -201,28 +203,28 @@ describe('「对方的书面决定在不在档」的唯一入口', () => {
 
   it('空数组 ⇒ false（变异：删掉 length 那道判断、让 every 空真走成 true → 红）', () => {
     // 半格的声明不许拿到"那份决定恒在档"：那比没声明更糟，它读起来像还没填。
-    expect(counterpartyDecisionOnFile([], facts(['某类']))).toBe(false);
+    expect(counterpartyDecisionOnFile(decl([]), facts(['某类']))).toBe(false);
   });
 
   it('档案里有那一类材料 ⇒ true', () => {
-    expect(counterpartyDecisionOnFile(['evidence:某类'], facts(['某类']))).toBe(true);
+    expect(counterpartyDecisionOnFile(decl(['evidence:某类']), facts(['某类']))).toBe(true);
   });
 
   it('有书证、但**不是**那一类 ⇒ false（变异：改成 evidence.length > 0 → 红）', () => {
-    expect(counterpartyDecisionOnFile(['evidence:某类'], facts(['别的类', '再一类']))).toBe(false);
+    expect(counterpartyDecisionOnFile(decl(['evidence:某类']), facts(['别的类', '再一类']))).toBe(false);
   });
 
   it('档案里什么都没有 ⇒ false（变异：改成常量 true → 红）', () => {
-    expect(counterpartyDecisionOnFile(['evidence:某类'], facts([]))).toBe(false);
+    expect(counterpartyDecisionOnFile(decl(['evidence:某类']), facts([]))).toBe(false);
   });
 
   // ↓ 第三轮复审（2026-09-10）收窄成双槽之后的两道门槛，各一正一反。
   it('多槽：**全部**到位才算在档，少一格即 false（变异：every 改成 some → 红）', () => {
     const slots = ['evidence:某类', 'timeline:某事件'];
     const 书证事件 = [{ kind: '某事件', source_tier: '书证' }];
-    expect(counterpartyDecisionOnFile(slots, facts(['某类'], 书证事件)), '两格都在档').toBe(true);
-    expect(counterpartyDecisionOnFile(slots, facts(['某类'])), '只有那一类材料，没有那条事件').toBe(false);
-    expect(counterpartyDecisionOnFile(slots, facts([], 书证事件)), '只有那条事件，没有那类材料').toBe(false);
+    expect(counterpartyDecisionOnFile(decl(slots), facts(['某类'], 书证事件)), '两格都在档').toBe(true);
+    expect(counterpartyDecisionOnFile(decl(slots), facts(['某类'])), '只有那一类材料，没有那条事件').toBe(false);
+    expect(counterpartyDecisionOnFile(decl(slots), facts([], 书证事件)), '只有那条事件，没有那类材料').toBe(false);
   });
 
   it('自述档不算"那张纸在档"（变异：门槛从 isDocumented 放回 != null → 红）', () => {
@@ -230,16 +232,16 @@ describe('「对方的书面决定在不在档」的唯一入口', () => {
     // 在这时指向一份不存在的纸。本票裁定的口径就是这一条（见 issue-table 的函数注释）。
     const slots = ['evidence:某类', 'timeline:某事件'];
     expect(
-      counterpartyDecisionOnFile(slots, facts(['某类'], [{ kind: '某事件', source_tier: '自述' }])),
+      counterpartyDecisionOnFile(decl(slots), facts(['某类'], [{ kind: '某事件', source_tier: '自述' }])),
     ).toBe(false);
     // 【反臂】同一条事件换成书证档当场翻真——证明上面那句不是"这个槽根本没解析出来"
     expect(
-      counterpartyDecisionOnFile(slots, facts(['某类'], [{ kind: '某事件', source_tier: '书证' }])),
+      counterpartyDecisionOnFile(decl(slots), facts(['某类'], [{ kind: '某事件', source_tier: '书证' }])),
     ).toBe(true);
-    // resolveSlot 对时间线取**最强**档：一自述 + 一书证 ⇒ 到得了书证，算在档
+    // 时间线取**最强**档：一自述 + 一书证 ⇒ 到得了书证，算在档
     expect(
       counterpartyDecisionOnFile(
-        slots,
+        decl(slots),
         facts(['某类'], [
           { kind: '某事件', source_tier: '自述' },
           { kind: '某事件', source_tier: '书证' },
@@ -248,9 +250,47 @@ describe('「对方的书面决定在不在档」的唯一入口', () => {
     ).toBe(true);
   });
 
+  // ↓ 取值判定那道门槛（2026-09-10「公司动作」票）：槽在档 ≠ 那条记录说的是这件事。
+  it('挂了判定的槽：判不过 ⇒ false（变异：counterpartyDecisionOnFile 不传 slotChecks / 改回 resolveSlot → 红）', () => {
+    const slots = ['evidence:某类', 'timeline:某事件'];
+    const checks: Record<string, SlotValueCheck> = {
+      'timeline:某事件': { accepts: (raw) => raw.includes('那件事'), missingAs: '那件事' },
+    };
+    const 别的事 = [{ kind: '某事件', source_tier: '书证', title: '记的是别的事' }];
+    const 那件事 = [{ kind: '某事件', source_tier: '书证', title: '记的是那件事' }];
+    expect(
+      counterpartyDecisionOnFile({ slots, slotChecks: checks }, facts(['某类'], 别的事)),
+      '一条判不过的记录就让"那份决定在档"成立了',
+    ).toBe(false);
+    // 【反臂】换成过得了判定的那条当场翻真——证明上面那句不是"这个槽根本没解析出来"
+    expect(counterpartyDecisionOnFile({ slots, slotChecks: checks }, facts(['某类'], 那件事))).toBe(true);
+  });
+
+  it('🔴 与要件表同一把尺：同一份档案，"在档"与"这个要件成立"同真同假（变异：任一侧绕开 resolveCheckedSlot → 红）', () => {
+    // 【它守什么】规则三给的出路是「把对方那份书面决定原样固定下来」。两侧各写一把尺的形态是：
+    // 要件表说「缺失」（判定没过），规则三说「在档」（只数了记录），两行并排印在同一份报告上。
+    const slots = ['evidence:某类', 'timeline:某事件'];
+    const check: SlotValueCheck = { accepts: (raw) => raw.includes('那件事'), missingAs: '那件事' };
+    const card = {
+      id: 'e1',
+      claimKind: '某诉求',
+      name: '要件一',
+      burden: 'respondent' as const,
+      basis: [{ anchor: '某法|第一条', verified: true }],
+      satisfiedBy: slots,
+      slotChecks: { 'timeline:某事件': check },
+      typicalEvidence: ['某种材料'],
+    };
+    for (const [title, expected] of [['记的是别的事', false], ['记的是那件事', true]] as const) {
+      const f = facts(['某类'], [{ kind: '某事件', source_tier: '书证', title }]);
+      expect(counterpartyDecisionOnFile({ slots, slotChecks: card.slotChecks }, f)).toBe(expected);
+      expect(buildElementSheet(f, [card]).rows[0].status === '成立').toBe(expected);
+    }
+  });
+
   it('认不出来的槽 ⇒ false（配置错误不静默兜成"在档"）', () => {
-    expect(counterpartyDecisionOnFile(['没有冒号的槽'], facts(['某类']))).toBe(false);
-    expect(counterpartyDecisionOnFile(['不认识的表:某类'], facts(['某类']))).toBe(false);
+    expect(counterpartyDecisionOnFile(decl(['没有冒号的槽']), facts(['某类']))).toBe(false);
+    expect(counterpartyDecisionOnFile(decl(['不认识的表:某类']), facts(['某类']))).toBe(false);
   });
 });
 

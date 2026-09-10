@@ -12,6 +12,7 @@
 
 import type { CrisisOpenerText, HotlineFact } from '@/lib/agent/crisis-opener';
 import type { Burden, ElementCard } from '@/lib/cases/elements';
+import type { CounterpartyDecision } from '@/lib/cases/issue-table';
 
 import { COUNSELING } from './counseling';
 import { LABOR } from './labor';
@@ -575,9 +576,9 @@ export interface DomainPack {
    */
   burdenLabels?: Readonly<Record<Burden, string>>;
   /**
-   * 「对方的书面决定」在这个行当里落在**哪几个事实槽**（`<表>:<取值>` 形态，
-   * 与要件卡的 satisfiedBy 同一套寻址）。**语义与 satisfiedBy 同款：列出来的槽全部到位
-   * 才算在档**，少一格就是不在档。共用层不认识这些槽在某个行当里叫什么。
+   * 「对方的书面决定」在这个行当里落在**哪几个事实槽**、以及那几条记录里写的字**算不算这件事**
+   *（`{ slots, slotChecks }`，寻址与判定都与要件卡同一套）。**语义与 satisfiedBy 同款：
+   * 列出来的槽全部到位才算在档**，少一格就是不在档。共用层不认识这些槽在某个行当里叫什么。
    *
    * 【为什么是一组槽，不是一个】（第三轮复审点名、第四轮收窄，2026-09-10）一个槽指向的材料类别往往**很宽**：
    * 同一个类别下装着好几种性质完全不同的纸，其中大多数根本不是"对方作出的那个决定"。
@@ -585,15 +586,22 @@ export interface DomainPack {
    * 规则三跟着让用户去固定一份档案里根本不存在的决定，而回包 200、每一行都读得通。
    * 一组槽把"对方确实作出过那个决定"另记一格，两格都到位才谈得上在档。
    *
+   * 【为什么槽与判定合成一格，而不是并排两个字段】（2026-09-10 台账「公司动作」票）
+   * 有些槽指向的**记录类别**同样很宽：那个类别下大多数记录记的根本不是对方作出的决定。
+   * 于是槽之外还要一句"这条记录说的是不是这件事"。两个字段并排的形态是——
+   * 领域包填了槽、忘了判定，规则三按裸槽说「在档」而要件卡按判定说「缺失」，
+   * 两行并排印在同一份报告上。合成一格之后，**填不出半份**（类型定义在
+   * lib/cases/issue-table.ts 的 CounterpartyDecision）。
+   *
    * 【它只服务争点表的规则三】举证责任在对方是常态，光凭这一点就报争点的形态是：
    * 那几行永远挂在争点表上，于是争点表永远读不完，它和没有争点表是同一个东西。
    * 有了对方那份写着理由的书面决定在档，才有一个打得着的靶子
    *（推导在 lib/cases/issue-table.ts，共用层不认识这个行当的文件叫什么）。
    *
-   * **省略（或空数组）= 本领域没有"对方的书面决定"这回事**（是结论不是待填项）：
+   * **省略（或空 slots）= 本领域没有"对方的书面决定"这回事**（是结论不是待填项）：
    * 规则三随之整条不生效，其余两条照常。
    */
-  counterpartyDecisionSlot?: readonly string[];
+  counterpartyDecision?: CounterpartyDecision;
   /**
    * 要件表那一节的抬头，用户可见。
    *
@@ -919,6 +927,22 @@ export function assertDomainPack(pack: DomainPack): void {
     arr(`${at}.basis`, card?.basis);
     arr(`${at}.satisfiedBy`, card?.satisfiedBy);
     arr(`${at}.typicalEvidence（「缺失」那一行的出路就是它，空了这条争点就没有下一步）`, card?.typicalEvidence);
+  }
+
+  // 「对方的书面决定」：可选（省略 = 本领域没有这回事）。一旦声明就不许半张——
+  //   · slots 为空 ⇒ 规则三整条不生效，而这一格看起来是配好了的；
+  //   · slotChecks 的 key 不在 slots 里 ⇒ 那条判定**一次都不会被调用**，
+  //     于是收窄看起来做了、实际没做（写错一个字与没写在产出上完全同形）。
+  if (pack.counterpartyDecision) {
+    arr('counterpartyDecision.slots', pack.counterpartyDecision.slots);
+    for (const slot of Object.keys(pack.counterpartyDecision.slotChecks ?? {})) {
+      if (!(pack.counterpartyDecision.slots ?? []).includes(slot)) {
+        missing.push(
+          `counterpartyDecision.slotChecks 的「${slot}」不在 slots 里——` +
+            '这条取值判定一次都不会被调用，而它看起来已经生效了',
+        );
+      }
+    }
   }
 
   // 【「任选其一」分组：打错一个字会静默失效】组名是自由串，写岔了的形态是两张卡各自成组，

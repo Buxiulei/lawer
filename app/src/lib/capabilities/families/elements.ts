@@ -143,7 +143,7 @@ export const issueList: Capability = {
       sheet.rows,
       // 在不在档走 lib/cases/issue-table 的唯一入口：此前这里与报告那侧各有一份同形的判断，
       // 而判据只钉得住其中一份（复审第三条）。
-      { counterpartyDecisionOnFile: counterpartyDecisionOnFile(ctx.pack.counterpartyDecisionSlot, facts) },
+      { counterpartyDecisionOnFile: counterpartyDecisionOnFile(ctx.pack.counterpartyDecision, facts) },
       sheet.rendered,
     );
     return {

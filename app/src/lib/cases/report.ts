@@ -367,7 +367,7 @@ function derivedIssues(input: ReportInput, pack: DomainPack): { rows: readonly I
   if (!sheet.rendered) return null;
   // 对方那份书面决定在不在档：槽位由领域包声明（共用层不认识它在这个行当里叫什么），
   // 判定走 issue-table 的唯一入口（那里说明了为什么不许在这里再写一遍同形的三行）。
-  const onFile = counterpartyDecisionOnFile(pack.counterpartyDecisionSlot, facts);
+  const onFile = counterpartyDecisionOnFile(pack.counterpartyDecision, facts);
   const table = buildIssueTable(sheet.rows, { counterpartyDecisionOnFile: onFile }, true);
   return { rows: table.rows, elements: sheet.rows };
 }

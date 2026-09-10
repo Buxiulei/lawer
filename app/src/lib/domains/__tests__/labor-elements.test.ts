@@ -29,7 +29,7 @@ import { describe, expect, it } from 'vitest';
 
 import { articleKey } from '@/lib/agent/citation-block';
 import { BURDENS, buildElementSheet, type Burden, type ElementFactsView } from '@/lib/cases/elements';
-import { buildIssueTable } from '@/lib/cases/issue-table';
+import { buildIssueTable, counterpartyDecisionOnFile } from '@/lib/cases/issue-table';
 
 import { LABOR } from '../labor';
 
@@ -113,6 +113,12 @@ for (const card of LABOR.elementCards ?? []) {
 
 /** 本片要覆盖的四项诉求（派单点名）。多一项少一项都要有人来改这一行。 */
 const COVERED_KINDS = ['2N', 'N', '欠薪', '双倍工资'];
+
+/** 「公司确实作出过那个决定」那条时间线槽，与它判不过时缺口那一行的名字。 */
+const COMPANY_ACTION_SLOT = 'timeline:公司动作';
+const COMPANY_ACTION_MISSING = '公司的解除/终止决定（请把公司作出这个决定的那一刻记成一条时间线事件）';
+/** 一条**过得了判定**的「公司动作」：判的是那段字，所以夹具必须把它写出来。 */
+const DECISION_EVENT = '公司送达《解除劳动合同通知书》';
 
 /** 「限定事项倒置」那一条的锚点：司法解释（一）第四十四条。 */
 const INTERPRETATION_ANCHOR = articleKey('最高人民法院关于审理劳动争议案件适用法律问题的解释（一）', '第四十四条');
@@ -663,7 +669,9 @@ describe('N 的两条解除路径：互斥、二选一（第二轮复审 2026-09
    */
   const PATH_ONE: FactsOver = {
     evidence: [{ category: '公司文件' }],
-    timeline: [{ kind: '公司动作', source_tier: '书证' }],
+    // 【为什么这条事件必须把标题写出来】（2026-09-10「公司动作」票）这个槽挂了取值判定：
+    // 记的是不是公司**已经作出**的那个解除决定，看的就是这段字。空标题一律判不过。
+    timeline: [{ kind: '公司动作', source_tier: '书证', title: DECISION_EVENT }],
   };
 
   it('路径一走通时，路径二的「缺失」不进争点表（变异：规则一不按分组取代表行 → 红）', () => {
@@ -688,7 +696,7 @@ describe('N 的两条解除路径：互斥、二选一（第二轮复审 2026-09
     const only = { evidence: [{ category: '公司文件' }] };
     const a = rowOf('N-2a', only);
     expect(a.status, `只有一份公司文件时 N-2a 被判成了 ${a.status}`).toBe('缺失');
-    expect(a.missingSlots, '缺口没点到"公司确实作出过这个决定"那条记录').toContain('timeline:公司动作');
+    expect(a.missingSlots, '缺口没点到"公司确实作出过这个决定"那条记录').toContain(COMPANY_ACTION_MISSING);
     // 同组那一条也还没走通 ⇒ 两条都是代表行，两条都留在争点表上
     expect(rowOf('N-2b', only).status).toBe('缺失');
     expect(
@@ -704,7 +712,7 @@ describe('N 的两条解除路径：互斥、二选一（第二轮复审 2026-09
     expect(
       rowOf('N-2a', {
         evidence: [{ category: '公司文件' }],
-        timeline: [{ kind: '公司动作', source_tier: '自述' }],
+        timeline: [{ kind: '公司动作', source_tier: '自述', title: DECISION_EVENT }],
       }).status,
       '事件只有当事人自己说，这一条就到不了「成立」',
     ).toBe('成立·待证');
@@ -712,7 +720,9 @@ describe('N 的两条解除路径：互斥、二选一（第二轮复审 2026-09
 
   it('只有那条「公司动作」、公司那份文件不在档 ⇒ 仍是「缺失」，且缺口点名那份文件', () => {
     // satisfiedBy 是「与」不是「或」：新加一个槽不许把原来那个槽变成可选。
-    const row = rowOf('N-2a', { timeline: [{ kind: '公司动作', source_tier: '书证' }] });
+    const row = rowOf('N-2a', {
+      timeline: [{ kind: '公司动作', source_tier: '书证', title: DECISION_EVENT }],
+    });
     expect(row.status).toBe('缺失');
     expect(row.missingSlots).toContain('evidence:公司文件');
   });
@@ -723,6 +733,300 @@ describe('N 的两条解除路径：互斥、二选一（第二轮复审 2026-09
     expect(ids, '什么材料都没有时，两条路径都该摆出来让用户自己认').toEqual(
       expect.arrayContaining(['N-2a', 'N-2b']),
     );
+  });
+});
+
+// ══ 「公司动作」也过取值判定（2026-09-10 台账「公司动作」票，对称于 N-2b）══
+describe('「公司动作」的取值判定：有这个类别的记录 ≠ 公司作出过解除决定', () => {
+  // 【它守什么】「公司动作」记的是对方做的事，而对方在核心客户窗口（HR 约谈施压期、
+  // 调岗降薪先来）做的**大多不是解除**：调岗通知、通知搬办公室、约谈、警告、年会通知。
+  // 只判"这个类别下有没有记录"的形态是——一条调岗通知 + 一份员工手册（「公司文件」是
+  // 最宽的那一类），N-2a / 2N-2 / 2N-3 三条一起写着「成立·待证」，争点表规则三照样触发，
+  // 而这个人连解除通知都还没收到，照着做只能去固定一份不存在的纸。
+  const factsWith = (over: FactsOver = {}): ElementFactsView => ({
+    case: {
+      employed_from: '2020-03-01',
+      position: '后端工程师',
+      monthly_wage_fen: 2_500_000,
+      contract_count: '续签过一次',
+    },
+    claims: [
+      { kind: 'N', source_tier: '自述' },
+      { kind: '2N', source_tier: '自述' },
+    ],
+    companies: [{ role: '签约主体', source_tier: '自述' }],
+    evidence: [],
+    ...over,
+    timeline: timelineOf(over),
+  });
+  const sheetOf = (over: FactsOver = {}) =>
+    buildElementSheet(factsWith(over), LABOR.elementCards ?? [], ['N', '2N']);
+  const rowOf = (id: string, over: FactsOver = {}) => sheetOf(over).rows.find((r) => r.id === id)!;
+  /** 判同一件事的那三张卡：这一票要它们一起动，不许再有"三处对一处错"。 */
+  const DECISION_CARDS = ['N-2a', '2N-2', '2N-3'] as const;
+  /** 一份员工手册（「公司文件」类）+ 一条「公司动作」，只让那段字说话。 */
+  const withCompanyAction = (title: string, tier = '自述'): FactsOver => ({
+    evidence: [{ category: '公司文件' }],
+    timeline: [{ kind: '公司动作', source_tier: tier, title }],
+  });
+
+  it('🔒 地板：三张卡的那个时间线槽真的挂着取值判定（删掉 slotChecks → 红）', () => {
+    for (const id of DECISION_CARDS) {
+      const card = (LABOR.elementCards ?? []).find((c) => c.id === id)!;
+      expect(card.satisfiedBy, `${id} 认的槽变了`).toContain(COMPANY_ACTION_SLOT);
+      expect(card.slotChecks?.[COMPANY_ACTION_SLOT], `${id} 的「公司动作」没有取值判定`).toBeTruthy();
+      expect(card.slotChecks?.[COMPANY_ACTION_SLOT]?.missingAs).toBe(COMPANY_ACTION_MISSING);
+      // 【为什么连这半句也钉】缺的不是"一份文件"，是把公司作出决定的那一刻记成一条事件。
+      // 只报名字的形态是：用户又去证据库翻一遍，那一项一个字都不变（禁令配出路，§7.7）。
+      expect(card.slotChecks?.[COMPANY_ACTION_SLOT]?.missingAs, '缺口只报了名字，没给出路').toContain(
+        '时间线事件',
+      );
+    }
+  });
+
+  it('(a) 员工手册 + 一条调岗通知 ⇒ 三条全「缺失」、缺口点名、规则三不触发（变异：去掉判定 → 红）', () => {
+    // 【这就是本票要根治的那一格】调岗降薪是施压期最常见的公司动作，它与"公司作出解除决定"
+    // 隔着整条路径。判成「成立·待证」的后果是三层，每一层都读得通：三张卡一起抬起来 ⇒
+    // N-2a 成了「N-解除路径」组的代表行、被迫解除那条路从争点表里消失 ⇒
+    // 规则三让他去把「公司那份书面决定」原样固定下来，而档案里根本没有那份决定。
+    const over = withCompanyAction('通知我调岗到保定分公司，下周报到');
+    for (const id of DECISION_CARDS) {
+      const row = rowOf(id, over);
+      expect(row.status, `${id} 被一条调岗通知抬成了 ${row.status}`).toBe('缺失');
+      expect(row.missingSlots, `${id} 的缺口没点名那条解除决定`).toEqual([COMPANY_ACTION_MISSING]);
+      // 它是〔未记录〕不是〔不成立〕：公司还没作出决定，不等于"公司没解除过"被证伪
+      expect(row.status).not.toBe('不成立');
+      expect(row.unresolvedSlots, `${id} 有认不出来的槽位（判定挂错地方了）`).toEqual([]);
+    }
+    // 规则三整条不触发，reasons 里只剩规则一
+    const onFile = counterpartyDecisionOnFile(LABOR.counterpartyDecision, factsWith(over));
+    expect(onFile, '一条调岗通知就让"对方那份书面决定在档"成立了').toBe(false);
+    const sheet = sheetOf(over);
+    const table = buildIssueTable(sheet.rows, { counterpartyDecisionOnFile: onFile }, sheet.rendered);
+    for (const id of DECISION_CARDS) {
+      const issue = table.rows.find((r) => r.id === id)!;
+      expect(issue, `${id} 不在争点表上——「缺失」的要件恰恰最该摆出来`).toBeTruthy();
+      expect(issue.reasons, `${id} 报了规则三，而档案里没有那份书面决定`).toEqual(['element_unsettled']);
+    }
+  });
+
+  it('(b) 员工手册 + 解除通知那条事件（自述）⇒ 三条成立·待证，规则三仍不触发（书证档才算在档）', () => {
+    const over = withCompanyAction('HR 通知我解除劳动合同，理由写的是绩效');
+    for (const id of DECISION_CARDS) {
+      expect(rowOf(id, over).status, `${id} 到不了「成立·待证」`).toBe('成立·待证');
+    }
+    expect(
+      counterpartyDecisionOnFile(LABOR.counterpartyDecision, factsWith(over)),
+      '只有当事人自己说的口头通知不算"那张纸在档"',
+    ).toBe(false);
+  });
+
+  it('(c) 那条事件由文件提取写入（书证档）⇒ 三条成立、规则三触发（自证上面不是恒不成立）', () => {
+    const over = withCompanyAction(DECISION_EVENT, '书证');
+    for (const id of DECISION_CARDS) {
+      expect(rowOf(id, over).status, `${id} 到不了「成立」`).toBe('成立');
+    }
+    const onFile = counterpartyDecisionOnFile(LABOR.counterpartyDecision, factsWith(over));
+    expect(onFile, '那份书面决定已在档，规则三的第二个条件该成立了').toBe(true);
+    const sheet = sheetOf(over);
+    const table = buildIssueTable(sheet.rows, { counterpartyDecisionOnFile: onFile }, sheet.rendered);
+    // 举证责任整条在对方的那两张（N-2a / 2N-3）由规则三留在表上；2N-2 是我方举证，不该被它捞
+    for (const id of ['N-2a', '2N-3']) {
+      expect(table.rows.find((r) => r.id === id)?.reasons, `${id} 没报规则三`).toContain(
+        'burden_on_other_side',
+      );
+    }
+  });
+
+  it('🔴 档位只从**过了判定的那条**里取：一条带书证的调岗通知抬不动它（变异：从全部同类事件里取最强档 → 红）', () => {
+    // 【这条最贵】用户把调岗通知的原件传了上来（书证档），另有一条自述的"HR 口头说要解除"。
+    // 从全部同类事件里取最强档的形态是：这个槽显示成书证档 ⇒ 三条写着「成立」，
+    // 而那份书证证的是调岗，不是解除决定。
+    const over: FactsOver = {
+      evidence: [{ category: '公司文件' }],
+      timeline: [
+        { kind: '公司动作', source_tier: '书证', title: '通知我调岗到保定分公司' },
+        { kind: '公司动作', source_tier: '自述', title: 'HR 通知我解除劳动合同' },
+      ],
+    };
+    for (const id of DECISION_CARDS) {
+      expect(rowOf(id, over).status, `${id} 被调岗那份书证抬到了「成立」`).toBe('成立·待证');
+    }
+  });
+
+  it('(d) 词表：认的那 10 种说法（变异：删掉正向词表里任一类 → 红）', () => {
+    for (const raw of [
+      DECISION_EVENT,
+      '收到《解除劳动合同通知书》',
+      'HR 通知我解除劳动合同，理由写的是绩效',
+      '单位把我辞退了',
+      '老板当场开除我',
+      '公司决定解聘，明天办交接',
+      '公司通知劳动合同到期终止，不再续签',
+      '公司通知合同到期不再续签',
+      'HR 口头通知我被裁了',
+      // 【它守什么】「准备 / 计划 / 考虑」这些未定态词在**已经解除之后**同样常见。
+      // 整条一命中就排的形态是：一个手上正拿着解除通知书的人，三条要件写着「缺失」，
+      // 清单让他去补那份他已经收到的纸。（变异：未定态那条不要求紧挨着决定动作 → 红）
+      '公司送达《解除劳动合同通知书》，让我准备交接',
+    ]) {
+      const row = rowOf('N-2a', withCompanyAction(raw));
+      expect(row.status, `「${raw}」（这是公司作出的解除决定）被判成了 ${row.status}`).toBe('成立·待证');
+    }
+  });
+
+  it('(d) 词表：不认的那 15 种说法，一律落「缺失」并点名（变异：判定放宽到"有记录就算" → 红）', () => {
+    // 【为什么反样本比正样本多】认不准时一律判"不算"：漏判只是让用户多读一行"该补什么"，
+    // 误判会让一个还没被解除的人以为这几项已经立住，并去固定一份不存在的书面决定。
+    // 前十条是施压期的日常动作，中间三条**带着「解除/裁员」这些词但还没定**，
+    // 最后两条是协商类——协商不是单方决定（经理裁定）。
+    for (const raw of [
+      '通知我调岗到保定分公司',
+      '宣布下月起降薪 30%',
+      'HR 约谈，暗示我主动走',
+      '发了一份书面警告',
+      '通知全员搬办公室',
+      '通知我停工待岗',
+      '下发新版员工手册，要求签收',
+      '绩效被突然打最低档',
+      '启动 30 天 PIP，目标含"显著提高沟通能力"等模糊项',
+      '年会通知：下周五团建',
+      '公司说要裁员，还没通知到我',
+      '传闻公司下月裁员',
+      '老板放话可能要解除一批人',
+      'HR 递来《协商解除协议》，补偿写 N',
+      'HR 催签协商解除协议（当时未签）',
+    ]) {
+      const row = rowOf('N-2a', withCompanyAction(raw));
+      expect(row.status, `「${raw}」（这不是公司作出的解除决定）被判成了 ${row.status}`).toBe('缺失');
+      expect(row.missingSlots, `「${raw}」的缺口没点名`).toEqual([COMPANY_ACTION_MISSING]);
+    }
+  });
+
+  it('detail 那段字也算数：标题只写「收到公司来函」，内容写在详情里', () => {
+    const row = rowOf('N-2a', {
+      evidence: [{ category: '公司文件' }],
+      timeline: [
+        {
+          kind: '公司动作',
+          source_tier: '自述',
+          title: '收到公司来函',
+          detail: '内容是解除劳动合同，理由写的是不能胜任工作',
+        },
+      ],
+    });
+    expect(row.status).toBe('成立·待证');
+  });
+});
+
+// ══ 公司一侧词表一份共用并扩词（2026-09-10 台账「公司动作」票第二条）══
+describe('N-2b 方向：公司一侧的部门名 / 职务名 / 合同称谓也算主语', () => {
+  // 【它守什么】复审实测：五条公司解除叙事被判成"我方发出了被迫解除通知"，
+  // 全部卡在主语那个词不在词表里（人力资源部 / 法务 / 总经理 / 甲方 / 用人单位）。
+  // 判错的后果与那 22 例同款：路径二被抬起来（用户不去准备那份通知、不去固定欠薪的
+  // 初步证明），而他真正该走的路径一被同组的代表行盖住——两个错都读起来很顺。
+  const withMyAction = (title: string) =>
+    buildElementSheet(
+      {
+        case: {
+          employed_from: '2020-03-01',
+          position: '后端工程师',
+          monthly_wage_fen: 2_500_000,
+          contract_count: '续签过一次',
+        },
+        claims: [{ kind: 'N', source_tier: '自述' }],
+        companies: [{ role: '签约主体', source_tier: '自述' }],
+        evidence: [{ category: '沟通记录' }],
+        timeline: [{ kind: '我方动作', source_tier: '自述', title, detail: null }],
+      },
+      LABOR.elementCards ?? [],
+      ['N'],
+    ).rows.find((r) => r.id === 'N-2b')!;
+
+  it('🔴 五条公司解除叙事一条都不认（变异：词表退回旧闭集「公司|HR|单位|老板|人事」→ 全红）', () => {
+    for (const raw of [
+      '公司人力资源部向我送达了解除劳动合同通知书，工资拖欠三个月',
+      '公司的法务部同事发送了解除劳动合同通知书，欠薪没结',
+      '公司法务今天上午给我发出解除通知，欠薪未结',
+      '总经理提出解除劳动合同，拖欠工资没给',
+      '甲方发出解除劳动合同通知书，拖欠工资',
+    ]) {
+      const row = withMyAction(raw);
+      expect(row.status, `「${raw}」（是公司解除的）被判成了 ${row.status}`).toBe('缺失');
+    }
+  });
+
+  it('🔴 反臂：同一批新词做收件人时照旧算我发的（变异：不认词前面那个介词 → 红）', () => {
+    // 【为什么这条必须并排放着】上一条的修法是"把这些词加进公司一侧"。若只加词、
+    // 不问它在句子里是主语还是收件人，这些——用户手上正拿着回执的那一类——会反向误杀。
+    for (const raw of [
+      '公司欠薪，我给领导发了被迫解除通知书',
+      '向用人单位邮寄被迫解除劳动合同通知书并留存回执',
+      '因拖欠工资，向人力资源部发送解除劳动合同通知',
+      '已向总经理提交被迫解除劳动合同通知书',
+      '公司欠薪我发出被迫解除通知书',
+    ]) {
+      expect(withMyAction(raw).status, `「${raw}」（这是我发的）被判成了 ${withMyAction(raw).status}`).toBe(
+        '成立·待证',
+      );
+    }
+  });
+});
+
+// ══ FORCED_CAUSE 口语化（2026-09-10 台账「公司动作」票第三条）══
+describe('第三十八条那两项事由：口语说法也取得到', () => {
+  // 【它守什么】上一版只认书面语（拖欠 / 欠薪 / 克扣 / 未足额支付 / 未缴纳社保）。
+  // 用户在时间线上写的是「工资一直没发」「还欠着两个月工资」「社保一直没交」——
+  // 一个字都取不到事由，于是⑧那条判不过，一份真发过被迫解除通知的档案落「缺失」，
+  // 清单让他去补一份他已经寄出去的通知书。
+  const withMyAction = (title: string) =>
+    buildElementSheet(
+      {
+        case: {
+          employed_from: '2020-03-01',
+          position: '后端工程师',
+          monthly_wage_fen: 2_500_000,
+          contract_count: '续签过一次',
+        },
+        claims: [{ kind: 'N', source_tier: '自述' }],
+        companies: [{ role: '签约主体', source_tier: '自述' }],
+        evidence: [{ category: '沟通记录' }],
+        timeline: [{ kind: '我方动作', source_tier: '自述', title, detail: null }],
+      },
+      LABOR.elementCards ?? [],
+      ['N'],
+    ).rows.find((r) => r.id === 'N-2b')!;
+  /** 事由 + 一句"我发出了解除通知"（走的是⑧：事由 + 解除动作 + 我方发出，三样都要）。 */
+  const sent = (cause: string) => withMyAction(`${cause}，我发出解除劳动合同通知书`);
+
+  it('认的那 10 种口语事由（变异：把扩进去的口语形态删掉 → 全红）', () => {
+    for (const cause of [
+      '工资一直没发',
+      '工资两个月没结',
+      '工资至今没给',
+      '还欠着两个月工资',
+      '欠着工资',
+      '社保一直没交',
+      '社保从来没缴',
+      '没交社保',
+      '没给我交社保',
+      '没发工资',
+    ]) {
+      expect(sent(cause).status, `「${cause}」取不到事由，被判成了 ${sent(cause).status}`).toBe('成立·待证');
+    }
+  });
+
+  it('🔴 不认的那 6 种（没有否定词就不是欠薪；变异：把否定词那一格去掉 → 全红）', () => {
+    for (const cause of [
+      '工资下月发',
+      '公司说会补社保',
+      '工资照发',
+      '社保一直正常缴纳',
+      '工资按时到账',
+      '已经补发了工资',
+    ]) {
+      expect(sent(cause).status, `「${cause}」不是第三十八条那两项事由，却被认了`).toBe('缺失');
+    }
   });
 });
 
@@ -748,15 +1052,24 @@ describe('「公司确实作出过那个决定」四处同源（第四轮复审 
     buildElementSheet(factsWith(over), LABOR.elementCards ?? [], ['2N']).rows.find((r) => r.id === id)!;
 
   it('🔒 四处取值逐字相同（变异：把其中任一处改回单槽、或再内联一份字面量 → 红）', () => {
-    const cardSlots = (id: string) => [...((LABOR.elementCards ?? []).find((c) => c.id === id)?.satisfiedBy ?? [])];
-    const pack = [...(LABOR.counterpartyDecisionSlot ?? [])];
-    expect(pack, 'counterpartyDecisionSlot 没声明').not.toEqual([]);
+    const card = (id: string) => (LABOR.elementCards ?? []).find((c) => c.id === id)!;
+    const pack = LABOR.counterpartyDecision;
+    expect(pack, 'counterpartyDecision 没声明').toBeTruthy();
+    expect([...(pack?.slots ?? [])], 'counterpartyDecision.slots 是空的').not.toEqual([]);
     // 【为什么钉的是取值而不是"都引用了那个常量"】常量是不是被引用，判据看不见——
     // 能看见的只有取值。四处取值相等，就把"再内联一份字面量"与"改了一处忘了另外三处"
-    // 一起挡在门外：那两种做法都会让下面这三行里的某一行对不上。
-    expect(cardSlots('2N-2'), '2N-2 与本包的 counterpartyDecisionSlot 对不上').toEqual(pack);
-    expect(cardSlots('2N-3'), '2N-3 与本包的 counterpartyDecisionSlot 对不上').toEqual(pack);
-    expect(cardSlots('N-2a'), 'N-2a 与本包的 counterpartyDecisionSlot 对不上').toEqual(pack);
+    // 一起挡在门外：那两种做法都会让下面这几行里的某一行对不上。
+    for (const id of ['2N-2', '2N-3', 'N-2a']) {
+      expect([...card(id).satisfiedBy], `${id} 与本包的 counterpartyDecision 对不上`).toEqual([
+        ...(pack?.slots ?? []),
+      ]);
+      // 【判定也要同源】（2026-09-10「公司动作」票）只对齐槽的形态是：卡片过判定、
+      // 规则三只数记录，于是要件表说「缺失」而正文让他去固定那份不存在的决定。
+      expect(
+        card(id).slotChecks?.[COMPANY_ACTION_SLOT]?.accepts,
+        `${id} 的「公司动作」判定不是本包声明的那一个`,
+      ).toBe(pack?.slotChecks?.[COMPANY_ACTION_SLOT]?.accepts);
+    }
   });
 
   it('只有一份「公司文件」**不能**把 2N-2 抬成「成立」（变异：2N-2 改回单槽 → 红）', () => {
@@ -765,7 +1078,7 @@ describe('「公司确实作出过那个决定」四处同源（第四轮复审 
     const only = { evidence: [{ category: '公司文件' }] };
     const row = rowOf('2N-2', only);
     expect(row.status, `只有一份公司文件时 2N-2 被判成了 ${row.status}`).toBe('缺失');
-    expect(row.missingSlots, '缺口没点到"公司确实作出过这个决定"那条记录').toContain('timeline:公司动作');
+    expect(row.missingSlots, '缺口没点到"公司确实作出过这个决定"那条记录').toContain(COMPANY_ACTION_MISSING);
   });
 
   it('公司文件 + 那条「公司动作」 ⇒ 2N-2 成立；事件只有自述时天花板是「成立·待证」', () => {
@@ -774,13 +1087,13 @@ describe('「公司确实作出过那个决定」四处同源（第四轮复审 
     expect(
       rowOf('2N-2', {
         evidence: [{ category: '公司文件' }],
-        timeline: [{ kind: '公司动作', source_tier: '书证' }],
+        timeline: [{ kind: '公司动作', source_tier: '书证', title: DECISION_EVENT }],
       }).status,
     ).toBe('成立');
     expect(
       rowOf('2N-2', {
         evidence: [{ category: '公司文件' }],
-        timeline: [{ kind: '公司动作', source_tier: '自述' }],
+        timeline: [{ kind: '公司动作', source_tier: '自述', title: DECISION_EVENT }],
       }).status,
       '事件只有当事人自己说，这一条就到不了「成立」',
     ).toBe('成立·待证');
@@ -788,7 +1101,9 @@ describe('「公司确实作出过那个决定」四处同源（第四轮复审 
 
   it('只有那条「公司动作」、公司那份文件不在档 ⇒ 2N-2 仍是「缺失」，且缺口点名那份文件', () => {
     // satisfiedBy 是「与」不是「或」：新加一个槽不许把原来那个槽变成可选。
-    const row = rowOf('2N-2', { timeline: [{ kind: '公司动作', source_tier: '书证' }] });
+    const row = rowOf('2N-2', {
+      timeline: [{ kind: '公司动作', source_tier: '书证', title: DECISION_EVENT }],
+    });
     expect(row.status).toBe('缺失');
     expect(row.missingSlots).toContain('evidence:公司文件');
   });

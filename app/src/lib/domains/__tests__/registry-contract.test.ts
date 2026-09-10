@@ -177,6 +177,9 @@ describe('assertDomainPack：包必须实现全部字段', () => {
       'evidenceGate.action.detail',
       { evidenceGate: { ...FULL_EVIDENCE_GATE, action: { ...FULL_EVIDENCE_GATE.action, detail: '  ' } } },
     ],
+    // 「对方的书面决定」同样可选（省略 = 本领域没有这回事），声明了就不许半张：
+    // slots 空 ⇒ 争点表规则三整条不生效，而这一格看起来是配好了的。
+    ['counterpartyDecision.slots', { counterpartyDecision: { slots: [] } }],
     // interpretationDisputed / sensitive 是**可选**的（省略 = 本领域没这回事），但一旦声明就不许半张。
     // 所以负样本要先把它声明齐、再打坏其中一项——否则打坏的是"没声明"，守卫本来就该放过。
     ['interpretationDisputed.title', { interpretationDisputed: { ...FULL_INTERPRETATION_DISPUTED, title: '' } }],

@@ -160,7 +160,16 @@ describe('issue_list：争点表', () => {
     // 【它守什么】复审 2026-09-10 第三条：「在不在档」此前在报告与本能力里各写了一遍，
     // 而没有任何判据钉住它——换成常量 true，两侧的既有判据全绿。
     // 现在两侧共用 lib/cases/issue-table.counterpartyDecisionOnFile，这一条钉的就是那个入口。
-    expect(LABOR.counterpartyDecisionSlot).toEqual(['evidence:公司文件', 'timeline:公司动作']);
+    expect([...(LABOR.counterpartyDecision?.slots ?? [])]).toEqual([
+      'evidence:公司文件',
+      'timeline:公司动作',
+    ]);
+    // 那条「公司动作」还要过取值判定（2026-09-10「公司动作」票）——只对齐槽的形态是：
+    // 要件卡按判定说「缺失」，规则三只数记录说「在档」，两行并排印在同一份报告上。
+    expect(
+      LABOR.counterpartyDecision?.slotChecks?.['timeline:公司动作'],
+      '「公司动作」那个槽没有取值判定',
+    ).toBeTruthy();
     addEvidence('工资'); // 有书证，但不是那张写着理由的纸
     const before = (call('issue_list', alice, { case_id: caseId }).issues as {
       id: string;

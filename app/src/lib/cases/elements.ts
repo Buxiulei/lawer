@@ -336,6 +336,36 @@ function checkableEntries(
   return undefined;
 }
 
+/**
+ * 一个槽当前的档位，**过取值判定之后的那一份**。要件表与争点表规则三共用的那把尺。
+ *
+ * 【为什么它要导出，而不是留在 buildElementSheet 里】判「那份决定在不在档」的
+ * `lib/cases/issue-table.ts` 与这里判「这个要件成不成立」说的必须是同一件事
+ *（两处同真同假）。它此前走的是 `resolveSlot`——那把尺不看记录里写的是什么，
+ * 于是挂了判定的槽在两处得出不同的答案：要件表说「缺失」，规则三说「在档」，
+ * 而两边都返回 200、每一行都读得通。共用一个函数是唯一没有第二把尺的做法。
+ *
+ * @param check 省略 = 这个槽只判"有没有这条事实"（回落到 resolveSlot）
+ * @returns `undefined` = 寻址串不认识 / 判定挂在一个没有"取值"的槽上（**配置错误**）；
+ *   `null` = 认识这个槽，但档案里没有过得了判定的东西（〔未记录〕）；否则是档位——
+ *   **只从过了判定的那几条里取最强的一条**（理由见 SlotValueCheck）。
+ */
+export function resolveCheckedSlot(
+  slot: string,
+  facts: ElementFactsView,
+  check?: SlotValueCheck,
+): SourceTier | null | undefined {
+  if (!check) return resolveSlot(slot, facts);
+  const entries = checkableEntries(slot, facts);
+  if (entries === undefined) return undefined;
+  let best: SourceTier | null = null;
+  for (const e of entries) {
+    if (!check.accepts(e.raw)) continue;
+    if (best === null || tierRank(e.tier) > tierRank(best)) best = e.tier;
+  }
+  return best;
+}
+
 /** 卡片的 basis 全部核实过了吗。空 basis 一律算没核实（"没有锚点"不比"锚点存疑"更可信）。 */
 export function basisVerified(basis: readonly ElementBasis[]): boolean {
   return basis.length > 0 && basis.every((b) => b.verified && b.anchor.trim() !== '');
@@ -372,42 +402,22 @@ export function buildElementSheet(
       // 这件事成立（见 SlotValueCheck）。看不过就按〔未记录〕算，并以卡片给的名字点名——
       // 沿用槽串点名的形态是：用户读到「还差 basics:contract_count」，
       // 而他刚刚填过那一格，于是这行字读起来像系统没收到他的话。
+      // 取值判定与"有没有这条事实"走**同一个入口**（resolveCheckedSlot）：规则三那侧读的
+      // 也是它，两处因此不可能对同一个槽给出不同的答案（理由写在那个函数上）。
       const check = card.slotChecks?.[slot];
-      let tier: SourceTier | null;
-      if (check) {
-        const entries = checkableEntries(slot, facts);
-        if (entries === undefined) {
-          // 判定挂在一个没有"取值"的槽上 = 配置错误，与下面那一格同一条纪律：点名，不静默。
-          unresolved.push(slot);
-          missing.push(slot);
-          continue;
-        }
-        // 档位只从**过了判定的那几条**里取（取最强的一条）。从全部条目里取的形态是——
-        // 过了判定的那条只有当事人自己说，旁边那条没过判定的带着书证，于是这个槽显示成书证档。
-        let best: SourceTier | null = null;
-        for (const e of entries) {
-          if (!check.accepts(e.raw)) continue;
-          if (best === null || tierRank(e.tier) > tierRank(best)) best = e.tier;
-        }
-        if (best === null) {
-          // 一条都没过（或这个槽下本来就一条都没有）⇒ 按〔未记录〕算，用卡片给的名字点名。
-          missing.push(check.missingAs);
-          continue;
-        }
-        tier = best;
-      } else {
-        const resolved = resolveSlot(slot, facts);
-        if (resolved === undefined) {
-          // 不认识的槽**不当作缺失静默处理**：它是配置错误，与"用户还没上传"是两回事。
-          // 两处都点名（unresolvedSlots 说是什么、missingSlots 说它挡住了哪一格）。
-          unresolved.push(slot);
-          missing.push(slot);
-          continue;
-        }
-        tier = resolved;
+      const tier = resolveCheckedSlot(slot, facts, check);
+      if (tier === undefined) {
+        // 不认识的槽、或判定挂在一个没有"取值"的槽上，**都不当作缺失静默处理**：
+        // 它是配置错误，与"用户还没上传"是两回事。两处都点名
+        //（unresolvedSlots 说是什么、missingSlots 说它挡住了哪一格）。
+        unresolved.push(slot);
+        missing.push(slot);
+        continue;
       }
       if (tier === null) {
-        missing.push(slot);
+        // 挂了判定的槽：一条都没过（或这个槽下本来就一条都没有）⇒ 用卡片给的名字点名；
+        // 没挂判定的槽沿用槽串。
+        missing.push(check ? check.missingAs : slot);
         continue;
       }
       if (!isDocumented(tier)) selfReported.push(slot);

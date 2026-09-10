@@ -56,7 +56,15 @@ function snapshot(): CaseSnapshot {
     case_id: 7,
     happened_at: `2026-0${1 + (i % 8)}-${String(1 + (i % 27)).padStart(2, '0')} 09:00:00`,
     kind: i % 2 === 0 ? '公司动作' : '我方动作',
-    title: `第 ${i + 1} 件事：公司这边又出了一份新的说法，我当天做了书面回应`,
+    // 【第一条必须是那份解除决定】（2026-09-10「公司动作」票）本夹具登记着 2N 与 N ——
+    // 一个主张违法解除赔偿金的案子，档案里必然记着公司作出解除的那一刻。「公司动作」这个槽
+    // 现在过取值判定（记的是不是公司**已经作出**的解除/终止决定），泛泛的一句
+    // 「公司又出了一份新的说法」判不过，于是 2N-2 / 2N-3 / N-2a 三条一起落「缺失」——
+    // 那是**这份夹具自相矛盾**（主张 2N 却一条解除记录都没有），不是要件表算错了。
+    title:
+      i === 0
+        ? '第 1 件事：公司送达《解除劳动合同通知书》，理由写的是"客观情况发生重大变化"'
+        : `第 ${i + 1} 件事：公司这边又出了一份新的说法，我当天做了书面回应`,
     detail: '细节写满一行，长度贴近渲染器的单条上限，好让预算测得到最坏情形。'.repeat(2),
     milestone: null,
     source_tier: i % 3 === 0 ? '书证' : '自述',
@@ -141,6 +149,7 @@ function snapshot(): CaseSnapshot {
 const RENDERED = renderCaseFacts(buildCaseFacts(snapshot()));
 
 describe('最长案件（四项诉求 + 时间线 30 条）的事实卡预算', () => {
+
   it('🔒 地板：夹具真的是"最长案件"（缩了水的夹具会让下面每一条永远绿）', () => {
     const s = snapshot();
     for (const k of FOUR_KINDS) expect(s.claims.map((c) => c.kind), `${k} 不在夹具里`).toContain(k);
