@@ -624,6 +624,8 @@
 
 **2026-09-11 15:00 开工**：生产 e7d758a4 三服务 active、发版后零错误；fail2ban 累计封 49 IP（当前 0）。**三天零流量**：近 3 天 assistant 消息 0、新案件 0、有模型用量的用户 0（生产库只读查得）。主理人要三天汇总（已在会话里给）。派两票：① 「记一条事件」入口现状勘查（Sonnet，timeline-entry-survey）——展示组件/取数路径、登记类表单先例、POST /cases/{id}/timeline 契约与鉴权、类型清单如何到前端、老行补选路径、DESIGN.md 约束；勘查后经理出方案再派 Opus。② 协商一致解除要件票（Opus，negotiated-exit，ws/negotiated-exit）：N-2a 的公司动作槽 acceptsType 加 company_negotiation（§46(2) 独立路径），2N-2/2N-3 与规则三仍只认 company_termination（协商不是单方决定，不触发 §44 倒置）；COUNTERPARTY_DECISION 拆成槽（四处共用）与判定（N-2a 单独）；正则兜底不变。Ultracode 已关，改用 Agent 派单，复审另派。
 
+**2026-09-11 「记一条事件」入口现状表（scratchpad/rd-timeline-entry/现状表.md）三条事实**：① **案件页右栏时间线组件是 mock**（CasePanel.tsx:60 渲染 _mock/demo 的 demoTimeline，桌面右栏 + 移动端 Sheet 两处），真实事件只在 Dashboard 折叠成里程碑轨道；source_tier / event_type 在整个前端渲染层零消费方——产品缺陷。② 类型清单不需新端点：DomainPack.timelineEventTypes 已经 packOf 打进客户端 bundle。③ 最像的骨架是证据登记（AppSheet + 枚举选择 + fetch + humanError/toast + 本地头插）；POST /cases/{id}/timeline 网页 jwt 可调；「补选类型」无 PATCH 端点，addTimelineEvent 注释明写「只追加不改删」。经理设计并派 Opus（timeline-entry，ws/timeline-entry）：0 修 mock（接真实数据逐条展示 kind/类型/来源档）；1「记一条」抽屉（kind RadioGroup + 类型 select + 日期/标题/详情，POST，400 允许值上屏，头插）；2 补选类型走新 PATCH /cases/{id}/timeline/{eventId}，只改 event_type + event_type_set_at 可空列，仅 jwt 不开 api_key/MCP（模型归类不得压过谓词）；内容仍只追加。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
