@@ -622,6 +622,8 @@
 
 **2026-09-11 10:27 生产 sshd 改只认密钥（主理人裁决「改成只认密钥」）**：新增 /etc/ssh/sshd_config.d/00-key-only.conf（PasswordAuthentication no / KbdInteractiveAuthentication no / MaxStartups 30:50:200），sshd -t 通过后 reload；生效值核对 passwordauthentication no、permitrootlogin without-password、maxstartups 30:50:200；用全新连接（BatchMode、禁密码）密钥登录成功。发现同目录已有 00-nbdpsy-hardening.conf（PasswordAuthentication no，NBDpsy 侧所加）与 50-cloud-init.conf（yes）并存，此前生效值仍是 yes——两份 00- 前缀现在都说 no，口径一致，不互相改。fail2ban 当前封 2 IP。
 
+**2026-09-11 15:00 开工**：生产 e7d758a4 三服务 active、发版后零错误；fail2ban 累计封 49 IP（当前 0）。**三天零流量**：近 3 天 assistant 消息 0、新案件 0、有模型用量的用户 0（生产库只读查得）。主理人要三天汇总（已在会话里给）。派两票：① 「记一条事件」入口现状勘查（Sonnet，timeline-entry-survey）——展示组件/取数路径、登记类表单先例、POST /cases/{id}/timeline 契约与鉴权、类型清单如何到前端、老行补选路径、DESIGN.md 约束；勘查后经理出方案再派 Opus。② 协商一致解除要件票（Opus，negotiated-exit，ws/negotiated-exit）：N-2a 的公司动作槽 acceptsType 加 company_negotiation（§46(2) 独立路径），2N-2/2N-3 与规则三仍只认 company_termination（协商不是单方决定，不触发 §44 倒置）；COUNTERPARTY_DECISION 拆成槽（四处共用）与判定（N-2a 单独）；正则兜底不变。Ultracode 已关，改用 Agent 派单，复审另派。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
