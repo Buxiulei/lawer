@@ -634,6 +634,8 @@
 
 **2026-09-11 提示词层到位（ab2af7bf，ws/prompt-file-guidance）+ 合入 wt-int**：纪律段加第 12、13 条——要材料先看事实卡（站内工具集无 evidence_list/case_facts，事实卡每轮在提示里、证据清单是 P3 区；点名两名说明是同一份档案、本轮不调）、要上传指路「证据」栏（栏目名与壳层 CASE_NAV_ITEMS 同一份，量具自检钉住）、不说「发我」；静态段 labor 5790 → 6235、counseling 6350 → 6795，breakpoints[0] = 静态段长度；判据按构造钉；变异两臂红；全量 7464、守卫 134。裁定：三条口径接受（先看事实卡；不另写律师句；未实名闸由证据页自己交代）。wt-int 三方合并干净（无冲突）。
 
+**2026-09-11 入口票 Fable 复审 pass（1 major + 5 minor）**：亲跑全量 7503、变异 10 臂（A1 demo 运行时开关改恒真 → 存活 109 绿；A3 四块 demo 门恒开 → 票内判据全绿仅探针红——即 HEAD 行为对但无判据钉住）；PATCH 安全面探针 12 种取值全部同形（非本人 404 同形、api_key 403、IMMUTABLE_FIELD、NO_FIELDS、INVALID_BODY、系统动作行不分型 400）；happened_at 时区 UTC/上海一致。裁定：major（开关无牙）+ minor（event_type 非字符串静默清 NULL、表单摆出系统动作/期限、demoEvents 注释与代码相反）合入前修（回给原执行者）；backlog：卷宗栏时间线超 200 条分页（改走带 total 的分页端点）、组件内中性中文字面量迁领域包 copy。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
