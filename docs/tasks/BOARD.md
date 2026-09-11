@@ -630,6 +630,8 @@
 
 **2026-09-11 主理人产品反馈（经援助律师会话转来）**：站内「问它」页没有上传文件/图片/音频的入口，模型却说「拍照发我」「补齐这三样」，且要的东西（公司全称、劳动合同）档案里已有——没先读档。裁定两层：① 提示词层（派 Opus prompt-file-guidance，ws/prompt-file-guidance）：纪律段加闭合规则——要材料先调 evidence_list/case_facts，档案有的不再要；要上传就指路证据页，不说「发我」；labor-prompt-snapshot 更新记账，静态段长度重记。② 产品层（等入口票合入后派）：「问它」输入框加附件按钮走现成 evidence 上传链（实名闸照旧），传完在对话里落本地记录帧「已登记证据 #id」，不自动发一轮消息，下一轮事实卡自然带上。已回复对方会话。
 
+**2026-09-11 入口票到位（49d954d8，ws/timeline-entry，23 文件）+ 第二个产品缺陷**：执行者发现整个卷宗栏（CasePanel）此前只对演示案件渲染（Workbench.tsx:116/:335 `seeded ? … : null`）——真实用户桌面右栏与手机抽屉从未见过卷宗栏。本票：卷宗栏改跟 workbenchVisible 走，真实案件只渲染时间线（CaseTimeline + timelineData 走 GET /cases/{id}?timeline_limit=200，逐条 kind 徽标/类型 label/来源档后缀），诉求/证据/依据/待办四块仍 demo-only 不对真实案件渲染；TimelineEntrySheet（kind RadioGroup + 类型 Select + 日期/标题/详情，POST，400 允许值透传，头插）；PATCH /cases/{id}/timeline/{eventId} 仅 jwt、只改 event_type + event_type_set_at、带 title ⇒ 400 IMMUTABLE_FIELD、api_key 拒；变异 11 臂红；全量 7503。**裁定八条 openQuestions 全部接受**：卷宗栏其余四块接真实数据——另票（下一优先）；_mock 守卫收窄式；PATCH 不记台账、只记 set_at；MCP 侧不开（agent 不能改已存在记录类型）；kind label 用 TIMELINE_KINDS；400 允许值只钉链条两端（无 jsdom）；IMMUTABLE_FIELD 不进 ERROR_CODES（web 面）；演示态带〔自述〕后缀、界面不提供取消类型。派 Fable 独立复审（timeline-entry-review）。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
