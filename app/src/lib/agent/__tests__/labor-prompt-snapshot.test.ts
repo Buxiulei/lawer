@@ -23,14 +23,21 @@
 // 【为什么钉整段而不是几个关键词】钉关键词的形态是：某一句被删了、另一句被改写了，
 // 而挑出来的那几个词恰好都还在，判据照常绿。这两段是**逐字下发给模型的纪律**，
 // 不是内部实现，逐字钉住的成本（改文案要顺手改这里）正是它的作用。
+//
+// 【2026-09-11 加了第三组：要材料的那两条纪律（输出纪律第 12、13 条）】
+// 这一组**不逐字钉**，钉的是构造——三件必须同时在场的事（指路上传 / 否定式「发我」/
+// 先看清单）。逐字钉一段还在磨措辞的纪律，等于每改一个字都要来改判据，
+// 而真正要守住的不是那几个字，是"这条规则还在不在"。
 import { describe, expect, it } from 'vitest';
 
 import type { CaseRow } from '@/lib/db/cases';
 import { DEFAULT_DOMAIN, DOMAINS } from '@/lib/domains/registry';
 
+import { CASE_NAV_ITEMS } from '@/components/shell/navItems';
+
 import { CHARTER } from '../charter';
 import { renderLawyerMandatory } from '../lawyer-mandatory';
-import { buildSystemPrompt } from '../prompt';
+import { buildSystemPrompt, staticPrefixOf } from '../prompt';
 import type { CaseSnapshot } from '../snapshot';
 
 /** charter §1「身份与边界」整节（抬头之后到下一个 `## ` 之前），逐字。 */
@@ -162,5 +169,83 @@ describe('labor 的 system prompt：裁决改过的两段逐字钉住（基线 =
     expect(LABOR.interpretationDisputed, '缺省领域本来就该没有这一节，否则下面两条恒真').toBeUndefined();
     expect(p).not.toContain('本领域另有一节');
     expect(p).not.toContain('现行法律解释存疑');
+  });
+});
+
+/**
+ * 输出纪律第 12、13 条（要材料的两条）。**按构造钉，不逐字钉。**
+ *
+ * 【它修的是什么】主理人 2026-09-11 反馈「没有可以上传文件图片音频的地方」：
+ * 站内模型在对话里让用户把照片"发过来"，而「问它」的输入框**只收文字**——
+ * 附件入口在「证据」那一栏。用户照做、找不到，于是得出"这平台传不了东西"。
+ * 同一轮里它还要了档案中本来就有的东西（说明开口前没看清单）。
+ *
+ * 【为什么这条判据是"同时在场"，而不是三条各管一段】三件事缺任何一件，这条纪律都废：
+ * 只说"别让用户发给你"而不指路 = 把人堵住；只指路而不先看清单 = 用户被要第二遍；
+ * 只看清单而不指路 = 回到原病。所以判定的是**这一段整体还在不在**。
+ */
+describe('输出纪律第 12、13 条：要材料先看清单、指路上传（基线 = 2026-09-11 台账）', () => {
+  /** 站内这一轮不给模型的那两个能力名（它们 exposeTo 只有 mcp）。第 13 条点名它们是为了 */
+  /** 告诉模型"清单在哪"，同时明说站内不要去调——名字必须逐字在场，改名了这条要跟着改。 */
+  const TOOL_NAMES = /evidence_list/;
+  /** 指路：**去哪一栏**、**做什么动作**两半都要在。只有"上传"两个字不算指路。 */
+  const UPLOAD_ROUTE = /「证据」那一栏上传/;
+  /** 否定式「发我」：禁的那句原话必须写得出来，且必须带着否定词一起出现。 */
+  const REFUSE_SEND = /不说\*{0,2}「发我」/;
+  /** 另一半否定式：不许把材料要到对话里来。 */
+  const REFUSE_TO_ME = /不许让他发给你/;
+  /** 先看清单。 */
+  const READ_FIRST = /开口要材料之前先看清单/;
+
+  /**
+   * **不许出现的字面**：让用户把照片发进对话框的那一类说法。
+   * 判的是「拍照」与「发我」**搭在一起**，不是单独的「拍照」——charter §8 的
+   * 「先拍照上传」说的是去那一栏上传，是对的那句话，不该被这条误伤。
+   */
+  const FORBIDDEN_LITERALS = [
+    /拍[张一]?照[^。\n]{0,8}发(?:给)?我/,
+    /发(?:给)?我[^。\n]{0,6}(?:照片|图片|文件|录音|视频)/,
+  ];
+
+  it.each(Object.keys(DOMAINS))('[%s] 三件事同时在场（变异：删掉第 12、13 条 → 红）', (key) => {
+    const s = staticPrefixOf(DOMAINS[key]);
+    for (const [name, re] of Object.entries({
+      '能力名 evidence_list': TOOL_NAMES,
+      '指路到那一栏上传': UPLOAD_ROUTE,
+      '否定式「发我」': REFUSE_SEND,
+      '不许让他发给你': REFUSE_TO_ME,
+      '开口前先看清单': READ_FIRST,
+    })) {
+      expect(
+        re.test(s),
+        `缺什么：${key} 的静态段里没有「${name}」这一半。\n` +
+          '为什么缺：这三件事（指路上传 / 不许发进对话 / 先看清单）缺一条，整条纪律就废——\n' +
+          '  只禁不指路是把人堵住，只指路不看清单是把已经在档的东西再要一遍。\n' +
+          '怎么办：这三条一起改的，必须是一次有台账的裁决；把新措辞写进本判据的正则。',
+      ).toBe(true);
+    }
+  });
+
+  it.each(Object.keys(DOMAINS))('[%s] 提示里没有「拍照发我」那一类字面', (key) => {
+    const s = staticPrefixOf(DOMAINS[key]);
+    for (const re of FORBIDDEN_LITERALS) {
+      expect(re.test(s), `静态段里出现了让用户把材料发进对话框的说法：${re}`).toBe(false);
+    }
+  });
+
+  /**
+   * 【量具自检】上面两条比的都是"某个正则匹不匹配"。栏目名若与壳层导航脱节，
+   * 第一条照样绿（它匹配的是提示词里那几个字），而用户按着提示去找的那一栏叫另一个名字。
+   * 所以这里反过来钉：提示里指的那一栏，**就是底部 Tab 上真有的那一栏**。
+   */
+  it('指的那一栏与壳层导航是同一个名字（变异：把提示里的栏目名写死成别的 → 红）', () => {
+    const tab = CASE_NAV_ITEMS.find((i) => i.key === 'evidence');
+    expect(tab, '壳层导航里没有 key=evidence 那一栏了，第 12 条指向的栏目不存在').toBeTruthy();
+    expect(staticPrefixOf(LABOR)).toContain(`去「${tab!.label}」那一栏上传`);
+  });
+
+  /** 【量具自检】这一段真的进了整份 prompt，不是只验了 staticPrefixOf 的返回值。 */
+  it('这两条真的在 prompt 里（自证上面几条不是"只验了一个函数"）', () => {
+    expect(laborPrompt()).toContain('13. **开口要材料之前先看清单**');
   });
 });
