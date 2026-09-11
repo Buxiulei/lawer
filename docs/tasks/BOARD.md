@@ -626,6 +626,8 @@
 
 **2026-09-11 「记一条事件」入口现状表（scratchpad/rd-timeline-entry/现状表.md）三条事实**：① **案件页右栏时间线组件是 mock**（CasePanel.tsx:60 渲染 _mock/demo 的 demoTimeline，桌面右栏 + 移动端 Sheet 两处），真实事件只在 Dashboard 折叠成里程碑轨道；source_tier / event_type 在整个前端渲染层零消费方——产品缺陷。② 类型清单不需新端点：DomainPack.timelineEventTypes 已经 packOf 打进客户端 bundle。③ 最像的骨架是证据登记（AppSheet + 枚举选择 + fetch + humanError/toast + 本地头插）；POST /cases/{id}/timeline 网页 jwt 可调；「补选类型」无 PATCH 端点，addTimelineEvent 注释明写「只追加不改删」。经理设计并派 Opus（timeline-entry，ws/timeline-entry）：0 修 mock（接真实数据逐条展示 kind/类型/来源档）；1「记一条」抽屉（kind RadioGroup + 类型 select + 日期/标题/详情，POST，400 允许值上屏，头插）；2 补选类型走新 PATCH /cases/{id}/timeline/{eventId}，只改 event_type + event_type_set_at 可空列，仅 jwt 不开 api_key/MCP（模型归类不得压过谓词）；内容仍只追加。
 
+**2026-09-11 协商一致解除要件票到位（a140fca2，ws/negotiated-exit）+ 经理亲核通过**：COMPANY_DECISION_SLOTS（四处共用）/ COMPANY_UNILATERAL_DECISION_CHECKS（2N-2、2N-3、规则三，只认 company_termination）/ NEGOTIATED_OR_DECISION_CHECKS（N-2a 独用，多认 company_negotiation）；正则兜底与谓词一字未动；判据 (a) 自述/书证/规则三不触发/风险档位抬档、(b) 单方决定不回退、(c) 无类型协商文本仍缺失、(d) S16 两幕不动；变异三臂各 4/4/12 红；全量 7463、eval 543、verify 387/0、守卫 128。裁定三条 openQuestions：锚点层不做「项」级（整条引文已含第二项原文）——接受；签没签字在类型上分不开、靠已签协议在档间接筛——接受，登记面加「签了/没签」子答案记 backlog；N-2a missingAs 文案变动同步 S16 一行——接受。亲核：diff 形态与设计一致，三文件判据 120 条绿。wt-int ff 到 a140fca2，与入口票一班上产。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
