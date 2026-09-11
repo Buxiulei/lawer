@@ -46,6 +46,7 @@ import { intakeDirective, recapBrief, type IntakeStage } from './intake';
 import { renderLawyerMandatory } from './lawyer-mandatory';
 import { MAX_ACTION_CARDS } from './tools';
 import { domainPackOrDefault, type DomainPack } from '@/lib/domains/registry';
+import { CASE_NAV_ITEMS } from '@/components/shell/navItems';
 import { coreArticleKeys, packCitationGuide, type CoreArticleSources } from './citation-block';
 import type { KnowledgePack } from './retrieval';
 import type { CaseSnapshot } from './snapshot';
@@ -129,6 +130,25 @@ function markedCrisisNumbers(packs: KnowledgePack[], resourcePackId: string): st
   return extractHotlines(card?.facts).map((n) => (isLandlineOnly(n) ? `${n}（${LANDLINE_MARK}）` : n));
 }
 
+/**
+ * 底部 Tab 上「证据」那一栏的名字。**取壳层导航那份唯一真源，不在提示词里再抄一遍中文。**
+ *
+ * 抄一遍的形态正是第 12 条要修的那个病本身：那一栏哪天改了名，提示词照旧把用户指向
+ * 一个屏幕上不存在的栏目，而它每一轮都照常渲染、没有一处会报错——用户按着去找、找不到，
+ * 得出的结论仍然是「这平台传不了东西」。
+ */
+function evidenceTabLabel(): string {
+  const item = CASE_NAV_ITEMS.find((i) => i.key === 'evidence');
+  if (!item) {
+    throw new Error(
+      '缺什么：壳层导航 CASE_NAV_ITEMS 里没有 key=evidence 那一栏。' +
+        '为什么缺：输出纪律第 12 条要把用户指到那一栏上传，栏目名只有那一份真源。' +
+        '怎么办：那一栏改了 key 就把这里一起改；真撤了那一栏，第 12 条要跟着重写。',
+    );
+  }
+  return item.label;
+}
+
 /** 输出纪律段：把 charter 里几条能机械判定的要求，翻译成「本轮具体该调哪个工具」。 */
 function outputDiscipline(): string {
   return [
@@ -175,6 +195,22 @@ function outputDiscipline(): string {
     '   （实测事故：引的是真案例，却把用户的「次日报到」「未明确新岗位及薪资待遇」写进了案情。',
     '   **案号是真的、细节是编的**——用户当庭复述，对方一查全文没有该情节，失信的是用户自己。）',
     '11. **格式**：短句、编号、直给。不写「以上仅供参考」「建议咨询专业律师」这类话（charter §1、§7.7）。',
+    // 【第 12、13 条：要材料的两条纪律】（主理人 2026-09-11 反馈「没有可以上传文件图片音频的地方」）
+    // 实测形态：模型在对话里对用户说「那份合同的照片…现在拍张照发我」「补齐这三样我立刻把邮件填完整」，
+    // 而对话输入框**只收文字**——用户在里面找遍了也没有附件入口，于是得出「这平台传不了东西」；
+    // 更糟的是它要的那几样（签约主体全称、合同）**档案里本来就有**，说明它开口前没看清单。
+    // 两条分开写：12 管「怎么让他给」，13 管「该不该要」。合成一条的形态是，
+    // 模型把指路那半句学会了，照样把已经在档的东西再要一遍。
+    '12. **要用户给材料时指路上传，不许让他发给你**：这个对话框只收文字——文件、图片、录音',
+    '   在这里传不进来，输入框里没有附件入口。所以**不说**「发我」「发过来」「传给我」这类话：',
+    '   用户照做时会在输入框里找一圈、找不到，于是以为这个平台不能传东西',
+    '   （用户原话：「没有可以上传文件图片音频的地方」——入口一直在，只是不在这一页）。',
+    `   正确的那一句是具体的：**去「${evidenceTabLabel()}」那一栏上传**（照片、文件、录音三种都能传），`,
+    '   传完回这里说一声，下一轮我就看得见了。',
+    '13. **开口要材料之前先看清单**：后面那张事实卡已经逐条列了此刻档案里有什么',
+    '   （与 evidence_list / case_facts 取的是同一份档案；**站内这一轮的工具表里没有这两个名字，不要去调**）。',
+    '   已经在档的不许再要一遍——再要一次等于没读档，而用户读到的是「我给过的东西它没看见」。',
+    '   确实缺的那几样，一次只要最关键的 1–3 样，并逐样说清它拿来证明什么。',
   ].join('\n');
 }
 
