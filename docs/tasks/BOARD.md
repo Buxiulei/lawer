@@ -620,6 +620,8 @@
 
 **2026-09-10 夜 生产 SSH 被暴力尝试挤占（运维处置）**：21:48 起 sshd 日志「beginning MaxStartups throttling / drop connection past MaxStartups」，一小时 59 次丢连接；暴力源 49.233.221.71（420 次）、36.133.46.50（342）、129.211.204.25（121）、49.234.110.111（62），试的是 ubuntu 用户；我方部署通道（scp / ssh）随机被断，公网 200、双服务 active，业务无影响。sshd 现状：passwordauthentication **yes**、permitrootlogin without-password、maxstartups 10:30:100。处置：装 fail2ban（jail.local：sshd backend=systemd，bantime 1h，findtime 10m，maxretry 5，ignoreip 含经理当前来源 IP），启用即封 4 IP。**建议主理人拍板**：关闭密码登录（PasswordAuthentication no，key-only）——需确认没有人靠密码登录 ubuntu 用户；MaxStartups 可放到 30:50:200。另：本次收官邮件经重试已发（第一次 scp 被 MaxStartups 丢包）。教训：给生产发多次短连接时先合并成单会话；tar 管道与 `bash -s` 不能共用 stdin（我自己踩的）。
 
+**2026-09-11 10:27 生产 sshd 改只认密钥（主理人裁决「改成只认密钥」）**：新增 /etc/ssh/sshd_config.d/00-key-only.conf（PasswordAuthentication no / KbdInteractiveAuthentication no / MaxStartups 30:50:200），sshd -t 通过后 reload；生效值核对 passwordauthentication no、permitrootlogin without-password、maxstartups 30:50:200；用全新连接（BatchMode、禁密码）密钥登录成功。发现同目录已有 00-nbdpsy-hardening.conf（PasswordAuthentication no，NBDpsy 侧所加）与 50-cloud-init.conf（yes）并存，此前生效值仍是 yes——两份 00- 前缀现在都说 no，口径一致，不互相改。fail2ban 当前封 2 IP。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
