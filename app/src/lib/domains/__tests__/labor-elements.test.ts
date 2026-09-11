@@ -28,7 +28,13 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { articleKey } from '@/lib/agent/citation-block';
-import { BURDENS, buildElementSheet, type Burden, type ElementFactsView } from '@/lib/cases/elements';
+import {
+  BURDENS,
+  buildElementSheet,
+  representativeElementIds,
+  type Burden,
+  type ElementFactsView,
+} from '@/lib/cases/elements';
 import { buildIssueTable, counterpartyDecisionOnFile } from '@/lib/cases/issue-table';
 
 import { LABOR } from '../labor';
@@ -119,6 +125,20 @@ const COMPANY_ACTION_SLOT = 'timeline:公司动作';
 const COMPANY_ACTION_MISSING =
   '公司的解除/终止决定（请把公司作出这个决定的那一刻记成一条时间线事件，' +
   '并把类型选成「公司作出的解除/终止决定」——选了就不用靠那段字去猜）';
+/**
+ * N-2a 那一行的名字（2026-09-11 台账「协商一致解除」票）。上面那行**再加协商一致解除那一档**。
+ *
+ * 【为什么这两行必须是两个常量】N-2a 认的事件类型比另外三处多一种（协商解除），
+ * 缺口那一行是用户读到的唯一出路——两处共用一行字的形态是：一个已经协商一致签完字的人
+ * 读到「请把类型选成『公司作出的解除/终止决定』」，而他手上那份协议对应的是另一格。
+ */
+const N2A_ACTION_MISSING =
+  '公司的解除/终止决定（请把公司作出这个决定的那一刻记成一条时间线事件：' +
+  '单方解除、辞退、合同到期终止的，类型选「公司作出的解除/终止决定」；' +
+  '协商一致解除的，把那份**已签**协议按「公司文件」登记为证据，' +
+  '事件类型选「协商解除提议或协议」——只是递过来、还没签的那一份是提议，不算）';
+/** 某张卡判不过时缺口清单里那一行。N-2a 一份，其余三处一份（见上面两个常量）。 */
+const actionMissingFor = (id: string): string => (id === 'N-2a' ? N2A_ACTION_MISSING : COMPANY_ACTION_MISSING);
 /** 一条**过得了判定**的「公司动作」：判的是那段字，所以夹具必须把它写出来。 */
 const DECISION_EVENT = '公司送达《解除劳动合同通知书》';
 
@@ -700,7 +720,7 @@ describe('N 的两条解除路径：互斥、二选一（第二轮复审 2026-09
     const only = { evidence: [{ category: '公司文件' }] };
     const a = rowOf('N-2a', only);
     expect(a.status, `只有一份公司文件时 N-2a 被判成了 ${a.status}`).toBe('缺失');
-    expect(a.missingSlots, '缺口没点到"公司确实作出过这个决定"那条记录').toContain(COMPANY_ACTION_MISSING);
+    expect(a.missingSlots, '缺口没点到"公司确实作出过这个决定"那条记录').toContain(N2A_ACTION_MISSING);
     // 同组那一条也还没走通 ⇒ 两条都是代表行，两条都留在争点表上
     expect(rowOf('N-2b', only).status).toBe('缺失');
     expect(
@@ -779,7 +799,7 @@ describe('「公司动作」的取值判定：有这个类别的记录 ≠ 公�
       const card = (LABOR.elementCards ?? []).find((c) => c.id === id)!;
       expect(card.satisfiedBy, `${id} 认的槽变了`).toContain(COMPANY_ACTION_SLOT);
       expect(card.slotChecks?.[COMPANY_ACTION_SLOT], `${id} 的「公司动作」没有取值判定`).toBeTruthy();
-      expect(card.slotChecks?.[COMPANY_ACTION_SLOT]?.missingAs).toBe(COMPANY_ACTION_MISSING);
+      expect(card.slotChecks?.[COMPANY_ACTION_SLOT]?.missingAs).toBe(actionMissingFor(id));
       // 【为什么连这半句也钉】缺的不是"一份文件"，是把公司作出决定的那一刻记成一条事件。
       // 只报名字的形态是：用户又去证据库翻一遍，那一项一个字都不变（禁令配出路，§7.7）。
       expect(card.slotChecks?.[COMPANY_ACTION_SLOT]?.missingAs, '缺口只报了名字，没给出路').toContain(
@@ -797,7 +817,7 @@ describe('「公司动作」的取值判定：有这个类别的记录 ≠ 公�
     for (const id of DECISION_CARDS) {
       const row = rowOf(id, over);
       expect(row.status, `${id} 被一条调岗通知抬成了 ${row.status}`).toBe('缺失');
-      expect(row.missingSlots, `${id} 的缺口没点名那条解除决定`).toEqual([COMPANY_ACTION_MISSING]);
+      expect(row.missingSlots, `${id} 的缺口没点名那条解除决定`).toEqual([actionMissingFor(id)]);
       // 它是〔未记录〕不是〔不成立〕：公司还没作出决定，不等于"公司没解除过"被证伪
       expect(row.status).not.toBe('不成立');
       expect(row.unresolvedSlots, `${id} 有认不出来的槽位（判定挂错地方了）`).toEqual([]);
@@ -938,7 +958,7 @@ describe('「公司动作」的取值判定：有这个类别的记录 ≠ 公�
     ]) {
       const row = rowOf('N-2a', withCompanyAction(raw));
       expect(row.status, `「${raw}」（这不是公司作出的解除决定）被判成了 ${row.status}`).toBe('缺失');
-      expect(row.missingSlots, `「${raw}」的缺口没点名`).toEqual([COMPANY_ACTION_MISSING]);
+      expect(row.missingSlots, `「${raw}」的缺口没点名`).toEqual([N2A_ACTION_MISSING]);
     }
   });
 
@@ -963,7 +983,7 @@ describe('「公司动作」的取值判定：有这个类别的记录 ≠ 公�
       for (const id of DECISION_CARDS) {
         const row = rowOf(id, withCompanyAction(raw));
         expect(row.status, `「${raw}」（还没作出决定）把 ${id} 抬成了 ${row.status}`).toBe('缺失');
-        expect(row.missingSlots, `「${raw}」在 ${id} 上的缺口没点名`).toEqual([COMPANY_ACTION_MISSING]);
+        expect(row.missingSlots, `「${raw}」在 ${id} 上的缺口没点名`).toEqual([actionMissingFor(id)]);
       }
     }
   });
@@ -1016,7 +1036,7 @@ describe('「公司动作」的取值判定：有这个类别的记录 ≠ 公�
         expect(row.status, `「${raw}」（发给全员，不是送到这个人手上）把 ${id} 抬成了 ${row.status}`).toBe(
           '缺失',
         );
-        expect(row.missingSlots, `「${raw}」在 ${id} 上的缺口没点名`).toEqual([COMPANY_ACTION_MISSING]);
+        expect(row.missingSlots, `「${raw}」在 ${id} 上的缺口没点名`).toEqual([actionMissingFor(id)]);
       }
     }
   });
@@ -1060,7 +1080,7 @@ describe('「公司动作」的取值判定：有这个类别的记录 ≠ 公�
     for (const id of DECISION_CARDS) {
       const row = rowOf(id, over);
       expect(row.status, `${id} 被一条威胁式的约谈记录抬成了 ${row.status}`).toBe('缺失');
-      expect(row.missingSlots, `${id} 的缺口没点名那条解除决定`).toEqual([COMPANY_ACTION_MISSING]);
+      expect(row.missingSlots, `${id} 的缺口没点名那条解除决定`).toEqual([actionMissingFor(id)]);
       expect(row.unresolvedSlots, `${id} 有认不出来的槽位`).toEqual([]);
     }
     const onFile = counterpartyDecisionOnFile(LABOR.counterpartyDecision, factsWith(over));
@@ -1396,16 +1416,28 @@ describe('结构化「决定」标记：选过类型就不猜', () => {
     expect(timelineOf({ timeline: [{ kind: '公司动作', source_tier: '自述' }] })[0].event_type).toBeNull();
   });
 
-  it('🔒 地板：四处共用的那格判定真的挂着 acceptsType（去掉 → 红）', () => {
-    for (const id of DECISION_CARDS) {
-      const card = (LABOR.elementCards ?? []).find((c) => c.id === id)!;
-      expect(card.slotChecks?.[COMPANY_ACTION_SLOT]?.acceptsType, `${id} 的「公司动作」没有类型判定`).toEqual([
-        'company_termination',
-      ]);
-    }
-    expect(LABOR.counterpartyDecision?.slotChecks?.[COMPANY_ACTION_SLOT]?.acceptsType).toEqual([
+  it('🔒 地板：那格判定真的挂着 acceptsType，且 N-2a 只比另外三处多认协商那一格（去掉 / 多给一格 → 红）', () => {
+    // 【为什么这一条要逐处写死、而不是"四处相等"】（2026-09-11 台账「协商一致解除」票）
+    // 四处此前确实同值，而这一票让 N-2a **多认一种类型**：协商一致解除是第四十六条第二项
+    // 那一档经济补偿，2N（违法解除赔偿金）与规则三的举证倒置都不该跟着成立。
+    // 写成"四处相等"的形态是：这道地板要么把本票的裁定判红、要么被顺手改成"谁都不管"，
+    // 而把协商那一格误加进 2N-2 / 2N-3 / counterpartyDecision 的改动从此没有人会红。
+    const n2a = (LABOR.elementCards ?? []).find((c) => c.id === 'N-2a')!;
+    expect(n2a.slotChecks?.[COMPANY_ACTION_SLOT]?.acceptsType, 'N-2a 没有认下协商解除那一格').toEqual([
       'company_termination',
+      'company_negotiation',
     ]);
+    for (const id of ['2N-2', '2N-3'] as const) {
+      const card = (LABOR.elementCards ?? []).find((c) => c.id === id)!;
+      expect(
+        card.slotChecks?.[COMPANY_ACTION_SLOT]?.acceptsType,
+        `${id} 的「公司动作」类型判定不是"只认公司单方作出的那个决定"`,
+      ).toEqual(['company_termination']);
+    }
+    expect(
+      LABOR.counterpartyDecision?.slotChecks?.[COMPANY_ACTION_SLOT]?.acceptsType,
+      '规则三（举证倒置）跟着认了协商解除',
+    ).toEqual(['company_termination']);
     const n2b = (LABOR.elementCards ?? []).find((c) => c.id === 'N-2b')!;
     expect(n2b.slotChecks?.['timeline:我方动作']?.acceptsType).toEqual(['my_forced_termination_notice']);
   });
@@ -1431,27 +1463,30 @@ describe('结构化「决定」标记：选过类型就不猜', () => {
     for (const id of DECISION_CARDS) {
       const row = rowOf(id, over);
       expect(row.status, `${id} 被谓词绕过类型抬成了 ${row.status}`).toBe('缺失');
-      expect(row.missingSlots).toEqual([COMPANY_ACTION_MISSING]);
-    }
-    expect(onFile(over)).toBe(false);
-  });
-
-  it('🔴 协商解除提议 / 协议**不计入**公司单方决定（沿用裁定：协商不是单方决定）', () => {
-    const over = companyAction('HR 递来《协商解除协议》，补偿写 N', 'company_negotiation', '书证');
-    for (const id of DECISION_CARDS) {
-      expect(rowOf(id, over).status, `${id} 把一份协商提议当成了公司作出的决定`).toBe('缺失');
+      expect(row.missingSlots).toEqual([actionMissingFor(id)]);
     }
     expect(onFile(over)).toBe(false);
   });
 
   it('N-2a 的出路里说得出"已经签完字了怎么办"（禁令配出路，§7.7）', () => {
-    // 协商一致解除确实是第四十六条第二项那一档，而它不由 company_termination 承载。
-    // 不说的形态是：一个已经签完协议的人读到「缺失」，而清单从头到尾只在讲解除通知书。
+    // 协商一致解除是第四十六条第二项那一档，而它由 company_negotiation 承载、不由
+    // company_termination 承载。不说的形态是：一个已经签完协议的人读到「缺失」，
+    // 而清单从头到尾只在讲解除通知书。
     const card = (LABOR.elementCards ?? []).find((c) => c.id === 'N-2a')!;
     const line = card.typicalEvidence.find((e) => e.includes('协商一致'));
     expect(line, 'N-2a 的出路里没有一句讲协商一致解除').toBeTruthy();
-    // 那句话要同时说清两件事：把已签的那份登记为证据、事件那一格选哪个类型。
+    // 那句话要同时说清三件事：把已签的那份登记为证据、事件那一格选哪个类型、没签的不算。
     expect(line).toContain('协商解除提议或协议');
+    expect(line).toContain('公司文件');
+    expect(line, '没说清"还没签的那一份不算"').toContain('还没签');
+    // 缺口那一行（用户真正读到的那一句）同样要带着这条出路，不是只报个名字。
+    const missing = card.slotChecks?.[COMPANY_ACTION_SLOT]?.missingAs ?? '';
+    expect(missing, '缺口那一行没讲协商一致解除怎么办').toContain('协商解除提议或协议');
+    expect(missing).toContain('时间线事件');
+    // 登记面上那一格的 hint 也要说得出"没签的不算"——签没签在类型上分不开，
+    // 这句话是登记时唯一说得清它的地方。
+    const negotiation = LABOR.timelineEventTypes['公司动作'].find((t) => t.id === 'company_negotiation')!;
+    expect(negotiation.hint ?? '', 'company_negotiation 的 hint 没说清"没签的不算"').toContain('还没签');
   });
 
   it('🔴 我方动作同款双向：含糊 + 对的类型 ⇒ 过；写着「被迫解除」+ 异议函 ⇒ 不过', () => {
@@ -1497,5 +1532,154 @@ describe('结构化「决定」标记：选过类型就不猜', () => {
       title: LABOR.copy.site.intakeFreeTextTitle,
       answers: {},
     })).toBe('my_other');
+  });
+});
+
+// ══ 协商一致解除（2026-09-11 台账「协商一致解除」票）══
+/**
+ * **协商一致解除只抬 N，不抬 2N、不触发举证倒置。**
+ *
+ * 【它守什么】此前 `company_negotiation` 一处都不计入：一个已经协商一致签完字的人，
+ * N-2a「公司作出的解除/终止决定（第四十六条第二至七项）」写着「缺失」——而第四十六条
+ * 第二项「用人单位提出、双方协商一致解除」本来就是经济补偿的一条独立路径。后果是三层，
+ * 每一层都读得通：N 的两条路径（N-2a / N-2b）双双立不住 ⇒ 风险档位落到「依据不足」⇒
+ * 争点表让他去补一份他永远不会有的《解除通知书》，而他手上那份已签协议一个字都没被提到。
+ *
+ * 【反方向同样贵，所以这一组两臂都钉】协商一致解除**不是**用人单位单方作出的决定：
+ * 2N（违法解除赔偿金）不因它成立，司法解释（一）第四十四条那句「因用人单位作出的……决定」
+ * 的举证倒置也不该被一份双方谈成的协议触发。跟着一起放开的形态是——一个自愿签了 N+1 的人
+ * 被告知"违法解除赔偿金这一项已经立住"，并被指去打一场他签过字的仗。
+ */
+describe('协商一致解除：N-2a 认它，2N 与规则三不认', () => {
+  const factsWith = (over: FactsOver = {}): ElementFactsView => ({
+    case: {
+      employed_from: '2020-03-01',
+      position: '后端工程师',
+      monthly_wage_fen: 2_500_000,
+      contract_count: '续签过一次',
+    },
+    claims: [
+      { kind: 'N', source_tier: '自述' },
+      { kind: '2N', source_tier: '自述' },
+    ],
+    companies: [{ role: '签约主体', source_tier: '自述' }],
+    evidence: [],
+    ...over,
+    timeline: timelineOf(over),
+  });
+  const sheetOf = (over: FactsOver = {}) =>
+    buildElementSheet(factsWith(over), LABOR.elementCards ?? [], ['N', '2N']);
+  const rowOf = (id: string, over: FactsOver = {}) => sheetOf(over).rows.find((r) => r.id === id)!;
+  const onFile = (over: FactsOver) => counterpartyDecisionOnFile(LABOR.counterpartyDecision, factsWith(over));
+  /** 争点表：与产线同一条链（要件表 → counterpartyDecisionOnFile → buildIssueTable）。 */
+  const tableOf = (over: FactsOver) => {
+    const sheet = sheetOf(over);
+    return buildIssueTable(sheet.rows, { counterpartyDecisionOnFile: onFile(over) }, sheet.rendered);
+  };
+  /** 一份材料（默认员工手册那一类「公司文件」）+ 一条带类型的「公司动作」。 */
+  const negotiated = (tier: string, title = 'HR 递来《协商解除协议》，当天签了'): FactsOver => ({
+    evidence: [{ category: '公司文件' }],
+    timeline: [{ kind: '公司动作', source_tier: tier, title, event_type: 'company_negotiation' }],
+  });
+
+  it('(a) 协商解除那条事件（自述）⇒ N-2a 成立·待证，而 2N 那两张仍「缺失」', () => {
+    const over = negotiated('自述');
+    expect(rowOf('N-2a', over).status, 'N-2a 没有认下协商一致解除这一档').toBe('成立·待证');
+    expect(rowOf('N-2a', over).missingSlots).toEqual([]);
+    for (const id of ['2N-2', '2N-3'] as const) {
+      const row = rowOf(id, over);
+      expect(row.status, `${id} 把一份协商解除协议当成了公司单方作出的决定`).toBe('缺失');
+      expect(row.missingSlots, `${id} 的缺口没点名那条单方决定`).toEqual([COMPANY_ACTION_MISSING]);
+    }
+  });
+
+  it('(a) 已签协议（书证）+ 同类型事件（书证）⇒ N-2a 成立；2N 那两张不动', () => {
+    // 【为什么两档都要钉】只钉「成立」，把协商那一格写成恒 true 也是绿的；
+    // 只钉「成立·待证」，两个槽取最强档（而不是最弱）同样绿。
+    const over = negotiated('书证');
+    expect(rowOf('N-2a', over).status).toBe('成立');
+    for (const id of ['2N-2', '2N-3'] as const) {
+      expect(rowOf(id, over).status, `${id} 跟着协商解除一起抬起来了`).toBe('缺失');
+    }
+  });
+
+  it('🔴 (a) 规则三不许被协商解除触发：书面决定不在档、争点表里没有 burden_on_other_side', () => {
+    // 【它守什么】规则三给的出路是「把他那份书面决定与上面写的理由原样固定下来」——
+    // 双方谈成的那份协议不是"用人单位作出的决定"，第四十四条那句倒置管不到它。
+    // 变异：把 company_negotiation 误加进 counterpartyDecision ⇒ 这一条红。
+    const over = negotiated('书证');
+    expect(onFile(over), '一份协商解除协议就让"对方那份书面决定在档"成立了').toBe(false);
+    for (const row of tableOf(over).rows) {
+      expect(row.reasons, `${row.id} 报了规则三，而档案里没有对方单方作出的那份决定`).not.toContain(
+        'burden_on_other_side',
+      );
+    }
+  });
+
+  it('🔴 (a) 风险档位按 N 这条路抬起来：N-2 组的代表行是 N-2a，N-2b 的「缺失」不再拖着它', () => {
+    // 【为什么钉的是代表行，而不是直接调 riskBandOf】riskBandOf 要一个库（lib/cases/claims.ts
+    // 现取档案），而它抬不抬档**只由这一步决定**：representativeElementIds 取组内最好的那一档，
+    // 之后 band 才按 adverse / missing / pending 分档。这一步错了，band 必然错；
+    // 这一步对了，band 就是那张表照着 status 读出来的。
+    const over = negotiated('自述');
+    const represents = representativeElementIds(sheetOf(over).rows);
+    expect(represents.has('N-2a'), '走通的那条路没当上代表行').toBe(true);
+    expect(represents.has('N-2b'), '没走的那条路还在拖着风险档位（band 会落到「依据不足」）').toBe(false);
+    // 【band 那一步只数代表行里的「缺失」】所以这里数的是**解除路径那一组**贡献了几条：
+    // 认下协商一致解除之后这一组一条都不贡献（N-3「计算基数」照旧缺，那是另一件事、
+    // 该缺就缺——把整项 N 一起断言的形态是这条判据在测工资流水有没有上传）。
+    const gapsOfExitGroup = (o?: FactsOver) => {
+      const rows = sheetOf(o).rows;
+      const rep = representativeElementIds(rows);
+      return rows
+        .filter((r) => r.alternativeGroup === 'N-解除路径' && rep.has(r.id) && r.status === '缺失')
+        .map((r) => r.id);
+    };
+    expect(gapsOfExitGroup(over), '解除路径这一组还在往风险缺口里报「缺失」').toEqual([]);
+    // 反臂：这个人什么都没有时，两条路都是代表行、两条都报缺（这道分组不是"藏起一条"）
+    const empty = representativeElementIds(sheetOf().rows);
+    expect(empty.has('N-2a') && empty.has('N-2b')).toBe(true);
+    expect(gapsOfExitGroup(), '这一票之前那个已签协议的用户读到的就是这两条').toEqual(['N-2a', 'N-2b']);
+  });
+
+  it('🔴 (b) 公司单方作出的那个决定（书证）照旧全抬、规则三照旧触发（不回退）', () => {
+    // 【为什么这条必须并排放着】上面几条的修法是"N-2a 多认一种类型"。多认过头、
+    // 或把类型判定改成"任一命中即过"的形态，在这一条上看不出来——所以它钉的是另一件事：
+    // 协商那一档加进来之后，原来那条路一个字都没变。
+    const over: FactsOver = {
+      evidence: [{ category: '公司文件' }],
+      timeline: [
+        { kind: '公司动作', source_tier: '书证', title: DECISION_EVENT, event_type: 'company_termination' },
+      ],
+    };
+    for (const id of ['N-2a', '2N-2', '2N-3'] as const) {
+      expect(rowOf(id, over).status, `${id} 没有按类型认下来`).toBe('成立');
+    }
+    expect(onFile(over), '规则三的第二个条件不成立了').toBe(true);
+    // 举证责任整条在对方的那两张（N-2a / 2N-3）由规则三留在争点表上
+    for (const id of ['N-2a', '2N-3'] as const) {
+      expect(tableOf(over).rows.find((r) => r.id === id)!.reasons, `${id} 没被规则三捞进来`).toContain(
+        'burden_on_other_side',
+      );
+    }
+  });
+
+  it('🔴 (c) 没选类型的那条记录：「双方协商一致解除，已签协议」照旧不认（正则兜底不跟着放宽）', () => {
+    // 【为什么兜底这条路不放宽】从一段自由文本里认"这份协商解除协议签没签字"认不准，
+    // 而认错的代价是把一个还在被催签的人判成"这一项已经立住"。只有**显式选过类型**
+    // 才走协商那条路（误差方向：宁可多问一句）。
+    // 变异：把 COMPANY_DECISION_NEGOTIATED 从谓词里去掉 ⇒ 这一条红。
+    for (const raw of ['双方协商一致解除，已签协议', '与公司协商一致解除劳动合同，协议已经签了']) {
+      const over: FactsOver = {
+        evidence: [{ category: '公司文件' }],
+        timeline: [{ kind: '公司动作', source_tier: '书证', title: raw }],
+      };
+      for (const id of ['N-2a', '2N-2', '2N-3'] as const) {
+        const row = rowOf(id, over);
+        expect(row.status, `「${raw}」（没选类型）把 ${id} 抬成了 ${row.status}`).toBe('缺失');
+        expect(row.missingSlots, `「${raw}」在 ${id} 上的缺口没点名`).toEqual([actionMissingFor(id)]);
+      }
+      expect(onFile(over)).toBe(false);
+    }
   });
 });

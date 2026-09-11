@@ -216,7 +216,14 @@ describe('S16 只传了员工手册：一份「公司文件」不算公司作出
     const COMPANY_DECISION_MISSING =
       '公司的解除/终止决定（请把公司作出这个决定的那一刻记成一条时间线事件，' +
       '并把类型选成「公司作出的解除/终止决定」——选了就不用靠那段字去猜）';
-    expect(missingOf('N-2a')).toEqual([COMPANY_DECISION_MISSING]);
+    // N-2a 那一行多认协商一致解除那一档（2026-09-11 台账「协商一致解除」票），
+    // 所以它的缺口那一行比另外两张多一句出路——三态与"一份员工手册一张都抬不动"没变。
+    const NEGOTIATED_OR_DECISION_MISSING =
+      '公司的解除/终止决定（请把公司作出这个决定的那一刻记成一条时间线事件：' +
+      '单方解除、辞退、合同到期终止的，类型选「公司作出的解除/终止决定」；' +
+      '协商一致解除的，把那份**已签**协议按「公司文件」登记为证据，' +
+      '事件类型选「协商解除提议或协议」——只是递过来、还没签的那一份是提议，不算）';
+    expect(missingOf('N-2a')).toEqual([NEGOTIATED_OR_DECISION_MISSING]);
     expect(missingOf('2N-2')).toEqual([COMPANY_DECISION_MISSING]);
     expect(missingOf('2N-3')).toEqual([COMPANY_DECISION_MISSING]);
     expect(missingOf('N-2b'), 'N-2b 的缺口没点名那份被迫解除通知').toEqual([
