@@ -636,6 +636,8 @@
 
 **2026-09-11 入口票 Fable 复审 pass（1 major + 5 minor）**：亲跑全量 7503、变异 10 臂（A1 demo 运行时开关改恒真 → 存活 109 绿；A3 四块 demo 门恒开 → 票内判据全绿仅探针红——即 HEAD 行为对但无判据钉住）；PATCH 安全面探针 12 种取值全部同形（非本人 404 同形、api_key 403、IMMUTABLE_FIELD、NO_FIELDS、INVALID_BODY、系统动作行不分型 400）；happened_at 时区 UTC/上海一致。裁定：major（开关无牙）+ minor（event_type 非字符串静默清 NULL、表单摆出系统动作/期限、demoEvents 注释与代码相反）合入前修（回给原执行者）；backlog：卷宗栏时间线超 200 条分页（改走带 total 的分页端点）、组件内中性中文字面量迁领域包 copy。
 
+**2026-09-11 入口票修补到位（330089a3）+ 三票合入 wt-int**：demo/real 岔口抽成 timelineData 纯函数 initialTimeline/loadTimeline（组件里零 `if (demo)`），case-timeline-source 7 条钉「真实必调 apiFetch、演示零请求」；CasePanel 四块 demo 门 SSR 判据 3 条；PATCH typeof 闸（非字符串六种 400，空串仍取消）；表单 kind 用 satisfies 排除表滤出两类（差集为空的判据自检补齐）；注释改正；变异 5 新 + 4 复跑全红；全量 7522。wt-int 合入 ws/timeline-entry（与协商要件、提示词层三方合并），折台账，闸链跑在折入后的树上。backlog：卷宗栏其余四块接真实数据（下一优先）、时间线超 200 条分页、组件中性文案迁领域包、「问它」附件按钮（产品层，紧接着派）。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
