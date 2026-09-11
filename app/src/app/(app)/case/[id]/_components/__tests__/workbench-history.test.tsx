@@ -36,12 +36,25 @@ vi.mock('@/app/_ui/discreet', () => ({
   useDiscreet: () => ({ discreet: false, setDiscreet: () => {}, toggle: () => {} }),
 }));
 vi.mock('next/link', () => ({ default: ({ children }: { children: ReactNode }) => <a>{children}</a> }));
+/**
+ * 卷宗栏这两处**不是挡掉就完了，要记下每一帧传了什么**：
+ * 认领卷宗栏会让壳层把右边那一栏腾出来（CaseWorkspaceProvider 的 data-panes），
+ * 顶栏那个按钮则会开出一张抽屉。哪一屏该不该认领，判据在下面「卷宗栏认领」一节。
+ */
+const panes = vi.hoisted(() => ({ dossier: [] as unknown[], openers: [] as unknown[] }));
 vi.mock('../../_workspace/CaseWorkspaceProvider', () => ({
   useCaseWorkspace: () => ({ openViewer: () => {}, viewer: null }),
-  useDossierPortal: () => null,
+  useDossierPortal: (children: unknown) => {
+    panes.dossier.push(children ?? null);
+    return null;
+  },
   useViewerPortal: () => null,
 }));
-vi.mock('@/components/shell/casePanel', () => ({ useRegisterCasePanel: () => {} }));
+vi.mock('@/components/shell/casePanel', () => ({
+  useRegisterCasePanel: (opener: unknown) => {
+    panes.openers.push(opener ?? null);
+  },
+}));
 vi.mock('../citations', () => ({
   lawCiteId: (cite: string) => cite,
   prefersReducedMotion: () => true,
@@ -383,6 +396,8 @@ beforeEach(() => {
   chat.retried.length = 0;
   chat.error = null;
   harness.slots.length = 0;
+  panes.dossier.length = 0;
+  panes.openers.length = 0;
 });
 
 /* ── 〇、台架自证 ─────────────────────────────────────────── */
@@ -395,6 +410,55 @@ describe('台架', () => {
   it('首帧是骨架，落定帧不是（否则下面全是空过）', async () => {
     expect(probe(frame(CASE)).types).toContain('SkeletonList');
     expect(probe(await settled(CASE)).types).not.toContain('SkeletonList');
+  });
+});
+
+/* ── 〇之二、卷宗栏认领 ───────────────────────────────────── */
+
+/**
+ * 卷宗栏（连同它里面的时间线与「记一件事」入口）**只在工作台本体真的画出来时才认领**。
+ *
+ * 【为什么要钉它】认领这个动作会让壳层把右边那一栏腾出来，顶栏也跟着长出「案件档案」按钮。
+ * 三处提前返回（还在读历史 / 没登录 / 历史没读到）都不渲染投送出去的那段内容——
+ * 认了却什么都不投的形态是：未登录那一屏右边多出一条空栏、按钮开出一张空抽屉，
+ * 而页面不报错。这一节与 Workbench 里 `workbenchVisible` 那个条件是同一件事的两面。
+ *
+ * 【变异臂】把 useDossierPortal / useRegisterCasePanel 的入参改回无条件
+ *（`<>…</>` 与 openPanel）⇒ 下面三条「不认领」全红。
+ */
+describe('卷宗栏认领跟着工作台本体走', () => {
+  const last = (xs: unknown[]) => xs[xs.length - 1];
+
+  it('正对照：已登录 + 历史读到了 ⇒ 认领，按钮也登记', async () => {
+    await settled(CASE);
+    expect(panes.dossier.length, '一帧都没推到，下面几条在验空集').toBeGreaterThan(0);
+    expect(last(panes.dossier)).not.toBeNull();
+    expect(last(panes.openers)).toBeTypeOf('function');
+  });
+
+  it('演示案件照旧认领（它的卷宗栏就是那套样板）', async () => {
+    await settled(demoCase.id);
+    expect(last(panes.dossier)).not.toBeNull();
+  });
+
+  it('🔴 还在读历史那一帧不认领', () => {
+    frame(CASE);
+    expect(last(panes.dossier)).toBeNull();
+    expect(last(panes.openers)).toBeNull();
+  });
+
+  it('🔴 没登录那一屏不认领', async () => {
+    auth.token = null;
+    await settled(CASE);
+    expect(last(panes.dossier)).toBeNull();
+    expect(last(panes.openers)).toBeNull();
+  });
+
+  it('🔴 历史没读到那一屏不认领', async () => {
+    bus.fails = true;
+    await settled(CASE);
+    expect(last(panes.dossier)).toBeNull();
+    expect(last(panes.openers)).toBeNull();
   });
 });
 

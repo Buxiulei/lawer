@@ -60,6 +60,11 @@ export interface TimelineEventRow {
    * null = 没人选过——存量行、以及登记方说不准的那些。判定据此回落到谓词。
    */
   event_type: string | null;
+  /**
+   * 上面那一格是什么时候被**改**成现在这个值的（PATCH /timeline/{eventId}）。
+   * null = 没人改过——登记时就定下来的、以及存量行，都在此列。
+   */
+  event_type_set_at: string | null;
   created_at: string;
 }
 
@@ -245,7 +250,7 @@ export function updateCaseFields(
  * 正是踩在这个形状上，所以先把入口收成一个。
  */
 const TIMELINE_COLUMNS =
-  'id, case_id, happened_at, kind, title, detail, milestone, source_tier, asserted_by, event_type, created_at';
+  'id, case_id, happened_at, kind, title, detail, milestone, source_tier, asserted_by, event_type, event_type_set_at, created_at';
 
 /**
  * 只追加，修正靠补一条新事件（spec §7）——本文件不提供 update/delete。
@@ -442,6 +447,48 @@ export function setEventMilestone(
   const info = db
     .prepare('UPDATE timeline_events SET milestone = ? WHERE id = ? AND case_id = ?')
     .run(params.milestone, params.eventId, params.caseId);
+  return info.changes > 0;
+}
+
+/** 本案下的一条事件。跨案件取不到（WHERE 带 case_id，同 setEventMilestone 的理由）。 */
+export function findTimelineEvent(
+  db: Database,
+  caseId: number,
+  eventId: number,
+): TimelineEventRow | undefined {
+  return db
+    .prepare(`SELECT ${TIMELINE_COLUMNS} FROM timeline_events WHERE id = ? AND case_id = ?`)
+    .get(eventId, caseId) as TimelineEventRow | undefined;
+}
+
+/**
+ * 补选/改写一条事件的**类型**。**全仓写 event_type 列的 UPDATE 只有这一条。**
+ *
+ * 【为什么这张只追加的表上会有一条 UPDATE】时间线的内容（happened_at / kind / title /
+ * detail / source_tier）照旧只追加不改删——记错了补一条新的。而 event_type 是**分类标签**：
+ * 它不断言发生过什么，只说"这条记录归到哪一格"。存量行与登记时说不准的那些一律是 NULL，
+ * 判定对它们回落到读那段自由文本；不让补选的形态是——那条回落永远回落，
+ * 而登记的人明明知道答案，只是当时没被问到。
+ *
+ * 【这条 SQL 为什么只列这两列】写成 `SET ... , title = ?` 那种可扩展形状的形态是：
+ * 下一个人顺手多传一格，时间线就成了可改的——而"可改即等于可篡改"是这张表的设计前提
+ *（见 migrate.ts 建表注释）。列写死在 SQL 里，多改一列必须改这一行，改这一行就得说清为什么。
+ * `event_type_set_at` 跟着同一条语句走：它记的正是"这一次改动"，分成两条就可能只成一条。
+ *
+ * @param eventType 新取值；null = 取消这一格（回到"没人说过这是什么"）。
+ *   值域校验在 lib/cases（本层不认识业务枚举，同 kind / source_tier 的既定分工）。
+ * @returns 是否真的更新到一行（false = 事件不存在或不属于该案）
+ */
+export function setEventType(
+  db: Database,
+  params: { caseId: number; eventId: number; eventType: string | null },
+): boolean {
+  const info = db
+    .prepare(
+      "UPDATE timeline_events SET event_type = ?, event_type_set_at = datetime('now')" +
+        ' WHERE id = ? AND case_id = ?',
+    )
+    .run(params.eventType, params.eventId, params.caseId);
   return info.changes > 0;
 }
 

@@ -42,6 +42,7 @@ function event(over: Partial<TimelineEventRow> = {}): TimelineEventRow {
     source_tier: '自述',
     asserted_by: 'user',
     event_type: null,
+    event_type_set_at: null,
     created_at: '2026-09-01 10:00:00',
     ...over,
   };

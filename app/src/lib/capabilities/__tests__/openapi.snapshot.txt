@@ -143,6 +143,7 @@ POST /api/v1/company/dossiers/confirm	post_v1_company_dossiers_confirm	bearer	[]
 GET /api/v1/company/dossiers/{id}	get_v1_company_dossiers_by_id	bearer	[path:id!]	{}
 POST /api/v1/cases/{id}/paste-back	post_v1_cases_by_id_paste_back	bearer	[path:id!]	{}
 POST /api/v1/cases/{id}/paste-back/confirm	post_v1_cases_by_id_paste_back_confirm	bearer	[path:id!]	{}
+PATCH /api/v1/cases/{id}/timeline/{eventId}	patch_v1_cases_by_id_timeline_by_event_id	bearer	[path:id!,path:eventId!]	{}
 GET /api/v1/keys	get_v1_keys	bearer	[]	{}
 POST /api/v1/keys	post_v1_keys	bearer	[]	{}
 GET /api/v1/keys/{id}/secret	get_v1_keys_by_id_secret	bearer	[path:id!]	{}

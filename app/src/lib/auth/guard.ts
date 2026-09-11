@@ -45,17 +45,26 @@ export function requireIdentity(db: Database, req: Request, scope: Scope): Guard
   return { ok: true, identity };
 }
 
-/** 只认网页登录态的接口（api key 不得自我增殖：不能用 key 再造 key） */
-export function requireWebSession(db: Database, req: Request): GuardResult {
+/**
+ * 只认网页登录态的接口（api key 不得自我增殖：不能用 key 再造 key）。
+ *
+ * @param message 拒绝时说的那句话。**默认是 key 管理那一条**；别的门要自己的三段式
+ *   就传进来（同 requireRealname 的既有形状）。让每条路由自己写一遍
+ *   `identity.via !== 'jwt'` 的形态是：判定有了第二份，哪天口径变了改一处漏一处，
+ *   而两边都不报错——且结构守卫（rest-agent-writes-guard）认的正是这个函数名，
+ *   自己判的那条会被当成"api key 够得着"，要求它去接一条永不执行的台账。
+ */
+export function requireWebSession(
+  db: Database,
+  req: Request,
+  message = '管理 api key 只能用网页登录态操作',
+): GuardResult {
   const identity = resolveIdentity(db, req.headers);
   if (!identity) {
     return { ok: false, response: deny(401, 'UNAUTHORIZED', '缺少或无效的凭据') };
   }
   if (identity.via !== 'jwt') {
-    return {
-      ok: false,
-      response: deny(403, 'WEB_SESSION_REQUIRED', '管理 api key 只能用网页登录态操作'),
-    };
+    return { ok: false, response: deny(403, 'WEB_SESSION_REQUIRED', message) };
   }
   return { ok: true, identity };
 }

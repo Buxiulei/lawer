@@ -135,6 +135,11 @@ export const REST_INDEX: readonly RestEndpoint[] = [
   { category: 'web', method: 'POST', path: '/api/oauth/authorize', auth: 'jwt', description: 'OAuth 同意页点「同意」：签发一次性授权码；只认网页登录态（不能用令牌换新授权）' },
   { category: 'web', method: 'POST', path: '/api/v1/cases/{id}/paste-back', auth: 'jwt', description: '把助手回复里的结构块解析成待写入条目并回预览，**一行都不写库**' },
   { category: 'web', method: 'POST', path: '/api/v1/cases/{id}/paste-back/confirm', auth: 'jwt', description: '写入上一步预览里勾中的条目，走与 MCP 同一批能力；同批重放零双写' },
+  // 【为什么它在 web 而不是 agent 面】时间线的 event_type 是**登记人自己的判断**，
+  // 而要件判定优先读这一格、不再回落到谓词。开给 key 的形态是：模型读完那段自述替用户把
+  // 类型定了，归类从此压过服务端的谓词，且库里看不出这一格是人选的还是模型填的。
+  // 登记那一条（POST /timeline）照旧开给 agent：那是把用户说过的事第一次记下来。
+  { category: 'web', method: 'PATCH', path: '/api/v1/cases/{id}/timeline/{eventId}', auth: 'jwt', description: '补选（或改写）一条时间线事件的类型 event_type。这是时间线上唯一可改的一列——时间、类别、标题、详情、来源档一律只追加不改删，记错了补一条新的' },
   { category: 'web', method: 'GET', path: '/api/v1/keys', auth: 'jwt', description: '列出自己的 api key（永不回显明文或 hash）' },
   { category: 'web', method: 'POST', path: '/api/v1/keys', auth: 'jwt', description: '创建 api key，明文在本次响应里给出，同时以密文落库' },
   { category: 'web', method: 'GET', path: '/api/v1/keys/{id}/secret', auth: 'jwt', description: '取回这把 key 的明文（本能力上线前签发的旧密钥无密文，回 KEY_NOT_VIEWABLE）' },

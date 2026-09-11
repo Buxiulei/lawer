@@ -111,9 +111,28 @@ export function Workbench({ caseId }: { caseId: string }) {
 
   useEffect(() => setSignedIn(Boolean(readToken())), []);
 
-  // 顶栏那个「案件档案」按钮由壳层渲染，这里把开抽屉的动作交给它
+  /**
+   * 这一屏现在到底渲不渲染工作台本体。**与下面三处提前返回是同一个条件**
+   *（读历史中 / 没登录 / 历史没读到），抽成一个名字是因为它有三个读者：
+   * 那三处 return、卷宗栏的认领、以及顶栏那个「案件档案」按钮。
+   *
+   * 【为什么认领与按钮也要跟着它走】认领卷宗栏会让壳层把那一栏腾出来
+   *（CaseWorkspaceProvider 的 data-panes）。腾了却什么都不投的形态是：
+   * 未登录那一屏右边多出一条空栏；顶栏那个按钮则开出一张空抽屉。
+   */
+  const workbenchVisible =
+    history.phase !== 'loading' && history.phase !== 'failed' && (seeded || signedIn);
+
+  // 顶栏那个「案件档案」按钮由壳层渲染，这里把开抽屉的动作交给它。
+  //
+  // 【为什么不再只给演示案件登记】此前这里写的是 `seeded ? openPanel : null`，
+  // 于是卷宗栏（连同它里面的时间线）**只有演示案件看得见**：真实用户在手机上
+  // 没有那个按钮、在桌面上那一栏也是空的。时间线接上真实数据、又在它头部开了
+  // 「记一件事」这个登记入口之后，那道闸会让这两件事对真实用户一次都不发生。
+  // 演示与真实的分野改由 CasePanel 的 `demo` 参数表达：演示案件照旧摆全套演示卷宗，
+  // 真实案件只摆已经有真实数据源的那一块（见 CasePanel 抬头）。
   const openPanel = useCallback(() => setPanelOpen(true), []);
-  useRegisterCasePanel(seeded ? openPanel : null);
+  useRegisterCasePanel(workbenchVisible ? openPanel : null);
 
   /* 程序化滚动一律过 `scrollBehavior()`。
      `globals.css` 底部那条 `* { animation-duration: .01ms }` 兜底**管不到 JS**，
@@ -332,10 +351,10 @@ export function Workbench({ caseId }: { caseId: string }) {
   );
 
   const dossier = useDossierPortal(
-    seeded ? (
+    workbenchVisible ? (
       <>
         <h2 className="mb-2 px-1 text-[15px] font-semibold text-ink">案件档案</h2>
-        <CasePanel caseId={caseId} actions={actions} />
+        <CasePanel caseId={caseId} demo={seeded} actions={actions} />
       </>
     ) : null,
   );
@@ -596,7 +615,7 @@ export function Workbench({ caseId }: { caseId: string }) {
       {original}
 
       <AppSheet open={panelOpen} onClose={() => setPanelOpen(false)} title="案件档案">
-        <CasePanel caseId={caseId} actions={actions} />
+        <CasePanel caseId={caseId} demo={seeded} actions={actions} />
       </AppSheet>
 
       {/* 变换容器会成为 fixed 的参照系，确认弹窗必须挂在它外面 */}

@@ -158,8 +158,10 @@
 
 只有 `radio-group` 拉了新依赖（`@radix-ui/react-radio-group`），换来一组单选在 Tab 序里
 只占一个停靠点、组内方向键走位；其余基元都是原生元素 + token，没加包。
-`select` 是**原生 `<select>`** 的封装（手机上出系统滚轮，比自绘浮层好按），
-本波没有消费方，是给第二波表单预置的；富内容菜单走 `dropdown-menu`。
+`select` 是**原生 `<select>`** 的封装（手机上出系统滚轮，比自绘浮层好按）；
+第一个消费方是卷宗栏时间线的「这条记录是什么」那一格（取值按案件领域 + 事件类别而定、
+数量不定，用它比一排单选稳）。选项数固定且少的枚举仍走 `radio-group`；
+富内容菜单走 `dropdown-menu`。
 
 ### 数据表格 `DataTable` 用法（给第二波：账户流水等）
 `src/components/shadcn/data-table.tsx`。一份 `columns` 同时喂两副面孔：
