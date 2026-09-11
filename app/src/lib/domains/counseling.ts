@@ -983,6 +983,11 @@ export const COUNSELING: DomainPack = {
         '它会起草并存进来；手里已有的材料先传进证据库。',
       graphLitigationNote: '已入档的涉诉记录',
       graphIntro: '跟来访者签约的、收款的、背后控股或挂靠的，常常不是同一个主体。',
+      /** 口径见 labor.ts 同名键 */
+      timelineAddLabel: '记一件事',
+      timelineEmpty:
+        '这一栏按日子记下这个案子发生过什么：来访者哪天提出异议、平台或协会哪天转来投诉，' +
+        '你哪天回了说明、发了函。现在一条都还没有——从你印象最深的那一天记起就行，记错了补一条新的。',
       claimsFootnote: '初算值，随证据补充调整；按合同约定与已完成次数折算，未计其他损失。',
       docActionsHint:
         '对某一条还有疑问，或者想让人帮你把回复的原话写出来，去「问它」接着说。' +

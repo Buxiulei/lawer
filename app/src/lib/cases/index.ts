@@ -903,6 +903,96 @@ export function confirmMilestone(
   return { ok: true, event };
 }
 
+/** 「你发来的是什么」——错误体里点名那一格的实际形态，省得调用方原样重试一次再收同一句。 */
+function describeBadEventType(raw: unknown): string {
+  if (raw === null) return 'null';
+  if (Array.isArray(raw)) return '数组';
+  if (typeof raw === 'object') return '对象';
+  if (typeof raw === 'string') return '一串空白';
+  return `${typeof raw}（${String(raw)}）`;
+}
+
+/**
+ * 补选（或改写）一条已存在事件的**类型**。**这是全仓唯一能写 event_type 的改写入口。**
+ *
+ * 【为什么这张"只追加"的表上开这一条】addTimelineEvent 的口径是「写错了补一条新的，
+ * 本模块不提供改/删」——那条口径管的是**事件的内容**：发生在哪天、是谁做的、做了什么。
+ * event_type 不在其中：它是**分类标签**，不断言发生过什么，只说这条记录归到哪一格。
+ * 存量行、以及登记时说不准的那些，这一格一律是 NULL，判定对它们回落到读那段自由文本。
+ * 不让补选的形态是——回落永远回落，而登记的人本来就知道答案，只是当时没被问到。
+ * 内容仍旧一格都改不了：SQL 里只有 event_type 与 event_type_set_at 两列（见 store.setEventType）。
+ *
+ * 【为什么 eventType 必须显式给】省略按"清空"办的形态是：调用方漏拼一个字段，
+ * 那条记录上已经选好的类型被悄悄抹掉，回包 200，而判定从此回落到读那段字——
+ * 没有一处会报错。省略一律 400；真要取消这一格，传空串（同 addTimelineEvent 的口径）。
+ */
+export function setTimelineEventType(
+  db: Database,
+  input: {
+    caseId: number;
+    userId: number;
+    eventId: number;
+    /** 新取值（空串 = 取消这一格）。**省略是错误，不是"不改"** */
+    eventType?: unknown;
+  },
+): Result<{ event: store.TimelineEventRow }> {
+  const found = assertOwned(db, input.caseId, input.userId);
+  if (isFailure(found)) return found;
+
+  // 先取那一行：值域按**它自己的 kind** 取（公司动作那一类的取值不能落到我方动作上）。
+  // 取不到一律按"不存在"办，不区分"不在本案下"——同 setActionStatus 的口径。
+  const event = store.findTimelineEvent(db, input.caseId, input.eventId);
+  if (!event) return fail(404, 'EVENT_NOT_FOUND', '时间线事件不存在');
+
+  if (input.eventType === undefined) {
+    return fail(
+      400,
+      'NO_FIELDS',
+      '这条端点只改 event_type 这一格，而本次请求没有带它。' +
+        '时间线的内容（时间、类别、标题、详情、来源档）在这里一格都改不了——记错了补一条新的。' +
+        '要改类型就带上 event_type；要取消已选的类型，把它传成空串。',
+    );
+  }
+
+  // 【为什么这道 typeof 闸在本函数、不在 resolveEventType 里】resolveEventType 把
+  // "不是字符串"一律折成"没选过"（落 null）。那条口径对**登记**是对的：新记一条时
+  // 那一格本来就可以不选，折成 null 之后记录照样落库、判定回落到谓词，什么都没丢。
+  // 而本函数是**改**：调用方发来 `{event_type: 123}`（拼错了类型、或把数组原样塞进来）时，
+  // 折成 null 的形态是——那条记录上已经选好的类型被悄悄抹掉、回包 200，
+  // 判定从此回落到读那段字，而没有一处会说出发生了什么。
+  //
+  // 空串是唯一放行的"空"：它是下拉里「先不选」那一项的值，语义就是取消这一格。
+  // 全是空白的串不在此列——它是打歪了的输入，不是一次取消。
+  if (typeof input.eventType !== 'string' || (input.eventType !== '' && input.eventType.trim() === '')) {
+    return fail(
+      400,
+      'INVALID_EVENT_TYPE',
+      `event_type 只收字符串，本次收到的是 ${describeBadEventType(input.eventType)}。` +
+        '本端点只改这一格，把它读成"没选过"会把这条记录上已经选定的类型悄悄抹掉。' +
+        '传这一类下的某个取值；要取消已选的类型，传空串。',
+    );
+  }
+
+  const packed = packForCase(found);
+  if (isFailure(packed)) return packed;
+  // 与 addTimelineEvent 共用同一套值域校验：另写一份的形态是——同一个取值在登记时被拒、
+  // 补选时放行（或反过来），而两条路各自看都正常。
+  const resolved = resolveEventType(packed.pack, event.kind, input.eventType);
+  if (isFailure(resolved)) return resolved;
+
+  const updated = store.setEventType(db, {
+    caseId: input.caseId,
+    eventId: input.eventId,
+    eventType: resolved.eventType,
+  });
+  if (!updated) return fail(404, 'EVENT_NOT_FOUND', '时间线事件不存在');
+
+  // 要件表按这一格判定，个案报告的「争议焦点 / 风险与未定项」两节由要件表派生——
+  // 改完不置陈旧旗的形态是：报告上那两节仍按回落的结果写着，而库里的判据已经变了。
+  markReportStale(db, input.caseId, '时间线');
+  return { ok: true, event: store.findTimelineEvent(db, input.caseId, input.eventId)! };
+}
+
 /** 把一条行动卡标成「完成」（或「放弃」）。action 必须属于本案，本案必须属于本人。 */
 export function setActionStatus(
   db: Database,

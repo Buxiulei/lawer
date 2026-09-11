@@ -72,6 +72,7 @@ const { EvidenceDetailSheet } = await import(
 );
 const { SetupPrompt } = await import('@/app/(app)/settings/_components/SetupPrompt');
 const { CasePanel } = await import('@/app/(app)/case/[id]/_components/CasePanel');
+const { TimelineSection } = await import('@/app/(app)/case/[id]/_components/CaseTimeline');
 const { CompanyGraphView } = await import(
   '@/app/(app)/case/[id]/graph/_components/CompanyGraphView'
 );
@@ -218,10 +219,32 @@ const SURFACES: {
   {
     // 卷宗栏（PC 右栏 / 手机抽屉）里按行当变的两句：图谱那一格的引言、诉求表脚注的口径。
     // 这一面同时验两个键，是因为它们在同一个组件里由同一次 useCaseDomain 取。
+    //
+    // 【为什么传 demo】这两块底下还是演示数据，只在演示案件下渲染（见 CasePanel 抬头）。
+    // 不传的形态是：这一面渲染出来的只有时间线，而下面两条断言在验一个不存在的字符串。
     name: '卷宗栏·图谱引言与诉求脚注',
     domainFrom: 'case',
     keys: ['graphIntro', 'claimsFootnote'],
-    render: () => ssr(<CasePanel caseId={CASE_ID} actions={[]} />),
+    render: () => ssr(<CasePanel caseId={CASE_ID} demo actions={[]} />),
+  },
+  {
+    // 卷宗栏时间线：登记入口上的动词 + 一条都还没有时那一段。
+    // **用渲染面而不是整块 CasePanel**：取数在 effect 里，node 环境跑不了 effect，
+    // 整块渲染出来的恒是骨架屏（events===null），那两句一句都不会出现。
+    name: '卷宗栏·时间线空态与登记入口',
+    domainFrom: 'case',
+    keys: ['timelineAddLabel', 'timelineEmpty'],
+    render: () =>
+      ssr(
+        <TimelineSection
+          caseId={CASE_ID}
+          events={[]}
+          failure={null}
+          canWrite
+          onAdd={() => {}}
+          onPickType={() => {}}
+        />,
+      ),
   },
   {
     // 关系图整页的引言首句。**用空图那一支渲染**：这一句在有图和没图两屏上是同一个

@@ -1,30 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import type {
   ActionItem,
   Claim,
   Deadline,
   EvidenceItem,
   EvidenceStatus,
-  TimelineEvent,
-  TimelineKind,
 } from "@/app/_mock/types";
 import {
   demoClaims,
   demoDeadlines,
   demoEvidence,
   demoMessages,
-  demoTimeline,
 } from "@/app/_mock/demo";
 import { mockCompanyGraph } from "@/app/_mock/company-graph";
 import { useCaseDomain } from "@/app/_ui/caseDomain";
 import { useDiscreet } from "@/app/_ui/discreet";
 import { packOf } from "@/app/_ui/domain";
 import { NEUTRAL_WORD } from "@/app/_ui/neutral";
-import { cn } from "@/app/_ui/cn";
-import { formatDate } from "@/app/_ui/format";
 import { AmountText } from "@/components/case/AmountText";
 import { DeadlineChip } from "@/components/case/DeadlineChip";
 import {
@@ -33,8 +27,8 @@ import {
 } from "@/components/case/EvidenceBadge";
 import { Badge } from "@/components/shadcn/badge";
 import { Sensitive } from "@/components/Sensitive";
+import { CaseTimeline } from "./CaseTimeline";
 import { citedLaws, evidenceCiteId, lawCiteId } from "./citations";
-import { MaskedText } from "./RichText";
 
 /**
  * 案件档案面板：时间线 / 诉求金额 / 证据摘要 / 本案依据 / 待办与截止日。
@@ -44,12 +38,22 @@ import { MaskedText } from "./RichText";
  * （它靠哪几份材料记下的），证据行挂 data-cite-target，「本案依据」每行挂
  * data-cite-target 指向对话里那几张法条卡。桥本身装在 Workbench 上、只在有 hover
  * 的设备生效，触屏一行属性都不读。
+ *
+ * 【`demo` 这道分野是什么】时间线已经接上真实接口（见 ./CaseTimeline），
+ * 底下四块**还没有真实数据源**——它们读的仍是 `_mock/demo` 里那套演示案情。
+ * 真实案件也把它们渲染出来的形态是：用户在自己的卷宗栏里读到另一个人的诉求金额、
+ * 另一个人的证据清单、另一个人的截止日，而页面不报错、数字也对得上。
+ * 那正是 RecentRecords / Dashboard 当年各踩过一次的坑。所以这四块只在演示案件下出现；
+ * 它们各自接真实数据是后续票的事，这里不拿 demo 顶。
  */
 export function CasePanel({
   caseId,
+  demo,
   actions,
 }: {
   caseId: string;
+  /** 演示案件（未登录时的样板案）。真实案件传 false。 */
+  demo: boolean;
   actions: ActionItem[];
 }) {
   // 卷宗栏里有两句是按行当变的（图谱那一格的引言、诉求表脚注的口径）。写死的形态是：
@@ -57,105 +61,20 @@ export function CasePanel({
   const copy = packOf(useCaseDomain(caseId)).copy.pages;
   return (
     <div className="flex flex-col gap-3">
-      <TimelineBlock events={demoTimeline} />
-      <CompanyGraphBlock caseId={caseId} intro={copy.graphIntro} />
-      <ClaimsBlock claims={demoClaims} footnote={copy.claimsFootnote} />
-      <EvidenceBlock caseId={caseId} items={demoEvidence} />
-      {/* **不能排在最后**：本块窄屏 display:none，但 `:last-child` 照样命中它，
-          排最后会把 TodoBlock 的 last:border-b-0 顶掉、在手机上凭空多一条底线
-          （display:none 不改变结构伪类——这条坑值得写下来）。 */}
-      <LawBasisBlock />
-      <TodoBlock actions={actions} deadlines={demoDeadlines} />
+      <CaseTimeline caseId={caseId} demo={demo} />
+      {demo && (
+        <>
+          <CompanyGraphBlock caseId={caseId} intro={copy.graphIntro} />
+          <ClaimsBlock claims={demoClaims} footnote={copy.claimsFootnote} />
+          <EvidenceBlock caseId={caseId} items={demoEvidence} />
+          {/* **不能排在最后**：本块窄屏 display:none，但 `:last-child` 照样命中它，
+              排最后会把 TodoBlock 的 last:border-b-0 顶掉、在手机上凭空多一条底线
+              （display:none 不改变结构伪类——这条坑值得写下来）。 */}
+          <LawBasisBlock />
+          <TodoBlock actions={actions} deadlines={demoDeadlines} />
+        </>
+      )}
     </div>
-  );
-}
-
-/* ── 时间线 ───────────────────────────────────────────────── */
-
-const KIND_DOT: Record<TimelineKind, string> = {
-  公司动作: "bg-amber",
-  我方动作: "bg-primary",
-  系统动作: "bg-ink-2",
-  期限: "bg-amber",
-};
-
-const VISIBLE_EVENTS = 4;
-
-function TimelineBlock({ events }: { events: TimelineEvent[] }) {
-  const [all, setAll] = useState(false);
-  const ordered = [...events].sort((a, b) =>
-    b.happenedAt.localeCompare(a.happenedAt),
-  );
-  const shown = all ? ordered : ordered.slice(0, VISIBLE_EVENTS);
-
-  return (
-    <section className="border-b border-line pb-4 last:border-b-0">
-      <header className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="fs-m font-semibold text-ink">时间线</h3>
-        <span className="num fs-xs text-ink-2">{events.length} 条</span>
-      </header>
-      <div>
-        <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 fs-xs text-ink-2">
-          {(["公司动作", "我方动作", "系统动作"] as const).map((kind) => (
-            <span key={kind} className="inline-flex items-center gap-1.5">
-              <span
-                className={cn("size-2 rounded-full", KIND_DOT[kind])}
-                aria-hidden
-              />
-              {kind}
-            </span>
-          ))}
-        </div>
-
-        <ol className="relative flex flex-col gap-4 pl-5">
-          <span
-            aria-hidden
-            className="absolute top-2 bottom-2 left-[3.5px] w-px bg-line"
-          />
-          {shown.map((e) => (
-            // data-cite：这一条是靠哪几份材料记下来的。停在它上面，下面证据行里
-            // 对应那几条一起亮；反过来停在证据上，用过它的时间线条目也亮。
-            <li
-              key={e.id}
-              data-veil=""
-              data-cite={
-                e.evidenceIds.length > 0
-                  ? e.evidenceIds.map(evidenceCiteId).join(" ")
-                  : undefined
-              }
-              className="relative"
-            >
-              <span
-                aria-hidden
-                className={cn(
-                  "absolute top-[7px] -left-5 size-2 rounded-full ring-4 ring-surface",
-                  KIND_DOT[e.kind],
-                )}
-              />
-              <p className="num fs-xs text-ink-2">
-                {formatDate(e.happenedAt)}
-              </p>
-              <p className="fs-m font-medium text-ink">
-                {e.title}
-              </p>
-              <p className="mt-0.5 line-clamp-2 fs-s text-ink-2">
-                <MaskedText text={e.detail} />
-              </p>
-            </li>
-          ))}
-        </ol>
-
-        {ordered.length > VISIBLE_EVENTS && (
-          <button
-            type="button"
-            onClick={() => setAll((v) => !v)}
-            className="mt-2 min-h-11 fs-s text-primary-ink"
-          >
-            {all ? "只看最近 4 条" : `展开全部 ${ordered.length} 条`}
-          </button>
-        )}
-      </div>
-    </section>
   );
 }
 

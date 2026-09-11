@@ -1580,6 +1580,19 @@ export function runMigrations(db: Database.Database): void {
   // 且取值域按领域变，库里锁不住），同 milestone / intake_stage。
   addColumnIfMissing(db, 'timeline_events', 'event_type', 'TEXT');
 
+  // timeline_events.event_type_set_at：**上面那一格是什么时候被选定的**。
+  //
+  // 【为什么要它】event_type 是全表唯一允许改的一列（PATCH /timeline/{eventId}：
+  // 类型是分类标签，不是内容；内容照旧只追加不改删）。少了这一列，
+  // "登记时就选好的" 与 "事后回来补选的" 在库里完全同形——而这两者在庭上不是一回事：
+  // 前者是当时的判断，后者是知道了后续走向之后的归类。哪一天要复核判定为什么这样走，
+  // 少这一列就只能靠猜。
+  //
+  // 【为什么可空、不回填】存量行（以及登记时就选定、此后没人动过的行）该列恒为 NULL，
+  // 它说的是"这一格没有被改过"。回填成建档时间的形态是：每一行都像是被人补选过一次，
+  // 而那正是这一列要区分的那件事。
+  addColumnIfMissing(db, 'timeline_events', 'event_type_set_at', 'TEXT');
+
   // cases 的首诊四列：**首诊填的那几个数字要有地方落**。
   //
   // 【为什么非加不可】首诊六步里，入职日期与月工资是 N/2N/N+1 的**计算输入**，
