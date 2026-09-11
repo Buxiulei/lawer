@@ -628,6 +628,8 @@
 
 **2026-09-11 协商一致解除要件票到位（a140fca2，ws/negotiated-exit）+ 经理亲核通过**：COMPANY_DECISION_SLOTS（四处共用）/ COMPANY_UNILATERAL_DECISION_CHECKS（2N-2、2N-3、规则三，只认 company_termination）/ NEGOTIATED_OR_DECISION_CHECKS（N-2a 独用，多认 company_negotiation）；正则兜底与谓词一字未动；判据 (a) 自述/书证/规则三不触发/风险档位抬档、(b) 单方决定不回退、(c) 无类型协商文本仍缺失、(d) S16 两幕不动；变异三臂各 4/4/12 红；全量 7463、eval 543、verify 387/0、守卫 128。裁定三条 openQuestions：锚点层不做「项」级（整条引文已含第二项原文）——接受；签没签字在类型上分不开、靠已签协议在档间接筛——接受，登记面加「签了/没签」子答案记 backlog；N-2a missingAs 文案变动同步 S16 一行——接受。亲核：diff 形态与设计一致，三文件判据 120 条绿。wt-int ff 到 a140fca2，与入口票一班上产。
 
+**2026-09-11 主理人产品反馈（经援助律师会话转来）**：站内「问它」页没有上传文件/图片/音频的入口，模型却说「拍照发我」「补齐这三样」，且要的东西（公司全称、劳动合同）档案里已有——没先读档。裁定两层：① 提示词层（派 Opus prompt-file-guidance，ws/prompt-file-guidance）：纪律段加闭合规则——要材料先调 evidence_list/case_facts，档案有的不再要；要上传就指路证据页，不说「发我」；labor-prompt-snapshot 更新记账，静态段长度重记。② 产品层（等入口票合入后派）：「问它」输入框加附件按钮走现成 evidence 上传链（实名闸照旧），传完在对话里落本地记录帧「已登记证据 #id」，不自动发一轮消息，下一轮事实卡自然带上。已回复对方会话。
+
 **审计自身的教训入账**：①报告1 用 sqlite3 CLI 读逐连接 PRAGMA 当生产事实——better-sqlite3 编译期默认不同（synchronous=NORMAL 非 FULL、busy_timeout=5000 非 0），报告3 头号墙整条建在错值上被撤销——**又一例「先审量具再信读数」**；②报告4 把「唯一测得出来的」排成「最先倒的」——可测性偏差；③access log 行/秒≠并发用户（量纲）。**待办三实测**（1000 档排序定稿前置）：50 路真 SSE 的 memory.peak 差分、单 chat turn 事件循环占用、四家 LLM 上游账户级并发/TPM 上限（查控制台即得）。⚠️ 核验官 C8 称驾驶舱仍用 demoCase mock——**取自本地 ws/guard-alter-fix 分支快照，与批6「前端已接线」记录冲突，采信前须对 prod 实际版本核一分钟**，别把陈旧分支当产线。
 
 ## 📏 批 0 交出的三条测量教训（2026-08-27）
