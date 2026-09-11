@@ -14,8 +14,8 @@ import { evidenceCiteId } from './citations';
 import { MaskedText } from './RichText';
 import { AddEventSheet, PickTypeSheet } from './TimelineEntrySheet';
 import {
-  demoEvents,
-  fetchTimeline,
+  initialTimeline,
+  loadTimeline,
   prependEvent,
   replaceEvent,
   type TimelineEventView,
@@ -56,22 +56,18 @@ const VISIBLE_EVENTS = 4;
  * `demo` 为真时一次网络请求都不发，走演示数据（同 Dashboard 的分工）。
  */
 export function CaseTimeline({ caseId, demo }: { caseId: string; demo: boolean }) {
-  const [events, setEvents] = useState<TimelineEventView[] | null>(() =>
-    demo ? demoEvents() : null,
-  );
+  const [events, setEvents] = useState<TimelineEventView[] | null>(() => initialTimeline(demo));
   const [failure, setFailure] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [picking, setPicking] = useState<TimelineEventView | null>(null);
 
+  // 演示走 mock、真实走接口这道岔口**不在这里**，在 timelineData 的两个纯函数里
+  //（理由见 initialTimeline 抬头：写在这条 effect 里的 if，判据推不动，改成恒真照绿）。
   useEffect(() => {
-    if (demo) {
-      setEvents(demoEvents());
-      return;
-    }
     let alive = true;
     setFailure(null);
-    setEvents(null);
-    fetchTimeline(caseId)
+    setEvents(initialTimeline(demo));
+    loadTimeline(caseId, demo)
       .then((rows) => {
         if (alive) setEvents(rows);
       })

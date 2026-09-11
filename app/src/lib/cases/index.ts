@@ -903,6 +903,15 @@ export function confirmMilestone(
   return { ok: true, event };
 }
 
+/** 「你发来的是什么」——错误体里点名那一格的实际形态，省得调用方原样重试一次再收同一句。 */
+function describeBadEventType(raw: unknown): string {
+  if (raw === null) return 'null';
+  if (Array.isArray(raw)) return '数组';
+  if (typeof raw === 'object') return '对象';
+  if (typeof raw === 'string') return '一串空白';
+  return `${typeof raw}（${String(raw)}）`;
+}
+
 /**
  * 补选（或改写）一条已存在事件的**类型**。**这是全仓唯一能写 event_type 的改写入口。**
  *
@@ -942,6 +951,25 @@ export function setTimelineEventType(
       '这条端点只改 event_type 这一格，而本次请求没有带它。' +
         '时间线的内容（时间、类别、标题、详情、来源档）在这里一格都改不了——记错了补一条新的。' +
         '要改类型就带上 event_type；要取消已选的类型，把它传成空串。',
+    );
+  }
+
+  // 【为什么这道 typeof 闸在本函数、不在 resolveEventType 里】resolveEventType 把
+  // "不是字符串"一律折成"没选过"（落 null）。那条口径对**登记**是对的：新记一条时
+  // 那一格本来就可以不选，折成 null 之后记录照样落库、判定回落到谓词，什么都没丢。
+  // 而本函数是**改**：调用方发来 `{event_type: 123}`（拼错了类型、或把数组原样塞进来）时，
+  // 折成 null 的形态是——那条记录上已经选好的类型被悄悄抹掉、回包 200，
+  // 判定从此回落到读那段字，而没有一处会说出发生了什么。
+  //
+  // 空串是唯一放行的"空"：它是下拉里「先不选」那一项的值，语义就是取消这一格。
+  // 全是空白的串不在此列——它是打歪了的输入，不是一次取消。
+  if (typeof input.eventType !== 'string' || (input.eventType !== '' && input.eventType.trim() === '')) {
+    return fail(
+      400,
+      'INVALID_EVENT_TYPE',
+      `event_type 只收字符串，本次收到的是 ${describeBadEventType(input.eventType)}。` +
+        '本端点只改这一格，把它读成"没选过"会把这条记录上已经选定的类型悄悄抹掉。' +
+        '传这一类下的某个取值；要取消已选的类型，传空串。',
     );
   }
 

@@ -171,6 +171,37 @@ describe('口子不许开歪', () => {
     expect((row() as { event_type: string | null }).event_type).toBeNull();
   });
 
+  /**
+   * 【为什么这一组要逐个取值跑】登记那条路（addTimelineEvent → resolveEventType）把
+   * "不是字符串"一律折成"没选过"——对**新记一条**那是对的：那一格本来就可以不选。
+   * 而本端点是**改**：折成 null 的形态是，调用方发来一个拼错的取值（数组、数字、
+   * 打歪的空白），那条记录上已经选定的类型被悄悄抹掉、回包 200，判定从此回落到读那段字，
+   * 而没有一处会说出发生了什么。变异：把 setTimelineEventType 里那道 typeof 闸删掉 ⇒ 本组红。
+   */
+  test.each([
+    ['数字', 123],
+    ['布尔', true],
+    ['数组', ['x']],
+    ['对象', {}],
+    ['全是空白的串', '   '],
+    ['null', null],
+  ])('🔴 event_type 是%s ⇒ 400，且**不许**把已选的类型悄悄清成 NULL', async (_label, bad) => {
+    await call({ event_type: COMPANY_TYPES[0].id });
+    const res = await call({ event_type: bad });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.error_code).toBe('INVALID_EVENT_TYPE');
+    expect(
+      (row() as { event_type: string | null }).event_type,
+      '被拦下时那一格必须原封不动',
+    ).toBe(COMPANY_TYPES[0].id);
+  });
+
+  test('对照臂：空串仍然是"取消这一格"，没有被上面那道闸一起拒掉', async () => {
+    await call({ event_type: COMPANY_TYPES[0].id });
+    expect((await call({ event_type: '' })).status).toBe(200);
+    expect((row() as { event_type: string | null }).event_type).toBeNull();
+  });
+
   test('一个字段都不带 ⇒ 400 NO_FIELDS，不按"清空"办', async () => {
     await call({ event_type: COMPANY_TYPES[0].id });
     const res = await call({});

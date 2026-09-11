@@ -10,7 +10,7 @@ import { Button } from '@/components/shadcn/button';
 import { Field, InputField, TextareaField } from '@/components/shadcn/field';
 import { RadioGroup, RadioGroupItem } from '@/components/shadcn/radio-group';
 import { Select } from '@/components/shadcn/select';
-import { TIMELINE_KINDS } from '@/lib/cases/timeline-kinds';
+import { TIMELINE_KINDS, type TimelineKind } from '@/lib/cases/timeline-kinds';
 import { createEvent, setEventType, type TimelineEventView } from './timelineData';
 
 /**
@@ -27,6 +27,28 @@ import { createEvent, setEventType, type TimelineEventView } from './timelineDat
 
 /** 没选类型时那一行说明。**不写"必须选"**——不选是一条正当的路，判定会回去读那段字。 */
 const UNSURE_HINT = '挑不准就不选。不选也存得下，只是之后的判定要回去读你写的那段字。';
+
+/**
+ * 四类里**表单不摆**的那两类。
+ *
+ * · 系统动作 —— 服务端自己的落痕位（闸留痕、进度记录）。摆给用户选，等于让他亲手写一条
+ *   看起来像系统写的记录，而档案里"这话是谁说的"正是最要紧的一栏。
+ * · 期限     —— 推算出来的日子，有自己的模块（期限卡按法定起算点算）。在这儿手记一条，
+ *   它既不参与推算、也不会提醒任何人，只是一条长得像期限的事件。
+ *
+ * 【为什么写成排除表而不是直接列两个中文】`satisfies` 把它钉在共享词表的取值域上：
+ * 哪天 TIMELINE_KINDS 改了措辞，这里当场是**类型错误**，而不是安静地滤不掉、
+ * 把那两类又摆回表单上。
+ */
+export const KINDS_NOT_IN_FORM = ['系统动作', '期限'] as const satisfies readonly TimelineKind[];
+
+/**
+ * 表单摆得出来的事件类别。**从共享词表里滤，不另抄一份中文**：
+ * 抄一份的形态是词表改了这里不改，两处各说各话而谁都不报错。
+ */
+export const FORM_KINDS: readonly TimelineKind[] = TIMELINE_KINDS.filter(
+  (k) => !(KINDS_NOT_IN_FORM as readonly string[]).includes(k),
+);
 
 /** 本机今天（'YYYY-MM-DD'）。日期框的初值——绝大多数人记的是刚发生的事。 */
 function today(): string {
@@ -92,7 +114,7 @@ export function AddEventSheet({
   onCreated: (created: TimelineEventView) => void;
 }) {
   const domain = useCaseDomain(caseId);
-  const [kind, setKind] = useState<string>(TIMELINE_KINDS[0]);
+  const [kind, setKind] = useState<string>(FORM_KINDS[0]);
   const [happenedAt, setHappenedAt] = useState('');
   const [title, setTitle] = useState('');
   const [detail, setDetail] = useState('');
@@ -105,7 +127,7 @@ export function AddEventSheet({
   // 服务器的日期，与用户本机的日期可能差一天。
   useEffect(() => {
     if (!open) return;
-    setKind(TIMELINE_KINDS[0]);
+    setKind(FORM_KINDS[0]);
     setHappenedAt(today());
     setTitle('');
     setDetail('');
@@ -170,7 +192,7 @@ export function AddEventSheet({
               setEventTypeValue('');
             }}
           >
-            {TIMELINE_KINDS.map((k) => (
+            {FORM_KINDS.map((k) => (
               <RadioGroupItem key={k} value={k}>
                 {k}
               </RadioGroupItem>

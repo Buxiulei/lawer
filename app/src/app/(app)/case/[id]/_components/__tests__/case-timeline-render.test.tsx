@@ -25,8 +25,27 @@ vi.mock('@/app/_ui/discreet', () => ({
   useDiscreet: () => ({ discreet: false, setDiscreet: () => {}, toggle: () => {} }),
   DocumentTitle: () => null,
 }));
+vi.mock('next/link', () => ({
+  default: ({ children, href }: { children: React.ReactNode; href: string }) => (
+    <a href={href}>{children}</a>
+  ),
+}));
+// 抽屉真身在 Radix 的 Portal 后面，SSR 出空串（同 page-copy-by-domain 那份判据的处境）。
+// 换成把 children 原样摆出来的壳：被验的是抽屉**里**那几项，不是 Radix 的搬运。
+vi.mock('@/components/shadcn/app-sheet', () => ({
+  AppSheet: ({ children, footer }: { children: React.ReactNode; footer?: React.ReactNode }) => (
+    <div>
+      {children}
+      {footer}
+    </div>
+  ),
+}));
 
 const { TimelineSection } = await import('../CaseTimeline');
+const { CasePanel } = await import('../CasePanel');
+const { AddEventSheet, FORM_KINDS, KINDS_NOT_IN_FORM } = await import('../TimelineEntrySheet');
+const { TIMELINE_KINDS } = await import('@/lib/cases/timeline-kinds');
+const { demoClaims, demoDeadlines, demoEvidence, demoTimeline } = await import('@/app/_mock/demo');
 const { prependEvent, replaceEvent, toTimelineView } = await import('../timelineData');
 const { DEFAULT_DOMAIN, DOMAINS } = await import('@/lib/domains/registry');
 const { tierMark } = await import('@/lib/cases/source-tier');
@@ -240,5 +259,76 @@ describe('卷宗栏时间线不许再从 mock 取事件', () => {
       importsOf(data).filter((i) => i.from === '@/app/_mock/demo').map((i) => i.bindings.trim()),
       '数据层只取那一份演示时间线，别把整套演示案情拖进来',
     ).toEqual(['{ demoTimeline }']);
+  });
+});
+
+/**
+ * 卷宗栏下面那四块（诉求 / 证据 / 本案依据 / 待办）**还没有真实数据源**，
+ * 所以只在演示案件下渲染。
+ *
+ * 【为什么要按渲染产物再钉一遍】复审变异实测：把 CasePanel 里那个 `{demo && (…)}`
+ * 改成恒真，本票全部判据**照绿**——它们验的是时间线那一块，四块摆不摆出来没人看。
+ * 而那正是 RecentRecords / Dashboard 各踩过一次的坑：真实用户在自己的卷宗栏里
+ * 读到另一个人的诉求金额、另一个人的材料清单、另一个人的截止日，页面不报错、数字也对得上。
+ */
+describe('演示数据不许出现在真实案件的卷宗栏里', () => {
+  /** 四块各拿一条**取自演示数据本身**的标记串，不在判据里另抄一遍中文 */
+  const MARKS = {
+    诉求: demoClaims[0].label,
+    证据: demoEvidence[0].name,
+    待办: demoDeadlines[0].title,
+  };
+  /** 时间线只露最近 4 条，所以标记取**最新那一条**（数组第 0 条是最早的那一件） */
+  const newestDemoEvent = [...demoTimeline].sort((a, b) =>
+    b.happenedAt.localeCompare(a.happenedAt),
+  )[0].title;
+
+  it('正对照：演示案件把四块连同演示时间线一起摆出来', () => {
+    const out = text(ssr(<CasePanel caseId="demo" demo actions={[]} />));
+    for (const [block, mark] of Object.entries(MARKS)) {
+      expect(out, `演示案件的卷宗栏少了「${block}」那一块`).toContain(mark);
+    }
+    expect(out).toContain(newestDemoEvent);
+  });
+
+  it('🔴 真实案件：四块的演示内容一个字都不出现（变异：把 demo 门改恒真 → 红）', () => {
+    const out = text(ssr(<CasePanel caseId="4217" demo={false} actions={[]} />));
+    for (const [block, mark] of Object.entries(MARKS)) {
+      expect(out, `真实案件的卷宗栏里混进了演示的「${block}」`).not.toContain(mark);
+    }
+  });
+
+  it('🔴 真实案件：那二十条演示事件一条都不出现（首帧是"还在读"，不是演示数据）', () => {
+    const out = text(ssr(<CasePanel caseId="4217" demo={false} actions={[]} />));
+    for (const e of demoTimeline) {
+      expect(out, `真实案件的时间线上出现了演示事件「${e.title}」`).not.toContain(e.title);
+    }
+  });
+});
+
+/**
+ * 「记一件事」那张表单**只摆两类**：公司动作 / 我方动作。
+ * 系统动作是服务端自己的落痕位，期限有自己的模块——摆给用户选，
+ * 等于让他亲手写一条看起来像系统写的记录，或者一条不参与推算、不提醒任何人的假期限。
+ */
+describe('表单摆得出来的事件类别', () => {
+  it('是共享词表的**真子集**，而不是另抄的一份中文', () => {
+    expect(FORM_KINDS.length).toBe(2);
+    for (const k of FORM_KINDS) expect(TIMELINE_KINDS).toContain(k);
+    expect(FORM_KINDS.length).toBeLessThan(TIMELINE_KINDS.length);
+  });
+
+  it('🔴 抽屉里只出现那两项，另外两项一个都不摆（变异：改回 TIMELINE_KINDS → 红）', () => {
+    const out = text(
+      ssr(<AddEventSheet caseId="4217" open onClose={() => {}} onCreated={() => {}} />),
+    );
+    expect(out.length, '量具自检：抽屉什么都没渲染出来').toBeGreaterThan(50);
+    for (const k of FORM_KINDS) expect(out).toContain(k);
+    // 排除项**直接照那张常量表数**，不照 TIMELINE_KINDS 与 FORM_KINDS 的差集：
+    // 差集在"表单又摆回四类"时会变成空集，这一圈循环当场什么都不验（照绿）。
+    expect(KINDS_NOT_IN_FORM.length, '量具自检：排除表空了，下一圈在验空集').toBeGreaterThan(0);
+    for (const k of KINDS_NOT_IN_FORM) {
+      expect(out, `表单里摆出了不该给用户选的「${k}」`).not.toContain(k);
+    }
   });
 });

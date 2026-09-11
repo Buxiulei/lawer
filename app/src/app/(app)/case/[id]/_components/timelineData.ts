@@ -169,7 +169,9 @@ export function demoEvents(): TimelineEventView[] {
     title: e.title,
     detail: e.detail,
     // 演示数据早于这两列落地，两格都没有。
-    // · 类型：照实说"没人选过"——演示案件里那几条同样看得见「选类型」那个小操作，演的就是它；
+    // · 类型：照实说"没人选过"。**演示态不会因此冒出「选类型」那个小操作**——
+    //   演示案件没有 cases 行，两个写入口在那一屏一律不渲染（CaseTimeline 的 canWrite）。
+    //   所以这几条只是不带类型标签而已。
     // · 档位：取**缺省档**，而不是 null。这两个值在屏幕上是两句不同的话：〔未记录〕说的是
     //   "库里根本没有这一项"，〔自述〕说的是"有，但只有当事人一个人的说法"。演示的那二十条
     //   正是当事人自己讲出来的经过，落成真数据时服务端给的也正是这一档（DDL 默认值同一个字面量）。
@@ -177,4 +179,26 @@ export function demoEvents(): TimelineEventView[] {
     sourceTier: DEFAULT_SOURCE_TIER,
     evidenceIds: e.evidenceIds,
   }));
+}
+
+/* ── 演示 / 真实这道岔口 ───────────────────────────────────── */
+
+/**
+ * 开屏那一刻手里有什么。演示案件同步就有（不闪一帧骨架），真实案件是 null＝**还在读**。
+ *
+ * 【为什么它和 loadTimeline 不写在组件的 effect 里】写成 effect 里一句 `if (demo)` 的形态是：
+ * 把它改成恒真（真实案件也走演示数据、一次请求都不发），整套判据照绿——本仓没有 jsdom，
+ * 组件的 effect 在判据里推不动。岔口搬到这两个纯函数上，就能拿一个 fetch 桩把它数出来。
+ */
+export function initialTimeline(demo: boolean): TimelineEventView[] | null {
+  return demo ? demoEvents() : null;
+}
+
+/**
+ * 这一屏该怎么拿时间线。**这是"演示走 mock、真实走接口"的唯一判定点。**
+ *
+ * @param demo 演示案件。它没有 cases 行，去请求只会换回一条 404。
+ */
+export function loadTimeline(caseId: string, demo: boolean): Promise<TimelineEventView[]> {
+  return demo ? Promise.resolve(demoEvents()) : fetchTimeline(caseId);
 }
